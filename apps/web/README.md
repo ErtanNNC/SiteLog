@@ -4,15 +4,15 @@ Vite + React 19 + TypeScript. The office panel from `docs/SITELOG_SPEC.md` §11 
 
 ## Scripts
 
-| Command                                  | What it does                                                                        |
-| ---------------------------------------- | ----------------------------------------------------------------------------------- |
-| `pnpm --filter @sitelog/web dev`         | Vite dev server (http://localhost:5173)                                             |
-| `pnpm --filter @sitelog/web build`       | Production build to `dist/`                                                         |
-| `pnpm --filter @sitelog/web preview`     | Serve the build                                                                     |
-| `pnpm --filter @sitelog/web typecheck`   | `tsc` over `src`, `e2e` and the configs                                             |
-| `pnpm --filter @sitelog/web test`        | Vitest (jsdom + Testing Library)                                                    |
-| `pnpm --filter @sitelog/web e2e`         | Playwright smoke test (starts Vite on :4173 with `VITE_DEMO=true`)                  |
-| `pnpm --filter @sitelog/web screenshots` | Saves `e2e/__screenshots__/{login,overview,sites}-{1440,375}.png` for visual review |
+| Command                                  | What it does                                                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `pnpm --filter @sitelog/web dev`         | Vite dev server (http://localhost:5173)                                                                 |
+| `pnpm --filter @sitelog/web build`       | Production build to `dist/`                                                                             |
+| `pnpm --filter @sitelog/web preview`     | Serve the build                                                                                         |
+| `pnpm --filter @sitelog/web typecheck`   | `tsc` over `src`, `e2e` and the configs                                                                 |
+| `pnpm --filter @sitelog/web test`        | Vitest (jsdom + Testing Library)                                                                        |
+| `pnpm --filter @sitelog/web e2e`         | Playwright smoke test (starts Vite on :4173 with `VITE_DEMO=true`)                                      |
+| `pnpm --filter @sitelog/web screenshots` | Saves `e2e/__screenshots__/{login,overview,sites,site,reports,report}-{1440,375}.png` for visual review |
 
 Root: `pnpm lint`, `pnpm format`, `pnpm check`.
 
@@ -76,5 +76,5 @@ UI primitives live in `src/components/ui` (shadcn-style, restyled), SiteLog comp
 
 ## Tests
 
-- Vitest: components (`src/components/**/*.test.tsx`), Login and Overview pages, `DemoSource` aggregations against the §18 figures (Overview KPIs, hours matrix, weather log, streaks, mutations).
+- Vitest: components (`src/components/**/*.test.tsx`), Login, Overview, Site detail, Reports and Report review pages, `DemoSource` aggregations against the §18 figures (Overview KPIs, hours matrix, weather log, streaks, mutations).
 - Playwright: `e2e/smoke.spec.ts` (login → overview → every nav item, sites, accounts landing, demo realtime, mobile drawer) and `e2e/screenshots.spec.ts`. The configs use `/opt/pw-browsers/chromium` when it exists (or `PLAYWRIGHT_CHROMIUM_PATH`); do not run `playwright install` in the sandbox.

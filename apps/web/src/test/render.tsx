@@ -1,9 +1,10 @@
 /* eslint-disable react-refresh/only-export-components */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderOptions } from '@testing-library/react';
-import type { ReactElement, ReactNode } from 'react';
+import { useState, type ReactElement, type ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { AuthContextForTests, type AuthState } from '@/auth/AuthProvider';
+import { TopBarSlotProvider } from '@/components/shell/TopBar';
 import { TooltipProvider } from '@/components/ui/Tooltip';
 import { DataProvider } from '@/data/DataProvider';
 import { DemoSource } from '@/data/demo/DemoSource';
@@ -64,10 +65,15 @@ export function Providers({
   store,
   auth,
 }: ProviderOptions & { children: ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
-  });
-  const src = source === undefined ? makeSource(as, store) : source;
+  const [client] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
+      }),
+  );
+  // Pages render week/month/site pickers through the TopBarControls portal; give them a slot.
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const [src] = useState(() => (source === undefined ? makeSource(as, store) : source));
   const authState = makeAuthState(as, {
     ...auth,
     currentOrg: auth?.currentOrg ?? {
@@ -84,13 +90,16 @@ export function Providers({
         <AuthContextForTests.Provider value={authState}>
           <DataProvider source={src}>
             <TooltipProvider>
-              {path ? (
-                <Routes>
-                  <Route path={path} element={children} />
-                </Routes>
-              ) : (
-                children
-              )}
+              <TopBarSlotProvider value={slot}>
+                <div ref={setSlot} data-testid="topbar-controls" />
+                {path ? (
+                  <Routes>
+                    <Route path={path} element={children} />
+                  </Routes>
+                ) : (
+                  children
+                )}
+              </TopBarSlotProvider>
             </TooltipProvider>
           </DataProvider>
         </AuthContextForTests.Provider>
