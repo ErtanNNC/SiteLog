@@ -28,6 +28,7 @@ export const JobPayloadSchemas = {
     sendToWhatsApp: z.boolean().default(false),
     emailRecipients: z.boolean().default(false),
     changeNote: z.string().optional(),
+    notifyReporter: z.boolean().optional(),
   }),
   send_email: z.object({
     kind: z.enum([
