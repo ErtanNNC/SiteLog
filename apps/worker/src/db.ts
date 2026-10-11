@@ -133,6 +133,7 @@ export interface QuestionInput {
 }
 
 export interface QuestionPatch {
+  options?: Json | null;
   asked_message_id?: string | null;
   asked_at?: string | Date | null;
   answered_message_id?: string | null;
@@ -205,6 +206,18 @@ export interface ExpiredMedia {
   storage_path: string;
   type: MsgType;
   created_at: string;
+}
+
+export interface InvoiceSummary {
+  id: string;
+  org_id: string;
+  company_name: string;
+  invoice_no: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  invoiced_hours: number;
+  reported_hours: number;
+  lines: Array<{ date: string; hours: number; site_id?: string }>;
 }
 
 export interface DigestStats {
@@ -309,6 +322,7 @@ export interface Db {
   updateEvidencePack(id: string, patch: Partial<Pick<EvidencePackRow, 'status' | 'pdf_path' | 'error' | 'ready_at'>>): Promise<void>;
   listWeatherEvents(siteId: string, start: string, end: string): Promise<WeatherEventRow[]>;
   listExpiredMedia(before: Date, limit: number): Promise<ExpiredMedia[]>;
+  getInvoiceSummary(invoiceId: string): Promise<InvoiceSummary | null>;
   purgeMessageMedia(messageId: string, purgedAt: Date): Promise<void>;
   digestStats(orgId: string, weekStart: string, weekEnd: string): Promise<DigestStats>;
 
@@ -742,6 +756,25 @@ export function createDb(sql: Sql): Db {
       return sql<ExpiredMedia[]>`select id as message_id, storage_path, type, created_at from messages
         where storage_path is not null and type in ('audio','image') and created_at < ${before.toISOString()}
         order by created_at limit ${limit}`;
+    },
+    async getInvoiceSummary(invoiceId) {
+      const rows = await sql<Array<{ id: string; org_id: string; company_name: string; invoice_no: string | null; period_start: string | null; period_end: string | null; invoiced_hours: number | null; reported_hours: number | null; lines: unknown }>>`
+        select i.id, i.org_id, c.name as company_name, i.invoice_no, i.period_start, i.period_end, i.total_hours as invoiced_hours, i.lines,
+          (select sum(cm.hours) from current_manpower cm where cm.company_id = i.company_id and cm.date between coalesce(i.period_start, '1970-01-01') and coalesce(i.period_end, '2999-12-31')) as reported_hours
+        from sub_invoices i join companies c on c.id = i.company_id where i.id = ${invoiceId}`;
+      const r = rows[0];
+      if (!r) return null;
+      return {
+        id: r.id,
+        org_id: r.org_id,
+        company_name: r.company_name,
+        invoice_no: r.invoice_no,
+        period_start: r.period_start,
+        period_end: r.period_end,
+        invoiced_hours: Number(r.invoiced_hours ?? 0),
+        reported_hours: Number(r.reported_hours ?? 0),
+        lines: Array.isArray(r.lines) ? (r.lines as InvoiceSummary['lines']) : [],
+      };
     },
     async purgeMessageMedia(messageId, purgedAt) {
       await sql.begin(async (tx) => {

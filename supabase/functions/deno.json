@@ -1,0 +1,30 @@
+{
+  "imports": {
+    "@sitelog/shared": "../../packages/shared/src/index.ts",
+    "@sitelog/shared/": "../../packages/shared/src/",
+    "@std/assert": "jsr:@std/assert@1",
+    "zod": "npm:zod@4.6.6",
+    "date-fns": "npm:date-fns@4.4.0",
+    "date-fns-tz": "npm:date-fns-tz@3.2.0",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.117.3",
+    "stripe": "npm:stripe@23.0.0"
+  },
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "nodeModulesDir": "none",
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "fmt": {
+    "singleQuote": true,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "semiColons": true
+  }
+}

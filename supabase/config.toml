@@ -1,0 +1,109 @@
+# Supabase CLI configuration for SiteLog.
+# Reference: https://supabase.com/docs/guides/local-development/cli/config
+# Paths in this file are relative to the supabase/ directory.
+project_id = "sitelog"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+# PostgREST caps every response at this many rows; the functions page with .range() where needed.
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+# Must match the hosted project's Postgres major version (`show server_version;`).
+major_version = 17
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/auth/callback"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[edge_runtime]
+enabled = true
+policy = "oneshot"
+inspector_port = 8083
+deno_version = 2
+
+# Edge Functions (§4.2, Appendix B).
+# All functions share one Deno config / import map: ./functions/deno.json. The CLI accepts a
+# deno.json for `import_map` (it reads its "imports" key), the same way it accepts import_map.json.
+# `verify_jwt = false` only for the three endpoints that are not called with a Supabase JWT:
+# Meta (HMAC signature), Stripe (Stripe-Signature) and pg_cron (SCHEDULER_SECRET bearer token).
+# Every api-* function keeps the gateway JWT check and additionally resolves the user + org role.
+
+[functions.whatsapp-webhook]
+enabled = true
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/whatsapp-webhook/index.ts"
+
+[functions.scheduler-tick]
+enabled = true
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/scheduler-tick/index.ts"
+
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/stripe-webhook/index.ts"
+
+[functions.api-invite-reporter]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/api-invite-reporter/index.ts"
+
+[functions.api-link-unknown-sender]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/api-link-unknown-sender/index.ts"
+
+[functions.api-export-payroll]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/api-export-payroll/index.ts"
+
+[functions.api-evidence-pack]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/api-evidence-pack/index.ts"
+
+[functions.api-billing]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/api-billing/index.ts"
+
+[analytics]
+enabled = false

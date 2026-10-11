@@ -1,0 +1,37 @@
+import type { AppClient } from './supabase.ts';
+
+/** `notify_org(...)` RPC wrapper → in-app notification center (§13). Returns the notification id. */
+
+export type NotificationKind =
+  | 'missing_report'
+  | 'needs_review'
+  | 'unknown_sender'
+  | 'invoice_gap'
+  | 'glossary_review'
+  | 'pack_ready'
+  | 'billing'
+  | 'report_edited';
+
+export interface Notification {
+  orgId: string;
+  kind: NotificationKind;
+  title: string;
+  body?: string | null;
+  targetPath?: string | null;
+  /** null = every member of the org sees it. */
+  userId?: string | null;
+}
+
+export async function notifyOrg(admin: AppClient, n: Notification): Promise<string> {
+  const { data } = await admin
+    .rpc('notify_org', {
+      p_org: n.orgId,
+      p_kind: n.kind,
+      p_title: n.title,
+      p_body: n.body ?? null,
+      p_target_path: n.targetPath ?? null,
+      p_user_id: n.userId ?? null,
+    })
+    .throwOnError();
+  return data;
+}
