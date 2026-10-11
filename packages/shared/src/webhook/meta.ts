@@ -226,8 +226,9 @@ export async function metaSignature(
     false,
     ['sign'],
   );
-  const data = typeof rawBody === 'string' ? enc.encode(rawBody) : rawBody;
-  const sig = await crypto.subtle.sign('HMAC', key, data as BufferSource);
+  // Copy into a fresh Uint8Array so the buffer is a plain ArrayBuffer (WebCrypto rejects shared buffers).
+  const data = new Uint8Array(typeof rawBody === 'string' ? enc.encode(rawBody) : rawBody);
+  const sig = await crypto.subtle.sign('HMAC', key, data);
   return `sha256=${toHex(sig)}`;
 }
 

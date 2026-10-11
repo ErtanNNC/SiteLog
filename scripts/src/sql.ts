@@ -28,20 +28,20 @@ export function ident(name: string): string {
 }
 
 /** `insert into t (cols) values (...), (...);` in chunks. Column list = keys of the first row minus `omit`. */
-export function insertRows(
+export function insertRows<T extends object>(
   table: string,
-  rows: Array<Record<string, unknown>>,
+  rows: T[],
   opts: { omit?: string[]; onConflict?: string; chunk?: number } = {},
 ): string {
   if (rows.length === 0) return `-- ${table}: no rows\n`;
   const omit = new Set(opts.omit ?? []);
-  const cols = Object.keys(rows[0]!).filter((c) => !omit.has(c));
+  const cols = Object.keys(rows[0] as Record<string, unknown>).filter((c) => !omit.has(c));
   const chunk = opts.chunk ?? 200;
   const out: string[] = [];
   for (let i = 0; i < rows.length; i += chunk) {
     const values = rows
       .slice(i, i + chunk)
-      .map((r) => `  (${cols.map((c) => lit(r[c])).join(', ')})`)
+      .map((r) => `  (${cols.map((c) => lit((r as Record<string, unknown>)[c])).join(', ')})`)
       .join(',\n');
     out.push(
       `insert into ${ident(table)} (${cols.map(ident).join(', ')}) values\n${values}${opts.onConflict ? `\n${opts.onConflict}` : ''};\n`,

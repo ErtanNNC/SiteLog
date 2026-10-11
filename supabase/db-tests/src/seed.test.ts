@@ -25,7 +25,7 @@ describe('seed.sql (Kestrel demo)', () => {
     expect(map.reporters).toBe(7);
     expect(map.companies).toBe(8);
     expect(map.reports).toBeGreaterThan(60);
-    expect(map.site_days).toBeGreaterThan(map.reports);
+    expect(map.site_days!).toBeGreaterThan(map.reports!);
   });
 
   it('shows the Oct 5–9 hours per company through the RLS view', async () => {
