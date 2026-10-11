@@ -1,0 +1,29 @@
+/**
+ * Runtime configuration (Vite env). Demo mode runs the whole panel on the in-memory §18
+ * Kestrel dataset: `VITE_DEMO=true`, or simply no `VITE_SUPABASE_URL`.
+ */
+const e = import.meta.env;
+
+function str(v: string | undefined): string | undefined {
+  const t = v?.trim();
+  return t ? t : undefined;
+}
+
+export const env = {
+  supabaseUrl: str(e.VITE_SUPABASE_URL),
+  supabaseAnonKey: str(e.VITE_SUPABASE_ANON_KEY),
+  appUrl:
+    str(e.VITE_APP_URL) ??
+    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'),
+  waDisplayNumber: str(e.VITE_WA_DISPLAY_NUMBER) ?? '+15550142290',
+  sentryDsn: str(e.VITE_SENTRY_DSN),
+  demo: e.VITE_DEMO === 'true' || !str(e.VITE_SUPABASE_URL),
+  dev: !!e.DEV,
+} as const;
+
+export const isDemo: boolean = env.demo;
+
+/** Edge function base URL (`${VITE_SUPABASE_URL}/functions/v1`). */
+export function functionsUrl(name: string): string {
+  return `${env.supabaseUrl ?? ''}/functions/v1/${name}`;
+}
