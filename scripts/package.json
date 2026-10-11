@@ -1,0 +1,24 @@
+{
+  "name": "@sitelog/scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dev scripts: webhook replay, demo seed generation.",
+  "scripts": {
+    "replay-webhook": "tsx src/replay-webhook.ts",
+    "seed-demo": "tsx src/seed-demo.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sitelog/shared": "workspace:*",
+    "dotenv": "^18.0.7",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

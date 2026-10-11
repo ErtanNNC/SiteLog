@@ -1,0 +1,31 @@
+# deps / build
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# supabase local
+supabase/.temp/
+supabase/.branches/
+
+# tests
+playwright-report/
+test-results/
+apps/web/e2e/__screenshots__/**/actual-*.png
+
+# worker scratch
+apps/worker/tmp/
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

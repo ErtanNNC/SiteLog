@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+coverage
+pnpm-lock.yaml
+*.min.*
+docs/SITELOG_SPEC.md
+supabase/.temp
+apps/web/public/brand
+**/fonts/*.ttf

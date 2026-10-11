@@ -1,0 +1,25 @@
+{
+  "name": "@sitelog/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SiteLog shared schemas, enums, types and pure helpers (Node, browser and Deno).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "date-fns": "^4.4.0",
+    "date-fns-tz": "^3.2.0",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}
