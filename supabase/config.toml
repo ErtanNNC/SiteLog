@@ -105,5 +105,11 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/api-billing/index.ts"
 
+[functions.api-invite-office-user]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/api-invite-office-user/index.ts"
+
 [analytics]
 enabled = false

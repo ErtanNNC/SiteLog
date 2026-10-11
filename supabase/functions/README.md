@@ -88,6 +88,7 @@ supabase functions deploy api-link-unknown-sender
 supabase functions deploy api-export-payroll
 supabase functions deploy api-evidence-pack
 supabase functions deploy api-billing
+supabase functions deploy api-invite-office-user
 
 # or everything at once (config.toml carries verify_jwt / import_map per function)
 supabase functions deploy
@@ -187,6 +188,11 @@ Notes:
   subscription. Quantity decreases use `proration_behavior: 'none'` (paused sites stop being billed
   from the next cycle, §19 #5); increases are prorated. Checkout requires at least one site and
   grants the 14-day trial only while `orgs.trial_ends_at` is null.
+- **api-invite-office-user** uses `auth.admin.inviteUserByEmail` (Supabase sends the invite email,
+  redirect `APP_URL/auth/callback`, user metadata `invited_org_id`/`invited_role`) and writes the
+  `org_members` row up front so the membership exists on first sign-in. For an email that already
+  has an account no invite can be sent; the membership is added and the user signs in with their
+  usual magic link (`emailSent: false` in the response).
 - **stripe-webhook** maps Stripe statuses as trialing→trialing, active→active,
   past_due/unpaid/incomplete→past_due, canceled/incomplete_expired→canceled, paused→paused; an
   unknown status leaves `billing_status` untouched. `invoice.paid` only promotes to `active` when the
