@@ -1,4 +1,11 @@
-import { ButtonSets, exampleDraftCard, localDate, waCopy, type MessageRow, type TranscriptRow } from '@sitelog/shared';
+import {
+  ButtonSets,
+  exampleDraftCard,
+  localDate,
+  waCopy,
+  type MessageRow,
+  type TranscriptRow,
+} from '@sitelog/shared';
 import { firstWords, isUnintelligible } from '../../ai/transcribe';
 import type { Ctx } from '../../context';
 import { sendFreeForm } from '../../wa/send';
@@ -18,9 +25,19 @@ export async function handleTestContent(s: Session): Promise<void> {
   const { ctx, inbound, message } = s;
   if (inbound.kind === 'audio') {
     const site = s.activeSites[0] ?? s.sites[0];
-    const loc = site ? { orgId: site.org_id, siteId: site.id, date: localDate(new Date(message.created_at), site.timezone) } : { custom: `${s.reporter.org_id}/_test` };
+    const loc = site
+      ? {
+          orgId: site.org_id,
+          siteId: site.id,
+          date: localDate(new Date(message.created_at), site.timezone),
+        }
+      : { custom: `${s.reporter.org_id}/_test` };
     await ensureMediaStored(ctx, message, loc);
-    await ctx.db.enqueueJob('transcribe_audio', { messageId: message.id, testMode: true }, { dedupeKey: `transcribe:${message.id}` });
+    await ctx.db.enqueueJob(
+      'transcribe_audio',
+      { messageId: message.id, testMode: true },
+      { dedupeKey: `transcribe:${message.id}` },
+    );
     return;
   }
   if (inbound.kind === 'text') {
@@ -46,7 +63,11 @@ export async function handleTestButton(s: Session, action: 'example' | 'done'): 
 }
 
 /** Called by the transcribe_audio job for testMode payloads. */
-export async function onTestTranscript(ctx: Ctx, message: MessageRow, transcript: TranscriptRow): Promise<void> {
+export async function onTestTranscript(
+  ctx: Ctx,
+  message: MessageRow,
+  transcript: TranscriptRow,
+): Promise<void> {
   const session = await createSession(ctx, message);
   const convo = session?.convo ?? (await ctx.db.getConversation(message.conversation_id));
   if (!convo) return;
@@ -55,8 +76,20 @@ export async function onTestTranscript(ctx: Ctx, message: MessageRow, transcript
     return;
   }
   const deadline = session ? await deadlineText(session) : '17:30';
-  await sendFreeForm(ctx, convo, waCopy.testHeard(firstWords(transcript.text), deadline), ButtonSets.test(), { kind: 'test_heard' });
+  await sendFreeForm(
+    ctx,
+    convo,
+    waCopy.testHeard(firstWords(transcript.text), deadline),
+    ButtonSets.test(),
+    { kind: 'test_heard' },
+  );
   if (session) await session.setState('idle', {});
   else await ctx.db.updateConversation(convo.id, { state: 'idle' });
-  await ctx.db.logAudit({ org_id: session?.reporter.org_id ?? convo.org_id, actor_type: 'agent', action: 'reporter.test_note', entity: 'message', entity_id: message.id });
+  await ctx.db.logAudit({
+    org_id: session?.reporter.org_id ?? convo.org_id,
+    actor_type: 'agent',
+    action: 'reporter.test_note',
+    entity: 'message',
+    entity_id: message.id,
+  });
 }

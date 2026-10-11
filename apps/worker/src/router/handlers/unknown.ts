@@ -10,7 +10,11 @@ import { parseInbound } from '../inbound';
  * §F11 — a phone that is not a reporter in any org: hold the message, transcribe audio for the
  * snippet, guess the site from the content, reply once, alert the office.
  */
-export async function handleUnknownSender(ctx: Ctx, convo: ConversationRow, message: MessageRow): Promise<void> {
+export async function handleUnknownSender(
+  ctx: Ctx,
+  convo: ConversationRow,
+  message: MessageRow,
+): Promise<void> {
   const inbound = parseInbound(message);
   const existing = await ctx.db.findPendingUnknownSender(convo.phone_e164);
   let snippet: string | null = null;
@@ -30,10 +34,26 @@ export async function handleUnknownSender(ctx: Ctx, convo: ConversationRow, mess
       const t = await transcribeAudio(
         ctx.ai.openai,
         ctx.ffmpeg,
-        { audio: buffer, ext: message.storage_path.split('.').pop() ?? 'ogg', model: ctx.config.TRANSCRIBE_MODEL, prompt: buildTranscriptionPrompt({ siteName: 'a construction site', companies: [], glossary: [] }), durationS: message.duration_s ?? undefined },
+        {
+          audio: buffer,
+          ext: message.storage_path.split('.').pop() ?? 'ogg',
+          model: ctx.config.TRANSCRIBE_MODEL,
+          prompt: buildTranscriptionPrompt({
+            siteName: 'a construction site',
+            companies: [],
+            glossary: [],
+          }),
+          durationS: message.duration_s ?? undefined,
+        },
         ctx.log,
       );
-      await ctx.db.upsertTranscript({ message_id: message.id, language: t.language, text: t.text, segments: t.segments, model: t.model });
+      await ctx.db.upsertTranscript({
+        message_id: message.id,
+        language: t.language,
+        text: t.text,
+        segments: t.segments,
+        model: t.model,
+      });
       ctx.metrics.add({ audioSeconds: t.durationS, estCostUsd: t.estCostUsd });
       snippet = t.text;
     } catch (err) {
@@ -47,7 +67,19 @@ export async function handleUnknownSender(ctx: Ctx, convo: ConversationRow, mess
   let guessedOrgId: string | null = null;
   if (snippet) {
     const sites = await ctx.db.listActiveSites();
-    const guess = await guessSite(ctx.ai.claude, ctx.config.CLAUDE_MODEL_FAST, snippet, sites.map((s) => ({ id: s.id, name: s.name, projectCode: s.project_code, address: s.address, orgId: s.org_id })), ctx.log);
+    const guess = await guessSite(
+      ctx.ai.claude,
+      ctx.config.CLAUDE_MODEL_FAST,
+      snippet,
+      sites.map((s) => ({
+        id: s.id,
+        name: s.name,
+        projectCode: s.project_code,
+        address: s.address,
+        orgId: s.org_id,
+      })),
+      ctx.log,
+    );
     if (guess.siteId && guess.confidence >= 0.85) {
       guessedSiteId = guess.siteId;
       guessedOrgId = sites.find((s) => s.id === guess.siteId)?.org_id ?? null;
@@ -63,11 +95,36 @@ export async function handleUnknownSender(ctx: Ctx, convo: ConversationRow, mess
     // Reply only once per pending sender (§F11 step 3).
     return;
   }
-  const row = await ctx.db.insertUnknownSender({ org_id: guessedOrgId, phone_e164: convo.phone_e164, first_message_id: message.id, snippet, guessed_site_id: guessedSiteId });
+  const row = await ctx.db.insertUnknownSender({
+    org_id: guessedOrgId,
+    phone_e164: convo.phone_e164,
+    first_message_id: message.id,
+    snippet,
+    guessed_site_id: guessedSiteId,
+  });
   if (guessedOrgId) {
     await ctx.db.updateConversation(convo.id, { org_id: guessedOrgId });
-    await ctx.db.notifyOrg(guessedOrgId, 'unknown_sender', 'Unknown number tried to report', snippet, '/team');
-    await ctx.db.logAudit({ org_id: guessedOrgId, actor_type: 'system', action: 'unknown_sender.recorded', entity: 'unknown_sender', entity_id: row.id, diff: { guessed_site_id: guessedSiteId } });
+    await ctx.db.notifyOrg(
+      guessedOrgId,
+      'unknown_sender',
+      'Unknown number tried to report',
+      snippet,
+      '/team',
+    );
+    await ctx.db.logAudit({
+      org_id: guessedOrgId,
+      actor_type: 'system',
+      action: 'unknown_sender.recorded',
+      entity: 'unknown_sender',
+      entity_id: row.id,
+      diff: { guessed_site_id: guessedSiteId },
+    });
   }
-  await sendFreeForm(ctx, convo, guessedOrgId ? waCopy.unknownNumber() : waCopy.unknownNumberNoOrg(), undefined, { kind: 'unknown_number' });
+  await sendFreeForm(
+    ctx,
+    convo,
+    guessedOrgId ? waCopy.unknownNumber() : waCopy.unknownNumberNoOrg(),
+    undefined,
+    { kind: 'unknown_number' },
+  );
 }

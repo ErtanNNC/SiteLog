@@ -76,12 +76,24 @@ export interface ExtractionInput {
 }
 
 /** The org context block (companies + glossary) is cached separately from the volatile user message. */
-export function buildOrgContextBlock(input: Pick<ExtractionInput, 'companies' | 'glossary' | 'rejectedMappings'>): string {
-  const companies = input.companies.map((c) => ({ id: c.id, name: c.name, trade: c.trade ?? undefined, aliases: c.aliases, selfPerform: c.isSelfPerform || undefined }));
+export function buildOrgContextBlock(
+  input: Pick<ExtractionInput, 'companies' | 'glossary' | 'rejectedMappings'>,
+): string {
+  const companies = input.companies.map((c) => ({
+    id: c.id,
+    name: c.name,
+    trade: c.trade ?? undefined,
+    aliases: c.aliases,
+    selfPerform: c.isSelfPerform || undefined,
+  }));
   const glossary = input.glossary.length
-    ? input.glossary.map((g) => `- "${g.heard}" → ${g.official}${g.kind !== 'term' ? ` (${g.kind})` : ''}`).join('\n')
+    ? input.glossary
+        .map((g) => `- "${g.heard}" → ${g.official}${g.kind !== 'term' ? ` (${g.kind})` : ''}`)
+        .join('\n')
     : '- (none)';
-  const rejected = input.rejectedMappings.length ? input.rejectedMappings.map((r) => `- do not map "${r.heard}" to ${r.official}`).join('\n') : '- (none)';
+  const rejected = input.rejectedMappings.length
+    ? input.rejectedMappings.map((r) => `- do not map "${r.heard}" to ${r.official}`).join('\n')
+    : '- (none)';
   return `COMPANIES: ${JSON.stringify(companies)}\nGLOSSARY (heard → official):\n${glossary}\nREJECTED MAPPINGS:\n${rejected}`;
 }
 
@@ -93,7 +105,10 @@ export function formatObservedWeather(w: SiteDayWeather | null): string {
   if (!w) return 'not available';
   const hours = w.hours
     .filter((h) => h.precipIn > 0 || h.gustMph !== null)
-    .map((h) => `${h.time} precip ${h.precipIn.toFixed(2)} in, temp ${h.tempF ?? '?'} F, wind ${h.windMph ?? '?'} mph, gusts ${h.gustMph ?? '?'} mph`);
+    .map(
+      (h) =>
+        `${h.time} precip ${h.precipIn.toFixed(2)} in, temp ${h.tempF ?? '?'} F, wind ${h.windMph ?? '?'} mph, gusts ${h.gustMph ?? '?'} mph`,
+    );
   const summary = `day total precip ${w.summary.precipIn.toFixed(2)} in · temp ${w.summary.tempMinF}–${w.summary.tempMaxF} F · wind ${w.summary.windMph} mph · max gust ${w.summary.gustMph ?? '?'} mph (${w.provider})`;
   return `${summary}\n${hours.slice(0, 24).join('\n')}`;
 }
@@ -121,7 +136,8 @@ export function buildExtractionUserMessage(input: ExtractionInput): string {
   if (byMessage.size === 0 && input.texts.length === 0) lines.push('(no voice note)');
   for (const [messageId, segs] of byMessage) {
     lines.push(`VOICE NOTE messageId=${messageId}`);
-    for (const s of segs) lines.push(`[${fmtSeconds(s.start)}–${fmtSeconds(s.end)}] ${s.text.trim()}`);
+    for (const s of segs)
+      lines.push(`[${fmtSeconds(s.start)}–${fmtSeconds(s.end)}] ${s.text.trim()}`);
   }
   for (const t of input.texts) {
     lines.push(`TEXT MESSAGE messageId=${t.messageId}`);

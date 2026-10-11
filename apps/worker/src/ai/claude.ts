@@ -36,10 +36,14 @@ export function modelProfile(model: string): ModelProfile {
   }
   const name = family[1]!;
   const version = Number(family[2]) + Number(family[3] ?? '0') / 10;
-  if (name === 'fable' || name === 'mythos') return { forcedToolChoice: false, sampling: false, effort: true };
+  if (name === 'fable' || name === 'mythos')
+    return { forcedToolChoice: false, sampling: false, effort: true };
   const forcedToolChoice = !((name === 'opus' || name === 'sonnet') && version >= 5.5);
   const sampling = version <= 4.6 && !(name === 'opus' && version >= 4.7);
-  const effort = (name === 'opus' && version >= 4.5) || (name === 'sonnet' && version >= 4.6) || (name === 'haiku' && version >= 5.5);
+  const effort =
+    (name === 'opus' && version >= 4.5) ||
+    (name === 'sonnet' && version >= 4.6) ||
+    (name === 'haiku' && version >= 5.5);
   return { forcedToolChoice, sampling, effort };
 }
 
@@ -98,20 +102,38 @@ function usageOf(msg: Anthropic.Message): TokenUsage {
 }
 
 function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
-  return { input: a.input + b.input, output: a.output + b.output, cacheRead: a.cacheRead + b.cacheRead, cacheWrite: a.cacheWrite + b.cacheWrite };
+  return {
+    input: a.input + b.input,
+    output: a.output + b.output,
+    cacheRead: a.cacheRead + b.cacheRead,
+    cacheWrite: a.cacheWrite + b.cacheWrite,
+  };
 }
 
-export function buildParams<T>(req: ToolCallRequest<T>, messages: Anthropic.MessageParam[]): Anthropic.MessageCreateParamsNonStreaming {
+export function buildParams<T>(
+  req: ToolCallRequest<T>,
+  messages: Anthropic.MessageParam[],
+): Anthropic.MessageCreateParamsNonStreaming {
   const profile = modelProfile(req.model);
   const system: Anthropic.TextBlockParam[] = req.system
     .filter((b) => b.text.trim().length > 0)
-    .map((b) => (b.cache ? { type: 'text', text: b.text, cache_control: { type: 'ephemeral' } } : { type: 'text', text: b.text }));
+    .map((b) =>
+      b.cache
+        ? { type: 'text', text: b.text, cache_control: { type: 'ephemeral' } }
+        : { type: 'text', text: b.text },
+    );
   const params: Anthropic.MessageCreateParamsNonStreaming = {
     model: req.model,
     max_tokens: req.maxTokens ?? 8192,
     system,
     messages,
-    tools: [{ name: req.tool.name, description: req.tool.description, input_schema: req.tool.inputSchema as Anthropic.Tool.InputSchema }],
+    tools: [
+      {
+        name: req.tool.name,
+        description: req.tool.description,
+        input_schema: req.tool.inputSchema as Anthropic.Tool.InputSchema,
+      },
+    ],
     tool_choice: profile.forcedToolChoice
       ? { type: 'tool', name: req.tool.name, disable_parallel_tool_use: true }
       : { type: 'auto', disable_parallel_tool_use: true },
@@ -140,13 +162,19 @@ export function toolInstruction(name: string): string {
   return `Respond only by calling the ${name} tool.`;
 }
 
-export async function callTool<T>(client: MessagesClient, req: ToolCallRequest<T>, log?: Logger): Promise<ToolCallResult<T>> {
+export async function callTool<T>(
+  client: MessagesClient,
+  req: ToolCallRequest<T>,
+  log?: Logger,
+): Promise<ToolCallResult<T>> {
   const profile = modelProfile(req.model);
   const started = Date.now();
   let usage: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   let apiCalls = 0;
   let retried = false;
-  const messages: Anthropic.MessageParam[] = profile.forcedToolChoice ? [...req.messages] : withInstruction(req.messages, req.tool.name);
+  const messages: Anthropic.MessageParam[] = profile.forcedToolChoice
+    ? [...req.messages]
+    : withInstruction(req.messages, req.tool.name);
   let noToolRetry = !profile.forcedToolChoice;
   let invalidRetry = req.retryOnInvalid ?? true;
 
@@ -161,13 +189,20 @@ export async function callTool<T>(client: MessagesClient, req: ToolCallRequest<T
     }
     const toolUse = findToolUse(msg, req.tool.name);
     if (!toolUse) {
-      if (msg.stop_reason === 'max_tokens') throw new ToolCallError('response truncated before the tool call', 'truncated');
+      if (msg.stop_reason === 'max_tokens')
+        throw new ToolCallError('response truncated before the tool call', 'truncated');
       if (noToolRetry) {
         noToolRetry = false;
         retried = true;
-        log?.warn('model answered without calling the tool; re-prompting once', { model: req.model, tool: req.tool.name });
+        log?.warn('model answered without calling the tool; re-prompting once', {
+          model: req.model,
+          tool: req.tool.name,
+        });
         messages.push({ role: 'assistant', content: msg.content });
-        messages.push({ role: 'user', content: `You must call the ${req.tool.name} tool now. Do not answer in prose.` });
+        messages.push({
+          role: 'user',
+          content: `You must call the ${req.tool.name} tool now. Do not answer in prose.`,
+        });
         continue;
       }
       throw new ToolCallError('model did not call the tool', 'no_tool_use', msg.content);
@@ -189,7 +224,11 @@ export async function callTool<T>(client: MessagesClient, req: ToolCallRequest<T
     if (invalidRetry) {
       invalidRetry = false;
       retried = true;
-      log?.warn('tool input failed validation; retrying once with the error', { model: req.model, tool: req.tool.name, issues });
+      log?.warn('tool input failed validation; retrying once with the error', {
+        model: req.model,
+        tool: req.tool.name,
+        issues,
+      });
       messages.push({ role: 'assistant', content: msg.content });
       messages.push({
         role: 'user',
@@ -204,11 +243,18 @@ export async function callTool<T>(client: MessagesClient, req: ToolCallRequest<T
       });
       continue;
     }
-    throw new ToolCallError(`tool input failed validation after retry: ${issues}`, 'invalid_input', parsed.error.issues);
+    throw new ToolCallError(
+      `tool input failed validation after retry: ${issues}`,
+      'invalid_input',
+      parsed.error.issues,
+    );
   }
 }
 
-function withInstruction(messages: Anthropic.MessageParam[], toolName: string): Anthropic.MessageParam[] {
+function withInstruction(
+  messages: Anthropic.MessageParam[],
+  toolName: string,
+): Anthropic.MessageParam[] {
   const out = [...messages];
   const last = out[out.length - 1];
   if (!last || last.role !== 'user') return out;
@@ -216,7 +262,10 @@ function withInstruction(messages: Anthropic.MessageParam[], toolName: string): 
   if (typeof last.content === 'string') {
     out[out.length - 1] = { role: 'user', content: `${last.content}\n\n${instruction}` };
   } else {
-    out[out.length - 1] = { role: 'user', content: [...last.content, { type: 'text', text: instruction }] };
+    out[out.length - 1] = {
+      role: 'user',
+      content: [...last.content, { type: 'text', text: instruction }],
+    };
   }
   return out;
 }

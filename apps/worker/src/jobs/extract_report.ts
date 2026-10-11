@@ -14,7 +14,10 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload) 
   const report = await ctx.db.getReport(payload.reportId);
   if (!report) throw new PermanentJobError(`report ${payload.reportId} not found`);
   if (report.status === 'filed' || report.status === 'signed_off' || report.status === 'void') {
-    ctx.log.info('extraction skipped: report is closed', { report_id: report.id, status: report.status });
+    ctx.log.info('extraction skipped: report is closed', {
+      report_id: report.id,
+      status: report.status,
+    });
     return;
   }
   const site = await ctx.db.siteContext(report.site_id);
@@ -24,25 +27,42 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload) 
   const convo = reporter ? await ctx.db.getConversationByPhone(reporter.phone_e164) : null;
 
   // §F5 step 3: progress bubble once processing takes > 10 s.
-  if (convo && report.received_at && ctx.now().getTime() - new Date(report.received_at).getTime() > PROGRESS_AFTER_MS) {
+  if (
+    convo &&
+    report.received_at &&
+    ctx.now().getTime() - new Date(report.received_at).getTime() > PROGRESS_AFTER_MS
+  ) {
     const c = contextOf(convo);
     if (c.progress_sent_for !== report.id) {
-      await sendFreeForm(ctx, convo, waCopy.progress(), undefined, { kind: 'progress', reportId: report.id });
-      await ctx.db.updateConversation(convo.id, { context: { ...c, progress_sent_for: report.id } });
+      await sendFreeForm(ctx, convo, waCopy.progress(), undefined, {
+        kind: 'progress',
+        reportId: report.id,
+      });
+      await ctx.db.updateConversation(convo.id, {
+        context: { ...c, progress_sent_for: report.id },
+      });
     }
   }
 
   const previousDraft = await currentData(ctx, report);
   const input = await composeExtractionInput(ctx, report, site, reporter, {
     previousDraft,
-    reportDate: siteDay?.date ?? previousDraft?.reportDate ?? new Date(report.received_at ?? ctx.now()).toISOString().slice(0, 10),
+    reportDate:
+      siteDay?.date ??
+      previousDraft?.reportDate ??
+      new Date(report.received_at ?? ctx.now()).toISOString().slice(0, 10),
     observedWeather: siteDayWeatherOf(siteDay?.weather),
   });
   const sourceCountAtStart = (await ctx.db.listReportSources(report.id)).length;
   if (!ctx.ai.claude) throw new Error('ANTHROPIC_API_KEY is required for extraction');
 
   const result = await runExtraction(ctx.ai.claude, ctx.config.CLAUDE_MODEL, input, ctx.log);
-  ctx.metrics.add({ tokens: result.call.usage, estCostUsd: result.call.estCostUsd, extractionLatencyMs: result.call.latencyMs, extractionRetried: result.call.retried });
+  ctx.metrics.add({
+    tokens: result.call.usage,
+    estCostUsd: result.call.estCostUsd,
+    extractionLatencyMs: result.call.latencyMs,
+    extractionRetried: result.call.retried,
+  });
   await storeDraft(ctx, report, result.data);
   await ctx.db.logAudit({
     org_id: report.org_id,
@@ -50,15 +70,36 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload) 
     action: 'report.extracted',
     entity: 'report',
     entity_id: report.id,
-    diff: { model: result.call.model, sources: sourceCountAtStart, discrepancies: result.discrepancies, languages: result.data.languageDetected, merged: !!previousDraft },
+    diff: {
+      model: result.call.model,
+      sources: sourceCountAtStart,
+      discrepancies: result.discrepancies,
+      languages: result.data.languageDetected,
+      merged: !!previousDraft,
+    },
   });
-  await learnTerms(ctx, { orgId: report.org_id, siteId: report.site_id, reporterId: report.reporter_id, terms: result.data.newTerms, companies: site.companies, glossary: site.glossary });
+  await learnTerms(ctx, {
+    orgId: report.org_id,
+    siteId: report.site_id,
+    reporterId: report.reporter_id,
+    terms: result.data.newTerms,
+    companies: site.companies,
+    glossary: site.glossary,
+  });
 
   const sourceCountNow = (await ctx.db.listReportSources(report.id)).length;
   if (sourceCountNow !== sourceCountAtStart) {
     ctx.log.info('sources changed during extraction; re-extracting', { report_id: report.id });
-    await ctx.db.enqueueJob('extract_report', { reportId: report.id, reason: `sources:${sourceCountNow}` }, { dedupeKey: `extract:${report.id}:${sourceCountNow}` });
+    await ctx.db.enqueueJob(
+      'extract_report',
+      { reportId: report.id, reason: `sources:${sourceCountNow}` },
+      { dedupeKey: `extract:${report.id}:${sourceCountNow}` },
+    );
     return;
   }
-  await ctx.db.enqueueJob('decide_next', { reportId: report.id }, { dedupeKey: `decide:${report.id}:extract:${sourceCountNow}` });
+  await ctx.db.enqueueJob(
+    'decide_next',
+    { reportId: report.id },
+    { dedupeKey: `decide:${report.id}:extract:${sourceCountNow}` },
+  );
 };

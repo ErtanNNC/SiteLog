@@ -1,0 +1,156 @@
+{
+  "id": "riverside-2026-10-09",
+  "description": "§18 hero report. Mixed ES/EN, 2 min 48 s, Delta headcount not stated (asked later).",
+  "site": {
+    "name": "Riverside Lofts — Block B",
+    "projectCode": "RL-2041",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-09",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Marco",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d001",
+      "name": "Apex Concrete",
+      "trade": "Concrete",
+      "aliases": ["Apex", "the Apex guys"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d002",
+      "name": "BrightLine Electric",
+      "trade": "Electrical",
+      "aliases": ["BrightLine"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d003",
+      "name": "Delta Mechanical",
+      "trade": "HVAC",
+      "aliases": ["the Delta guys", "Delta"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d004",
+      "name": "Ironclad Steel",
+      "trade": "Rebar",
+      "aliases": ["Ironclad"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "Kestrel"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "the deck", "official": "Elevated concrete slab", "kind": "term" },
+    { "heard": "pour on four", "official": "Level 4 concrete pour", "kind": "term" },
+    { "heard": "block", "official": "Concrete masonry units (CMU)", "kind": "term" },
+    { "heard": "llovió", "official": "Rain", "kind": "term" },
+    { "heard": "stood down", "official": "Work stoppage", "kind": "term" }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-09",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-09T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0.05, "tempF": 58, "windMph": 8, "gustMph": 14 },
+      { "time": "07:00", "precipIn": 0.12, "tempF": 58, "windMph": 9, "gustMph": 16 },
+      { "time": "08:00", "precipIn": 0.11, "tempF": 59, "windMph": 9, "gustMph": 17 },
+      { "time": "09:00", "precipIn": 0.08, "tempF": 60, "windMph": 9, "gustMph": 15 },
+      { "time": "10:00", "precipIn": 0.04, "tempF": 61, "windMph": 8, "gustMph": 13 },
+      { "time": "11:00", "precipIn": 0, "tempF": 62, "windMph": 8, "gustMph": 12 },
+      { "time": "12:00", "precipIn": 0, "tempF": 63, "windMph": 8, "gustMph": 12 },
+      { "time": "13:00", "precipIn": 0, "tempF": 64, "windMph": 9, "gustMph": 13 },
+      { "time": "14:00", "precipIn": 0, "tempF": 64, "windMph": 9, "gustMph": 13 },
+      { "time": "15:00", "precipIn": 0, "tempF": 64, "windMph": 8, "gustMph": 12 }
+    ],
+    "summary": {
+      "precipIn": 0.4,
+      "tempMinF": 58,
+      "tempMaxF": 64,
+      "windMph": 9,
+      "gustMph": 17,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0.35,
+      "maxGustWorkingHoursMph": 17
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "messageId": "11111111-0000-4000-8000-000000000102",
+      "caption": "L4 pour done",
+      "takenAt": "2026-10-09T22:31:40Z"
+    },
+    { "messageId": "11111111-0000-4000-8000-000000000103", "takenAt": "2026-10-09T22:31:52Z" }
+  ],
+  "segments": [
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 0.0,
+      "end": 6.2,
+      "text": "Okay, Friday report, Riverside Block B. Long day but a good one."
+    },
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 6.2,
+      "end": 12.4,
+      "text": "Primero el clima: llovió desde las siete hasta las diez y media, no pudimos hacer block afuera en la fachada sur."
+    },
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 12.4,
+      "end": 18.9,
+      "text": "So masonry outside stood down about three and a half hours, we moved those guys inside to do the interior block on two."
+    },
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 18.9,
+      "end": 26.1,
+      "text": "Then we poured the deck on four, like sixty-eight yards, finished around two thirty, Apex had six guys all day on that."
+    },
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 26.1,
+      "end": 33.0,
+      "text": "BrightLine, five electricians full day on three, rough-in is about sixty percent now."
+    },
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 33.0,
+      "end": 40.5,
+      "text": "The Delta guys were on two doing the ductwork east wing, todo el día también."
+    },
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 40.5,
+      "end": 47.2,
+      "text": "Ironclad had three guys tying rebar for the five deck, full day, and they brought two loads of rebar around one o'clock."
+    },
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 47.2,
+      "end": 53.8,
+      "text": "Our guys, four laborers all day, cleanup and helping the pour."
+    },
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 53.8,
+      "end": 60.0,
+      "text": "Safety, we did the toolbox talk this morning on wet weather access, slippery decks, no incidents, nobody got hurt."
+    },
+    {
+      "messageId": "11111111-0000-4000-8000-000000000101",
+      "start": 60.0,
+      "end": 67.5,
+      "text": "El lunes necesitamos la bomba de concreto a las siete para el deck de cinco. That's it, sending two photos."
+    }
+  ],
+  "texts": []
+}

@@ -22,7 +22,11 @@ export interface LoggerOptions {
 
 export function serializeError(err: unknown): LogFields {
   if (err instanceof Error) {
-    return { name: err.name, message: err.message, stack: err.stack?.split('\n').slice(0, 6).join('\n') };
+    return {
+      name: err.name,
+      message: err.message,
+      stack: err.stack?.split('\n').slice(0, 6).join('\n'),
+    };
   }
   return { message: String(err) };
 }

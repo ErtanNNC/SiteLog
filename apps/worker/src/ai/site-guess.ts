@@ -34,7 +34,12 @@ export const SITE_GUESS_TOOL = {
 } as const;
 
 function norm(s: string): string {
-  return s.toLowerCase().replace(/[—–-]/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return s
+    .toLowerCase()
+    .replace(/[—–-]/g, ' ')
+    .replace(/[^a-z0-9 ]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** Deterministic match on project code / site name / distinctive words (no model). */
@@ -48,29 +53,59 @@ export function matchSiteByText(text: string, sites: SiteCandidate[]): SiteGuess
   // Distinctive first word of the site name ("Riverside", "Oakmont") as a whole word.
   const words = new Set(t.split(' '));
   const firstWordHits = sites.filter((s) => {
-    const w = norm(s.name).split(' ').filter((x) => x.length >= 4)[0];
+    const w = norm(s.name)
+      .split(' ')
+      .filter((x) => x.length >= 4)[0];
     return !!w && words.has(w);
   });
-  if (firstWordHits.length === 1) return { siteId: firstWordHits[0]!.id, confidence: 0.9, method: 'name' };
+  if (firstWordHits.length === 1)
+    return { siteId: firstWordHits[0]!.id, confidence: 0.9, method: 'name' };
   let best: { id: string; score: number } | null = null;
   for (const s of sites) {
-    const score = Math.max(...norm(s.name).split(' ').filter((w) => w.length >= 5).map((w) => Math.max(...t.split(' ').map((x) => similarity(w, x)))), 0);
+    const score = Math.max(
+      ...norm(s.name)
+        .split(' ')
+        .filter((w) => w.length >= 5)
+        .map((w) => Math.max(...t.split(' ').map((x) => similarity(w, x)))),
+      0,
+    );
     if (!best || score > best.score) best = { id: s.id, score };
   }
-  if (best && best.score >= 0.8) return { siteId: best.id, confidence: Math.min(0.84, best.score), method: 'fuzzy' };
+  if (best && best.score >= 0.8)
+    return { siteId: best.id, confidence: Math.min(0.84, best.score), method: 'fuzzy' };
   return { siteId: null, confidence: 0, method: 'none' };
 }
 
-export async function guessSite(client: MessagesClient | null, model: string, text: string, sites: SiteCandidate[], log?: Logger): Promise<SiteGuess> {
+export async function guessSite(
+  client: MessagesClient | null,
+  model: string,
+  text: string,
+  sites: SiteCandidate[],
+  log?: Logger,
+): Promise<SiteGuess> {
   const quick = matchSiteByText(text, sites);
-  if (quick.confidence >= SITE_INFER_THRESHOLD || !client || sites.length === 0 || !text.trim()) return quick;
+  if (quick.confidence >= SITE_INFER_THRESHOLD || !client || sites.length === 0 || !text.trim())
+    return quick;
   try {
     const res = await callTool(
       client,
       {
         model,
         system: [{ text: SITE_GUESS_SYSTEM_PROMPT, cache: true }],
-        messages: [{ role: 'user', content: buildSiteGuessUserMessage({ text, sites: sites.map((s) => ({ id: s.id, name: s.name, projectCode: s.projectCode, address: s.address })) }) }],
+        messages: [
+          {
+            role: 'user',
+            content: buildSiteGuessUserMessage({
+              text,
+              sites: sites.map((s) => ({
+                id: s.id,
+                name: s.name,
+                projectCode: s.projectCode,
+                address: s.address,
+              })),
+            }),
+          },
+        ],
         tool: { ...SITE_GUESS_TOOL, inputSchema: toolInputSchema(SiteGuessSchema) },
         schema: SiteGuessSchema,
         maxTokens: 256,
@@ -78,7 +113,8 @@ export async function guessSite(client: MessagesClient | null, model: string, te
       },
       log,
     );
-    const siteId = res.data.siteId && sites.some((s) => s.id === res.data.siteId) ? res.data.siteId : null;
+    const siteId =
+      res.data.siteId && sites.some((s) => s.id === res.data.siteId) ? res.data.siteId : null;
     return { siteId, confidence: siteId ? res.data.confidence : 0, method: 'model' };
   } catch (err) {
     log?.warn('site guess failed', { err });

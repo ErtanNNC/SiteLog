@@ -26,7 +26,11 @@ const T = {
 } as const;
 
 export function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 /** "Riverside Lofts — Block B" → "Riverside Lofts" */
@@ -34,7 +38,13 @@ export function siteShort(name: string): string {
   return name.split(/\s+[—–-]\s+/)[0]?.trim() || name;
 }
 
-export function layout(opts: { title: string; eyebrow?: string; bodyHtml: string; cta?: { label: string; url: string }; footerNote?: string }): string {
+export function layout(opts: {
+  title: string;
+  eyebrow?: string;
+  bodyHtml: string;
+  cta?: { label: string; url: string };
+  footerNote?: string;
+}): string {
   const cta = opts.cta
     ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 8px 0"><tr><td style="background:${T.signal};border-radius:6px">
         <a href="${esc(opts.cta.url)}" style="display:inline-block;padding:12px 20px;font:700 15px/20px Archivo,'Helvetica Neue',Helvetica,Arial,sans-serif;color:${T.asphalt};text-decoration:none">${esc(opts.cta.label)}</a></td></tr></table>`
@@ -114,17 +124,26 @@ export function reportFiledEmail(i: ReportFiledInput): RenderedEmail {
   const subject = updated
     ? `Updated: ${i.reportNo} · ${siteShort(i.siteName)} · ${formatDateShort(i.reportDate)} · v${i.version}`
     : `Daily report · ${siteShort(i.siteName)} · ${formatDateShort(i.reportDate)} · ${i.reportNo}`;
-  const crew = i.totals.headcountKnown ? `${i.totals.crewOnSite} on site · ${i.totals.subcontractors} sub${i.totals.subcontractors === 1 ? '' : 's'}` : 'Headcount pending';
+  const crew = i.totals.headcountKnown
+    ? `${i.totals.crewOnSite} on site · ${i.totals.subcontractors} sub${i.totals.subcontractors === 1 ? '' : 's'}`
+    : 'Headcount pending';
   const hours = i.totals.hoursKnown ? formatHours(i.totals.totalHours) : 'Hours pending';
-  const weather = i.totals.weatherAffected ? `${formatHours(i.totals.lostHours)} lost to weather` : 'No weather stoppage';
+  const weather = i.totals.weatherAffected
+    ? `${formatHours(i.totals.lostHours)} lost to weather`
+    : 'No weather stoppage';
   const chips = [
     ...(i.isLate ? [chip('Late', '#FFE7D4', '#9A3412')] : []),
-    ...(i.reviewReasons.length ? [chip('Needs review', '#E0E7FB', '#1E3A8A')] : [chip(updated ? `Version ${i.version}` : 'Filed', '#DCEFE2', '#14532D')]),
+    ...(i.reviewReasons.length
+      ? [chip('Needs review', '#E0E7FB', '#1E3A8A')]
+      : [chip(updated ? `Version ${i.version}` : 'Filed', '#DCEFE2', '#14532D')]),
   ].join(' ');
   const reasons = i.reviewReasons.length
     ? `<p style="margin:12px 0 0 0"><strong>Review reasons</strong></p><ul style="margin:4px 0 0 18px;padding:0">${i.reviewReasons.map((r) => `<li>${esc(reasonLabel(r))}</li>`).join('')}</ul>`
     : '';
-  const change = updated && i.changeNote ? `<p style="margin:0 0 12px 0;padding:10px 12px;background:${T.concrete};border-radius:6px"><strong>Updated:</strong> ${esc(i.changeNote)}</p>` : '';
+  const change =
+    updated && i.changeNote
+      ? `<p style="margin:0 0 12px 0;padding:10px 12px;background:${T.concrete};border-radius:6px"><strong>Updated:</strong> ${esc(i.changeNote)}</p>`
+      : '';
   const bodyHtml = `${chips ? `<p style="margin:0 0 12px 0">${chips}</p>` : ''}${change}
     ${kv([
       ['Site', esc(i.siteName)],
@@ -133,7 +152,9 @@ export function reportFiledEmail(i: ReportFiledInput): RenderedEmail {
       ['Crew', esc(crew)],
       ['Hours', esc(hours)],
       ['Weather', esc(weather)],
-      ...(i.reporterFirstName ? [['Reported by', esc(i.reporterFirstName)] as [string, string]] : []),
+      ...(i.reporterFirstName
+        ? [['Reported by', esc(i.reporterFirstName)] as [string, string]]
+        : []),
     ])}
     <p style="margin:0">${esc(i.summary || 'No summary.')}</p>${reasons}
     <p style="margin:16px 0 0 0;color:${T.dust}">The PDF is attached.</p>`;
@@ -150,12 +171,23 @@ export function reportFiledEmail(i: ReportFiledInput): RenderedEmail {
     ...(i.isLate ? ['Late'] : []),
     '',
     i.summary || 'No summary.',
-    ...(i.reviewReasons.length ? ['', 'Review reasons:', ...i.reviewReasons.map((r) => `- ${reasonLabel(r)}`)] : []),
+    ...(i.reviewReasons.length
+      ? ['', 'Review reasons:', ...i.reviewReasons.map((r) => `- ${reasonLabel(r)}`)]
+      : []),
     '',
     `Open in SiteLog: ${i.url}`,
     'The PDF is attached.',
   ].join('\n');
-  return { subject, html: layout({ title: updated ? `Updated: ${i.reportNo}` : `Daily report ${i.reportNo}`, eyebrow: i.orgName, bodyHtml, cta: { label: 'Open in SiteLog', url: i.url } }), text };
+  return {
+    subject,
+    html: layout({
+      title: updated ? `Updated: ${i.reportNo}` : `Daily report ${i.reportNo}`,
+      eyebrow: i.orgName,
+      bodyHtml,
+      cta: { label: 'Open in SiteLog', url: i.url },
+    }),
+    text,
+  };
 }
 
 export interface ReportMissingInput {
@@ -171,10 +203,28 @@ export function reportMissingEmail(i: ReportMissingInput): RenderedEmail {
   const who = i.reporterFirstName ?? 'The site manager';
   const subject = `${siteShort(i.siteName)} — no report · ${formatDateShort(i.date)}`;
   const line = `${i.siteName} — no report. ${who} didn't answer 2 reminders.`;
-  const call = i.reporterPhone ? `<p style="margin:12px 0 0 0"><a href="tel:${esc(i.reporterPhone)}" style="color:${T.level}">Call ${esc(who)}</a></p>` : '';
+  const call = i.reporterPhone
+    ? `<p style="margin:12px 0 0 0"><a href="tel:${esc(i.reporterPhone)}" style="color:${T.level}">Call ${esc(who)}</a></p>`
+    : '';
   const bodyHtml = `<p style="margin:0 0 8px 0">${chip('Missing', '#FBE1DF', '#991B1B')}</p><p style="margin:0">${esc(line)}</p>${call}`;
-  const text = [subject, '', line, ...(i.reporterPhone ? [`Call ${who}: ${i.reporterPhone}`] : []), '', `Open in SiteLog: ${i.url}`].join('\n');
-  return { subject, html: layout({ title: 'No report', eyebrow: i.orgName, bodyHtml, cta: { label: 'Open in SiteLog', url: i.url } }), text };
+  const text = [
+    subject,
+    '',
+    line,
+    ...(i.reporterPhone ? [`Call ${who}: ${i.reporterPhone}`] : []),
+    '',
+    `Open in SiteLog: ${i.url}`,
+  ].join('\n');
+  return {
+    subject,
+    html: layout({
+      title: 'No report',
+      eyebrow: i.orgName,
+      bodyHtml,
+      cta: { label: 'Open in SiteLog', url: i.url },
+    }),
+    text,
+  };
 }
 
 export interface InvoiceQueryInput {
@@ -190,17 +240,41 @@ export interface InvoiceQueryInput {
 
 export function invoiceQueryEmail(i: InvoiceQueryInput): RenderedEmail {
   const gap = Math.round((i.invoicedHours - i.reportedHours) * 100) / 100;
-  const period = i.periodStart && i.periodEnd ? `${formatDateShort(i.periodStart)} – ${formatDateShort(i.periodEnd)}` : 'the invoice period';
+  const period =
+    i.periodStart && i.periodEnd
+      ? `${formatDateShort(i.periodStart)} – ${formatDateShort(i.periodEnd)}`
+      : 'the invoice period';
   const subject = `Hours query · ${i.companyName}${i.invoiceNo ? ` · ${i.invoiceNo}` : ''}`;
   const bodyHtml = `<p style="margin:0 0 12px 0">${esc(i.orgName)} compared invoice ${esc(i.invoiceNo ?? '')} with the daily site reports for ${esc(period)}.</p>
     ${kv([
       ['Invoiced', `${formatHours(i.invoicedHours)}`],
       ['Reported', `${formatHours(i.reportedHours)}`],
-      ['Difference', `<strong style="color:${gap > 0 ? T.missing : T.filed}">${gap > 0 ? '+' : ''}${formatHours(gap)}</strong>`],
+      [
+        'Difference',
+        `<strong style="color:${gap > 0 ? T.missing : T.filed}">${gap > 0 ? '+' : ''}${formatHours(gap)}</strong>`,
+      ],
     ])}
     <p style="margin:0">Could you check the days where the hours differ? The daily reports with audio evidence are available on request.</p>`;
-  const text = [subject, '', `${i.orgName} compared invoice ${i.invoiceNo ?? ''} with the daily site reports for ${period}.`, `Invoiced: ${formatHours(i.invoicedHours)}`, `Reported: ${formatHours(i.reportedHours)}`, `Difference: ${gap > 0 ? '+' : ''}${formatHours(gap)}`, '', 'Could you check the days where the hours differ?'].join('\n');
-  return { subject, html: layout({ title: 'Hours query', eyebrow: i.orgName, bodyHtml, footerNote: 'Sent with SiteLog.' }), text };
+  const text = [
+    subject,
+    '',
+    `${i.orgName} compared invoice ${i.invoiceNo ?? ''} with the daily site reports for ${period}.`,
+    `Invoiced: ${formatHours(i.invoicedHours)}`,
+    `Reported: ${formatHours(i.reportedHours)}`,
+    `Difference: ${gap > 0 ? '+' : ''}${formatHours(gap)}`,
+    '',
+    'Could you check the days where the hours differ?',
+  ].join('\n');
+  return {
+    subject,
+    html: layout({
+      title: 'Hours query',
+      eyebrow: i.orgName,
+      bodyHtml,
+      footerNote: 'Sent with SiteLog.',
+    }),
+    text,
+  };
 }
 
 export interface EvidencePackReadyInput {
@@ -216,8 +290,23 @@ export function evidencePackReadyEmail(i: EvidencePackReadyInput): RenderedEmail
   const subject = `EOT evidence pack ready · ${siteShort(i.siteName)} · ${formatDateShort(i.periodStart)} – ${formatDateShort(i.periodEnd)}`;
   const bodyHtml = `<p style="margin:0 0 12px 0">The evidence pack for ${esc(i.siteName)}, ${esc(formatDateShort(i.periodStart))} – ${esc(formatDateShort(i.periodEnd))}, is ready.</p>
     <p style="margin:0">The download link is valid for 7 days. Weather data: Open-Meteo.</p>`;
-  const text = [subject, '', `Download (valid 7 days): ${i.downloadUrl}`, `Weather & delays: ${i.panelUrl}`, 'Weather data: Open-Meteo.'].join('\n');
-  return { subject, html: layout({ title: 'Evidence pack ready', eyebrow: i.orgName, bodyHtml, cta: { label: 'Download the pack', url: i.downloadUrl } }), text };
+  const text = [
+    subject,
+    '',
+    `Download (valid 7 days): ${i.downloadUrl}`,
+    `Weather & delays: ${i.panelUrl}`,
+    'Weather data: Open-Meteo.',
+  ].join('\n');
+  return {
+    subject,
+    html: layout({
+      title: 'Evidence pack ready',
+      eyebrow: i.orgName,
+      bodyHtml,
+      cta: { label: 'Download the pack', url: i.downloadUrl },
+    }),
+    text,
+  };
 }
 
 export interface WeeklyDigestInput {
@@ -232,11 +321,32 @@ export function weeklyDigestEmail(i: WeeklyDigestInput): RenderedEmail {
   const s = i.stats;
   const onTimePct = s.siteDays ? Math.round((s.onTime / s.siteDays) * 100) : 0;
   const subject = `SiteLog weekly · ${formatDateShort(i.weekStart)} – ${formatDateShort(i.weekEnd)} · ${onTimePct}% on time`;
-  const weather = s.weatherHoursBySite.length ? s.weatherHoursBySite.map((w) => `<li>${esc(w.siteName)}: ${esc(formatHours(w.hours))}</li>`).join('') : '<li>No weather stoppages</li>';
-  const gaps = s.invoiceGaps.length ? s.invoiceGaps.map((g) => `<li>${esc(g.companyName)}: ${g.gap > 0 ? '+' : ''}${esc(formatHours(g.gap))}</li>`).join('') : '<li>No open invoice gaps</li>';
-  const unsigned = s.unsigned.length ? s.unsigned.map((u) => `<li>${esc(u.reportNo)} · ${esc(u.siteName)} · ${esc(formatDateShort(u.date))}</li>`).join('') : '<li>All filed reports are signed off</li>';
+  const weather = s.weatherHoursBySite.length
+    ? s.weatherHoursBySite
+        .map((w) => `<li>${esc(w.siteName)}: ${esc(formatHours(w.hours))}</li>`)
+        .join('')
+    : '<li>No weather stoppages</li>';
+  const gaps = s.invoiceGaps.length
+    ? s.invoiceGaps
+        .map(
+          (g) =>
+            `<li>${esc(g.companyName)}: ${g.gap > 0 ? '+' : ''}${esc(formatHours(g.gap))}</li>`,
+        )
+        .join('')
+    : '<li>No open invoice gaps</li>';
+  const unsigned = s.unsigned.length
+    ? s.unsigned
+        .map(
+          (u) =>
+            `<li>${esc(u.reportNo)} · ${esc(u.siteName)} · ${esc(formatDateShort(u.date))}</li>`,
+        )
+        .join('')
+    : '<li>All filed reports are signed off</li>';
   const bodyHtml = `${kv([
-    ['On time', `<strong>${onTimePct}%</strong> (${s.onTime} of ${s.siteDays} site-days; ${s.filed} filed)`],
+    [
+      'On time',
+      `<strong>${onTimePct}%</strong> (${s.onTime} of ${s.siteDays} site-days; ${s.filed} filed)`,
+    ],
   ])}
     <p style="margin:8px 0 4px 0"><strong>Weather hours by site</strong></p><ul style="margin:0 0 12px 18px;padding:0">${weather}</ul>
     <p style="margin:8px 0 4px 0"><strong>Invoice gaps</strong></p><ul style="margin:0 0 12px 18px;padding:0">${gaps}</ul>
@@ -247,17 +357,32 @@ export function weeklyDigestEmail(i: WeeklyDigestInput): RenderedEmail {
     `On time: ${onTimePct}% (${s.onTime} of ${s.siteDays} site-days; ${s.filed} filed)`,
     '',
     'Weather hours by site:',
-    ...(s.weatherHoursBySite.length ? s.weatherHoursBySite.map((w) => `- ${w.siteName}: ${formatHours(w.hours)}`) : ['- No weather stoppages']),
+    ...(s.weatherHoursBySite.length
+      ? s.weatherHoursBySite.map((w) => `- ${w.siteName}: ${formatHours(w.hours)}`)
+      : ['- No weather stoppages']),
     '',
     'Invoice gaps:',
-    ...(s.invoiceGaps.length ? s.invoiceGaps.map((g) => `- ${g.companyName}: ${g.gap > 0 ? '+' : ''}${formatHours(g.gap)}`) : ['- No open invoice gaps']),
+    ...(s.invoiceGaps.length
+      ? s.invoiceGaps.map((g) => `- ${g.companyName}: ${g.gap > 0 ? '+' : ''}${formatHours(g.gap)}`)
+      : ['- No open invoice gaps']),
     '',
     'Unsigned reports:',
-    ...(s.unsigned.length ? s.unsigned.map((u) => `- ${u.reportNo} · ${u.siteName} · ${formatDateShort(u.date)}`) : ['- All filed reports are signed off']),
+    ...(s.unsigned.length
+      ? s.unsigned.map((u) => `- ${u.reportNo} · ${u.siteName} · ${formatDateShort(u.date)}`)
+      : ['- All filed reports are signed off']),
     '',
     `Open SiteLog: ${i.url}`,
   ].join('\n');
-  return { subject, html: layout({ title: 'Weekly digest', eyebrow: i.orgName, bodyHtml, cta: { label: 'Open SiteLog', url: i.url } }), text };
+  return {
+    subject,
+    html: layout({
+      title: 'Weekly digest',
+      eyebrow: i.orgName,
+      bodyHtml,
+      cta: { label: 'Open SiteLog', url: i.url },
+    }),
+    text,
+  };
 }
 
 export interface UnknownSenderInput {
@@ -273,8 +398,25 @@ export function unknownSenderEmail(i: UnknownSenderInput): RenderedEmail {
     ['Number', esc(i.phone)],
     ['Message', esc(i.snippet ?? '(no text)')],
   ])}<p style="margin:0">Link the number to a site or ignore it on the Team page. Nothing was filed.</p>`;
-  const text = [subject, '', `Number: ${i.phone}`, `Message: ${i.snippet ?? '(no text)'}`, '', 'Nothing was filed. Link or ignore it on the Team page:', i.url].join('\n');
-  return { subject, html: layout({ title: subject, eyebrow: i.orgName, bodyHtml, cta: { label: 'Open Team & numbers', url: i.url } }), text };
+  const text = [
+    subject,
+    '',
+    `Number: ${i.phone}`,
+    `Message: ${i.snippet ?? '(no text)'}`,
+    '',
+    'Nothing was filed. Link or ignore it on the Team page:',
+    i.url,
+  ].join('\n');
+  return {
+    subject,
+    html: layout({
+      title: subject,
+      eyebrow: i.orgName,
+      bodyHtml,
+      cta: { label: 'Open Team & numbers', url: i.url },
+    }),
+    text,
+  };
 }
 
 export interface ReportEditedAfterSignoffInput {
@@ -289,6 +431,22 @@ export function reportEditedAfterSignoffEmail(i: ReportEditedAfterSignoffInput):
   const subject = `${i.reportNo} was edited after sign-off`;
   const bodyHtml = `<p style="margin:0 0 12px 0">${esc(i.reportNo)} was edited after you signed it off. Version ${i.version} needs a fresh sign-off.</p>
     <p style="margin:0;padding:10px 12px;background:${T.concrete};border-radius:6px"><strong>Change:</strong> ${esc(i.changeNote || '(no note)')}</p>`;
-  const text = [subject, '', `${i.reportNo} was edited after you signed it off. Version ${i.version} needs a fresh sign-off.`, `Change: ${i.changeNote || '(no note)'}`, '', `Review: ${i.url}`].join('\n');
-  return { subject, html: layout({ title: subject, eyebrow: i.orgName, bodyHtml, cta: { label: 'Review the report', url: i.url } }), text };
+  const text = [
+    subject,
+    '',
+    `${i.reportNo} was edited after you signed it off. Version ${i.version} needs a fresh sign-off.`,
+    `Change: ${i.changeNote || '(no note)'}`,
+    '',
+    `Review: ${i.url}`,
+  ].join('\n');
+  return {
+    subject,
+    html: layout({
+      title: subject,
+      eyebrow: i.orgName,
+      bodyHtml,
+      cta: { label: 'Review the report', url: i.url },
+    }),
+    text,
+  };
 }

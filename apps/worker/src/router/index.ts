@@ -4,7 +4,15 @@ import { handleHelp, handleLanguage, handleStop } from './handlers/commands';
 import { handleWeatherButton, handleWeatherFollowupPhoto } from './handlers/dayoff';
 import { confirmReport, requestFix } from './handlers/draft';
 import { handleEditCandidate } from './handlers/edit';
-import { continueWithSite, dayFromText, handleContent, handleDayChoice, handleSiteChoice, mergeIntoActive, sendSitePicker } from './handlers/intake';
+import {
+  continueWithSite,
+  dayFromText,
+  handleContent,
+  handleDayChoice,
+  handleSiteChoice,
+  mergeIntoActive,
+  sendSitePicker,
+} from './handlers/intake';
 import { handleQuestionButton } from './handlers/question';
 import { handleReminderButton } from './handlers/reminder';
 import { handleReplyText } from './handlers/reply';
@@ -42,14 +50,22 @@ export async function routeInbound(ctx: Ctx, message: MessageRow): Promise<void>
 async function dispatch(s: Session): Promise<void> {
   const { inbound } = s;
   const state = s.convo.state;
-  s.ctx.log.info('routing inbound', { conversation_id: s.convo.id, state, kind: inbound.kind, reporter_id: s.reporter.id });
+  s.ctx.log.info('routing inbound', {
+    conversation_id: s.convo.id,
+    state,
+    kind: inbound.kind,
+    reporter_id: s.reporter.id,
+  });
 
   if (inbound.kind === 'reaction') {
     await handleReaction(s);
     return;
   }
   if (inbound.kind === 'unsupported') {
-    s.ctx.log.info('unsupported inbound type ignored', { message_id: s.message.id, type: s.message.type });
+    s.ctx.log.info('unsupported inbound type ignored', {
+      message_id: s.message.id,
+      type: s.message.type,
+    });
     return;
   }
 
@@ -129,7 +145,10 @@ async function handleText(s: Session, text: string): Promise<void> {
 
   // Global commands first (§7.2): help · stop · language · no work · edit <day>.
   const quick = quickClassify(text, s.now, s.tz);
-  if (quick && (quick.intent === 'help' || quick.intent === 'stop' || quick.intent === 'language')) {
+  if (
+    quick &&
+    (quick.intent === 'help' || quick.intent === 'stop' || quick.intent === 'language')
+  ) {
     if (quick.intent === 'help') await handleHelp(s);
     else if (quick.intent === 'stop') await handleStop(s);
     else await handleLanguage(s, quick.entities?.language ?? 'en');
@@ -138,7 +157,10 @@ async function handleText(s: Session, text: string): Promise<void> {
 
   // Waiting for a site or day choice: accept the answer as text too.
   if (state === 'selecting_site' || c.pending?.awaiting === 'site') {
-    const guess = matchSiteByText(text, s.activeSites.map((x) => ({ id: x.id, name: x.name, projectCode: x.project_code })));
+    const guess = matchSiteByText(
+      text,
+      s.activeSites.map((x) => ({ id: x.id, name: x.name, projectCode: x.project_code })),
+    );
     if (guess.siteId && guess.confidence >= 0.85) {
       await handleSiteChoice(s, guess.siteId);
       return;
@@ -147,7 +169,11 @@ async function handleText(s: Session, text: string): Promise<void> {
       await handleReplyText(s, text, false);
       return;
     }
-    await sendSitePicker(s, c.pending?.message_ids ?? [], (c.pending as { intent?: 'report' | 'no_work' | 'weather_day' } | null)?.intent ?? 'report');
+    await sendSitePicker(
+      s,
+      c.pending?.message_ids ?? [],
+      (c.pending as { intent?: 'report' | 'no_work' | 'weather_day' } | null)?.intent ?? 'report',
+    );
     return;
   }
   if (c.pending?.awaiting === 'day' && c.pending.site_id) {
@@ -162,7 +188,9 @@ async function handleText(s: Session, text: string): Promise<void> {
       }
       if (!quick) {
         // Not an answer to the prompt: treat it as more content for the pending report.
-        await s.setState(null, { pending: { ...c.pending, message_ids: [...c.pending.message_ids, s.message.id] } });
+        await s.setState(null, {
+          pending: { ...c.pending, message_ids: [...c.pending.message_ids, s.message.id] },
+        });
         return;
       }
     }
@@ -187,21 +215,38 @@ async function handleMedia(s: Session): Promise<void> {
     await handleContent(s); // parks the message with the pending ones
     return;
   }
-  if (state === 'idle' && c.weather_report_id && (inbound.kind === 'image' || (inbound.kind === 'document' && (inbound.mime ?? '').startsWith('image/')))) {
+  if (
+    state === 'idle' &&
+    c.weather_report_id &&
+    (inbound.kind === 'image' ||
+      (inbound.kind === 'document' && (inbound.mime ?? '').startsWith('image/')))
+  ) {
     const report = await s.ctx.db.getReport(c.weather_report_id);
     if (report && report.kind === 'weather_day') {
       await handleWeatherFollowupPhoto(s, report);
       return;
     }
   }
-  if ((state === 'processing' || state === 'awaiting_answer' || state === 'awaiting_confirmation') && c.active_report_id) {
+  if (
+    (state === 'processing' || state === 'awaiting_answer' || state === 'awaiting_confirmation') &&
+    c.active_report_id
+  ) {
     const report = await s.ctx.db.getReport(c.active_report_id);
-    if (report && report.status !== 'filed' && report.status !== 'signed_off' && report.status !== 'void') {
+    if (
+      report &&
+      report.status !== 'filed' &&
+      report.status !== 'signed_off' &&
+      report.status !== 'void'
+    ) {
       if (inbound.kind === 'audio' && state !== 'processing') {
         // A voice note while a question or draft is pending may be an answer, a fix or more content:
         // transcribe first, then parse_reply decides (§F6 step 4, §7.2 merge rule).
         await storeForReply(s, report.site_id);
-        await s.ctx.db.enqueueJob('transcribe_audio', { messageId: s.message.id, reportId: report.id }, { dedupeKey: `transcribe:${s.message.id}` });
+        await s.ctx.db.enqueueJob(
+          'transcribe_audio',
+          { messageId: s.message.id, reportId: report.id },
+          { dedupeKey: `transcribe:${s.message.id}` },
+        );
         return;
       }
       await mergeIntoActive(s, report);
@@ -212,15 +257,28 @@ async function handleMedia(s: Session): Promise<void> {
     const report = await s.ctx.db.getReport(c.editing.report_id);
     if (report && inbound.kind === 'audio') {
       await storeForReply(s, report.site_id);
-      await s.ctx.db.enqueueJob('transcribe_audio', { messageId: s.message.id, reportId: report.id }, { dedupeKey: `transcribe:${s.message.id}` });
+      await s.ctx.db.enqueueJob(
+        'transcribe_audio',
+        { messageId: s.message.id, reportId: report.id },
+        { dedupeKey: `transcribe:${s.message.id}` },
+      );
       return;
     }
   }
-  if (state === 'idle' && c.weather_report_id && c.weather_followup === 'voice' && inbound.kind === 'audio') {
+  if (
+    state === 'idle' &&
+    c.weather_report_id &&
+    c.weather_followup === 'voice' &&
+    inbound.kind === 'audio'
+  ) {
     const report = await s.ctx.db.getReport(c.weather_report_id);
     if (report) {
       await storeForReply(s, report.site_id);
-      await s.ctx.db.enqueueJob('transcribe_audio', { messageId: s.message.id, reportId: report.id }, { dedupeKey: `transcribe:${s.message.id}` });
+      await s.ctx.db.enqueueJob(
+        'transcribe_audio',
+        { messageId: s.message.id, reportId: report.id },
+        { dedupeKey: `transcribe:${s.message.id}` },
+      );
       return;
     }
   }
@@ -232,7 +290,11 @@ async function storeForReply(s: Session, siteId: string): Promise<void> {
   const { localDate } = await import('@sitelog/shared');
   const site = s.siteById(siteId) ?? (await s.ctx.db.getSite(siteId));
   if (!site) return;
-  await ensureMediaStored(s.ctx, s.message, { orgId: site.org_id, siteId: site.id, date: localDate(new Date(s.message.created_at), site.timezone) });
+  await ensureMediaStored(s.ctx, s.message, {
+    orgId: site.org_id,
+    siteId: site.id,
+    date: localDate(new Date(s.message.created_at), site.timezone),
+  });
 }
 
 /** A thumbs-up on the draft message files it (§F7 step 3). Other reactions are ignored. */
@@ -241,7 +303,12 @@ async function handleReaction(s: Session): Promise<void> {
   const c = s.context;
   if (!isThumbsUp(s.inbound.emoji)) return;
   if (s.convo.state !== 'awaiting_confirmation' || !c.active_report_id) return;
-  if (s.inbound.toWaMessageId && c.draft_wa_message_id && s.inbound.toWaMessageId !== c.draft_wa_message_id) return;
+  if (
+    s.inbound.toWaMessageId &&
+    c.draft_wa_message_id &&
+    s.inbound.toWaMessageId !== c.draft_wa_message_id
+  )
+    return;
   await confirmReport(s, c.active_report_id);
 }
 

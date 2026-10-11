@@ -8,11 +8,15 @@ import { PermanentJobError, type JobHandler } from './types';
 export const decideNext: JobHandler<'decide_next'> = async (ctx, payload) => {
   const report = await ctx.db.getReport(payload.reportId);
   if (!report) throw new PermanentJobError(`report ${payload.reportId} not found`);
-  if (report.status === 'filed' || report.status === 'signed_off' || report.status === 'void') return;
+  if (report.status === 'filed' || report.status === 'signed_off' || report.status === 'void')
+    return;
   const data = await currentData(ctx, report);
   if (!data) throw new PermanentJobError(`report ${report.id} has no draft`);
   if (report.kind !== 'daily') {
-    await fileReport(ctx, report.id, { trigger: report.kind === 'weather_day' ? 'weather_day' : 'no_work', silent: true });
+    await fileReport(ctx, report.id, {
+      trigger: report.kind === 'weather_day' ? 'weather_day' : 'no_work',
+      silent: true,
+    });
     return;
   }
   const site = await ctx.db.siteContext(report.site_id);
@@ -35,7 +39,10 @@ export const decideNext: JobHandler<'decide_next'> = async (ctx, payload) => {
       ctx.log.info('question still open; waiting', { report_id: report.id, question_id: open.id });
       return;
     }
-    await ctx.db.updateQuestion(open.id, { answered_at: ctx.now(), answer: { resolved_by: 'extraction' } });
+    await ctx.db.updateQuestion(open.id, {
+      answered_at: ctx.now(),
+      answer: { resolved_by: 'extraction' },
+    });
     open.answered_at = ctx.now().toISOString();
   }
 

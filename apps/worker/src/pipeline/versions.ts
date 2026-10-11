@@ -20,7 +20,12 @@ export interface NewVersionResult {
   wasSignedOff: boolean;
 }
 
-export async function createReportVersion(ctx: Ctx, report: ReportRow, data: DailyReportData, opts: NewVersionOptions): Promise<NewVersionResult> {
+export async function createReportVersion(
+  ctx: Ctx,
+  report: ReportRow,
+  data: DailyReportData,
+  opts: NewVersionOptions,
+): Promise<NewVersionResult> {
   if (report.status !== 'filed' && report.status !== 'signed_off') {
     throw new Error(`report ${report.id} is ${report.status}; only filed reports get new versions`);
   }
@@ -37,7 +42,12 @@ export async function createReportVersion(ctx: Ctx, report: ReportRow, data: Dai
   await ctx.db.denormalizeVersion(report.id, next);
   const wasSignedOff = report.status === 'signed_off';
   const signer = report.signed_off_by;
-  const updated = await ctx.db.updateReport(report.id, { current_version: next, status: 'filed', signed_off_by: null, signed_off_at: null });
+  const updated = await ctx.db.updateReport(report.id, {
+    current_version: next,
+    status: 'filed',
+    signed_off_by: null,
+    signed_off_at: null,
+  });
   await ctx.db.logAudit({
     org_id: report.org_id,
     actor_type: opts.author === 'reporter_reply' ? 'reporter' : 'agent',
@@ -48,15 +58,44 @@ export async function createReportVersion(ctx: Ctx, report: ReportRow, data: Dai
     diff: { version: next, change_note: opts.changeNote, message_id: opts.authorMessageId ?? null },
   });
   if (wasSignedOff) {
-    await ctx.db.logAudit({ org_id: report.org_id, actor_type: 'agent', action: 'report.signoff_reverted', entity: 'report', entity_id: report.id, diff: { version: next } });
-    await ctx.db.notifyOrg(report.org_id, 'report_edited', `${report.report_no} was edited after sign-off`, opts.changeNote, `/reports/${report.id}`, signer);
+    await ctx.db.logAudit({
+      org_id: report.org_id,
+      actor_type: 'agent',
+      action: 'report.signoff_reverted',
+      entity: 'report',
+      entity_id: report.id,
+      diff: { version: next },
+    });
+    await ctx.db.notifyOrg(
+      report.org_id,
+      'report_edited',
+      `${report.report_no} was edited after sign-off`,
+      opts.changeNote,
+      `/reports/${report.id}`,
+      signer,
+    );
     if (signer) {
-      await ctx.db.enqueueJob('send_email', { kind: 'report_edited_after_signoff', reportId: report.id, version: next, changeNote: opts.changeNote }, { dedupeKey: `email:edited_after_signoff:${report.id}:${next}` });
+      await ctx.db.enqueueJob(
+        'send_email',
+        {
+          kind: 'report_edited_after_signoff',
+          reportId: report.id,
+          version: next,
+          changeNote: opts.changeNote,
+        },
+        { dedupeKey: `email:edited_after_signoff:${report.id}:${next}` },
+      );
     }
   }
   await ctx.db.enqueueJob(
     'render_pdf',
-    { reportId: report.id, version: next, sendToWhatsApp: opts.sendToWhatsApp ?? false, emailRecipients: opts.emailRecipients ?? true, changeNote: opts.changeNote },
+    {
+      reportId: report.id,
+      version: next,
+      sendToWhatsApp: opts.sendToWhatsApp ?? false,
+      emailRecipients: opts.emailRecipients ?? true,
+      changeNote: opts.changeNote,
+    },
     { dedupeKey: `render_pdf:${report.id}:${next}` },
   );
   return { report: updated, version, wasSignedOff };

@@ -8,7 +8,10 @@ interface Rate {
 }
 
 const RATES: Array<{ match: RegExp; rate: Rate }> = [
-  { match: /claude-(fable|mythos)/, rate: { input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 } },
+  {
+    match: /claude-(fable|mythos)/,
+    rate: { input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 },
+  },
   { match: /claude-opus-5-5/, rate: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 } },
   { match: /claude-opus/, rate: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 } },
   { match: /claude-sonnet-4-6/, rate: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } },
@@ -25,9 +28,18 @@ export interface TokenUsage {
 }
 
 export function estimateClaudeCostUsd(model: string, usage: TokenUsage): number {
-  const rate = RATES.find((r) => r.match.test(model))?.rate ?? { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 };
+  const rate = RATES.find((r) => r.match.test(model))?.rate ?? {
+    input: 3,
+    output: 15,
+    cacheRead: 0.3,
+    cacheWrite: 3.75,
+  };
   const usd =
-    (usage.input * rate.input + usage.output * rate.output + usage.cacheRead * rate.cacheRead + usage.cacheWrite * rate.cacheWrite) / 1_000_000;
+    (usage.input * rate.input +
+      usage.output * rate.output +
+      usage.cacheRead * rate.cacheRead +
+      usage.cacheWrite * rate.cacheWrite) /
+    1_000_000;
   return Math.round(usd * 1e6) / 1e6;
 }
 

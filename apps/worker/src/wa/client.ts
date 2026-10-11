@@ -33,7 +33,12 @@ export interface WaMedia {
 export interface WaClient {
   sendText(to: string, text: string): Promise<WaSendResult>;
   sendButtons(to: string, body: string, buttons: Button[]): Promise<WaSendResult>;
-  sendList(to: string, body: string, options: ListOption[], buttonText?: string): Promise<WaSendResult>;
+  sendList(
+    to: string,
+    body: string,
+    options: ListOption[],
+    buttonText?: string,
+  ): Promise<WaSendResult>;
   sendDocument(to: string, doc: DocumentInput): Promise<WaSendResult>;
   sendTemplate(to: string, template: Record<string, unknown>): Promise<WaSendResult>;
   markRead(waMessageId: string): Promise<void>;
@@ -83,7 +88,11 @@ export function buildTextPayload(to: string, text: string): Record<string, unkno
   };
 }
 
-export function buildButtonsPayload(to: string, body: string, buttons: Button[]): Record<string, unknown> {
+export function buildButtonsPayload(
+  to: string,
+  body: string,
+  buttons: Button[],
+): Record<string, unknown> {
   if (buttons.length === 0) throw new Error('at least one button is required');
   if (buttons.length > BUTTONS_MAX) throw new Error(`at most ${BUTTONS_MAX} buttons per message`);
   const seen = new Set<string>();
@@ -101,7 +110,10 @@ export function buildButtonsPayload(to: string, body: string, buttons: Button[])
       type: 'button',
       body: { text: clip(body, WA_BODY_MAX) },
       action: {
-        buttons: buttons.map((b) => ({ type: 'reply', reply: { id: b.id, title: truncateTitle(b.title) } })),
+        buttons: buttons.map((b) => ({
+          type: 'reply',
+          reply: { id: b.id, title: truncateTitle(b.title) },
+        })),
       },
     },
   };
@@ -133,7 +145,9 @@ export function buildListPayload(
             rows: options.map((o) => ({
               id: o.id.slice(0, 200),
               title: clip(o.title, WA_LIST_TITLE_MAX),
-              ...(o.description ? { description: clip(o.description, WA_LIST_DESCRIPTION_MAX) } : {}),
+              ...(o.description
+                ? { description: clip(o.description, WA_LIST_DESCRIPTION_MAX) }
+                : {}),
             })),
           },
         ],
@@ -142,17 +156,29 @@ export function buildListPayload(
   };
 }
 
-export function buildDocumentPayload(to: string, mediaId: string, filename: string, caption?: string): Record<string, unknown> {
+export function buildDocumentPayload(
+  to: string,
+  mediaId: string,
+  filename: string,
+  caption?: string,
+): Record<string, unknown> {
   return {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
     to: toWaId(to),
     type: 'document',
-    document: { id: mediaId, filename, ...(caption ? { caption: clip(caption, WA_BODY_MAX) } : {}) },
+    document: {
+      id: mediaId,
+      filename,
+      ...(caption ? { caption: clip(caption, WA_BODY_MAX) } : {}),
+    },
   };
 }
 
-export function buildTemplateMessagePayload(to: string, template: Record<string, unknown>): Record<string, unknown> {
+export function buildTemplateMessagePayload(
+  to: string,
+  template: Record<string, unknown>,
+): Record<string, unknown> {
   return {
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
@@ -168,16 +194,25 @@ export function buildMarkReadPayload(waMessageId: string): Record<string, unknow
 
 type FetchLike = typeof fetch;
 
-export function createWaClient(cfg: WaClientConfig, log: Logger, fetchImpl: FetchLike = fetch): WaClient {
+export function createWaClient(
+  cfg: WaClientConfig,
+  log: Logger,
+  fetchImpl: FetchLike = fetch,
+): WaClient {
   const base = `${cfg.graphBase.replace(/\/$/, '')}/${cfg.graphVersion}`;
   const requireConfig = () => {
     if (!cfg.accessToken || !cfg.phoneNumberId) {
-      throw new Error('WA_ACCESS_TOKEN and WA_PHONE_NUMBER_ID are required to send WhatsApp messages');
+      throw new Error(
+        'WA_ACCESS_TOKEN and WA_PHONE_NUMBER_ID are required to send WhatsApp messages',
+      );
     }
   };
   const headers = () => ({ Authorization: `Bearer ${cfg.accessToken}` });
 
-  async function postJson(path: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async function postJson(
+    path: string,
+    payload: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     requireConfig();
     const res = await fetchImpl(`${base}/${path}`, {
       method: 'POST',
@@ -192,7 +227,8 @@ export function createWaClient(cfg: WaClientConfig, log: Logger, fetchImpl: Fetc
       /* non-JSON body */
     }
     if (!res.ok) {
-      const err = (body as { error?: { message?: string } } | null)?.error?.message ?? text.slice(0, 300);
+      const err =
+        (body as { error?: { message?: string } } | null)?.error?.message ?? text.slice(0, 300);
       throw new WaApiError(`WhatsApp API ${res.status}: ${err}`, res.status, body);
     }
     return (body ?? {}) as Record<string, unknown>;
@@ -211,7 +247,8 @@ export function createWaClient(cfg: WaClientConfig, log: Logger, fetchImpl: Fetc
   return {
     sendText: (to, text) => send(buildTextPayload(to, text)),
     sendButtons: (to, body, buttons) => send(buildButtonsPayload(to, body, buttons)),
-    sendList: (to, body, options, buttonText) => send(buildListPayload(to, body, options, buttonText)),
+    sendList: (to, body, options, buttonText) =>
+      send(buildListPayload(to, body, options, buttonText)),
     sendTemplate: (to, template) => send(buildTemplateMessagePayload(to, template)),
     async sendDocument(to, doc) {
       const mediaId = await this.uploadMedia(doc.buffer, doc.mime, doc.filename);
@@ -230,10 +267,21 @@ export function createWaClient(cfg: WaClientConfig, log: Logger, fetchImpl: Fetc
       form.append('messaging_product', 'whatsapp');
       form.append('type', mime);
       form.append('file', new Blob([new Uint8Array(buffer)], { type: mime }), filename);
-      const res = await fetchImpl(`${base}/${cfg.phoneNumberId}/media`, { method: 'POST', headers: headers(), body: form });
-      const body = (await res.json().catch(() => ({}))) as { id?: string; error?: { message?: string } };
+      const res = await fetchImpl(`${base}/${cfg.phoneNumberId}/media`, {
+        method: 'POST',
+        headers: headers(),
+        body: form,
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        id?: string;
+        error?: { message?: string };
+      };
       if (!res.ok || !body.id) {
-        throw new WaApiError(`WhatsApp media upload ${res.status}: ${body.error?.message ?? 'no id'}`, res.status, body);
+        throw new WaApiError(
+          `WhatsApp media upload ${res.status}: ${body.error?.message ?? 'no id'}`,
+          res.status,
+          body,
+        );
       }
       return body.id;
     },
@@ -244,14 +292,28 @@ export function createWaClient(cfg: WaClientConfig, log: Logger, fetchImpl: Fetc
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
           const metaRes = await fetchImpl(`${base}/${mediaId}`, { headers: headers() });
-          const meta = (await metaRes.json().catch(() => ({}))) as { url?: string; mime_type?: string; sha256?: string; error?: { message?: string } };
+          const meta = (await metaRes.json().catch(() => ({}))) as {
+            url?: string;
+            mime_type?: string;
+            sha256?: string;
+            error?: { message?: string };
+          };
           if (!metaRes.ok || !meta.url) {
-            throw new WaApiError(`WhatsApp media lookup ${metaRes.status}: ${meta.error?.message ?? 'no url'}`, metaRes.status, meta);
+            throw new WaApiError(
+              `WhatsApp media lookup ${metaRes.status}: ${meta.error?.message ?? 'no url'}`,
+              metaRes.status,
+              meta,
+            );
           }
           const fileRes = await fetchImpl(meta.url, { headers: headers() });
-          if (!fileRes.ok) throw new WaApiError(`WhatsApp media download ${fileRes.status}`, fileRes.status, null);
+          if (!fileRes.ok)
+            throw new WaApiError(`WhatsApp media download ${fileRes.status}`, fileRes.status, null);
           const buffer = Buffer.from(await fileRes.arrayBuffer());
-          return { buffer, mime: meta.mime_type ?? fileRes.headers.get('content-type'), sha256: meta.sha256 ?? null };
+          return {
+            buffer,
+            mime: meta.mime_type ?? fileRes.headers.get('content-type'),
+            sha256: meta.sha256 ?? null,
+          };
         } catch (err) {
           lastErr = err;
           log.warn('media download failed', { err, media_id: mediaId, attempt });
@@ -264,7 +326,15 @@ export function createWaClient(cfg: WaClientConfig, log: Logger, fetchImpl: Fetc
 
 /** Records every outbound call (tests). */
 export interface FakeWaClient extends WaClient {
-  sent: Array<{ kind: 'text' | 'buttons' | 'list' | 'document' | 'template'; to: string; body?: string; buttons?: Button[]; options?: ListOption[]; template?: Record<string, unknown>; filename?: string }>;
+  sent: Array<{
+    kind: 'text' | 'buttons' | 'list' | 'document' | 'template';
+    to: string;
+    body?: string;
+    buttons?: Button[];
+    options?: ListOption[];
+    template?: Record<string, unknown>;
+    filename?: string;
+  }>;
   media: Map<string, WaMedia>;
   reset(): void;
 }

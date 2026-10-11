@@ -242,7 +242,12 @@ export interface Db {
   getMessageByWaId(waId: string): Promise<MessageRow | null>;
   insertOutboundMessage(input: OutboundMessageInput): Promise<MessageRow>;
   updateMessage(id: string, patch: MessagePatch): Promise<void>;
-  listMessagesBetween(conversationId: string, from: Date, to: Date, types?: MsgType[]): Promise<MessageRow[]>;
+  listMessagesBetween(
+    conversationId: string,
+    from: Date,
+    to: Date,
+    types?: MsgType[],
+  ): Promise<MessageRow[]>;
 
   // transcripts
   getTranscript(messageId: string): Promise<TranscriptRow | null>;
@@ -252,23 +257,44 @@ export interface Db {
   // reporters, sites, orgs
   listReportersByPhone(phone: string): Promise<ReporterRow[]>;
   getReporter(id: string): Promise<ReporterRow | null>;
-  updateReporter(id: string, patch: Partial<Pick<ReporterRow, 'status' | 'verified_at' | 'invited_at' | 'last_invite_error'>>): Promise<void>;
+  updateReporter(
+    id: string,
+    patch: Partial<
+      Pick<ReporterRow, 'status' | 'verified_at' | 'invited_at' | 'last_invite_error'>
+    >,
+  ): Promise<void>;
   listSitesForReporter(reporterId: string): Promise<SiteRow[]>;
   listReportersForSite(siteId: string): Promise<ReporterRow[]>;
   getSite(id: string): Promise<SiteRow | null>;
   listSitesByOrg(orgId: string): Promise<SiteRow[]>;
-  listActiveSites(): Promise<Array<Pick<SiteRow, 'id' | 'org_id' | 'name' | 'project_code' | 'address'>>>;
+  listActiveSites(): Promise<
+    Array<Pick<SiteRow, 'id' | 'org_id' | 'name' | 'project_code' | 'address'>>
+  >;
   getOrg(id: string): Promise<OrgRow | null>;
   listOrgs(): Promise<OrgRow[]>;
   getOrgSettings(orgId: string): Promise<OrgSettingsRow | null>;
   listCompanies(orgId: string): Promise<CompanyRow[]>;
   getCompany(id: string): Promise<CompanyRow | null>;
-  insertCompany(orgId: string, name: string, status: CompanyRow['status'], trade?: string | null): Promise<CompanyRow>;
-  listGlossary(orgId: string, siteId?: string | null, reporterId?: string | null): Promise<GlossaryTermRow[]>;
+  insertCompany(
+    orgId: string,
+    name: string,
+    status: CompanyRow['status'],
+    trade?: string | null,
+  ): Promise<CompanyRow>;
+  listGlossary(
+    orgId: string,
+    siteId?: string | null,
+    reporterId?: string | null,
+  ): Promise<GlossaryTermRow[]>;
   upsertGlossaryTerm(input: GlossaryUpsert): Promise<GlossaryTermRow>;
   listSiteRecipients(siteId: string): Promise<string[]>;
-  listMemberEmails(orgId: string, roles: string[]): Promise<Array<{ email: string; user_id: string; display_name: string | null }>>;
-  getUserContact(userId: string): Promise<{ email: string | null; display_name: string | null } | null>;
+  listMemberEmails(
+    orgId: string,
+    roles: string[],
+  ): Promise<Array<{ email: string; user_id: string; display_name: string | null }>>;
+  getUserContact(
+    userId: string,
+  ): Promise<{ email: string | null; display_name: string | null } | null>;
   siteContext(siteId: string): Promise<SiteContext | null>;
 
   // site days
@@ -287,10 +313,26 @@ export interface Db {
   listReportsForSitePeriod(siteId: string, start: string, end: string): Promise<ReportRow[]>;
   nextReportNo(siteId: string): Promise<string>;
   getVersion(reportId: string, version: number): Promise<ReportVersionRow | null>;
+  listVersions(reportId: string): Promise<ReportVersionRow[]>;
   insertVersion(input: VersionInput): Promise<ReportVersionRow>;
-  updateVersion(reportId: string, version: number, patch: { data?: Json; summary?: string | null; pdf_path?: string | null; change_note?: string | null }): Promise<void>;
+  updateVersion(
+    reportId: string,
+    version: number,
+    patch: {
+      data?: Json;
+      summary?: string | null;
+      pdf_path?: string | null;
+      change_note?: string | null;
+    },
+  ): Promise<void>;
   denormalizeVersion(reportId: string, version: number): Promise<void>;
-  insertReportSource(input: { report_id: string; message_id: string; kind: ReportSourceRow['kind']; caption?: string | null; taken_at?: string | Date | null }): Promise<void>;
+  insertReportSource(input: {
+    report_id: string;
+    message_id: string;
+    kind: ReportSourceRow['kind'];
+    caption?: string | null;
+    taken_at?: string | Date | null;
+  }): Promise<void>;
   listReportSources(reportId: string): Promise<ReportSourceWithMessage[]>;
 
   // questions
@@ -302,11 +344,27 @@ export interface Db {
   // unknown senders
   findPendingUnknownSender(phone: string): Promise<UnknownSenderRow | null>;
   getUnknownSender(id: string): Promise<UnknownSenderRow | null>;
-  insertUnknownSender(input: { org_id: string | null; phone_e164: string; first_message_id: string | null; snippet: string | null; guessed_site_id?: string | null }): Promise<UnknownSenderRow>;
-  updateUnknownSender(id: string, patch: { org_id?: string | null; snippet?: string | null; guessed_site_id?: string | null }): Promise<void>;
+  insertUnknownSender(input: {
+    org_id: string | null;
+    phone_e164: string;
+    first_message_id: string | null;
+    snippet: string | null;
+    guessed_site_id?: string | null;
+  }): Promise<UnknownSenderRow>;
+  updateUnknownSender(
+    id: string,
+    patch: { org_id?: string | null; snippet?: string | null; guessed_site_id?: string | null },
+  ): Promise<void>;
 
   // notifications & audit
-  notifyOrg(orgId: string, kind: string, title: string, body?: string | null, targetPath?: string | null, userId?: string | null): Promise<string>;
+  notifyOrg(
+    orgId: string,
+    kind: string,
+    title: string,
+    body?: string | null,
+    targetPath?: string | null,
+    userId?: string | null,
+  ): Promise<string>;
   logAudit(input: AuditInput): Promise<void>;
 
   // jobs
@@ -320,7 +378,10 @@ export interface Db {
 
   // evidence packs, weather, retention, digest
   getEvidencePack(id: string): Promise<EvidencePackRow | null>;
-  updateEvidencePack(id: string, patch: Partial<Pick<EvidencePackRow, 'status' | 'pdf_path' | 'error' | 'ready_at'>>): Promise<void>;
+  updateEvidencePack(
+    id: string,
+    patch: Partial<Pick<EvidencePackRow, 'status' | 'pdf_path' | 'error' | 'ready_at'>>,
+  ): Promise<void>;
   listWeatherEvents(siteId: string, start: string, end: string): Promise<WeatherEventRow[]>;
   listExpiredMedia(before: Date, limit: number): Promise<ExpiredMedia[]>;
   getInvoiceSummary(invoiceId: string): Promise<InvoiceSummary | null>;
@@ -359,8 +420,18 @@ export function connectSql(url: string, opts: { max?: number } = {}): Sql {
     prepare: false,
     onnotice: () => {},
     types: {
-      numeric: { to: 1700, from: [1700], serialize: (x: number | string) => String(x), parse: (x: string) => Number(x) },
-      bigint: { to: 20, from: [20], serialize: (x: number | string) => String(x), parse: (x: string) => Number(x) },
+      numeric: {
+        to: 1700,
+        from: [1700],
+        serialize: (x: number | string) => String(x),
+        parse: (x: string) => Number(x),
+      },
+      bigint: {
+        to: 20,
+        from: [20],
+        serialize: (x: number | string) => String(x),
+        parse: (x: string) => Number(x),
+      },
       date: { to: 1082, from: [1082], serialize: (x: string) => x, parse: (x: string) => x },
       timestamptz: {
         to: 1184,
@@ -407,11 +478,14 @@ export function createDb(sql: Sql): Db {
       return one(await sql<ConversationRow[]>`select * from conversations where id = ${id}`);
     },
     async getConversationByPhone(phone) {
-      return one(await sql<ConversationRow[]>`select * from conversations where phone_e164 = ${phone}`);
+      return one(
+        await sql<ConversationRow[]>`select * from conversations where phone_e164 = ${phone}`,
+      );
     },
     async ensureConversation(phone, patch) {
       const existing = await db.getConversationByPhone(phone);
-      if (existing) return Object.keys(patch).length ? db.updateConversation(existing.id, patch) : existing;
+      if (existing)
+        return Object.keys(patch).length ? db.updateConversation(existing.id, patch) : existing;
       const rows = await sql<ConversationRow[]>`
         insert into conversations (phone_e164, org_id, reporter_id, state, context)
         values (${phone}, ${patch.org_id ?? null}, ${patch.reporter_id ?? null}, ${patch.state ?? 'new'}, ${sql.json((patch.context ?? {}) as never)})
@@ -423,16 +497,22 @@ export function createDb(sql: Sql): Db {
       const p: Record<string, unknown> = { ...patch };
       if (patch.last_outbound_at !== undefined) p.last_outbound_at = iso(patch.last_outbound_at);
       if (patch.last_inbound_at !== undefined) p.last_inbound_at = iso(patch.last_inbound_at);
-      const rows = await sql<ConversationRow[]>`update conversations set ${setClause(p)} where id = ${id} returning *`;
+      const rows = await sql<
+        ConversationRow[]
+      >`update conversations set ${setClause(p)} where id = ${id} returning *`;
       const row = rows[0];
       if (!row) throw new Error(`conversation ${id} not found`);
       return row;
     },
     async listConversationsByState(states, changedBefore) {
       if (changedBefore) {
-        return sql<ConversationRow[]>`select * from conversations where state = any(${sql.array(states)}::convo_state[]) and state_changed_at < ${changedBefore.toISOString()} order by state_changed_at`;
+        return sql<
+          ConversationRow[]
+        >`select * from conversations where state = any(${sql.array(states)}::convo_state[]) and state_changed_at < ${changedBefore.toISOString()} order by state_changed_at`;
       }
-      return sql<ConversationRow[]>`select * from conversations where state = any(${sql.array(states)}::convo_state[]) order by state_changed_at`;
+      return sql<
+        ConversationRow[]
+      >`select * from conversations where state = any(${sql.array(states)}::convo_state[]) order by state_changed_at`;
     },
 
     // messages ----------------------------------------------------------------------------
@@ -455,20 +535,28 @@ export function createDb(sql: Sql): Db {
     },
     async listMessagesBetween(conversationId, from, to, types) {
       if (types && types.length) {
-        return sql<MessageRow[]>`select * from messages where conversation_id = ${conversationId} and direction = 'in'
+        return sql<
+          MessageRow[]
+        >`select * from messages where conversation_id = ${conversationId} and direction = 'in'
           and created_at between ${from.toISOString()} and ${to.toISOString()} and type = any(${sql.array(types)}::msg_type[]) order by created_at`;
       }
-      return sql<MessageRow[]>`select * from messages where conversation_id = ${conversationId} and direction = 'in'
+      return sql<
+        MessageRow[]
+      >`select * from messages where conversation_id = ${conversationId} and direction = 'in'
         and created_at between ${from.toISOString()} and ${to.toISOString()} order by created_at`;
     },
 
     // transcripts -------------------------------------------------------------------------
     async getTranscript(messageId) {
-      return one(await sql<TranscriptRow[]>`select * from transcripts where message_id = ${messageId}`);
+      return one(
+        await sql<TranscriptRow[]>`select * from transcripts where message_id = ${messageId}`,
+      );
     },
     async listTranscripts(messageIds) {
       if (messageIds.length === 0) return [];
-      return sql<TranscriptRow[]>`select * from transcripts where message_id = any(${sql.array(messageIds)}::uuid[])`;
+      return sql<
+        TranscriptRow[]
+      >`select * from transcripts where message_id = any(${sql.array(messageIds)}::uuid[])`;
     },
     async upsertTranscript(input) {
       const rows = await sql<TranscriptRow[]>`
@@ -481,7 +569,9 @@ export function createDb(sql: Sql): Db {
 
     // reporters, sites, orgs --------------------------------------------------------------
     async listReportersByPhone(phone) {
-      return sql<ReporterRow[]>`select * from reporters where phone_e164 = ${phone} and status <> 'disabled' order by created_at`;
+      return sql<
+        ReporterRow[]
+      >`select * from reporters where phone_e164 = ${phone} and status <> 'disabled' order by created_at`;
     },
     async getReporter(id) {
       return one(await sql<ReporterRow[]>`select * from reporters where id = ${id}`);
@@ -494,7 +584,9 @@ export function createDb(sql: Sql): Db {
         where sr.reporter_id = ${reporterId} and s.status <> 'archived' order by sr.is_primary desc, s.name`;
     },
     async listReportersForSite(siteId) {
-      return sql<ReporterRow[]>`select r.* from reporters r join site_reporters sr on sr.reporter_id = r.id
+      return sql<
+        ReporterRow[]
+      >`select r.* from reporters r join site_reporters sr on sr.reporter_id = r.id
         where sr.site_id = ${siteId} order by sr.is_primary desc, r.created_at`;
     },
     async getSite(id) {
@@ -504,7 +596,9 @@ export function createDb(sql: Sql): Db {
       return sql<SiteRow[]>`select * from sites where org_id = ${orgId} order by name`;
     },
     async listActiveSites() {
-      return sql<Array<Pick<SiteRow, 'id' | 'org_id' | 'name' | 'project_code' | 'address'>>>`select id, org_id, name, project_code, address from sites where status = 'active'`;
+      return sql<
+        Array<Pick<SiteRow, 'id' | 'org_id' | 'name' | 'project_code' | 'address'>>
+      >`select id, org_id, name, project_code, address from sites where status = 'active'`;
     },
     async getOrg(id) {
       return one(await sql<OrgRow[]>`select * from orgs where id = ${id}`);
@@ -541,7 +635,9 @@ export function createDb(sql: Sql): Db {
           and scope_site_id is not distinct from ${input.scope_site_id ?? null} limit 1`;
       const row = existing[0];
       if (row) {
-        const rows = await sql<GlossaryTermRow[]>`update glossary_terms set times_heard = times_heard + 1, last_seen_at = now(),
+        const rows = await sql<
+          GlossaryTermRow[]
+        >`update glossary_terms set times_heard = times_heard + 1, last_seen_at = now(),
           official = coalesce(official, ${input.official}) where id = ${row.id} returning *`;
         return rows[0]!;
       }
@@ -553,7 +649,9 @@ export function createDb(sql: Sql): Db {
       return rows[0]!;
     },
     async listSiteRecipients(siteId) {
-      const rows = await sql<Array<{ email: string }>>`select email from site_recipients where site_id = ${siteId} order by email`;
+      const rows = await sql<
+        Array<{ email: string }>
+      >`select email from site_recipients where site_id = ${siteId} order by email`;
       return rows.map((r) => r.email);
     },
     async listMemberEmails(orgId, roles) {
@@ -562,9 +660,11 @@ export function createDb(sql: Sql): Db {
         where m.org_id = ${orgId} and m.role = any(${sql.array(roles)}::member_role[]) and u.email is not null order by u.email`;
     },
     async getUserContact(userId) {
-      return one(await sql<Array<{ email: string | null; display_name: string | null }>>`
+      return one(
+        await sql<Array<{ email: string | null; display_name: string | null }>>`
         select u.email, (select m.display_name from org_members m where m.user_id = u.id limit 1) as display_name
-        from auth.users u where u.id = ${userId}`);
+        from auth.users u where u.id = ${userId}`,
+      );
     },
     async siteContext(siteId) {
       const site = await db.getSite(siteId);
@@ -586,7 +686,11 @@ export function createDb(sql: Sql): Db {
       return one(await sql<SiteDayRow[]>`select * from site_days where id = ${id}`);
     },
     async findSiteDay(siteId, date) {
-      return one(await sql<SiteDayRow[]>`select * from site_days where site_id = ${siteId} and date = ${date}`);
+      return one(
+        await sql<
+          SiteDayRow[]
+        >`select * from site_days where site_id = ${siteId} and date = ${date}`,
+      );
     },
     async getOrCreateSiteDay(siteId, date, deadlineAt) {
       const rows = await sql<SiteDayRow[]>`
@@ -598,7 +702,9 @@ export function createDb(sql: Sql): Db {
     async updateSiteDay(id, patch) {
       const p: Record<string, unknown> = { ...patch };
       if (patch.deadline_at !== undefined) p.deadline_at = iso(patch.deadline_at);
-      const rows = await sql<SiteDayRow[]>`update site_days set ${setClause(p)} where id = ${id} returning *`;
+      const rows = await sql<
+        SiteDayRow[]
+      >`update site_days set ${setClause(p)} where id = ${id} returning *`;
       const row = rows[0];
       if (!row) throw new Error(`site_day ${id} not found`);
       return row;
@@ -620,17 +726,25 @@ export function createDb(sql: Sql): Db {
       for (const k of ['confirmed_at', 'filed_at', 'signed_off_at', 'received_at'] as const) {
         if (patch[k] !== undefined) p[k] = iso(patch[k]);
       }
-      const rows = await sql<ReportRow[]>`update reports set ${setClause(p)} where id = ${id} returning *`;
+      const rows = await sql<
+        ReportRow[]
+      >`update reports set ${setClause(p)} where id = ${id} returning *`;
       const row = rows[0];
       if (!row) throw new Error(`report ${id} not found`);
       return row;
     },
     async findOpenReportForSiteDay(siteDayId) {
-      return one(await sql<ReportRow[]>`select * from reports where site_day_id = ${siteDayId}
-        and status in ('collecting','awaiting_answer','awaiting_confirmation') order by created_at desc limit 1`);
+      return one(
+        await sql<ReportRow[]>`select * from reports where site_day_id = ${siteDayId}
+        and status in ('collecting','awaiting_answer','awaiting_confirmation') order by created_at desc limit 1`,
+      );
     },
     async findReportForSiteDay(siteDayId) {
-      return one(await sql<ReportRow[]>`select * from reports where site_day_id = ${siteDayId} and status <> 'void' order by created_at desc limit 1`);
+      return one(
+        await sql<
+          ReportRow[]
+        >`select * from reports where site_day_id = ${siteDayId} and status <> 'void' order by created_at desc limit 1`,
+      );
     },
     async findReportsByDate(siteIds, date) {
       if (siteIds.length === 0) return [];
@@ -643,11 +757,22 @@ export function createDb(sql: Sql): Db {
         where r.site_id = ${siteId} and sd.date between ${start} and ${end} and r.status in ('filed','signed_off') order by sd.date`;
     },
     async nextReportNo(siteId) {
-      const rows = await sql<Array<{ next_report_no: string }>>`select next_report_no(${siteId}) as next_report_no`;
+      const rows = await sql<
+        Array<{ next_report_no: string }>
+      >`select next_report_no(${siteId}) as next_report_no`;
       return rows[0]!.next_report_no;
     },
     async getVersion(reportId, version) {
-      return one(await sql<ReportVersionRow[]>`select * from report_versions where report_id = ${reportId} and version = ${version}`);
+      return one(
+        await sql<
+          ReportVersionRow[]
+        >`select * from report_versions where report_id = ${reportId} and version = ${version}`,
+      );
+    },
+    async listVersions(reportId) {
+      return sql<
+        ReportVersionRow[]
+      >`select * from report_versions where report_id = ${reportId} order by version`;
     },
     async insertVersion(input) {
       const rows = await sql<ReportVersionRow[]>`
@@ -669,7 +794,9 @@ export function createDb(sql: Sql): Db {
         on conflict (report_id, message_id) do nothing`;
     },
     async listReportSources(reportId) {
-      return sql<ReportSourceWithMessage[]>`select rs.*, m.type as message_type, m.storage_path, m.duration_s, m.created_at as message_created_at, m.media_mime, m.body
+      return sql<
+        ReportSourceWithMessage[]
+      >`select rs.*, m.type as message_type, m.storage_path, m.duration_s, m.created_at as message_created_at, m.media_mime, m.body
         from report_sources rs join messages m on m.id = rs.message_id where rs.report_id = ${reportId} order by m.created_at`;
     },
 
@@ -685,7 +812,9 @@ export function createDb(sql: Sql): Db {
       return one(await sql<QuestionRow[]>`select * from questions where id = ${id}`);
     },
     async listQuestions(reportId) {
-      return sql<QuestionRow[]>`select * from questions where report_id = ${reportId} order by created_at`;
+      return sql<
+        QuestionRow[]
+      >`select * from questions where report_id = ${reportId} order by created_at`;
     },
     async updateQuestion(id, patch) {
       const p: Record<string, unknown> = { ...patch };
@@ -696,7 +825,11 @@ export function createDb(sql: Sql): Db {
 
     // unknown senders ---------------------------------------------------------------------
     async findPendingUnknownSender(phone) {
-      return one(await sql<UnknownSenderRow[]>`select * from unknown_senders where phone_e164 = ${phone} and status = 'pending' order by created_at desc limit 1`);
+      return one(
+        await sql<
+          UnknownSenderRow[]
+        >`select * from unknown_senders where phone_e164 = ${phone} and status = 'pending' order by created_at desc limit 1`,
+      );
     },
     async getUnknownSender(id) {
       return one(await sql<UnknownSenderRow[]>`select * from unknown_senders where id = ${id}`);
@@ -713,7 +846,9 @@ export function createDb(sql: Sql): Db {
 
     // notifications & audit ---------------------------------------------------------------
     async notifyOrg(orgId, kind, title, body = null, targetPath = null, userId = null) {
-      const rows = await sql<Array<{ notify_org: string }>>`select notify_org(${orgId}, ${kind}, ${title}, ${body}, ${targetPath}, ${userId}) as notify_org`;
+      const rows = await sql<
+        Array<{ notify_org: string }>
+      >`select notify_org(${orgId}, ${kind}, ${title}, ${body}, ${targetPath}, ${userId}) as notify_org`;
       return rows[0]!.notify_org;
     },
     async logAudit(input) {
@@ -734,14 +869,18 @@ export function createDb(sql: Sql): Db {
       return one(await sql<JobRow[]>`select * from jobs where id = ${id}`);
     },
     async enqueueJob(type, payload, opts = {}) {
-      const rows = await sql<Array<{ enqueue_job: number }>>`select enqueue_job(${type}, ${sql.json(payload as never)}, ${iso(opts.runAfter) ?? null}, ${opts.dedupeKey ?? null}) as enqueue_job`;
+      const rows = await sql<
+        Array<{ enqueue_job: number }>
+      >`select enqueue_job(${type}, ${sql.json(payload as never)}, ${iso(opts.runAfter) ?? null}, ${opts.dedupeKey ?? null}) as enqueue_job`;
       return rows[0]!.enqueue_job;
     },
     async updateJobMetrics(id, metrics) {
       await sql`update jobs set payload = payload || jsonb_build_object('metrics', ${sql.json(metrics as never)}::jsonb) where id = ${id}`;
     },
     async queueStats() {
-      const rows = await sql<Array<{ status: string; n: number }>>`select status::text as status, count(*)::int as n from jobs where status in ('queued','running','dead') group by status`;
+      const rows = await sql<
+        Array<{ status: string; n: number }>
+      >`select status::text as status, count(*)::int as n from jobs where status in ('queued','running','dead') group by status`;
       const get = (s: string) => rows.find((r) => r.status === s)?.n ?? 0;
       return { queued: get('queued'), running: get('running'), dead: get('dead') };
     },
@@ -754,15 +893,31 @@ export function createDb(sql: Sql): Db {
       await sql`update evidence_packs set ${setClause(patch as Record<string, unknown>)} where id = ${id}`;
     },
     async listWeatherEvents(siteId, start, end) {
-      return sql<WeatherEventRow[]>`select * from current_weather where site_id = ${siteId} and date between ${start} and ${end} order by date, start_local`;
+      return sql<
+        WeatherEventRow[]
+      >`select * from current_weather where site_id = ${siteId} and date between ${start} and ${end} order by date, start_local`;
     },
     async listExpiredMedia(before, limit) {
-      return sql<ExpiredMedia[]>`select id as message_id, storage_path, type, created_at from messages
+      return sql<
+        ExpiredMedia[]
+      >`select id as message_id, storage_path, type, created_at from messages
         where storage_path is not null and type in ('audio','image') and created_at < ${before.toISOString()}
         order by created_at limit ${limit}`;
     },
     async getInvoiceSummary(invoiceId) {
-      const rows = await sql<Array<{ id: string; org_id: string; company_name: string; invoice_no: string | null; period_start: string | null; period_end: string | null; invoiced_hours: number | null; reported_hours: number | null; lines: unknown }>>`
+      const rows = await sql<
+        Array<{
+          id: string;
+          org_id: string;
+          company_name: string;
+          invoice_no: string | null;
+          period_start: string | null;
+          period_end: string | null;
+          invoiced_hours: number | null;
+          reported_hours: number | null;
+          lines: unknown;
+        }>
+      >`
         select i.id, i.org_id, c.name as company_name, i.invoice_no, i.period_start, i.period_end, i.total_hours as invoiced_hours, i.lines,
           (select sum(cm.hours) from current_manpower cm where cm.company_id = i.company_id and cm.date between coalesce(i.period_start, '1970-01-01') and coalesce(i.period_end, '2999-12-31')) as reported_hours
         from sub_invoices i join companies c on c.id = i.company_id where i.id = ${invoiceId}`;
@@ -794,7 +949,9 @@ export function createDb(sql: Sql): Db {
         group by 1, 2`;
       const siteDays = days.reduce((a, d) => a + d.n, 0);
       const filed = days.filter((d) => d.status === 'filed').reduce((a, d) => a + d.n, 0);
-      const onTime = days.filter((d) => d.status === 'filed' && !d.is_late).reduce((a, d) => a + d.n, 0);
+      const onTime = days
+        .filter((d) => d.status === 'filed' && !d.is_late)
+        .reduce((a, d) => a + d.n, 0);
       const weather = await sql<Array<{ site_name: string; hours: number }>>`
         select s.name as site_name, sum(w.lost_hours)::numeric as hours from current_weather w join sites s on s.id = w.site_id
         where w.org_id = ${orgId} and w.date between ${weekStart} and ${weekEnd} group by s.name order by hours desc`;
@@ -811,8 +968,14 @@ export function createDb(sql: Sql): Db {
         filed,
         onTime,
         weatherHoursBySite: weather.map((w) => ({ siteName: w.site_name, hours: Number(w.hours) })),
-        unsigned: unsigned.map((u) => ({ reportNo: u.report_no, siteName: u.site_name, date: u.date })),
-        invoiceGaps: gaps.filter((g) => Number(g.gap) !== 0).map((g) => ({ companyName: g.company_name, gap: Number(g.gap) })),
+        unsigned: unsigned.map((u) => ({
+          reportNo: u.report_no,
+          siteName: u.site_name,
+          date: u.date,
+        })),
+        invoiceGaps: gaps
+          .filter((g) => Number(g.gap) !== 0)
+          .map((g) => ({ companyName: g.company_name, gap: Number(g.gap) })),
       };
     },
 

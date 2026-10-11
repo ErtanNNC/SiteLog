@@ -25,18 +25,42 @@ async function loadDotenv(): Promise<void> {
 }
 
 export function buildContext(config: Config): Ctx {
-  const log = createLogger({ service: 'sitelog-worker', worker_id: config.WORKER_ID }, { level: config.LOG_LEVEL });
+  const log = createLogger(
+    { service: 'sitelog-worker', worker_id: config.WORKER_ID },
+    { level: config.LOG_LEVEL },
+  );
   const db = connectDb(config.SUPABASE_DB_URL, { max: config.WORKER_CONCURRENCY + 2 });
-  const storage = config.WORKER_DRY_RUN ? createMemoryStorage() : createStorage(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY);
-  const wa = createWaClient({ graphBase: config.WA_GRAPH_BASE, graphVersion: config.WA_GRAPH_VERSION, phoneNumberId: config.WA_PHONE_NUMBER_ID, accessToken: config.WA_ACCESS_TOKEN }, log);
+  const storage = config.WORKER_DRY_RUN
+    ? createMemoryStorage()
+    : createStorage(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY);
+  const wa = createWaClient(
+    {
+      graphBase: config.WA_GRAPH_BASE,
+      graphVersion: config.WA_GRAPH_VERSION,
+      phoneNumberId: config.WA_PHONE_NUMBER_ID,
+      accessToken: config.WA_ACCESS_TOKEN,
+    },
+    log,
+  );
   return {
     config,
     db,
     wa,
     storage,
-    ai: { claude: createAnthropicClient(config.ANTHROPIC_API_KEY), openai: createOpenAiClient(config.OPENAI_API_KEY) },
-    email: createEmailProvider({ provider: config.EMAIL_PROVIDER, apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM }, log),
-    ffmpeg: createFfmpegRunner(resolveFfmpegPath({ ...process.env, FFMPEG_PATH: config.FFMPEG_PATH || process.env.FFMPEG_PATH })),
+    ai: {
+      claude: createAnthropicClient(config.ANTHROPIC_API_KEY),
+      openai: createOpenAiClient(config.OPENAI_API_KEY),
+    },
+    email: createEmailProvider(
+      { provider: config.EMAIL_PROVIDER, apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM },
+      log,
+    ),
+    ffmpeg: createFfmpegRunner(
+      resolveFfmpegPath({
+        ...process.env,
+        FFMPEG_PATH: config.FFMPEG_PATH || process.env.FFMPEG_PATH,
+      }),
+    ),
     log,
     now: () => new Date(),
     metrics: createMetrics(),
@@ -47,7 +71,12 @@ export async function main(): Promise<void> {
   await loadDotenv();
   const config = loadConfig();
   if (config.SENTRY_DSN) {
-    Sentry.init({ dsn: config.SENTRY_DSN, environment: config.NODE_ENV, release: `sitelog-worker@${VERSION}`, tracesSampleRate: 0 });
+    Sentry.init({
+      dsn: config.SENTRY_DSN,
+      environment: config.NODE_ENV,
+      release: `sitelog-worker@${VERSION}`,
+      tracesSampleRate: 0,
+    });
   }
   const ctx = buildContext(config);
   const startedAt = Date.now();
@@ -63,7 +92,13 @@ export async function main(): Promise<void> {
     if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
       try {
         const queue = await ctx.db.queueStats();
-        const body = { ok: true, version: VERSION, uptimeS: Math.round((Date.now() - startedAt) / 1000), queue, active: runner.active };
+        const body = {
+          ok: true,
+          version: VERSION,
+          uptimeS: Math.round((Date.now() - startedAt) / 1000),
+          queue,
+          active: runner.active,
+        };
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(body));
       } catch (err) {
@@ -76,7 +111,12 @@ export async function main(): Promise<void> {
     res.writeHead(404);
     res.end();
   });
-  server.listen(config.WORKER_PORT, () => ctx.log.info('health server listening', { port: config.WORKER_PORT, ffmpeg: resolveFfmpegPath() }));
+  server.listen(config.WORKER_PORT, () =>
+    ctx.log.info('health server listening', {
+      port: config.WORKER_PORT,
+      ffmpeg: resolveFfmpegPath(),
+    }),
+  );
   runner.start();
 
   let stopping = false;

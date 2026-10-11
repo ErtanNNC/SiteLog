@@ -45,7 +45,11 @@ export class SessionError extends Error {
   }
 }
 
-export async function createSession(ctx: Ctx, message: MessageRow, convo?: ConversationRow): Promise<Session | null> {
+export async function createSession(
+  ctx: Ctx,
+  message: MessageRow,
+  convo?: ConversationRow,
+): Promise<Session | null> {
   const conversation = convo ?? (await ctx.db.getConversation(message.conversation_id));
   if (!conversation) throw new SessionError(`conversation ${message.conversation_id} not found`);
   const reporters = await ctx.db.listReportersByPhone(conversation.phone_e164);
@@ -81,7 +85,10 @@ export async function createSession(ctx: Ctx, message: MessageRow, convo?: Conve
     },
     async setState(state, patch = {}) {
       const next: ConvoContext = { ...contextOf(session.convo), ...patch };
-      session.convo = await ctx.db.updateConversation(session.convo.id, { ...(state ? { state } : {}), context: next });
+      session.convo = await ctx.db.updateConversation(session.convo.id, {
+        ...(state ? { state } : {}),
+        context: next,
+      });
       return session.convo;
     },
     siteById(id) {
@@ -97,10 +104,15 @@ function dedupeById<T extends { id: string }>(rows: T[]): T[] {
 }
 
 /** "17:30" for the site (site override → org default). */
-export function deadlineFor(site: Pick<SiteRow, 'deadline'>, settings: Pick<OrgSettingsRow, 'default_deadline'>): string {
+export function deadlineFor(
+  site: Pick<SiteRow, 'deadline'>,
+  settings: Pick<OrgSettingsRow, 'default_deadline'>,
+): string {
   return formatDeadline(site.deadline ?? settings.default_deadline);
 }
 
-export function workingDaysOf(settings: Pick<OrgSettingsRow, 'working_days'> | null | undefined): number[] {
+export function workingDaysOf(
+  settings: Pick<OrgSettingsRow, 'working_days'> | null | undefined,
+): number[] {
   return settings?.working_days?.length ? settings.working_days.map(Number) : [1, 2, 3, 4, 5];
 }

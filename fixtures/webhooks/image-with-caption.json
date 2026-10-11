@@ -1,0 +1,35 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102030405060708",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550142290",
+              "phone_number_id": "111222333444555"
+            },
+            "contacts": [{ "profile": { "name": "Marco Ruiz" }, "wa_id": "15550143378" }],
+            "messages": [
+              {
+                "from": "15550143378",
+                "id": "wamid.HBgLMTU1NTAxNDMzNzgVAgASGBQzQUY0QjQ0QzFFNzE5MDdCNzA2MAA=",
+                "timestamp": "1791671500",
+                "type": "image",
+                "image": {
+                  "id": "2234567890123456",
+                  "mime_type": "image/jpeg",
+                  "sha256": "0c1d2e3f405162738495a6b7c8d9e0f10213243546576879808192a3b4c5d6e7",
+                  "caption": "L4 pour done"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

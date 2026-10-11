@@ -42,17 +42,21 @@ export function createStorage(url: string, serviceRoleKey: string): Storage {
 export function createStorageFromClient(client: SupabaseClient): Storage {
   return {
     async upload(bucket, path, body, contentType) {
-      const { error } = await client.storage.from(bucket).upload(path, body, { contentType, upsert: true });
+      const { error } = await client.storage
+        .from(bucket)
+        .upload(path, body, { contentType, upsert: true });
       if (error) throw new StorageError(`upload failed: ${error.message}`, bucket, path);
     },
     async download(bucket, path) {
       const { data, error } = await client.storage.from(bucket).download(path);
-      if (error || !data) throw new StorageError(`download failed: ${error?.message ?? 'no data'}`, bucket, path);
+      if (error || !data)
+        throw new StorageError(`download failed: ${error?.message ?? 'no data'}`, bucket, path);
       return Buffer.from(await data.arrayBuffer());
     },
     async signedUrl(bucket, path, expiresInS = SIGNED_URL_TTL_S) {
       const { data, error } = await client.storage.from(bucket).createSignedUrl(path, expiresInS);
-      if (error || !data) throw new StorageError(`signed url failed: ${error?.message ?? 'no data'}`, bucket, path);
+      if (error || !data)
+        throw new StorageError(`signed url failed: ${error?.message ?? 'no data'}`, bucket, path);
       return data.signedUrl;
     },
     async remove(bucket, paths) {
@@ -68,7 +72,9 @@ export function createStorageFromClient(client: SupabaseClient): Storage {
 }
 
 /** In-memory storage for tests and WORKER_DRY_RUN. */
-export function createMemoryStorage(): Storage & { files: Map<string, { body: Buffer; contentType: string }> } {
+export function createMemoryStorage(): Storage & {
+  files: Map<string, { body: Buffer; contentType: string }>;
+} {
   const files = new Map<string, { body: Buffer; contentType: string }>();
   const key = (b: Bucket, p: string) => `${b}/${p}`;
   return {

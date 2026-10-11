@@ -1,4 +1,10 @@
-import { deriveTotals, firstName, formatDateShort, pdfFileName, type DailyReportData } from '@sitelog/shared';
+import {
+  deriveTotals,
+  firstName,
+  formatDateShort,
+  pdfFileName,
+  type DailyReportData,
+} from '@sitelog/shared';
 import type { Ctx } from '../context';
 import type { EmailAttachment } from '../email/provider';
 import {
@@ -22,13 +28,28 @@ export const sendEmail: JobHandler<'send_email'> = async (ctx, payload) => {
     ctx.log.info('email skipped: no recipients', { kind: payload.kind });
     return;
   }
-  const res = await ctx.email.send({ to, subject: rendered.subject, html: rendered.html, text: rendered.text, attachments, tags: { kind: payload.kind } });
-  ctx.log.info('email sent', { kind: payload.kind, to: to.length, provider: ctx.email.name, id: res.id });
+  const res = await ctx.email.send({
+    to,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    attachments,
+    tags: { kind: payload.kind },
+  });
+  ctx.log.info('email sent', {
+    kind: payload.kind,
+    to: to.length,
+    provider: ctx.email.name,
+    id: res.id,
+  });
 };
 
 type EmailPayload = Parameters<JobHandler<'send_email'>>[1];
 
-export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<{ to: string[]; rendered: RenderedEmail; attachments?: EmailAttachment[] } | null> {
+export async function buildEmail(
+  ctx: Ctx,
+  payload: EmailPayload,
+): Promise<{ to: string[]; rendered: RenderedEmail; attachments?: EmailAttachment[] } | null> {
   const appUrl = ctx.config.APP_URL;
   switch (payload.kind) {
     case 'report_filed':
@@ -38,7 +59,8 @@ export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<{ to:
       if (!report) throw new PermanentJobError(`report ${payload.reportId} not found`);
       const version = await ctx.db.getVersion(report.id, payload.version ?? report.current_version);
       const site = await ctx.db.siteContext(report.site_id);
-      if (!version || !site) throw new PermanentJobError(`report ${report.id} version/site missing`);
+      if (!version || !site)
+        throw new PermanentJobError(`report ${report.id} version/site missing`);
       const data = version.data as DailyReportData;
       const to = payload.to ?? [...site.recipients];
       if (payload.kind === 'report_updated' && report.signed_off_by) {
@@ -48,7 +70,11 @@ export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<{ to:
       const attachments: EmailAttachment[] = [];
       if (version.pdf_path) {
         try {
-          attachments.push({ filename: pdfFileName(report.report_no, data.reportDate, version.version), content: await ctx.storage.download('pdfs', version.pdf_path), contentType: 'application/pdf' });
+          attachments.push({
+            filename: pdfFileName(report.report_no, data.reportDate, version.version),
+            content: await ctx.storage.download('pdfs', version.pdf_path),
+            contentType: 'application/pdf',
+          });
         } catch (err) {
           ctx.log.warn('pdf attachment missing', { err, report_id: report.id });
         }
@@ -63,7 +89,11 @@ export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<{ to:
         version: version.version,
         changeNote: payload.changeNote ?? version.change_note ?? null,
         summary: data.summary,
-        totals: deriveTotals(data, { selfPerformCompanyIds: new Set(site.companies.filter((c) => c.is_self_perform).map((c) => c.id)) }),
+        totals: deriveTotals(data, {
+          selfPerformCompanyIds: new Set(
+            site.companies.filter((c) => c.is_self_perform).map((c) => c.id),
+          ),
+        }),
         reviewReasons: report.review_reasons,
         isLate: report.is_late,
         reporterFirstName: reporter ? firstName(reporter.name) : null,
@@ -118,28 +148,51 @@ export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<{ to:
         const c = await ctx.db.getUserContact(pack.created_by);
         if (c?.email) to.push(c.email);
       }
-      const rendered = evidencePackReadyEmail({ orgName: org?.name ?? 'SiteLog', siteName: site?.name ?? 'All sites', periodStart: pack.period_start, periodEnd: pack.period_end, downloadUrl: url, panelUrl: `${appUrl}/weather` });
+      const rendered = evidencePackReadyEmail({
+        orgName: org?.name ?? 'SiteLog',
+        siteName: site?.name ?? 'All sites',
+        periodStart: pack.period_start,
+        periodEnd: pack.period_end,
+        downloadUrl: url,
+        panelUrl: `${appUrl}/weather`,
+      });
       return { to, rendered };
     }
     case 'weekly_digest': {
       if (!payload.orgId) throw new PermanentJobError('orgId required');
       const org = await ctx.db.getOrg(payload.orgId);
       if (!org) throw new PermanentJobError(`org ${payload.orgId} not found`);
-      const weekStart = (payload as { weekStart?: string }).weekStart ?? new Date(ctx.now().getTime() - 7 * 86400000).toISOString().slice(0, 10);
+      const weekStart =
+        (payload as { weekStart?: string }).weekStart ??
+        new Date(ctx.now().getTime() - 7 * 86400000).toISOString().slice(0, 10);
       const weekEnd = addDaysIso(weekStart, 6);
       const stats = await ctx.db.digestStats(org.id, weekStart, weekEnd);
       const members = await ctx.db.listMemberEmails(org.id, ['admin', 'pm']);
-      const rendered = weeklyDigestEmail({ orgName: org.name, weekStart, weekEnd, stats, url: appUrl });
+      const rendered = weeklyDigestEmail({
+        orgName: org.name,
+        weekStart,
+        weekEnd,
+        stats,
+        url: appUrl,
+      });
       return { to: payload.to ?? members.map((m) => m.email), rendered };
     }
     case 'unknown_sender': {
-      if (!payload.unknownSenderId && !payload.orgId) throw new PermanentJobError('unknownSenderId or orgId required');
+      if (!payload.unknownSenderId && !payload.orgId)
+        throw new PermanentJobError('unknownSenderId or orgId required');
       const orgId = payload.orgId;
-      const sender = payload.unknownSenderId ? await ctx.db.getUnknownSender(payload.unknownSenderId) : null;
+      const sender = payload.unknownSenderId
+        ? await ctx.db.getUnknownSender(payload.unknownSenderId)
+        : null;
       const org = orgId ? await ctx.db.getOrg(orgId) : null;
       if (!org) return null;
       const members = await ctx.db.listMemberEmails(org.id, ['ops', 'admin']);
-      const rendered = unknownSenderEmail({ orgName: org.name, phone: sender?.phone_e164 ?? 'unknown number', snippet: sender?.snippet ?? null, url: `${appUrl}/team` });
+      const rendered = unknownSenderEmail({
+        orgName: org.name,
+        phone: sender?.phone_e164 ?? 'unknown number',
+        snippet: sender?.snippet ?? null,
+        url: `${appUrl}/team`,
+      });
       return { to: payload.to ?? members.map((m) => m.email), rendered };
     }
     case 'report_edited_after_signoff': {
@@ -147,7 +200,13 @@ export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<{ to:
       const report = await ctx.db.getReport(payload.reportId);
       if (!report) throw new PermanentJobError(`report ${payload.reportId} not found`);
       const org = await ctx.db.getOrg(report.org_id);
-      const rendered = reportEditedAfterSignoffEmail({ orgName: org?.name ?? 'SiteLog', reportNo: report.report_no, changeNote: payload.changeNote ?? '', version: payload.version ?? report.current_version, url: `${appUrl}/reports/${report.id}` });
+      const rendered = reportEditedAfterSignoffEmail({
+        orgName: org?.name ?? 'SiteLog',
+        reportNo: report.report_no,
+        changeNote: payload.changeNote ?? '',
+        version: payload.version ?? report.current_version,
+        url: `${appUrl}/reports/${report.id}`,
+      });
       return { to: payload.to ?? [], rendered };
     }
   }

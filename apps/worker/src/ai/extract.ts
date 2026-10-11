@@ -38,7 +38,12 @@ export interface ExtractionResult {
 }
 
 /** The full Claude call (§10.4). */
-export async function runExtraction(client: MessagesClient, model: string, input: ExtractionInput, log?: Logger): Promise<ExtractionResult> {
+export async function runExtraction(
+  client: MessagesClient,
+  model: string,
+  input: ExtractionInput,
+  log?: Logger,
+): Promise<ExtractionResult> {
   const result = await callTool(
     client,
     {
@@ -70,12 +75,17 @@ function normalize(s: string): string {
 }
 
 /** Map the model's company reference to a known company by id, name or alias (case-insensitive). */
-export function matchCompany(entry: Pick<ManpowerEntry, 'companyId' | 'companyName' | 'companyNameHeard'>, companies: ExtractionCompany[]): ExtractionCompany | null {
+export function matchCompany(
+  entry: Pick<ManpowerEntry, 'companyId' | 'companyName' | 'companyNameHeard'>,
+  companies: ExtractionCompany[],
+): ExtractionCompany | null {
   if (entry.companyId) {
     const byId = companies.find((c) => c.id === entry.companyId);
     if (byId) return byId;
   }
-  const candidates = [entry.companyName, entry.companyNameHeard].filter((s): s is string => !!s && s.trim().length > 0);
+  const candidates = [entry.companyName, entry.companyNameHeard].filter(
+    (s): s is string => !!s && s.trim().length > 0,
+  );
   for (const cand of candidates) {
     const n = normalize(cand);
     if (!n) continue;
@@ -88,7 +98,9 @@ export function matchCompany(entry: Pick<ManpowerEntry, 'companyId' | 'companyNa
   for (const cand of candidates) {
     const n = normalize(cand);
     if (n.length < 4) continue;
-    const hits = companies.filter((c) => normalize(c.name).split(' ')[0] === n || normalize(c.name).startsWith(`${n} `));
+    const hits = companies.filter(
+      (c) => normalize(c.name).split(' ')[0] === n || normalize(c.name).startsWith(`${n} `),
+    );
     if (hits.length === 1) return hits[0]!;
   }
   return null;
@@ -98,16 +110,25 @@ export function matchCompany(entry: Pick<ManpowerEntry, 'companyId' | 'companyNa
  * Code after the model (§10.4 / §10.5): totals are recomputed, schemaVersion / reportDate / photos /
  * observed weather are set by code, companies are resolved by name or alias.
  */
-export function postProcessExtraction(raw: ExtractionOutput, input: ExtractionInput): { data: DailyReportData; discrepancies: HoursDiscrepancy[] } {
+export function postProcessExtraction(
+  raw: ExtractionOutput,
+  input: ExtractionInput,
+): { data: DailyReportData; discrepancies: HoursDiscrepancy[] } {
   const manpower = raw.manpower.map((m) => {
     const company = matchCompany(m, input.companies);
     let entry: ManpowerEntry = company
-      ? { ...m, companyId: company.id, companyName: company.name, trade: m.trade ?? company.trade ?? undefined }
+      ? {
+          ...m,
+          companyId: company.id,
+          companyName: company.name,
+          trade: m.trade ?? company.trade ?? undefined,
+        }
       : { ...m, companyId: null };
     if (entry.hoursPerWorker === null && entry.hoursBasis === 'full_day_default') {
       entry = { ...entry, hoursPerWorker: input.defaultShiftHours };
     }
-    if (entry.hoursPerWorker !== null && entry.hoursPerWorker > 24) entry = { ...entry, hoursPerWorker: null, totalHours: null, hoursBasis: 'unknown' };
+    if (entry.hoursPerWorker !== null && entry.hoursPerWorker > 24)
+      entry = { ...entry, hoursPerWorker: null, totalHours: null, hoursBasis: 'unknown' };
     return entry;
   });
   const { entries, discrepancies } = recomputeManpowerTotals(manpower);
@@ -123,7 +144,10 @@ export function postProcessExtraction(raw: ExtractionOutput, input: ExtractionIn
     weather: {
       ...raw.weather,
       observed: input.observedWeather ? toObserved(input.observedWeather) : undefined,
-      periods: raw.weather.periods.map((p) => ({ ...p, lostHours: Math.round(p.lostHours * 100) / 100 })),
+      periods: raw.weather.periods.map((p) => ({
+        ...p,
+        lostHours: Math.round(p.lostHours * 100) / 100,
+      })),
     },
     photos: input.photos,
     summary: raw.summary.trim(),

@@ -12,19 +12,47 @@ export async function handleFirstReply(s: Session): Promise<void> {
   for (const r of s.reporters) {
     if (r.status === 'invited' || !r.verified_at) {
       await ctx.db.updateReporter(r.id, { status: 'verified', verified_at: now.toISOString() });
-      await ctx.db.logAudit({ org_id: r.org_id, actor_type: 'reporter', actor_id: r.id, action: 'reporter.verified', entity: 'reporter', entity_id: r.id, diff: { message_id: s.message.id } });
+      await ctx.db.logAudit({
+        org_id: r.org_id,
+        actor_type: 'reporter',
+        actor_id: r.id,
+        action: 'reporter.verified',
+        entity: 'reporter',
+        entity_id: r.id,
+        diff: { message_id: s.message.id },
+      });
     }
   }
   if (!s.convo.reporter_id || !s.convo.org_id) {
-    s.convo = await ctx.db.updateConversation(s.convo.id, { reporter_id: s.convo.reporter_id ?? s.reporter.id, org_id: s.convo.org_id ?? s.reporter.org_id });
+    s.convo = await ctx.db.updateConversation(s.convo.id, {
+      reporter_id: s.convo.reporter_id ?? s.reporter.id,
+      org_id: s.convo.org_id ?? s.reporter.org_id,
+    });
   }
 
-  if (s.inbound.kind === 'button' && s.inbound.parsed.kind === 'welcome' && s.inbound.parsed.action === 'wrong_site') {
+  if (
+    s.inbound.kind === 'button' &&
+    s.inbound.parsed.kind === 'welcome' &&
+    s.inbound.parsed.action === 'wrong_site'
+  ) {
     await s.setState('idle', { site_disputed: true });
     await s.reply(waCopy.wrongSiteAck(), undefined, { kind: 'wrong_site' });
     for (const r of s.reporters) {
-      await ctx.db.logAudit({ org_id: r.org_id, actor_type: 'reporter', actor_id: r.id, action: 'reporter.wrong_site', entity: 'reporter', entity_id: r.id });
-      await ctx.db.notifyOrg(r.org_id, 'reporter_wrong_site', `${r.name} says the site is wrong`, 'Check the site assignment on the Team page.', '/team');
+      await ctx.db.logAudit({
+        org_id: r.org_id,
+        actor_type: 'reporter',
+        actor_id: r.id,
+        action: 'reporter.wrong_site',
+        entity: 'reporter',
+        entity_id: r.id,
+      });
+      await ctx.db.notifyOrg(
+        r.org_id,
+        'reporter_wrong_site',
+        `${r.name} says the site is wrong`,
+        'Check the site assignment on the Team page.',
+        '/team',
+      );
     }
     return;
   }

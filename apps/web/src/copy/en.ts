@@ -323,7 +323,12 @@ export const copy = {
       hoursUnit: 'h',
       weather: 'Weather-affected sites',
       weatherLink: 'Added to delay log',
-      segments: { filed: 'Filed', weather: 'Weather day', missing: 'Missing', awaiting: 'Awaiting' },
+      segments: {
+        filed: 'Filed',
+        weather: 'Weather day',
+        missing: 'Missing',
+        awaiting: 'Awaiting',
+      },
     },
     sitesToday: 'Sites today',
     columns: {
@@ -406,7 +411,12 @@ export const copy = {
 
   siteDetail: {
     breadcrumb: 'Sites',
-    tabs: { reports: 'Daily reports', crew: 'Crew & subs', weather: 'Weather & delays', photos: 'Photos' },
+    tabs: {
+      reports: 'Daily reports',
+      crew: 'Crew & subs',
+      weather: 'Weather & delays',
+      photos: 'Photos',
+    },
     siteSettings: 'Site settings',
     message: (first: string) => `Message ${first}`,
     latest: (date: string) => `Latest · ${date}`,
@@ -478,7 +488,8 @@ export const copy = {
     previous: 'Previous report',
     next: 'Next report',
     provenance: {
-      reportedBy: (name: string, time: string) => `Reported by ${name} by WhatsApp voice at ${time}`,
+      reportedBy: (name: string, time: string) =>
+        `Reported by ${name} by WhatsApp voice at ${time}`,
       confirmed: (time: string) => `confirmed ${time}`,
       editedByReply: (time: string) => `edited by reply ${time}`,
       editedBy: (name: string, time: string) => `edited by ${name} ${time}`,
@@ -535,7 +546,12 @@ export const copy = {
       addNewCompany: 'Add new…',
       hoursPerWorker: 'h / worker',
     },
-    work: { area: 'Area', activity: 'Activity', status: 'Status', heardAs: (s: string) => `heard “${s}”` },
+    work: {
+      area: 'Area',
+      activity: 'Activity',
+      status: 'Status',
+      heardAs: (s: string) => `heard “${s}”`,
+    },
     workStatus: {
       complete: 'Complete',
       in_progress: 'In progress',
@@ -720,7 +736,12 @@ export const copy = {
     reviewed: 'Term updated.',
     empty: 'No terms yet. The agent learns them from voice notes.',
     emptyReview: 'Nothing to review.',
-    form: { heard: 'Heard in the field', official: 'Written in reports as', kind: 'Kind', language: 'Language' },
+    form: {
+      heard: 'Heard in the field',
+      official: 'Written in reports as',
+      kind: 'Kind',
+      language: 'Language',
+    },
   },
 
   settings: {
@@ -750,8 +771,16 @@ export const copy = {
     signoffRequired: 'Sign-off required',
     emailPdf: 'Email PDF when filed',
     pdf: { logo: 'Logo', letterhead: 'Letterhead lines', footer: 'Footer', paper: 'Paper size' },
-    recipients: { perSite: 'Per-site recipients', applyAll: 'Apply to all sites', add: 'Add email' },
-    payroll: { format: 'Format', columns: 'Columns', includeUnconfirmed: 'Include unconfirmed companies' },
+    recipients: {
+      perSite: 'Per-site recipients',
+      applyAll: 'Apply to all sites',
+      add: 'Add email',
+    },
+    payroll: {
+      format: 'Format',
+      columns: 'Columns',
+      includeUnconfirmed: 'Include unconfirmed companies',
+    },
   },
 
   billing: {

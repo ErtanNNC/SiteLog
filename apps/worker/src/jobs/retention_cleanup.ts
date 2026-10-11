@@ -4,7 +4,9 @@ export const RETENTION_BATCH = 200;
 
 /** §15 privacy — delete audio and photos (and their transcripts) older than AUDIO_RETENTION_DAYS; reports + PDFs are kept. */
 export const retentionCleanup: JobHandler<'retention_cleanup'> = async (ctx, payload) => {
-  const before = payload.before ? new Date(payload.before) : new Date(ctx.now().getTime() - ctx.config.AUDIO_RETENTION_DAYS * 86_400_000);
+  const before = payload.before
+    ? new Date(payload.before)
+    : new Date(ctx.now().getTime() - ctx.config.AUDIO_RETENTION_DAYS * 86_400_000);
   let purged = 0;
   let failed = 0;
   for (let round = 0; round < 50; round++) {
@@ -24,7 +26,13 @@ export const retentionCleanup: JobHandler<'retention_cleanup'> = async (ctx, pay
     }
     if (batch.length < RETENTION_BATCH) break;
   }
-  await ctx.db.logAudit({ org_id: null, actor_type: 'system', action: 'retention.cleanup', entity: 'messages', diff: { before: before.toISOString(), purged, failed } });
+  await ctx.db.logAudit({
+    org_id: null,
+    actor_type: 'system',
+    action: 'retention.cleanup',
+    entity: 'messages',
+    diff: { before: before.toISOString(), purged, failed },
+  });
   ctx.metrics.add({ purged, failed });
   ctx.log.info('retention cleanup done', { before: before.toISOString(), purged, failed });
 };

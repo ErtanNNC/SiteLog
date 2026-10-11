@@ -22,16 +22,26 @@ export interface RunnerOptions {
 }
 
 export class JobTimeoutError extends Error {
-  constructor(public readonly jobId: number, ms: number) {
+  constructor(
+    public readonly jobId: number,
+    ms: number,
+  ) {
     super(`job ${jobId} exceeded ${ms} ms`);
     this.name = 'JobTimeoutError';
   }
 }
 
-export async function runJob(baseCtx: Ctx, job: JobRow, timeoutMs: number): Promise<{ ok: boolean; error?: string }> {
+export async function runJob(
+  baseCtx: Ctx,
+  job: JobRow,
+  timeoutMs: number,
+): Promise<{ ok: boolean; error?: string }> {
   const metrics = createMetrics();
   const type = job.type as JobTypeKey;
-  const ctx: Ctx = { ...childCtx(baseCtx, { job_id: job.id, job_type: job.type, attempt: job.attempts }), metrics };
+  const ctx: Ctx = {
+    ...childCtx(baseCtx, { job_id: job.id, job_type: job.type, attempt: job.attempts }),
+    metrics,
+  };
   const started = Date.now();
   if (!(JOB_TYPES as readonly string[]).includes(type)) {
     const error = `unknown job type ${job.type}`;
@@ -41,7 +51,11 @@ export async function runJob(baseCtx: Ctx, job: JobRow, timeoutMs: number): Prom
   try {
     const payload = parseJobPayload(type, job.payload);
     const handler = registry[type] as (c: Ctx, p: unknown, j: JobRow) => Promise<void>;
-    await withTimeout(handler(ctx, payload, job), timeoutMs, () => new JobTimeoutError(job.id, timeoutMs));
+    await withTimeout(
+      handler(ctx, payload, job),
+      timeoutMs,
+      () => new JobTimeoutError(job.id, timeoutMs),
+    );
     await ctx.db.completeJob(job.id);
     await saveMetrics(ctx, job, metrics.snapshot(), Date.now() - started);
     ctx.log.info('job done', { ms: Date.now() - started });
@@ -57,7 +71,12 @@ export async function runJob(baseCtx: Ctx, job: JobRow, timeoutMs: number): Prom
   }
 }
 
-async function saveMetrics(ctx: Ctx, job: JobRow, m: ReturnType<ReturnType<typeof createMetrics>['snapshot']>, latencyMs: number): Promise<void> {
+async function saveMetrics(
+  ctx: Ctx,
+  job: JobRow,
+  m: ReturnType<ReturnType<typeof createMetrics>['snapshot']>,
+  latencyMs: number,
+): Promise<void> {
   try {
     await ctx.db.updateJobMetrics(job.id, { ...m, latencyMs });
   } catch (err) {
@@ -68,7 +87,10 @@ async function saveMetrics(ctx: Ctx, job: JobRow, m: ReturnType<ReturnType<typeo
 /** §10.1: after 5 attempts → dead + Sentry alert + reporter gets error_retry once. */
 async function onDeadJob(ctx: Ctx, job: JobRow, err: unknown): Promise<void> {
   ctx.log.error('job dead', { err });
-  Sentry.captureException(err instanceof Error ? err : new Error(String(err)), { tags: { job_type: job.type }, extra: { job_id: job.id, payload: job.payload } });
+  Sentry.captureException(err instanceof Error ? err : new Error(String(err)), {
+    tags: { job_type: job.type },
+    extra: { job_id: job.id, payload: job.payload },
+  });
   try {
     const convo = await conversationForJob(ctx, job);
     if (!convo) return;
@@ -148,7 +170,7 @@ export function createRunner(ctx: Ctx, opts: RunnerOptions): Runner {
 
   async function mainLoop(): Promise<void> {
     while (running) {
-      let n = 0;
+      let n: number;
       try {
         n = await tick();
       } catch (err) {

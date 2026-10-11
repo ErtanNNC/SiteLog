@@ -3,12 +3,7 @@
  * mutation updates rows in place (with audit + notifications) so the panel behaves like the
  * real thing until the page is reloaded.
  */
-import {
-  DEMO_NOW,
-  DEMO_ORG_ID,
-  DEMO_USERS,
-  kestrelDemo,
-} from '@sitelog/shared/demo/kestrel.ts';
+import { DEMO_NOW, DEMO_ORG_ID, DEMO_USERS, kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import type { DemoDataset, DemoUser } from '@sitelog/shared/demo/types.ts';
 import { demoId, demoRand } from '@sitelog/shared/demo/ids.ts';
 import type {
@@ -188,7 +183,9 @@ export class DemoStore {
     const d = this.data;
     d.manpower = d.manpower.filter((m) => !(m.report_id === report.id && m.version === version));
     d.workItems = d.workItems.filter((w) => !(w.report_id === report.id && w.version === version));
-    d.weatherEvents = d.weatherEvents.filter((w) => !(w.report_id === report.id && w.version === version));
+    d.weatherEvents = d.weatherEvents.filter(
+      (w) => !(w.report_id === report.id && w.version === version),
+    );
     data.manpower.forEach((m, i) => {
       const row: ManpowerEntryRow = {
         id: demoId(`mp:${report.id}:${version}:${i}`),
@@ -245,7 +242,13 @@ export class DemoStore {
     });
   }
 
-  private pushVersion(report: ReportRow, data: DailyReportData, author: ReportVersionRow['author'], userId: string | null, changeNote: string | null): number {
+  private pushVersion(
+    report: ReportRow,
+    data: DailyReportData,
+    author: ReportVersionRow['author'],
+    userId: string | null,
+    changeNote: string | null,
+  ): number {
     const next = report.current_version + 1;
     const site = this.site(report.site_id);
     this.data.versions.push({
@@ -268,10 +271,32 @@ export class DemoStore {
     report.signed_off_by = null;
     report.signed_off_at = null;
     report.updated_at = this.nowIso();
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'report.version_created', entity: 'report', entity_id: report.id, diff: { version: next, change_note: changeNote } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'report.version_created',
+      entity: 'report',
+      entity_id: report.id,
+      diff: { version: next, change_note: changeNote },
+    });
     if (wasSigned) {
-      this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'report.signoff_reverted', entity: 'report', entity_id: report.id, diff: { version: next } });
-      this.notify({ user_id: signer, kind: 'report_edited', title: `${report.report_no} was edited after sign-off`, body: changeNote, target_path: `/reports/${report.id}` });
+      this.audit({
+        org_id: this.data.org.id,
+        actor_type: 'user',
+        actor_id: userId,
+        action: 'report.signoff_reverted',
+        entity: 'report',
+        entity_id: report.id,
+        diff: { version: next },
+      });
+      this.notify({
+        user_id: signer,
+        kind: 'report_edited',
+        title: `${report.report_no} was edited after sign-off`,
+        body: changeNote,
+        target_path: `/reports/${report.id}`,
+      });
     }
     return next;
   }
@@ -280,12 +305,21 @@ export class DemoStore {
 
   signOff(reportId: string, userId: string): void {
     const r = this.report(reportId);
-    if (r.status !== 'filed') throw new Error(`Only filed reports can be signed off (status ${r.status})`);
+    if (r.status !== 'filed')
+      throw new Error(`Only filed reports can be signed off (status ${r.status})`);
     r.status = 'signed_off';
     r.signed_off_by = userId;
     r.signed_off_at = this.nowIso();
     r.updated_at = this.nowIso();
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'report.signed_off', entity: 'report', entity_id: r.id, diff: { version: r.current_version } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'report.signed_off',
+      entity: 'report',
+      entity_id: r.id,
+      diff: { version: r.current_version },
+    });
     this.emit({ table: 'reports', id: r.id });
   }
 
@@ -295,14 +329,33 @@ export class DemoStore {
     r.status = 'filed';
     r.signed_off_by = null;
     r.signed_off_at = null;
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'report.signoff_undone', entity: 'report', entity_id: r.id, diff: null });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'report.signoff_undone',
+      entity: 'report',
+      entity_id: r.id,
+      diff: null,
+    });
     this.emit({ table: 'reports', id: r.id });
   }
 
-  createReportVersion(reportId: string, data: DailyReportData, changeNote: string, userId: string): number {
+  createReportVersion(
+    reportId: string,
+    data: DailyReportData,
+    changeNote: string,
+    userId: string,
+  ): number {
     const r = this.report(reportId);
     if (!changeNote.trim()) throw new Error(copy.report.edit.changeNoteRequired);
-    const next = this.pushVersion(r, structuredClone(data), 'office_user', userId, changeNote.trim());
+    const next = this.pushVersion(
+      r,
+      structuredClone(data),
+      'office_user',
+      userId,
+      changeNote.trim(),
+    );
     this.emit({ table: 'reports', id: r.id });
     return next;
   }
@@ -314,7 +367,15 @@ export class DemoStore {
     const from = sd.status;
     sd.status = 'no_work';
     sd.updated_at = this.nowIso();
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'site_day.marked_no_work', entity: 'site_day', entity_id: sd.id, diff: { from } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'site_day.marked_no_work',
+      entity: 'site_day',
+      entity_id: sd.id,
+      diff: { from },
+    });
     this.emit({ table: 'site_days', id: sd.id });
   }
 
@@ -326,36 +387,80 @@ export class DemoStore {
       company = d.companies.find((c) => c.name.toLowerCase() === input.name.toLowerCase());
       if (company) company.status = 'confirmed';
       else {
-        company = { id: localId('company'), org_id: d.org.id, name: input.name, trade: null, aliases: [], is_self_perform: false, status: 'confirmed', created_at: this.nowIso() };
+        company = {
+          id: localId('company'),
+          org_id: d.org.id,
+          name: input.name,
+          trade: null,
+          aliases: [],
+          is_self_perform: false,
+          status: 'confirmed',
+          created_at: this.nowIso(),
+        };
         d.companies.push(company);
       }
     } else {
       company = d.companies.find((c) => c.id === input.companyId);
       if (!company) throw new Error('Company not found');
-      if (company.name !== input.name && !company.aliases.includes(input.name)) company.aliases.push(input.name);
+      if (company.name !== input.name && !company.aliases.includes(input.name))
+        company.aliases.push(input.name);
     }
-    const term = d.glossary.find((t) => t.kind === 'company' && t.heard.toLowerCase() === input.name.toLowerCase());
+    const term = d.glossary.find(
+      (t) => t.kind === 'company' && t.heard.toLowerCase() === input.name.toLowerCase(),
+    );
     if (term) {
       term.status = 'confirmed';
       term.official = company.name;
       term.company_id = company.id;
     } else {
-      d.glossary.push({ id: localId('term'), org_id: d.org.id, scope_site_id: null, scope_reporter_id: null, heard: input.name, official: company.name, language: 'en', kind: 'company', company_id: company.id, status: 'confirmed', times_heard: 1, first_seen_at: this.nowIso(), last_seen_at: this.nowIso() });
+      d.glossary.push({
+        id: localId('term'),
+        org_id: d.org.id,
+        scope_site_id: null,
+        scope_reporter_id: null,
+        heard: input.name,
+        official: company.name,
+        language: 'en',
+        kind: 'company',
+        company_id: company.id,
+        status: 'confirmed',
+        times_heard: 1,
+        first_seen_at: this.nowIso(),
+        last_seen_at: this.nowIso(),
+      });
     }
     const cur = d.versions.find((v) => v.report_id === r.id && v.version === r.current_version)!;
     const data = structuredClone(cur.data as unknown as DailyReportData);
     const cid = company.id;
     const cname = company.name;
     data.manpower = data.manpower.map((m) =>
-      m.companyId === null && (m.companyName.toLowerCase() === input.name.toLowerCase() || m.companyNameHeard.toLowerCase() === input.name.toLowerCase())
-        ? { ...m, companyId: cid, companyName: cname, source: [...m.source, { type: 'office_edit' as const, userId, at: this.nowIso() }] }
+      m.companyId === null &&
+      (m.companyName.toLowerCase() === input.name.toLowerCase() ||
+        m.companyNameHeard.toLowerCase() === input.name.toLowerCase())
+        ? {
+            ...m,
+            companyId: cid,
+            companyName: cname,
+            source: [...m.source, { type: 'office_edit' as const, userId, at: this.nowIso() }],
+          }
         : m,
     );
-    const note = input.action === 'add' ? `Added ${company.name} as subcontractor` : `"${input.name}" mapped to ${company.name}`;
+    const note =
+      input.action === 'add'
+        ? `Added ${company.name} as subcontractor`
+        : `"${input.name}" mapped to ${company.name}`;
     this.pushVersion(r, data, 'office_user', userId, note);
     r.review_reasons = r.review_reasons.filter((x) => x !== `unknown_company:${input.name}`);
     r.needs_review = r.review_reasons.length > 0;
-    this.audit({ org_id: d.org.id, actor_type: 'user', actor_id: userId, action: 'report.unknown_company_resolved', entity: 'report', entity_id: r.id, diff: { name: input.name, action: input.action, company_id: company.id } });
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'report.unknown_company_resolved',
+      entity: 'report',
+      entity_id: r.id,
+      diff: { name: input.name, action: input.action, company_id: company.id },
+    });
     this.emit({ table: 'reports', id: r.id });
   }
 
@@ -366,7 +471,16 @@ export class DemoStore {
     const upsertCompany = (name: string): CompanyRow => {
       let c = d.companies.find((x) => x.name.toLowerCase() === name.toLowerCase());
       if (!c) {
-        c = { id: localId('company'), org_id: d.org.id, name, trade: null, aliases: [], is_self_perform: false, status: 'confirmed', created_at: this.nowIso() };
+        c = {
+          id: localId('company'),
+          org_id: d.org.id,
+          name,
+          trade: null,
+          aliases: [],
+          is_self_perform: false,
+          status: 'confirmed',
+          created_at: this.nowIso(),
+        };
         d.companies.push(c);
       } else c.status = 'confirmed';
       if (!c.aliases.includes(t.heard) && c.name !== t.heard) c.aliases.push(t.heard);
@@ -404,7 +518,19 @@ export class DemoStore {
         break;
       }
     }
-    this.audit({ org_id: d.org.id, actor_type: 'user', actor_id: userId, action: 'glossary.reviewed', entity: 'glossary_term', entity_id: t.id, diff: { action: input.action, official: input.official ?? null, company_id: input.companyId ?? null } });
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'glossary.reviewed',
+      entity: 'glossary_term',
+      entity_id: t.id,
+      diff: {
+        action: input.action,
+        official: input.official ?? null,
+        company_id: input.companyId ?? null,
+      },
+    });
     this.emit({ table: 'all' });
   }
 
@@ -425,13 +551,29 @@ export class DemoStore {
       last_seen_at: null,
     };
     this.data.glossary.push(row);
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'glossary.added', entity: 'glossary_term', entity_id: row.id, diff: { heard: row.heard, official: row.official } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'glossary.added',
+      entity: 'glossary_term',
+      entity_id: row.id,
+      diff: { heard: row.heard, official: row.official },
+    });
     this.emit({ table: 'all' });
   }
 
   saveSettings(patch: OrgSettingsPatch, userId: string): void {
     Object.assign(this.data.settings, patch, { updated_at: this.nowIso() });
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'settings.updated', entity: 'org', entity_id: this.data.org.id, diff: patch as AuditLogRow['diff'] });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'settings.updated',
+      entity: 'org',
+      entity_id: this.data.org.id,
+      diff: patch as AuditLogRow['diff'],
+    });
     this.emit({ table: 'all' });
   }
 
@@ -439,7 +581,15 @@ export class DemoStore {
     this.site(siteId);
     this.data.recipients = this.data.recipients.filter((r) => r.site_id !== siteId);
     for (const email of emails) this.data.recipients.push({ site_id: siteId, email });
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'site.recipients_updated', entity: 'site', entity_id: siteId, diff: { emails } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'site.recipients_updated',
+      entity: 'site',
+      entity_id: siteId,
+      diff: { emails },
+    });
     this.emit({ table: 'all' });
   }
 
@@ -460,7 +610,15 @@ export class DemoStore {
       resolved_at: null,
       created_at: this.nowIso(),
     });
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'invoice.added', entity: 'company', entity_id: input.companyId, diff: { invoice_no: input.invoiceNo, total } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'invoice.added',
+      entity: 'company',
+      entity_id: input.companyId,
+      diff: { invoice_no: input.invoiceNo, total },
+    });
     this.emit({ table: 'all' });
   }
 
@@ -470,18 +628,52 @@ export class DemoStore {
     inv.status = status;
     if (status === 'queried') inv.queried_at = this.nowIso();
     if (status === 'resolved') inv.resolved_at = this.nowIso();
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: `invoice.${status}`, entity: 'company', entity_id: inv.company_id, diff: { invoice_no: inv.invoice_no } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: `invoice.${status}`,
+      entity: 'company',
+      entity_id: inv.company_id,
+      diff: { invoice_no: inv.invoice_no },
+    });
     this.emit({ table: 'all' });
   }
 
   inviteReporter(input: InviteReporterInput, userId: string): string {
     const id = localId('reporter');
-    this.data.reporters.push({ id, org_id: this.data.org.id, name: input.name.trim(), phone_e164: input.phone, role: input.role, languages: input.languages, status: 'invited', invited_at: this.nowIso(), verified_at: null, last_invite_error: null, created_at: this.nowIso() });
+    this.data.reporters.push({
+      id,
+      org_id: this.data.org.id,
+      name: input.name.trim(),
+      phone_e164: input.phone,
+      role: input.role,
+      languages: input.languages,
+      status: 'invited',
+      invited_at: this.nowIso(),
+      verified_at: null,
+      last_invite_error: null,
+      created_at: this.nowIso(),
+    });
     for (const siteId of input.siteIds) {
-      const hasPrimary = this.data.siteReporters.some((sr) => sr.site_id === siteId && sr.is_primary);
-      this.data.siteReporters.push({ site_id: siteId, reporter_id: id, is_primary: input.role === 'site_manager' && !hasPrimary });
+      const hasPrimary = this.data.siteReporters.some(
+        (sr) => sr.site_id === siteId && sr.is_primary,
+      );
+      this.data.siteReporters.push({
+        site_id: siteId,
+        reporter_id: id,
+        is_primary: input.role === 'site_manager' && !hasPrimary,
+      });
     }
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'reporter.invited', entity: 'reporter', entity_id: id, diff: { sites: input.siteIds } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'reporter.invited',
+      entity: 'reporter',
+      entity_id: id,
+      diff: { sites: input.siteIds },
+    });
     this.emit({ table: 'all' });
     return id;
   }
@@ -489,12 +681,29 @@ export class DemoStore {
   linkUnknownSender(input: LinkUnknownSenderInput, userId: string): void {
     const u = this.data.unknownSenders.find((x) => x.id === input.unknownSenderId);
     if (!u) throw new Error(copy.errors.notFound);
-    const id = this.inviteReporter({ name: input.name, phone: u.phone_e164, role: 'backup', siteIds: [input.siteId], languages: ['en'] }, userId);
+    const id = this.inviteReporter(
+      {
+        name: input.name,
+        phone: u.phone_e164,
+        role: 'backup',
+        siteIds: [input.siteId],
+        languages: ['en'],
+      },
+      userId,
+    );
     const r = this.data.reporters.find((x) => x.id === id)!;
     r.status = 'verified';
     r.verified_at = this.nowIso();
     u.status = 'linked';
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'unknown_sender.linked', entity: 'reporter', entity_id: id, diff: { site_id: input.siteId } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'unknown_sender.linked',
+      entity: 'reporter',
+      entity_id: id,
+      diff: { site_id: input.siteId },
+    });
     this.emit({ table: 'unknown_senders', id: u.id });
   }
 
@@ -502,45 +711,120 @@ export class DemoStore {
     const u = this.data.unknownSenders.find((x) => x.id === id);
     if (!u) throw new Error(copy.errors.notFound);
     u.status = 'ignored';
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'unknown_sender.ignored', entity: 'unknown_sender', entity_id: id, diff: null });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'unknown_sender.ignored',
+      entity: 'unknown_sender',
+      entity_id: id,
+      diff: null,
+    });
     this.emit({ table: 'unknown_senders', id });
   }
 
   addOfficeUser(input: { email: string; role: MemberRole; name?: string }, userId: string): void {
     const id = localId('user');
-    this.data.users.push({ id, email: input.email, name: input.name ?? input.email, title: null as unknown as string, role: input.role });
-    this.data.members.push({ org_id: this.data.org.id, user_id: id, role: input.role, display_name: input.name ?? input.email, title: null, created_at: this.nowIso() });
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'member.invited', entity: 'org', entity_id: this.data.org.id, diff: { email: input.email, role: input.role } });
+    this.data.users.push({
+      id,
+      email: input.email,
+      name: input.name ?? input.email,
+      title: null as unknown as string,
+      role: input.role,
+    });
+    this.data.members.push({
+      org_id: this.data.org.id,
+      user_id: id,
+      role: input.role,
+      display_name: input.name ?? input.email,
+      title: null,
+      created_at: this.nowIso(),
+    });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'member.invited',
+      entity: 'org',
+      entity_id: this.data.org.id,
+      diff: { email: input.email, role: input.role },
+    });
     this.emit({ table: 'all' });
   }
 
   changeMemberRole(targetUserId: string, role: MemberRole, userId: string): void {
     const m = this.data.members.find((x) => x.user_id === targetUserId);
     if (!m) throw new Error(copy.errors.notFound);
-    if (m.role === 'admin' && role !== 'admin' && this.data.members.filter((x) => x.role === 'admin').length <= 1) throw new Error(copy.team.addUser.lastAdmin);
+    if (
+      m.role === 'admin' &&
+      role !== 'admin' &&
+      this.data.members.filter((x) => x.role === 'admin').length <= 1
+    )
+      throw new Error(copy.team.addUser.lastAdmin);
     m.role = role;
     const u = this.data.users.find((x) => x.id === targetUserId);
     if (u) u.role = role;
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'member.role_changed', entity: 'org', entity_id: this.data.org.id, diff: { user_id: targetUserId, role } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'member.role_changed',
+      entity: 'org',
+      entity_id: this.data.org.id,
+      diff: { user_id: targetUserId, role },
+    });
     this.emit({ table: 'all' });
   }
 
   removeMember(targetUserId: string, userId: string): void {
     const m = this.data.members.find((x) => x.user_id === targetUserId);
     if (!m) throw new Error(copy.errors.notFound);
-    if (m.role === 'admin' && this.data.members.filter((x) => x.role === 'admin').length <= 1) throw new Error(copy.team.addUser.lastAdmin);
+    if (m.role === 'admin' && this.data.members.filter((x) => x.role === 'admin').length <= 1)
+      throw new Error(copy.team.addUser.lastAdmin);
     this.data.members = this.data.members.filter((x) => x.user_id !== targetUserId);
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'member.removed', entity: 'org', entity_id: this.data.org.id, diff: { user_id: targetUserId } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'member.removed',
+      entity: 'org',
+      entity_id: this.data.org.id,
+      diff: { user_id: targetUserId },
+    });
     this.emit({ table: 'all' });
   }
 
   createSite(input: CreateSiteInput, userId: string): string {
     const id = localId('site');
     const today = formatDateInTz(this.now, input.timezone);
-    this.data.sites.push({ id, org_id: this.data.org.id, name: input.name.trim(), project_code: input.projectCode.trim(), address: input.address ?? null, lat: input.lat ?? null, lng: input.lng ?? null, timezone: input.timezone, deadline: input.deadline ?? null, working_hours: input.workingHours ?? null, status: 'active', active_since: today, paused_at: null, report_seq: 0, created_at: this.nowIso() });
+    this.data.sites.push({
+      id,
+      org_id: this.data.org.id,
+      name: input.name.trim(),
+      project_code: input.projectCode.trim(),
+      address: input.address ?? null,
+      lat: input.lat ?? null,
+      lng: input.lng ?? null,
+      timezone: input.timezone,
+      deadline: input.deadline ?? null,
+      working_hours: input.workingHours ?? null,
+      status: 'active',
+      active_since: today,
+      paused_at: null,
+      report_seq: 0,
+      created_at: this.nowIso(),
+    });
     for (const email of input.recipients ?? []) this.data.recipients.push({ site_id: id, email });
     if (input.reporter) this.inviteReporter({ ...input.reporter, siteIds: [id] }, userId);
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'site.created', entity: 'site', entity_id: id, diff: { name: input.name } });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'site.created',
+      entity: 'site',
+      entity_id: id,
+      diff: { name: input.name },
+    });
     this.emit({ table: 'all' });
     return id;
   }
@@ -555,7 +839,15 @@ export class DemoStore {
     if (patch.timezone !== undefined) s.timezone = patch.timezone;
     if (patch.deadline !== undefined) s.deadline = patch.deadline ?? null;
     if (patch.workingHours !== undefined) s.working_hours = patch.workingHours ?? null;
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'site.updated', entity: 'site', entity_id: siteId, diff: patch as AuditLogRow['diff'] });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'site.updated',
+      entity: 'site',
+      entity_id: siteId,
+      diff: patch as AuditLogRow['diff'],
+    });
     this.emit({ table: 'all' });
   }
 
@@ -563,15 +855,44 @@ export class DemoStore {
     const s = this.site(siteId);
     s.status = status;
     s.paused_at = status === 'paused' ? this.nowIso() : null;
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: status === 'paused' ? 'site.paused' : 'site.resumed', entity: 'site', entity_id: siteId, diff: null });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: status === 'paused' ? 'site.paused' : 'site.resumed',
+      entity: 'site',
+      entity_id: siteId,
+      diff: null,
+    });
     this.emit({ table: 'all' });
   }
 
   requestEvidencePack(input: RequestEvidencePackInput, userId: string): string {
     const id = localId('pack');
     const site = input.siteId ? this.site(input.siteId) : null;
-    this.data.packs.unshift({ id, org_id: this.data.org.id, site_id: input.siteId, period_start: input.periodStart, period_end: input.periodEnd, status: 'queued', pdf_path: null, sections: input.sections, error: null, created_by: userId, created_at: this.nowIso(), ready_at: null });
-    this.audit({ org_id: this.data.org.id, actor_type: 'user', actor_id: userId, action: 'evidence_pack.requested', entity: 'evidence_pack', entity_id: id, diff: { site_id: input.siteId, period: [input.periodStart, input.periodEnd] } });
+    this.data.packs.unshift({
+      id,
+      org_id: this.data.org.id,
+      site_id: input.siteId,
+      period_start: input.periodStart,
+      period_end: input.periodEnd,
+      status: 'queued',
+      pdf_path: null,
+      sections: input.sections,
+      error: null,
+      created_by: userId,
+      created_at: this.nowIso(),
+      ready_at: null,
+    });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'evidence_pack.requested',
+      entity: 'evidence_pack',
+      entity_id: id,
+      diff: { site_id: input.siteId, period: [input.periodStart, input.periodEnd] },
+    });
     this.emit({ table: 'evidence_packs', id });
     const t = setTimeout(() => {
       const p = this.data.packs.find((x) => x.id === id);
@@ -579,7 +900,13 @@ export class DemoStore {
       p.status = 'ready';
       p.ready_at = this.nowIso();
       p.pdf_path = `${this.data.org.id}/${input.siteId ?? 'all'}/eot_${input.periodStart}_${input.periodEnd}.pdf`;
-      this.notify({ user_id: userId, kind: 'pack_ready', title: `EOT evidence pack ready — ${site?.name ?? copy.hours.allSites}`, body: null, target_path: '/weather' });
+      this.notify({
+        user_id: userId,
+        kind: 'pack_ready',
+        title: `EOT evidence pack ready — ${site?.name ?? copy.hours.allSites}`,
+        body: null,
+        target_path: '/weather',
+      });
       this.emit({ table: 'evidence_packs', id });
     }, 1500);
     this.timers.push(t);
@@ -588,7 +915,8 @@ export class DemoStore {
 
   markNotificationsRead(ids: string[]): void {
     const set = new Set(ids);
-    for (const n of this.data.notifications) if (set.has(n.id) && !n.read_at) n.read_at = this.nowIso();
+    for (const n of this.data.notifications)
+      if (set.has(n.id) && !n.read_at) n.read_at = this.nowIso();
     this.emit({ table: 'notifications' });
   }
 
@@ -611,26 +939,141 @@ export class DemoStore {
     const data: DailyReportData = {
       ...emptyReportData(today),
       languageDetected: ['en'],
-      summary: 'Framing continued at Units 1–4 with 6 on site (48 h). Roof trusses set on Unit 2; backfill at the north trench completed. Dry all day. No incidents reported.',
+      summary:
+        'Framing continued at Units 1–4 with 6 on site (48 h). Roof trusses set on Unit 2; backfill at the north trench completed. Dry all day. No incidents reported.',
       workingHours: { start: '07:00', end: '15:30' },
-      weather: { observed: { precipIn: 0, tempMinF: 55, tempMaxF: 67, windMph: 8, gustMph: 14, provider: 'Open-Meteo' }, conditionsText: 'Overcast, dry', periods: [] },
-      manpower: [{ companyId: self.id, companyNameHeard: 'our crew', companyName: self.name, trade: 'General labor', area: 'Units 1–4', workers: 6, hoursPerWorker: 8, totalHours: 48, hoursBasis: 'stated', confidence: 0.93, source: [{ type: 'audio', messageId: audioId, start: 6, end: 15 }] }],
-      workPerformed: [
-        { area: 'Units 1–4', activity: 'Framing', status: 'in_progress', percentComplete: 70, source: [{ type: 'audio', messageId: audioId, start: 15, end: 26 }] },
-        { area: 'Site', activity: 'Excavation and backfill', status: 'complete', source: [{ type: 'audio', messageId: audioId, start: 26, end: 34 }] },
+      weather: {
+        observed: {
+          precipIn: 0,
+          tempMinF: 55,
+          tempMaxF: 67,
+          windMph: 8,
+          gustMph: 14,
+          provider: 'Open-Meteo',
+        },
+        conditionsText: 'Overcast, dry',
+        periods: [],
+      },
+      manpower: [
+        {
+          companyId: self.id,
+          companyNameHeard: 'our crew',
+          companyName: self.name,
+          trade: 'General labor',
+          area: 'Units 1–4',
+          workers: 6,
+          hoursPerWorker: 8,
+          totalHours: 48,
+          hoursBasis: 'stated',
+          confidence: 0.93,
+          source: [{ type: 'audio', messageId: audioId, start: 6, end: 15 }],
+        },
       ],
-      safety: { incidents: [], noIncidentsStated: true, visitors: [], source: [{ type: 'audio', messageId: audioId, start: 34, end: 41 }] },
+      workPerformed: [
+        {
+          area: 'Units 1–4',
+          activity: 'Framing',
+          status: 'in_progress',
+          percentComplete: 70,
+          source: [{ type: 'audio', messageId: audioId, start: 15, end: 26 }],
+        },
+        {
+          area: 'Site',
+          activity: 'Excavation and backfill',
+          status: 'complete',
+          source: [{ type: 'audio', messageId: audioId, start: 26, end: 34 }],
+        },
+      ],
+      safety: {
+        incidents: [],
+        noIncidentsStated: true,
+        visitors: [],
+        source: [{ type: 'audio', messageId: audioId, start: 34, end: 41 }],
+      },
       photos: [],
     };
     if (convo) {
-      const msg: MessageRow = { id: audioId, conversation_id: convo.id, direction: 'in', wa_message_id: `wamid.demo.sim.${audioId.slice(-6)}`, type: 'audio', body: null, payload: { peaks: Array.from({ length: 64 }, (_, i) => Math.round((0.15 + 0.85 * demoRand('peak:sim', i)) * 100) / 100) }, media_id: null, media_mime: 'audio/ogg; codecs=opus', storage_path: null, duration_s: 58, template_name: null, status: 'received', error: null, created_at: receivedAt };
+      const msg: MessageRow = {
+        id: audioId,
+        conversation_id: convo.id,
+        direction: 'in',
+        wa_message_id: `wamid.demo.sim.${audioId.slice(-6)}`,
+        type: 'audio',
+        body: null,
+        payload: {
+          peaks: Array.from(
+            { length: 64 },
+            (_, i) => Math.round((0.15 + 0.85 * demoRand('peak:sim', i)) * 100) / 100,
+          ),
+        },
+        media_id: null,
+        media_mime: 'audio/ogg; codecs=opus',
+        storage_path: null,
+        duration_s: 58,
+        template_name: null,
+        status: 'received',
+        error: null,
+        created_at: receivedAt,
+      };
       d.messages.push(msg);
-      d.transcripts.push({ id: localId('transcript'), message_id: audioId, language: 'en', text: 'Hey, sorry this is late. Elm Street, Friday. Six of us framing on one through four, full day. Trusses went up on unit two, and we finished the backfill on the north trench. Dry all day, no incidents.', segments: [{ start: 0, end: 6, text: 'Hey, sorry this is late. Elm Street, Friday.' }, { start: 6, end: 15, text: 'Six of us framing on one through four, full day.' }, { start: 15, end: 26, text: 'Trusses went up on unit two,' }, { start: 26, end: 34, text: 'and we finished the backfill on the north trench.' }, { start: 34, end: 41, text: 'Dry all day, no incidents.' }], model: 'whisper-1', created_at: receivedAt });
-      d.sources.push({ id: localId('src'), report_id: reportId, message_id: audioId, kind: 'audio', caption: null, taken_at: receivedAt });
+      d.transcripts.push({
+        id: localId('transcript'),
+        message_id: audioId,
+        language: 'en',
+        text: 'Hey, sorry this is late. Elm Street, Friday. Six of us framing on one through four, full day. Trusses went up on unit two, and we finished the backfill on the north trench. Dry all day, no incidents.',
+        segments: [
+          { start: 0, end: 6, text: 'Hey, sorry this is late. Elm Street, Friday.' },
+          { start: 6, end: 15, text: 'Six of us framing on one through four, full day.' },
+          { start: 15, end: 26, text: 'Trusses went up on unit two,' },
+          { start: 26, end: 34, text: 'and we finished the backfill on the north trench.' },
+          { start: 34, end: 41, text: 'Dry all day, no incidents.' },
+        ],
+        model: 'whisper-1',
+        created_at: receivedAt,
+      });
+      d.sources.push({
+        id: localId('src'),
+        report_id: reportId,
+        message_id: audioId,
+        kind: 'audio',
+        caption: null,
+        taken_at: receivedAt,
+      });
     }
-    const report: ReportRow = { id: reportId, org_id: d.org.id, site_id: site.id, site_day_id: sd.id, report_no: reportNo, status: 'filed', current_version: 0, reporter_id: reporter?.id ?? null, received_at: receivedAt, confirmed_at: receivedAt, filed_at: receivedAt, signed_off_by: null, signed_off_at: null, needs_review: false, review_reasons: [], is_late: true, kind: 'daily', created_at: receivedAt, updated_at: receivedAt };
+    const report: ReportRow = {
+      id: reportId,
+      org_id: d.org.id,
+      site_id: site.id,
+      site_day_id: sd.id,
+      report_no: reportNo,
+      status: 'filed',
+      current_version: 0,
+      reporter_id: reporter?.id ?? null,
+      received_at: receivedAt,
+      confirmed_at: receivedAt,
+      filed_at: receivedAt,
+      signed_off_by: null,
+      signed_off_at: null,
+      needs_review: false,
+      review_reasons: [],
+      is_late: true,
+      kind: 'daily',
+      created_at: receivedAt,
+      updated_at: receivedAt,
+    };
     d.reports.push(report);
-    d.versions.push({ report_id: reportId, version: 1, data: data as unknown as ReportVersionRow['data'], summary: data.summary, pdf_path: `${d.org.id}/${site.id}/${reportNo}_v1.pdf`, author: 'agent', author_user_id: null, author_message_id: null, change_note: null, created_at: receivedAt });
+    d.versions.push({
+      report_id: reportId,
+      version: 1,
+      data: data as unknown as ReportVersionRow['data'],
+      summary: data.summary,
+      pdf_path: `${d.org.id}/${site.id}/${reportNo}_v1.pdf`,
+      author: 'agent',
+      author_user_id: null,
+      author_message_id: null,
+      change_note: null,
+      created_at: receivedAt,
+    });
     report.current_version = 1;
     this.denormalize(report, 1, data);
     const totals = deriveTotals(data);
@@ -638,9 +1081,26 @@ export class DemoStore {
     sd.is_late = true;
     sd.report_id = reportId;
     sd.updated_at = receivedAt;
-    this.audit({ org_id: d.org.id, actor_type: 'agent', actor_id: null, action: 'report.filed', entity: 'report', entity_id: reportId, diff: { version: 1, late: true }, created_at: receivedAt });
-    this.notify({ user_id: null, kind: 'report_filed', title: `${site.name} — late report in`, body: `${reportNo} · ${totals.crewOnSite} on site · ${totals.totalHours} h`, target_path: `/reports/${reportId}` });
-    const missingNotif = d.notifications.find((n) => n.kind === 'missing_report' && !n.read_at && n.title.startsWith(site.name));
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'agent',
+      actor_id: null,
+      action: 'report.filed',
+      entity: 'report',
+      entity_id: reportId,
+      diff: { version: 1, late: true },
+      created_at: receivedAt,
+    });
+    this.notify({
+      user_id: null,
+      kind: 'report_filed',
+      title: `${site.name} — late report in`,
+      body: `${reportNo} · ${totals.crewOnSite} on site · ${totals.totalHours} h`,
+      target_path: `/reports/${reportId}`,
+    });
+    const missingNotif = d.notifications.find(
+      (n) => n.kind === 'missing_report' && !n.read_at && n.title.startsWith(site.name),
+    );
     if (missingNotif) missingNotif.read_at = this.nowIso();
     this.emit({ table: 'site_days', id: sd.id });
     this.emit({ table: 'reports', id: reportId });
@@ -650,3 +1110,14 @@ export class DemoStore {
 
 export { DEMO_NOW, DEMO_ORG_ID, DEMO_USERS };
 export type { SiteDayRow };
+
+let instance: DemoStore | null = null;
+/** One store per browser session (mutations persist until reload). */
+export function getDemoStore(): DemoStore {
+  if (!instance) instance = new DemoStore();
+  return instance;
+}
+export function resetDemoStore(): void {
+  instance?.dispose();
+  instance = null;
+}

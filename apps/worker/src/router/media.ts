@@ -24,18 +24,34 @@ export interface StoredMedia {
   mime: string | null;
 }
 
-export function storagePathFor(message: Pick<MessageRow, 'id' | 'type' | 'media_mime'>, loc: MediaLocation | { custom: string }): { bucket: Bucket; path: string } {
+export function storagePathFor(
+  message: Pick<MessageRow, 'id' | 'type' | 'media_mime'>,
+  loc: MediaLocation | { custom: string },
+): { bucket: Bucket; path: string } {
   const isAudio = message.type === 'audio';
   const ext = mimeExtension(message.media_mime, isAudio ? 'ogg' : 'jpg');
-  if ('custom' in loc) return { bucket: isAudio ? 'audio' : 'photos', path: `${loc.custom}/${message.id}.${ext}` };
+  if ('custom' in loc)
+    return { bucket: isAudio ? 'audio' : 'photos', path: `${loc.custom}/${message.id}.${ext}` };
   return isAudio
     ? { bucket: 'audio', path: audioStoragePath(loc.orgId, loc.siteId, loc.date, message.id, ext) }
-    : { bucket: 'photos', path: photoStoragePath(loc.orgId, loc.siteId, loc.date, message.id, ext) };
+    : {
+        bucket: 'photos',
+        path: photoStoragePath(loc.orgId, loc.siteId, loc.date, message.id, ext),
+      };
 }
 
-export async function ensureMediaStored(ctx: Ctx, message: MessageRow, loc: MediaLocation | { custom: string }): Promise<StoredMedia | null> {
-  if (message.type !== 'audio' && message.type !== 'image' && message.type !== 'document') return null;
-  const payload = (message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload) ? message.payload : {}) as Record<string, unknown>;
+export async function ensureMediaStored(
+  ctx: Ctx,
+  message: MessageRow,
+  loc: MediaLocation | { custom: string },
+): Promise<StoredMedia | null> {
+  if (message.type !== 'audio' && message.type !== 'image' && message.type !== 'document')
+    return null;
+  const payload = (
+    message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)
+      ? message.payload
+      : {}
+  ) as Record<string, unknown>;
   const { bucket, path } = storagePathFor(message, loc);
   if (message.storage_path) {
     return {
@@ -48,13 +64,19 @@ export async function ensureMediaStored(ctx: Ctx, message: MessageRow, loc: Medi
   }
   if (!message.media_id) return null;
   const media = await ctx.wa.downloadMedia(message.media_id);
-  const mime = media.mime ?? message.media_mime ?? (message.type === 'audio' ? 'audio/ogg' : 'image/jpeg');
+  const mime =
+    media.mime ?? message.media_mime ?? (message.type === 'audio' ? 'audio/ogg' : 'image/jpeg');
   await ctx.storage.upload(bucket, path, media.buffer, mime);
   let durationS: number | null = null;
   let peaks: number[] | null = null;
   if (message.type === 'audio') {
     try {
-      const analysis = await withTempDir(async (dir) => analyzeAudio(ctx.ffmpeg, await writeTemp(dir, `in.${mimeExtension(mime, 'ogg')}`, media.buffer)));
+      const analysis = await withTempDir(async (dir) =>
+        analyzeAudio(
+          ctx.ffmpeg,
+          await writeTemp(dir, `in.${mimeExtension(mime, 'ogg')}`, media.buffer),
+        ),
+      );
       durationS = analysis.durationS;
       peaks = analysis.peaks;
       ctx.metrics.add({ audioSeconds: durationS });
@@ -66,7 +88,12 @@ export async function ensureMediaStored(ctx: Ctx, message: MessageRow, loc: Medi
     storage_path: path,
     duration_s: durationS,
     media_mime: mime,
-    payload: { ...payload, ...(peaks ? { peaks } : {}), ...(durationS !== null ? { duration_s: durationS } : {}), sha256: media.sha256 ?? payload.sha256 ?? null },
+    payload: {
+      ...payload,
+      ...(peaks ? { peaks } : {}),
+      ...(durationS !== null ? { duration_s: durationS } : {}),
+      sha256: media.sha256 ?? payload.sha256 ?? null,
+    },
   });
   message.storage_path = path;
   message.duration_s = durationS;
@@ -75,7 +102,10 @@ export async function ensureMediaStored(ctx: Ctx, message: MessageRow, loc: Medi
 }
 
 /** Load a stored original (audio) for transcription. */
-export async function loadStoredAudio(ctx: Ctx, message: MessageRow): Promise<{ buffer: Buffer; ext: string } | null> {
+export async function loadStoredAudio(
+  ctx: Ctx,
+  message: MessageRow,
+): Promise<{ buffer: Buffer; ext: string } | null> {
   if (!message.storage_path) return null;
   const buffer = await ctx.storage.download('audio', message.storage_path);
   return { buffer, ext: message.storage_path.split('.').pop() ?? 'ogg' };

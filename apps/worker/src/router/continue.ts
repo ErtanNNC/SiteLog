@@ -9,7 +9,12 @@ import { createSession } from './session';
  * What happens once a voice note is transcribed: test notes get their echo, intake audio goes to
  * extraction (unless it turns out to be a short command like "rained out"), replies go to parse_reply.
  */
-export async function afterTranscription(ctx: Ctx, message: MessageRow, transcript: TranscriptRow, payload: { reportId?: string; testMode?: boolean }): Promise<void> {
+export async function afterTranscription(
+  ctx: Ctx,
+  message: MessageRow,
+  transcript: TranscriptRow,
+  payload: { reportId?: string; testMode?: boolean },
+): Promise<void> {
   if (payload.testMode) {
     await onTestTranscript(ctx, message, transcript);
     return;
@@ -20,7 +25,11 @@ export async function afterTranscription(ctx: Ctx, message: MessageRow, transcri
   const sources = await ctx.db.listReportSources(report.id);
   const isSource = sources.some((s) => s.message_id === message.id && s.kind === 'audio');
   if (!isSource) {
-    await ctx.db.enqueueJob('parse_reply', { messageId: message.id, reportId: report.id }, { dedupeKey: `parse_reply:${message.id}` });
+    await ctx.db.enqueueJob(
+      'parse_reply',
+      { messageId: message.id, reportId: report.id },
+      { dedupeKey: `parse_reply:${message.id}` },
+    );
     return;
   }
 
@@ -31,7 +40,13 @@ export async function afterTranscription(ctx: Ctx, message: MessageRow, transcri
     if (session) {
       const quick = quickClassify(transcript.text, session.now, session.tz);
       const intent = quick?.intent ?? (await classifyShort(session, transcript.text));
-      if (intent === 'no_work' || intent === 'weather_day' || intent === 'edit_request' || intent === 'help' || intent === 'stop') {
+      if (
+        intent === 'no_work' ||
+        intent === 'weather_day' ||
+        intent === 'edit_request' ||
+        intent === 'help' ||
+        intent === 'stop'
+      ) {
         await voidReport(ctx, report.id);
         await session.setState('idle', { active_report_id: null, pending_question_id: null });
         await handleReplyText(session, transcript.text, true);
@@ -39,14 +54,26 @@ export async function afterTranscription(ctx: Ctx, message: MessageRow, transcri
       }
     }
   }
-  await ctx.db.enqueueJob('extract_report', { reportId: report.id, reason: `sources:${sources.length}` }, { dedupeKey: `extract:${report.id}:${sources.length}` });
+  await ctx.db.enqueueJob(
+    'extract_report',
+    { reportId: report.id, reason: `sources:${sources.length}` },
+    { dedupeKey: `extract:${report.id}:${sources.length}` },
+  );
 }
 
-async function classifyShort(session: Awaited<ReturnType<typeof createSession>>, text: string): Promise<string | null> {
+async function classifyShort(
+  session: Awaited<ReturnType<typeof createSession>>,
+  text: string,
+): Promise<string | null> {
   if (!session || !session.ctx.ai.claude) return null;
   const { classifyWithModel } = await import('../ai/classify');
   try {
-    const res = await classifyWithModel(session.ctx.ai.claude, session.ctx.config.CLAUDE_MODEL_FAST, { state: 'idle', lastOutbound: null, text, isVoice: true }, session.ctx.log);
+    const res = await classifyWithModel(
+      session.ctx.ai.claude,
+      session.ctx.config.CLAUDE_MODEL_FAST,
+      { state: 'idle', lastOutbound: null, text, isVoice: true },
+      session.ctx.log,
+    );
     session.ctx.metrics.add({ tokens: res.usage, estCostUsd: res.estCostUsd });
     return res.data.confidence >= 0.7 ? res.data.intent : null;
   } catch (err) {
@@ -61,6 +88,13 @@ export async function voidReport(ctx: Ctx, reportId: string): Promise<void> {
   if (!report || report.status === 'filed' || report.status === 'signed_off') return;
   await ctx.db.updateReport(report.id, { status: 'void' });
   const siteDay = await ctx.db.getSiteDay(report.site_day_id);
-  if (siteDay && siteDay.status === 'processing') await ctx.db.updateSiteDay(siteDay.id, { status: 'pending' });
-  await ctx.db.logAudit({ org_id: report.org_id, actor_type: 'agent', action: 'report.voided', entity: 'report', entity_id: report.id });
+  if (siteDay && siteDay.status === 'processing')
+    await ctx.db.updateSiteDay(siteDay.id, { status: 'pending' });
+  await ctx.db.logAudit({
+    org_id: report.org_id,
+    actor_type: 'agent',
+    action: 'report.voided',
+    entity: 'report',
+    entity_id: report.id,
+  });
 }

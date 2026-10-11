@@ -24,7 +24,9 @@ function str(v: unknown): string | null {
 }
 
 /** Button / list reply id or template quick-reply payload, wherever the webhook put it. */
-export function buttonIdOf(message: Pick<MessageRow, 'payload'>): { id: string; title: string | null } | null {
+export function buttonIdOf(
+  message: Pick<MessageRow, 'payload'>,
+): { id: string; title: string | null } | null {
   const p = dict(message.payload);
   const raw = dict(p.raw);
   const interactive = dict(p.interactive ?? raw.interactive);
@@ -33,11 +35,15 @@ export function buttonIdOf(message: Pick<MessageRow, 'payload'>): { id: string; 
   const button = dict(p.button ?? raw.button);
   const id = str(p.replyId) ?? str(buttonReply.id) ?? str(listReply.id) ?? str(button.payload);
   if (!id) return null;
-  const title = str(p.replyTitle) ?? str(buttonReply.title) ?? str(listReply.title) ?? str(button.text);
+  const title =
+    str(p.replyTitle) ?? str(buttonReply.title) ?? str(listReply.title) ?? str(button.text);
   return { id, title };
 }
 
-export function reactionOf(message: Pick<MessageRow, 'payload'>): { emoji: string | null; toWaMessageId: string | null } {
+export function reactionOf(message: Pick<MessageRow, 'payload'>): {
+  emoji: string | null;
+  toWaMessageId: string | null;
+} {
   const p = dict(message.payload);
   const raw = dict(p.raw);
   const reaction = dict(p.reaction ?? raw.reaction);
@@ -57,7 +63,13 @@ export function parseInbound(message: MessageRow): InboundContent {
   switch (message.type) {
     case 'interactive': {
       const b = buttonIdOf(message);
-      if (b) return { kind: 'button', id: b.id, title: b.title ?? message.body, parsed: parseButtonId(b.id) };
+      if (b)
+        return {
+          kind: 'button',
+          id: b.id,
+          title: b.title ?? message.body,
+          parsed: parseButtonId(b.id),
+        };
       return message.body ? { kind: 'text', text: message.body } : { kind: 'unsupported' };
     }
     case 'text':
@@ -67,7 +79,12 @@ export function parseInbound(message: MessageRow): InboundContent {
     case 'image':
       return { kind: 'image', mediaId: message.media_id, caption: message.body };
     case 'document':
-      return { kind: 'document', mediaId: message.media_id, caption: message.body, mime: message.media_mime };
+      return {
+        kind: 'document',
+        mediaId: message.media_id,
+        caption: message.body,
+        mime: message.media_mime,
+      };
     case 'reaction':
       return { kind: 'reaction', ...reactionOf(message) };
     default:

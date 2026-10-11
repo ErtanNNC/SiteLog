@@ -39,25 +39,59 @@ export function inferSite(s: Session): SiteRow | null {
   const candidates = s.activeSites;
   if (candidates.length === 1) return candidates[0]!;
   const text = contentText(s);
-  const guess = matchSiteByText(text, candidates.map((c) => ({ id: c.id, name: c.name, projectCode: c.project_code, address: c.address })));
-  if (guess.siteId && guess.confidence >= SITE_INFER_THRESHOLD) return candidates.find((c) => c.id === guess.siteId) ?? null;
+  const guess = matchSiteByText(
+    text,
+    candidates.map((c) => ({
+      id: c.id,
+      name: c.name,
+      projectCode: c.project_code,
+      address: c.address,
+    })),
+  );
+  if (guess.siteId && guess.confidence >= SITE_INFER_THRESHOLD)
+    return candidates.find((c) => c.id === guess.siteId) ?? null;
   return null;
 }
 
-export function siteOptions(sites: SiteRow[]): Array<{ id: string; title: string; description?: string }> {
-  return sites.slice(0, 10).map((site) => ({ id: ButtonIds.site(site.id), title: truncateTitle(site.name), description: site.project_code }));
+export function siteOptions(
+  sites: SiteRow[],
+): Array<{ id: string; title: string; description?: string }> {
+  return sites.slice(0, 10).map((site) => ({
+    id: ButtonIds.site(site.id),
+    title: truncateTitle(site.name),
+    description: site.project_code,
+  }));
 }
 
-export async function sendSitePicker(s: Session, messageIds: string[], intent: 'report' | 'no_work' | 'weather_day' = 'report'): Promise<void> {
-  await s.setState('selecting_site', { pending: { message_ids: messageIds, awaiting: 'site', intent }, candidate_site_ids: s.activeSites.map((x) => x.id) });
-  await sendChoice(s.ctx, s.convo, waCopy.pickSite(), siteOptions(s.activeSites), { kind: 'pick_site' });
+export async function sendSitePicker(
+  s: Session,
+  messageIds: string[],
+  intent: 'report' | 'no_work' | 'weather_day' = 'report',
+): Promise<void> {
+  await s.setState('selecting_site', {
+    pending: { message_ids: messageIds, awaiting: 'site', intent },
+    candidate_site_ids: s.activeSites.map((x) => x.id),
+  });
+  await sendChoice(s.ctx, s.convo, waCopy.pickSite(), siteOptions(s.activeSites), {
+    kind: 'pick_site',
+  });
 }
 
-export async function askWhichDay(s: Session, site: SiteRow, messageIds: string[], info: { date: string; alternative: string }): Promise<void> {
-  await s.setState('idle', { pending: { message_ids: messageIds, site_id: site.id, awaiting: 'day' } });
+export async function askWhichDay(
+  s: Session,
+  site: SiteRow,
+  messageIds: string[],
+  info: { date: string; alternative: string },
+): Promise<void> {
+  await s.setState('idle', {
+    pending: { message_ids: messageIds, site_id: site.id, awaiting: 'day' },
+  });
   await s.reply(
     waCopy.whichDay(info.date, info.alternative),
-    ButtonSets.whichDay(info.date, info.alternative, { today: 'Today', yesterday: weekdayName(info.alternative) }),
+    ButtonSets.whichDay(info.date, info.alternative, {
+      today: 'Today',
+      yesterday: weekdayName(info.alternative),
+    }),
     { kind: 'which_day' },
   );
 }
@@ -75,7 +109,9 @@ export async function handleContent(s: Session): Promise<void> {
   const pending = s.context.pending;
   if (pending) {
     // Still waiting for a site/day choice: park this message with the others.
-    await s.setState(null, { pending: { ...pending, message_ids: [...pending.message_ids, s.message.id] } });
+    await s.setState(null, {
+      pending: { ...pending, message_ids: [...pending.message_ids, s.message.id] },
+    });
     return;
   }
   const site = inferSite(s);
@@ -87,7 +123,11 @@ export async function handleContent(s: Session): Promise<void> {
 }
 
 /** After the site is known: decide the report date (which-day before noon) and start. */
-export async function continueWithSite(s: Session, site: SiteRow, messageIds: string[]): Promise<void> {
+export async function continueWithSite(
+  s: Session,
+  site: SiteRow,
+  messageIds: string[],
+): Promise<void> {
   const settings = await s.ctx.db.getOrgSettings(site.org_id);
   const info = reportDateForInbound(s.now, site.timezone, workingDaysOf(settings));
   if (info.ambiguous) {
@@ -117,7 +157,13 @@ export async function handleSiteChoice(s: Session, siteId: string): Promise<void
   }
   if (intent === 'weather_day') {
     await s.setState('idle', { pending: null, last_site_id: site.id });
-    await logWeatherDay(s, site, localDate(s.now, site.timezone), null, pending?.message_ids[0] ?? s.message.id);
+    await logWeatherDay(
+      s,
+      site,
+      localDate(s.now, site.timezone),
+      null,
+      pending?.message_ids[0] ?? s.message.id,
+    );
     return;
   }
   const ids = pending?.message_ids ?? [];
@@ -140,7 +186,10 @@ export async function handleDayChoice(s: Session, date: string): Promise<void> {
 }
 
 /** Text answer to the which-day prompt ("today", "yesterday", "hoy", "ayer"). */
-export function dayFromText(text: string, info: { date: string; alternative: string }): string | null {
+export function dayFromText(
+  text: string,
+  info: { date: string; alternative: string },
+): string | null {
   const t = text.trim().toLowerCase();
   if (/^(today|hoy|this one|now)\b/.test(t)) return info.date;
   if (/^(yesterday|ayer)\b/.test(t)) return info.alternative;
@@ -166,7 +215,12 @@ function sourceKindOf(m: MessageRow): 'audio' | 'photo' | 'text' | null {
 }
 
 /** §F5 steps 1–3: site-day, report row, sources, ack, pipeline jobs. */
-export async function startIntake(s: Session, site: SiteRow, date: string, messageIds: string[]): Promise<void> {
+export async function startIntake(
+  s: Session,
+  site: SiteRow,
+  date: string,
+  messageIds: string[],
+): Promise<void> {
   const { ctx } = s;
   const siteCtx = await ctx.db.siteContext(site.id);
   if (!siteCtx) throw new Error(`site ${site.id} has no context`);
@@ -175,7 +229,11 @@ export async function startIntake(s: Session, site: SiteRow, date: string, messa
   const messages = await loadMessages(s, messageIds);
 
   for (const m of messages) {
-    await ensureMediaStored(ctx, m, { orgId: site.org_id, siteId: site.id, date: localDate(new Date(m.created_at), site.timezone) });
+    await ensureMediaStored(ctx, m, {
+      orgId: site.org_id,
+      siteId: site.id,
+      date: localDate(new Date(m.created_at), site.timezone),
+    });
   }
 
   let report = await ctx.db.findOpenReportForSiteDay(siteDay.id);
@@ -195,7 +253,15 @@ export async function startIntake(s: Session, site: SiteRow, date: string, messa
       received_at: messages[0]?.created_at ?? s.now,
       kind: 'daily',
     });
-    await ctx.db.logAudit({ org_id: site.org_id, actor_type: 'reporter', actor_id: report.reporter_id, action: 'report.created', entity: 'report', entity_id: report.id, diff: { report_no: reportNo, date } });
+    await ctx.db.logAudit({
+      org_id: site.org_id,
+      actor_type: 'reporter',
+      actor_id: report.reporter_id,
+      action: 'report.created',
+      entity: 'report',
+      entity_id: report.id,
+      diff: { report_no: reportNo, date },
+    });
   }
 
   const newAudio: MessageRow[] = [];
@@ -203,7 +269,13 @@ export async function startIntake(s: Session, site: SiteRow, date: string, messa
   for (const m of messages) {
     const kind = sourceKindOf(m);
     if (!kind) continue;
-    await ctx.db.insertReportSource({ report_id: report.id, message_id: m.id, kind, caption: kind === 'photo' ? m.body : null, taken_at: m.created_at });
+    await ctx.db.insertReportSource({
+      report_id: report.id,
+      message_id: m.id,
+      kind,
+      caption: kind === 'photo' ? m.body : null,
+      taken_at: m.created_at,
+    });
     if (kind === 'audio') newAudio.push(m);
     if (kind === 'photo') newPhotos++;
   }
@@ -215,16 +287,29 @@ export async function startIntake(s: Session, site: SiteRow, date: string, messa
     return;
   }
 
-  if (siteDay.status === 'pending' || siteDay.status === 'reminded' || siteDay.status === 'missing') {
+  if (
+    siteDay.status === 'pending' ||
+    siteDay.status === 'reminded' ||
+    siteDay.status === 'missing'
+  ) {
     await ctx.db.updateSiteDay(siteDay.id, { status: 'processing' });
   }
   await s.setState('processing', { active_report_id: report.id, pending_question_id: null });
   const duration = newAudio.reduce((a, m) => a + (m.duration_s ?? 0), 0);
-  await s.reply(waCopy.ackReceived(s.firstName, newAudio.length ? duration : null, newPhotos), undefined, { kind: 'ack', reportId: report.id });
+  await s.reply(
+    waCopy.ackReceived(s.firstName, newAudio.length ? duration : null, newPhotos),
+    undefined,
+    { kind: 'ack', reportId: report.id },
+  );
   await enqueuePipeline(s, report, newAudio, sources.length);
 }
 
-export async function enqueuePipeline(s: Session, report: ReportRow, audio: MessageRow[], sourceCount: number): Promise<void> {
+export async function enqueuePipeline(
+  s: Session,
+  report: ReportRow,
+  audio: MessageRow[],
+  sourceCount: number,
+): Promise<void> {
   const { ctx } = s;
   const pendingAudio = [];
   for (const m of audio) {
@@ -232,15 +317,28 @@ export async function enqueuePipeline(s: Session, report: ReportRow, audio: Mess
   }
   if (pendingAudio.length) {
     for (const m of pendingAudio) {
-      await ctx.db.enqueueJob('transcribe_audio', { messageId: m.id, reportId: report.id }, { dedupeKey: `transcribe:${m.id}` });
+      await ctx.db.enqueueJob(
+        'transcribe_audio',
+        { messageId: m.id, reportId: report.id },
+        { dedupeKey: `transcribe:${m.id}` },
+      );
     }
     return;
   }
-  await ctx.db.enqueueJob('extract_report', { reportId: report.id, reason: `sources:${sourceCount}` }, { dedupeKey: `extract:${report.id}:${sourceCount}` });
+  await ctx.db.enqueueJob(
+    'extract_report',
+    { reportId: report.id, reason: `sources:${sourceCount}` },
+    { dedupeKey: `extract:${report.id}:${sourceCount}` },
+  );
 }
 
 /** Content for a day that is already filed: photos within 10 min attach, anything else is an edit. */
-async function handleContentForFiledDay(s: Session, report: ReportRow, site: SiteRow, messages: MessageRow[]): Promise<void> {
+async function handleContentForFiledDay(
+  s: Session,
+  report: ReportRow,
+  site: SiteRow,
+  messages: MessageRow[],
+): Promise<void> {
   const { ctx } = s;
   const photos = messages.filter((m) => sourceKindOf(m) === 'photo');
   const others = messages.filter((m) => sourceKindOf(m) === 'audio' || sourceKindOf(m) === 'text');
@@ -254,10 +352,18 @@ async function handleContentForFiledDay(s: Session, report: ReportRow, site: Sit
     await s.reply(waCopy.lockedReport(), undefined, { kind: 'locked' });
     return;
   }
-  await s.setState('editing', { editing: { report_id: report.id }, last_site_id: site.id, pending: null });
+  await s.setState('editing', {
+    editing: { report_id: report.id },
+    last_site_id: site.id,
+    pending: null,
+  });
   for (const m of others) {
     if (m.type === 'audio') {
-      await ctx.db.enqueueJob('transcribe_audio', { messageId: m.id, reportId: report.id }, { dedupeKey: `transcribe:${m.id}` });
+      await ctx.db.enqueueJob(
+        'transcribe_audio',
+        { messageId: m.id, reportId: report.id },
+        { dedupeKey: `transcribe:${m.id}` },
+      );
     } else if (m.body) {
       await applyEdit(s, report, m.body, m.id);
     }
@@ -265,21 +371,50 @@ async function handleContentForFiledDay(s: Session, report: ReportRow, site: Sit
 }
 
 /** §7.2: photos within 10 minutes of the voice note attach to the same (already filed) report. */
-export async function attachLatePhotos(s: Session, report: ReportRow, photos: MessageRow[]): Promise<void> {
+export async function attachLatePhotos(
+  s: Session,
+  report: ReportRow,
+  photos: MessageRow[],
+): Promise<void> {
   const { ctx } = s;
   const filedAt = report.filed_at ? new Date(report.filed_at).getTime() : 0;
-  const recent = photos.filter((m) => Math.abs(new Date(m.created_at).getTime() - filedAt) <= LATE_PHOTO_WINDOW_MS);
+  const recent = photos.filter(
+    (m) => Math.abs(new Date(m.created_at).getTime() - filedAt) <= LATE_PHOTO_WINDOW_MS,
+  );
   if (recent.length === 0) {
-    await s.reply(waCopy.editHint(weekdayName(localDate(s.now, s.tz))), undefined, { kind: 'edit_hint' });
+    await s.reply(waCopy.editHint(weekdayName(localDate(s.now, s.tz))), undefined, {
+      kind: 'edit_hint',
+    });
     return;
   }
   const data = await currentData(ctx, report);
   if (!data) return;
   for (const m of recent) {
-    await ctx.db.insertReportSource({ report_id: report.id, message_id: m.id, kind: 'photo', caption: m.body, taken_at: m.created_at });
+    await ctx.db.insertReportSource({
+      report_id: report.id,
+      message_id: m.id,
+      kind: 'photo',
+      caption: m.body,
+      taken_at: m.created_at,
+    });
   }
-  const next = { ...data, photos: [...data.photos, ...recent.map((m) => ({ messageId: m.id, caption: m.body ?? undefined, takenAt: m.created_at }))] };
-  await createReportVersion(ctx, report, next, { changeNote: `Photo${recent.length > 1 ? 's' : ''} added`, author: 'agent', authorMessageId: recent[0]!.id, emailRecipients: false });
+  const next = {
+    ...data,
+    photos: [
+      ...data.photos,
+      ...recent.map((m) => ({
+        messageId: m.id,
+        caption: m.body ?? undefined,
+        takenAt: m.created_at,
+      })),
+    ],
+  };
+  await createReportVersion(ctx, report, next, {
+    changeNote: `Photo${recent.length > 1 ? 's' : ''} added`,
+    author: 'agent',
+    authorMessageId: recent[0]!.id,
+    emailRecipients: false,
+  });
   await s.reply(waCopy.mergedMore(), undefined, { kind: 'merged', reportId: report.id });
 }
 
@@ -288,30 +423,65 @@ export async function mergeIntoActive(s: Session, report: ReportRow): Promise<vo
   const { ctx, message } = s;
   const site = s.siteById(report.site_id) ?? (await ctx.db.getSite(report.site_id));
   if (!site) throw new Error(`site ${report.site_id} not found`);
-  await ensureMediaStored(ctx, message, { orgId: site.org_id, siteId: site.id, date: localDate(new Date(message.created_at), site.timezone) });
+  await ensureMediaStored(ctx, message, {
+    orgId: site.org_id,
+    siteId: site.id,
+    date: localDate(new Date(message.created_at), site.timezone),
+  });
   const kind = sourceKindOf(message);
   if (!kind) return;
-  await ctx.db.insertReportSource({ report_id: report.id, message_id: message.id, kind, caption: kind === 'photo' ? message.body : null, taken_at: message.created_at });
+  await ctx.db.insertReportSource({
+    report_id: report.id,
+    message_id: message.id,
+    kind,
+    caption: kind === 'photo' ? message.body : null,
+    taken_at: message.created_at,
+  });
   const sources = await ctx.db.listReportSources(report.id);
   if (kind === 'photo') {
     // A photo answers an open photo question; otherwise it just rides along.
     const pendingId = s.context.pending_question_id;
     const q = pendingId ? await ctx.db.getQuestion(pendingId) : null;
     if (q && !q.answered_at && q.field === 'photo') {
-      await ctx.db.updateQuestion(q.id, { answered_message_id: message.id, answered_at: s.now, answer: { photo: true } });
+      await ctx.db.updateQuestion(q.id, {
+        answered_message_id: message.id,
+        answered_at: s.now,
+        answer: { photo: true },
+      });
       await s.setState(null, { pending_question_id: null });
-      await ctx.db.enqueueJob('decide_next', { reportId: report.id }, { dedupeKey: `decide:${report.id}:${message.id}` });
+      await ctx.db.enqueueJob(
+        'decide_next',
+        { reportId: report.id },
+        { dedupeKey: `decide:${report.id}:${message.id}` },
+      );
     } else if (s.convo.state === 'awaiting_confirmation') {
       const data = await currentData(ctx, report);
       if (data) {
-        await ctx.db.insertVersion({ report_id: report.id, version: report.current_version || 1, data: { ...data, photos: [...data.photos, { messageId: message.id, caption: message.body ?? undefined, takenAt: message.created_at }] }, summary: data.summary || null, author: 'agent' });
+        await ctx.db.insertVersion({
+          report_id: report.id,
+          version: report.current_version || 1,
+          data: {
+            ...data,
+            photos: [
+              ...data.photos,
+              {
+                messageId: message.id,
+                caption: message.body ?? undefined,
+                takenAt: message.created_at,
+              },
+            ],
+          },
+          summary: data.summary || null,
+          author: 'agent',
+        });
       }
     }
     await s.reply(waCopy.mergedMore(), undefined, { kind: 'merged', reportId: report.id });
     return;
   }
   await s.reply(waCopy.mergedMore(), undefined, { kind: 'merged', reportId: report.id });
-  if (s.convo.state !== 'processing') await s.setState('processing', { active_report_id: report.id });
+  if (s.convo.state !== 'processing')
+    await s.setState('processing', { active_report_id: report.id });
   await enqueuePipeline(s, report, kind === 'audio' ? [message] : [], sources.length);
 }
 

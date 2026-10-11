@@ -42,7 +42,7 @@ import type {
   UpdateSitePatch,
 } from '../source';
 import type { ChangeEvent, OrgSettingsPatch, ReportFilters } from '../types';
-import { DemoStore } from './store';
+import type { DemoStore } from './store';
 
 export interface DemoSourceOptions {
   /** Simulated network latency so skeletons are visible in the browser (0 in tests). */
@@ -95,7 +95,12 @@ export class DemoSource implements DataSource {
     return this.run(() => {
       const rows = this.store.rows();
       const { reports, total, incidentIds, weatherHours } = filterReports(rows, filters);
-      return paginate(assembleReportItems(rows, reports, incidentIds), total, filters, weatherHours);
+      return paginate(
+        assembleReportItems(rows, reports, incidentIds),
+        total,
+        filters,
+        weatherHours,
+      );
     });
   }
   getReportDetail(reportId: string, version?: number | null) {
@@ -143,7 +148,9 @@ export class DemoSource implements DataSource {
     return this.run(() => this.store.undoSignOff(reportId, this.user.id));
   }
   createReportVersion(reportId: string, data: DailyReportData, changeNote: string) {
-    return this.run(() => ({ version: this.store.createReportVersion(reportId, data, changeNote, this.user.id) }));
+    return this.run(() => ({
+      version: this.store.createReportVersion(reportId, data, changeNote, this.user.id),
+    }));
   }
   markNoWork(siteDayId: string) {
     return this.run(() => this.store.markNoWork(siteDayId, this.user.id));
@@ -210,7 +217,12 @@ export class DemoSource implements DataSource {
   }
   payrollCsvUrl(week: string, siteId: string | null = null) {
     return this.run(() => {
-      const csv = payrollCsv(this.store.rows(), week, siteId, this.store.data.settings.include_unconfirmed_in_payroll);
+      const csv = payrollCsv(
+        this.store.rows(),
+        week,
+        siteId,
+        this.store.data.settings.include_unconfirmed_in_payroll,
+      );
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       return URL.createObjectURL(blob);
     });
@@ -230,6 +242,10 @@ export class DemoSource implements DataSource {
 }
 
 /** Raw CSV text (used by tests and the download helper). */
-export function demoPayrollCsv(store: DemoStore, week: string, siteId: string | null = null): string {
+export function demoPayrollCsv(
+  store: DemoStore,
+  week: string,
+  siteId: string | null = null,
+): string {
   return payrollCsv(store.rows(), week, siteId, store.data.settings.include_unconfirmed_in_payroll);
 }

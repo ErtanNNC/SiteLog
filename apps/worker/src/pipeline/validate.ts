@@ -12,12 +12,25 @@ import {
 
 /** §10.5 — validation + question selection against the org's settings (pure wrappers over shared). */
 
-export function requiredFieldsOf(settings: Pick<OrgSettingsRow, 'required_fields'>): RequiredFieldKey[] {
-  const allowed = new Set<string>(['manpower', 'hours', 'weather', 'work_performed', 'safety', 'photo']);
+export function requiredFieldsOf(
+  settings: Pick<OrgSettingsRow, 'required_fields'>,
+): RequiredFieldKey[] {
+  const allowed = new Set<string>([
+    'manpower',
+    'hours',
+    'weather',
+    'work_performed',
+    'safety',
+    'photo',
+  ]);
   return settings.required_fields.filter((f): f is RequiredFieldKey => allowed.has(f));
 }
 
-export function validateDraft(data: DailyReportData, settings: Pick<OrgSettingsRow, 'required_fields'>, photoCount: number): ValidationResult {
+export function validateDraft(
+  data: DailyReportData,
+  settings: Pick<OrgSettingsRow, 'required_fields'>,
+  photoCount: number,
+): ValidationResult {
   return validateReport(data, { requiredFields: requiredFieldsOf(settings), photoCount });
 }
 
@@ -44,9 +57,17 @@ export function selectNextQuestion(
   });
 }
 
-/** reports.review_reasons at filing: validation reasons + unanswered questions + extras, deduplicated. */
-export function reviewReasons(validation: ValidationResult, questions: QuestionRow[], extras: string[] = []): string[] {
+/**
+ * reports.review_reasons at filing: validation reasons, required values still missing (asked or not),
+ * unanswered questions and trigger extras, deduplicated.
+ */
+export function reviewReasons(
+  validation: ValidationResult,
+  questions: QuestionRow[],
+  extras: string[] = [],
+): string[] {
   const reasons = new Set<string>(validation.reviewReasons);
+  for (const m of validation.missingRequired) reasons.add(`missing:${m}`);
   for (const q of questions) {
     if (!q.answered_at) reasons.add(`unanswered:${q.field}`);
     const a = q.answer as { unanswered?: boolean } | null;

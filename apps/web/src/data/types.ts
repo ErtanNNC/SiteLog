@@ -130,11 +130,7 @@ export interface OverviewSiteRow {
 }
 
 export type AttentionKind =
-  | 'missing'
-  | 'needs_review'
-  | 'invoice_gap'
-  | 'unknown_sender'
-  | 'glossary_review';
+  'missing' | 'needs_review' | 'invoice_gap' | 'unknown_sender' | 'glossary_review';
 
 export type AttentionAction =
   | { kind: 'call'; label: string; tel: string }
@@ -275,7 +271,8 @@ export interface ReportFilters {
   pageSize?: number;
 }
 
-export type ReportFlagKind = 'rain' | 'version' | 'unknown_sub' | 'late' | 'incident' | 'weather_day';
+export type ReportFlagKind =
+  'rain' | 'version' | 'unknown_sub' | 'late' | 'incident' | 'weather_day';
 
 export interface ReportFlag {
   kind: ReportFlagKind;
@@ -634,7 +631,14 @@ export type OrgSettings = Omit<OrgSettingsRow, 'org_id' | 'updated_at'>;
 export type OrgSettingsPatch = Partial<OrgSettings>;
 
 export interface SettingsData {
-  org: { id: string; name: string; address: string | null; licenseNo: string | null; timezone: string; logoPath: string | null };
+  org: {
+    id: string;
+    name: string;
+    address: string | null;
+    licenseNo: string | null;
+    timezone: string;
+    logoPath: string | null;
+  };
   settings: OrgSettings;
   siteRecipients: Array<{ siteId: string; siteName: string; emails: string[] }>;
 }

@@ -1,0 +1,42 @@
+# Example Fly.io config for the SiteLog worker. Deploy from the repo root:
+#   fly launch --no-deploy --copy-config --config apps/worker/fly.toml
+#   fly secrets set SUPABASE_DB_URL=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+#     WA_PHONE_NUMBER_ID=... WA_ACCESS_TOKEN=... OPENAI_API_KEY=... ANTHROPIC_API_KEY=... RESEND_API_KEY=... SENTRY_DSN=...
+#   fly deploy --config apps/worker/fly.toml --dockerfile apps/worker/Dockerfile
+app = "sitelog-worker"
+primary_region = "dfw"
+
+[build]
+  dockerfile = "apps/worker/Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  WORKER_PORT = "8080"
+  WORKER_CONCURRENCY = "4"
+  AUDIO_RETENTION_DAYS = "730"
+  WA_GRAPH_VERSION = "v21.0"
+  TRANSCRIBE_MODEL = "whisper-1"
+  CLAUDE_MODEL = "claude-sonnet-5-5"
+  CLAUDE_MODEL_FAST = "claude-haiku-5-5"
+  EMAIL_PROVIDER = "resend"
+  EMAIL_FROM = "SiteLog <reports@sitelog.app>"
+  APP_URL = "https://app.sitelog.app"
+  LOG_LEVEL = "info"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "1gb"

@@ -6,7 +6,8 @@ import { ANSWER_SYSTEM_PROMPT, buildAnswerUserMessage } from './prompts/replies'
 /** §10.7 — `parse_answer` tool. Below 0.7 confidence the caller re-asks once. */
 export const ANSWER_TOOL = {
   name: 'parse_answer',
-  description: 'Interpret the reply to the open clarifying question and return the structured answer with a confidence.',
+  description:
+    'Interpret the reply to the open clarifying question and return the structured answer with a confidence.',
 } as const;
 
 export interface AnswerRequest {
@@ -16,7 +17,12 @@ export interface AnswerRequest {
   defaultShiftHours: number;
 }
 
-export async function parseAnswerWithModel(client: MessagesClient, model: string, req: AnswerRequest, log?: Logger): Promise<ToolCallResult<ParsedAnswer>> {
+export async function parseAnswerWithModel(
+  client: MessagesClient,
+  model: string,
+  req: AnswerRequest,
+  log?: Logger,
+): Promise<ToolCallResult<ParsedAnswer>> {
   return callTool(
     client,
     {

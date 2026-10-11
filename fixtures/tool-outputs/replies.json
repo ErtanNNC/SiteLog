@@ -1,0 +1,74 @@
+{
+  "description": "Recorded outputs of the small tools, keyed by scenario, used by the worker tests without API keys.",
+  "apply_correction": {
+    "apex-6-to-7": {
+      "operations": [
+        {
+          "op": "replace",
+          "path": "/manpower/0/workers",
+          "value": 7,
+          "reason": "Apex was 7 guys, not 6"
+        },
+        {
+          "op": "replace",
+          "path": "/manpower/0/totalHours",
+          "value": null,
+          "reason": "recomputed by the system"
+        }
+      ],
+      "changeNote": "Apex Concrete 6 → 7 workers",
+      "needsClarification": null
+    },
+    "ambiguous": {
+      "operations": [],
+      "changeNote": "",
+      "needsClarification": "Which crew do you mean — Apex Concrete or Ironclad Steel?"
+    }
+  },
+  "parse_answer": {
+    "delta-5-full-day": {
+      "field": "manpower.workers",
+      "value": { "workers": 5, "fullDay": true },
+      "confidence": 0.98
+    },
+    "unclear": {
+      "field": "manpower.workers",
+      "value": { "text": "maybe later" },
+      "confidence": 0.2
+    }
+  },
+  "classify_reply": {
+    "fix-apex": {
+      "intent": "fix",
+      "confidence": 0.95,
+      "entities": { "numbers": [7, 6] },
+      "correctionText": "Apex had 7 not 6"
+    },
+    "edit-friday": {
+      "intent": "edit_request",
+      "confidence": 0.95,
+      "entities": { "dayReference": "Friday", "numbers": [7, 6] },
+      "correctionText": "Apex was 7 guys, not 6"
+    },
+    "rained-out": { "intent": "weather_day", "confidence": 0.95, "entities": { "time": "11:00" } },
+    "thanks": { "intent": "other", "confidence": 0.9 }
+  },
+  "classify_day_off": {
+    "rained-out-11": {
+      "kind": "weather_day",
+      "fullDay": false,
+      "releasedAt": "11:00",
+      "cause": "rain",
+      "workersThisMorning": 9,
+      "confidence": 0.95
+    },
+    "holiday": {
+      "kind": "no_work",
+      "fullDay": true,
+      "releasedAt": null,
+      "cause": "holiday",
+      "workersThisMorning": null,
+      "confidence": 0.95
+    }
+  }
+}

@@ -25,24 +25,44 @@ export interface EditRequest {
   correctionText: string | null;
 }
 
-export async function handleEditRequest(s: Session, req: EditRequest, rawText: string): Promise<void> {
+export async function handleEditRequest(
+  s: Session,
+  req: EditRequest,
+  rawText: string,
+): Promise<void> {
   const { ctx } = s;
-  const date = req.dayReference && /^\d{4}-\d{2}-\d{2}$/.test(req.dayReference) ? req.dayReference : resolveDayReference(req.dayReference ?? rawText, s.now, s.tz);
+  const date =
+    req.dayReference && /^\d{4}-\d{2}-\d{2}$/.test(req.dayReference)
+      ? req.dayReference
+      : resolveDayReference(req.dayReference ?? rawText, s.now, s.tz);
   if (!date) {
     await s.reply(waCopy.noReportFound(), undefined, { kind: 'edit_no_report' });
     return;
   }
-  const correctionText = (req.correctionText ?? stripDayReference(rawText.replace(/^(edit|edita|change|fix)\b/i, '').trim())).trim();
-  const candidates = await ctx.db.findReportsByDate(s.sites.map((x) => x.id), date);
+  const correctionText = (
+    req.correctionText ??
+    stripDayReference(rawText.replace(/^(edit|edita|change|fix)\b/i, '').trim())
+  ).trim();
+  const candidates = await ctx.db.findReportsByDate(
+    s.sites.map((x) => x.id),
+    date,
+  );
   if (candidates.length === 0) {
     await s.reply(waCopy.noReportFound(), undefined, { kind: 'edit_no_report' });
     return;
   }
   if (candidates.length > 1) {
-    await s.setState('editing', { editing: { report_id: '', correction_text: correctionText || null, date } as never });
+    await s.setState('editing', {
+      editing: { report_id: '', correction_text: correctionText || null, date } as never,
+    });
     await s.reply(
       waCopy.editCandidates(),
-      ButtonSets.editCandidates(candidates.map((r) => ({ id: r.id, label: truncateTitle(`${s.siteById(r.site_id)?.name ?? r.report_no}`) }))),
+      ButtonSets.editCandidates(
+        candidates.map((r) => ({
+          id: r.id,
+          label: truncateTitle(`${s.siteById(r.site_id)?.name ?? r.report_no}`),
+        })),
+      ),
       { kind: 'edit_candidates' },
     );
     return;
@@ -57,7 +77,11 @@ export async function handleEditCandidate(s: Session, reportId: string): Promise
   await proceedWithReport(s, report, editing.correction_text ?? '');
 }
 
-async function proceedWithReport(s: Session, report: ReportRow, correctionText: string): Promise<void> {
+async function proceedWithReport(
+  s: Session,
+  report: ReportRow,
+  correctionText: string,
+): Promise<void> {
   const data = await currentData(s.ctx, report);
   const site = s.siteById(report.site_id);
   const today = localDate(s.now, site?.timezone ?? s.tz);
@@ -90,7 +114,12 @@ export async function handleEditingText(s: Session, text: string): Promise<void>
 }
 
 /** apply_correction → patch → new version → re-render + email + reply (§F8 steps 3–5). */
-export async function applyEdit(s: Session, report: ReportRow, correctionText: string, messageId: string): Promise<void> {
+export async function applyEdit(
+  s: Session,
+  report: ReportRow,
+  correctionText: string,
+  messageId: string,
+): Promise<void> {
   const { ctx } = s;
   const data = await currentData(ctx, report);
   const site = await ctx.db.siteContext(report.site_id);
@@ -111,13 +140,26 @@ export async function applyEdit(s: Session, report: ReportRow, correctionText: s
   ctx.metrics.add({ tokens: res.usage, estCostUsd: res.estCostUsd });
   if (res.data.needsClarification || res.data.operations.length === 0) {
     await s.setState('editing', { editing: { report_id: report.id } });
-    await s.reply(waCopy.questionGeneric(res.data.needsClarification ?? waCopy.fixPrompt()), undefined, { kind: 'edit_clarify', reportId: report.id });
+    await s.reply(
+      waCopy.questionGeneric(res.data.needsClarification ?? waCopy.fixPrompt()),
+      undefined,
+      { kind: 'edit_clarify', reportId: report.id },
+    );
     return;
   }
   const patched = applyPatch(data, res.data.operations);
   const { entries } = recomputeManpowerTotals(patched.manpower);
   const next = DailyReportDataSchema.parse({ ...patched, manpower: entries });
-  const result = await createReportVersion(ctx, report, next, { changeNote: res.data.changeNote, author: 'reporter_reply', authorMessageId: messageId, emailRecipients: true });
+  const result = await createReportVersion(ctx, report, next, {
+    changeNote: res.data.changeNote,
+    author: 'reporter_reply',
+    authorMessageId: messageId,
+    emailRecipients: true,
+  });
   await s.setState('idle', { editing: null });
-  await s.reply(waCopy.editApplied(weekdayName(next.reportDate), res.data.changeNote, result.version.version), undefined, { kind: 'edit_applied', reportId: report.id });
+  await s.reply(
+    waCopy.editApplied(weekdayName(next.reportDate), res.data.changeNote, result.version.version),
+    undefined,
+    { kind: 'edit_applied', reportId: report.id },
+  );
 }

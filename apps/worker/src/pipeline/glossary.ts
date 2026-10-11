@@ -9,21 +9,35 @@ import type { Ctx } from '../context';
 export const AUTO_LEARN_CONFIDENCE = 0.9;
 
 export function termStatusFor(term: NewTerm): 'auto_learned' | 'needs_review' {
-  return term.kind === 'term' && term.confidence >= AUTO_LEARN_CONFIDENCE ? 'auto_learned' : 'needs_review';
+  return term.kind === 'term' && term.confidence >= AUTO_LEARN_CONFIDENCE
+    ? 'auto_learned'
+    : 'needs_review';
 }
 
 function known(term: NewTerm, companies: CompanyRow[], glossary: GlossaryTermRow[]): boolean {
   const heard = term.heard.trim().toLowerCase();
   if (!heard) return true;
   for (const c of companies) {
-    if (c.name.toLowerCase() === heard || c.aliases.some((a) => a.toLowerCase() === heard)) return true;
+    if (c.name.toLowerCase() === heard || c.aliases.some((a) => a.toLowerCase() === heard))
+      return true;
   }
-  return glossary.some((g) => g.heard.toLowerCase() === heard && (g.status === 'confirmed' || g.status === 'rejected' || g.status === 'built_in'));
+  return glossary.some(
+    (g) =>
+      g.heard.toLowerCase() === heard &&
+      (g.status === 'confirmed' || g.status === 'rejected' || g.status === 'built_in'),
+  );
 }
 
 export async function learnTerms(
   ctx: Ctx,
-  input: { orgId: string; siteId: string | null; reporterId?: string | null; terms: NewTerm[]; companies: CompanyRow[]; glossary: GlossaryTermRow[] },
+  input: {
+    orgId: string;
+    siteId: string | null;
+    reporterId?: string | null;
+    terms: NewTerm[];
+    companies: CompanyRow[];
+    glossary: GlossaryTermRow[];
+  },
 ): Promise<GlossaryTermRow[]> {
   const out: GlossaryTermRow[] = [];
   const seen = new Set<string>();
@@ -44,7 +58,13 @@ export async function learnTerms(
   }
   if (out.some((t) => t.status === 'needs_review')) {
     const n = out.filter((t) => t.status === 'needs_review').length;
-    await ctx.db.notifyOrg(input.orgId, 'glossary_review', `${n} new term${n === 1 ? '' : 's'} to review`, out.map((t) => t.heard).join(', '), '/glossary');
+    await ctx.db.notifyOrg(
+      input.orgId,
+      'glossary_review',
+      `${n} new term${n === 1 ? '' : 's'} to review`,
+      out.map((t) => t.heard).join(', '),
+      '/glossary',
+    );
   }
   return out;
 }

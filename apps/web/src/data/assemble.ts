@@ -247,7 +247,11 @@ export function totalsOf(rows: RowSet, data: DailyReportData): ReportTotals {
   return deriveTotals(data, { selfPerformCompanyIds: selfPerformIds(rows) });
 }
 
-export function workdaysBetween(from: string, to: string, workingDays: readonly number[]): string[] {
+export function workdaysBetween(
+  from: string,
+  to: string,
+  workingDays: readonly number[],
+): string[] {
   const out: string[] = [];
   if (from > to) return out;
   for (let d = from; d <= to; d = addDays(d, 1)) if (isWorkingDay(d, workingDays)) out.push(d);
@@ -368,7 +372,12 @@ export function currentManpower(
       if (r.current_version !== m.version || !FILED_STATUSES.has(r.status)) continue;
       const date = m.date ?? ix.reportDate.get(r.id);
       if (!date) continue;
-      out.push({ ...m, date, site_id: m.site_id ?? r.site_id, report_no: m.report_no ?? r.report_no });
+      out.push({
+        ...m,
+        date,
+        site_id: m.site_id ?? r.site_id,
+        report_no: m.report_no ?? r.report_no,
+      });
     } else if (m.date && m.site_id) {
       if (m.report_status && !FILED_STATUSES.has(m.report_status)) continue;
       out.push({ ...m, date: m.date, site_id: m.site_id, report_no: m.report_no ?? '' });
@@ -388,16 +397,12 @@ export function currentWeather(rows: RowSet, ix: Index): WeatherEventRow[] {
 
 function weatherImpactText(data: DailyReportData | null): string | null {
   if (!data) return null;
-  const p = data.weather.periods.find((x) => x.lostHours > 0 || x.fullDay) ?? data.weather.periods[0];
+  const p =
+    data.weather.periods.find((x) => x.lostHours > 0 || x.fullDay) ?? data.weather.periods[0];
   if (!p) return null;
   const range = p.start && p.end ? `${p.start}–${p.end}` : p.start ? `from ${p.start}` : '';
   const head = [p.condition, range].filter(Boolean).join(' ');
   return p.impact ? `${head} · ${p.impact}` : head;
-}
-
-function audioSourceOf(sources: Source[] | undefined): { messageId: string; start: number } | null {
-  const a = sources?.find((s) => s.type === 'audio');
-  return a && a.type === 'audio' ? { messageId: a.messageId, start: a.start } : null;
 }
 
 export function peaksOf(payload: unknown): number[] {
@@ -408,9 +413,11 @@ export function peaksOf(payload: unknown): number[] {
 
 export function segmentsOf(json: unknown): TranscriptSegment[] {
   if (!Array.isArray(json)) return [];
-  return json
-    .filter(isRecord)
-    .map((s) => ({ start: Number(s.start ?? 0), end: Number(s.end ?? 0), text: String(s.text ?? '') }));
+  return json.filter(isRecord).map((s) => ({
+    start: Number(s.start ?? 0),
+    end: Number(s.end ?? 0),
+    text: String(s.text ?? ''),
+  }));
 }
 
 function optionsOf(json: unknown): string[] {
@@ -512,7 +519,8 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
     else if (status === 'no_work') segments.noWork += 1;
     else segments.awaiting += 1;
 
-    const filedData = status === 'filed' && report && FILED_STATUSES.has(report.status) ? totals : null;
+    const filedData =
+      status === 'filed' && report && FILED_STATUSES.has(report.status) ? totals : null;
     if (filedData) {
       crew += filedData.crewOnSite;
       hours += filedData.totalHours;
@@ -560,7 +568,13 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
         siteId: site.id,
         actions: [
           ...(reporter
-            ? [{ kind: 'call' as const, label: copy.overview.attention.missing.call(first), tel: reporter.phone_e164 }]
+            ? [
+                {
+                  kind: 'call' as const,
+                  label: copy.overview.attention.missing.call(first),
+                  tel: reporter.phone_e164,
+                },
+              ]
             : []),
           {
             kind: 'mark_no_work',
@@ -577,9 +591,14 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
         const [kind, name] = r.split(':');
         if (kind === 'unknown_company' && data) {
           const entry = data.manpower.find(
-            (m) => m.companyName.toLowerCase() === (name ?? '').toLowerCase() || m.companyNameHeard.toLowerCase() === (name ?? '').toLowerCase(),
+            (m) =>
+              m.companyName.toLowerCase() === (name ?? '').toLowerCase() ||
+              m.companyNameHeard.toLowerCase() === (name ?? '').toLowerCase(),
           );
-          return copy.overview.attention.needs_review.unknownCompany(name ?? '', entry?.workers ?? 0);
+          return copy.overview.attention.needs_review.unknownCompany(
+            name ?? '',
+            entry?.workers ?? 0,
+          );
         }
         return reviewReasonText(r);
       });
@@ -590,7 +609,13 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
         body: reasons.join(' · '),
         siteId: site.id,
         reportId: report.id,
-        actions: [{ kind: 'review_report', label: copy.overview.attention.needs_review.review, reportId: report.id }],
+        actions: [
+          {
+            kind: 'review_report',
+            label: copy.overview.attention.needs_review.review,
+            reportId: report.id,
+          },
+        ],
       });
     }
   }
@@ -606,7 +631,14 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
     const company = ix.companyById.get(inv.company_id);
     if (!company) continue;
     const reported = sum(
-      cm.filter((m) => m.company_id === inv.company_id && m.date >= inv.period_start! && m.date <= inv.period_end!).map((m) => Number(m.hours)),
+      cm
+        .filter(
+          (m) =>
+            m.company_id === inv.company_id &&
+            m.date >= inv.period_start! &&
+            m.date <= inv.period_end!,
+        )
+        .map((m) => Number(m.hours)),
     );
     const invoiced = Number(inv.total_hours ?? 0);
     const gap = Math.round((invoiced - reported) * 100) / 100;
@@ -616,8 +648,14 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       kind: 'invoice_gap',
       gap,
       title: copy.overview.attention.invoice_gap.title(company.name, formatGap(gap)),
-      body: copy.overview.attention.invoice_gap.body(inv.invoice_no ?? '', formatHours(invoiced), formatHours(reported)),
-      actions: [{ kind: 'compare_hours', label: copy.overview.attention.invoice_gap.compare, week }],
+      body: copy.overview.attention.invoice_gap.body(
+        inv.invoice_no ?? '',
+        formatHours(invoiced),
+        formatHours(reported),
+      ),
+      actions: [
+        { kind: 'compare_hours', label: copy.overview.attention.invoice_gap.compare, week },
+      ],
     });
   }
   gapItems.sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
@@ -665,7 +703,10 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
     signed_off: 5,
     no_work: 6,
   };
-  sitesToday.sort((a, b) => rowOrder[a.chip.variant] - rowOrder[b.chip.variant] || a.siteName.localeCompare(b.siteName));
+  sitesToday.sort(
+    (a, b) =>
+      rowOrder[a.chip.variant] - rowOrder[b.chip.variant] || a.siteName.localeCompare(b.siteName),
+  );
 
   const deadlines = active.map((s) => siteDeadline(s, rows.settings)).sort();
   const earliest = deadlines[0] ?? hhmm(rows.settings.default_deadline);
@@ -706,7 +747,10 @@ export function assembleSiteCards(rows: RowSet, ctx: AssembleCtx): SiteCard[] {
     const sd = days.find((d) => d.date === today);
     const report = reportForSiteDay(ix, sd);
     const data = report ? versionData(currentVersion(ix, report)) : null;
-    const chip = site.status === 'paused' ? { variant: 'no_work' as const, label: copy.chips.paused } : chipForSiteDay(sd, report);
+    const chip =
+      site.status === 'paused'
+        ? { variant: 'no_work' as const, label: copy.chips.paused }
+        : chipForSiteDay(sd, report);
     const streakDays = lastWorkdays(today, 14, rows.settings.working_days);
     const streak: StreakCell[] = streakDays.map((date) => {
       const d = days.find((x) => x.date === date);
@@ -715,10 +759,17 @@ export function assembleSiteCards(rows: RowSet, ctx: AssembleCtx): SiteCard[] {
     const reporter = ix.primaryReporterBySite.get(site.id) ?? null;
     const weatherDates = new Set<string>();
     for (const w of wx) {
-      if (w.site_id === site.id && w.date.startsWith(month) && (Number(w.lost_hours) > 0 || w.full_day)) weatherDates.add(w.date);
+      if (
+        w.site_id === site.id &&
+        w.date.startsWith(month) &&
+        (Number(w.lost_hours) > 0 || w.full_day)
+      )
+        weatherDates.add(w.date);
     }
-    for (const d of days) if (d.date.startsWith(month) && d.status === 'weather_day') weatherDates.add(d.date);
-    const filedToday = sd?.status === 'filed' && report && FILED_STATUSES.has(report.status) && data;
+    for (const d of days)
+      if (d.date.startsWith(month) && d.status === 'weather_day') weatherDates.add(d.date);
+    const filedToday =
+      sd?.status === 'filed' && report && FILED_STATUSES.has(report.status) && data;
     cards.push({
       siteId: site.id,
       name: site.name,
@@ -734,18 +785,27 @@ export function assembleSiteCards(rows: RowSet, ctx: AssembleCtx): SiteCard[] {
       reporterPhone: reporter?.phone_e164 ?? null,
       crewToday: filedToday ? totalsOf(rows, data).crewOnSite : null,
       weatherDaysMonth: weatherDates.size,
-      needsAttention: site.status === 'active' && (chip.variant === 'missing' || chip.variant === 'needs_review'),
+      needsAttention:
+        site.status === 'active' && (chip.variant === 'missing' || chip.variant === 'needs_review'),
       activeSince: site.active_since,
       pausedAt: site.paused_at,
     });
   }
-  cards.sort((a, b) => (a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'active' ? -1 : 1));
+  cards.sort((a, b) =>
+    a.status === b.status ? a.name.localeCompare(b.name) : a.status === 'active' ? -1 : 1,
+  );
   return cards;
 }
 
 // ───────────────────────────── Site detail ─────────────────────────────
 
-function crewRowsFor(rows: RowSet, ix: Index, report: ReportRow, data: DailyReportData, prev: DailyReportData | null): CrewRow[] {
+function crewRowsFor(
+  rows: RowSet,
+  ix: Index,
+  report: ReportRow,
+  data: DailyReportData,
+  prev: DailyReportData | null,
+): CrewRow[] {
   const changes = manpowerChanges(prev, data);
   const qs = rows.questions.filter((q) => q.report_id === report.id);
   return data.manpower.map((m, i) => {
@@ -756,11 +816,26 @@ function crewRowsFor(rows: RowSet, ix: Index, report: ReportRow, data: DailyRepo
     if (change) badges.push({ kind: 'edited', label: copy.chips.edited(report.current_version) });
     const q = qs.find((x) => {
       const t = isRecord(x.target) ? x.target : {};
-      return t.manpowerIndex === i || (typeof t.companyName === 'string' && t.companyName === m.companyName) || (typeof t.companyNameHeard === 'string' && t.companyNameHeard === m.companyNameHeard);
+      return (
+        t.manpowerIndex === i ||
+        (typeof t.companyName === 'string' && t.companyName === m.companyName) ||
+        (typeof t.companyNameHeard === 'string' && t.companyNameHeard === m.companyNameHeard)
+      );
     });
-    if (q?.answered_at) badges.push({ kind: 'confirmed_by_reply', label: copy.chips.confirmedByReply });
-    else if (q?.asked_at) badges.push({ kind: 'asked', label: copy.chips.asked(formatTimeInTz(q.asked_at, ix.siteById.get(report.site_id)?.timezone ?? rows.org.timezone)) });
-    if (m.hoursBasis === 'reply' && !q) badges.push({ kind: 'confirmed_by_reply', label: copy.chips.confirmedByReply });
+    if (q?.answered_at)
+      badges.push({ kind: 'confirmed_by_reply', label: copy.chips.confirmedByReply });
+    else if (q?.asked_at)
+      badges.push({
+        kind: 'asked',
+        label: copy.chips.asked(
+          formatTimeInTz(
+            q.asked_at,
+            ix.siteById.get(report.site_id)?.timezone ?? rows.org.timezone,
+          ),
+        ),
+      });
+    if (m.hoursBasis === 'reply' && !q)
+      badges.push({ kind: 'confirmed_by_reply', label: copy.chips.confirmedByReply });
     if (unconfirmed) badges.push({ kind: 'unconfirmed', label: copy.chips.unconfirmed });
     return {
       companyId: m.companyId,
@@ -776,7 +851,12 @@ function crewRowsFor(rows: RowSet, ix: Index, report: ReportRow, data: DailyRepo
   });
 }
 
-export function assembleSiteDetail(rows: RowSet, ctx: AssembleCtx, siteId: string, month: string): SiteDetail {
+export function assembleSiteDetail(
+  rows: RowSet,
+  ctx: AssembleCtx,
+  siteId: string,
+  month: string,
+): SiteDetail {
   const ix = buildIndex(rows);
   const site = ix.siteById.get(siteId);
   if (!site) throw new Error(copy.errors.notFound);
@@ -786,7 +866,8 @@ export function assembleSiteDetail(rows: RowSet, ctx: AssembleCtx, siteId: strin
   const wx = currentWeather(rows, ix).filter((w) => w.site_id === siteId);
   const crewByReport = groupBy(cm, (m) => m.report_id);
   const lostByReport = new Map<string, number>();
-  for (const w of wx) lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
+  for (const w of wx)
+    lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
 
   const cells: CalendarCell[] = monthDays(month).map((date) => {
     const sd = days.find((d) => d.date === date);
@@ -801,8 +882,10 @@ export function assembleSiteDetail(rows: RowSet, ctx: AssembleCtx, siteId: strin
       isFuture: date > today,
       status: sd?.status ?? null,
       chip: sd ? chipForSiteDay(sd, report) : null,
-      crew: filed && report.kind !== 'weather_day' ? sum(crewRows.map((m) => Number(m.workers))) : null,
-      hours: filed && report.kind !== 'weather_day' ? sum(crewRows.map((m) => Number(m.hours))) : null,
+      crew:
+        filed && report.kind !== 'weather_day' ? sum(crewRows.map((m) => Number(m.workers))) : null,
+      hours:
+        filed && report.kind !== 'weather_day' ? sum(crewRows.map((m) => Number(m.hours))) : null,
       weatherAffected: sd?.status === 'weather_day' || lost > 0,
       lostHours: lost,
       reportId: report?.id ?? null,
@@ -837,16 +920,24 @@ export function assembleSiteDetail(rows: RowSet, ctx: AssembleCtx, siteId: strin
   const monthStart = `${month}-01`;
   const monthEnd = monthDays(month).at(-1)!;
   const from = site.active_since && site.active_since > monthStart ? site.active_since : monthStart;
-  const workdaysSoFar = workdaysBetween(from, monthEnd < today ? monthEnd : today, rows.settings.working_days).length;
+  const workdaysSoFar = workdaysBetween(
+    from,
+    monthEnd < today ? monthEnd : today,
+    rows.settings.working_days,
+  ).length;
   const onTime = monthReports.filter((x) => !x.r.is_late && x.r.kind !== 'weather_day').length;
-  const monthCrew = monthReports.map((x) => sum((crewByReport.get(x.r.id) ?? []).map((m) => Number(m.workers))));
+  const monthCrew = monthReports.map((x) =>
+    sum((crewByReport.get(x.r.id) ?? []).map((m) => Number(m.workers))),
+  );
   const dailyReports = monthReports.filter((x) => x.r.kind !== 'weather_day');
   const monthStats = {
     reports: monthReports.length,
     onTime,
     workdaysSoFar,
     weatherHours: sum(monthReports.map((x) => lostByReport.get(x.r.id) ?? 0)),
-    laborHours: sum(monthReports.flatMap((x) => (crewByReport.get(x.r.id) ?? []).map((m) => Number(m.hours)))),
+    laborHours: sum(
+      monthReports.flatMap((x) => (crewByReport.get(x.r.id) ?? []).map((m) => Number(m.hours))),
+    ),
     avgCrew: dailyReports.length ? Math.round(sum(monthCrew) / dailyReports.length) : null,
   };
 
@@ -886,7 +977,8 @@ export function assembleSiteDetail(rows: RowSet, ctx: AssembleCtx, siteId: strin
     latest,
     monthStats,
     crewToday,
-    photoCount: rows.sources.filter((s) => s.kind === 'photo' && siteReportIds.has(s.report_id)).length,
+    photoCount: rows.sources.filter((s) => s.kind === 'photo' && siteReportIds.has(s.report_id))
+      .length,
   };
 }
 
@@ -894,29 +986,45 @@ export function assembleSiteDetail(rows: RowSet, ctx: AssembleCtx, siteId: strin
 
 export function reportFlags(report: ReportRow, lost: number, tz: string): ReportFlag[] {
   const flags: ReportFlag[] = [];
-  if (report.kind === 'weather_day') flags.push({ kind: 'weather_day', label: copy.reports.flags.weatherDay });
-  else if (lost > 0) flags.push({ kind: 'rain', label: copy.reports.flags.rain(formatHours(lost)) });
-  if (report.current_version > 1) flags.push({ kind: 'version', label: copy.reports.flags.version(report.current_version) });
-  if (report.review_reasons.some((r) => r.startsWith('unknown_company'))) flags.push({ kind: 'unknown_sub', label: copy.reports.flags.unknownSub });
-  if (report.is_late && report.received_at) flags.push({ kind: 'late', label: copy.reports.flags.late(formatTimeInTz(report.received_at, tz)) });
+  if (report.kind === 'weather_day')
+    flags.push({ kind: 'weather_day', label: copy.reports.flags.weatherDay });
+  else if (lost > 0)
+    flags.push({ kind: 'rain', label: copy.reports.flags.rain(formatHours(lost)) });
+  if (report.current_version > 1)
+    flags.push({ kind: 'version', label: copy.reports.flags.version(report.current_version) });
+  if (report.review_reasons.some((r) => r.startsWith('unknown_company')))
+    flags.push({ kind: 'unknown_sub', label: copy.reports.flags.unknownSub });
+  if (report.is_late && report.received_at)
+    flags.push({
+      kind: 'late',
+      label: copy.reports.flags.late(formatTimeInTz(report.received_at, tz)),
+    });
   return flags;
 }
 
-export function assembleReportItems(rows: RowSet, reports: ReportRow[], incidentReportIds: Set<string> = new Set()): ReportListItem[] {
+export function assembleReportItems(
+  rows: RowSet,
+  reports: ReportRow[],
+  incidentReportIds: Set<string> = new Set(),
+): ReportListItem[] {
   const ix = buildIndex(rows);
   const cm = currentManpower(rows, ix);
   const wx = currentWeather(rows, ix);
   const crewByReport = groupBy(cm, (m) => m.report_id);
   const lostByReport = new Map<string, number>();
-  for (const w of wx) lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
+  for (const w of wx)
+    lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
   return reports.map((r) => {
     const site = ix.siteById.get(r.site_id);
     const tz = site?.timezone ?? rows.org.timezone;
-    const reporter = r.reporter_id ? ix.reporterById.get(r.reporter_id) : ix.primaryReporterBySite.get(r.site_id);
+    const reporter = r.reporter_id
+      ? ix.reporterById.get(r.reporter_id)
+      : ix.primaryReporterBySite.get(r.site_id);
     const crewRows = crewByReport.get(r.id) ?? [];
     const lost = lostByReport.get(r.id) ?? 0;
     const flags = reportFlags(r, lost, tz);
-    if (incidentReportIds.has(r.id)) flags.push({ kind: 'incident', label: copy.reports.flags.incident });
+    if (incidentReportIds.has(r.id))
+      flags.push({ kind: 'incident', label: copy.reports.flags.incident });
     const isWx = r.kind === 'weather_day';
     return {
       reportId: r.id,
@@ -942,14 +1050,20 @@ export function assembleReportItems(rows: RowSet, reports: ReportRow[], incident
 }
 
 /** In-memory filtering + pagination (demo). The Supabase source does this server-side. */
-export function filterReports(rows: RowSet, filters: ReportFilters): { reports: ReportRow[]; total: number; incidentIds: Set<string>; weatherHours: number } {
+export function filterReports(
+  rows: RowSet,
+  filters: ReportFilters,
+): { reports: ReportRow[]; total: number; incidentIds: Set<string>; weatherHours: number } {
   const ix = buildIndex(rows);
   const q = filters.q?.trim().toLowerCase() ?? '';
   const wx = currentWeather(rows, ix);
   const lostByReport = new Map<string, number>();
-  for (const w of wx) lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
+  for (const w of wx)
+    lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
   const incidentIds = new Set<string>();
-  const transcriptByMessage = new Map(rows.transcripts.map((t) => [t.message_id, t.text.toLowerCase()]));
+  const transcriptByMessage = new Map(
+    rows.transcripts.map((t) => [t.message_id, t.text.toLowerCase()]),
+  );
   const sourcesByReport = groupBy(rows.sources, (s) => s.report_id);
 
   let list = rows.reports.filter((r) => FILED_STATUSES.has(r.status));
@@ -960,8 +1074,13 @@ export function filterReports(rows: RowSet, filters: ReportFilters): { reports: 
     if (filters.from && date < filters.from) return false;
     if (filters.to && date > filters.to) return false;
     if (filters.status && filters.status !== 'all') {
-      if (filters.status === 'needs_review' && !(r.status === 'filed' && r.needs_review)) return false;
-      if (filters.status === 'filed' && !(r.status === 'filed' && !r.needs_review && r.kind !== 'weather_day')) return false;
+      if (filters.status === 'needs_review' && !(r.status === 'filed' && r.needs_review))
+        return false;
+      if (
+        filters.status === 'filed' &&
+        !(r.status === 'filed' && !r.needs_review && r.kind !== 'weather_day')
+      )
+        return false;
       if (filters.status === 'signed_off' && r.status !== 'signed_off') return false;
       if (filters.status === 'weather_day' && r.kind !== 'weather_day') return false;
     }
@@ -974,8 +1093,12 @@ export function filterReports(rows: RowSet, filters: ReportFilters): { reports: 
     if (hasIncident) incidentIds.add(r.id);
     if (filters.incident && !hasIncident) return false;
     if (q) {
-      const hay = [r.report_no, site?.name ?? '', site?.project_code ?? '', data?.summary ?? ''].join(' ').toLowerCase();
-      const transcripts = (sourcesByReport.get(r.id) ?? []).map((s) => transcriptByMessage.get(s.message_id) ?? '').join(' ');
+      const hay = [r.report_no, site?.name ?? '', site?.project_code ?? '', data?.summary ?? '']
+        .join(' ')
+        .toLowerCase();
+      const transcripts = (sourcesByReport.get(r.id) ?? [])
+        .map((s) => transcriptByMessage.get(s.message_id) ?? '')
+        .join(' ');
       if (!hay.includes(q) && !transcripts.includes(q)) return false;
     }
     return true;
@@ -984,19 +1107,38 @@ export function filterReports(rows: RowSet, filters: ReportFilters): { reports: 
     const da = ix.reportDate.get(a.id) ?? '';
     const db = ix.reportDate.get(b.id) ?? '';
     if (da !== db) return da < db ? 1 : -1;
-    return (ix.siteById.get(a.site_id)?.name ?? '').localeCompare(ix.siteById.get(b.site_id)?.name ?? '');
+    return (ix.siteById.get(a.site_id)?.name ?? '').localeCompare(
+      ix.siteById.get(b.site_id)?.name ?? '',
+    );
   });
   const weatherHours = sum(list.map((r) => lostByReport.get(r.id) ?? 0));
   const total = list.length;
   const pageSize = filters.pageSize ?? PAGE_SIZE;
   const page = Math.max(1, filters.page ?? 1);
-  return { reports: list.slice((page - 1) * pageSize, page * pageSize), total, incidentIds, weatherHours };
+  return {
+    reports: list.slice((page - 1) * pageSize, page * pageSize),
+    total,
+    incidentIds,
+    weatherHours,
+  };
 }
 
-export function paginate(items: ReportListItem[], total: number, filters: ReportFilters, weatherHours: number): ReportList {
+export function paginate(
+  items: ReportListItem[],
+  total: number,
+  filters: ReportFilters,
+  weatherHours: number,
+): ReportList {
   const pageSize = filters.pageSize ?? PAGE_SIZE;
   const page = Math.max(1, filters.page ?? 1);
-  return { items, total, page, pageSize, pageCount: Math.max(1, Math.ceil(total / pageSize)), weatherHours };
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+    pageCount: Math.max(1, Math.ceil(total / pageSize)),
+    weatherHours,
+  };
 }
 
 // ───────────────────────────── Report detail ─────────────────────────────
@@ -1021,10 +1163,16 @@ function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): Tran
   if (!segments.length) return [];
   const out: TranscriptExcerpt[] = [];
   const seen = new Set<string>();
-  const push = (src: Source[] | undefined, mapped: string, section: TranscriptExcerpt['section']) => {
+  const push = (
+    src: Source[] | undefined,
+    mapped: string,
+    section: TranscriptExcerpt['section'],
+  ) => {
     const a = src?.find((s) => s.type === 'audio');
     if (!a || a.type !== 'audio') return;
-    const seg = segments.find((s) => a.start >= s.start - 0.01 && a.start < s.end) ?? segments.find((s) => s.end > a.start);
+    const seg =
+      segments.find((s) => a.start >= s.start - 0.01 && a.start < s.end) ??
+      segments.find((s) => s.end > a.start);
     if (!seg) return;
     const key = `${seg.start}:${mapped}`;
     if (seen.has(key)) return;
@@ -1032,27 +1180,64 @@ function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): Tran
     out.push({ start: seg.start, end: seg.end, quote: seg.text, mapped, section });
   };
   for (const m of data.manpower) {
-    const hrs = m.totalHours !== null ? ` × ${m.hoursPerWorker ?? '?'} h = ${formatHoursNum(m.totalHours)} h` : '';
-    push(m.source, `${m.companyName} · ${m.workers ?? '?'} ${copy.common.workersUnit}${hrs}${m.area ? ` · ${m.area}` : ''}`, 'manpower');
+    const hrs =
+      m.totalHours !== null
+        ? ` × ${m.hoursPerWorker ?? '?'} h = ${formatHoursNum(m.totalHours)} h`
+        : '';
+    push(
+      m.source,
+      `${m.companyName} · ${m.workers ?? '?'} ${copy.common.workersUnit}${hrs}${m.area ? ` · ${m.area}` : ''}`,
+      'manpower',
+    );
   }
   for (const p of data.weather.periods) {
     const range = p.start && p.end ? ` ${p.start}–${p.end}` : '';
-    push(p.source, `${p.condition}${range} · ${p.impact ?? ''} · ${formatHours(p.lostHours)} lost`.replace(' ·  ·', ' ·'), 'weather');
+    push(
+      p.source,
+      `${p.condition}${range} · ${p.impact ?? ''} · ${formatHours(p.lostHours)} lost`.replace(
+        ' ·  ·',
+        ' ·',
+      ),
+      'weather',
+    );
   }
   for (const w of data.workPerformed) {
     const qty = w.quantity ? ` · ${w.quantity.value} ${w.quantity.unit}` : '';
     const pct = w.percentComplete !== undefined ? ` · ${w.percentComplete}%` : '';
-    push(w.source, `${w.area} · ${w.activity} · ${copy.report.workStatus[w.status]}${qty}${pct}`, 'work');
+    push(
+      w.source,
+      `${w.area} · ${w.activity} · ${copy.report.workStatus[w.status]}${qty}${pct}`,
+      'work',
+    );
   }
-  for (const d of data.deliveries) push(d.source, `${d.item}${d.quantity ? `, ${d.quantity}` : ''}${d.supplier ? ` (${d.supplier})` : ''}${d.time ? ` · ${d.time}` : ''}`, 'delivery');
-  push(data.safety.source, data.safety.toolboxTalk ? copy.report.safety.toolboxTalk(data.safety.toolboxTalk) + (data.safety.noIncidentsStated ? ` · ${copy.report.safety.noIncidents}` : '') : data.safety.noIncidentsStated ? copy.report.safety.noIncidents : copy.report.safety.notStated, 'safety');
+  for (const d of data.deliveries)
+    push(
+      d.source,
+      `${d.item}${d.quantity ? `, ${d.quantity}` : ''}${d.supplier ? ` (${d.supplier})` : ''}${d.time ? ` · ${d.time}` : ''}`,
+      'delivery',
+    );
+  push(
+    data.safety.source,
+    data.safety.toolboxTalk
+      ? copy.report.safety.toolboxTalk(data.safety.toolboxTalk) +
+          (data.safety.noIncidentsStated ? ` · ${copy.report.safety.noIncidents}` : '')
+      : data.safety.noIncidentsStated
+        ? copy.report.safety.noIncidents
+        : copy.report.safety.notStated,
+    'safety',
+  );
   for (const n of data.nextWorkday) push(n.source, n.item, 'next');
   for (const i of data.issues) push(i.source, i.description, 'other');
   out.sort((a, b) => a.start - b.start);
   return out.slice(0, 8);
 }
 
-export function assembleReportDetail(rows: RowSet, ctx: AssembleCtx, reportId: string, selected?: number | null): ReportDetail {
+export function assembleReportDetail(
+  rows: RowSet,
+  ctx: AssembleCtx,
+  reportId: string,
+  selected?: number | null,
+): ReportDetail {
   const ix = buildIndex(rows);
   const report = ix.reportById.get(reportId);
   if (!report) throw new Error(copy.errors.notFound);
@@ -1060,7 +1245,8 @@ export function assembleReportDetail(rows: RowSet, ctx: AssembleCtx, reportId: s
   if (!site) throw new Error(copy.errors.notFound);
   const tz = site.timezone;
   const versions = ix.versionsByReport.get(report.id) ?? [];
-  const version = selected && versions.some((v) => v.version === selected) ? selected : report.current_version;
+  const version =
+    selected && versions.some((v) => v.version === selected) ? selected : report.current_version;
   const vRow = versions.find((v) => v.version === version);
   const data = versionData(vRow);
   if (!data) throw new Error(copy.errors.notFound);
@@ -1070,25 +1256,40 @@ export function assembleReportDetail(rows: RowSet, ctx: AssembleCtx, reportId: s
   const msgById = new Map(rows.messages.map((m) => [m.id, m]));
   const audioSrc = sources.find((s) => s.kind === 'audio');
   const audioMsg = audioSrc ? msgById.get(audioSrc.message_id) : undefined;
-  const transcriptRow = audioMsg ? rows.transcripts.find((t) => t.message_id === audioMsg.id) : undefined;
+  const transcriptRow = audioMsg
+    ? rows.transcripts.find((t) => t.message_id === audioMsg.id)
+    : undefined;
   const segments = transcriptRow ? segmentsOf(transcriptRow.segments) : [];
   const photos = sources
     .filter((s) => s.kind === 'photo')
     .map((s) => {
       const m = msgById.get(s.message_id);
-      return { messageId: s.message_id, storagePath: m?.storage_path ?? null, url: null, caption: s.caption ?? m?.body ?? null, takenAt: s.taken_at ?? m?.created_at ?? null };
+      return {
+        messageId: s.message_id,
+        storagePath: m?.storage_path ?? null,
+        url: null,
+        caption: s.caption ?? m?.body ?? null,
+        takenAt: s.taken_at ?? m?.created_at ?? null,
+      };
     });
 
-  const reporter = report.reporter_id ? ix.reporterById.get(report.reporter_id) : ix.primaryReporterBySite.get(site.id);
+  const reporter = report.reporter_id
+    ? ix.reporterById.get(report.reporter_id)
+    : ix.primaryReporterBySite.get(site.id);
   const reporterName = reporter?.name ?? copy.sites.reporter;
   const actorName = (a: AuditLogRow): string => {
     if (a.actor_type === 'user') return memberName(rows, a.actor_id) ?? 'Office';
-    if (a.actor_type === 'reporter') return (a.actor_id && ix.reporterById.get(a.actor_id)?.name) || reporterName;
+    if (a.actor_type === 'reporter')
+      return (a.actor_id && ix.reporterById.get(a.actor_id)?.name) || reporterName;
     if (a.actor_type === 'agent') return 'SiteLog agent';
     return 'System';
   };
   const activity: ActivityEntry[] = rows.audit
-    .filter((a) => a.entity_id === report.id || (a.entity === 'site_day' && a.entity_id === report.site_day_id))
+    .filter(
+      (a) =>
+        a.entity_id === report.id ||
+        (a.entity === 'site_day' && a.entity_id === report.site_day_id),
+    )
     .map((a) => {
       const diff = isRecord(a.diff) ? a.diff : {};
       const detail =
@@ -1113,9 +1314,19 @@ export function assembleReportDetail(rows: RowSet, ctx: AssembleCtx, reportId: s
     });
   const date = ix.reportDate.get(report.id) ?? data.reportDate;
   const convoMessages = rows.messages
-    .filter((m) => (audioMsg ? m.conversation_id === audioMsg.conversation_id : false) && formatDateInTz(m.created_at, tz) === date)
+    .filter(
+      (m) =>
+        (audioMsg ? m.conversation_id === audioMsg.conversation_id : false) &&
+        formatDateInTz(m.created_at, tz) === date,
+    )
     .sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
-  const messages: MessageItem[] = convoMessages.map((m) => ({ id: m.id, direction: m.direction, type: m.type, body: m.body, at: m.created_at }));
+  const messages: MessageItem[] = convoMessages.map((m) => ({
+    id: m.id,
+    direction: m.direction,
+    type: m.type,
+    body: m.body,
+    at: m.created_at,
+  }));
   activity.sort((a, b) => (a.at < b.at ? -1 : 1));
 
   const questions: QuestionItem[] = rows.questions
@@ -1140,7 +1351,9 @@ export function assembleReportDetail(rows: RowSet, ctx: AssembleCtx, reportId: s
     .map((r) => ({ id: r.id, date: ix.reportDate.get(r.id) ?? '' }))
     .sort((a, b) => (a.date < b.date ? -1 : 1));
   const pos = siteReports.findIndex((r) => r.id === report.id);
-  const lost = currentWeather(rows, ix).filter((w) => w.report_id === report.id).reduce((a, w) => a + Number(w.lost_hours), 0);
+  const lost = currentWeather(rows, ix)
+    .filter((w) => w.report_id === report.id)
+    .reduce((a, w) => a + Number(w.lost_hours), 0);
 
   return {
     report: {
@@ -1168,7 +1381,12 @@ export function assembleReportDetail(rows: RowSet, ctx: AssembleCtx, reportId: s
     versions: versions.map((v) => ({
       version: v.version,
       author: v.author,
-      authorName: v.author === 'office_user' ? (memberName(rows, v.author_user_id) ?? 'Office') : v.author === 'reporter_reply' ? reporterName : 'SiteLog agent',
+      authorName:
+        v.author === 'office_user'
+          ? (memberName(rows, v.author_user_id) ?? 'Office')
+          : v.author === 'reporter_reply'
+            ? reporterName
+            : 'SiteLog agent',
       changeNote: v.change_note,
       createdAt: v.created_at,
       isCurrent: v.version === report.current_version,
@@ -1187,14 +1405,20 @@ export function assembleReportDetail(rows: RowSet, ctx: AssembleCtx, reportId: s
         }
       : null,
     photos,
-    transcript: transcriptRow ? { language: transcriptRow.language, text: transcriptRow.text, segments } : null,
+    transcript: transcriptRow
+      ? { language: transcriptRow.language, text: transcriptRow.text, segments }
+      : null,
     excerpts: excerptsFor(data, segments),
     activity,
     messages,
     questions,
     companies: rows.companies.map(toCompanyOption).sort((a, b) => a.name.localeCompare(b.name)),
     selfPerformCompanyIds: [...selfPerformIds(rows)],
-    settings: { signoffRequired: rows.settings.signoff_required, filingMode: rows.settings.filing_mode, defaultShiftHours: Number(rows.settings.default_shift_hours) },
+    settings: {
+      signoffRequired: rows.settings.signoff_required,
+      filingMode: rows.settings.filing_mode,
+      defaultShiftHours: Number(rows.settings.default_shift_hours),
+    },
     pdfUrl: null,
     prevReportId: pos > 0 ? siteReports[pos - 1]!.id : null,
     nextReportId: pos >= 0 && pos < siteReports.length - 1 ? siteReports[pos + 1]!.id : null,
@@ -1204,21 +1428,36 @@ export function assembleReportDetail(rows: RowSet, ctx: AssembleCtx, reportId: s
 
 // ───────────────────────────── Hours ─────────────────────────────
 
-export function assembleHours(rows: RowSet, _ctx: AssembleCtx, week: string, siteId: string | null): HoursMatrix {
+export function assembleHours(
+  rows: RowSet,
+  _ctx: AssembleCtx,
+  week: string,
+  siteId: string | null,
+): HoursMatrix {
   const ix = buildIndex(rows);
   const { start, end } = isoWeekRange(week);
   const days = Array.from({ length: 5 }, (_, i) => addDays(start, i));
-  const cm = currentManpower(rows, ix).filter((m) => m.date >= start && m.date <= end && (!siteId || m.site_id === siteId));
+  const cm = currentManpower(rows, ix).filter(
+    (m) => m.date >= start && m.date <= end && (!siteId || m.site_id === siteId),
+  );
   const self = selfPerformIds(rows);
   const subs = cm.filter((m) => !(m.company_id && self.has(m.company_id)));
-  const keyOf = (m: ManpowerLike) => m.company_id ?? `heard:${(m.company_name ?? m.company_name_heard ?? '').toLowerCase()}`;
+  const keyOf = (m: ManpowerLike) =>
+    m.company_id ?? `heard:${(m.company_name ?? m.company_name_heard ?? '').toLowerCase()}`;
   const grouped = groupBy(subs, keyOf);
   const hasInvoiceComparison = !siteId;
 
   const invoiceFor = (companyId: string | null): SubInvoiceRow | undefined => {
     if (!companyId || !hasInvoiceComparison) return undefined;
     return rows.invoices
-      .filter((i) => i.company_id === companyId && i.period_start && i.period_end && i.period_start <= end && i.period_end >= start)
+      .filter(
+        (i) =>
+          i.company_id === companyId &&
+          i.period_start &&
+          i.period_end &&
+          i.period_start <= end &&
+          i.period_end >= start,
+      )
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
   };
 
@@ -1226,19 +1465,31 @@ export function assembleHours(rows: RowSet, _ctx: AssembleCtx, week: string, sit
   for (const [key, entries] of grouped) {
     const first = entries[0]!;
     const company = first.company_id ? ix.companyById.get(first.company_id) : undefined;
-    const dayHours = days.map((d) => sum(entries.filter((m) => m.date === d).map((m) => Number(m.hours))));
+    const dayHours = days.map((d) =>
+      sum(entries.filter((m) => m.date === d).map((m) => Number(m.hours))),
+    );
     const reported = sum(dayHours);
     const inv = invoiceFor(first.company_id);
-    const invoiced = inv ? Number(inv.total_hours ?? sum(invoiceLines(inv.lines).map((l) => l.hours))) : null;
+    const invoiced = inv
+      ? Number(inv.total_hours ?? sum(invoiceLines(inv.lines).map((l) => l.hours)))
+      : null;
     const gap = invoiced === null ? null : Math.round((invoiced - reported) * 100) / 100;
     const unconfirmed = !company || company.status === 'unconfirmed';
-    const status: HoursRow['status'] = unconfirmed ? 'unconfirmed' : gap === null ? 'awaiting' : Math.abs(gap) < 0.005 ? 'match' : 'gap';
+    const status: HoursRow['status'] = unconfirmed
+      ? 'unconfirmed'
+      : gap === null
+        ? 'awaiting'
+        : Math.abs(gap) < 0.005
+          ? 'match'
+          : 'gap';
     rowsOut.push({
       key,
       companyId: first.company_id,
       companyName: company?.name ?? first.company_name ?? first.company_name_heard ?? '—',
       trade: company?.trade ?? first.trade ?? null,
-      siteNames: uniq(entries.map((m) => ix.siteById.get(m.site_id)?.name ?? '')).filter(Boolean).map(shortSiteName),
+      siteNames: uniq(entries.map((m) => ix.siteById.get(m.site_id)?.name ?? ''))
+        .filter(Boolean)
+        .map(shortSiteName),
       days: dayHours,
       reported,
       invoiced,
@@ -1248,7 +1499,9 @@ export function assembleHours(rows: RowSet, _ctx: AssembleCtx, week: string, sit
       invoiceId: inv?.id ?? null,
       invoiceNo: inv?.invoice_no ?? null,
       invoiceStatus: (inv?.status as InvoiceStatus | undefined) ?? null,
-      reportIdsByDay: days.map((d) => uniq(entries.filter((m) => m.date === d).map((m) => m.report_id))),
+      reportIdsByDay: days.map((d) =>
+        uniq(entries.filter((m) => m.date === d).map((m) => m.report_id)),
+      ),
     });
   }
   rowsOut.sort((a, b) => b.reported - a.reported || a.companyName.localeCompare(b.companyName));
@@ -1273,7 +1526,13 @@ export function assembleHours(rows: RowSet, _ctx: AssembleCtx, week: string, sit
       const dayCmp = days.map((d, i) => {
         const invoicedDay = lines.find((l) => l.date === d)?.hours ?? 0;
         const reportedDay = r.days[i] ?? 0;
-        return { date: d, invoiced: invoicedDay, reported: reportedDay, gap: Math.round((invoicedDay - reportedDay) * 100) / 100, reportIds: r.reportIdsByDay[i] ?? [] };
+        return {
+          date: d,
+          invoiced: invoicedDay,
+          reported: reportedDay,
+          gap: Math.round((invoicedDay - reportedDay) * 100) / 100,
+          reportIds: r.reportIdsByDay[i] ?? [],
+        };
       });
       const evidence: InvoiceEvidence[] = [];
       for (const d of dayCmp) {
@@ -1283,12 +1542,20 @@ export function assembleHours(rows: RowSet, _ctx: AssembleCtx, week: string, sit
           if (!rep) continue;
           const entries = subs.filter((m) => m.report_id === rid && keyOf(m) === r.key);
           const entry = entries[0];
-          const src = entry && isRecord(entry.source) && entry.source.type === 'audio' ? entry.source : null;
+          const src =
+            entry && isRecord(entry.source) && entry.source.type === 'audio' ? entry.source : null;
           const audioStart = src && typeof src.start === 'number' ? src.start : null;
           const audio = audioByReport.get(rid);
           const transcript = audio ? transcriptByMessage.get(audio.message_id) : undefined;
-          const seg = transcript && audioStart !== null ? segmentsOf(transcript.segments).find((s) => audioStart >= s.start && audioStart < s.end) : undefined;
-          const quote = seg?.text ?? `${r.companyName} · ${entries.map((m) => `${m.workers} × ${formatHoursNum(Number(m.hours) / Math.max(1, Number(m.workers)))} h`).join(', ')} = ${formatHoursNum(sum(entries.map((m) => Number(m.hours))))} h`;
+          const seg =
+            transcript && audioStart !== null
+              ? segmentsOf(transcript.segments).find(
+                  (s) => audioStart >= s.start && audioStart < s.end,
+                )
+              : undefined;
+          const quote =
+            seg?.text ??
+            `${r.companyName} · ${entries.map((m) => `${m.workers} × ${formatHoursNum(Number(m.hours) / Math.max(1, Number(m.workers)))} h`).join(', ')} = ${formatHoursNum(sum(entries.map((m) => Number(m.hours))))} h`;
           evidence.push({
             date: d.date,
             reportId: rid,
@@ -1296,7 +1563,9 @@ export function assembleHours(rows: RowSet, _ctx: AssembleCtx, week: string, sit
             siteName: ix.siteById.get(rep.site_id)?.name ?? '',
             quote,
             audioStart,
-            messageId: audio?.message_id ?? (src && typeof src.messageId === 'string' ? src.messageId : null),
+            messageId:
+              audio?.message_id ??
+              (src && typeof src.messageId === 'string' ? src.messageId : null),
           });
         }
       }
@@ -1338,33 +1607,65 @@ export function assembleHours(rows: RowSet, _ctx: AssembleCtx, week: string, sit
 }
 
 /** Payroll CSV (§F15): date,site,project_code,company,trade,workers,hours,report_no,version */
-export function payrollCsv(rows: RowSet, week: string, siteId: string | null, includeUnconfirmed: boolean): string {
+export function payrollCsv(
+  rows: RowSet,
+  week: string,
+  siteId: string | null,
+  includeUnconfirmed: boolean,
+): string {
   const ix = buildIndex(rows);
   const { start, end } = isoWeekRange(week);
-  const cm = currentManpower(rows, ix).filter((m) => m.date >= start && m.date <= end && (!siteId || m.site_id === siteId));
+  const cm = currentManpower(rows, ix).filter(
+    (m) => m.date >= start && m.date <= end && (!siteId || m.site_id === siteId),
+  );
   const esc = (v: string | number | null | undefined) => {
     const s = v === null || v === undefined ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = ['date,site,project_code,company,trade,workers,hours,report_no,version'];
-  for (const m of cm.sort((a, b) => (a.date === b.date ? a.site_id.localeCompare(b.site_id) : a.date < b.date ? -1 : 1))) {
+  for (const m of cm.sort((a, b) =>
+    a.date === b.date ? a.site_id.localeCompare(b.site_id) : a.date < b.date ? -1 : 1,
+  )) {
     const company = m.company_id ? ix.companyById.get(m.company_id) : undefined;
     if (!includeUnconfirmed && (!company || company.status === 'unconfirmed')) continue;
     const site = ix.siteById.get(m.site_id);
-    lines.push([m.date, esc(site?.name), esc(site?.project_code), esc(company?.name ?? m.company_name), esc(company?.trade ?? m.trade), m.workers, Number(m.hours), esc(m.report_no), m.version].join(','));
+    lines.push(
+      [
+        m.date,
+        esc(site?.name),
+        esc(site?.project_code),
+        esc(company?.name ?? m.company_name),
+        esc(company?.trade ?? m.trade),
+        m.workers,
+        Number(m.hours),
+        esc(m.report_no),
+        m.version,
+      ].join(','),
+    );
   }
   return lines.join('\n') + '\n';
 }
 
 // ───────────────────────────── Weather ─────────────────────────────
 
-export function assembleWeather(rows: RowSet, ctx: AssembleCtx, month: string, siteId: string | null): WeatherLog {
+export function assembleWeather(
+  rows: RowSet,
+  ctx: AssembleCtx,
+  month: string,
+  siteId: string | null,
+): WeatherLog {
   const ix = buildIndex(rows);
   const today = formatDateInTz(ctx.now, rows.org.timezone);
   const monthEnd = monthDays(month).at(-1)!;
   const until = monthEnd < today ? monthEnd : today;
   const days = workdaysBetween(`${month}-01`, until, rows.settings.working_days);
-  const wx = currentWeather(rows, ix).filter((w) => w.date.startsWith(month) && w.date <= until && (!siteId || w.site_id === siteId) && (Number(w.lost_hours) > 0 || w.full_day));
+  const wx = currentWeather(rows, ix).filter(
+    (w) =>
+      w.date.startsWith(month) &&
+      w.date <= until &&
+      (!siteId || w.site_id === siteId) &&
+      (Number(w.lost_hours) > 0 || w.full_day),
+  );
 
   const entries: DelayEntry[] = wx
     .map((w) => {
@@ -1372,7 +1673,9 @@ export function assembleWeather(rows: RowSet, ctx: AssembleCtx, month: string, s
       const report = ix.reportById.get(w.report_id);
       const audio = isRecord(w.audio_source) ? w.audio_source : null;
       const audioStart = audio && typeof audio.start === 'number' ? audio.start : null;
-      const observed = isRecord(w.observed) ? (w.observed as unknown as DelayEntry['observed']) : null;
+      const observed = isRecord(w.observed)
+        ? (w.observed as unknown as DelayEntry['observed'])
+        : null;
       return {
         id: w.id,
         reportId: w.report_id,
@@ -1398,7 +1701,9 @@ export function assembleWeather(rows: RowSet, ctx: AssembleCtx, month: string, s
         claimReady: w.claim_ready,
       };
     })
-    .sort((a, b) => (a.date === b.date ? a.siteName.localeCompare(b.siteName) : a.date < b.date ? 1 : -1));
+    .sort((a, b) =>
+      a.date === b.date ? a.siteName.localeCompare(b.siteName) : a.date < b.date ? 1 : -1,
+    );
 
   const cellMap = new Map<string, number>();
   for (const e of entries) {
@@ -1409,7 +1714,9 @@ export function assembleWeather(rows: RowSet, ctx: AssembleCtx, month: string, s
     const [sid, date] = k.split(':') as [string, string];
     return { siteId: sid, date, hours: Math.round(hours * 100) / 100 };
   });
-  const sitesActive = rows.sites.filter((s) => s.status !== 'archived' && (!siteId || s.id === siteId)).map(toSiteOption);
+  const sitesActive = rows.sites
+    .filter((s) => s.status !== 'archived' && (!siteId || s.id === siteId))
+    .map(toSiteOption);
   const packs: PackItem[] = rows.packs
     .filter((p) => !siteId || p.site_id === siteId)
     .map((p) => ({
@@ -1455,7 +1762,9 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
     const sites = links
       .map((l) => {
         const s = ix.siteById.get(l.site_id);
-        return s ? { id: s.id, name: s.name, shortName: shortSiteName(s.name), isPrimary: l.is_primary } : null;
+        return s
+          ? { id: s.id, name: s.name, shortName: shortSiteName(s.name), isPrimary: l.is_primary }
+          : null;
       })
       .filter((x): x is NonNullable<typeof x> => !!x)
       .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
@@ -1465,7 +1774,8 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
     let reports30 = 0;
     for (const sid of primarySites) {
       for (const d of ix.siteDaysBySite.get(sid) ?? []) {
-        if (d.date < from || d.date > today || d.status === 'no_work' || d.status === 'pending') continue;
+        if (d.date < from || d.date > today || d.status === 'no_work' || d.status === 'pending')
+          continue;
         expected += 1;
         if (d.status === 'filed' || d.status === 'weather_day') {
           reports30 += 1;
@@ -1473,7 +1783,14 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
         }
       }
     }
-    const chipStatus: TeamReporter['chipStatus'] = r.status === 'disabled' ? 'disabled' : r.status === 'verified' ? 'verified' : r.last_invite_error ? 'not_on_whatsapp' : 'invite_sent';
+    const chipStatus: TeamReporter['chipStatus'] =
+      r.status === 'disabled'
+        ? 'disabled'
+        : r.status === 'verified'
+          ? 'verified'
+          : r.last_invite_error
+            ? 'not_on_whatsapp'
+            : 'invite_sent';
     return {
       id: r.id,
       name: r.name,
@@ -1497,7 +1814,9 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
       at: u.created_at,
       snippet: u.snippet,
       guessedSiteId: u.guessed_site_id,
-      guessedSiteName: u.guessed_site_id ? (ix.siteById.get(u.guessed_site_id)?.name ?? null) : null,
+      guessedSiteName: u.guessed_site_id
+        ? (ix.siteById.get(u.guessed_site_id)?.name ?? null)
+        : null,
       messageId: u.first_message_id,
     }));
   return {
@@ -1511,7 +1830,13 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
 export function officeUsers(rows: RowSet): OfficeUser[] {
   const order: Record<string, number> = { admin: 0, pm: 1, ops: 2, accounts: 3 };
   return rows.members
-    .map((m) => ({ userId: m.user_id, name: m.display_name ?? m.email ?? 'User', email: m.email ?? null, title: m.title, role: m.role }))
+    .map((m) => ({
+      userId: m.user_id,
+      name: m.display_name ?? m.email ?? 'User',
+      email: m.email ?? null,
+      title: m.title,
+      role: m.role,
+    }))
     .sort((a, b) => (order[a.role] ?? 9) - (order[b.role] ?? 9) || a.name.localeCompare(b.name));
 }
 
@@ -1536,7 +1861,9 @@ export function assembleGlossary(rows: RowSet): GlossaryData {
   }));
   terms.sort((a, b) => b.timesHeard - a.timesHeard || a.heard.localeCompare(b.heard));
   return {
-    reviewQueue: terms.filter((t) => t.status === 'needs_review').sort((a, b) => (a.lastSeenAt ?? '') < (b.lastSeenAt ?? '') ? 1 : -1),
+    reviewQueue: terms
+      .filter((t) => t.status === 'needs_review')
+      .sort((a, b) => ((a.lastSeenAt ?? '') < (b.lastSeenAt ?? '') ? 1 : -1)),
     terms: terms.filter((t) => t.status !== 'rejected'),
     companies: rows.companies.map(toCompanyOption),
     sites: rows.sites.map(toSiteOption),
@@ -1548,11 +1875,22 @@ export function assembleGlossary(rows: RowSet): GlossaryData {
 export function assembleSettings(rows: RowSet): SettingsData {
   const { org_id: _o, updated_at: _u, ...settings } = rows.settings;
   return {
-    org: { id: rows.org.id, name: rows.org.name, address: rows.org.address, licenseNo: rows.org.license_no, timezone: rows.org.timezone, logoPath: rows.org.logo_path },
+    org: {
+      id: rows.org.id,
+      name: rows.org.name,
+      address: rows.org.address,
+      licenseNo: rows.org.license_no,
+      timezone: rows.org.timezone,
+      logoPath: rows.org.logo_path,
+    },
     settings,
     siteRecipients: rows.sites
       .filter((s) => s.status !== 'archived')
-      .map((s) => ({ siteId: s.id, siteName: s.name, emails: rows.recipients.filter((r) => r.site_id === s.id).map((r) => r.email) })),
+      .map((s) => ({
+        siteId: s.id,
+        siteName: s.name,
+        emails: rows.recipients.filter((r) => r.site_id === s.id).map((r) => r.email),
+      })),
   };
 }
 
@@ -1583,8 +1921,16 @@ export function assembleBilling(rows: RowSet, ctx: AssembleCtx): BillingData {
     },
     sites: rows.sites
       .filter((s) => s.status !== 'archived')
-      .map((s) => ({ id: s.id, name: s.name, projectCode: s.project_code, activeSince: s.active_since, status: s.status, monthlyCents: s.status === 'active' ? PRICE_PER_SITE_CENTS : 0, pausedAt: s.paused_at }))
-      .sort((a, b) => (a.activeSince ?? '') < (b.activeSince ?? '') ? -1 : 1),
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        projectCode: s.project_code,
+        activeSince: s.active_since,
+        status: s.status,
+        monthlyCents: s.status === 'active' ? PRICE_PER_SITE_CENTS : 0,
+        pausedAt: s.paused_at,
+      }))
+      .sort((a, b) => ((a.activeSince ?? '') < (b.activeSince ?? '') ? -1 : 1)),
     invoices: plan.invoices,
   };
 }
@@ -1597,7 +1943,11 @@ export function assembleSetupState(rows: RowSet): SetupState {
     timezone: rows.org.timezone,
     siteCount: rows.sites.filter((s) => s.status !== 'archived').length,
     reporterCount: rows.reporters.length,
-    steps: { company: true, site: rows.sites.length > 0, reports: rows.settings.updated_at > rows.org.created_at },
+    steps: {
+      company: true,
+      site: rows.sites.length > 0,
+      reports: rows.settings.updated_at > rows.org.created_at,
+    },
   };
 }
 
@@ -1608,7 +1958,15 @@ export function assembleNotifications(rows: RowSet, ctx: AssembleCtx): Notificat
     .filter((n) => n.user_id === null || n.user_id === ctx.userId)
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
     .slice(0, 50)
-    .map((n) => ({ id: n.id, kind: n.kind, title: n.title, body: n.body, targetPath: n.target_path, readAt: n.read_at, createdAt: n.created_at }));
+    .map((n) => ({
+      id: n.id,
+      kind: n.kind,
+      title: n.title,
+      body: n.body,
+      targetPath: n.target_path,
+      readAt: n.read_at,
+      createdAt: n.created_at,
+    }));
 }
 
 export function assembleNavBadges(rows: RowSet, ctx: AssembleCtx): NavBadges {
@@ -1616,7 +1974,9 @@ export function assembleNavBadges(rows: RowSet, ctx: AssembleCtx): NavBadges {
     reportsToReview: rows.reports.filter((r) => r.status === 'filed' && r.needs_review).length,
     unknownSenders: rows.unknownSenders.filter((u) => u.status === 'pending').length,
     termsToReview: rows.glossary.filter((t) => t.status === 'needs_review').length,
-    unreadNotifications: rows.notifications.filter((n) => !n.read_at && (n.user_id === null || n.user_id === ctx.userId)).length,
+    unreadNotifications: rows.notifications.filter(
+      (n) => !n.read_at && (n.user_id === null || n.user_id === ctx.userId),
+    ).length,
   };
 }
 
@@ -1627,17 +1987,31 @@ export function searchRows(rows: RowSet, q: string, limit = 12): SearchResult[] 
   const out: SearchResult[] = [];
   const has = (s: string | null | undefined) => (s ?? '').toLowerCase().includes(needle);
   for (const s of rows.sites) {
-    if (has(s.name) || has(s.project_code)) out.push({ kind: 'site', id: s.id, title: s.name, subtitle: s.project_code, href: `/sites/${s.id}` });
+    if (has(s.name) || has(s.project_code))
+      out.push({
+        kind: 'site',
+        id: s.id,
+        title: s.name,
+        subtitle: s.project_code,
+        href: `/sites/${s.id}`,
+      });
   }
   for (const r of rows.reports) {
     const site = ix.siteById.get(r.site_id);
     const v = currentVersion(ix, r);
     if (has(r.report_no) || has(v?.summary)) {
-      out.push({ kind: 'report', id: r.id, title: r.report_no, subtitle: `${site?.name ?? ''} · ${formatMonthDay(ix.reportDate.get(r.id) ?? r.created_at.slice(0, 10))}`, href: `/reports/${r.id}` });
+      out.push({
+        kind: 'report',
+        id: r.id,
+        title: r.report_no,
+        subtitle: `${site?.name ?? ''} · ${formatMonthDay(ix.reportDate.get(r.id) ?? r.created_at.slice(0, 10))}`,
+        href: `/reports/${r.id}`,
+      });
     }
   }
   for (const c of rows.companies) {
-    if (has(c.name) || c.aliases.some(has)) out.push({ kind: 'company', id: c.id, title: c.name, subtitle: c.trade, href: `/hours` });
+    if (has(c.name) || c.aliases.some(has))
+      out.push({ kind: 'company', id: c.id, title: c.name, subtitle: c.trade, href: `/hours` });
   }
   const sourceByMessage = new Map(rows.sources.map((s) => [s.message_id, s]));
   for (const t of rows.transcripts) {
@@ -1646,21 +2020,57 @@ export function searchRows(rows: RowSet, q: string, limit = 12): SearchResult[] 
     const r = src ? ix.reportById.get(src.report_id) : undefined;
     const i = t.text.toLowerCase().indexOf(needle);
     const snippet = `…${t.text.slice(Math.max(0, i - 30), i + needle.length + 40).trim()}…`;
-    out.push({ kind: 'transcript', id: t.id, title: r ? r.report_no : copy.shell.search.groups.transcript, subtitle: snippet, href: r ? `/reports/${r.id}` : '/team' });
+    out.push({
+      kind: 'transcript',
+      id: t.id,
+      title: r ? r.report_no : copy.shell.search.groups.transcript,
+      subtitle: snippet,
+      href: r ? `/reports/${r.id}` : '/team',
+    });
   }
   for (const r of rows.reporters) {
-    if (has(r.name) || has(r.phone_e164) || has(formatPhone(r.phone_e164))) out.push({ kind: 'reporter', id: r.id, title: r.name, subtitle: formatPhone(r.phone_e164), href: '/team' });
+    if (has(r.name) || has(r.phone_e164) || has(formatPhone(r.phone_e164)))
+      out.push({
+        kind: 'reporter',
+        id: r.id,
+        title: r.name,
+        subtitle: formatPhone(r.phone_e164),
+        href: '/team',
+      });
   }
   for (const t of rows.glossary) {
-    if (has(t.heard) || has(t.official)) out.push({ kind: 'term', id: t.id, title: `“${t.heard}” → ${t.official ?? '?'}`, subtitle: t.kind, href: '/glossary' });
+    if (has(t.heard) || has(t.official))
+      out.push({
+        kind: 'term',
+        id: t.id,
+        title: `“${t.heard}” → ${t.official ?? '?'}`,
+        subtitle: t.kind,
+        href: '/glossary',
+      });
   }
-  const order: Record<SearchResult['kind'], number> = { report: 0, site: 1, company: 2, transcript: 3, reporter: 4, term: 5 };
+  const order: Record<SearchResult['kind'], number> = {
+    report: 0,
+    site: 1,
+    company: 2,
+    transcript: 3,
+    reporter: 4,
+    term: 5,
+  };
   return out.sort((a, b) => order[a.kind] - order[b.kind]).slice(0, limit);
 }
 
-export function orgSummary(rows: RowSet, ctx: AssembleCtx): { id: string; name: string; timezone: string; activeSites: number; role: OrgMemberRow['role'] } {
+export function orgSummary(
+  rows: RowSet,
+  ctx: AssembleCtx,
+): { id: string; name: string; timezone: string; activeSites: number; role: OrgMemberRow['role'] } {
   const m = rows.members.find((x) => x.user_id === ctx.userId);
-  return { id: rows.org.id, name: rows.org.name, timezone: rows.org.timezone, activeSites: rows.sites.filter((s) => s.status === 'active').length, role: m?.role ?? 'ops' };
+  return {
+    id: rows.org.id,
+    name: rows.org.name,
+    timezone: rows.org.timezone,
+    activeSites: rows.sites.filter((s) => s.status === 'active').length,
+    role: m?.role ?? 'ops',
+  };
 }
 
 export function audioTimestamp(seconds: number): string {

@@ -49,7 +49,12 @@ async function record(
   return row;
 }
 
-async function attempt<T>(ctx: Ctx, convo: ConversationRow, fn: () => Promise<T>, onError: (message: string) => Promise<void>): Promise<T> {
+async function attempt<T>(
+  ctx: Ctx,
+  convo: ConversationRow,
+  fn: () => Promise<T>,
+  onError: (message: string) => Promise<void>,
+): Promise<T> {
   try {
     return await fn();
   } catch (err) {
@@ -61,48 +66,97 @@ async function attempt<T>(ctx: Ctx, convo: ConversationRow, fn: () => Promise<T>
 }
 
 /** Free-form text (and optional ≤ 3 reply buttons). Use inside the 24 h window (replies). */
-export async function sendFreeForm(ctx: Ctx, convo: ConversationRow, text: string, buttons?: Button[], meta: OutboundMeta = {}): Promise<MessageRow> {
+export async function sendFreeForm(
+  ctx: Ctx,
+  convo: ConversationRow,
+  text: string,
+  buttons?: Button[],
+  meta: OutboundMeta = {},
+): Promise<MessageRow> {
   const to = convo.phone_e164;
   const payload = { ...meta, text, buttons: buttons ?? [] };
   const type = buttons && buttons.length ? 'interactive' : 'text';
   const res = await attempt(
     ctx,
     convo,
-    () => (buttons && buttons.length ? ctx.wa.sendButtons(to, text, buttons) : ctx.wa.sendText(to, text)),
-    (error) => record(ctx, convo, { type, body: text, payload, waMessageId: null, error }).then(() => undefined),
+    () =>
+      buttons && buttons.length ? ctx.wa.sendButtons(to, text, buttons) : ctx.wa.sendText(to, text),
+    (error) =>
+      record(ctx, convo, { type, body: text, payload, waMessageId: null, error }).then(
+        () => undefined,
+      ),
   );
   return record(ctx, convo, { type, body: text, payload, waMessageId: res.waMessageId });
 }
 
 /** List message for 4–10 options (§9.4). */
-export async function sendListMessage(ctx: Ctx, convo: ConversationRow, body: string, options: ListOption[], buttonText = 'Choose', meta: OutboundMeta = {}): Promise<MessageRow> {
+export async function sendListMessage(
+  ctx: Ctx,
+  convo: ConversationRow,
+  body: string,
+  options: ListOption[],
+  buttonText = 'Choose',
+  meta: OutboundMeta = {},
+): Promise<MessageRow> {
   const payload = { ...meta, text: body, options };
   const res = await attempt(
     ctx,
     convo,
     () => ctx.wa.sendList(convo.phone_e164, body, options, buttonText),
-    (error) => record(ctx, convo, { type: 'interactive', body, payload, waMessageId: null, error }).then(() => undefined),
+    (error) =>
+      record(ctx, convo, { type: 'interactive', body, payload, waMessageId: null, error }).then(
+        () => undefined,
+      ),
   );
   return record(ctx, convo, { type: 'interactive', body, payload, waMessageId: res.waMessageId });
 }
 
 /** Buttons when ≤ 3, a list message otherwise. */
-export async function sendChoice(ctx: Ctx, convo: ConversationRow, body: string, options: ListOption[], meta: OutboundMeta = {}): Promise<MessageRow> {
+export async function sendChoice(
+  ctx: Ctx,
+  convo: ConversationRow,
+  body: string,
+  options: ListOption[],
+  meta: OutboundMeta = {},
+): Promise<MessageRow> {
   if (options.length <= 3) {
-    return sendFreeForm(ctx, convo, body, options.map((o) => ({ id: o.id, title: o.title })), meta);
+    return sendFreeForm(
+      ctx,
+      convo,
+      body,
+      options.map((o) => ({ id: o.id, title: o.title })),
+      meta,
+    );
   }
   return sendListMessage(ctx, convo, body, options.slice(0, 10), 'Choose', meta);
 }
 
-export async function sendDocumentMessage(ctx: Ctx, convo: ConversationRow, doc: DocumentInput, meta: OutboundMeta = {}): Promise<MessageRow> {
+export async function sendDocumentMessage(
+  ctx: Ctx,
+  convo: ConversationRow,
+  doc: DocumentInput,
+  meta: OutboundMeta = {},
+): Promise<MessageRow> {
   const payload = { ...meta, filename: doc.filename, caption: doc.caption ?? null };
   const res = await attempt(
     ctx,
     convo,
     () => ctx.wa.sendDocument(convo.phone_e164, doc),
-    (error) => record(ctx, convo, { type: 'document', body: doc.caption ?? doc.filename, payload, waMessageId: null, error }).then(() => undefined),
+    (error) =>
+      record(ctx, convo, {
+        type: 'document',
+        body: doc.caption ?? doc.filename,
+        payload,
+        waMessageId: null,
+        error,
+      }).then(() => undefined),
   );
-  return record(ctx, convo, { type: 'document', body: doc.caption ?? doc.filename, payload, waMessageId: res.waMessageId });
+  return record(ctx, convo, {
+    type: 'document',
+    body: doc.caption ?? doc.filename,
+    payload,
+    waMessageId: res.waMessageId,
+  });
 }
 
 export interface BusinessInitiatedOptions {
@@ -130,16 +184,39 @@ export async function sendBusinessInitiated(
   const buttons = opts.buttons ?? templateButtons(templateName, { siteDayId: opts.siteDayId });
   if (mode === 'free_form') {
     const text = freeFormText ?? renderTemplateText(templateName, vars);
-    return sendFreeForm(ctx, convo, text, buttons.length ? buttons : undefined, { ...opts.meta, kind: opts.meta?.kind ?? templateName });
+    return sendFreeForm(ctx, convo, text, buttons.length ? buttons : undefined, {
+      ...opts.meta,
+      kind: opts.meta?.kind ?? templateName,
+    });
   }
   const template = buildTemplatePayload(templateName, vars, buttons);
   const body = renderTemplateText(templateName, vars);
-  const payload = { ...opts.meta, kind: opts.meta?.kind ?? templateName, template, text: body, buttons };
+  const payload = {
+    ...opts.meta,
+    kind: opts.meta?.kind ?? templateName,
+    template,
+    text: body,
+    buttons,
+  };
   const res = await attempt(
     ctx,
     convo,
     () => ctx.wa.sendTemplate(convo.phone_e164, template),
-    (error) => record(ctx, convo, { type: 'template', body, payload, template_name: templateName, waMessageId: null, error }).then(() => undefined),
+    (error) =>
+      record(ctx, convo, {
+        type: 'template',
+        body,
+        payload,
+        template_name: templateName,
+        waMessageId: null,
+        error,
+      }).then(() => undefined),
   );
-  return record(ctx, convo, { type: 'template', body, payload, template_name: templateName, waMessageId: res.waMessageId });
+  return record(ctx, convo, {
+    type: 'template',
+    body,
+    payload,
+    template_name: templateName,
+    waMessageId: res.waMessageId,
+  });
 }

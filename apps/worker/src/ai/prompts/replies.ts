@@ -100,7 +100,12 @@ export function buildAnswerUserMessage(input: {
   ].join('\n');
 }
 
-export function buildClassifyUserMessage(input: { state: string; lastOutbound: string | null; text: string; isVoice: boolean }): string {
+export function buildClassifyUserMessage(input: {
+  state: string;
+  lastOutbound: string | null;
+  text: string;
+  isVoice: boolean;
+}): string {
   return [
     `CONVERSATION STATE: ${input.state}`,
     `LAST MESSAGE FROM SITELOG: ${input.lastOutbound ? input.lastOutbound.slice(0, 600) : '(none)'}`,
@@ -109,13 +114,24 @@ export function buildClassifyUserMessage(input: { state: string; lastOutbound: s
   ].join('\n');
 }
 
-export function buildDayOffUserMessage(input: { text: string; workingHours: string | null; defaultShiftHours: number }): string {
-  return [`WORKING HOURS: ${input.workingHours ?? 'not set'}`, `DEFAULT_SHIFT_HOURS: ${input.defaultShiftHours}`, 'MESSAGE:', input.text.trim()].join('\n');
+export function buildDayOffUserMessage(input: {
+  text: string;
+  workingHours: string | null;
+  defaultShiftHours: number;
+}): string {
+  return [
+    `WORKING HOURS: ${input.workingHours ?? 'not set'}`,
+    `DEFAULT_SHIFT_HOURS: ${input.defaultShiftHours}`,
+    'MESSAGE:',
+    input.text.trim(),
+  ].join('\n');
 }
 
 export function buildSiteGuessUserMessage(input: {
   text: string;
   sites: Array<{ id: string; name: string; projectCode: string; address?: string | null }>;
 }): string {
-  return [`CANDIDATE SITES: ${JSON.stringify(input.sites)}`, 'MESSAGE:', input.text.trim()].join('\n');
+  return [`CANDIDATE SITES: ${JSON.stringify(input.sites)}`, 'MESSAGE:', input.text.trim()].join(
+    '\n',
+  );
 }

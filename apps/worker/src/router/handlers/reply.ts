@@ -42,11 +42,20 @@ function stateFallback(s: Session): ClassifiedReply {
   }
 }
 
-export async function classifyText(s: Session, text: string, isVoice: boolean): Promise<ClassifiedReply> {
+export async function classifyText(
+  s: Session,
+  text: string,
+  isVoice: boolean,
+): Promise<ClassifiedReply> {
   const quick = quickClassify(text, s.now, s.tz);
   if (quick) return quick;
   if (!s.ctx.ai.claude) return stateFallback(s);
-  const res = await classifyWithModel(s.ctx.ai.claude, s.ctx.config.CLAUDE_MODEL_FAST, { state: s.convo.state, lastOutbound: await lastOutboundText(s), text, isVoice }, s.ctx.log);
+  const res = await classifyWithModel(
+    s.ctx.ai.claude,
+    s.ctx.config.CLAUDE_MODEL_FAST,
+    { state: s.convo.state, lastOutbound: await lastOutboundText(s), text, isVoice },
+    s.ctx.log,
+  );
   s.ctx.metrics.add({ tokens: res.usage, estCostUsd: res.estCostUsd });
   return res.data;
 }
@@ -77,7 +86,14 @@ export async function handleReplyText(s: Session, text: string, isVoice: boolean
       await handleLanguage(s, cls.entities?.language ?? 'en');
       return;
     case 'edit_request':
-      await handleEditRequest(s, { dayReference: cls.entities?.dayReference ?? null, correctionText: cls.correctionText ?? null }, text);
+      await handleEditRequest(
+        s,
+        {
+          dayReference: cls.entities?.dayReference ?? null,
+          correctionText: cls.correctionText ?? null,
+        },
+        text,
+      );
       return;
     case 'no_work':
     case 'weather_day': {
@@ -123,22 +139,41 @@ export async function handleReplyText(s: Session, text: string, isVoice: boolean
         await handleEditingText(s, text);
         return;
       }
-      if ((state === 'awaiting_confirmation' || state === 'awaiting_answer' || state === 'processing') && c.active_report_id) {
+      if (
+        (state === 'awaiting_confirmation' ||
+          state === 'awaiting_answer' ||
+          state === 'processing') &&
+        c.active_report_id
+      ) {
         const report = await ctx.db.getReport(c.active_report_id);
-        if (report && (report.status === 'awaiting_confirmation' || report.status === 'awaiting_answer' || report.status === 'collecting')) {
+        if (
+          report &&
+          (report.status === 'awaiting_confirmation' ||
+            report.status === 'awaiting_answer' ||
+            report.status === 'collecting')
+        ) {
           await applyFix(s, report, cls.correctionText ?? text);
           return;
         }
       }
       if (state === 'idle' && c.last_filed_report_id) {
         // "Apex had 7 not 6" right after filing → edit today's report.
-        await handleEditRequest(s, { dayReference: 'today', correctionText: cls.correctionText ?? text }, text);
+        await handleEditRequest(
+          s,
+          { dayReference: 'today', correctionText: cls.correctionText ?? text },
+          text,
+        );
         return;
       }
       return;
     }
     case 'new_report_content': {
-      if ((state === 'processing' || state === 'awaiting_answer' || state === 'awaiting_confirmation') && c.active_report_id) {
+      if (
+        (state === 'processing' ||
+          state === 'awaiting_answer' ||
+          state === 'awaiting_confirmation') &&
+        c.active_report_id
+      ) {
         const report = await ctx.db.getReport(c.active_report_id);
         if (report && report.status !== 'filed' && report.status !== 'signed_off') {
           await mergeIntoActive(s, report);

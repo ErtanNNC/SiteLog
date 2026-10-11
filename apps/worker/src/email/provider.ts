@@ -36,8 +36,14 @@ export function createResendProvider(apiKey: string, from: string): EmailProvide
         html: msg.html,
         text: msg.text,
         replyTo: msg.replyTo,
-        attachments: msg.attachments?.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })),
-        tags: msg.tags ? Object.entries(msg.tags).map(([name, value]) => ({ name, value })) : undefined,
+        attachments: msg.attachments?.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          contentType: a.contentType,
+        })),
+        tags: msg.tags
+          ? Object.entries(msg.tags).map(([name, value]) => ({ name, value }))
+          : undefined,
       });
       if (error) throw new Error(`Resend: ${error.name ?? 'error'} ${error.message}`);
       return { id: data?.id ?? null };
@@ -73,7 +79,10 @@ export function createMemoryProvider(): EmailProvider & { sent: EmailMessage[] }
   };
 }
 
-export function createEmailProvider(cfg: { provider: 'resend' | 'console'; apiKey: string; from: string }, log: Logger): EmailProvider {
+export function createEmailProvider(
+  cfg: { provider: 'resend' | 'console'; apiKey: string; from: string },
+  log: Logger,
+): EmailProvider {
   if (cfg.provider === 'resend' && cfg.apiKey) return createResendProvider(cfg.apiKey, cfg.from);
   return createConsoleProvider(log, cfg.from);
 }

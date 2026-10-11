@@ -22,7 +22,11 @@ export interface MetricsSink {
 }
 
 export function createMetrics(): MetricsSink {
-  const m: JobMetrics = { tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, audioSeconds: 0, estCostUsd: 0 };
+  const m: JobMetrics = {
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    audioSeconds: 0,
+    estCostUsd: 0,
+  };
   return {
     add(delta) {
       const t = m.tokens!;
@@ -33,7 +37,8 @@ export function createMetrics(): MetricsSink {
         t.cacheWrite = (t.cacheWrite ?? 0) + (delta.tokens.cacheWrite ?? 0);
       }
       if (delta.audioSeconds) m.audioSeconds = (m.audioSeconds ?? 0) + delta.audioSeconds;
-      if (delta.estCostUsd) m.estCostUsd = Math.round(((m.estCostUsd ?? 0) + delta.estCostUsd) * 1e6) / 1e6;
+      if (delta.estCostUsd)
+        m.estCostUsd = Math.round(((m.estCostUsd ?? 0) + delta.estCostUsd) * 1e6) / 1e6;
       for (const [k, v] of Object.entries(delta)) {
         if (!['tokens', 'audioSeconds', 'estCostUsd', 'latencyMs'].includes(k)) m[k] = v;
       }

@@ -13,7 +13,26 @@ export const weeklyDigest: JobHandler<'weekly_digest'> = async (ctx, payload) =>
     ctx.log.info('weekly digest skipped: no admin/pm emails', { org_id: org.id });
     return;
   }
-  const rendered = weeklyDigestEmail({ orgName: org.name, weekStart: payload.weekStart, weekEnd, stats, url: ctx.config.APP_URL });
-  await ctx.email.send({ to: members.map((m) => m.email), subject: rendered.subject, html: rendered.html, text: rendered.text, tags: { kind: 'weekly_digest' } });
-  await ctx.db.logAudit({ org_id: org.id, actor_type: 'system', action: 'digest.sent', entity: 'org', entity_id: org.id, diff: { week_start: payload.weekStart, recipients: members.length } });
+  const rendered = weeklyDigestEmail({
+    orgName: org.name,
+    weekStart: payload.weekStart,
+    weekEnd,
+    stats,
+    url: ctx.config.APP_URL,
+  });
+  await ctx.email.send({
+    to: members.map((m) => m.email),
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
+    tags: { kind: 'weekly_digest' },
+  });
+  await ctx.db.logAudit({
+    org_id: org.id,
+    actor_type: 'system',
+    action: 'digest.sent',
+    entity: 'org',
+    entity_id: org.id,
+    diff: { week_start: payload.weekStart, recipients: members.length },
+  });
 };

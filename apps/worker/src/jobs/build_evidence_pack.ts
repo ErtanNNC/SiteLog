@@ -14,15 +14,45 @@ export const buildEvidencePack: JobHandler<'build_evidence_pack'> = async (ctx, 
     if (!site) throw new PermanentJobError(`site ${pack.site_id} not found`);
     const input = await buildEvidencePackInput(ctx, pack, site);
     const buffer = await renderEvidencePackPdf(input);
-    const path = evidencePackStoragePath(pack.org_id, pack.site_id, pack.period_start, pack.period_end);
+    const path = evidencePackStoragePath(
+      pack.org_id,
+      pack.site_id,
+      pack.period_start,
+      pack.period_end,
+    );
     await ctx.storage.upload('exports', path, buffer, 'application/pdf');
-    await ctx.db.updateEvidencePack(pack.id, { status: 'ready', pdf_path: path, ready_at: ctx.now().toISOString() });
-    await ctx.db.logAudit({ org_id: pack.org_id, actor_type: 'agent', action: 'evidence_pack.ready', entity: 'evidence_pack', entity_id: pack.id, diff: { path, bytes: buffer.length, days: input.days.length } });
-    await ctx.db.notifyOrg(pack.org_id, 'pack_ready', `EOT evidence pack ready: ${site.site.name}`, `${pack.period_start} – ${pack.period_end}`, '/weather', pack.created_by);
-    await ctx.db.enqueueJob('send_email', { kind: 'evidence_pack_ready', packId: pack.id }, { dedupeKey: `email:pack:${pack.id}` });
+    await ctx.db.updateEvidencePack(pack.id, {
+      status: 'ready',
+      pdf_path: path,
+      ready_at: ctx.now().toISOString(),
+    });
+    await ctx.db.logAudit({
+      org_id: pack.org_id,
+      actor_type: 'agent',
+      action: 'evidence_pack.ready',
+      entity: 'evidence_pack',
+      entity_id: pack.id,
+      diff: { path, bytes: buffer.length, days: input.days.length },
+    });
+    await ctx.db.notifyOrg(
+      pack.org_id,
+      'pack_ready',
+      `EOT evidence pack ready: ${site.site.name}`,
+      `${pack.period_start} – ${pack.period_end}`,
+      '/weather',
+      pack.created_by,
+    );
+    await ctx.db.enqueueJob(
+      'send_email',
+      { kind: 'evidence_pack_ready', packId: pack.id },
+      { dedupeKey: `email:pack:${pack.id}` },
+    );
     ctx.metrics.add({ pdfBytes: buffer.length, packDays: input.days.length });
   } catch (err) {
-    await ctx.db.updateEvidencePack(pack.id, { status: 'failed', error: err instanceof Error ? err.message.slice(0, 500) : String(err) });
+    await ctx.db.updateEvidencePack(pack.id, {
+      status: 'failed',
+      error: err instanceof Error ? err.message.slice(0, 500) : String(err),
+    });
     throw err;
   }
 };

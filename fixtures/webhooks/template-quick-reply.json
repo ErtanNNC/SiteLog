@@ -1,0 +1,37 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "102030405060708",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "15550142290",
+              "phone_number_id": "111222333444555"
+            },
+            "contacts": [{ "profile": { "name": "Priya Raman" }, "wa_id": "15550147719" }],
+            "messages": [
+              {
+                "context": {
+                  "from": "15550142290",
+                  "id": "wamid.HBgLMTU1NTAxNDIyOTAVAgARGBI5QkQ0RTk3MzE1QjM0QjQ4NzEA"
+                },
+                "from": "15550147719",
+                "id": "wamid.HBgLMTU1NTAxNDc3MTkVAgASGBQzQUY0QjQ0QzFFNzE5MDdCNzA4MgA=",
+                "timestamp": "1791673500",
+                "type": "button",
+                "button": {
+                  "payload": "rem:9e7a6c2d-1f3b-4a5c-8d9e-0f1a2b3c4d5e:no_work",
+                  "text": "No work today"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

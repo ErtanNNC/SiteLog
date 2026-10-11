@@ -2,7 +2,17 @@ import OpenAI, { toFile } from 'openai';
 import { join } from 'node:path';
 import type { CompanyRow, GlossaryTermRow } from '@sitelog/shared';
 import type { Logger } from '../log';
-import { chunkArgs, chunkPlan, convertToMp3Args, pcmDurationSeconds, decodePcmArgs, readTemp, withTempDir, writeTemp, type FfmpegRunner } from '../media/ffmpeg';
+import {
+  chunkArgs,
+  chunkPlan,
+  convertToMp3Args,
+  pcmDurationSeconds,
+  decodePcmArgs,
+  readTemp,
+  withTempDir,
+  writeTemp,
+  type FfmpegRunner,
+} from '../media/ffmpeg';
 import { estimateTranscriptionCostUsd } from './cost';
 
 /** §10.2 — OGG/Opus → mono 16 kHz MP3 → OpenAI transcription with segment timestamps. */
@@ -75,7 +85,11 @@ interface VerboseJson {
   segments?: Array<{ start: number; end: number; text: string }>;
 }
 
-function parseVerbose(raw: unknown, offsetS: number, fallbackDuration: number): { text: string; language: string | null; segments: TranscriptSegment[] } {
+function parseVerbose(
+  raw: unknown,
+  offsetS: number,
+  fallbackDuration: number,
+): { text: string; language: string | null; segments: TranscriptSegment[] } {
   const v = (raw ?? {}) as VerboseJson;
   const text = (v.text ?? '').trim();
   const segs = (v.segments ?? []).map((s) => ({
@@ -83,7 +97,12 @@ function parseVerbose(raw: unknown, offsetS: number, fallbackDuration: number): 
     end: Math.round((s.end + offsetS) * 100) / 100,
     text: s.text.trim(),
   }));
-  if (segs.length === 0 && text) segs.push({ start: offsetS, end: Math.round((offsetS + (v.duration ?? fallbackDuration)) * 100) / 100, text });
+  if (segs.length === 0 && text)
+    segs.push({
+      start: offsetS,
+      end: Math.round((offsetS + (v.duration ?? fallbackDuration)) * 100) / 100,
+      text,
+    });
   return { text, language: v.language ?? null, segments: segs.filter((s) => s.text.length > 0) };
 }
 
@@ -93,7 +112,17 @@ export function stitchLanguages(langs: Array<string | null>): string | null {
 }
 
 const LANG_NAMES: Record<string, string> = {
-  english: 'en', spanish: 'es', polish: 'pl', hindi: 'hi', portuguese: 'pt', french: 'fr', german: 'de', italian: 'it', vietnamese: 'vi', chinese: 'zh', tagalog: 'tl',
+  english: 'en',
+  spanish: 'es',
+  polish: 'pl',
+  hindi: 'hi',
+  portuguese: 'pt',
+  french: 'fr',
+  german: 'de',
+  italian: 'it',
+  vietnamese: 'vi',
+  chinese: 'zh',
+  tagalog: 'tl',
 };
 
 export function normaliseLanguage(l: string): string {
@@ -112,7 +141,12 @@ export interface TranscribeInput {
 }
 
 /** The whole pipeline for one voice note. Chunks > 15 min into ≤ 10-min pieces with offsets. */
-export async function transcribeAudio(api: TranscriptionApi, run: FfmpegRunner, input: TranscribeInput, log?: Logger): Promise<TranscriptResult> {
+export async function transcribeAudio(
+  api: TranscriptionApi,
+  run: FfmpegRunner,
+  input: TranscribeInput,
+  log?: Logger,
+): Promise<TranscriptResult> {
   return withTempDir(async (dir) => {
     const original = await writeTemp(dir, `in.${input.ext || 'ogg'}`, input.audio);
     const mp3 = join(dir, 'audio.mp3');
@@ -123,21 +157,32 @@ export async function transcribeAudio(api: TranscriptionApi, run: FfmpegRunner, 
       durationS = pcmDurationSeconds(stdout);
     }
     const plan = chunkPlan(durationS);
-    const parts: Array<{ text: string; language: string | null; segments: TranscriptSegment[] }> = [];
+    const parts: Array<{ text: string; language: string | null; segments: TranscriptSegment[] }> =
+      [];
     for (const chunk of plan) {
       let path = mp3;
       if (plan.length > 1) {
         path = join(dir, `chunk-${chunk.index}.mp3`);
         await run(chunkArgs(mp3, path, chunk.startS, chunk.durationS));
       }
-      const file = await toFile(await readTemp(path), `audio-${chunk.index}.mp3`, { type: 'audio/mpeg' });
-      const raw = await createWithFallback(api, { file, model: input.model, prompt: input.prompt }, log);
+      const file = await toFile(await readTemp(path), `audio-${chunk.index}.mp3`, {
+        type: 'audio/mpeg',
+      });
+      const raw = await createWithFallback(
+        api,
+        { file, model: input.model, prompt: input.prompt },
+        log,
+      );
       parts.push(parseVerbose(raw, chunk.startS, chunk.durationS));
     }
     const segments = parts.flatMap((p) => p.segments).sort((a, b) => a.start - b.start);
     return {
       language: stitchLanguages(parts.map((p) => p.language)),
-      text: parts.map((p) => p.text).filter(Boolean).join(' ').trim(),
+      text: parts
+        .map((p) => p.text)
+        .filter(Boolean)
+        .join(' ')
+        .trim(),
       segments,
       durationS,
       model: input.model,
@@ -147,7 +192,11 @@ export async function transcribeAudio(api: TranscriptionApi, run: FfmpegRunner, 
   });
 }
 
-async function createWithFallback(api: TranscriptionApi, p: { file: File; model: string; prompt: string }, log?: Logger): Promise<unknown> {
+async function createWithFallback(
+  api: TranscriptionApi,
+  p: { file: File; model: string; prompt: string },
+  log?: Logger,
+): Promise<unknown> {
   try {
     return await api.audio.transcriptions.create({
       file: p.file,
@@ -160,8 +209,15 @@ async function createWithFallback(api: TranscriptionApi, p: { file: File; model:
     // Some models accept only json/text; fall back to one segment for the chunk.
     const msg = err instanceof Error ? err.message : String(err);
     if (/response_format|timestamp_granularities|verbose_json/i.test(msg)) {
-      log?.warn('transcription model does not support verbose_json; falling back to json', { model: p.model });
-      return api.audio.transcriptions.create({ file: p.file, model: p.model, response_format: 'json', prompt: p.prompt });
+      log?.warn('transcription model does not support verbose_json; falling back to json', {
+        model: p.model,
+      });
+      return api.audio.transcriptions.create({
+        file: p.file,
+        model: p.model,
+        response_format: 'json',
+        prompt: p.prompt,
+      });
     }
     throw err;
   }

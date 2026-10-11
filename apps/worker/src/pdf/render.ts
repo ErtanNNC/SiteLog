@@ -1,0 +1,253 @@
+import { createElement } from 'react';
+import { renderToBuffer } from '@react-pdf/renderer';
+import type { DocumentProps } from '@react-pdf/renderer';
+import type { ReactElement } from 'react';
+import type {
+  DailyReportData,
+  EvidencePackRow,
+  ReportRow,
+  ReportVersionRow,
+} from '@sitelog/shared';
+import type { Ctx } from '../context';
+import type { SiteContext } from '../db';
+import { siteDayWeatherOf, transcriptSegments } from '../pipeline/compose';
+import { EvidencePack } from './EvidencePack';
+import { ReportDocument } from './ReportDocument';
+import type { EvidenceDay, EvidencePackInput, PdfImage, PdfPhoto, ReportPdfInput } from './types';
+
+/** `renderToBuffer` wrappers + the loaders that turn DB rows into the document inputs. */
+
+export async function renderReportPdf(input: ReportPdfInput): Promise<Buffer> {
+  return renderToBuffer(
+    createElement(ReportDocument, { input }) as unknown as ReactElement<DocumentProps>,
+  );
+}
+
+export async function renderEvidencePackPdf(input: EvidencePackInput): Promise<Buffer> {
+  return renderToBuffer(
+    createElement(EvidencePack, { input }) as unknown as ReactElement<DocumentProps>,
+  );
+}
+
+export function imageFormat(
+  path: string | null | undefined,
+  mime?: string | null,
+): 'png' | 'jpg' | null {
+  const ext = (path ?? '').split('.').pop()?.toLowerCase();
+  if (ext === 'png' || mime === 'image/png') return 'png';
+  if (ext === 'jpg' || ext === 'jpeg' || mime === 'image/jpeg') return 'jpg';
+  return null;
+}
+
+async function loadLogo(ctx: Ctx, logoPath: string | null): Promise<PdfImage | null> {
+  if (!logoPath) return null;
+  const format = imageFormat(logoPath);
+  if (!format) return null; // SVG logos are not embeddable by react-pdf; the name is used instead.
+  try {
+    return { data: await ctx.storage.download('logos', logoPath), format };
+  } catch (err) {
+    ctx.log.warn('logo not loaded', { err, path: logoPath });
+    return null;
+  }
+}
+
+async function loadPhotos(
+  ctx: Ctx,
+  sources: Array<{
+    kind: string;
+    storage_path: string | null;
+    media_mime: string | null;
+    taken_at: string | null;
+    message_created_at: string;
+    caption: string | null;
+  }>,
+  max: number,
+): Promise<PdfPhoto[]> {
+  const out: PdfPhoto[] = [];
+  for (const s of sources) {
+    if (s.kind !== 'photo' || !s.storage_path || out.length >= max) continue;
+    const format = imageFormat(s.storage_path, s.media_mime);
+    if (!format) continue;
+    try {
+      out.push({
+        data: await ctx.storage.download('photos', s.storage_path),
+        format,
+        takenAt: s.taken_at ?? s.message_created_at,
+        caption: s.caption,
+      });
+    } catch (err) {
+      ctx.log.warn('photo not loaded', { err, path: s.storage_path });
+    }
+  }
+  return out;
+}
+
+export async function buildReportPdfInput(
+  ctx: Ctx,
+  args: { report: ReportRow; version: ReportVersionRow; site: SiteContext; data: DailyReportData },
+): Promise<ReportPdfInput> {
+  const { report, version, site, data } = args;
+  const sources = await ctx.db.listReportSources(report.id);
+  const audio = sources.filter((s) => s.kind === 'audio');
+  const transcripts = await ctx.db.listTranscripts(audio.map((a) => a.message_id));
+  const languages = Array.from(
+    new Set(transcripts.flatMap((t) => (t.language ?? '').split('+').filter(Boolean))),
+  );
+  const versions = await ctx.db.listVersions(report.id);
+  const reporter = report.reporter_id ? await ctx.db.getReporter(report.reporter_id) : null;
+  const signer = report.signed_off_by ? await ctx.db.getUserContact(report.signed_off_by) : null;
+  const [logo, photos] = await Promise.all([
+    loadLogo(ctx, site.org.logo_path),
+    loadPhotos(ctx, sources, site.settings.pdf_max_photos),
+  ]);
+  return {
+    org: {
+      name: site.org.name,
+      address: site.org.address,
+      licenseNo: site.org.license_no,
+      letterheadLines: site.settings.letterhead_lines ?? [],
+      logo,
+    },
+    site: {
+      name: site.site.name,
+      projectCode: site.site.project_code,
+      address: site.site.address,
+      workingHours: site.site.working_hours,
+      timezone: site.site.timezone,
+    },
+    report: {
+      reportNo: report.report_no,
+      version: version.version,
+      status: report.status,
+      kind: report.kind as ReportPdfInput['report']['kind'],
+      filedAt: report.filed_at,
+      confirmedAt: report.confirmed_at,
+      signedOffAt: report.signed_off_at,
+      signedOffByName: signer?.display_name ?? signer?.email ?? null,
+      isLate: report.is_late,
+      reviewReasons: report.review_reasons,
+    },
+    data: data.languageDetected.length ? data : { ...data, languageDetected: languages },
+    reporterName: reporter?.name ?? null,
+    sources: {
+      audioCount: audio.length,
+      totalAudioSeconds: audio.reduce((a, s) => a + (s.duration_s ?? 0), 0),
+      languages: data.languageDetected.length ? data.languageDetected : languages,
+      receivedAt: report.received_at,
+      textCount: sources.filter((s) => s.kind === 'text').length,
+    },
+    photos,
+    companies: site.companies.map((c) => ({
+      id: c.id,
+      name: c.name,
+      status: c.status,
+      isSelfPerform: c.is_self_perform,
+    })),
+    edits: versions.map((v) => ({
+      version: v.version,
+      author: v.author,
+      changeNote: v.change_note,
+      createdAt: v.created_at,
+    })),
+    settings: {
+      paper: site.settings.pdf_paper === 'a4' ? 'a4' : 'letter',
+      footerEnabled: site.settings.pdf_footer_enabled,
+      maxPhotos: site.settings.pdf_max_photos,
+    },
+    generatedAt: ctx.now().toISOString(),
+  };
+}
+
+export async function buildEvidencePackInput(
+  ctx: Ctx,
+  pack: EvidencePackRow,
+  site: SiteContext,
+): Promise<EvidencePackInput> {
+  const reports = await ctx.db.listReportsForSitePeriod(
+    site.site.id,
+    pack.period_start,
+    pack.period_end,
+  );
+  const events = await ctx.db.listWeatherEvents(site.site.id, pack.period_start, pack.period_end);
+  const days: EvidenceDay[] = [];
+  for (const r of reports) {
+    const version = await ctx.db.getVersion(r.id, r.current_version);
+    if (!version) continue;
+    const data = version.data as DailyReportData;
+    const dayEvents = events.filter((e) => e.report_id === r.id);
+    const lost =
+      Math.round(
+        (dayEvents.length
+          ? dayEvents.reduce((a, e) => a + Number(e.lost_hours), 0)
+          : data.weather.periods.reduce((a, p) => a + p.lostHours, 0)) * 100,
+      ) / 100;
+    const fullDay =
+      dayEvents.some((e) => e.full_day) || data.weather.periods.some((p) => p.fullDay === true);
+    if (lost <= 0 && !fullDay) continue;
+    const sources = await ctx.db.listReportSources(r.id);
+    const audio = sources.filter((s) => s.kind === 'audio');
+    const transcripts = await ctx.db.listTranscripts(audio.map((a) => a.message_id));
+    const siteDay = await ctx.db.getSiteDay(r.site_day_id);
+    const observed = siteDayWeatherOf(siteDay?.weather);
+    const photos = await loadPhotos(ctx, sources, 4);
+    days.push({
+      date: data.reportDate,
+      reportNo: r.report_no,
+      version: r.current_version,
+      signedOff: r.status === 'signed_off',
+      data,
+      lostHours: lost,
+      fullDay,
+      claimReady:
+        dayEvents.some((e) => e.claim_ready) ||
+        (audio.length > 0 && photos.length > 0 && !!observed),
+      transcriptExcerpts: weatherExcerpts(
+        data,
+        transcripts.flatMap((t) => transcriptSegments(t.message_id, t)),
+      ),
+      photos,
+      observed,
+      photoCount: sources.filter((s) => s.kind === 'photo').length,
+      audioCount: audio.length,
+    });
+  }
+  const requester = pack.created_by ? await ctx.db.getUserContact(pack.created_by) : null;
+  return {
+    org: { name: site.org.name, logo: await loadLogo(ctx, site.org.logo_path) },
+    site: {
+      name: site.site.name,
+      projectCode: site.site.project_code,
+      address: site.site.address,
+      timezone: site.site.timezone,
+    },
+    periodStart: pack.period_start,
+    periodEnd: pack.period_end,
+    days,
+    settings: { paper: site.settings.pdf_paper === 'a4' ? 'a4' : 'letter' },
+    generatedAt: ctx.now().toISOString(),
+    requestedBy: requester?.display_name ?? requester?.email ?? null,
+  };
+}
+
+/** Segments the weather periods point at (± one neighbour), else the first few segments. */
+export function weatherExcerpts(
+  data: DailyReportData,
+  segments: Array<{ start: number; end: number; text: string }>,
+  max = 6,
+): Array<{ start: number; end: number; text: string }> {
+  if (segments.length === 0) return [];
+  const starts = data.weather.periods.flatMap((p) =>
+    p.source.filter((s) => s.type === 'audio').map((s) => (s as { start: number }).start),
+  );
+  const picked = new Set<number>();
+  for (const st of starts) {
+    const idx = segments.findIndex((s) => st >= s.start && st <= s.end + 0.5);
+    const i = idx >= 0 ? idx : segments.findIndex((s) => s.start >= st);
+    if (i < 0) continue;
+    for (const j of [i - 1, i, i + 1]) if (j >= 0 && j < segments.length) picked.add(j);
+  }
+  const idxs = (picked.size ? Array.from(picked) : segments.slice(0, 3).map((_, i) => i))
+    .sort((a, b) => a - b)
+    .slice(0, max);
+  return idxs.map((i) => segments[i]!);
+}

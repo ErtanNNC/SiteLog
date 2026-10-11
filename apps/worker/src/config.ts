@@ -9,7 +9,9 @@ import { z } from 'zod';
 
 const bool = z
   .union([z.string(), z.boolean()])
-  .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase())));
+  .transform((v) =>
+    typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase()),
+  );
 
 const intFrom = (def: number) =>
   z

@@ -7,7 +7,8 @@ export const sendTemplate: JobHandler<'send_template'> = async (ctx, payload) =>
   const convo = await ctx.db.getConversation(payload.conversationId);
   if (!convo) throw new PermanentJobError(`conversation ${payload.conversationId} not found`);
   const template = payload.template as TemplateName;
-  if (!TEMPLATE_NAMES.includes(template)) throw new PermanentJobError(`unknown template ${payload.template}`);
+  if (!TEMPLATE_NAMES.includes(template))
+    throw new PermanentJobError(`unknown template ${payload.template}`);
   const vars = Object.entries(payload.vars)
     .sort(([a], [b]) => Number(a) - Number(b))
     .map(([, v]) => v);
@@ -18,7 +19,8 @@ export const sendTemplate: JobHandler<'send_template'> = async (ctx, payload) =>
   });
   if (payload.siteDayId && payload.stage !== undefined) {
     const siteDay = await ctx.db.getSiteDay(payload.siteDayId);
-    if (siteDay && siteDay.reminder_stage < payload.stage) await ctx.db.updateSiteDay(siteDay.id, { reminder_stage: payload.stage });
+    if (siteDay && siteDay.reminder_stage < payload.stage)
+      await ctx.db.updateSiteDay(siteDay.id, { reminder_stage: payload.stage });
   }
 };
 

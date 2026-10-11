@@ -16,7 +16,10 @@ export interface FfmpegResult {
   stderr: string;
 }
 
-export type FfmpegRunner = (args: string[], opts?: { timeoutMs?: number; maxBuffer?: number }) => Promise<FfmpegResult>;
+export type FfmpegRunner = (
+  args: string[],
+  opts?: { timeoutMs?: number; maxBuffer?: number },
+) => Promise<FfmpegResult>;
 
 export const PCM_SAMPLE_RATE = 8000;
 export const MP3_SAMPLE_RATE = 16000;
@@ -43,17 +46,72 @@ export function resolveFfmpegPath(env: NodeJS.ProcessEnv = process.env): string 
 
 /** `ffmpeg -i in.ogg -vn -ac 1 -ar 16000 -b:a 32k out.mp3` */
 export function convertToMp3Args(input: string, output: string): string[] {
-  return ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-vn', '-ac', '1', '-ar', String(MP3_SAMPLE_RATE), '-b:a', MP3_BITRATE, '-f', 'mp3', output];
+  return [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-i',
+    input,
+    '-vn',
+    '-ac',
+    '1',
+    '-ar',
+    String(MP3_SAMPLE_RATE),
+    '-b:a',
+    MP3_BITRATE,
+    '-f',
+    'mp3',
+    output,
+  ];
 }
 
 /** Decode to signed 16-bit mono PCM on stdout (for duration + waveform peaks). */
 export function decodePcmArgs(input: string, sampleRate = PCM_SAMPLE_RATE): string[] {
-  return ['-hide_banner', '-loglevel', 'error', '-i', input, '-vn', '-ac', '1', '-ar', String(sampleRate), '-f', 's16le', '-acodec', 'pcm_s16le', 'pipe:1'];
+  return [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-i',
+    input,
+    '-vn',
+    '-ac',
+    '1',
+    '-ar',
+    String(sampleRate),
+    '-f',
+    's16le',
+    '-acodec',
+    'pcm_s16le',
+    'pipe:1',
+  ];
 }
 
 /** Cut `[start, start+duration)` seconds out of an mp3 without re-encoding. */
-export function chunkArgs(input: string, output: string, startS: number, durationS: number): string[] {
-  return ['-hide_banner', '-loglevel', 'error', '-y', '-ss', startS.toFixed(2), '-t', durationS.toFixed(2), '-i', input, '-vn', '-c', 'copy', '-f', 'mp3', output];
+export function chunkArgs(
+  input: string,
+  output: string,
+  startS: number,
+  durationS: number,
+): string[] {
+  return [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-ss',
+    startS.toFixed(2),
+    '-t',
+    durationS.toFixed(2),
+    '-i',
+    input,
+    '-vn',
+    '-c',
+    'copy',
+    '-f',
+    'mp3',
+    output,
+  ];
 }
 
 export interface Chunk {
@@ -63,7 +121,11 @@ export interface Chunk {
 }
 
 /** Split audio over the threshold into equal chunks of at most `maxChunkS` (10 min). */
-export function chunkPlan(durationS: number, maxChunkS = MAX_CHUNK_S, thresholdS = SPLIT_THRESHOLD_S): Chunk[] {
+export function chunkPlan(
+  durationS: number,
+  maxChunkS = MAX_CHUNK_S,
+  thresholdS = SPLIT_THRESHOLD_S,
+): Chunk[] {
   const d = Math.max(0, durationS);
   if (d <= thresholdS) return [{ index: 0, startS: 0, durationS: d }];
   const n = Math.ceil(d / maxChunkS);
@@ -106,14 +168,25 @@ export function createFfmpegRunner(binary: string = resolveFfmpegPath()): Ffmpeg
       execFile(
         binary,
         args,
-        { encoding: 'buffer', maxBuffer: opts.maxBuffer ?? 256 * 1024 * 1024, timeout: opts.timeoutMs ?? 120_000 },
+        {
+          encoding: 'buffer',
+          maxBuffer: opts.maxBuffer ?? 256 * 1024 * 1024,
+          timeout: opts.timeoutMs ?? 120_000,
+        },
         (err, stdout, stderr) => {
           const errText = Buffer.isBuffer(stderr) ? stderr.toString('utf8') : String(stderr ?? '');
           if (err) {
-            reject(new Error(`ffmpeg failed (${binary} ${args.slice(0, 6).join(' ')}…): ${errText.slice(-500) || err.message}`));
+            reject(
+              new Error(
+                `ffmpeg failed (${binary} ${args.slice(0, 6).join(' ')}…): ${errText.slice(-500) || err.message}`,
+              ),
+            );
             return;
           }
-          resolve({ stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout), stderr: errText });
+          resolve({
+            stdout: Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout),
+            stderr: errText,
+          });
         },
       );
     });

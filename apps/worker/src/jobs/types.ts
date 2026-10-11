@@ -1,7 +1,11 @@
 import type { JobPayloads, JobRow, JobTypeKey } from '@sitelog/shared';
 import type { Ctx } from '../context';
 
-export type JobHandler<K extends JobTypeKey> = (ctx: Ctx, payload: JobPayloads[K], job: JobRow) => Promise<void>;
+export type JobHandler<K extends JobTypeKey> = (
+  ctx: Ctx,
+  payload: JobPayloads[K],
+  job: JobRow,
+) => Promise<void>;
 
 export type JobRegistry = { [K in JobTypeKey]: JobHandler<K> };
 
@@ -14,5 +18,7 @@ export class PermanentJobError extends Error {
 }
 
 export function rawPayload(job: JobRow): Record<string, unknown> {
-  return job.payload && typeof job.payload === 'object' && !Array.isArray(job.payload) ? (job.payload as Record<string, unknown>) : {};
+  return job.payload && typeof job.payload === 'object' && !Array.isArray(job.payload)
+    ? (job.payload as Record<string, unknown>)
+    : {};
 }

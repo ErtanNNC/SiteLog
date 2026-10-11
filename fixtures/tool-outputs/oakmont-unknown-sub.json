@@ -1,0 +1,184 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Dry and sunny; no weather impact. Summit Drywall hung board on the second-floor east wing (approx. 70% of the wing). BrightLine Electric pulled wire on the first floor. The Ridgeway crew (6) completed firestopping at mechanical penetrations until 15:00. ClearView Glazing delivered 12 curtain-wall units for the lobby. Toolbox talk on ladder safety; one near miss (board slid off a cart), no injury.",
+  "weather": { "conditionsText": "Dry and sunny all day", "periods": [] },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d006",
+      "companyNameHeard": "Summit",
+      "companyName": "Summit Drywall",
+      "trade": "Drywall",
+      "area": "Level 2 east wing",
+      "workers": 8,
+      "hoursPerWorker": 8,
+      "totalHours": 64,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "22222222-0000-4000-8000-000000000201",
+          "start": 5.5,
+          "end": 12.0
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d002",
+      "companyNameHeard": "BrightLine",
+      "companyName": "BrightLine Electric",
+      "trade": "Electrical",
+      "area": "Level 1",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "22222222-0000-4000-8000-000000000201",
+          "start": 12.0,
+          "end": 18.4
+        }
+      ]
+    },
+    {
+      "companyId": null,
+      "companyNameHeard": "the Ridgeway crew",
+      "companyName": "Ridgeway",
+      "trade": "Firestopping",
+      "area": "Mechanical penetrations",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "22222222-0000-4000-8000-000000000201",
+          "start": 18.4,
+          "end": 25.0
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 2 east wing",
+      "activity": "Drywall board hanging",
+      "status": "in_progress",
+      "percentComplete": 70,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "22222222-0000-4000-8000-000000000201",
+          "start": 5.5,
+          "end": 12.0
+        }
+      ]
+    },
+    {
+      "area": "Level 1",
+      "activity": "Electrical wire pulling",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "22222222-0000-4000-8000-000000000201",
+          "start": 12.0,
+          "end": 18.4
+        }
+      ]
+    },
+    {
+      "area": "Mechanical penetrations",
+      "activity": "Firestopping",
+      "status": "complete",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "22222222-0000-4000-8000-000000000201",
+          "start": 18.4,
+          "end": 25.0
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Curtain wall units (lobby)",
+      "quantity": "12 units",
+      "supplier": "ClearView Glazing",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "22222222-0000-4000-8000-000000000201",
+          "start": 25.0,
+          "end": 31.2
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Ladder safety",
+    "incidents": [
+      {
+        "description": "A drywall board slid off a cart; no injury",
+        "severity": "near_miss",
+        "source": [
+          {
+            "type": "audio",
+            "messageId": "22222222-0000-4000-8000-000000000201",
+            "start": 31.2,
+            "end": 37.0
+          }
+        ]
+      }
+    ],
+    "noIncidentsStated": false,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "22222222-0000-4000-8000-000000000201",
+        "start": 31.2,
+        "end": 37.0
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Start taping and joint compound on the east wing",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "22222222-0000-4000-8000-000000000201",
+          "start": 37.0,
+          "end": 41.0
+        }
+      ]
+    }
+  ],
+  "newTerms": [
+    {
+      "heard": "the Ridgeway crew",
+      "proposedOfficial": "Ridgeway",
+      "kind": "company",
+      "confidence": 0.85
+    }
+  ],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": [
+    {
+      "field": "company.unknown",
+      "question": "I heard \"the Ridgeway crew\" — is that a new subcontractor?",
+      "options": ["Add \"Ridgeway\""],
+      "target": { "companyNameHeard": "the Ridgeway crew", "manpowerIndex": 2 }
+    }
+  ]
+}
