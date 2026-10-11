@@ -20,7 +20,7 @@ import type {
   WeatherEventRow,
   WorkItemRow,
 } from '@sitelog/shared/db/types.ts';
-import type { InvoiceStatus, MemberRole } from '@sitelog/shared/enums.ts';
+import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
 import { formatReportNo } from '@sitelog/shared/report/numbering.ts';
@@ -685,7 +685,7 @@ export class DemoStore {
       {
         name: input.name,
         phone: u.phone_e164,
-        role: 'backup',
+        role: input.role ?? 'backup',
         siteIds: [input.siteId],
         languages: ['en'],
       },
@@ -705,6 +705,44 @@ export class DemoStore {
       diff: { site_id: input.siteId },
     });
     this.emit({ table: 'unknown_senders', id: u.id });
+  }
+
+  setReporterStatus(reporterId: string, status: ReporterStatus, userId: string): void {
+    const r = this.data.reporters.find((x) => x.id === reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    r.status = status;
+    if (status === 'invited') {
+      r.invited_at = this.nowIso();
+      r.verified_at = null;
+    }
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: status === 'disabled' ? 'reporter.disabled' : 'reporter.enabled',
+      entity: 'reporter',
+      entity_id: reporterId,
+      diff: { status },
+    });
+    this.emit({ table: 'all' });
+  }
+
+  resendInvite(reporterId: string, userId: string): void {
+    const r = this.data.reporters.find((x) => x.id === reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    r.invited_at = this.nowIso();
+    r.last_invite_error = null;
+    if (r.status === 'disabled') r.status = 'invited';
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'reporter.invite_resent',
+      entity: 'reporter',
+      entity_id: reporterId,
+      diff: null,
+    });
+    this.emit({ table: 'all' });
   }
 
   ignoreUnknownSender(id: string, userId: string): void {

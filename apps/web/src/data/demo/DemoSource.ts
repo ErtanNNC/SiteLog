@@ -2,7 +2,7 @@
  * DataSource over the in-memory DemoStore. No network, deterministic "now" (DEMO_NOW).
  * Mutations persist for the session; `simulateIncomingReport()` is the only "realtime" event.
  */
-import type { InvoiceStatus, MemberRole } from '@sitelog/shared/enums.ts';
+import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { sleep } from '@/lib/utils';
 import {
@@ -186,6 +186,12 @@ export class DemoSource implements DataSource {
   }
   ignoreUnknownSender(unknownSenderId: string) {
     return this.run(() => this.store.ignoreUnknownSender(unknownSenderId, this.user.id));
+  }
+  setReporterStatus(reporterId: string, status: ReporterStatus) {
+    return this.run(() => this.store.setReporterStatus(reporterId, status, this.user.id));
+  }
+  resendInvite(reporterId: string) {
+    return this.run(() => this.store.resendInvite(reporterId, this.user.id));
   }
   addOfficeUser(input: { email: string; role: MemberRole; name?: string }) {
     return this.run(() => this.store.addOfficeUser(input, this.user.id));

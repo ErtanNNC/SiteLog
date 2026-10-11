@@ -3,7 +3,13 @@
  *  - demo/DemoSource.ts — in-memory over the §18 Kestrel dataset (no Supabase)
  *  - supabase/SupabaseSource.ts — supabase-js queries, RPCs, edge functions, realtime
  */
-import type { InvoiceStatus, MemberRole, ReporterRole, TermKind } from '@sitelog/shared/enums.ts';
+import type {
+  InvoiceStatus,
+  MemberRole,
+  ReporterRole,
+  ReporterStatus,
+  TermKind,
+} from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import type {
   BillingData,
@@ -79,6 +85,8 @@ export interface LinkUnknownSenderInput {
   unknownSenderId: string;
   siteId: string;
   name: string;
+  /** Defaults to `backup` (F11). */
+  role?: ReporterRole;
 }
 
 export interface CreateOrgInput {
@@ -161,6 +169,10 @@ export interface DataSource {
   inviteReporter(input: InviteReporterInput): Promise<void>;
   linkUnknownSender(input: LinkUnknownSenderInput): Promise<void>;
   ignoreUnknownSender(unknownSenderId: string): Promise<void>;
+  /** Team row menu: Disable (→ `disabled`) or re-enable (→ `invited`). */
+  setReporterStatus(reporterId: string, status: ReporterStatus): Promise<void>;
+  /** Team row menu: one re-send of `sitelog_welcome` (F3 edge case). */
+  resendInvite(reporterId: string): Promise<void>;
   addOfficeUser(input: { email: string; role: MemberRole; name?: string }): Promise<void>;
   changeMemberRole(userId: string, role: MemberRole): Promise<void>;
   removeMember(userId: string): Promise<void>;

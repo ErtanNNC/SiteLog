@@ -31,7 +31,7 @@ import type {
   CurrentManpowerRow,
   CurrentWeatherRow,
 } from '@sitelog/shared/db/types.ts';
-import type { InvoiceStatus, MemberRole } from '@sitelog/shared/enums.ts';
+import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/shared/format.ts';
 import { copy } from '@/copy/en';
@@ -383,7 +383,7 @@ export class SupabaseSource implements DataSource {
     const todayReport = allReports.find(
       (r) => siteDays.find((d) => d.id === r.site_day_id)?.date === today,
     );
-    const [manpower, weatherEvents, versions, questions, photoCount] = await Promise.all([
+    const [manpower, weatherEvents, versions, questions, photoSources] = await Promise.all([
       this.manpowerBetween(from, to, siteId),
       this.weatherBetween(from, to, siteId),
       this.sb
@@ -396,13 +396,25 @@ export class SupabaseSource implements DataSource {
         : Promise.resolve([] as QuestionRow[]),
       this.sb
         .from('report_sources')
-        .select('id', { count: 'exact', head: true })
+        .select('*')
         .eq('kind', 'photo')
         .in(
           'report_id',
           allReports.map((r) => r.id),
-        ),
+        )
+        .then(unwrap),
     ]);
+    const photoMessages = photoSources.length
+      ? unwrap(
+          await this.sb
+            .from('messages')
+            .select('*')
+            .in(
+              'id',
+              photoSources.map((s) => s.message_id),
+            ),
+        )
+      : [];
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays: [...siteDays, ...latestSiteDays],
@@ -411,9 +423,14 @@ export class SupabaseSource implements DataSource {
       manpower,
       weatherEvents,
       questions,
+      sources: photoSources as ReportSourceRow[],
+      messages: photoMessages as MessageRow[],
     };
     const detail = assembleSiteDetail(rows, this.ctx(), siteId, month);
-    detail.photoCount = photoCount.count ?? detail.photoCount;
+    const urls = await Promise.all(
+      (detail.photos ?? []).map((p) => this.signedUrl('photos', p.storagePath)),
+    );
+    detail.photos = (detail.photos ?? []).map((p, i) => ({ ...p, url: urls[i] ?? null }));
     return detail;
   }
 
@@ -1112,6 +1129,21 @@ export class SupabaseSource implements DataSource {
       unknown_sender_id: input.unknownSenderId,
       site_id: input.siteId,
       name: input.name,
+      role: input.role ?? 'backup',
+    });
+  }
+  async setReporterStatus(reporterId: string, status: ReporterStatus) {
+    const patch: Partial<ReporterRow> = { status };
+    if (status === 'invited') patch.invited_at = new Date().toISOString();
+    const { error } = await this.sb.from('reporters').update(patch).eq('id', reporterId);
+    if (error) throw new Error(error.message);
+  }
+  async resendInvite(reporterId: string) {
+    // api-invite-reporter re-sends `sitelog_welcome` for an existing reporter (one re-send, F3).
+    await this.callFunction('api-invite-reporter', {
+      org_id: this.orgId,
+      reporter_id: reporterId,
+      resend: true,
     });
   }
   async ignoreUnknownSender(unknownSenderId: string) {

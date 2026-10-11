@@ -87,6 +87,7 @@ import type {
   SetupState,
   SiteCard,
   SiteDetail,
+  SitePhoto,
   SiteInfo,
   SiteOption,
   StreakCell,
@@ -968,6 +969,32 @@ export function assembleSiteDetail(
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
 
   const siteReportIds = new Set(rows.reports.filter((r) => r.site_id === siteId).map((r) => r.id));
+  const msgById = new Map(rows.messages.map((m) => [m.id, m]));
+  const photos: SitePhoto[] = rows.sources
+    .filter((s) => s.kind === 'photo' && siteReportIds.has(s.report_id))
+    .map((s) => {
+      const r = ix.reportById.get(s.report_id);
+      const m = msgById.get(s.message_id);
+      return {
+        messageId: s.message_id,
+        reportId: s.report_id,
+        reportNo: r?.report_no ?? '',
+        date: ix.reportDate.get(s.report_id) ?? '',
+        caption: s.caption ?? m?.body ?? null,
+        takenAt: s.taken_at ?? m?.created_at ?? null,
+        storagePath: m?.storage_path ?? null,
+        url: null,
+      };
+    })
+    .sort((a, b) =>
+      a.date === b.date
+        ? (a.takenAt ?? '') < (b.takenAt ?? '')
+          ? -1
+          : 1
+        : a.date < b.date
+          ? 1
+          : -1,
+    );
   return {
     site: toSiteInfo(site, rows.settings),
     reporters,
@@ -977,8 +1004,8 @@ export function assembleSiteDetail(
     latest,
     monthStats,
     crewToday,
-    photoCount: rows.sources.filter((s) => s.kind === 'photo' && siteReportIds.has(s.report_id))
-      .length,
+    photoCount: photos.length,
+    photos,
   };
 }
 
@@ -1943,6 +1970,7 @@ export function assembleSetupState(rows: RowSet): SetupState {
     timezone: rows.org.timezone,
     siteCount: rows.sites.filter((s) => s.status !== 'archived').length,
     reporterCount: rows.reporters.length,
+    projectCodes: rows.sites.map((s) => s.project_code),
     steps: {
       company: true,
       site: rows.sites.length > 0,

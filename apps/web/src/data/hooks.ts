@@ -3,7 +3,7 @@
  * mutations invalidate the org and toast (sonner). Pages never call the source directly.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { InvoiceStatus, MemberRole } from '@sitelog/shared/enums.ts';
+import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { toast } from 'sonner';
 import { copy } from '@/copy/en';
@@ -276,6 +276,26 @@ export function useIgnoreUnknownSender() {
   return useSourceMutation(
     (vars: { unknownSenderId: string }) => s.ignoreUnknownSender(vars.unknownSenderId),
     { success: copy.toasts.ignored },
+  );
+}
+
+export function useSetReporterStatus() {
+  const s = useDataSource();
+  return useSourceMutation(
+    (vars: { reporterId: string; status: ReporterStatus; name: string }) =>
+      s.setReporterStatus(vars.reporterId, vars.status),
+    {
+      success: (v) =>
+        v.status === 'disabled' ? copy.team.disabledToast(v.name) : copy.toasts.saved,
+    },
+  );
+}
+
+export function useResendInvite() {
+  const s = useDataSource();
+  return useSourceMutation(
+    (vars: { reporterId: string; name: string }) => s.resendInvite(vars.reporterId),
+    { success: (v) => copy.team.resent(v.name) },
   );
 }
 

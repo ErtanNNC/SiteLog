@@ -251,6 +251,20 @@ export interface SiteDetail {
   };
   crewToday: { date: string; rows: CrewRow[]; totalWorkers: number; totalHours: number } | null;
   photoCount: number;
+  /** Photos tab (P5): every photo attached to this site's reports, newest first. */
+  photos?: SitePhoto[];
+}
+
+export interface SitePhoto {
+  messageId: string;
+  reportId: string;
+  reportNo: string;
+  date: string;
+  caption: string | null;
+  takenAt: string | null;
+  storagePath: string | null;
+  /** Signed URL (10 min) or null in demo mode. */
+  url: string | null;
 }
 
 // ───────────────────────────── P6 Reports ─────────────────────────────
@@ -683,6 +697,8 @@ export interface SetupState {
   siteCount: number;
   reporterCount: number;
   steps: { company: boolean; site: boolean; reports: boolean };
+  /** Existing project numbers (uniqueness check in the wizard). */
+  projectCodes?: string[];
 }
 
 // ───────────────────────────── Shell ─────────────────────────────

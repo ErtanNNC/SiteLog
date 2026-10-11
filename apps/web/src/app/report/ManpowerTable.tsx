@@ -1,0 +1,222 @@
+import { formatTimeInTz } from '@sitelog/shared/format.ts';
+import type { ManpowerEntry, Source } from '@sitelog/shared/schemas/report.ts';
+import { DataTable, type Column } from '@/components/sitelog/DataTable';
+import { SourceLink } from '@/components/sitelog/SourceLink';
+import { Badge } from '@/components/ui/Badge';
+import { TableCell, TableRow } from '@/components/ui/Table';
+import { copy } from '@/copy/en';
+import { manpowerChanges } from '@/data/assemble';
+import type { ReportDetail } from '@/data/types';
+import { formatCrew, formatHoursNum } from '@/lib/format';
+import { cn } from '@/lib/utils';
+
+export interface ManpowerTableProps {
+  detail: ReportDetail;
+  onOpenMessage?: (messageId: string) => void;
+  onOpenHistory?: () => void;
+}
+
+interface Row {
+  index: number;
+  entry: ManpowerEntry;
+  badges: Array<{ kind: 'edited' | 'asked' | 'confirmed' | 'unconfirmed'; label: string }>;
+  was: { workers: number | null; totalHours: number | null } | null;
+}
+
+/** Sources of one value, de-duplicated by type + message, rendered as SourceLinks. */
+export function SourceLinks({
+  sources,
+  detail,
+  onOpenMessage,
+  onOpenHistory,
+  className,
+}: {
+  sources: Source[] | undefined;
+  detail: ReportDetail;
+  onOpenMessage?: (messageId: string) => void;
+  onOpenHistory?: () => void;
+  className?: string;
+}) {
+  if (!sources?.length) return null;
+  const seen = new Set<string>();
+  const msgAt = (id: string) => detail.messages.find((m) => m.id === id)?.at ?? null;
+  const editor = (s: Source) =>
+    s.type === 'office_edit'
+      ? (detail.versions.find((v) => v.author === 'office_user' && v.createdAt === s.at)
+          ?.authorName ?? detail.versions.find((v) => v.author === 'office_user')?.authorName)
+      : null;
+  return (
+    <span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
+      {sources.map((s, i) => {
+        const key =
+          s.type === 'audio'
+            ? `audio:${s.start}`
+            : s.type === 'office_edit'
+              ? `edit:${s.at}`
+              : s.type === 'weather_api'
+                ? 'wx'
+                : `${s.type}:${s.messageId}`;
+        if (seen.has(key)) return null;
+        seen.add(key);
+        return (
+          <SourceLink
+            key={`${key}-${i}`}
+            source={s}
+            timezone={detail.site.timezone}
+            messageAt={s.type === 'reply' || s.type === 'text' ? msgAt(s.messageId) : null}
+            editorName={editor(s)}
+            onOpenMessage={onOpenMessage}
+            onOpenHistory={onOpenHistory}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
+/** Manpower table with EDITED Vn / ASKED hh:mm / CONFIRMED BY REPLY / UNCONFIRMED badges and the previous-version diff. */
+export function ManpowerTable({ detail, onOpenMessage, onOpenHistory }: ManpowerTableProps) {
+  const tz = detail.site.timezone;
+  const changes = manpowerChanges(detail.previousData, detail.data);
+  const companyById = new Map(detail.companies.map((c) => [c.id, c]));
+
+  const rows: Row[] = detail.data.manpower.map((entry, index) => {
+    const badges: Row['badges'] = [];
+    const change = changes.get(index);
+    if (change) badges.push({ kind: 'edited', label: copy.report.diff.edited(detail.version) });
+    const q = detail.questions.find(
+      (x) =>
+        x.manpowerIndex === index ||
+        (x.companyName !== null && x.companyName === entry.companyName),
+    );
+    if (q?.answeredAt) badges.push({ kind: 'confirmed', label: copy.report.confirmedByReply });
+    else if (q?.askedAt)
+      badges.push({
+        kind: 'asked',
+        label: copy.report.questionAsked(formatTimeInTz(q.askedAt, tz)),
+      });
+    else if (entry.hoursBasis === 'reply')
+      badges.push({ kind: 'confirmed', label: copy.report.confirmedByReply });
+    const company = entry.companyId ? companyById.get(entry.companyId) : undefined;
+    if (!company || company.status === 'unconfirmed')
+      badges.push({ kind: 'unconfirmed', label: copy.chips.unconfirmed });
+    return { index, entry, badges, was: change ?? null };
+  });
+
+  const BADGE: Record<Row['badges'][number]['kind'], 'level' | 'tint' | 'filed' | 'dashed'> = {
+    edited: 'level',
+    asked: 'tint',
+    confirmed: 'filed',
+    unconfirmed: 'dashed',
+  };
+
+  const Diff = ({ now, was, changed }: { now: string; was: string; changed: boolean }) => (
+    <span className="inline-flex flex-col items-end leading-tight">
+      <span className={cn(changed && 'font-semibold')}>{now}</span>
+      {changed ? (
+        <span className="text-[11px] text-dust">
+          <s aria-hidden="true">{was}</s>
+          <span className="sr-only">{copy.report.diff.was(was)}</span>
+        </span>
+      ) : null}
+    </span>
+  );
+
+  const columns: Column<Row>[] = [
+    {
+      key: 'company',
+      header: copy.report.manpower.company,
+      cell: (r) => (
+        <div className="min-w-[180px]">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-semibold">{r.entry.companyName}</span>
+            {r.badges.map((b) => (
+              <Badge key={b.kind} variant={BADGE[b.kind]} data-badge={b.kind}>
+                {b.label}
+              </Badge>
+            ))}
+          </div>
+          {r.entry.companyNameHeard &&
+          r.entry.companyNameHeard.toLowerCase() !== r.entry.companyName.toLowerCase() ? (
+            <div className="text-caption text-dust">
+              {copy.report.work.heardAs(r.entry.companyNameHeard)}
+            </div>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: 'trade',
+      header: copy.report.manpower.tradeArea,
+      hideBelowMd: true,
+      cell: (r) => (
+        <span className="text-caption text-dust">
+          {[r.entry.trade ?? companyById.get(r.entry.companyId ?? '')?.trade, r.entry.area]
+            .filter(Boolean)
+            .join(' · ') || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'workers',
+      header: copy.report.manpower.workers,
+      numeric: true,
+      cell: (r) => (
+        <Diff
+          now={formatCrew(r.entry.workers)}
+          was={formatCrew(r.was?.workers)}
+          changed={!!r.was && r.was.workers !== r.entry.workers}
+        />
+      ),
+    },
+    {
+      key: 'hours',
+      header: copy.report.manpower.hours,
+      numeric: true,
+      cell: (r) => (
+        <Diff
+          now={formatHoursNum(r.entry.totalHours)}
+          was={formatHoursNum(r.was?.totalHours)}
+          changed={!!r.was && r.was.totalHours !== r.entry.totalHours}
+        />
+      ),
+    },
+    {
+      key: 'source',
+      header: copy.report.manpower.source,
+      hideBelowMd: true,
+      cell: (r) => (
+        <SourceLinks
+          sources={r.entry.source}
+          detail={detail}
+          onOpenMessage={onOpenMessage}
+          onOpenHistory={onOpenHistory}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <DataTable
+      columns={columns}
+      rows={rows}
+      rowKey={(r) => `${r.index}-${r.entry.companyName}`}
+      aria-label={copy.report.sections.manpower}
+      footer={
+        <TableRow>
+          <TableCell className="font-semibold">{copy.report.manpower.total}</TableCell>
+          <TableCell className="hidden md:table-cell" />
+          <TableCell numeric data-testid="manpower-total-crew">
+            {formatCrew(detail.totals.crewOnSite)}
+            {!detail.totals.headcountKnown ? '+' : ''}
+          </TableCell>
+          <TableCell numeric data-testid="manpower-total-hours">
+            {formatHoursNum(detail.totals.totalHours)}
+            {!detail.totals.hoursKnown ? '+' : ''}
+          </TableCell>
+          <TableCell className="hidden md:table-cell" />
+        </TableRow>
+      }
+    />
+  );
+}
