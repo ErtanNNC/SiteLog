@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@sitelog/shared/db/types.ts';
+import type { Database } from './db-types';
 import { env, isDemo } from './env';
 
 export type Db = SupabaseClient<Database>;

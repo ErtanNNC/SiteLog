@@ -135,7 +135,7 @@ export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<{ to:
     case 'unknown_sender': {
       if (!payload.unknownSenderId && !payload.orgId) throw new PermanentJobError('unknownSenderId or orgId required');
       const orgId = payload.orgId;
-      const sender = payload.unknownSenderId ? await ctx.db.findPendingUnknownSenderById?.(payload.unknownSenderId) : null;
+      const sender = payload.unknownSenderId ? await ctx.db.getUnknownSender(payload.unknownSenderId) : null;
       const org = orgId ? await ctx.db.getOrg(orgId) : null;
       if (!org) return null;
       const members = await ctx.db.listMemberEmails(org.id, ['ops', 'admin']);

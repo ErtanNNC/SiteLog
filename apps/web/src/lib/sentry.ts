@@ -9,7 +9,6 @@ export function initSentry(): void {
   Sentry.init({
     dsn: env.sentryDsn,
     environment: env.dev ? 'development' : 'production',
-    sendDefaultPii: false,
     tracesSampleRate: 0,
   });
   enabled = true;

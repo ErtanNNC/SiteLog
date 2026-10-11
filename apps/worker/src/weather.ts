@@ -35,7 +35,7 @@ export async function fetchSiteDayWeather(ctx: Ctx, siteId: string, date: string
   }
   const deadline = formatDeadline(site.deadline ?? settings?.default_deadline ?? '17:30');
   const siteDay = await ctx.db.getOrCreateSiteDay(site.id, date, deadlineInstant(date, deadline, site.timezone));
-  await ctx.db.updateSiteDay(siteDay.id, { weather });
+  await ctx.db.updateSiteDay(siteDay.id, { weather: weather as unknown as Record<string, unknown> });
   ctx.log.info('weather stored', { site_id: siteId, date, precip_in: weather.summary.precipIn, max_gust: weather.summary.maxGustWorkingHoursMph });
   return weather;
 }

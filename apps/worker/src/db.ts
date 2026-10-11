@@ -301,6 +301,7 @@ export interface Db {
 
   // unknown senders
   findPendingUnknownSender(phone: string): Promise<UnknownSenderRow | null>;
+  getUnknownSender(id: string): Promise<UnknownSenderRow | null>;
   insertUnknownSender(input: { org_id: string | null; phone_e164: string; first_message_id: string | null; snippet: string | null; guessed_site_id?: string | null }): Promise<UnknownSenderRow>;
   updateUnknownSender(id: string, patch: { org_id?: string | null; snippet?: string | null; guessed_site_id?: string | null }): Promise<void>;
 
@@ -696,6 +697,9 @@ export function createDb(sql: Sql): Db {
     // unknown senders ---------------------------------------------------------------------
     async findPendingUnknownSender(phone) {
       return one(await sql<UnknownSenderRow[]>`select * from unknown_senders where phone_e164 = ${phone} and status = 'pending' order by created_at desc limit 1`);
+    },
+    async getUnknownSender(id) {
+      return one(await sql<UnknownSenderRow[]>`select * from unknown_senders where id = ${id}`);
     },
     async insertUnknownSender(input) {
       const rows = await sql<UnknownSenderRow[]>`

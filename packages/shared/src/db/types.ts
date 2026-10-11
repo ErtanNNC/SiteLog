@@ -29,7 +29,7 @@ type Json = string | number | boolean | null | { [key: string]: Json | undefined
 /** Insert type: columns with defaults / nullable become optional. */
 type Insert<Row, Optional extends keyof Row> = Omit<Row, Optional> & Partial<Pick<Row, Optional>>;
 
-export interface OrgRow {
+export type OrgRow = {
   id: string;
   name: string;
   address: string | null;
@@ -41,18 +41,18 @@ export interface OrgRow {
   billing_status: string | null;
   trial_ends_at: string | null;
   created_at: string;
-}
+};
 
-export interface OrgMemberRow {
+export type OrgMemberRow = {
   org_id: string;
   user_id: string;
   role: MemberRole;
   display_name: string | null;
   title: string | null;
   created_at: string;
-}
+};
 
-export interface OrgSettingsRow {
+export type OrgSettingsRow = {
   org_id: string;
   default_deadline: string;
   working_days: number[];
@@ -79,9 +79,9 @@ export interface OrgSettingsRow {
   include_unconfirmed_in_payroll: boolean;
   past_due_grace_days: number;
   updated_at: string;
-}
+};
 
-export interface SiteRow {
+export type SiteRow = {
   id: string;
   org_id: string;
   name: string;
@@ -97,9 +97,9 @@ export interface SiteRow {
   paused_at: string | null;
   report_seq: number;
   created_at: string;
-}
+};
 
-export interface ReporterRow {
+export type ReporterRow = {
   id: string;
   org_id: string;
   name: string;
@@ -111,20 +111,20 @@ export interface ReporterRow {
   verified_at: string | null;
   last_invite_error: string | null;
   created_at: string;
-}
+};
 
-export interface SiteReporterRow {
+export type SiteReporterRow = {
   site_id: string;
   reporter_id: string;
   is_primary: boolean;
-}
+};
 
-export interface SiteRecipientRow {
+export type SiteRecipientRow = {
   site_id: string;
   email: string;
-}
+};
 
-export interface CompanyRow {
+export type CompanyRow = {
   id: string;
   org_id: string;
   name: string;
@@ -133,9 +133,9 @@ export interface CompanyRow {
   is_self_perform: boolean;
   status: CompanyStatus;
   created_at: string;
-}
+};
 
-export interface ConversationRow {
+export type ConversationRow = {
   id: string;
   org_id: string | null;
   reporter_id: string | null;
@@ -146,9 +146,9 @@ export interface ConversationRow {
   last_outbound_at: string | null;
   state_changed_at: string;
   updated_at: string;
-}
+};
 
-export interface MessageRow {
+export type MessageRow = {
   id: string;
   conversation_id: string;
   direction: MsgDirection;
@@ -164,9 +164,9 @@ export interface MessageRow {
   status: MsgStatus;
   error: string | null;
   created_at: string;
-}
+};
 
-export interface TranscriptRow {
+export type TranscriptRow = {
   id: string;
   message_id: string;
   language: string | null;
@@ -174,9 +174,9 @@ export interface TranscriptRow {
   segments: Json;
   model: string | null;
   created_at: string;
-}
+};
 
-export interface UnknownSenderRow {
+export type UnknownSenderRow = {
   id: string;
   org_id: string | null;
   phone_e164: string;
@@ -185,9 +185,9 @@ export interface UnknownSenderRow {
   guessed_site_id: string | null;
   status: SenderStatus;
   created_at: string;
-}
+};
 
-export interface SiteDayRow {
+export type SiteDayRow = {
   id: string;
   site_id: string;
   date: string;
@@ -200,9 +200,9 @@ export interface SiteDayRow {
   report_id: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface ReportRow {
+export type ReportRow = {
   id: string;
   org_id: string;
   site_id: string;
@@ -222,9 +222,9 @@ export interface ReportRow {
   kind: string;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface ReportVersionRow {
+export type ReportVersionRow = {
   report_id: string;
   version: number;
   data: Json;
@@ -235,18 +235,18 @@ export interface ReportVersionRow {
   author_message_id: string | null;
   change_note: string | null;
   created_at: string;
-}
+};
 
-export interface ReportSourceRow {
+export type ReportSourceRow = {
   id: string;
   report_id: string;
   message_id: string;
   kind: 'audio' | 'photo' | 'text' | 'reply';
   caption: string | null;
   taken_at: string | null;
-}
+};
 
-export interface ManpowerEntryRow {
+export type ManpowerEntryRow = {
   id: string;
   report_id: string;
   version: number;
@@ -260,9 +260,9 @@ export interface ManpowerEntryRow {
   hours_basis: string | null;
   source: Json | null;
   confidence: number | null;
-}
+};
 
-export interface WorkItemRow {
+export type WorkItemRow = {
   id: string;
   report_id: string;
   version: number;
@@ -272,9 +272,9 @@ export interface WorkItemRow {
   percent: number | null;
   quantity: string | null;
   source: Json | null;
-}
+};
 
-export interface WeatherEventRow {
+export type WeatherEventRow = {
   id: string;
   report_id: string;
   version: number;
@@ -290,9 +290,9 @@ export interface WeatherEventRow {
   photo_count: number;
   observed: Json | null;
   claim_ready: boolean;
-}
+};
 
-export interface QuestionRow {
+export type QuestionRow = {
   id: string;
   report_id: string;
   field: string;
@@ -305,9 +305,9 @@ export interface QuestionRow {
   asked_at: string | null;
   answered_at: string | null;
   created_at: string;
-}
+};
 
-export interface GlossaryTermRow {
+export type GlossaryTermRow = {
   id: string;
   org_id: string | null;
   scope_site_id: string | null;
@@ -321,9 +321,9 @@ export interface GlossaryTermRow {
   times_heard: number;
   first_seen_at: string;
   last_seen_at: string | null;
-}
+};
 
-export interface SubInvoiceRow {
+export type SubInvoiceRow = {
   id: string;
   org_id: string;
   company_id: string;
@@ -337,9 +337,9 @@ export interface SubInvoiceRow {
   queried_at: string | null;
   resolved_at: string | null;
   created_at: string;
-}
+};
 
-export interface EvidencePackRow {
+export type EvidencePackRow = {
   id: string;
   org_id: string;
   site_id: string | null;
@@ -352,9 +352,9 @@ export interface EvidencePackRow {
   created_by: string | null;
   created_at: string;
   ready_at: string | null;
-}
+};
 
-export interface JobRow {
+export type JobRow = {
   id: number;
   type: string;
   payload: Json;
@@ -367,9 +367,9 @@ export interface JobRow {
   dedupe_key: string | null;
   created_at: string;
   finished_at: string | null;
-}
+};
 
-export interface AuditLogRow {
+export type AuditLogRow = {
   id: number;
   org_id: string | null;
   actor_type: string | null;
@@ -379,9 +379,9 @@ export interface AuditLogRow {
   entity_id: string | null;
   diff: Json | null;
   created_at: string;
-}
+};
 
-export interface NotificationRow {
+export type NotificationRow = {
   id: string;
   org_id: string;
   user_id: string | null;
@@ -391,20 +391,33 @@ export interface NotificationRow {
   target_path: string | null;
   read_at: string | null;
   created_at: string;
-}
+};
 
-export interface CurrentManpowerRow extends ManpowerEntryRow {
+export type SchedulerStateRow = {
+  key: string;
+  value: Json;
+  updated_at: string;
+};
+
+export type StripeEventRow = {
+  id: string;
+  type: string;
+  received_at: string;
+  processed_at: string | null;
+};
+
+export type CurrentManpowerRow = ManpowerEntryRow & {
   site_id: string;
   org_id: string;
   date: string;
   report_no: string;
   report_status: ReportStatus;
-}
+};
 
-export interface CurrentWeatherRow extends WeatherEventRow {
+export type CurrentWeatherRow = WeatherEventRow & {
   org_id: string;
   report_no: string;
-}
+};
 
 type Table<Row, OptionalInsert extends keyof Row> = {
   Row: Row;
@@ -413,7 +426,7 @@ type Table<Row, OptionalInsert extends keyof Row> = {
   Relationships: [];
 };
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       orgs: Table<
@@ -698,6 +711,41 @@ export interface Database {
       complete_job: { Args: { p_job_id: number }; Returns: undefined };
       fail_job: { Args: { p_job_id: number; p_error: string }; Returns: undefined };
       mark_notifications_read: { Args: { p_ids: string[] }; Returns: undefined };
+      log_audit: {
+        Args: {
+          p_org: string | null;
+          p_actor_type: string;
+          p_actor_id: string | null;
+          p_action: string;
+          p_entity: string | null;
+          p_entity_id: string | null;
+          p_diff?: Json | null;
+        };
+        Returns: undefined;
+      };
+      notify_org: {
+        Args: {
+          p_org: string;
+          p_kind: string;
+          p_title: string;
+          p_body?: string | null;
+          p_target_path?: string | null;
+          p_user_id?: string | null;
+        };
+        Returns: string;
+      };
+      invoice_gaps: {
+        Args: { p_org: string; p_start: string; p_end: string };
+        Returns: Array<{
+          company_id: string;
+          company_name: string;
+          invoiced: number;
+          reported: number;
+          gap: number;
+          invoice_id: string;
+          invoice_status: string;
+        }>;
+      };
     };
     Enums: {
       member_role: MemberRole;
@@ -720,7 +768,7 @@ export interface Database {
     };
     CompositeTypes: Record<string, never>;
   };
-}
+};
 
 export type Tables<T extends keyof Database['public']['Tables']> =
   Database['public']['Tables'][T]['Row'];

@@ -12,7 +12,7 @@ export const decideNext: JobHandler<'decide_next'> = async (ctx, payload) => {
   const data = await currentData(ctx, report);
   if (!data) throw new PermanentJobError(`report ${report.id} has no draft`);
   if (report.kind !== 'daily') {
-    await fileReport(ctx, report.id, { trigger: report.kind, silent: true });
+    await fileReport(ctx, report.id, { trigger: report.kind === 'weather_day' ? 'weather_day' : 'no_work', silent: true });
     return;
   }
   const site = await ctx.db.siteContext(report.site_id);
