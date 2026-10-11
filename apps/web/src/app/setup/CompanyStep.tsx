@@ -84,7 +84,11 @@ export function CompanyStep({
               <div className="flex items-center gap-4">
                 <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-card border border-rebar bg-concrete">
                   {logoUrl ? (
-                    <img src={logoUrl} alt={c.logo} className="max-h-full max-w-full object-contain" />
+                    <img
+                      src={logoUrl}
+                      alt={c.logo}
+                      className="max-h-full max-w-full object-contain"
+                    />
                   ) : (
                     <ImagePlus className="size-6 text-dust" aria-hidden="true" />
                   )}
@@ -122,7 +126,11 @@ export function CompanyStep({
               </div>
             </Field>
             <Field id="co-tz" label={c.timezone}>
-              <TimezoneSelect id="co-tz" value={draft.timezone} onChange={(tz) => set({ timezone: tz })} />
+              <TimezoneSelect
+                id="co-tz"
+                value={draft.timezone}
+                onChange={(tz) => set({ timezone: tz })}
+              />
             </Field>
           </div>
           <div className="flex justify-end border-t border-rebar pt-5">

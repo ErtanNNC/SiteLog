@@ -86,7 +86,12 @@ export function SiteStep({
     if (manual && (draft.lat.trim() || draft.lng.trim())) {
       const lat = Number(draft.lat);
       const lng = Number(draft.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180)
+      if (
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng) ||
+        Math.abs(lat) > 90 ||
+        Math.abs(lng) > 180
+      )
         return { lat: null, lng: null, error: c.coordsInvalid };
       return { lat, lng };
     }
@@ -113,7 +118,9 @@ export function SiteStep({
     onSubmit({ draft, lat: co.lat, lng: co.lng }, another);
   };
 
-  const previewName = draft.managerName.trim() ? firstName(draft.managerName) : c.preview.placeholderName;
+  const previewName = draft.managerName.trim()
+    ? firstName(draft.managerName)
+    : c.preview.placeholderName;
   const welcome = renderTemplateText('sitelog_welcome', [
     previewName,
     companyName || copy.app.name,
@@ -176,7 +183,10 @@ export function SiteStep({
                 error={errors.address}
                 hint={
                   <span
-                    className={cn('inline-flex items-center gap-1', geo.status === 'found' && 'text-filed')}
+                    className={cn(
+                      'inline-flex items-center gap-1',
+                      geo.status === 'found' && 'text-filed',
+                    )}
                     data-testid="geo-hint"
                   >
                     <MapPin className="size-3.5" aria-hidden="true" />
@@ -197,7 +207,8 @@ export function SiteStep({
                   aria-invalid={!!errors.address}
                 />
               </Field>
-              {geo.status === 'failed' || (!canGeocode && !(draft.lat.trim() && draft.lng.trim())) ? (
+              {geo.status === 'failed' ||
+              (!canGeocode && !(draft.lat.trim() && draft.lng.trim())) ? (
                 <div
                   role="status"
                   className="rounded-card border border-signal-deep/50 bg-signal-tint/40 p-3 text-caption text-asphalt"
@@ -241,7 +252,11 @@ export function SiteStep({
               )}
               <div className="grid gap-5 md:grid-cols-2">
                 <Field id="site-tz" label={c.timezone}>
-                  <TimezoneSelect id="site-tz" value={draft.timezone} onChange={(tz) => set({ timezone: tz })} />
+                  <TimezoneSelect
+                    id="site-tz"
+                    value={draft.timezone}
+                    onChange={(tz) => set({ timezone: tz })}
+                  />
                 </Field>
                 <Field id="site-deadline" label={c.deadline} hint={c.deadlineHint}>
                   <Input
@@ -255,7 +270,10 @@ export function SiteStep({
               </div>
             </section>
 
-            <section className="grid gap-5 border-t border-rebar pt-6" aria-labelledby="manager-section">
+            <section
+              className="grid gap-5 border-t border-rebar pt-6"
+              aria-labelledby="manager-section"
+            >
               <h2 id="manager-section" className="font-h2 text-h2">
                 {c.sectionManager}
               </h2>
@@ -297,7 +315,9 @@ export function SiteStep({
                         }
                         className={cn(
                           'h-10 rounded-chip border px-3 text-[15px] font-medium',
-                          on ? 'border-asphalt bg-asphalt text-chalk' : 'border-rebar bg-chalk text-asphalt hover:bg-concrete',
+                          on
+                            ? 'border-asphalt bg-asphalt text-chalk'
+                            : 'border-rebar bg-chalk text-asphalt hover:bg-concrete',
                         )}
                       >
                         {copy.team.invite.languageNames[l]}
@@ -403,7 +423,15 @@ export function SiteStep({
   );
 }
 
-function ChatBubble({ from, text, buttons }: { from: string; text: string; buttons?: readonly string[] }) {
+function ChatBubble({
+  from,
+  text,
+  buttons,
+}: {
+  from: string;
+  text: string;
+  buttons?: readonly string[];
+}) {
   return (
     <div className="max-w-[320px]">
       <div className="rounded-[14px] rounded-tl-[4px] border border-rebar bg-concrete px-3.5 py-2.5 text-[14px] leading-[20px]">

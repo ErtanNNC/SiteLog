@@ -15,7 +15,10 @@ describe('SettingsPage (demo data)', () => {
   it('renders the reports section from org_settings with Save disabled until dirty, then persists', async () => {
     const store = new DemoStore();
     renderWithProviders(<SettingsPage />, opts(store));
-    expect(await screen.findByRole('heading', { name: 'Reports & reminders' })).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /^Settings$/ });
+    expect(
+      screen.getAllByRole('tab', { name: 'Reports & reminders', selected: true }).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByLabelText('Report deadline')).toHaveValue('17:30');
     const save = screen.getByTestId('save-settings');
     expect(save).toBeDisabled();
@@ -24,8 +27,12 @@ describe('SettingsPage (demo data)', () => {
     expect(within(ladder).getByTestId('stage-missing')).toHaveTextContent('at 19:00');
 
     await userEvent.click(within(ladder).getByRole('switch', { name: 'Reminder 2' }));
-    await userEvent.click(within(screen.getByTestId('working-days')).getByRole('button', { name: 'Sat' }));
-    await userEvent.click(screen.getByRole('radio', { name: 'File automatically after 15 minutes' }));
+    await userEvent.click(
+      within(screen.getByTestId('working-days')).getByRole('button', { name: 'Sat' }),
+    );
+    await userEvent.click(
+      screen.getByRole('radio', { name: 'File automatically after 15 minutes' }),
+    );
     expect(save).toBeEnabled();
     await userEvent.click(save);
     await waitFor(() => expect(save).toBeDisabled());
@@ -45,18 +52,20 @@ describe('SettingsPage (demo data)', () => {
       </>,
       opts(store),
     );
-    await screen.findByRole('heading', { name: 'Reports & reminders' });
+    await screen.findByRole('heading', { name: /^Settings$/ });
     await userEvent.click(screen.getByRole('switch', { name: 'Sign-off required' }));
     await userEvent.click(screen.getByRole('link', { name: 'Elsewhere' }));
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Unsaved changes');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Stay' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(screen.getByRole('heading', { name: 'Reports & reminders' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Settings$/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('link', { name: 'Elsewhere' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Leave' }));
+    await userEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Leave' }),
+    );
     await waitFor(() =>
-      expect(screen.queryByRole('heading', { name: 'Reports & reminders' })).not.toBeInTheDocument(),
+      expect(screen.queryByRole('heading', { name: /^Settings$/ })).not.toBeInTheDocument(),
     );
     expect(store.data.settings.signoff_required).toBe(true);
   });
@@ -64,28 +73,38 @@ describe('SettingsPage (demo data)', () => {
   it('edits recipients per site and applies one list to all sites', async () => {
     const store = new DemoStore();
     renderWithProviders(<SettingsPage />, opts(store, 'recipients'));
-    expect(await screen.findByRole('heading', { name: 'Recipients' })).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /^Settings$/ });
+    expect(
+      screen.getAllByRole('tab', { name: 'Recipients', selected: true }).length,
+    ).toBeGreaterThan(0);
     const cards = screen.getAllByTestId('site-recipients');
     expect(cards).toHaveLength(6);
     const riverside = cards.find((c) => c.dataset.site === 'Riverside Lofts — Block B')!;
     await userEvent.type(within(riverside).getByRole('textbox'), 'owner@riverside.example');
-    await userEvent.click(within(riverside).getByRole('button', { name: /^Add email · Riverside/ }));
+    await userEvent.click(
+      within(riverside).getByRole('button', { name: /^Add email · Riverside/ }),
+    );
     expect(within(riverside).getByText('owner@riverside.example')).toBeInTheDocument();
-    await userEvent.click(within(riverside).getByRole('button', { name: /^Apply to all sites · Riverside/ }));
+    await userEvent.click(
+      within(riverside).getByRole('button', { name: /^Apply to all sites · Riverside/ }),
+    );
     const elm = cards.find((c) => c.dataset.site === 'Elm St. Townhomes')!;
     expect(within(elm).getByText('owner@riverside.example')).toBeInTheDocument();
     await userEvent.click(screen.getByTestId('save-settings'));
     await waitFor(() => expect(screen.getByTestId('save-settings')).toBeDisabled());
     const elmSite = store.data.sites.find((s) => s.project_code === 'ES-0377')!;
-    expect(store.data.recipients.filter((r) => r.site_id === elmSite.id).map((r) => r.email)).toContain(
-      'owner@riverside.example',
-    );
+    expect(
+      store.data.recipients.filter((r) => r.site_id === elmSite.id).map((r) => r.email),
+    ).toContain('owner@riverside.example');
   });
 
   it('shows the PDF preview with the paper size and letterhead lines', async () => {
     const store = new DemoStore();
     renderWithProviders(<SettingsPage />, opts(store, 'pdf'));
-    expect(await screen.findByRole('heading', { name: 'PDF template' })).toBeInTheDocument();
+    await screen.findByRole('heading', { name: /^Settings$/ });
+    expect(
+      screen.getAllByRole('tab', { name: 'PDF template', selected: true }).length,
+    ).toBeGreaterThan(0);
     const preview = screen.getByTestId('pdf-preview');
     expect(preview).toHaveAttribute('data-paper', 'letter');
     expect(preview).toHaveTextContent('2101 W Fulton St, Chicago, IL 60612');

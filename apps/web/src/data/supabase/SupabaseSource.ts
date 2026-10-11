@@ -1116,18 +1116,18 @@ export class SupabaseSource implements DataSource {
   }
   async inviteReporter(input: InviteReporterInput) {
     await this.callFunction('api-invite-reporter', {
-      org_id: this.orgId,
+      orgId: this.orgId,
       name: input.name,
       phone: input.phone,
       role: input.role,
-      site_ids: input.siteIds,
+      siteIds: input.siteIds,
       languages: input.languages,
     });
   }
   async linkUnknownSender(input: LinkUnknownSenderInput) {
     await this.callFunction('api-link-unknown-sender', {
-      unknown_sender_id: input.unknownSenderId,
-      site_id: input.siteId,
+      unknownSenderId: input.unknownSenderId,
+      siteId: input.siteId,
       name: input.name,
       role: input.role ?? 'backup',
     });
@@ -1140,11 +1140,7 @@ export class SupabaseSource implements DataSource {
   }
   async resendInvite(reporterId: string) {
     // api-invite-reporter re-sends `sitelog_welcome` for an existing reporter (one re-send, F3).
-    await this.callFunction('api-invite-reporter', {
-      org_id: this.orgId,
-      reporter_id: reporterId,
-      resend: true,
-    });
+    await this.callFunction('api-invite-reporter', { action: 'resend', reporterId });
   }
   async ignoreUnknownSender(unknownSenderId: string) {
     const { error } = await this.sb
@@ -1157,10 +1153,9 @@ export class SupabaseSource implements DataSource {
     // Supabase invite (magic link) is sent by the api-billing-adjacent admin function in production;
     // the org_members row is created on first sign-in (§F20). Until then we store the pending role.
     await this.callFunction('api-invite-office-user', {
-      org_id: this.orgId,
+      orgId: this.orgId,
       email: input.email,
       role: input.role,
-      name: input.name ?? null,
     });
   }
   async changeMemberRole(userId: string, role: MemberRole) {
@@ -1231,7 +1226,7 @@ export class SupabaseSource implements DataSource {
       .update({ status: 'paused', paused_at: new Date().toISOString() })
       .eq('id', siteId);
     if (error) throw new Error(error.message);
-    await this.callFunction('api-billing', { action: 'sync', org_id: this.orgId }).catch(
+    await this.callFunction('api-billing', { action: 'sync', orgId: this.orgId }).catch(
       () => undefined,
     );
   }
@@ -1241,24 +1236,27 @@ export class SupabaseSource implements DataSource {
       .update({ status: 'active', paused_at: null })
       .eq('id', siteId);
     if (error) throw new Error(error.message);
-    await this.callFunction('api-billing', { action: 'sync', org_id: this.orgId }).catch(
+    await this.callFunction('api-billing', { action: 'sync', orgId: this.orgId }).catch(
       () => undefined,
     );
   }
   async requestEvidencePack(input: RequestEvidencePackInput) {
-    const res = await this.callFunction<{ pack_id?: string; id?: string }>('api-evidence-pack', {
-      org_id: this.orgId,
-      site_id: input.siteId,
-      period_start: input.periodStart,
-      period_end: input.periodEnd,
-      sections: input.sections,
-    });
-    return { packId: res.pack_id ?? res.id ?? '' };
+    const res = await this.callFunction<{ pack?: { id: string }; packId?: string; id?: string }>(
+      'api-evidence-pack',
+      {
+        orgId: this.orgId,
+        siteId: input.siteId,
+        periodStart: input.periodStart,
+        periodEnd: input.periodEnd,
+        sections: input.sections,
+      },
+    );
+    return { packId: res.pack?.id ?? res.packId ?? res.id ?? '' };
   }
   async payrollCsvUrl(week: string, siteId: string | null = null) {
     const csv = await this.callFunction<string>('api-export-payroll', undefined, {
       method: 'GET',
-      query: { week, org_id: this.orgId, ...(siteId ? { site_id: siteId } : {}) },
+      query: { week, org: this.orgId, site: siteId ?? 'all' },
     });
     return URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   }

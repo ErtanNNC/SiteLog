@@ -3,7 +3,13 @@ import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/Select';
 import { copy } from '@/copy/en';
 import { cn } from '@/lib/utils';
 import { SETUP_STEPS, type SetupStep } from './state';
@@ -52,7 +58,9 @@ export function Stepper({
               <span className={cn('eyebrow block', isCurrent ? 'text-dust-light' : 'text-dust')}>
                 {copy.setup.stepOf(i + 1, SETUP_STEPS.length)}
               </span>
-              <span className="block truncate text-[15px] font-semibold">{copy.setup.steps[step]}</span>
+              <span className="block truncate text-[15px] font-semibold">
+                {copy.setup.steps[step]}
+              </span>
               <span className="sr-only">{copy.setup.stepState[state]}</span>
             </span>
           </li>
@@ -83,7 +91,9 @@ export function Field({
     <div className={cn('grid gap-1.5', className)}>
       <Label htmlFor={id}>
         {label}
-        {optional ? <span className="ml-1 font-normal text-dust">· {copy.common.optional}</span> : null}
+        {optional ? (
+          <span className="ml-1 font-normal text-dust">· {copy.common.optional}</span>
+        ) : null}
       </Label>
       {children}
       {hint ? <p className="text-caption text-dust">{hint}</p> : null}

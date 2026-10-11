@@ -11,7 +11,13 @@ import {
 } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/Select';
 import { copy } from '@/copy/en';
 import { useAddInvoice } from '@/data/hooks';
 import type { HoursMatrix } from '@/data/types';
@@ -55,9 +61,7 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
   };
 
   const parsed = hours.map((h) => (h.trim() === '' ? 0 : Number(h)));
-  const total = parsed.every((n) => Number.isFinite(n))
-    ? parsed.reduce((a, b) => a + b, 0)
-    : NaN;
+  const total = parsed.every((n) => Number.isFinite(n)) ? parsed.reduce((a, b) => a + b, 0) : NaN;
 
   const submit = () => {
     const next: Record<string, string> = {};
@@ -197,7 +201,10 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
             </div>
             <div className="flex items-center justify-between text-caption">
               <span className="text-dust">{c.total}</span>
-              <span className="font-mono text-data font-semibold tabular" data-testid="invoice-total">
+              <span
+                className="font-mono text-data font-semibold tabular"
+                data-testid="invoice-total"
+              >
                 {Number.isFinite(total) ? `${formatHoursNum(total)} ${copy.common.hoursUnit}` : '—'}
               </span>
             </div>

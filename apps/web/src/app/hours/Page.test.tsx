@@ -45,7 +45,9 @@ describe('HoursPage (demo data, week 2026-W41)', () => {
     const store = new DemoStore();
     renderWithProviders(<HoursPage />, { route: '/hours', store });
     const table = await screen.findByRole('table', { name: 'Crew hours' });
-    expect(screen.getByText('Select a row with a gap to compare it with the invoice.')).toBeVisible();
+    expect(
+      screen.getByText('Select a row with a gap to compare it with the invoice.'),
+    ).toBeVisible();
     await userEvent.click(
       within(table).getByRole('button', { name: 'Compare BrightLine Electric with its invoice' }),
     );

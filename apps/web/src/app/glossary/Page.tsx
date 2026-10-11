@@ -9,7 +9,13 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/Select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { copy } from '@/copy/en';
 import { useGlossary, useReviewGlossaryTerm } from '@/data/hooks';
@@ -20,14 +26,20 @@ import { AddTermDialog } from './AddTermDialog';
 type Tab = 'all' | 'companies' | 'spanish';
 
 const SOURCE_CHIP: Record<TermStatus, { box: string; label: string }> = {
-  confirmed: { box: 'border-chip-filed-bg bg-chip-filed-bg text-chip-filed-fg', label: copy.chips.confirmed },
+  confirmed: {
+    box: 'border-chip-filed-bg bg-chip-filed-bg text-chip-filed-fg',
+    label: copy.chips.confirmed,
+  },
   auto_learned: { box: 'border-rebar bg-concrete text-asphalt', label: copy.chips.autoLearned },
   built_in: { box: 'border-rebar bg-chalk text-dust', label: copy.chips.builtIn },
   needs_review: {
     box: 'border-chip-review-bg bg-chip-review-bg text-chip-review-fg',
     label: copy.chips.needs_review,
   },
-  rejected: { box: 'border-chip-miss-bg bg-chip-miss-bg text-chip-miss-fg', label: copy.chips.rejected },
+  rejected: {
+    box: 'border-chip-miss-bg bg-chip-miss-bg text-chip-miss-fg',
+    label: copy.chips.rejected,
+  },
 };
 
 function SourceChip({ status }: { status: TermStatus }) {
@@ -130,7 +142,9 @@ export default function GlossaryPage() {
       />
 
       <section aria-label={copy.glossary.reviewTitle(data.reviewQueue.length)} className="mb-8">
-        <h2 className="font-h2 mb-3 text-h2">{copy.glossary.reviewTitle(data.reviewQueue.length)}</h2>
+        <h2 className="font-h2 mb-3 text-h2">
+          {copy.glossary.reviewTitle(data.reviewQueue.length)}
+        </h2>
         {data.reviewQueue.length === 0 ? (
           <EmptyState
             icon={BookOpen}
@@ -208,7 +222,10 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
     <Card data-testid="review-card" data-kind={term.kind} className="flex h-full flex-col">
       <CardContent className="flex flex-1 flex-col p-5">
         <div className="eyebrow text-dust">
-          {copy.glossary.heard(term.timesHeard, term.scopeSiteName ? term.scopeSiteName.split(' ')[0]! : null)}
+          {copy.glossary.heard(
+            term.timesHeard,
+            term.scopeSiteName ? term.scopeSiteName.split(' ')[0]! : null,
+          )}
           {term.language !== 'en' ? ` · ${term.language}` : ''}
         </div>
         <p className="font-h2 mt-2 text-[22px] leading-7">“{term.heard}”</p>
@@ -270,7 +287,13 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
               </SelectContent>
             </Select>
             <div className="flex gap-2">
-              <Button type="submit" variant="secondary" size="dense" loading={busy} disabled={!companyId}>
+              <Button
+                type="submit"
+                variant="secondary"
+                size="dense"
+                loading={busy}
+                disabled={!companyId}
+              >
                 {copy.glossary.mapConfirm}
               </Button>
               <Button variant="ghost" size="dense" onClick={() => setMode('idle')}>
@@ -282,7 +305,12 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
           <div className="mt-auto flex flex-wrap gap-2 pt-4">
             {isCompany ? (
               <>
-                <Button variant="secondary" size="dense" loading={busy} onClick={() => done('add_company')}>
+                <Button
+                  variant="secondary"
+                  size="dense"
+                  loading={busy}
+                  onClick={() => done('add_company')}
+                >
                   {copy.glossary.addAsSub}
                 </Button>
                 <Button variant="ghost" size="dense" onClick={() => setMode('map')}>
@@ -291,7 +319,12 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
               </>
             ) : (
               <>
-                <Button variant="secondary" size="dense" loading={busy} onClick={() => done('approve')}>
+                <Button
+                  variant="secondary"
+                  size="dense"
+                  loading={busy}
+                  onClick={() => done('approve')}
+                >
                   <Check aria-hidden="true" />
                   {copy.glossary.approve}
                 </Button>
@@ -300,7 +333,12 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
                 </Button>
               </>
             )}
-            <Button variant="destructive" size="dense" loading={busy} onClick={() => done('reject')}>
+            <Button
+              variant="destructive"
+              size="dense"
+              loading={busy}
+              onClick={() => done('reject')}
+            >
               {copy.glossary.reject}
             </Button>
           </div>

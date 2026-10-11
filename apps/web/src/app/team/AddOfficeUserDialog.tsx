@@ -88,7 +88,11 @@ export function AddOfficeUserDialog({
             <RadioGroup value={role} onValueChange={(v) => setRole(v as MemberRole)}>
               {MEMBER_ROLES.map((r) => (
                 <label key={r} className="flex min-h-10 items-start gap-3 text-[15px]">
-                  <RadioGroupItem value={r} className="mt-0.5" aria-label={copy.team.officeRoles[r]} />
+                  <RadioGroupItem
+                    value={r}
+                    className="mt-0.5"
+                    aria-label={copy.team.officeRoles[r]}
+                  />
                   <span>
                     <span className="font-medium">{copy.team.officeRoles[r]}</span>
                     <span className="block text-caption text-dust">{c.roleHelp[r]}</span>

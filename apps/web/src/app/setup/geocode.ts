@@ -41,7 +41,12 @@ export async function geocodeAddress(
     };
     const hit = json.results?.[0];
     if (hit) {
-      return { lat: hit.latitude, lng: hit.longitude, name: hit.name, timezone: hit.timezone ?? null };
+      return {
+        lat: hit.latitude,
+        lng: hit.longitude,
+        name: hit.name,
+        timezone: hit.timezone ?? null,
+      };
     }
   }
   return null;

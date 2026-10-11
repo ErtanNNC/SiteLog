@@ -65,7 +65,8 @@ export function PhoneInput({
   const id = useId();
   const [touched, setTouched] = useState(false);
   const country = PHONE_COUNTRIES.find((c) => c.code === value.country) ?? PHONE_COUNTRIES[0];
-  const showError = error ?? (touched && value.raw.trim() && !value.e164 ? copy.team.invite.phoneInvalid : null);
+  const showError =
+    error ?? (touched && value.raw.trim() && !value.e164 ? copy.team.invite.phoneInvalid : null);
   return (
     <div className={cn('grid gap-1.5', className)}>
       <Label htmlFor={`${id}-number`}>
@@ -78,7 +79,9 @@ export function PhoneInput({
           onValueChange={(c) => onChange(phoneValue(c as PhoneCountryCode, value.raw))}
         >
           <SelectTrigger aria-label={copy.team.invite.country} className="font-mono">
-            <SelectValue />
+            <SelectValue>
+              {country.code} +{country.dial}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {PHONE_COUNTRIES.map((c) => (

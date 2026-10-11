@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { ReporterRole } from '@sitelog/shared/enums.ts';
 import { formatPhone } from '@sitelog/shared/format.ts';
 import { Button } from '@/components/ui/Button';
@@ -13,7 +13,13 @@ import {
 } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/Select';
 import { copy } from '@/copy/en';
 import { useLinkUnknownSender } from '@/data/hooks';
 import type { SiteOption, UnknownSenderItem } from '@/data/types';
@@ -36,19 +42,11 @@ export function guessName(snippet: string | null): string {
 export function LinkSenderDialog({ sender, onOpenChange, sites }: Props) {
   const c = copy.team.link;
   const link = useLinkUnknownSender();
-  const [name, setName] = useState('');
+  // The parent keys this dialog by sender id, so state initialises per sender.
+  const [name, setName] = useState(() => guessName(sender?.snippet ?? null));
   const [role, setRole] = useState<ReporterRole>('backup');
-  const [siteId, setSiteId] = useState('');
+  const [siteId, setSiteId] = useState(sender?.guessedSiteId ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (sender) {
-      setName(guessName(sender.snippet));
-      setRole('backup');
-      setSiteId(sender.guessedSiteId ?? '');
-      setErrors({});
-    }
-  }, [sender]);
 
   const submit = () => {
     if (!sender) return;

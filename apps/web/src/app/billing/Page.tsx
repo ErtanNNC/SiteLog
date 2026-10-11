@@ -23,7 +23,10 @@ type InvoiceRow = BillingData['invoices'][number];
 const INVOICE_CHIP: Record<InvoiceRow['status'], { box: string; label: string }> = {
   paid: { box: 'border-chip-filed-bg bg-chip-filed-bg text-chip-filed-fg', label: copy.chips.paid },
   open: { box: 'border-chip-await-bg bg-chip-await-bg text-chip-await-fg', label: copy.chips.open },
-  past_due: { box: 'border-chip-miss-bg bg-chip-miss-bg text-chip-miss-fg', label: copy.chips.pastDue },
+  past_due: {
+    box: 'border-chip-miss-bg bg-chip-miss-bg text-chip-miss-fg',
+    label: copy.chips.pastDue,
+  },
 };
 
 /** P13 · Billing — plan card, sites on the plan (pause / resume), invoices (§11.4, F19). */
@@ -32,7 +35,9 @@ export default function BillingPage() {
   const billing = useBilling();
   const pause = usePauseSite();
   const resume = useResumeSite();
-  const [confirm, setConfirm] = useState<{ site: SiteRow; action: 'pause' | 'resume' } | null>(null);
+  const [confirm, setConfirm] = useState<{ site: SiteRow; action: 'pause' | 'resume' } | null>(
+    null,
+  );
 
   const siteColumns: Column<SiteRow>[] = [
     {
@@ -41,7 +46,9 @@ export default function BillingPage() {
       cell: (s) => (
         <div className="min-w-[180px]">
           <div className="font-semibold">{s.name}</div>
-          <div className="font-mono text-[12px] uppercase tracking-[0.08em] text-dust">{s.projectCode}</div>
+          <div className="font-mono text-[12px] uppercase tracking-[0.08em] text-dust">
+            {s.projectCode}
+          </div>
         </div>
       ),
     },
@@ -146,7 +153,12 @@ export default function BillingPage() {
       cell: (i) =>
         i.url && i.url !== '#' ? (
           <Button variant="ghost" size="dense" asChild>
-            <a href={i.url} target="_blank" rel="noopener" aria-label={copy.billing.invoiceDownload(formatDateLong(i.date))}>
+            <a
+              href={i.url}
+              target="_blank"
+              rel="noopener"
+              aria-label={copy.billing.invoiceDownload(formatDateLong(i.date))}
+            >
               <Download aria-hidden="true" />
               {copy.billing.download}
             </a>
@@ -182,22 +194,33 @@ export default function BillingPage() {
       <PageHeader title={copy.billing.title} subtitle={copy.billing.subtitle} />
 
       {plan.status === 'past_due' ? (
-        <div role="alert" className="mb-6 rounded-card border border-missing/60 bg-chip-miss-bg/40 p-4 text-[15px]">
+        <div
+          role="alert"
+          className="mb-6 rounded-card border border-missing/60 bg-chip-miss-bg/40 p-4 text-[15px]"
+        >
           {copy.billing.statusBanner.past_due}
         </div>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]" aria-label={copy.billing.plan}>
+      <section
+        className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]"
+        aria-label={copy.billing.plan}
+      >
         <Card dark data-testid="plan-card">
           <CardContent className="p-6">
             <div className="eyebrow text-dust-light">{copy.billing.plan}</div>
             <div className="mt-3 flex flex-wrap items-baseline gap-2">
-              <span className="font-display text-[44px] leading-[48px] tabular" data-testid="plan-total">
+              <span
+                className="font-display text-[44px] leading-[48px] tabular"
+                data-testid="plan-total"
+              >
                 {formatMoneyCents(plan.monthlyCents)}
               </span>
               <span className="font-mono text-data text-dust-light">{copy.billing.perMonth}</span>
             </div>
-            <p className="mt-1 text-[15px] text-dust-light">{copy.billing.sitesTimes(plan.activeSites)}</p>
+            <p className="mt-1 text-[15px] text-dust-light">
+              {copy.billing.sitesTimes(plan.activeSites)}
+            </p>
             <dl className="mt-6 grid gap-4 border-t border-iron pt-4 sm:grid-cols-2">
               <div>
                 <dt className="eyebrow text-dust-light">{copy.billing.nextInvoice}</dt>
@@ -231,7 +254,10 @@ export default function BillingPage() {
             <ul className="space-y-2 text-[15px] text-dust">
               {copy.billing.whatCountsPoints.map((p) => (
                 <li key={p} className="flex gap-2">
-                  <span aria-hidden="true" className="mt-2.5 size-1.5 shrink-0 rounded-full bg-iron" />
+                  <span
+                    aria-hidden="true"
+                    className="mt-2.5 size-1.5 shrink-0 rounded-full bg-iron"
+                  />
                   {p}
                 </li>
               ))}
@@ -256,7 +282,12 @@ export default function BillingPage() {
           </span>
         </CardHeader>
         <CardContent className="px-0 pb-2 pt-3">
-          <DataTable columns={siteColumns} rows={sites} rowKey={(s) => s.id} aria-label={copy.billing.sitesOnPlan} />
+          <DataTable
+            columns={siteColumns}
+            rows={sites}
+            rowKey={(s) => s.id}
+            aria-label={copy.billing.sitesOnPlan}
+          />
         </CardContent>
       </Card>
 
@@ -285,8 +316,16 @@ export default function BillingPage() {
               : copy.billing.resumeDialog.title(confirm.site.name)
             : ''
         }
-        description={confirm?.action === 'pause' ? copy.billing.pauseDialog.body : copy.billing.resumeDialog.body}
-        confirmLabel={confirm?.action === 'pause' ? copy.billing.pauseDialog.confirm : copy.billing.resumeDialog.confirm}
+        description={
+          confirm?.action === 'pause'
+            ? copy.billing.pauseDialog.body
+            : copy.billing.resumeDialog.body
+        }
+        confirmLabel={
+          confirm?.action === 'pause'
+            ? copy.billing.pauseDialog.confirm
+            : copy.billing.resumeDialog.confirm
+        }
         destructive={confirm?.action === 'pause'}
         loading={pause.isPending || resume.isPending}
         onConfirm={() => {

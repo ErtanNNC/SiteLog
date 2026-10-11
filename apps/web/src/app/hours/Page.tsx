@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Download, Plus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useAuth } from '@/auth/AuthProvider';
 import { TopBarControls } from '@/components/shell/TopBar';
@@ -9,7 +9,13 @@ import { PageSkeleton } from '@/components/sitelog/Skeletons';
 import { EmptyState, ErrorState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/Select';
 import {
   Table,
   TableBody,
@@ -23,13 +29,7 @@ import { copy } from '@/copy/en';
 import { useDataSource } from '@/data/DataProvider';
 import { useHours, usePayrollCsv } from '@/data/hooks';
 import type { HoursRow } from '@/data/types';
-import {
-  addWeeks,
-  formatDateInTz,
-  formatHoursNum,
-  formatWeekLabel,
-  isoWeekOf,
-} from '@/lib/format';
+import { addWeeks, formatDateInTz, formatHoursNum, formatWeekLabel, isoWeekOf } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { AddInvoiceDialog } from './AddInvoiceDialog';
 import { InvoiceCheckAside } from './InvoiceCheckAside';
@@ -49,9 +49,7 @@ export default function HoursPage() {
   const tz = currentOrg?.timezone ?? 'UTC';
   const [params, setParams] = useSearchParams();
   const defaultWeek = useMemo(() => isoWeekOf(formatDateInTz(source.now(), tz)), [source, tz]);
-  const week = /^\d{4}-W\d{2}$/.test(params.get('week') ?? '')
-    ? params.get('week')!
-    : defaultWeek;
+  const week = /^\d{4}-W\d{2}$/.test(params.get('week') ?? '') ? params.get('week')! : defaultWeek;
   const siteParam = params.get('site');
   const siteId = siteParam && siteParam !== ALL ? siteParam : null;
 
@@ -70,13 +68,7 @@ export default function HoursPage() {
   };
 
   const data = hours.data;
-  // The selected row lives on the current week; drop the selection when it disappears.
-  useEffect(() => {
-    if (selectedKey && data && !data.rows.some((r) => r.key === selectedKey)) {
-      setSelectedKey(null);
-    }
-  }, [data, selectedKey]);
-
+  // The selection is keyed by company; a week without that row simply shows the hint.
   const selectedRow = data?.rows.find((r) => r.key === selectedKey) ?? null;
   const selectedInvoice =
     selectedRow?.invoiceId && data

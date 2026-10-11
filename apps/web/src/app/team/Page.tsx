@@ -132,7 +132,7 @@ export default function TeamPage() {
               <span
                 key={s.id}
                 className={cn(
-                  'inline-flex h-6 items-center rounded-chip border px-1.5 text-[12px] font-medium',
+                  'inline-flex h-6 items-center whitespace-nowrap rounded-chip border px-1.5 text-[12px] font-medium',
                   s.isPrimary ? 'border-asphalt text-asphalt' : 'border-rebar text-dust',
                 )}
                 title={s.isPrimary ? `${s.name} · ${copy.team.primary}` : s.name}
@@ -241,17 +241,25 @@ export default function TeamPage() {
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="flex min-w-0 items-start gap-3">
-                  <PhoneOff className="mt-0.5 size-5 shrink-0 text-signal-deep" aria-hidden="true" />
+                  <PhoneOff
+                    className="mt-0.5 size-5 shrink-0 text-signal-deep"
+                    aria-hidden="true"
+                  />
                   <div className="min-w-0">
                     <p className="font-semibold">{copy.team.unknown.title}</p>
                     <p className="font-mono text-[13px] text-asphalt">
                       {copy.team.unknown.body(formatPhone(u.phone), formatTimeInTz(u.at, tz))}
                       {u.guessedSiteName ? (
-                        <span className="text-dust"> · {copy.team.unknown.guessed(u.guessedSiteName)}</span>
+                        <span className="text-dust">
+                          {' '}
+                          · {copy.team.unknown.guessed(u.guessedSiteName)}
+                        </span>
                       ) : null}
                     </p>
                     {u.snippet ? (
-                      <p className="mt-1 text-[15px] text-dust">{copy.team.unknown.snippet(u.snippet)}</p>
+                      <p className="mt-1 text-[15px] text-dust">
+                        {copy.team.unknown.snippet(u.snippet)}
+                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -326,7 +334,9 @@ export default function TeamPage() {
                             {u.name}
                             {isSelf ? <span className="text-dust"> · {copy.team.you}</span> : null}
                           </div>
-                          <div className="truncate text-caption text-dust">{u.email ?? u.title ?? ''}</div>
+                          <div className="truncate text-caption text-dust">
+                            {u.email ?? u.title ?? ''}
+                          </div>
                         </div>
                         <span
                           className={cn(
@@ -389,14 +399,21 @@ export default function TeamPage() {
             <CardHeader>
               <CardTitle>{copy.team.howMatching}</CardTitle>
             </CardHeader>
-            <CardContent className="pt-2 text-[15px] text-dust">{copy.team.howMatchingBody}</CardContent>
+            <CardContent className="pt-2 text-[15px] text-dust">
+              {copy.team.howMatchingBody}
+            </CardContent>
           </Card>
         </aside>
       </div>
 
       <InviteReporterDialog open={inviteOpen} onOpenChange={setInviteOpen} sites={data.sites} />
       <AddOfficeUserDialog open={addUserOpen} onOpenChange={setAddUserOpen} />
-      <LinkSenderDialog sender={linking} onOpenChange={(o) => !o && setLinking(null)} sites={data.sites} />
+      <LinkSenderDialog
+        key={linking?.id ?? 'none'}
+        sender={linking}
+        onOpenChange={(o) => !o && setLinking(null)}
+        sites={data.sites}
+      />
       <ConfirmDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}

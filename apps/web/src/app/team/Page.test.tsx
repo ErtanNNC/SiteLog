@@ -33,7 +33,9 @@ describe('TeamPage (demo data)', () => {
     await userEvent.click(within(alert).getByRole('button', { name: 'Link to Elm St. Townhomes' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Luis');
-    expect(within(dialog).getByRole('combobox', { name: 'Site' })).toHaveTextContent('Elm St. Townhomes');
+    expect(within(dialog).getByRole('combobox', { name: 'Site' })).toHaveTextContent(
+      'Elm St. Townhomes',
+    );
     await userEvent.click(within(dialog).getByRole('button', { name: 'Link number' }));
     await waitFor(() => expect(screen.queryByTestId('unknown-sender')).not.toBeInTheDocument());
     const luis = store.data.reporters.find((r) => r.phone_e164 === '+15550194410')!;
@@ -80,10 +82,15 @@ describe('TeamPage (demo data)', () => {
     await userEvent.click(within(dialog).getByRole('radio', { name: 'Accounts' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send invite' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(store.data.members.some((m) => m.display_name === 'dana@kestrelbuild.example')).toBe(true);
+    expect(store.data.members.some((m) => m.display_name === 'dana@kestrelbuild.example')).toBe(
+      true,
+    );
     const office = screen.getByTestId('office-users');
     await waitFor(() => expect(within(office).getAllByRole('listitem')).toHaveLength(5));
     await userEvent.click(within(office).getByRole('button', { name: 'Menu for Lena Ortiz' }));
-    expect(await screen.findByRole('menuitem', { name: 'Remove' })).toHaveAttribute('aria-disabled', 'true');
+    expect(await screen.findByRole('menuitem', { name: 'Remove' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });

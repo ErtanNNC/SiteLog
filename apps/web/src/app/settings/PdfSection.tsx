@@ -4,7 +4,13 @@ import { Button } from '@/components/ui/Button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/Select';
 import { copy } from '@/copy/en';
 import { cn } from '@/lib/utils';
 import { SettingsCard, SwitchRow } from './fields';
@@ -31,7 +37,11 @@ export function PdfSection({ draft, update, orgName, logoUrl, onLogoChange }: Pd
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex size-20 items-center justify-center overflow-hidden rounded-card border border-rebar bg-concrete">
               {logoUrl ? (
-                <img src={logoUrl} alt={copy.settings.pdf.logo} className="max-h-full max-w-full object-contain" />
+                <img
+                  src={logoUrl}
+                  alt={copy.settings.pdf.logo}
+                  className="max-h-full max-w-full object-contain"
+                />
               ) : (
                 <ImagePlus className="size-6 text-dust" aria-hidden="true" />
               )}

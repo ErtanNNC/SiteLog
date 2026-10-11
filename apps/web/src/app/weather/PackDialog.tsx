@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { formatHours } from '@sitelog/shared/format.ts';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -13,7 +13,13 @@ import {
 } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/Select';
 import { copy } from '@/copy/en';
 import { useRequestEvidencePack } from '@/data/hooks';
 import type { DelayEntry, SiteOption } from '@/data/types';
@@ -31,7 +37,7 @@ interface Props {
   entries: DelayEntry[];
 }
 
-/** "Build EOT evidence pack": site, period, included sections → requestEvidencePack (F16). */
+/** "Build EOT evidence pack": site, period, included sections → requestEvidencePack (F16). The parent keys it per open. */
 export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, entries }: Props) {
   const c = copy.weather.pack;
   const d = copy.weather.packDialog;
@@ -42,17 +48,6 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
   const [to, setTo] = useState(range.end);
   const [sections, setSections] = useState<string[]>([...SECTIONS]);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setSiteId(defaultSiteId ?? ALL);
-      setFrom(range.start);
-      setTo(range.end);
-      setSections([...SECTIONS]);
-      setError(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultSiteId, month]);
 
   const inScope = entries.filter(
     (e) => (siteId === ALL || e.siteId === siteId) && e.date >= from && e.date <= to,

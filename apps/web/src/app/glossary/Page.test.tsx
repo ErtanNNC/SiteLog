@@ -14,8 +14,12 @@ describe('GlossaryPage (demo data)', () => {
     expect(within(queue).getAllByTestId('review-card')).toHaveLength(3);
     expect(queue).toHaveTextContent('Heard 4× · Oakmont');
     expect(queue).toHaveTextContent('“mud”');
-    const company = within(queue).getByText('“the Ridgeway crew”').closest<HTMLElement>('[data-testid="review-card"]')!;
-    expect(within(company).getByRole('button', { name: 'Add as subcontractor' })).toBeInTheDocument();
+    const company = within(queue)
+      .getByText('“the Ridgeway crew”')
+      .closest<HTMLElement>('[data-testid="review-card"]')!;
+    expect(
+      within(company).getByRole('button', { name: 'Add as subcontractor' }),
+    ).toBeInTheDocument();
     expect(within(company).getByRole('button', { name: 'Map to…' })).toBeInTheDocument();
 
     const table = screen.getByRole('table', { name: 'All terms' });
@@ -39,12 +43,16 @@ describe('GlossaryPage (demo data)', () => {
     const store = new DemoStore();
     renderWithProviders(<GlossaryPage />, { route: '/glossary', store });
     const queue = await screen.findByTestId('review-queue');
-    const mud = within(queue).getByText('“mud”').closest<HTMLElement>('[data-testid="review-card"]')!;
+    const mud = within(queue)
+      .getByText('“mud”')
+      .closest<HTMLElement>('[data-testid="review-card"]')!;
     await userEvent.click(within(mud).getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(within(queue).queryByText('“mud”')).not.toBeInTheDocument());
     expect(store.data.glossary.find((t) => t.heard === 'mud')!.status).toBe('confirmed');
 
-    const colado = within(queue).getByText('“colado”').closest<HTMLElement>('[data-testid="review-card"]')!;
+    const colado = within(queue)
+      .getByText('“colado”')
+      .closest<HTMLElement>('[data-testid="review-card"]')!;
     await userEvent.click(within(colado).getByRole('button', { name: 'Change' }));
     const input = within(colado).getByLabelText('Official term');
     await userEvent.clear(input);
@@ -54,10 +62,16 @@ describe('GlossaryPage (demo data)', () => {
     const term = store.data.glossary.find((t) => t.heard === 'colado')!;
     expect(term).toMatchObject({ status: 'confirmed', official: 'Concrete placement' });
 
-    const ridge = within(queue).getByText('“the Ridgeway crew”').closest<HTMLElement>('[data-testid="review-card"]')!;
+    const ridge = within(queue)
+      .getByText('“the Ridgeway crew”')
+      .closest<HTMLElement>('[data-testid="review-card"]')!;
     await userEvent.click(within(ridge).getByRole('button', { name: 'Reject' }));
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'New this week · review 0' })).toBeInTheDocument());
-    expect(store.data.glossary.find((t) => t.heard === 'the Ridgeway crew')!.status).toBe('rejected');
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'New this week · review 0' })).toBeInTheDocument(),
+    );
+    expect(store.data.glossary.find((t) => t.heard === 'the Ridgeway crew')!.status).toBe(
+      'rejected',
+    );
     expect(screen.getByText('Nothing to review.')).toBeInTheDocument();
   });
 
@@ -65,9 +79,13 @@ describe('GlossaryPage (demo data)', () => {
     const store = new DemoStore();
     renderWithProviders(<GlossaryPage />, { route: '/glossary', store });
     const queue = await screen.findByTestId('review-queue');
-    const ridge = within(queue).getByText('“the Ridgeway crew”').closest<HTMLElement>('[data-testid="review-card"]')!;
+    const ridge = within(queue)
+      .getByText('“the Ridgeway crew”')
+      .closest<HTMLElement>('[data-testid="review-card"]')!;
     await userEvent.click(within(ridge).getByRole('button', { name: 'Add as subcontractor' }));
-    await waitFor(() => expect(within(queue).queryByText('“the Ridgeway crew”')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(queue).queryByText('“the Ridgeway crew”')).not.toBeInTheDocument(),
+    );
     expect(store.data.companies.find((c) => c.name === 'Ridgeway')!.status).toBe('confirmed');
 
     await userEvent.click(screen.getByRole('button', { name: 'Add term' }));

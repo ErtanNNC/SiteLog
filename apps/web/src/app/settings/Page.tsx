@@ -1,5 +1,5 @@
 import { Save } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthProvider';
@@ -38,9 +38,10 @@ export default function SettingsPage() {
   const saveRecipients = useSaveSiteRecipients();
 
   // Baseline (last loaded / saved) and the editable draft.
-  const [baseline, setBaseline] = useState<{ settings: OrgSettings; recipients: RecipientsDraft } | null>(
-    null,
-  );
+  const [baseline, setBaseline] = useState<{
+    settings: OrgSettings;
+    recipients: RecipientsDraft;
+  } | null>(null);
   const [draft, setDraft] = useState<OrgSettings | null>(null);
   const [recipients, setRecipients] = useState<RecipientsDraft>([]);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -49,13 +50,13 @@ export default function SettingsPage() {
     storage.get<string[]>(columnsKey, [...PAYROLL_COLUMNS]),
   );
 
-  useEffect(() => {
-    if (!settings.data || baseline) return;
+  // Seed the draft from the first load (adjusting state during render avoids an effect round-trip).
+  if (settings.data && !baseline) {
     const base = { settings: settings.data.settings, recipients: settings.data.siteRecipients };
     setBaseline(base);
     setDraft(structuredClone(base.settings));
     setRecipients(structuredClone(base.recipients));
-  }, [settings.data, baseline]);
+  }
 
   const update = useCallback(
     (patch: Partial<OrgSettings>) => setDraft((d) => (d ? { ...d, ...patch } : d)),
@@ -161,8 +162,8 @@ export default function SettingsPage() {
       {controls}
       <PageHeader
         eyebrow={settings.data.org.name}
-        title={copy.settings.tabs[section]}
-        subtitle={copy.settings.title}
+        title={copy.settings.title}
+        subtitle={copy.settings.tabs[section]}
       />
       <div className="mb-5 lg:hidden">
         <SectionTabs current={section} />

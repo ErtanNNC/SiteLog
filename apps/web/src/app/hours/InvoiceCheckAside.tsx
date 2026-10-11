@@ -3,7 +3,15 @@ import { Link } from 'react-router';
 import { formatAudioTimestamp } from '@sitelog/shared/format.ts';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/Card';
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/Table';
 import { copy } from '@/copy/en';
 import { useSetInvoiceStatus } from '@/data/hooks';
 import type { HoursRow, InvoiceDetail } from '@/data/types';
@@ -30,7 +38,12 @@ export function buildQueryMailto(invoice: InvoiceDetail, origin: string): string
     m.intro(invoice.companyName, invoice.invoiceNo, period),
     '',
     ...invoice.days.map((d) =>
-      m.row(`${weekdayName(d.date)} ${formatMonthDay(d.date)}`, h(d.invoiced), h(d.reported), signed(d.gap)),
+      m.row(
+        `${weekdayName(d.date)} ${formatMonthDay(d.date)}`,
+        h(d.invoiced),
+        h(d.reported),
+        signed(d.gap),
+      ),
     ),
     m.total(h(invoice.totals.invoiced), h(invoice.totals.reported), signed(invoice.totals.gap)),
   ];
@@ -113,7 +126,10 @@ export function InvoiceCheckAside({
                   </TableCell>
                   <TableCell
                     numeric
-                    className={cn('py-2', Math.abs(d.gap) >= 0.005 && 'font-semibold text-signal-deep')}
+                    className={cn(
+                      'py-2',
+                      Math.abs(d.gap) >= 0.005 && 'font-semibold text-signal-deep',
+                    )}
                   >
                     {signed(d.gap)}
                   </TableCell>
@@ -151,7 +167,10 @@ export function InvoiceCheckAside({
               data-testid="invoice-evidence"
             >
               {invoice.evidence.map((e) => (
-                <li key={`${e.reportId}-${e.date}`} className="rounded-card border border-rebar p-3">
+                <li
+                  key={`${e.reportId}-${e.date}`}
+                  className="rounded-card border border-rebar p-3"
+                >
                   <div className="eyebrow text-dust">
                     {copy.hours.evidenceFor(formatMonthDay(e.date), e.siteName)}
                   </div>

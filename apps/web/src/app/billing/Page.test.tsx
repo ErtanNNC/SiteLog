@@ -36,7 +36,9 @@ describe('BillingPage (demo data)', () => {
     const store = new DemoStore();
     renderWithProviders(<BillingPage />, { route: '/billing', store });
     const sites = await screen.findByRole('table', { name: 'Sites on this plan' });
-    await userEvent.click(within(sites).getByRole('button', { name: 'Pause Riverside Lofts — Block B' }));
+    await userEvent.click(
+      within(sites).getByRole('button', { name: 'Pause Riverside Lofts — Block B' }),
+    );
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Pause Riverside Lofts — Block B?');
     expect(dialog).toHaveTextContent('Reminders stop and it won’t be billed from next cycle.');
@@ -49,8 +51,12 @@ describe('BillingPage (demo data)', () => {
     const row = within(sites).getByText('Riverside Lofts — Block B').closest('tr')!;
     expect(within(row).getByText('Paused')).toBeInTheDocument();
 
-    await userEvent.click(within(row).getByRole('button', { name: 'Resume Riverside Lofts — Block B' }));
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Resume site' }));
+    await userEvent.click(
+      within(row).getByRole('button', { name: 'Resume Riverside Lofts — Block B' }),
+    );
+    await userEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Resume site' }),
+    );
     await waitFor(() => expect(riverside.status).toBe('active'));
     await waitFor(() => expect(screen.getByTestId('plan-total')).toHaveTextContent('$2,394'));
     expect(store.data.audit.at(-1)!.action).toBe('site.resumed');

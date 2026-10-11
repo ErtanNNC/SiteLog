@@ -94,10 +94,13 @@ function SetupLayout({
   const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-concrete">
-      <header className="on-dark sticky top-0 z-30 flex h-16 items-center justify-between bg-asphalt px-4 text-chalk md:px-8">
+      <header className="on-dark flex h-16 items-center justify-between bg-asphalt px-4 text-chalk md:px-8">
         <div className="flex min-w-0 items-center gap-4">
           <Logo />
-          <span className="hidden truncate text-caption text-dust-light sm:inline" data-testid="setup-header">
+          <span
+            className="hidden truncate text-caption text-dust-light sm:inline"
+            data-testid="setup-header"
+          >
             {copy.setup.header(currentOrg?.name ?? copy.setup.title)}
           </span>
         </div>
@@ -192,9 +195,7 @@ function Wizard() {
   const saveRecipients = useSaveSiteRecipients();
 
   const [draft, setDraft] = useState<OrgSettings | null>(null);
-  useEffect(() => {
-    if (settings.data && !draft) setDraft(structuredClone(settings.data.settings));
-  }, [settings.data, draft]);
+  if (settings.data && !draft) setDraft(structuredClone(settings.data.settings));
   const update = useCallback(
     (patch: Partial<OrgSettings>) => setDraft((d) => (d ? { ...d, ...patch } : d)),
     [],

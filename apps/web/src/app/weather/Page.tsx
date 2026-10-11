@@ -13,7 +13,13 @@ import { PageSkeleton } from '@/components/sitelog/Skeletons';
 import { EmptyState, ErrorState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/Select';
 import { copy } from '@/copy/en';
 import { useDataSource } from '@/data/DataProvider';
 import { useWeather } from '@/data/hooks';
@@ -254,7 +260,9 @@ export default function WeatherPage() {
                     <CardContent className="p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="font-semibold">{p.siteName ?? copy.weather.packs.allSites}</div>
+                          <div className="font-semibold">
+                            {p.siteName ?? copy.weather.packs.allSites}
+                          </div>
                           <div className="font-mono text-[12px] text-dust">
                             {formatMonthDay(p.periodStart)} – {formatMonthDay(p.periodEnd)} ·{' '}
                             {copy.weather.packs.sections(p.sections.length)}
@@ -308,6 +316,7 @@ export default function WeatherPage() {
       </div>
 
       <PackDialog
+        key={packOpen ? `open-${siteId ?? ALL}-${month}` : 'closed'}
         open={packOpen}
         onOpenChange={setPackOpen}
         sites={data.sites}
@@ -324,7 +333,8 @@ function DelayCard({ entry }: { entry: DelayEntry }) {
   const details: string[] = [];
   if (typeof precip === 'number') details.push(copy.weather.observed(`${precip} in`));
   if (entry.fullDay) details.push(copy.weather.fullDay);
-  else if (entry.start && entry.end) details.push(copy.weather.stoppedBetween(entry.start, entry.end));
+  else if (entry.start && entry.end)
+    details.push(copy.weather.stoppedBetween(entry.start, entry.end));
   else if (entry.start) details.push(copy.weather.stoppedFrom(entry.start));
   return (
     <Card data-testid="delay-entry" data-claim-ready={entry.claimReady || undefined}>
@@ -341,7 +351,9 @@ function DelayCard({ entry }: { entry: DelayEntry }) {
                 aria-label={copy.weather.openReport(entry.reportNo)}
               >
                 {entry.condition}
-                {entry.impact ? <span className="font-normal text-dust"> — {entry.impact}</span> : null}
+                {entry.impact ? (
+                  <span className="font-normal text-dust"> — {entry.impact}</span>
+                ) : null}
               </Link>
             </h3>
             {details.length ? (

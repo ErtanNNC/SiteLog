@@ -53,3 +53,54 @@ for (const width of WIDTHS) {
     await shoot(page, 'report', width);
   });
 }
+
+// ── Hours · Weather · Team · Glossary · Settings · Billing · Setup (P2, P8–P13) ──
+for (const width of WIDTHS) {
+  test(`setup pages screenshots at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
+    await signIn(page);
+
+    await page.goto('/hours');
+    await expect(page.getByRole('heading', { name: 'Crew hours' })).toBeVisible();
+    await expect(page.getByTestId('hours-matrix')).toBeVisible();
+    await page
+      .getByRole('button', { name: 'Compare BrightLine Electric with its invoice' })
+      .click();
+    await expect(page.getByTestId('invoice-check')).toBeVisible();
+    await shoot(page, 'hours', width);
+
+    await page.goto('/weather');
+    await expect(page.getByRole('heading', { name: 'Weather & delays' })).toBeVisible();
+    await expect(page.getByTestId('delay-log')).toBeVisible();
+    await shoot(page, 'weather', width);
+
+    await page.goto('/team');
+    await expect(page.getByRole('heading', { name: 'Team & numbers' })).toBeVisible();
+    await expect(page.getByTestId('unknown-sender')).toBeVisible();
+    await shoot(page, 'team', width);
+
+    await page.goto('/glossary');
+    await expect(page.getByRole('heading', { name: 'Site glossary' })).toBeVisible();
+    await expect(page.getByTestId('review-queue')).toBeVisible();
+    await shoot(page, 'glossary', width);
+
+    await page.goto('/settings/reports');
+    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+    await expect(page.getByTestId('ladder')).toBeVisible();
+    await shoot(page, 'settings-reports', width);
+
+    await page.goto('/billing');
+    await expect(page.getByRole('heading', { name: 'Billing' })).toBeVisible();
+    await expect(page.getByTestId('plan-card')).toBeVisible();
+    await shoot(page, 'billing', width);
+
+    await page.goto('/setup/site');
+    await expect(page.getByRole('heading', { name: 'Site', exact: true })).toBeVisible();
+    await page.getByLabel('Site name').fill('Harbor View Apartments');
+    await page.getByLabel('Project number').fill('HV-5120');
+    await page.getByLabel('Name', { exact: true }).fill('Elena Vasquez');
+    await page.getByTestId('manager-phone').fill('555 014 8001');
+    await expect(page.getByTestId('welcome-preview')).toContainText('Hi Elena');
+    await shoot(page, 'setup-site', width);
+  });
+}
