@@ -1927,3 +1927,15 @@ Use the seed data in §18 for realistic screens. No gradients, no emoji, no left
 | Punch list | Remaining small items to fix before handover |
 | Topped out | Structure has reached its highest point |
 | Stood down | Work (or a crane) stopped, often for weather or safety |
+
+### 19.1 Decisions taken during the build (v1.0.1, 2026-10-11)
+
+| # | Topic | Decision |
+|---|---|---|
+| 12 | Org creation under RLS | `create_org(name, timezone, address, license_no)` RPC (security definer) creates the org, its settings, the self-perform company and the caller's admin membership. A plain `insert into orgs` cannot return its row before the membership exists. |
+| 13 | "stop" command | Stored as `site_days.reminders_paused`. Reminder 1/2 and the heads-up are suppressed; the **missing** escalation still reaches the office. |
+| 14 | Aggregate views | `current_manpower` / `current_weather` run with the owner's privileges and filter by `org_members` explicitly, so `accounts` users can read hours without a policy on `reports`. Service connections see every org. |
+| 15 | Conversation timeouts (§7.2) | Swept by the worker every 60 s (`awaiting_answer` 60 min → draft with `unanswered:<field>`; `awaiting_confirmation` nudge +30 min, file +2 h as `unconfirmed`, or +15 min when `filing_mode='auto_15min'`). |
+| 16 | Schema additions | Columns marked `-- +` in `supabase/migrations/20261011000002_tables.sql`: ladder toggles and PDF settings in `org_settings`, `reports.kind` (daily · weather_day · no_work), `report_versions.author_message_id`, `jobs.dedupe_key`, `notifications`, `scheduler_state`, `unknown_senders.guessed_site_id`, `reporters.last_invite_error`. |
+| 17 | Demo mode | `VITE_DEMO=true` runs the panel on the §18 dataset in memory (`packages/shared/src/demo/kestrel.ts`); the same dataset generates `supabase/seed.sql` and backs the DB tests. |
+| 18 | Tooling versions | TypeScript 5.9, Vite 8, React 19, React Router 7, Tailwind 4 (CSS-first tokens instead of `tailwind.config.ts`), Zod 4 (`z.toJSONSchema` for tool schemas), Vitest 5, PGlite for DB tests. |
