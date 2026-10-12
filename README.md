@@ -16,7 +16,7 @@ supabase/db-tests        Migrations + seed + RLS/RPC tests on PGlite (no Docker 
 supabase/seed.sql        Generated §18 demo data (Kestrel Build Group)
 fixtures                 Webhook payloads, golden transcripts, expected extractions, recorded tool outputs
 scripts                  replay-webhook, seed-demo
-docs                     SITELOG_SPEC.md, RUNBOOK.md
+docs                     SITELOG_SPEC.md, RUNBOOK.md, AUDIT_BACKLOG.md (deferred audit findings)
 ```
 
 ## Quick start
