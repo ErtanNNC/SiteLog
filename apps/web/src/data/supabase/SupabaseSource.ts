@@ -350,6 +350,8 @@ export class SupabaseSource implements DataSource {
     const core = await this.core();
     const now = this.now();
     const dates = uniq(core.sites.map((s) => formatDateInTz(now, s.timezone))).sort();
+    // A new org has no sites yet: the window is the org's own today.
+    if (!dates.length) dates.push(formatDateInTz(now, core.org.timezone));
     const from = addDays(dates[0]!, -1);
     const to = addDays(dates.at(-1)!, 1);
     const siteDays = await this.siteDays(this.siteIds(core), from, to);
