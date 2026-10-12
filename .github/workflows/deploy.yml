@@ -146,10 +146,10 @@ jobs:
       - name: Check configuration
         id: cfg
         run: |
-          if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$NETLIFY_SITE_ID" ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
+          if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::Web deploy skipped for $ENVIRONMENT: set NETLIFY_AUTH_TOKEN (secret) and NETLIFY_SITE_ID, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (variables)."
+            echo "::notice::Web deploy skipped for $ENVIRONMENT: set NETLIFY_AUTH_TOKEN (secret) and VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (variables)."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/checkout@v4
@@ -166,6 +166,27 @@ jobs:
       - name: Build
         if: steps.cfg.outputs.ready == 'true'
         run: pnpm --filter @sitelog/web build
+      - name: Netlify site
+        id: site
+        if: steps.cfg.outputs.ready == 'true'
+        # Without NETLIFY_SITE_ID the site is found or created by name, so a token is all Netlify needs.
+        run: |
+          api=https://api.netlify.com/api/v1
+          auth="Authorization: Bearer $NETLIFY_AUTH_TOKEN"
+          if [ -n "$NETLIFY_SITE_ID" ]; then
+            site=$(curl -sS --fail-with-body -H "$auth" "$api/sites/$NETLIFY_SITE_ID")
+          else
+            name="sitelog-${ENVIRONMENT}-$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+            site=$(curl -sS --fail-with-body -H "$auth" "$api/sites?name=$name&filter=all" \
+              | jq -c --arg n "$name" '[.[] | select(.name == $n)][0] // empty')
+            if [ -z "$site" ]; then
+              site=$(jq -n --arg n "$name" '{name: $n}' \
+                | curl -sS --fail-with-body -H "$auth" -H 'Content-Type: application/json' -d @- "$api/sites")
+              echo "Created Netlify site $name"
+            fi
+          fi
+          echo "id=$(jq -r .id <<<"$site")" >> "$GITHUB_OUTPUT"
+          echo "url=$(jq -r '.ssl_url // .url' <<<"$site")" >> "$GITHUB_OUTPUT"
       - name: Deploy
         if: steps.cfg.outputs.ready == 'true'
         run: |
@@ -174,9 +195,9 @@ jobs:
           else
             flags="--prod"
           fi
-          npx --yes netlify-cli@27.10.2 deploy --dir apps/web/dist --site "$NETLIFY_SITE_ID" \
+          npx --yes netlify-cli@27.10.2 deploy --dir apps/web/dist --site "${{ steps.site.outputs.id }}" \
             --auth "$NETLIFY_AUTH_TOKEN" --message "${GITHUB_SHA::7} ${ENVIRONMENT}" $flags --json > deploy.json
           url=$(node -e "const d=require('./deploy.json');console.log(d.deploy_url||d.url||'')")
           echo "Deployed: $url"
           echo "### Web panel (${ENVIRONMENT})" >> "$GITHUB_STEP_SUMMARY"
-          echo "$url" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ vars.VITE_APP_URL || steps.site.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
