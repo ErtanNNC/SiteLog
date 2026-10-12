@@ -185,6 +185,8 @@ export interface DataSource {
    */
   getPdfUrls(selection: PdfSelection): Promise<PdfLinkBatch>;
   /** Stripe customer portal session URL (payment method, invoices); demo rejects. */
+  /** Stripe Checkout session URL to start the subscription (14-day trial, §F2 step 4, §19 #4). */
+  getBillingCheckoutUrl(): Promise<string>;
   getBillingPortalUrl(): Promise<string>;
 
   // ─── Mutations ───

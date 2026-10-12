@@ -889,6 +889,15 @@ export class SupabaseSource implements DataSource {
     return data;
   }
 
+  async getBillingCheckoutUrl() {
+    const res = await this.callFunction<{ url?: string | null }>('api-billing', {
+      orgId: this.orgId,
+      action: 'checkout',
+    });
+    if (!res?.url) throw new Error(copy.errors.generic);
+    return res.url;
+  }
+
   async getBillingPortalUrl() {
     const res = await this.callFunction<{ url?: string | null }>('api-billing', {
       orgId: this.orgId,

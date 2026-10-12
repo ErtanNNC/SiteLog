@@ -1,5 +1,6 @@
 import { CreditCard, Download, Pause, Play } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { formatMoneyCents, formatMonthDay, formatMonthYear } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
@@ -12,7 +13,13 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/Dialog';
 import { copy } from '@/copy/en';
-import { useBilling, useBillingPortal, usePauseSite, useResumeSite } from '@/data/hooks';
+import {
+  useBilling,
+  useBillingCheckout,
+  useBillingPortal,
+  usePauseSite,
+  useResumeSite,
+} from '@/data/hooks';
 import type { BillingData } from '@/data/types';
 import { formatDateLong } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -36,11 +43,40 @@ export default function BillingPage() {
   const pause = usePauseSite();
   const resume = useResumeSite();
   const portal = useBillingPortal();
-  /** Stripe customer portal (payment method, invoice PDFs); demo mode only explains it. */
+  const checkout = useBillingCheckout();
+  const hasSubscription = billing.data?.plan.hasSubscription ?? true;
+  /**
+   * Stripe customer portal (payment method, invoice PDFs) once a subscription exists; before that,
+   * Stripe Checkout starts it (14-day trial). Demo mode only explains it.
+   */
   const openPortal = () => {
-    if (isDemo) toast.message(copy.billing.portalDemo);
-    else portal.mutate();
+    if (isDemo)
+      toast.message(hasSubscription ? copy.billing.portalDemo : copy.billing.checkoutDemo);
+    else if (hasSubscription) portal.mutate();
+    else checkout.mutate();
   };
+  const stripeBusy = portal.isPending || checkout.isPending;
+
+  // Back from Stripe Checkout: ?checkout=success|canceled (api-billing success/cancel URLs).
+  const [params, setParams] = useSearchParams();
+  const checkoutResult = params.get('checkout');
+  const refetchBilling = billing.refetch;
+  useEffect(() => {
+    if (!checkoutResult) return;
+    if (checkoutResult === 'success') {
+      toast.success(copy.billing.checkoutSuccess);
+      void refetchBilling();
+    } else if (checkoutResult === 'canceled') toast.message(copy.billing.checkoutCanceled);
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('checkout');
+        next.delete('session_id');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [checkoutResult, refetchBilling, setParams]);
   const [confirm, setConfirm] = useState<{ site: SiteRow; action: 'pause' | 'resume' } | null>(
     null,
   );
@@ -174,7 +210,7 @@ export default function BillingPage() {
             variant="ghost"
             size="dense"
             aria-label={copy.billing.invoiceDownload(formatDateLong(i.date))}
-            disabled={portal.isPending}
+            disabled={stripeBusy}
             onClick={openPortal}
           >
             <Download aria-hidden="true" />
@@ -199,6 +235,21 @@ export default function BillingPage() {
   return (
     <>
       <PageHeader title={copy.billing.title} subtitle={copy.billing.subtitle} />
+
+      {!plan.hasSubscription ? (
+        <Card className="mb-6" data-testid="start-subscription">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+            <div className="max-w-[640px]">
+              <h2 className="font-h2 text-h2">{copy.billing.startTitle}</h2>
+              <p className="mt-1 text-[15px] text-dust">{copy.billing.startBody}</p>
+            </div>
+            <Button loading={stripeBusy} onClick={openPortal}>
+              <CreditCard aria-hidden="true" />
+              {copy.billing.startCta}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {plan.status === 'past_due' ? (
         <div
@@ -272,7 +323,7 @@ export default function BillingPage() {
             <Button
               variant="ghost"
               className="mt-5 w-full"
-              loading={portal.isPending}
+              loading={stripeBusy}
               onClick={openPortal}
               data-testid="update-payment"
             >

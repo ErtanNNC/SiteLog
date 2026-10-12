@@ -670,6 +670,8 @@ export interface BillingData {
     paymentMethod: { brand: string; last4: string } | null;
     status: string | null;
     trialEndsAt: string | null;
+    /** A Stripe subscription exists (not canceled); without one, payment buttons open Checkout. */
+    hasSubscription: boolean;
   };
   sites: Array<{
     id: string;

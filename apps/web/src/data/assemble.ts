@@ -138,7 +138,7 @@ export interface RowSet {
   packs: EvidencePackRow[];
   notifications: NotificationRow[];
   audit: AuditLogRow[];
-  billing?: BillingData['plan'] & { invoices: BillingData['invoices'] };
+  billing?: Omit<BillingData['plan'], 'hasSubscription'> & { invoices: BillingData['invoices'] };
 }
 
 export interface AssembleCtx {
@@ -1951,6 +1951,8 @@ export function assembleBilling(rows: RowSet, ctx: AssembleCtx): BillingData {
       paymentMethod: plan.paymentMethod,
       status: rows.org.billing_status,
       trialEndsAt: rows.org.trial_ends_at,
+      hasSubscription:
+        rows.org.stripe_subscription_id != null && rows.org.billing_status !== 'canceled',
     },
     sites: rows.sites
       .filter((s) => s.status !== 'archived')

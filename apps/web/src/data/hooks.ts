@@ -470,12 +470,23 @@ export function useOpenReportPdf() {
 
 /** Billing → Stripe customer portal (payment method, invoices). Same tab; Stripe links back. */
 export function useBillingPortal() {
+  return useStripeRedirect('portal');
+}
+
+export function useBillingCheckout() {
+  return useStripeRedirect('checkout');
+}
+
+/** Opens a Stripe-hosted page (customer portal or Checkout) in the same tab. */
+function useStripeRedirect(kind: 'portal' | 'checkout') {
   const s = useDataSource();
   return useMutation({
     mutationFn: async () => {
-      const id = toast.loading(copy.billing.portalOpening);
+      const id = toast.loading(
+        kind === 'portal' ? copy.billing.portalOpening : copy.billing.checkoutOpening,
+      );
       try {
-        const url = await s.getBillingPortalUrl();
+        const url = await (kind === 'portal' ? s.getBillingPortalUrl() : s.getBillingCheckoutUrl());
         toast.dismiss(id);
         window.location.assign(url);
       } catch (err) {

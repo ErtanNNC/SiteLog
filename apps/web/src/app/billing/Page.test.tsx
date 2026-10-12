@@ -105,4 +105,39 @@ describe('BillingPage (demo data)', () => {
     );
     await waitFor(() => expect(portal).toHaveBeenCalledTimes(2));
   });
+
+  it('without a subscription, the start card and payment buttons open Stripe Checkout', async () => {
+    const store = new DemoStore();
+    store.data.org = {
+      ...store.data.org,
+      stripe_subscription_id: null,
+      billing_status: 'trialing',
+    };
+    const u = demoUserFor('admin');
+    const source = new DemoSource(store, { id: u.id, email: u.email, name: u.name, role: u.role });
+    const checkout = vi
+      .spyOn(source, 'getBillingCheckoutUrl')
+      .mockRejectedValue(new Error('stripe down'));
+    const portal = vi.spyOn(source, 'getBillingPortalUrl');
+    renderWithProviders(<BillingPage />, { route: '/billing', source, auth: { isDemo: false } });
+    const card = await screen.findByTestId('start-subscription');
+    expect(card).toHaveTextContent('Start your subscription');
+    await userEvent.click(within(card).getByRole('button', { name: 'Add payment details' }));
+    await waitFor(() => expect(checkout).toHaveBeenCalledTimes(1));
+    await userEvent.click(screen.getByTestId('update-payment'));
+    await waitFor(() => expect(checkout).toHaveBeenCalledTimes(2));
+    expect(portal).not.toHaveBeenCalled();
+  });
+
+  it('confirms the return from Stripe Checkout and drops the query', async () => {
+    const success = vi.spyOn(toast, 'success');
+    renderWithProviders(<BillingPage />, { route: '/billing?checkout=success&session_id=cs_1' });
+    await screen.findByTestId('plan-card');
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(
+        'Subscription started. It can take a minute to show here.',
+      ),
+    );
+    expect(screen.queryByTestId('start-subscription')).not.toBeInTheDocument();
+  });
 });

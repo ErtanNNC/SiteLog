@@ -170,6 +170,9 @@ export class DemoSource implements DataSource {
       return { files: [], missing: reportNos, total, capped: total > PDF_EXPORT_LIMIT };
     });
   }
+  getBillingCheckoutUrl(): Promise<string> {
+    return Promise.reject(new Error(copy.billing.checkoutDemo));
+  }
   getBillingPortalUrl(): Promise<string> {
     return Promise.reject(new Error(copy.billing.portalDemo));
   }
