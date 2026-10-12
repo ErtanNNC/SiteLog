@@ -41,13 +41,20 @@ jobs:
     environment: ${{ inputs.environment || 'staging' }}
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
     steps:
       - name: Check configuration
         id: cfg
         run: |
-          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD_SECRET" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            # A password pasted on a phone often carries a trailing space or line break.
+            pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            echo "::add-mask::$pw"
+            if [ "$pw" != "$SUPABASE_DB_PASSWORD_SECRET" ]; then
+              echo "::warning::SUPABASE_DB_PASSWORD had surrounding whitespace or a line break; using it trimmed."
+            fi
+            { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::Supabase deploy skipped for $ENVIRONMENT: set SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable)."
