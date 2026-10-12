@@ -57,6 +57,93 @@ jobs:
       - run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
       - run: deno test --config supabase/functions/deno.json --allow-env --allow-net supabase/functions
 
+  e2e:
+    name: E2E · smoke + accessibility (Playwright, demo mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
+      # Smoke flows + §15/M9 axe WCAG 2.2 AA scan of every route at 1440/375 px + keyboard checks.
+      - run: pnpm --filter @sitelog/web e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-demo
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
+
+  e2e-supabase:
+    name: E2E · local Supabase stack (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      # `supabase start` loads supabase/functions/.env into the Edge Runtime. Only APP_URL matters
+      # here (CORS origin of the panel under test); the rest are dummies so no function boots
+      # half-configured. Nothing here reaches Meta, Stripe or Anthropic.
+      - name: Edge Function env
+        run: |
+          cat > supabase/functions/.env <<'ENV'
+          APP_URL=http://localhost:5173
+          WA_VERIFY_TOKEN=e2e-verify-token
+          WA_APP_SECRET=e2e-app-secret
+          SCHEDULER_SECRET=e2e-scheduler-secret
+          STRIPE_SECRET_KEY=sk_test_e2e_dummy
+          STRIPE_WEBHOOK_SECRET=whsec_e2e_dummy
+          STRIPE_PRICE_ID_SITE=price_e2e_dummy
+          ENV
+      - name: Start Supabase (migrations + seed.sql)
+        run: supabase start -x studio,imgproxy,logflare,vector,supavisor,postgres-meta,mailpit
+      - name: Export API URL and keys
+        run: |
+          supabase status -o env 2>/dev/null \
+            | sed -E 's/^([A-Z0-9_]+)="(.*)"$/\1=\2/' \
+            | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY)=' >> "$GITHUB_ENV"
+      # First request per function downloads its npm/jsr imports; do it before the browser waits.
+      - name: Warm up Edge Functions
+        run: |
+          for fn in api-export-payroll api-evidence-pack; do
+            curl -sS -o /dev/null -m 180 -w "$fn %{http_code}\n" \
+              -H "Authorization: Bearer $ANON_KEY" "$API_URL/functions/v1/$fn" || true
+          done
+      - name: Install Chromium
+        run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
+      - name: Login · realtime · edit → v2 · sign-off · payroll CSV · EOT pack
+        run: pnpm --filter @sitelog/web e2e:supabase
+      - name: Supabase logs
+        if: failure()
+        run: |
+          for c in edge_runtime realtime auth rest; do
+            echo "::group::$c"; docker logs "supabase_${c}_sitelog" --tail 150 2>&1 || true; echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-supabase
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
+
   eval:
     name: Extraction evals (golden transcripts)
     # Paid API calls: main and manual runs only (feature-branch pushes skip it).

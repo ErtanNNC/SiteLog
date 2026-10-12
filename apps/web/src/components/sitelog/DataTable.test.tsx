@@ -31,7 +31,12 @@ describe('DataTable', () => {
       'sticky',
     );
     expect(screen.getByText('472')).toHaveClass('font-mono', 'text-right');
-    expect(screen.getByRole('link', { name: 'Open Apex Concrete' })).toBeInTheDocument();
+    // Pointer users click the row; it is not a second (nested) tab stop or a link role.
+    const row = screen.getByText('Apex Concrete').closest('tr')!;
+    expect(row).toHaveAttribute('data-href', '/companies/a');
+    expect(row).toHaveClass('cursor-pointer');
+    expect(row).not.toHaveAttribute('tabindex');
+    expect(screen.queryByRole('link')).toBeNull();
   });
 
   it('shows the empty state when there are no rows', () => {

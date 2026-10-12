@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:a11y": "playwright test --project a11y",
+    "e2e:supabase": "playwright test --config playwright.supabase.config.ts",
     "screenshots": "playwright test --config playwright.screenshots.config.ts"
   },
   "dependencies": {
@@ -49,6 +51,7 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",

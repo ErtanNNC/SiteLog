@@ -2,7 +2,7 @@ import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } fro
 import { cn } from '@/lib/utils';
 
 export const inputClasses =
-  'flex h-11 w-full rounded-chip border border-rebar bg-chalk px-3 text-[15px] text-asphalt placeholder:text-dust-light focus-visible:border-asphalt disabled:cursor-not-allowed disabled:bg-concrete disabled:opacity-70 aria-invalid:border-missing';
+  'flex h-11 w-full rounded-chip border border-rebar bg-chalk px-3 text-[15px] text-asphalt placeholder:text-dust focus-visible:border-asphalt disabled:cursor-not-allowed disabled:bg-concrete disabled:opacity-70 aria-invalid:border-missing';
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   ({ className, type = 'text', ...props }, ref) => (

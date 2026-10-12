@@ -1,6 +1,7 @@
 import { formatHours, formatMonthDay } from '@sitelog/shared/format.ts';
 import { copy } from '@/copy/en';
 import type { HeatmapCell, SiteOption } from '@/data/types';
+import { useScrollRegion } from '@/lib/useScrollRegion';
 import { cn } from '@/lib/utils';
 
 const RAMP = [
@@ -32,8 +33,9 @@ export interface HeatmapGridProps {
 export function HeatmapGrid({ sites, days, cells, maxHours, title, className }: HeatmapGridProps) {
   const lookup = new Map(cells.map((c) => [`${c.siteId}:${c.date}`, c.hours]));
   const max = Math.max(8, maxHours ?? 0);
+  const scrollRegion = useScrollRegion(title);
   return (
-    <div className={cn('overflow-x-auto scrollbar-thin', className)}>
+    <div {...scrollRegion} className={cn('overflow-x-auto scrollbar-thin', className)}>
       <table className="w-full border-separate border-spacing-1 text-caption" aria-label={title}>
         <thead>
           <tr>

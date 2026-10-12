@@ -67,76 +67,97 @@ export function CalendarMonth({
           </div>
         ) : null}
       </div>
+      {/* Rows use `display: contents` so the 7-column CSS grid lays out their cells directly. */}
       <div className="grid grid-cols-7 gap-1 p-3" role="grid" aria-label={formatMonthLabel(month)}>
-        {copy.calendar.weekdays.map((d) => (
-          <div key={d} role="columnheader" className="eyebrow py-1 text-center text-dust">
-            {d}
+        <div role="row" className="contents">
+          {copy.calendar.weekdays.map((d) => (
+            <div key={d} role="columnheader" className="eyebrow py-1 text-center text-dust">
+              {d}
+            </div>
+          ))}
+        </div>
+        {weeks(lead, cells).map((week) => (
+          <div key={week.key} role="row" className="contents">
+            {Array.from({ length: week.lead }, (_, i) => (
+              <div key={`lead-${i}`} aria-hidden="true" />
+            ))}
+            {week.cells.map((cell) => {
+              const day = Number(cell.date.slice(8, 10));
+              const tone = !cell.isWorkday
+                ? 'bg-concrete text-dust'
+                : cell.isFuture || !cell.chip
+                  ? 'bg-chalk text-dust'
+                  : CELL_TONE[cell.chip.variant];
+              const label = `${formatMonthDay(cell.date)}: ${cell.chip?.label ?? (cell.isWorkday ? copy.calendar.noReport : copy.calendar.weekend)}${cell.crew !== null ? `, ${copy.calendar.crew(cell.crew)}` : ''}${cell.weatherAffected ? `, ${copy.calendar.weatherAffected}` : ''}`;
+              const content = (
+                <>
+                  <span className="flex items-start justify-between">
+                    <span
+                      className={cn(
+                        'font-mono text-[12px] font-medium',
+                        cell.isToday && 'underline underline-offset-2',
+                      )}
+                    >
+                      {day}
+                    </span>
+                    {cell.weatherAffected ? (
+                      <CloudRain className="size-4" aria-hidden="true" />
+                    ) : null}
+                  </span>
+                  {cell.crew !== null ? (
+                    <span className="mt-auto font-mono text-data tabular">{cell.crew}</span>
+                  ) : cell.chip &&
+                    cell.chip.variant !== 'filed' &&
+                    cell.chip.variant !== 'signed_off' ? (
+                    <span className="mt-auto text-[11px] leading-4">{cell.chip.label}</span>
+                  ) : null}
+                </>
+              );
+              const base = cn(
+                'flex min-h-14 flex-col rounded-chip border p-1.5 text-left',
+                tone,
+                cell.isToday ? 'border-asphalt' : 'border-transparent',
+              );
+              return cell.reportId ? (
+                <button
+                  key={cell.date}
+                  type="button"
+                  role="gridcell"
+                  aria-label={copy.calendar.openReport(formatMonthDay(cell.date))}
+                  title={label}
+                  className={cn(base, 'hover:border-iron')}
+                  onClick={() => open(cell)}
+                  data-date={cell.date}
+                >
+                  {content}
+                </button>
+              ) : (
+                <div
+                  key={cell.date}
+                  role="gridcell"
+                  aria-label={label}
+                  className={base}
+                  data-date={cell.date}
+                >
+                  {content}
+                </div>
+              );
+            })}
           </div>
         ))}
-        {Array.from({ length: lead }, (_, i) => (
-          <div key={`lead-${i}`} aria-hidden="true" />
-        ))}
-        {cells.map((cell) => {
-          const day = Number(cell.date.slice(8, 10));
-          const tone = !cell.isWorkday
-            ? 'bg-concrete text-dust-light'
-            : cell.isFuture || !cell.chip
-              ? 'bg-chalk text-dust'
-              : CELL_TONE[cell.chip.variant];
-          const label = `${formatMonthDay(cell.date)}: ${cell.chip?.label ?? (cell.isWorkday ? copy.calendar.noReport : copy.calendar.weekend)}${cell.crew !== null ? `, ${copy.calendar.crew(cell.crew)}` : ''}${cell.weatherAffected ? `, ${copy.calendar.weatherAffected}` : ''}`;
-          const content = (
-            <>
-              <span className="flex items-start justify-between">
-                <span
-                  className={cn(
-                    'font-mono text-[12px] font-medium',
-                    cell.isToday && 'underline underline-offset-2',
-                  )}
-                >
-                  {day}
-                </span>
-                {cell.weatherAffected ? <CloudRain className="size-4" aria-hidden="true" /> : null}
-              </span>
-              {cell.crew !== null ? (
-                <span className="mt-auto font-mono text-data tabular">{cell.crew}</span>
-              ) : cell.chip &&
-                cell.chip.variant !== 'filed' &&
-                cell.chip.variant !== 'signed_off' ? (
-                <span className="mt-auto text-[11px] leading-4">{cell.chip.label}</span>
-              ) : null}
-            </>
-          );
-          const base = cn(
-            'flex min-h-14 flex-col rounded-chip border p-1.5 text-left',
-            tone,
-            cell.isToday ? 'border-asphalt' : 'border-transparent',
-          );
-          return cell.reportId ? (
-            <button
-              key={cell.date}
-              type="button"
-              role="gridcell"
-              aria-label={copy.calendar.openReport(formatMonthDay(cell.date))}
-              title={label}
-              className={cn(base, 'hover:border-iron')}
-              onClick={() => open(cell)}
-              data-date={cell.date}
-            >
-              {content}
-            </button>
-          ) : (
-            <div
-              key={cell.date}
-              role="gridcell"
-              aria-label={label}
-              className={base}
-              data-date={cell.date}
-            >
-              {content}
-            </div>
-          );
-        })}
       </div>
     </div>
   );
+}
+
+/** Splits the month into Monday-first week rows; the first row starts after `lead` blanks. */
+function weeks(lead: number, cells: CalendarCell[]) {
+  const out: Array<{ key: string; lead: number; cells: CalendarCell[] }> = [];
+  let i = 0;
+  for (let size = 7 - lead; i < cells.length; size = 7) {
+    const chunk = cells.slice(i, i + size);
+    out.push({ key: chunk[0]!.date, lead: out.length === 0 ? lead : 0, cells: chunk });
+    i += size;
+  }
+  return out;
 }

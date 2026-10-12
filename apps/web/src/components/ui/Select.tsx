@@ -14,7 +14,7 @@ export const SelectTrigger = forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex w-full items-center justify-between gap-2 rounded-chip border border-rebar bg-chalk px-3 text-[15px] text-asphalt data-[placeholder]:text-dust-light focus-visible:border-asphalt disabled:cursor-not-allowed disabled:opacity-50 [&>span]:truncate',
+      'flex w-full items-center justify-between gap-2 rounded-chip border border-rebar bg-chalk px-3 text-[15px] text-asphalt data-[placeholder]:text-dust focus-visible:border-asphalt disabled:cursor-not-allowed disabled:opacity-50 [&>span]:truncate',
       dense ? 'h-10' : 'h-11',
       className,
     )}

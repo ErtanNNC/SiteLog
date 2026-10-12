@@ -9,7 +9,7 @@ import { StatusChip } from '@/components/sitelog/StatusChip';
 import { StreakBar, StreakLegend } from '@/components/sitelog/StreakBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { copy } from '@/copy/en';
 import { useSites } from '@/data/hooks';
 import type { SiteCard } from '@/data/types';
@@ -45,8 +45,9 @@ export default function SitesPage() {
           </Button>
         }
       />
-      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+      {/* The filter tabs control the card grid below, which is their tab panel. */}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <TabsList aria-label={copy.common.filter}>
             <TabsTrigger value="all">{copy.sites.tabs.all}</TabsTrigger>
             <TabsTrigger value="attention">
@@ -59,54 +60,56 @@ export default function SitesPage() {
             </TabsTrigger>
             <TabsTrigger value="paused">{copy.sites.tabs.paused}</TabsTrigger>
           </TabsList>
-        </Tabs>
-        <div className="flex items-center gap-3 text-caption text-dust">
-          <span className="eyebrow">{copy.sites.legend}</span>
-          <StreakLegend />
+          <div className="flex items-center gap-3 text-caption text-dust">
+            <span className="eyebrow">{copy.sites.legend}</span>
+            <StreakLegend />
+          </div>
         </div>
-      </div>
 
-      {sites.isPending ? (
-        <CardsSkeleton />
-      ) : sites.isError ? (
-        <ErrorState
-          thing={copy.nav.sites.toLowerCase()}
-          error={sites.error}
-          onRetry={() => void sites.refetch()}
-        />
-      ) : visible.length === 0 && tab !== 'all' ? (
-        <EmptyState
-          title={tab === 'attention' ? copy.sites.emptyAttention : copy.sites.emptyPaused}
-        />
-      ) : (
-        <ul
-          className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(330px,1fr))]"
-          aria-label={copy.sites.title}
-        >
-          {visible.map((s) => (
-            <li key={s.siteId}>
-              <SiteCardView site={s} />
-            </li>
-          ))}
-          {tab === 'all' ? (
-            <li>
-              <Link
-                to="/setup/site"
-                className="flex h-full min-h-[220px] flex-col items-center justify-center rounded-card border border-dashed border-iron bg-transparent p-6 text-center hover:border-asphalt hover:bg-chalk/60"
-                data-testid="connect-site-card"
-              >
-                <span className="flex size-11 items-center justify-center rounded-full bg-signal text-asphalt">
-                  <Plus aria-hidden="true" className="size-6" />
-                </span>
-                <span className="font-h2 mt-3 text-h2">{copy.sites.connectAnother}</span>
-                <span className="mt-1 font-mono text-[12px] uppercase tracking-[0.08em] text-dust">
-                  {copy.sites.connectAnotherPrice}
-                </span>
-              </Link>
-            </li>
-          ) : null}
-        </ul>
-      )}
+        <TabsContent value={tab} className="mt-0">
+          {sites.isPending ? (
+            <CardsSkeleton />
+          ) : sites.isError ? (
+            <ErrorState
+              thing={copy.nav.sites.toLowerCase()}
+              error={sites.error}
+              onRetry={() => void sites.refetch()}
+            />
+          ) : visible.length === 0 && tab !== 'all' ? (
+            <EmptyState
+              title={tab === 'attention' ? copy.sites.emptyAttention : copy.sites.emptyPaused}
+            />
+          ) : (
+            <ul
+              className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(330px,1fr))]"
+              aria-label={copy.sites.title}
+            >
+              {visible.map((s) => (
+                <li key={s.siteId}>
+                  <SiteCardView site={s} />
+                </li>
+              ))}
+              {tab === 'all' ? (
+                <li>
+                  <Link
+                    to="/setup/site"
+                    className="flex h-full min-h-[220px] flex-col items-center justify-center rounded-card border border-dashed border-iron bg-transparent p-6 text-center hover:border-asphalt hover:bg-chalk/60"
+                    data-testid="connect-site-card"
+                  >
+                    <span className="flex size-11 items-center justify-center rounded-full bg-signal text-asphalt">
+                      <Plus aria-hidden="true" className="size-6" />
+                    </span>
+                    <span className="font-h2 mt-3 text-h2">{copy.sites.connectAnother}</span>
+                    <span className="mt-1 font-mono text-[12px] uppercase tracking-[0.08em] text-dust">
+                      {copy.sites.connectAnotherPrice}
+                    </span>
+                  </Link>
+                </li>
+              ) : null}
+            </ul>
+          )}
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

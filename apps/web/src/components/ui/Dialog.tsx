@@ -2,6 +2,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import {
   forwardRef,
+  useRef,
   type ComponentPropsWithoutRef,
   type ComponentRef,
   type ReactNode,
@@ -33,37 +34,76 @@ export const DialogContent = forwardRef<
     side?: 'center' | 'left' | 'right';
     hideClose?: boolean;
   }
->(({ className, children, side = 'center', hideClose, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        'fixed z-50 flex flex-col bg-chalk text-asphalt outline-none',
-        side === 'center' &&
-          'left-1/2 top-1/2 w-[calc(100%-32px)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-card border border-rebar p-6',
-        side === 'left' && 'inset-y-0 left-0 h-full w-[280px] max-w-[85vw] border-r border-iron',
-        side === 'right' && 'inset-y-0 right-0 h-full w-full max-w-md border-l border-rebar p-6',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      {!hideClose && (
-        <DialogPrimitive.Close asChild>
-          <Button
-            variant="subtle"
-            size="iconDense"
-            className="absolute right-3 top-3"
-            aria-label={copy.a11y.closeDialog}
-          >
-            <X aria-hidden="true" />
-          </Button>
-        </DialogPrimitive.Close>
-      )}
-    </DialogPrimitive.Content>
-  </DialogPortal>
-));
+>(
+  (
+    {
+      className,
+      children,
+      side = 'center',
+      hideClose,
+      onOpenAutoFocus,
+      onCloseAutoFocus,
+      ...props
+    },
+    ref,
+  ) => {
+    // Most dialogs here are opened from state (no <DialogTrigger>), and Radix then has nothing
+    // to return focus to on close, so it lands on <body>. Remember the opener and restore it
+    // (WCAG 2.4.3 focus order); a dialog with a DialogTrigger gets the same element back.
+    const opener = useRef<HTMLElement | null>(null);
+    return (
+      <DialogPortal>
+        <DialogOverlay />
+        <DialogPrimitive.Content
+          ref={ref}
+          onOpenAutoFocus={(e) => {
+            opener.current =
+              document.activeElement instanceof HTMLElement &&
+              document.activeElement !== document.body
+                ? document.activeElement
+                : null;
+            onOpenAutoFocus?.(e);
+          }}
+          onCloseAutoFocus={(e) => {
+            onCloseAutoFocus?.(e);
+            if (e.defaultPrevented) return;
+            const el = opener.current;
+            opener.current = null;
+            if (el?.isConnected) {
+              e.preventDefault();
+              el.focus();
+            }
+          }}
+          className={cn(
+            'fixed z-50 flex flex-col bg-chalk text-asphalt outline-none',
+            side === 'center' &&
+              'left-1/2 top-1/2 w-[calc(100%-32px)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-card border border-rebar p-6',
+            side === 'left' &&
+              'inset-y-0 left-0 h-full w-[280px] max-w-[85vw] border-r border-iron',
+            side === 'right' &&
+              'inset-y-0 right-0 h-full w-full max-w-md border-l border-rebar p-6',
+            className,
+          )}
+          {...props}
+        >
+          {children}
+          {!hideClose && (
+            <DialogPrimitive.Close asChild>
+              <Button
+                variant="subtle"
+                size="iconDense"
+                className="absolute right-3 top-3"
+                aria-label={copy.a11y.closeDialog}
+              >
+                <X aria-hidden="true" />
+              </Button>
+            </DialogPrimitive.Close>
+          )}
+        </DialogPrimitive.Content>
+      </DialogPortal>
+    );
+  },
+);
 DialogContent.displayName = 'DialogContent';
 
 export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

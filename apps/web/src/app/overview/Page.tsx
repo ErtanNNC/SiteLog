@@ -132,7 +132,7 @@ export default function OverviewPage() {
             <Link
               to={`/reports/${r.reportId}`}
               onClick={(e) => e.stopPropagation()}
-              className="rounded-chip focus-visible:outline"
+              className="rounded-chip"
             >
               <StatusChip variant={r.chip.variant} label={r.chip.label} />
             </Link>

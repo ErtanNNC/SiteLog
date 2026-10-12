@@ -76,7 +76,7 @@ function GlobalSearch({ className }: { className?: string }) {
           if (e.key === 'Enter' && list[0]) go(list[0]);
         }}
         placeholder={copy.shell.search.placeholder}
-        className="h-11 w-full rounded-chip border border-rebar bg-concrete/60 pl-10 pr-10 text-[15px] placeholder:text-dust-light focus:border-asphalt focus:bg-chalk"
+        className="h-11 w-full rounded-chip border border-rebar bg-concrete/60 pl-10 pr-10 text-[15px] placeholder:text-dust focus:border-asphalt focus:bg-chalk"
       />
       {q ? (
         <button

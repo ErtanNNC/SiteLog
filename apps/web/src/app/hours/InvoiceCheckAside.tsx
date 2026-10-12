@@ -16,6 +16,7 @@ import { copy } from '@/copy/en';
 import { useSetInvoiceStatus } from '@/data/hooks';
 import type { HoursRow, InvoiceDetail } from '@/data/types';
 import { formatHoursNum, formatMonthDay, weekdayName } from '@/lib/format';
+import { useScrollRegion } from '@/lib/useScrollRegion';
 import { cn } from '@/lib/utils';
 
 const STATUS_STYLE: Record<InvoiceDetail['status'], string> = {
@@ -73,6 +74,7 @@ export function InvoiceCheckAside({
   onClose: () => void;
 }) {
   const setStatus = useSetInvoiceStatus();
+  const scrollRegion = useScrollRegion(copy.hours.invoiceCheck);
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const mailto = buildQueryMailto(invoice, origin);
   const period = `${formatMonthDay(invoice.periodStart)} – ${formatMonthDay(invoice.periodEnd)}`;
@@ -101,7 +103,7 @@ export function InvoiceCheckAside({
         </Button>
       </CardHeader>
       <CardContent className="px-0 pt-4">
-        <div className="overflow-x-auto scrollbar-thin">
+        <div {...scrollRegion} className="overflow-x-auto scrollbar-thin">
           <Table aria-label={copy.hours.invoiceCheck}>
             <TableHeader>
               <TableRow>

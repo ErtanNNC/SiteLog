@@ -492,7 +492,10 @@ export class SupabaseSource implements DataSource {
     const sb = this.sb;
     let q = sb
       .from('reports')
-      .select('*, site_days!inner(id, date, site_id)', { count: 'exact' })
+      // reports↔site_days have FKs both ways (site_days.report_id too): name the embed's FK.
+      .select('*, site_days!reports_site_day_id_fkey!inner(id, date, site_id)', {
+        count: 'exact',
+      })
       .eq('org_id', this.orgId)
       .in('status', ['filed', 'signed_off']);
     if (filters.siteId) q = q.eq('site_id', filters.siteId);
@@ -681,7 +684,7 @@ export class SupabaseSource implements DataSource {
         : Promise.resolve([] as TranscriptRow[]),
       sb
         .from('reports')
-        .select('id, site_day_id, status, site_id, site_days(date)')
+        .select('id, site_day_id, status, site_id, site_days!reports_site_day_id_fkey(date)')
         .eq('site_id', site.id)
         .in('status', ['filed', 'signed_off'])
         .then(unwrap),

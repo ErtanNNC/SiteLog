@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { copy } from '@/copy/en';
+import { useScrollRegion } from '@/lib/useScrollRegion';
 import { cn } from '@/lib/utils';
 import {
   Table,
@@ -28,9 +29,14 @@ export interface DataTableProps<T> {
   columns: Column<T>[];
   rows: T[];
   rowKey: (row: T) => string;
-  /** Row link: the whole row becomes clickable (keyboard: Enter). */
+  /**
+   * Row link for pointer users: a click anywhere on the row opens it. Keyboard and screen-reader
+   * users get the real link a cell renders (every rowHref table must render one), so the row
+   * itself is not a second, nested tab stop and keeps its table-row semantics.
+   */
   rowHref?: (row: T) => string | null | undefined;
   rowTone?: (row: T) => 'default' | 'missing' | 'attention';
+  /** @deprecated Not rendered any more: the link inside the row carries the accessible name. */
   rowLabel?: (row: T) => string;
   footer?: ReactNode;
   empty?: { title: string; body?: string; action?: ReactNode };
@@ -47,7 +53,6 @@ export function DataTable<T>({
   rowKey,
   rowHref,
   rowTone,
-  rowLabel,
   footer,
   empty,
   caption,
@@ -56,6 +61,7 @@ export function DataTable<T>({
   ...rest
 }: DataTableProps<T>) {
   const navigate = useNavigate();
+  const scrollRegion = useScrollRegion(rest['aria-label'] ?? caption);
   if (rows.length === 0 && empty) {
     return (
       <EmptyState
@@ -68,6 +74,7 @@ export function DataTable<T>({
   }
   return (
     <div
+      {...scrollRegion}
       className={cn('w-full overflow-x-auto scrollbar-thin', className)}
       data-testid="data-table"
     >
@@ -103,16 +110,11 @@ export function DataTable<T>({
                   key={rowKey(row)}
                   tone={tone}
                   className={cn(
-                    clickable && 'cursor-pointer hover:bg-concrete/70 focus-visible:bg-concrete/70',
+                    clickable && 'cursor-pointer hover:bg-concrete/70',
                     dense && '[&>td]:py-2',
                   )}
-                  tabIndex={clickable ? 0 : undefined}
-                  role={clickable ? 'link' : undefined}
-                  aria-label={clickable && rowLabel ? copy.table.rowLink(rowLabel(row)) : undefined}
-                  onClick={clickable ? () => void navigate(href) : undefined}
-                  onKeyDown={
-                    clickable ? (e) => e.key === 'Enter' && void navigate(href) : undefined
-                  }
+                  data-href={href ?? undefined}
+                  onClick={clickable ? (e) => onRowClick(e, () => void navigate(href)) : undefined}
                 >
                   {columns.map((c) => (
                     <TableCell
@@ -132,6 +134,13 @@ export function DataTable<T>({
       </Table>
     </div>
   );
+}
+
+/** Clicks on a link, button or field inside the row do their own thing, not the row's. */
+function onRowClick(e: MouseEvent<HTMLTableRowElement>, open: () => void) {
+  const target = e.target as Element | null;
+  if (target?.closest('a, button, input, select, textarea, label, [role="button"]')) return;
+  open();
 }
 
 export { TableCell as DataTableCell, TableRow as DataTableRow };

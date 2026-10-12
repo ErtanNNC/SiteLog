@@ -13,9 +13,19 @@ export const chromiumExecutablePath =
   process.env.PLAYWRIGHT_CHROMIUM_PATH ??
   (existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : undefined);
 
+/**
+ * CI (or PW_PREVIEW=1) tests a production build served by `vite preview`: faster page loads
+ * than the dev server and no HMR reloads mid-test. Locally the dev server is reused.
+ */
+const preview = !!process.env.CI || process.env.PW_PREVIEW === '1';
+const DEMO_DIST = 'node_modules/.e2e/demo';
+
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /smoke\.spec\.ts/,
+  // Demo-mode specs only; e2e/supabase/** runs against a local Supabase stack
+  // (playwright.supabase.config.ts) and the screenshots spec has its own config.
+  testMatch: /(smoke|a11y)\.spec\.ts/,
+  testIgnore: /supabase\//,
   timeout: 60_000,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
@@ -26,12 +36,18 @@ export default defineConfig({
     trace: 'retain-on-failure',
     launchOptions: { executablePath: chromiumExecutablePath },
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', testMatch: /smoke\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    // §15 / M9: axe WCAG 2.2 AA scan of every route at 1440 and 375 px + keyboard checks.
+    { name: 'a11y', testMatch: /a11y\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+  ],
   webServer: {
-    command: `pnpm exec vite --port ${PORT} --strictPort`,
+    command: preview
+      ? `pnpm exec vite build --outDir ${DEMO_DIST} --emptyOutDir && pnpm exec vite preview --outDir ${DEMO_DIST} --port ${PORT} --strictPort`
+      : `pnpm exec vite --port ${PORT} --strictPort`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 180_000,
     env: { VITE_DEMO: 'true' },
   },
 });

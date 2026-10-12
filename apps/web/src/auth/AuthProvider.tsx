@@ -60,6 +60,30 @@ function pickOrg(orgs: OrgSummary[]): OrgSummary | null {
   return orgs.find((o) => o.id === saved) ?? orgs[0]!;
 }
 
+/**
+ * Links minted by the admin API (`inviteUserByEmail`, `generateLink`) cannot carry a PKCE
+ * challenge, so GoTrue redirects them to /auth/callback with implicit-grant tokens in the URL
+ * hash, which a `flowType: 'pkce'` client refuses ("Not a valid PKCE flow url"). Adopt that
+ * session explicitly and strip the tokens from the address bar.
+ */
+async function adoptImplicitGrantSession(sb: NonNullable<typeof supabase>): Promise<void> {
+  if (typeof window === 'undefined' || !window.location.hash) return;
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const accessToken = hash.get('access_token');
+  const refreshToken = hash.get('refresh_token');
+  if (!accessToken || !refreshToken) return;
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${window.location.pathname}${window.location.search}`,
+  );
+  const { error } = await sb.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  });
+  if (error) console.warn('[auth] could not adopt the session from the link', error.message);
+}
+
 function userFromSession(session: Session): AuthUser {
   const meta = (session.user.user_metadata ?? {}) as Record<string, unknown>;
   const email = session.user.email ?? null;
@@ -155,15 +179,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
     const sb = supabase;
-    void sb.auth.getSession().then(({ data }) => {
-      if (cancelled) return;
-      if (data.session) {
-        sessionRef.current = data.session;
-        void applySignedIn(userFromSession(data.session), null);
-      } else {
-        applySignedOut();
-      }
-    });
+    void adoptImplicitGrantSession(sb)
+      .then(() => sb.auth.getSession())
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (data.session) {
+          sessionRef.current = data.session;
+          void applySignedIn(userFromSession(data.session), null);
+        } else {
+          applySignedOut();
+        }
+      });
     const { data: sub } = sb.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       if (event === 'SIGNED_OUT' || !session) {

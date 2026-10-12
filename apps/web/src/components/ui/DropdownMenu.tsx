@@ -3,7 +3,16 @@ import { Check } from 'lucide-react';
 import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from 'react';
 import { cn } from '@/lib/utils';
 
-export const DropdownMenu = DropdownMenuPrimitive.Root;
+/**
+ * Menus open non-modal (WAI-ARIA menu button pattern): a modal Radix menu sets aria-hidden on the
+ * rest of the page while it stays tabbable (axe aria-hidden-focus); Tab now closes the menu.
+ */
+export function DropdownMenu({
+  modal = false,
+  ...props
+}: ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Root>) {
+  return <DropdownMenuPrimitive.Root modal={modal} {...props} />;
+}
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 export const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 export const DropdownMenuPortal = DropdownMenuPrimitive.Portal;

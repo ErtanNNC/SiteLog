@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { copy } from '@/copy/en';
 import { useGlossary, useReviewGlossaryTerm } from '@/data/hooks';
 import type { CompanyOption, GlossaryTerm } from '@/data/types';
@@ -165,42 +165,45 @@ export default function GlossaryPage() {
         )}
       </section>
 
+      {/* The filter tabs control the terms table, which is their tab panel. */}
       <Card>
-        <div className="flex flex-col gap-3 border-b border-rebar px-5 py-4 md:flex-row md:items-center md:justify-between">
-          <h2 className="font-h2 text-h2">{copy.glossary.all}</h2>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+          <div className="flex flex-col gap-3 border-b border-rebar px-5 py-4 md:flex-row md:items-center md:justify-between">
+            <h2 className="font-h2 text-h2">{copy.glossary.all}</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <TabsList aria-label={copy.common.filter}>
                 <TabsTrigger value="all">{copy.glossary.tabs.all}</TabsTrigger>
                 <TabsTrigger value="companies">{copy.glossary.tabs.companies}</TabsTrigger>
                 <TabsTrigger value="spanish">{copy.glossary.tabs.spanish}</TabsTrigger>
               </TabsList>
-            </Tabs>
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dust"
-                aria-hidden="true"
-              />
-              <Input
-                type="search"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder={copy.glossary.search}
-                aria-label={copy.glossary.search}
-                className="h-10 w-full pl-9 sm:w-[240px]"
-              />
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-dust"
+                  aria-hidden="true"
+                />
+                <Input
+                  type="search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder={copy.glossary.search}
+                  aria-label={copy.glossary.search}
+                  className="h-10 w-full pl-9 sm:w-[240px]"
+                />
+              </div>
             </div>
           </div>
-        </div>
-        <CardContent className="px-0 pb-2 pt-0">
-          <DataTable
-            columns={columns}
-            rows={terms}
-            rowKey={(t) => t.id}
-            aria-label={copy.glossary.all}
-            empty={{ title: needle ? copy.glossary.noResults(q.trim()) : copy.glossary.empty }}
-          />
-        </CardContent>
+          <TabsContent value={tab} className="mt-0">
+            <CardContent className="px-0 pb-2 pt-0">
+              <DataTable
+                columns={columns}
+                rows={terms}
+                rowKey={(t) => t.id}
+                aria-label={copy.glossary.all}
+                empty={{ title: needle ? copy.glossary.noResults(q.trim()) : copy.glossary.empty }}
+              />
+            </CardContent>
+          </TabsContent>
+        </Tabs>
       </Card>
 
       <AddTermDialog open={addOpen} onOpenChange={setAddOpen} sites={data.sites} />

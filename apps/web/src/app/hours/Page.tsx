@@ -30,6 +30,7 @@ import { useDataSource } from '@/data/DataProvider';
 import { useHours, usePayrollCsv } from '@/data/hooks';
 import type { HoursRow } from '@/data/types';
 import { addWeeks, formatDateInTz, formatHoursNum, formatWeekLabel, isoWeekOf } from '@/lib/format';
+import { useScrollRegion } from '@/lib/useScrollRegion';
 import { cn } from '@/lib/utils';
 import { AddInvoiceDialog } from './AddInvoiceDialog';
 import { InvoiceCheckAside } from './InvoiceCheckAside';
@@ -266,8 +267,13 @@ function HoursMatrix({
   selectedKey: string | null;
   onSelect: (row: HoursRow) => void;
 }) {
+  const scrollRegion = useScrollRegion(copy.hours.title);
   return (
-    <div className="w-full overflow-x-auto scrollbar-thin" data-testid="hours-matrix">
+    <div
+      {...scrollRegion}
+      className="w-full overflow-x-auto scrollbar-thin"
+      data-testid="hours-matrix"
+    >
       <Table aria-label={copy.hours.title}>
         <TableHeader>
           <TableRow>
@@ -292,7 +298,7 @@ function HoursMatrix({
                 tone={r.status === 'gap' ? 'attention' : 'default'}
                 data-status={r.status}
                 data-company={r.companyName}
-                aria-selected={selectable ? selected : undefined}
+                aria-pressed={selectable ? selected : undefined}
                 tabIndex={selectable ? 0 : undefined}
                 role={selectable ? 'button' : undefined}
                 aria-label={selectable ? copy.hours.openRow(r.companyName) : undefined}
