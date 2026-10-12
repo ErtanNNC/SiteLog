@@ -409,14 +409,14 @@ export default function TeamPage() {
 
       <InviteReporterDialog open={inviteOpen} onOpenChange={setInviteOpen} sites={data.sites} />
       <EditReporterDialog
-        key={editing?.id ?? 'none'}
+        key={`edit:${editing?.id ?? 'none'}`}
         reporter={editing}
         onOpenChange={(o) => !o && setEditing(null)}
         sites={data.sites}
       />
       <AddOfficeUserDialog open={addUserOpen} onOpenChange={setAddUserOpen} />
       <LinkSenderDialog
-        key={linking?.id ?? 'none'}
+        key={`link:${linking?.id ?? 'none'}`}
         sender={linking}
         onOpenChange={(o) => !o && setLinking(null)}
         sites={data.sites}

@@ -94,6 +94,10 @@ for (const width of WIDTHS) {
     await expect(page.getByTestId('plan-card')).toBeVisible();
     await shoot(page, 'billing', width);
 
+    await page.goto('/ops');
+    await expect(page.getByTestId('ops-kpis')).toBeVisible();
+    await shoot(page, 'ops', width);
+
     await page.goto('/setup/site');
     await expect(page.getByRole('heading', { name: 'Site', exact: true })).toBeVisible();
     await page.getByLabel('Site name').fill('Harbor View Apartments');
