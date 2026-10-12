@@ -756,6 +756,15 @@ export type Database = {
         Returns: Json;
       };
       mark_no_work: { Args: { p_site_day_id: string }; Returns: Json };
+      // Office-entered reports (20261013000001_office_reports.sql): admin / pm / ops, checked in SQL.
+      create_office_report: {
+        Args: { p_site_id: string; p_date: string; p_data: Json };
+        Returns: Json;
+      };
+      attach_version_pdf: {
+        Args: { p_report_id: string; p_version: number; p_path: string };
+        Returns: Json;
+      };
       resolve_unknown_company: {
         Args: {
           p_report_id: string;
