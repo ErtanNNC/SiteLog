@@ -71,6 +71,23 @@ describe('job queue fairness', () => {
     ]);
   });
 
+  it('gives report jobs the reporter’s conversation key', async () => {
+    const [r] = await svc<{ report_id: string; convo_id: string }>(
+      `select r.id as report_id, c.id as convo_id from reports r
+         join reporters rp on rp.id = r.reporter_id
+         join conversations c on c.phone_e164 = rp.phone_e164 limit 1`,
+    );
+    await enqueue('decide_next', { reportId: r!.report_id });
+    await enqueue('render_pdf', { reportId: r!.report_id, version: 1 });
+    const rows = await svc<{ type: string; lock_key: string | null }>(
+      `select type, lock_key from jobs order by id`,
+    );
+    expect(rows).toEqual([
+      { type: 'decide_next', lock_key: `convo:${r!.convo_id}` },
+      { type: 'render_pdf', lock_key: null },
+    ]);
+  });
+
   it('runs one conversation’s messages one at a time, in order, while others proceed', async () => {
     const a = await conversation('+15550100002');
     const b = await conversation('+15550100003');

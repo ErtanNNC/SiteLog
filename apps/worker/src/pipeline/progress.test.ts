@@ -226,17 +226,23 @@ describe('progress bubble (§F5 step 3)', () => {
       'Writing your report…\n- Transcribed, site noise removed\n- Checking subcontractor hours…',
     ]);
 
-    // Extraction is slow as well (and re-runs because a photo arrived meanwhile): still one bubble.
+    // Extraction is slow as well (and re-runs because a captioned photo arrived meanwhile): still
+    // one bubble. A captionless photo would ride along without a re-run (syncDraftPhotos).
     let photoAdded = false;
     h.claude(
       slowClaude(h, riversideComplete(), 20_000, async () => {
         if (photoAdded) return;
         photoAdded = true;
-        const photo = await h.inbound(convo, { type: 'image', storage_path: 'x/p.jpg' });
+        const photo = await h.inbound(convo, {
+          type: 'image',
+          body: 'L4 deck poured',
+          storage_path: 'x/p.jpg',
+        });
         await h.db.insertReportSource({
           report_id: report.id,
           message_id: photo.id,
           kind: 'photo',
+          caption: 'L4 deck poured',
         });
       }),
     );

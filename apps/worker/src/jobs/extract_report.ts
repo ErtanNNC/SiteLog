@@ -1,6 +1,6 @@
 import { runExtraction } from '../ai/extract';
 import { composeExtractionInput, siteDayWeatherOf } from '../pipeline/compose';
-import { currentData, storeDraft } from '../pipeline/draft';
+import { currentData, isPlainPhoto, storeDraft } from '../pipeline/draft';
 import { learnTerms } from '../pipeline/glossary';
 import { allAudioTranscribed, sendProgressIfSlow } from '../pipeline/progress';
 import { PermanentJobError, type JobHandler } from './types';
@@ -35,7 +35,8 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload) 
       new Date(report.received_at ?? ctx.now()).toISOString().slice(0, 10),
     observedWeather: siteDayWeatherOf(siteDay?.weather),
   });
-  const sourceCountAtStart = (await ctx.db.listReportSources(report.id)).length;
+  const sourcesAtStart = new Set((await ctx.db.listReportSources(report.id)).map((s) => s.id));
+  const sourceCountAtStart = sourcesAtStart.size;
   if (!ctx.ai.claude) throw new Error('ANTHROPIC_API_KEY is required for extraction');
 
   const result = await runExtraction(ctx.ai.claude, ctx.config.CLAUDE_MODEL, input, ctx.log);
@@ -84,8 +85,11 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload) 
     glossary: site.glossary,
   });
 
-  const sourceCountNow = (await ctx.db.listReportSources(report.id)).length;
-  const settled = sourceCountNow === sourceCountAtStart;
+  const sourcesNow = await ctx.db.listReportSources(report.id);
+  const sourceCountNow = sourcesNow.length;
+  // Captionless photos that arrived meanwhile are added by decide_next (syncDraftPhotos) without
+  // another model call (load test: 1.5 extractions per report when photos follow the voice note).
+  const settled = sourcesNow.every((s) => sourcesAtStart.has(s.id) || isPlainPhoto(s));
   // §F5 step 3: if extraction pushed us past 10 s, say what was found before the question/draft.
   await sendProgressIfSlow(ctx, report.id, async () => ({
     transcribed: await allAudioTranscribed(ctx, report.id),

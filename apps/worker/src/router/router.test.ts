@@ -210,6 +210,21 @@ describe('router: intake (F5, F12)', () => {
     ]);
   });
 
+  it('a photo on a day already logged as no work says so instead of opening a report', async () => {
+    const convo = await h.conversation('idle');
+    await h.send(convo, { type: 'text', body: 'no work today' });
+    expect(h.sentTexts().at(-1)).toMatch(/^Noted — no work today at /);
+    await h.send(convo, { type: 'image' });
+    expect(h.sentTexts().at(-1)).toMatch(
+      /^Got the photo\. Today is logged as no work at .+; if the crew did work, send a quick voice note\.$/,
+    );
+    expect(
+      Array.from(h.db.data.reports.values()).filter(
+        (r) => r.status !== 'void' && r.kind === 'daily',
+      ),
+    ).toHaveLength(0);
+  });
+
   it('photos only → asks for a voice note; the later voice note merges into the same report', async () => {
     const convo = await h.conversation('idle');
     await h.send(convo, { type: 'image' });

@@ -1,4 +1,4 @@
-import { currentData, sendDraft } from '../pipeline/draft';
+import { currentData, sendDraft, syncDraftPhotos } from '../pipeline/draft';
 import { fileReport } from '../pipeline/file';
 import { selectNextQuestion, validateDraft } from '../pipeline/validate';
 import { rerouteDayOff } from '../router/continue';
@@ -11,8 +11,8 @@ export const decideNext: JobHandler<'decide_next'> = async (ctx, payload) => {
   if (!report) throw new PermanentJobError(`report ${payload.reportId} not found`);
   if (report.status === 'filed' || report.status === 'signed_off' || report.status === 'void')
     return;
-  const data = await currentData(ctx, report);
-  if (!data) throw new PermanentJobError(`report ${report.id} has no draft`);
+  const draft = await currentData(ctx, report);
+  if (!draft) throw new PermanentJobError(`report ${report.id} has no draft`);
   if (report.kind !== 'daily') {
     await fileReport(ctx, report.id, {
       trigger: report.kind === 'weather_day' ? 'weather_day' : 'no_work',
@@ -28,9 +28,10 @@ export const decideNext: JobHandler<'decide_next'> = async (ctx, payload) => {
 
   const questions = await ctx.db.listQuestions(report.id);
   // §F10: a long note saying nobody worked goes to the day-off flow, not a headcount question.
-  if (questions.length === 0 && (await rerouteDayOff(ctx, report, data))) return;
+  if (questions.length === 0 && (await rerouteDayOff(ctx, report, draft))) return;
 
   const sources = await ctx.db.listReportSources(report.id);
+  const data = await syncDraftPhotos(ctx, report, draft, sources);
   const photoCount = sources.filter((s) => s.kind === 'photo').length;
   const validation = validateDraft(data, site.settings, photoCount);
 

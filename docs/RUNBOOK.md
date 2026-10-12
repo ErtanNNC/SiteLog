@@ -136,19 +136,20 @@ for f in supabase/migrations/*.sql; do psql -h 127.0.0.1 -p 55432 -U postgres -d
 
 **Results (2026-10-12, golden-case mix, default latencies).**
 
-| Run                                        | Site-days closed    | Received → question/draft p50 / p95   | OK → PDF p95 | Ack p95 | Slot-s per report | 500 / 30 min         |
-| ------------------------------------------ | ------------------- | ------------------------------------- | ------------ | ------- | ----------------- | -------------------- |
-| PGlite, 24 reports, 1 × 4, scale 0.05      | 24 / 24             | 108 / 123 s (window 5 min, saturated) | 79 s         | 32 s    | 46                | no (≈ 150 / 30 min)  |
-| PGlite, 500 reports, 1 × 4, scale 0.02     | 40 / 500 at timeout | 51 / 80 min                           | 74 min       | 26 min  | 47                | no (≈ 150 / 30 min)  |
-| Postgres 17, 500 reports, 4 × 6, scale 0.1 | 500 / 500           | 61 / 90 s                             | 26 s         | 10 s    | 55                | yes (≈ 790 / 30 min) |
+| Run                                                                | Site-days closed    | Received → question/draft p50 / p95   | OK → PDF p95 | Ack p95 | Slot-s per report | 500 / 30 min         |
+| ------------------------------------------------------------------ | ------------------- | ------------------------------------- | ------------ | ------- | ----------------- | -------------------- |
+| PGlite, 24 reports, 1 × 4, scale 0.05                              | 24 / 24             | 108 / 123 s (window 5 min, saturated) | 79 s         | 32 s    | 46                | no (≈ 150 / 30 min)  |
+| PGlite, 500 reports, 1 × 4, scale 0.02                             | 40 / 500 at timeout | 51 / 80 min                           | 74 min       | 26 min  | 47                | no (≈ 150 / 30 min)  |
+| Postgres 17, 500 reports, 4 × 6, scale 0.1                         | 500 / 500           | 61 / 90 s                             | 26 s         | 10 s    | 55                | yes (≈ 790 / 30 min) |
+| Postgres 17, 500 reports, 2 × 10, scale 0.1, after the queue fixes | 500 / 500           | 46 / 61 s                             | 7 s          | 4.7 s   | 44                | yes (≈ 830 / 30 min) |
 
-**Sizing.** A report holds a worker slot for ≈ 50–55 s (transcription, extraction, ≈ 1.5 extraction calls per report, the WhatsApp/storage/email calls; ≈ 0.3–1.2 s of it CPU and database), so one instance at the default `WORKER_CONCURRENCY=4` files ≈ 150 reports per 30 min. 500 in 30 min needs ≥ 16 slots, ≈ 22 to keep queues short: e.g. 4 instances × 6 or 2 × 12 (each instance opens concurrency + 2 database connections). The worker is I/O-bound, so raising `WORKER_CONCURRENCY` is cheaper than adding machines until PDF rendering (≈ 0.2–0.35 s of CPU per report, on the event loop) starts to delay the other jobs of that instance.
+**Sizing.** A report holds a worker slot for ≈ 44 s (transcription, one extraction, the WhatsApp/storage/email calls; ≈ 0.3–1 s of it CPU and database), so one instance at the default `WORKER_CONCURRENCY=4` files ≈ 160 reports per 30 min. 500 in 30 min needs ≥ 13 slots, ≈ 18 to keep queues short. `apps/worker/fly.toml` runs 2 machines × `WORKER_CONCURRENCY=10` (each instance opens concurrency + 2 database connections). The worker is I/O-bound, so raising `WORKER_CONCURRENCY` is cheaper than adding machines until PDF rendering (≈ 0.2–0.35 s of CPU per report, on the event loop) starts to delay the other jobs of that instance.
 
-**Known issues the load test shows** (2026-10-12):
+**Fixed after the first runs** (`20261012000004_queue_fairness.sql` and the worker, 2026-10-12):
 
-- FIFO claiming (`order by run_after, id`): when the queue backs up, acks (`inbound_message`) wait behind transcription and extraction (ack p95 26 min in the saturated run, target 5 s) and almost no report finishes until the backlog clears.
-- Intake race: inbound messages of one conversation are routed by two slots at once when they arrive within about a second or wait together in a backed-up queue (claimed in the same tick). Depending on the interleaving: two reports for one site-day (one left `collecting` with the photo) and a wrong "Got the photos…" reply; or a second ack plus an extraction that runs before the voice note is transcribed, whose empty draft looks like a day off, so the working day is voided and logged as `weather_day` / `no_work` (≈ 1 in 150–500 reports in these runs).
-- A photo that lands while its report is being extracted triggers a second extraction (≈ 1.5 Claude extraction calls per report).
+- FIFO claiming let acks wait behind transcription and extraction (ack p95 26 min saturated). `claim_jobs()` now claims acks and replies first, then filing, PDF and the report email, then transcription and extraction, then background jobs.
+- Intake race: messages of one conversation were routed by two slots at once (two reports for one site-day, a wrong "Got the photos…", an extraction before the transcript whose empty draft looked like a day off). Jobs now carry `lock_key = convo:<id>` (inbound, transcription, reply parsing, extraction, decide_next, filing): one at a time per conversation, in order. At most one live report per site-day (unique index). Extraction waits for every voice note's transcript, and the F10 reroute needs the note to say nobody worked.
+- A photo that arrived during extraction triggered a second extraction (≈ 1.5 Claude calls per report). The photo now waits for the extraction and rides along (`syncDraftPhotos`), so a report costs one extraction; a captioned photo arriving mid-extraction is still re-read.
 
 ## 8. End-to-end tests against a local Supabase stack
 

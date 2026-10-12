@@ -1,8 +1,9 @@
 -- SiteLog · job queue fairness and intake race (2026-10-12), found by the worker load test.
 --   1. jobs.lock_key: jobs about one WhatsApp conversation (inbound_message, transcribe_audio,
---      parse_reply) run one at a time. Two messages sent together (voice note + photo) were handled
---      by two worker slots at once and could create two reports for one site-day, or extract a
---      report before its transcript existed. The key is derived on insert, so the webhook and the
+--      parse_reply, and the report jobs extract_report, decide_next, file_report) run one at a
+--      time. Two messages sent together (voice note + photo) were handled by two worker slots at
+--      once and could create two reports for one site-day or extract a report before its
+--      transcript existed; a photo handled during decide_next's day-off reroute opened a report. The key is derived on insert, so the webhook and the
 --      worker keep calling enqueue_job unchanged.
 --   2. claim_jobs(): skips a job while an earlier job with the same key is due or running, and
 --      claims short conversational jobs first, then filing, PDF and the report email (acks were
@@ -23,6 +24,15 @@ language sql stable security definer set search_path = public as $$
          and p_payload ->> 'messageId' ~ '^[0-9a-f-]{36}$'
       then (select 'convo:' || m.conversation_id from messages m
              where m.id = (p_payload ->> 'messageId')::uuid and m.conversation_id is not null)
+    -- Report jobs that read or change the reporter's conversation (progress bubble, questions,
+    -- the draft card, the F10 reroute, "Filed."): same key, so a photo sent meanwhile waits.
+    when p_type in ('extract_report', 'decide_next', 'file_report')
+         and p_payload ->> 'reportId' ~ '^[0-9a-f-]{36}$'
+      then (select 'convo:' || c.id from reports r
+             join reporters rp on rp.id = r.reporter_id
+             join conversations c on c.phone_e164 = rp.phone_e164
+            where r.id = (p_payload ->> 'reportId')::uuid
+            limit 1)
   end;
 $$;
 

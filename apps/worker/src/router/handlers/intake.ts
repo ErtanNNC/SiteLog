@@ -239,6 +239,16 @@ export async function startIntake(
   }
 
   let report = await ctx.db.findOpenReportForSiteDay(siteDay.id);
+  if (
+    !report &&
+    siteDay.status === 'no_work' &&
+    messages.every((m) => sourceKindOf(m) === 'photo')
+  ) {
+    // Photos sent with (or after) "no work today": no report to start, but say what is on record.
+    await s.setState(null, { last_site_id: site.id, pending: null });
+    await s.reply(waCopy.photoOnNoWorkDay(site.name), undefined, { kind: 'no_work' });
+    return;
+  }
   if (!report) {
     const filed = await ctx.db.findReportForSiteDay(siteDay.id);
     if (filed && (filed.status === 'filed' || filed.status === 'signed_off')) {

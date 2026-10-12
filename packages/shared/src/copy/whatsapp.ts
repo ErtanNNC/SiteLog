@@ -45,6 +45,8 @@ export const waCopy = {
   weatherDayFollowup: (): string =>
     'How many were on site this morning? And a photo of conditions would make the record stronger.',
   noWorkLogged: (site: string): string => `Noted — no work today at ${site}.`,
+  photoOnNoWorkDay: (site: string): string =>
+    `Got the photo. Today is logged as no work at ${site}; if the crew did work, send a quick voice note.`,
   photosOnly: (): string =>
     "Got the photos. Send a quick voice note with today's work, crew and weather.",
   unclearAudio: (): string =>

@@ -199,6 +199,79 @@ describe('pipeline: compose + extract job + filing', () => {
     expect(h.db.data.audit.map((a) => a.action)).toContain('report.extracted');
   });
 
+  it('a photo arriving during extraction rides along without another model call; a caption re-extracts', async () => {
+    for (const caption of [null, 'L4 pour done']) {
+      const scripted = scriptedClaude([
+        { input: load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09') },
+      ]);
+      const h = createHarness();
+      const siteDay = await h.db.getOrCreateSiteDay(
+        SITE_RIVERSIDE,
+        '2026-10-09',
+        deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+      );
+      const report = await h.db.insertReport({
+        org_id: h.org.id,
+        site_id: SITE_RIVERSIDE,
+        site_day_id: siteDay.id,
+        report_no: 'RL-2041-0187',
+        reporter_id: h.marco.id,
+        received_at: '2026-10-09T22:31:00Z',
+        kind: 'daily',
+      });
+      const convo = await h.conversation('processing', { active_report_id: report.id });
+      const audio = await h.inbound(convo, {
+        type: 'audio',
+        storage_path: 'x/a.ogg',
+        duration_s: 168,
+      });
+      await h.db.insertReportSource({ report_id: report.id, message_id: audio.id, kind: 'audio' });
+      const fixture = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
+      await h.db.upsertTranscript({
+        message_id: audio.id,
+        language: 'es+en',
+        text: fixture.segments.map((x) => x.text).join(' '),
+        segments: fixture.segments.map((x) => ({ start: x.start, end: x.end, text: x.text })),
+        model: 'whisper-1',
+      });
+      // The photo lands while the model is working.
+      let photoId = '';
+      h.claude({
+        ...scripted,
+        messages: {
+          async create(params) {
+            const photo = await h.inbound(convo, {
+              type: 'image',
+              body: caption,
+              storage_path: 'x/p.jpg',
+            });
+            photoId = photo.id;
+            await h.db.insertReportSource({
+              report_id: report.id,
+              message_id: photo.id,
+              kind: 'photo',
+              caption,
+              taken_at: photo.created_at,
+            });
+            return scripted.messages.create(params);
+          },
+        },
+      });
+      h.setNow(new Date('2026-10-09T22:31:05Z'));
+      await h.runJob('extract_report', { reportId: report.id });
+      if (caption) {
+        expect(h.db.jobsOfType('extract_report')).toHaveLength(1); // re-extract with the caption
+        expect(h.db.jobsOfType('decide_next')).toHaveLength(0);
+        continue;
+      }
+      expect(h.db.jobsOfType('extract_report')).toHaveLength(0);
+      expect(h.db.jobsOfType('decide_next')).toHaveLength(1);
+      await h.runJob('decide_next', { reportId: report.id });
+      const draft = await currentData(h.ctx, (await h.db.getReport(report.id))!);
+      expect(draft!.photos.map((p) => p.messageId)).toEqual([photoId]);
+    }
+  });
+
   it('a long "no work today" note goes to the §F10 no-work flow instead of a headcount question', async () => {
     const h = createHarness();
     h.setNow(new Date('2026-10-08T12:05:00Z'));

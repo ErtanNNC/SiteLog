@@ -6,6 +6,7 @@ import {
   type DailyReportData,
   type MessageRow,
   type ReportRow,
+  type ReportSourceRow,
   type ReportVersionRow,
 } from '@sitelog/shared';
 import type { Ctx } from '../context';
@@ -33,6 +34,44 @@ export async function storeDraft(
     author_message_id: opts.authorMessageId ?? null,
     change_note: opts.changeNote ?? null,
   });
+}
+
+/**
+ * Photos are added to the draft by code, not the model (§10.4): a photo that arrived after the
+ * extraction started is appended here instead of paying for another extraction. Returns the data
+ * to use (stored when it changed).
+ */
+export async function syncDraftPhotos(
+  ctx: Ctx,
+  report: ReportRow,
+  data: DailyReportData,
+  sources: Array<
+    Pick<ReportSourceRow, 'message_id' | 'kind' | 'caption' | 'taken_at'> & {
+      message_created_at?: string;
+    }
+  >,
+): Promise<DailyReportData> {
+  const have = new Set(data.photos.map((p) => p.messageId));
+  const missing = sources.filter((s) => s.kind === 'photo' && !have.has(s.message_id));
+  if (missing.length === 0) return data;
+  const next: DailyReportData = {
+    ...data,
+    photos: [
+      ...data.photos,
+      ...missing.map((s) => ({
+        messageId: s.message_id,
+        caption: s.caption ?? undefined,
+        takenAt: s.taken_at ?? s.message_created_at ?? ctx.now().toISOString(),
+      })),
+    ],
+  };
+  await storeDraft(ctx, report, next);
+  return next;
+}
+
+/** A photo without a caption carries nothing for the model to read. */
+export function isPlainPhoto(s: Pick<ReportSourceRow, 'kind' | 'caption'>): boolean {
+  return s.kind === 'photo' && !(s.caption ?? '').trim();
 }
 
 export async function currentData(ctx: Ctx, report: ReportRow): Promise<DailyReportData | null> {
