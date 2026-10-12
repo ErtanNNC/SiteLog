@@ -181,12 +181,18 @@ jobs:
       - name: Netlify site
         id: site
         if: steps.cfg.outputs.ready == 'true'
-        # Without NETLIFY_SITE_ID the site is found or created by name, so a token is all Netlify needs.
+        # The site id comes from NETLIFY_SITE_ID or .github/netlify-sites.json (an id survives renaming
+        # the site in Netlify). With neither, a site is found or created by name, so a token is all
+        # Netlify needs for the first deploy.
         run: |
           api=https://api.netlify.com/api/v1
           auth="Authorization: Bearer $NETLIFY_AUTH_TOKEN"
-          if [ -n "$NETLIFY_SITE_ID" ]; then
-            site=$(curl -sS --fail-with-body -H "$auth" "$api/sites/$NETLIFY_SITE_ID")
+          id="$NETLIFY_SITE_ID"
+          if [ -z "$id" ] && [ -f .github/netlify-sites.json ]; then
+            id=$(jq -r --arg e "$ENVIRONMENT" '.[$e] // empty' .github/netlify-sites.json)
+          fi
+          if [ -n "$id" ]; then
+            site=$(curl -sS --fail-with-body -H "$auth" "$api/sites/$id")
           else
             name="sitelog-${ENVIRONMENT}-$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
             site=$(curl -sS --fail-with-body -H "$auth" "$api/sites?name=$name&filter=all" \
@@ -196,6 +202,7 @@ jobs:
                 | curl -sS --fail-with-body -H "$auth" -H 'Content-Type: application/json' -d @- "$api/sites")
               echo "Created Netlify site $name"
             fi
+            echo "::notice::Netlify site $(jq -r .name <<<"$site") has id $(jq -r .id <<<"$site"); add it to .github/netlify-sites.json under \"$ENVIRONMENT\" so a rename keeps deploys on it."
           fi
           echo "id=$(jq -r .id <<<"$site")" >> "$GITHUB_OUTPUT"
           echo "url=$(jq -r '.ssl_url // .url' <<<"$site")" >> "$GITHUB_OUTPUT"
