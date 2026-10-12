@@ -3,7 +3,10 @@
   "compilerOptions": {
     "lib": ["ES2023", "DOM"],
     "jsx": "react-jsx",
-    "types": ["node"]
+    "types": ["node"],
+    // src/integration imports supabase/functions/whatsapp-webhook/logic.ts, whose bare
+    // '@sitelog/shared' import is a Deno import-map entry; point it at the same file the package exports.
+    "paths": { "@sitelog/shared": ["../../packages/shared/src/index.ts"] }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

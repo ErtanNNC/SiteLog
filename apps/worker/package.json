@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval": "tsx src/ai/eval.ts",
+    "loadtest": "tsx src/integration/loadtest.ts",
     "render-sample-pdf": "tsx src/pdf/render-sample.ts"
   },
   "dependencies": {
