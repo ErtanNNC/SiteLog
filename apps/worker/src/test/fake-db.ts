@@ -717,6 +717,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         locked_by: null,
         last_error: null,
         dedupe_key: opts.dedupeKey ?? null,
+        lock_key: null,
         created_at: iso(),
         finished_at: null,
       });

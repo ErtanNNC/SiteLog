@@ -370,6 +370,8 @@ export type JobRow = {
   locked_by: string | null;
   last_error: string | null;
   dedupe_key: string | null;
+  /** `convo:<id>`: jobs of one conversation run one at a time (20261012000004_queue_fairness.sql). */
+  lock_key: string | null;
   created_at: string;
   finished_at: string | null;
 };
@@ -709,9 +711,12 @@ export type Database = {
         | 'locked_by'
         | 'last_error'
         | 'dedupe_key'
+        | 'lock_key'
         | 'created_at'
         | 'finished_at'
       >;
+      scheduler_state: Table<SchedulerStateRow, 'value' | 'updated_at'>;
+      stripe_events: Table<StripeEventRow, 'received_at' | 'processed_at'>;
       audit_log: Table<
         AuditLogRow,
         'id' | 'org_id' | 'actor_type' | 'actor_id' | 'entity' | 'entity_id' | 'diff' | 'created_at'

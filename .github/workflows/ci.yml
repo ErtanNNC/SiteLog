@@ -113,6 +113,11 @@ jobs:
           ENV
       - name: Start Supabase (migrations + seed.sql)
         run: supabase start -x studio,imgproxy,logflare,vector,supavisor,postgres-meta,mailpit
+      # The shared Database type is hand-maintained; fail when it drifts from the migrated schema.
+      - name: Shared DB types match the schema
+        run: |
+          supabase gen types typescript --local --schema public > "$RUNNER_TEMP/db.gen.ts"
+          pnpm --filter @sitelog/scripts db-types-drift -- "$RUNNER_TEMP/db.gen.ts"
       - name: Export API URL and keys
         run: |
           supabase status -o env 2>/dev/null \

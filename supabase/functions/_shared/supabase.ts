@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { Database, Json } from '@sitelog/shared';
+import type { Database, Json, SchedulerStateRow, StripeEventRow } from '@sitelog/shared';
+
+export type { SchedulerStateRow, StripeEventRow };
 import { requireEnv } from './env.ts';
 
 /**
@@ -8,8 +10,8 @@ import { requireEnv } from './env.ts';
  * supabase-js requires every `Row` to extend `Record<string, unknown>`. The hand-maintained rows in
  * `@sitelog/shared/db/types.ts` are interfaces (no implicit index signature), which makes the
  * whole schema fall back to `never`. The schema is therefore re-mapped into plain object types
- * here, and the tables/RPCs the shared type does not list yet (`scheduler_state`, `stripe_events`,
- * `log_audit`, `notify_org`, `invoice_gaps`) are added.
+ * here, and the RPC signatures this layer relies on (`log_audit`, `notify_org`, `invoice_gaps`) are
+ * pinned.
  */
 type Plain<T> = { [K in keyof T]: T[K] };
 type PlainTable<T> = T extends {
@@ -24,19 +26,6 @@ type PlainView<T> = T extends { Row: infer R; Relationships: infer L }
   ? { Row: Plain<R>; Relationships: L }
   : never;
 
-export interface SchedulerStateRow {
-  key: string;
-  value: Json;
-  updated_at: string;
-}
-
-export interface StripeEventRow {
-  id: string;
-  type: string;
-  received_at: string;
-  processed_at: string | null;
-}
-
 export interface InvoiceGapRow {
   company_id: string;
   company_name: string;
@@ -46,21 +35,6 @@ export interface InvoiceGapRow {
   invoice_id: string;
   invoice_status: string;
 }
-
-type ExtraTables = {
-  scheduler_state: {
-    Row: SchedulerStateRow;
-    Insert: { key: string; value: Json; updated_at?: string };
-    Update: Partial<SchedulerStateRow>;
-    Relationships: [];
-  };
-  stripe_events: {
-    Row: StripeEventRow;
-    Insert: { id: string; type: string; received_at?: string; processed_at?: string | null };
-    Update: Partial<StripeEventRow>;
-    Relationships: [];
-  };
-};
 
 type ExtraFunctions = {
   log_audit: {
@@ -92,7 +66,7 @@ type ExtraFunctions = {
   };
 };
 
-type Tables0 = Database['public']['Tables'] & ExtraTables;
+type Tables0 = Database['public']['Tables'];
 type Views0 = Database['public']['Views'];
 
 export type AppDatabase = {

@@ -368,6 +368,7 @@ export function createHarness(
         locked_by: 'test',
         last_error: null,
         dedupe_key: null,
+        lock_key: null,
         created_at: now.toISOString(),
         finished_at: null,
       };
