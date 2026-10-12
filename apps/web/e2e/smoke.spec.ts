@@ -131,14 +131,28 @@ test.describe('SiteLog panel (demo mode)', () => {
     await expect(page.getByText(/Entered by .+ in SiteLog at/)).toBeVisible();
     await expect(page.getByText('Wall framing')).toBeVisible();
 
-    const popup = page.waitForEvent('popup');
+    // Capture the URL the PDF button opens (headless Chromium has no PDF viewer, so a PDF tab
+    // stays blank there) and check that it really is a PDF.
+    await page.evaluate(() => {
+      const w = window as unknown as { __opened: string[] };
+      w.__opened = [];
+      window.open = (url?: string | URL) => {
+        if (url) w.__opened.push(String(url));
+        return null;
+      };
+    });
     await page.getByRole('button', { name: 'PDF', exact: true }).click();
-    const tab = await popup;
-    await tab.waitForURL(/^blob:/);
-    const head = await page.evaluate(async (url) => {
-      const bytes = await (await fetch(url)).arrayBuffer();
-      return new TextDecoder().decode(bytes.slice(0, 5));
-    }, tab.url());
+    const opened = await page.waitForFunction(() => {
+      const urls = (window as unknown as { __opened: string[] }).__opened;
+      return urls.find((u) => u.startsWith('blob:')) ?? null;
+    });
+    const head = await page.evaluate(
+      async (url) => {
+        const bytes = await (await fetch(url)).arrayBuffer();
+        return new TextDecoder().decode(bytes.slice(0, 5));
+      },
+      (await opened.jsonValue()) as string,
+    );
     expect(head).toBe('%PDF-');
 
     await page
