@@ -39,14 +39,20 @@ export function imageFormat(
   return null;
 }
 
-async function loadLogo(ctx: Ctx, logoPath: string | null): Promise<PdfImage | null> {
+export async function loadLogo(
+  ctx: Pick<Ctx, 'storage' | 'log'>,
+  logoPath: string | null,
+): Promise<PdfImage | null> {
   if (!logoPath) return null;
-  const format = imageFormat(logoPath);
-  if (!format) return null; // SVG logos are not embeddable by react-pdf; the name is used instead.
+  // react-pdf cannot embed SVG files: the web panel uploads a PNG rendition next to an SVG logo.
+  const path = /\.svg$/i.test(logoPath) ? logoPath.replace(/\.svg$/i, '.png') : logoPath;
+  const format = imageFormat(path);
+  if (!format) return null;
   try {
-    return { data: await ctx.storage.download('logos', logoPath), format };
+    return { data: await ctx.storage.download('logos', path), format };
   } catch (err) {
-    ctx.log.warn('logo not loaded', { err, path: logoPath });
+    // No rendition (or a storage error): the letterhead falls back to the company name.
+    ctx.log.warn('logo not loaded', { err, path });
     return null;
   }
 }

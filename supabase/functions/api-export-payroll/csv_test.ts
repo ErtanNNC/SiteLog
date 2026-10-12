@@ -3,6 +3,7 @@ import {
   buildPayrollRows,
   csvEscape,
   formatHours,
+  normalizePayrollColumns,
   PAYROLL_COLUMNS,
   payrollCsv,
   payrollFileName,
@@ -139,3 +140,37 @@ Deno.test('payrollCsv has exactly the spec columns in order', () => {
   );
   assertEquals(payrollFileName('2026-W41'), 'payroll_2026-W41.csv');
 });
+
+Deno.test('payrollCsv follows the org column order (org_settings.payroll_columns)', () => {
+  const rows = buildPayrollRows([entries[0]!], sites, companies, { includeUnconfirmed: false });
+  assertEquals(
+    payrollCsv(rows, [
+      'company',
+      'hours',
+      'date',
+      'site',
+      'project_code',
+      'trade',
+      'workers',
+      'report_no',
+      'version',
+    ]),
+    'company,hours,date,site,project_code,trade,workers,report_no,version\r\n' +
+      'Delta Mechanical,48,2026-10-06,Riverside Lofts — Block B,RL-2041,HVAC,6,RL-2041-0187,2\r\n',
+  );
+});
+
+Deno.test(
+  'payrollCsv normalises a stored order: unknown and duplicate names out, missing appended',
+  () => {
+    const header = (order: readonly string[] | null | undefined) =>
+      payrollCsv([], order).split('\r\n')[0];
+    assertEquals(header(null), PAYROLL_COLUMNS.join(','));
+    assertEquals(header(undefined), PAYROLL_COLUMNS.join(','));
+    assertEquals(
+      header(['report_no', 'phone', 'report_no', 'hours']),
+      'report_no,hours,date,site,project_code,company,trade,workers,version',
+    );
+    assertEquals(normalizePayrollColumns(['version']).length, PAYROLL_COLUMNS.length);
+  },
+);

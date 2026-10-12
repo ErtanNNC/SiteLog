@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, FileDown, FolderArchive, Search, X } from 'l
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
-import { formatDateShort, formatHours } from '@sitelog/shared/format.ts';
+import { formatDateInTz, formatDateShort, formatHours } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { DataTable, type Column } from '@/components/sitelog/DataTable';
 import { PageHeader } from '@/components/sitelog/PageHeader';
@@ -23,7 +23,8 @@ import {
   SelectValue,
 } from '@/components/ui/Select';
 import { copy } from '@/copy/en';
-import { useReports, useSites } from '@/data/hooks';
+import { useDataSource } from '@/data/DataProvider';
+import { useOpenReportPdf, usePdfZipExport, useReports, useSites } from '@/data/hooks';
 import type { ReportFilters, ReportFlag, ReportListItem, ReportStatusFilter } from '@/data/types';
 import { formatCrew, formatHoursNum, monthOf } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -74,7 +75,10 @@ function filtersFrom(params: URLSearchParams): ReportFilters {
 
 /** P6 · Reports archive — filters in the URL, 50 per page from the DataSource (§11.4). */
 export default function ReportsPage() {
-  const { isDemo } = useAuth();
+  const { isDemo, currentOrg } = useAuth();
+  const source = useDataSource();
+  const pdfZip = usePdfZipExport();
+  const openPdf = useOpenReportPdf();
   const [params, setParams] = useSearchParams();
   const filters = useMemo(() => filtersFrom(params), [params]);
   const reports = useReports(filters);
@@ -143,14 +147,32 @@ export default function ReportsPage() {
     });
   };
 
+  /** Selected rows, or every report matching the current filters (capped server-side). */
   const onExport = () => {
     const n = selected.size || data?.total || 0;
-    if (isDemo) toast.message(copy.reports.exportDemo(n));
-    else toast.message(copy.reports.exportStarted(n));
+    if (isDemo) {
+      toast.message(copy.reports.exportDemo(n));
+      return;
+    }
+    if (!n) {
+      toast.message(copy.reports.exportNone);
+      return;
+    }
+    pdfZip.mutate({
+      selection: selected.size
+        ? { reportIds: [...selected] }
+        : { filters: { ...filters, page: 1 } },
+      fileName: copy.pdfZip.fileName(
+        copy.pdfZip.labels.archive,
+        formatDateInTz(source.now(), currentOrg?.timezone ?? 'UTC'),
+      ),
+    });
   };
 
   const onPdf = (r: ReportListItem) => {
-    if (isDemo || !r.pdfPath) toast.message(copy.toasts.pdfDemo);
+    if (isDemo) toast.message(copy.toasts.pdfDemo);
+    else if (!r.pdfPath) toast.message(copy.reports.pdfNotReady);
+    else openPdf.open(r.reportId);
   };
 
   const columns: Column<ReportListItem>[] = [
@@ -274,7 +296,12 @@ export default function ReportsPage() {
         title={copy.reports.title}
         subtitle={copy.reports.subtitle}
         actions={
-          <Button variant="secondary" onClick={onExport} data-testid="export-zip">
+          <Button
+            variant="secondary"
+            onClick={onExport}
+            loading={pdfZip.isPending}
+            data-testid="export-zip"
+          >
             <FolderArchive aria-hidden="true" />
             {copy.reports.exportZip}
             {selected.size ? (

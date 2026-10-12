@@ -133,4 +133,26 @@ describe('SetupPage (demo org)', () => {
       expect(store.data.sites.some((s) => s.project_code === 'WG-0100')).toBe(true),
     );
   });
+
+  it('validates the company logo and uploads it once the company is created', async () => {
+    const store = new DemoStore();
+    storage.set(progressKey(demoUserFor('admin').id), { done: {}, createdSites: [] });
+    renderWithProviders(<Harness />, { route: '/setup/company', store });
+    await screen.findByRole('heading', { name: 'Set up your company' });
+    const input = document.getElementById('co-logo') as HTMLInputElement;
+    await userEvent.upload(input, new File(['x'], 'logo.jpg', { type: 'image/jpeg' }), {
+      applyAccept: false,
+    });
+    expect(await screen.findByText('Use a PNG or SVG file.')).toBeInTheDocument();
+    await userEvent.upload(input, new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }));
+    await waitFor(() =>
+      expect(screen.queryByText('Use a PNG or SVG file.')).not.toBeInTheDocument(),
+    );
+    expect(store.data.org.logo_path).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Continue to first site' }));
+    expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
+    expect(store.data.org.logo_path).toBe(`${store.data.org.id}/logo.svg`);
+    expect(store.logoUrl).toMatch(/^blob:/);
+    expect(store.data.audit.at(-1)!.action).toBe('org.logo_updated');
+  });
 });

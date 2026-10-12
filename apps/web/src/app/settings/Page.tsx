@@ -1,5 +1,5 @@
 import { Save } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthProvider';
@@ -10,11 +10,11 @@ import { ErrorState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/Dialog';
 import { copy } from '@/copy/en';
-import { useDataSource } from '@/data/DataProvider';
-import { useSaveSettings, useSaveSiteRecipients, useSettings } from '@/data/hooks';
+import { useSaveSettings, useSaveSiteRecipients, useSetOrgLogo, useSettings } from '@/data/hooks';
 import type { OrgSettings, OrgSettingsPatch } from '@/data/types';
-import { cn, storage } from '@/lib/utils';
-import { PAYROLL_COLUMNS, PayrollSection } from './PayrollSection';
+import { logoFileError } from '@/lib/logo';
+import { cn } from '@/lib/utils';
+import { PayrollSection } from './PayrollSection';
 import { PdfSection } from './PdfSection';
 import { RecipientsSection, type RecipientsDraft } from './RecipientsSection';
 import { ReportsSection } from './ReportsSection';
@@ -31,11 +31,11 @@ export default function SettingsPage() {
   const section = (SECTIONS as readonly string[]).includes(sectionParam ?? '')
     ? (sectionParam as Section)
     : null;
-  const source = useDataSource();
   const { isDemo } = useAuth();
   const settings = useSettings();
   const saveSettings = useSaveSettings();
   const saveRecipients = useSaveSiteRecipients();
+  const setLogo = useSetOrgLogo();
 
   // Baseline (last loaded / saved) and the editable draft.
   const [baseline, setBaseline] = useState<{
@@ -44,11 +44,15 @@ export default function SettingsPage() {
   } | null>(null);
   const [draft, setDraft] = useState<OrgSettings | null>(null);
   const [recipients, setRecipients] = useState<RecipientsDraft>([]);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const columnsKey = `sitelog.payrollColumns.${source.orgId}`;
-  const [columns, setColumns] = useState<string[]>(() =>
-    storage.get<string[]>(columnsKey, [...PAYROLL_COLUMNS]),
-  );
+  // The picked (or removed) logo shows at once; the stored one (signed URL) takes over after
+  // the settings refetch that follows a successful upload, so the preview never flickers.
+  const [logoOverride, setLogoOverride] = useState<{ url: string | null; at: number } | null>(null);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const overrideUrl = logoOverride?.url ?? null;
+  useEffect(() => () => void (overrideUrl && URL.revokeObjectURL(overrideUrl)), [overrideUrl]);
+  if (logoOverride && !setLogo.isPending && settings.dataUpdatedAt > logoOverride.at) {
+    setLogoOverride(null);
+  }
 
   // Seed the draft from the first load (adjusting state during render avoids an effect round-trip).
   if (settings.data && !baseline) {
@@ -96,23 +100,21 @@ export default function SettingsPage() {
     }
   };
 
+  /** Logo upload / removal is saved right away (Storage + orgs.logo_path), not with "Save". */
   const onLogoChange = (file: File | null) => {
-    if (logoUrl) URL.revokeObjectURL(logoUrl);
-    if (!file) {
-      setLogoUrl(null);
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error(copy.setup.company.logoTooLarge);
-      return;
-    }
-    setLogoUrl(URL.createObjectURL(file));
-    if (isDemo) toast.message(copy.settings.pdf.logoPreviewOnly);
-  };
-
-  const onColumnsChange = (next: string[]) => {
-    setColumns(next);
-    storage.set(columnsKey, next);
+    const error = file ? logoFileError(file) : null;
+    setLogoError(error);
+    if (error) return;
+    setLogoOverride({ url: file ? URL.createObjectURL(file) : null, at: Date.now() });
+    setLogo.mutate(
+      { file },
+      {
+        onSuccess: () => {
+          if (file && isDemo) toast.message(copy.settings.pdf.logoDemo);
+        },
+        onError: () => setLogoOverride(null),
+      },
+    );
   };
 
   if (!section) return <Navigate to="/settings/reports" replace />;
@@ -175,21 +177,16 @@ export default function SettingsPage() {
           draft={draft}
           update={update}
           orgName={settings.data.org.name}
-          logoUrl={logoUrl}
+          logoUrl={logoOverride ? logoOverride.url : settings.data.org.logoUrl}
           onLogoChange={onLogoChange}
+          logoBusy={setLogo.isPending}
+          logoError={logoError}
         />
       ) : null}
       {section === 'recipients' ? (
         <RecipientsSection draft={recipients} update={setRecipients} />
       ) : null}
-      {section === 'payroll' ? (
-        <PayrollSection
-          draft={draft}
-          update={update}
-          columns={columns}
-          onColumnsChange={onColumnsChange}
-        />
-      ) : null}
+      {section === 'payroll' ? <PayrollSection draft={draft} update={update} /> : null}
 
       <ConfirmDialog
         open={!!guard.pending}

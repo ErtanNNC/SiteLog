@@ -652,6 +652,8 @@ export interface SettingsData {
     licenseNo: string | null;
     timezone: string;
     logoPath: string | null;
+    /** Signed URL (Supabase) or in-memory object URL (demo) of the logo, for previews. */
+    logoUrl: string | null;
   };
   settings: OrgSettings;
   siteRecipients: Array<{ siteId: string; siteName: string; emails: string[] }>;
@@ -679,10 +681,13 @@ export interface BillingData {
     pausedAt: string | null;
   }>;
   invoices: Array<{
+    /** Stripe invoice id (Supabase mode). */
+    id?: string;
     date: string;
     sites: number;
     amountCents: number;
     status: 'paid' | 'open' | 'past_due';
+    /** Stripe hosted invoice page; empty / '#' → open the customer portal instead. */
     url: string;
   }>;
 }

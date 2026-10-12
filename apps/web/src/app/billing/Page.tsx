@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/Dialog';
 import { copy } from '@/copy/en';
-import { useBilling, usePauseSite, useResumeSite } from '@/data/hooks';
+import { useBilling, useBillingPortal, usePauseSite, useResumeSite } from '@/data/hooks';
 import type { BillingData } from '@/data/types';
 import { formatDateLong } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -35,6 +35,12 @@ export default function BillingPage() {
   const billing = useBilling();
   const pause = usePauseSite();
   const resume = useResumeSite();
+  const portal = useBillingPortal();
+  /** Stripe customer portal (payment method, invoice PDFs); demo mode only explains it. */
+  const openPortal = () => {
+    if (isDemo) toast.message(copy.billing.portalDemo);
+    else portal.mutate();
+  };
   const [confirm, setConfirm] = useState<{ site: SiteRow; action: 'pause' | 'resume' } | null>(
     null,
   );
@@ -168,7 +174,8 @@ export default function BillingPage() {
             variant="ghost"
             size="dense"
             aria-label={copy.billing.invoiceDownload(formatDateLong(i.date))}
-            onClick={() => toast.message(isDemo ? copy.billing.portalDemo : copy.errors.generic)}
+            disabled={portal.isPending}
+            onClick={openPortal}
           >
             <Download aria-hidden="true" />
             {copy.billing.download}
@@ -265,7 +272,9 @@ export default function BillingPage() {
             <Button
               variant="ghost"
               className="mt-5 w-full"
-              onClick={() => toast.message(isDemo ? copy.billing.portalDemo : copy.errors.generic)}
+              loading={portal.isPending}
+              onClick={openPortal}
+              data-testid="update-payment"
             >
               <CreditCard aria-hidden="true" />
               {copy.billing.updatePayment}
@@ -299,7 +308,7 @@ export default function BillingPage() {
           <DataTable
             columns={invoiceColumns}
             rows={invoices}
-            rowKey={(i) => i.date}
+            rowKey={(i) => i.id ?? i.date}
             aria-label={copy.billing.invoices}
             empty={{ title: copy.billing.invoicesEmpty }}
           />

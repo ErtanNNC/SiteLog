@@ -4,10 +4,9 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { copy } from '@/copy/en';
+import { LOGO_ACCEPT, logoFileError } from '@/lib/logo';
 import { Field, TimezoneSelect } from './fields';
 import type { CompanyDraft } from './state';
-
-const MAX_LOGO = 2 * 1024 * 1024;
 
 export function CompanyStep({
   draft,
@@ -97,16 +96,15 @@ export function CompanyStep({
                   ref={fileRef}
                   id="co-logo"
                   type="file"
-                  accept="image/png,image/svg+xml"
+                  accept={LOGO_ACCEPT}
                   className="sr-only"
                   onChange={(e) => {
                     const f = e.target.files?.[0] ?? null;
-                    if (f && f.size > MAX_LOGO) {
-                      setErrors((er) => ({ ...er, logo: c.logoTooLarge }));
-                      return;
-                    }
-                    if (f && !['image/png', 'image/svg+xml'].includes(f.type)) {
-                      setErrors((er) => ({ ...er, logo: c.logoWrongType }));
+                    e.target.value = '';
+                    if (!f) return;
+                    const error = logoFileError(f);
+                    if (error) {
+                      setErrors((er) => ({ ...er, logo: error }));
                       return;
                     }
                     setErrors(({ logo: _l, ...rest }) => rest);

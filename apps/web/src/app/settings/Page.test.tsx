@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { demoPayrollCsv } from '@/data/demo/DemoSource';
 import { DemoStore } from '@/data/demo/store';
 import { renderWithProviders } from '@/test/render';
 import SettingsPage from './Page';
@@ -112,5 +113,83 @@ describe('SettingsPage (demo data)', () => {
     expect(preview).toHaveAttribute('data-paper', 'a4');
     await userEvent.click(screen.getByTestId('save-settings'));
     await waitFor(() => expect(store.data.settings.pdf_paper).toBe('a4'));
+  });
+
+  it('reorders payroll columns and saves them to org_settings (not localStorage)', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<SettingsPage />, opts(store, 'payroll'));
+    await screen.findByRole('heading', { name: /^Settings$/ });
+    const list = screen.getByTestId('payroll-columns');
+    const order = () =>
+      within(list)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent);
+    expect(order()[0]).toContain('date');
+    const save = screen.getByTestId('save-settings');
+    expect(save).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reset to default order' })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Move company up' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Move company up' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Move company up' }));
+    expect(order()[0]).toContain('company');
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+    await waitFor(() => expect(save).toBeDisabled());
+    expect(store.data.settings.payroll_columns).toEqual([
+      'company',
+      'date',
+      'site',
+      'project_code',
+      'trade',
+      'workers',
+      'hours',
+      'report_no',
+      'version',
+    ]);
+    expect(store.data.audit.at(-1)!.action).toBe('settings.updated');
+    expect(window.localStorage.length).toBe(0);
+    // The demo CSV follows the saved order, like api-export-payroll.
+    expect(demoPayrollCsv(store, '2026-W41').split('\n')[0]).toBe(
+      'company,date,site,project_code,trade,workers,hours,report_no,version',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reset to default order' }));
+    expect(order()[0]).toContain('date');
+    expect(save).toBeEnabled();
+  });
+
+  it('uploads a PNG logo into the live preview, rejects other files and removes it', async () => {
+    const created = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:logo-preview');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const store = new DemoStore();
+    renderWithProviders(<SettingsPage />, opts(store, 'pdf'));
+    await screen.findByRole('heading', { name: /^Settings$/ });
+    const input = screen.getByTestId('logo-input');
+
+    await userEvent.upload(input, new File(['GIF89a'], 'logo.gif', { type: 'image/gif' }), {
+      applyAccept: false,
+    });
+    expect(await screen.findByText('Use a PNG or SVG file.')).toBeInTheDocument();
+    const big = new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' });
+    await userEvent.upload(input, big);
+    expect(await screen.findByText('The logo must be 2 MB or smaller.')).toBeInTheDocument();
+    expect(store.data.org.logo_path).toBeNull();
+
+    await userEvent.upload(input, new File(['png'], 'kestrel.png', { type: 'image/png' }));
+    await waitFor(() => expect(store.data.org.logo_path).toBe(`${store.data.org.id}/logo.png`));
+    expect(created).toHaveBeenCalled();
+    expect(store.logoUrl).toBe('blob:logo-preview');
+    const preview = screen.getByTestId('pdf-preview');
+    await waitFor(() =>
+      expect(preview.querySelector('img')).toHaveAttribute('src', 'blob:logo-preview'),
+    );
+    expect(screen.queryByText('Use a PNG or SVG file.')).not.toBeInTheDocument();
+    expect(store.data.audit.at(-1)!.action).toBe('org.logo_updated');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove logo' }));
+    await waitFor(() => expect(store.data.org.logo_path).toBeNull());
+    await waitFor(() => expect(preview.querySelector('img')).toBeNull());
+    expect(store.data.audit.at(-1)!.action).toBe('org.logo_removed');
   });
 });

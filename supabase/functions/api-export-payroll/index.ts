@@ -10,7 +10,8 @@ import { buildPayrollRows, payrollCsv, payrollFileName } from './csv.ts';
  * api-export-payroll (§F15 step 5, Appendix B) — any member role.
  * GET ?org=<uuid>&week=2026-W41&site=<uuid|all> → text/csv attachment `payroll_<week>.csv`
  * Rows come from `current_manpower` (current version of filed/signed-off reports only) for the
- * whole ISO week (Mon–Sun); unconfirmed companies follow org_settings.include_unconfirmed_in_payroll.
+ * whole ISO week (Mon–Sun); unconfirmed companies follow org_settings.include_unconfirmed_in_payroll
+ * and the column order follows org_settings.payroll_columns (Settings → Payroll export, §P12).
  */
 
 const QuerySchema = z.object({
@@ -31,7 +32,7 @@ Deno.serve(
     const [settings, sites, companies] = await Promise.all([
       admin
         .from('org_settings')
-        .select('include_unconfirmed_in_payroll')
+        .select('include_unconfirmed_in_payroll, payroll_columns')
         .eq('org_id', params.org)
         .maybeSingle()
         .throwOnError(),
@@ -69,7 +70,7 @@ Deno.serve(
       rows: rows.length,
     });
 
-    return new Response(payrollCsv(rows), {
+    return new Response(payrollCsv(rows, settings.data?.payroll_columns), {
       status: 200,
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',

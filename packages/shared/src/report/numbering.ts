@@ -47,3 +47,8 @@ export function evidencePackStoragePath(
 ): string {
   return `${orgId}/${siteId}/eot_${periodStart}_${periodEnd}.pdf`;
 }
+
+/** Company logo in bucket `logos` (§F2, §F18): one object per org, PNG or SVG. */
+export function logoStoragePath(orgId: string, ext: 'png' | 'svg'): string {
+  return `${orgId}/logo.${ext}`;
+}

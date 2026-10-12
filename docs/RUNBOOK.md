@@ -19,7 +19,7 @@ Operational guide for staging and production. The product spec is `SITELOG_SPEC.
 ## 2. First deployment
 
 1. **Supabase project**: create it, note `SUPABASE_URL`, anon and service-role keys, the DB connection string (`SUPABASE_DB_URL`).
-2. **Schema**: `supabase link --project-ref <ref>` then `supabase db push`. The migrations enable RLS everywhere, create the job-queue functions and (when the extensions exist) storage buckets, realtime publication and the pg_cron schedule.
+2. **Schema**: `supabase link --project-ref <ref>` then `supabase db push`. The migrations enable RLS everywhere, create the job-queue functions and (when the extensions exist) storage buckets, realtime publication and the pg_cron schedule. On an existing project, push `20261012000001_web_gaps.sql` **before** redeploying `api-export-payroll` (it reads the new `org_settings.payroll_columns`); the same migration adds the `update_reporter` / `set_org_logo` RPCs, an `org_settings` audit trigger and the "admins update logos" / "admins delete logos" storage policies that logo re-uploads need.
 3. **Vault secrets for pg_cron** (SQL editor):
    ```sql
    select vault.create_secret('https://<ref>.supabase.co/functions/v1/scheduler-tick', 'scheduler_tick_url');
@@ -40,7 +40,7 @@ Operational guide for staging and production. The product spec is `SITELOG_SPEC.
 - **Stuck running jobs** are reclaimed automatically after 15 minutes (`claim_jobs`).
 - **Re-render a PDF**: `select enqueue_job('render_pdf', jsonb_build_object('reportId', '<uuid>', 'version', <n>, 'emailRecipients', false));`
 - **Reminders not firing**: check `scheduler_state.last_tick`, the pg_cron job (`select * from cron.job_run_details order by start_time desc limit 20;`) and that `site_days` for today exist with the right `deadline_at` (site time zone + DST).
-- **A reporter changed phones**: Team → Edit number (the conversation row follows the reporter).
+- **A reporter changed phones**: Team → row menu → Disable, then Invite reporter with the new number (messages are matched by number, so Team → Edit only changes name, role, sites and languages).
 - **Retention**: the nightly `retention_cleanup` job deletes audio/photos older than `AUDIO_RETENTION_DAYS` (default 730). Reports and PDFs are kept.
 - **Backups**: Supabase PITR/daily backups; restore drill = restore to a branch project, run `pnpm test:db` against it, check the latest `reports` row.
 

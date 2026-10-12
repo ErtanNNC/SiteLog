@@ -81,6 +81,38 @@ export interface InviteReporterInput {
   languages: string[];
 }
 
+/** Team → Edit reporter (§P10). The phone is not editable: disable and invite the new number. */
+export interface UpdateReporterInput {
+  reporterId: string;
+  name: string;
+  role: ReporterRole;
+  siteIds: string[];
+  languages: string[];
+}
+
+/** Upper bound of one PDF zip export (signed URLs are fetched and zipped in the browser). */
+export const PDF_EXPORT_LIMIT = 200;
+
+/** Which reports to export: explicit ids (selected rows) or every report matching the filters. */
+export type PdfSelection = { reportIds: string[] } | { filters: ReportFilters };
+
+export interface PdfLink {
+  reportId: string;
+  reportNo: string;
+  /** Signed URL (10 min) of the current version's PDF. */
+  url: string;
+}
+
+export interface PdfLinkBatch {
+  files: PdfLink[];
+  /** Report numbers in the selection without a rendered PDF yet. */
+  missing: string[];
+  /** Reports in the selection before the PDF_EXPORT_LIMIT cap. */
+  total: number;
+  /** True when `total` exceeded PDF_EXPORT_LIMIT and only the first ones were resolved. */
+  capped: boolean;
+}
+
 export interface LinkUnknownSenderInput {
   unknownSenderId: string;
   siteId: string;
@@ -147,8 +179,13 @@ export interface DataSource {
   getNavBadges(): Promise<NavBadges>;
   getSetupState(): Promise<SetupState>;
   search(q: string): Promise<SearchResult[]>;
-  /** Signed URLs (10 min) for today's filed PDFs; demo returns []. */
-  getTodaysPdfUrls(): Promise<Array<{ reportNo: string; url: string }>>;
+  /**
+   * Signed URLs (10 min) of the current-version PDFs for a set of reports, capped at
+   * PDF_EXPORT_LIMIT. Demo mode has no rendered PDFs: every report comes back in `missing`.
+   */
+  getPdfUrls(selection: PdfSelection): Promise<PdfLinkBatch>;
+  /** Stripe customer portal session URL (payment method, invoices); demo rejects. */
+  getBillingPortalUrl(): Promise<string>;
 
   // ─── Mutations ───
   signOff(reportId: string): Promise<void>;
@@ -173,12 +210,19 @@ export interface DataSource {
   setReporterStatus(reporterId: string, status: ReporterStatus): Promise<void>;
   /** Team row menu: one re-send of `sitelog_welcome` (F3 edge case). */
   resendInvite(reporterId: string): Promise<void>;
+  /** Team row menu → Edit: name, role, sites, languages in one audited change. */
+  updateReporter(input: UpdateReporterInput): Promise<void>;
   addOfficeUser(input: { email: string; role: MemberRole; name?: string }): Promise<void>;
   changeMemberRole(userId: string, role: MemberRole): Promise<void>;
   removeMember(userId: string): Promise<void>;
   createOrg(input: CreateOrgInput): Promise<{ orgId: string }>;
   createSite(input: CreateSiteInput): Promise<{ siteId: string }>;
   updateSite(siteId: string, patch: UpdateSitePatch): Promise<void>;
+  /**
+   * Upload (PNG/SVG ≤ 2 MB, validated by the caller) or clear (`null`) the company logo used on
+   * PDFs. `orgId` defaults to the source's org (the setup wizard passes a freshly created one).
+   */
+  setOrgLogo(file: File | null, orgId?: string): Promise<void>;
   pauseSite(siteId: string): Promise<void>;
   resumeSite(siteId: string): Promise<void>;
   requestEvidencePack(input: RequestEvidencePackInput): Promise<{ packId: string }>;

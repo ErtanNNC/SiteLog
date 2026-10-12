@@ -23,7 +23,7 @@ import type {
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
-import { formatReportNo } from '@sitelog/shared/report/numbering.ts';
+import { formatReportNo, logoStoragePath } from '@sitelog/shared/report/numbering.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
 import { fromZonedTime } from 'date-fns-tz';
@@ -39,6 +39,7 @@ import type {
   RequestEvidencePackInput,
   ResolveUnknownCompanyInput,
   ReviewGlossaryTermInput,
+  UpdateReporterInput,
   UpdateSitePatch,
 } from '../source';
 import type { ChangeEvent, OrgSettingsPatch } from '../types';
@@ -72,6 +73,8 @@ export class DemoStore {
   readonly data: DemoDataset;
   private listeners = new Set<(e: ChangeEvent) => void>();
   private timers: Array<ReturnType<typeof setTimeout>> = [];
+  /** Demo logo: an object URL of the picked file, kept for this session only. */
+  logoUrl: string | null = null;
 
   constructor(dataset: DemoDataset = kestrelDemo()) {
     this.data = structuredClone(dataset);
@@ -741,6 +744,84 @@ export class DemoStore {
       entity: 'reporter',
       entity_id: reporterId,
       diff: null,
+    });
+    this.emit({ table: 'all' });
+  }
+
+  /** Mirror of update_reporter() (20261012000001_web_gaps.sql). The phone never changes. */
+  updateReporter(input: UpdateReporterInput, userId: string): void {
+    const r = this.data.reporters.find((x) => x.id === input.reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    const name = input.name.trim();
+    if (!name) throw new Error(copy.team.invite.nameRequired);
+    const siteIds = [...new Set(input.siteIds)];
+    if (!siteIds.length) throw new Error(copy.team.invite.sitesRequired);
+    for (const id of siteIds) this.site(id);
+    const languages = [
+      ...new Set(input.languages.map((l) => l.trim().toLowerCase()).filter(Boolean)),
+    ];
+    const langs = languages.length ? languages : ['en'];
+
+    const before = this.data.siteReporters.filter((sr) => sr.reporter_id === r.id);
+    const added = siteIds.filter((id) => !before.some((sr) => sr.site_id === id));
+    const removed = before.filter((sr) => !siteIds.includes(sr.site_id));
+    const diff: Record<string, unknown> = {};
+    if (r.name !== name) diff.name = { from: r.name, to: name };
+    if (r.role !== input.role) diff.role = { from: r.role, to: input.role };
+    if (r.languages.join() !== langs.join()) diff.languages = { from: r.languages, to: langs };
+    if (added.length) diff.sites_added = added;
+    if (removed.length) diff.sites_removed = removed.map((sr) => sr.site_id);
+
+    r.name = name;
+    r.role = input.role;
+    r.languages = langs;
+    this.data.siteReporters = this.data.siteReporters.filter(
+      (sr) => !(sr.reporter_id === r.id && removed.includes(sr)),
+    );
+    for (const siteId of added) {
+      const hasPrimary = this.data.siteReporters.some(
+        (sr) => sr.site_id === siteId && sr.is_primary,
+      );
+      this.data.siteReporters.push({ site_id: siteId, reporter_id: r.id, is_primary: !hasPrimary });
+    }
+    // A site that lost its primary promotes the next reporter (enabled, site managers first).
+    for (const gone of removed.filter((sr) => sr.is_primary)) {
+      const site = this.data.siteReporters.filter((sr) => sr.site_id === gone.site_id);
+      if (site.some((sr) => sr.is_primary)) continue;
+      const rank = (sr: { reporter_id: string }) => {
+        const rep = this.data.reporters.find((x) => x.id === sr.reporter_id);
+        return (rep?.status === 'disabled' ? 2 : 0) + (rep?.role === 'site_manager' ? 0 : 1);
+      };
+      const next = [...site].sort((a, b) => rank(a) - rank(b))[0];
+      if (next) next.is_primary = true;
+    }
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'reporter.updated',
+      entity: 'reporter',
+      entity_id: r.id,
+      diff: diff as AuditLogRow['diff'],
+    });
+    this.emit({ table: 'all' });
+  }
+
+  /** Demo logo: keeps the object URL in memory and records the path like set_org_logo(). */
+  setLogo(file: { url: string; ext: 'png' | 'svg' } | null, userId: string): void {
+    const org = this.data.org;
+    const from = org.logo_path;
+    if (this.logoUrl && this.logoUrl !== file?.url) URL.revokeObjectURL(this.logoUrl);
+    this.logoUrl = file?.url ?? null;
+    org.logo_path = file ? logoStoragePath(org.id, file.ext) : null;
+    this.audit({
+      org_id: org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: file ? 'org.logo_updated' : 'org.logo_removed',
+      entity: 'org',
+      entity_id: org.id,
+      diff: { from, to: org.logo_path },
     });
     this.emit({ table: 'all' });
   }

@@ -7,20 +7,25 @@ import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { toast } from 'sonner';
 import { copy } from '@/copy/en';
+import { pdfFileNames, saveBlob, zipFromUrls } from '@/lib/pdfZip';
 import { qk } from '@/lib/query';
+import { pendingTab } from '@/lib/tab';
 import { errorMessage } from '@/lib/utils';
 import { useDataSource } from './DataProvider';
-import type {
-  AddGlossaryTermInput,
-  AddInvoiceInput,
-  CreateOrgInput,
-  CreateSiteInput,
-  InviteReporterInput,
-  LinkUnknownSenderInput,
-  RequestEvidencePackInput,
-  ResolveUnknownCompanyInput,
-  ReviewGlossaryTermInput,
-  UpdateSitePatch,
+import {
+  PDF_EXPORT_LIMIT,
+  type AddGlossaryTermInput,
+  type AddInvoiceInput,
+  type CreateOrgInput,
+  type CreateSiteInput,
+  type InviteReporterInput,
+  type LinkUnknownSenderInput,
+  type PdfSelection,
+  type RequestEvidencePackInput,
+  type ResolveUnknownCompanyInput,
+  type ReviewGlossaryTermInput,
+  type UpdateReporterInput,
+  type UpdateSitePatch,
 } from './source';
 import type { OrgSettingsPatch, ReportFilters } from './types';
 
@@ -143,6 +148,8 @@ function useSourceMutation<TVars, TResult>(
   opts: {
     success?: string | ((vars: TVars, result: TResult) => string);
     silent?: boolean;
+    /** The caller toasts its own error (e.g. a more specific hint). */
+    quietErrors?: boolean;
     invalidate?: boolean;
   } = {},
 ) {
@@ -159,7 +166,7 @@ function useSourceMutation<TVars, TResult>(
       }
     },
     onError: (err) => {
-      toast.error(errorMessage(err, copy.errors.generic));
+      if (!opts.quietErrors) toast.error(errorMessage(err, copy.errors.generic));
     },
   });
 }
@@ -299,6 +306,13 @@ export function useResendInvite() {
   );
 }
 
+export function useUpdateReporter() {
+  const s = useDataSource();
+  return useSourceMutation((vars: UpdateReporterInput) => s.updateReporter(vars), {
+    success: (v) => copy.team.edit.saved(v.name.trim()),
+  });
+}
+
 export function useAddOfficeUser() {
   const s = useDataSource();
   return useSourceMutation(
@@ -360,6 +374,22 @@ export function useResumeSite() {
   );
 }
 
+/**
+ * Settings → PDF template / setup wizard: upload (File) or remove (null) the company logo.
+ * `quiet` leaves both toasts to the caller (the wizard shows its own hint on failure).
+ */
+export function useSetOrgLogo(opts: { quiet?: boolean } = {}) {
+  const s = useDataSource();
+  return useSourceMutation(
+    (vars: { file: File | null; orgId?: string }) => s.setOrgLogo(vars.file, vars.orgId),
+    {
+      success: (v) => (v.file ? copy.toasts.logoUpdated : copy.toasts.logoRemoved),
+      silent: opts.quiet,
+      quietErrors: opts.quiet,
+    },
+  );
+}
+
 export function useRequestEvidencePack() {
   const s = useDataSource();
   return useSourceMutation((vars: RequestEvidencePackInput) => s.requestEvidencePack(vars), {
@@ -373,6 +403,86 @@ export function usePayrollCsv() {
     (vars: { week: string; siteId: string | null }) => s.payrollCsvUrl(vars.week, vars.siteId),
     { success: copy.toasts.csvReady, invalidate: false },
   );
+}
+
+/**
+ * "Today's PDFs" / "Export PDFs (.zip)": resolve signed URLs, download them in the browser and save
+ * one zip of `{reportNo}.pdf` files. Progress and outcome are reported in a single sonner toast.
+ */
+export function usePdfZipExport() {
+  const s = useDataSource();
+  return useMutation({
+    mutationFn: async (vars: { selection: PdfSelection; fileName: string }) => {
+      const id = toast.loading(copy.pdfZip.preparing);
+      try {
+        const batch = await s.getPdfUrls(vars.selection);
+        if (batch.capped) toast.message(copy.pdfZip.capped(PDF_EXPORT_LIMIT, batch.total));
+        if (!batch.files.length) {
+          toast.message(copy.pdfZip.none, { id });
+          return { zipped: 0 };
+        }
+        const names = pdfFileNames(batch.files.map((f) => f.reportNo));
+        const result = await zipFromUrls(
+          batch.files.map((f, i) => ({ name: names[i]!, url: f.url })),
+          { onProgress: (done, total) => toast.loading(copy.pdfZip.progress(done, total), { id }) },
+        );
+        if (!result.blob) {
+          toast.error(copy.pdfZip.failed, { id });
+          return { zipped: 0 };
+        }
+        saveBlob(result.blob, vars.fileName);
+        const skipped = result.failed.length + batch.missing.length;
+        if (skipped) toast.warning(copy.pdfZip.partial(result.added.length, skipped), { id });
+        else toast.success(copy.pdfZip.ready(result.added.length), { id });
+        return { zipped: result.added.length };
+      } catch (err) {
+        toast.error(errorMessage(err, copy.pdfZip.failed), { id });
+        return { zipped: 0 };
+      }
+    },
+  });
+}
+
+/**
+ * Reports archive row → open the current version's PDF (signed URL) in a new tab. The tab is
+ * opened synchronously in `open()` (inside the click) so popup blockers allow it.
+ */
+export function useOpenReportPdf() {
+  const s = useDataSource();
+  const m = useMutation({
+    mutationFn: async (vars: { reportId: string; go: (url: string | null) => void }) => {
+      try {
+        const batch = await s.getPdfUrls({ reportIds: [vars.reportId] });
+        const url = batch.files[0]?.url ?? null;
+        vars.go(url);
+        if (!url) toast.message(copy.reports.pdfNotReady);
+      } catch (err) {
+        vars.go(null);
+        toast.error(errorMessage(err, copy.errors.generic));
+      }
+    },
+  });
+  return {
+    open: (reportId: string) => m.mutate({ reportId, go: pendingTab() }),
+    isPending: m.isPending,
+  };
+}
+
+/** Billing → Stripe customer portal (payment method, invoices). Same tab; Stripe links back. */
+export function useBillingPortal() {
+  const s = useDataSource();
+  return useMutation({
+    mutationFn: async () => {
+      const id = toast.loading(copy.billing.portalOpening);
+      try {
+        const url = await s.getBillingPortalUrl();
+        toast.dismiss(id);
+        window.location.assign(url);
+      } catch (err) {
+        toast.error(errorMessage(err, copy.errors.generic), { id });
+      }
+    },
+  });
 }
 
 export function useMarkNotificationsRead() {

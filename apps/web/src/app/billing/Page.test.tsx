@@ -1,7 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
-import { DemoStore } from '@/data/demo/store';
+import { toast } from 'sonner';
+import { describe, expect, it, vi } from 'vitest';
+import { DemoSource } from '@/data/demo/DemoSource';
+import { DemoStore, demoUserFor } from '@/data/demo/store';
 import { renderWithProviders } from '@/test/render';
 import BillingPage from './Page';
 
@@ -60,5 +62,47 @@ describe('BillingPage (demo data)', () => {
     await waitFor(() => expect(riverside.status).toBe('active'));
     await waitFor(() => expect(screen.getByTestId('plan-total')).toHaveTextContent('$2,394'));
     expect(store.data.audit.at(-1)!.action).toBe('site.resumed');
+  });
+
+  it('demo mode explains the Stripe portal for payment method and invoice downloads', async () => {
+    const message = vi.spyOn(toast, 'message');
+    renderWithProviders(<BillingPage />, { route: '/billing' });
+    await userEvent.click(await screen.findByTestId('update-payment'));
+    const invoices = screen.getByRole('table', { name: 'Invoices' });
+    await userEvent.click(
+      within(invoices).getByRole('button', { name: 'Download invoice Thu, Oct 1, 2026' }),
+    );
+    expect(message).toHaveBeenCalledTimes(2);
+    expect(message).toHaveBeenLastCalledWith(
+      'Demo mode: the Stripe customer portal opens here in production.',
+    );
+  });
+
+  it('opens the Stripe customer portal from api-billing outside demo mode', async () => {
+    const u = demoUserFor('admin');
+    const source = new DemoSource(new DemoStore(), {
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+    });
+    const portal = vi
+      .spyOn(source, 'getBillingPortalUrl')
+      .mockRejectedValueOnce(new Error('No Stripe customer yet; start a subscription first'))
+      .mockResolvedValueOnce('https://billing.stripe.test/p/session');
+    const error = vi.spyOn(toast, 'error');
+    renderWithProviders(<BillingPage />, { route: '/billing', source, auth: { isDemo: false } });
+    const invoices = await screen.findByRole('table', { name: 'Invoices' });
+    await userEvent.click(screen.getByTestId('update-payment'));
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        'No Stripe customer yet; start a subscription first',
+        expect.anything(),
+      ),
+    );
+    await userEvent.click(
+      within(invoices).getByRole('button', { name: 'Download invoice Thu, Oct 1, 2026' }),
+    );
+    await waitFor(() => expect(portal).toHaveBeenCalledTimes(2));
   });
 });

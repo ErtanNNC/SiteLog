@@ -14,9 +14,11 @@ import {
   useInviteReporter,
   useSaveSettings,
   useSaveSiteRecipients,
+  useSetOrgLogo,
   useSettings,
   useSetupState,
 } from '@/data/hooks';
+import { uploadOrgLogo } from '@/data/supabase/SupabaseSource';
 import type { OrgSettings } from '@/data/types';
 import { supabase } from '@/lib/supabase';
 import { CompanyStep } from './CompanyStep';
@@ -64,14 +66,16 @@ function useProgress() {
   return { progress, setProgress, userId };
 }
 
+/** The picked logo (validated by CompanyStep): previewed now, uploaded once the org exists. */
 function useLogoPreview() {
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  useEffect(() => () => void (logoUrl && URL.revokeObjectURL(logoUrl)), [logoUrl]);
+  const [logo, setLogo] = useState<{ file: File; url: string } | null>(null);
+  useEffect(() => () => void (logo && URL.revokeObjectURL(logo.url)), [logo]);
   return {
-    logoUrl,
+    logoUrl: logo?.url ?? null,
+    file: logo?.file ?? null,
     onLogoChange: (file: File | null) => {
       const url = file ? URL.createObjectURL(file) : null;
-      setLogoUrl(url);
+      setLogo(file && url ? { file, url } : null);
       return url;
     },
   };
@@ -157,6 +161,11 @@ function NoOrgWizard() {
       const id = (data as { id?: string } | null)?.id;
       if (!id) throw new Error(copy.errors.generic);
       setProgress((p) => ({ ...p, done: { ...p.done, company: true }, flow: 'wizard' }));
+      if (logo.file) {
+        await uploadOrgLogo(supabase, id, logo.file).catch(() =>
+          toast.error(copy.setup.company.logoUploadFailed),
+        );
+      }
       await refreshOrgs();
       toast.success(copy.toasts.orgCreated(progress.company.name.trim()));
       void navigate('/setup/site', { replace: true });
@@ -193,6 +202,7 @@ function Wizard() {
   const inviteReporter = useInviteReporter();
   const saveSettings = useSaveSettings();
   const saveRecipients = useSaveSiteRecipients();
+  const setLogo = useSetOrgLogo({ quiet: true });
 
   const [draft, setDraft] = useState<OrgSettings | null>(null);
   if (settings.data && !draft) setDraft(structuredClone(settings.data.settings));
@@ -232,8 +242,13 @@ function Wizard() {
         licenseNo: progress.company.licenseNo.trim() || null,
       },
       {
-        onSuccess: async () => {
+        onSuccess: async ({ orgId }) => {
           setProgress((p) => ({ ...p, done: { ...p.done, company: true }, flow: 'wizard' }));
+          if (logo.file) {
+            await setLogo
+              .mutateAsync({ file: logo.file, orgId })
+              .catch(() => toast.error(copy.setup.company.logoUploadFailed));
+          }
           await refreshOrgs();
           void navigate('/setup/site');
         },

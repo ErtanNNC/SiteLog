@@ -12,7 +12,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { formatHours, formatTimeInTz } from '@sitelog/shared/format.ts';
+import { formatDateInTz, formatHours, formatTimeInTz } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { DataTable, type Column } from '@/components/sitelog/DataTable';
 import { KpiTile } from '@/components/sitelog/KpiTile';
@@ -25,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/Dialog';
 import { copy } from '@/copy/en';
 import { useDataSource } from '@/data/DataProvider';
-import { useMarkNoWork, useOverview } from '@/data/hooks';
+import { useMarkNoWork, useOverview, usePdfZipExport } from '@/data/hooks';
 import type { AttentionAction, AttentionItem, OverviewSiteRow } from '@/data/types';
 import { formatCrew, formatEyebrowDateTime, formatHoursNum, formatMonthDay } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,7 @@ export default function OverviewPage() {
   const { isDemo } = useAuth();
   const overview = useOverview();
   const markNoWork = useMarkNoWork();
+  const pdfZip = usePdfZipExport();
   const navigate = useNavigate();
   const [noWork, setNoWork] = useState<{
     siteDayId: string;
@@ -60,18 +61,24 @@ export default function OverviewPage() {
   const data = overview.data;
   const tz = data?.timezone ?? 'UTC';
 
-  const onPdfs = async () => {
+  /** One zip of today's filed PDFs (`{reportNo}.pdf`); demo mode has no rendered PDFs. */
+  const onPdfs = () => {
     if (isDemo) {
       toast.message(copy.overview.pdfsDemo);
       return;
     }
-    const urls = await source.getTodaysPdfUrls();
-    if (!urls.length) {
+    const ids = data?.pdfReportIds ?? [];
+    if (!ids.length) {
       toast.message(copy.overview.pdfsNone);
       return;
     }
-    toast.success(copy.overview.pdfsOpened(urls.length));
-    for (const u of urls) window.open(u.url, '_blank', 'noopener');
+    pdfZip.mutate({
+      selection: { reportIds: ids },
+      fileName: copy.pdfZip.fileName(
+        copy.pdfZip.labels.today,
+        formatDateInTz(source.now(), data?.timezone ?? 'UTC'),
+      ),
+    });
   };
 
   const act = (a: AttentionAction) => {
@@ -202,7 +209,12 @@ export default function OverviewPage() {
         eyebrow={formatEyebrowDateTime(isDemo ? source.now() : clock, tz)}
         title={copy.overview.title(data.siteCount)}
         actions={
-          <Button variant="secondary" onClick={() => void onPdfs()}>
+          <Button
+            variant="secondary"
+            onClick={onPdfs}
+            loading={pdfZip.isPending}
+            data-testid="todays-pdfs"
+          >
             <FolderArchive aria-hidden="true" />
             {copy.overview.pdfs}
           </Button>

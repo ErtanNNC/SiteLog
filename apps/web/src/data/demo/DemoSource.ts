@@ -4,6 +4,7 @@
  */
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { copy } from '@/copy/en';
 import { sleep } from '@/lib/utils';
 import {
   assembleBilling,
@@ -27,19 +28,23 @@ import {
   searchRows,
   type AssembleCtx,
 } from '../assemble';
-import type {
-  AddGlossaryTermInput,
-  AddInvoiceInput,
-  CreateOrgInput,
-  CreateSiteInput,
-  DataSource,
-  InviteReporterInput,
-  LinkUnknownSenderInput,
-  RequestEvidencePackInput,
-  ResolveUnknownCompanyInput,
-  ReviewGlossaryTermInput,
-  SourceUser,
-  UpdateSitePatch,
+import {
+  PDF_EXPORT_LIMIT,
+  type AddGlossaryTermInput,
+  type AddInvoiceInput,
+  type CreateOrgInput,
+  type CreateSiteInput,
+  type DataSource,
+  type InviteReporterInput,
+  type LinkUnknownSenderInput,
+  type PdfLinkBatch,
+  type PdfSelection,
+  type RequestEvidencePackInput,
+  type ResolveUnknownCompanyInput,
+  type ReviewGlossaryTermInput,
+  type SourceUser,
+  type UpdateReporterInput,
+  type UpdateSitePatch,
 } from '../source';
 import type { ChangeEvent, OrgSettingsPatch, ReportFilters } from '../types';
 import type { DemoStore } from './store';
@@ -119,7 +124,11 @@ export class DemoSource implements DataSource {
     return this.run(() => assembleGlossary(this.store.rows()));
   }
   getSettings() {
-    return this.run(() => assembleSettings(this.store.rows()));
+    return this.run(() => {
+      const data = assembleSettings(this.store.rows());
+      data.org.logoUrl = this.store.logoUrl;
+      return data;
+    });
   }
   getBilling() {
     return this.run(() => assembleBilling(this.store.rows(), this.ctx()));
@@ -136,8 +145,33 @@ export class DemoSource implements DataSource {
   search(q: string) {
     return this.run(() => searchRows(this.store.rows(), q));
   }
-  getTodaysPdfUrls() {
-    return this.run(() => [] as Array<{ reportNo: string; url: string }>);
+  /** The demo has no rendered PDFs: every selected report is reported as missing. */
+  getPdfUrls(selection: PdfSelection) {
+    return this.run((): PdfLinkBatch => {
+      const rows = this.store.rows();
+      let reportNos: string[];
+      let total: number;
+      if ('reportIds' in selection) {
+        const ids = [...new Set(selection.reportIds)];
+        total = ids.length;
+        reportNos = ids
+          .slice(0, PDF_EXPORT_LIMIT)
+          .map((id) => rows.reports.find((r) => r.id === id)?.report_no)
+          .filter((no): no is string => !!no);
+      } else {
+        const res = filterReports(rows, {
+          ...selection.filters,
+          page: 1,
+          pageSize: PDF_EXPORT_LIMIT,
+        });
+        total = res.total;
+        reportNos = res.reports.map((r) => r.report_no);
+      }
+      return { files: [], missing: reportNos, total, capped: total > PDF_EXPORT_LIMIT };
+    });
+  }
+  getBillingPortalUrl(): Promise<string> {
+    return Promise.reject(new Error(copy.billing.portalDemo));
   }
 
   // ─── Mutations ───
@@ -193,6 +227,9 @@ export class DemoSource implements DataSource {
   resendInvite(reporterId: string) {
     return this.run(() => this.store.resendInvite(reporterId, this.user.id));
   }
+  updateReporter(input: UpdateReporterInput) {
+    return this.run(() => this.store.updateReporter(input, this.user.id));
+  }
   addOfficeUser(input: { email: string; role: MemberRole; name?: string }) {
     return this.run(() => this.store.addOfficeUser(input, this.user.id));
   }
@@ -212,6 +249,17 @@ export class DemoSource implements DataSource {
   updateSite(siteId: string, patch: UpdateSitePatch) {
     return this.run(() => this.store.updateSite(siteId, patch, this.user.id));
   }
+  /** Demo: the logo lives in memory as an object URL so the PDF preview works. */
+  setOrgLogo(file: File | null, _orgId?: string) {
+    return this.run(() =>
+      this.store.setLogo(
+        file
+          ? { url: URL.createObjectURL(file), ext: file.type === 'image/svg+xml' ? 'svg' : 'png' }
+          : null,
+        this.user.id,
+      ),
+    );
+  }
   pauseSite(siteId: string) {
     return this.run(() => this.store.setSiteStatus(siteId, 'paused', this.user.id));
   }
@@ -228,6 +276,7 @@ export class DemoSource implements DataSource {
         week,
         siteId,
         this.store.data.settings.include_unconfirmed_in_payroll,
+        this.store.data.settings.payroll_columns,
       );
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       return URL.createObjectURL(blob);
@@ -253,5 +302,11 @@ export function demoPayrollCsv(
   week: string,
   siteId: string | null = null,
 ): string {
-  return payrollCsv(store.rows(), week, siteId, store.data.settings.include_unconfirmed_in_payroll);
+  return payrollCsv(
+    store.rows(),
+    week,
+    siteId,
+    store.data.settings.include_unconfirmed_in_payroll,
+    store.data.settings.payroll_columns,
+  );
 }

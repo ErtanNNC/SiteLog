@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
+import { PAYROLL_COLUMNS } from '@sitelog/shared';
 import type {
   CompanyRow,
   ConversationRow,
@@ -206,6 +207,7 @@ export function createHarness(
     letterhead_lines: [],
     no_work_pdf: false,
     include_unconfirmed_in_payroll: true,
+    payroll_columns: [...PAYROLL_COLUMNS],
     past_due_grace_days: 14,
     updated_at: '2026-03-01T00:00:00Z',
     ...opts.settings,

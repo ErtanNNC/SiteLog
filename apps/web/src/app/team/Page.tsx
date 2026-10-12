@@ -1,6 +1,5 @@
 import { Link2, MoreHorizontal, PhoneOff, UserPlus, Users } from 'lucide-react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { MEMBER_ROLES, type MemberRole } from '@sitelog/shared/enums.ts';
 import { formatPhone, formatTimeInTz } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
@@ -35,6 +34,7 @@ import type { OfficeUser, ReporterChipStatus, TeamReporter, UnknownSenderItem } 
 import { formatLanguages } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { AddOfficeUserDialog } from './AddOfficeUserDialog';
+import { EditReporterDialog } from './EditReporterDialog';
 import { InviteReporterDialog } from './InviteReporterDialog';
 import { LinkSenderDialog } from './LinkSenderDialog';
 
@@ -100,6 +100,7 @@ export default function TeamPage() {
   const [linking, setLinking] = useState<UnknownSenderItem | null>(null);
   const [removing, setRemoving] = useState<OfficeUser | null>(null);
   const [disabling, setDisabling] = useState<TeamReporter | null>(null);
+  const [editing, setEditing] = useState<TeamReporter | null>(null);
 
   const data = team.data;
   const adminCount = data?.officeUsers.filter((u) => u.role === 'admin').length ?? 0;
@@ -178,7 +179,7 @@ export default function TeamPage() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => toast.message(copy.team.editSoon)}>
+            <DropdownMenuItem onSelect={() => setEditing(r)}>
               {copy.team.rowMenu.edit}
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -407,6 +408,12 @@ export default function TeamPage() {
       </div>
 
       <InviteReporterDialog open={inviteOpen} onOpenChange={setInviteOpen} sites={data.sites} />
+      <EditReporterDialog
+        key={editing?.id ?? 'none'}
+        reporter={editing}
+        onOpenChange={(o) => !o && setEditing(null)}
+        sites={data.sites}
+      />
       <AddOfficeUserDialog open={addUserOpen} onOpenChange={setAddUserOpen} />
       <LinkSenderDialog
         key={linking?.id ?? 'none'}

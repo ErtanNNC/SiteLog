@@ -319,7 +319,6 @@ export const copy = {
     pdfs: 'Today’s PDFs',
     pdfsDemo: 'Demo mode: PDFs are rendered by the worker from each filed report.',
     pdfsNone: 'No PDFs yet today.',
-    pdfsOpened: (n: number) => `Opening ${plural(n, 'PDF')}…`,
     kpis: {
       reportsIn: 'Reports in',
       crew: 'Crew on site',
@@ -558,7 +557,7 @@ export const copy = {
     emptyHint: 'Try widening the dates or clearing a toggle.',
     exportDemo: (n: number) =>
       `Demo mode: a zip with ${plural(n, 'PDF')} would download here. PDFs are rendered by the worker.`,
-    exportStarted: (n: number) => `Preparing ${plural(n, 'PDF')}…`,
+    exportNone: 'No reports to export. Widen the filters or select rows.',
     statuses: {
       all: 'Any status',
       filed: 'Filed',
@@ -962,7 +961,15 @@ export const copy = {
     empty: 'No reporters yet. Invite the first site manager.',
     resent: (name: string) => `Invite re-sent to ${name}.`,
     disabledToast: (name: string) => `${name} disabled.`,
-    editSoon: 'Editing a reporter is coming next — use Disable and re-invite for now.',
+    edit: {
+      title: (name: string) => `Edit ${name}`,
+      description: 'Changes apply from the next message this number sends.',
+      phone: 'WhatsApp number',
+      phoneHint:
+        'The number can’t be changed. To use a new number, disable this reporter and invite the new number.',
+      save: 'Save changes',
+      saved: (name: string) => `${name} updated.`,
+    },
     officeEmpty: 'No office users.',
     changeRole: 'Change role',
     removeUser: 'Remove',
@@ -1151,7 +1158,8 @@ export const copy = {
       upload: 'Upload logo',
       replace: 'Replace logo',
       removeLogo: 'Remove logo',
-      logoPreviewOnly: 'Preview only in demo mode.',
+      logoDemo: 'Demo mode: the logo is kept in this browser tab only.',
+      logoUploading: 'Uploading…',
       letterhead: 'Letterhead lines',
       letterheadHint: 'Address, licence number — one per line, under the company name.',
       letterheadPlaceholder: 'Line',
@@ -1187,7 +1195,8 @@ export const copy = {
       formats: { generic: 'Generic CSV' },
       formatHint: 'More presets (QuickBooks, ADP) are coming.',
       columns: 'Columns',
-      columnsHint: 'Drag to reorder is coming; use the arrows.',
+      columnsHint: 'Column order of the payroll CSV, for everyone in the company.',
+      reset: 'Reset to default order',
       moveUp: (col: string) => `Move ${col} up`,
       moveDown: (col: string) => `Move ${col} down`,
       includeUnconfirmed: 'Include unconfirmed companies',
@@ -1241,6 +1250,7 @@ export const copy = {
       'Added sites are prorated by Stripe.',
     ],
     portalDemo: 'Demo mode: the Stripe customer portal opens here in production.',
+    portalOpening: 'Opening the Stripe customer portal…',
     pausedSince: (date: string) => `since ${date}`,
     invoicesEmpty: 'No invoices yet.',
     invoiceDownload: (date: string) => `Download invoice ${date}`,
@@ -1278,6 +1288,8 @@ export const copy = {
       upload: 'Upload logo',
       replace: 'Replace logo',
       removeLogo: 'Remove logo',
+      logoUploadFailed:
+        'The company was created, but the logo didn’t upload. Add it in Settings → PDF template.',
       timezone: 'Company time zone',
       next: 'Continue to first site',
     },
@@ -1387,6 +1399,22 @@ export const copy = {
     csvReady: 'Payroll CSV ready.',
     companyResolved: 'Company resolved. New version saved.',
     orgCreated: (name: string) => `${name} created.`,
+    logoUpdated: 'Logo updated.',
+    logoRemoved: 'Logo removed.',
+  },
+
+  pdfZip: {
+    preparing: 'Preparing PDFs…',
+    progress: (done: number, total: number) => `Downloading PDFs · ${done} of ${total}`,
+    ready: (n: number) => `${plural(n, 'PDF')} zipped.`,
+    partial: (zipped: number, skipped: number) =>
+      `${plural(zipped, 'PDF')} zipped · ${skipped} not ready or failed to download.`,
+    none: 'None of these reports has a PDF yet.',
+    failed: 'Couldn’t build the zip. Try again.',
+    capped: (limit: number, total: number) =>
+      `Exporting the first ${limit} of ${total} reports. Narrow the filters for the rest.`,
+    fileName: (label: string, date: string) => `SiteLog_${label}_${date}.zip`,
+    labels: { today: 'daily-reports', archive: 'reports' },
   },
 
   a11y: {

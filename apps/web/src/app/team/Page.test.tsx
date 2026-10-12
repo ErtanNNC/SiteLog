@@ -93,4 +93,54 @@ describe('TeamPage (demo data)', () => {
       'true',
     );
   });
+
+  it('edits a reporter: name, sites and languages, with the phone read-only (P10)', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<TeamPage />, { route: '/team', store });
+    const table = await screen.findByRole('table', { name: 'Field reporters' });
+    await userEvent.click(within(table).getByRole('button', { name: 'Menu for Jorge Medina' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Edit Jorge Medina');
+    const phone = within(dialog).getByTestId('edit-phone');
+    expect(phone).toHaveValue('+1 555 014 3390');
+    expect(phone).toHaveAttribute('readonly');
+    expect(dialog).toHaveTextContent('disable this reporter and invite the new number');
+    const save = within(dialog).getByRole('button', { name: 'Save changes' });
+    expect(save).toBeDisabled();
+
+    // At least one site is required.
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', { name: 'Riverside Lofts — Block B' }),
+    );
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', { name: 'Pier 9 Warehouse Retrofit' }),
+    );
+    await userEvent.click(save);
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Pick at least one site.');
+
+    const name = within(dialog).getByLabelText('Name');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Jorge A. Medina');
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', { name: 'Pier 9 Warehouse Retrofit' }),
+    );
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Elm St. Townhomes' }));
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'English' }));
+    await userEvent.click(save);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    const jorge = store.data.reporters.find((r) => r.phone_e164 === '+15550143390')!;
+    expect(jorge.name).toBe('Jorge A. Medina');
+    expect(jorge.languages).toEqual(['es', 'en']);
+    const links = store.data.siteReporters.filter((sr) => sr.reporter_id === jorge.id);
+    const codeOf = (siteId: string) => store.data.sites.find((s) => s.id === siteId)!.project_code;
+    expect(links.map((l) => codeOf(l.site_id)).sort()).toEqual(['ES-0377', 'P9-0932'].sort());
+    // Elm St. already has a primary site manager, so Jorge joins as secondary.
+    expect(links.every((l) => !l.is_primary)).toBe(true);
+    const audit = store.data.audit.at(-1)!;
+    expect(audit.action).toBe('reporter.updated');
+    expect(audit.diff).toMatchObject({ name: { from: 'Jorge Medina', to: 'Jorge A. Medina' } });
+    await waitFor(() => expect(within(table).getByText('Jorge A. Medina')).toBeInTheDocument());
+  });
 });

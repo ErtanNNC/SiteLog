@@ -31,6 +31,7 @@ import type { DailyReportData, ManpowerEntry, WeatherPeriod } from '../schemas/r
 import { emptyReportData } from '../schemas/report.ts';
 import { deriveTotals } from '../report/hours.ts';
 import { formatReportNo } from '../report/numbering.ts';
+import { PAYROLL_COLUMNS } from '../report/payroll.ts';
 import { demoId, demoRand } from './ids.ts';
 import type { DemoDataset, DemoUser } from './types.ts';
 import { heroTranscriptSegments, heroSummary } from './hero.ts';
@@ -1570,6 +1571,7 @@ export function buildKestrelDemo(): DemoDataset {
       no_work_pdf: false,
       include_unconfirmed_in_payroll: true,
       past_due_grace_days: 14,
+      payroll_columns: [...PAYROLL_COLUMNS],
       updated_at: at('2026-09-15', '11:00'),
     },
     users: DEMO_USERS,

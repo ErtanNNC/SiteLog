@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderEvidencePackPdf, renderReportPdf, weatherExcerpts } from './render';
+import { loadLogo, renderEvidencePackPdf, renderReportPdf, weatherExcerpts } from './render';
 import { sampleEvidencePackInput, sampleReportInput } from './sample-data';
 
 function pageCount(pdf: Buffer): number {
@@ -55,5 +55,36 @@ describe('weatherExcerpts', () => {
     expect(
       weatherExcerpts({ ...data, weather: { ...data.weather, periods: [] } }, segs),
     ).toHaveLength(3);
+  });
+});
+
+describe('loadLogo', () => {
+  const log = { warn: () => undefined } as unknown as Parameters<typeof loadLogo>[0]['log'];
+  const storageWith = (paths: string[], seen: string[]) =>
+    ({
+      download: async (_bucket: string, path: string) => {
+        seen.push(path);
+        if (!paths.includes(path)) throw new Error('not found');
+        return Buffer.from('png');
+      },
+    }) as unknown as Parameters<typeof loadLogo>[0]['storage'];
+
+  it('embeds a PNG logo as is', async () => {
+    const seen: string[] = [];
+    const logo = await loadLogo({ storage: storageWith(['o/logo.png'], seen), log }, 'o/logo.png');
+    expect(logo?.format).toBe('png');
+    expect(seen).toEqual(['o/logo.png']);
+  });
+
+  it('uses the PNG rendition the panel uploads next to an SVG logo', async () => {
+    const seen: string[] = [];
+    const logo = await loadLogo({ storage: storageWith(['o/logo.png'], seen), log }, 'o/logo.svg');
+    expect(logo?.format).toBe('png');
+    expect(seen).toEqual(['o/logo.png']);
+  });
+
+  it('falls back to the company name when an SVG has no rendition', async () => {
+    const logo = await loadLogo({ storage: storageWith([], []), log }, 'o/logo.svg');
+    expect(logo).toBeNull();
   });
 });

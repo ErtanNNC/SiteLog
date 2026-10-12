@@ -249,4 +249,85 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
       lines.some((l) => l.includes('BrightLine Electric,Electrical,5,40,RL-2041-0187,2')),
     ).toBe(true);
   });
+
+  it('payroll CSV follows the saved column order', async () => {
+    const { source: s, store } = source();
+    await s.saveSettings({
+      payroll_columns: ['report_no', 'hours', 'company', 'date', 'site'],
+    });
+    const header = demoPayrollCsv(store, '2026-W41', null).split('\n')[0];
+    expect(header).toBe('report_no,hours,company,date,site,project_code,trade,workers,version');
+  });
+
+  it('has no rendered PDFs: every selected report comes back as missing', async () => {
+    const { source: s, store } = source();
+    const filed = store.data.reports.filter((r) => r.status === 'filed').slice(0, 3);
+    const picked = await s.getPdfUrls({ reportIds: filed.map((r) => r.id) });
+    expect(picked).toEqual({
+      files: [],
+      missing: filed.map((r) => r.report_no),
+      total: 3,
+      capped: false,
+    });
+    const all = await s.getPdfUrls({ filters: { status: 'all', page: 3, pageSize: 10 } });
+    const archive = await s.listReports({ status: 'all' });
+    // Filters ignore paging: every matching report up to PDF_EXPORT_LIMIT (200).
+    expect(all.total).toBe(archive.total);
+    expect(all.missing).toHaveLength(archive.total);
+    expect(all.capped).toBe(false);
+    await expect(s.getBillingPortalUrl()).rejects.toThrow(/Demo mode/);
+  });
+
+  it('edits a reporter and promotes the next reporter on a site that loses its primary', async () => {
+    const { source: s, store } = source('ops');
+    const riverside = store.data.sites.find((x) => x.project_code === 'RL-2041')!;
+    const marco = store.data.reporters.find((r) => r.name === 'Marco Ruiz')!;
+    const jorge = store.data.reporters.find((r) => r.name === 'Jorge Medina')!;
+    const elm = store.data.sites.find((x) => x.project_code === 'ES-0377')!;
+    await s.updateReporter({
+      reporterId: marco.id,
+      name: 'Marco Ruiz',
+      role: 'site_manager',
+      siteIds: [elm.id],
+      languages: ['es', 'en'],
+    });
+    const link = (rid: string, sid: string) =>
+      store.data.siteReporters.find((x) => x.reporter_id === rid && x.site_id === sid);
+    expect(link(marco.id, riverside.id)).toBeUndefined();
+    expect(link(marco.id, elm.id)!.is_primary).toBe(false);
+    expect(link(jorge.id, riverside.id)!.is_primary).toBe(true);
+    expect(marco.phone_e164).toBe('+15550143378');
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'reporter.updated',
+      diff: { sites_added: [elm.id], sites_removed: [riverside.id] },
+    });
+    await expect(
+      s.updateReporter({
+        reporterId: marco.id,
+        name: ' ',
+        role: 'site_manager',
+        siteIds: [elm.id],
+        languages: [],
+      }),
+    ).rejects.toThrow('Enter a name.');
+    await expect(
+      s.updateReporter({
+        reporterId: marco.id,
+        name: 'Marco',
+        role: 'site_manager',
+        siteIds: [],
+        languages: [],
+      }),
+    ).rejects.toThrow('Pick at least one site.');
+  });
+
+  it('keeps an uploaded logo in memory for the settings preview', async () => {
+    const { source: s, store } = source();
+    await s.setOrgLogo(new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }));
+    const settings = await s.getSettings();
+    expect(settings.org.logoPath).toBe(`${store.data.org.id}/logo.svg`);
+    expect(settings.org.logoUrl).toMatch(/^blob:/);
+    await s.setOrgLogo(null);
+    expect((await s.getSettings()).org).toMatchObject({ logoPath: null, logoUrl: null });
+  });
 });

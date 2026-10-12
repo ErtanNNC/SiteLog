@@ -1,4 +1,5 @@
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, RotateCcw } from 'lucide-react';
+import { normalizePayrollColumns, PAYROLL_COLUMNS } from '@sitelog/shared/report/payroll.ts';
 import { Button } from '@/components/ui/Button';
 import { Label } from '@/components/ui/Label';
 import {
@@ -12,33 +13,21 @@ import { copy } from '@/copy/en';
 import { SettingsCard, SwitchRow } from './fields';
 import type { SectionProps } from './ReportsSection';
 
-/** §F15 CSV columns in their default order. */
-export const PAYROLL_COLUMNS = [
-  'date',
-  'site',
-  'project_code',
-  'company',
-  'trade',
-  'workers',
-  'hours',
-  'report_no',
-  'version',
-] as const;
-
-export interface PayrollSectionProps extends SectionProps {
-  columns: string[];
-  onColumnsChange: (next: string[]) => void;
-}
-
-/** Payroll export: format preset, column order, include unconfirmed companies (§F18). */
-export function PayrollSection({ draft, update, columns, onColumnsChange }: PayrollSectionProps) {
+/**
+ * Payroll export: format preset, column order, include unconfirmed companies (§F18, §P12).
+ * The order is org_settings.payroll_columns — saved with "Save changes" and used by
+ * api-export-payroll for every CSV.
+ */
+export function PayrollSection({ draft, update }: SectionProps) {
   const c = copy.settings.payroll;
+  const columns = normalizePayrollColumns(draft.payroll_columns);
+  const isDefault = columns.every((col, i) => col === PAYROLL_COLUMNS[i]);
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir;
     if (j < 0 || j >= columns.length) return;
     const next = [...columns];
     [next[i], next[j]] = [next[j]!, next[i]!];
-    onColumnsChange(next);
+    update({ payroll_columns: next });
   };
   return (
     <div className="grid gap-6">
@@ -98,6 +87,16 @@ export function PayrollSection({ draft, update, columns, onColumnsChange }: Payr
             </li>
           ))}
         </ol>
+        <Button
+          variant="subtle"
+          size="dense"
+          className="mt-3"
+          disabled={isDefault}
+          onClick={() => update({ payroll_columns: [...PAYROLL_COLUMNS] })}
+        >
+          <RotateCcw aria-hidden="true" />
+          {c.reset}
+        </Button>
       </SettingsCard>
     </div>
   );

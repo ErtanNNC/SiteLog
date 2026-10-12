@@ -34,6 +34,7 @@ import type { ChipVariant } from '@sitelog/shared/status.ts';
 import type { DailyReportData, ManpowerEntry, Source } from '@sitelog/shared/schemas/report.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
+import { normalizePayrollColumns, type PayrollColumn } from '@sitelog/shared/report/payroll.ts';
 import { isWorkingDay } from '@sitelog/shared/schedule/day.ts';
 import {
   addDays,
@@ -1633,15 +1634,20 @@ export function assembleHours(
   };
 }
 
-/** Payroll CSV (§F15): date,site,project_code,company,trade,workers,hours,report_no,version */
+/**
+ * Payroll CSV (§F15): date,site,project_code,company,trade,workers,hours,report_no,version —
+ * columns in the org's order (org_settings.payroll_columns, normalised), like api-export-payroll.
+ */
 export function payrollCsv(
   rows: RowSet,
   week: string,
   siteId: string | null,
   includeUnconfirmed: boolean,
+  order?: readonly string[] | null,
 ): string {
   const ix = buildIndex(rows);
   const { start, end } = isoWeekRange(week);
+  const columns = normalizePayrollColumns(order);
   const cm = currentManpower(rows, ix).filter(
     (m) => m.date >= start && m.date <= end && (!siteId || m.site_id === siteId),
   );
@@ -1649,26 +1655,25 @@ export function payrollCsv(
     const s = v === null || v === undefined ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const lines = ['date,site,project_code,company,trade,workers,hours,report_no,version'];
+  const lines = [columns.join(',')];
   for (const m of cm.sort((a, b) =>
     a.date === b.date ? a.site_id.localeCompare(b.site_id) : a.date < b.date ? -1 : 1,
   )) {
     const company = m.company_id ? ix.companyById.get(m.company_id) : undefined;
     if (!includeUnconfirmed && (!company || company.status === 'unconfirmed')) continue;
     const site = ix.siteById.get(m.site_id);
-    lines.push(
-      [
-        m.date,
-        esc(site?.name),
-        esc(site?.project_code),
-        esc(company?.name ?? m.company_name),
-        esc(company?.trade ?? m.trade),
-        m.workers,
-        Number(m.hours),
-        esc(m.report_no),
-        m.version,
-      ].join(','),
-    );
+    const cell: Record<PayrollColumn, string | number> = {
+      date: m.date,
+      site: esc(site?.name),
+      project_code: esc(site?.project_code),
+      company: esc(company?.name ?? m.company_name),
+      trade: esc(company?.trade ?? m.trade),
+      workers: m.workers,
+      hours: Number(m.hours),
+      report_no: esc(m.report_no),
+      version: m.version,
+    };
+    lines.push(columns.map((c) => cell[c]).join(','));
   }
   return lines.join('\n') + '\n';
 }
@@ -1909,6 +1914,7 @@ export function assembleSettings(rows: RowSet): SettingsData {
       licenseNo: rows.org.license_no,
       timezone: rows.org.timezone,
       logoPath: rows.org.logo_path,
+      logoUrl: null,
     },
     settings,
     siteRecipients: rows.sites

@@ -1,16 +1,12 @@
 /** Payroll CSV (§F15 step 5, §P8). Pure: rows in, text out. RFC 4180 quoting, CRLF line endings. */
 
-export const PAYROLL_COLUMNS = [
-  'date',
-  'site',
-  'project_code',
-  'company',
-  'trade',
-  'workers',
-  'hours',
-  'report_no',
-  'version',
-] as const;
+import {
+  normalizePayrollColumns,
+  PAYROLL_COLUMNS,
+  type PayrollColumn,
+} from '@sitelog/shared/report/payroll.ts';
+
+export { normalizePayrollColumns, PAYROLL_COLUMNS, type PayrollColumn };
 
 export interface ManpowerInput {
   date: string;
@@ -113,10 +109,18 @@ export function buildPayrollRows(
   );
 }
 
-export function payrollCsv(rows: readonly PayrollRow[]): string {
+/**
+ * Columns follow the org's order (org_settings.payroll_columns, §P12), normalised so every §F15
+ * column is present exactly once; the default is the spec order.
+ */
+export function payrollCsv(
+  rows: readonly PayrollRow[],
+  order: readonly string[] | null | undefined = PAYROLL_COLUMNS,
+): string {
+  const columns = normalizePayrollColumns(order);
   return toCsv(
-    PAYROLL_COLUMNS,
-    rows.map((r) => PAYROLL_COLUMNS.map((c) => r[c])),
+    columns,
+    rows.map((r) => columns.map((c) => r[c])),
   );
 }
 

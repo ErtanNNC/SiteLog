@@ -1,7 +1,10 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
-import { DemoStore } from '@/data/demo/store';
+import { toast } from 'sonner';
+import { describe, expect, it, vi } from 'vitest';
+import { DemoSource } from '@/data/demo/DemoSource';
+import { DemoStore, demoUserFor } from '@/data/demo/store';
+import type { PdfLinkBatch, PdfSelection } from '@/data/source';
 import { renderWithProviders } from '@/test/render';
 import OverviewPage from './Page';
 
@@ -87,5 +90,53 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
       store.data.siteDays.find((d) => d.site_id === elm.id && d.date === '2026-10-09')!.status,
     ).toBe('no_work');
     expect(store.data.audit.at(-1)!.action).toBe('site_day.marked_no_work');
+  });
+
+  it("Today's PDFs explains demo mode instead of downloading", async () => {
+    const message = vi.spyOn(toast, 'message');
+    renderWithProviders(<OverviewPage />);
+    await userEvent.click(await screen.findByTestId('todays-pdfs'));
+    expect(message).toHaveBeenCalledWith(
+      'Demo mode: PDFs are rendered by the worker from each filed report.',
+    );
+  });
+
+  it("Today's PDFs downloads one zip of today's filed reports (signed URLs)", async () => {
+    const u = demoUserFor('admin');
+    const calls: PdfSelection[] = [];
+    const source = new (class extends DemoSource {
+      override async getPdfUrls(selection: PdfSelection): Promise<PdfLinkBatch> {
+        calls.push(selection);
+        const ids = 'reportIds' in selection ? selection.reportIds : [];
+        return {
+          files: ids.map((id, i) => ({
+            reportId: id,
+            reportNo: `NO-${i}`,
+            url: `https://storage.test/${i}.pdf`,
+          })),
+          missing: [],
+          total: ids.length,
+          capped: false,
+        };
+      }
+    })(new DemoStore(), { id: u.id, email: u.email, name: u.name, role: u.role });
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => new Response(new TextEncoder().encode('%PDF-1.7')));
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => undefined);
+    const success = vi.spyOn(toast, 'success');
+    renderWithProviders(<OverviewPage />, { source, auth: { isDemo: false } });
+    await userEvent.click(await screen.findByTestId('todays-pdfs'));
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+    expect((click.mock.instances[0] as unknown as HTMLAnchorElement).download).toBe(
+      'SiteLog_daily-reports_2026-10-09.zip',
+    );
+    // The four reports filed today (Riverside, Oakmont, Pier 9, Northgate).
+    expect(calls).toEqual([{ reportIds: expect.any(Array) }]);
+    expect((calls[0] as { reportIds: string[] }).reportIds).toHaveLength(4);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(success).toHaveBeenCalledWith('4 PDFs zipped.', expect.anything());
   });
 });

@@ -78,6 +78,11 @@ export type OrgSettingsRow = {
   no_work_pdf: boolean;
   include_unconfirmed_in_payroll: boolean;
   past_due_grace_days: number;
+  /**
+   * Payroll CSV column order (20261012000001_web_gaps.sql; defaults to the §F15 order). Read it
+   * through `normalizePayrollColumns()`.
+   */
+  payroll_columns: string[];
   updated_at: string;
 };
 
@@ -711,6 +716,20 @@ export type Database = {
       complete_job: { Args: { p_job_id: number }; Returns: undefined };
       fail_job: { Args: { p_job_id: number; p_error: string }; Returns: undefined };
       mark_notifications_read: { Args: { p_ids: string[] }; Returns: undefined };
+      set_org_logo: {
+        Args: { p_org_id: string; p_logo_path: string | null };
+        Returns: Json;
+      };
+      update_reporter: {
+        Args: {
+          p_reporter_id: string;
+          p_name: string;
+          p_role: ReporterRole;
+          p_site_ids: string[];
+          p_languages: string[];
+        };
+        Returns: Json;
+      };
       log_audit: {
         Args: {
           p_org: string | null;

@@ -34,8 +34,10 @@ import type {
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/shared/format.ts';
+import { logoStoragePath } from '@sitelog/shared/report/numbering.ts';
 import { copy } from '@/copy/en';
 import { functionsUrl } from '@/lib/env';
+import { rasterizeSvgLogo } from '@/lib/logo';
 import type { Db } from '@/lib/supabase';
 import { uniq } from '@/lib/utils';
 import {
@@ -59,21 +61,27 @@ import {
   type AssembleCtx,
   type RowSet,
 } from '../assemble';
-import type {
-  AddGlossaryTermInput,
-  AddInvoiceInput,
-  CreateOrgInput,
-  CreateSiteInput,
-  DataSource,
-  InviteReporterInput,
-  LinkUnknownSenderInput,
-  RequestEvidencePackInput,
-  ResolveUnknownCompanyInput,
-  ReviewGlossaryTermInput,
-  SourceUser,
-  UpdateSitePatch,
+import {
+  PDF_EXPORT_LIMIT,
+  type AddGlossaryTermInput,
+  type AddInvoiceInput,
+  type CreateOrgInput,
+  type CreateSiteInput,
+  type DataSource,
+  type InviteReporterInput,
+  type LinkUnknownSenderInput,
+  type PdfLink,
+  type PdfLinkBatch,
+  type PdfSelection,
+  type RequestEvidencePackInput,
+  type ResolveUnknownCompanyInput,
+  type ReviewGlossaryTermInput,
+  type SourceUser,
+  type UpdateReporterInput,
+  type UpdateSitePatch,
 } from '../source';
 import type {
+  BillingData,
   ChangeEvent,
   OrgSettingsPatch,
   OrgSummary,
@@ -82,6 +90,41 @@ import type {
 } from '../types';
 
 const SIGNED_URL_TTL = 600; // 10 minutes (§15)
+/** Ids per `.in()` filter so PostgREST URLs stay well under proxy limits. */
+const IN_CHUNK = 100;
+
+function chunks<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/** api-billing `invoices` rows (supabase/functions/api-billing/logic.ts InvoiceSummary). */
+interface StripeInvoiceSummary {
+  id: string;
+  date: string;
+  amount_cents: number;
+  status: string | null;
+  hosted_invoice_url: string | null;
+  sites: number;
+}
+
+/** api-billing `status` (BillingSummary) — only the fields the Billing page shows. */
+interface StripeBillingStatus {
+  nextInvoiceAt: string | null;
+  paymentMethod: { brand: string; last4: string } | null;
+}
+
+function toBillingInvoice(inv: StripeInvoiceSummary, tz: string): BillingData['invoices'][number] {
+  return {
+    id: inv.id,
+    date: formatDateInTz(new Date(inv.date), tz),
+    sites: inv.sites,
+    amountCents: inv.amount_cents,
+    status: inv.status === 'paid' ? 'paid' : inv.status === 'uncollectible' ? 'past_due' : 'open',
+    url: inv.hosted_invoice_url ?? '',
+  };
+}
 
 function unwrap<T>(res: { data: T | null; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
@@ -277,7 +320,14 @@ export class SupabaseSource implements DataSource {
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new Error(text || `${name} failed (${res.status})`);
+      let message = text;
+      try {
+        const body = JSON.parse(text) as { error?: unknown };
+        if (typeof body.error === 'string' && body.error) message = body.error;
+      } catch {
+        /* plain-text error */
+      }
+      throw new Error(message || `${name} failed (${res.status})`);
     }
     const ct = res.headers.get('content-type') ?? '';
     return (ct.includes('application/json') ? await res.json() : await res.text()) as T;
@@ -434,11 +484,12 @@ export class SupabaseSource implements DataSource {
     return detail;
   }
 
-  async listReports(filters: ReportFilters) {
-    const core = await this.core();
+  /**
+   * The Reports archive query (§P6) for a set of filters — filed / signed-off reports with their
+   * site day — before ordering and paging. Wrapped in an object so `await` doesn't run it.
+   */
+  private async reportArchiveQuery(filters: ReportFilters) {
     const sb = this.sb;
-    const pageSize = filters.pageSize ?? PAGE_SIZE;
-    const page = Math.max(1, filters.page ?? 1);
     let q = sb
       .from('reports')
       .select('*, site_days!inner(id, date, site_id)', { count: 'exact' })
@@ -512,10 +563,17 @@ export class SupabaseSource implements DataSource {
       const ids = uniq(srcs.map((s) => s.report_id));
       q = q.or(`report_no.ilike.%${safe}%${ids.length ? `,id.in.(${ids.join(',')})` : ''}`);
     }
-    q = q
+    return { q };
+  }
+
+  async listReports(filters: ReportFilters) {
+    const sb = this.sb;
+    const pageSize = filters.pageSize ?? PAGE_SIZE;
+    const page = Math.max(1, filters.page ?? 1);
+    const [core, { q }] = await Promise.all([this.core(), this.reportArchiveQuery(filters)]);
+    const res = await q
       .order('received_at', { ascending: false, nullsFirst: false })
       .range((page - 1) * pageSize, page * pageSize - 1);
-    const res = await q;
     if (res.error) throw new Error(res.error.message);
     const raw = (res.data ?? []) as unknown as Array<
       ReportRow & { site_days: { id: string; date: string; site_id: string } | null }
@@ -797,11 +855,47 @@ export class SupabaseSource implements DataSource {
   }
 
   async getSettings() {
-    return assembleSettings(this.rowsFrom(await this.core()));
+    const data = assembleSettings(this.rowsFrom(await this.core()));
+    data.org.logoUrl = await this.signedUrl('logos', data.org.logoPath);
+    return data;
   }
 
+  /**
+   * Plan and sites from the database; invoices and the payment method from Stripe through
+   * api-billing (admin only). Stripe being unreachable or unconfigured leaves those empty.
+   */
   async getBilling() {
-    return assembleBilling(this.rowsFrom(await this.core()), this.ctx());
+    const core = await this.core();
+    const data = assembleBilling(this.rowsFrom(core), this.ctx());
+    const call = <T>(action: 'status' | 'invoices') =>
+      this.callFunction<T>('api-billing', { orgId: this.orgId, action }).catch(() => null);
+    const [status, invoices] = await Promise.all([
+      call<StripeBillingStatus>('status'),
+      call<{ invoices?: StripeInvoiceSummary[] }>('invoices'),
+    ]);
+    if (status && typeof status === 'object') {
+      if (status.paymentMethod) data.plan.paymentMethod = status.paymentMethod;
+      if (status.nextInvoiceAt)
+        data.plan.nextInvoiceDate = formatDateInTz(
+          new Date(status.nextInvoiceAt),
+          core.org.timezone,
+        );
+    }
+    if (invoices && Array.isArray(invoices.invoices)) {
+      data.invoices = invoices.invoices
+        .filter((i) => i.status !== 'draft' && i.status !== 'void')
+        .map((i) => toBillingInvoice(i, core.org.timezone));
+    }
+    return data;
+  }
+
+  async getBillingPortalUrl() {
+    const res = await this.callFunction<{ url?: string | null }>('api-billing', {
+      orgId: this.orgId,
+      action: 'portal',
+    });
+    if (!res?.url) throw new Error(copy.errors.generic);
+    return res.url;
   }
 
   async getNotifications() {
@@ -989,28 +1083,72 @@ export class SupabaseSource implements DataSource {
     return out.slice(0, 12);
   }
 
-  async getTodaysPdfUrls() {
-    const overview = await this.getOverview();
-    if (!overview.pdfReportIds.length) return [];
-    const reports = unwrap(
-      await this.sb
-        .from('reports')
-        .select('id, report_no, current_version')
-        .in('id', overview.pdfReportIds),
-    );
-    const versions = unwrap(
-      await this.sb
-        .from('report_versions')
-        .select('report_id, version, pdf_path')
-        .in('report_id', overview.pdfReportIds),
-    );
-    const out: Array<{ reportNo: string; url: string }> = [];
-    for (const r of reports) {
-      const v = versions.find((x) => x.report_id === r.id && x.version === r.current_version);
-      const url = await this.signedUrl('pdfs', v?.pdf_path);
-      if (url) out.push({ reportNo: r.report_no, url });
+  /** Current-version PDFs of explicit reports or of every report matching archive filters. */
+  async getPdfUrls(selection: PdfSelection): Promise<PdfLinkBatch> {
+    type Picked = Pick<ReportRow, 'id' | 'report_no' | 'current_version'>;
+    let reports: Picked[];
+    let total: number;
+    if ('reportIds' in selection) {
+      const ids = uniq(selection.reportIds);
+      total = ids.length;
+      const wanted = ids.slice(0, PDF_EXPORT_LIMIT);
+      const found = (
+        await Promise.all(
+          chunks(wanted, IN_CHUNK).map((part) =>
+            this.sb
+              .from('reports')
+              .select('id, report_no, current_version')
+              .in('id', part)
+              .then(unwrap),
+          ),
+        )
+      ).flat();
+      const byId = new Map(found.map((r) => [r.id, r]));
+      reports = wanted.map((id) => byId.get(id)).filter((r): r is Picked => !!r);
+    } else {
+      const { q } = await this.reportArchiveQuery(selection.filters);
+      const res = await q
+        .order('received_at', { ascending: false, nullsFirst: false })
+        .range(0, PDF_EXPORT_LIMIT - 1);
+      if (res.error) throw new Error(res.error.message);
+      reports = (res.data ?? []) as unknown as Picked[];
+      total = res.count ?? reports.length;
     }
-    return out;
+
+    const versions = (
+      await Promise.all(
+        chunks(
+          reports.map((r) => r.id),
+          IN_CHUNK,
+        ).map((part) =>
+          this.sb
+            .from('report_versions')
+            .select('report_id, version, pdf_path')
+            .in('report_id', part)
+            .then(unwrap),
+        ),
+      )
+    ).flat();
+    const pdfPath = new Map(versions.map((v) => [`${v.report_id}:${v.version}`, v.pdf_path]));
+    const pathOf = (r: Picked) => pdfPath.get(`${r.id}:${r.current_version}`) ?? null;
+    const paths = uniq(reports.map(pathOf).filter((p): p is string => !!p));
+    const urlByPath = new Map<string, string>();
+    if (paths.length) {
+      const signed = await this.sb.storage.from('pdfs').createSignedUrls(paths, SIGNED_URL_TTL);
+      if (signed.error) throw new Error(signed.error.message);
+      for (const d of signed.data ?? [])
+        if (d.path && d.signedUrl && !d.error) urlByPath.set(d.path, d.signedUrl);
+    }
+
+    const files: PdfLink[] = [];
+    const missing: string[] = [];
+    for (const r of reports) {
+      const path = pathOf(r);
+      const url = path ? urlByPath.get(path) : undefined;
+      if (url) files.push({ reportId: r.id, reportNo: r.report_no, url });
+      else missing.push(r.report_no);
+    }
+    return { files, missing, total, capped: total > PDF_EXPORT_LIMIT };
   }
 
   // ─── Mutations (RPCs are security definer and check roles themselves) ───
@@ -1142,6 +1280,16 @@ export class SupabaseSource implements DataSource {
     // api-invite-reporter re-sends `sitelog_welcome` for an existing reporter (one re-send, F3).
     await this.callFunction('api-invite-reporter', { action: 'resend', reporterId });
   }
+  async updateReporter(input: UpdateReporterInput) {
+    // One audited transaction (20261012000001_web_gaps.sql); the phone number is never touched.
+    await this.rpc('update_reporter', {
+      p_reporter_id: input.reporterId,
+      p_name: input.name,
+      p_role: input.role,
+      p_site_ids: input.siteIds,
+      p_languages: input.languages,
+    });
+  }
   async ignoreUnknownSender(unknownSenderId: string) {
     const { error } = await this.sb
       .from('unknown_senders')
@@ -1219,6 +1367,9 @@ export class SupabaseSource implements DataSource {
     if (patch.workingHours !== undefined) row.working_hours = patch.workingHours ?? null;
     const { error } = await this.sb.from('sites').update(row).eq('id', siteId);
     if (error) throw new Error(error.message);
+  }
+  async setOrgLogo(file: File | null, orgId?: string) {
+    await uploadOrgLogo(this.sb, orgId ?? this.orgId, file);
   }
   async pauseSite(siteId: string) {
     const { error } = await this.sb
@@ -1308,6 +1459,46 @@ export class SupabaseSource implements DataSource {
       void this.sb.removeChannel(channel);
     };
   }
+}
+
+/**
+ * Company logo (§F2, §F18): upsert `logos/{orgId}/logo.{png|svg}`, then record the path with
+ * set_org_logo() (admin only, audited); `null` clears it. The other extension's object is removed
+ * best-effort so switching PNG ↔ SVG leaves one file. Used by the source and by the setup wizard
+ * right after create_org (no DataSource yet).
+ */
+export async function uploadOrgLogo(sb: Db, orgId: string, file: File | null): Promise<void> {
+  const bucket = sb.storage.from('logos');
+  const all = [logoStoragePath(orgId, 'png'), logoStoragePath(orgId, 'svg')];
+  if (!file) {
+    const { error } = await sb.rpc('set_org_logo', { p_org_id: orgId, p_logo_path: null });
+    if (error) throw new Error(error.message);
+    await bucket.remove(all).catch(() => undefined);
+    return;
+  }
+  const isSvg = file.type === 'image/svg+xml';
+  const path = logoStoragePath(orgId, isSvg ? 'svg' : 'png');
+  const up = await bucket.upload(path, file, {
+    upsert: true,
+    contentType: file.type,
+    cacheControl: '60',
+  });
+  if (up.error) throw new Error(up.error.message);
+  // An SVG keeps a PNG rendition next to it for the PDF renderer (see rasterizeSvgLogo).
+  const png = isSvg ? await rasterizeSvgLogo(file) : null;
+  if (png) {
+    await bucket
+      .upload(logoStoragePath(orgId, 'png'), png, {
+        upsert: true,
+        contentType: 'image/png',
+        cacheControl: '60',
+      })
+      .catch(() => undefined);
+  }
+  const { error } = await sb.rpc('set_org_logo', { p_org_id: orgId, p_logo_path: path });
+  if (error) throw new Error(error.message);
+  const keep = new Set([path, ...(png ? [logoStoragePath(orgId, 'png')] : [])]);
+  await bucket.remove(all.filter((p) => !keep.has(p))).catch(() => undefined);
 }
 
 /** Org memberships of a user (used by the AuthProvider before any org is selected). */

@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/Select';
 import { copy } from '@/copy/en';
+import { LOGO_ACCEPT } from '@/lib/logo';
 import { cn } from '@/lib/utils';
 import { SettingsCard, SwitchRow } from './fields';
 import type { SectionProps } from './ReportsSection';
@@ -19,11 +20,22 @@ import type { SectionProps } from './ReportsSection';
 export interface PdfSectionProps extends SectionProps {
   orgName: string;
   logoUrl: string | null;
+  /** Uploads (File) or removes (null) the logo right away. */
   onLogoChange: (file: File | null) => void;
+  logoBusy?: boolean;
+  logoError?: string | null;
 }
 
-/** PDF template: logo (preview only), letterhead lines, footer, paper size, live thumbnail (§12). */
-export function PdfSection({ draft, update, orgName, logoUrl, onLogoChange }: PdfSectionProps) {
+/** PDF template: logo upload, letterhead lines, footer, paper size, live thumbnail (§12, §P12). */
+export function PdfSection({
+  draft,
+  update,
+  orgName,
+  logoUrl,
+  onLogoChange,
+  logoBusy = false,
+  logoError = null,
+}: PdfSectionProps) {
   const c = copy.settings.pdf;
   const fileRef = useRef<HTMLInputElement>(null);
   const lines = draft.letterhead_lines;
@@ -50,21 +62,46 @@ export function PdfSection({ draft, update, orgName, logoUrl, onLogoChange }: Pd
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/png,image/svg+xml"
+                accept={LOGO_ACCEPT}
                 className="sr-only"
                 aria-label={c.upload}
-                onChange={(e) => onLogoChange(e.target.files?.[0] ?? null)}
+                aria-describedby={logoError ? 'pdf-logo-error' : undefined}
+                data-testid="logo-input"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  e.target.value = '';
+                  if (file) onLogoChange(file);
+                }}
               />
-              <Button variant="ghost" size="dense" onClick={() => fileRef.current?.click()}>
-                {logoUrl ? c.replace : c.upload}
+              <Button
+                variant="ghost"
+                size="dense"
+                loading={logoBusy}
+                onClick={() => fileRef.current?.click()}
+              >
+                {logoBusy ? c.logoUploading : logoUrl ? c.replace : c.upload}
               </Button>
               {logoUrl ? (
-                <Button variant="destructive" size="dense" onClick={() => onLogoChange(null)}>
+                <Button
+                  variant="destructive"
+                  size="dense"
+                  disabled={logoBusy}
+                  onClick={() => onLogoChange(null)}
+                >
                   {c.removeLogo}
                 </Button>
               ) : null}
             </div>
           </div>
+          {logoError ? (
+            <p
+              id="pdf-logo-error"
+              role="alert"
+              className="mt-2 text-caption font-medium text-missing"
+            >
+              {logoError}
+            </p>
+          ) : null}
         </SettingsCard>
 
         <SettingsCard title={c.letterhead} hint={c.letterheadHint}>
