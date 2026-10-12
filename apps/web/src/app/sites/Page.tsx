@@ -1,7 +1,9 @@
-import { CloudRain, Phone, Plus, Users } from 'lucide-react';
+import { CloudRain, HardHat, Phone, Plus, Users } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { formatMonthDay, formatPhone } from '@sitelog/shared/format.ts';
+import { useAuth } from '@/auth/AuthProvider';
+import { canAccess, ROUTE_ROLES } from '@/auth/guards';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { CardsSkeleton } from '@/components/sitelog/Skeletons';
 import { EmptyState, ErrorState } from '@/components/sitelog/States';
@@ -21,6 +23,9 @@ type Tab = 'all' | 'attention' | 'paused';
 /** P4 · Sites — cards grid with 14-workday streaks (§11.4). */
 export default function SitesPage() {
   const sites = useSites();
+  const { role } = useAuth();
+  // Sites are added in the setup wizard, which is admin-only (RLS: sites_admin_insert).
+  const canAddSite = canAccess(role, ROUTE_ROLES.setup!);
   const [tab, setTab] = useState<Tab>('all');
   const all = sites.data ?? [];
   const active = all.filter((s) => s.status === 'active');
@@ -37,12 +42,14 @@ export default function SitesPage() {
         title={copy.sites.title}
         subtitle={copy.sites.subtitle(active.length)}
         actions={
-          <Button variant="primary" asChild>
-            <Link to="/setup/site">
-              <Plus aria-hidden="true" />
-              {copy.sites.addSite}
-            </Link>
-          </Button>
+          canAddSite ? (
+            <Button variant="primary" asChild>
+              <Link to="/setup/site">
+                <Plus aria-hidden="true" />
+                {copy.sites.addSite}
+              </Link>
+            </Button>
+          ) : undefined
         }
       />
       {/* The filter tabs control the card grid below, which is their tab panel. */}
@@ -75,6 +82,21 @@ export default function SitesPage() {
               error={sites.error}
               onRetry={() => void sites.refetch()}
             />
+          ) : all.length === 0 && tab === 'all' ? (
+            // A new org: "Connect another site" is the last card of a populated grid (§11.4).
+            <EmptyState
+              hero
+              icon={HardHat}
+              title={copy.sites.empty}
+              body={canAddSite ? copy.overview.noSites : copy.overview.noSitesAskAdmin}
+              action={
+                canAddSite ? (
+                  <Button variant="primary" asChild>
+                    <Link to="/setup/site">{copy.overview.connectFirstSite}</Link>
+                  </Button>
+                ) : undefined
+              }
+            />
           ) : visible.length === 0 && tab !== 'all' ? (
             <EmptyState
               title={tab === 'attention' ? copy.sites.emptyAttention : copy.sites.emptyPaused}
@@ -89,7 +111,7 @@ export default function SitesPage() {
                   <SiteCardView site={s} />
                 </li>
               ))}
-              {tab === 'all' ? (
+              {tab === 'all' && canAddSite ? (
                 <li>
                   <Link
                     to="/setup/site"

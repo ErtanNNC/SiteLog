@@ -1,6 +1,8 @@
-import { CheckCheck, Mail, Mic, X } from 'lucide-react';
+import { CheckCheck, FileText, Mail, Mic, X } from 'lucide-react';
 import { Link } from 'react-router';
 import { formatAudioTimestamp } from '@sitelog/shared/format.ts';
+import { useAuth } from '@/auth/AuthProvider';
+import { canAccess, ROUTE_ROLES } from '@/auth/guards';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/Card';
 import {
@@ -14,7 +16,7 @@ import {
 } from '@/components/ui/Table';
 import { copy } from '@/copy/en';
 import { useSetInvoiceStatus } from '@/data/hooks';
-import type { HoursRow, InvoiceDetail } from '@/data/types';
+import type { HoursRow, InvoiceDetail, InvoiceEvidence } from '@/data/types';
 import { formatHoursNum, formatMonthDay, weekdayName } from '@/lib/format';
 import { useScrollRegion } from '@/lib/useScrollRegion';
 import { cn } from '@/lib/utils';
@@ -64,6 +66,48 @@ export function buildQueryMailto(invoice: InvoiceDetail, origin: string): string
   return `mailto:?${params.toString().replace(/\+/g, '%20')}`;
 }
 
+/**
+ * The report behind a gap day: its voice note when it has one (a typed report has none), linked
+ * to the report for the roles that can open reports (an accounts user sees the number only).
+ */
+function EvidenceChip({ e, canOpen }: { e: InvoiceEvidence; canOpen: boolean }) {
+  const audio = e.audioStart !== null || !!e.messageId;
+  const body = (
+    <>
+      {audio ? (
+        <Mic className="size-4" aria-hidden="true" />
+      ) : (
+        <FileText className="size-4" aria-hidden="true" />
+      )}
+      {audio ? (
+        <>
+          {e.audioStart !== null
+            ? copy.hours.audioLink(formatAudioTimestamp(e.audioStart))
+            : copy.source.audio('').trim()}
+          <span className="text-dust">· {e.reportNo}</span>
+        </>
+      ) : (
+        e.reportNo
+      )}
+    </>
+  );
+  const chip =
+    'inline-flex h-7 items-center gap-1 rounded-chip border border-rebar bg-chalk px-2 font-mono text-[12px] font-medium';
+  return canOpen ? (
+    <Link
+      to={`/reports/${e.reportId}`}
+      className={cn(chip, 'text-level hover:border-iron')}
+      aria-label={copy.hours.openReport(e.reportNo)}
+    >
+      {body}
+    </Link>
+  ) : (
+    <span className={cn(chip, 'text-asphalt')} data-testid="evidence-report">
+      {body}
+    </span>
+  );
+}
+
 export function InvoiceCheckAside({
   invoice,
   row,
@@ -74,7 +118,10 @@ export function InvoiceCheckAside({
   onClose: () => void;
 }) {
   const setStatus = useSetInvoiceStatus();
+  const { role } = useAuth();
+  const canOpenReports = canAccess(role, ROUTE_ROLES.reports ?? []);
   const scrollRegion = useScrollRegion(copy.hours.invoiceCheck);
+  const hasGapDay = invoice.days.some((d) => Math.abs(d.gap) >= 0.005);
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const mailto = buildQueryMailto(invoice, origin);
   const period = `${formatMonthDay(invoice.periodStart)} – ${formatMonthDay(invoice.periodEnd)}`;
@@ -162,7 +209,9 @@ export function InvoiceCheckAside({
         <div className="px-5 pt-5">
           <h3 className="eyebrow text-dust">{copy.hours.evidence}</h3>
           {invoice.evidence.length === 0 ? (
-            <p className="mt-2 text-caption text-dust">{copy.hours.noEvidence}</p>
+            <p className="mt-2 text-caption text-dust">
+              {hasGapDay ? copy.hours.noReportEvidence : copy.hours.noEvidence}
+            </p>
           ) : (
             <ul
               className="mt-2 max-h-[400px] space-y-3 overflow-y-auto scrollbar-thin"
@@ -178,17 +227,7 @@ export function InvoiceCheckAside({
                   </div>
                   <blockquote className="mt-1 text-[15px] leading-[22px]">“{e.quote}”</blockquote>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <Link
-                      to={`/reports/${e.reportId}`}
-                      className="inline-flex h-7 items-center gap-1 rounded-chip border border-rebar bg-chalk px-2 font-mono text-[12px] font-medium text-level hover:border-iron"
-                      aria-label={copy.hours.openReport(e.reportNo)}
-                    >
-                      <Mic className="size-4" aria-hidden="true" />
-                      {e.audioStart !== null
-                        ? copy.hours.audioLink(formatAudioTimestamp(e.audioStart))
-                        : copy.source.audio('')}
-                      <span className="text-dust">· {e.reportNo}</span>
-                    </Link>
+                    <EvidenceChip e={e} canOpen={canOpenReports} />
                   </div>
                 </li>
               ))}

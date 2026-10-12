@@ -81,6 +81,16 @@ export function addMonths(yearMonth: string, delta: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+/** "2026-10" with a real month (a `?month=` URL param; "2026-13" is not one). */
+export function isValidYearMonth(yearMonth: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(yearMonth);
+}
+
+/** "2026-W41" naming a week that exists in that year (a `?week=` URL param; W00 or W54 is not one). */
+export function isValidIsoWeek(isoWeek: string): boolean {
+  return /^\d{4}-W\d{2}$/.test(isoWeek) && isoWeekOf(isoWeekRange(isoWeek).start) === isoWeek;
+}
+
 export function addWeeks(isoWeek: string, delta: number): string {
   const { start } = isoWeekRange(isoWeek);
   return isoWeekOf(addDays(start, delta * 7));

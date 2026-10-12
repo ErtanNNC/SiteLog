@@ -155,7 +155,14 @@ export interface OverviewData {
   today: string;
   now: string;
   timezone: string;
+  /** Active sites (the ones that report today). */
   siteCount: number;
+  /** Paused sites: an org whose sites are all paused is not an org with no sites. */
+  pausedCount: number;
+  /** Some active site has a verified site manager linked (who reports and gets reminders). */
+  hasReporter: boolean;
+  /** `hasReporter` and the first reminder is turned on in Settings → Reports. */
+  remindersOn: boolean;
   /** Earliest site deadline today, "17:30". */
   earliestDeadline: string;
   /** First reminder time, "17:45". */
@@ -163,7 +170,7 @@ export interface OverviewData {
   kpis: OverviewKpis;
   sitesToday: OverviewSiteRow[];
   needsAttention: AttentionItem[];
-  /** Report ids filed today with a PDF (for "Today's PDFs"). */
+  /** Report ids filed today (for "Today's PDFs"; one without a stored PDF is rendered first). */
   pdfReportIds: string[];
 }
 
@@ -565,6 +572,8 @@ export interface PackItem {
   readyAt: string | null;
   pdfPath: string | null;
   url: string | null;
+  /** Still queued well after it was requested: nothing is building it. */
+  notStarted: boolean;
 }
 
 export interface WeatherLog {

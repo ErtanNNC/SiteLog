@@ -138,15 +138,9 @@ export default function SettingsPage() {
     </TopBarControls>
   );
 
-  if (settings.isPending || !draft) {
-    return (
-      <>
-        {controls}
-        <PageSkeleton />
-      </>
-    );
-  }
-  if (settings.isError || !settings.data) {
+  // A failed first load leaves no data to seed the draft from: show the error, not a skeleton.
+  // (A failed refetch keeps the loaded data and the draft, so the page stays editable.)
+  if (settings.isError && !settings.data) {
     return (
       <>
         {controls}
@@ -155,6 +149,14 @@ export default function SettingsPage() {
           error={settings.error}
           onRetry={() => void settings.refetch()}
         />
+      </>
+    );
+  }
+  if (!settings.data || !draft) {
+    return (
+      <>
+        {controls}
+        <PageSkeleton />
       </>
     );
   }

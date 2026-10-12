@@ -34,10 +34,13 @@ export interface AuthUser {
   title: string | null;
 }
 
-export type AuthStatus = 'loading' | 'signed_out' | 'signed_in';
+/** `error`: signed in, but the org memberships could not be loaded (see `error`, `refreshOrgs`). */
+export type AuthStatus = 'loading' | 'signed_out' | 'signed_in' | 'error';
 
 export interface AuthState {
   status: AuthStatus;
+  /** Why the org memberships failed to load while `status` is `error`; null otherwise. */
+  error: unknown;
   user: AuthUser | null;
   orgs: OrgSummary[];
   currentOrg: OrgSummary | null;
@@ -101,11 +104,14 @@ function userFromSession(session: Session): AuthUser {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
+  const [error, setError] = useState<unknown>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [orgs, setOrgs] = useState<OrgSummary[]>([]);
   const [currentOrg, setCurrentOrgState] = useState<OrgSummary | null>(null);
   const [demoKey, setDemoKey] = useState<DemoLoginKey | null>(null);
   const sessionRef = useRef<Session | null>(null);
+  /** The user whose org memberships are loaded and shown (null while none are). */
+  const loadedUserRef = useRef<string | null>(null);
 
   const loadOrgsFor = useCallback(
     async (u: AuthUser, key: DemoLoginKey | null): Promise<OrgSummary[]> => {
@@ -125,14 +131,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  /**
+   * Never rejects: a failed org load (network, PostgREST) ends in `error` with the user kept, so
+   * the guard can offer Retry and Sign out instead of a skeleton that never ends. Treating it as
+   * "no orgs" would send an existing customer to the wizard to create a second company.
+   *
+   * A reload for the user already signed in (auth-js re-emits SIGNED_IN when the tab regains
+   * focus) that fails keeps the loaded state: going to `error` would unmount the page and lose
+   * an unsaved form over a brief network blip.
+   */
   const applySignedIn = useCallback(
     async (u: AuthUser, key: DemoLoginKey | null) => {
-      const list = await loadOrgsFor(u, key);
+      let list: OrgSummary[] | null = null;
+      let failure: unknown = null;
+      try {
+        list = await loadOrgsFor(u, key);
+      } catch (err) {
+        failure = err ?? new Error('Could not load your companies');
+      }
+      if (!list && loadedUserRef.current === u.id) {
+        console.warn('[auth] could not reload your companies; keeping the loaded ones', failure);
+        return;
+      }
+      loadedUserRef.current = list ? u.id : null;
       setUser(u);
       setDemoKey(key);
-      setOrgs(list);
-      setCurrentOrgState(pickOrg(list));
-      setStatus('signed_in');
+      setOrgs(list ?? []);
+      setCurrentOrgState(list ? pickOrg(list) : null);
+      setError(failure);
+      setStatus(list ? 'signed_in' : 'error');
       setSentryUser({ id: u.id, email: u.email });
     },
     [loadOrgsFor],
@@ -140,6 +167,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applySignedOut = useCallback(() => {
     sessionRef.current = null;
+    loadedUserRef.current = null;
+    setError(null);
     setUser(null);
     setOrgs([]);
     setCurrentOrgState(null);
@@ -189,6 +218,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           applySignedOut();
         }
+      })
+      // A failed session restore (network) must not leave the app on its loading skeleton.
+      .catch(() => {
+        if (!cancelled) applySignedOut();
       });
     const { data: sub } = sb.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
@@ -251,11 +284,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     applySignedOut();
   }, [applySignedOut]);
 
+  /** Rejects on failure; after a failed sign-in load (`error`) a success completes the sign-in. */
   const refreshOrgs = useCallback(async () => {
     if (!user) return [];
-    const list = await loadOrgsFor(user, demoKey);
+    let list: OrgSummary[];
+    try {
+      list = await loadOrgsFor(user, demoKey);
+    } catch (err) {
+      setError((prev: unknown) => (prev ? err : prev));
+      throw err;
+    }
+    loadedUserRef.current = user.id;
     setOrgs(list);
     setCurrentOrgState((cur) => list.find((o) => o.id === cur?.id) ?? pickOrg(list));
+    setError(null);
+    setStatus((s) => (s === 'error' ? 'signed_in' : s));
     return list;
   }, [user, demoKey, loadOrgsFor]);
 
@@ -269,6 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthState>(
     () => ({
       status,
+      error,
       user,
       orgs,
       currentOrg,
@@ -283,6 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }),
     [
       status,
+      error,
       user,
       orgs,
       currentOrg,

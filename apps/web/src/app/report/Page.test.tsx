@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { DemoStore, type DemoLoginKey } from '@/data/demo/store';
+import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { DemoStore, demoUserFor, type DemoLoginKey } from '@/data/demo/store';
 import { renderWithProviders } from '@/test/render';
 import ReportDetailPage from './Page';
 
@@ -141,5 +142,149 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
     await waitFor(() => expect(screen.getByTestId('manpower-total-crew')).toHaveTextContent('25'));
     expect(screen.getByTestId('manpower-total-hours')).toHaveTextContent('200');
     expect(screen.getByTestId('provenance')).toHaveTextContent('edited by Lena Ortiz');
+  }, 30_000);
+});
+
+describe('ReportDetailPage (report typed in the panel)', () => {
+  it('credits Open-Meteo only when there is observed weather', async () => {
+    const store = new DemoStore();
+    const site = store.data.sites.find((x) => x.project_code === 'P9-0932')!;
+    const typed = store.createOfficeReport({
+      siteId: site.id,
+      date: '2026-09-14',
+      data: {
+        ...emptyReportData('2026-09-14'),
+        summary: 'Typed in the office.',
+        weather: { conditionsText: 'Clear, 68°F', periods: [] },
+      },
+      userId: demoUserFor('admin').id,
+    });
+    renderWithProviders(<ReportDetailPage />, {
+      store,
+      route: `/reports/${typed.reportId}`,
+      path: '/reports/:reportId',
+    });
+    expect(await screen.findByText('Clear, 68°F')).toBeInTheDocument();
+    expect(screen.queryByText('Weather data: Open-Meteo')).not.toBeInTheDocument();
+  });
+});
+
+describe('ReportDetailPage (typed company filed before companies were linked on save)', () => {
+  it('offers Add as subcontractor for the unlinked company, so Crew hours "Confirm" leads somewhere', async () => {
+    const store = new DemoStore();
+    const elm = store.data.sites.find((x) => x.name === 'Elm St. Townhomes')!;
+    const typed = store.createOfficeReport({
+      siteId: elm.id,
+      date: '2026-10-09',
+      data: {
+        ...emptyReportData('2026-10-09'),
+        summary: 'Typed in the office.',
+        manpower: [
+          {
+            companyId: null,
+            companyNameHeard: 'Harbor Masonry',
+            companyName: 'Harbor Masonry',
+            workers: 4,
+            hoursPerWorker: 8,
+            totalHours: 32,
+            hoursBasis: 'office_edit',
+            confidence: 1,
+            source: [],
+          },
+        ],
+      },
+      userId: demoUserFor('admin').id,
+    });
+    // As filed before the fix: no company row and the crew row not linked.
+    store.data.companies.splice(
+      store.data.companies.findIndex((c) => c.name === 'Harbor Masonry'),
+      1,
+    );
+    const v1 = store.data.versions.find((v) => v.report_id === typed.reportId)!;
+    (
+      v1.data as unknown as { manpower: Array<{ companyId: string | null }> }
+    ).manpower[0]!.companyId = null;
+    for (const m of store.data.manpower) if (m.report_id === typed.reportId) m.company_id = null;
+
+    renderWithProviders(<ReportDetailPage />, {
+      store,
+      route: `/reports/${typed.reportId}`,
+      path: '/reports/:reportId',
+    });
+    const banner = await screen.findByRole('region', { name: '1 reason to review' });
+    expect(banner).toHaveTextContent('Unknown subcontractor “Harbor Masonry”');
+    const table = screen.getByRole('table', { name: 'Manpower' });
+    expect(within(table).getByText('Unconfirmed')).toBeInTheDocument();
+
+    await userEvent.click(within(banner).getByRole('button', { name: 'Add as subcontractor' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: /reason to review/ })).not.toBeInTheDocument(),
+    );
+    const company = store.data.companies.find((c) => c.name === 'Harbor Masonry')!;
+    expect(company.status).toBe('confirmed');
+    const report = store.data.reports.find((r) => r.id === typed.reportId)!;
+    expect(report.current_version).toBe(2);
+    const v2 = store.data.versions.find((v) => v.report_id === report.id && v.version === 2)!;
+    expect(
+      (v2.data as unknown as { manpower: Array<{ companyId: string | null }> }).manpower[0]!
+        .companyId,
+    ).toBe(company.id);
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('table', { name: 'Manpower' })).queryByText('Unconfirmed'),
+      ).not.toBeInTheDocument(),
+    );
+  }, 30_000);
+});
+
+describe('ReportDetailPage (WhatsApp report still being collected)', () => {
+  it('offers no Add / Map controls for an unlinked company before the report is filed', async () => {
+    const store = new DemoStore();
+    const elm = store.data.sites.find((x) => x.name === 'Elm St. Townhomes')!;
+    const typed = store.createOfficeReport({
+      siteId: elm.id,
+      date: '2026-10-09',
+      data: {
+        ...emptyReportData('2026-10-09'),
+        summary: 'Still talking to the site manager.',
+        manpower: [
+          {
+            companyId: null,
+            companyNameHeard: 'Harbor Masonry',
+            companyName: 'Harbor Masonry',
+            workers: 4,
+            hoursPerWorker: 8,
+            totalHours: 32,
+            hoursBasis: 'stated',
+            confidence: 0.6,
+            source: [],
+          },
+        ],
+      },
+      userId: demoUserFor('admin').id,
+    });
+    // As extraction leaves it while the worker asks about the company: not linked, not filed.
+    store.data.companies.splice(
+      store.data.companies.findIndex((c) => c.name === 'Harbor Masonry'),
+      1,
+    );
+    const v1 = store.data.versions.find((v) => v.report_id === typed.reportId)!;
+    (
+      v1.data as unknown as { manpower: Array<{ companyId: string | null }> }
+    ).manpower[0]!.companyId = null;
+    for (const m of store.data.manpower) if (m.report_id === typed.reportId) m.company_id = null;
+    const report = store.data.reports.find((r) => r.id === typed.reportId)!;
+    report.status = 'awaiting_answer';
+    report.filed_at = null;
+
+    renderWithProviders(<ReportDetailPage />, {
+      store,
+      route: `/reports/${typed.reportId}`,
+      path: '/reports/:reportId',
+    });
+    expect(await screen.findByRole('table', { name: 'Manpower' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /reason to review/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add as subcontractor' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Map to existing' })).not.toBeInTheDocument();
   }, 30_000);
 });

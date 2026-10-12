@@ -1,5 +1,5 @@
 import { assertEquals } from '@std/assert';
-import { baseSummary, invoiceSummary, syncDecision } from './logic.ts';
+import { baseSummary, checkoutQuantity, invoiceSummary, syncDecision } from './logic.ts';
 
 Deno.test('invoiceSummary maps a Stripe invoice to the panel row', () => {
   assertEquals(
@@ -22,6 +22,13 @@ Deno.test('invoiceSummary maps a Stripe invoice to the panel row', () => {
       sites: 3,
     },
   );
+});
+
+Deno.test('checkoutQuantity bills the active sites and refuses an org with none', () => {
+  assertEquals(checkoutQuantity(0), null);
+  assertEquals(checkoutQuantity(-1), null);
+  assertEquals(checkoutQuantity(1), 1);
+  assertEquals(checkoutQuantity(6), 6);
 });
 
 Deno.test('syncDecision updates only when the quantity differs; decreases are not prorated', () => {

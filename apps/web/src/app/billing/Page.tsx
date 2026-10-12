@@ -1,6 +1,6 @@
 import { CreditCard, Download, Pause, Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { formatMoneyCents, formatMonthDay, formatMonthYear } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
@@ -45,6 +45,10 @@ export default function BillingPage() {
   const portal = useBillingPortal();
   const checkout = useBillingCheckout();
   const hasSubscription = billing.data?.plan.hasSubscription ?? true;
+  // Checkout subscribes one unit per active site, so it needs at least one (api-billing: 409).
+  const needsSite = !hasSubscription && (billing.data?.plan.activeSites ?? 0) === 0;
+  // Paused sites are listed below with Resume: point there rather than to a new $399 site.
+  const canResume = needsSite && (billing.data?.sites ?? []).some((s) => s.status === 'paused');
   /**
    * Stripe customer portal (payment method, invoice PDFs) once a subscription exists; before that,
    * Stripe Checkout starts it (14-day trial). Demo mode only explains it.
@@ -242,11 +246,22 @@ export default function BillingPage() {
             <div className="max-w-[640px]">
               <h2 className="font-h2 text-h2">{copy.billing.startTitle}</h2>
               <p className="mt-1 text-[15px] text-dust">{copy.billing.startBody}</p>
+              {needsSite ? (
+                <p className="mt-1 text-[15px] font-medium" data-testid="start-needs-site">
+                  {canResume ? copy.billing.startResumeSite : copy.billing.startNoSites}
+                </p>
+              ) : null}
             </div>
-            <Button loading={stripeBusy} onClick={openPortal}>
-              <CreditCard aria-hidden="true" />
-              {copy.billing.startCta}
-            </Button>
+            {needsSite ? (
+              <Button variant={canResume ? 'ghost' : 'secondary'} asChild>
+                <Link to="/setup/site">{copy.billing.addSite}</Link>
+              </Button>
+            ) : (
+              <Button loading={stripeBusy} onClick={openPortal}>
+                <CreditCard aria-hidden="true" />
+                {copy.billing.startCta}
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : null}
@@ -282,7 +297,12 @@ export default function BillingPage() {
             <dl className="mt-6 grid gap-4 border-t border-iron pt-4 sm:grid-cols-2">
               <div>
                 <dt className="eyebrow text-dust-light">{copy.billing.nextInvoice}</dt>
-                <dd className="mt-1 font-mono text-data">{formatDateLong(plan.nextInvoiceDate)}</dd>
+                <dd className="mt-1 font-mono text-data" data-testid="next-invoice">
+                  {/* Only a subscription has an invoice date (Stripe's current period end). */}
+                  {plan.hasSubscription
+                    ? formatDateLong(plan.nextInvoiceDate)
+                    : copy.billing.noSubscription}
+                </dd>
               </div>
               <div>
                 <dt className="eyebrow text-dust-light">{copy.billing.paymentMethod}</dt>
@@ -295,7 +315,7 @@ export default function BillingPage() {
               </div>
               {plan.trialEndsAt ? (
                 <div>
-                  <dt className="eyebrow text-dust-light">{copy.chips.pending}</dt>
+                  <dt className="eyebrow text-dust-light">{copy.billing.trial}</dt>
                   <dd className="mt-1 font-mono text-data">
                     {copy.billing.trialEnds(formatDateLong(plan.trialEndsAt.slice(0, 10)))}
                   </dd>
@@ -324,6 +344,7 @@ export default function BillingPage() {
               variant="ghost"
               className="mt-5 w-full"
               loading={stripeBusy}
+              disabled={needsSite}
               onClick={openPortal}
               data-testid="update-payment"
             >
@@ -347,6 +368,15 @@ export default function BillingPage() {
             rows={sites}
             rowKey={(s) => s.id}
             aria-label={copy.billing.sitesOnPlan}
+            empty={{
+              title: copy.billing.noSitesTitle,
+              body: copy.billing.noSitesBody,
+              action: (
+                <Button variant="secondary" asChild>
+                  <Link to="/setup/site">{copy.billing.addSite}</Link>
+                </Button>
+              ),
+            }}
           />
         </CardContent>
       </Card>

@@ -31,6 +31,11 @@ export default function AuthCallbackPage() {
       void navigate(orgs.length ? homeFor(role) : '/setup', { replace: true });
       return;
     }
+    // Signed in, but the companies did not load: the app's guard shows Retry and Sign out.
+    if (status === 'error') {
+      void navigate('/', { replace: true });
+      return;
+    }
     if (status === 'signed_out') {
       const t = setTimeout(() => void navigate('/login?error=auth', { replace: true }), 15_000);
       return () => clearTimeout(t);

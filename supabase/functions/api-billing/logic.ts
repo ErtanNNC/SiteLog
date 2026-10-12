@@ -35,6 +35,15 @@ export function invoiceSummary(inv: InvoiceLike): InvoiceSummary {
   };
 }
 
+/**
+ * Checkout subscribes one unit per active site. With none there is nothing to bill yet (Stripe
+ * Checkout needs a quantity of at least 1), so the caller refuses instead of billing one site.
+ */
+export function checkoutQuantity(activeSites: number): number | null {
+  const n = Math.max(0, Math.floor(activeSites));
+  return n > 0 ? n : null;
+}
+
 export interface SyncDecision {
   update: boolean;
   quantity: number;

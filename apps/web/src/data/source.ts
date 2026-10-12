@@ -106,8 +106,8 @@ export interface PdfLink {
 
 export interface PdfLinkBatch {
   files: PdfLink[];
-  /** Report numbers in the selection without a rendered PDF yet. */
-  missing: string[];
+  /** Reports in the selection without a stored PDF yet (the export renders them in the browser). */
+  missing: Array<{ reportId: string; reportNo: string }>;
   /** Reports in the selection before the PDF_EXPORT_LIMIT cap. */
   total: number;
   /** True when `total` exceeded PDF_EXPORT_LIMIT and only the first ones were resolved. */
@@ -122,7 +122,8 @@ export interface LinkUnknownSenderInput {
   role?: ReporterRole;
 }
 
-export interface CreateOrgInput {
+/** Company details (name, time zone, address, licence number) of the current org. */
+export interface UpdateOrgInput {
   name: string;
   timezone: string;
   address?: string | null;
@@ -140,6 +141,19 @@ export interface CreateSiteInput {
   workingHours?: string | null;
   recipients?: string[];
   reporter?: InviteReporterInput | null;
+}
+
+/**
+ * The site exists once createSite resolves. Saving its recipients or inviting its manager runs
+ * after the insert; a failure there is returned instead of thrown, so the caller never retries
+ * (and duplicates) a site that was created.
+ */
+export interface CreateSiteResult {
+  siteId: string;
+  /** Message of a failed manager invite (WhatsApp welcome); null when it was sent or not asked. */
+  inviteError: string | null;
+  /** Message of a failed recipients save; null when saved or not asked. */
+  recipientsError: string | null;
 }
 
 export type UpdateSitePatch = Partial<
@@ -249,8 +263,12 @@ export interface DataSource {
   addOfficeUser(input: { email: string; role: MemberRole; name?: string }): Promise<void>;
   changeMemberRole(userId: string, role: MemberRole): Promise<void>;
   removeMember(userId: string): Promise<void>;
-  createOrg(input: CreateOrgInput): Promise<{ orgId: string }>;
-  createSite(input: CreateSiteInput): Promise<{ siteId: string }>;
+  /**
+   * Admin: edit the current org's company details (update_org, audited). Orgs are created only by
+   * the no-org setup wizard (create_org), never through a source, which always has an org.
+   */
+  updateOrg(input: UpdateOrgInput): Promise<void>;
+  createSite(input: CreateSiteInput): Promise<CreateSiteResult>;
   updateSite(siteId: string, patch: UpdateSitePatch): Promise<void>;
   /**
    * Upload (PNG/SVG ≤ 2 MB, validated by the caller) or clear (`null`) the company logo used on

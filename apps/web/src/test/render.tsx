@@ -36,6 +36,7 @@ export function makeAuthState(
   };
   return {
     status: 'signed_in',
+    error: null,
     user: { id: du.id, email: du.email, name: du.name, title: du.title },
     orgs: [org],
     currentOrg: org,
@@ -76,13 +77,17 @@ export function Providers({
   const [src] = useState(() => (source === undefined ? makeSource(as, store) : source));
   const authState = makeAuthState(as, {
     ...auth,
-    currentOrg: auth?.currentOrg ?? {
-      id: src?.orgId ?? 'org',
-      name: 'Kestrel Build Group',
-      timezone: 'America/Chicago',
-      activeSites: 6,
-      role: demoUserFor(as).role,
-    },
+    // An explicit `currentOrg: null` is a user without an org (the no-org setup wizard).
+    currentOrg:
+      auth && 'currentOrg' in auth
+        ? (auth.currentOrg ?? null)
+        : {
+            id: src?.orgId ?? 'org',
+            name: 'Kestrel Build Group',
+            timezone: 'America/Chicago',
+            activeSites: 6,
+            role: demoUserFor(as).role,
+          },
   });
   return (
     <QueryClientProvider client={client}>

@@ -1,11 +1,13 @@
 import {
   BookOpen,
+  CirclePause,
   FolderArchive,
   HardHat,
   Inbox,
   Link2,
   MessageSquareText,
   Phone,
+  Plus,
   Scale,
   Search,
   type LucideIcon,
@@ -15,6 +17,7 @@ import { Link, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { formatDateInTz, formatHours, formatTimeInTz } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
+import { canAccess, ROUTE_ROLES } from '@/auth/guards';
 import { DataTable, type Column } from '@/components/sitelog/DataTable';
 import { KpiTile } from '@/components/sitelog/KpiTile';
 import { PageHeader } from '@/components/sitelog/PageHeader';
@@ -42,7 +45,10 @@ const ATTENTION_ICON: Record<AttentionItem['kind'], LucideIcon> = {
 /** P3 · Overview (today) — §11.4 + F13. */
 export default function OverviewPage() {
   const source = useDataSource();
-  const { isDemo } = useAuth();
+  const { isDemo, role } = useAuth();
+  // Sites are added in the setup wizard and paused / resumed in their settings, both admin-only
+  // (RLS: sites_admin_insert, sites_admin_update).
+  const canAddSite = canAccess(role, ROUTE_ROLES.setup!);
   const overview = useOverview();
   const markNoWork = useMarkNoWork();
   const pdfZip = usePdfZipExport();
@@ -202,6 +208,7 @@ export default function OverviewPage() {
     k.segments.filed === 0 &&
     k.segments.missing === 0 &&
     k.segments.weather === 0 &&
+    k.segments.noWork === 0 &&
     data.siteCount > 0;
 
   return (
@@ -240,16 +247,30 @@ export default function OverviewPage() {
         </Card>
       ) : null}
 
-      {data.siteCount === 0 ? (
+      {data.siteCount === 0 && data.pausedCount > 0 ? (
+        <EmptyState
+          hero
+          icon={CirclePause}
+          title={copy.overview.allPausedTitle}
+          body={canAddSite ? copy.overview.allPaused : copy.overview.allPausedAskAdmin}
+          action={
+            <Button variant="secondary" asChild>
+              <Link to="/sites">{copy.overview.openSites}</Link>
+            </Button>
+          }
+        />
+      ) : data.siteCount === 0 ? (
         <EmptyState
           hero
           icon={HardHat}
           title={copy.overview.noSitesTitle}
-          body={copy.overview.noSites}
+          body={canAddSite ? copy.overview.noSites : copy.overview.noSitesAskAdmin}
           action={
-            <Button variant="primary" asChild>
-              <Link to="/setup/site">{copy.overview.connectFirstSite}</Link>
-            </Button>
+            canAddSite ? (
+              <Button variant="primary" asChild>
+                <Link to="/setup/site">{copy.overview.connectFirstSite}</Link>
+              </Button>
+            ) : undefined
           }
         />
       ) : (
@@ -319,13 +340,34 @@ export default function OverviewPage() {
               <CardContent className="px-0 pb-2 pt-3">
                 {noReportsYet ? (
                   <div className="px-5 pb-4">
-                    <EmptyState
-                      icon={Inbox}
-                      title={copy.overview.emptyBeforeReports(
-                        data.earliestDeadline,
-                        data.reminder1At,
-                      )}
-                    />
+                    {data.hasReporter ? (
+                      <EmptyState
+                        icon={Inbox}
+                        title={
+                          data.remindersOn
+                            ? copy.overview.emptyBeforeReports(
+                                data.earliestDeadline,
+                                data.reminder1At,
+                              )
+                            : copy.overview.emptyBeforeReportsNoReminders(data.earliestDeadline)
+                        }
+                      />
+                    ) : (
+                      // Nobody reports by WhatsApp yet, so nothing arrives and nobody is reminded.
+                      <EmptyState
+                        icon={Inbox}
+                        title={copy.overview.emptyNoReporter}
+                        body={copy.overview.emptyNoReporterBody}
+                        action={
+                          <Button variant="primary" asChild>
+                            <Link to="/reports/new">
+                              <Plus aria-hidden="true" />
+                              {copy.reports.newReport}
+                            </Link>
+                          </Button>
+                        }
+                      />
+                    )}
                   </div>
                 ) : null}
                 <DataTable
@@ -342,7 +384,15 @@ export default function OverviewPage() {
             <aside aria-label={copy.overview.needsAttention} className="min-w-0">
               <h2 className="font-h2 mb-3 text-h2">{copy.overview.needsAttention}</h2>
               {data.needsAttention.length === 0 ? (
-                <EmptyState title={copy.overview.allClear} body={copy.overview.allClearBody} />
+                // A missing site always adds an item, so here a site is either in or still due.
+                k.segments.awaiting > 0 ? (
+                  <EmptyState
+                    title={copy.overview.nothingYet}
+                    body={copy.overview.nothingYetBody(k.segments.awaiting)}
+                  />
+                ) : (
+                  <EmptyState title={copy.overview.allClear} body={copy.overview.allClearBody} />
+                )
               ) : (
                 <ul className="space-y-3" data-testid="needs-attention">
                   {data.needsAttention.map((item) => {

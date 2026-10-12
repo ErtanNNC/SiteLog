@@ -2,7 +2,7 @@ import Stripe from 'stripe';
 import { z } from 'zod';
 import { logAudit } from '../_shared/audit.ts';
 import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
-import { periodEndOf, trialDaysFor, unixToIso } from '../_shared/billing.ts';
+import { checkoutTrial, periodEndOf, unixToIso } from '../_shared/billing.ts';
 import { requireEnv } from '../_shared/env.ts';
 import {
   HttpError,
@@ -14,12 +14,19 @@ import {
 } from '../_shared/http.ts';
 import { logInfo } from '../_shared/log.ts';
 import { adminClient, type AppClient, type TableRow } from '../_shared/supabase.ts';
-import { baseSummary, invoiceSummary, syncDecision, type BillingSummary } from './logic.ts';
+import {
+  baseSummary,
+  checkoutQuantity,
+  invoiceSummary,
+  syncDecision,
+  type BillingSummary,
+} from './logic.ts';
 
 /**
  * api-billing (§F19, §P13, §19 #4/#5) — admin only.
  * POST { orgId, action, siteId? } with action:
- *   checkout     → Stripe Checkout Session (subscription, quantity = active sites, 14-day trial once)
+ *   checkout     → Stripe Checkout Session (subscription, quantity = active sites ≥ 1, keeps the
+ *                  rest of the org's 14-day trial)
  *   portal       → customer portal session (payment method, invoices)
  *   sync         → subscription item quantity = count of active sites
  *   pause_site   → sites.status 'paused' (+ paused_at), then sync
@@ -125,30 +132,37 @@ async function checkout(stripe: Stripe, admin: AppClient, org: Org, user: Authed
       'This organisation already has a subscription; use the billing portal to manage it',
     );
   }
+  // Checked before a Stripe customer is created: with no active site there is nothing to bill.
+  const quantity = checkoutQuantity(await activeSiteCount(admin, org.id));
+  if (quantity === null) {
+    throw new HttpError(
+      409,
+      'Add a site before starting the subscription; billing is per active site',
+    );
+  }
   const customer = await ensureCustomer(stripe, admin, org, user);
-  const quantity = Math.max(1, await activeSiteCount(admin, org.id));
-  const trialDays = trialDaysFor(org);
+  const trial = checkoutTrial(org, new Date());
   const base = appUrl();
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer,
     client_reference_id: org.id,
     line_items: [{ price: requireEnv('STRIPE_PRICE_ID_SITE'), quantity }],
-    subscription_data: {
-      metadata: { orgId: org.id },
-      ...(trialDays ? { trial_period_days: trialDays } : {}),
-    },
+    subscription_data: { metadata: { orgId: org.id }, ...trial },
     success_url: `${base}/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${base}/billing?checkout=canceled`,
     metadata: { orgId: org.id },
   });
+  const trialEnd = unixToIso(trial.trial_end);
+  const trialDays = trial.trial_period_days ?? 0;
   logInfo('billing.checkout_created', {
     orgId: org.id,
     sessionId: session.id,
     quantity,
-    trialDays: trialDays ?? 0,
+    trialDays,
+    trialEnd,
   });
-  return { url: session.url, sessionId: session.id, quantity, trialDays: trialDays ?? 0 };
+  return { url: session.url, sessionId: session.id, quantity, trialDays, trialEnd };
 }
 
 async function portal(stripe: Stripe, org: Org) {

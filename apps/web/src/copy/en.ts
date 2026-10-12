@@ -220,6 +220,7 @@ export const copy = {
     photos: (n: number) => `${plural(n, 'photo')}`,
     weatherData: 'Weather data',
     photoRequested: 'Photo requested',
+    photoMissing: 'No photo',
     audioMissing: 'No audio',
     weatherMissing: 'No weather data',
     claimReady: 'Claim-ready',
@@ -312,6 +313,8 @@ export const copy = {
     demoHintAs: (name: string) => `Demo mode: you’ll sign in as ${name}.`,
     callbackTitle: 'Signing you in…',
     callbackBody: 'One moment while we check your link.',
+    accountThing: 'your companies',
+    signOut: 'Sign out',
   },
 
   overview: {
@@ -348,11 +351,24 @@ export const copy = {
     needsAttention: 'Needs attention',
     allClear: 'All clear',
     allClearBody: 'Every site has reported and nothing is waiting on you.',
+    nothingYet: 'Nothing needs you yet',
+    nothingYetBody: (awaiting: number) => `${plural(awaiting, 'site')} still to report today.`,
     emptyBeforeReports: (deadline: string, r1: string) =>
       `Reports usually arrive after ${deadline}. Reminders go out at ${r1}.`,
+    emptyBeforeReportsNoReminders: (deadline: string) =>
+      `Reports usually arrive after ${deadline}.`,
+    emptyNoReporter: 'No site manager reports by WhatsApp yet',
+    emptyNoReporterBody:
+      'Type today’s report in the panel until a site manager is linked to report by WhatsApp.',
     noSitesTitle: 'No sites yet',
-    noSites: 'Connect your first site and its site manager starts reporting tonight.',
+    noSites: 'Connect your first site, then file its daily reports from Reports → New report.',
+    noSitesAskAdmin: 'An admin connects sites. Ask an admin to connect the first one.',
     connectFirstSite: 'Connect your first site',
+    allPausedTitle: 'All sites are paused',
+    allPaused: 'Resume a site from its settings and daily reports start again.',
+    allPausedAskAdmin:
+      'An admin resumes sites. Ask an admin to resume one and daily reports start again.',
+    openSites: 'Open sites',
     attention: {
       missing: {
         title: (site: string) => `${site} — no report`,
@@ -407,7 +423,7 @@ export const copy = {
     connectAnotherPrice: '$399 / month · no setup fee',
     emptyAttention: 'No site needs attention right now.',
     emptyPaused: 'No paused sites.',
-    empty: 'No sites yet.',
+    empty: 'No sites yet',
     openSite: (name: string) => `Open ${name}`,
     pausedSince: (date: string) => `Paused since ${date}`,
     reporter: 'Site manager',
@@ -470,7 +486,7 @@ export const copy = {
       allDates: 'All dates',
       empty: 'No photos yet. Site managers can send them with the voice note.',
       open: (caption: string) => `Open photo: ${caption}`,
-      noPreview: 'Preview not available in demo mode',
+      noPreview: 'Preview not available',
       openReport: (no: string) => `Open report ${no}`,
       caption: (date: string, time: string) => `${date} · ${time}`,
     },
@@ -556,6 +572,11 @@ export const copy = {
     buildPackHint: (h: string) => `${h} lost to weather in this set`,
     empty: 'No reports match these filters.',
     emptyHint: 'Try widening the dates or clearing a toggle.',
+    emptyNone: 'No reports yet',
+    emptyNoneBody: 'Type a site’s daily report and it is filed here, with its PDF.',
+    emptyNoSitesBody: 'Add your first site, then file its daily reports here.',
+    emptyNoSitesAskAdmin:
+      'An admin adds sites. Ask an admin to add the first one, then file its daily reports here.',
     exportDemo: (n: number) =>
       `Demo mode: a zip with ${plural(n, 'PDF')} would download here. PDFs are rendered by the worker.`,
     exportNone: 'No reports to export. Widen the filters or select rows.',
@@ -570,6 +591,7 @@ export const copy = {
     toggles: 'Quick filters',
     manager: (name: string) => `by ${name}`,
     pdfNotReady: 'PDF not ready yet',
+    pdfNotStored: 'No PDF stored yet. It is made when you open it.',
     pagination: 'Pagination',
     showing: (from: number, to: number, total: number) => `${from}–${to} of ${total}`,
   },
@@ -855,6 +877,7 @@ export const copy = {
     audioLink: (ts: string) => `audio ${ts}`,
     openReport: (no: string) => `Open report ${no}`,
     noEvidence: 'No gap days to show evidence for.',
+    noReportEvidence: 'No site report recorded hours for this company on the gap days.',
     queryMail: {
       subject: (company: string, no: string) => `Invoice ${no} — hours query from SiteLog`,
       intro: (company: string, no: string, period: string) =>
@@ -863,7 +886,7 @@ export const copy = {
         `${date}: invoiced ${invoiced}, reported ${reported}, gap ${gap}`,
       total: (invoiced: string, reported: string, gap: string) =>
         `Total: invoiced ${invoiced}, reported ${reported}, gap ${gap}`,
-      evidence: 'Site report evidence (voice notes on file):',
+      evidence: 'Site report evidence:',
       outro:
         'Could you check these days and send a corrected invoice or the timesheets behind the difference?\n\nThanks,',
     },
@@ -886,6 +909,8 @@ export const copy = {
       invoiceNoRequired: 'Enter the invoice number.',
       periodInvalid: 'The period end must be on or after the start.',
       hoursInvalid: 'Hours must be numbers.',
+      noCompanies:
+        'No subcontractors yet. A company appears here once a filed report lists its crew.',
     },
   },
 
@@ -923,6 +948,9 @@ export const copy = {
       download: 'Download',
     },
     empty: 'No weather delays this month.',
+    noSitesTitle: 'No sites yet',
+    noSites: 'Lost hours show up here once a site’s reports record a weather delay.',
+    noWorkdays: 'No workdays in this month yet.',
     monthSelect: 'Month',
     siteSelect: 'Site',
     allSites: 'All sites',
@@ -942,7 +970,10 @@ export const copy = {
       siteRequired: 'Pick the site the claim is for.',
       periodInvalid: 'The end must be on or after the start.',
       sectionsRequired: 'Pick at least one section.',
+      sitePlaceholder: 'Choose a site',
       summary: (days: number, hours: string) => `${plural(days, 'site-day')} · ${hours} lost`,
+      summaryMonthOnly: (month: string, days: number, hours: string) =>
+        `${month} only: ${plural(days, 'site-day')} · ${hours} lost`,
     },
     packs: {
       empty: 'No packs yet. Build one from the delay log.',
@@ -950,6 +981,8 @@ export const copy = {
       requestedBy: (when: string) => `Requested ${when}`,
       sections: (n: number) => `${plural(n, 'section')}`,
       demoDownload: 'Demo mode: the worker renders the PDF; nothing to download here.',
+      notStarted:
+        'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact SiteLog support.',
     },
   },
 
@@ -984,7 +1017,7 @@ export const copy = {
     primary: 'Primary',
     noSites: 'No sites',
     empty: 'No reporters yet. Invite the first site manager.',
-    resent: (name: string) => `Invite re-sent to ${name}.`,
+    resent: (name: string) => `New invite queued for ${name}.`,
     disabledToast: (name: string) => `${name} disabled.`,
     edit: {
       title: (name: string) => `Edit ${name}`,
@@ -1033,7 +1066,7 @@ export const copy = {
       sites: 'Sites',
       languages: 'Speaks',
       send: 'Send WhatsApp welcome',
-      sent: (name: string) => `Welcome sent to ${name}.`,
+      sent: (name: string) => `Welcome queued for ${name}.`,
       description:
         'Sends the WhatsApp welcome template. The reporter replies to verify the number.',
       namePlaceholder: 'Full name',
@@ -1043,6 +1076,9 @@ export const copy = {
       phoneInvalid: 'Enter a valid WhatsApp number for the chosen country.',
       nameRequired: 'Enter a name.',
       sitesRequired: 'Pick at least one site.',
+      noSites: 'Add a site first. Each reporter reports for a site.',
+      noSitesAskAdmin: 'Ask an admin to add a site first. Each reporter reports for a site.',
+      addSite: 'Add a site',
       languagesHint: 'Reports always come out in English.',
       languageNames: {
         en: 'English',
@@ -1214,6 +1250,8 @@ export const copy = {
       remove: (email: string) => `Remove ${email}`,
       invalid: 'Enter a valid email.',
       none: 'No recipients yet.',
+      noSitesTitle: 'No sites yet',
+      noSitesBody: 'Recipients are set per site. Add a site first.',
     },
     payroll: {
       format: 'Format',
@@ -1264,7 +1302,9 @@ export const copy = {
     activeSitesLabel: 'Active sites',
     card: (brand: string, last4: string) => `${brand} ending ${last4}`,
     noPaymentMethod: 'No payment method on file',
+    trial: 'Free trial',
     trialEnds: (date: string) => `Trial ends ${date}`,
+    noSubscription: 'No subscription yet',
     statusBanner: {
       past_due:
         'Payment past due. Reports keep flowing for 14 days; update the payment method to keep reminders on.',
@@ -1282,6 +1322,12 @@ export const copy = {
     startBody:
       '14-day free trial. Add a card before day 15 to keep reports and reminders running; billing is per active site.',
     startCta: 'Add payment details',
+    startNoSites: 'Add a site before you add payment details. Billing is per active site.',
+    startResumeSite:
+      'Resume a site below, or add one, before you add payment details. Billing is per active site.',
+    addSite: 'Add a site',
+    noSitesTitle: 'No sites on the plan',
+    noSitesBody: 'Each active site is billed $399 a month.',
     checkoutSuccess: 'Subscription started. It can take a minute to show here.',
     checkoutCanceled: 'Checkout canceled. No subscription was started.',
     pausedSince: (date: string) => `since ${date}`,
@@ -1323,6 +1369,7 @@ export const copy = {
       removeLogo: 'Remove logo',
       logoUploadFailed:
         'The company was created, but the logo didn’t upload. Add it in Settings → PDF template.',
+      logoSaveFailed: 'The logo didn’t upload. Add it in Settings → PDF template.',
       timezone: 'Company time zone',
       next: 'Continue to first site',
     },
@@ -1364,7 +1411,11 @@ export const copy = {
       backupPhone: 'Backup WhatsApp number',
       addAnother: 'Add another site',
       send: 'Send WhatsApp welcome',
-      sent: (name: string) => `Welcome sent to ${name}.`,
+      sent: (name: string) => `Site added. The WhatsApp welcome to ${name} is queued.`,
+      inviteFailed: (name: string, reason: string) =>
+        `The site was created, but the WhatsApp welcome to ${name} couldn’t be queued (${reason}). Invite them from Team & numbers.`,
+      recipientsFailed:
+        'The site was created, but its report recipients weren’t saved. Set them in Settings → Recipients.',
       another: (n: number) => `${plural(n, 'site')} added so far`,
       preview: {
         title: (name: string) => `Preview · what ${name} receives`,
@@ -1396,6 +1447,8 @@ export const copy = {
     },
     resume: 'Progress saved. Pick up where you left off.',
     savedLater: 'Progress saved.',
+    savedLaterSignedOut: 'Progress saved. Sign in again to finish setting up.',
+    pageName: 'company setup',
   },
 
   ops: {
@@ -1499,8 +1552,7 @@ export const copy = {
     versionSaved: (v: number) => `Version ${v} saved.`,
     invoiceAdded: 'Invoice added.',
     notificationsRead: 'Marked as read.',
-    pdfDemo: 'Demo mode: open a report and press PDF to see it.',
-    reporterInvited: (name: string) => `Welcome sent to ${name}.`,
+    reporterInvited: (name: string) => `Welcome queued for ${name}.`,
     linked: 'Number linked.',
     ignored: 'Number ignored.',
     termReviewed: 'Glossary updated.',
@@ -1517,6 +1569,7 @@ export const copy = {
     csvReady: 'Payroll CSV ready.',
     companyResolved: 'Company resolved. New version saved.',
     orgCreated: (name: string) => `${name} created.`,
+    orgUpdated: 'Company details saved.',
     logoUpdated: 'Logo updated.',
     logoRemoved: 'Logo removed.',
   },
@@ -1524,6 +1577,7 @@ export const copy = {
   pdfZip: {
     preparing: 'Preparing PDFs…',
     progress: (done: number, total: number) => `Downloading PDFs · ${done} of ${total}`,
+    making: (done: number, total: number) => `Making PDFs · ${done} of ${total}`,
     ready: (n: number) => `${plural(n, 'PDF')} zipped.`,
     partial: (zipped: number, skipped: number) =>
       `${plural(zipped, 'PDF')} zipped · ${skipped} not ready or failed to download.`,

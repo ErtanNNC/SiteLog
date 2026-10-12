@@ -33,7 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/Select';
 import { copy } from '@/copy/en';
-import { reviewReasonText } from '@/data/assemble';
+import { reviewReasonText, unlinkedCompanyReasons } from '@/data/assemble';
 import { useDataSource } from '@/data/DataProvider';
 import {
   useCreateReportVersion,
@@ -200,51 +200,62 @@ function ReportScreen({
     else reportPdf.open(r.id, detail.version);
   };
 
-  const reasons = r.needsReview
-    ? r.reviewReasons.map((reason) => {
-        const [kind, ...rest] = reason.split(':');
-        const name = rest.join(':');
-        return {
-          key: reason,
-          text: reviewReasonText(reason),
-          action:
-            kind === 'unknown_company' ? (
-              <span className="inline-flex flex-wrap items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  loading={resolveCompany.isPending}
-                  onClick={() => resolveCompany.mutate({ reportId: r.id, name, action: 'add' })}
-                >
-                  {copy.states.reviewReasons.addAsSub}
-                </Button>
-                <Select
-                  onValueChange={(companyId) =>
-                    resolveCompany.mutate({ reportId: r.id, name, action: 'map', companyId })
-                  }
-                >
-                  <SelectTrigger
-                    dense
-                    className="h-9 w-auto min-w-[180px]"
-                    aria-label={copy.states.reviewReasons.mapTo}
-                  >
-                    <SelectValue placeholder={copy.states.reviewReasons.mapTo} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {detail.companies
-                      .filter((c) => c.status === 'confirmed')
-                      .map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </span>
-            ) : undefined,
-        };
-      })
-    : [];
+  const resolve = (name: string, action: 'add' | 'map', companyId?: string) => {
+    // The new version gets its PDF like an office edit does (no worker in some deployments).
+    // An error was already toasted by useSourceMutation.
+    void resolveCompany.mutateAsync({ reportId: r.id, name, action, companyId }).then(
+      () => reportPdf.prepare(r.id, null),
+      () => undefined,
+    );
+  };
+  const pendingReasons = r.needsReview ? r.reviewReasons : [];
+  // Crew companies with no company id that are not review reasons (typed in the panel before
+  // they were linked on save) get the same Add / Map controls on the current version of a filed
+  // report. Not while a WhatsApp report is still being collected: the worker is asking about an
+  // unknown company and writes the next version itself.
+  const isFiled = r.status === 'filed' || r.status === 'signed_off';
+  const reasons = [
+    ...pendingReasons,
+    ...(isCurrent && isFiled ? unlinkedCompanyReasons(detail.data, pendingReasons) : []),
+  ].map((reason) => {
+    const [kind, ...rest] = reason.split(':');
+    const name = rest.join(':');
+    return {
+      key: reason,
+      text: reviewReasonText(reason),
+      action:
+        kind === 'unknown_company' ? (
+          <span className="inline-flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={resolveCompany.isPending}
+              onClick={() => resolve(name, 'add')}
+            >
+              {copy.states.reviewReasons.addAsSub}
+            </Button>
+            <Select onValueChange={(companyId) => resolve(name, 'map', companyId)}>
+              <SelectTrigger
+                dense
+                className="h-9 w-auto min-w-[180px]"
+                aria-label={copy.states.reviewReasons.mapTo}
+              >
+                <SelectValue placeholder={copy.states.reviewReasons.mapTo} />
+              </SelectTrigger>
+              <SelectContent>
+                {detail.companies
+                  .filter((c) => c.status === 'confirmed')
+                  .map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </span>
+        ) : undefined,
+    };
+  });
 
   return (
     <>

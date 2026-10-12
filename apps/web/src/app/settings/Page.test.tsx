@@ -1,9 +1,10 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import { demoPayrollCsv } from '@/data/demo/DemoSource';
 import { DemoStore } from '@/data/demo/store';
-import { renderWithProviders } from '@/test/render';
+import { makeSource, renderWithProviders } from '@/test/render';
 import SettingsPage from './Page';
 
 const opts = (store: DemoStore, section = 'reports') => ({
@@ -191,5 +192,34 @@ describe('SettingsPage (demo data)', () => {
     await waitFor(() => expect(store.data.org.logo_path).toBeNull());
     await waitFor(() => expect(preview.querySelector('img')).toBeNull());
     expect(store.data.audit.at(-1)!.action).toBe('org.logo_removed');
+  });
+
+  it('shows the error with Retry when settings fail to load, not an endless skeleton', async () => {
+    const source = makeSource('admin', new DemoStore());
+    const real = source.getSettings.bind(source);
+    vi.spyOn(source, 'getSettings')
+      .mockRejectedValueOnce(new Error('JWT expired'))
+      .mockImplementation(real);
+    renderWithProviders(<SettingsPage />, {
+      route: '/settings/reports',
+      path: '/settings/:section',
+      source,
+    });
+    expect(await screen.findByText('Couldn’t load settings.')).toBeInTheDocument();
+    expect(screen.getByText('JWT expired')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByLabelText('Report deadline')).toHaveValue('17:30');
+  });
+
+  it('Recipients in an org with no sites explains they are per site and links to adding one', async () => {
+    const d = kestrelDemo();
+    const store = new DemoStore({ ...d, sites: [], siteReporters: [], recipients: [] });
+    renderWithProviders(<SettingsPage />, opts(store, 'recipients'));
+    expect(await screen.findByRole('heading', { name: 'No sites yet' })).toBeInTheDocument();
+    expect(screen.getByText('Recipients are set per site. Add a site first.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Connect your first site' })).toHaveAttribute(
+      'href',
+      '/setup/site',
+    );
   });
 });

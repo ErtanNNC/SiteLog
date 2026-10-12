@@ -3,6 +3,7 @@
  * Mutations persist for the session; `simulateIncomingReport()` is the only "realtime" event.
  */
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
+import type { ReportRow } from '@sitelog/shared/db/types.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { copy } from '@/copy/en';
 import { sleep } from '@/lib/utils';
@@ -33,8 +34,8 @@ import {
   type AddGlossaryTermInput,
   type AddInvoiceInput,
   type CreateOfficeReportInput,
-  type CreateOrgInput,
   type CreateSiteInput,
+  type CreateSiteResult,
   type DataSource,
   type InviteReporterInput,
   type LinkUnknownSenderInput,
@@ -45,6 +46,7 @@ import {
   type SaveReportPdfInput,
   type ReviewGlossaryTermInput,
   type SourceUser,
+  type UpdateOrgInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
 } from '../source';
@@ -158,19 +160,20 @@ export class DemoSource implements DataSource {
   search(q: string) {
     return this.run(() => searchRows(this.store.rows(), q));
   }
-  /** The demo has no rendered PDFs: every selected report is reported as missing. */
+  /** Only PDFs rendered in this browser session have a URL; every other report is missing. */
   getPdfUrls(selection: PdfSelection) {
     return this.run((): PdfLinkBatch => {
       const rows = this.store.rows();
-      let reportNos: string[];
+      let reports: ReportRow[];
       let total: number;
       if ('reportIds' in selection) {
         const ids = [...new Set(selection.reportIds)];
         total = ids.length;
-        reportNos = ids
+        const byId = new Map(rows.reports.map((r) => [r.id, r]));
+        reports = ids
           .slice(0, PDF_EXPORT_LIMIT)
-          .map((id) => rows.reports.find((r) => r.id === id)?.report_no)
-          .filter((no): no is string => !!no);
+          .map((id) => byId.get(id))
+          .filter((r): r is ReportRow => !!r);
       } else {
         const res = filterReports(rows, {
           ...selection.filters,
@@ -178,15 +181,14 @@ export class DemoSource implements DataSource {
           pageSize: PDF_EXPORT_LIMIT,
         });
         total = res.total;
-        reportNos = res.reports.map((r) => r.report_no);
+        reports = res.reports;
       }
       const files: PdfLinkBatch['files'] = [];
-      const missing: string[] = [];
-      for (const no of reportNos) {
-        const r = rows.reports.find((x) => x.report_no === no)!;
+      const missing: PdfLinkBatch['missing'] = [];
+      for (const r of reports) {
         const url = this.pdfUrls.get(`${r.id}:${r.current_version}`);
-        if (url) files.push({ reportId: r.id, reportNo: no, url });
-        else missing.push(no);
+        if (url) files.push({ reportId: r.id, reportNo: r.report_no, url });
+        else missing.push({ reportId: r.id, reportNo: r.report_no });
       }
       return { files, missing, total, capped: total > PDF_EXPORT_LIMIT };
     });
@@ -215,6 +217,7 @@ export class DemoSource implements DataSource {
   }
   saveReportPdf(input: SaveReportPdfInput) {
     return this.run(() => {
+      this.store.attachVersionPdf(input.reportId, input.version, this.user.id);
       const key = `${input.reportId}:${input.version}`;
       const previous = this.pdfUrls.get(key);
       if (previous) URL.revokeObjectURL(previous);
@@ -276,12 +279,16 @@ export class DemoSource implements DataSource {
   removeMember(userId: string) {
     return this.run(() => this.store.removeMember(userId, this.user.id));
   }
-  createOrg(_input: CreateOrgInput) {
-    // The demo has exactly one org; the wizard "creates" it by returning it.
-    return this.run(() => ({ orgId: this.orgId }));
+  updateOrg(input: UpdateOrgInput) {
+    return this.run(() => this.store.updateOrg(input, this.user.id));
   }
+  /** The in-memory insert and invite are one step, so nothing can fail after the site exists. */
   createSite(input: CreateSiteInput) {
-    return this.run(() => ({ siteId: this.store.createSite(input, this.user.id) }));
+    return this.run((): CreateSiteResult => ({
+      siteId: this.store.createSite(input, this.user.id),
+      inviteError: null,
+      recipientsError: null,
+    }));
   }
   updateSite(siteId: string, patch: UpdateSitePatch) {
     return this.run(() => this.store.updateSite(siteId, patch, this.user.id));

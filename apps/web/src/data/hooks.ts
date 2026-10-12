@@ -2,10 +2,11 @@
  * TanStack Query hooks over the DataSource. Query keys are org-scoped (lib/query.ts);
  * mutations invalidate the org and toast (sonner). Pages never call the source directly.
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { toast } from 'sonner';
+import { useAuth } from '@/auth/AuthProvider';
 import { copy } from '@/copy/en';
 import { pdfFileNames, saveBlob, zipFromUrls } from '@/lib/pdfZip';
 import { qk } from '@/lib/query';
@@ -14,10 +15,10 @@ import { errorMessage } from '@/lib/utils';
 import { useDataSource } from './DataProvider';
 import {
   PDF_EXPORT_LIMIT,
+  type DataSource,
   type AddGlossaryTermInput,
   type AddInvoiceInput,
   type CreateOfficeReportInput,
-  type CreateOrgInput,
   type CreateSiteInput,
   type InviteReporterInput,
   type LinkUnknownSenderInput,
@@ -25,6 +26,7 @@ import {
   type RequestEvidencePackInput,
   type ResolveUnknownCompanyInput,
   type ReviewGlossaryTermInput,
+  type UpdateOrgInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
 } from './source';
@@ -208,34 +210,52 @@ export function useCreateOfficeReport() {
 
 /**
  * A version's PDF: the stored one, or rendered in the browser with the worker's document
- * (@sitelog/pdf), stored for that version (exports, later visits) and returned. Until the worker
- * runs, this is how reports typed in the panel and office edits get their PDF.
+ * (@sitelog/pdf) and stored for that version (exports, later visits). `stored` is false when the
+ * upload failed and `url` is a local object URL of the rendered file. Until the worker runs, this
+ * is how reports typed in the panel and office edits get their PDF.
  */
+async function makeReportPdf(
+  s: DataSource,
+  qc: QueryClient,
+  reportId: string,
+  version: number | null,
+  opts: { invalidate?: boolean } = {},
+): Promise<{ url: string; stored: boolean }> {
+  const detail = await s.getReportDetail(reportId, version);
+  if (detail.pdfUrl) return { url: detail.pdfUrl, stored: true };
+  const [{ renderReportDetailPdf }, settings] = await Promise.all([
+    import('@/lib/reportPdf'),
+    qc.fetchQuery({ queryKey: qk.settings(s.orgId), queryFn: () => s.getSettings() }),
+  ]);
+  const pdf = await renderReportDetailPdf(detail, settings, s.now());
+  try {
+    const url = await s.saveReportPdf({
+      reportId,
+      reportNo: detail.report.reportNo,
+      siteId: detail.site.id,
+      version: detail.version,
+      pdf,
+    });
+    if (opts.invalidate !== false) invalidateReportPdfs(s, qc, [reportId]);
+    return { url, stored: true };
+  } catch {
+    return { url: URL.createObjectURL(pdf), stored: false };
+  }
+}
+
+/** The report pages and the archive rows (their PDF button) see the newly stored PDFs. */
+function invalidateReportPdfs(s: DataSource, qc: QueryClient, reportIds: string[]) {
+  for (const id of reportIds) void qc.invalidateQueries({ queryKey: qk.report(s.orgId, id) });
+  void qc.invalidateQueries({ queryKey: [s.orgId, 'reports'] });
+}
+
+/** A version's PDF (see makeReportPdf): opened in a new tab, or prepared after filing / an edit. */
 export function useReportPdf() {
   const s = useDataSource();
   const qc = useQueryClient();
   const make = async (reportId: string, version: number | null): Promise<string> => {
-    const detail = await s.getReportDetail(reportId, version);
-    if (detail.pdfUrl) return detail.pdfUrl;
-    const [{ renderReportDetailPdf }, settings] = await Promise.all([
-      import('@/lib/reportPdf'),
-      qc.fetchQuery({ queryKey: qk.settings(s.orgId), queryFn: () => s.getSettings() }),
-    ]);
-    const pdf = await renderReportDetailPdf(detail, settings, s.now());
-    let url: string;
-    try {
-      url = await s.saveReportPdf({
-        reportId,
-        reportNo: detail.report.reportNo,
-        siteId: detail.site.id,
-        version: detail.version,
-        pdf,
-      });
-    } catch {
-      toast.warning(copy.report.pdfNotSaved);
-      url = URL.createObjectURL(pdf);
-    }
-    void qc.invalidateQueries({ queryKey: qk.report(s.orgId, reportId) });
+    const { url, stored } = await makeReportPdf(s, qc, reportId, version);
+    if (!stored) toast.warning(copy.report.pdfNotSaved);
     return url;
   };
   const m = useMutation({
@@ -408,10 +428,10 @@ export function useRemoveMember() {
   });
 }
 
-export function useCreateOrg() {
+export function useUpdateOrg() {
   const s = useDataSource();
-  return useSourceMutation((vars: CreateOrgInput) => s.createOrg(vars), {
-    success: (v) => copy.toasts.orgCreated(v.name),
+  return useSourceMutation((vars: UpdateOrgInput) => s.updateOrg(vars), {
+    success: copy.toasts.orgUpdated,
   });
 }
 
@@ -430,18 +450,37 @@ export function useUpdateSite() {
   );
 }
 
+/**
+ * The org switcher's "N active sites" comes from the auth org list, not from a query, so a
+ * pause or resume reloads that list too. A failed reload only leaves the count stale.
+ */
+function useRefreshOrgsQuietly() {
+  const { refreshOrgs } = useAuth();
+  return () => {
+    refreshOrgs().catch(() => undefined);
+  };
+}
+
 export function usePauseSite() {
   const s = useDataSource();
+  const refreshOrgs = useRefreshOrgsQuietly();
   return useSourceMutation(
-    (vars: { siteId: string; siteName: string }) => s.pauseSite(vars.siteId),
+    async (vars: { siteId: string; siteName: string }) => {
+      await s.pauseSite(vars.siteId);
+      refreshOrgs();
+    },
     { success: (v) => copy.toasts.sitePaused(v.siteName) },
   );
 }
 
 export function useResumeSite() {
   const s = useDataSource();
+  const refreshOrgs = useRefreshOrgsQuietly();
   return useSourceMutation(
-    (vars: { siteId: string; siteName: string }) => s.resumeSite(vars.siteId),
+    async (vars: { siteId: string; siteName: string }) => {
+      await s.resumeSite(vars.siteId);
+      refreshOrgs();
+    },
     { success: (v) => copy.toasts.siteResumed(v.siteName) },
   );
 }
@@ -483,19 +522,38 @@ export function usePayrollCsv() {
  */
 export function usePdfZipExport() {
   const s = useDataSource();
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: async (vars: { selection: PdfSelection; fileName: string }) => {
       const id = toast.loading(copy.pdfZip.preparing);
+      const local: string[] = [];
       try {
         const batch = await s.getPdfUrls(vars.selection);
         if (batch.capped) toast.message(copy.pdfZip.capped(PDF_EXPORT_LIMIT, batch.total));
-        if (!batch.files.length) {
+        // Reports without a stored PDF (typed in the panel, a failed upload, no worker yet): render
+        // them here, one at a time, and store each so the next export has it.
+        const files = [...batch.files];
+        const made: string[] = [];
+        let notMade = 0;
+        for (const [i, r] of batch.missing.entries()) {
+          toast.loading(copy.pdfZip.making(i + 1, batch.missing.length), { id });
+          try {
+            const pdf = await makeReportPdf(s, qc, r.reportId, null, { invalidate: false });
+            if (pdf.stored) made.push(r.reportId);
+            else local.push(pdf.url);
+            files.push({ reportId: r.reportId, reportNo: r.reportNo, url: pdf.url });
+          } catch {
+            notMade += 1;
+          }
+        }
+        if (made.length) invalidateReportPdfs(s, qc, made);
+        if (!files.length) {
           toast.message(copy.pdfZip.none, { id });
           return { zipped: 0 };
         }
-        const names = pdfFileNames(batch.files.map((f) => f.reportNo));
+        const names = pdfFileNames(files.map((f) => f.reportNo));
         const result = await zipFromUrls(
-          batch.files.map((f, i) => ({ name: names[i]!, url: f.url })),
+          files.map((f, i) => ({ name: names[i]!, url: f.url })),
           { onProgress: (done, total) => toast.loading(copy.pdfZip.progress(done, total), { id }) },
         );
         if (!result.blob) {
@@ -503,13 +561,15 @@ export function usePdfZipExport() {
           return { zipped: 0 };
         }
         saveBlob(result.blob, vars.fileName);
-        const skipped = result.failed.length + batch.missing.length;
+        const skipped = result.failed.length + notMade;
         if (skipped) toast.warning(copy.pdfZip.partial(result.added.length, skipped), { id });
         else toast.success(copy.pdfZip.ready(result.added.length), { id });
         return { zipped: result.added.length };
       } catch (err) {
         toast.error(errorMessage(err, copy.pdfZip.failed), { id });
         return { zipped: 0 };
+      } finally {
+        for (const url of local) URL.revokeObjectURL(url);
       }
     },
   });

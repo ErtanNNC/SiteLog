@@ -2,6 +2,8 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
+import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
+import type { DemoDataset } from '@sitelog/shared/demo/types.ts';
 import { DemoSource } from '@/data/demo/DemoSource';
 import { DemoStore, demoUserFor } from '@/data/demo/store';
 import type { PdfLinkBatch, PdfSelection } from '@/data/source';
@@ -138,5 +140,177 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
     expect((calls[0] as { reportIds: string[] }).reportIds).toHaveLength(4);
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(success).toHaveBeenCalledWith('4 PDFs zipped.', expect.anything());
+  });
+});
+
+/**
+ * A new org (§18 org and members, nothing else), optionally with the first §18 site. The demo
+ * clock is Fri Oct 9 2026 19:05 Chicago, after the 17:30 deadline, and no site-day exists yet
+ * (no scheduler has run), as in a deployment where reports are typed in the panel.
+ */
+function newOrg(
+  opts: {
+    site?: 'active' | 'paused';
+    reporter?: boolean;
+    reminder1?: boolean;
+  } = {},
+): DemoDataset {
+  const d = kestrelDemo();
+  const site = d.sites[0]!;
+  const link = d.siteReporters.find((sr) => sr.site_id === site.id && sr.is_primary)!;
+  const reporter = d.reporters.find((r) => r.id === link.reporter_id)!;
+  return {
+    ...d,
+    settings: { ...d.settings, reminder1_enabled: opts.reminder1 ?? true },
+    sites: opts.site
+      ? [
+          {
+            ...site,
+            report_seq: 0,
+            status: opts.site,
+            paused_at: opts.site === 'paused' ? '2026-10-01T15:00:00Z' : null,
+          },
+        ]
+      : [],
+    reporters: opts.reporter ? [reporter] : [],
+    siteReporters: opts.reporter ? [link] : [],
+    recipients: [],
+    companies: [],
+    glossary: [],
+    conversations: [],
+    messages: [],
+    transcripts: [],
+    unknownSenders: [],
+    siteDays: [],
+    reports: [],
+    versions: [],
+    sources: [],
+    manpower: [],
+    workItems: [],
+    weatherEvents: [],
+    questions: [],
+    invoices: [],
+    packs: [],
+    notifications: [],
+    audit: [],
+  };
+}
+
+describe('OverviewPage empty states', () => {
+  it('no sites: connect the first one', async () => {
+    renderWithProviders(<OverviewPage />, { store: new DemoStore(newOrg()) });
+    expect(await screen.findByRole('heading', { name: 'No sites yet' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Connect your first site' })).toHaveAttribute(
+      'href',
+      '/setup/site',
+    );
+  });
+
+  it('no sites, as a project manager: ask an admin, no link into the admin-only wizard', async () => {
+    renderWithProviders(<OverviewPage />, { store: new DemoStore(newOrg()), as: 'pm' });
+    expect(await screen.findByRole('heading', { name: 'No sites yet' })).toBeInTheDocument();
+    expect(
+      screen.getByText('An admin connects sites. Ask an admin to connect the first one.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Connect your first site' })).toBeNull();
+  });
+
+  it('every site paused: says so and points to Sites, not to connecting a first site', async () => {
+    renderWithProviders(<OverviewPage />, { store: new DemoStore(newOrg({ site: 'paused' })) });
+    expect(
+      await screen.findByRole('heading', { name: 'All sites are paused' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open sites' })).toHaveAttribute('href', '/sites');
+    expect(
+      screen.getByText('Resume a site from its settings and daily reports start again.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No sites yet')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Connect your first site' })).toBeNull();
+  });
+
+  it('every site paused, as a project manager: ask an admin (only admins can resume a site)', async () => {
+    renderWithProviders(<OverviewPage />, {
+      store: new DemoStore(newOrg({ site: 'paused' })),
+      as: 'pm',
+    });
+    expect(
+      await screen.findByRole('heading', { name: 'All sites are paused' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'An admin resumes sites. Ask an admin to resume one and daily reports start again.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Resume a site from its settings/)).not.toBeInTheDocument();
+  });
+
+  it('one site, nothing reported, no site manager: not "all clear", and offers a typed report', async () => {
+    renderWithProviders(<OverviewPage />, { store: new DemoStore(newOrg({ site: 'active' })) });
+    expect(await screen.findByTestId('kpi-reports-in')).toHaveTextContent('0 / 1');
+    const aside = screen.getByRole('complementary', { name: 'Needs attention' });
+    expect(within(aside).getByRole('heading', { name: 'Nothing needs you yet' })).toBeVisible();
+    expect(within(aside).getByText('1 site still to report today.')).toBeInTheDocument();
+    expect(screen.queryByText('All clear')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Every site has reported/)).not.toBeInTheDocument();
+
+    expect(
+      screen.getByRole('heading', { name: 'No site manager reports by WhatsApp yet' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Reminders go out/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'New report' })).toHaveAttribute(
+      'href',
+      '/reports/new',
+    );
+  });
+
+  it('a verified site manager and reminders on: the deadline and the first reminder', async () => {
+    renderWithProviders(<OverviewPage />, {
+      store: new DemoStore(newOrg({ site: 'active', reporter: true })),
+    });
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Reports usually arrive after 17:30. Reminders go out at 17:45.',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'New report' })).toBeNull();
+  });
+
+  it('reminders turned off: the deadline only', async () => {
+    renderWithProviders(<OverviewPage />, {
+      store: new DemoStore(newOrg({ site: 'active', reporter: true, reminder1: false })),
+    });
+    expect(
+      await screen.findByRole('heading', { name: 'Reports usually arrive after 17:30.' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Reminders go out/)).not.toBeInTheDocument();
+  });
+
+  it('every site in and nothing waiting: all clear', async () => {
+    const d = newOrg({ site: 'active', reporter: true });
+    const site = d.sites[0]!;
+    d.siteDays = [
+      {
+        id: 'sd-1',
+        site_id: site.id,
+        date: '2026-10-09',
+        status: 'no_work',
+        deadline_at: '2026-10-09T22:30:00Z',
+        reminder_stage: 0,
+        reminders_paused: false,
+        is_late: false,
+        weather: null,
+        report_id: null,
+        created_at: '2026-10-09T05:00:00Z',
+        updated_at: '2026-10-09T18:00:00Z',
+      },
+    ];
+    renderWithProviders(<OverviewPage />, { store: new DemoStore(d) });
+    const aside = await screen.findByRole('complementary', { name: 'Needs attention' });
+    expect(within(aside).getByRole('heading', { name: 'All clear' })).toBeInTheDocument();
+    expect(
+      within(aside).getByText('Every site has reported and nothing is waiting on you.'),
+    ).toBeInTheDocument();
+    // A no-work day is an outcome: no "reports usually arrive" hint for it.
+    expect(screen.queryByText(/Reports usually arrive/)).not.toBeInTheDocument();
   });
 });

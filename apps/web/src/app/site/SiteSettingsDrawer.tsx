@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Link } from 'react-router';
 import { z } from 'zod';
 import { formatMonthDay, formatPhone } from '@sitelog/shared/format.ts';
+import { useAuth } from '@/auth/AuthProvider';
 import { StatusChip } from '@/components/sitelog/StatusChip';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -124,6 +125,9 @@ export function SiteSettingsDrawer({
   orgDeadline: string;
 }) {
   const site = detail.site;
+  // Only admins can pause or resume a site (RLS: sites_admin_update); for anyone else the
+  // update would match no row and still report success.
+  const canPause = useAuth().role === 'admin';
   const updateSite = useUpdateSite();
   const saveRecipients = useSaveSiteRecipients();
   const pauseSite = usePauseSite();
@@ -366,27 +370,29 @@ export function SiteSettingsDrawer({
                   )}
                 />
 
-                <div className="border-t border-rebar pt-4">
-                  {site.status === 'paused' ? (
-                    <Button
-                      variant="ghost"
-                      size="dense"
-                      onClick={() => setConfirm('resume')}
-                      loading={resumeSite.isPending}
-                    >
-                      {copy.siteDetail.resumeSite}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="destructive"
-                      size="dense"
-                      onClick={() => setConfirm('pause')}
-                      loading={pauseSite.isPending}
-                    >
-                      {copy.siteDetail.pauseSite}
-                    </Button>
-                  )}
-                </div>
+                {canPause ? (
+                  <div className="border-t border-rebar pt-4">
+                    {site.status === 'paused' ? (
+                      <Button
+                        variant="ghost"
+                        size="dense"
+                        onClick={() => setConfirm('resume')}
+                        loading={resumeSite.isPending}
+                      >
+                        {copy.siteDetail.resumeSite}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="destructive"
+                        size="dense"
+                        onClick={() => setConfirm('pause')}
+                        loading={pauseSite.isPending}
+                      >
+                        {copy.siteDetail.pauseSite}
+                      </Button>
+                    )}
+                  </div>
+                ) : null}
               </div>
 
               <DialogFooter className="mt-0 border-t border-rebar px-6 py-4">

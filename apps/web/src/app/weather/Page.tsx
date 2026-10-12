@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { formatHours } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
+import { canAccess, ROUTE_ROLES } from '@/auth/guards';
 import { TopBarControls } from '@/components/shell/TopBar';
 import { EvidenceChips } from '@/components/sitelog/EvidenceChips';
 import { HeatmapGrid } from '@/components/sitelog/HeatmapGrid';
@@ -31,6 +32,7 @@ import {
   formatMonthDay,
   formatMonthLabel,
   formatWeekdayMonthDay,
+  isValidYearMonth,
   monthOf,
 } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -49,13 +51,11 @@ const PACK_CHIP: Record<PackItem['status'], string> = {
 /** P9 · Weather & delays — KPIs, heatmap, delay log and EOT packs (§11.4, F16). */
 export default function WeatherPage() {
   const source = useDataSource();
-  const { currentOrg, isDemo } = useAuth();
+  const { currentOrg, isDemo, role } = useAuth();
   const tz = currentOrg?.timezone ?? 'UTC';
   const [params, setParams] = useSearchParams();
   const today = useMemo(() => formatDateInTz(source.now(), tz), [source, tz]);
-  const month = /^\d{4}-\d{2}$/.test(params.get('month') ?? '')
-    ? params.get('month')!
-    : monthOf(today);
+  const month = isValidYearMonth(params.get('month') ?? '') ? params.get('month')! : monthOf(today);
   const siteParam = params.get('site');
   const siteId = siteParam && siteParam !== ALL ? siteParam : null;
 
@@ -74,6 +74,10 @@ export default function WeatherPage() {
   };
 
   const data = weather.data;
+  // The site the log is for: the data drops a site that is not the org's (a stale or typed link),
+  // so the picker then reads "All sites" instead of going blank.
+  const activeSite = data && !weather.isPlaceholderData ? data.siteId : siteId;
+
   const monthOptions = useMemo(() => {
     const list: string[] = [];
     for (let i = 0; i < 12; i += 1) list.push(addMonths(monthOf(today), -i));
@@ -83,7 +87,10 @@ export default function WeatherPage() {
 
   const controls = (
     <TopBarControls>
-      <Select value={siteId ?? ALL} onValueChange={(v) => setQuery({ site: v === ALL ? null : v })}>
+      <Select
+        value={activeSite ?? ALL}
+        onValueChange={(v) => setQuery({ site: v === ALL ? null : v })}
+      >
         <SelectTrigger dense className="w-[200px]" aria-label={copy.weather.siteSelect}>
           <SelectValue />
         </SelectTrigger>
@@ -171,7 +178,11 @@ export default function WeatherPage() {
         title={copy.weather.title}
         subtitle={copy.weather.subtitle}
         actions={
-          <Button variant="primary" onClick={() => setPackOpen(true)}>
+          <Button
+            variant="primary"
+            disabled={data.sites.length === 0}
+            onClick={() => setPackOpen(true)}
+          >
             <FileText aria-hidden="true" />
             {copy.weather.buildPack}
           </Button>
@@ -205,13 +216,30 @@ export default function WeatherPage() {
           <CardTitle>{copy.weather.heatmap}</CardTitle>
         </CardHeader>
         <CardContent className="pt-3">
-          <HeatmapGrid
-            sites={data.sites}
-            days={data.days}
-            cells={data.cells}
-            maxHours={data.maxHours}
-            title={copy.weather.heatmap}
-          />
+          {data.sites.length === 0 ? (
+            <EmptyState
+              icon={CloudRain}
+              title={copy.weather.noSitesTitle}
+              body={copy.weather.noSites}
+              action={
+                canAccess(role, ROUTE_ROLES.setup ?? []) ? (
+                  <Button variant="secondary" asChild>
+                    <Link to="/setup/site">{copy.sites.addSite}</Link>
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : data.days.length === 0 ? (
+            <EmptyState icon={CloudRain} title={copy.weather.noWorkdays} />
+          ) : (
+            <HeatmapGrid
+              sites={activeSite ? data.sites.filter((s) => s.id === activeSite) : data.sites}
+              days={data.days}
+              cells={data.cells}
+              maxHours={data.maxHours}
+              title={copy.weather.heatmap}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -270,6 +298,14 @@ export default function WeatherPage() {
                           <div className="mt-1 text-caption text-dust">
                             {copy.weather.packs.requestedBy(formatDateTimeShort(p.createdAt, tz))}
                           </div>
+                          {p.notStarted ? (
+                            <p
+                              className="mt-1 text-caption font-medium text-signal-deep"
+                              data-testid="pack-not-started"
+                            >
+                              {copy.weather.packs.notStarted}
+                            </p>
+                          ) : null}
                         </div>
                         <span
                           className={cn(
@@ -316,11 +352,11 @@ export default function WeatherPage() {
       </div>
 
       <PackDialog
-        key={packOpen ? `open-${siteId ?? ALL}-${month}` : 'closed'}
+        key={packOpen ? `open-${activeSite ?? ALL}-${month}` : 'closed'}
         open={packOpen}
         onOpenChange={setPackOpen}
         sites={data.sites}
-        defaultSiteId={siteId}
+        defaultSiteId={activeSite}
         month={month}
         entries={data.entries}
       />

@@ -1,5 +1,7 @@
-import { Mail, Plus, X } from 'lucide-react';
+import { HardHat, Mail, Plus, X } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'react-router';
+import { EmptyState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -26,6 +28,22 @@ export function RecipientsSection({
     if (!src) return;
     update(draft.map((s) => ({ ...s, emails: [...src.emails] })));
   };
+
+  // Lists are per site: a new org has none to show (Settings is admin-only, as is adding a site).
+  if (draft.length === 0) {
+    return (
+      <EmptyState
+        icon={HardHat}
+        title={c.noSitesTitle}
+        body={c.noSitesBody}
+        action={
+          <Button variant="primary" asChild>
+            <Link to="/setup/site">{copy.overview.connectFirstSite}</Link>
+          </Button>
+        }
+      />
+    );
+  }
 
   return (
     <div className="grid gap-4">

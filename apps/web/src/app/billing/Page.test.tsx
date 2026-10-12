@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
+import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import { DemoSource } from '@/data/demo/DemoSource';
 import { DemoStore, demoUserFor } from '@/data/demo/store';
 import { renderWithProviders } from '@/test/render';
@@ -36,7 +37,9 @@ describe('BillingPage (demo data)', () => {
 
   it('pauses and resumes a site through the confirm dialog (F19)', async () => {
     const store = new DemoStore();
-    renderWithProviders(<BillingPage />, { route: '/billing', store });
+    // The org switcher's active-site count lives in the auth org list.
+    const refreshOrgs = vi.fn(async () => []);
+    renderWithProviders(<BillingPage />, { route: '/billing', store, auth: { refreshOrgs } });
     const sites = await screen.findByRole('table', { name: 'Sites on this plan' });
     await userEvent.click(
       within(sites).getByRole('button', { name: 'Pause Riverside Lofts — Block B' }),
@@ -48,6 +51,7 @@ describe('BillingPage (demo data)', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
     expect(riverside.status).toBe('paused');
+    expect(refreshOrgs).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByTestId('plan-total')).toHaveTextContent('$1,995'));
     expect(screen.getByTestId('plan-card')).toHaveTextContent('5 active sites × $399');
     const row = within(sites).getByText('Riverside Lofts — Block B').closest('tr')!;
@@ -60,6 +64,7 @@ describe('BillingPage (demo data)', () => {
       within(await screen.findByRole('dialog')).getByRole('button', { name: 'Resume site' }),
     );
     await waitFor(() => expect(riverside.status).toBe('active'));
+    await waitFor(() => expect(refreshOrgs).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(screen.getByTestId('plan-total')).toHaveTextContent('$2,394'));
     expect(store.data.audit.at(-1)!.action).toBe('site.resumed');
   });
@@ -139,5 +144,76 @@ describe('BillingPage (demo data)', () => {
       ),
     );
     expect(screen.queryByTestId('start-subscription')).not.toBeInTheDocument();
+  });
+
+  it('a new org without a subscription or sites: trial label, no invoice date, add a site first', async () => {
+    const d = kestrelDemo();
+    const store = new DemoStore({
+      ...d,
+      org: {
+        ...d.org,
+        stripe_customer_id: null,
+        stripe_subscription_id: null,
+        billing_status: 'trialing',
+        trial_ends_at: '2026-10-26T15:00:00.000Z',
+      },
+      sites: [],
+      siteReporters: [],
+      recipients: [],
+    });
+    const u = demoUserFor('admin');
+    const source = new DemoSource(store, { id: u.id, email: u.email, name: u.name, role: u.role });
+    const checkout = vi.spyOn(source, 'getBillingCheckoutUrl');
+    renderWithProviders(<BillingPage />, { route: '/billing', source, auth: { isDemo: false } });
+    const plan = await screen.findByTestId('plan-card');
+    expect(within(plan).getByTestId('next-invoice')).toHaveTextContent('No subscription yet');
+    expect(plan).toHaveTextContent('Free trial');
+    expect(plan).toHaveTextContent('Trial ends Mon, Oct 26, 2026');
+    expect(plan).not.toHaveTextContent('Awaiting');
+
+    const card = screen.getByTestId('start-subscription');
+    expect(card).toHaveTextContent(
+      'Add a site before you add payment details. Billing is per active site.',
+    );
+    expect(within(card).queryByRole('button', { name: 'Add payment details' })).toBeNull();
+    expect(within(card).getByRole('link', { name: 'Add a site' })).toHaveAttribute(
+      'href',
+      '/setup/site',
+    );
+    expect(screen.getByTestId('update-payment')).toBeDisabled();
+    expect(screen.getByRole('heading', { name: 'No sites on the plan' })).toBeInTheDocument();
+    expect(checkout).not.toHaveBeenCalled();
+  });
+
+  it('no subscription and every site paused: points to Resume, not to adding a new site', async () => {
+    const d = kestrelDemo();
+    const store = new DemoStore({
+      ...d,
+      org: {
+        ...d.org,
+        stripe_customer_id: null,
+        stripe_subscription_id: null,
+        billing_status: 'trialing',
+        trial_ends_at: '2026-10-26T15:00:00.000Z',
+      },
+      sites: d.sites.slice(0, 1).map((s) => ({
+        ...s,
+        status: 'paused' as const,
+        paused_at: '2026-10-01T15:00:00.000Z',
+      })),
+    });
+    const u = demoUserFor('admin');
+    const source = new DemoSource(store, { id: u.id, email: u.email, name: u.name, role: u.role });
+    renderWithProviders(<BillingPage />, { route: '/billing', source, auth: { isDemo: false } });
+    const card = await screen.findByTestId('start-subscription');
+    expect(within(card).getByTestId('start-needs-site')).toHaveTextContent(
+      'Resume a site below, or add one, before you add payment details. Billing is per active site.',
+    );
+    expect(card).not.toHaveTextContent('Add a site before you add payment details.');
+    expect(within(card).queryByRole('button', { name: 'Add payment details' })).toBeNull();
+    const sites = screen.getByRole('table', { name: 'Sites on this plan' });
+    expect(
+      within(sites).getByRole('button', { name: `Resume ${d.sites[0]!.name}` }),
+    ).toBeInTheDocument();
   });
 });

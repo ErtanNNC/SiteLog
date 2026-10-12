@@ -106,6 +106,9 @@ export interface MemberInfo extends OrgMemberRow {
   email?: string | null;
 }
 
+/** Weather rows may come from `weather_events` (demo) or the `current_weather` view. */
+export type WeatherLike = WeatherEventRow & { report_no?: string };
+
 /** Manpower rows may come from `manpower_entries` (demo) or the `current_manpower` view. */
 export type ManpowerLike = ManpowerEntryRow & {
   date?: string;
@@ -132,7 +135,7 @@ export interface RowSet {
   versions: ReportVersionRow[];
   sources: ReportSourceRow[];
   manpower: ManpowerLike[];
-  weatherEvents: WeatherEventRow[];
+  weatherEvents: WeatherLike[];
   questions: QuestionRow[];
   invoices: SubInvoiceRow[];
   packs: EvidencePackRow[];
@@ -411,7 +414,7 @@ export function currentManpower(
 }
 
 /** Current-version weather events of filed/signed-off reports. */
-export function currentWeather(rows: RowSet, ix: Index): WeatherEventRow[] {
+export function currentWeather(rows: RowSet, ix: Index): WeatherLike[] {
   return rows.weatherEvents.filter((w) => {
     const r = ix.reportById.get(w.report_id);
     if (!r) return true; // from the current_weather view
@@ -489,6 +492,34 @@ export function reviewReasonText(reason: string, rows?: RowSet): string {
   }
 }
 
+const UNKNOWN_COMPANY = 'unknown_company:';
+
+/**
+ * `unknown_company:<name>` for each crew company in `data` that has no company id and is not
+ * already one of `reviewReasons`, e.g. a company typed in the panel before typed companies were
+ * linked on save. The report page offers them the same Add / Map controls as the review reasons
+ * (resolve_unknown_company takes any name), so Crew hours "Confirm" always lands on an action.
+ */
+export function unlinkedCompanyReasons(data: DailyReportData, reviewReasons: string[]): string[] {
+  const seen = new Set(
+    reviewReasons
+      .filter((x) => x.startsWith(UNKNOWN_COMPANY))
+      .map((x) => x.slice(UNKNOWN_COMPANY.length).trim().toLowerCase()),
+  );
+  const out: string[] = [];
+  for (const m of data.manpower) {
+    if (m.companyId !== null) continue;
+    const name = m.companyName.trim() ? m.companyName : m.companyNameHeard;
+    const keys = [m.companyName, m.companyNameHeard]
+      .map((n) => n.trim().toLowerCase())
+      .filter(Boolean);
+    if (!keys.length || keys.some((k) => seen.has(k))) continue;
+    keys.forEach((k) => seen.add(k));
+    out.push(`${UNKNOWN_COMPANY}${name}`);
+  }
+  return out;
+}
+
 /** Manpower rows that differ from the previous version (for "Edited v2 · was 6"). */
 export function manpowerChanges(
   prev: DailyReportData | null,
@@ -548,7 +579,9 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
     if (filedData) {
       crew += filedData.crewOnSite;
       hours += filedData.totalHours;
-      if (currentVersion(ix, report!)?.pdf_path) pdfReportIds.push(report!.id);
+      // With or without a stored PDF: the zip export renders and stores a missing one (typed
+      // reports, an office edit or a failed upload, no worker yet).
+      pdfReportIds.push(report!.id);
     }
     const lostHours = totals?.lostHours ?? 0;
     if (isWeatherDay || (totals?.weatherAffected ?? false)) {
@@ -735,12 +768,21 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
 
   const deadlines = active.map((s) => siteDeadline(s, rows.settings)).sort();
   const earliest = deadlines[0] ?? hhmm(rows.settings.default_deadline);
+  // The scheduler reminds a verified site manager linked to the site (§7.4); without one, or
+  // with the first reminder turned off, the "Reminders go out at …" line would be false.
+  const activeIds = new Set(active.map((s) => s.id));
+  const hasReporter = rows.siteReporters.some(
+    (sr) => activeIds.has(sr.site_id) && ix.reporterById.get(sr.reporter_id)?.status === 'verified',
+  );
 
   return {
     today,
     now: ctx.now.toISOString(),
     timezone: orgTz,
     siteCount: active.length,
+    pausedCount: rows.sites.filter((s) => s.status === 'paused').length,
+    hasReporter,
+    remindersOn: hasReporter && rows.settings.reminder1_enabled,
     earliestDeadline: earliest,
     reminder1At: addMinutesToHHMM(earliest, rows.settings.reminder1_offset_min),
     kpis: {
@@ -944,12 +986,16 @@ export function assembleSiteDetail(
   const monthReports = siteReports.filter((x) => x.date.startsWith(month));
   const monthStart = `${month}-01`;
   const monthEnd = monthDays(month).at(-1)!;
-  const from = site.active_since && site.active_since > monthStart ? site.active_since : monthStart;
-  const workdaysSoFar = workdaysBetween(
-    from,
-    monthEnd < today ? monthEnd : today,
-    rows.settings.working_days,
-  ).length;
+  const activeFrom =
+    site.active_since && site.active_since > monthStart ? site.active_since : monthStart;
+  // A report typed for a day before the site was added (back-filled) starts the count there, and
+  // a day with a report counts even when it is not a working day, so it never reads "7 of 1".
+  const firstReport = monthReports.at(-1)?.date;
+  const from = firstReport && firstReport < activeFrom ? firstReport : activeFrom;
+  const workdaysSoFar = new Set([
+    ...workdaysBetween(from, monthEnd < today ? monthEnd : today, rows.settings.working_days),
+    ...monthReports.map((x) => x.date),
+  ]).size;
   const onTime = monthReports.filter((x) => !x.r.is_late && x.r.kind !== 'weather_day').length;
   const monthCrew = monthReports.map((x) =>
     sum((crewByReport.get(x.r.id) ?? []).map((m) => Number(m.workers))),
@@ -1199,6 +1245,7 @@ const ACTION_LABELS: Record<string, string> = {
   'report.confirmed': 'Confirmed on WhatsApp',
   'report.filed': 'Filed',
   'report.version_created': 'New version',
+  'report.pdf_rendered': 'PDF created',
   'report.signed_off': 'Signed off',
   'report.signoff_undone': 'Sign-off undone',
   'report.signoff_reverted': 'Sign-off reverted by edit',
@@ -1475,6 +1522,11 @@ export function assembleReportDetail(
 
 // ───────────────────────────── Hours ─────────────────────────────
 
+/** Code-point order (not locale order), the same in every browser. */
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 export function assembleHours(
   rows: RowSet,
   _ctx: AssembleCtx,
@@ -1484,9 +1536,11 @@ export function assembleHours(
   const ix = buildIndex(rows);
   const { start, end } = isoWeekRange(week);
   const days = Array.from({ length: 5 }, (_, i) => addDays(start, i));
-  const cm = currentManpower(rows, ix).filter(
-    (m) => m.date >= start && m.date <= end && (!siteId || m.site_id === siteId),
-  );
+  // In report order, whatever order the rows came in (the database pages them by id), so a row's
+  // sites, its reports per day and the invoice evidence list the same way in both data sources.
+  const cm = currentManpower(rows, ix)
+    .filter((m) => m.date >= start && m.date <= end && (!siteId || m.site_id === siteId))
+    .sort((a, b) => compareText(a.report_no, b.report_no) || compareText(a.id, b.id));
   const self = selfPerformIds(rows);
   const subs = cm.filter((m) => !(m.company_id && self.has(m.company_id)));
   const keyOf = (m: ManpowerLike) =>
@@ -1494,29 +1548,41 @@ export function assembleHours(
   const grouped = groupBy(subs, keyOf);
   const hasInvoiceComparison = !siteId;
 
+  const overlapsWeek = (i: SubInvoiceRow) =>
+    !!i.period_start && !!i.period_end && i.period_start <= end && i.period_end >= start;
   const invoiceFor = (companyId: string | null): SubInvoiceRow | undefined => {
     if (!companyId || !hasInvoiceComparison) return undefined;
     return rows.invoices
-      .filter(
-        (i) =>
-          i.company_id === companyId &&
-          i.period_start &&
-          i.period_end &&
-          i.period_start <= end &&
-          i.period_end >= start,
-      )
+      .filter((i) => i.company_id === companyId && overlapsWeek(i))
       .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
   };
 
+  // A subcontractor that invoiced the week but has no hours in any report still gets a row: all
+  // of its invoiced hours are a gap (the invoice_gaps RPC reports it too).
+  const groups = [...grouped].map(([key, entries]) => ({
+    key,
+    companyId: entries[0]!.company_id,
+    entries,
+  }));
+  if (hasInvoiceComparison) {
+    const listed = new Set(groups.map((g) => g.companyId));
+    for (const i of rows.invoices) {
+      if (!i.company_id || self.has(i.company_id) || listed.has(i.company_id) || !overlapsWeek(i))
+        continue;
+      listed.add(i.company_id);
+      groups.push({ key: i.company_id, companyId: i.company_id, entries: [] });
+    }
+  }
+
   const rowsOut: HoursRow[] = [];
-  for (const [key, entries] of grouped) {
-    const first = entries[0]!;
-    const company = first.company_id ? ix.companyById.get(first.company_id) : undefined;
+  for (const { key, companyId, entries } of groups) {
+    const first = entries[0];
+    const company = companyId ? ix.companyById.get(companyId) : undefined;
     const dayHours = days.map((d) =>
       sum(entries.filter((m) => m.date === d).map((m) => Number(m.hours))),
     );
     const reported = sum(dayHours);
-    const inv = invoiceFor(first.company_id);
+    const inv = invoiceFor(companyId);
     const invoiced = inv
       ? Number(inv.total_hours ?? sum(invoiceLines(inv.lines).map((l) => l.hours)))
       : null;
@@ -1531,9 +1597,9 @@ export function assembleHours(
           : 'gap';
     rowsOut.push({
       key,
-      companyId: first.company_id,
-      companyName: company?.name ?? first.company_name ?? first.company_name_heard ?? '—',
-      trade: company?.trade ?? first.trade ?? null,
+      companyId,
+      companyName: company?.name ?? first?.company_name ?? first?.company_name_heard ?? '—',
+      trade: company?.trade ?? first?.trade ?? null,
       siteNames: uniq(entries.map((m) => ix.siteById.get(m.site_id)?.name ?? ''))
         .filter(Boolean)
         .map(shortSiteName),
@@ -1585,10 +1651,12 @@ export function assembleHours(
       for (const d of dayCmp) {
         if (Math.abs(d.gap) < 0.005) continue;
         for (const rid of d.reportIds) {
+          // An accounts user cannot read reports (RLS): the current_manpower row carries the
+          // report number and site, so the evidence still lists the day.
           const rep = ix.reportById.get(rid);
-          if (!rep) continue;
           const entries = subs.filter((m) => m.report_id === rid && keyOf(m) === r.key);
           const entry = entries[0];
+          if (!rep && !entry) continue;
           const src =
             entry && isRecord(entry.source) && entry.source.type === 'audio' ? entry.source : null;
           const audioStart = src && typeof src.start === 'number' ? src.start : null;
@@ -1603,11 +1671,12 @@ export function assembleHours(
           const quote =
             seg?.text ??
             `${r.companyName} · ${entries.map((m) => `${m.workers} × ${formatHoursNum(Number(m.hours) / Math.max(1, Number(m.workers)))} h`).join(', ')} = ${formatHoursNum(sum(entries.map((m) => Number(m.hours))))} h`;
+          const siteId = rep?.site_id ?? entry?.site_id;
           evidence.push({
             date: d.date,
             reportId: rid,
-            reportNo: rep.report_no,
-            siteName: ix.siteById.get(rep.site_id)?.name ?? '',
+            reportNo: rep?.report_no ?? entry?.report_no ?? '',
+            siteName: (siteId && ix.siteById.get(siteId)?.name) || '',
             quote,
             audioStart,
             messageId:
@@ -1644,7 +1713,8 @@ export function assembleHours(
     totals,
     kpis: {
       subHours: totals.reported,
-      companies: rowsOut.length,
+      // On site: in a report this week (not only on an invoice).
+      companies: rowsOut.filter((r) => grouped.has(r.key)).length,
       gapHours: sum(gapRows.map((r) => Math.max(0, r.gap ?? 0))),
       gapSubs: gapRows.length,
     },
@@ -1699,13 +1769,21 @@ export function payrollCsv(
 
 // ───────────────────────────── Weather ─────────────────────────────
 
+/**
+ * A pack the worker has not picked up after this long is shown as not started: only the worker
+ * builds packs, and a deployment without it would otherwise show "Queued" for ever.
+ */
+export const PACK_START_GRACE_MS = 10 * 60 * 1000;
+
 export function assembleWeather(
   rows: RowSet,
   ctx: AssembleCtx,
   month: string,
-  siteId: string | null,
+  site: string | null,
 ): WeatherLog {
   const ix = buildIndex(rows);
+  // A site that is not the org's (a stale or typed link) shows every site, not an empty log.
+  const siteId = site && ix.siteById.has(site) ? site : null;
   const today = formatDateInTz(ctx.now, rows.org.timezone);
   const monthEnd = monthDays(month).at(-1)!;
   const until = monthEnd < today ? monthEnd : today;
@@ -1730,7 +1808,7 @@ export function assembleWeather(
       return {
         id: w.id,
         reportId: w.report_id,
-        reportNo: report?.report_no ?? '',
+        reportNo: report?.report_no ?? w.report_no ?? '',
         siteId: w.site_id,
         siteName: site?.name ?? '',
         siteShort: site ? shortSiteName(site.name) : '',
@@ -1747,7 +1825,8 @@ export function assembleWeather(
           messageId: audio && typeof audio.messageId === 'string' ? audio.messageId : null,
           photos: w.photo_count,
           weatherData: !!observed,
-          photoRequested: w.photo_count === 0,
+          // Only a site manager's report asks for a photo; one typed in the panel has no reporter.
+          photoRequested: w.photo_count === 0 && !!report?.reporter_id,
         },
         claimReady: w.claim_ready,
       };
@@ -1765,9 +1844,12 @@ export function assembleWeather(
     const [sid, date] = k.split(':') as [string, string];
     return { siteId: sid, date, hours: Math.round(hours * 100) / 100 };
   });
-  const sitesActive = rows.sites
-    .filter((s) => s.status !== 'archived' && (!siteId || s.id === siteId))
+  // Every site for the site picker (the page narrows the heatmap), and the chosen one even when
+  // it is archived (Site detail links here).
+  const siteOptions = rows.sites
+    .filter((s) => s.status !== 'archived' || s.id === siteId)
     .map(toSiteOption);
+  const nowMs = ctx.now.getTime();
   const packs: PackItem[] = rows.packs
     .filter((p) => !siteId || p.site_id === siteId)
     .map((p) => ({
@@ -1782,12 +1864,14 @@ export function assembleWeather(
       readyAt: p.ready_at,
       pdfPath: p.pdf_path,
       url: null,
+      notStarted:
+        p.status === 'queued' && nowMs - new Date(p.created_at).getTime() > PACK_START_GRACE_MS,
     }))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   return {
     month,
     siteId,
-    sites: sitesActive,
+    sites: siteOptions,
     days,
     cells,
     maxHours: Math.max(0, ...cells.map((c) => c.hours)),

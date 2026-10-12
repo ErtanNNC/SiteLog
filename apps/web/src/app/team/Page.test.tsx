@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import { DemoStore } from '@/data/demo/store';
 import { renderWithProviders } from '@/test/render';
 import TeamPage from './Page';
@@ -142,5 +143,35 @@ describe('TeamPage (demo data)', () => {
     expect(audit.action).toBe('reporter.updated');
     expect(audit.diff).toMatchObject({ name: { from: 'Jorge Medina', to: 'Jorge A. Medina' } });
     await waitFor(() => expect(within(table).getByText('Jorge A. Medina')).toBeInTheDocument());
+  });
+
+  it('Invite reporter in an org with no sites says to add one first instead of a dead end', async () => {
+    const d = kestrelDemo();
+    const store = new DemoStore({ ...d, sites: [], siteReporters: [], recipients: [] });
+    renderWithProviders(<TeamPage />, { route: '/team', store });
+    await screen.findByRole('heading', { name: 'Team & numbers' });
+    await userEvent.click(screen.getAllByRole('button', { name: 'Invite reporter' })[0]!);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('invite-no-sites')).toHaveTextContent(
+      'Add a site first. Each reporter reports for a site.',
+    );
+    expect(within(dialog).getByRole('link', { name: 'Add a site' })).toHaveAttribute(
+      'href',
+      '/setup/site',
+    );
+    expect(within(dialog).getByRole('button', { name: 'Send WhatsApp welcome' })).toBeDisabled();
+  });
+
+  it('an ops user with no sites is told to ask an admin (adding a site is admin-only)', async () => {
+    const d = kestrelDemo();
+    const store = new DemoStore({ ...d, sites: [], siteReporters: [], recipients: [] });
+    renderWithProviders(<TeamPage />, { route: '/team', store, as: 'ops' });
+    await screen.findByRole('heading', { name: 'Team & numbers' });
+    await userEvent.click(screen.getAllByRole('button', { name: 'Invite reporter' })[0]!);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('invite-no-sites')).toHaveTextContent(
+      'Ask an admin to add a site first.',
+    );
+    expect(within(dialog).queryByRole('link', { name: 'Add a site' })).toBeNull();
   });
 });

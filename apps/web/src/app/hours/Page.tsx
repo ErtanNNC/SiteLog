@@ -29,7 +29,14 @@ import { copy } from '@/copy/en';
 import { useDataSource } from '@/data/DataProvider';
 import { useHours, usePayrollCsv } from '@/data/hooks';
 import type { HoursRow } from '@/data/types';
-import { addWeeks, formatDateInTz, formatHoursNum, formatWeekLabel, isoWeekOf } from '@/lib/format';
+import {
+  addWeeks,
+  formatDateInTz,
+  formatHoursNum,
+  formatWeekLabel,
+  isoWeekOf,
+  isValidIsoWeek,
+} from '@/lib/format';
 import { useScrollRegion } from '@/lib/useScrollRegion';
 import { cn } from '@/lib/utils';
 import { AddInvoiceDialog } from './AddInvoiceDialog';
@@ -50,7 +57,7 @@ export default function HoursPage() {
   const tz = currentOrg?.timezone ?? 'UTC';
   const [params, setParams] = useSearchParams();
   const defaultWeek = useMemo(() => isoWeekOf(formatDateInTz(source.now(), tz)), [source, tz]);
-  const week = /^\d{4}-W\d{2}$/.test(params.get('week') ?? '') ? params.get('week')! : defaultWeek;
+  const week = isValidIsoWeek(params.get('week') ?? '') ? params.get('week')! : defaultWeek;
   const siteParam = params.get('site');
   const siteId = siteParam && siteParam !== ALL ? siteParam : null;
 
@@ -247,10 +254,9 @@ export default function HoursPage() {
         open={addOpen}
         onOpenChange={setAddOpen}
         matrix={data}
-        onAdded={(companyId) => {
-          const r = data.rows.find((x) => x.companyId === companyId);
-          if (r) setSelectedKey(r.key);
-        }}
+        // A known company's row is keyed by its id, also when the invoice is its first row this
+        // week (no reported hours): select it once the matrix reloads.
+        onAdded={(companyId) => setSelectedKey(companyId)}
       />
     </>
   );
@@ -268,6 +274,9 @@ function HoursMatrix({
   onSelect: (row: HoursRow) => void;
 }) {
   const scrollRegion = useScrollRegion(copy.hours.title);
+  // No row has an invoice to compare (none yet, unconfirmed companies, or one site): the totals
+  // say so instead of "0" and "match".
+  const compared = rows.some((r) => r.invoiced !== null);
   return (
     <div
       {...scrollRegion}
@@ -366,9 +375,19 @@ function HoursMatrix({
             <TableCell numeric className="font-bold">
               {formatHoursNum(totals.reported)}
             </TableCell>
-            <TableCell numeric>{formatHoursNum(totals.invoiced)}</TableCell>
-            <TableCell numeric className={cn(totals.gap > 0 && 'text-signal-deep')}>
-              {totals.gap !== 0 ? gapText(totals.gap) : copy.hours.gap.match}
+            <TableCell numeric>
+              {compared ? (
+                formatHoursNum(totals.invoiced)
+              ) : (
+                <span className="text-dust-light">—</span>
+              )}
+            </TableCell>
+            <TableCell numeric className={cn(compared && totals.gap > 0 && 'text-signal-deep')}>
+              {compared ? (
+                gapText(totals.gap)
+              ) : (
+                <span className="text-dust">{copy.hours.gap.awaiting}</span>
+              )}
             </TableCell>
           </TableRow>
         </TableFooter>

@@ -5,7 +5,10 @@ import type { DelayEvidence } from '@/data/types';
 import { cn } from '@/lib/utils';
 import { useVoicePlayer } from './VoicePlayer';
 
-/** Audio ts · Photos n · Weather data (green) and missing evidence as dashed red ("Photo requested"). */
+/**
+ * Audio ts · Photos n · Weather data (green) and missing evidence as dashed red ("Photo requested"
+ * when the site manager was asked for one, "No photo" for a report typed in the panel).
+ */
 export function EvidenceChips({
   evidence,
   className,
@@ -42,7 +45,7 @@ export function EvidenceChips({
       ) : (
         <span className={cn(chip, 'border-dashed border-missing text-missing')}>
           <Camera aria-hidden="true" />
-          {copy.evidence.photoRequested}
+          {evidence.photoRequested ? copy.evidence.photoRequested : copy.evidence.photoMissing}
         </span>
       )}
       {evidence.weatherData ? (

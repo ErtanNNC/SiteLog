@@ -1,9 +1,10 @@
 import { ChevronLeft, ChevronRight, FileDown, FolderArchive, Plus, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, Navigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { formatDateInTz, formatDateShort, formatHours } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
+import { canAccess, ROUTE_ROLES } from '@/auth/guards';
 import { DataTable, type Column } from '@/components/sitelog/DataTable';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { TableSkeleton } from '@/components/sitelog/Skeletons';
@@ -24,7 +25,13 @@ import {
 } from '@/components/ui/Select';
 import { copy } from '@/copy/en';
 import { useDataSource } from '@/data/DataProvider';
-import { useOpenReportPdf, usePdfZipExport, useReports, useSites } from '@/data/hooks';
+import {
+  useOpenReportPdf,
+  usePdfZipExport,
+  useReportPdf,
+  useReports,
+  useSites,
+} from '@/data/hooks';
 import type { ReportFilters, ReportFlag, ReportListItem, ReportStatusFilter } from '@/data/types';
 import { formatCrew, formatHoursNum, monthOf } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -73,12 +80,19 @@ function filtersFrom(params: URLSearchParams): ReportFilters {
   };
 }
 
+function withoutPage(params: URLSearchParams): string {
+  const next = new URLSearchParams(params);
+  next.delete('page');
+  return next.toString();
+}
+
 /** P6 · Reports archive — filters in the URL, 50 per page from the DataSource (§11.4). */
 export default function ReportsPage() {
-  const { isDemo, currentOrg } = useAuth();
+  const { isDemo, currentOrg, role } = useAuth();
   const source = useDataSource();
   const pdfZip = usePdfZipExport();
   const openPdf = useOpenReportPdf();
+  const reportPdf = useReportPdf();
   const [params, setParams] = useSearchParams();
   const filters = useMemo(() => filtersFrom(params), [params]);
   const reports = useReports(filters);
@@ -128,6 +142,11 @@ export default function ReportsPage() {
 
   const data = reports.data;
   const items = data?.items ?? [];
+  // A page past the last one (a stale or typed link, or the set shrank) goes back to page 1.
+  const pastEnd = !!data && data.page > data.pageCount;
+  const noSites = sites.data?.length === 0;
+  // Sites are added in the setup wizard, which is admin-only (RLS: sites_admin_insert).
+  const canAddSite = canAccess(role, ROUTE_ROLES.setup!);
   const allOnPageSelected = items.length > 0 && items.every((i) => selected.has(i.reportId));
 
   const toggleAll = () => {
@@ -169,10 +188,12 @@ export default function ReportsPage() {
     });
   };
 
+  // A stored PDF opens by its signed URL. A report without one (typed in the panel, a failed
+  // upload, no worker yet) is rendered here and stored, as the report page does; so is every
+  // report in the demo, which has no stored files.
   const onPdf = (r: ReportListItem) => {
-    if (isDemo) toast.message(copy.toasts.pdfDemo);
-    else if (!r.pdfPath) toast.message(copy.reports.pdfNotReady);
-    else openPdf.open(r.reportId);
+    if (r.pdfPath && !isDemo) openPdf.open(r.reportId);
+    else reportPdf.open(r.reportId, null);
   };
 
   const columns: Column<ReportListItem>[] = [
@@ -270,7 +291,7 @@ export default function ReportsPage() {
           variant="subtle"
           size="iconDense"
           aria-label={copy.reports.downloadPdf(r.reportNo)}
-          title={r.pdfPath ? undefined : copy.reports.pdfNotReady}
+          title={r.pdfPath ? undefined : copy.reports.pdfNotStored}
           onClick={(e) => {
             e.stopPropagation();
             onPdf(r);
@@ -441,6 +462,11 @@ export default function ReportsPage() {
       <Card>
         {reports.isPending ? (
           <TableSkeleton rows={10} />
+        ) : pastEnd ? (
+          <>
+            <Navigate to={{ search: withoutPage(params) }} replace />
+            <TableSkeleton rows={10} />
+          </>
         ) : reports.isError || !data ? (
           <ErrorState
             thing={copy.nav.reports.toLowerCase()}
@@ -450,7 +476,37 @@ export default function ReportsPage() {
           />
         ) : items.length === 0 ? (
           <div className="p-5">
-            <EmptyState title={copy.reports.empty} body={copy.reports.emptyHint} />
+            {activeFilterCount === 0 ? (
+              // Nothing filed yet: no filter to widen, so say what to do instead.
+              <EmptyState
+                title={copy.reports.emptyNone}
+                body={
+                  !noSites
+                    ? copy.reports.emptyNoneBody
+                    : canAddSite
+                      ? copy.reports.emptyNoSitesBody
+                      : copy.reports.emptyNoSitesAskAdmin
+                }
+                action={
+                  noSites ? (
+                    canAddSite ? (
+                      <Button asChild>
+                        <Link to="/setup/site">{copy.overview.connectFirstSite}</Link>
+                      </Button>
+                    ) : null
+                  ) : (
+                    <Button asChild>
+                      <Link to="/reports/new">
+                        <Plus aria-hidden="true" />
+                        {copy.reports.newReport}
+                      </Link>
+                    </Button>
+                  )
+                }
+              />
+            ) : (
+              <EmptyState title={copy.reports.empty} body={copy.reports.emptyHint} />
+            )}
           </div>
         ) : (
           <DataTable

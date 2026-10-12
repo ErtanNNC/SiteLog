@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import type { ReporterRole } from '@sitelog/shared/enums.ts';
+import { useAuth } from '@/auth/AuthProvider';
+import { canAccess, ROUTE_ROLES } from '@/auth/guards';
 import { emptyPhone, PhoneInput, type PhoneValue } from '@/components/sitelog/PhoneInput';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -38,6 +41,10 @@ interface Props {
 export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds = [] }: Props) {
   const c = copy.team.invite;
   const invite = useInviteReporter();
+  const { role: memberRole } = useAuth();
+  // A reporter reports for a site; with none yet the dialog explains how to get one.
+  const noSites = sites.length === 0;
+  const canAddSite = canAccess(memberRole, ROUTE_ROLES.setup!);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState<PhoneValue>(emptyPhone());
   const [role, setRole] = useState<ReporterRole>('site_manager');
@@ -58,6 +65,7 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
     on ? [...list, id] : list.filter((x) => x !== id);
 
   const submit = () => {
+    if (noSites) return;
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = c.nameRequired;
     if (!phone.e164) next.phone = c.phoneInvalid;
@@ -140,6 +148,21 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
           </div>
           <fieldset className="grid gap-2">
             <legend className="text-caption font-medium">{c.sites}</legend>
+            {noSites ? (
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-dashed border-rebar bg-concrete/60 p-3"
+                data-testid="invite-no-sites"
+              >
+                <p className="text-[15px] text-dust">
+                  {canAddSite ? c.noSites : c.noSitesAskAdmin}
+                </p>
+                {canAddSite ? (
+                  <Button variant="secondary" size="dense" asChild>
+                    <Link to="/setup/site">{c.addSite}</Link>
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             <div className="grid gap-1 sm:grid-cols-2">
               {sites.map((s) => (
                 <label key={s.id} className="flex min-h-10 items-center gap-3 text-[15px]">
@@ -187,7 +210,7 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
             <DialogClose asChild>
               <Button variant="ghost">{copy.common.cancel}</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" loading={invite.isPending}>
+            <Button type="submit" variant="primary" loading={invite.isPending} disabled={noSites}>
               {c.send}
             </Button>
           </DialogFooter>

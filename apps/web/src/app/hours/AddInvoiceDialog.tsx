@@ -43,6 +43,8 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const companies = matrix.companies.filter((x) => !x.isSelfPerform && x.status === 'confirmed');
+  // A new org has only its self-perform crew: nothing to invoice until a report lists a sub.
+  const noCompanies = companies.length === 0;
 
   const reset = () => {
     setCompanyId('');
@@ -114,19 +116,30 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="inv-company">{c.company}</Label>
-              <Select value={companyId} onValueChange={pickCompany}>
-                <SelectTrigger id="inv-company" aria-invalid={!!errors.company}>
-                  <SelectValue placeholder={c.companyPlaceholder} />
-                </SelectTrigger>
-                <SelectContent>
-                  {companies.map((co) => (
-                    <SelectItem key={co.id} value={co.id}>
-                      {co.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {noCompanies ? (
+                <>
+                  <span className="text-caption font-medium text-asphalt">{c.company}</span>
+                  <p className="text-caption text-dust" data-testid="no-companies">
+                    {c.noCompanies}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Label htmlFor="inv-company">{c.company}</Label>
+                  <Select value={companyId} onValueChange={pickCompany}>
+                    <SelectTrigger id="inv-company" aria-invalid={!!errors.company}>
+                      <SelectValue placeholder={c.companyPlaceholder} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companies.map((co) => (
+                        <SelectItem key={co.id} value={co.id}>
+                          {co.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
               {errors.company ? (
                 <p role="alert" className="text-caption font-medium text-missing">
                   {errors.company}
@@ -231,7 +244,7 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
             <DialogClose asChild>
               <Button variant="ghost">{copy.common.cancel}</Button>
             </DialogClose>
-            <Button type="submit" variant="primary" loading={add.isPending}>
+            <Button type="submit" variant="primary" loading={add.isPending} disabled={noCompanies}>
               {c.save}
             </Button>
           </DialogFooter>

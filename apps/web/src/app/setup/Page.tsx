@@ -2,14 +2,15 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthProvider';
+import { RequireRole, ROUTE_ROLES } from '@/auth/guards';
 import { Logo } from '@/components/shell/Sidebar';
 import { phoneValue, type PhoneCountryCode } from '@/components/sitelog/PhoneInput';
 import { PageSkeleton } from '@/components/sitelog/Skeletons';
+import { ErrorState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
 import { copy } from '@/copy/en';
 import { useOptionalDataSource } from '@/data/DataProvider';
 import {
-  useCreateOrg,
   useCreateSite,
   useInviteReporter,
   useSaveSettings,
@@ -17,7 +18,9 @@ import {
   useSetOrgLogo,
   useSettings,
   useSetupState,
+  useUpdateOrg,
 } from '@/data/hooks';
+import type { CreateSiteResult, UpdateOrgInput } from '@/data/source';
 import { uploadOrgLogo } from '@/data/supabase/SupabaseSource';
 import type { OrgSettings } from '@/data/types';
 import { supabase } from '@/lib/supabase';
@@ -36,17 +39,27 @@ import {
   type SetupStep,
 } from './state';
 
-/** P2 · Setup wizard — /setup/company · /setup/site · /setup/reports, outside the app shell (F2). */
+/**
+ * P2 · Setup wizard — /setup/company · /setup/site · /setup/reports, outside the app shell (F2).
+ * A user without an org creates one (company step only); in an org, only admins set it up (the
+ * site insert, recipients and settings are admin-only in RLS).
+ */
 export default function SetupPage() {
   const source = useOptionalDataSource();
-  return source ? <Wizard /> : <NoOrgWizard />;
+  if (!source) return <NoOrgWizard />;
+  return (
+    <RequireRole roles={ROUTE_ROLES.setup!} page={copy.setup.pageName}>
+      <Wizard />
+    </RequireRole>
+  );
 }
 
 function useProgress() {
   const { user, currentOrg } = useAuth();
   const userId = user?.id ?? 'anon';
+  const orgId = currentOrg?.id ?? null;
   const [progress, setProgressState] = useState<SetupProgress>(() => {
-    const p = loadProgress(userId, currentOrg?.timezone);
+    const p = loadProgress(userId, orgId, currentOrg?.timezone);
     if (currentOrg) {
       p.done.company = true;
       if (!p.company.name) p.company.name = currentOrg.name;
@@ -58,12 +71,12 @@ function useProgress() {
     (fn: (prev: SetupProgress) => SetupProgress) =>
       setProgressState((prev) => {
         const next = fn(prev);
-        saveProgress(userId, next);
+        saveProgress(userId, orgId, next);
         return next;
       }),
-    [userId],
+    [userId, orgId],
   );
-  return { progress, setProgress, userId };
+  return { progress, setProgress, userId, orgId };
 }
 
 /** The picked logo (validated by CompanyStep): previewed now, uploaded once the org exists. */
@@ -94,8 +107,22 @@ function SetupLayout({
   subtitle?: string;
   children: ReactNode;
 }) {
-  const { currentOrg } = useAuth();
+  const { currentOrg, signOut } = useAuth();
   const navigate = useNavigate();
+  /**
+   * In an org the panel is the way out. Without one every page leads back here, so leaving means
+   * signing out; the progress stays saved for this user and resumes after the next sign-in.
+   */
+  const leave = async () => {
+    if (currentOrg) {
+      toast.success(copy.setup.savedLater);
+      void navigate('/');
+      return;
+    }
+    toast.success(copy.setup.savedLaterSignedOut);
+    await signOut().catch(() => undefined);
+    void navigate('/login', { replace: true });
+  };
   return (
     <div className="min-h-screen bg-concrete">
       <header className="on-dark flex h-16 items-center justify-between bg-asphalt px-4 text-chalk md:px-8">
@@ -112,10 +139,7 @@ function SetupLayout({
           variant="ghost"
           size="dense"
           className="border-iron bg-transparent text-chalk hover:bg-steel"
-          onClick={() => {
-            toast.success(copy.setup.savedLater);
-            void navigate(currentOrg ? '/' : '/login');
-          }}
+          onClick={() => void leave()}
         >
           {copy.setup.saveLater}
         </Button>
@@ -138,7 +162,8 @@ function SetupLayout({
 /** Supabase user without an org: only the company step is possible until `create_org` runs. */
 function NoOrgWizard() {
   const { refreshOrgs } = useAuth();
-  const { progress, setProgress } = useProgress();
+  const { progress, setProgress, userId } = useProgress();
+  const company = progress.company;
   const logo = useLogoPreview();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -152,22 +177,30 @@ function NoOrgWizard() {
     setBusy(true);
     try {
       const { data, error } = await supabase.rpc('create_org', {
-        p_name: progress.company.name.trim(),
-        p_timezone: progress.company.timezone,
-        p_address: progress.company.address.trim() || null,
-        p_license_no: progress.company.licenseNo.trim() || null,
+        p_name: company.name.trim(),
+        p_timezone: company.timezone,
+        p_address: company.address.trim() || null,
+        p_license_no: company.licenseNo.trim() || null,
       } as never);
       if (error) throw new Error(error.message);
       const id = (data as { id?: string } | null)?.id;
       if (!id) throw new Error(copy.errors.generic);
-      setProgress((p) => ({ ...p, done: { ...p.done, company: true }, flow: 'wizard' }));
+      // The wizard continues in the new org, whose progress is kept under its own key.
+      clearProgress(userId, null);
+      saveProgress(userId, id, {
+        ...progress,
+        company,
+        site: emptySite(company.timezone),
+        done: { ...progress.done, company: true },
+        flow: 'wizard',
+      });
       if (logo.file) {
         await uploadOrgLogo(supabase, id, logo.file).catch(() =>
           toast.error(copy.setup.company.logoUploadFailed),
         );
       }
       await refreshOrgs();
-      toast.success(copy.toasts.orgCreated(progress.company.name.trim()));
+      toast.success(copy.toasts.orgCreated(company.name.trim()));
       void navigate('/setup/site', { replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : copy.errors.generic);
@@ -178,8 +211,8 @@ function NoOrgWizard() {
   return (
     <SetupLayout step="company" done={progress.done} title={copy.setup.title}>
       <CompanyStep
-        draft={progress.company}
-        onChange={(company) => setProgress((p) => ({ ...p, company }))}
+        draft={company}
+        onChange={(next) => setProgress((p) => ({ ...p, company: next }))}
         onContinue={() => void create()}
         busy={busy}
         logoUrl={logo.logoUrl}
@@ -193,11 +226,11 @@ function Wizard() {
   const { step: stepParam } = useParams();
   const navigate = useNavigate();
   const { currentOrg, isDemo, refreshOrgs } = useAuth();
-  const { progress, setProgress, userId } = useProgress();
+  const { progress, setProgress, userId, orgId } = useProgress();
   const logo = useLogoPreview();
   const setupState = useSetupState();
   const settings = useSettings();
-  const createOrg = useCreateOrg();
+  const updateOrg = useUpdateOrg();
   const createSite = useCreateSite();
   const inviteReporter = useInviteReporter();
   const saveSettings = useSaveSettings();
@@ -205,7 +238,22 @@ function Wizard() {
   const setLogo = useSetOrgLogo({ quiet: true });
 
   const [draft, setDraft] = useState<OrgSettings | null>(null);
+  // The org exists here: the company step edits its stored details, seeded once from the load.
+  const [companySeeded, setCompanySeeded] = useState(false);
   if (settings.data && !draft) setDraft(structuredClone(settings.data.settings));
+  if (settings.data && !companySeeded) {
+    const org = settings.data.org;
+    setCompanySeeded(true);
+    setProgress((p) => ({
+      ...p,
+      company: {
+        name: org.name,
+        address: org.address ?? '',
+        licenseNo: org.licenseNo ?? '',
+        timezone: org.timezone,
+      },
+    }));
+  }
   const update = useCallback(
     (patch: Partial<OrgSettings>) => setDraft((d) => (d ? { ...d, ...patch } : d)),
     [],
@@ -233,35 +281,47 @@ function Wizard() {
 
   const companyName = currentOrg?.name ?? progress.company.name;
 
-  const continueFromCompany = () => {
-    createOrg.mutate(
-      {
-        name: progress.company.name.trim(),
-        timezone: progress.company.timezone,
-        address: progress.company.address.trim() || null,
-        licenseNo: progress.company.licenseNo.trim() || null,
-      },
-      {
-        onSuccess: async ({ orgId }) => {
-          setProgress((p) => ({ ...p, done: { ...p.done, company: true }, flow: 'wizard' }));
-          if (logo.file) {
-            await setLogo
-              .mutateAsync({ file: logo.file, orgId })
-              .catch(() => toast.error(copy.setup.company.logoUploadFailed));
-          }
-          await refreshOrgs();
-          void navigate('/setup/site');
-        },
-      },
-    );
+  /** Saves edits to the current org (never a second create_org) and the picked logo. */
+  const continueFromCompany = async () => {
+    const org = settings.data?.org;
+    if (!org) return;
+    const next: UpdateOrgInput = {
+      name: progress.company.name.trim(),
+      timezone: progress.company.timezone,
+      address: progress.company.address.trim() || null,
+      licenseNo: progress.company.licenseNo.trim() || null,
+    };
+    const changed =
+      next.name !== org.name ||
+      next.timezone !== org.timezone ||
+      next.address !== (org.address ?? null) ||
+      next.licenseNo !== (org.licenseNo ?? null);
+    try {
+      if (changed) await updateOrg.mutateAsync(next);
+    } catch {
+      return; // toasted by the mutation hook
+    }
+    setProgress((p) => ({ ...p, done: { ...p.done, company: true }, flow: 'wizard' }));
+    if (logo.file) {
+      await setLogo
+        .mutateAsync({ file: logo.file })
+        .catch(() => toast.error(copy.setup.company.logoSaveFailed));
+    }
+    // The org switcher and the setup header show the company name from the auth org list.
+    if (changed) await refreshOrgs().catch(() => undefined);
+    void navigate('/setup/site');
   };
 
   const submitSite = async ({ draft: s, lat, lng }: SiteSubmit, another: boolean) => {
+    const name = s.name.trim();
+    const code = s.projectCode.trim();
+    const manager = s.managerName.trim();
+    const languages = s.languages.length ? s.languages : ['en'];
+    let created: CreateSiteResult;
     try {
-      const phone = s.managerPhone;
-      const { siteId } = await createSite.mutateAsync({
-        name: s.name.trim(),
-        projectCode: s.projectCode.trim(),
+      created = await createSite.mutateAsync({
+        name,
+        projectCode: code,
         address: s.address.trim() || null,
         lat,
         lng,
@@ -269,42 +329,54 @@ function Wizard() {
         deadline: s.deadline ? `${s.deadline}:00` : null,
         recipients: progress.reports.recipients,
         reporter: {
-          name: s.managerName.trim(),
-          phone: normalizedPhone(s.managerCountry, phone),
+          name: manager,
+          phone: normalizedPhone(s.managerCountry, s.managerPhone),
           role: 'site_manager',
           siteIds: [],
-          languages: s.languages.length ? s.languages : ['en'],
+          languages,
         },
       });
-      if (s.hasBackup && s.backupName.trim() && s.backupPhone.trim()) {
+    } catch {
+      return; // toasted by the mutation hook; no site was created
+    }
+    const { siteId } = created;
+    // The site exists from here on: record it first, so a failed invite below never leads to a
+    // retry that creates it again (or trips over its project number).
+    if (!addSiteMode) {
+      setProgress((p) => ({
+        ...p,
+        done: { ...p.done, site: true },
+        createdSites: [...p.createdSites, { id: siteId, name, code }],
+        site: emptySite(p.company.timezone),
+      }));
+    }
+    if (created.recipientsError) toast.error(copy.setup.site.recipientsFailed);
+    let invited = !created.inviteError;
+    if (created.inviteError) {
+      toast.error(copy.setup.site.inviteFailed(manager, created.inviteError));
+    }
+    if (s.hasBackup && s.backupName.trim() && s.backupPhone.trim()) {
+      try {
         await inviteReporter.mutateAsync({
           name: s.backupName.trim(),
           phone: normalizedPhone(s.backupCountry, s.backupPhone),
           role: 'backup',
           siteIds: [siteId],
-          languages: s.languages.length ? s.languages : ['en'],
+          languages,
         });
+      } catch {
+        invited = false; // toasted by the mutation hook
       }
-      toast.success(copy.setup.site.sent(s.managerName.trim()));
-      await refreshOrgs();
-      if (addSiteMode) {
-        clearProgress(userId);
-        void navigate('/sites');
-        return;
-      }
-      setProgress((p) => ({
-        ...p,
-        done: { ...p.done, site: true },
-        createdSites: [
-          ...p.createdSites,
-          { id: siteId, name: s.name.trim(), code: s.projectCode.trim() },
-        ],
-        site: emptySite(p.company.timezone),
-      }));
-      if (!another) void navigate('/setup/reports');
-    } catch {
-      /* toasted by the mutation hooks */
     }
+    if (invited) toast.success(copy.setup.site.sent(manager));
+    // Only the org switcher's site count depends on it.
+    await refreshOrgs().catch(() => undefined);
+    if (addSiteMode) {
+      clearProgress(userId, orgId);
+      void navigate('/sites');
+      return;
+    }
+    if (!another) void navigate('/setup/reports');
   };
 
   const finish = async () => {
@@ -316,12 +388,22 @@ function Wizard() {
           patch[key] = draft[key];
       }
       await saveSettings.mutateAsync(patch);
+      // Add the wizard's recipients to each site created in this run. A list saved in Settings
+      // meanwhile (a run can be finished days later) is kept, not replaced, so read the lists
+      // fresh; a site that is not among them (gone, or stale progress) is skipped.
+      const fresh = await settings.refetch();
+      const lists = (fresh.data ?? settings.data).siteRecipients;
       for (const site of progress.createdSites) {
-        await saveRecipients.mutateAsync({ siteId: site.id, emails: progress.reports.recipients });
+        const current = lists.find((r) => r.siteId === site.id);
+        if (!current) continue;
+        const emails = [...new Set([...current.emails, ...progress.reports.recipients])];
+        if (emails.length !== current.emails.length) {
+          await saveRecipients.mutateAsync({ siteId: site.id, emails });
+        }
       }
-      clearProgress(userId);
+      clearProgress(userId, orgId);
       toast.success(copy.setup.reports.finished);
-      await refreshOrgs();
+      await refreshOrgs().catch(() => undefined);
       void navigate('/', { replace: true });
     } catch {
       /* toasted by the mutation hooks */
@@ -330,19 +412,33 @@ function Wizard() {
 
   const title = addSiteMode ? copy.setup.addSiteTitle : copy.setup.title;
   const subtitle = addSiteMode ? copy.setup.addSiteSubtitle : undefined;
+  // Only a failed first load (nothing to edit); a failed refetch keeps the loaded data.
+  const settingsError =
+    settings.isError && !settings.data ? (
+      <ErrorState
+        thing={copy.nav.settings.toLowerCase()}
+        error={settings.error}
+        onRetry={() => void settings.refetch()}
+      />
+    ) : null;
 
   return (
     <SetupLayout step={step} done={progress.done} title={title} subtitle={subtitle}>
-      {step === 'company' ? (
-        <CompanyStep
-          draft={progress.company}
-          onChange={(company) => setProgress((p) => ({ ...p, company }))}
-          onContinue={continueFromCompany}
-          busy={createOrg.isPending}
-          logoUrl={logo.logoUrl}
-          onLogoChange={logo.onLogoChange}
-        />
-      ) : null}
+      {step === 'company'
+        ? (settingsError ??
+          (companySeeded ? (
+            <CompanyStep
+              draft={progress.company}
+              onChange={(company) => setProgress((p) => ({ ...p, company }))}
+              onContinue={() => void continueFromCompany()}
+              busy={updateOrg.isPending || setLogo.isPending}
+              logoUrl={logo.logoUrl}
+              onLogoChange={logo.onLogoChange}
+            />
+          ) : (
+            <PageSkeleton />
+          )))
+        : null}
       {step === 'site' ? (
         <SiteStep
           draft={progress.site}
@@ -357,23 +453,24 @@ function Wizard() {
           siteCount={(setupState.data?.siteCount ?? 0) + 1}
         />
       ) : null}
-      {step === 'reports' ? (
-        draft ? (
-          <ReportsStep
-            draft={draft}
-            update={update}
-            recipients={progress.reports.recipients}
-            onRecipientsChange={(recipients) =>
-              setProgress((p) => ({ ...p, reports: { ...p.reports, recipients } }))
-            }
-            onBack={() => void navigate('/setup/site')}
-            onFinish={() => void finish()}
-            busy={saveSettings.isPending || saveRecipients.isPending}
-          />
-        ) : (
-          <PageSkeleton />
-        )
-      ) : null}
+      {step === 'reports'
+        ? (settingsError ??
+          (draft ? (
+            <ReportsStep
+              draft={draft}
+              update={update}
+              recipients={progress.reports.recipients}
+              onRecipientsChange={(recipients) =>
+                setProgress((p) => ({ ...p, reports: { ...p.reports, recipients } }))
+              }
+              onBack={() => void navigate('/setup/site')}
+              onFinish={() => void finish()}
+              busy={saveSettings.isPending || saveRecipients.isPending}
+            />
+          ) : (
+            <PageSkeleton />
+          )))
+        : null}
       {step === 'company' && currentOrg ? (
         <p className="mt-4 text-caption text-dust">
           <Link to="/" className="text-level underline-offset-4 hover:underline">

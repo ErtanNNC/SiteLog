@@ -1,16 +1,17 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { DemoStore } from '@/data/demo/store';
+import { DemoStore, type DemoLoginKey } from '@/data/demo/store';
 import { renderWithProviders } from '@/test/render';
 import SiteDetailPage from './Page';
 
-function renderRiverside(store = new DemoStore()) {
+function renderRiverside(store = new DemoStore(), as: DemoLoginKey = 'admin') {
   const site = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
   renderWithProviders(<SiteDetailPage />, {
     store,
     route: `/sites/${site.id}`,
     path: '/sites/:siteId',
+    as,
   });
   return { store, site };
 }
@@ -85,5 +86,23 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
       'reports@kestrelbuild.example',
       'lena@kestrelbuild.example',
     ]);
+  });
+
+  it('offers Pause site to admins only (RLS lets only admins update a site)', async () => {
+    renderRiverside();
+    await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
+    expect(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Pause site' }),
+    ).toBeInTheDocument();
+  });
+
+  it('hides Pause site from a project manager', async () => {
+    renderRiverside(new DemoStore(), 'pm');
+    await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Pause site' })).toBeNull();
   });
 });

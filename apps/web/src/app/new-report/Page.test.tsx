@@ -55,6 +55,43 @@ describe('NewReportPage', () => {
     expect(day.report_id).toBe(report.id);
   });
 
+  it('files a company added with "Add new…" as a confirmed company linked by id', async () => {
+    const user = userEvent.setup();
+    const store = renderNew();
+    const elm = store.data.sites.find((s) => s.name === 'Elm St. Townhomes')!;
+    await user.click(await screen.findByTestId('new-report-site'));
+    await user.click(await screen.findByRole('option', { name: /Elm St\. Townhomes/ }));
+    const editor = screen.getByTestId('report-editor');
+    await user.click(within(editor).getByRole('button', { name: 'Add company' }));
+    await user.click(within(editor).getByRole('combobox', { name: 'Company' }));
+    await user.click(await screen.findByRole('option', { name: 'Add new…' }));
+    await user.type(within(editor).getByLabelText('New company name'), 'Harbor Masonry');
+    await user.type(within(editor).getByLabelText('Workers'), '4');
+    await user.type(within(editor).getByLabelText('Hours / worker'), '8');
+    await user.click(screen.getByTestId('file-report'));
+
+    await waitFor(() =>
+      expect(store.data.reports.some((r) => r.site_id === elm.id && !r.reporter_id)).toBe(true),
+    );
+    const report = store.data.reports.find((r) => r.site_id === elm.id && !r.reporter_id)!;
+    const company = store.data.companies.find((c) => c.name === 'Harbor Masonry')!;
+    expect(company).toMatchObject({ status: 'confirmed', is_self_perform: false });
+    const v1 = store.data.versions.find((v) => v.report_id === report.id && v.version === 1)!;
+    const data = v1.data as unknown as {
+      manpower: Array<{ companyId: string | null; companyName: string; totalHours: number }>;
+    };
+    expect(data.manpower).toEqual([
+      expect.objectContaining({
+        companyId: company.id,
+        companyName: 'Harbor Masonry',
+        totalHours: 32,
+      }),
+    ]);
+    expect(store.data.audit).toContainEqual(
+      expect.objectContaining({ action: 'company.created', entity_id: company.id }),
+    );
+  });
+
   it('refuses an empty report and a future date', async () => {
     const user = userEvent.setup();
     const store = renderNew();

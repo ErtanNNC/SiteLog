@@ -1,12 +1,17 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { toast } from 'sonner';
+import { describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router';
 import { DemoStore, demoUserFor } from '@/data/demo/store';
 import { storage } from '@/lib/utils';
-import { renderWithProviders } from '@/test/render';
+import { makeSource, renderWithProviders } from '@/test/render';
 import SetupPage from './Page';
 import { progressKey } from './state';
+
+const ADMIN = demoUserFor('admin').id;
+/** Wizard progress is kept per user and org. */
+const keyFor = (store: DemoStore) => progressKey(ADMIN, store.data.org.id);
 
 function Harness() {
   return (
@@ -15,6 +20,7 @@ function Harness() {
       <Route path="/setup/:step" element={<SetupPage />} />
       <Route path="/" element={<h1>Overview landing</h1>} />
       <Route path="/sites" element={<h1>Sites landing</h1>} />
+      <Route path="/login" element={<h1>Login landing</h1>} />
     </Routes>
   );
 }
@@ -25,13 +31,16 @@ describe('SetupPage (demo org)', () => {
     { timeout: 30_000 },
     async () => {
       const store = new DemoStore();
-      storage.set(progressKey(demoUserFor('admin').id), { done: {}, createdSites: [] });
+      const success = vi.spyOn(toast, 'success');
+      storage.set(keyFor(store), { done: {}, createdSites: [] });
       renderWithProviders(<Harness />, { route: '/setup/company', store });
       expect(
         await screen.findByRole('heading', { name: 'Set up your company' }),
       ).toBeInTheDocument();
       expect(screen.getByTestId('setup-header')).toHaveTextContent('Kestrel Build Group · setup');
-      expect(screen.getByLabelText('Company name')).toHaveValue('Kestrel Build Group');
+      expect(await screen.findByLabelText('Company name')).toHaveValue('Kestrel Build Group');
+      // The org exists: the stored details are shown, and unchanged ones are not saved again.
+      expect(screen.getByLabelText(/^Address/)).toHaveValue('2101 W Fulton St, Chicago, IL 60612');
       await userEvent.click(screen.getByRole('button', { name: 'Continue to first site' }));
 
       expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
@@ -65,6 +74,10 @@ describe('SetupPage (demo org)', () => {
       expect(
         await screen.findByRole('heading', { name: 'Reports & reminders' }),
       ).toBeInTheDocument();
+      // The invite only queues the welcome; it goes out once a worker sends it.
+      expect(success).toHaveBeenCalledWith(
+        'Site added. The WhatsApp welcome to Elena Vasquez is queued.',
+      );
       const site = store.data.sites.find((s) => s.project_code === 'HV-5120')!;
       expect(site).toMatchObject({
         name: 'Harbor View Apartments',
@@ -90,7 +103,8 @@ describe('SetupPage (demo org)', () => {
       expect(
         store.data.recipients.filter((r) => r.site_id === site.id).map((r) => r.email),
       ).toEqual(['pm@kestrelbuild.example']);
-      expect(storage.get(progressKey(demoUserFor('admin').id), null)).toBeNull();
+      expect(storage.get(keyFor(store), null)).toBeNull();
+      expect(store.data.audit.some((a) => a.action === 'org.updated')).toBe(false);
     },
   );
 
@@ -99,7 +113,7 @@ describe('SetupPage (demo org)', () => {
     { timeout: 30_000 },
     async () => {
       const store = new DemoStore();
-      storage.set(progressKey(demoUserFor('admin').id), {
+      storage.set(keyFor(store), {
         done: { company: true },
         flow: 'wizard',
         createdSites: [],
@@ -107,7 +121,9 @@ describe('SetupPage (demo org)', () => {
       });
       renderWithProviders(<Harness />, { route: '/setup', store });
       expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
-      expect(screen.getByLabelText('Site name')).toHaveValue('Pending site');
+      expect(await screen.findByDisplayValue('Pending site')).toBe(
+        screen.getByLabelText('Site name'),
+      );
       await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
       expect(screen.getByText('That project number is already in use.')).toBeInTheDocument();
       expect(screen.getByText('Enter the site manager’s name.')).toBeInTheDocument();
@@ -136,9 +152,9 @@ describe('SetupPage (demo org)', () => {
 
   it('validates the company logo and uploads it once the company is created', async () => {
     const store = new DemoStore();
-    storage.set(progressKey(demoUserFor('admin').id), { done: {}, createdSites: [] });
+    storage.set(keyFor(store), { done: {}, createdSites: [] });
     renderWithProviders(<Harness />, { route: '/setup/company', store });
-    await screen.findByRole('heading', { name: 'Set up your company' });
+    await screen.findByLabelText('Company name');
     const input = document.getElementById('co-logo') as HTMLInputElement;
     await userEvent.upload(input, new File(['x'], 'logo.jpg', { type: 'image/jpeg' }), {
       applyAccept: false,
@@ -154,5 +170,155 @@ describe('SetupPage (demo org)', () => {
     expect(store.data.org.logo_path).toBe(`${store.data.org.id}/logo.svg`);
     expect(store.logoUrl).toMatch(/^blob:/);
     expect(store.data.audit.at(-1)!.action).toBe('org.logo_updated');
+  });
+
+  it('Back to the company step edits the existing org instead of creating a second one', async () => {
+    const store = new DemoStore();
+    const source = makeSource('admin', store);
+    const refreshOrgs = vi.fn(async () => []);
+    storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+    renderWithProviders(<Harness />, {
+      route: '/setup/site',
+      source,
+      auth: { refreshOrgs },
+    });
+    await userEvent.click(await screen.findByRole('button', { name: 'Back' }));
+    const name = await screen.findByLabelText('Company name');
+    expect(name).toHaveValue('Kestrel Build Group');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Kestrel Build Group LLC');
+    await userEvent.click(screen.getByRole('button', { name: 'Continue to first site' }));
+    expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
+    expect(store.data.org).toMatchObject({
+      id: source.orgId,
+      name: 'Kestrel Build Group LLC',
+      address: '2101 W Fulton St, Chicago, IL 60612',
+    });
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'org.updated',
+      entity_id: source.orgId,
+      diff: { name: { from: 'Kestrel Build Group', to: 'Kestrel Build Group LLC' } },
+    });
+    expect(refreshOrgs).toHaveBeenCalled();
+  });
+
+  it('is admin-only inside an org', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<Harness />, { route: '/setup/site', store, as: 'pm' });
+    expect(await screen.findByRole('heading', { name: 'No access' })).toBeInTheDocument();
+    expect(
+      screen.getByText('You don’t have access to company setup. Ask an admin.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('Site name')).not.toBeInTheDocument();
+  });
+
+  it(
+    'keeps a created site when its manager invite fails, so a retry cannot duplicate it',
+    { timeout: 30_000 },
+    async () => {
+      const store = new DemoStore();
+      const source = makeSource('admin', store);
+      const real = source.createSite.bind(source);
+      vi.spyOn(source, 'createSite').mockImplementation(async (input) => ({
+        ...(await real({ ...input, reporter: null })),
+        inviteError: 'api-invite-reporter failed (502)',
+      }));
+      const error = vi.spyOn(toast, 'error');
+      const success = vi.spyOn(toast, 'success');
+      storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+      renderWithProviders(<Harness />, { route: '/setup/site', source });
+      await userEvent.type(await screen.findByLabelText('Site name'), 'Harbor View Apartments');
+      await userEvent.type(screen.getByLabelText('Project number'), 'HV-5120');
+      await userEvent.type(screen.getByLabelText('Site address'), '400 Harbor Dr, Chicago, IL');
+      await userEvent.type(screen.getByLabelText('Name'), 'Elena Vasquez');
+      await userEvent.type(screen.getByTestId('manager-phone'), '555 014 8001');
+      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+
+      expect(
+        await screen.findByRole('heading', { name: 'Reports & reminders' }),
+      ).toBeInTheDocument();
+      const site = store.data.sites.find((s) => s.project_code === 'HV-5120')!;
+      expect(storage.get<{ createdSites: unknown[] } | null>(keyFor(store), null)).toMatchObject({
+        done: { site: true },
+        createdSites: [{ id: site.id, name: 'Harbor View Apartments', code: 'HV-5120' }],
+      });
+      expect(error).toHaveBeenCalledWith(
+        'The site was created, but the WhatsApp welcome to Elena Vasquez couldn’t be queued (api-invite-reporter failed (502)). Invite them from Team & numbers.',
+      );
+      expect(success).not.toHaveBeenCalledWith(
+        'Site added. The WhatsApp welcome to Elena Vasquez is queued.',
+      );
+
+      // Back on the site step, the same project number is already taken (no second insert).
+      await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+      await userEvent.type(await screen.findByLabelText('Project number'), 'HV-5120');
+      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+      expect(screen.getByText('That project number is already in use.')).toBeInTheDocument();
+      expect(store.data.sites.filter((s) => s.project_code === 'HV-5120')).toHaveLength(1);
+    },
+  );
+
+  it('finishing later adds the wizard recipients without dropping a list saved meanwhile', async () => {
+    const store = new DemoStore();
+    const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
+    storage.set(keyFor(store), {
+      done: { company: true, site: true },
+      flow: 'wizard',
+      createdSites: [
+        { id: riverside.id, name: riverside.name, code: riverside.project_code },
+        // Stale progress: a site that is not in this org is left alone.
+        { id: 'site-of-another-org', name: 'Elsewhere', code: 'EW-0001' },
+      ],
+      reports: { recipients: ['pm@kestrelbuild.example', 'sam@kestrelbuild.example'] },
+    });
+    renderWithProviders(<Harness />, { route: '/setup/reports', store });
+    await userEvent.click(await screen.findByRole('button', { name: 'Finish' }));
+    expect(await screen.findByRole('heading', { name: 'Overview landing' })).toBeInTheDocument();
+    expect(
+      store.data.recipients.filter((r) => r.site_id === riverside.id).map((r) => r.email),
+    ).toEqual([
+      'reports@kestrelbuild.example',
+      'sam@kestrelbuild.example',
+      'pm@kestrelbuild.example',
+    ]);
+    expect(store.data.recipients.some((r) => r.site_id === 'site-of-another-org')).toBe(false);
+  });
+
+  it('shows an error with Retry instead of an endless skeleton when settings fail to load', async () => {
+    const store = new DemoStore();
+    const source = makeSource('admin', store);
+    const real = source.getSettings.bind(source);
+    vi.spyOn(source, 'getSettings')
+      .mockRejectedValueOnce(new Error('PostgREST unavailable'))
+      .mockImplementation(real);
+    storage.set(keyFor(store), {
+      done: { company: true, site: true },
+      flow: 'wizard',
+      createdSites: [],
+    });
+    renderWithProviders(<Harness />, { route: '/setup/reports', source });
+    expect(await screen.findByText('Couldn’t load settings.')).toBeInTheDocument();
+    expect(screen.getByText('PostgREST unavailable')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('button', { name: 'Finish' })).toBeInTheDocument();
+  });
+});
+
+describe('SetupPage (no org yet)', () => {
+  it('"Save and finish later" signs out instead of bouncing back to the wizard', async () => {
+    const signOut = vi.fn(async () => {});
+    renderWithProviders(<Harness />, {
+      route: '/setup/company',
+      source: null,
+      auth: { currentOrg: null, orgs: [], role: null, signOut },
+    });
+    await userEvent.type(await screen.findByLabelText('Company name'), 'Fresh Build Co');
+    await userEvent.click(screen.getByRole('button', { name: 'Save and finish later' }));
+    expect(await screen.findByRole('heading', { name: 'Login landing' })).toBeInTheDocument();
+    expect(signOut).toHaveBeenCalledTimes(1);
+    // The draft stays saved for this user (no org yet) and resumes after the next sign-in.
+    expect(
+      storage.get<{ company: { name: string } } | null>(progressKey(ADMIN), null)?.company.name,
+    ).toBe('Fresh Build Co');
   });
 });

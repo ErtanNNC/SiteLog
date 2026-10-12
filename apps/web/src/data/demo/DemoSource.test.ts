@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore, demoUserFor } from './store';
 import { DemoSource, demoPayrollCsv } from './DemoSource';
 
@@ -27,6 +28,9 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(o.kpis.weatherLostHours).toBe(10.5);
     expect(o.earliestDeadline).toBe('17:30');
     expect(o.reminder1At).toBe('17:45');
+    expect(o.pausedCount).toBe(0);
+    expect(o.hasReporter).toBe(true);
+    expect(o.remindersOn).toBe(true);
     const byCode = Object.fromEntries(o.sitesToday.map((r) => [r.projectCode, r]));
     expect(byCode['ES-0377']!.chip.variant).toBe('missing');
     expect(byCode['OM-1187']!.chip.variant).toBe('needs_review');
@@ -239,6 +243,22 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     unsub();
   });
 
+  it("overview: Today's PDFs lists a report typed today that has no stored PDF yet", async () => {
+    const { source: s, store } = source();
+    const elm = store.data.sites.find((x) => x.project_code === 'ES-0377')!;
+    const typed = store.createOfficeReport({
+      siteId: elm.id,
+      date: '2026-10-09',
+      data: { ...emptyReportData('2026-10-09'), summary: 'Typed in the office.' },
+      userId: demoUserFor('admin').id,
+    });
+    expect(store.data.versions.find((v) => v.report_id === typed.reportId)!.pdf_path).toBeNull();
+    const o = await s.getOverview();
+    // The four filed today in §18 plus the typed one; the zip export renders its PDF.
+    expect(o.pdfReportIds).toHaveLength(5);
+    expect(o.pdfReportIds).toContain(typed.reportId);
+  });
+
   it('payroll CSV has the §F15 columns and one line per manpower entry', () => {
     const { store } = source();
     const csv = demoPayrollCsv(store, '2026-W41', null);
@@ -265,7 +285,7 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     const picked = await s.getPdfUrls({ reportIds: filed.map((r) => r.id) });
     expect(picked).toEqual({
       files: [],
-      missing: filed.map((r) => r.report_no),
+      missing: filed.map((r) => ({ reportId: r.id, reportNo: r.report_no })),
       total: 3,
       capped: false,
     });
@@ -276,6 +296,37 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(all.missing).toHaveLength(archive.total);
     expect(all.capped).toBe(false);
     await expect(s.getBillingPortalUrl()).rejects.toThrow(/Demo mode/);
+  });
+
+  it('stores a browser-rendered PDF on the version, like attach_version_pdf, with an activity row', async () => {
+    const { source: s, store } = source();
+    const r = store.data.reports.find((x) => x.status === 'filed')!;
+    const v = store.data.versions.find(
+      (x) => x.report_id === r.id && x.version === r.current_version,
+    )!;
+    v.pdf_path = null;
+    await s.saveReportPdf({
+      reportId: r.id,
+      reportNo: r.report_no,
+      siteId: r.site_id,
+      version: r.current_version,
+      pdf: new Blob(['%PDF-1.3'], { type: 'application/pdf' }),
+    });
+    expect(v.pdf_path).toBe(
+      `${store.data.org.id}/${r.site_id}/${r.report_no}_v${r.current_version}.pdf`,
+    );
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'report.pdf_rendered',
+      entity: 'report',
+      entity_id: r.id,
+      diff: { version: r.current_version, renderer: 'browser' },
+    });
+    const picked = await s.getPdfUrls({ reportIds: [r.id] });
+    expect(picked.files.map((f) => f.reportNo)).toEqual([r.report_no]);
+    const detail = await s.getReportDetail(r.id);
+    expect(detail.activity).toContainEqual(
+      expect.objectContaining({ label: 'PDF created', detail: `v${r.current_version}` }),
+    );
   });
 
   it('edits a reporter and promotes the next reporter on a site that loses its primary', async () => {
@@ -329,5 +380,54 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(settings.org.logoUrl).toMatch(/^blob:/);
     await s.setOrgLogo(null);
     expect((await s.getSettings()).org).toMatchObject({ logoPath: null, logoUrl: null });
+  });
+});
+
+describe('DemoSource.updateOrg (setup wizard company step in an existing org)', () => {
+  it('edits the one org, audits only the changed fields and refuses a blank name', async () => {
+    const { source: s, store } = source();
+    const before = store.data.audit.length;
+    await s.updateOrg({
+      name: '  Kestrel Build Group LLC ',
+      timezone: 'America/Chicago',
+      address: '2101 W Fulton St, Chicago, IL 60612',
+      licenseNo: '  ',
+    });
+    expect((await s.getSettings()).org).toMatchObject({
+      id: s.orgId,
+      name: 'Kestrel Build Group LLC',
+      licenseNo: null,
+    });
+    expect((await s.getOrgs()).map((o) => o.name)).toEqual(['Kestrel Build Group LLC']);
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'org.updated',
+      entity_id: s.orgId,
+      diff: {
+        name: { from: 'Kestrel Build Group', to: 'Kestrel Build Group LLC' },
+        license_no: { from: 'IL GC-104-5582', to: null },
+      },
+    });
+    expect(Object.keys(store.data.audit.at(-1)!.diff ?? {})).toEqual(['name', 'license_no']);
+    // Nothing changed: no audit row.
+    await s.updateOrg({
+      name: 'Kestrel Build Group LLC',
+      timezone: 'America/Chicago',
+      address: '2101 W Fulton St, Chicago, IL 60612',
+    });
+    expect(store.data.audit.length).toBe(before + 1);
+    await expect(s.updateOrg({ name: ' ', timezone: 'America/Chicago' })).rejects.toThrow(
+      'Enter your company name.',
+    );
+  });
+
+  it('createSite reports no follow-up failure (the in-memory invite cannot fail apart)', async () => {
+    const { source: s } = source();
+    await expect(
+      s.createSite({
+        name: 'Westgate Clinic',
+        projectCode: 'WG-0100',
+        timezone: 'America/Chicago',
+      }),
+    ).resolves.toMatchObject({ inviteError: null, recipientsError: null });
   });
 });

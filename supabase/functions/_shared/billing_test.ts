@@ -6,8 +6,9 @@ import {
   monthlyTotalCents,
   periodEndOf,
   prorationFor,
+  checkoutTrial,
+  MIN_CHECKOUT_TRIAL_MS,
   statusAfterInvoicePaid,
-  trialDaysFor,
   unixToIso,
 } from './billing.ts';
 
@@ -34,11 +35,27 @@ Deno.test('statusAfterInvoicePaid recovers past_due and converts trials, never c
 Deno.test('money and trial helpers', () => {
   assertEquals(monthlyTotalCents(0), 0);
   assertEquals(monthlyTotalCents(6), 239_400);
-  assertEquals(trialDaysFor({ trial_ends_at: null }), 14);
-  assertEquals(trialDaysFor({ trial_ends_at: '2026-10-25T00:00:00Z' }), undefined);
   assertEquals(prorationFor(2, 3), 'create_prorations');
   assertEquals(prorationFor(3, 2), 'none');
   assertEquals(prorationFor(3, 3), 'none');
+});
+
+Deno.test('checkoutTrial keeps the trial create_org() started instead of charging at once', () => {
+  const now = new Date('2026-10-12T12:00:00Z');
+  // Org created on Oct 10: 12 days left, the subscription's trial ends with the org's.
+  assertEquals(checkoutTrial({ trial_ends_at: '2026-10-24T12:00:00Z' }, now), {
+    trial_end: Date.parse('2026-10-24T12:00:00Z') / 1000,
+  });
+  // Under 48 h left: Checkout's minimum (plus an hour), never an early charge.
+  const soon = checkoutTrial({ trial_ends_at: '2026-10-13T12:00:00Z' }, now);
+  assertEquals(soon, {
+    trial_end: Math.ceil((now.getTime() + MIN_CHECKOUT_TRIAL_MS + 3_600_000) / 1000),
+  });
+  // Trial over, or a value Stripe could not use: no trial.
+  assertEquals(checkoutTrial({ trial_ends_at: '2026-10-12T11:59:59Z' }, now), {});
+  assertEquals(checkoutTrial({ trial_ends_at: 'garbage' }, now), {});
+  // An org without a stored trial gets the full 14 days.
+  assertEquals(checkoutTrial({ trial_ends_at: null }, now), { trial_period_days: 14 });
 });
 
 Deno.test('Stripe reference helpers', () => {

@@ -34,9 +34,32 @@ export function monthlyTotalCents(activeSites: number): number {
   return PRICE_PER_SITE_CENTS * Math.max(0, Math.floor(activeSites));
 }
 
-/** 14-day trial once per org: no trial when the org already had one (`trial_ends_at` set). */
-export function trialDaysFor(org: { trial_ends_at: string | null }): number | undefined {
-  return org.trial_ends_at ? undefined : TRIAL_DAYS;
+/** Stripe Checkout refuses a `subscription_data.trial_end` less than 48 hours away. */
+export const MIN_CHECKOUT_TRIAL_MS = 48 * 3_600_000;
+/** Head room for the time between building the session and Stripe validating it. */
+const CHECKOUT_TRIAL_MARGIN_MS = 3_600_000;
+
+/** The trial part of Checkout's `subscription_data`: nothing, a length, or an end (Unix s). */
+export interface CheckoutTrial {
+  trial_period_days?: number;
+  trial_end?: number;
+}
+
+/**
+ * 14-day trial once per org (§19 #4). create_org() starts it (`trial_ends_at` = +14 days), and
+ * card details are added during it, so Checkout keeps the time left instead of charging at once:
+ *   - no `trial_ends_at` (an org from before trials were stored): a full trial;
+ *   - trial still running: it ends at `trial_ends_at`, or 48 h + 1 h from now when it is closer,
+ *     since Checkout needs 48 h (a few extra free hours rather than an early charge);
+ *   - trial over (or unreadable): none, the first invoice is charged at once.
+ */
+export function checkoutTrial(org: { trial_ends_at: string | null }, now: Date): CheckoutTrial {
+  if (!org.trial_ends_at) return { trial_period_days: TRIAL_DAYS };
+  const end = Date.parse(org.trial_ends_at);
+  const nowMs = now.getTime();
+  if (!Number.isFinite(end) || end <= nowMs) return {};
+  const earliest = nowMs + MIN_CHECKOUT_TRIAL_MS + CHECKOUT_TRIAL_MARGIN_MS;
+  return { trial_end: Math.ceil(Math.max(end, earliest) / 1000) };
 }
 
 /**

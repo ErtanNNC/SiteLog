@@ -31,7 +31,11 @@ import type {
 } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
-import { formatReportNo, logoStoragePath } from '@sitelog/shared/report/numbering.ts';
+import {
+  formatReportNo,
+  logoStoragePath,
+  pdfStoragePath,
+} from '@sitelog/shared/report/numbering.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
 import { deadlineInstant } from '@sitelog/shared/schedule/reminders.ts';
@@ -48,6 +52,7 @@ import type {
   RequestEvidencePackInput,
   ResolveUnknownCompanyInput,
   ReviewGlossaryTermInput,
+  UpdateOrgInput,
   UpdateReporterInput,
   UpdateSitePatch,
 } from '../source';
@@ -353,6 +358,84 @@ export class DemoStore {
     this.emit({ table: 'reports', id: r.id });
   }
 
+  /**
+   * Mirror of link_typed_companies(): each crew row added with "Add new…" (companyId null) is
+   * linked to the org's company with that name or alias (case-insensitive), confirming it, or to
+   * a new confirmed company, with an audit row. Names in `skip` (pending `unknown_company:`
+   * review reasons) stay unlinked for the review banner.
+   */
+  private linkTypedCompanies(
+    data: DailyReportData,
+    reportId: string,
+    userId: string,
+    skip: string[] = [],
+  ): DailyReportData {
+    const d = this.data;
+    const skipped = new Set(skip.map((s) => s.trim().toLowerCase()));
+    const links = new Map<string, CompanyRow>();
+    for (const m of data.manpower) {
+      const name = m.companyName.trim();
+      const key = name.toLowerCase();
+      if (m.companyId !== null || !name || skipped.has(key) || links.has(key)) continue;
+      let company =
+        d.companies.find((c) => c.name.toLowerCase() === key) ??
+        d.companies.find((c) => c.aliases.some((a) => a.toLowerCase() === key));
+      if (!company) {
+        company = {
+          id: localId('company'),
+          org_id: d.org.id,
+          name,
+          trade: m.trade?.trim() || null,
+          aliases: [],
+          is_self_perform: false,
+          status: 'confirmed',
+          created_at: this.nowIso(),
+        };
+        d.companies.push(company);
+        this.audit({
+          org_id: d.org.id,
+          actor_type: 'user',
+          actor_id: userId,
+          action: 'company.created',
+          entity: 'company',
+          entity_id: company.id,
+          diff: {
+            name,
+            trade: company.trade,
+            status: 'confirmed',
+            report_id: reportId,
+            trigger: 'office_entry',
+          },
+        });
+      } else if (company.status === 'unconfirmed') {
+        company.status = 'confirmed';
+        this.audit({
+          org_id: d.org.id,
+          actor_type: 'user',
+          actor_id: userId,
+          action: 'company.confirmed',
+          entity: 'company',
+          entity_id: company.id,
+          diff: {
+            name: company.name,
+            from: 'unconfirmed',
+            report_id: reportId,
+            trigger: 'office_entry',
+          },
+        });
+      }
+      links.set(key, company);
+    }
+    if (!links.size) return data;
+    return {
+      ...data,
+      manpower: data.manpower.map((m) => {
+        const company = m.companyId === null ? links.get(m.companyName.trim().toLowerCase()) : null;
+        return company ? { ...m, companyId: company.id, companyName: company.name } : m;
+      }),
+    };
+  }
+
   createReportVersion(
     reportId: string,
     data: DailyReportData,
@@ -361,9 +444,12 @@ export class DemoStore {
   ): number {
     const r = this.report(reportId);
     if (!changeNote.trim()) throw new Error(copy.report.edit.changeNoteRequired);
+    const pending = r.review_reasons
+      .filter((x) => x.startsWith('unknown_company:'))
+      .map((x) => x.slice('unknown_company:'.length));
     const next = this.pushVersion(
       r,
-      structuredClone(data),
+      this.linkTypedCompanies(structuredClone(data), r.id, userId, pending),
       'office_user',
       userId,
       changeNote.trim(),
@@ -395,13 +481,15 @@ export class DemoStore {
     const reportNo = formatReportNo(site.project_code, site.report_seq);
     const at = this.nowIso();
     const isLate = Date.parse(at) > Date.parse(sd.deadline_at);
-    const data: DailyReportData = {
-      ...structuredClone(input.data),
-      reportDate: input.date,
-      schemaVersion: 1,
-    };
+    const reportId = localId('report');
+    // Every crew row here was typed by the office: each "Add new…" name becomes a company.
+    const data: DailyReportData = this.linkTypedCompanies(
+      { ...structuredClone(input.data), reportDate: input.date, schemaVersion: 1 },
+      reportId,
+      input.userId,
+    );
     const report: ReportRow = {
-      id: localId('report'),
+      id: reportId,
       org_id: d.org.id,
       site_id: site.id,
       site_day_id: sd.id,
@@ -451,6 +539,27 @@ export class DemoStore {
     this.emit({ table: 'reports', id: report.id });
     this.emit({ table: 'site_days', id: sd.id });
     return { reportId: report.id, reportNo, created: true };
+  }
+
+  /**
+   * Mirror of attach_version_pdf(): a PDF rendered in the browser is now the version's PDF (the
+   * path pdfStoragePath() builds), with an audit row. The file itself stays in the DemoSource.
+   */
+  attachVersionPdf(reportId: string, version: number, userId: string): void {
+    const r = this.report(reportId);
+    const v = this.data.versions.find((x) => x.report_id === reportId && x.version === version);
+    if (!v) throw new Error(copy.errors.notFound);
+    const path = pdfStoragePath(this.data.org.id, r.site_id, r.report_no, version);
+    v.pdf_path = path;
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'report.pdf_rendered',
+      entity: 'report',
+      entity_id: reportId,
+      diff: { version, path, renderer: 'browser' },
+    });
   }
 
   markNoWork(siteDayId: string, userId: string): void {
@@ -898,6 +1007,35 @@ export class DemoStore {
   }
 
   /** Demo logo: keeps the object URL in memory and records the path like set_org_logo(). */
+  /** Same rules as update_org(): name required, blanks clear address / licence, audited diff. */
+  updateOrg(input: UpdateOrgInput, userId: string): void {
+    const org = this.data.org;
+    const name = input.name.trim();
+    if (!name) throw new Error(copy.setup.company.nameRequired);
+    const next = {
+      name,
+      timezone: input.timezone.trim() || org.timezone,
+      address: input.address?.trim() || null,
+      license_no: input.licenseNo?.trim() || null,
+    };
+    const diff: Record<string, { from: string | null; to: string | null }> = {};
+    for (const key of Object.keys(next) as Array<keyof typeof next>) {
+      if (org[key] !== next[key]) diff[key] = { from: org[key], to: next[key] };
+    }
+    if (!Object.keys(diff).length) return;
+    Object.assign(org, next);
+    this.audit({
+      org_id: org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'org.updated',
+      entity: 'org',
+      entity_id: org.id,
+      diff,
+    });
+    this.emit({ table: 'all' });
+  }
+
   setLogo(file: { url: string; ext: 'png' | 'svg' } | null, userId: string): void {
     const org = this.data.org;
     const from = org.logo_path;

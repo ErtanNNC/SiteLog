@@ -84,10 +84,20 @@ export function emptyProgress(timezone = DEFAULT_TZ): SetupProgress {
   };
 }
 
-export const progressKey = (userId: string) => `sitelog.setup.${userId}`;
+/**
+ * Per user and org: `createdSites` are ids of one org, so progress saved in one org must never
+ * resume in another (its "Finish" would rewrite that org's site recipients). A user without an
+ * org (the company step only) has no org id yet.
+ */
+export const progressKey = (userId: string, orgId?: string | null) =>
+  orgId ? `sitelog.setup.${userId}.${orgId}` : `sitelog.setup.${userId}`;
 
-export function loadProgress(userId: string, timezone = DEFAULT_TZ): SetupProgress {
-  const saved = storage.get<Partial<SetupProgress> | null>(progressKey(userId), null);
+export function loadProgress(
+  userId: string,
+  orgId: string | null,
+  timezone = DEFAULT_TZ,
+): SetupProgress {
+  const saved = storage.get<Partial<SetupProgress> | null>(progressKey(userId, orgId), null);
   const base = emptyProgress(timezone);
   if (!saved) return base;
   return {
@@ -101,12 +111,12 @@ export function loadProgress(userId: string, timezone = DEFAULT_TZ): SetupProgre
   };
 }
 
-export function saveProgress(userId: string, progress: SetupProgress): void {
-  storage.set(progressKey(userId), { ...progress, updatedAt: new Date().toISOString() });
+export function saveProgress(userId: string, orgId: string | null, progress: SetupProgress): void {
+  storage.set(progressKey(userId, orgId), { ...progress, updatedAt: new Date().toISOString() });
 }
 
-export function clearProgress(userId: string): void {
-  storage.remove(progressKey(userId));
+export function clearProgress(userId: string, orgId: string | null): void {
+  storage.remove(progressKey(userId, orgId));
 }
 
 /** First step that is not done yet (wizard resumes here). */

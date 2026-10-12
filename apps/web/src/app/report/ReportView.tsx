@@ -110,9 +110,12 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
                 ) : null}
               </dl>
             ) : null}
-            <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
-              {copy.report.weather.attribution}
-            </p>
+            {/* Credit Open-Meteo only for its observations, as the PDF does. */}
+            {observed ? (
+              <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
+                {copy.report.weather.attribution}
+              </p>
+            ) : null}
           </div>
           <div>
             <div className="eyebrow text-dust">{copy.report.weather.impact}</div>

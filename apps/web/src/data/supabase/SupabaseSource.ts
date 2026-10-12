@@ -16,7 +16,7 @@ import type {
   OrgMemberRow,
   OrgRow,
   OrgSettingsRow,
-  QuestionRow,
+  ReportArchiveRow,
   ReportRow,
   ReportSourceRow,
   ReportVersionRow,
@@ -42,7 +42,7 @@ import { copy } from '@/copy/en';
 import { functionsUrl } from '@/lib/env';
 import { rasterizeSvgLogo } from '@/lib/logo';
 import type { Db } from '@/lib/supabase';
-import { uniq } from '@/lib/utils';
+import { errorMessage, uniq } from '@/lib/utils';
 import {
   assembleBilling,
   assembleGlossary,
@@ -70,8 +70,8 @@ import {
   type AddInvoiceInput,
   type CreateOfficeReportInput,
   type CreateOfficeReportResult,
-  type CreateOrgInput,
   type CreateSiteInput,
+  type CreateSiteResult,
   type DataSource,
   type InviteReporterInput,
   type LinkUnknownSenderInput,
@@ -83,6 +83,7 @@ import {
   type ReviewGlossaryTermInput,
   type SaveReportPdfInput,
   type SourceUser,
+  type UpdateOrgInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
 } from '../source';
@@ -99,12 +100,44 @@ import type {
 const SIGNED_URL_TTL = 600; // 10 minutes (§15)
 /** Ids per `.in()` filter so PostgREST URLs stay well under proxy limits. */
 const IN_CHUNK = 100;
+/** Rows per request when reading a whole filtered set, under PostgREST's max_rows (1000). */
+const ARCHIVE_ROWS_PER_REQUEST = 500;
 
 function chunks<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
 }
+
+/**
+ * Every row of a filtered read, a page at a time: PostgREST cuts a response at max_rows without
+ * an error, so one unpaged select would silently drop rows. `page` must order by a unique column.
+ */
+async function allPages<T>(
+  page: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += ARCHIVE_ROWS_PER_REQUEST) {
+    const rows = unwrap(await page(from, from + ARCHIVE_ROWS_PER_REQUEST - 1));
+    out.push(...rows);
+    if (rows.length < ARCHIVE_ROWS_PER_REQUEST) return out;
+  }
+}
+
+/** Runs an `.in()` query per IN_CHUNK ids (deduplicated) and concatenates the rows. */
+async function inChunks<T>(
+  ids: readonly string[],
+  query: (part: string[]) => PromiseLike<T[]>,
+): Promise<T[]> {
+  if (!ids.length) return [];
+  return (await Promise.all(chunks(uniq(ids), IN_CHUNK).map((part) => query(part)))).flat();
+}
+
+/** Site detail Photos tab: the newest photos of the site, one page under PostgREST max_rows. */
+const SITE_PHOTO_LIMIT = 500;
 
 /** api-billing `invoices` rows (supabase/functions/api-billing/logic.ts InvoiceSummary). */
 interface StripeInvoiceSummary {
@@ -256,8 +289,9 @@ export class SupabaseSource implements DataSource {
   }
 
   private async reportsForSiteDays(siteDayIds: string[]): Promise<ReportRow[]> {
-    if (!siteDayIds.length) return [];
-    return unwrap(await this.sb.from('reports').select('*').in('site_day_id', siteDayIds));
+    return inChunks(siteDayIds, (part) =>
+      this.sb.from('reports').select('*').in('site_day_id', part).then(unwrap),
+    );
   }
 
   private async currentVersions(reports: ReportRow[]): Promise<ReportVersionRow[]> {
@@ -280,35 +314,53 @@ export class SupabaseSource implements DataSource {
     to: string,
     siteId?: string | null,
   ): Promise<CurrentManpowerRow[]> {
-    let q = this.sb
-      .from('current_manpower')
-      .select('*')
-      .eq('org_id', this.orgId)
-      .gte('date', from)
-      .lte('date', to);
-    if (siteId) q = q.eq('site_id', siteId);
-    return unwrap(await q);
+    return allPages((start, end) => {
+      let q = this.sb
+        .from('current_manpower')
+        .select('*')
+        .eq('org_id', this.orgId)
+        .gte('date', from)
+        .lte('date', to);
+      if (siteId) q = q.eq('site_id', siteId);
+      return q.order('id', { ascending: true }).range(start, end);
+    });
   }
 
+  /** `delaysOnly`: just the periods that lost time (all the Weather page uses). */
   private async weatherBetween(
     from: string,
     to: string,
     siteId?: string | null,
+    delaysOnly = false,
   ): Promise<CurrentWeatherRow[]> {
-    let q = this.sb
-      .from('current_weather')
-      .select('*')
-      .eq('org_id', this.orgId)
-      .gte('date', from)
-      .lte('date', to);
-    if (siteId) q = q.eq('site_id', siteId);
-    return unwrap(await q);
+    return allPages((start, end) => {
+      let q = this.sb
+        .from('current_weather')
+        .select('*')
+        .eq('org_id', this.orgId)
+        .gte('date', from)
+        .lte('date', to);
+      if (siteId) q = q.eq('site_id', siteId);
+      if (delaysOnly) q = q.or('lost_hours.gt.0,full_day.eq.true');
+      return q.order('id', { ascending: true }).range(start, end);
+    });
   }
 
   private async signedUrl(bucket: string, path: string | null | undefined): Promise<string | null> {
     if (!path) return null;
     const { data } = await this.sb.storage.from(bucket).createSignedUrl(path, SIGNED_URL_TTL);
     return data?.signedUrl ?? null;
+  }
+
+  /** Signed URLs for many objects in one request, by path; a path that fails is left out. */
+  private async signedUrls(bucket: string, paths: readonly string[]): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    if (!paths.length) return out;
+    const { data } = await this.sb.storage
+      .from(bucket)
+      .createSignedUrls(uniq(paths), SIGNED_URL_TTL);
+    for (const d of data ?? []) if (d.path && d.signedUrl && !d.error) out.set(d.path, d.signedUrl);
+    return out;
   }
 
   private async callFunction<T = unknown>(
@@ -420,96 +472,182 @@ export class SupabaseSource implements DataSource {
     if (!site) throw new Error(copy.errors.notFound);
     const today = formatDateInTz(this.now(), site.timezone);
     const days = monthDays(month);
-    const from = days[0]! < today ? days[0]! : today;
-    const to = days.at(-1)! > today ? days.at(-1)! : today;
-    const siteDays = await this.siteDays([siteId], from, to);
-    const reports = await this.reportsForSiteDays(siteDays.map((d) => d.id));
-    // Latest report may be outside the month: fetch the newest filed report for the site.
-    const latest = unwrap(
-      await this.sb
-        .from('reports')
+    const from = days[0]!;
+    const to = days.at(-1)!;
+    // Only the viewed month (calendar, month stats) and the latest report day are loaded, so an
+    // older month never pulls every row since then. The latest is the newest day with a filed
+    // report (site_days.report_id is set on filing) — by day, not by filed_at, because a typed
+    // report can be back-filled for an earlier day. When the latest is today it also carries
+    // "Crew today"; a day that is not filed has no crew to show.
+    const [monthSiteDays, latestDays] = await Promise.all([
+      this.siteDays([siteId], from, to),
+      this.sb
+        .from('site_days')
         .select('*')
         .eq('site_id', siteId)
-        .in('status', ['filed', 'signed_off'])
-        .order('filed_at', { ascending: false })
-        .limit(1),
-    );
-    const allReports = [...reports, ...latest.filter((r) => !reports.some((x) => x.id === r.id))];
-    const latestSiteDays =
-      latest.length && !siteDays.some((d) => d.id === latest[0]!.site_day_id)
-        ? unwrap(await this.sb.from('site_days').select('*').eq('id', latest[0]!.site_day_id))
-        : [];
-    const todayReport = allReports.find(
-      (r) => siteDays.find((d) => d.id === r.site_day_id)?.date === today,
-    );
-    const [manpower, weatherEvents, versions, questions, photoSources] = await Promise.all([
-      this.manpowerBetween(from, to, siteId),
-      this.weatherBetween(from, to, siteId),
-      this.sb
-        .from('report_versions')
-        .select('*')
-        .in('report_id', uniq([todayReport?.id, latest[0]?.id].filter((x): x is string => !!x)))
-        .then(unwrap),
-      todayReport
-        ? this.sb.from('questions').select('*').eq('report_id', todayReport.id).then(unwrap)
-        : Promise.resolve([] as QuestionRow[]),
-      this.sb
-        .from('report_sources')
-        .select('*')
-        .eq('kind', 'photo')
-        .in(
-          'report_id',
-          allReports.map((r) => r.id),
-        )
+        .not('report_id', 'is', null)
+        .lte('date', today)
+        .order('date', { ascending: false })
+        .limit(1)
         .then(unwrap),
     ]);
-    const photoMessages = photoSources.length
-      ? unwrap(
-          await this.sb
-            .from('messages')
-            .select('*')
-            .in(
-              'id',
-              photoSources.map((s) => s.message_id),
-            ),
-        )
-      : [];
+    const latestDay = latestDays[0];
+    const siteDays =
+      latestDay && !monthSiteDays.some((d) => d.id === latestDay.id)
+        ? [...monthSiteDays, latestDay]
+        : monthSiteDays;
+    const reports = await this.reportsForSiteDays(siteDays.map((d) => d.id));
+    const dateOfDay = new Map(siteDays.map((d) => [d.id, d.date]));
+    const todayReportIds = reports
+      .filter((r) => r.status !== 'void' && dateOfDay.get(r.site_day_id) === today)
+      .map((r) => r.id);
+    const latestReportId = latestDay?.report_id ?? null;
+    // The month's manpower / weather rows cover the calendar and month stats; the Latest card's
+    // report needs its own when it falls outside the month.
+    const latestOutside = latestDay && (latestDay.date < from || latestDay.date > to);
+    const [manpower, latestManpower, weatherEvents, latestWeather, versions, questions, photos] =
+      await Promise.all([
+        this.manpowerBetween(from, to, siteId),
+        latestOutside && latestReportId
+          ? this.sb
+              .from('current_manpower')
+              .select('*')
+              .eq('report_id', latestReportId)
+              .then(unwrap)
+          : Promise.resolve([] as CurrentManpowerRow[]),
+        this.weatherBetween(from, to, siteId),
+        latestOutside && latestReportId
+          ? this.sb.from('current_weather').select('*').eq('report_id', latestReportId).then(unwrap)
+          : Promise.resolve([] as CurrentWeatherRow[]),
+        inChunks([...todayReportIds, ...(latestReportId ? [latestReportId] : [])], (part) =>
+          this.sb.from('report_versions').select('*').in('report_id', part).then(unwrap),
+        ),
+        inChunks(todayReportIds, (part) =>
+          this.sb.from('questions').select('*').in('report_id', part).then(unwrap),
+        ),
+        this.sitePhotos(siteId, reports, siteDays),
+      ]);
     const rows: RowSet = {
       ...this.rowsFrom(core),
-      siteDays: [...siteDays, ...latestSiteDays],
-      reports: allReports,
+      siteDays: [...siteDays, ...photos.siteDays],
+      reports: [...reports, ...photos.reports],
       versions,
-      manpower,
-      weatherEvents,
+      manpower: [...manpower, ...latestManpower],
+      weatherEvents: [...weatherEvents, ...latestWeather],
       questions,
-      sources: photoSources as ReportSourceRow[],
-      messages: photoMessages as MessageRow[],
+      sources: photos.sources,
+      messages: photos.messages,
     };
     const detail = assembleSiteDetail(rows, this.ctx(), siteId, month);
-    const urls = await Promise.all(
-      (detail.photos ?? []).map((p) => this.signedUrl('photos', p.storagePath)),
+    const urls = await this.signedUrls(
+      'photos',
+      (detail.photos ?? []).map((p) => p.storagePath).filter((p): p is string => !!p),
     );
-    detail.photos = (detail.photos ?? []).map((p, i) => ({ ...p, url: urls[i] ?? null }));
+    detail.photos = (detail.photos ?? []).map((p) => ({
+      ...p,
+      url: p.storagePath ? (urls.get(p.storagePath) ?? null) : null,
+    }));
     return detail;
   }
 
   /**
-   * The Reports archive query (§P6) for a set of filters — filed / signed-off reports with their
-   * site day — before ordering and paging. Wrapped in an object so `await` doesn't run it.
+   * The Photos tab shows the site's photos from every report, not only the viewed month's
+   * (§11.4): the newest SITE_PHOTO_LIMIT photo sources, plus the reports and site days (for the
+   * report number and date) and messages (for the storage path) that are not loaded yet.
    */
-  private async reportArchiveQuery(filters: ReportFilters) {
-    const sb = this.sb;
-    let q = sb
-      .from('reports')
-      // reports↔site_days have FKs both ways (site_days.report_id too): name the embed's FK.
-      .select('*, site_days!reports_site_day_id_fkey!inner(id, date, site_id)', {
-        count: 'exact',
-      })
-      .eq('org_id', this.orgId)
-      .in('status', ['filed', 'signed_off']);
+  private async sitePhotos(
+    siteId: string,
+    loadedReports: ReportRow[],
+    loadedSiteDays: SiteDayRow[],
+  ): Promise<{
+    sources: ReportSourceRow[];
+    reports: ReportRow[];
+    siteDays: SiteDayRow[];
+    messages: MessageRow[];
+  }> {
+    const sources: ReportSourceRow[] = unwrap(
+      await this.sb
+        .from('report_sources')
+        .select('*, reports!inner(site_id)')
+        .eq('kind', 'photo')
+        .eq('reports.site_id', siteId)
+        .order('taken_at', { ascending: false, nullsFirst: false })
+        .limit(SITE_PHOTO_LIMIT),
+    ).map(({ reports: _site, ...s }) => s);
+    if (!sources.length) return { sources, reports: [], siteDays: [], messages: [] };
+    const haveReport = new Set(loadedReports.map((r) => r.id));
+    const [reports, messages] = await Promise.all([
+      inChunks(
+        sources.map((s) => s.report_id).filter((id) => !haveReport.has(id)),
+        (part) => this.sb.from('reports').select('*').in('id', part).then(unwrap),
+      ),
+      inChunks(
+        sources.map((s) => s.message_id),
+        (part) => this.sb.from('messages').select('*').in('id', part).then(unwrap),
+      ),
+    ]);
+    const haveDay = new Set(loadedSiteDays.map((d) => d.id));
+    const siteDays = await inChunks(
+      reports.map((r) => r.site_day_id).filter((id) => !haveDay.has(id)),
+      (part) => this.sb.from('site_days').select('*').in('id', part).then(unwrap),
+    );
+    return { sources, reports, siteDays, messages };
+  }
+
+  /**
+   * The archive's text search (§P6 "report text + transcripts") as a PostgREST `or` filter over
+   * report_archive: report number, site name, project code and the current version's summary (a
+   * substring, as in the demo), or a transcript of the report matching it (full text). `null`
+   * without a query; `''` when the query has nothing left to search for.
+   */
+  private async archiveTextFilter(query: string | null | undefined): Promise<string | null> {
+    const text = query?.trim();
+    if (!text) return null;
+    // `,` `(` `)` structure an `or` filter, `"` `\` quote in it, `%` `*` are ilike wildcards.
+    const safe = text
+      .replace(/[,()"\\%*]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!safe) return '';
+    const tr = unwrap(
+      await this.sb
+        .from('transcripts')
+        .select('message_id')
+        .textSearch('text', safe, { type: 'websearch', config: 'english' })
+        .limit(IN_CHUNK),
+    );
+    const srcs = await inChunks(
+      tr.map((t) => t.message_id),
+      (part) =>
+        this.sb.from('report_sources').select('report_id').in('message_id', part).then(unwrap),
+    );
+    // At most IN_CHUNK ids, so the request URL stays well under proxy limits.
+    const ids = uniq(srcs.map((x) => x.report_id)).slice(0, IN_CHUNK);
+    const like = `ilike.%${safe}%`;
+    return [
+      `report_no.${like}`,
+      `site_name.${like}`,
+      `project_code.${like}`,
+      `summary.${like}`,
+      ...(ids.length ? [`id.in.(${ids.join(',')})`] : []),
+    ].join(',');
+  }
+
+  /**
+   * The Reports archive (§P6) for a set of filters, before ordering and paging: report_archive
+   * rows (filed / signed-off reports with their current version's date, lost hours, incident flag
+   * and summary), so every filter runs server-side without id lists in the URL.
+   */
+  private archive(
+    columns: string,
+    filters: ReportFilters,
+    text: string | null,
+    opts: { count?: 'exact'; head?: boolean } = {},
+  ) {
+    let q = this.sb.from('report_archive').select(columns, opts).eq('org_id', this.orgId);
     if (filters.siteId) q = q.eq('site_id', filters.siteId);
-    if (filters.from) q = q.gte('site_days.date', filters.from);
-    if (filters.to) q = q.lte('site_days.date', filters.to);
+    if (filters.from) q = q.gte('date', filters.from);
+    if (filters.to) q = q.lte('date', filters.to);
     switch (filters.status) {
       case 'needs_review':
         q = q.eq('status', 'filed').eq('needs_review', true);
@@ -528,95 +666,103 @@ export class SupabaseSource implements DataSource {
     }
     if (filters.edited) q = q.gt('current_version', 1);
     if (filters.late) q = q.eq('is_late', true);
-    if (filters.hasWeatherDelay) {
-      const wx = unwrap(
-        await sb
-          .from('current_weather')
-          .select('report_id')
-          .eq('org_id', this.orgId)
+    if (filters.hasWeatherDelay) q = q.or('lost_hours.gt.0,kind.eq.weather_day');
+    if (filters.incident) q = q.eq('has_incident', true);
+    if (text === '') q = q.in('id', []);
+    else if (text) q = q.or(text);
+    return q;
+  }
+
+  /** Archive order: newest report date first, then by site (as the demo sorts). */
+  private archiveOrdered(q: ReturnType<SupabaseSource['archive']>) {
+    return q
+      .order('date', { ascending: false })
+      .order('site_name', { ascending: true })
+      .order('received_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true });
+  }
+
+  /** Lost weather hours over every report matching the filters, not just the page shown. */
+  private async archiveWeatherHours(filters: ReportFilters, text: string | null): Promise<number> {
+    let total = 0;
+    for (let from = 0; ; from += ARCHIVE_ROWS_PER_REQUEST) {
+      const rows = unwrap(
+        await this.archive('id, lost_hours', filters, text)
           .gt('lost_hours', 0)
-          .limit(1000),
-      );
-      q = q.or(
-        `id.in.(${uniq(wx.map((w) => w.report_id)).join(',') || '00000000-0000-0000-0000-000000000000'}),kind.eq.weather_day`,
-      );
+          .order('id', { ascending: true })
+          .range(from, from + ARCHIVE_ROWS_PER_REQUEST - 1),
+      ) as unknown as Array<Pick<ReportArchiveRow, 'id' | 'lost_hours'>>;
+      total += rows.reduce((a, r) => a + Number(r.lost_hours), 0);
+      if (rows.length < ARCHIVE_ROWS_PER_REQUEST) break;
     }
-    if (filters.incident) {
-      const inc = unwrap(
-        await sb
+    return Math.round(total * 100) / 100;
+  }
+
+  /**
+   * The versions an archive page needs, without their data: the current one (its PDF) and
+   * version 1 (who wrote it: a typed report stays the office's after an edit, it does not become
+   * the site manager's). assembleReportItems reads only these columns.
+   */
+  private async archiveVersions(reports: ReportRow[]): Promise<ReportVersionRow[]> {
+    const cur = new Map(reports.map((r) => [r.id, r.current_version]));
+    const rows = await inChunks(
+      reports.map((r) => r.id),
+      (part) =>
+        this.sb
           .from('report_versions')
-          .select('report_id')
-          .neq('data->safety->incidents', '[]')
-          .limit(1000),
-      );
-      q = q.in('id', uniq(inc.map((i) => i.report_id)));
-    }
-    const text = filters.q?.trim();
-    if (text) {
-      const safe = text.replace(/[,()]/g, ' ');
-      const tr = unwrap(
-        await sb
-          .from('transcripts')
-          .select('message_id')
-          .textSearch('text', safe, { type: 'websearch', config: 'english' })
-          .limit(200),
-      );
-      const srcs = tr.length
-        ? unwrap(
-            await sb
-              .from('report_sources')
-              .select('report_id')
-              .in(
-                'message_id',
-                tr.map((t) => t.message_id),
-              ),
-          )
-        : [];
-      const ids = uniq(srcs.map((s) => s.report_id));
-      q = q.or(`report_no.ilike.%${safe}%${ids.length ? `,id.in.(${ids.join(',')})` : ''}`);
-    }
-    return { q };
+          .select('report_id, version, author, pdf_path')
+          .in('report_id', part)
+          .then(unwrap),
+    );
+    return rows.filter(
+      (v) => v.version === 1 || cur.get(v.report_id) === v.version,
+    ) as ReportVersionRow[];
   }
 
   async listReports(filters: ReportFilters) {
     const sb = this.sb;
     const pageSize = filters.pageSize ?? PAGE_SIZE;
     const page = Math.max(1, filters.page ?? 1);
-    const [core, { q }] = await Promise.all([this.core(), this.reportArchiveQuery(filters)]);
-    const res = await q
-      .order('received_at', { ascending: false, nullsFirst: false })
-      .range((page - 1) * pageSize, page * pageSize - 1);
-    if (res.error) throw new Error(res.error.message);
-    const raw = (res.data ?? []) as unknown as Array<
-      ReportRow & { site_days: { id: string; date: string; site_id: string } | null }
-    >;
-    const reports: ReportRow[] = raw.map(({ site_days: _sd, ...r }) => r);
-    const siteDays = raw
-      .filter((r) => r.site_days)
-      .map(
-        (r) =>
-          ({
-            id: r.site_days!.id,
-            date: r.site_days!.date,
-            site_id: r.site_days!.site_id,
-          }) as SiteDayRow,
-      );
+    const [core, text] = await Promise.all([this.core(), this.archiveTextFilter(filters.q)]);
+    const [res, weatherHours] = await Promise.all([
+      this.archiveOrdered(this.archive('*', filters, text, { count: 'exact' })).range(
+        (page - 1) * pageSize,
+        page * pageSize - 1,
+      ),
+      this.archiveWeatherHours(filters, text),
+    ]);
+    if (res.error) {
+      // A page past the last one (a stale or typed URL): PostgREST answers 416. Return it empty
+      // with the real total, like a page just past the end, so the archive goes back to page 1.
+      if (res.error.code !== 'PGRST103' || page === 1) throw new Error(res.error.message);
+      const head = await this.archive('id', filters, text, { count: 'exact', head: true });
+      if (head.error) throw new Error(head.error.message);
+      return paginate([], head.count ?? 0, filters, weatherHours);
+    }
+    const raw = (res.data ?? []) as unknown as ReportArchiveRow[];
+    const reports: ReportRow[] = raw.map(
+      ({
+        date: _date,
+        site_name: _site,
+        project_code: _code,
+        lost_hours: _lost,
+        has_incident: _incident,
+        summary: _summary,
+        ...r
+      }) => r,
+    );
+    const siteDays = raw.map(
+      (r) => ({ id: r.site_day_id, date: r.date, site_id: r.site_id }) as SiteDayRow,
+    );
+    const incidentIds = new Set(raw.filter((r) => r.has_incident).map((r) => r.id));
     const ids = reports.map((r) => r.id);
     const [manpower, weatherEvents, versions] = ids.length
       ? await Promise.all([
           sb.from('current_manpower').select('*').in('report_id', ids).then(unwrap),
           sb.from('current_weather').select('*').in('report_id', ids).then(unwrap),
-          this.currentVersions(reports),
+          this.archiveVersions(reports),
         ])
       : [[], [], []];
-    const incidentIds = new Set(
-      versions
-        .filter(
-          (v) =>
-            ((v.data as unknown as DailyReportData | null)?.safety?.incidents?.length ?? 0) > 0,
-        )
-        .map((v) => v.report_id),
-    );
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays,
@@ -626,13 +772,7 @@ export class SupabaseSource implements DataSource {
       weatherEvents,
     };
     const items = assembleReportItems(rows, reports, incidentIds);
-    const weatherHours = weatherEvents.reduce((a, w) => a + Number(w.lost_hours), 0);
-    return paginate(
-      items,
-      res.count ?? items.length,
-      filters,
-      Math.round(weatherHours * 100) / 100,
-    );
+    return paginate(items, res.count ?? items.length, filters, weatherHours);
   }
 
   async getReportDetail(reportId: string, version?: number | null) {
@@ -765,31 +905,26 @@ export class SupabaseSource implements DataSource {
         .gte('period_end', start)
         .then(unwrap),
     ]);
-    const reportIds = uniq(manpower.map((m) => m.report_id));
-    const [reports, sources] = reportIds.length
-      ? await Promise.all([
-          this.sb.from('reports').select('*').in('id', reportIds).then(unwrap),
-          this.user.role === 'accounts'
-            ? Promise.resolve([] as ReportSourceRow[])
-            : this.sb
-                .from('report_sources')
-                .select('*')
-                .eq('kind', 'audio')
-                .in('report_id', reportIds)
-                .then(unwrap),
-        ])
-      : [[], []];
-    const transcripts = sources.length
-      ? unwrap(
-          await this.sb
-            .from('transcripts')
-            .select('*')
-            .in(
-              'message_id',
-              sources.map((s) => s.message_id),
-            ),
-        )
-      : [];
+    // Reports, their audio and transcripts are admin/pm/ops only (RLS): an accounts user gets
+    // the hours and report numbers from current_manpower alone. Id lists go in IN_CHUNK parts.
+    const reportIds = this.user.role === 'accounts' ? [] : manpower.map((m) => m.report_id);
+    const [reports, sources] = await Promise.all([
+      inChunks(reportIds, (part) =>
+        this.sb.from('reports').select('*').in('id', part).then(unwrap),
+      ),
+      inChunks(reportIds, (part) =>
+        this.sb
+          .from('report_sources')
+          .select('*')
+          .eq('kind', 'audio')
+          .in('report_id', part)
+          .then(unwrap),
+      ),
+    ]);
+    const transcripts = await inChunks(
+      sources.map((s) => s.message_id),
+      (part) => this.sb.from('transcripts').select('*').in('message_id', part).then(unwrap),
+    );
     const rows: RowSet = {
       ...this.rowsFrom(core),
       manpower,
@@ -801,11 +936,13 @@ export class SupabaseSource implements DataSource {
     return assembleHours(rows, this.ctx(), week, siteId);
   }
 
-  async getWeather(month: string, siteId: string | null = null) {
+  async getWeather(month: string, site: string | null = null) {
     const core = await this.core();
     const days = monthDays(month);
+    // As assembleWeather: a site that is not the org's shows every site.
+    const siteId = site && core.sites.some((s) => s.id === site) ? site : null;
     const [weatherEvents, packs] = await Promise.all([
-      this.weatherBetween(days[0]!, days.at(-1)!, siteId),
+      this.weatherBetween(days[0]!, days.at(-1)!, siteId, true),
       this.sb
         .from('evidence_packs')
         .select('*')
@@ -814,10 +951,11 @@ export class SupabaseSource implements DataSource {
         .limit(50)
         .then(unwrap),
     ]);
-    const reportIds = uniq(weatherEvents.map((w) => w.report_id));
-    const reports = reportIds.length
-      ? unwrap(await this.sb.from('reports').select('*').in('id', reportIds))
-      : [];
+    // The reports tell a site manager's report (a photo was asked for) from a typed one.
+    const reports = await inChunks(
+      weatherEvents.map((w) => w.report_id),
+      (part) => this.sb.from('reports').select('*').in('id', part).then(unwrap),
+    );
     const rows: RowSet = {
       ...this.rowsFrom(core),
       weatherEvents,
@@ -1127,10 +1265,12 @@ export class SupabaseSource implements DataSource {
       const byId = new Map(found.map((r) => [r.id, r]));
       reports = wanted.map((id) => byId.get(id)).filter((r): r is Picked => !!r);
     } else {
-      const { q } = await this.reportArchiveQuery(selection.filters);
-      const res = await q
-        .order('received_at', { ascending: false, nullsFirst: false })
-        .range(0, PDF_EXPORT_LIMIT - 1);
+      const text = await this.archiveTextFilter(selection.filters.q);
+      const res = await this.archiveOrdered(
+        this.archive('id, report_no, current_version', selection.filters, text, {
+          count: 'exact',
+        }),
+      ).range(0, PDF_EXPORT_LIMIT - 1);
       if (res.error) throw new Error(res.error.message);
       reports = (res.data ?? []) as unknown as Picked[];
       total = res.count ?? reports.length;
@@ -1162,12 +1302,12 @@ export class SupabaseSource implements DataSource {
     }
 
     const files: PdfLink[] = [];
-    const missing: string[] = [];
+    const missing: PdfLinkBatch['missing'] = [];
     for (const r of reports) {
       const path = pathOf(r);
       const url = path ? urlByPath.get(path) : undefined;
       if (url) files.push({ reportId: r.id, reportNo: r.report_no, url });
-      else missing.push(r.report_no);
+      else missing.push({ reportId: r.id, reportNo: r.report_no });
     }
     return { files, missing, total, capped: total > PDF_EXPORT_LIMIT };
   }
@@ -1367,17 +1507,16 @@ export class SupabaseSource implements DataSource {
       .eq('user_id', userId);
     if (error) throw new Error(error.message);
   }
-  async createOrg(input: CreateOrgInput) {
-    const res = (await this.rpc('create_org', {
+  async updateOrg(input: UpdateOrgInput) {
+    await this.rpc('update_org', {
+      p_org_id: this.orgId,
       p_name: input.name,
       p_timezone: input.timezone,
       p_address: input.address ?? null,
       p_license_no: input.licenseNo ?? null,
-    })) as { id?: string } | null;
-    if (!res?.id) throw new Error(copy.errors.generic);
-    return { orgId: res.id };
+    });
   }
-  async createSite(input: CreateSiteInput) {
+  async createSite(input: CreateSiteInput): Promise<CreateSiteResult> {
     const { data, error } = await this.sb
       .from('sites')
       .insert({
@@ -1396,9 +1535,28 @@ export class SupabaseSource implements DataSource {
       .select('id')
       .single();
     if (error || !data) throw new Error(error?.message ?? copy.errors.generic);
-    if (input.recipients?.length) await this.saveSiteRecipients(data.id, input.recipients);
-    if (input.reporter) await this.inviteReporter({ ...input.reporter, siteIds: [data.id] });
-    return { siteId: data.id };
+    // The site exists from here on: report a failed follow-up instead of throwing, or a retry
+    // would hit unique(org_id, project_code) or create a second site.
+    const result: CreateSiteResult = { siteId: data.id, inviteError: null, recipientsError: null };
+    if (input.recipients?.length) {
+      try {
+        await this.saveSiteRecipients(data.id, input.recipients);
+      } catch (err) {
+        result.recipientsError = errorMessage(err, copy.errors.generic);
+      }
+    }
+    if (input.reporter) {
+      try {
+        await this.inviteReporter({ ...input.reporter, siteIds: [data.id] });
+      } catch (err) {
+        result.inviteError = errorMessage(err, copy.errors.generic);
+      }
+    }
+    // A running subscription bills one unit per active site (as after pause / resume).
+    await this.callFunction('api-billing', { action: 'sync', orgId: this.orgId }).catch(
+      () => undefined,
+    );
+    return result;
   }
   async updateSite(siteId: string, patch: UpdateSitePatch) {
     const row: Partial<SiteRow> = {};

@@ -23,6 +23,7 @@ import {
 import { copy } from '@/copy/en';
 import { useRequestEvidencePack } from '@/data/hooks';
 import type { DelayEntry, SiteOption } from '@/data/types';
+import { formatMonthLabel } from '@/lib/format';
 import { monthDaysRange } from './month';
 
 const SECTIONS = ['summary', 'reports', 'transcripts', 'photos', 'weather'] as const;
@@ -59,9 +60,12 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
   const [sections, setSections] = useState<string[]>([...SECTIONS]);
   const [error, setError] = useState<string | null>(null);
 
+  // The page has loaded this month's delays only, so a period reaching past it is summed for
+  // this month and says so (the pack itself covers the whole period).
   const inScope = entries.filter((e) => e.siteId === siteId && e.date >= from && e.date <= to);
   const siteDays = new Set(inScope.map((e) => `${e.siteId}:${e.date}`)).size;
   const hours = inScope.reduce((a, e) => a + e.lostHours, 0);
+  const pastMonth = from < range.start || to > range.end;
 
   const toggle = (key: string, on: boolean) =>
     setSections((prev) => (on ? [...prev, key] : prev.filter((k) => k !== key)));
@@ -110,7 +114,7 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
             <Label htmlFor="pack-site">{c.site}</Label>
             <Select value={siteId} onValueChange={setSiteId}>
               <SelectTrigger id="pack-site">
-                <SelectValue />
+                <SelectValue placeholder={d.sitePlaceholder} />
               </SelectTrigger>
               <SelectContent>
                 {sites.map((s) => (
@@ -150,7 +154,9 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
               </div>
             </div>
             <p className="font-mono text-[12px] text-dust" data-testid="pack-summary">
-              {d.summary(siteDays, formatHours(hours))}
+              {pastMonth
+                ? d.summaryMonthOnly(formatMonthLabel(month), siteDays, formatHours(hours))
+                : d.summary(siteDays, formatHours(hours))}
             </p>
           </fieldset>
           <fieldset className="grid gap-2">
