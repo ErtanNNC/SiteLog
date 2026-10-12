@@ -59,7 +59,7 @@ Runtime secrets are not copied from GitHub: edge-function secrets stay in `supab
 - **Re-render a PDF**: `select enqueue_job('render_pdf', jsonb_build_object('reportId', '<uuid>', 'version', <n>, 'emailRecipients', false));`
 - **Reminders not firing**: check `scheduler_state.last_tick`, the pg_cron job (`select * from cron.job_run_details order by start_time desc limit 20;`) and that `site_days` for today exist with the right `deadline_at` (site time zone + DST).
 - **A reporter changed phones**: Team → row menu → Disable, then Invite reporter with the new number (messages are matched by number, so Team → Edit only changes name, role, sites and languages).
-- **Retention**: the nightly `retention_cleanup` job deletes audio/photos older than `AUDIO_RETENTION_DAYS` (default 730). Reports and PDFs are kept.
+- **Retention**: the nightly `retention_cleanup` job deletes audio/photos older than `AUDIO_RETENTION_DAYS` (default 730) and `done` jobs finished more than 30 days ago (dead and discarded jobs stay for `/ops`). Reports and PDFs are kept.
 - **Backups**: Supabase PITR/daily backups; restore drill = restore to a branch project, run `pnpm test:db` against it, check the latest `reports` row.
 
 ## 4. Incident playbooks
@@ -149,3 +149,15 @@ for f in supabase/migrations/*.sql; do psql -h 127.0.0.1 -p 55432 -U postgres -d
 - FIFO claiming (`order by run_after, id`): when the queue backs up, acks (`inbound_message`) wait behind transcription and extraction (ack p95 26 min in the saturated run, target 5 s) and almost no report finishes until the backlog clears.
 - Intake race: inbound messages of one conversation are routed by two slots at once when they arrive within about a second or wait together in a backed-up queue (claimed in the same tick). Depending on the interleaving: two reports for one site-day (one left `collecting` with the photo) and a wrong "Got the photos…" reply; or a second ack plus an extraction that runs before the voice note is transcribed, whose empty draft looks like a day off, so the working day is voided and logged as `weather_day` / `no_work` (≈ 1 in 150–500 reports in these runs).
 - A photo that lands while its report is being extracted triggers a second extraction (≈ 1.5 Claude extraction calls per report).
+
+## 8. End-to-end tests against a local Supabase stack
+
+CI runs them in the `e2e-supabase` job (`.github/workflows/ci.yml`). Locally, with Docker running:
+
+```sh
+supabase start -x studio,imgproxy,logflare,vector,supavisor,postgres-meta,mailpit   # applies migrations + seed
+set -a; eval "$(supabase status -o env)"; set +a
+pnpm e2e:supabase      # builds the panel in Supabase mode and signs in a seeded user via generateLink
+```
+
+The specs live in `apps/web/e2e/supabase/`; the payroll CSV and EOT pack tests need the edge runtime (`supabase start` serves `supabase/functions`; put dummy values for their env in `supabase/functions/.env`). Where AWS ECR is blocked, prefix `supabase start` with `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io`.

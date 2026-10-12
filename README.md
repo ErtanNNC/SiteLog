@@ -73,6 +73,9 @@ Open decisions from §19 are left as the spec recommends (shared WhatsApp number
 | `pnpm replay-webhook -- fixtures/webhooks/*.json` | Replay Meta payloads against a local webhook (signs them with `WA_APP_SECRET`) |
 | `pnpm eval`                                       | Golden-transcript extraction evals, 26 cases (needs `ANTHROPIC_API_KEY`)       |
 | `pnpm eval -- --recorded` / `--case <id>`         | Score the recorded tool outputs offline / run a subset (`--list` shows cases)  |
+| `pnpm e2e`                                        | Playwright on the demo build: smoke, screenshots, axe WCAG 2.2 AA + keyboard   |
+| `pnpm e2e:supabase`                               | Playwright against a local Supabase stack (`supabase start`, see RUNBOOK §8)   |
+| `pnpm loadtest`                                   | N reports through the real job loop on PGlite or `DATABASE_URL` (RUNBOOK §7)   |
 
 ## Licences
 
