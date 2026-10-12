@@ -1,4 +1,10 @@
-import type { DailyReportData, MessageRow, ReportRow, TranscriptRow } from '@sitelog/shared';
+import {
+  looksLikeDayOff,
+  type DailyReportData,
+  type MessageRow,
+  type ReportRow,
+  type TranscriptRow,
+} from '@sitelog/shared';
 import { quickClassify } from '../ai/classify';
 import type { Ctx } from '../context';
 import { allAudioTranscribed, audioPending, sendProgressIfSlow } from '../pipeline/progress';
@@ -108,18 +114,7 @@ export async function voidReport(ctx: Ctx, reportId: string): Promise<void> {
   });
 }
 
-/** Said in the note itself: an empty draft alone is not evidence (a transcript may be missing). */
-const DAY_OFF_WORDS =
-  /\b(no work|nobody (worked|came|was on site|on site|showed)|no one (worked|came|on site)|no crew|(site|street|road) (was |is )?closed|rained out|weather day|stay(ed)? home|sent (everyone|everybody|the crew|the guys|them) home|no (hubo )?trabajo|nadie (trabaj|vino|en la obra))/i;
-
-/** The note described a day off: no crew and no work in the draft, and the speaker said so. */
-export function looksLikeDayOff(data: DailyReportData, text: string): boolean {
-  return (
-    data.workPerformed.length === 0 &&
-    data.manpower.every((m) => m.workers === 0) &&
-    DAY_OFF_WORDS.test(text)
-  );
-}
+export { looksLikeDayOff };
 
 /**
  * §F10 for long notes: "No work today, the city closed the street… crew back at seven tomorrow"
