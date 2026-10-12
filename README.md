@@ -70,7 +70,8 @@ Open decisions from §19 are left as the spec recommends (shared WhatsApp number
 | `pnpm test:db`                                    | PGlite migration, seed, RLS and RPC tests                                      |
 | `pnpm seed:demo`                                  | Regenerate `supabase/seed.sql` from the demo dataset                           |
 | `pnpm replay-webhook -- fixtures/webhooks/*.json` | Replay Meta payloads against a local webhook (signs them with `WA_APP_SECRET`) |
-| `pnpm eval`                                       | Golden-transcript extraction evals (needs `ANTHROPIC_API_KEY`)                 |
+| `pnpm eval`                                       | Golden-transcript extraction evals, 26 cases (needs `ANTHROPIC_API_KEY`)       |
+| `pnpm eval -- --recorded` / `--case <id>`         | Score the recorded tool outputs offline / run a subset (`--list` shows cases)  |
 
 ## Licences
 
