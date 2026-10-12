@@ -19,11 +19,18 @@ import {
   DropdownMenuTrigger,
 } from '../ui/DropdownMenu';
 import { navItemsFor } from './nav';
+import { assetUrl } from '@/lib/asset';
 
 export function Logo({ className }: { className?: string }) {
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
-      <img src="/brand/logo-mark.svg" alt="" width={32} height={32} className="size-8 shrink-0" />
+      <img
+        src={assetUrl('brand/logo-mark.svg')}
+        alt=""
+        width={32}
+        height={32}
+        className="size-8 shrink-0"
+      />
       <span className="font-display text-[22px] leading-none text-chalk">{copy.app.name}</span>
     </span>
   );

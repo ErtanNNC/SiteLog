@@ -7,6 +7,8 @@ interface ImportMetaEnv {
   readonly VITE_WA_DISPLAY_NUMBER?: string;
   readonly VITE_DEMO?: string;
   readonly VITE_SENTRY_DSN?: string;
+  /** `memory` for hosts without history-API routing (the demo artifact build). */
+  readonly VITE_ROUTER?: string;
 }
 
 interface ImportMeta {

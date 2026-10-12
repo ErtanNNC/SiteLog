@@ -20,6 +20,7 @@ import { Tip } from '@/components/ui/Tooltip';
 import { copy } from '@/copy/en';
 import { demoUserFor } from '@/data/demo/store';
 import { errorMessage } from '@/lib/utils';
+import { assetUrl } from '@/lib/asset';
 
 const schema = z.object({ email: z.string().trim().email(copy.login.emailInvalid) });
 type FormValues = z.infer<typeof schema>;
@@ -92,7 +93,13 @@ export default function LoginPage() {
         aria-label={copy.app.name}
       >
         <div className="flex items-center gap-3">
-          <img src="/brand/logo-mark.svg" alt="" width={40} height={40} className="size-10" />
+          <img
+            src={assetUrl('brand/logo-mark.svg')}
+            alt=""
+            width={40}
+            height={40}
+            className="size-10"
+          />
           <span className="font-display text-[26px] leading-none">{copy.app.name}</span>
         </div>
         <div className="my-10 max-w-xl lg:my-16">
