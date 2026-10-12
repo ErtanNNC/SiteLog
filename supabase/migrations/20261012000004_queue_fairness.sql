@@ -5,8 +5,9 @@
 --      report before its transcript existed. The key is derived on insert, so the webhook and the
 --      worker keep calling enqueue_job unchanged.
 --   2. claim_jobs(): skips a job while an earlier job with the same key is due or running, and
---      claims short conversational jobs first (acks were waiting behind transcription and
---      extraction under load: ack p95 26 min in the load test).
+--      claims short conversational jobs first, then filing, PDF and the report email (acks were
+--      waiting behind transcription and extraction under load: ack p95 26 min in the load test;
+--      the filed-report email waited ~37 min behind them once acks were first).
 --   3. At most one non-void report per site-day (edits are versions of that report).
 --   4. Indexes for lookups that were sequential scans: reports by site-day, reporters by phone
 --      (webhook + every session), site_reporters by reporter.
@@ -40,7 +41,7 @@ create or replace function job_priority(p_type text) returns int
 language sql immutable set search_path = public as $$
   select case
     when p_type in ('inbound_message', 'send_message', 'send_template', 'send_welcome') then 0
-    when p_type in ('parse_reply', 'decide_next', 'file_report', 'render_pdf') then 1
+    when p_type in ('parse_reply', 'decide_next', 'file_report', 'render_pdf', 'send_email') then 1
     when p_type in ('transcribe_audio', 'extract_report') then 2
     else 3
   end;

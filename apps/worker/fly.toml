@@ -12,7 +12,9 @@ primary_region = "dfw"
 [env]
   NODE_ENV = "production"
   WORKER_PORT = "8080"
-  WORKER_CONCURRENCY = "4"
+  # Slots mostly wait on WhatsApp / OpenAI / Claude: 2 machines x 10 file 500 reports in 30 min
+  # (load test, RUNBOOK section 7).
+  WORKER_CONCURRENCY = "10"
   AUDIO_RETENTION_DAYS = "730"
   WA_GRAPH_VERSION = "v21.0"
   TRANSCRIBE_MODEL = "whisper-1"
@@ -28,7 +30,7 @@ primary_region = "dfw"
   force_https = true
   auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 2
 
   [[http_service.checks]]
     interval = "30s"
