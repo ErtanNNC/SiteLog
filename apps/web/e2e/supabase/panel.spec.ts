@@ -35,9 +35,10 @@ test('magic-link sign-in lands on the Overview with the seeded sites', async ({ 
   for (const name of ['Riverside Lofts — Block B', 'Elm St. Townhomes', 'Oakmont Medical Center']) {
     await expect(table.getByRole('link', { name, exact: true })).toBeVisible();
   }
-  await expect(
-    page.getByTestId('needs-attention').locator('[data-kind]').first(),
-  ).toHaveAttribute('data-kind', 'missing');
+  await expect(page.getByTestId('needs-attention').locator('[data-kind]').first()).toHaveAttribute(
+    'data-kind',
+    'missing',
+  );
 });
 
 test('realtime: a site-day change on the server flips the Overview row without a reload', async ({
