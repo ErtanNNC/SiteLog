@@ -31,6 +31,7 @@ export const ROUTE_ROLES: Record<string, MemberRole[]> = {
   reports: ['admin', 'pm', 'ops'],
   hours: ['admin', 'pm', 'ops', 'accounts'],
   weather: ['admin', 'pm', 'ops'],
+  try: ['admin', 'pm', 'ops'],
   team: ['admin', 'ops'],
   glossary: ['admin', 'pm', 'ops'],
   settings: ['admin'],

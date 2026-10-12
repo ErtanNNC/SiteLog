@@ -76,6 +76,38 @@ test.describe('SiteLog panel (demo mode)', () => {
     await expect(page.getByText('Elm St. Townhomes — no report')).toHaveCount(0);
   });
 
+  test('try it on WhatsApp: voice note → question → OK → Overview shows Riverside filed', async ({
+    page,
+  }) => {
+    await signIn(page);
+    await expect(page.getByTestId('try-card')).toBeVisible();
+    await page
+      .getByRole('navigation', { name: 'Main navigation' })
+      .getByRole('link', { name: /^Try it on WhatsApp/ })
+      .click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Try it on WhatsApp');
+    const log = page.getByRole('log', { name: 'Conversation' });
+    await page.getByRole('button', { name: 'Send Marco’s voice note' }).click();
+    await expect(log.getByText('Got it, Marco — 2 min 48 s.')).toBeVisible();
+    await log.getByRole('button', { name: '5 · full day' }).click({ timeout: 20_000 });
+    await expect(log.getByText(/23 on site · 4 subs · 184 h/)).toBeVisible({ timeout: 20_000 });
+    await log.getByRole('button', { name: 'OK, file it' }).click();
+    await expect(log.getByText(/^Filed\. Daily Report RL-2041-0187/)).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByTestId('try-report-no')).toHaveText('RL-2041-0187');
+    await page.getByTestId('try-open-report').click();
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText(
+      'RL-2041-0187',
+    );
+    await page
+      .getByRole('navigation', { name: 'Main navigation' })
+      .getByRole('link', { name: /^Overview/ })
+      .click();
+    const row = page.getByRole('row').filter({ hasText: 'Riverside Lofts — Block B' });
+    await expect(row.getByText('Filed', { exact: true })).toBeVisible();
+  });
+
   test('mobile: the menu button opens the drawer navigation', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await signIn(page);

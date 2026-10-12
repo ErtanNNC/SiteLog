@@ -13,19 +13,28 @@ import type {
   ManpowerEntryRow,
   MessageRow,
   NotificationRow,
+  QuestionRow,
   ReportRow,
+  ReportSourceRow,
   ReportVersionRow,
   SiteDayRow,
   SiteRow,
+  TranscriptRow,
   WeatherEventRow,
   WorkItemRow,
 } from '@sitelog/shared/db/types.ts';
-import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
+import type {
+  InvoiceStatus,
+  MemberRole,
+  ReporterStatus,
+  SiteDayStatus,
+} from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
 import { formatReportNo, logoStoragePath } from '@sitelog/shared/report/numbering.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
+import { deadlineInstant } from '@sitelog/shared/schedule/reminders.ts';
 import { fromZonedTime } from 'date-fns-tz';
 import { copy } from '@/copy/en';
 import { localId } from '@/lib/utils';
@@ -1225,6 +1234,597 @@ export class DemoStore {
     this.emit({ table: 'reports', id: reportId });
     return true;
   }
+
+  // ─── Field simulator (/try): what the worker writes while a reporter talks to the agent ───
+
+  private todaySiteDay(site: SiteRow): SiteDayRow {
+    const date = formatDateInTz(this.now, site.timezone);
+    let sd = this.data.siteDays.find((x) => x.site_id === site.id && x.date === date);
+    if (!sd) {
+      const deadline = (site.deadline ?? this.data.settings.default_deadline).slice(0, 5);
+      sd = {
+        id: localId('siteday'),
+        site_id: site.id,
+        date,
+        status: 'pending',
+        deadline_at: deadlineInstant(date, deadline, site.timezone).toISOString(),
+        reminder_stage: 0,
+        reminders_paused: false,
+        is_late: false,
+        weather: null,
+        report_id: null,
+        created_at: this.nowIso(),
+        updated_at: this.nowIso(),
+      };
+      this.data.siteDays.push(sd);
+    }
+    return sd;
+  }
+
+  /** The status an unreported day has at "now" on the §7.4 ladder (pending → reminded → missing). */
+  private unreportedStatus(sd: SiteDayRow): SiteDayStatus {
+    const s = this.data.settings;
+    const deadline = Date.parse(sd.deadline_at);
+    const now = this.now.getTime();
+    if (s.missing_enabled && now >= deadline + s.missing_offset_min * 60_000) return 'missing';
+    if (s.reminder1_enabled && now >= deadline + s.reminder1_offset_min * 60_000) return 'reminded';
+    return 'pending';
+  }
+
+  /** Today at a site, and what replacing it for the simulator would leave behind. */
+  fieldDay(siteId: string): FieldDayInfo {
+    const site = this.site(siteId);
+    const sd = this.todaySiteDay(site);
+    const reports = this.data.reports.filter((r) => r.site_day_id === sd.id);
+    const shown =
+      (sd.report_id ? reports.find((r) => r.id === sd.report_id) : undefined) ??
+      reports.find((r) => r.status !== 'void') ??
+      null;
+    const numbers = new Set(reports.map((r) => r.report_no));
+    let seq = site.report_seq;
+    while (seq > 0 && numbers.has(formatReportNo(site.project_code, seq))) seq -= 1;
+    return {
+      siteDayId: sd.id,
+      date: sd.date,
+      status: sd.status,
+      deadlineAt: sd.deadline_at,
+      reportId: shown?.id ?? null,
+      reportNo: shown?.report_no ?? null,
+      reportStatus: shown?.status ?? null,
+      needsReview: shown?.needs_review ?? false,
+      receivedAt: shown?.received_at ?? null,
+      remindersPaused: sd.reminders_paused,
+      weather: sd.weather,
+      needsReset:
+        reports.length > 0 ||
+        !(sd.status === 'pending' || sd.status === 'reminded' || sd.status === 'missing'),
+      statusAfterReset: this.unreportedStatus(sd),
+      reportSeqAfterReset: seq,
+    };
+  }
+
+  /**
+   * Clears today at a site so the simulator can file a fresh report: removes the day's reports
+   * (with versions, sources, questions, denormalised rows and their notifications) and the
+   * reporter's messages of the day, rolls the report sequence back over the removed numbers and
+   * puts the site-day back where the reminder ladder has it now.
+   */
+  resetFieldDay(
+    siteId: string,
+    reporterId: string | null,
+    opts: { keepMessageIdPrefix?: string } = {},
+  ): void {
+    const site = this.site(siteId);
+    const info = this.fieldDay(siteId);
+    const sd = this.todaySiteDay(site);
+    const d = this.data;
+    const removed = d.reports.filter((r) => r.site_day_id === sd.id);
+    const ids = new Set(removed.map((r) => r.id));
+    d.reports = d.reports.filter((r) => !ids.has(r.id));
+    d.versions = d.versions.filter((v) => !ids.has(v.report_id));
+    d.sources = d.sources.filter((s) => !ids.has(s.report_id));
+    d.questions = d.questions.filter((q) => !ids.has(q.report_id));
+    d.manpower = d.manpower.filter((m) => !ids.has(m.report_id));
+    d.workItems = d.workItems.filter((w) => !ids.has(w.report_id));
+    d.weatherEvents = d.weatherEvents.filter((w) => !ids.has(w.report_id));
+    d.notifications = d.notifications.filter(
+      (n) => !removed.some((r) => n.target_path === `/reports/${r.id}`),
+    );
+    const convo = d.conversations.find((c) => c.reporter_id === reporterId);
+    if (convo) {
+      const gone = new Set(
+        d.messages
+          .filter(
+            (m) =>
+              m.conversation_id === convo.id &&
+              formatDateInTz(m.created_at, site.timezone) === sd.date &&
+              !(opts.keepMessageIdPrefix && m.id.startsWith(opts.keepMessageIdPrefix)),
+          )
+          .map((m) => m.id),
+      );
+      d.messages = d.messages.filter((m) => !gone.has(m.id));
+      d.transcripts = d.transcripts.filter((t) => !gone.has(t.message_id));
+    }
+    site.report_seq = info.reportSeqAfterReset;
+    sd.status = info.statusAfterReset;
+    sd.report_id = null;
+    sd.is_late = false;
+    sd.updated_at = this.nowIso();
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'system',
+      actor_id: null,
+      action: 'site_day.reset',
+      entity: 'site_day',
+      entity_id: sd.id,
+      diff: { reason: 'field_simulator', removed: removed.map((r) => r.report_no) },
+    });
+    this.emit({ table: 'site_days', id: sd.id });
+    this.emit({ table: 'reports' });
+  }
+
+  /** WhatsApp messages of the simulated chat (the report page shows the day's thread). */
+  recordFieldMessages(reporterId: string, messages: FieldMessageInput[]): void {
+    const convo = this.data.conversations.find((c) => c.reporter_id === reporterId);
+    if (!convo) return;
+    for (const m of messages) {
+      this.data.messages.push({
+        id: m.id,
+        conversation_id: convo.id,
+        direction: m.direction,
+        wa_message_id: null,
+        type: m.type,
+        body: m.body,
+        payload: (m.payload ?? null) as MessageRow['payload'],
+        media_id: null,
+        media_mime: m.type === 'audio' ? 'audio/ogg; codecs=opus' : null,
+        storage_path: null,
+        duration_s: m.durationS ?? null,
+        template_name: null,
+        status: m.direction === 'in' ? 'received' : 'sent',
+        error: null,
+        created_at: m.at,
+      });
+      if (m.transcript) {
+        this.data.transcripts.push({
+          id: localId('transcript'),
+          message_id: m.id,
+          language: m.transcript.language,
+          text: m.transcript.text,
+          segments: m.transcript.segments as TranscriptRow['segments'],
+          model: 'replayed-fixture',
+          created_at: m.at,
+        });
+      }
+      if (m.direction === 'in') convo.last_inbound_at = m.at;
+      else convo.last_outbound_at = m.at;
+    }
+  }
+
+  /** Drops the messages of an abandoned simulator chat that changed nothing else. */
+  removeFieldMessages(reporterId: string, idPrefix: string): void {
+    const convo = this.data.conversations.find((c) => c.reporter_id === reporterId);
+    if (!convo || !idPrefix) return;
+    const gone = new Set(
+      this.data.messages
+        .filter((m) => m.conversation_id === convo.id && m.id.startsWith(idPrefix))
+        .map((m) => m.id),
+    );
+    if (gone.size === 0) return;
+    this.data.messages = this.data.messages.filter((m) => !gone.has(m.id));
+    this.data.transcripts = this.data.transcripts.filter((t) => !gone.has(t.message_id));
+  }
+
+  /** §F5 step 1: report row (collecting) with the site's next number. */
+  openFieldReport(input: {
+    id: string;
+    siteId: string;
+    reporterId: string;
+    reportNo: string;
+    kind: string;
+    at: string;
+  }): void {
+    const site = this.site(input.siteId);
+    const sd = this.todaySiteDay(site);
+    const seq = Number(input.reportNo.slice(site.project_code.length + 1));
+    if (Number.isInteger(seq)) site.report_seq = Math.max(site.report_seq, seq);
+    this.data.reports.push({
+      id: input.id,
+      org_id: this.data.org.id,
+      site_id: site.id,
+      site_day_id: sd.id,
+      report_no: input.reportNo,
+      status: 'collecting',
+      current_version: 0,
+      reporter_id: input.reporterId,
+      received_at: input.at,
+      confirmed_at: null,
+      filed_at: null,
+      signed_off_by: null,
+      signed_off_at: null,
+      needs_review: false,
+      review_reasons: [],
+      is_late: false,
+      kind: input.kind,
+      created_at: input.at,
+      updated_at: input.at,
+    });
+    this.emit({ table: 'reports', id: input.id });
+  }
+
+  setFieldDayStatus(siteId: string, status: SiteDayStatus): void {
+    const sd = this.todaySiteDay(this.site(siteId));
+    sd.status = status;
+    sd.updated_at = this.nowIso();
+    this.emit({ table: 'site_days', id: sd.id });
+  }
+
+  /** sendQuestion / sendDraft: the report waits for an answer or the reporter's OK. */
+  setFieldReportStatus(
+    reportId: string,
+    status: 'collecting' | 'awaiting_answer' | 'awaiting_confirmation',
+    at: string,
+  ): void {
+    const r = this.report(reportId);
+    if (r.status === 'filed' || r.status === 'signed_off' || r.status === 'void') return;
+    r.status = status;
+    r.updated_at = at;
+    this.emit({ table: 'reports', id: r.id });
+  }
+
+  /** storeDraft: the working draft lives in version 1 until filing freezes it. */
+  storeFieldDraft(input: {
+    reportId: string;
+    data: DailyReportData;
+    messageId: string | null;
+    at: string;
+  }): void {
+    const d = this.data;
+    const r = this.report(input.reportId);
+    if (r.status === 'filed' || r.status === 'signed_off' || r.status === 'void') return;
+    const data = structuredClone(input.data);
+    const existing = d.versions.find((v) => v.report_id === r.id && v.version === 1);
+    d.versions = d.versions.filter((v) => !(v.report_id === r.id && v.version === 1));
+    d.versions.push({
+      report_id: r.id,
+      version: 1,
+      data: data as unknown as ReportVersionRow['data'],
+      summary: data.summary || null,
+      pdf_path: null,
+      author: 'agent',
+      author_user_id: null,
+      author_message_id: input.messageId ?? existing?.author_message_id ?? null,
+      change_note: null,
+      created_at: existing?.created_at ?? input.at,
+    });
+    r.updated_at = input.at;
+    this.emit({ table: 'reports', id: r.id });
+  }
+
+  /** F6 "Add …": the report is flagged for review as soon as the company is added. */
+  flagFieldReview(reportId: string, reasons: string[], at: string): void {
+    const r = this.report(reportId);
+    r.review_reasons = [...new Set([...r.review_reasons, ...reasons])];
+    r.needs_review = r.review_reasons.length > 0;
+    r.updated_at = at;
+    this.emit({ table: 'reports', id: r.id });
+  }
+
+  /** "stop": no more reminders for today's site-day (§F11). Returns false when already paused. */
+  pauseFieldReminders(siteId: string): boolean {
+    const sd = this.todaySiteDay(this.site(siteId));
+    if (sd.reminders_paused) return false;
+    sd.reminders_paused = true;
+    sd.updated_at = this.nowIso();
+    this.emit({ table: 'site_days', id: sd.id });
+    return true;
+  }
+
+  voidFieldReport(reportId: string, at: string): void {
+    const r = this.report(reportId);
+    r.status = 'void';
+    r.updated_at = at;
+    this.emit({ table: 'reports', id: r.id });
+  }
+
+  fieldAudit(row: {
+    actor: 'agent' | 'reporter' | 'system';
+    actorId: string | null;
+    action: string;
+    entity: string;
+    entityId: string;
+    diff: Record<string, unknown>;
+    at: string;
+  }): void {
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: row.actor,
+      actor_id: row.actorId,
+      action: row.action,
+      entity: row.entity,
+      entity_id: row.entityId,
+      diff: row.diff as AuditLogRow['diff'],
+      created_at: row.at,
+    });
+  }
+
+  /**
+   * F6 "Add …": an unconfirmed subcontractor for the office to confirm. A company with the same
+   * name (a re-run of the same scenario) is reused; returns the id in use.
+   */
+  addFieldCompany(input: { id: string; name: string; at: string }): string {
+    const same = this.data.companies.find(
+      (c) => c.id === input.id || c.name.toLowerCase() === input.name.trim().toLowerCase(),
+    );
+    if (same) return same.id;
+    this.data.companies.push({
+      id: input.id,
+      org_id: this.data.org.id,
+      name: input.name,
+      trade: null,
+      aliases: [],
+      is_self_perform: false,
+      status: 'unconfirmed',
+      created_at: input.at,
+    });
+    return input.id;
+  }
+
+  /** §F7 step 3 / pipeline/file.ts: freeze v1, write rows, file, flip the site-day, notify. */
+  fileFieldReport(input: FieldFileInput): void {
+    const d = this.data;
+    const r = this.report(input.reportId);
+    const site = this.site(r.site_id);
+    const sd = d.siteDays.find((x) => x.id === r.site_day_id)!;
+    const data = structuredClone(input.data);
+    r.kind = input.kind;
+    d.versions = d.versions.filter((v) => !(v.report_id === r.id && v.version === 1));
+    d.versions.push({
+      report_id: r.id,
+      version: 1,
+      data: data as unknown as ReportVersionRow['data'],
+      summary: data.summary || null,
+      pdf_path: `${d.org.id}/${site.id}/${r.report_no}_v1.pdf`,
+      author: 'agent',
+      author_user_id: null,
+      author_message_id: null,
+      change_note: null,
+      created_at: input.at,
+    });
+    d.sources = d.sources.filter((s) => s.report_id !== r.id);
+    input.sources.forEach((s, i) =>
+      d.sources.push({
+        id: `${r.id}-s${i + 1}`,
+        report_id: r.id,
+        message_id: s.messageId,
+        kind: s.kind,
+        caption: s.caption,
+        taken_at: s.at,
+      }),
+    );
+    d.questions = d.questions.filter((q) => q.report_id !== r.id);
+    for (const q of input.questions) {
+      d.questions.push({
+        id: q.id,
+        report_id: r.id,
+        field: q.field,
+        target: { ...q.target, path: q.path } as QuestionRow['target'],
+        prompt: q.prompt,
+        options: q.buttons as unknown as QuestionRow['options'],
+        asked_message_id: null,
+        answered_message_id: null,
+        answer: (q.answer ?? null) as QuestionRow['answer'],
+        asked_at: q.askedAt,
+        answered_at: q.answeredAt,
+        created_at: q.askedAt,
+      });
+    }
+    r.current_version = 1;
+    this.denormalize(r, 1, data);
+    const isLate = Date.parse(input.at) > Date.parse(sd.deadline_at);
+    r.status = 'filed';
+    r.filed_at = input.at;
+    r.confirmed_at = input.trigger === 'confirm' ? input.at : null;
+    r.is_late = isLate;
+    r.needs_review = input.reasons.length > 0;
+    r.review_reasons = [...input.reasons];
+    r.updated_at = input.at;
+    sd.status =
+      input.kind === 'weather_day' ? 'weather_day' : input.kind === 'no_work' ? 'no_work' : 'filed';
+    sd.report_id = r.id;
+    sd.is_late = isLate;
+    sd.updated_at = input.at;
+    this.audit({
+      org_id: d.org.id,
+      actor_type: input.trigger === 'confirm' ? 'reporter' : 'agent',
+      actor_id: input.trigger === 'confirm' ? r.reporter_id : null,
+      action: 'report.filed',
+      entity: 'report',
+      entity_id: r.id,
+      diff: {
+        trigger: input.trigger,
+        version: 1,
+        is_late: isLate,
+        review_reasons: input.reasons,
+        confirm_message_id: input.confirmMessageId ?? null,
+      },
+      created_at: input.at,
+    });
+    // pipeline/file.ts notifies the panel only for review; "Report filed" is email-only (§13).
+    if (input.reasons.length > 0) {
+      this.notify({
+        user_id: null,
+        kind: 'needs_review',
+        title: `${r.report_no} needs review`,
+        body: input.reasons.join(', '),
+        target_path: `/reports/${r.id}`,
+      });
+    }
+    if (input.kind !== 'no_work' || d.settings.no_work_pdf) this.pdfRendered(r, 1, input.at);
+    const missingNotif = d.notifications.find(
+      (n) => n.kind === 'missing_report' && !n.read_at && n.title.startsWith(site.name),
+    );
+    if (missingNotif) missingNotif.read_at = this.nowIso();
+    this.emit({ table: 'site_days', id: sd.id });
+    this.emit({ table: 'reports', id: r.id });
+  }
+
+  /** A new version of a filed report from the field (late photo, weather follow-up, "edit Friday"). */
+  addFieldVersion(input: FieldVersionInput): void {
+    const d = this.data;
+    const r = this.report(input.reportId);
+    const site = this.site(r.site_id);
+    const data = structuredClone(input.data);
+    d.versions.push({
+      report_id: r.id,
+      version: input.version,
+      data: data as unknown as ReportVersionRow['data'],
+      summary: data.summary || null,
+      pdf_path: `${d.org.id}/${site.id}/${r.report_no}_v${input.version}.pdf`,
+      author: input.author,
+      author_user_id: null,
+      author_message_id: input.messageId,
+      change_note: input.changeNote,
+      created_at: input.at,
+    });
+    if (input.source) {
+      d.sources.push({
+        id: `${r.id}-s${d.sources.filter((s) => s.report_id === r.id).length + 1}`,
+        report_id: r.id,
+        message_id: input.source.messageId,
+        kind: input.source.kind,
+        caption: input.source.caption,
+        taken_at: input.source.at,
+      });
+    }
+    const wasSigned = r.status === 'signed_off';
+    r.current_version = input.version;
+    r.status = 'filed';
+    r.signed_off_by = null;
+    r.signed_off_at = null;
+    r.updated_at = input.at;
+    this.denormalize(r, input.version, data);
+    this.audit({
+      org_id: d.org.id,
+      actor_type: input.author === 'reporter_reply' ? 'reporter' : 'agent',
+      actor_id: input.author === 'reporter_reply' ? r.reporter_id : null,
+      action: 'report.version_created',
+      entity: 'report',
+      entity_id: r.id,
+      diff: { version: input.version, change_note: input.changeNote },
+      created_at: input.at,
+    });
+    if (wasSigned) {
+      this.audit({
+        org_id: d.org.id,
+        actor_type: 'agent',
+        actor_id: null,
+        action: 'report.signoff_reverted',
+        entity: 'report',
+        entity_id: r.id,
+        diff: { version: input.version },
+        created_at: input.at,
+      });
+    }
+    this.pdfRendered(r, input.version, input.at);
+    this.emit({ table: 'reports', id: r.id });
+  }
+
+  /** jobs/render_pdf.ts: one audit row per rendered version (the demo has no PDF bytes). */
+  private pdfRendered(r: ReportRow, version: number, at: string): void {
+    const path = this.data.versions.find(
+      (v) => v.report_id === r.id && v.version === version,
+    )?.pdf_path;
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'agent',
+      actor_id: null,
+      action: 'report.pdf_rendered',
+      entity: 'report',
+      entity_id: r.id,
+      diff: { version, path: path ?? null },
+      created_at: at,
+    });
+  }
+
+  /** §F10 step 4 without a no-work PDF: the site-day alone records it. */
+  markFieldNoWork(siteId: string): void {
+    this.setFieldDayStatus(siteId, 'no_work');
+  }
+}
+
+export interface FieldDayInfo {
+  siteDayId: string;
+  date: string;
+  status: SiteDayStatus;
+  deadlineAt: string;
+  reportId: string | null;
+  reportNo: string | null;
+  reportStatus: ReportRow['status'] | null;
+  needsReview: boolean;
+  receivedAt: string | null;
+  remindersPaused: boolean;
+  /** site_days.weather (observed hourly weather), when fetched. */
+  weather: SiteDayRow['weather'];
+  needsReset: boolean;
+  statusAfterReset: SiteDayStatus;
+  reportSeqAfterReset: number;
+}
+
+export interface FieldMessageInput {
+  id: string;
+  direction: 'in' | 'out';
+  type: MessageRow['type'];
+  body: string | null;
+  at: string;
+  durationS?: number | null;
+  payload?: unknown;
+  transcript?: {
+    language: string | null;
+    text: string;
+    segments: Array<{ start: number; end: number; text: string }>;
+  };
+}
+
+export interface FieldSourceInput {
+  messageId: string;
+  kind: ReportSourceRow['kind'];
+  caption: string | null;
+  at: string;
+}
+
+export interface FieldFileInput {
+  reportId: string;
+  kind: 'daily' | 'weather_day' | 'no_work';
+  data: DailyReportData;
+  trigger: 'confirm' | 'weather_day' | 'no_work';
+  reasons: string[];
+  at: string;
+  /** The reporter's "OK" (report.filed audit diff). */
+  confirmMessageId?: string | null;
+  sources: FieldSourceInput[];
+  questions: Array<{
+    id: string;
+    field: string;
+    path: string;
+    prompt: string;
+    buttons: Array<{ id: string; title: string }>;
+    target: Record<string, unknown>;
+    answer: Record<string, unknown> | null;
+    askedAt: string;
+    answeredAt: string | null;
+  }>;
+}
+
+export interface FieldVersionInput {
+  reportId: string;
+  version: number;
+  data: DailyReportData;
+  author: 'agent' | 'reporter_reply';
+  changeNote: string;
+  messageId: string | null;
+  source: FieldSourceInput | null;
+  at: string;
 }
 
 export { DEMO_NOW, DEMO_ORG_ID, DEMO_USERS };

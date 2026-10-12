@@ -24,6 +24,7 @@ export const copy = {
     glossary: 'Site glossary',
     settings: 'Settings',
     billing: 'Billing',
+    try: 'Try it on WhatsApp',
     badges: {
       reportsToReview: (n: number) => `${plural(n, 'report')} to review`,
       unknownSenders: (n: number) => `${plural(n, 'unknown number')}`,
@@ -1508,6 +1509,216 @@ export const copy = {
       `Exporting the first ${limit} of ${total} reports. Narrow the filters for the rest.`,
     fileName: (label: string, date: string) => `SiteLog_${label}_${date}.zip`,
     labels: { today: 'daily-reports', archive: 'reports' },
+  },
+
+  /** /try — the in-browser field simulator (demo mode only). */
+  try: {
+    title: 'Try it on WhatsApp',
+    eyebrow: 'Field simulator · demo',
+    subtitle:
+      'Be the site manager: send a voice note, answer the agent, file the report — and watch the office side update.',
+    honesty:
+      'Simulated in your browser: no WhatsApp, no AI, nothing leaves this page. Voice notes are scripted test cases (a transcript, no audio). The agent’s messages use the same rules and wording as the live agent; where it would use AI, the simulator uses a stored answer or tells you in a grey note.',
+    startOver: 'Start over',
+    startOverHint: 'Clears this chat and today’s report for the site',
+    begin: {
+      note: (first: string) => `Send ${first}’s voice note`,
+      typed: (first: string) => `Send ${first}’s typed report`,
+      pick: 'Pick another voice note',
+    },
+    phone: {
+      region: (name: string) => `Simulated WhatsApp chat with ${name}`,
+      title: 'SiteLog',
+      subtitle: (name: string, site: string) => `${name} · ${site}`,
+      simulated: 'Simulated',
+      log: 'Conversation',
+      typing: 'SiteLog is typing…',
+      fromAgent: 'SiteLog',
+      fromReporter: (first: string) => first,
+      sentAt: (who: string, time: string) => `${who}, ${time}`,
+      voiceNote: 'Voice note',
+      transcript: 'Transcript',
+      showTranscript: 'Show full transcript',
+      hideTranscript: 'Show less',
+      photoAlt:
+        'Sample site photo: a concrete deck with rebar mats, a tower crane and an overcast sky',
+      document: 'PDF document',
+      buttons: 'Reply options',
+      reminderHistory: 'Sent earlier today',
+      system: 'Simulator',
+    },
+    composer: {
+      voice: 'Voice note',
+      voiceLabel: 'Send voice note',
+      photo: 'Send photo',
+      input: 'Type a reply',
+      placeholder: 'Type a reply or a command…',
+      send: 'Send',
+      busy: 'SiteLog is replying…',
+      suggestions: 'Try next',
+    },
+    sheet: {
+      title: 'Send a voice note',
+      description:
+        'Test cases from the SiteLog evaluation set, each from a Kestrel site and its site manager. The simulator uses the report the extraction is expected to produce from each transcript.',
+      send: 'Send',
+      sendLabel: (title: string) => `Send: ${title}`,
+      typed: 'Typed report',
+      current: 'This chat',
+      switches: (name: string) => `Starts a chat as ${name}`,
+      clearsUnfinished: (site: string) =>
+        `Your unfinished chat at ${site} is cleared, and so is its report.`,
+      replaces: (site: string, reportNo: string | null) =>
+        reportNo
+          ? `Replaces today’s demo report for ${site} (${reportNo}).`
+          : `Replaces today’s demo status for ${site}.`,
+      fresh: (site: string) => `${site} has nothing filed today yet.`,
+      recordedOn: (date: string) => `Test case from ${date}, replayed as today`,
+      languages: (codes: string[]) =>
+        codes
+          .map((c) => ({ en: 'English', es: 'Spanish', pl: 'Polish', hi: 'Hindi' })[c] ?? c)
+          .join(' + '),
+      outcomes: {
+        draft: 'Complete note',
+        question: 'Agent asks',
+        weather_day: 'Weather day',
+        no_work: 'No work',
+      },
+    },
+    scenarios: {
+      'riverside-2026-10-09': {
+        title: 'Marco’s Friday report',
+        shows: 'Spanish and English mixed; the Delta crew size is missing, so the agent asks.',
+      },
+      'oakmont-2026-10-08-missing-headcount': {
+        title: '“A few of the Delta guys”',
+        shows: 'Two gaps, asked one at a time: Delta’s headcount, then Summit’s hours.',
+      },
+      'pier9-2026-10-09-rain-unknown-roofer': {
+        title: 'Rain on the roof, a new roofer',
+        shows: '2 h lost to rain and an unknown subcontractor the office has to confirm.',
+      },
+      'elm-2026-10-02-rain-morning': {
+        title: 'Rained out until 10',
+        shows: 'Weather stoppage logged as a delay; a complete note, straight to the draft.',
+      },
+      'northgate-2026-10-08-overtime-pour': {
+        title: 'Overtime pour',
+        shows: 'End times and overtime turned into hours in code; nothing to ask.',
+      },
+      'riverside-2026-10-07-spanish': {
+        title: 'All in Spanish',
+        shows: 'Spoken in Spanish, filed in English, with “hasta las dos” turned into hours.',
+      },
+      'northgate-2026-10-06-correction-near-miss': {
+        title: '“Scratch that, six guys”',
+        shows: 'A correction inside the note, and a near miss logged as an incident.',
+      },
+      'hillcrest-2026-10-06-full-weather-day': {
+        title: 'Full weather day',
+        shows: 'Nobody worked: logged as a weather day for the delay record, not a daily report.',
+      },
+      'elm-2026-10-08-no-work': {
+        title: 'Street closed, no work',
+        shows: 'A no-work day: recorded as such, no crew or hours invented.',
+      },
+      'elm-2026-10-07-text-report': {
+        title: 'Typed instead of spoken',
+        shows: 'A text message works too; no photo was sent, so the agent asks for one.',
+      },
+    } as Record<string, { title: string; shows: string }>,
+    notes: {
+      intro: (first: string, name: string, site: string, typed: boolean) =>
+        `You are ${name}, site manager at ${site}. Send ${first}’s ${typed ? 'typed report' : 'voice note'} and reply to the agent as ${first} would. The chat works like WhatsApp; the office side updates as you go.`,
+      introLate: (clock: string, deadline: string) =>
+        `The demo clock is ${clock}, after the ${deadline} deadline, so reports filed here show as late.`,
+      introReplaces: (what: string) =>
+        `Sending replaces today’s demo report for this site (${what}).`,
+      replaced: (site: string, reportNo: string) =>
+        reportNo
+          ? `Today’s demo report for ${site} (${reportNo}) was cleared so this chat files a fresh one.`
+          : `Today at ${site} was cleared so this chat starts fresh.`,
+      unsupported_text:
+        'The live agent uses the AI to understand free text like this. In the simulator, try a button, “no work today”, “rained out, sent everyone home at 11”, “help” or “thanks”.',
+      unsupported_answer: (prompt: string, field: string) =>
+        `The live agent uses the AI to read answers like this. Here, tap a button or answer in a simple form: ${
+          (
+            {
+              'manpower.workers': '“5, full day” or “6 guys till 3”',
+              'manpower.hours': '“full day”, “half day” or “till 3”',
+              'weather.impact': '“no stoppage” or “2 hours”',
+              safety: '“no incidents” or “toolbox talk, no incidents”',
+              'company.unknown': '“add”, or the company’s name',
+              photo: 'send a photo',
+            } as Record<string, string>
+          )[field] ?? '“5, full day”'
+        }. (${prompt})`,
+      unsupported_fix:
+        'The live agent uses the AI to understand this kind of correction. In the simulator, name the crew and the number, e.g. “Apex had 7 not 6” or “Summit was there till 3”.',
+      unchanged_fix: 'The report already says that, so nothing changed.',
+      unsupported_report:
+        'The live agent extracts any typed report with the AI. In the simulator, send one of the recorded voice notes instead.',
+      voice_busy: (first: string) =>
+        `The live agent would read another note from ${first} now as an answer or a fix. In the simulator, voice notes are the recorded cases: use Start over to send a different one.`,
+      edit_other_day: (weekday: string, example: boolean) =>
+        `The live agent can edit any report from the last 14 days. The simulator only has today’s report${
+          example ? `: try “edit ${weekday} — Apex was 7 guys, not 6”.` : '.'
+        }`,
+      silent: 'The live agent does not reply to that here, so nothing happens.',
+    },
+    suggestions: {
+      sendNote: (first: string) => `Send ${first}’s voice note`,
+      pickAnother: 'Pick another voice note',
+      noWork: 'no work today',
+      rainedOut: 'rained out, sent everyone home at 11',
+      fix: 'Apex had 7 not 6',
+      edit: (weekday: string) => `edit ${weekday} — Apex was 7 guys, not 6`,
+      typed: (text: string) => `Send “${text}”`,
+      ok: 'OK',
+      photo: 'Send a photo',
+      openReport: 'Open the report in the panel',
+    },
+    office: {
+      title: 'What the office sees',
+      today: (date: string) => `Today · ${date}`,
+      site: 'Site',
+      status: 'Status',
+      report: 'Report',
+      notFiled: 'Not filed yet',
+      open: 'Open the report in the panel',
+      live: 'Overview, Sites and Reports update live as you chat.',
+      legend: 'What happened',
+      empty: 'Nothing yet. Send a voice note to start.',
+      events: {
+        replaced: (no: string | null) =>
+          no ? `Cleared today’s demo report ${no}` : 'Cleared today’s demo status',
+        received: (voice: boolean, duration: string, photos: number) =>
+          `${voice ? `Voice note${duration ? ` (${duration})` : ''}` : 'Typed report'}${photos ? ` + ${photos === 1 ? '1 photo' : `${photos} photos`}` : ''} received`,
+        question: (prompt: string) => `Asked: ${prompt}`,
+        answered: (answer: string, ack: string | null) =>
+          ack
+            ? `Answer “${answer}” applied — ${ack.replace(/^Thanks — /, '')}`
+            : `Answered “${answer}”`,
+        photo_answered: 'Photo received — question answered',
+        unanswered: (prompt: string) => `No usable answer; flagged for review: ${prompt}`,
+        draft: 'Draft sent for confirmation',
+        corrected: (note: string) => `Draft corrected: ${note}`,
+        filed: (no: string, review: boolean) =>
+          review ? `Filed ${no} — flagged for review` : `Filed ${no}`,
+        weather_day: (no: string) => `Weather day logged as ${no}`,
+        no_work: 'Day recorded as no work',
+        version: (no: string, v: number, note: string) => `${no} version ${v}: ${note}`,
+        company_added: (name: string) => `${name} added as an unconfirmed subcontractor`,
+        voided: (no: string) => `${no} voided: the note described a day off`,
+      },
+    },
+    filedCallout: (no: string) => `Filed as ${no}. The office has it now.`,
+    overviewCard: {
+      eyebrow: 'Demo',
+      title: 'Try it on WhatsApp',
+      body: 'Be Marco on site: send his voice note, answer one question, file the report — then come back and watch this page update.',
+      cta: 'Open the field simulator',
+    },
   },
 
   a11y: {

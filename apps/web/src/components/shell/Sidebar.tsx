@@ -48,7 +48,7 @@ export function Sidebar({
   const badges = useNavBadges();
   const simulate = useSimulateIncomingReport();
   const navigate = useNavigate();
-  const items = navItemsFor(role);
+  const items = navItemsFor(role, isDemo);
   const main = items.filter((i) => i.group === 'main');
   const setup = items.filter((i) => i.group === 'setup');
 

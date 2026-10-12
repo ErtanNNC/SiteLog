@@ -80,6 +80,7 @@ const ROUTES: RouteCase[] = [
   { name: 'settings-payroll', path: '/settings/payroll', ready: (p) => h1(p, 'Settings') },
   { name: 'billing', path: '/billing', ready: (p) => p.getByTestId('plan-card') },
   { name: 'ops', path: '/ops', ready: (p) => p.getByTestId('ops-kpis') },
+  { name: 'try', path: '/try', ready: (p) => p.getByTestId('try-log') },
   { name: 'setup-company', path: '/setup/company', ready: (p) => h1(p, /./) },
   { name: 'setup-site', path: '/setup/site', ready: (p) => p.getByLabel('Site name') },
   { name: 'setup-reports', path: '/setup/reports', ready: (p) => h1(p, /./) },
@@ -176,6 +177,33 @@ for (const width of WIDTHS) {
         .first()
         .click();
       await expect(page.getByRole('dialog')).toBeVisible();
+      await expectNoViolations(page);
+    });
+
+    test('try it on WhatsApp: voice-note sheet and a conversation with reply buttons', async ({
+      page,
+    }) => {
+      await signInFast(page);
+      await page.goto('/try');
+      await expect(page.getByTestId('try-log')).toBeVisible();
+      // No sideways scroll, and the first action is on screen without scrolling.
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await expect(page.getByRole('button', { name: 'Send Marco’s voice note' })).toBeInViewport();
+      await page.getByRole('button', { name: 'Send voice note' }).click();
+      await expect(page.getByRole('dialog', { name: 'Send a voice note' })).toBeVisible();
+      await expectNoViolations(page);
+      await page.getByRole('button', { name: 'Send: Marco’s Friday report' }).click();
+      const log = page.getByRole('log', { name: 'Conversation' });
+      await expect(log.getByRole('button', { name: '5 · full day' })).toBeEnabled({
+        timeout: 20_000,
+      });
+      await expectNoViolations(page);
+      await log.getByRole('button', { name: '5 · full day' }).click();
+      await expect(log.getByRole('button', { name: 'OK, file it' })).toBeEnabled({
+        timeout: 20_000,
+      });
       await expectNoViolations(page);
     });
 
@@ -313,4 +341,43 @@ test.describe('keyboard', () => {
     await expect(page.getByRole('menu')).toHaveCount(0);
     await expect(account).toBeFocused();
   });
+
+  test('try it on WhatsApp: voice note, answer and OK with the keyboard only', async ({ page }) => {
+    await signInFast(page);
+    await page.goto('/try');
+    const log = page.getByRole('log', { name: 'Conversation' });
+    await log.getByRole('button', { name: 'Send Marco’s voice note' }).focus();
+    await page.keyboard.press('Enter');
+    // Focus moves to the question's buttons once the reply is in.
+    await expect(log.getByRole('button', { name: '4 · full day' })).toBeFocused({
+      timeout: 30_000,
+    });
+    await page.keyboard.press('Tab');
+    await expect(log.getByRole('button', { name: '5 · full day' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(log.getByRole('button', { name: 'OK, file it' })).toBeFocused({
+      timeout: 30_000,
+    });
+    await page.keyboard.press('Enter');
+    await expect(log.getByText(/^Filed\. Daily Report RL-2041-0187/)).toBeVisible({
+      timeout: 30_000,
+    });
+  });
+});
+
+test.describe('no sideways scroll on narrow phones', () => {
+  for (const width of [320, 360, 390]) {
+    test(`/try and Overview at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await signInFast(page);
+      await page.goto('/try');
+      await expect(page.getByTestId('try-log')).toBeVisible();
+      const overflow = () =>
+        page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(await overflow()).toBeLessThanOrEqual(0);
+      await page.goto('/');
+      await expect(h1(page, 'Today across 6 sites')).toBeVisible();
+      expect(await overflow()).toBeLessThanOrEqual(0);
+    });
+  }
 });

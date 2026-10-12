@@ -16,6 +16,7 @@ describe('Sidebar', () => {
       'Site glossary',
       'Settings',
       'Billing',
+      'Try it on WhatsApp',
     ]) {
       expect(screen.getByRole('link', { name: new RegExp(label) })).toBeInTheDocument();
     }
@@ -30,6 +31,10 @@ describe('Sidebar', () => {
 
   it('hides Settings and Billing for a project manager and Team for ops-only pages', () => {
     renderWithProviders(<Sidebar />, { as: 'pm' });
+    expect(screen.getByRole('link', { name: /Try it on WhatsApp/ })).toHaveAttribute(
+      'href',
+      '/try',
+    );
     expect(screen.queryByRole('link', { name: /Settings/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Billing/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Team & numbers/ })).not.toBeInTheDocument();

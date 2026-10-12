@@ -11,6 +11,7 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      '**/dist-artifact/**', // apps/web build:artifact output
       '**/build/**',
       '**/coverage/**',
       'supabase/functions/**', // Deno — linted with `deno lint`

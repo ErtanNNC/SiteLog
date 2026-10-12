@@ -296,7 +296,14 @@ export function buildIndex(rows: RowSet): Index {
   const reporterById = new Map(rows.reporters.map((r) => [r.id, r]));
   const companyById = new Map(rows.companies.map((c) => [c.id, c]));
   const reportById = new Map(rows.reports.map((r) => [r.id, r]));
-  const reportBySiteDay = new Map(rows.reports.map((r) => [r.site_day_id, r]));
+  // The report a site-day shows: never a void one, and a filed / signed-off one over a draft.
+  const reportBySiteDay = new Map<string, ReportRow>();
+  for (const r of rows.reports) {
+    if (r.status === 'void') continue;
+    const have = reportBySiteDay.get(r.site_day_id);
+    if (!have || (!FILED_STATUSES.has(have.status) && FILED_STATUSES.has(r.status)))
+      reportBySiteDay.set(r.site_day_id, r);
+  }
   const siteDayById = new Map(rows.siteDays.map((d) => [d.id, d]));
   const siteDaysBySite = groupBy(rows.siteDays, (d) => d.site_id);
   const versionsByReport = groupBy(rows.versions, (v) => v.report_id);
@@ -332,7 +339,10 @@ export function currentVersion(ix: Index, report: ReportRow): ReportVersionRow |
 
 export function reportForSiteDay(ix: Index, sd: SiteDayRow | undefined): ReportRow | null {
   if (!sd) return null;
-  if (sd.report_id) return ix.reportById.get(sd.report_id) ?? ix.reportBySiteDay.get(sd.id) ?? null;
+  if (sd.report_id) {
+    const linked = ix.reportById.get(sd.report_id);
+    if (linked && linked.status !== 'void') return linked;
+  }
   return ix.reportBySiteDay.get(sd.id) ?? null;
 }
 
@@ -552,7 +562,8 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       weatherImpact: weatherImpactText(data),
       lostHours,
       weatherDay: isWeatherDay,
-      reportId: report?.id ?? null,
+      // Only a filed report can be opened; a draft or a voided one has no page yet.
+      reportId: report && FILED_STATUSES.has(report.status) ? report.id : null,
       reportNo: report?.report_no ?? null,
       isLate: !!(sd?.is_late || report?.is_late),
       needsReview: !!report?.needs_review && report.status === 'filed',
@@ -780,7 +791,7 @@ export function assembleSiteCards(rows: RowSet, ctx: AssembleCtx): SiteCard[] {
       status: site.status,
       timezone: site.timezone,
       chip,
-      reportId: report?.id ?? null,
+      reportId: report && FILED_STATUSES.has(report.status) ? report.id : null,
       streak,
       onTime14: streak.filter((c) => c.status === 'on_time').length,
       reporterName: reporter?.name ?? null,
@@ -890,7 +901,7 @@ export function assembleSiteDetail(
         filed && report.kind !== 'weather_day' ? sum(crewRows.map((m) => Number(m.hours))) : null,
       weatherAffected: sd?.status === 'weather_day' || lost > 0,
       lostHours: lost,
-      reportId: report?.id ?? null,
+      reportId: filed ? report.id : null,
       isLate: !!(sd?.is_late || report?.is_late),
     };
   });

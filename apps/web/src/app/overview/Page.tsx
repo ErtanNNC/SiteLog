@@ -4,6 +4,7 @@ import {
   HardHat,
   Inbox,
   Link2,
+  MessageSquareText,
   Phone,
   Scale,
   Search,
@@ -221,6 +222,24 @@ export default function OverviewPage() {
         }
       />
 
+      {isDemo && data.siteCount > 0 ? (
+        <Card dark className="mb-6" data-testid="try-card">
+          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+            <MessageSquareText className="size-8 shrink-0 text-dust-light" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <div className="eyebrow text-dust-light">{copy.try.overviewCard.eyebrow}</div>
+              <h2 className="font-h2 text-h2 text-chalk">{copy.try.overviewCard.title}</h2>
+              <p className="mt-0.5 text-[14px] leading-5 text-dust-light">
+                {copy.try.overviewCard.body}
+              </p>
+            </div>
+            <Button asChild variant="primary" className="self-start sm:self-center">
+              <Link to="/try">{copy.try.overviewCard.cta}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {data.siteCount === 0 ? (
         <EmptyState
           hero
@@ -289,8 +308,8 @@ export default function OverviewPage() {
             />
           </section>
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-            <Card>
+          <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+            <Card className="min-w-0">
               <CardHeader>
                 <CardTitle>{copy.overview.sitesToday}</CardTitle>
                 {isDemo ? (
@@ -320,7 +339,7 @@ export default function OverviewPage() {
               </CardContent>
             </Card>
 
-            <aside aria-label={copy.overview.needsAttention}>
+            <aside aria-label={copy.overview.needsAttention} className="min-w-0">
               <h2 className="font-h2 mb-3 text-h2">{copy.overview.needsAttention}</h2>
               {data.needsAttention.length === 0 ? (
                 <EmptyState title={copy.overview.allClear} body={copy.overview.allClearBody} />

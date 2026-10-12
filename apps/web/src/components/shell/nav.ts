@@ -7,6 +7,7 @@ import {
   FileText,
   HardHat,
   LayoutDashboard,
+  MessageSquareText,
   Settings,
   Users,
   type LucideIcon,
@@ -23,6 +24,8 @@ export interface NavItem {
   badge?: 'reportsToReview' | 'unknownSenders' | 'termsToReview';
   badgeTone?: 'level' | 'signal';
   end?: boolean;
+  /** Only in demo mode (the field simulator needs the in-memory demo data). */
+  demoOnly?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -46,6 +49,14 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { key: 'hours', to: '/hours', label: copy.nav.hours, icon: Clock, group: 'main' },
   { key: 'weather', to: '/weather', label: copy.nav.weather, icon: CloudRain, group: 'main' },
+  {
+    key: 'try',
+    to: '/try',
+    label: copy.nav.try,
+    icon: MessageSquareText,
+    group: 'main',
+    demoOnly: true,
+  },
   {
     key: 'team',
     to: '/team',
@@ -75,7 +86,9 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 /** Role-aware nav: hide Settings/Billing for non-admins; accounts users only see Crew hours. */
-export function navItemsFor(role: MemberRole | null): NavItem[] {
+export function navItemsFor(role: MemberRole | null, isDemo = false): NavItem[] {
   if (!role) return [];
-  return NAV_ITEMS.filter((item) => ROUTE_ROLES[item.key]?.includes(role));
+  return NAV_ITEMS.filter(
+    (item) => ROUTE_ROLES[item.key]?.includes(role) && (!item.demoOnly || isDemo),
+  );
 }

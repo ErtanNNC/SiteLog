@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Outlet } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Outlet, useLocation, useNavigationType } from 'react-router';
 import { copy } from '@/copy/en';
 import { Dialog, DialogContent, DialogTitle } from '../ui/Dialog';
 import { OfflineBanner } from '../sitelog/States';
@@ -12,6 +12,7 @@ import { TopBar, TopBarSlotProvider } from './TopBar';
  */
 export function AppShell() {
   const [drawer, setDrawer] = useState(false);
+  useScrollTopOnNavigate();
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   return (
     <TopBarSlotProvider value={slot}>
@@ -45,4 +46,19 @@ export function AppShell() {
       </Dialog>
     </TopBarSlotProvider>
   );
+}
+
+/**
+ * The page scrolls the window, and the router keeps that offset across links, so a link near the
+ * bottom of one page opened the next one mid-page. Start each newly opened page at the top; Back
+ * and Forward (POP) and same-page search-param changes keep the position.
+ */
+function useScrollTopOnNavigate() {
+  const { pathname } = useLocation();
+  const navigationType = useNavigationType();
+  useEffect(() => {
+    if (navigationType === 'POP') return;
+    const el = document.scrollingElement ?? document.documentElement;
+    el.scrollTop = 0;
+  }, [pathname, navigationType]);
 }
