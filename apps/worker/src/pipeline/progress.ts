@@ -1,0 +1,104 @@
+import { deriveTotals, waCopy, type DailyReportData } from '@sitelog/shared';
+import type { Ctx } from '../context';
+import { contextOf } from '../router/context';
+import { sendFreeForm } from '../wa/send';
+
+/**
+ * §F5 step 3 — the progress bubble ("Writing your report…" + the steps done so far).
+ *
+ * The WhatsApp Cloud API cannot edit a sent message, so ticking steps off live would mean one
+ * message per step. Instead the agent sends at most ONE bubble per report (guarded by
+ * `conversations.context.progress_sent_for`), at the first pipeline checkpoint where more than
+ * 10 s have passed since the note arrived (`reports.received_at`):
+ *   1. after transcription (once every voice note of the report is transcribed),
+ *   2. when extraction starts (queue latency, text-only reports),
+ *   3. after extraction, before decide_next sends the question or the draft card.
+ * It lists what is complete at that moment and ends with the pending hours check. It is never
+ * sent once a question or the draft card has gone out (report no longer `collecting`), nor when
+ * the conversation has moved on from processing this report.
+ */
+export const PROGRESS_AFTER_MS = 10_000;
+
+export interface ProgressFacts {
+  /** Every voice note of the report has a transcript (false for text-only reports). */
+  transcribed: boolean;
+  /** The extracted draft, once extraction finished on a settled set of sources. */
+  draft?: DailyReportData | null;
+  selfPerformCompanyIds?: ReadonlySet<string>;
+}
+
+/** Lines under "Writing your report…": transcribed · crew found · weather logged · checking hours. */
+export function progressSteps(facts: ProgressFacts): string[] {
+  const steps: string[] = [];
+  if (facts.transcribed) steps.push(waCopy.progressTranscribed());
+  const draft = facts.draft;
+  if (draft) {
+    if (draft.manpower.length > 0) {
+      const totals = deriveTotals(draft, { selfPerformCompanyIds: facts.selfPerformCompanyIds });
+      // A partial headcount ("the Delta guys") would show a wrong total; the question fixes it.
+      if (totals.headcountKnown && totals.crewOnSite > 0) {
+        steps.push(waCopy.progressCrew(totals.crewOnSite, totals.subcontractors));
+      }
+    }
+    const delay = draft.weather.periods.find(
+      (p) => (p.lostHours > 0 || p.fullDay === true) && p.start && p.end,
+    );
+    if (delay?.start && delay.end) {
+      steps.push(waCopy.progressRain(delay.start, delay.end, conditionLabel(delay.condition)));
+    }
+  }
+  steps.push(waCopy.progressHours());
+  return steps;
+}
+
+function conditionLabel(condition: string): string {
+  const c = condition.trim();
+  return c ? c.charAt(0).toUpperCase() + c.slice(1) : 'Weather';
+}
+
+/** True when the report has at least one voice note and every one of them is transcribed. */
+export async function allAudioTranscribed(ctx: Ctx, reportId: string): Promise<boolean> {
+  const audio = (await ctx.db.listReportSources(reportId)).filter((s) => s.kind === 'audio');
+  if (audio.length === 0) return false;
+  const ids = new Set(audio.map((s) => s.message_id));
+  const done = await ctx.db.listTranscripts([...ids]);
+  return done.filter((t) => ids.has(t.message_id)).length >= ids.size;
+}
+
+/**
+ * Sends the progress bubble when this checkpoint is the first one past 10 s. `facts` is only
+ * evaluated once every cheap guard passed; it may return null for "not a reportable point yet"
+ * (e.g. a second voice note is still being transcribed). Returns true when a bubble went out.
+ * Best-effort: a failed send is logged, never fails the job, and is not retried.
+ */
+export async function sendProgressIfSlow(
+  ctx: Ctx,
+  reportId: string,
+  facts: () => Promise<ProgressFacts | null>,
+): Promise<boolean> {
+  const report = await ctx.db.getReport(reportId);
+  if (!report || report.kind !== 'daily' || report.status !== 'collecting') return false;
+  if (!report.received_at) return false;
+  const elapsed = ctx.now().getTime() - new Date(report.received_at).getTime();
+  if (elapsed <= PROGRESS_AFTER_MS) return false;
+  const reporter = report.reporter_id ? await ctx.db.getReporter(report.reporter_id) : null;
+  const convo = reporter ? await ctx.db.getConversationByPhone(reporter.phone_e164) : null;
+  if (!convo) return false;
+  const c = contextOf(convo);
+  if (c.progress_sent_for === report.id) return false;
+  if (convo.state !== 'processing' || c.active_report_id !== report.id) return false;
+
+  const f = await facts();
+  if (!f) return false;
+  const text = waCopy.progressLines(progressSteps(f));
+  // Claim before sending so a retry or a concurrent job never sends a second bubble.
+  await ctx.db.updateConversation(convo.id, { context: { ...c, progress_sent_for: report.id } });
+  try {
+    await sendFreeForm(ctx, convo, text, undefined, { kind: 'progress', reportId: report.id });
+  } catch (err) {
+    ctx.log.warn('progress bubble not sent', { err, report_id: report.id });
+    return false;
+  }
+  ctx.log.info('progress bubble sent', { report_id: report.id, elapsed_ms: elapsed });
+  return true;
+}

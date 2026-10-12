@@ -191,7 +191,10 @@ describe('pipeline: compose + extract job + filing', () => {
     const draft = await currentData(h.ctx, report);
     expect(draft!.photos[0]!.messageId).toBe(photo.id);
     expect(draft!.weather.observed?.precipIn).toBe(0.4);
-    expect(h.sentTexts()).toEqual(['Writing your report…']);
+    // Extraction started 30 s after the note: the §F5 progress bubble goes out at the start.
+    expect(h.sentTexts()).toEqual([
+      'Writing your report…\n- Transcribed, site noise removed\n- Checking subcontractor hours…',
+    ]);
     expect(h.db.jobsOfType('decide_next')).toHaveLength(1);
     expect(h.db.data.audit.map((a) => a.action)).toContain('report.extracted');
   });

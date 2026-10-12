@@ -12,12 +12,18 @@ export const waCopy = {
     return `Got it, ${first}${parts.length ? ` — ${parts.join(' and ')}` : ''}.`;
   },
   progress: (): string => 'Writing your report…',
+  /**
+   * §F5 step 3. WhatsApp cannot edit a sent message, so this is one bubble listing the steps done
+   * so far; lines use a plain "- " marker (§9.3 note: no emoji, no check glyphs elsewhere in copy).
+   */
   progressLines: (steps: string[]): string =>
     ['Writing your report…', ...steps.map((s) => `- ${s}`)].join('\n'),
   progressTranscribed: (): string => 'Transcribed, site noise removed',
   progressCrew: (n: number, k: number): string =>
     `${n} on site, ${k} subcontractor${k === 1 ? '' : 's'}`,
-  progressRain: (start: string, end: string): string => `Rain ${start}–${end} logged as delay`,
+  /** "Rain 07:00–10:30 logged as delay"; other conditions pass their own label ("High wind"). */
+  progressRain: (start: string, end: string, condition = 'Rain'): string =>
+    `${condition} ${start}–${end} logged as delay`,
   progressHours: (): string => 'Checking subcontractor hours…',
   questionGeneric: (question: string): string =>
     question.startsWith('Quick check') ? question : `Quick check: ${question}`,

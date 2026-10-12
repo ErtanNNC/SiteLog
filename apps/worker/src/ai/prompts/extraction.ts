@@ -20,7 +20,9 @@ Rules:
    Keep quantities with their unit and add heardAs with the spoken words.
 6. Weather: describe conditions and the impact on work; lostHours is the duration work was stopped
    or reassigned because of weather. Use OBSERVED_WEATHER only for numbers (precipitation, temperature,
-   wind); use the transcript for impact.
+   wind); use the transcript for impact. If the manager says nothing about the weather, leave
+   conditionsText empty and add "weather.conditions" to missingRequired; never describe conditions from
+   OBSERVED_WEATHER alone.
 7. Every item must carry source entries with the transcript segment start time (seconds) it came from.
    Values provided by answers carry source type "reply".
 8. Safety: set noIncidentsStated true only if the manager explicitly says there were no incidents.

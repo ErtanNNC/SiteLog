@@ -92,10 +92,11 @@ src/
   index.ts        boot: dotenv (dev), config, Sentry, health server, runner, SIGTERM
   config.ts       zod-validated env
   db.ts           Db interface + postgres implementation (RPC wrappers)
+  db.pglite.test.ts  the real db.ts against PGlite (all migrations + seed) via pglite-socket
   storage.ts      Supabase Storage (service role) + in-memory fake
   runner.ts       claim → run → complete/fail, dead-job handling, sweep
   router/         §7.2 state machine (session, inbound parsing, media, handlers/*, timeouts, continue)
-  pipeline/       compose · validate · draft · file · versions · glossary
+  pipeline/       compose · validate · draft · file · versions · glossary · progress (§F5 bubble)
   ai/             claude (tool calls, caching, validation retry) · extract · correction · answer · classify · dayoff · site-guess · transcribe · prompts/ · eval
   wa/             Graph API client + payload builders · send (window logic, outbound rows)
   pdf/            ReportDocument · EvidencePack · fonts · render · sample-data · render-sample

@@ -1,13 +1,9 @@
-import { waCopy } from '@sitelog/shared';
 import { runExtraction } from '../ai/extract';
 import { composeExtractionInput, siteDayWeatherOf } from '../pipeline/compose';
 import { currentData, storeDraft } from '../pipeline/draft';
 import { learnTerms } from '../pipeline/glossary';
-import { contextOf } from '../router/context';
-import { sendFreeForm } from '../wa/send';
+import { allAudioTranscribed, sendProgressIfSlow } from '../pipeline/progress';
 import { PermanentJobError, type JobHandler } from './types';
-
-export const PROGRESS_AFTER_MS = 10_000;
 
 /** §4.3 step 5 — Claude extraction → draft version → decide_next. Re-runs when sources arrived meanwhile. */
 export const extractReport: JobHandler<'extract_report'> = async (ctx, payload) => {
@@ -24,25 +20,11 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload) 
   if (!site) throw new PermanentJobError(`site ${report.site_id} not found`);
   const siteDay = await ctx.db.getSiteDay(report.site_day_id);
   const reporter = report.reporter_id ? await ctx.db.getReporter(report.reporter_id) : null;
-  const convo = reporter ? await ctx.db.getConversationByPhone(reporter.phone_e164) : null;
 
-  // §F5 step 3: progress bubble once processing takes > 10 s.
-  if (
-    convo &&
-    report.received_at &&
-    ctx.now().getTime() - new Date(report.received_at).getTime() > PROGRESS_AFTER_MS
-  ) {
-    const c = contextOf(convo);
-    if (c.progress_sent_for !== report.id) {
-      await sendFreeForm(ctx, convo, waCopy.progress(), undefined, {
-        kind: 'progress',
-        reportId: report.id,
-      });
-      await ctx.db.updateConversation(convo.id, {
-        context: { ...c, progress_sent_for: report.id },
-      });
-    }
-  }
+  // §F5 step 3: progress bubble if we are already past 10 s (queue latency, text-only reports).
+  await sendProgressIfSlow(ctx, report.id, async () => ({
+    transcribed: await allAudioTranscribed(ctx, report.id),
+  }));
 
   const previousDraft = await currentData(ctx, report);
   const input = await composeExtractionInput(ctx, report, site, reporter, {
@@ -88,7 +70,16 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload) 
   });
 
   const sourceCountNow = (await ctx.db.listReportSources(report.id)).length;
-  if (sourceCountNow !== sourceCountAtStart) {
+  const settled = sourceCountNow === sourceCountAtStart;
+  // §F5 step 3: if extraction pushed us past 10 s, say what was found before the question/draft.
+  await sendProgressIfSlow(ctx, report.id, async () => ({
+    transcribed: await allAudioTranscribed(ctx, report.id),
+    draft: settled ? result.data : null,
+    selfPerformCompanyIds: new Set(
+      site.companies.filter((c) => c.is_self_perform).map((c) => c.id),
+    ),
+  }));
+  if (!settled) {
     ctx.log.info('sources changed during extraction; re-extracting', { report_id: report.id });
     await ctx.db.enqueueJob(
       'extract_report',

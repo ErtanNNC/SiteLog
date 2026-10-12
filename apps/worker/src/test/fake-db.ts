@@ -133,7 +133,10 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async ensureConversation(phone, patch) {
       const existing = await db.getConversationByPhone(phone);
-      if (existing) return db.updateConversation(existing.id, patch);
+      if (existing) {
+        const hasPatch = Object.values(patch).some((v) => v !== undefined);
+        return hasPatch ? db.updateConversation(existing.id, patch) : existing;
+      }
       const row: ConversationRow = {
         id: randomUUID(),
         org_id: patch.org_id ?? null,
@@ -141,8 +144,8 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         phone_e164: phone,
         state: patch.state ?? 'new',
         context: (patch.context ?? {}) as ConversationRow['context'],
-        last_inbound_at: null,
-        last_outbound_at: null,
+        last_inbound_at: patch.last_inbound_at ? toIso(patch.last_inbound_at) : null,
+        last_outbound_at: patch.last_outbound_at ? toIso(patch.last_outbound_at) : null,
         state_changed_at: iso(),
         updated_at: iso(),
       };
@@ -510,6 +513,16 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async insertVersion(input) {
       const existing = d.versions.get(vkey(input.report_id, input.version));
+      const report = d.reports.get(input.report_id);
+      const isDraft =
+        !report ||
+        ['collecting', 'awaiting_answer', 'awaiting_confirmation'].includes(report.status);
+      if (existing && report && !isDraft && input.version <= report.current_version) {
+        // Same rule as the SQL: a current version of a filed report is immutable.
+        throw new Error(
+          `report ${input.report_id} version ${input.version} already exists and is immutable`,
+        );
+      }
       const row: ReportVersionRow = {
         report_id: input.report_id,
         version: input.version,
@@ -737,11 +750,13 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return Array.from(d.messages.values())
         .filter(
           (m) =>
+            m.direction === 'in' &&
             m.storage_path &&
-            (m.type === 'audio' || m.type === 'image') &&
+            (m.type === 'audio' || m.type === 'image' || m.type === 'document') &&
             new Date(m.created_at) < before &&
             !d.purged.includes(m.id),
         )
+        .sort((a, b) => a.created_at.localeCompare(b.created_at))
         .slice(0, limit)
         .map((m): ExpiredMedia => ({
           message_id: m.id,

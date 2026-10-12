@@ -1,6 +1,7 @@
 import type { MessageRow, TranscriptRow } from '@sitelog/shared';
 import { quickClassify } from '../ai/classify';
 import type { Ctx } from '../context';
+import { allAudioTranscribed, sendProgressIfSlow } from '../pipeline/progress';
 import { handleReplyText } from './handlers/reply';
 import { onTestTranscript } from './handlers/test';
 import { createSession } from './session';
@@ -54,6 +55,10 @@ export async function afterTranscription(
       }
     }
   }
+  // §F5 step 3: transcription alone took > 10 s → progress bubble now (once all notes are in).
+  await sendProgressIfSlow(ctx, report.id, async () =>
+    (await allAudioTranscribed(ctx, report.id)) ? { transcribed: true } : null,
+  );
   await ctx.db.enqueueJob(
     'extract_report',
     { reportId: report.id, reason: `sources:${sources.length}` },

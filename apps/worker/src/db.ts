@@ -450,6 +450,12 @@ function one<T>(rows: readonly T[]): T | null {
   return rows[0] ?? null;
 }
 
+/** A Postgres unique_violation (23505) on the given constraint, as postgres.js reports it. */
+function isUniqueViolation(err: unknown, constraint: string): boolean {
+  const e = err as { code?: string; constraint_name?: string } | null;
+  return !!e && e.code === '23505' && e.constraint_name === constraint;
+}
+
 function iso(v: string | Date | null | undefined): string | null {
   if (v === null || v === undefined) return null;
   return v instanceof Date ? v.toISOString() : v;
@@ -483,15 +489,20 @@ export function createDb(sql: Sql): Db {
       );
     },
     async ensureConversation(phone, patch) {
+      const hasPatch = Object.values(patch).some((v) => v !== undefined);
       const existing = await db.getConversationByPhone(phone);
-      if (existing)
-        return Object.keys(patch).length ? db.updateConversation(existing.id, patch) : existing;
+      if (existing) return hasPatch ? db.updateConversation(existing.id, patch) : existing;
       const rows = await sql<ConversationRow[]>`
-        insert into conversations (phone_e164, org_id, reporter_id, state, context)
-        values (${phone}, ${patch.org_id ?? null}, ${patch.reporter_id ?? null}, ${patch.state ?? 'new'}, ${sql.json((patch.context ?? {}) as never)})
-        on conflict (phone_e164) do update set updated_at = now()
+        insert into conversations (phone_e164, org_id, reporter_id, state, context, last_inbound_at, last_outbound_at)
+        values (${phone}, ${patch.org_id ?? null}, ${patch.reporter_id ?? null}, ${patch.state ?? 'new'}, ${sql.json((patch.context ?? {}) as never)},
+                ${iso(patch.last_inbound_at)}, ${iso(patch.last_outbound_at)})
+        on conflict (phone_e164) do nothing
         returning *`;
-      return rows[0]!;
+      if (rows[0]) return rows[0];
+      // Lost an insert race for this phone (webhook vs. welcome): apply the patch to the winner.
+      const winner = await db.getConversationByPhone(phone);
+      if (!winner) throw new Error('conversation insert conflicted but no row was found');
+      return hasPatch ? db.updateConversation(winner.id, patch) : winner;
     },
     async updateConversation(id, patch) {
       const p: Record<string, unknown> = { ...patch };
@@ -554,9 +565,12 @@ export function createDb(sql: Sql): Db {
     },
     async listTranscripts(messageIds) {
       if (messageIds.length === 0) return [];
+      // Callers pass voice notes in chronological order; keep it (heap/index order is arbitrary
+      // and transcription jobs finish out of order), so PDFs and evidence packs stay stable.
+      const ids = sql.array(messageIds);
       return sql<
         TranscriptRow[]
-      >`select * from transcripts where message_id = any(${sql.array(messageIds)}::uuid[])`;
+      >`select * from transcripts where message_id = any(${ids}::uuid[]) order by array_position(${ids}::uuid[], message_id)`;
     },
     async upsertTranscript(input) {
       const rows = await sql<TranscriptRow[]>`
@@ -775,12 +789,23 @@ export function createDb(sql: Sql): Db {
       >`select * from report_versions where report_id = ${reportId} order by version`;
     },
     async insertVersion(input) {
+      // Drafts (report not filed yet) are overwritten in place, and so is a version left dangling
+      // above current_version by a failed attempt (retry stays idempotent). A version that is
+      // already current on a filed report is immutable: e.g. an office edit (create_report_version)
+      // committed v3 while a WhatsApp edit was computing its own v3 — never overwrite it.
       const rows = await sql<ReportVersionRow[]>`
         insert into report_versions (report_id, version, data, summary, author, author_user_id, author_message_id, change_note)
         values (${input.report_id}, ${input.version}, ${sql.json(input.data as never)}, ${input.summary}, ${input.author}, ${input.author_user_id ?? null}, ${input.author_message_id ?? null}, ${input.change_note ?? null})
         on conflict (report_id, version) do update set data = excluded.data, summary = excluded.summary, change_note = excluded.change_note, author_message_id = excluded.author_message_id
+          where exists (select 1 from reports r where r.id = excluded.report_id
+                          and (r.status in ('collecting','awaiting_answer','awaiting_confirmation') or excluded.version > r.current_version))
         returning *`;
-      return rows[0]!;
+      const row = rows[0];
+      if (!row)
+        throw new Error(
+          `report ${input.report_id} version ${input.version} already exists and is immutable`,
+        );
+      return row;
     },
     async updateVersion(reportId, version, patch) {
       await sql`update report_versions set ${setClause(patch as Record<string, unknown>)} where report_id = ${reportId} and version = ${version}`;
@@ -869,10 +894,20 @@ export function createDb(sql: Sql): Db {
       return one(await sql<JobRow[]>`select * from jobs where id = ${id}`);
     },
     async enqueueJob(type, payload, opts = {}) {
-      const rows = await sql<
-        Array<{ enqueue_job: number }>
-      >`select enqueue_job(${type}, ${sql.json(payload as never)}, ${iso(opts.runAfter) ?? null}, ${opts.dedupeKey ?? null}) as enqueue_job`;
-      return rows[0]!.enqueue_job;
+      const enqueue = async () => {
+        const rows = await sql<
+          Array<{ enqueue_job: number }>
+        >`select enqueue_job(${type}, ${sql.json(payload as never)}, ${iso(opts.runAfter) ?? null}, ${opts.dedupeKey ?? null}) as enqueue_job`;
+        return rows[0]!.enqueue_job;
+      };
+      try {
+        return await enqueue();
+      } catch (err) {
+        // Two concurrent enqueues of one dedupe key both miss enqueue_job's lookup; the loser hits
+        // the partial unique index once the winner commits. The winner's job is the answer.
+        if (opts.dedupeKey && isUniqueViolation(err, 'jobs_dedupe_key_active')) return enqueue();
+        throw err;
+      }
     },
     async updateJobMetrics(id, metrics) {
       await sql`update jobs set payload = payload || jsonb_build_object('metrics', ${sql.json(metrics as never)}::jsonb) where id = ${id}`;
@@ -901,8 +936,9 @@ export function createDb(sql: Sql): Db {
       return sql<
         ExpiredMedia[]
       >`select id as message_id, storage_path, type, created_at from messages
-        where storage_path is not null and type in ('audio','image') and created_at < ${before.toISOString()}
-        order by created_at limit ${limit}`;
+        where direction = 'in' and storage_path is not null and type in ('audio','image','document')
+          and created_at < ${before.toISOString()}
+        order by created_at, id limit ${limit}`;
     },
     async getInvoiceSummary(invoiceId) {
       const rows = await sql<
@@ -954,7 +990,7 @@ export function createDb(sql: Sql): Db {
         .reduce((a, d) => a + d.n, 0);
       const weather = await sql<Array<{ site_name: string; hours: number }>>`
         select s.name as site_name, sum(w.lost_hours)::numeric as hours from current_weather w join sites s on s.id = w.site_id
-        where w.org_id = ${orgId} and w.date between ${weekStart} and ${weekEnd} group by s.name order by hours desc`;
+        where w.org_id = ${orgId} and w.date between ${weekStart} and ${weekEnd} group by s.id, s.name order by hours desc, s.name`;
       const unsigned = await sql<Array<{ report_no: string; site_name: string; date: string }>>`
         select r.report_no, s.name as site_name, sd.date from reports r join sites s on s.id = r.site_id join site_days sd on sd.id = r.site_day_id
         where r.org_id = ${orgId} and r.status = 'filed' and sd.date between ${weekStart} and ${weekEnd} order by sd.date`;
