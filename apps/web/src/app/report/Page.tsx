@@ -46,6 +46,7 @@ import {
 import { officeEntryAuthor } from '@/data/pdfInput';
 import type { ReportDetail } from '@/data/types';
 import { formatDateTimeShort } from '@/lib/format';
+import { openInNewTab } from '@/lib/tab';
 import { errorMessage } from '@/lib/utils';
 import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
@@ -195,7 +196,7 @@ function ReportScreen({
   };
 
   const onPdf = () => {
-    if (detail.pdfUrl) window.open(detail.pdfUrl, '_blank', 'noopener');
+    if (detail.pdfUrl) openInNewTab(detail.pdfUrl);
     else reportPdf.open(r.id, detail.version);
   };
 

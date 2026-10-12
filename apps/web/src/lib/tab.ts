@@ -17,6 +17,16 @@ export function pendingTab(): (url: string | null) => void {
       return;
     }
     if (win && !win.closed) win.location.href = url;
-    else window.open(url, '_blank', 'noopener');
+    else openInNewTab(url);
   };
+}
+
+/**
+ * Opens a URL in a new tab. `blob:` URLs (PDFs rendered in this page) open without `noopener`:
+ * Chrome only resolves a blob URL in the browsing-context group that created it, so a noopener
+ * tab stays blank.
+ */
+export function openInNewTab(url: string): void {
+  if (url.startsWith('blob:')) window.open(url, '_blank');
+  else window.open(url, '_blank', 'noopener');
 }
