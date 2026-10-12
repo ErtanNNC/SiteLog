@@ -1,7 +1,8 @@
-import type { MessageRow, TranscriptRow } from '@sitelog/shared';
+import type { DailyReportData, MessageRow, ReportRow, TranscriptRow } from '@sitelog/shared';
 import { quickClassify } from '../ai/classify';
 import type { Ctx } from '../context';
 import { allAudioTranscribed, sendProgressIfSlow } from '../pipeline/progress';
+import { handleDayOffText } from './handlers/dayoff';
 import { handleReplyText } from './handlers/reply';
 import { onTestTranscript } from './handlers/test';
 import { createSession } from './session';
@@ -102,4 +103,53 @@ export async function voidReport(ctx: Ctx, reportId: string): Promise<void> {
     entity: 'report',
     entity_id: report.id,
   });
+}
+
+/** No crew and no work in the draft: the note described a day off rather than a workday. */
+export function looksLikeDayOff(data: DailyReportData): boolean {
+  return data.workPerformed.length === 0 && data.manpower.every((m) => m.workers === 0);
+}
+
+/**
+ * §F10 for long notes: "No work today, the city closed the street… crew back at seven tomorrow"
+ * is too long for the short-command check in afterTranscription, so it is extracted like a report
+ * and would then be asked for a headcount. When the draft shows nobody worked, the daily report is
+ * voided and the note goes through the weather-day / no-work flow instead. Returns true when it did.
+ */
+export async function rerouteDayOff(
+  ctx: Ctx,
+  report: ReportRow,
+  data: DailyReportData,
+): Promise<boolean> {
+  if (report.kind !== 'daily' || report.status !== 'collecting' || !looksLikeDayOff(data))
+    return false;
+  const sources = (await ctx.db.listReportSources(report.id)).filter(
+    (s) => s.kind === 'audio' || s.kind === 'text',
+  );
+  if (sources.length === 0) return false;
+  const transcripts = await ctx.db.listTranscripts(
+    sources.filter((s) => s.kind === 'audio').map((s) => s.message_id),
+  );
+  const text = sources
+    .map((s) =>
+      s.kind === 'audio'
+        ? transcripts.find((t) => t.message_id === s.message_id)?.text
+        : (s.body ?? undefined),
+    )
+    .filter((t): t is string => Boolean(t?.trim()))
+    .join('\n');
+  const last = sources[sources.length - 1]!;
+  const message = await ctx.db.getMessage(last.message_id);
+  if (!text || !message) return false;
+  const session = await createSession(ctx, message);
+  const site = session?.siteById(report.site_id);
+  if (!session || !site) return false;
+  ctx.log.info('draft describes a day off; rerouting to F10', { report_id: report.id });
+  await voidReport(ctx, report.id);
+  await session.setState('idle', { active_report_id: null, pending_question_id: null });
+  const hint = data.weather.periods.some((p) => p.fullDay || (p.lostHours ?? 0) > 0)
+    ? 'weather_day'
+    : 'no_work';
+  await handleDayOffText(session, site, text, message.id, hint);
+  return true;
 }

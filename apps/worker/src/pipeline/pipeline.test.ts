@@ -199,6 +199,54 @@ describe('pipeline: compose + extract job + filing', () => {
     expect(h.db.data.audit.map((a) => a.action)).toContain('report.extracted');
   });
 
+  it('a long "no work today" note goes to the §F10 no-work flow instead of a headcount question', async () => {
+    const h = createHarness();
+    h.setNow(new Date('2026-10-08T12:05:00Z'));
+    const siteDay = await h.db.getOrCreateSiteDay(
+      SITE_RIVERSIDE,
+      '2026-10-08',
+      deadlineInstant('2026-10-08', '17:30', 'America/Chicago'),
+    );
+    const report = await h.db.insertReport({
+      org_id: h.org.id,
+      site_id: SITE_RIVERSIDE,
+      site_day_id: siteDay.id,
+      report_no: 'RL-2041-0190',
+      reporter_id: h.marco.id,
+      received_at: '2026-10-08T12:04:00Z',
+      kind: 'daily',
+    });
+    const convo = await h.conversation('processing', { active_report_id: report.id });
+    const audio = await h.inbound(convo, {
+      type: 'audio',
+      storage_path: 'x/n.ogg',
+      duration_s: 24,
+      created_at: '2026-10-08T12:04:00Z',
+    });
+    await h.db.insertReportSource({
+      report_id: report.id,
+      message_id: audio.id,
+      kind: 'audio',
+      taken_at: audio.created_at,
+    });
+    const fixture = load<ExtractionInput>('transcripts', 'elm-2026-10-08-no-work');
+    await h.db.upsertTranscript({
+      message_id: audio.id,
+      language: 'en',
+      text: fixture.segments.map((x) => x.text).join(' '),
+      segments: fixture.segments.map((x) => ({ start: x.start, end: x.end, text: x.text })),
+      model: 'whisper-1',
+    });
+    await storeDraft(h.ctx, report, load<DailyReportData>('expected', 'elm-2026-10-08-no-work'));
+
+    await h.runJob('decide_next', { reportId: report.id });
+
+    expect(await h.db.listQuestions(report.id)).toHaveLength(0);
+    expect((await h.db.getReport(report.id))!.status).toBe('void');
+    expect(h.sentTexts().at(-1)).toMatch(/^Noted — no work today at /);
+    expect(h.db.data.audit.map((a) => a.action)).toContain('site_day.no_work');
+  });
+
   it('fileReport is idempotent and writes everything once', async () => {
     const h = createHarness();
     const siteDay = await h.db.getOrCreateSiteDay(

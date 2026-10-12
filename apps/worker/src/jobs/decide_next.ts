@@ -1,6 +1,7 @@
 import { currentData, sendDraft } from '../pipeline/draft';
 import { fileReport } from '../pipeline/file';
 import { selectNextQuestion, validateDraft } from '../pipeline/validate';
+import { rerouteDayOff } from '../router/continue';
 import { sendQuestion } from '../router/handlers/question';
 import { PermanentJobError, type JobHandler } from './types';
 
@@ -25,10 +26,13 @@ export const decideNext: JobHandler<'decide_next'> = async (ctx, payload) => {
   const convo = reporter ? await ctx.db.getConversationByPhone(reporter.phone_e164) : null;
   if (!convo) throw new PermanentJobError(`report ${report.id} has no conversation`);
 
+  const questions = await ctx.db.listQuestions(report.id);
+  // §F10: a long note saying nobody worked goes to the day-off flow, not a headcount question.
+  if (questions.length === 0 && (await rerouteDayOff(ctx, report, data))) return;
+
   const sources = await ctx.db.listReportSources(report.id);
   const photoCount = sources.filter((s) => s.kind === 'photo').length;
   const validation = validateDraft(data, site.settings, photoCount);
-  const questions = await ctx.db.listQuestions(report.id);
 
   // An open question whose gap a re-extraction closed is resolved; otherwise keep waiting for it.
   const open = questions.find((q) => !q.answered_at);
