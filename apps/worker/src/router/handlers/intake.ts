@@ -12,8 +12,10 @@ import {
   type ReportRow,
   type SiteRow,
 } from '@sitelog/shared';
+import { isUniqueViolation } from '../../db';
 import { matchSiteByText, SITE_INFER_THRESHOLD } from '../../ai/site-guess';
 import { currentData } from '../../pipeline/draft';
+import { audioPending } from '../../pipeline/progress';
 import { createReportVersion } from '../../pipeline/versions';
 import { sendChoice } from '../../wa/send';
 import { ensureMediaStored } from '../media';
@@ -244,24 +246,36 @@ export async function startIntake(
       return;
     }
     const reportNo = await ctx.db.nextReportNo(site.id);
-    report = await ctx.db.insertReport({
-      org_id: site.org_id,
-      site_id: site.id,
-      site_day_id: siteDay.id,
-      report_no: reportNo,
-      reporter_id: s.reporters.find((r) => r.org_id === site.org_id)?.id ?? s.reporter.id,
-      received_at: messages[0]?.created_at ?? s.now,
-      kind: 'daily',
-    });
-    await ctx.db.logAudit({
-      org_id: site.org_id,
-      actor_type: 'reporter',
-      actor_id: report.reporter_id,
-      action: 'report.created',
-      entity: 'report',
-      entity_id: report.id,
-      diff: { report_no: reportNo, date },
-    });
+    try {
+      report = await ctx.db.insertReport({
+        org_id: site.org_id,
+        site_id: site.id,
+        site_day_id: siteDay.id,
+        report_no: reportNo,
+        reporter_id: s.reporters.find((r) => r.org_id === site.org_id)?.id ?? s.reporter.id,
+        received_at: messages[0]?.created_at ?? s.now,
+        kind: 'daily',
+      });
+      await ctx.db.logAudit({
+        org_id: site.org_id,
+        actor_type: 'reporter',
+        actor_id: report.reporter_id,
+        action: 'report.created',
+        entity: 'report',
+        entity_id: report.id,
+        diff: { report_no: reportNo, date },
+      });
+    } catch (err) {
+      // Another intake for this site-day got there first (reports_one_live_per_site_day): join it.
+      if (!isUniqueViolation(err, 'reports_one_live_per_site_day')) throw err;
+      const live = await ctx.db.findReportForSiteDay(siteDay.id);
+      if (!live) throw err;
+      if (live.status === 'filed' || live.status === 'signed_off') {
+        await handleContentForFiledDay(s, live, site, messages);
+        return;
+      }
+      report = live;
+    }
   }
 
   const newAudio: MessageRow[] = [];
@@ -325,6 +339,9 @@ export async function enqueuePipeline(
     }
     return;
   }
+  // A photo or text next to a voice note still being transcribed: that transcription enqueues the
+  // extraction once every note has its transcript (an earlier extraction saw an empty transcript).
+  if (await audioPending(ctx, report.id)) return;
   await ctx.db.enqueueJob(
     'extract_report',
     { reportId: report.id, reason: `sources:${sourceCount}` },

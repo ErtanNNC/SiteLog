@@ -1,7 +1,7 @@
 import type { DailyReportData, MessageRow, ReportRow, TranscriptRow } from '@sitelog/shared';
 import { quickClassify } from '../ai/classify';
 import type { Ctx } from '../context';
-import { allAudioTranscribed, sendProgressIfSlow } from '../pipeline/progress';
+import { allAudioTranscribed, audioPending, sendProgressIfSlow } from '../pipeline/progress';
 import { handleDayOffText } from './handlers/dayoff';
 import { handleReplyText } from './handlers/reply';
 import { onTestTranscript } from './handlers/test';
@@ -56,14 +56,17 @@ export async function afterTranscription(
       }
     }
   }
+  // Another voice note of this report is still being transcribed: its transcription extracts.
+  if (await audioPending(ctx, report.id)) return;
   // §F5 step 3: transcription alone took > 10 s → progress bubble now (once all notes are in).
   await sendProgressIfSlow(ctx, report.id, async () =>
     (await allAudioTranscribed(ctx, report.id)) ? { transcribed: true } : null,
   );
+  const sourceCount = (await ctx.db.listReportSources(report.id)).length;
   await ctx.db.enqueueJob(
     'extract_report',
-    { reportId: report.id, reason: `sources:${sources.length}` },
-    { dedupeKey: `extract:${report.id}:${sources.length}` },
+    { reportId: report.id, reason: `sources:${sourceCount}` },
+    { dedupeKey: `extract:${report.id}:${sourceCount}` },
   );
 }
 
@@ -105,9 +108,17 @@ export async function voidReport(ctx: Ctx, reportId: string): Promise<void> {
   });
 }
 
-/** No crew and no work in the draft: the note described a day off rather than a workday. */
-export function looksLikeDayOff(data: DailyReportData): boolean {
-  return data.workPerformed.length === 0 && data.manpower.every((m) => m.workers === 0);
+/** Said in the note itself: an empty draft alone is not evidence (a transcript may be missing). */
+const DAY_OFF_WORDS =
+  /\b(no work|nobody (worked|came|was on site|on site|showed)|no one (worked|came|on site)|no crew|(site|street|road) (was |is )?closed|rained out|weather day|stay(ed)? home|sent (everyone|everybody|the crew|the guys|them) home|no (hubo )?trabajo|nadie (trabaj|vino|en la obra))/i;
+
+/** The note described a day off: no crew and no work in the draft, and the speaker said so. */
+export function looksLikeDayOff(data: DailyReportData, text: string): boolean {
+  return (
+    data.workPerformed.length === 0 &&
+    data.manpower.every((m) => m.workers === 0) &&
+    DAY_OFF_WORDS.test(text)
+  );
 }
 
 /**
@@ -121,8 +132,9 @@ export async function rerouteDayOff(
   report: ReportRow,
   data: DailyReportData,
 ): Promise<boolean> {
-  if (report.kind !== 'daily' || report.status !== 'collecting' || !looksLikeDayOff(data))
-    return false;
+  if (report.kind !== 'daily' || report.status !== 'collecting') return false;
+  if (data.workPerformed.length > 0 || data.manpower.some((m) => m.workers !== 0)) return false;
+  if (await audioPending(ctx, report.id)) return false;
   const sources = (await ctx.db.listReportSources(report.id)).filter(
     (s) => s.kind === 'audio' || s.kind === 'text',
   );
@@ -140,7 +152,7 @@ export async function rerouteDayOff(
     .join('\n');
   const last = sources[sources.length - 1]!;
   const message = await ctx.db.getMessage(last.message_id);
-  if (!text || !message) return false;
+  if (!text || !message || !looksLikeDayOff(data, text)) return false;
   const session = await createSession(ctx, message);
   const site = session?.siteById(report.site_id);
   if (!session || !site) return false;

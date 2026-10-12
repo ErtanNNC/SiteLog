@@ -914,6 +914,7 @@ export const copy = {
         'The pack has a cover, a delay summary by day, each day’s signed report, transcript excerpts with timestamps, photos and the observed weather table.',
       from: 'From',
       to: 'To',
+      siteRequired: 'Pick the site the claim is for.',
       periodInvalid: 'The end must be on or after the start.',
       sectionsRequired: 'Pick at least one section.',
       summary: (days: number, hours: string) => `${plural(days, 'site-day')} · ${hours} lost`,

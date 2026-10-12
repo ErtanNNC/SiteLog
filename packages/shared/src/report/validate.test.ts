@@ -226,6 +226,17 @@ describe('parseQuickAnswer', () => {
       fullDay: true,
     });
     expect(parseQuickAnswer('manpower.workers', 'not sure')).toBeNull();
+    // A headcount question answered without a number is not an answer (model / re-ask).
+    expect(parseQuickAnswer('manpower.workers', 'they were here all day')).toBeNull();
+    expect(parseQuickAnswer('manpower.workers', 'Jim plus his four guys')).toEqual({ workers: 5 });
+    expect(parseQuickAnswer('manpower.workers', '4 guys and the foreman, full day')).toEqual({
+      workers: 5,
+      fullDay: true,
+    });
+    expect(parseQuickAnswer('manpower.workers', 'three plus two, till 3')).toEqual({
+      workers: 5,
+      endTime: '15:00',
+    });
     expect(parseQuickAnswer('manpower.hours', 'Half day')).toEqual({ hoursPerWorker: 4 });
     expect(parseQuickAnswer('manpower.hours', '8')).toEqual({ hoursPerWorker: 8 });
   });

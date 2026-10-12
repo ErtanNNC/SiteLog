@@ -334,6 +334,29 @@ export function closestCompany<T extends { id: string; name: string; aliases?: r
   return best && best.score >= threshold ? best.c : null;
 }
 
+const CREW_NOUN = String.raw`(?:guys?|workers?|men|people|hands|helpers?|personas?|hombres?)`;
+const LEAD = String.raw`(?:the |a |his |their )?(?:foreman|forman|super|superintendent|lead|leadman|boss|capataz|encargado)`;
+
+/**
+ * Headcounts said as a sum: "Jim plus his four guys" → 5, "4 guys and the foreman" → 5,
+ * "3 plus 2" → 5. Numbers are already digits. Null when the answer is not phrased that way.
+ */
+function crewCount(t: string): number | null {
+  const sum = new RegExp(
+    String.raw`\b(\d+)\s*${CREW_NOUN}?\s*(?:plus|\+|and|y|más|mas)\s*(\d+)\b`,
+  ).exec(t);
+  if (sum) return Number(sum[1]) + Number(sum[2]);
+  const personPlusCrew = new RegExp(
+    String.raw`\b(?:plus|\+|and|y|con|más|mas)\s+(?:his|her|their|sus?)\s+(\d+)\b`,
+  ).exec(t);
+  if (personPlusCrew) return Number(personPlusCrew[1]) + 1;
+  const crewPlusLead = new RegExp(
+    String.raw`\b(\d+)\s*${CREW_NOUN}?\s*(?:plus|\+|and|y|más|mas)\s+${LEAD}\b`,
+  ).exec(t);
+  if (crewPlusLead) return Number(crewPlusLead[1]) + 1;
+  return null;
+}
+
 /** Quick parser for button/text answers like "5 · full day", "4, till 3", "six guys 8h" (no model call). */
 export function parseQuickAnswer(field: QuestionField, text: string): AnswerValue | null {
   const t = text.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -385,7 +408,12 @@ export function parseQuickAnswer(field: QuestionField, text: string): AnswerValu
             .replace(/\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|horas?)\b/, '')
             .replace(/\b(?:till|until|to|hasta(?: las)?)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/, ''),
         );
-      if (field === 'manpower.workers' && headcount) value.workers = Number(headcount[1]);
+      if (field === 'manpower.workers') {
+        // The question is the headcount: "they were here all day" leaves it unanswered (model / re-ask).
+        const workers = crewCount(normalized) ?? (headcount ? Number(headcount[1]) : null);
+        if (workers === null) return null;
+        value.workers = workers;
+      }
       if (fullDay) value.fullDay = true;
       else if (halfDay) value.hoursPerWorker = 4;
       else if (hoursMatch) value.hoursPerWorker = Number(hoursMatch[1]);

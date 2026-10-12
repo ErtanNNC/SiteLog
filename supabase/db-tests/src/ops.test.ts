@@ -437,12 +437,13 @@ describe('cost per report', () => {
     }
     const old = await report({ date: '2026-08-01' });
     await cost(old.id, 1000, '2026-08-01T22:00:00Z');
+    // Its own site-day: a site-day has at most one live report (20261012000004_queue_fairness.sql).
     const noWork = await report({
-      date: '2026-09-29',
+      date: '2026-09-20',
       kind: 'no_work',
-      filedAt: '2026-09-29T23:00:00Z',
+      filedAt: '2026-09-20T23:00:00Z',
     });
-    await cost(noWork.id, 0, '2026-09-29T23:00:00Z', 'no_work');
+    await cost(noWork.id, 0, '2026-09-20T23:00:00Z', 'no_work');
 
     const baseline = async (kind: string, before: string, exclude: string | null) =>
       (

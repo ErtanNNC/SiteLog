@@ -1281,6 +1281,28 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
     });
   });
 
+  it('deletes only done jobs finished before the cutoff', async () => {
+    const mk = async (status: string, finished: string | null) => {
+      const [row] = await q<{ id: string }>(
+        `insert into jobs (type, payload, status, finished_at) values ('weekly_digest', '{}', $1, $2) returning id`,
+        [status, finished],
+      );
+      return Number(row!.id);
+    };
+    const oldDone = await mk('done', '2026-08-01T00:00:00Z');
+    const newDone = await mk('done', '2026-10-11T00:00:00Z');
+    const oldDead = await mk('dead', '2026-08-01T00:00:00Z');
+    expect(
+      await db.purgeFinishedJobs(new Date('2026-09-12T00:00:00Z'), 1_000),
+    ).toBeGreaterThanOrEqual(1);
+    const left = (
+      await q<{ id: string }>(`select id from jobs where id = any($1)`, [
+        [oldDone, newDone, oldDead],
+      ])
+    ).map((r) => Number(r.id));
+    expect(left.sort()).toEqual([newDone, oldDead].sort());
+  });
+
   it('updates reporters (invite bookkeeping)', async () => {
     await db.updateReporter(MARCO, {
       last_invite_error: 'Not on WhatsApp',

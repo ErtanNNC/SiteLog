@@ -151,6 +151,18 @@ export function createRunner(ctx: Ctx, opts: RunnerOptions): Runner {
   let loop: Promise<void> | null = null;
   let sweepTimer: NodeJS.Timeout | null = null;
   const inflight = new Set<Promise<unknown>>();
+  /** Ends the main loop's current wait early: a finished job frees a slot and often enqueued a follow-up. */
+  let wake: (() => void) | null = null;
+  const idle = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(done, ms);
+      function done() {
+        clearTimeout(timer);
+        wake = null;
+        resolve();
+      }
+      wake = done;
+    });
 
   const track = <T>(p: Promise<T>): Promise<T> => {
     inflight.add(p);
@@ -163,7 +175,12 @@ export function createRunner(ctx: Ctx, opts: RunnerOptions): Runner {
     const jobs = await ctx.db.claimJobs(opts.workerId, free);
     for (const job of jobs) {
       active++;
-      void track(runJob(ctx, job, opts.jobTimeoutMs).finally(() => active--));
+      void track(
+        runJob(ctx, job, opts.jobTimeoutMs).finally(() => {
+          active--;
+          wake?.();
+        }),
+      );
     }
     return jobs.length;
   }
@@ -188,7 +205,7 @@ export function createRunner(ctx: Ctx, opts: RunnerOptions): Runner {
         await sleep(Math.min(opts.pollIntervalMs * 5, 10_000));
         continue;
       }
-      if (n === 0 || active >= opts.concurrency) await sleep(opts.pollIntervalMs);
+      if (n === 0 || active >= opts.concurrency) await idle(opts.pollIntervalMs);
     }
   }
 
@@ -207,6 +224,7 @@ export function createRunner(ctx: Ctx, opts: RunnerOptions): Runner {
     },
     async stop() {
       running = false;
+      wake?.();
       if (sweepTimer) clearInterval(sweepTimer);
       await loop;
       const deadline = Date.now() + 30_000;

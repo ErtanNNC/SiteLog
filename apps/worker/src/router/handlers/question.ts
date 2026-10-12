@@ -136,7 +136,8 @@ export async function handleAnswer(
       return;
     }
   }
-  if (!value) {
+  // A headcount question is only answered by a headcount ("they were here all day" is not one).
+  if (!value || (field === 'manpower.workers' && value.workers == null)) {
     await reaskOrGiveUp(s, q, report, text);
     return;
   }

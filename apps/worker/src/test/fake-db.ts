@@ -831,6 +831,15 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async getInvoiceSummary() {
       return null;
     },
+    async purgeFinishedJobs(before, limit) {
+      const cutoff = before.toISOString();
+      const ids = [...d.jobs.values()]
+        .filter((j) => j.status === 'done' && j.finished_at !== null && j.finished_at < cutoff)
+        .map((j) => j.id)
+        .slice(0, limit);
+      for (const id of ids) d.jobs.delete(id);
+      return ids.length;
+    },
     async purgeMessageMedia(messageId, purgedAt) {
       const m = d.messages.get(messageId);
       if (m) {

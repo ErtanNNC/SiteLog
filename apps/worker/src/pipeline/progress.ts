@@ -57,6 +57,15 @@ function conditionLabel(condition: string): string {
 }
 
 /** True when the report has at least one voice note and every one of them is transcribed. */
+/** A voice note of the report has no transcript yet (its transcription will continue the pipeline). */
+export async function audioPending(ctx: Ctx, reportId: string): Promise<boolean> {
+  const audio = (await ctx.db.listReportSources(reportId)).filter((s) => s.kind === 'audio');
+  if (audio.length === 0) return false;
+  const ids = [...new Set(audio.map((s) => s.message_id))];
+  const done = new Set((await ctx.db.listTranscripts(ids)).map((t) => t.message_id));
+  return ids.some((id) => !done.has(id));
+}
+
 export async function allAudioTranscribed(ctx: Ctx, reportId: string): Promise<boolean> {
   const audio = (await ctx.db.listReportSources(reportId)).filter((s) => s.kind === 'audio');
   if (audio.length === 0) return false;

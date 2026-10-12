@@ -413,6 +413,8 @@ export interface Db {
   listExpiredMedia(before: Date, limit: number): Promise<ExpiredMedia[]>;
   getInvoiceSummary(invoiceId: string): Promise<InvoiceSummary | null>;
   purgeMessageMedia(messageId: string, purgedAt: Date): Promise<void>;
+  /** Deletes `done` jobs finished before `before` (dead / failed ones stay for /ops). */
+  purgeFinishedJobs(before: Date, limit: number): Promise<number>;
   digestStats(orgId: string, weekStart: string, weekEnd: string): Promise<DigestStats>;
 
   /** Close the connection pool (no-op for fakes). */
@@ -478,7 +480,7 @@ function one<T>(rows: readonly T[]): T | null {
 }
 
 /** A Postgres unique_violation (23505) on the given constraint, as postgres.js reports it. */
-function isUniqueViolation(err: unknown, constraint: string): boolean {
+export function isUniqueViolation(err: unknown, constraint: string): boolean {
   const e = err as { code?: string; constraint_name?: string } | null;
   return !!e && e.code === '23505' && e.constraint_name === constraint;
 }
@@ -1036,6 +1038,14 @@ export function createDb(sql: Sql): Db {
         reported_hours: Number(r.reported_hours ?? 0),
         lines: Array.isArray(r.lines) ? (r.lines as InvoiceSummary['lines']) : [],
       };
+    },
+    async purgeFinishedJobs(before, limit) {
+      const rows = await sql<Array<{ id: number }>>`
+        delete from jobs where id in (
+          select id from jobs where status = 'done' and finished_at < ${before.toISOString()}
+          order by id limit ${limit}
+        ) returning id`;
+      return rows.length;
     },
     async purgeMessageMedia(messageId, purgedAt) {
       await sql.begin(async (tx) => {

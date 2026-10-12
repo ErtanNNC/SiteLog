@@ -25,7 +25,6 @@ import { useRequestEvidencePack } from '@/data/hooks';
 import type { DelayEntry, SiteOption } from '@/data/types';
 import { monthDaysRange } from './month';
 
-const ALL = 'all';
 const SECTIONS = ['summary', 'reports', 'transcripts', 'photos', 'weather'] as const;
 
 interface Props {
@@ -37,21 +36,30 @@ interface Props {
   entries: DelayEntry[];
 }
 
+/**
+ * The site preselected when the page is not filtered: the one with the most lost hours this month
+ * (an extension claim is per project, so a pack is always for one site — F16 "choose site + period").
+ */
+function likeliestSite(sites: SiteOption[], entries: DelayEntry[]): string {
+  const hours = new Map<string, number>();
+  for (const e of entries) hours.set(e.siteId, (hours.get(e.siteId) ?? 0) + e.lostHours);
+  const ranked = [...sites].sort((a, b) => (hours.get(b.id) ?? 0) - (hours.get(a.id) ?? 0));
+  return ranked[0]?.id ?? '';
+}
+
 /** "Build EOT evidence pack": site, period, included sections → requestEvidencePack (F16). The parent keys it per open. */
 export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, entries }: Props) {
   const c = copy.weather.pack;
   const d = copy.weather.packDialog;
   const request = useRequestEvidencePack();
   const range = monthDaysRange(month);
-  const [siteId, setSiteId] = useState(defaultSiteId ?? ALL);
+  const [siteId, setSiteId] = useState(() => defaultSiteId ?? likeliestSite(sites, entries));
   const [from, setFrom] = useState(range.start);
   const [to, setTo] = useState(range.end);
   const [sections, setSections] = useState<string[]>([...SECTIONS]);
   const [error, setError] = useState<string | null>(null);
 
-  const inScope = entries.filter(
-    (e) => (siteId === ALL || e.siteId === siteId) && e.date >= from && e.date <= to,
-  );
+  const inScope = entries.filter((e) => e.siteId === siteId && e.date >= from && e.date <= to);
   const siteDays = new Set(inScope.map((e) => `${e.siteId}:${e.date}`)).size;
   const hours = inScope.reduce((a, e) => a + e.lostHours, 0);
 
@@ -59,6 +67,10 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
     setSections((prev) => (on ? [...prev, key] : prev.filter((k) => k !== key)));
 
   const submit = () => {
+    if (!siteId) {
+      setError(d.siteRequired);
+      return;
+    }
     if (to < from) {
       setError(d.periodInvalid);
       return;
@@ -70,7 +82,7 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
     setError(null);
     request.mutate(
       {
-        siteId: siteId === ALL ? null : siteId,
+        siteId,
         periodStart: from,
         periodEnd: to,
         sections: SECTIONS.filter((s) => sections.includes(s)),
@@ -101,7 +113,6 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL}>{copy.weather.packs.allSites}</SelectItem>
                 {sites.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name}

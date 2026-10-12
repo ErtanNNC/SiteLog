@@ -49,15 +49,15 @@ describe('WeatherPage (demo data, October 2026)', () => {
     renderWithProviders(<WeatherPage />, { route: '/weather', store });
     await userEvent.click(await screen.findByRole('button', { name: 'Build EOT evidence pack' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByTestId('pack-summary')).toHaveTextContent(
-      '10 site-days · 36.5 h lost',
-    );
+    // A pack is for one site (F16): unfiltered, the site with the most lost hours is preselected.
+    expect(within(dialog).getByTestId('pack-summary')).toHaveTextContent('3 site-days · 17 h lost');
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Photos' }));
     await userEvent.click(within(dialog).getByRole('button', { name: 'Generate PDF pack' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const pack = store.data.packs[0]!;
     expect(pack.sections).toEqual(['summary', 'reports', 'transcripts', 'weather']);
     expect(pack.period_start).toBe('2026-10-01');
+    expect(store.data.sites.find((x) => x.id === pack.site_id)?.name).toMatch(/^Hillcrest/);
     const history = await screen.findByTestId('pack-history');
     await waitFor(() =>
       expect(within(history).getAllByTestId('pack-status')[0]).toHaveTextContent('Queued'),

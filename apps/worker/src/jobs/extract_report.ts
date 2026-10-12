@@ -45,6 +45,21 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload) 
     extractionLatencyMs: result.call.latencyMs,
     extractionRetried: result.call.retried,
   });
+  // Filed (or voided) while the model was working, e.g. "OK" on the previous draft: a draft
+  // written now would collide with the frozen version and the job would retry for nothing.
+  const latest = await ctx.db.getReport(report.id);
+  if (
+    !latest ||
+    latest.status === 'filed' ||
+    latest.status === 'signed_off' ||
+    latest.status === 'void'
+  ) {
+    ctx.log.info('extraction discarded: report closed meanwhile', {
+      report_id: report.id,
+      status: latest?.status ?? null,
+    });
+    return;
+  }
   await storeDraft(ctx, report, result.data);
   await ctx.db.logAudit({
     org_id: report.org_id,

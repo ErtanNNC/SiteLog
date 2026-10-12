@@ -460,4 +460,28 @@ describe('jobs: welcome, template, retention', () => {
     expect(h.storage.files.has('audio/o/s/d/old.ogg')).toBe(false);
     expect((await h.db.getMessage(fresh.id))!.storage_path).toBe('o/s/d/new.ogg');
   });
+
+  it('retention_cleanup deletes done jobs after 30 days and keeps recent, dead and queued ones', async () => {
+    const h = createHarness();
+    const now = h.ctx.now().getTime();
+    const ago = (days: number) => new Date(now - days * 86_400_000).toISOString();
+    const make = async (status: 'done' | 'dead' | 'queued', finishedDaysAgo: number | null) => {
+      const id = await h.db.enqueueJob('weekly_digest', {
+        orgId: h.org.id,
+        weekStart: '2026-09-07',
+      });
+      Object.assign(h.db.data.jobs.get(id)!, {
+        status,
+        finished_at: finishedDaysAgo === null ? null : ago(finishedDaysAgo),
+      });
+      return id;
+    };
+    const oldDone = await make('done', 45);
+    const recentDone = await make('done', 3);
+    const oldDead = await make('dead', 45);
+    const queued = await make('queued', null);
+    await h.runJob('retention_cleanup', {});
+    expect(h.db.data.jobs.has(oldDone)).toBe(false);
+    for (const id of [recentDone, oldDead, queued]) expect(h.db.data.jobs.has(id)).toBe(true);
+  });
 });
