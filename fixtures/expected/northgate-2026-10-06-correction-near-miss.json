@@ -1,0 +1,172 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Stair tower topped out with the last precast pieces set by the Kestrel crew. Apex Concrete formed the Level 3 shear walls; Ironclad Steel built column cages on Level 2. Near miss: a rebar bundle slipped off the telehandler forks onto the deck; no one was beneath it. Toolbox talk on rigging and securing loads held afterwards. Dry and cool; no weather impact.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 49,
+      "tempMaxF": 60,
+      "windMph": 8,
+      "gustMph": 14,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Dry and cool, no impact",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Level 3",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "start": 5.2,
+          "end": 12.6
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d004",
+      "companyNameHeard": "Ironclad",
+      "companyName": "Ironclad Steel",
+      "trade": "Rebar",
+      "area": "Level 2",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "start": 12.6,
+          "end": 19
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Stair tower",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "start": 19,
+          "end": 26
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 3",
+      "activity": "Shear wall formwork",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "start": 5.2,
+          "end": 12.6
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Column rebar cages",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "start": 12.6,
+          "end": 19
+        }
+      ]
+    },
+    {
+      "area": "Stair tower",
+      "activity": "Precast erection; structural frame complete to roof level",
+      "status": "complete",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "start": 19,
+          "end": 26
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [
+    {
+      "item": "Telehandler",
+      "note": "Rebar bundle slipped off the forks (near miss)",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000012-0000-4000-8000-000000001201",
+          "start": 26,
+          "end": 32.4
+        }
+      ]
+    }
+  ],
+  "safety": {
+    "toolboxTalk": "Rigging and securing loads (after the near miss)",
+    "incidents": [
+      {
+        "description": "A rebar bundle slipped off the telehandler forks and landed on the deck; no one was beneath it",
+        "severity": "near_miss",
+        "source": [
+          {
+            "type": "audio",
+            "messageId": "e0000012-0000-4000-8000-000000001201",
+            "start": 26,
+            "end": 32.4
+          }
+        ]
+      }
+    ],
+    "noIncidentsStated": false,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000012-0000-4000-8000-000000001201",
+        "start": 26,
+        "end": 38
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": [],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-06",
+  "photos": [
+    { "messageId": "e0000012-0000-4000-8000-000000001205", "takenAt": "2026-10-06T22:09:00Z" }
+  ]
+}

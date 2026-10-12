@@ -1,0 +1,133 @@
+{
+  "id": "northgate-2026-10-08-overtime-pour",
+  "description": "Overtime and end times: \"full day plus two hours overtime\" → 10 h, \"till three\" → 8 h, \"stayed till six\" → 11 h; numbers in words (\"a hundred and twelve yards\", \"fourteen trucks\"); next-workday plans incl. an inspection at 10:00.",
+  "expectedQuestion": null,
+  "site": {
+    "name": "Northgate Parking Structure",
+    "projectCode": "NG-2210",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-08",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Kevin",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d001",
+      "name": "Apex Concrete",
+      "trade": "Concrete",
+      "aliases": ["Apex", "the Apex guys"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d004",
+      "name": "Ironclad Steel",
+      "trade": "Rebar",
+      "aliases": ["Ironclad"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "the deck", "official": "Elevated concrete slab", "kind": "term" },
+    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    {
+      "heard": "topped out",
+      "official": "Structural frame complete to roof level",
+      "kind": "term"
+    },
+    { "heard": "punch", "official": "Punch list items", "kind": "term" },
+    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+  ],
+  "rejectedMappings": [{ "heard": "lift", "official": "Lift (concrete placement height)" }],
+  "observedWeather": {
+    "date": "2026-10-08",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-08T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0, "tempF": 55, "windMph": 5, "gustMph": 12 },
+      { "time": "07:00", "precipIn": 0, "tempF": 60, "windMph": 6, "gustMph": 10 },
+      { "time": "08:00", "precipIn": 0, "tempF": 64, "windMph": 7, "gustMph": 8 },
+      { "time": "09:00", "precipIn": 0, "tempF": 67, "windMph": 5, "gustMph": 11 },
+      { "time": "10:00", "precipIn": 0, "tempF": 70, "windMph": 6, "gustMph": 9 },
+      { "time": "11:00", "precipIn": 0, "tempF": 71, "windMph": 7, "gustMph": 12 },
+      { "time": "12:00", "precipIn": 0, "tempF": 71, "windMph": 5, "gustMph": 10 },
+      { "time": "13:00", "precipIn": 0, "tempF": 70, "windMph": 6, "gustMph": 8 },
+      { "time": "14:00", "precipIn": 0, "tempF": 67, "windMph": 7, "gustMph": 11 },
+      { "time": "15:00", "precipIn": 0, "tempF": 64, "windMph": 5, "gustMph": 9 },
+      { "time": "16:00", "precipIn": 0, "tempF": 60, "windMph": 6, "gustMph": 12 },
+      { "time": "17:00", "precipIn": 0, "tempF": 55, "windMph": 7, "gustMph": 10 }
+    ],
+    "summary": {
+      "precipIn": 0,
+      "tempMinF": 55,
+      "tempMaxF": 71,
+      "windMph": 6,
+      "gustMph": 12,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0,
+      "maxGustWorkingHoursMph": 12
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "messageId": "e0000011-0000-4000-8000-000000001105",
+      "caption": "Ramp B finished",
+      "takenAt": "2026-10-08T23:20:00Z"
+    },
+    { "messageId": "e0000011-0000-4000-8000-000000001106", "takenAt": "2026-10-08T23:20:30Z" }
+  ],
+  "segments": [
+    {
+      "messageId": "e0000011-0000-4000-8000-000000001101",
+      "start": 0,
+      "end": 6.4,
+      "text": "Northgate, Thursday. Big day, we poured ramp B."
+    },
+    {
+      "messageId": "e0000011-0000-4000-8000-000000001101",
+      "start": 6.4,
+      "end": 14.8,
+      "text": "A hundred and twelve yards, the pump showed up at six forty-five and the last truck was around four."
+    },
+    {
+      "messageId": "e0000011-0000-4000-8000-000000001101",
+      "start": 14.8,
+      "end": 23,
+      "text": "Apex had four guys, full day plus two hours overtime finishing, so ten hours each."
+    },
+    {
+      "messageId": "e0000011-0000-4000-8000-000000001101",
+      "start": 23,
+      "end": 30.5,
+      "text": "Ironclad, three guys till three, then they left. Our crew, five guys, stayed till six to cure and cover."
+    },
+    {
+      "messageId": "e0000011-0000-4000-8000-000000001101",
+      "start": 30.5,
+      "end": 37,
+      "text": "Ready-mix was fourteen trucks, no rejected loads."
+    },
+    {
+      "messageId": "e0000011-0000-4000-8000-000000001101",
+      "start": 37,
+      "end": 43,
+      "text": "Dry, about seventy degrees, perfect pour weather. No incidents, toolbox talk on pump hose safety."
+    },
+    {
+      "messageId": "e0000011-0000-4000-8000-000000001101",
+      "start": 43,
+      "end": 50,
+      "text": "Tomorrow we strip the edge forms on the ramp, and the inspector's coming at ten for the level two PT deck."
+    }
+  ],
+  "texts": []
+}

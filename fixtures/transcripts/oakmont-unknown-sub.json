@@ -1,6 +1,7 @@
 {
   "id": "oakmont-unknown-sub",
   "description": "English, dry day, mentions 'the Ridgeway crew' which is not in COMPANIES → unknown company flagged.",
+  "expectedQuestion": { "field": "company.unknown", "path": "company.unknown:Ridgeway" },
   "site": {
     "name": "Oakmont Medical Center",
     "projectCode": "OM-1187",

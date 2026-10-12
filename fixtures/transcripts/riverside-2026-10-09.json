@@ -1,6 +1,7 @@
 {
   "id": "riverside-2026-10-09",
   "description": "§18 hero report. Mixed ES/EN, 2 min 48 s, Delta headcount not stated (asked later).",
+  "expectedQuestion": { "field": "manpower.workers", "path": "manpower.workers:Delta Mechanical" },
   "site": {
     "name": "Riverside Lofts — Block B",
     "projectCode": "RL-2041",

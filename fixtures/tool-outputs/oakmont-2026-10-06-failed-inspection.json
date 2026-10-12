@@ -1,0 +1,190 @@
+{
+  "languageDetected": ["en"],
+  "summary": "The fire marshal failed the Level 1 above-ceiling inspection: two firestop sleeves missing at the corridor wall; re-inspection Thursday morning. Delta Mechanical continued Level 1 ductwork; Summit Drywall installed ceiling grid and Apex Concrete prepared the topping slab on Level 2. Door frames and hardware (approx. 60 frames) delivered at 09:00; drywall stocked on Level 2 at 13:00. Toolbox talk on ladder use; no incidents.",
+  "weather": {
+    "conditionsText": "Light rain before work started; dry during working hours, no impact",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d003",
+      "companyNameHeard": "Delta",
+      "companyName": "Delta Mechanical",
+      "trade": "HVAC",
+      "area": "Level 1",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 13,
+          "end": 19.8
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d006",
+      "companyNameHeard": "Summit",
+      "companyName": "Summit Drywall",
+      "trade": "Drywall",
+      "area": "Level 2",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 19.8,
+          "end": 26.4
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Level 2",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 19.8,
+          "end": 26.4
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 1",
+      "activity": "Ductwork",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 13,
+          "end": 19.8
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Ceiling grid",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 19.8,
+          "end": 26.4
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Concrete topping slab preparation",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 19.8,
+          "end": 26.4
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Door frames and hardware",
+      "quantity": "approx. 60 frames",
+      "time": "09:00",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 26.4,
+          "end": 34
+        }
+      ]
+    },
+    {
+      "item": "Drywall board, stocked on Level 2",
+      "time": "13:00",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 26.4,
+          "end": 34
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Ladder use",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": ["Fire marshal (above-ceiling inspection, Level 1)"],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000019-0000-4000-8000-000000001901",
+        "start": 6.2,
+        "end": 13
+      },
+      {
+        "type": "audio",
+        "messageId": "e0000019-0000-4000-8000-000000001901",
+        "start": 34,
+        "end": 40
+      }
+    ]
+  },
+  "issues": [
+    {
+      "description": "Level 1 above-ceiling inspection failed: two firestop sleeves missing at the corridor wall",
+      "impact": "Level 1 ceiling close-up on hold until re-inspection; Delta Mechanical to install the sleeves",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 6.2,
+          "end": 19.8
+        }
+      ]
+    }
+  ],
+  "nextWorkday": [
+    {
+      "item": "Fire marshal re-inspection of the Level 1 above-ceiling work, Thursday morning",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000019-0000-4000-8000-000000001901",
+          "start": 34,
+          "end": 40
+        }
+      ]
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

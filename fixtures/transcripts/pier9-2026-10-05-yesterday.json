@@ -1,0 +1,115 @@
+{
+  "id": "pier9-2026-10-05-yesterday",
+  "description": "Note about yesterday, sent the next morning: report dated Mon Oct 5. Drizzle 13:30–15:00 → 1.5 h lost (§18 Pier 9 Oct 5); \"no incidents, no toolbox talk\" satisfies safety; photos taken the day before.",
+  "expectedQuestion": null,
+  "site": {
+    "name": "Pier 9 Warehouse Retrofit",
+    "projectCode": "P9-0932",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-05",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Tomasz",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d002",
+      "name": "BrightLine Electric",
+      "trade": "Electrical",
+      "aliases": ["BrightLine", "Bright Line"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d006",
+      "name": "Summit Drywall",
+      "trade": "Drywall",
+      "aliases": ["Summit"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "punch", "official": "Punch list items", "kind": "term" },
+    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-05",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-05T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0, "tempF": 55, "windMph": 8, "gustMph": 17 },
+      { "time": "07:00", "precipIn": 0, "tempF": 57, "windMph": 9, "gustMph": 15 },
+      { "time": "08:00", "precipIn": 0, "tempF": 59, "windMph": 10, "gustMph": 13 },
+      { "time": "09:00", "precipIn": 0, "tempF": 61, "windMph": 8, "gustMph": 16 },
+      { "time": "10:00", "precipIn": 0, "tempF": 62, "windMph": 9, "gustMph": 14 },
+      { "time": "11:00", "precipIn": 0, "tempF": 63, "windMph": 10, "gustMph": 17 },
+      { "time": "12:00", "precipIn": 0, "tempF": 63, "windMph": 8, "gustMph": 15 },
+      { "time": "13:00", "precipIn": 0.02, "tempF": 62, "windMph": 9, "gustMph": 13 },
+      { "time": "14:00", "precipIn": 0.05, "tempF": 61, "windMph": 10, "gustMph": 16 },
+      { "time": "15:00", "precipIn": 0, "tempF": 59, "windMph": 8, "gustMph": 14 },
+      { "time": "16:00", "precipIn": 0, "tempF": 57, "windMph": 9, "gustMph": 17 },
+      { "time": "17:00", "precipIn": 0, "tempF": 55, "windMph": 10, "gustMph": 15 }
+    ],
+    "summary": {
+      "precipIn": 0.07,
+      "tempMinF": 55,
+      "tempMaxF": 63,
+      "windMph": 9,
+      "gustMph": 17,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0.07,
+      "maxGustWorkingHoursMph": 17
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    { "messageId": "e0000009-0000-4000-8000-000000000905", "takenAt": "2026-10-05T19:05:00Z" },
+    {
+      "messageId": "e0000009-0000-4000-8000-000000000906",
+      "caption": "Roof north side",
+      "takenAt": "2026-10-05T20:48:00Z"
+    }
+  ],
+  "segments": [
+    {
+      "messageId": "e0000009-0000-4000-8000-000000000901",
+      "start": 0,
+      "end": 7.2,
+      "text": "Morning, this is for yesterday, Monday, Pier 9. Sorry, my phone died last night."
+    },
+    {
+      "messageId": "e0000009-0000-4000-8000-000000000901",
+      "start": 7.2,
+      "end": 15,
+      "text": "We had drizzle from one thirty till three, our guys had to come off the roof, so an hour and a half lost on the membrane repairs. They finished the day cleaning up bay two."
+    },
+    {
+      "messageId": "e0000009-0000-4000-8000-000000000901",
+      "start": 15,
+      "end": 22.5,
+      "text": "Our guys, six of them, all day. Summit, three guys, all day on the office framing in bay three."
+    },
+    {
+      "messageId": "e0000009-0000-4000-8000-000000000901",
+      "start": 22.5,
+      "end": 29,
+      "text": "The roof patching on the north side is maybe sixty percent. The framing is about halfway."
+    },
+    {
+      "messageId": "e0000009-0000-4000-8000-000000000901",
+      "start": 29,
+      "end": 34.5,
+      "text": "No incidents, no toolbox talk yesterday. Sending the photos from yesterday now."
+    }
+  ],
+  "texts": []
+}

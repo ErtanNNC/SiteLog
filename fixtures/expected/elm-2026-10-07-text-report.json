@@ -1,0 +1,76 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Roof trusses set on Units 1–4 (all 24). Roof sheathing delivered at 14:00 (60 sheets). Dry; no weather impact. Toolbox talk on fall protection for truss setting; no incidents.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 54,
+      "tempMaxF": 70,
+      "windMph": 7,
+      "gustMph": 12,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Dry, no weather issues",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Units 1–4",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Units 1–4",
+      "activity": "Roof truss setting",
+      "status": "complete",
+      "quantity": { "value": 24, "unit": "trusses" },
+      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Roof sheathing",
+      "quantity": "60 sheets",
+      "time": "14:00",
+      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Fall protection for truss setting",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Roof sheathing on Units 1–4",
+      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": ["photo"],
+  "lowConfidence": [],
+  "proposedQuestions": [
+    {
+      "field": "photo",
+      "question": "A photo of today's trusses would complete the report. Can you send one?",
+      "options": ["Sending now", "No photo today"]
+    }
+  ],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-07",
+  "photos": []
+}

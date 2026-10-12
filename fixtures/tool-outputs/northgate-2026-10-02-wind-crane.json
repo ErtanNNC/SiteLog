@@ -1,0 +1,176 @@
+{
+  "languageDetected": ["en"],
+  "summary": "High wind after lunch (gusts over 30 mph): the crane was stood down from 13:00 to 15:00, stopping precast picks for 2 h; the erection crew moved to connections and grouting. Nine double tees set on Level 3 before the stoppage. Ramp B pour preparation and Level 2 post-tension deck rebar continued. Toolbox talk on crane signals and wind limits; no incidents.",
+  "weather": {
+    "conditionsText": "Dry; high wind after lunch with gusts over 30 mph",
+    "periods": [
+      {
+        "start": "13:00",
+        "end": "15:00",
+        "condition": "High wind",
+        "impact": "Crane stood down; no precast picks, erection crew moved to connections and grouting",
+        "lostHours": 2,
+        "source": [
+          {
+            "type": "audio",
+            "messageId": "e0000010-0000-4000-8000-000000001001",
+            "start": 0,
+            "end": 14.1
+          }
+        ]
+      }
+    ]
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Ramp B",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "start": 21,
+          "end": 28.3
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d004",
+      "companyNameHeard": "Ironclad",
+      "companyName": "Ironclad Steel",
+      "trade": "Rebar",
+      "area": "Level 2",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "start": 21,
+          "end": 28.3
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Level 3",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "start": 28.3,
+          "end": 34
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 3",
+      "activity": "Precast erection",
+      "status": "in_progress",
+      "quantity": { "value": 9, "unit": "double tees", "heardAs": "nine double tees" },
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "start": 14.1,
+          "end": 21
+        }
+      ]
+    },
+    {
+      "area": "Level 3",
+      "activity": "Precast connections and grouting",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "start": 6,
+          "end": 14.1
+        }
+      ]
+    },
+    {
+      "area": "Ramp B",
+      "activity": "Pour preparation",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "start": 21,
+          "end": 28.3
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Rebar, post-tension deck",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "start": 21,
+          "end": 28.3
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [
+    {
+      "item": "Crane",
+      "note": "Stood down 13:00–15:00 for wind",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000010-0000-4000-8000-000000001001",
+          "start": 6,
+          "end": 14.1
+        }
+      ]
+    }
+  ],
+  "safety": {
+    "toolboxTalk": "Crane signals and wind limits",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000010-0000-4000-8000-000000001001",
+        "start": 34,
+        "end": 40.2
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

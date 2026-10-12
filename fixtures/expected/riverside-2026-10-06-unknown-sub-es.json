@@ -1,0 +1,206 @@
+{
+  "languageDetected": ["es"],
+  "summary": "Apex Concrete continued formwork for the Level 4 elevated slab. A new crew, Ramírez (4 workers), patched the Level 3 columns until 12:00. BrightLine Electric worked on Level 3 and Delta Mechanical on Level 2. Dry; no weather impact. Toolbox talk on fall protection at slab edges; no incidents.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 55,
+      "tempMaxF": 68,
+      "windMph": 8,
+      "gustMph": 15,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Dry, no weather impact",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Level 4",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "start": 6,
+          "end": 14.5
+        }
+      ]
+    },
+    {
+      "companyId": null,
+      "companyNameHeard": "los de Ramírez",
+      "companyName": "Ramírez",
+      "trade": "Concrete patching",
+      "area": "Level 3",
+      "workers": 4,
+      "hoursPerWorker": 5,
+      "totalHours": 20,
+      "hoursBasis": "stated",
+      "confidence": 0.85,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "start": 14.5,
+          "end": 22
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d002",
+      "companyNameHeard": "BrightLine",
+      "companyName": "BrightLine Electric",
+      "trade": "Electrical",
+      "area": "Level 3",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "start": 22,
+          "end": 29
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d003",
+      "companyNameHeard": "Delta",
+      "companyName": "Delta Mechanical",
+      "trade": "HVAC",
+      "area": "Level 2",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "start": 22,
+          "end": 29
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "nuestros cuatro",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Level 4",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "start": 29,
+          "end": 35
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 4",
+      "activity": "Formwork for the elevated slab",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "start": 6,
+          "end": 14.5
+        }
+      ]
+    },
+    {
+      "area": "Level 3",
+      "activity": "Column patching",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "start": 14.5,
+          "end": 22
+        }
+      ]
+    },
+    {
+      "area": "Level 4",
+      "activity": "Cleanup",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000022-0000-4000-8000-000000002201",
+          "start": 29,
+          "end": 35
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Fall protection at slab edges",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000022-0000-4000-8000-000000002201",
+        "start": 35,
+        "end": 41.5
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [
+    {
+      "heard": "los de Ramírez",
+      "proposedOfficial": "Ramírez",
+      "kind": "company",
+      "confidence": 0.8
+    },
+    { "heard": "cimbra", "proposedOfficial": "Formwork", "kind": "term", "confidence": 0.85 }
+  ],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": [
+    {
+      "field": "company.unknown",
+      "question": "I heard \"los de Ramírez\" — is that a new subcontractor?",
+      "options": ["Add \"Ramírez\""],
+      "target": { "companyNameHeard": "los de Ramírez", "manpowerIndex": 1 }
+    }
+  ],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-06",
+  "photos": [
+    { "messageId": "e0000022-0000-4000-8000-000000002205", "takenAt": "2026-10-06T22:27:00Z" },
+    {
+      "messageId": "e0000022-0000-4000-8000-000000002206",
+      "caption": "Columnas nivel 3",
+      "takenAt": "2026-10-06T22:27:15Z"
+    }
+  ]
+}

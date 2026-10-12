@@ -1,0 +1,212 @@
+{
+  "languageDetected": ["es"],
+  "summary": "Elevator core walls poured by Apex Concrete (approx. 24 yd³), finished at about 13:00. Level 3 electrical conduit approximately 50% complete; Level 2 ductwork continued in the west wing; rebar tying for the Level 4 slab continued. Scaffold for the north elevation delivered at 09:00. Dry all day. Toolbox talk on scaffold and harness safety; no incidents.",
+  "weather": { "conditionsText": "Dry all day", "periods": [] },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Elevator core",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 14.9,
+          "end": 21.6
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d002",
+      "companyNameHeard": "BrightLine",
+      "companyName": "BrightLine Electric",
+      "trade": "Electrical",
+      "area": "Level 3",
+      "workers": 4,
+      "hoursPerWorker": 7,
+      "totalHours": 28,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 21.6,
+          "end": 29
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d003",
+      "companyNameHeard": "los de Delta",
+      "companyName": "Delta Mechanical",
+      "trade": "HVAC",
+      "area": "Level 2",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 29,
+          "end": 35.2
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d004",
+      "companyNameHeard": "Ironclad",
+      "companyName": "Ironclad Steel",
+      "trade": "Rebar",
+      "area": "Level 4",
+      "workers": 2,
+      "hoursPerWorker": 4,
+      "totalHours": 8,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 35.2,
+          "end": 41.7
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "nuestros cuatro peones",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Elevator core",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 41.7,
+          "end": 48
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Elevator core",
+      "activity": "Wall pour",
+      "status": "complete",
+      "quantity": { "value": 24, "unit": "yd³", "heardAs": "veinticuatro yardas" },
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 6.8,
+          "end": 21.6
+        }
+      ]
+    },
+    {
+      "area": "Level 3",
+      "activity": "Electrical conduit rough-in",
+      "status": "in_progress",
+      "percentComplete": 50,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 21.6,
+          "end": 29
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Ductwork, west wing",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 29,
+          "end": 35.2
+        }
+      ]
+    },
+    {
+      "area": "Level 4",
+      "activity": "Rebar tying for the slab",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 35.2,
+          "end": 41.7
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Scaffold for the north elevation",
+      "time": "09:00",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 48,
+          "end": 55.5
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Scaffold and harness safety",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000004-0000-4000-8000-000000000401",
+        "start": 55.5,
+        "end": 62
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Erect the scaffold on the north elevation",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000004-0000-4000-8000-000000000401",
+          "start": 48,
+          "end": 55.5
+        }
+      ]
+    }
+  ],
+  "newTerms": [
+    { "heard": "colado", "proposedOfficial": "Concrete pour", "kind": "term", "confidence": 0.85 }
+  ],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

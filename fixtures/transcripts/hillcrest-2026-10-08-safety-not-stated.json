@@ -1,0 +1,114 @@
+{
+  "id": "hillcrest-2026-10-08-safety-not-stated",
+  "description": "Safety never mentioned → noIncidentsStated stays false and the safety question is asked; sprinkles with no stoppage (0 h); steel delivery with a time.",
+  "expectedQuestion": { "field": "safety", "path": "safety" },
+  "site": {
+    "name": "Hillcrest School Extension",
+    "projectCode": "HS-0418",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-08",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Aisha",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d001",
+      "name": "Apex Concrete",
+      "trade": "Concrete",
+      "aliases": ["Apex", "the Apex guys"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d006",
+      "name": "Summit Drywall",
+      "trade": "Drywall",
+      "aliases": ["Summit"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "block", "official": "Concrete masonry units (CMU)", "kind": "term" },
+    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-08",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-08T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0, "tempF": 54, "windMph": 8, "gustMph": 16 },
+      { "time": "07:00", "precipIn": 0, "tempF": 56, "windMph": 9, "gustMph": 14 },
+      { "time": "08:00", "precipIn": 0, "tempF": 58, "windMph": 10, "gustMph": 12 },
+      { "time": "09:00", "precipIn": 0, "tempF": 60, "windMph": 8, "gustMph": 15 },
+      { "time": "10:00", "precipIn": 0, "tempF": 61, "windMph": 9, "gustMph": 13 },
+      { "time": "11:00", "precipIn": 0, "tempF": 62, "windMph": 10, "gustMph": 16 },
+      { "time": "12:00", "precipIn": 0.02, "tempF": 62, "windMph": 8, "gustMph": 14 },
+      { "time": "13:00", "precipIn": 0, "tempF": 61, "windMph": 9, "gustMph": 12 },
+      { "time": "14:00", "precipIn": 0, "tempF": 60, "windMph": 10, "gustMph": 15 },
+      { "time": "15:00", "precipIn": 0, "tempF": 58, "windMph": 8, "gustMph": 13 },
+      { "time": "16:00", "precipIn": 0, "tempF": 56, "windMph": 9, "gustMph": 16 },
+      { "time": "17:00", "precipIn": 0, "tempF": 54, "windMph": 10, "gustMph": 14 }
+    ],
+    "summary": {
+      "precipIn": 0.02,
+      "tempMinF": 54,
+      "tempMaxF": 62,
+      "windMph": 9,
+      "gustMph": 16,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0.02,
+      "maxGustWorkingHoursMph": 16
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "messageId": "e0000023-0000-4000-8000-000000002305",
+      "caption": "South wall",
+      "takenAt": "2026-10-08T22:19:00Z"
+    }
+  ],
+  "segments": [
+    {
+      "messageId": "e0000023-0000-4000-8000-000000002301",
+      "start": 0,
+      "end": 6.5,
+      "text": "Hillcrest, Thursday. Cloudy, a few sprinkles at lunch, didn't stop anything."
+    },
+    {
+      "messageId": "e0000023-0000-4000-8000-000000002301",
+      "start": 6.5,
+      "end": 14,
+      "text": "Our guys, eight, full day, block on the south elevation, we got past the window sills, maybe seventy percent of that wall."
+    },
+    {
+      "messageId": "e0000023-0000-4000-8000-000000002301",
+      "start": 14,
+      "end": 21.5,
+      "text": "Summit two, full day, gym office framing, they finished the framing."
+    },
+    {
+      "messageId": "e0000023-0000-4000-8000-000000002301",
+      "start": 21.5,
+      "end": 29,
+      "text": "The gym steel showed up at eight thirty, three trucks. The erector starts Monday."
+    },
+    {
+      "messageId": "e0000023-0000-4000-8000-000000002301",
+      "start": 29,
+      "end": 33,
+      "text": "That's it. Photo of the wall."
+    }
+  ],
+  "texts": []
+}

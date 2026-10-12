@@ -1,0 +1,201 @@
+{
+  "languageDetected": ["en"],
+  "summary": "ClearView Glazing set 14 curtain-wall panels on the north elevation. Delta Mechanical continued mechanical rough-in in the Level 1 imaging suite (headcount not stated). Summit Drywall hung board in the Level 2 patient wing. Kestrel laborers cleaned up and protected finished floors on Level 1. Overcast, no rain; no weather impact. Toolbox talk on silica and dust control; no incidents.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 52,
+      "tempMaxF": 61,
+      "windMph": 9,
+      "gustMph": 16,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Overcast all day, no rain; no impact",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d005",
+      "companyNameHeard": "ClearView",
+      "companyName": "ClearView Glazing",
+      "trade": "Glazing",
+      "area": "Exterior — north elevation",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "start": 6.1,
+          "end": 13.4
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d003",
+      "companyNameHeard": "the Delta guys",
+      "companyName": "Delta Mechanical",
+      "trade": "HVAC",
+      "area": "Level 1",
+      "workers": null,
+      "hoursPerWorker": null,
+      "totalHours": null,
+      "hoursBasis": "unknown",
+      "confidence": 0.6,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "start": 13.4,
+          "end": 20
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d006",
+      "companyNameHeard": "Summit",
+      "companyName": "Summit Drywall",
+      "trade": "Drywall",
+      "area": "Level 2",
+      "workers": 4,
+      "hoursPerWorker": null,
+      "totalHours": null,
+      "hoursBasis": "unknown",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "start": 20,
+          "end": 26.2
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Level 1",
+      "workers": 2,
+      "hoursPerWorker": 8,
+      "totalHours": 16,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "start": 26.2,
+          "end": 32.5
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Exterior — north elevation",
+      "activity": "Curtain wall glazing",
+      "status": "in_progress",
+      "quantity": { "value": 14, "unit": "panels", "heardAs": "fourteen panels" },
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "start": 6.1,
+          "end": 13.4
+        }
+      ]
+    },
+    {
+      "area": "Level 1",
+      "activity": "Mechanical rough-in, imaging suite",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "start": 13.4,
+          "end": 20
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Drywall hanging, patient wing",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "start": 20,
+          "end": 26.2
+        }
+      ]
+    },
+    {
+      "area": "Level 1",
+      "activity": "Cleanup and floor protection",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "start": 26.2,
+          "end": 32.5
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Silica and dust control",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000006-0000-4000-8000-000000000601",
+        "start": 32.5,
+        "end": 38
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": [
+    "manpower.workers:Delta Mechanical",
+    "manpower.hours:Delta Mechanical",
+    "manpower.hours:Summit Drywall"
+  ],
+  "lowConfidence": [{ "path": "manpower[1]", "reason": "\"A few\" is not a headcount" }],
+  "proposedQuestions": [
+    {
+      "field": "manpower.workers",
+      "question": "Quick check: you said 'a few of the Delta guys' were on Level 1. How many, and for how long?",
+      "options": ["3 · full day", "4 · full day"],
+      "target": { "companyNameHeard": "the Delta guys", "manpowerIndex": 1 }
+    },
+    {
+      "field": "manpower.hours",
+      "question": "How long was Summit Drywall on site today?",
+      "options": ["Full day", "Half day"],
+      "target": { "companyNameHeard": "Summit", "manpowerIndex": 2 }
+    }
+  ],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-08",
+  "photos": [
+    {
+      "messageId": "e0000006-0000-4000-8000-000000000605",
+      "caption": "North curtain wall",
+      "takenAt": "2026-10-08T22:12:30Z"
+    }
+  ]
+}

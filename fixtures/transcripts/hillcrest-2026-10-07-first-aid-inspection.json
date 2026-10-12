@@ -1,0 +1,126 @@
+{
+  "id": "hillcrest-2026-10-07-first-aid-inspection",
+  "description": "First-aid incident (cut hand, treated from the kit, back to work) → severity first_aid and noIncidentsStated false; passed city footing inspection as a visitor; \"thirty-two yards\" footing pour.",
+  "expectedQuestion": null,
+  "site": {
+    "name": "Hillcrest School Extension",
+    "projectCode": "HS-0418",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-07",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Aisha",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d001",
+      "name": "Apex Concrete",
+      "trade": "Concrete",
+      "aliases": ["Apex", "the Apex guys"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d006",
+      "name": "Summit Drywall",
+      "trade": "Drywall",
+      "aliases": ["Summit"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "block", "official": "Concrete masonry units (CMU)", "kind": "term" },
+    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-07",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-07T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0, "tempF": 52, "windMph": 6, "gustMph": 13 },
+      { "time": "07:00", "precipIn": 0, "tempF": 57, "windMph": 7, "gustMph": 11 },
+      { "time": "08:00", "precipIn": 0, "tempF": 61, "windMph": 8, "gustMph": 9 },
+      { "time": "09:00", "precipIn": 0, "tempF": 65, "windMph": 6, "gustMph": 12 },
+      { "time": "10:00", "precipIn": 0, "tempF": 67, "windMph": 7, "gustMph": 10 },
+      { "time": "11:00", "precipIn": 0, "tempF": 69, "windMph": 8, "gustMph": 13 },
+      { "time": "12:00", "precipIn": 0, "tempF": 69, "windMph": 6, "gustMph": 11 },
+      { "time": "13:00", "precipIn": 0, "tempF": 67, "windMph": 7, "gustMph": 9 },
+      { "time": "14:00", "precipIn": 0, "tempF": 65, "windMph": 8, "gustMph": 12 },
+      { "time": "15:00", "precipIn": 0, "tempF": 61, "windMph": 6, "gustMph": 10 },
+      { "time": "16:00", "precipIn": 0, "tempF": 57, "windMph": 7, "gustMph": 13 },
+      { "time": "17:00", "precipIn": 0, "tempF": 52, "windMph": 8, "gustMph": 11 }
+    ],
+    "summary": {
+      "precipIn": 0,
+      "tempMinF": 52,
+      "tempMaxF": 69,
+      "windMph": 7,
+      "gustMph": 13,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0,
+      "maxGustWorkingHoursMph": 13
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "messageId": "e0000018-0000-4000-8000-000000001805",
+      "caption": "East footings poured",
+      "takenAt": "2026-10-07T22:15:00Z"
+    }
+  ],
+  "segments": [
+    {
+      "messageId": "e0000018-0000-4000-8000-000000001801",
+      "start": 0,
+      "end": 6,
+      "text": "Hillcrest, Wednesday. Dry and sunny, no weather issues."
+    },
+    {
+      "messageId": "e0000018-0000-4000-8000-000000001801",
+      "start": 6,
+      "end": 13,
+      "text": "We pumped out the footings first thing, then Apex had five guys on the classroom wing east footings, full day, they poured thirty-two yards."
+    },
+    {
+      "messageId": "e0000018-0000-4000-8000-000000001801",
+      "start": 13,
+      "end": 19.5,
+      "text": "Summit, two guys, full day, framing the office walls in the gym."
+    },
+    {
+      "messageId": "e0000018-0000-4000-8000-000000001801",
+      "start": 19.5,
+      "end": 26,
+      "text": "Our guys, eight of them, full day, block on the south elevation, we're up to about the window sills."
+    },
+    {
+      "messageId": "e0000018-0000-4000-8000-000000001801",
+      "start": 26,
+      "end": 34.5,
+      "text": "The city inspector came at ten for the east footing rebar and passed it, so we poured right after."
+    },
+    {
+      "messageId": "e0000018-0000-4000-8000-000000001801",
+      "start": 34.5,
+      "end": 43,
+      "text": "One first aid: one of our masons cut his hand on a block, we cleaned it and bandaged it from the first aid kit and he went back to work."
+    },
+    {
+      "messageId": "e0000018-0000-4000-8000-000000001801",
+      "start": 43,
+      "end": 48,
+      "text": "Toolbox talk this morning was hand protection, funny enough. Photo of the footings."
+    }
+  ],
+  "texts": []
+}

@@ -1,0 +1,199 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Ironclad Steel tied approximately 80% of the Level 2 post-tension elevated slab rebar. Apex Concrete completed the Level 2 column pours (approx. 11 yd³). The boom lift was out of service all morning, so the Kestrel crew worked on Level 1 punch list items instead of the Level 3 shear wall formwork. Dry. Toolbox talk on aerial lift inspections; no incidents.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 51,
+      "tempMaxF": 66,
+      "windMph": 9,
+      "gustMph": 15,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Dry all day",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d004",
+      "companyNameHeard": "Iron Clad",
+      "companyName": "Ironclad Steel",
+      "trade": "Rebar",
+      "area": "Level 2",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000021-0000-4000-8000-000000002101",
+          "start": 6.5,
+          "end": 14
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "A pecks guys",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Level 2",
+      "workers": 2,
+      "hoursPerWorker": 8,
+      "totalHours": 16,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.8,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000021-0000-4000-8000-000000002101",
+          "start": 14,
+          "end": 21.8
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Level 1",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000021-0000-4000-8000-000000002101",
+          "start": 21.8,
+          "end": 30
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 2",
+      "activity": "Rebar for the post-tension elevated slab",
+      "status": "in_progress",
+      "percentComplete": 80,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000021-0000-4000-8000-000000002101",
+          "start": 6.5,
+          "end": 14
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Column pours",
+      "status": "complete",
+      "quantity": { "value": 11, "unit": "yd³", "heardAs": "eleven yards" },
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000021-0000-4000-8000-000000002101",
+          "start": 14,
+          "end": 21.8
+        }
+      ]
+    },
+    {
+      "area": "Level 1",
+      "activity": "Punch list items",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000021-0000-4000-8000-000000002101",
+          "start": 21.8,
+          "end": 30
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [
+    {
+      "item": "Boom lift",
+      "note": "Out of service all morning; repair scheduled for tomorrow 07:00",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000021-0000-4000-8000-000000002101",
+          "start": 21.8,
+          "end": 36
+        }
+      ]
+    }
+  ],
+  "safety": {
+    "toolboxTalk": "Aerial lift inspections",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000021-0000-4000-8000-000000002101",
+        "start": 36,
+        "end": 41
+      }
+    ]
+  },
+  "issues": [
+    {
+      "description": "Boom lift out of service all morning",
+      "impact": "Level 3 shear wall formwork postponed; crew reassigned to Level 1 punch list items",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000021-0000-4000-8000-000000002101",
+          "start": 21.8,
+          "end": 30
+        }
+      ]
+    }
+  ],
+  "nextWorkday": [
+    {
+      "item": "Boom lift repair by the rental company at 07:00",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000021-0000-4000-8000-000000002101",
+          "start": 30,
+          "end": 36
+        }
+      ]
+    }
+  ],
+  "newTerms": [
+    {
+      "heard": "Iron Clad",
+      "proposedOfficial": "Ironclad Steel",
+      "kind": "company",
+      "confidence": 0.85
+    },
+    {
+      "heard": "A pecks",
+      "proposedOfficial": "Apex Concrete",
+      "kind": "company",
+      "confidence": 0.75
+    }
+  ],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": [],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-07",
+  "photos": [
+    { "messageId": "e0000021-0000-4000-8000-000000002105", "takenAt": "2026-10-07T22:01:00Z" }
+  ]
+}

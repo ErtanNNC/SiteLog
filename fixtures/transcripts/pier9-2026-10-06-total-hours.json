@@ -1,0 +1,116 @@
+{
+  "id": "pier9-2026-10-06-total-hours",
+  "description": "Crews stated as total hours (\"thirty hours between them\", \"forty-eight hours total\") → hoursPerWorker derived by code (7.5, 8, 8); quantity in words \"two hundred and forty linear feet\".",
+  "expectedQuestion": null,
+  "site": {
+    "name": "Pier 9 Warehouse Retrofit",
+    "projectCode": "P9-0932",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-06",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Tomasz",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d002",
+      "name": "BrightLine Electric",
+      "trade": "Electrical",
+      "aliases": ["BrightLine", "Bright Line"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d006",
+      "name": "Summit Drywall",
+      "trade": "Drywall",
+      "aliases": ["Summit"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "punch", "official": "Punch list items", "kind": "term" },
+    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-06",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-06T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0, "tempF": 54, "windMph": 15, "gustMph": 24 },
+      { "time": "07:00", "precipIn": 0, "tempF": 57, "windMph": 16, "gustMph": 22 },
+      { "time": "08:00", "precipIn": 0, "tempF": 60, "windMph": 17, "gustMph": 20 },
+      { "time": "09:00", "precipIn": 0, "tempF": 63, "windMph": 15, "gustMph": 23 },
+      { "time": "10:00", "precipIn": 0, "tempF": 65, "windMph": 16, "gustMph": 21 },
+      { "time": "11:00", "precipIn": 0, "tempF": 66, "windMph": 17, "gustMph": 24 },
+      { "time": "12:00", "precipIn": 0, "tempF": 66, "windMph": 15, "gustMph": 22 },
+      { "time": "13:00", "precipIn": 0, "tempF": 65, "windMph": 16, "gustMph": 20 },
+      { "time": "14:00", "precipIn": 0, "tempF": 63, "windMph": 17, "gustMph": 23 },
+      { "time": "15:00", "precipIn": 0, "tempF": 60, "windMph": 15, "gustMph": 21 },
+      { "time": "16:00", "precipIn": 0, "tempF": 57, "windMph": 16, "gustMph": 24 },
+      { "time": "17:00", "precipIn": 0, "tempF": 54, "windMph": 17, "gustMph": 22 }
+    ],
+    "summary": {
+      "precipIn": 0,
+      "tempMinF": 54,
+      "tempMaxF": 66,
+      "windMph": 16,
+      "gustMph": 24,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0,
+      "maxGustWorkingHoursMph": 24
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    { "messageId": "e0000007-0000-4000-8000-000000000705", "takenAt": "2026-10-06T21:58:00Z" }
+  ],
+  "segments": [
+    {
+      "messageId": "e0000007-0000-4000-8000-000000000701",
+      "start": 0,
+      "end": 5.9,
+      "text": "Pier 9, Tuesday. Dry, bit windy off the lake but no problem for us."
+    },
+    {
+      "messageId": "e0000007-0000-4000-8000-000000000701",
+      "start": 5.9,
+      "end": 14.2,
+      "text": "Summit, four guys, they put in thirty hours between them on the office build-out in bay three, two of them left early."
+    },
+    {
+      "messageId": "e0000007-0000-4000-8000-000000000701",
+      "start": 14.2,
+      "end": 22,
+      "text": "Our guys, six, forty-eight hours total, saw-cutting the slab in bay two, about two hundred and forty linear feet done."
+    },
+    {
+      "messageId": "e0000007-0000-4000-8000-000000000701",
+      "start": 22,
+      "end": 29.5,
+      "text": "And BrightLine sent two electricians for the dock lights, sixteen hours total, the dock lighting is finished."
+    },
+    {
+      "messageId": "e0000007-0000-4000-8000-000000000701",
+      "start": 29.5,
+      "end": 35,
+      "text": "No incidents. Toolbox talk was saw safety and slurry cleanup."
+    },
+    {
+      "messageId": "e0000007-0000-4000-8000-000000000701",
+      "start": 35,
+      "end": 40,
+      "text": "Thursday the dock levelers arrive at eight. Photo sent."
+    }
+  ],
+  "texts": []
+}

@@ -1,0 +1,145 @@
+{
+  "id": "oakmont-2026-10-08-missing-headcount",
+  "description": "\"A few of the Delta guys\" → headcount and hours unknown (null, never guessed); Summit headcount stated without hours. Question priority: Delta headcount first, then Summit hours.",
+  "expectedQuestion": { "field": "manpower.workers", "path": "manpower.workers:Delta Mechanical" },
+  "site": {
+    "name": "Oakmont Medical Center",
+    "projectCode": "OM-1187",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-08",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Dana",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d001",
+      "name": "Apex Concrete",
+      "trade": "Concrete",
+      "aliases": ["Apex", "the Apex guys"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d002",
+      "name": "BrightLine Electric",
+      "trade": "Electrical",
+      "aliases": ["BrightLine", "Bright Line"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d003",
+      "name": "Delta Mechanical",
+      "trade": "HVAC",
+      "aliases": ["the Delta guys", "Delta"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d005",
+      "name": "ClearView Glazing",
+      "trade": "Glazing",
+      "aliases": ["ClearView", "Clear View"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d006",
+      "name": "Summit Drywall",
+      "trade": "Drywall",
+      "aliases": ["Summit"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "punch", "official": "Punch list items", "kind": "term" },
+    { "heard": "rough-in", "official": "MEP rough-in", "kind": "term" },
+    { "heard": "the Delta guys", "official": "Delta Mechanical", "kind": "company" },
+    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-08",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-08T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0, "tempF": 52, "windMph": 8, "gustMph": 16 },
+      { "time": "07:00", "precipIn": 0, "tempF": 55, "windMph": 9, "gustMph": 14 },
+      { "time": "08:00", "precipIn": 0, "tempF": 57, "windMph": 10, "gustMph": 12 },
+      { "time": "09:00", "precipIn": 0, "tempF": 59, "windMph": 8, "gustMph": 15 },
+      { "time": "10:00", "precipIn": 0, "tempF": 60, "windMph": 9, "gustMph": 13 },
+      { "time": "11:00", "precipIn": 0, "tempF": 61, "windMph": 10, "gustMph": 16 },
+      { "time": "12:00", "precipIn": 0, "tempF": 61, "windMph": 8, "gustMph": 14 },
+      { "time": "13:00", "precipIn": 0, "tempF": 60, "windMph": 9, "gustMph": 12 },
+      { "time": "14:00", "precipIn": 0, "tempF": 59, "windMph": 10, "gustMph": 15 },
+      { "time": "15:00", "precipIn": 0, "tempF": 57, "windMph": 8, "gustMph": 13 },
+      { "time": "16:00", "precipIn": 0, "tempF": 55, "windMph": 9, "gustMph": 16 },
+      { "time": "17:00", "precipIn": 0, "tempF": 52, "windMph": 10, "gustMph": 14 }
+    ],
+    "summary": {
+      "precipIn": 0,
+      "tempMinF": 52,
+      "tempMaxF": 61,
+      "windMph": 9,
+      "gustMph": 16,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0,
+      "maxGustWorkingHoursMph": 16
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "messageId": "e0000006-0000-4000-8000-000000000605",
+      "caption": "North curtain wall",
+      "takenAt": "2026-10-08T22:12:30Z"
+    }
+  ],
+  "segments": [
+    {
+      "messageId": "e0000006-0000-4000-8000-000000000601",
+      "start": 0,
+      "end": 6.1,
+      "text": "Oakmont, Thursday the eighth. Overcast all day, no rain, didn't affect anything."
+    },
+    {
+      "messageId": "e0000006-0000-4000-8000-000000000601",
+      "start": 6.1,
+      "end": 13.4,
+      "text": "ClearView had three glaziers on the north elevation curtain wall, full day, they set fourteen panels."
+    },
+    {
+      "messageId": "e0000006-0000-4000-8000-000000000601",
+      "start": 13.4,
+      "end": 20,
+      "text": "A few of the Delta guys were on level one doing the mechanical rough-in in the imaging suite."
+    },
+    {
+      "messageId": "e0000006-0000-4000-8000-000000000601",
+      "start": 20,
+      "end": 26.2,
+      "text": "Summit had four guys hanging board on two, patient wing."
+    },
+    {
+      "messageId": "e0000006-0000-4000-8000-000000000601",
+      "start": 26.2,
+      "end": 32.5,
+      "text": "Our crew, two laborers, full day, cleanup and protecting the finished floors on one."
+    },
+    {
+      "messageId": "e0000006-0000-4000-8000-000000000601",
+      "start": 32.5,
+      "end": 38,
+      "text": "Toolbox talk was silica and dust control. No incidents."
+    },
+    {
+      "messageId": "e0000006-0000-4000-8000-000000000601",
+      "start": 38,
+      "end": 42.4,
+      "text": "Photo of the curtain wall is coming."
+    }
+  ],
+  "texts": []
+}

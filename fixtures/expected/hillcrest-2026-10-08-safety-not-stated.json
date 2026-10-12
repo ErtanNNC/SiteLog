@@ -1,0 +1,137 @@
+{
+  "languageDetected": ["en"],
+  "summary": "South elevation CMU blockwork passed window-sill height (approximately 70% of the wall). Summit Drywall completed the gym office framing. Structural steel for the gym delivered at 08:30 (3 trucks); erection starts Monday. Cloudy with brief sprinkles at lunch; no stoppage.",
+  "weather": {
+    "observed": {
+      "precipIn": 0.02,
+      "tempMinF": 54,
+      "tempMaxF": 62,
+      "windMph": 9,
+      "gustMph": 16,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Cloudy; brief sprinkles at lunch, no stoppage",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our guys",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Exterior — south elevation",
+      "workers": 8,
+      "hoursPerWorker": 8,
+      "totalHours": 64,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000023-0000-4000-8000-000000002301",
+          "start": 6.5,
+          "end": 14
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d006",
+      "companyNameHeard": "Summit",
+      "companyName": "Summit Drywall",
+      "trade": "Drywall",
+      "area": "Gym",
+      "workers": 2,
+      "hoursPerWorker": 8,
+      "totalHours": 16,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000023-0000-4000-8000-000000002301",
+          "start": 14,
+          "end": 21.5
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Exterior — south elevation",
+      "activity": "CMU blockwork",
+      "status": "in_progress",
+      "percentComplete": 70,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000023-0000-4000-8000-000000002301",
+          "start": 6.5,
+          "end": 14
+        }
+      ]
+    },
+    {
+      "area": "Gym",
+      "activity": "Office wall framing",
+      "status": "complete",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000023-0000-4000-8000-000000002301",
+          "start": 14,
+          "end": 21.5
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Structural steel for the gym",
+      "quantity": "3 trucks",
+      "time": "08:30",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000023-0000-4000-8000-000000002301",
+          "start": 21.5,
+          "end": 29
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": { "incidents": [], "noIncidentsStated": false, "visitors": [], "source": [] },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Gym steel erection starts Monday",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000023-0000-4000-8000-000000002301",
+          "start": 21.5,
+          "end": 29
+        }
+      ]
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": ["safety"],
+  "lowConfidence": [],
+  "proposedQuestions": [
+    {
+      "field": "safety",
+      "question": "Any incidents or a toolbox talk today?",
+      "options": ["No incidents", "Toolbox talk held"]
+    }
+  ],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-08",
+  "photos": [
+    {
+      "messageId": "e0000023-0000-4000-8000-000000002305",
+      "caption": "South wall",
+      "takenAt": "2026-10-08T22:19:00Z"
+    }
+  ]
+}

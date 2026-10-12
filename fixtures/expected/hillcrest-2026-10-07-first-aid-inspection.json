@@ -1,0 +1,195 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Classroom wing east footings poured by Apex Concrete (approx. 32 yd³) after the city inspector passed the footing rebar at 10:00. South elevation CMU blockwork reached about window-sill height. Summit Drywall framed the gym office walls. One first-aid case: a mason cut his hand on a block, was treated on site and returned to work. Dry and sunny.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 52,
+      "tempMaxF": 69,
+      "windMph": 7,
+      "gustMph": 13,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Dry and sunny, no impact",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Classroom wing",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "start": 6,
+          "end": 13
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d006",
+      "companyNameHeard": "Summit",
+      "companyName": "Summit Drywall",
+      "trade": "Drywall",
+      "area": "Gym",
+      "workers": 2,
+      "hoursPerWorker": 8,
+      "totalHours": 16,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "start": 13,
+          "end": 19.5
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our guys",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Exterior — south elevation",
+      "workers": 8,
+      "hoursPerWorker": 8,
+      "totalHours": 64,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "start": 19.5,
+          "end": 26
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Classroom wing",
+      "activity": "Footing dewatering",
+      "status": "complete",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "start": 6,
+          "end": 13
+        }
+      ]
+    },
+    {
+      "area": "Classroom wing",
+      "activity": "East footing pour",
+      "status": "complete",
+      "quantity": { "value": 32, "unit": "yd³", "heardAs": "thirty-two yards" },
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "start": 6,
+          "end": 13
+        },
+        {
+          "type": "audio",
+          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "start": 26,
+          "end": 34.5
+        }
+      ]
+    },
+    {
+      "area": "Gym",
+      "activity": "Office wall framing",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "start": 13,
+          "end": 19.5
+        }
+      ]
+    },
+    {
+      "area": "Exterior — south elevation",
+      "activity": "CMU blockwork",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "start": 19.5,
+          "end": 26
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Hand protection",
+    "incidents": [
+      {
+        "description": "A mason cut his hand on a block; cleaned and bandaged from the first-aid kit, returned to work",
+        "severity": "first_aid",
+        "source": [
+          {
+            "type": "audio",
+            "messageId": "e0000018-0000-4000-8000-000000001801",
+            "start": 34.5,
+            "end": 43
+          }
+        ]
+      }
+    ],
+    "noIncidentsStated": false,
+    "visitors": ["City building inspector (east footing rebar inspection, passed)"],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000018-0000-4000-8000-000000001801",
+        "start": 26,
+        "end": 34.5
+      },
+      {
+        "type": "audio",
+        "messageId": "e0000018-0000-4000-8000-000000001801",
+        "start": 34.5,
+        "end": 43
+      },
+      {
+        "type": "audio",
+        "messageId": "e0000018-0000-4000-8000-000000001801",
+        "start": 43,
+        "end": 48
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": [],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-07",
+  "photos": [
+    {
+      "messageId": "e0000018-0000-4000-8000-000000001805",
+      "caption": "East footings poured",
+      "takenAt": "2026-10-07T22:15:00Z"
+    }
+  ]
+}

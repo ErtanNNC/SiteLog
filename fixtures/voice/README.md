@@ -24,12 +24,17 @@ step can be re-run when `TRANSCRIBE_MODEL` changes.
    ```
 
 4. Copy the segments into a new `../transcripts/<id>.json` (add site context, companies, glossary,
-   photos — see the existing files), and write the expected `DailyReportData` to
-   `../expected/<id>.json`. Only values that are actually said in the recording may appear in
-   `expected`; every non-null number needs a source with the segment start time.
-5. Run `pnpm eval` (needs `ANTHROPIC_API_KEY`). The eval checks manpower counts and hours exactly,
-   weather `lostHours` ±0.5 h, that every non-null number carries a source and that unknown
-   companies are flagged.
+   photos — see the existing files; set `expectedQuestion` to the question code should ask first,
+   or `null`), and write the expected `DailyReportData` to `../expected/<id>.json`. Only values
+   that are actually said in the recording may appear in `expected`; every non-null number needs a
+   source with the segment start time. Save the model's `submit_daily_report` input for the case
+   as `../tool-outputs/<id>.json` (the worker tests replay it without an API key).
+5. Run `pnpm --filter @sitelog/worker test` (offline: every case must parse with the shared schemas,
+   be internally consistent and its recorded tool output must score as a pass) and `pnpm eval`
+   (needs `ANTHROPIC_API_KEY`; `--case <part>` to run a subset, `--recorded` to score the recorded
+   outputs offline). The eval checks manpower counts and hours exactly, weather `lostHours`
+   ±0.5 h, that every non-null number carries a source, that unknown companies are flagged, and
+   that code derives the same required gaps and next question as for the expected data.
 
 Recordings are customer-style data: do not commit real customer audio. Synthetic recordings by
 the team are fine.

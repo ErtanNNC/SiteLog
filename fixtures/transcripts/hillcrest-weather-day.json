@@ -1,6 +1,7 @@
 {
   "id": "hillcrest-weather-day",
   "description": "Rained out at 11:00: crew released, 5 h lost, headcount stated, no work performed after the stop.",
+  "expectedQuestion": null,
   "site": {
     "name": "Hillcrest School Extension",
     "projectCode": "HS-0418",

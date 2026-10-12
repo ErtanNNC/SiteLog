@@ -1,0 +1,183 @@
+{
+  "languageDetected": ["en"],
+  "summary": "The Level 2 post-tension deck passed inspection at 10:00; pour planned for Tuesday. Apex Concrete stripped edge forms and patched on Ramp B; Ironclad Steel placed shear wall rebar and the Kestrel crew formed the shear walls on Level 3. Shoring for Level 3 delivered at 13:00. Dry, cold morning. Toolbox talk on cold stress; no incidents.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 44,
+      "tempMaxF": 60,
+      "windMph": 8,
+      "gustMph": 14,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Dry; cold morning, no impact",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Ramp B",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "start": 6,
+          "end": 13.5
+        },
+        { "type": "reply", "messageId": "e0000026-0000-4000-8000-000000002603" }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d004",
+      "companyNameHeard": "Ironclad",
+      "companyName": "Ironclad Steel",
+      "trade": "Rebar",
+      "area": "Level 3",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "start": 13.5,
+          "end": 20
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Level 3",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "start": 20,
+          "end": 27
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Ramp B",
+      "activity": "Edge form stripping and patching",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "start": 6,
+          "end": 13.5
+        }
+      ]
+    },
+    {
+      "area": "Level 3",
+      "activity": "Shear wall rebar",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "start": 13.5,
+          "end": 20
+        }
+      ]
+    },
+    {
+      "area": "Level 3",
+      "activity": "Shear wall formwork",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "start": 20,
+          "end": 27
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Shoring for Level 3",
+      "quantity": "1 truckload",
+      "time": "13:00",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000026-0000-4000-8000-000000002602",
+          "start": 6.5,
+          "end": 12
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Cold stress",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": ["Inspector (Level 2 post-tension deck, passed)"],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000026-0000-4000-8000-000000002601",
+        "start": 27,
+        "end": 32
+      },
+      {
+        "type": "audio",
+        "messageId": "e0000026-0000-4000-8000-000000002602",
+        "start": 0,
+        "end": 6.5
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Level 2 post-tension deck pour on Tuesday",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000026-0000-4000-8000-000000002602",
+          "start": 0,
+          "end": 6.5
+        }
+      ]
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": [],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-09",
+  "photos": [
+    {
+      "messageId": "e0000026-0000-4000-8000-000000002605",
+      "caption": "L3 shear walls",
+      "takenAt": "2026-10-09T22:08:00Z"
+    }
+  ]
+}

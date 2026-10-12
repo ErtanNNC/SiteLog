@@ -1,0 +1,116 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Rain from 07:00 to 10:00 stopped framing for 3 h; the crew sorted material. After 10:00 the Kestrel crew framed second-floor walls on Units 1–4 (approximately 40% complete). Second-floor lumber package delivered at 11:30 on two flatbeds. Toolbox talk on slips and wet surfaces; no incidents.",
+  "weather": {
+    "observed": {
+      "precipIn": 0.28,
+      "tempMinF": 55,
+      "tempMaxF": 64,
+      "windMph": 10,
+      "gustMph": 18,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Rain 07:00–10:00, dry afterwards",
+    "periods": [
+      {
+        "start": "07:00",
+        "end": "10:00",
+        "condition": "Rain",
+        "impact": "Framing on Units 1–4 stopped (slick subfloor); crew sorted material",
+        "lostHours": 3,
+        "source": [
+          {
+            "type": "audio",
+            "messageId": "e0000014-0000-4000-8000-000000001401",
+            "start": 0,
+            "end": 12.5
+          }
+        ]
+      }
+    ]
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Units 1–4",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000014-0000-4000-8000-000000001401",
+          "start": 12.5,
+          "end": 20.4
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Units 1–4",
+      "activity": "Second-floor wall framing",
+      "status": "in_progress",
+      "percentComplete": 40,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000014-0000-4000-8000-000000001401",
+          "start": 12.5,
+          "end": 20.4
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Second-floor lumber package",
+      "quantity": "2 flatbed loads",
+      "time": "11:30",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000014-0000-4000-8000-000000001401",
+          "start": 20.4,
+          "end": 27
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Slips and wet surfaces",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000014-0000-4000-8000-000000001401",
+        "start": 27,
+        "end": 33
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": [],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-02",
+  "photos": [
+    { "messageId": "e0000014-0000-4000-8000-000000001405", "takenAt": "2026-10-02T22:02:00Z" },
+    {
+      "messageId": "e0000014-0000-4000-8000-000000001406",
+      "caption": "Second floor walls",
+      "takenAt": "2026-10-02T22:02:20Z"
+    }
+  ]
+}

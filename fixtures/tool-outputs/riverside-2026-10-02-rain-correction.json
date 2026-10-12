@@ -1,0 +1,161 @@
+{
+  "languageDetected": ["es", "en"],
+  "summary": "Heavy rain from 12:00 to the end of the day stopped exterior CMU blockwork on the south elevation (3.5 h lost); the masons moved to cleanup on Level 2. Apex Concrete formed the Level 4 elevated slab under tarps. Level 3 electrical rough-in continued. Delta Mechanical was not on site. Toolbox talk on wet-weather access and slippery scaffold planks; no incidents.",
+  "weather": {
+    "conditionsText": "Dry morning; heavy rain from 12:00 to the end of the day",
+    "periods": [
+      {
+        "start": "12:00",
+        "end": "15:30",
+        "condition": "Heavy rain",
+        "impact": "Exterior CMU blockwork on the south elevation stopped; masons moved to cleanup on Level 2",
+        "lostHours": 3.5,
+        "source": [
+          {
+            "type": "audio",
+            "messageId": "e0000005-0000-4000-8000-000000000501",
+            "start": 5.4,
+            "end": 19.6
+          }
+        ]
+      }
+    ]
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Level 4",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "start": 19.6,
+          "end": 27.9
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d002",
+      "companyNameHeard": "BrightLine",
+      "companyName": "BrightLine Electric",
+      "trade": "Electrical",
+      "area": "Level 3",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "start": 27.9,
+          "end": 34
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our guys",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Exterior — south elevation",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "start": 34,
+          "end": 41.2
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Exterior — south elevation",
+      "activity": "CMU blockwork",
+      "status": "stopped",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "start": 5.4,
+          "end": 19.6
+        }
+      ]
+    },
+    {
+      "area": "Level 4",
+      "activity": "Formwork for the elevated slab",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "start": 19.6,
+          "end": 27.9
+        }
+      ]
+    },
+    {
+      "area": "Level 3",
+      "activity": "Electrical rough-in",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "start": 27.9,
+          "end": 34
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Wet-weather access and slippery scaffold planks",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000005-0000-4000-8000-000000000501",
+        "start": 45.5,
+        "end": 53.5
+      }
+    ]
+  },
+  "issues": [
+    {
+      "description": "Delta Mechanical did not attend site",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000005-0000-4000-8000-000000000501",
+          "start": 41.2,
+          "end": 45.5
+        }
+      ]
+    }
+  ],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

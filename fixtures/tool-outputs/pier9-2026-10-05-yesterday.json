@@ -1,0 +1,129 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Drizzle from 13:30 to 15:00 stopped roof membrane repairs for 1.5 h; the crew moved to cleanup in Bay 2. North roof patching approximately 60% complete; Bay 3 office framing approximately 50% complete. No incidents.",
+  "weather": {
+    "conditionsText": "Dry morning; drizzle 13:30–15:00",
+    "periods": [
+      {
+        "start": "13:30",
+        "end": "15:00",
+        "condition": "Drizzle",
+        "impact": "Roof membrane repairs stopped; crew moved to cleanup in Bay 2",
+        "lostHours": 1.5,
+        "source": [
+          {
+            "type": "audio",
+            "messageId": "e0000009-0000-4000-8000-000000000901",
+            "start": 7.2,
+            "end": 15
+          }
+        ]
+      }
+    ]
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our guys",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Roof",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "start": 15,
+          "end": 22.5
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d006",
+      "companyNameHeard": "Summit",
+      "companyName": "Summit Drywall",
+      "trade": "Drywall",
+      "area": "Bay 3",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "start": 15,
+          "end": 22.5
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Roof — north side",
+      "activity": "Membrane repairs",
+      "status": "in_progress",
+      "percentComplete": 60,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "start": 7.2,
+          "end": 15
+        },
+        {
+          "type": "audio",
+          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "start": 22.5,
+          "end": 29
+        }
+      ]
+    },
+    {
+      "area": "Bay 3",
+      "activity": "Office wall framing",
+      "status": "in_progress",
+      "percentComplete": 50,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "start": 15,
+          "end": 22.5
+        },
+        {
+          "type": "audio",
+          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "start": 22.5,
+          "end": 29
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000009-0000-4000-8000-000000000901",
+        "start": 29,
+        "end": 34.5
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

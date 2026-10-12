@@ -1,0 +1,242 @@
+{
+  "languageDetected": ["en", "es"],
+  "summary": "Apex Concrete formed the Level 4 elevated slab (edge forms and shoring); Ironclad Steel started the bottom rebar mat on Level 4. Level 3 electrical rough-in approximately 45% complete; Level 2 east wing ductwork nearly complete. CMU delivered at 10:30 (8 pallets). Dry with light wind; no stoppage. Toolbox talk on working under shoring; no incidents.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 54,
+      "tempMaxF": 66,
+      "windMph": 12,
+      "gustMph": 19,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Dry, light wind; no stoppage",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Level 4",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 9.8,
+          "end": 21.4
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d004",
+      "companyNameHeard": "the Ironclad guys",
+      "companyName": "Ironclad Steel",
+      "trade": "Rebar",
+      "area": "Level 4",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 21.4,
+          "end": 33
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d002",
+      "companyNameHeard": "BrightLine",
+      "companyName": "BrightLine Electric",
+      "trade": "Electrical",
+      "area": "Level 3",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 33,
+          "end": 41.5
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d003",
+      "companyNameHeard": "the Delta guys",
+      "companyName": "Delta Mechanical",
+      "trade": "HVAC",
+      "area": "Level 2",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 55,
+          "end": 66.2
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "nuestros muchachos",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Level 4",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 66.2,
+          "end": 78
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 4",
+      "activity": "Edge forms and shoring for the elevated slab",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 9.8,
+          "end": 21.4
+        }
+      ]
+    },
+    {
+      "area": "Level 4",
+      "activity": "Bottom rebar mat",
+      "status": "started",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 21.4,
+          "end": 33
+        }
+      ]
+    },
+    {
+      "area": "Level 3",
+      "activity": "Electrical rough-in",
+      "status": "in_progress",
+      "percentComplete": 45,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 33,
+          "end": 55
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Ductwork, east wing",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 55,
+          "end": 66.2
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Concrete masonry units (CMU)",
+      "quantity": "8 pallets",
+      "time": "10:30",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 101,
+          "end": 112.5
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Working under the shoring on Level 4",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000020-0000-4000-8000-000000002001",
+        "start": 112.5,
+        "end": 126.5
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Ironclad Steel to continue the bottom mat on Level 4",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 126.5,
+          "end": 140.1
+        }
+      ]
+    },
+    {
+      "item": "Level 4 deck rebar inspection, tentatively Thursday (to be confirmed)",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000020-0000-4000-8000-000000002001",
+          "start": 126.5,
+          "end": 140.1
+        }
+      ]
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": [],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-05",
+  "photos": [
+    {
+      "messageId": "e0000020-0000-4000-8000-000000002005",
+      "caption": "L4 shoring",
+      "takenAt": "2026-10-05T22:35:00Z"
+    },
+    { "messageId": "e0000020-0000-4000-8000-000000002006", "takenAt": "2026-10-05T22:35:12Z" }
+  ]
+}

@@ -1,0 +1,148 @@
+{
+  "id": "riverside-2026-10-02-rain-correction",
+  "description": "Mixed ES/EN code-switching. \"llovió fuerte desde las doce\" → rain 12:00–15:30, 3.5 h lost (§18 Riverside Oct 2). In-note correction \"Apex tenía cinco, no, perdón, eran seis\" → 6. \"Delta no vino hoy\" → no Delta crew.",
+  "expectedQuestion": null,
+  "site": {
+    "name": "Riverside Lofts — Block B",
+    "projectCode": "RL-2041",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-02",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Marco",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d001",
+      "name": "Apex Concrete",
+      "trade": "Concrete",
+      "aliases": ["Apex", "the Apex guys"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d002",
+      "name": "BrightLine Electric",
+      "trade": "Electrical",
+      "aliases": ["BrightLine", "Bright Line"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d003",
+      "name": "Delta Mechanical",
+      "trade": "HVAC",
+      "aliases": ["the Delta guys", "Delta"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d004",
+      "name": "Ironclad Steel",
+      "trade": "Rebar",
+      "aliases": ["Ironclad"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "the deck", "official": "Elevated concrete slab", "kind": "term" },
+    { "heard": "pour on four", "official": "Level 4 concrete pour", "kind": "area" },
+    { "heard": "block", "official": "Concrete masonry units (CMU)", "kind": "term" },
+    { "heard": "llovió", "official": "Rain", "kind": "term" },
+    { "heard": "andamio", "official": "Scaffold", "kind": "term" },
+    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    { "heard": "rough-in", "official": "MEP rough-in", "kind": "term" }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-02",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-02T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0, "tempF": 57, "windMph": 9, "gustMph": 21 },
+      { "time": "07:00", "precipIn": 0, "tempF": 59, "windMph": 10, "gustMph": 19 },
+      { "time": "08:00", "precipIn": 0, "tempF": 60, "windMph": 11, "gustMph": 17 },
+      { "time": "09:00", "precipIn": 0, "tempF": 62, "windMph": 9, "gustMph": 20 },
+      { "time": "10:00", "precipIn": 0, "tempF": 62, "windMph": 10, "gustMph": 18 },
+      { "time": "11:00", "precipIn": 0, "tempF": 63, "windMph": 11, "gustMph": 21 },
+      { "time": "12:00", "precipIn": 0.18, "tempF": 63, "windMph": 9, "gustMph": 19 },
+      { "time": "13:00", "precipIn": 0.29, "tempF": 62, "windMph": 10, "gustMph": 17 },
+      { "time": "14:00", "precipIn": 0.21, "tempF": 62, "windMph": 11, "gustMph": 20 },
+      { "time": "15:00", "precipIn": 0.12, "tempF": 60, "windMph": 9, "gustMph": 18 },
+      { "time": "16:00", "precipIn": 0.04, "tempF": 59, "windMph": 10, "gustMph": 21 },
+      { "time": "17:00", "precipIn": 0, "tempF": 57, "windMph": 11, "gustMph": 19 }
+    ],
+    "summary": {
+      "precipIn": 0.84,
+      "tempMinF": 57,
+      "tempMaxF": 63,
+      "windMph": 10,
+      "gustMph": 21,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0.8,
+      "maxGustWorkingHoursMph": 21
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "messageId": "e0000005-0000-4000-8000-000000000505",
+      "caption": "Fachada sur",
+      "takenAt": "2026-10-02T22:41:05Z"
+    }
+  ],
+  "segments": [
+    {
+      "messageId": "e0000005-0000-4000-8000-000000000501",
+      "start": 0,
+      "end": 5.4,
+      "text": "Okay, Riverside, viernes dos de octubre."
+    },
+    {
+      "messageId": "e0000005-0000-4000-8000-000000000501",
+      "start": 5.4,
+      "end": 13.8,
+      "text": "En la mañana todo bien, pero llovió fuerte desde las doce hasta el final del día, so we stood down the exterior block on the south side."
+    },
+    {
+      "messageId": "e0000005-0000-4000-8000-000000000501",
+      "start": 13.8,
+      "end": 19.6,
+      "text": "That's three and a half hours lost on the masonry, los mandé a limpiar adentro en el nivel dos."
+    },
+    {
+      "messageId": "e0000005-0000-4000-8000-000000000501",
+      "start": 19.6,
+      "end": 27.9,
+      "text": "Apex tenía cinco, no, perdón, eran seis, six guys, forming the deck on four, full day, they kept working under the tarps."
+    },
+    {
+      "messageId": "e0000005-0000-4000-8000-000000000501",
+      "start": 27.9,
+      "end": 34,
+      "text": "BrightLine five, todo el día, rough-in on three."
+    },
+    {
+      "messageId": "e0000005-0000-4000-8000-000000000501",
+      "start": 34,
+      "end": 41.2,
+      "text": "Our guys, seis albañiles, todo el día: block en la fachada sur hasta las doce, y después limpieza adentro."
+    },
+    {
+      "messageId": "e0000005-0000-4000-8000-000000000501",
+      "start": 41.2,
+      "end": 45.5,
+      "text": "Delta no vino hoy."
+    },
+    {
+      "messageId": "e0000005-0000-4000-8000-000000000501",
+      "start": 45.5,
+      "end": 53.5,
+      "text": "Safety: toolbox talk on wet weather and slippery scaffold planks, no incidents. Mando foto de la fachada."
+    }
+  ],
+  "texts": []
+}

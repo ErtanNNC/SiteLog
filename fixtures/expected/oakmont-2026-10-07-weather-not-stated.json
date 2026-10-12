@@ -1,0 +1,243 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Level 2 patient-wing topping slab poured by Apex Concrete (approx. 18 yd³). Level 1 mechanical rough-in, north elevation glazing and Level 2 drywall continued. BrightLine Electric made the Level 1 temporary power safe (half day). Toolbox talk on housekeeping; no incidents.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 55,
+      "tempMaxF": 70,
+      "windMph": 7,
+      "gustMph": 13,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Level 2",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 6,
+          "end": 13.5
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d003",
+      "companyNameHeard": "Delta",
+      "companyName": "Delta Mechanical",
+      "trade": "HVAC",
+      "area": "Level 1",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 13.5,
+          "end": 20.5
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d005",
+      "companyNameHeard": "ClearView",
+      "companyName": "ClearView Glazing",
+      "trade": "Glazing",
+      "area": "Exterior — north elevation",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 13.5,
+          "end": 20.5
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d006",
+      "companyNameHeard": "Summit",
+      "companyName": "Summit Drywall",
+      "trade": "Drywall",
+      "area": "Level 2",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 20.5,
+          "end": 26
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "workers": 2,
+      "hoursPerWorker": 8,
+      "totalHours": 16,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 20.5,
+          "end": 26
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d002",
+      "companyNameHeard": "a BrightLine guy",
+      "companyName": "BrightLine Electric",
+      "trade": "Electrical",
+      "area": "Level 1",
+      "workers": 1,
+      "hoursPerWorker": 4,
+      "totalHours": 4,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 26,
+          "end": 31.5
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 2",
+      "activity": "Concrete topping slab, patient wing",
+      "status": "complete",
+      "quantity": { "value": 18, "unit": "yd³", "heardAs": "eighteen yards" },
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 6,
+          "end": 13.5
+        }
+      ]
+    },
+    {
+      "area": "Level 1",
+      "activity": "Mechanical rough-in",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 13.5,
+          "end": 20.5
+        }
+      ]
+    },
+    {
+      "area": "Exterior — north elevation",
+      "activity": "Curtain wall glazing",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 13.5,
+          "end": 20.5
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Drywall",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 20.5,
+          "end": 26
+        }
+      ]
+    },
+    {
+      "area": "Level 1",
+      "activity": "Temporary power made safe",
+      "status": "complete",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000024-0000-4000-8000-000000002401",
+          "start": 26,
+          "end": 31.5
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Housekeeping",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000024-0000-4000-8000-000000002401",
+        "start": 31.5,
+        "end": 37
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": ["weather.conditions"],
+  "lowConfidence": [],
+  "proposedQuestions": [
+    {
+      "field": "weather.impact",
+      "question": "What was the weather like today, and did it stop any work?",
+      "options": ["Dry, no impact"]
+    }
+  ],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-07",
+  "photos": [
+    {
+      "messageId": "e0000024-0000-4000-8000-000000002405",
+      "caption": "Topping slab L2",
+      "takenAt": "2026-10-07T22:30:00Z"
+    },
+    { "messageId": "e0000024-0000-4000-8000-000000002406", "takenAt": "2026-10-07T22:30:20Z" }
+  ]
+}

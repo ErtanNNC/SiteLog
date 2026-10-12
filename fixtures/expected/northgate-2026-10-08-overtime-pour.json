@@ -1,0 +1,188 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Ramp B concrete pour completed (approx. 112 yd³, 14 ready-mix trucks); the pump arrived at 06:45 and the last truck at about 16:00. Apex Concrete worked 2 h overtime finishing; the Kestrel crew stayed until 18:00 to cure and cover. Dry, about 70 °F. Toolbox talk on pump hose safety; no incidents.",
+  "weather": {
+    "observed": {
+      "precipIn": 0,
+      "tempMinF": 55,
+      "tempMaxF": 71,
+      "windMph": 6,
+      "gustMph": 12,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Dry, about 70 °F",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Ramp B",
+      "workers": 4,
+      "hoursPerWorker": 10,
+      "totalHours": 40,
+      "hoursBasis": "stated",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000011-0000-4000-8000-000000001101",
+          "start": 14.8,
+          "end": 23
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d004",
+      "companyNameHeard": "Ironclad",
+      "companyName": "Ironclad Steel",
+      "trade": "Rebar",
+      "area": "Ramp B",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000011-0000-4000-8000-000000001101",
+          "start": 23,
+          "end": 30.5
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Ramp B",
+      "workers": 5,
+      "hoursPerWorker": 11,
+      "totalHours": 55,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000011-0000-4000-8000-000000001101",
+          "start": 23,
+          "end": 30.5
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Ramp B",
+      "activity": "Concrete pour",
+      "status": "complete",
+      "quantity": { "value": 112, "unit": "yd³", "heardAs": "a hundred and twelve yards" },
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000011-0000-4000-8000-000000001101",
+          "start": 0,
+          "end": 14.8
+        }
+      ]
+    },
+    {
+      "area": "Ramp B",
+      "activity": "Curing and covering",
+      "status": "complete",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000011-0000-4000-8000-000000001101",
+          "start": 23,
+          "end": 30.5
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Ready-mix concrete",
+      "quantity": "14 trucks, no rejected loads",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000011-0000-4000-8000-000000001101",
+          "start": 30.5,
+          "end": 37
+        }
+      ]
+    }
+  ],
+  "equipment": [
+    {
+      "item": "Concrete pump",
+      "note": "On site from 06:45",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000011-0000-4000-8000-000000001101",
+          "start": 6.4,
+          "end": 14.8
+        }
+      ]
+    }
+  ],
+  "safety": {
+    "toolboxTalk": "Pump hose safety",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000011-0000-4000-8000-000000001101",
+        "start": 37,
+        "end": 43
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Strip the edge forms on Ramp B",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000011-0000-4000-8000-000000001101",
+          "start": 43,
+          "end": 50
+        }
+      ]
+    },
+    {
+      "item": "Level 2 post-tension deck inspection at 10:00",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000011-0000-4000-8000-000000001101",
+          "start": 43,
+          "end": 50
+        }
+      ]
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": [],
+  "schemaVersion": 1,
+  "reportDate": "2026-10-08",
+  "photos": [
+    {
+      "messageId": "e0000011-0000-4000-8000-000000001105",
+      "caption": "Ramp B finished",
+      "takenAt": "2026-10-08T23:20:00Z"
+    },
+    { "messageId": "e0000011-0000-4000-8000-000000001106", "takenAt": "2026-10-08T23:20:30Z" }
+  ]
+}

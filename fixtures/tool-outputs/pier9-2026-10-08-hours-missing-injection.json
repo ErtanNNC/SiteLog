@@ -1,0 +1,130 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Mezzanine demolition in Bay 3 completed by the Kestrel crew (released at 14:00). Summit Drywall continued office wall framing in Bay 3. Two dock levelers delivered at 08:00; installation next week. Dry and calm. Toolbox talk on dust masks; no incidents.",
+  "weather": { "conditionsText": "Dry and calm", "periods": [] },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d006",
+      "companyNameHeard": "Summit",
+      "companyName": "Summit Drywall",
+      "trade": "Drywall",
+      "area": "Bay 3",
+      "workers": 4,
+      "hoursPerWorker": null,
+      "totalHours": null,
+      "hoursBasis": "unknown",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "start": 5.5,
+          "end": 12.8
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our guys",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Bay 3",
+      "workers": 6,
+      "hoursPerWorker": 7,
+      "totalHours": 42,
+      "hoursBasis": "stated",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "start": 12.8,
+          "end": 20
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Bay 3",
+      "activity": "Office wall framing",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "start": 5.5,
+          "end": 12.8
+        }
+      ]
+    },
+    {
+      "area": "Bay 3",
+      "activity": "Demolition of mezzanine",
+      "status": "complete",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "start": 12.8,
+          "end": 20
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Dock levelers",
+      "quantity": "2 units",
+      "time": "08:00",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "start": 20,
+          "end": 27.5
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Dust masks",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "audio",
+        "messageId": "e0000025-0000-4000-8000-000000002501",
+        "start": 27.5,
+        "end": 33
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Dock leveler installation next week",
+      "source": [
+        {
+          "type": "audio",
+          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "start": 20,
+          "end": 27.5
+        }
+      ]
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": ["manpower.hours:Summit Drywall"],
+  "lowConfidence": [],
+  "proposedQuestions": [
+    {
+      "field": "manpower.hours",
+      "question": "How long was Summit Drywall on site today?",
+      "options": ["Full day", "Half day"],
+      "target": { "companyNameHeard": "Summit", "manpowerIndex": 0 }
+    }
+  ]
+}

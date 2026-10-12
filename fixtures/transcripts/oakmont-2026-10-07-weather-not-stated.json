@@ -1,0 +1,140 @@
+{
+  "id": "oakmont-2026-10-07-weather-not-stated",
+  "description": "Weather never mentioned: conditionsText stays empty even though observed weather exists (§10.5 \"observed data alone is not enough\") → weather question. Six crews incl. \"a BrightLine guy … half a day\" (1 × 4 h).",
+  "expectedQuestion": { "field": "weather.impact", "path": "weather.conditions" },
+  "site": {
+    "name": "Oakmont Medical Center",
+    "projectCode": "OM-1187",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-07",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Dana",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d001",
+      "name": "Apex Concrete",
+      "trade": "Concrete",
+      "aliases": ["Apex", "the Apex guys"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d002",
+      "name": "BrightLine Electric",
+      "trade": "Electrical",
+      "aliases": ["BrightLine", "Bright Line"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d003",
+      "name": "Delta Mechanical",
+      "trade": "HVAC",
+      "aliases": ["the Delta guys", "Delta"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d005",
+      "name": "ClearView Glazing",
+      "trade": "Glazing",
+      "aliases": ["ClearView", "Clear View"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d006",
+      "name": "Summit Drywall",
+      "trade": "Drywall",
+      "aliases": ["Summit"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "punch", "official": "Punch list items", "kind": "term" },
+    { "heard": "rough-in", "official": "MEP rough-in", "kind": "term" },
+    { "heard": "the Delta guys", "official": "Delta Mechanical", "kind": "company" },
+    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-07",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-07T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0, "tempF": 55, "windMph": 6, "gustMph": 13 },
+      { "time": "07:00", "precipIn": 0, "tempF": 59, "windMph": 7, "gustMph": 11 },
+      { "time": "08:00", "precipIn": 0, "tempF": 63, "windMph": 8, "gustMph": 9 },
+      { "time": "09:00", "precipIn": 0, "tempF": 66, "windMph": 6, "gustMph": 12 },
+      { "time": "10:00", "precipIn": 0, "tempF": 69, "windMph": 7, "gustMph": 10 },
+      { "time": "11:00", "precipIn": 0, "tempF": 70, "windMph": 8, "gustMph": 13 },
+      { "time": "12:00", "precipIn": 0, "tempF": 70, "windMph": 6, "gustMph": 11 },
+      { "time": "13:00", "precipIn": 0, "tempF": 69, "windMph": 7, "gustMph": 9 },
+      { "time": "14:00", "precipIn": 0, "tempF": 66, "windMph": 8, "gustMph": 12 },
+      { "time": "15:00", "precipIn": 0, "tempF": 63, "windMph": 6, "gustMph": 10 },
+      { "time": "16:00", "precipIn": 0, "tempF": 59, "windMph": 7, "gustMph": 13 },
+      { "time": "17:00", "precipIn": 0, "tempF": 55, "windMph": 8, "gustMph": 11 }
+    ],
+    "summary": {
+      "precipIn": 0,
+      "tempMinF": 55,
+      "tempMaxF": 70,
+      "windMph": 7,
+      "gustMph": 13,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0,
+      "maxGustWorkingHoursMph": 13
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "messageId": "e0000024-0000-4000-8000-000000002405",
+      "caption": "Topping slab L2",
+      "takenAt": "2026-10-07T22:30:00Z"
+    },
+    { "messageId": "e0000024-0000-4000-8000-000000002406", "takenAt": "2026-10-07T22:30:20Z" }
+  ],
+  "segments": [
+    {
+      "messageId": "e0000024-0000-4000-8000-000000002401",
+      "start": 0,
+      "end": 6,
+      "text": "Oakmont, Wednesday."
+    },
+    {
+      "messageId": "e0000024-0000-4000-8000-000000002401",
+      "start": 6,
+      "end": 13.5,
+      "text": "Apex three, full day, poured the topping slab on two in the patient wing, eighteen yards."
+    },
+    {
+      "messageId": "e0000024-0000-4000-8000-000000002401",
+      "start": 13.5,
+      "end": 20.5,
+      "text": "Delta five, full day, level one mechanical rough-in. ClearView four, full day, north elevation glazing."
+    },
+    {
+      "messageId": "e0000024-0000-4000-8000-000000002401",
+      "start": 20.5,
+      "end": 26,
+      "text": "Summit four, all day, drywall on two. Our crew two, all day, cleanup."
+    },
+    {
+      "messageId": "e0000024-0000-4000-8000-000000002401",
+      "start": 26,
+      "end": 31.5,
+      "text": "And a BrightLine guy came for half a day to make the temp power safe on one."
+    },
+    {
+      "messageId": "e0000024-0000-4000-8000-000000002401",
+      "start": 31.5,
+      "end": 37,
+      "text": "No incidents, toolbox talk was housekeeping. Sending photos."
+    }
+  ],
+  "texts": []
+}

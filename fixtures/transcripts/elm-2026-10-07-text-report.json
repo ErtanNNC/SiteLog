@@ -1,0 +1,70 @@
+{
+  "id": "elm-2026-10-07-text-report",
+  "description": "Text message instead of a voice note (source type \"text\", digits not words); no photo sent → photo question.",
+  "expectedQuestion": { "field": "photo", "path": "photo" },
+  "site": {
+    "name": "Elm St. Townhomes",
+    "projectCode": "ES-0377",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-07",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Priya",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    { "heard": "punch", "official": "Punch list items", "kind": "term" },
+    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-07",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-07T21:30:00Z",
+    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "hours": [
+      { "time": "06:00", "precipIn": 0, "tempF": 54, "windMph": 6, "gustMph": 12 },
+      { "time": "07:00", "precipIn": 0, "tempF": 59, "windMph": 7, "gustMph": 10 },
+      { "time": "08:00", "precipIn": 0, "tempF": 63, "windMph": 8, "gustMph": 8 },
+      { "time": "09:00", "precipIn": 0, "tempF": 66, "windMph": 6, "gustMph": 11 },
+      { "time": "10:00", "precipIn": 0, "tempF": 69, "windMph": 7, "gustMph": 9 },
+      { "time": "11:00", "precipIn": 0, "tempF": 70, "windMph": 8, "gustMph": 12 },
+      { "time": "12:00", "precipIn": 0, "tempF": 70, "windMph": 6, "gustMph": 10 },
+      { "time": "13:00", "precipIn": 0, "tempF": 69, "windMph": 7, "gustMph": 8 },
+      { "time": "14:00", "precipIn": 0, "tempF": 66, "windMph": 8, "gustMph": 11 },
+      { "time": "15:00", "precipIn": 0, "tempF": 63, "windMph": 6, "gustMph": 9 },
+      { "time": "16:00", "precipIn": 0, "tempF": 59, "windMph": 7, "gustMph": 12 },
+      { "time": "17:00", "precipIn": 0, "tempF": 54, "windMph": 8, "gustMph": 10 }
+    ],
+    "summary": {
+      "precipIn": 0,
+      "tempMinF": 54,
+      "tempMaxF": 70,
+      "windMph": 7,
+      "gustMph": 12,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0,
+      "maxGustWorkingHoursMph": 12
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [],
+  "segments": [],
+  "texts": [
+    {
+      "messageId": "e0000016-0000-4000-8000-000000001601",
+      "text": "Elm St Wed. Our crew 6 full day. Roof trusses set on units 1-4, all 24 up. Sheathing delivery came 2pm, 60 sheets. Dry, no weather issues. Toolbox talk on fall protection for truss setting, no incidents. Tomorrow sheathing on the 1-4 roofs."
+    }
+  ]
+}
