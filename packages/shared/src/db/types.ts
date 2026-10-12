@@ -487,6 +487,16 @@ export type CurrentWeatherRow = WeatherEventRow & {
   report_no: string;
 };
 
+/** Reports archive (20261013000002_report_archive.sql): a filed report + its current version's flags. */
+export type ReportArchiveRow = ReportRow & {
+  date: string;
+  site_name: string;
+  project_code: string;
+  lost_hours: number;
+  has_incident: boolean;
+  summary: string | null;
+};
+
 type Table<Row, OptionalInsert extends keyof Row> = {
   Row: Row;
   Insert: Insert<Row, OptionalInsert>;
@@ -734,6 +744,7 @@ export type Database = {
     Views: {
       current_manpower: { Row: CurrentManpowerRow; Relationships: [] };
       current_weather: { Row: CurrentWeatherRow; Relationships: [] };
+      report_archive: { Row: ReportArchiveRow; Relationships: [] };
     };
     Functions: {
       is_member: { Args: { org: string }; Returns: boolean };
@@ -798,6 +809,17 @@ export type Database = {
       mark_notifications_read: { Args: { p_ids: string[] }; Returns: undefined };
       set_org_logo: {
         Args: { p_org_id: string; p_logo_path: string | null };
+        Returns: Json;
+      };
+      // Company details of an existing org (20261013000004_update_org.sql): admin, audited.
+      update_org: {
+        Args: {
+          p_org_id: string;
+          p_name: string;
+          p_timezone?: string | null;
+          p_address?: string | null;
+          p_license_no?: string | null;
+        };
         Returns: Json;
       };
       update_reporter: {
