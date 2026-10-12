@@ -248,7 +248,6 @@ export const copy = {
     empty: 'Nothing to show yet.',
     sortBy: (col: string) => `Sort by ${col}`,
     scrollHint: 'Scroll sideways to see more columns',
-    rowLink: (label: string) => `Open ${label}`,
   },
 
   states: {
@@ -1371,6 +1370,91 @@ export const copy = {
     },
     resume: 'Progress saved. Pick up where you left off.',
     savedLater: 'Progress saved.',
+  },
+
+  ops: {
+    eyebrow: 'SiteLog internal',
+    title: 'Ops',
+    subtitle: 'Job queue, dead letters and report cost across every org. SiteLog staff only.',
+    errorThing: 'ops data',
+    refresh: 'Refresh',
+    utc: (when: string) => `${when} UTC`,
+    age: (seconds: number) => {
+      const s = Math.max(0, Math.round(seconds));
+      if (s < 60) return `${s} s`;
+      if (s < 3600) return `${Math.floor(s / 60)} min`;
+      return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+    },
+    queue: {
+      title: 'Queue health',
+      label: 'Queue by job type',
+      queued: 'Queued',
+      running: 'Running',
+      dead: 'Dead',
+      oldest: 'Oldest waiting',
+      oldestHint: 'Longest a due job has waited for a worker',
+      none: 'None waiting',
+      columns: {
+        type: 'Job type',
+        queued: 'Queued',
+        running: 'Running',
+        dead: 'Dead',
+        oldest: 'Oldest waiting',
+      },
+      empty: 'The queue is empty.',
+    },
+    dead: {
+      title: 'Dead jobs',
+      hint: 'Jobs that failed 5 attempts. Fix the cause, then retry; discard what should never run.',
+      columns: {
+        job: 'Job',
+        attempts: 'Attempts',
+        error: 'Last error',
+        payload: 'Payload',
+        died: 'Died',
+      },
+      retry: 'Retry',
+      discard: 'Discard',
+      retryLabel: (id: number) => `Retry job ${id}`,
+      discardLabel: (id: number) => `Discard job ${id}`,
+      noError: 'No error recorded',
+      noPayload: 'No ids',
+      empty: 'No dead jobs.',
+      emptyBody: 'Jobs land here after 5 failed attempts.',
+      confirmRetry: {
+        title: (id: number, type: string) => `Retry job ${id} (${type})?`,
+        body: 'It goes back to the queue with 5 fresh attempts and runs within seconds. The retry is audited.',
+        confirm: 'Retry job',
+      },
+      confirmDiscard: {
+        title: (id: number, type: string) => `Discard job ${id} (${type})?`,
+        body: 'It leaves this list and never runs again. The row is kept for the record and the discard is audited.',
+        confirm: 'Discard job',
+      },
+    },
+    cost: {
+      title: 'Cost outliers',
+      hint: 'Filed reports that cost more than 3× the median of their kind over the previous 30 days (once 20 reports exist). AI plus WhatsApp templates, estimated.',
+      columns: {
+        report: 'Report',
+        org: 'Org',
+        site: 'Site',
+        filed: 'Filed',
+        cost: 'Cost',
+        median: 'Median',
+        ratio: 'vs median',
+      },
+      ratio: (r: number) => `${r.toFixed(1)}×`,
+      breakdown: (ai: string, templates: number) => `AI ${ai} · ${plural(templates, 'template')}`,
+      sample: (n: number) => `${plural(n, 'report')} in baseline`,
+      otherOrg: 'Switch to this org to open the report',
+      empty: 'No cost outliers in the last 30 days.',
+    },
+    toasts: {
+      retried: (id: number) => `Job ${id} is queued again.`,
+      discarded: (id: number) => `Job ${id} discarded.`,
+    },
+    notDead: 'Only dead jobs can be retried or discarded.',
   },
 
   errors: {

@@ -23,7 +23,6 @@ describe('DataTable', () => {
           rows={[{ id: 'a', company: 'Apex Concrete', hours: 472 }]}
           rowKey={(r) => r.id}
           rowHref={(r) => `/companies/${r.id}`}
-          rowLabel={(r) => r.company}
         />
       </MemoryRouter>,
     );

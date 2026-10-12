@@ -18,6 +18,7 @@ import type {
   HoursMatrix,
   NavBadges,
   NotificationItem,
+  OpsData,
   OrgSettingsPatch,
   OrgSummary,
   OverviewData,
@@ -231,6 +232,16 @@ export interface DataSource {
   /** Object URL of the payroll CSV for a week (caller revokes it). */
   payrollCsvUrl(week: string, siteId?: string | null): Promise<string>;
   markNotificationsRead(ids: string[]): Promise<void>;
+
+  // ─── Platform ops (/ops, §15): SiteLog operators only, never an org role ───
+  /** True when the signed-in user is in `platform_admins`; false (not an error) otherwise. */
+  isPlatformAdmin(): Promise<boolean>;
+  /** Queue health, dead jobs and cost outliers across every org (RPCs refuse non-operators). */
+  getOps(): Promise<OpsData>;
+  /** Dead job → queued, attempts reset, due now (audited). */
+  retryDeadJob(jobId: number): Promise<void>;
+  /** Dead job → discarded, kept for forensics (audited). */
+  discardDeadJob(jobId: number): Promise<void>;
 
   // ─── Realtime ───
   subscribe(onChange: (event: ChangeEvent) => void): () => void;

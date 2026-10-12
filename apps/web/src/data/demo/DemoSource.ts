@@ -47,11 +47,14 @@ import {
   type UpdateSitePatch,
 } from '../source';
 import type { ChangeEvent, OrgSettingsPatch, ReportFilters } from '../types';
+import { demoOpsFor } from './ops';
 import type { DemoStore } from './store';
 
 export interface DemoSourceOptions {
   /** Simulated network latency so skeletons are visible in the browser (0 in tests). */
   latencyMs?: number;
+  /** The demo user is a SiteLog operator so /ops can be seen (default true). */
+  platformAdmin?: boolean;
 }
 
 export class DemoSource implements DataSource {
@@ -59,6 +62,7 @@ export class DemoSource implements DataSource {
   readonly orgId: string;
   readonly user: SourceUser;
   private latency: number;
+  private platformAdmin: boolean;
 
   constructor(
     readonly store: DemoStore,
@@ -68,6 +72,7 @@ export class DemoSource implements DataSource {
     this.user = user;
     this.orgId = store.data.org.id;
     this.latency = opts.latencyMs ?? 0;
+    this.platformAdmin = opts.platformAdmin ?? true;
   }
 
   now(): Date {
@@ -287,6 +292,25 @@ export class DemoSource implements DataSource {
   }
   markNotificationsRead(ids: string[]) {
     return this.run(() => this.store.markNotificationsRead(ids));
+  }
+
+  // ─── Platform ops (fixed demo sample, demo/ops.ts) ───
+  isPlatformAdmin() {
+    return this.run(() => this.platformAdmin);
+  }
+  getOps() {
+    return this.run(() => this.ops().snapshot());
+  }
+  retryDeadJob(jobId: number) {
+    return this.run(() => this.ops().retry(jobId, this.user.id));
+  }
+  discardDeadJob(jobId: number) {
+    return this.run(() => this.ops().discard(jobId, this.user.id));
+  }
+  /** Mirrors the ops_* RPCs: refused unless the user is a platform admin. */
+  private ops() {
+    if (!this.platformAdmin) throw new Error(copy.errors.notFound);
+    return demoOpsFor(this.store);
   }
 
   // ─── Realtime ───

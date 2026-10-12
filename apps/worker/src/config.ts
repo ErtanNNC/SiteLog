@@ -57,6 +57,15 @@ export const ConfigSchema = z.object({
   SWEEP_INTERVAL_MS: intFrom(60_000),
   AUDIO_RETENTION_DAYS: intFrom(730),
   SENTRY_DSN: z.string().default(''),
+  /**
+   * §15 cost guardrail: USD Meta bills per delivered template message (Utility, US rate card).
+   * Free-form replies inside the 24 h window cost nothing. See src/cost.ts.
+   */
+  COST_WA_TEMPLATE_USD: z
+    .union([z.string(), z.number()])
+    .default(0.004)
+    .transform((v) => (typeof v === 'number' ? v : Number.parseFloat(v)))
+    .pipe(z.number().min(0).max(1)),
   FFMPEG_PATH: z.string().default(''),
   /** Skip the ffmpeg + storage path in tests. */
   WORKER_DRY_RUN: bool.default(false),

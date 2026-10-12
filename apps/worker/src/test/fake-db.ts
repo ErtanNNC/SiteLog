@@ -10,6 +10,7 @@ import type {
   OrgRow,
   OrgSettingsRow,
   QuestionRow,
+  ReportCostRow,
   ReportRow,
   ReportSourceRow,
   ReportVersionRow,
@@ -21,6 +22,7 @@ import type {
   WeatherEventRow,
 } from '@sitelog/shared';
 import { formatReportNo } from '@sitelog/shared';
+import { median } from '../cost';
 import type { AuditInput, Db, ExpiredMedia, Json, ReportSourceWithMessage } from '../db';
 
 /**
@@ -67,6 +69,8 @@ export interface FakeDbData {
   weatherEvents: WeatherEventRow[];
   denormalized: Array<{ report_id: string; version: number }>;
   purged: string[];
+  /** report_costs (§15 cost guardrail). */
+  reportCosts: Map<string, ReportCostRow>;
 }
 
 export interface FakeDb extends Db {
@@ -104,6 +108,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     weatherEvents: [],
     denormalized: [],
     purged: [],
+    reportCosts: new Map(),
   };
   let jobSeq = 0;
   let taken = 0;
@@ -732,6 +737,64 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         running: all.filter((j) => j.status === 'running').length,
         dead: all.filter((j) => j.status === 'dead').length,
       };
+    },
+
+    // Mirrors report_cost_inputs() / report_cost_baseline() (20261012000003_ops.sql).
+    async reportCostInputs(reportId) {
+      const obj = (v: unknown): Record<string, unknown> =>
+        v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+      const report = d.reports.get(reportId);
+      const sourceIds = new Set(
+        d.sources.filter((s) => s.report_id === reportId).map((s) => s.message_id),
+      );
+      let aiUsd = 0;
+      let jobCount = 0;
+      for (const j of d.jobs.values()) {
+        const p = obj(j.payload);
+        const refs =
+          p.reportId === reportId ||
+          (typeof p.messageId === 'string' && sourceIds.has(p.messageId));
+        if (!refs) continue;
+        const m = obj(p.metrics);
+        jobCount++;
+        aiUsd +=
+          typeof m.costUsdTotal === 'number'
+            ? m.costUsdTotal
+            : typeof m.estCostUsd === 'number'
+              ? m.estCostUsd
+              : 0;
+      }
+      const waTemplates = Array.from(d.messages.values()).filter((m) => {
+        if (m.direction !== 'out' || m.type !== 'template' || m.status === 'failed') return false;
+        const p = obj(m.payload);
+        return p.reportId === reportId || (!!report && p.siteDayId === report.site_day_id);
+      }).length;
+      return { aiUsd, jobCount, waTemplates };
+    },
+    async reportCostBaseline({ kind, before, excludeReportId, days }) {
+      const end = new Date(before).getTime();
+      const start = end - days * 86_400_000;
+      const costs = Array.from(d.reportCosts.values())
+        .filter((c) => {
+          const t = new Date(c.filed_at).getTime();
+          return c.kind === kind && t < end && t >= start && c.report_id !== excludeReportId;
+        })
+        .map((c) => c.cost_cents);
+      return { medianCents: median(costs), sample: costs.length };
+    },
+    async getReportCost(reportId) {
+      return d.reportCosts.get(reportId) ?? null;
+    },
+    async upsertReportCost(input) {
+      const prev = d.reportCosts.get(input.report_id);
+      const row: ReportCostRow = {
+        ...input,
+        kind: prev?.kind ?? input.kind,
+        filed_at: prev?.filed_at ?? toIso(input.filed_at)!,
+        computed_at: iso(),
+      };
+      d.reportCosts.set(row.report_id, row);
+      return row;
     },
 
     async getEvidencePack(id) {

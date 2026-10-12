@@ -7,6 +7,7 @@ import {
 } from '@sitelog/shared';
 import { firstName } from '@sitelog/shared';
 import type { Ctx } from '../context';
+import { recordReportCostSafely } from '../cost';
 import { sendFreeForm } from '../wa/send';
 import { currentData } from './draft';
 import { reviewReasons, validateDraft } from './validate';
@@ -16,6 +17,7 @@ import { contextOf } from '../router/context';
  * §F7 step 3 — filing: freeze the current version, write the denormalised rows, set filed_at /
  * confirmed_at / is_late, flip the site-day, flag review reasons, render + deliver the PDF.
  * Idempotent: a report that is already filed or signed off is returned unchanged.
+ * Last step: the AI + WhatsApp cost estimate (§15 cost guardrail, src/cost.ts); it never fails filing.
  */
 
 export type FileTrigger = 'confirm' | 'auto' | 'timeout' | 'office' | 'weather_day' | 'no_work';
@@ -175,6 +177,7 @@ export async function fileReport(
       await sendFreeForm(ctx, convo, text, undefined, { kind: 'filed', reportId: report.id });
     }
   }
+  await recordReportCostSafely(ctx, report.id);
   const version = (await ctx.db.getVersion(report.id, versionNo))!;
   return { report: updated, version, reasons, alreadyFiled: false };
 }

@@ -57,6 +57,7 @@ Real environment: copy `.env.example` to `.env`, create a Supabase project, run 
 | DB types        | `supabase gen types`                       | hand-maintained `packages/shared/src/db/types.ts`                                                  | no Supabase CLI in the build sandbox; regenerate when available                                                 |
 | Reporter number | "Edit number" (§F3)                        | Team → Edit changes name, role, sites and languages only; a new number = Disable + Invite reporter | messages, conversations and WhatsApp verification are keyed by the number                                       |
 | PDF zips        | "Today's PDFs (zip)", "Export PDFs (.zip)" | built in the browser from 10-minute signed URLs (`fflate`, stored), at most 200 reports per export | no zip worker job; PDFs are already compressed                                                                  |
+| `/ops`, cost    | "admin of SiteLog only"; cost per report   | `platform_admins` + `ops_*` RPCs; worker-written `report_costs` table (cents), not a column        | SiteLog staff are not an org role; cost is internal and must not reach customers through `reports` RLS          |
 
 Open decisions from §19 are left as the spec recommends (shared WhatsApp number, worker + ffmpeg, Open-Meteo, 14-day trial, confirm-to-file, 2-year audio retention, imperial units, $399).
 

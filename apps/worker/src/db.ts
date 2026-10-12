@@ -12,6 +12,7 @@ import type {
   OrgRow,
   OrgSettingsRow,
   QuestionRow,
+  ReportCostRow,
   ReportRow,
   ReportSourceRow,
   ReportVersionRow,
@@ -220,6 +221,21 @@ export interface InvoiceSummary {
   lines: Array<{ date: string; hours: number; site_id?: string }>;
 }
 
+/** What a report's cost estimate is made of (report_cost_inputs(), §15 cost guardrail). */
+export interface ReportCostInputs {
+  /** Sum of jobs.payload.metrics cost (AI: Claude + transcription) of the report's jobs. */
+  aiUsd: number;
+  jobCount: number;
+  /** Outbound template messages (billable) tagged with the report or its site-day. */
+  waTemplates: number;
+}
+
+/** Median cost of comparable filed reports before a given time (report_cost_baseline()). */
+export interface ReportCostBaseline {
+  medianCents: number | null;
+  sample: number;
+}
+
 export interface DigestStats {
   siteDays: number;
   filed: number;
@@ -375,6 +391,17 @@ export interface Db {
   enqueueJob(type: JobType, payload: Json, opts?: EnqueueOptions): Promise<number>;
   updateJobMetrics(id: number, metrics: JobMetrics): Promise<void>;
   queueStats(): Promise<QueueStats>;
+
+  // cost per report (§15 cost guardrail; src/cost.ts)
+  reportCostInputs(reportId: string): Promise<ReportCostInputs>;
+  reportCostBaseline(input: {
+    kind: string;
+    before: string;
+    excludeReportId: string;
+    days: number;
+  }): Promise<ReportCostBaseline>;
+  getReportCost(reportId: string): Promise<ReportCostRow | null>;
+  upsertReportCost(input: Omit<ReportCostRow, 'computed_at'>): Promise<ReportCostRow>;
 
   // evidence packs, weather, retention, digest
   getEvidencePack(id: string): Promise<EvidencePackRow | null>;
@@ -918,6 +945,45 @@ export function createDb(sql: Sql): Db {
       >`select status::text as status, count(*)::int as n from jobs where status in ('queued','running','dead') group by status`;
       const get = (s: string) => rows.find((r) => r.status === s)?.n ?? 0;
       return { queued: get('queued'), running: get('running'), dead: get('dead') };
+    },
+
+    // cost per report ------------------------------------------------------------------
+    async reportCostInputs(reportId) {
+      const rows = await sql<
+        Array<{ ai_usd: number; job_count: number; wa_templates: number }>
+      >`select ai_usd, job_count, wa_templates from report_cost_inputs(${reportId})`;
+      const r = rows[0];
+      return {
+        aiUsd: Number(r?.ai_usd ?? 0),
+        jobCount: r?.job_count ?? 0,
+        waTemplates: r?.wa_templates ?? 0,
+      };
+    },
+    async reportCostBaseline({ kind, before, excludeReportId, days }) {
+      const rows = await sql<
+        Array<{ median_cents: number | null; sample: number }>
+      >`select median_cents, sample from report_cost_baseline(${kind}, ${before}, ${excludeReportId}, ${days})`;
+      const r = rows[0];
+      return {
+        medianCents: r?.median_cents == null ? null : Number(r.median_cents),
+        sample: r?.sample ?? 0,
+      };
+    },
+    async getReportCost(reportId) {
+      return one(
+        await sql<ReportCostRow[]>`select * from report_costs where report_id = ${reportId}`,
+      );
+    },
+    async upsertReportCost(input) {
+      const rows = await sql<ReportCostRow[]>`
+        insert into report_costs (report_id, org_id, kind, filed_at, cost_cents, median_cents, sample, outlier, detail, computed_at)
+        values (${input.report_id}, ${input.org_id}, ${input.kind}, ${iso(input.filed_at)}, ${input.cost_cents},
+                ${input.median_cents}, ${input.sample}, ${input.outlier}, ${sql.json(input.detail as never)}, now())
+        on conflict (report_id) do update set
+          cost_cents = excluded.cost_cents, median_cents = excluded.median_cents, sample = excluded.sample,
+          outlier = excluded.outlier, detail = excluded.detail, computed_at = excluded.computed_at
+        returning *`;
+      return rows[0]!;
     },
 
     // packs, weather, retention, digest ---------------------------------------------------

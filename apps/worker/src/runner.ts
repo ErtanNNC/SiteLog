@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/node';
 import { JOB_TYPES, parseJobPayload, waCopy, type JobRow, type JobTypeKey } from '@sitelog/shared';
 import { childCtx, createMetrics, type Ctx } from './context';
+import { costUsdAcrossAttempts, refreshCostAfterJob } from './cost';
 import { registry } from './jobs/registry';
 import { rawPayload } from './jobs/types';
 import { contextOf } from './router/context';
@@ -10,7 +11,8 @@ import { sendFreeForm } from './wa/send';
 /**
  * Job loop: claim_jobs (FOR UPDATE SKIP LOCKED) → handler with a per-job timeout → complete_job /
  * fail_job (backoff + dead after 5 attempts). Dead jobs go to Sentry and the reporter hears
- * `error_retry` once. Metrics (tokens, audio seconds, latency, cost) land in jobs.payload.metrics.
+ * `error_retry` once. Metrics (tokens, audio seconds, latency, cost) land in jobs.payload.metrics;
+ * a job that references a filed report then refreshes that report's cost estimate (src/cost.ts).
  */
 
 export interface RunnerOptions {
@@ -58,6 +60,7 @@ export async function runJob(
     );
     await ctx.db.completeJob(job.id);
     await saveMetrics(ctx, job, metrics.snapshot(), Date.now() - started);
+    await refreshCostAfterJob(ctx, job);
     ctx.log.info('job done', { ms: Date.now() - started });
     return { ok: true };
   } catch (err) {
@@ -65,6 +68,7 @@ export async function runJob(
     ctx.log.error('job failed', { err, ms: Date.now() - started });
     await ctx.db.failJob(job.id, error);
     await saveMetrics(ctx, job, metrics.snapshot(), Date.now() - started);
+    await refreshCostAfterJob(ctx, job);
     const after = await ctx.db.getJob(job.id);
     if (after?.status === 'dead') await onDeadJob(ctx, job, err);
     return { ok: false, error };
@@ -78,7 +82,13 @@ async function saveMetrics(
   latencyMs: number,
 ): Promise<void> {
   try {
-    await ctx.db.updateJobMetrics(job.id, { ...m, latencyMs });
+    // Retries: keep the cost of the earlier attempts (each one may have called the models).
+    const costUsdTotal = costUsdAcrossAttempts(job, m.estCostUsd ?? 0);
+    await ctx.db.updateJobMetrics(job.id, {
+      ...m,
+      latencyMs,
+      ...(costUsdTotal !== null ? { costUsdTotal } : {}),
+    });
   } catch (err) {
     ctx.log.warn('metrics not saved', { err });
   }

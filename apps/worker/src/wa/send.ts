@@ -191,9 +191,11 @@ export async function sendBusinessInitiated(
   }
   const template = buildTemplatePayload(templateName, vars, buttons);
   const body = renderTemplateText(templateName, vars);
+  // siteDayId: billable templates (reminders) count towards that day's report cost (src/cost.ts).
   const payload = {
     ...opts.meta,
     kind: opts.meta?.kind ?? templateName,
+    ...(opts.siteDayId ? { siteDayId: opts.siteDayId } : {}),
     template,
     text: body,
     buttons,

@@ -43,7 +43,17 @@ export function estimateClaudeCostUsd(model: string, usage: TokenUsage): number 
   return Math.round(usd * 1e6) / 1e6;
 }
 
-/** Transcription is billed per minute of audio (whisper-1 and gpt-4o-transcribe: $0.006/min). */
-export function estimateTranscriptionCostUsd(_model: string, audioSeconds: number): number {
-  return Math.round((audioSeconds / 60) * 0.006 * 1e6) / 1e6;
+/**
+ * Transcription is billed per minute of audio: USD per minute for whisper-1 and
+ * gpt-4o-transcribe (OpenAI list price). Feeds jobs.payload.metrics.estCostUsd of the
+ * transcription jobs, which the cost-per-report estimate sums (src/cost.ts).
+ */
+export const TRANSCRIPTION_USD_PER_MINUTE = 0.006;
+
+export function estimateTranscriptionCostUsd(
+  _model: string,
+  audioSeconds: number,
+  usdPerMinute = TRANSCRIPTION_USD_PER_MINUTE,
+): number {
+  return Math.round((audioSeconds / 60) * usdPerMinute * 1e6) / 1e6;
 }

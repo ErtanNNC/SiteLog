@@ -742,3 +742,48 @@ export interface ChangeEvent {
   table: 'site_days' | 'reports' | 'notifications' | 'unknown_senders' | 'evidence_packs' | 'all';
   id?: string | null;
 }
+
+// ───────────────────────────── Ops (/ops, SiteLog staff only) ─────────────────────────────
+
+/** Queue health per job type (§15 reliability). */
+export interface OpsQueueRow {
+  type: string;
+  queued: number;
+  running: number;
+  dead: number;
+  /** Seconds the oldest due job has waited to be claimed; null when none is waiting. */
+  oldestDueSeconds: number | null;
+}
+
+/** A dead-lettered job. `payload` holds ids and enum-like fields only (no phones or texts). */
+export interface OpsDeadJob {
+  id: number;
+  type: string;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+  payload: Record<string, string | number | boolean>;
+}
+
+/** A filed report whose cost passed 3× the 30-day median (§15 cost guardrail). */
+export interface OpsCostOutlier {
+  reportId: string;
+  reportNo: string;
+  orgId: string;
+  orgName: string;
+  siteId: string;
+  siteName: string;
+  filedAt: string;
+  costCents: number;
+  medianCents: number | null;
+  sample: number;
+  aiUsd: number | null;
+  waTemplates: number | null;
+}
+
+export interface OpsData {
+  queue: OpsQueueRow[];
+  deadJobs: OpsDeadJob[];
+  costOutliers: OpsCostOutlier[];
+}

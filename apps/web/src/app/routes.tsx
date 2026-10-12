@@ -26,6 +26,7 @@ const TeamPage = page(() => import('./team/Page'));
 const GlossaryPage = page(() => import('./glossary/Page'));
 const SettingsPage = page(() => import('./settings/Page'));
 const BillingPage = page(() => import('./billing/Page'));
+const OpsPage = page(() => import('./ops/Page'));
 const NotFoundPage = page(() => import('./not-found/Page'));
 
 function guard(key: keyof typeof ROUTE_ROLES, label: string, node: ReactNode) {
@@ -77,6 +78,8 @@ export function AppRoutes() {
               element={guard('settings', copy.nav.settings, <SettingsPage />)}
             />
             <Route path="/billing" element={guard('billing', copy.nav.billing, <BillingPage />)} />
+            {/* SiteLog staff only (platform_admins), not an org role and not in the sidebar. */}
+            <Route path="/ops" element={<OpsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>

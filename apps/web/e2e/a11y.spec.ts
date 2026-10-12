@@ -79,6 +79,7 @@ const ROUTES: RouteCase[] = [
   { name: 'settings-recipients', path: '/settings/recipients', ready: (p) => h1(p, 'Settings') },
   { name: 'settings-payroll', path: '/settings/payroll', ready: (p) => h1(p, 'Settings') },
   { name: 'billing', path: '/billing', ready: (p) => p.getByTestId('plan-card') },
+  { name: 'ops', path: '/ops', ready: (p) => p.getByTestId('ops-kpis') },
   { name: 'setup-company', path: '/setup/company', ready: (p) => h1(p, /./) },
   { name: 'setup-site', path: '/setup/site', ready: (p) => p.getByLabel('Site name') },
   { name: 'setup-reports', path: '/setup/reports', ready: (p) => h1(p, /./) },

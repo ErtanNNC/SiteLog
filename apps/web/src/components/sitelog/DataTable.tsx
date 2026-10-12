@@ -36,8 +36,6 @@ export interface DataTableProps<T> {
    */
   rowHref?: (row: T) => string | null | undefined;
   rowTone?: (row: T) => 'default' | 'missing' | 'attention';
-  /** @deprecated Not rendered any more: the link inside the row carries the accessible name. */
-  rowLabel?: (row: T) => string;
   footer?: ReactNode;
   empty?: { title: string; body?: string; action?: ReactNode };
   caption?: string;

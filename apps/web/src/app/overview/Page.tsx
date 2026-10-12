@@ -314,7 +314,6 @@ export default function OverviewPage() {
                   rows={data.sitesToday}
                   rowKey={(r) => r.siteId}
                   rowHref={(r) => (r.reportId ? `/reports/${r.reportId}` : `/sites/${r.siteId}`)}
-                  rowLabel={(r) => r.siteName}
                   rowTone={(r) => (r.chip.variant === 'missing' ? 'missing' : 'default')}
                   aria-label={copy.overview.sitesToday}
                 />

@@ -450,7 +450,6 @@ export default function ReportsPage() {
             rows={items}
             rowKey={(r) => r.reportId}
             rowHref={(r) => `/reports/${r.reportId}`}
-            rowLabel={(r) => r.reportNo}
             rowTone={(r) => (selected.has(r.reportId) ? 'attention' : 'default')}
             aria-label={copy.reports.title}
             className={cn(reports.isFetching && 'opacity-70')}

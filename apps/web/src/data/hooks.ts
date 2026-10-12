@@ -496,6 +496,54 @@ function useStripeRedirect(kind: 'portal' | 'checkout') {
   });
 }
 
+// ───────────────────────────── Platform ops (/ops) ─────────────────────────────
+
+/** Is the signed-in user a SiteLog operator? Errors count as "no" (the page then 404s). */
+export function usePlatformAdmin() {
+  const s = useDataSource();
+  return useQuery({
+    queryKey: qk.opsAccess(s.user.id),
+    queryFn: () => s.isPlatformAdmin(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
+export function useOps(opts: Opts = {}) {
+  const s = useDataSource();
+  return useQuery({
+    queryKey: qk.ops(s.user.id),
+    queryFn: () => s.getOps(),
+    refetchInterval: 30_000,
+    ...opts,
+  });
+}
+
+function useOpsMutation(fn: (jobId: number) => Promise<void>, success: (jobId: number) => string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { jobId: number }) => fn(vars.jobId),
+    onSuccess: (_r, vars) => {
+      void qc.invalidateQueries({ queryKey: ['ops'] });
+      toast.success(success(vars.jobId));
+    },
+    onError: (err) => {
+      void qc.invalidateQueries({ queryKey: ['ops'] });
+      toast.error(errorMessage(err, copy.errors.generic));
+    },
+  });
+}
+
+export function useRetryDeadJob() {
+  const s = useDataSource();
+  return useOpsMutation((id) => s.retryDeadJob(id), copy.ops.toasts.retried);
+}
+
+export function useDiscardDeadJob() {
+  const s = useDataSource();
+  return useOpsMutation((id) => s.discardDeadJob(id), copy.ops.toasts.discarded);
+}
+
 export function useMarkNotificationsRead() {
   const s = useDataSource();
   return useSourceMutation((vars: { ids: string[] }) => s.markNotificationsRead(vars.ids), {

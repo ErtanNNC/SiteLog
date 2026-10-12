@@ -53,7 +53,8 @@ Runtime secrets are not copied from GitHub: edge-function secrets stay in `supab
 
 ## 3. Day-to-day operations
 
-- **Dead jobs**: `select id, type, payload, last_error from jobs where status = 'dead' order by id desc;` Fix the cause, then `update jobs set status = 'queued', attempts = 0, run_after = now() where id = <id>;`. The reporter already received `error_retry` once.
+- **Dead jobs**: open `/ops` in the panel (SiteLog operators only, §6): queue health per job type, dead jobs with **Retry** (back to `queued`, 5 fresh attempts, due now) and **Discard** (kept as `failed`, never runs again); both are written to `audit_log` (`ops.job_retried` / `ops.job_discarded`, `org_id` null, actor = the operator). Fix the cause first. The reporter already received `error_retry` once. SQL fallback: `select id, type, payload, last_error from jobs where status = 'dead' order by id desc;` then `update jobs set status = 'queued', attempts = 0, run_after = now() where id = <id>;` (not audited).
+- **Cost outliers** (§15 cost guardrail): every filed report gets an AI + WhatsApp estimate in `report_costs.cost_cents` (worker, refreshed after later jobs on the report). A report above 3× the median of its kind over the previous 30 days (once 20 reports exist) logs `report cost outlier` (warn, with `org_id`, `report_id`, `cost_cents`, `median_cents`), sends a Sentry warning when `SENTRY_DSN` is set and is listed on `/ops`. Look at the report's jobs (`select type, attempts, payload->'metrics' from jobs where payload->>'reportId' = '<uuid>';`): retries, a very long voice note or a reminder storm are the usual causes. Rates: `COST_WA_TEMPLATE_USD` (worker env, default 0.004 per template) and `TRANSCRIPTION_USD_PER_MINUTE` / the Claude rates in `apps/worker/src/ai/cost.ts`.
 - **Stuck running jobs** are reclaimed automatically after 15 minutes (`claim_jobs`).
 - **Re-render a PDF**: `select enqueue_job('render_pdf', jsonb_build_object('reportId', '<uuid>', 'version', <n>, 'emailRecipients', false));`
 - **Reminders not firing**: check `scheduler_state.last_tick`, the pg_cron job (`select * from cron.job_run_details order by start_time desc limit 20;`) and that `site_days` for today exist with the right `deadline_at` (site time zone + DST).
@@ -79,3 +80,72 @@ Runtime secrets are not copied from GitHub: edge-function secrets stay in `supab
 - Storage buckets are private; the panel uses 10-minute signed URLs.
 - Phone numbers never go to an LLM. Transcripts are data, not instructions (system prompt rule 9).
 - Every state change is in `audit_log`; report versions are immutable.
+
+## 6. SiteLog operators (`/ops`)
+
+`/ops` is for SiteLog staff, not for customers: it shows every org's queue, dead jobs and cost outliers. Access comes from the `platform_admins` table (migration `20261012000003_ops.sql`), never from an org role — a customer's org admin gets the "Page not found" page, and every `ops_*` RPC refuses them. The table has RLS with no policies, so it is only managed with the service role (SQL editor or `psql "$SUPABASE_DB_URL"`).
+
+Add an operator (they sign in with a magic link first so `auth.users` has the row; they also need one org membership to get past the setup wizard, e.g. a SiteLog-internal org):
+
+```sql
+insert into platform_admins (user_id, note)
+select id, 'on-call, added 2026-10-12 by <you>' from auth.users where email = '<operator@sitelog.app>'
+on conflict (user_id) do nothing;
+```
+
+Remove one: `delete from platform_admins where user_id = (select id from auth.users where email = '<operator@sitelog.app>');` · List: `select u.email, p.note, p.created_at from platform_admins p join auth.users u on u.id = p.user_id;`
+
+The page reloads every 30 s. Dead-job payloads are reduced to ids and enum-like fields and errors are redacted (phone numbers, emails), so no customer message content is shown there; open the job in SQL when the full payload is needed.
+
+## 7. Load test (§16.2 M9)
+
+`pnpm loadtest` pushes N voice-note reports (default 500 arriving over 30 min) through the worker the way production runs it: the webhook ingest (`apps/worker/src/integration/webhook.ts`, the decisions of `whatsapp-webhook`), `createRunner().start()` (claim_jobs → handlers), the router, PDF rendering and every SQL statement. Meta, OpenAI, Claude, Storage, the email provider and ffmpeg are fakes that answer from `fixtures/` (the single-voice-note golden cases, round-robin) after a sampled latency. Simulated reporters send a photo 0–40 s after the note, tap the first option of a question (or send a photo when asked for one) and press **OK, file it** 10–45 s after the draft. The same fakes drive the integration test (`src/integration/pipeline.integration.test.ts`, part of `pnpm --filter @sitelog/worker test`).
+
+```sh
+pnpm loadtest -- --reports 24 --time-scale 0.05       # smoke run on PGlite, ~30 s
+pnpm loadtest                                         # 500 reports, 1 instance × 4 (WORKER_CONCURRENCY default)
+pnpm loadtest -- --instances 4 --concurrency 6 --time-scale 0.1 --json /tmp/loadtest.json
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/postgres pnpm loadtest -- --instances 4 --concurrency 6 --time-scale 0.1
+```
+
+`-- --help` lists the knobs: latency per service in scale-1 seconds (`--transcribe 8-20` for a 3-min note, `--claude 12-35`, `--claude-fast`, `--wa`, `--media`, `--email`, `--storage`), `--think`, `--photo-delay` / `--no-photo`, `--fail-rate` (transient errors; retries then follow the real `fail_job` backoff, which runs on database time and is not scaled), `--cases`, `--seed`, `--timeout`, `--keep`.
+
+**Reading the output.**
+
+- _Time scale._ Simulated latencies, think time, the arrival window and the poll interval are multiplied by `--time-scale`, and the worker runs on a virtual clock 1/scale times faster than the wall clock, so latencies print in scale-1 seconds. CPU and database time are not scaled, so in virtual time they are stretched by 1/scale: the printed latencies are an upper bound. Use the largest scale you have time for.
+- _At scale 1._ Slot-seconds per report = how long a report's jobs hold worker slots (simulated waits at full length + real CPU/DB). Capacity = instances × concurrency × 1800 / slot-seconds; the line says whether 500 reports in 30 min is met and how many slots it needs at 100 % and 70 % busy.
+- _Intake races_ counts site-days that got more than one report, reporters told "Got the photos…" after their voice note had arrived, extractions that ran before the transcript existed, and golden cases whose replays closed in different ways (e.g. some `filed`, one `no_work`): each case replays the same transcript, so a mix means a race decided it (known issue below). _Phone numbers sent to Claude_ must be 0.
+
+**Databases.** Without `DATABASE_URL` the run boots PGlite (every migration) in-process: one Postgres session behind one connection on the worker's event loop. That is fine for correctness and the projection, and pessimistic for latency. For timings use a scratch Postgres with `supabase/migrations` applied. Never point it at a database someone is using: it creates its own org (`Load test <id>`, deleted at the end unless `--keep`), but the runner claims every due job in the queue and runs one timeout sweep at start. A throwaway one from the Supabase image (the storage schema normally comes from the storage service, so stub it first):
+
+```sh
+docker run -d --name sitelog_loadtest_db -p 127.0.0.1:55432:5432 -e POSTGRES_PASSWORD=postgres supabase/postgres:17.11.0.004
+export PGPASSWORD=postgres
+until psql -h 127.0.0.1 -p 55432 -U postgres -d postgres -c 'select 1' >/dev/null 2>&1; do sleep 1; done
+psql -h 127.0.0.1 -p 55432 -U supabase_admin -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+create table if not exists storage.buckets (id text primary key, name text, public boolean default false);
+create table if not exists storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text references storage.buckets, name text, owner uuid, metadata jsonb);
+create or replace function storage.foldername(name text) returns text[] language sql immutable
+  as $$ select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1] $$;
+alter table storage.buckets owner to postgres;
+alter table storage.objects owner to postgres;
+SQL
+for f in supabase/migrations/*.sql; do psql -h 127.0.0.1 -p 55432 -U postgres -d postgres -v ON_ERROR_STOP=1 -q -f "$f" || break; done
+# afterwards: docker rm -f sitelog_loadtest_db
+```
+
+**Results (2026-10-12, golden-case mix, default latencies).**
+
+| Run                                        | Site-days closed    | Received → question/draft p50 / p95   | OK → PDF p95 | Ack p95 | Slot-s per report | 500 / 30 min         |
+| ------------------------------------------ | ------------------- | ------------------------------------- | ------------ | ------- | ----------------- | -------------------- |
+| PGlite, 24 reports, 1 × 4, scale 0.05      | 24 / 24             | 108 / 123 s (window 5 min, saturated) | 79 s         | 32 s    | 46                | no (≈ 150 / 30 min)  |
+| PGlite, 500 reports, 1 × 4, scale 0.02     | 40 / 500 at timeout | 51 / 80 min                           | 74 min       | 26 min  | 47                | no (≈ 150 / 30 min)  |
+| Postgres 17, 500 reports, 4 × 6, scale 0.1 | 500 / 500           | 61 / 90 s                             | 26 s         | 10 s    | 55                | yes (≈ 790 / 30 min) |
+
+**Sizing.** A report holds a worker slot for ≈ 50–55 s (transcription, extraction, ≈ 1.5 extraction calls per report, the WhatsApp/storage/email calls; ≈ 0.3–1.2 s of it CPU and database), so one instance at the default `WORKER_CONCURRENCY=4` files ≈ 150 reports per 30 min. 500 in 30 min needs ≥ 16 slots, ≈ 22 to keep queues short: e.g. 4 instances × 6 or 2 × 12 (each instance opens concurrency + 2 database connections). The worker is I/O-bound, so raising `WORKER_CONCURRENCY` is cheaper than adding machines until PDF rendering (≈ 0.2–0.35 s of CPU per report, on the event loop) starts to delay the other jobs of that instance.
+
+**Known issues the load test shows** (2026-10-12):
+
+- FIFO claiming (`order by run_after, id`): when the queue backs up, acks (`inbound_message`) wait behind transcription and extraction (ack p95 26 min in the saturated run, target 5 s) and almost no report finishes until the backlog clears.
+- Intake race: inbound messages of one conversation are routed by two slots at once when they arrive within about a second or wait together in a backed-up queue (claimed in the same tick). Depending on the interleaving: two reports for one site-day (one left `collecting` with the photo) and a wrong "Got the photos…" reply; or a second ack plus an extraction that runs before the voice note is transcribed, whose empty draft looks like a day off, so the working day is voided and logged as `weather_day` / `no_work` (≈ 1 in 150–500 reports in these runs).
+- A photo that lands while its report is being extracted triggers a second extraction (≈ 1.5 Claude extraction calls per report).

@@ -411,6 +411,67 @@ export type StripeEventRow = {
   processed_at: string | null;
 };
 
+/** SiteLog's own operators (/ops). Not an org role; managed with the service role (§15). */
+export type PlatformAdminRow = {
+  user_id: string;
+  note: string | null;
+  created_at: string;
+};
+
+/** Cost estimate of a filed report (§15 cost guardrail). Service role + ops RPCs only. */
+export type ReportCostRow = {
+  report_id: string;
+  org_id: string;
+  kind: string;
+  filed_at: string;
+  /** AI + WhatsApp estimate in integer cents. */
+  cost_cents: number;
+  /** Median of the baseline window when estimated; null when the sample was too small. */
+  median_cents: number | null;
+  sample: number;
+  outlier: boolean;
+  /** { aiUsd, waTemplates, waTemplateUsd, jobs } */
+  detail: Json;
+  computed_at: string;
+};
+
+/** ops_queue_stats() row. */
+export type OpsQueueStatRow = {
+  type: string;
+  queued: number;
+  running: number;
+  dead: number;
+  /** Seconds the oldest due (run_after passed) queued job has waited; null when none. */
+  oldest_due_s: number | null;
+};
+
+/** ops_dead_jobs() row: payload reduced to ids / enum-like fields, error redacted. */
+export type OpsDeadJobRow = {
+  id: number;
+  type: string;
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
+  finished_at: string | null;
+  payload: Json;
+};
+
+/** ops_cost_outliers() row. */
+export type OpsCostOutlierRow = {
+  report_id: string;
+  report_no: string;
+  org_id: string;
+  org_name: string;
+  site_id: string;
+  site_name: string;
+  kind: string;
+  filed_at: string;
+  cost_cents: number;
+  median_cents: number | null;
+  sample: number;
+  detail: Json;
+};
+
 export type CurrentManpowerRow = ManpowerEntryRow & {
   site_id: string;
   org_id: string;
@@ -659,6 +720,11 @@ export type Database = {
         NotificationRow,
         'id' | 'user_id' | 'body' | 'target_path' | 'read_at' | 'created_at'
       >;
+      platform_admins: Table<PlatformAdminRow, 'note' | 'created_at'>;
+      report_costs: Table<
+        ReportCostRow,
+        'median_cents' | 'sample' | 'outlier' | 'detail' | 'computed_at'
+      >;
     };
     Views: {
       current_manpower: { Row: CurrentManpowerRow; Relationships: [] };
@@ -764,6 +830,22 @@ export type Database = {
           invoice_id: string;
           invoice_status: string;
         }>;
+      };
+      // Platform ops (20261012000003_ops.sql): platform admins only, checked in SQL.
+      is_platform_admin: { Args: Record<string, never>; Returns: boolean };
+      ops_queue_stats: { Args: Record<string, never>; Returns: OpsQueueStatRow[] };
+      ops_dead_jobs: { Args: { p_limit?: number }; Returns: OpsDeadJobRow[] };
+      ops_retry_job: { Args: { p_job_id: number }; Returns: Json };
+      ops_discard_job: { Args: { p_job_id: number }; Returns: Json };
+      ops_cost_outliers: { Args: { p_days?: number }; Returns: OpsCostOutlierRow[] };
+      // Worker (service role) only.
+      report_cost_inputs: {
+        Args: { p_report_id: string };
+        Returns: Array<{ ai_usd: number; job_count: number; wa_templates: number }>;
+      };
+      report_cost_baseline: {
+        Args: { p_kind: string; p_before: string; p_exclude?: string | null; p_days?: number };
+        Returns: Array<{ median_cents: number | null; sample: number }>;
       };
     };
     Enums: {

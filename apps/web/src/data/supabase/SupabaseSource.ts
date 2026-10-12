@@ -30,6 +30,9 @@ import type {
   UnknownSenderRow,
   CurrentManpowerRow,
   CurrentWeatherRow,
+  OpsCostOutlierRow,
+  OpsDeadJobRow,
+  OpsQueueStatRow,
 } from '@sitelog/shared/db/types.ts';
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
@@ -83,6 +86,7 @@ import {
 import type {
   BillingData,
   ChangeEvent,
+  OpsData,
   OrgSettingsPatch,
   OrgSummary,
   ReportFilters,
@@ -1428,6 +1432,31 @@ export class SupabaseSource implements DataSource {
     await this.rpc('mark_notifications_read', { p_ids: ids });
   }
 
+  // ─── Platform ops (20261012000003_ops.sql; every RPC checks is_platform_admin()) ───
+
+  async isPlatformAdmin() {
+    const { data, error } = await this.sb.rpc('is_platform_admin');
+    return !error && data === true;
+  }
+  async getOps(): Promise<OpsData> {
+    const [queue, dead, outliers] = await Promise.all([
+      this.rpc('ops_queue_stats', {}),
+      this.rpc('ops_dead_jobs', { p_limit: 100 }),
+      this.rpc('ops_cost_outliers', { p_days: 30 }),
+    ]);
+    return toOpsData(
+      (queue ?? []) as OpsQueueStatRow[],
+      (dead ?? []) as OpsDeadJobRow[],
+      (outliers ?? []) as OpsCostOutlierRow[],
+    );
+  }
+  async retryDeadJob(jobId: number) {
+    await this.rpc('ops_retry_job', { p_job_id: jobId });
+  }
+  async discardDeadJob(jobId: number) {
+    await this.rpc('ops_discard_job', { p_job_id: jobId });
+  }
+
   // ─── Realtime ───
 
   subscribe(onChange: (event: ChangeEvent) => void): () => void {
@@ -1511,6 +1540,57 @@ export async function uploadOrgLogo(sb: Db, orgId: string, file: File | null): P
   if (error) throw new Error(error.message);
   const keep = new Set([path, ...(png ? [logoStoragePath(orgId, 'png')] : [])]);
   await bucket.remove(all.filter((p) => !keep.has(p))).catch(() => undefined);
+}
+
+/** ops_* RPC rows → the /ops view model (payload / detail jsonb narrowed to primitives). */
+function toOpsData(
+  queue: OpsQueueStatRow[],
+  dead: OpsDeadJobRow[],
+  outliers: OpsCostOutlierRow[],
+): OpsData {
+  const record = (v: unknown): Record<string, unknown> =>
+    v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  const num = (v: unknown): number | null =>
+    typeof v === 'number' ? v : typeof v === 'string' && v !== '' && !Number.isNaN(+v) ? +v : null;
+  return {
+    queue: queue.map((q) => ({
+      type: q.type,
+      queued: q.queued,
+      running: q.running,
+      dead: q.dead,
+      oldestDueSeconds: q.oldest_due_s,
+    })),
+    deadJobs: dead.map((j) => ({
+      id: Number(j.id),
+      type: j.type,
+      attempts: j.attempts,
+      lastError: j.last_error,
+      createdAt: j.created_at,
+      finishedAt: j.finished_at,
+      payload: Object.fromEntries(
+        Object.entries(record(j.payload)).filter((e): e is [string, string | number | boolean] =>
+          ['string', 'number', 'boolean'].includes(typeof e[1]),
+        ),
+      ),
+    })),
+    costOutliers: outliers.map((o) => {
+      const detail = record(o.detail);
+      return {
+        reportId: o.report_id,
+        reportNo: o.report_no,
+        orgId: o.org_id,
+        orgName: o.org_name,
+        siteId: o.site_id,
+        siteName: o.site_name,
+        filedAt: o.filed_at,
+        costCents: o.cost_cents,
+        medianCents: num(o.median_cents),
+        sample: o.sample,
+        aiUsd: num(detail.aiUsd),
+        waTemplates: num(detail.waTemplates),
+      };
+    }),
+  };
 }
 
 /** Org memberships of a user (used by the AuthProvider before any org is selected). */
