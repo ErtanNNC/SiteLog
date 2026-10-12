@@ -137,7 +137,8 @@ jobs:
     env:
       NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
       NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
-      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      SUPABASE_URL_VAR: ${{ vars.VITE_SUPABASE_URL }}
       VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       VITE_APP_URL: ${{ vars.VITE_APP_URL }}
       VITE_WA_DISPLAY_NUMBER: ${{ vars.VITE_WA_DISPLAY_NUMBER }}
@@ -146,6 +147,17 @@ jobs:
       - name: Check configuration
         id: cfg
         run: |
+          # The project URL follows from the project ref; a missing or placeholder value is derived.
+          VITE_SUPABASE_URL="$SUPABASE_URL_VAR"
+          if ! [[ "$VITE_SUPABASE_URL" =~ ^https://[^\<\>[:space:]]+$ ]] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            VITE_SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
+            echo "::notice::VITE_SUPABASE_URL unset or not a URL; using $VITE_SUPABASE_URL"
+          fi
+          echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" >> "$GITHUB_ENV"
+          if [ -n "$VITE_SUPABASE_ANON_KEY" ] && ! [[ "$VITE_SUPABASE_ANON_KEY" =~ ^(eyJ|sb_publishable_) ]]; then
+            echo "::error::VITE_SUPABASE_ANON_KEY is not a Supabase anon key (eyJ…) or publishable key (sb_publishable_…)."
+            exit 1
+          fi
           if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
@@ -195,7 +207,7 @@ jobs:
           else
             flags="--prod"
           fi
-          npx --yes netlify-cli@27.10.2 deploy --dir apps/web/dist --site "${{ steps.site.outputs.id }}" \
+          npx --yes netlify-cli@27.10.2 deploy --filter @sitelog/web --dir "$GITHUB_WORKSPACE/apps/web/dist" --site "${{ steps.site.outputs.id }}" \
             --auth "$NETLIFY_AUTH_TOKEN" --message "${GITHUB_SHA::7} ${ENVIRONMENT}" $flags --json > deploy.json
           url=$(node -e "const d=require('./deploy.json');console.log(d.deploy_url||d.url||'')")
           echo "Deployed: $url"
