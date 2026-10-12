@@ -16,6 +16,7 @@ import {
   PDF_EXPORT_LIMIT,
   type AddGlossaryTermInput,
   type AddInvoiceInput,
+  type CreateOfficeReportInput,
   type CreateOrgInput,
   type CreateSiteInput,
   type InviteReporterInput,
@@ -195,6 +196,77 @@ export function useCreateReportVersion() {
       success: (_v, r) => copy.toasts.versionSaved(r.version),
     },
   );
+}
+
+/** New report page: file a report typed in the panel (create_office_report). */
+export function useCreateOfficeReport() {
+  const s = useDataSource();
+  return useSourceMutation((vars: CreateOfficeReportInput) => s.createOfficeReport(vars), {
+    silent: true,
+  });
+}
+
+/**
+ * A version's PDF: the stored one, or rendered in the browser with the worker's document
+ * (@sitelog/pdf), stored for that version (exports, later visits) and returned. Until the worker
+ * runs, this is how reports typed in the panel and office edits get their PDF.
+ */
+export function useReportPdf() {
+  const s = useDataSource();
+  const qc = useQueryClient();
+  const make = async (reportId: string, version: number | null): Promise<string> => {
+    const detail = await s.getReportDetail(reportId, version);
+    if (detail.pdfUrl) return detail.pdfUrl;
+    const [{ renderReportDetailPdf }, settings] = await Promise.all([
+      import('@/lib/reportPdf'),
+      qc.fetchQuery({ queryKey: qk.settings(s.orgId), queryFn: () => s.getSettings() }),
+    ]);
+    const pdf = await renderReportDetailPdf(detail, settings, s.now());
+    let url: string;
+    try {
+      url = await s.saveReportPdf({
+        reportId,
+        reportNo: detail.report.reportNo,
+        siteId: detail.site.id,
+        version: detail.version,
+        pdf,
+      });
+    } catch {
+      toast.warning(copy.report.pdfNotSaved);
+      url = URL.createObjectURL(pdf);
+    }
+    void qc.invalidateQueries({ queryKey: qk.report(s.orgId, reportId) });
+    return url;
+  };
+  const m = useMutation({
+    mutationFn: async (vars: {
+      reportId: string;
+      version: number | null;
+      go: (url: string | null) => void;
+    }) => {
+      const id = toast.loading(copy.report.pdfPreparing);
+      try {
+        const url = await make(vars.reportId, vars.version);
+        toast.dismiss(id);
+        vars.go(url);
+      } catch (err) {
+        vars.go(null);
+        toast.error(errorMessage(err, copy.report.pdfFailed), { id });
+      }
+    },
+  });
+  return {
+    /** Call inside the click: the tab opens first so popup blockers allow it. */
+    open: (reportId: string, version: number | null) =>
+      m.mutate({ reportId, version, go: pendingTab() }),
+    isPending: m.isPending,
+    /** Render and store without opening (after filing or an edit); false when it failed. */
+    prepare: (reportId: string, version: number | null) =>
+      make(reportId, version).then(
+        () => true,
+        () => false,
+      ),
+  };
 }
 
 export function useMarkNoWork() {

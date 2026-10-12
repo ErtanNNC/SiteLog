@@ -20,6 +20,7 @@ const SitesPage = page(() => import('./sites/Page'));
 const SiteDetailPage = page(() => import('./site/Page'));
 const ReportsPage = page(() => import('./reports/Page'));
 const ReportDetailPage = page(() => import('./report/Page'));
+const NewReportPage = page(() => import('./new-report/Page'));
 const HoursPage = page(() => import('./hours/Page'));
 const WeatherPage = page(() => import('./weather/Page'));
 const TeamPage = page(() => import('./team/Page'));
@@ -62,6 +63,10 @@ export function AppRoutes() {
               element={guard('sites', copy.nav.sites, <SiteDetailPage />)}
             />
             <Route path="/reports" element={guard('reports', copy.nav.reports, <ReportsPage />)} />
+            <Route
+              path="/reports/new"
+              element={guard('reports', copy.nav.reports, <NewReportPage />)}
+            />
             <Route
               path="/reports/:reportId"
               element={guard('reports', copy.nav.reports, <ReportDetailPage />)}

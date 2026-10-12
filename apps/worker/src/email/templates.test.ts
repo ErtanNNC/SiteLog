@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveTotals } from '@sitelog/shared';
-import { heroReportData } from '../pdf/sample-data';
+import { heroReportData } from '@sitelog/pdf/sample-data.ts';
 import {
   evidencePackReadyEmail,
   invoiceQueryEmail,

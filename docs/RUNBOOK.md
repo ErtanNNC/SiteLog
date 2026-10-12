@@ -53,6 +53,15 @@ Create two GitHub Environments, `staging` and `production` (add required reviewe
 
 Runtime secrets are not copied from GitHub: edge-function secrets stay in `supabase secrets set` (step 4) and worker secrets in `fly secrets set` (step 7). The panel is a single-page app; `apps/web/public/_redirects` sends every path to `index.html` (Netlify and Cloudflare Pages both read it).
 
+### Before the worker runs (typed reports)
+
+Until WhatsApp and the AI keys are live, offices type reports in the panel (Reports → **New report**). `create_office_report()` files them and the panel renders each version's PDF in the browser (`@sitelog/pdf`, the same document as the worker), uploads it to `pdfs/` and records it with `attach_version_pdf()`; nothing is emailed. Office edits still enqueue `render_pdf` jobs (with the report-updated email). Before starting the worker for the first time, discard the backlog so customers do not get weeks-old update emails:
+
+```sql
+update jobs set status = 'failed', last_error = 'discarded: queued before the worker existed'
+where status = 'queued' and created_at < now() - interval '1 hour';
+```
+
 ## 3. Day-to-day operations
 
 - **Dead jobs**: open `/ops` in the panel (SiteLog operators only, §6): queue health per job type, dead jobs with **Retry** (back to `queued`, 5 fresh attempts, due now) and **Discard** (kept as `failed`, never runs again); both are written to `audit_log` (`ops.job_retried` / `ops.job_discarded`, `org_id` null, actor = the operator). Fix the cause first. The reporter already received `error_retry` once. SQL fallback: `select id, type, payload, last_error from jobs where status = 'dead' order by id desc;` then `update jobs set status = 'queued', attempts = 0, run_after = now() where id = <id>;` (not audited).

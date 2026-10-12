@@ -6,10 +6,12 @@ RUN corepack enable
 WORKDIR /repo
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/pdf/package.json packages/pdf/
 COPY apps/worker/package.json apps/worker/
 # ffmpeg-static would download a binary at install time; the image uses the Debian package instead.
 RUN pnpm install --frozen-lockfile --filter @sitelog/worker... --config.ignore-scripts=true
 COPY packages/shared packages/shared
+COPY packages/pdf packages/pdf
 COPY apps/worker apps/worker
 RUN pnpm --filter @sitelog/worker build
 
@@ -21,6 +23,7 @@ RUN corepack enable
 WORKDIR /repo
 COPY --from=build /repo/package.json /repo/pnpm-lock.yaml /repo/pnpm-workspace.yaml /repo/.npmrc ./
 COPY --from=build /repo/packages/shared/package.json packages/shared/
+COPY --from=build /repo/packages/pdf/package.json packages/pdf/
 COPY --from=build /repo/apps/worker/package.json apps/worker/
 RUN pnpm install --frozen-lockfile --prod --filter @sitelog/worker... --config.ignore-scripts=true
 COPY --from=build /repo/apps/worker/dist apps/worker/dist

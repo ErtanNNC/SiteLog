@@ -1,7 +1,21 @@
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToBuffer } from '@react-pdf/renderer';
 import type { DocumentProps } from '@react-pdf/renderer';
 import type { ReactElement } from 'react';
+import {
+  EvidencePack,
+  ReportDocument,
+  setFontSource,
+  type EvidenceDay,
+  type EvidencePackInput,
+  type PdfImage,
+  type PdfPhoto,
+  type ReportPdfInput,
+} from '@sitelog/pdf';
 import type {
   DailyReportData,
   EvidencePackRow,
@@ -11,19 +25,43 @@ import type {
 import type { Ctx } from '../context';
 import type { SiteContext } from '../db';
 import { siteDayWeatherOf, transcriptSegments } from '../pipeline/compose';
-import { EvidencePack } from './EvidencePack';
-import { ReportDocument } from './ReportDocument';
-import type { EvidenceDay, EvidencePackInput, PdfImage, PdfPhoto, ReportPdfInput } from './types';
+
+/**
+ * The embedded TTFs ship in packages/pdf/src/fonts and are copied to dist/fonts by the build;
+ * both locations are tried.
+ */
+export function fontsDir(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const candidates = [join(here, 'fonts'), join(here, '..', 'fonts')];
+  try {
+    const pkg = createRequire(import.meta.url).resolve('@sitelog/pdf/package.json');
+    candidates.push(join(dirname(pkg), 'src', 'fonts'));
+  } catch {
+    // Bundled build without node_modules: dist/fonts only.
+  }
+  for (const c of candidates) if (existsSync(join(c, 'Archivo-Regular.ttf'))) return c;
+  throw new Error(`PDF fonts not found; looked in ${candidates.join(', ')}`);
+}
+
+let fontsReady = false;
+function useNodeFonts(): void {
+  if (fontsReady) return;
+  const dir = fontsDir();
+  setFontSource((file) => join(dir, file));
+  fontsReady = true;
+}
 
 /** `renderToBuffer` wrappers + the loaders that turn DB rows into the document inputs. */
 
 export async function renderReportPdf(input: ReportPdfInput): Promise<Buffer> {
+  useNodeFonts();
   return renderToBuffer(
     createElement(ReportDocument, { input }) as unknown as ReactElement<DocumentProps>,
   );
 }
 
 export async function renderEvidencePackPdf(input: EvidencePackInput): Promise<Buffer> {
+  useNodeFonts();
   return renderToBuffer(
     createElement(EvidencePack, { input }) as unknown as ReactElement<DocumentProps>,
   );
@@ -102,6 +140,16 @@ export async function buildReportPdfInput(
   const versions = await ctx.db.listVersions(report.id);
   const reporter = report.reporter_id ? await ctx.db.getReporter(report.reporter_id) : null;
   const signer = report.signed_off_by ? await ctx.db.getUserContact(report.signed_off_by) : null;
+  // Typed in the panel (create_office_report): no reporter, version 1 by an office user.
+  const first = versions.find((v) => v.version === 1);
+  const enteredByUser =
+    !report.reporter_id && first?.author === 'office_user' && first.author_user_id
+      ? await ctx.db.getUserContact(first.author_user_id)
+      : null;
+  const enteredBy =
+    !report.reporter_id && first?.author === 'office_user'
+      ? (enteredByUser?.display_name ?? enteredByUser?.email ?? 'Office')
+      : null;
   const [logo, photos] = await Promise.all([
     loadLogo(ctx, site.org.logo_path),
     loadPhotos(ctx, sources, site.settings.pdf_max_photos),
@@ -135,6 +183,7 @@ export async function buildReportPdfInput(
     },
     data: data.languageDetected.length ? data : { ...data, languageDetected: languages },
     reporterName: reporter?.name ?? null,
+    enteredBy,
     sources: {
       audioCount: audio.length,
       totalAudioSeconds: audio.reduce((a, s) => a + (s.duration_s ?? 0), 0),

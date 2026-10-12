@@ -69,6 +69,7 @@ const ROUTES: RouteCase[] = [
     ready: (p) => p.getByTestId('latest-card'),
   },
   { name: 'reports', path: '/reports', ready: (p) => p.getByRole('table', { name: 'Reports' }) },
+  { name: 'new report', path: '/reports/new', ready: (p) => p.getByTestId('report-editor') },
   { name: 'report', path: `/reports/${HERO_REPORT}`, ready: (p) => p.getByTestId('voice-player') },
   { name: 'hours', path: '/hours', ready: (p) => p.getByTestId('hours-matrix') },
   { name: 'weather', path: '/weather', ready: (p) => p.getByTestId('delay-log') },

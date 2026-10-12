@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, FileDown, FolderArchive, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileDown, FolderArchive, Plus, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -296,18 +296,26 @@ export default function ReportsPage() {
         title={copy.reports.title}
         subtitle={copy.reports.subtitle}
         actions={
-          <Button
-            variant="secondary"
-            onClick={onExport}
-            loading={pdfZip.isPending}
-            data-testid="export-zip"
-          >
-            <FolderArchive aria-hidden="true" />
-            {copy.reports.exportZip}
-            {selected.size ? (
-              <span className="font-mono text-[12px] opacity-80">{selected.size}</span>
-            ) : null}
-          </Button>
+          <>
+            <Button
+              variant="secondary"
+              onClick={onExport}
+              loading={pdfZip.isPending}
+              data-testid="export-zip"
+            >
+              <FolderArchive aria-hidden="true" />
+              {copy.reports.exportZip}
+              {selected.size ? (
+                <span className="font-mono text-[12px] opacity-80">{selected.size}</span>
+              ) : null}
+            </Button>
+            <Button asChild data-testid="new-report">
+              <Link to="/reports/new">
+                <Plus aria-hidden="true" />
+                {copy.reports.newReport}
+              </Link>
+            </Button>
+          </>
         }
       />
 

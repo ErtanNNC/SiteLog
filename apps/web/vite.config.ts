@@ -15,7 +15,8 @@ export default defineConfig({
   build: {
     sourcemap: process.env.VITE_SOURCEMAP !== 'false',
     outDir: process.env.VITE_OUT_DIR ?? 'dist',
-    chunkSizeWarningLimit: 900,
+    // The largest chunk is react-pdf (~1.2 MB), loaded only when a PDF is rendered in the browser.
+    chunkSizeWarningLimit: 1300,
   },
   test: {
     environment: 'jsdom',

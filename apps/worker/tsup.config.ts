@@ -1,4 +1,7 @@
+import { copyFile, mkdir, readdir } from 'node:fs/promises';
 import { defineConfig } from 'tsup';
+
+const FONTS = '../../packages/pdf/src/fonts';
 
 export default defineConfig({
   entry: ['src/index.ts'],
@@ -10,7 +13,7 @@ export default defineConfig({
   sourcemap: true,
   splitting: false,
   shims: false,
-  // Native / binary / large runtime deps stay external; @sitelog/shared is bundled from source.
+  // Native / binary / large runtime deps stay external; @sitelog/shared and @sitelog/pdf are bundled from source.
   external: [
     'ffmpeg-static',
     'fluent-ffmpeg',
@@ -27,7 +30,11 @@ export default defineConfig({
     'date-fns',
     'date-fns-tz',
   ],
-  noExternal: ['@sitelog/shared'],
-  // Embedded PDF fonts travel with the bundle (see src/pdf/fonts.ts for the lookup order).
-  onSuccess: 'mkdir -p dist/fonts && cp src/pdf/fonts/*.ttf dist/fonts/',
+  noExternal: ['@sitelog/shared', '@sitelog/pdf'],
+  // Embedded PDF fonts travel with the bundle (see fontsDir() in src/pdf/render.ts).
+  onSuccess: async () => {
+    await mkdir('dist/fonts', { recursive: true });
+    for (const f of await readdir(FONTS))
+      if (f.endsWith('.ttf')) await copyFile(`${FONTS}/${f}`, `dist/fonts/${f}`);
+  },
 });

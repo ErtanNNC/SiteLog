@@ -32,6 +32,7 @@ import {
   PDF_EXPORT_LIMIT,
   type AddGlossaryTermInput,
   type AddInvoiceInput,
+  type CreateOfficeReportInput,
   type CreateOrgInput,
   type CreateSiteInput,
   type DataSource,
@@ -41,6 +42,7 @@ import {
   type PdfSelection,
   type RequestEvidencePackInput,
   type ResolveUnknownCompanyInput,
+  type SaveReportPdfInput,
   type ReviewGlossaryTermInput,
   type SourceUser,
   type UpdateReporterInput,
@@ -63,6 +65,8 @@ export class DemoSource implements DataSource {
   readonly user: SourceUser;
   private latency: number;
   private platformAdmin: boolean;
+  /** PDFs rendered in this browser session (object URLs), by `${reportId}:${version}`. */
+  private readonly pdfUrls = new Map<string, string>();
 
   constructor(
     readonly store: DemoStore,
@@ -114,7 +118,11 @@ export class DemoSource implements DataSource {
     });
   }
   getReportDetail(reportId: string, version?: number | null) {
-    return this.run(() => assembleReportDetail(this.store.rows(), this.ctx(), reportId, version));
+    return this.run(() => {
+      const detail = assembleReportDetail(this.store.rows(), this.ctx(), reportId, version);
+      detail.pdfUrl = this.pdfUrls.get(`${detail.report.id}:${detail.version}`) ?? null;
+      return detail;
+    });
   }
   getHours(week: string, siteId: string | null = null) {
     return this.run(() => assembleHours(this.store.rows(), this.ctx(), week, siteId));
@@ -172,7 +180,15 @@ export class DemoSource implements DataSource {
         total = res.total;
         reportNos = res.reports.map((r) => r.report_no);
       }
-      return { files: [], missing: reportNos, total, capped: total > PDF_EXPORT_LIMIT };
+      const files: PdfLinkBatch['files'] = [];
+      const missing: string[] = [];
+      for (const no of reportNos) {
+        const r = rows.reports.find((x) => x.report_no === no)!;
+        const url = this.pdfUrls.get(`${r.id}:${r.current_version}`);
+        if (url) files.push({ reportId: r.id, reportNo: no, url });
+        else missing.push(no);
+      }
+      return { files, missing, total, capped: total > PDF_EXPORT_LIMIT };
     });
   }
   getBillingCheckoutUrl(): Promise<string> {
@@ -193,6 +209,19 @@ export class DemoSource implements DataSource {
     return this.run(() => ({
       version: this.store.createReportVersion(reportId, data, changeNote, this.user.id),
     }));
+  }
+  createOfficeReport(input: CreateOfficeReportInput) {
+    return this.run(() => this.store.createOfficeReport({ ...input, userId: this.user.id }));
+  }
+  saveReportPdf(input: SaveReportPdfInput) {
+    return this.run(() => {
+      const key = `${input.reportId}:${input.version}`;
+      const previous = this.pdfUrls.get(key);
+      if (previous) URL.revokeObjectURL(previous);
+      const url = URL.createObjectURL(input.pdf);
+      this.pdfUrls.set(key, url);
+      return url;
+    });
   }
   markNoWork(siteDayId: string) {
     return this.run(() => this.store.markNoWork(siteDayId, this.user.id));

@@ -38,10 +38,12 @@ import { useDataSource } from '@/data/DataProvider';
 import {
   useCreateReportVersion,
   useReportDetail,
+  useReportPdf,
   useResolveUnknownCompany,
   useSignOff,
   useUndoSignOff,
 } from '@/data/hooks';
+import { officeEntryAuthor } from '@/data/pdfInput';
 import type { ReportDetail } from '@/data/types';
 import { formatDateTimeShort } from '@/lib/format';
 import { errorMessage } from '@/lib/utils';
@@ -99,11 +101,12 @@ function ReportScreen({
   onSelectVersion: (v: number) => void;
 }) {
   const source = useDataSource();
-  const { role, isDemo } = useAuth();
+  const { role } = useAuth();
   const navigate = useNavigate();
   const signOff = useSignOff();
   const undoSignOff = useUndoSignOff();
   const createVersion = useCreateReportVersion();
+  const reportPdf = useReportPdf();
   const resolveCompany = useResolveUnknownCompany();
   const [signOffOpen, setSignOffOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -182,6 +185,7 @@ function ReportScreen({
     setNoteOpen(false);
     setEditing(false);
     setPendingData(null);
+    void reportPdf.prepare(r.id, res.version);
     void navigate(`/reports/${r.id}?v=${res.version}`, { replace: true });
   };
 
@@ -192,7 +196,7 @@ function ReportScreen({
 
   const onPdf = () => {
     if (detail.pdfUrl) window.open(detail.pdfUrl, '_blank', 'noopener');
-    else toast.message(isDemo ? copy.report.pdfDemo : copy.reports.pdfNotReady);
+    else reportPdf.open(r.id, detail.version);
   };
 
   const reasons = r.needsReview
@@ -546,12 +550,18 @@ function buildProvenance(detail: ReportDetail): string {
   const r = detail.report;
   const tz = detail.site.timezone;
   const name = detail.reporter?.name ?? copy.sites.reporter;
+  const enteredBy = officeEntryAuthor(detail);
   const parts: string[] = [];
-  if (r.receivedAt)
+  if (enteredBy && r.filedAt)
+    parts.push(copy.report.provenance.enteredBy(enteredBy, formatTimeInTz(r.filedAt, tz)));
+  else if (r.receivedAt)
     parts.push(copy.report.provenance.reportedBy(name, formatTimeInTz(r.receivedAt, tz)));
-  if (r.confirmedAt)
-    parts.push(copy.report.provenance.confirmed(formatTimeInTz(r.confirmedAt, tz)));
-  else if (r.filedAt) parts.push(copy.report.provenance.filedWithoutConfirmation);
+  // Typed in the panel: there is no WhatsApp confirmation to report.
+  if (!enteredBy) {
+    if (r.confirmedAt)
+      parts.push(copy.report.provenance.confirmed(formatTimeInTz(r.confirmedAt, tz)));
+    else if (r.filedAt) parts.push(copy.report.provenance.filedWithoutConfirmation);
+  }
   for (const v of detail.versions) {
     if (v.version === 1) continue;
     const t = formatTimeInTz(v.createdAt, tz);

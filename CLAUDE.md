@@ -5,6 +5,7 @@ Read `docs/SITELOG_SPEC.md` before changing product behaviour. It is the single 
 ## Layout
 
 - `packages/shared` — Zod schemas, enums, pure helpers (Node + browser + Deno). Relative imports use explicit `.ts` extensions so Deno can import it; keep it free of Node-only APIs.
+- `packages/pdf` — the §12 report / §F16 evidence pack react-pdf documents, rendered by the worker and (for typed reports and office edits) in the browser. Keep it free of Node-only APIs; the host calls `setFontSource()`.
 - `supabase/migrations` — schema, RLS, RPCs. `supabase/db-tests` runs them on PGlite (`pnpm test:db`). `supabase/seed.sql` is generated: edit `packages/shared/src/demo/kestrel.ts`, then `pnpm seed:demo`.
 - `supabase/functions` — Deno edge functions (webhook, scheduler, api-*, stripe). Not runnable here without Deno; CI runs `deno check` / `deno test`.
 - `apps/worker` — Node job runner (WhatsApp, transcription, Claude extraction, PDF, email, weather).

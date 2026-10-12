@@ -37,7 +37,7 @@ import type {
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/shared/format.ts';
-import { logoStoragePath } from '@sitelog/shared/report/numbering.ts';
+import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numbering.ts';
 import { copy } from '@/copy/en';
 import { functionsUrl } from '@/lib/env';
 import { rasterizeSvgLogo } from '@/lib/logo';
@@ -68,6 +68,8 @@ import {
   PDF_EXPORT_LIMIT,
   type AddGlossaryTermInput,
   type AddInvoiceInput,
+  type CreateOfficeReportInput,
+  type CreateOfficeReportResult,
   type CreateOrgInput,
   type CreateSiteInput,
   type DataSource,
@@ -79,6 +81,7 @@ import {
   type RequestEvidencePackInput,
   type ResolveUnknownCompanyInput,
   type ReviewGlossaryTermInput,
+  type SaveReportPdfInput,
   type SourceUser,
   type UpdateReporterInput,
   type UpdateSitePatch,
@@ -1191,6 +1194,30 @@ export class SupabaseSource implements DataSource {
       p_change_note: changeNote,
     })) as { version?: number } | null;
     return { version: res?.version ?? 0 };
+  }
+  async createOfficeReport(input: CreateOfficeReportInput): Promise<CreateOfficeReportResult> {
+    const res = (await this.rpc('create_office_report', {
+      p_site_id: input.siteId,
+      p_date: input.date,
+      p_data: input.data as never,
+    })) as Partial<CreateOfficeReportResult> | null;
+    if (!res?.reportId || !res.reportNo) throw new Error(copy.errors.generic);
+    return { reportId: res.reportId, reportNo: res.reportNo, created: res.created === true };
+  }
+  async saveReportPdf(input: SaveReportPdfInput) {
+    const path = pdfStoragePath(this.orgId, input.siteId, input.reportNo, input.version);
+    const { error } = await this.sb.storage.from('pdfs').upload(path, input.pdf, {
+      contentType: 'application/pdf',
+      upsert: true,
+      cacheControl: '60',
+    });
+    if (error) throw error;
+    await this.rpc('attach_version_pdf', {
+      p_report_id: input.reportId,
+      p_version: input.version,
+      p_path: path,
+    });
+    return (await this.signedUrl('pdfs', path)) ?? URL.createObjectURL(input.pdf);
   }
   async markNoWork(siteDayId: string) {
     await this.rpc('mark_no_work', { p_site_day_id: siteDayId });

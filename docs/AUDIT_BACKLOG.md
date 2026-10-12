@@ -6,6 +6,15 @@ Read-only audit of security, spec conformance and correctness, run with three in
 
 Fix the critical and high items before real customer data (other organisations, real phone numbers, Stripe) goes in.
 
+## Added after the audit
+
+### Office users can replace any PDF of their organisation in storage
+
+`supabase/migrations/20261013000001_office_reports.sql` · authorization · Known
+
+- **Problem:** The "office writes pdfs" / "office updates pdfs" storage policies let any admin, pm or ops member upload to any path under their org's folder in the `pdfs` bucket, including PDFs the worker rendered for WhatsApp reports. `attach_version_pdf()` only records the expected path; it does not stop the file at that path from being replaced.
+- **Fix:** Restrict the policies to paths of versions without a worker-rendered PDF (e.g. a `report_versions.pdf_renderer` column checked by the policy), or upload through an edge function that renders server-side.
+
 ## Critical (1)
 
 ### Inviting a phone already used by another org's reporter gives the inviting org that reporter's conversation and full message history

@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog';
 import { copy } from '@/copy/en';
+import { officeEntryAuthor } from '@/data/pdfInput';
 import type {
   ActivityEntry,
   MessageItem,
@@ -61,13 +62,16 @@ export function SourcePanel({ detail, openMessageId }: SourcePanelProps) {
   };
   const tz = detail.site.timezone;
   const player = useVoicePlayer();
+  const enteredBy = officeEntryAuthor(detail);
 
   return (
     <div className="space-y-4">
       <Card data-testid="source-panel">
         <CardHeader>
           <CardTitle>{copy.report.aside.source}</CardTitle>
-          <span className="eyebrow text-dust">{copy.report.aside.voiceNote}</span>
+          <span className="eyebrow text-dust">
+            {enteredBy ? copy.report.aside.typed : copy.report.aside.voiceNote}
+          </span>
         </CardHeader>
         <CardContent className="pt-3">
           {detail.audio ? (
@@ -85,6 +89,8 @@ export function SourcePanel({ detail, openMessageId }: SourcePanelProps) {
                 <span className="font-mono">{languagesLabel(detail)}</span>
               </div>
             </>
+          ) : enteredBy ? (
+            <p className="text-caption text-dust">{copy.report.aside.typedBy(enteredBy)}</p>
           ) : (
             <p className="text-caption text-dust">{copy.player.noAudio}</p>
           )}

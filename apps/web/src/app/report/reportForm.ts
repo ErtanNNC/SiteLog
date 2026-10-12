@@ -326,6 +326,32 @@ export function toReportData(
   return DailyReportDataSchema.parse(data);
 }
 
+/**
+ * A report typed in the panel: version 1 is the office's own record, not an edit of one, so its
+ * rows carry no `office_edit` source (that would print as EDITED). Later edits add them as usual.
+ */
+export function withoutOfficeEdits(data: DailyReportData): DailyReportData {
+  const keep = (sources: Source[]) => sources.filter((s) => s.type !== 'office_edit');
+  return {
+    ...data,
+    weather: {
+      ...data.weather,
+      periods: data.weather.periods.map((p) => ({ ...p, source: keep(p.source) })),
+    },
+    manpower: data.manpower.map((m) => ({ ...m, source: keep(m.source) })),
+    workPerformed: data.workPerformed.map((w) => ({ ...w, source: keep(w.source) })),
+    deliveries: data.deliveries.map((d) => ({ ...d, source: keep(d.source) })),
+    equipment: data.equipment.map((e) => ({ ...e, source: keep(e.source) })),
+    safety: {
+      ...data.safety,
+      source: keep(data.safety.source),
+      incidents: data.safety.incidents.map((x) => ({ ...x, source: keep(x.source) })),
+    },
+    issues: data.issues.map((i) => ({ ...i, source: keep(i.source) })),
+    nextWorkday: data.nextWorkday.map((n) => ({ ...n, source: keep(n.source) })),
+  };
+}
+
 /** Cheap structural comparison for the "Nothing changed" guard. */
 export function sameReportData(a: DailyReportData, b: DailyReportData): boolean {
   const strip = (d: DailyReportData) =>

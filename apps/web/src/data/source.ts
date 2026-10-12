@@ -149,6 +149,30 @@ export type UpdateSitePatch = Partial<
   >
 >;
 
+/** A daily report typed in the panel (no WhatsApp, no AI): filed at once as version 1. */
+export interface CreateOfficeReportInput {
+  siteId: string;
+  /** YYYY-MM-DD in the site's time zone; today or earlier. */
+  date: string;
+  data: DailyReportData;
+}
+
+export interface CreateOfficeReportResult {
+  reportId: string;
+  reportNo: string;
+  /** false: the site-day already had a live report, which is returned unchanged. */
+  created: boolean;
+}
+
+/** A report PDF rendered in the browser (@sitelog/pdf) for one version. */
+export interface SaveReportPdfInput {
+  reportId: string;
+  reportNo: string;
+  siteId: string;
+  version: number;
+  pdf: Blob;
+}
+
 export interface RequestEvidencePackInput {
   siteId: string | null;
   periodStart: string;
@@ -182,7 +206,7 @@ export interface DataSource {
   search(q: string): Promise<SearchResult[]>;
   /**
    * Signed URLs (10 min) of the current-version PDFs for a set of reports, capped at
-   * PDF_EXPORT_LIMIT. Demo mode has no rendered PDFs: every report comes back in `missing`.
+   * PDF_EXPORT_LIMIT. Demo mode only has the PDFs rendered in this browser session.
    */
   getPdfUrls(selection: PdfSelection): Promise<PdfLinkBatch>;
   /** Stripe customer portal session URL (payment method, invoices); demo rejects. */
@@ -198,6 +222,13 @@ export interface DataSource {
     data: DailyReportData,
     changeNote: string,
   ): Promise<{ version: number }>;
+  /** create_office_report: returns the existing report when the site-day already has one. */
+  createOfficeReport(input: CreateOfficeReportInput): Promise<CreateOfficeReportResult>;
+  /**
+   * Stores a browser-rendered PDF as the version's PDF and returns a URL to open it. Supabase:
+   * pdfs/{org}/{site}/{report_no}_v{n}.pdf + attach_version_pdf; demo: an in-memory object URL.
+   */
+  saveReportPdf(input: SaveReportPdfInput): Promise<string>;
   markNoWork(siteDayId: string): Promise<void>;
   resolveUnknownCompany(input: ResolveUnknownCompanyInput): Promise<void>;
   reviewGlossaryTerm(input: ReviewGlossaryTermInput): Promise<void>;

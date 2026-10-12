@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { renderEvidencePackPdf, renderReportPdf } from './render';
-import { sampleEvidencePackInput, sampleReportInput } from './sample-data';
+import { sampleEvidencePackInput, sampleReportInput } from '@sitelog/pdf/sample-data.ts';
 
 /** `pnpm --filter @sitelog/worker render-sample-pdf` → apps/worker/tmp/*.pdf for visual checks against the §12 artboards. */
 async function main(): Promise<void> {

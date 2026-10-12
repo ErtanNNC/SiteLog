@@ -2,8 +2,7 @@ import type { DailyReportData, SiteDayWeather } from '@sitelog/shared';
 
 /** Image bytes (worker) or a URL react-pdf fetches itself (browser). */
 export type PdfImage =
-  | { data: Uint8Array; format: 'png' | 'jpg' }
-  | { url: string; format: 'png' | 'jpg' };
+  { data: Uint8Array; format: 'png' | 'jpg' } | { url: string; format: 'png' | 'jpg' };
 
 export type PdfPhoto = PdfImage & {
   takenAt: string;
@@ -47,6 +46,8 @@ export interface ReportPdfInput {
   };
   data: DailyReportData;
   reporterName: string | null;
+  /** Office user who typed the report in the panel (no WhatsApp source); absent otherwise. */
+  enteredBy?: string | null;
   sources: {
     audioCount: number;
     totalAudioSeconds: number;

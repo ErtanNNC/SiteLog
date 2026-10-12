@@ -372,6 +372,87 @@ export class DemoStore {
     return next;
   }
 
+  /** Mirror of create_office_report(): a report typed in the panel, filed at once as version 1. */
+  createOfficeReport(input: {
+    siteId: string;
+    date: string;
+    data: DailyReportData;
+    userId: string;
+  }): { reportId: string; reportNo: string; created: boolean } {
+    const d = this.data;
+    const site = this.site(input.siteId);
+    if (site.status === 'archived') throw new Error(copy.errors.notFound);
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(input.date) ||
+      input.date > formatDateInTz(this.now, site.timezone)
+    )
+      throw new Error(copy.newReport.future);
+    const sd = this.siteDayFor(site, input.date);
+    const live = d.reports.find((r) => r.site_day_id === sd.id && r.status !== 'void');
+    if (live) return { reportId: live.id, reportNo: live.report_no, created: false };
+
+    site.report_seq += 1;
+    const reportNo = formatReportNo(site.project_code, site.report_seq);
+    const at = this.nowIso();
+    const isLate = Date.parse(at) > Date.parse(sd.deadline_at);
+    const data: DailyReportData = {
+      ...structuredClone(input.data),
+      reportDate: input.date,
+      schemaVersion: 1,
+    };
+    const report: ReportRow = {
+      id: localId('report'),
+      org_id: d.org.id,
+      site_id: site.id,
+      site_day_id: sd.id,
+      report_no: reportNo,
+      status: 'filed',
+      current_version: 1,
+      reporter_id: null,
+      received_at: at,
+      confirmed_at: null,
+      filed_at: at,
+      signed_off_by: null,
+      signed_off_at: null,
+      needs_review: false,
+      review_reasons: [],
+      is_late: isLate,
+      kind: 'daily',
+      created_at: at,
+      updated_at: at,
+    };
+    d.reports.push(report);
+    d.versions.push({
+      report_id: report.id,
+      version: 1,
+      data: data as unknown as ReportVersionRow['data'],
+      summary: data.summary || null,
+      pdf_path: null,
+      author: 'office_user',
+      author_user_id: input.userId,
+      author_message_id: null,
+      change_note: null,
+      created_at: at,
+    });
+    this.denormalize(report, 1, data);
+    sd.status = 'filed';
+    sd.report_id = report.id;
+    sd.is_late = isLate;
+    sd.updated_at = at;
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'user',
+      actor_id: input.userId,
+      action: 'report.filed',
+      entity: 'report',
+      entity_id: report.id,
+      diff: { trigger: 'office_entry', version: 1, is_late: isLate, date: input.date },
+    });
+    this.emit({ table: 'reports', id: report.id });
+    this.emit({ table: 'site_days', id: sd.id });
+    return { reportId: report.id, reportNo, created: true };
+  }
+
   markNoWork(siteDayId: string, userId: string): void {
     const sd = this.data.siteDays.find((d) => d.id === siteDayId);
     if (!sd) throw new Error(copy.errors.notFound);
@@ -1238,7 +1319,10 @@ export class DemoStore {
   // ─── Field simulator (/try): what the worker writes while a reporter talks to the agent ───
 
   private todaySiteDay(site: SiteRow): SiteDayRow {
-    const date = formatDateInTz(this.now, site.timezone);
+    return this.siteDayFor(site, formatDateInTz(this.now, site.timezone));
+  }
+
+  private siteDayFor(site: SiteRow, date: string): SiteDayRow {
     let sd = this.data.siteDays.find((x) => x.site_id === site.id && x.date === date);
     if (!sd) {
       const deadline = (site.deadline ?? this.data.settings.default_deadline).slice(0, 5);

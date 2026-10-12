@@ -108,6 +108,46 @@ test.describe('SiteLog panel (demo mode)', () => {
     await expect(row.getByText('Filed', { exact: true })).toBeVisible();
   });
 
+  test('new report: type Elm St.’s missing report, file it and open its PDF', async ({ page }) => {
+    await signIn(page);
+    await expect(page.getByRole('heading', { name: 'Today across 6 sites' })).toBeVisible();
+    await page
+      .getByRole('navigation', { name: 'Main navigation' })
+      .getByRole('link', { name: /^Reports/ })
+      .click();
+    await page.getByTestId('new-report').click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('New report');
+
+    await page.getByTestId('new-report-site').click();
+    await page.getByRole('option', { name: /Elm St\. Townhomes/ }).click();
+    await expect(page.getByTestId('new-report-date')).toHaveValue('2026-10-09');
+    const editor = page.getByTestId('report-editor');
+    await editor.getByRole('textbox').first().fill('Framing continued on units 3 and 4.');
+    await editor.getByRole('button', { name: 'Add work item' }).click();
+    await editor.getByLabel('Activity').first().fill('Wall framing');
+    await page.getByTestId('file-report').click();
+
+    await expect(page).toHaveURL(/\/reports\/(?!new)[^/?]+$/);
+    await expect(page.getByText(/Entered by .+ in SiteLog at/)).toBeVisible();
+    await expect(page.getByText('Wall framing')).toBeVisible();
+
+    const popup = page.waitForEvent('popup');
+    await page.getByRole('button', { name: 'PDF', exact: true }).click();
+    const tab = await popup;
+    await tab.waitForURL(/^blob:/);
+    const head = await page.evaluate(async (url) => {
+      const bytes = await (await fetch(url)).arrayBuffer();
+      return new TextDecoder().decode(bytes.slice(0, 5));
+    }, tab.url());
+    expect(head).toBe('%PDF-');
+
+    await page
+      .getByRole('navigation', { name: 'Main navigation' })
+      .getByRole('link', { name: /^Overview/ })
+      .click();
+    await expect(page.getByTestId('kpi-reports-in')).toHaveText(/5\s*\/\s*6/);
+  });
+
   test('mobile: the menu button opens the drawer navigation', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await signIn(page);

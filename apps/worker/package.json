@@ -20,6 +20,7 @@
     "@anthropic-ai/sdk": "^0.133.0",
     "@react-pdf/renderer": "^4.9.0",
     "@sentry/node": "^11.6.0",
+    "@sitelog/pdf": "workspace:*",
     "@sitelog/shared": "workspace:*",
     "@supabase/supabase-js": "^2.117.3",
     "date-fns": "^4.4.0",

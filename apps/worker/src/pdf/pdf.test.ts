@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadLogo, renderEvidencePackPdf, renderReportPdf, weatherExcerpts } from './render';
-import { sampleEvidencePackInput, sampleReportInput } from './sample-data';
+import { sampleEvidencePackInput, sampleReportInput } from '@sitelog/pdf/sample-data.ts';
 
 function pageCount(pdf: Buffer): number {
   return (pdf.toString('latin1').match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
@@ -22,6 +22,19 @@ describe('PDF rendering (smoke)', () => {
       settings: { ...sampleReportInput.settings, paper: 'a4' },
     });
     expect(pdf.toString('latin1')).toMatch(/\/MediaBox \[0 0 595\.2\d* 841\.8\d*\]/);
+  }, 60_000);
+
+  it('renders a report typed in the panel (prepared by the office, no WhatsApp source)', async () => {
+    const pdf = await renderReportPdf({
+      ...sampleReportInput,
+      reporterName: null,
+      enteredBy: 'Lena Ortiz',
+      report: { ...sampleReportInput.report, confirmedAt: null },
+      sources: { ...sampleReportInput.sources, audioCount: 0, totalAudioSeconds: 0, textCount: 0 },
+      photos: [],
+    });
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(pageCount(pdf)).toBe(2);
   }, 60_000);
 
   it('renders the evidence pack with cover, summary and one page per day', async () => {

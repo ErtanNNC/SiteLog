@@ -1,4 +1,4 @@
-import { ExternalLink, MessageCircle, Phone, Settings2 } from 'lucide-react';
+import { ExternalLink, MessageCircle, Phone, Plus, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
@@ -114,6 +114,13 @@ export default function SiteDetailPage() {
             <Button variant="ghost" onClick={() => setSettingsOpen(true)}>
               <Settings2 aria-hidden="true" />
               {copy.siteDetail.siteSettings}
+            </Button>
+            {/* One orange button: WhatsApp when the site has a manager, else typing the report. */}
+            <Button variant={primary && waHref ? 'secondary' : 'primary'} asChild>
+              <Link to={`/reports/new?site=${site.id}`}>
+                <Plus aria-hidden="true" />
+                {copy.reports.newReport}
+              </Link>
             </Button>
             {primary && waHref ? (
               <Button variant="primary" asChild title={copy.siteDetail.whatsAppHint}>

@@ -337,6 +337,18 @@ export function currentVersion(ix: Index, report: ReportRow): ReportVersionRow |
   return ix.versionsByReport.get(report.id)?.find((v) => v.version === report.current_version);
 }
 
+/** Typed in the panel (create_office_report): no reporter and version 1 by an office user. */
+export function isOfficeEntry(ix: Index, report: ReportRow): boolean {
+  if (report.reporter_id) return false;
+  return ix.versionsByReport.get(report.id)?.find((v) => v.version === 1)?.author === 'office_user';
+}
+
+/** The report's site manager; older rows without one fall back to the site's primary reporter. */
+function reporterOf(ix: Index, report: ReportRow): ReporterRow | undefined {
+  if (report.reporter_id) return ix.reporterById.get(report.reporter_id);
+  return isOfficeEntry(ix, report) ? undefined : ix.primaryReporterBySite.get(report.site_id);
+}
+
 export function reportForSiteDay(ix: Index, sd: SiteDayRow | undefined): ReportRow | null {
   if (!sd) return null;
   if (sd.report_id) {
@@ -1056,9 +1068,7 @@ export function assembleReportItems(
   return reports.map((r) => {
     const site = ix.siteById.get(r.site_id);
     const tz = site?.timezone ?? rows.org.timezone;
-    const reporter = r.reporter_id
-      ? ix.reporterById.get(r.reporter_id)
-      : ix.primaryReporterBySite.get(r.site_id);
+    const reporter = reporterOf(ix, r);
     const crewRows = crewByReport.get(r.id) ?? [];
     const lost = lostByReport.get(r.id) ?? 0;
     const flags = reportFlags(r, lost, tz);
@@ -1312,9 +1322,7 @@ export function assembleReportDetail(
       };
     });
 
-  const reporter = report.reporter_id
-    ? ix.reporterById.get(report.reporter_id)
-    : ix.primaryReporterBySite.get(site.id);
+  const reporter = reporterOf(ix, report);
   const reporterName = reporter?.name ?? copy.sites.reporter;
   const actorName = (a: AuditLogRow): string => {
     if (a.actor_type === 'user') return memberName(rows, a.actor_id) ?? 'Office';

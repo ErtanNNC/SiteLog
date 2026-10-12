@@ -62,6 +62,7 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
   if (data.safety.visitors.length) safety.push(`Visitors: ${data.safety.visitors.join(', ')}`);
   const issues = data.issues.map((i) => `${i.description}${i.impact ? ` — ${i.impact}` : ''}`);
   const src = input.sources;
+  const office = input.enteredBy != null;
   const sourceParagraph = [
     src.audioCount > 0
       ? `${src.audioCount} voice note${src.audioCount === 1 ? '' : 's'} (${formatDuration(src.totalAudioSeconds)})`
@@ -70,16 +71,22 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
     src.languages.length
       ? `spoken in ${src.languages.join(' and ').toUpperCase()}, report written in English`
       : null,
-    src.receivedAt ? `received ${fmtDateTime(src.receivedAt, tz)}` : null,
-    report.confirmedAt
-      ? `confirmed via WhatsApp ${fmtDateTime(report.confirmedAt, tz)}`
-      : report.filedAt
-        ? `filed ${fmtDateTime(report.filedAt, tz)} without confirmation`
-        : null,
+    office ? `entered in SiteLog by ${input.enteredBy}` : null,
+    src.receivedAt && !office ? `received ${fmtDateTime(src.receivedAt, tz)}` : null,
+    office && report.filedAt
+      ? `filed ${fmtDateTime(report.filedAt, tz)}`
+      : report.confirmedAt
+        ? `confirmed via WhatsApp ${fmtDateTime(report.confirmedAt, tz)}`
+        : report.filedAt
+          ? `filed ${fmtDateTime(report.filedAt, tz)} without confirmation`
+          : null,
     `${photos.length} photo${photos.length === 1 ? '' : 's'}`,
   ]
     .filter(Boolean)
     .join(' · ');
+  const sourceText = office
+    ? `${sourceParagraph[0]!.toUpperCase()}${sourceParagraph.slice(1)}.`
+    : `${sourceParagraph}. Audio and transcript retained in SiteLog.`;
 
   return (
     <Document
@@ -97,6 +104,7 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
         <Footer
           showWeather={!!data.weather.observed}
           footerEnabled={input.settings.footerEnabled}
+          typed={office}
         />
 
         <View style={styles.letterhead}>
@@ -133,7 +141,7 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
           {[
             ['Date', formatDateLong(data.reportDate)],
             ['Project no.', site.projectCode],
-            ['Site manager', input.reporterName ?? '—'],
+            office ? ['Prepared by', input.enteredBy] : ['Site manager', input.reporterName ?? '—'],
             [
               'Working hours',
               data.workingHours
@@ -204,24 +212,34 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
         </Section>
 
         <Section no="09" title="Source record">
-          <Text style={styles.body}>
-            {sourceParagraph}. Audio and transcript retained in SiteLog.
-          </Text>
+          <Text style={styles.body}>{sourceText}</Text>
           {report.reviewReasons.length ? (
             <Text style={styles.footnote}>Review flags: {report.reviewReasons.join(', ')}</Text>
           ) : null}
         </Section>
 
         <View style={styles.signoff} wrap={false}>
-          <View style={styles.signBox}>
-            <Text style={styles.eyebrow}>Site manager</Text>
-            <Text>{input.reporterName ?? '—'}</Text>
-            <Text style={styles.muted}>
-              {report.confirmedAt
-                ? `Confirmed via WhatsApp · ${fmtTime(report.confirmedAt, tz)}`
-                : 'Not confirmed'}
-            </Text>
-          </View>
+          {office ? (
+            <View style={styles.signBox}>
+              <Text style={styles.eyebrow}>Prepared by</Text>
+              <Text>{input.enteredBy}</Text>
+              <Text style={styles.muted}>
+                {report.filedAt
+                  ? `Entered in SiteLog · ${fmtTime(report.filedAt, tz)}`
+                  : 'Entered in SiteLog'}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.signBox}>
+              <Text style={styles.eyebrow}>Site manager</Text>
+              <Text>{input.reporterName ?? '—'}</Text>
+              <Text style={styles.muted}>
+                {report.confirmedAt
+                  ? `Confirmed via WhatsApp · ${fmtTime(report.confirmedAt, tz)}`
+                  : 'Not confirmed'}
+              </Text>
+            </View>
+          )}
           <View style={styles.signBox}>
             <Text style={styles.eyebrow}>Project manager</Text>
             {report.signedOffAt ? (

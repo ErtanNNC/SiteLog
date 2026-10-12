@@ -513,6 +513,7 @@ export const copy = {
     title: 'Reports',
     subtitle: 'Every daily report, searchable down to the spoken word',
     exportZip: 'Export PDFs (.zip)',
+    newReport: 'New report',
     filters: {
       site: 'Site',
       allSites: 'All sites',
@@ -573,6 +574,24 @@ export const copy = {
     showing: (from: number, to: number, total: number) => `${from}–${to} of ${total}`,
   },
 
+  newReport: {
+    title: 'New report',
+    subtitle: 'Type the day’s report for a site. It is filed as soon as you save it.',
+    breadcrumb: 'Reports',
+    site: 'Site',
+    pickSite: 'Choose a site',
+    date: 'Date',
+    noSites: 'Add a site before writing a report.',
+    future: 'The date can’t be in the future.',
+    empty: 'Write a summary or add at least one row before filing.',
+    submit: 'File report',
+    cancel: 'Cancel',
+    filed: (no: string) => `${no} filed.`,
+    exists: (no: string) =>
+      `${no} already covers this site and date. Opened it; use Edit to change it.`,
+    pdfLater: 'The report is filed. The PDF could not be made yet; open the report and press PDF.',
+  },
+
   report: {
     breadcrumb: 'Reports',
     eyebrow: (no: string) => `Daily report · ${no}`,
@@ -588,6 +607,7 @@ export const copy = {
       editedBy: (name: string, time: string) => `edited by ${name} ${time}`,
       signedOff: (name: string, time: string) => `signed off by ${name} ${time}`,
       filedWithoutConfirmation: 'filed without confirmation',
+      enteredBy: (name: string, time: string) => `Entered by ${name} in SiteLog at ${time}`,
     },
     actions: {
       edit: 'Edit',
@@ -662,6 +682,8 @@ export const copy = {
     aside: {
       source: 'Source',
       voiceNote: 'Voice note',
+      typed: 'Typed in SiteLog',
+      typedBy: (name: string) => `${name} typed this report in SiteLog; there is no voice note.`,
       fullTranscript: 'Full transcript',
       activity: 'Activity',
       excerpts: 'Transcript excerpts',
@@ -685,7 +707,9 @@ export const copy = {
     viewCurrent: 'View current',
     signOffHidden: 'Sign-off is for admins and project managers.',
     undoWindow: 'Undo within 10 minutes',
-    pdfDemo: 'Demo mode: the PDF is rendered by the worker from this version.',
+    pdfPreparing: 'Preparing the PDF…',
+    pdfFailed: 'The PDF could not be made. Try again.',
+    pdfNotSaved: 'PDF opened, but it could not be saved to SiteLog yet.',
     weatherDayNote: 'Weather day — no work performed.',
     summaryEmpty: 'No summary.',
     manpowerEmpty: 'No manpower reported.',
@@ -1475,7 +1499,7 @@ export const copy = {
     versionSaved: (v: number) => `Version ${v} saved.`,
     invoiceAdded: 'Invoice added.',
     notificationsRead: 'Marked as read.',
-    pdfDemo: 'Demo mode: PDFs are produced by the worker.',
+    pdfDemo: 'Demo mode: open a report and press PDF to see it.',
     reporterInvited: (name: string) => `Welcome sent to ${name}.`,
     linked: 'Number linked.',
     ignored: 'Number ignored.',

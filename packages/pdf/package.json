@@ -1,0 +1,24 @@
+{
+  "name": "@sitelog/pdf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SiteLog PDF documents (daily report, EOT evidence pack) for the worker and the web panel.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "^4.9.0",
+    "@sitelog/shared": "workspace:*",
+    "react": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^5.9.3"
+  }
+}
