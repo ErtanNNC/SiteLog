@@ -2,8 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -58,7 +59,8 @@ jobs:
 
   eval:
     name: Extraction evals (golden transcripts)
-    if: github.event_name == 'push'
+    # Paid API calls: main and manual runs only (feature-branch pushes skip it).
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
