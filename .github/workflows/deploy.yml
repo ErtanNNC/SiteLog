@@ -1,0 +1,175 @@
+name: Deploy
+
+# Order: database migrations → edge functions → worker + web, so new code never meets an old schema.
+# Each target is skipped (with a notice) until its secrets exist in the GitHub Environment, so this
+# workflow is safe to merge before the accounts are set up. Setup: docs/RUNBOOK.md §2 "Automated deploys".
+#
+#   push to main         → staging (all targets)
+#   workflow_dispatch    → staging or production, all or one target
+#   pull_request         → web preview only (Netlify deploy preview against staging Supabase)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: staging
+      target:
+        description: What to deploy
+        type: choice
+        options: [all, supabase, worker, web]
+        default: all
+
+concurrency:
+  group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || inputs.environment || 'staging' }}
+  cancel-in-progress: false
+
+env:
+  ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+
+jobs:
+  supabase:
+    name: Supabase · migrations + edge functions
+    if: github.event_name != 'pull_request' && contains(fromJSON('["all","supabase"]'), inputs.target || 'all')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment || 'staging' }}
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Supabase deploy skipped for $ENVIRONMENT: set SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: supabase/setup-cli@v1
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          version: 2.118.0
+      - name: Link project
+        if: steps.cfg.outputs.ready == 'true'
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Pending migrations
+        if: steps.cfg.outputs.ready == 'true'
+        run: supabase migration list --linked
+      - name: Push migrations
+        if: steps.cfg.outputs.ready == 'true'
+        run: supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
+      - name: Deploy edge functions
+        if: steps.cfg.outputs.ready == 'true'
+        # verify_jwt, entrypoints and the import map come from supabase/config.toml.
+        run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+
+  worker:
+    name: Worker · Fly.io
+    needs: supabase
+    if: >-
+      always() && github.event_name != 'pull_request' &&
+      (needs.supabase.result == 'success' || needs.supabase.result == 'skipped') &&
+      contains(fromJSON('["all","worker"]'), inputs.target || 'all')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment || 'staging' }}
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_APP: ${{ vars.FLY_APP }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -n "$FLY_API_TOKEN" ] && [ -n "$FLY_APP" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Worker deploy skipped for $ENVIRONMENT: set FLY_API_TOKEN (secret) and FLY_APP (variable)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.cfg.outputs.ready == 'true'
+      - name: Deploy
+        if: steps.cfg.outputs.ready == 'true'
+        # Runtime secrets (SUPABASE_DB_URL, WA_*, OPENAI_API_KEY, ANTHROPIC_API_KEY, …) live in Fly:
+        # `fly secrets set` per RUNBOOK §2.7; they are not copied from GitHub.
+        run: >-
+          flyctl deploy --remote-only --app "$FLY_APP"
+          --config apps/worker/fly.toml --dockerfile apps/worker/Dockerfile
+      - name: Health check
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS "https://${FLY_APP}.fly.dev/health"; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::worker /health did not answer after deploy"
+          exit 1
+
+  web:
+    name: Web panel · Netlify
+    needs: supabase
+    if: >-
+      always() &&
+      (needs.supabase.result == 'success' || needs.supabase.result == 'skipped') &&
+      (github.event_name == 'pull_request' || contains(fromJSON('["all","web"]'), inputs.target || 'all'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment || 'staging' }}
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+      VITE_APP_URL: ${{ vars.VITE_APP_URL }}
+      VITE_WA_DISPLAY_NUMBER: ${{ vars.VITE_WA_DISPLAY_NUMBER }}
+      VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$NETLIFY_SITE_ID" ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Web deploy skipped for $ENVIRONMENT: set NETLIFY_AUTH_TOKEN (secret) and NETLIFY_SITE_ID, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (variables)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: pnpm/action-setup@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.cfg.outputs.ready == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        if: steps.cfg.outputs.ready == 'true'
+        run: pnpm --filter @sitelog/web build
+      - name: Deploy
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            flags="--alias pr-${{ github.event.number }}"
+          else
+            flags="--prod"
+          fi
+          npx --yes netlify-cli@27.10.2 deploy --dir apps/web/dist --site "$NETLIFY_SITE_ID" \
+            --auth "$NETLIFY_AUTH_TOKEN" --message "${GITHUB_SHA::7} ${ENVIRONMENT}" $flags --json > deploy.json
+          url=$(node -e "const d=require('./deploy.json');console.log(d.deploy_url||d.url||'')")
+          echo "Deployed: $url"
+          echo "### Web panel (${ENVIRONMENT})" >> "$GITHUB_STEP_SUMMARY"
+          echo "$url" >> "$GITHUB_STEP_SUMMARY"

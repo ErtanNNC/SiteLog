@@ -34,6 +34,23 @@ Operational guide for staging and production. The product spec is `SITELOG_SPEC.
 9. **Stripe**: create the $399/month per-unit price (`STRIPE_PRICE_ID_SITE`), a webhook endpoint pointing at `stripe-webhook` with the events listed in `supabase/functions/README.md`, and the customer portal configuration.
 10. **Smoke test**: `pnpm replay-webhook -- --url https://<ref>.supabase.co/functions/v1/whatsapp-webhook --secret $WA_APP_SECRET fixtures/webhooks/audio-note.json` → a `messages` row and an `inbound_message` job appear; the worker replies on the test phone.
 
+### Automated deploys (`.github/workflows/deploy.yml`)
+
+Order per run: `supabase db push` → `supabase functions deploy` (settings from `supabase/config.toml`) → worker (Fly.io) and web panel (Netlify) in parallel. A push to `main` deploys **staging**; **production** is a manual run (Actions → Deploy → Run workflow → `production`), optionally for one target. Pull requests get a Netlify deploy preview of the panel (alias `pr-<n>`) against staging Supabase. Any target whose settings are missing is skipped with a notice, so the workflow is harmless before the accounts exist.
+
+Create two GitHub Environments, `staging` and `production` (add required reviewers on `production`), each with:
+
+| Kind     | Name                                                                                                                          | Used by                                                        |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Secret   | `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`                                                                               | migrations + functions                                         |
+| Variable | `SUPABASE_PROJECT_REF`                                                                                                        | migrations + functions                                         |
+| Secret   | `FLY_API_TOKEN`                                                                                                               | worker                                                         |
+| Variable | `FLY_APP`                                                                                                                     | worker (health check at `https://<FLY_APP>.fly.dev/health`)    |
+| Secret   | `NETLIFY_AUTH_TOKEN`                                                                                                          | web                                                            |
+| Variable | `NETLIFY_SITE_ID`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_URL`, `VITE_WA_DISPLAY_NUMBER`, `VITE_SENTRY_DSN` | web build (the anon key is public by design; it is a variable) |
+
+Runtime secrets are not copied from GitHub: edge-function secrets stay in `supabase secrets set` (step 4) and worker secrets in `fly secrets set` (step 7). The panel is a single-page app; `apps/web/public/_redirects` sends every path to `index.html` (Netlify and Cloudflare Pages both read it).
+
 ## 3. Day-to-day operations
 
 - **Dead jobs**: `select id, type, payload, last_error from jobs where status = 'dead' order by id desc;` Fix the cause, then `update jobs set status = 'queued', attempts = 0, run_after = now() where id = <id>;`. The reporter already received `error_retry` once.
