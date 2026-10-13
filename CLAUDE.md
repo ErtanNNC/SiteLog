@@ -104,4 +104,4 @@ Keep these scripts working; add new ones to the root `package.json` and list the
 
 ## Environment
 
-Copy `.env.example` → `.env` (root; read by the worker, functions and scripts) and put only `VITE_*` values in `apps/web/.env.local` (and `apps/field/.env.local` once it exists). Week-1 minimum: Supabase (local is fine), `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`; `RESEND_API_KEY` for email (otherwise `EMAIL_PROVIDER=console`). Keys go in `.env`, Supabase secrets or GitHub Environment secrets — never in the chat.
+Copy `.env.example` → `.env` and put only `VITE_*` values in `apps/web/.env.local` (and `apps/field/.env.local` once it exists). The worker loads `.env` from its working directory, so for `pnpm dev:worker` the file must be at `apps/worker/.env` (or a symlink to the root one); local edge functions read `supabase/functions/.env`. Week-1 minimum: Supabase (local is fine), `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`; `RESEND_API_KEY` for email (otherwise `EMAIL_PROVIDER=console`). Keys go in `.env`, Supabase secrets or GitHub Environment secrets — never in the chat.
