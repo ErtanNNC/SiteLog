@@ -25,6 +25,7 @@ import type {
   WeatherEventRow,
   WorkItemRow,
 } from '../db/types.ts';
+import { V12_ROW_DEFAULTS } from '../db/defaults.ts';
 import { addDays, isoWeekday } from '../format.ts';
 import { deadlineInstant } from '../schedule/reminders.ts';
 import type { DailyReportDataV1, ManpowerEntryV1, WeatherPeriodV1 } from '../schemas/report.ts';
@@ -47,6 +48,15 @@ export const DEMO_SITELOG_NUMBER = '+15550142290';
 export const DEMO_ORG_LOCALE = 'en-US' as const;
 
 const ORG = DEMO_ORG_ID;
+
+// The v1.2 columns (20261013000007) of the WhatsApp-era rows below, at their database defaults;
+// W1-06 rebuilds the channel layer (uploads, SMS, calls, channels, locales).
+const V12_REPORTER = V12_ROW_DEFAULTS.reporters;
+const V12_MESSAGE = V12_ROW_DEFAULTS.messages;
+const V12_TRANSCRIPT = V12_ROW_DEFAULTS.transcripts;
+const V12_REPORT = V12_ROW_DEFAULTS.reports;
+const V12_SOURCE = V12_ROW_DEFAULTS.report_sources;
+const V12_QUESTION = V12_ROW_DEFAULTS.questions;
 
 export const DEMO_USERS: DemoUser[] = [
   {
@@ -625,6 +635,7 @@ export function buildKestrelDemo(): DemoDataset {
     verified_at: at(s.activeSince, '09:40'),
     last_invite_error: null,
     created_at: at(s.activeSince, '09:05'),
+    ...V12_REPORTER,
   }));
   reporters.push({
     id: reporterId('jorge'),
@@ -638,6 +649,7 @@ export function buildKestrelDemo(): DemoDataset {
     verified_at: null,
     last_invite_error: null,
     created_at: at('2026-10-07', '10:15'),
+    ...V12_REPORTER,
   });
   const siteReporters = SITES.map((s) => ({
     site_id: siteId(s.key),
@@ -884,6 +896,7 @@ export function buildKestrelDemo(): DemoDataset {
         storage_path: `${ORG}/${sid}/${date}/${audioId}.ogg`,
         duration_s: durationS,
         template_name: null,
+        ...V12_MESSAGE,
         status: 'received',
         error: null,
         created_at: receivedAt,
@@ -911,6 +924,7 @@ export function buildKestrelDemo(): DemoDataset {
           storage_path: `${ORG}/${sid}/${date}/${pid}.jpg`,
           duration_s: null,
           template_name: null,
+          ...V12_MESSAGE,
           status: 'received',
           error: null,
           created_at: at(date, plan.receivedLocal).replace(
@@ -953,6 +967,7 @@ export function buildKestrelDemo(): DemoDataset {
         kind: plan.kind === 'weather_day' ? 'weather_day' : 'daily',
         created_at: receivedAt,
         updated_at: isHero ? at(date, '20:10') : confirmedAt,
+        ...V12_REPORT,
       });
       siteDays.push({
         id: siteDayId,
@@ -975,6 +990,7 @@ export function buildKestrelDemo(): DemoDataset {
         kind: 'audio',
         caption: null,
         taken_at: receivedAt,
+        ...V12_SOURCE,
       });
       photoIds.forEach((pid, i) =>
         sources.push({
@@ -984,6 +1000,7 @@ export function buildKestrelDemo(): DemoDataset {
           kind: 'photo',
           caption: messages.find((m) => m.id === pid)!.body,
           taken_at: messages.find((m) => m.id === pid)!.created_at,
+          ...V12_SOURCE,
         }),
       );
 
@@ -1006,6 +1023,7 @@ export function buildKestrelDemo(): DemoDataset {
           author_message_id: authorMessageId,
           change_note: changeNote,
           created_at: createdAt,
+          ...V12_ROW_DEFAULTS.report_versions,
         });
         d.manpower.forEach((m, i) =>
           manpower.push({
@@ -1085,6 +1103,7 @@ export function buildKestrelDemo(): DemoDataset {
           segments: heroTranscriptSegments as unknown as TranscriptRow['segments'],
           model: 'whisper-1',
           created_at: at(date, '17:38'),
+          ...V12_TRANSCRIPT,
         });
         const qId = demoId('question:hero:delta');
         const askedId = demoId('msg:hero:question');
@@ -1115,6 +1134,7 @@ export function buildKestrelDemo(): DemoDataset {
           storage_path: null,
           duration_s: null,
           template_name: null,
+          ...V12_MESSAGE,
           status: 'read',
           error: null,
           created_at: at(date, hhmm),
@@ -1211,6 +1231,7 @@ export function buildKestrelDemo(): DemoDataset {
           kind: 'reply',
           caption: null,
           taken_at: at(date, '17:41'),
+          ...V12_SOURCE,
         });
         questions.push({
           id: qId,
@@ -1234,6 +1255,7 @@ export function buildKestrelDemo(): DemoDataset {
           asked_at: at(date, '17:40'),
           answered_at: at(date, '17:41'),
           created_at: at(date, '17:40'),
+          ...V12_QUESTION,
         });
         logAudit({
           org_id: ORG,
@@ -1369,6 +1391,7 @@ export function buildKestrelDemo(): DemoDataset {
     storage_path: null,
     duration_s: 41,
     template_name: null,
+    ...V12_MESSAGE,
     status: 'received',
     error: null,
     created_at: at(DEMO_TODAY, '17:52'),
@@ -1385,6 +1408,7 @@ export function buildKestrelDemo(): DemoDataset {
     ],
     model: 'whisper-1',
     created_at: at(DEMO_TODAY, '17:53'),
+    ...V12_TRANSCRIPT,
   });
   const unknownSenders: UnknownSenderRow[] = [
     {
@@ -1554,6 +1578,10 @@ export function buildKestrelDemo(): DemoDataset {
       billing_status: 'active',
       trial_ends_at: null,
       created_at: at('2026-03-02', '09:00'),
+      ...V12_ROW_DEFAULTS.orgs,
+      // §18 demo org: console SMS driver and the Demo phone. 20261013000007 sets it on databases
+      // that already hold the org; a fresh one gets it here.
+      is_demo: true,
     },
     settings: {
       org_id: ORG,
@@ -1586,6 +1614,7 @@ export function buildKestrelDemo(): DemoDataset {
       past_due_grace_days: 14,
       payroll_columns: [...PAYROLL_COLUMNS],
       updated_at: at('2026-09-15', '11:00'),
+      ...V12_ROW_DEFAULTS.org_settings,
     },
     users: DEMO_USERS,
     members: DEMO_USERS.map((u) => ({
@@ -1595,6 +1624,7 @@ export function buildKestrelDemo(): DemoDataset {
       display_name: u.name,
       title: u.title,
       created_at: at('2026-03-02', '09:00'),
+      ...V12_ROW_DEFAULTS.org_members,
     })),
     sites,
     reporters,

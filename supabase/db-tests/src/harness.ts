@@ -116,26 +116,39 @@ export function storageBlocks(file: string): string[] {
 /**
  * `storage: true` adds the storage stub before the migrations, as on the real stack, so their
  * guarded storage blocks create the buckets and every storage policy in migration order.
+ * `realtime: true` creates the `supabase_realtime` publication first, as Supabase does.
+ * `until: '<file>'` stops before that migration file (a database as deployed before it, e.g. to
+ * add rows the next migration must handle, then `applyMigration()`); no seed then.
  */
 export async function bootDatabase(
-  opts: { seed?: boolean; storage?: boolean } = {},
+  opts: { seed?: boolean; storage?: boolean; realtime?: boolean; until?: string } = {},
 ): Promise<PGlite> {
   const db = new PGlite({ extensions: { pgcrypto } });
   await db.exec(SUPABASE_STUB);
   if (opts.storage) await installStorageStub(db);
-  for (const file of migrationFiles()) {
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
-    try {
-      await db.exec(sql);
-    } catch (err) {
-      throw new Error(`Migration ${file} failed: ${(err as Error).message}`, { cause: err });
-    }
+  if (opts.realtime) await db.exec('create publication supabase_realtime;');
+  const files = migrationFiles();
+  if (opts.until && !files.includes(opts.until))
+    throw new Error(`bootDatabase: no migration ${opts.until}`);
+  for (const file of files) {
+    if (opts.until && file >= opts.until) return db;
+    await applyMigration(db, file);
   }
   if (opts.seed) {
     const sql = readFileSync(SEED_FILE, 'utf8');
     await db.exec(sql);
   }
   return db;
+}
+
+/** Applies one file of supabase/migrations, as the migration owner. */
+export async function applyMigration(db: PGlite, file: string): Promise<void> {
+  const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf8');
+  try {
+    await db.exec(sql);
+  } catch (err) {
+    throw new Error(`Migration ${file} failed: ${(err as Error).message}`, { cause: err });
+  }
 }
 
 export function migrationFiles(): string[] {

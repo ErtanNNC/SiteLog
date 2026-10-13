@@ -56,6 +56,20 @@ function orgIds(prefix: 'aaaaaaaa' | 'bbbbbbbb') {
       billing: id(26),
       packReadyForPm: id(27),
     },
+    // v1.2 tables (W1-05 step 9).
+    consent: id(28),
+    fieldLink: id(29),
+    fieldDevice: id(30),
+    upload: id(31),
+    call: id(32),
+    /** An SMS row (D15): no conversation; org, reporter and phone set. */
+    smsMessage: id(33),
+    /** A reporter who texted STOP (status opted_out, opted_out_at), with its revoked SMS consent. */
+    optedOut: id(34),
+    optedOutConsent: id(35),
+    /** v1.2 transcripts: of the web recorder upload, and of the call. */
+    uploadTranscript: id(36),
+    callTranscript: id(37),
     users: { admin: user(1), pm: user(2), ops: user(3), accounts: user(4) } as Record<Role, string>,
   };
 }
@@ -63,8 +77,19 @@ function orgIds(prefix: 'aaaaaaaa' | 'bbbbbbbb') {
 export const ORG = { A: orgIds('aaaaaaaa'), B: orgIds('bbbbbbbb') } as const;
 export type OrgIds = (typeof ORG)[OrgKey];
 
-/** The private buckets of 20261011000006_platform.sql; each org has one object in each. */
-export const BUCKETS = ['audio', 'photos', 'pdfs', 'exports', 'logos', 'invoices'] as const;
+/**
+ * The private buckets of 20261011000006_platform.sql and `calls` (20261013000007, call
+ * recordings); each org has one object in each.
+ */
+export const BUCKETS = [
+  'audio',
+  'photos',
+  'pdfs',
+  'exports',
+  'logos',
+  'invoices',
+  'calls',
+] as const;
 export type Bucket = (typeof BUCKETS)[number];
 /** The object of org `o` in a bucket (paths start with the org id, §6.5). */
 export const objectName = (o: OrgIds, bucket: Bucket) => `${o.org}/${o.site}/matrix-${bucket}.bin`;
@@ -106,6 +131,8 @@ function orgSql(k: OrgKey, n: number): string {
     insert into reporters (id, org_id, name, phone_e164, status) values
       ('${o.reporter}', '${o.org}', 'Reporter ${k}', '${phone(10)}', 'verified'),
       ('${o.reporter2}', '${o.org}', 'Backup ${k}', '${phone(11)}', 'invited');
+    insert into reporters (id, org_id, name, phone_e164, status, opted_out_at) values
+      ('${o.optedOut}', '${o.org}', 'Opted out ${k}', '${phone(12)}', 'opted_out', now());
     insert into site_reporters (site_id, reporter_id) values ('${o.site}', '${o.reporter}');
     insert into site_recipients (site_id, email) values ('${o.site}', 'office-${k}@matrix.test');
     insert into conversations (id, org_id, reporter_id, phone_e164, state) values
@@ -133,6 +160,23 @@ function orgSql(k: OrgKey, n: number): string {
     insert into weather_events (id, report_id, version, site_id, date, lost_hours) values
       ('${o.weather}', '${o.report}', 1, '${o.site}', '2026-10-09', 2);
     insert into questions (id, report_id, field, prompt) values ('${o.question}', '${o.report}', 'hours', 'How many hours?');
+    insert into consents (id, reporter_id, type, method, text_version, revoked_at) values
+      ('${o.consent}', '${o.reporter}', 'sms', 'web_checkbox', 'v1', null),
+      ('${o.optedOutConsent}', '${o.optedOut}', 'sms', 'web_checkbox', 'v1', now());
+    insert into field_links (id, code_hash, reporter_id, kind) values
+      ('${o.fieldLink}', 'matrix-link-${k}', '${o.reporter}', 'personal');
+    insert into field_devices (id, reporter_id, device_token_hash, verified_at) values
+      ('${o.fieldDevice}', '${o.reporter}', 'matrix-device-${k}', now());
+    insert into uploads (id, report_id, reporter_id, site_id, kind, storage_path, mime) values
+      ('${o.upload}', '${o.report}', '${o.reporter}', '${o.site}', 'audio', '${o.org}/${o.site}/2026-10-09/u.webm', 'audio/webm');
+    insert into calls (id, org_id, reporter_id, site_id, report_id, direction, status) values
+      ('${o.call}', '${o.org}', '${o.reporter}', '${o.site}', '${o.report}', 'inbound', 'completed');
+    insert into transcripts (id, upload_id, call_id, text, segments) values
+      ('${o.uploadTranscript}', '${o.upload}', null, 'six from Apex, recorder', '[]'),
+      ('${o.callTranscript}', null, '${o.call}', 'six from Apex, call', '[]');
+    insert into messages (id, org_id, reporter_id, phone_e164, direction, provider, copy_key, body, status) values
+      ('${o.smsMessage}', '${o.org}', '${o.reporter}', '${phone(10)}', 'out', 'console', 'daily_link', 'Today''s link', 'delivered');
+    insert into rate_limits (key, window_start, count) values ('matrix:${k}', '2026-10-09T17:00:00Z', 1);
     insert into glossary_terms (id, org_id, heard, official) values ('${o.term}', '${o.org}', 'mud', 'Joint compound');
     insert into sub_invoices (id, org_id, company_id, invoice_no) values ('${o.invoice}', '${o.org}', '${o.company}', 'INV-${k}');
     insert into evidence_packs (id, org_id, site_id, period_start, period_end, created_by) values

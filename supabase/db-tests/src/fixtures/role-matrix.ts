@@ -1,6 +1,7 @@
 import {
   ORG,
   OPERATOR,
+  ROLES,
   SHARED,
   SPARE_USER,
   V1_DATA,
@@ -21,7 +22,7 @@ import {
  * Today's known, deferred defects are listed in KNOWN_DEFECTS with the step that fixes them: the
  * test expects today's (wrong) result for those cells, so a fix fails the test until its entry is
  * removed. Any other cell that differs from the expectation fails it too, as does a table missing
- * from this list (each new table, e.g. the six of step 9, needs its row here).
+ * from this list (each new table needs its row here).
  */
 
 export const OPS = ['select', 'insert', 'update', 'delete'] as const;
@@ -96,12 +97,12 @@ export const TABLES: Record<string, TableCase> = {
     set: 'name = name',
   },
   reporters: {
-    why: '§2.2 "Manage reporters, phone numbers & channel preferences: admin, ops"; pm reads who reported.',
-    allow: { select: OFFICE, insert: ADMIN_OPS, update: ADMIN_OPS, delete: ADMIN_OPS },
+    why: '§2.2 "Manage reporters, phone numbers & channel preferences: admin, ops"; pm reads who reported. Created by api-invite-reporter / api-link-unknown-sender and never deleted by a client (the consent records cascade, §17); admin and ops change status (disable, re-invite) directly and the rest through update_reporter() (20261013000007; column and status probes in PROBES).',
+    allow: { select: OFFICE, insert: NONE, update: ADMIN_OPS, delete: NONE },
     where: (o) => `org_id = '${o.org}'`,
     insert: (o) =>
       `insert into reporters (org_id, name, phone_e164) values ('${o.org}', 'New', '+15550009999')`,
-    set: 'name = name',
+    set: 'status = status',
   },
   site_reporters: {
     why: '§2.2 "Manage reporters: admin, ops".',
@@ -221,6 +222,54 @@ export const TABLES: Record<string, TableCase> = {
     insert: (o) =>
       `insert into questions (report_id, field, prompt) values ('${o.report}', 'hours', 'q')`,
     set: 'prompt = prompt',
+  },
+  consents: {
+    why: '§2.2 "Manage reporters, phone numbers & channel preferences": admin, ops read the consent records (Team, "Call now" needs consent); field-api and office RPCs write them (§6.5).',
+    allow: readOnly(ADMIN_OPS),
+    where: (o) => `id = '${o.consent}'`,
+    insert: (o) =>
+      `insert into consents (reporter_id, type, method, text_version) values ('${o.reporter}', 'auto_call', 'office_attested', 'v1')`,
+    set: 'method = method',
+  },
+  field_links: {
+    why: 'Field access (§6.5): link code hashes, read and written by field-api with the service role only; no client policy, no grant.',
+    allow: serviceOnly,
+    where: (o) => `id = '${o.fieldLink}'`,
+    insert: (o) =>
+      `insert into field_links (code_hash, reporter_id, kind) values ('matrix-new-link', '${o.reporter}', 'personal')`,
+    set: 'revoked_at = revoked_at',
+  },
+  field_devices: {
+    why: 'Field access (§6.5): device cookie hashes, field-api only (revocation for admin, ops comes as an RPC); no client policy, no grant.',
+    allow: serviceOnly,
+    where: (o) => `id = '${o.fieldDevice}'`,
+    insert: (o) =>
+      `insert into field_devices (reporter_id, device_token_hash) values ('${o.reporter}', 'matrix-new-device')`,
+    set: 'revoked_at = revoked_at',
+  },
+  uploads: {
+    why: 'Report sources: voice notes and photos (§2.2 "View reports": admin, pm, ops); written by field-api and the office-photo RPCs.',
+    allow: readOnly(OFFICE),
+    where: (o) => `id = '${o.upload}'`,
+    insert: (o) =>
+      `insert into uploads (report_id, site_id, kind, storage_path, uploaded_by) values ('${o.report}', '${o.site}', 'photo', '${o.org}/${o.site}/office/new.jpg', auth.uid())`,
+    set: 'caption = caption',
+  },
+  calls: {
+    why: 'Report sources: calls and their recordings (§2.2 "View reports": admin, pm, ops); written by the voice agent and worker (week 2).',
+    allow: readOnly(OFFICE),
+    where: (o) => `id = '${o.call}'`,
+    insert: (o) =>
+      `insert into calls (org_id, reporter_id, site_id, direction) values ('${o.org}', '${o.reporter}', '${o.site}', 'outbound')`,
+    set: 'outcome = outcome',
+  },
+  rate_limits: {
+    why: 'field-api throttling (§6.5): service role only; no client policy, no grant.',
+    allow: serviceOnly,
+    where: () => `key like 'matrix:%'`,
+    insert: () => `insert into rate_limits (key, window_start) values ('matrix:new', now())`,
+    set: 'count = count',
+    orgless: true,
   },
   glossary_terms: {
     why: '§2.2 "Manage glossary": admin, pm, ops.',
@@ -344,6 +393,10 @@ export const STORAGE: Record<Bucket, { why: string; select: readonly Role[] }> =
     select: OFFICE,
   },
   invoices: { why: '§2.2 "Record sub invoices / send invoice query": every role.', select: ALL },
+  calls: {
+    why: 'Call recordings are report sources (§2.2 "View reports": admin, pm, ops; 20261013000007).',
+    select: OFFICE,
+  },
 };
 
 /** The cell name of a bucket's objects. */
@@ -468,6 +521,8 @@ const B = ORG.B;
 const D21 = 'W1-05 step 9 (D21)';
 const LAST_ADMIN_REF =
   'docs/AUDIT_BACKLOG.md "org_members update and delete policies allow an org with zero admins"';
+const BILLING_REF =
+  'docs/AUDIT_BACKLOG.md "Org admins can overwrite the Stripe-mirrored billing columns and the grace period"';
 /** A no-last-admin guard may be a policy (42501, or no row) or a trigger that raises (P0001). */
 const GUARD_REFUSAL = ['42501', 'P0001'] as const;
 
@@ -608,27 +663,148 @@ export const PROBES: Probe[] = [
     sql: `update org_members set role = 'pm' where org_id = '${A.org}' and user_id = '${A.users.ops}'`,
     expect: true,
   },
-  {
-    name: 'orgs: an admin writes the billing columns',
+  // orgs column lockdown (20261013000007; the orgs half of BILLING_REF): billing, is_demo,
+  // country, currency and logo_path are service / RPC only; the profile columns stay the admin's.
+  ...(
+    [
+      ['the billing columns', `billing_status = 'active', stripe_customer_id = 'cus_B'`],
+      ['the subscription id', `stripe_subscription_id = 'sub_B'`],
+      ['the trial end', `trial_ends_at = now() + interval '1 year'`],
+      ['is_demo', 'is_demo = true'],
+      ['the country', `country = 'TR'`],
+      ['the currency', `currency = 'TRY'`],
+      ['the logo path', `logo_path = '${B.org}/logo.png'`],
+    ] as const
+  ).map(([what, set]): Probe => ({
+    name: `orgs: an admin writes ${what}`,
     org: 'A',
     role: 'admin',
     kind: 'write',
-    sql: `update orgs set billing_status = 'active', stripe_customer_id = 'cus_B' where id = '${A.org}'`,
+    sql: `update orgs set ${set} where id = '${A.org}'`,
     expect: false,
-    defect: {
-      today: true,
-      fixedBy: 'W1-05 step 9 (orgs column lockdown)',
-      ref: 'GAP W1-05 "Column lockdown on orgs"; docs/AUDIT_BACKLOG.md "Org admins can overwrite the Stripe-mirrored billing columns"',
-    },
-  },
+  })),
   {
     name: 'orgs: an admin edits the company profile',
     org: 'A',
     role: 'admin',
     kind: 'write',
-    sql: `update orgs set name = 'Org A renamed', address = 'Main St 1' where id = '${A.org}'`,
+    sql: `update orgs set name = 'Org A renamed', address = 'Main St 1', license_no = 'GC-1', tax_no = '123', timezone = 'America/Denver', locale = 'tr-TR', units = 'metric' where id = '${A.org}'`,
     expect: true,
   },
+  {
+    name: 'orgs: a pm edits the company profile',
+    org: 'A',
+    role: 'pm',
+    kind: 'write',
+    sql: `update orgs set name = 'Org A renamed' where id = '${A.org}'`,
+    expect: false,
+  },
+  {
+    // The org_settings half of the billing finding: scheduler-tick reads the grace period.
+    name: 'org_settings: an admin sets past_due_grace_days (outlasts the billing block)',
+    org: 'A',
+    role: 'admin',
+    kind: 'write',
+    sql: `update org_settings set past_due_grace_days = 100000 where org_id = '${A.org}'`,
+    expect: false,
+    defect: { today: true, fixedBy: D21, ref: BILLING_REF },
+  },
+  // reporters lockdown (20261013000007; docs/AUDIT_BACKLOG.md "reporters and unknown_senders
+  // write policies allow forging verification state"): consent, opt-out and activation state is
+  // SiteLog's; the office disables and re-invites.
+  ...(
+    [
+      ['ops', 'clears an opt-out (opted_out_at)', `opted_out_at = null`, A.optedOut],
+      ['ops', 'sets activated_at', `activated_at = now()`, A.reporter2],
+      ['admin', 'sets verified_at', `verified_at = now()`, A.reporter2],
+      ['ops', "changes a reporter's phone number", `phone_e164 = '+15550006666'`, A.reporter],
+      ['ops', 'moves a reporter out of opted_out', `status = 'invited'`, A.optedOut],
+      ['admin', 'disables a reporter who opted out', `status = 'disabled'`, A.optedOut],
+      ['admin', 'opts a reporter out', `status = 'opted_out'`, A.reporter],
+      [
+        'ops',
+        'marks an invited reporter verified (no consent)',
+        `status = 'verified'`,
+        A.reporter2,
+      ],
+    ] as const
+  ).map(([role, what, set, id]): Probe => ({
+    name: `reporters: ${role} ${what}`,
+    org: 'A',
+    role,
+    kind: 'write',
+    sql: `update reporters set ${set} where id = '${id}'`,
+    expect: false,
+  })),
+  ...(['admin', 'ops'] as const).map((role): Probe => ({
+    name: `reporters: ${role} deletes a reporter with consent records`,
+    org: 'A',
+    role,
+    kind: 'write',
+    sql: `delete from reporters where id = '${A.optedOut}'`,
+    expect: false,
+  })),
+  {
+    name: 'reporters: ops disables a reporter',
+    org: 'A',
+    role: 'ops',
+    kind: 'write',
+    sql: `update reporters set status = 'disabled' where id = '${A.reporter}'`,
+    expect: true,
+  },
+  {
+    name: 'reporters: an admin re-invites a reporter',
+    org: 'A',
+    role: 'admin',
+    kind: 'write',
+    sql: `update reporters set status = 'invited', invited_at = now() where id = '${A.reporter}'`,
+    expect: true,
+  },
+  // v1.2 transcripts (upload_id or call_id, no message): transcripts_select finds their org.
+  ...(
+    [
+      ['uploadTranscript', 'an upload'],
+      ['callTranscript', 'a call'],
+    ] as const
+  ).flatMap(([t, what]) =>
+    ROLES.flatMap((role): Probe[] => [
+      {
+        name: `transcripts: ${role} ${role === 'accounts' ? 'does not see' : 'sees'} ${what} transcript of its org`,
+        org: 'A',
+        role,
+        kind: 'select',
+        sql: `select 1 from transcripts where id = '${A[t]}'`,
+        expect: role !== 'accounts',
+      },
+      {
+        name: `transcripts: ${role} does not see ${what} transcript of another org`,
+        org: 'B',
+        role,
+        kind: 'select',
+        sql: `select 1 from transcripts where id = '${A[t]}'`,
+        expect: false,
+      },
+    ]),
+  ),
+  // SMS rows (D15): no conversation; messages_select finds their org through org_id.
+  ...ROLES.flatMap((role): Probe[] => [
+    {
+      name: `messages: ${role} ${role === 'accounts' ? 'does not see' : 'sees'} an SMS row of its org`,
+      org: 'A',
+      role,
+      kind: 'select',
+      sql: `select 1 from messages where id = '${A.smsMessage}'`,
+      expect: role !== 'accounts',
+    },
+    {
+      name: `messages: ${role} does not see an SMS row of another org`,
+      org: 'B',
+      role,
+      kind: 'select',
+      sql: `select 1 from messages where id = '${A.smsMessage}'`,
+      expect: false,
+    },
+  ]),
   ...notificationProbes,
   ...(['messages', 'transcripts'] as const).flatMap((table): Probe[] => {
     const id = table === 'messages' ? SHARED.message : SHARED.transcript;

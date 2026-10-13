@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
 import { PAYROLL_COLUMNS } from '@sitelog/shared';
+import { V12_ROW_DEFAULTS } from '@sitelog/shared';
 import type {
   CompanyRow,
   ConversationRow,
@@ -170,6 +171,7 @@ export function createHarness(
   };
 
   const org: OrgRow = {
+    ...V12_ROW_DEFAULTS.orgs,
     id: ORG_ID,
     name: 'Kestrel Build Group',
     address: '1200 Industrial Pkwy, Austin, TX',
@@ -183,6 +185,7 @@ export function createHarness(
     created_at: '2026-03-01T00:00:00Z',
   };
   const settings: OrgSettingsRow = {
+    ...V12_ROW_DEFAULTS.org_settings,
     org_id: ORG_ID,
     default_deadline: '17:30:00',
     working_days: [1, 2, 3, 4, 5],
@@ -238,6 +241,7 @@ export function createHarness(
     role: ReporterRow['role'],
     languages: string[],
   ): ReporterRow => ({
+    ...V12_ROW_DEFAULTS.reporters,
     id,
     org_id: ORG_ID,
     name,
@@ -316,6 +320,7 @@ export function createHarness(
     },
     async inbound(convo, input) {
       const row: MessageRow = {
+        ...V12_ROW_DEFAULTS.messages,
         id: randomUUID(),
         conversation_id: convo.id,
         org_id: null,

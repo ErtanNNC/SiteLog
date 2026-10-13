@@ -51,6 +51,19 @@ export type OrgRow = {
   billing_status: string | null;
   trial_ends_at: string | null;
   created_at: string;
+  /**
+   * §6.3 profile (20261013000007_schema_expand_v1_2.sql). An admin may update name, address,
+   * license_no, tax_no, timezone, locale and units directly; country, currency, logo_path, the
+   * billing columns and is_demo only through the service role or RPCs (column grants).
+   */
+  country: 'US' | 'TR';
+  /** Report language and the panel's default (§0 Conventions). */
+  locale: 'en-US' | 'tr-TR';
+  units: 'imperial' | 'metric';
+  currency: string;
+  tax_no: string | null;
+  /** Demo orgs: console SMS driver and the Demo phone (§4.5, §5.2). */
+  is_demo: boolean;
 };
 
 export type OrgMemberRow = {
@@ -60,6 +73,8 @@ export type OrgMemberRow = {
   display_name: string | null;
   title: string | null;
   created_at: string;
+  /** The user's panel language; null → the org locale (§11.2). */
+  ui_locale: string | null;
 };
 
 export type OrgSettingsRow = {
@@ -94,6 +109,12 @@ export type OrgSettingsRow = {
    */
   payroll_columns: string[];
   updated_at: string;
+  /** §6.3 field channels (20261013000007); nullable as in the spec, each with a default. */
+  daily_link_time: string | null;
+  auto_call_enabled: boolean | null;
+  second_call_enabled: boolean | null;
+  call_window_start: string | null;
+  call_window_end: string | null;
 };
 
 export type SiteRow = {
@@ -126,6 +147,11 @@ export type ReporterRow = {
   verified_at: string | null;
   last_invite_error: string | null;
   created_at: string;
+  /** Language SiteLog speaks and texts: en-US, es-US, tr-TR (§6.3). */
+  locale: string;
+  contact_pref: ContactPref;
+  activated_at: string | null;
+  opted_out_at: string | null;
 };
 
 export type SiteReporterRow = {
@@ -165,12 +191,20 @@ export type ConversationRow = {
 
 export type MessageRow = {
   id: string;
-  /** null for a photo uploaded in the panel (20261013000005_office_photos.sql): org_id is set instead. */
+  /**
+   * null for a photo uploaded in the panel (20261013000005_office_photos.sql) and for an SMS
+   * (20261013000007, D15): org_id is set instead.
+   */
   conversation_id: string | null;
-  /** Set on office uploads only; a WhatsApp message takes its org from the conversation. */
+  /** Set on office uploads and SMS rows; a WhatsApp message takes its org from the conversation. */
   org_id: string | null;
   direction: MsgDirection;
   wa_message_id: string | null;
+  /**
+   * WhatsApp message type. Nullable in the database since 20261013000007 (SMS rows have none),
+   * typed non-null while every row is a WhatsApp or office one: W1-08 widens it with the first
+   * SMS writer and the readers of SMS rows.
+   */
   type: MsgType;
   body: string | null;
   payload: Json | null;
@@ -182,11 +216,26 @@ export type MessageRow = {
   status: MsgStatus;
   error: string | null;
   created_at: string;
+  /** SMS columns (§6.3 messages, D15): null on WhatsApp and office rows. */
+  reporter_id: string | null;
+  phone_e164: string | null;
+  /** twilio | iletimerkezi | console */
+  provider: string | null;
+  provider_message_id: string | null;
+  /** §9.2 copy key, e.g. `daily_link`. */
+  copy_key: string | null;
 };
 
 export type TranscriptRow = {
   id: string;
+  /**
+   * The WhatsApp voice note. Nullable in the database since 20261013000007 (a v1.2 transcript
+   * sets upload_id or call_id instead, at most one), typed non-null while every transcript is a
+   * WhatsApp one: W1-11 widens it with transcribe_upload and its readers.
+   */
   message_id: string;
+  upload_id: string | null;
+  call_id: string | null;
   language: string | null;
   text: string;
   segments: Json;
@@ -240,6 +289,11 @@ export type ReportRow = {
   kind: string;
   created_at: string;
   updated_at: string;
+  /** Channel of the first submission; null on WhatsApp-era reports (D13). */
+  channel: FieldChannel | null;
+  /** Report output language, `en` | `tr`; null until step 10 backfills it. */
+  language: string | null;
+  confirmed_via: FieldChannel | null;
 };
 
 export type ReportVersionRow = {
@@ -253,15 +307,27 @@ export type ReportVersionRow = {
   author_message_id: string | null;
   change_note: string | null;
   created_at: string;
+  /** Channel of a reporter edit. */
+  via: FieldChannel | null;
 };
 
 export type ReportSourceRow = {
   id: string;
   report_id: string;
+  /**
+   * The WhatsApp or office-photo message. Nullable in the database since 20261013000007, and
+   * the kind check also takes the §6.2 `source_kind` labels (voice_note, call, answer); both are
+   * typed as today's rows have them until step 10 moves the writers and readers to uploads.
+   */
   message_id: string;
   kind: 'audio' | 'photo' | 'text' | 'reply';
   caption: string | null;
   taken_at: string | null;
+  upload_id: string | null;
+  call_id: string | null;
+  question_id: string | null;
+  /** null on rows from before 20261013000007. */
+  created_at: string | null;
 };
 
 export type ManpowerEntryRow = {
@@ -323,6 +389,10 @@ export type QuestionRow = {
   asked_at: string | null;
   answered_at: string | null;
   created_at: string;
+  /** null on WhatsApp-era questions (D13). */
+  channel: FieldChannel | null;
+  call_id: string | null;
+  answer_source: Json | null;
 };
 
 export type GlossaryTermRow = {
@@ -387,6 +457,101 @@ export type JobRow = {
   lock_key: string | null;
   created_at: string;
   finished_at: string | null;
+};
+
+/** §6.3 consents (20261013000007): admin and ops read them; written by field-api and RPCs. */
+export type ConsentRow = {
+  id: string;
+  reporter_id: string;
+  type: ConsentType;
+  /** 'web_checkbox' | 'sms_reply_yes' | 'voice_yes' | 'office_attested' */
+  method: string;
+  text_version: string;
+  evidence: Json | null;
+  given_at: string;
+  revoked_at: string | null;
+};
+
+/** §6.3 field_links: service role only (field-api). */
+export type FieldLinkRow = {
+  id: string;
+  code_hash: string;
+  reporter_id: string;
+  site_id: string | null;
+  kind: LinkKind;
+  report_date: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  last_opened_at: string | null;
+  created_at: string | null;
+};
+
+/** §6.3 field_devices: service role only (field-api). */
+export type FieldDeviceRow = {
+  id: string;
+  reporter_id: string;
+  device_token_hash: string;
+  user_agent: string | null;
+  verified_at: string | null;
+  last_seen_at: string | null;
+  revoked_at: string | null;
+};
+
+/**
+ * §6.3 uploads: web recorder files, and office photos (D14: no reporter, `uploaded_by` names the
+ * office user). admin, pm and ops read them.
+ */
+export type UploadRow = {
+  id: string;
+  report_id: string | null;
+  reporter_id: string | null;
+  site_id: string;
+  kind: UploadKind;
+  storage_path: string;
+  mime: string | null;
+  bytes: number | null;
+  duration_s: number | null;
+  peaks: Json | null;
+  recorded_at: string | null;
+  received_at: string | null;
+  caption: string | null;
+  uploaded_by: string | null;
+};
+
+/** §6.3 calls (rows written from week 2): admin, pm and ops read them. */
+export type CallRow = {
+  id: string;
+  org_id: string | null;
+  reporter_id: string | null;
+  site_id: string | null;
+  report_id: string | null;
+  direction: CallDirection;
+  transport: CallTransport;
+  /** 'daily_report' | 'reminder' | 'callback' | 'edit' */
+  purpose: string | null;
+  provider_call_id: string | null;
+  from_e164: string | null;
+  to_e164: string | null;
+  status: CallStatus;
+  outcome: CallOutcome | null;
+  disclosure_played: boolean | null;
+  started_at: string | null;
+  answered_at: string | null;
+  ended_at: string | null;
+  duration_s: number | null;
+  recording_path: string | null;
+  peaks: Json | null;
+  dialog_log: Json | null;
+  metrics: Json | null;
+  created_at: string | null;
+};
+
+/** §6.3 rate_limits: field-api throttling, service role only. */
+export type RateLimitRow = {
+  /** 'dev:<device_id>' | 'code:<e164>' */
+  key: string;
+  window_start: string;
+  count: number;
 };
 
 export type AuditLogRow = {
@@ -532,8 +697,17 @@ export type Database = {
         | 'billing_status'
         | 'trial_ends_at'
         | 'created_at'
+        | 'country'
+        | 'locale'
+        | 'units'
+        | 'currency'
+        | 'tax_no'
+        | 'is_demo'
       >;
-      org_members: Table<OrgMemberRow, 'role' | 'display_name' | 'title' | 'created_at'>;
+      org_members: Table<
+        OrgMemberRow,
+        'role' | 'display_name' | 'title' | 'created_at' | 'ui_locale'
+      >;
       org_settings: Table<OrgSettingsRow, Exclude<keyof OrgSettingsRow, 'org_id'>>;
       sites: Table<
         SiteRow,
@@ -559,6 +733,25 @@ export type Database = {
         | 'verified_at'
         | 'last_invite_error'
         | 'created_at'
+        | 'locale'
+        | 'contact_pref'
+        | 'activated_at'
+        | 'opted_out_at'
+      >;
+      consents: Table<ConsentRow, 'id' | 'evidence' | 'given_at' | 'revoked_at'>;
+      field_links: Table<
+        FieldLinkRow,
+        | 'id'
+        | 'site_id'
+        | 'report_date'
+        | 'expires_at'
+        | 'revoked_at'
+        | 'last_opened_at'
+        | 'created_at'
+      >;
+      field_devices: Table<
+        FieldDeviceRow,
+        'id' | 'user_agent' | 'verified_at' | 'last_seen_at' | 'revoked_at'
       >;
       site_reporters: Table<SiteReporterRow, 'is_primary'>;
       site_recipients: Table<SiteRecipientRow, never>;
@@ -594,8 +787,16 @@ export type Database = {
         | 'status'
         | 'error'
         | 'created_at'
+        | 'reporter_id'
+        | 'phone_e164'
+        | 'provider'
+        | 'provider_message_id'
+        | 'copy_key'
       >;
-      transcripts: Table<TranscriptRow, 'id' | 'language' | 'model' | 'created_at'>;
+      transcripts: Table<
+        TranscriptRow,
+        'id' | 'upload_id' | 'call_id' | 'language' | 'model' | 'created_at'
+      >;
       unknown_senders: Table<
         UnknownSenderRow,
         | 'id'
@@ -635,6 +836,48 @@ export type Database = {
         | 'kind'
         | 'created_at'
         | 'updated_at'
+        | 'channel'
+        | 'language'
+        | 'confirmed_via'
+      >;
+      uploads: Table<
+        UploadRow,
+        | 'id'
+        | 'report_id'
+        | 'reporter_id'
+        | 'mime'
+        | 'bytes'
+        | 'duration_s'
+        | 'peaks'
+        | 'recorded_at'
+        | 'received_at'
+        | 'caption'
+        | 'uploaded_by'
+      >;
+      calls: Table<
+        CallRow,
+        | 'id'
+        | 'org_id'
+        | 'reporter_id'
+        | 'site_id'
+        | 'report_id'
+        | 'transport'
+        | 'purpose'
+        | 'provider_call_id'
+        | 'from_e164'
+        | 'to_e164'
+        | 'status'
+        | 'outcome'
+        | 'disclosure_played'
+        | 'started_at'
+        | 'answered_at'
+        | 'ended_at'
+        | 'duration_s'
+        | 'recording_path'
+        | 'peaks'
+        | 'dialog_log'
+        | 'metrics'
+        | 'created_at'
       >;
       report_versions: Table<
         ReportVersionRow,
@@ -644,8 +887,12 @@ export type Database = {
         | 'author_message_id'
         | 'change_note'
         | 'created_at'
+        | 'via'
       >;
-      report_sources: Table<ReportSourceRow, 'id' | 'caption' | 'taken_at'>;
+      report_sources: Table<
+        ReportSourceRow,
+        'id' | 'caption' | 'taken_at' | 'upload_id' | 'call_id' | 'question_id' | 'created_at'
+      >;
       manpower_entries: Table<
         ManpowerEntryRow,
         | 'id'
@@ -684,6 +931,9 @@ export type Database = {
         | 'asked_at'
         | 'answered_at'
         | 'created_at'
+        | 'channel'
+        | 'call_id'
+        | 'answer_source'
       >;
       glossary_terms: Table<
         GlossaryTermRow,
@@ -740,6 +990,7 @@ export type Database = {
         | 'created_at'
         | 'finished_at'
       >;
+      rate_limits: Table<RateLimitRow, 'count'>;
       scheduler_state: Table<SchedulerStateRow, 'value' | 'updated_at'>;
       stripe_events: Table<StripeEventRow, 'received_at' | 'processed_at'>;
       audit_log: Table<

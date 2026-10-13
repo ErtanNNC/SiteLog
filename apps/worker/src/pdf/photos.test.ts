@@ -6,6 +6,7 @@ import {
   officePhotoStoragePath,
   readReportData,
   upgradeV1toV2,
+  V12_ROW_DEFAULTS,
   type DailyReportDataV1,
   type EvidencePackRow,
   type MessageRow,
@@ -48,6 +49,7 @@ async function setup() {
   });
   const office = (caption: string | null, mime: 'image/png' | 'image/jpeg', at: string) => {
     const row: MessageRow = {
+      ...V12_ROW_DEFAULTS.messages,
       id: randomUUID(),
       conversation_id: null,
       org_id: ORG_ID,

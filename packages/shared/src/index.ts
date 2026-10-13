@@ -30,3 +30,4 @@ export * from './schedule/day.ts';
 export * from './weather/observed.ts';
 export * from './webhook/meta.ts';
 export type * from './db/types.ts';
+export { V12_ROW_DEFAULTS } from './db/defaults.ts';

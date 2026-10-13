@@ -6,6 +6,7 @@
 import { DEMO_NOW, DEMO_ORG_ID, DEMO_USERS, kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import type { DemoDataset, DemoUser } from '@sitelog/shared/demo/types.ts';
 import { demoId, demoRand } from '@sitelog/shared/demo/ids.ts';
+import { V12_ROW_DEFAULTS } from '@sitelog/shared/db/defaults.ts';
 import type {
   AuditLogRow,
   CompanyRow,
@@ -118,6 +119,7 @@ export class DemoStore {
     if (!this.data.users.some((u) => u.id === DEMO_OPS_USER.id)) {
       this.data.users.push({ ...DEMO_OPS_USER });
       this.data.members.push({
+        ...V12_ROW_DEFAULTS.org_members,
         org_id: this.data.org.id,
         user_id: DEMO_OPS_USER.id,
         role: DEMO_OPS_USER.role,
@@ -293,6 +295,7 @@ export class DemoStore {
     const next = report.current_version + 1;
     const site = this.site(report.site_id);
     this.data.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: report.id,
       version: next,
       data: data as unknown as ReportVersionRow['data'],
@@ -610,6 +613,7 @@ export class DemoStore {
     return uploads.map((u) => {
       const id = localId('msg');
       this.data.messages.push({
+        ...V12_ROW_DEFAULTS.messages,
         id,
         conversation_id: null,
         org_id: orgId,
@@ -628,6 +632,7 @@ export class DemoStore {
         created_at: this.nowIso(),
       });
       this.data.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: localId('src'),
         report_id: reportId,
         message_id: id,
@@ -685,6 +690,7 @@ export class DemoStore {
       input.userId,
     );
     const report: ReportRow = {
+      ...V12_ROW_DEFAULTS.reports,
       id: reportId,
       org_id: d.org.id,
       site_id: site.id,
@@ -707,6 +713,7 @@ export class DemoStore {
     };
     d.reports.push(report);
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: report.id,
       version: 1,
       data: data as unknown as ReportVersionRow['data'],
@@ -1047,6 +1054,7 @@ export class DemoStore {
   inviteReporter(input: InviteReporterInput, userId: string): string {
     const id = localId('reporter');
     this.data.reporters.push({
+      ...V12_ROW_DEFAULTS.reporters,
       id,
       org_id: this.data.org.id,
       name: input.name.trim(),
@@ -1282,6 +1290,7 @@ export class DemoStore {
       role: input.role,
     });
     this.data.members.push({
+      ...V12_ROW_DEFAULTS.org_members,
       org_id: this.data.org.id,
       user_id: id,
       role: input.role,
@@ -1543,6 +1552,7 @@ export class DemoStore {
     };
     if (convo) {
       const msg: MessageRow = {
+        ...V12_ROW_DEFAULTS.messages,
         id: audioId,
         conversation_id: convo.id,
         org_id: null,
@@ -1567,6 +1577,7 @@ export class DemoStore {
       };
       d.messages.push(msg);
       d.transcripts.push({
+        ...V12_ROW_DEFAULTS.transcripts,
         id: localId('transcript'),
         message_id: audioId,
         language: 'en',
@@ -1582,6 +1593,7 @@ export class DemoStore {
         created_at: receivedAt,
       });
       d.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: localId('src'),
         report_id: reportId,
         message_id: audioId,
@@ -1591,6 +1603,7 @@ export class DemoStore {
       });
     }
     const report: ReportRow = {
+      ...V12_ROW_DEFAULTS.reports,
       id: reportId,
       org_id: d.org.id,
       site_id: site.id,
@@ -1613,6 +1626,7 @@ export class DemoStore {
     };
     d.reports.push(report);
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: reportId,
       version: 1,
       data: data as unknown as ReportVersionRow['data'],
@@ -1794,6 +1808,7 @@ export class DemoStore {
     if (!convo) return;
     for (const m of messages) {
       this.data.messages.push({
+        ...V12_ROW_DEFAULTS.messages,
         id: m.id,
         conversation_id: convo.id,
         org_id: null,
@@ -1813,6 +1828,7 @@ export class DemoStore {
       });
       if (m.transcript) {
         this.data.transcripts.push({
+          ...V12_ROW_DEFAULTS.transcripts,
           id: localId('transcript'),
           message_id: m.id,
           language: m.transcript.language,
@@ -1855,6 +1871,7 @@ export class DemoStore {
     const seq = Number(input.reportNo.slice(site.project_code.length + 1));
     if (Number.isInteger(seq)) site.report_seq = Math.max(site.report_seq, seq);
     this.data.reports.push({
+      ...V12_ROW_DEFAULTS.reports,
       id: input.id,
       org_id: this.data.org.id,
       site_id: site.id,
@@ -1912,6 +1929,7 @@ export class DemoStore {
     const existing = d.versions.find((v) => v.report_id === r.id && v.version === 1);
     d.versions = d.versions.filter((v) => !(v.report_id === r.id && v.version === 1));
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: r.id,
       version: 1,
       data: data as unknown as ReportVersionRow['data'],
@@ -2006,6 +2024,7 @@ export class DemoStore {
     r.kind = input.kind;
     d.versions = d.versions.filter((v) => !(v.report_id === r.id && v.version === 1));
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: r.id,
       version: 1,
       data: data as unknown as ReportVersionRow['data'],
@@ -2020,6 +2039,7 @@ export class DemoStore {
     d.sources = d.sources.filter((s) => s.report_id !== r.id);
     input.sources.forEach((s, i) =>
       d.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: `${r.id}-s${i + 1}`,
         report_id: r.id,
         message_id: s.messageId,
@@ -2031,6 +2051,7 @@ export class DemoStore {
     d.questions = d.questions.filter((q) => q.report_id !== r.id);
     for (const q of input.questions) {
       d.questions.push({
+        ...V12_ROW_DEFAULTS.questions,
         id: q.id,
         report_id: r.id,
         field: q.field,
@@ -2102,6 +2123,7 @@ export class DemoStore {
     const site = this.site(r.site_id);
     const data = structuredClone(input.data);
     d.versions.push({
+      ...V12_ROW_DEFAULTS.report_versions,
       report_id: r.id,
       version: input.version,
       data: data as unknown as ReportVersionRow['data'],
@@ -2115,6 +2137,7 @@ export class DemoStore {
     });
     if (input.source) {
       d.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: `${r.id}-s${d.sources.filter((s) => s.report_id === r.id).length + 1}`,
         report_id: r.id,
         message_id: input.source.messageId,

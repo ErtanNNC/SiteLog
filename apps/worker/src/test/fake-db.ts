@@ -22,6 +22,7 @@ import type {
   WeatherEventRow,
 } from '@sitelog/shared';
 import { formatReportNo } from '@sitelog/shared';
+import { V12_ROW_DEFAULTS } from '@sitelog/shared';
 import { median } from '../cost';
 import type { AuditInput, Db, ExpiredMedia, Json, ReportSourceWithMessage } from '../db';
 
@@ -193,6 +194,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async insertOutboundMessage(input) {
       const row: MessageRow = {
+        ...V12_ROW_DEFAULTS.messages,
         id: randomUUID(),
         conversation_id: input.conversation_id,
         org_id: null,
@@ -237,6 +239,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async upsertTranscript(input) {
       const row: TranscriptRow = {
+        ...V12_ROW_DEFAULTS.transcripts,
         id: d.transcripts.get(input.message_id)?.id ?? randomUUID(),
         message_id: input.message_id,
         language: input.language,
@@ -441,6 +444,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async insertReport(input) {
       const row: ReportRow = {
+        ...V12_ROW_DEFAULTS.reports,
         id: randomUUID(),
         org_id: input.org_id,
         site_id: input.site_id,
@@ -533,6 +537,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         );
       }
       const row: ReportVersionRow = {
+        ...V12_ROW_DEFAULTS.report_versions,
         report_id: input.report_id,
         version: input.version,
         data: input.data as ReportVersionRow['data'],
@@ -561,6 +566,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       )
         return;
       d.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: randomUUID(),
         report_id: input.report_id,
         message_id: input.message_id,
@@ -591,6 +597,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
 
     async insertQuestion(input) {
       const row: QuestionRow = {
+        ...V12_ROW_DEFAULTS.questions,
         id: randomUUID(),
         report_id: input.report_id,
         field: input.field,

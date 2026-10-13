@@ -18,7 +18,10 @@ import { TABLES, VIEWS } from './fixtures/role-matrix.ts';
 
 const A = ORG.A;
 
-/** The helpers granted to anon in 20261011000004_rls.sql:49-51, each with a call that hits a row. */
+/**
+ * The org lookup helpers (granted to anon in 20261011000004_rls.sql:49-51, and the v1.2 ones),
+ * each with a call that hits a row.
+ */
 const LOOKUP_HELPERS: Record<string, string> = {
   is_member: `select is_member('${A.org}') as v`,
   has_role: `select has_role('${A.org}', '{admin}') as v`,
@@ -28,6 +31,9 @@ const LOOKUP_HELPERS: Record<string, string> = {
   conversation_org: `select conversation_org('${A.conversation}') as v`,
   message_org: `select message_org('${A.message}') as v`,
   reporter_org: `select reporter_org('${A.reporter}') as v`,
+  // 20261013000007: revoked from public and anon when created.
+  upload_org: `select upload_org('${A.upload}') as v`,
+  call_org: `select call_org('${A.call}') as v`,
 };
 
 interface AnonGap {
