@@ -8,3 +8,9 @@ docs/SITELOG_SPEC.md
 supabase/.temp
 apps/web/public/brand
 **/fonts/*.ttf
+# Spec v1.2 kit files, kept byte-identical to the delivered kit
+docs/START_HERE.md
+docs/PLAN_WEEK1.md
+docs/decisions
+docs/design
+docs/brand
