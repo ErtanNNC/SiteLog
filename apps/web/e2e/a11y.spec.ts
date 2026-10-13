@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { demoId } from '@sitelog/shared/demo/ids.ts';
+
+const SITE_PHOTO = fileURLToPath(new URL('./fixtures/site-photo.png', import.meta.url));
 
 /**
  * §15 / §16.2 M9 accessibility pass (demo mode): axe-core WCAG 2.2 AA scan of every route at
@@ -125,6 +129,23 @@ for (const width of WIDTHS) {
       await expect(page.getByRole('dialog')).toBeVisible();
       await expect(page.getByLabel('Change note')).toBeFocused();
       await expectNoViolations(page);
+    });
+
+    test('new report with a photo and a refused file in the picker', async ({ page }) => {
+      await signInFast(page);
+      await page.goto('/reports/new');
+      const picker = page.getByTestId('photo-picker');
+      await picker.getByTestId('photo-input').setInputFiles([
+        { name: 'site-photo.png', mimeType: 'image/png', buffer: readFileSync(SITE_PHOTO) },
+        { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('not a photo') },
+      ]);
+      await expect(picker.getByRole('img', { name: 'Photo 1' })).toBeVisible();
+      await expect(picker.getByRole('alert')).toContainText('notes.txt is not an image.');
+      await expectNoViolations(page);
+      // The thumbnails, captions and buttons fit a phone screen without sideways scrolling.
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
     });
 
     test('crew hours with the invoice check open', async ({ page }) => {

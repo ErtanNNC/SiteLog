@@ -58,8 +58,17 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
   );
 }
 
-/** Edit mode body for P7: inline fields per section; rows add/remove; company select with "Add new…". */
-export function ReportEditor({ companies }: { companies: CompanyOption[] }) {
+/**
+ * Edit mode body for P7: inline fields per section; rows add/remove; company select with "Add
+ * new…". `photos` is the Photos section (PhotoPicker), last as in the report view.
+ */
+export function ReportEditor({
+  companies,
+  photos,
+}: {
+  companies: CompanyOption[];
+  photos?: ReactNode;
+}) {
   const form = useFormContext<ReportFormValues>();
   const manpower = useFieldArray({ control: form.control, name: 'manpower' });
   const periods = useFieldArray({ control: form.control, name: 'periods' });
@@ -636,6 +645,8 @@ export function ReportEditor({ companies }: { companies: CompanyOption[] }) {
           </ul>
         </Section>
       </div>
+
+      {photos}
     </div>
   );
 }

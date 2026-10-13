@@ -35,6 +35,7 @@ import type { DailyReportData, ManpowerEntry, Source } from '@sitelog/shared/sch
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import { normalizePayrollColumns, type PayrollColumn } from '@sitelog/shared/report/payroll.ts';
+import { versionPhotos } from '@sitelog/shared/report/photos.ts';
 import { isWorkingDay } from '@sitelog/shared/schedule/day.ts';
 import {
   addDays,
@@ -142,6 +143,11 @@ export interface RowSet {
   notifications: NotificationRow[];
   audit: AuditLogRow[];
   billing?: Omit<BillingData['plan'], 'hasSubscription'> & { invoices: BillingData['invoices'] };
+  /**
+   * `data.photos` of report versions whose full row is not in `versions` (the Supabase Photos
+   * tab loads only this column for the site's older reports).
+   */
+  photoLists?: Array<{ report_id: string; version: number; photos: unknown }>;
 }
 
 export interface AssembleCtx {
@@ -338,6 +344,38 @@ export function buildIndex(rows: RowSet): Index {
 
 export function currentVersion(ix: Index, report: ReportRow): ReportVersionRow | undefined {
   return ix.versionsByReport.get(report.id)?.find((v) => v.version === report.current_version);
+}
+
+/** One photo a version shows, with its message (storage path, type). */
+export interface ShownPhoto {
+  source: ReportSourceRow;
+  message: MessageRow | undefined;
+  caption: string | null;
+  takenAt: string | null;
+}
+
+/**
+ * The photos a version shows (versionPhotos: its data.photos in order; every photo of the report
+ * for data without the list). The message body stands in for a missing caption only then: with
+ * a list, a caption cleared in an edit stays cleared.
+ */
+export function shownPhotos(
+  photos: unknown,
+  sources: readonly ReportSourceRow[],
+  msgById: ReadonlyMap<string, MessageRow>,
+): ShownPhoto[] {
+  const listed = Array.isArray(photos);
+  return versionPhotos(listed ? (photos as DailyReportData['photos']) : null, sources).map(
+    ({ source, caption, takenAt }) => {
+      const message = msgById.get(source.message_id);
+      return {
+        source,
+        message,
+        caption: listed ? caption : (caption ?? message?.body ?? null),
+        takenAt: takenAt ?? message?.created_at ?? null,
+      };
+    },
+  );
 }
 
 /** Typed in the panel (create_office_report): no reporter and version 1 by an office user. */
@@ -1038,33 +1076,38 @@ export function assembleSiteDetail(
     .filter((x): x is ReporterSummary => !!x)
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
 
-  const siteReportIds = new Set(rows.reports.filter((r) => r.site_id === siteId).map((r) => r.id));
+  // Each report's photos as its current version shows them (an edit may remove or re-caption).
   const msgById = new Map(rows.messages.map((m) => [m.id, m]));
-  const photos: SitePhoto[] = rows.sources
-    .filter((s) => s.kind === 'photo' && siteReportIds.has(s.report_id))
-    .map((s) => {
-      const r = ix.reportById.get(s.report_id);
-      const m = msgById.get(s.message_id);
-      return {
-        messageId: s.message_id,
-        reportId: s.report_id,
-        reportNo: r?.report_no ?? '',
-        date: ix.reportDate.get(s.report_id) ?? '',
-        caption: s.caption ?? m?.body ?? null,
-        takenAt: s.taken_at ?? m?.created_at ?? null,
-        storagePath: m?.storage_path ?? null,
+  const photoSources = groupBy(
+    rows.sources.filter((s) => s.kind === 'photo'),
+    (s) => s.report_id,
+  );
+  const photos: SitePhoto[] = rows.reports
+    .filter((r) => r.site_id === siteId && photoSources.has(r.id))
+    .flatMap((r) => {
+      const v = currentVersion(ix, r);
+      const list = v
+        ? versionData(v)?.photos
+        : rows.photoLists?.find((p) => p.report_id === r.id && p.version === r.current_version)
+            ?.photos;
+      return shownPhotos(list, photoSources.get(r.id) ?? [], msgById).map((p) => ({
+        messageId: p.source.message_id,
+        reportId: r.id,
+        reportNo: r.report_no,
+        date: ix.reportDate.get(r.id) ?? '',
+        caption: p.caption,
+        takenAt: p.takenAt,
+        storagePath: p.message?.storage_path ?? null,
         url: null,
-      };
+      }));
     })
-    .sort((a, b) =>
-      a.date === b.date
-        ? (a.takenAt ?? '') < (b.takenAt ?? '')
-          ? -1
-          : 1
-        : a.date < b.date
-          ? 1
-          : -1,
-    );
+    // Newest day first; within a day by time taken (ties keep the version's order).
+    .sort((a, b) => {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      const x = a.takenAt ?? '';
+      const y = b.takenAt ?? '';
+      return x < y ? -1 : x > y ? 1 : 0;
+    });
   return {
     site: toSiteInfo(site, rows.settings),
     reporters,
@@ -1356,18 +1399,15 @@ export function assembleReportDetail(
     ? rows.transcripts.find((t) => t.message_id === audioMsg.id)
     : undefined;
   const segments = transcriptRow ? segmentsOf(transcriptRow.segments) : [];
-  const photos = sources
-    .filter((s) => s.kind === 'photo')
-    .map((s) => {
-      const m = msgById.get(s.message_id);
-      return {
-        messageId: s.message_id,
-        storagePath: m?.storage_path ?? null,
-        url: null,
-        caption: s.caption ?? m?.body ?? null,
-        takenAt: s.taken_at ?? m?.created_at ?? null,
-      };
-    });
+  // The viewed version's photos: an office edit may have removed some or changed a caption.
+  const photos = shownPhotos(data.photos, sources, msgById).map((p) => ({
+    messageId: p.source.message_id,
+    storagePath: p.message?.storage_path ?? null,
+    mime: p.message?.media_mime ?? null,
+    url: null,
+    caption: p.caption,
+    takenAt: p.takenAt,
+  }));
 
   const reporter = reporterOf(ix, report);
   const reporterName = reporter?.name ?? copy.sites.reporter;

@@ -38,9 +38,15 @@ import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/shared/format.ts';
 import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numbering.ts';
+import {
+  officePhotoStoragePath,
+  type OfficePhotoMime,
+  type OfficePhotoUpload,
+} from '@sitelog/shared/report/photos.ts';
 import { copy } from '@/copy/en';
 import { functionsUrl } from '@/lib/env';
 import { rasterizeSvgLogo } from '@/lib/logo';
+import { randomUuid } from '@/lib/photos';
 import type { Db } from '@/lib/supabase';
 import { errorMessage, uniq } from '@/lib/utils';
 import {
@@ -86,6 +92,7 @@ import {
   type UpdateOrgInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
+  type UploadedPhoto,
 } from '../source';
 import type {
   BillingData,
@@ -537,6 +544,7 @@ export class SupabaseSource implements DataSource {
       questions,
       sources: photos.sources,
       messages: photos.messages,
+      photoLists: photos.photoLists,
     };
     const detail = assembleSiteDetail(rows, this.ctx(), siteId, month);
     const urls = await this.signedUrls(
@@ -553,7 +561,8 @@ export class SupabaseSource implements DataSource {
   /**
    * The Photos tab shows the site's photos from every report, not only the viewed month's
    * (§11.4): the newest SITE_PHOTO_LIMIT photo sources, plus the reports and site days (for the
-   * report number and date) and messages (for the storage path) that are not loaded yet.
+   * report number and date) and messages (for the storage path) that are not loaded yet, and the
+   * current versions' data.photos (which of them each report shows, with what caption).
    */
   private async sitePhotos(
     siteId: string,
@@ -564,6 +573,7 @@ export class SupabaseSource implements DataSource {
     reports: ReportRow[];
     siteDays: SiteDayRow[];
     messages: MessageRow[];
+    photoLists: NonNullable<RowSet['photoLists']>;
   }> {
     const sources: ReportSourceRow[] = unwrap(
       await this.sb
@@ -574,7 +584,8 @@ export class SupabaseSource implements DataSource {
         .order('taken_at', { ascending: false, nullsFirst: false })
         .limit(SITE_PHOTO_LIMIT),
     ).map(({ reports: _site, ...s }) => s);
-    if (!sources.length) return { sources, reports: [], siteDays: [], messages: [] };
+    if (!sources.length)
+      return { sources, reports: [], siteDays: [], messages: [], photoLists: [] };
     const haveReport = new Set(loadedReports.map((r) => r.id));
     const [reports, messages] = await Promise.all([
       inChunks(
@@ -587,11 +598,27 @@ export class SupabaseSource implements DataSource {
       ),
     ]);
     const haveDay = new Set(loadedSiteDays.map((d) => d.id));
-    const siteDays = await inChunks(
-      reports.map((r) => r.site_day_id).filter((id) => !haveDay.has(id)),
-      (part) => this.sb.from('site_days').select('*').in('id', part).then(unwrap),
+    const current = new Map(
+      [...loadedReports, ...reports].map((r) => [r.id, r.current_version] as const),
     );
-    return { sources, reports, siteDays, messages };
+    const [siteDays, lists] = await Promise.all([
+      inChunks(
+        reports.map((r) => r.site_day_id).filter((id) => !haveDay.has(id)),
+        (part) => this.sb.from('site_days').select('*').in('id', part).then(unwrap),
+      ),
+      // Only the photos column of each version, not the whole report.
+      inChunks(uniq(sources.map((s) => s.report_id)), (part) =>
+        this.sb
+          .from('report_versions')
+          .select('report_id, version, photos:data->photos')
+          .in('report_id', part)
+          .then(unwrap),
+      ),
+    ]);
+    const photoLists = (
+      lists as unknown as Array<{ report_id: string; version: number; photos: unknown }>
+    ).filter((v) => current.get(v.report_id) === v.version);
+    return { sources, reports, siteDays, messages, photoLists };
   }
 
   /**
@@ -818,7 +845,7 @@ export class SupabaseSource implements DataSource {
       site.timezone,
     ).toISOString();
     const [convoMessages, transcripts, siteReports] = await Promise.all([
-      audioMsg
+      audioMsg?.conversation_id
         ? sb
             .from('messages')
             .select('*')
@@ -1329,22 +1356,63 @@ export class SupabaseSource implements DataSource {
   async undoSignOff(reportId: string) {
     await this.rpc('undo_sign_off', { p_report_id: reportId });
   }
-  async createReportVersion(reportId: string, data: DailyReportData, changeNote: string) {
+  async createReportVersion(
+    reportId: string,
+    data: DailyReportData,
+    changeNote: string,
+    photos: OfficePhotoUpload[] = [],
+  ) {
     const res = (await this.rpc('create_report_version', {
       p_report_id: reportId,
       p_data: data as never,
       p_change_note: changeNote,
+      ...(photos.length ? { p_photos: photos as never } : {}),
     })) as { version?: number } | null;
     return { version: res?.version ?? 0 };
   }
   async createOfficeReport(input: CreateOfficeReportInput): Promise<CreateOfficeReportResult> {
+    const photos = input.photos ?? [];
     const res = (await this.rpc('create_office_report', {
       p_site_id: input.siteId,
       p_date: input.date,
       p_data: input.data as never,
+      ...(photos.length ? { p_photos: photos as never } : {}),
     })) as Partial<CreateOfficeReportResult> | null;
     if (!res?.reportId || !res.reportNo) throw new Error(copy.errors.generic);
     return { reportId: res.reportId, reportNo: res.reportNo, created: res.created === true };
+  }
+  async findDayReport(siteId: string, date: string) {
+    const days = unwrap(
+      await this.sb.from('site_days').select('id').eq('site_id', siteId).eq('date', date).limit(1),
+    );
+    const day = days[0];
+    if (!day) return null;
+    const reports = unwrap(
+      await this.sb
+        .from('reports')
+        .select('id, report_no')
+        .eq('site_day_id', day.id)
+        .neq('status', 'void')
+        .order('created_at', { ascending: true })
+        .limit(1),
+    );
+    const r = reports[0];
+    return r ? { reportId: r.id, reportNo: r.report_no } : null;
+  }
+  /** Random object names, so no upsert: the storage policy allows inserts only. */
+  async uploadReportPhoto(
+    siteId: string,
+    photo: Blob,
+    mime: OfficePhotoMime,
+  ): Promise<UploadedPhoto> {
+    const path = officePhotoStoragePath(this.orgId, siteId, randomUuid(), mime);
+    const { error } = await this.sb.storage.from('photos').upload(path, photo, {
+      contentType: mime,
+      upsert: false,
+      cacheControl: '3600',
+    });
+    if (error) throw new Error(error.message);
+    return { path, mime };
   }
   async saveReportPdf(input: SaveReportPdfInput) {
     const path = pdfStoragePath(this.orgId, input.siteId, input.reportNo, input.version);

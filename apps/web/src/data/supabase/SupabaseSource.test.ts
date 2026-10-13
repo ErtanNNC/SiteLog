@@ -142,6 +142,8 @@ class FakeQuery implements PromiseLike<Result> {
   private offset = 0;
   private one = false;
   private embedReports = false;
+  /** `alias:column->key` items of the select list (a JSON field read as its own column). */
+  private jsonFields: Array<{ alias: string; column: string; key: string }> = [];
   private count = false;
   private head = false;
 
@@ -166,6 +168,15 @@ class FakeQuery implements PromiseLike<Result> {
 
   select(columns = '*', opts: { count?: string; head?: boolean } = {}) {
     if (columns.includes('reports!inner')) this.embedReports = true;
+    this.jsonFields = [...columns.matchAll(/(\w+):(\w+)->(\w+)/g)].map(
+      ([, alias, column, key]) => ({
+        alias: alias!,
+        column: column!,
+        key: key!,
+      }),
+    );
+    if (this.jsonFields.length)
+      this.db.calls.push({ table: this.table, method: 'select', value: columns });
     this.count = !!opts.count;
     this.head = !!opts.head;
     return this;
@@ -251,6 +262,17 @@ class FakeQuery implements PromiseLike<Result> {
     out = out.slice(this.offset, limit === Infinity ? undefined : this.offset + limit);
     if (this.embedReports)
       out = out.map((r) => ({ ...r, reports: { site_id: this.value(r, 'reports.site_id') } }));
+    // Only the selected JSON field, not the whole column (as PostgREST answers).
+    if (this.jsonFields.length)
+      out = out.map((r) => {
+        const row: Row = { ...r };
+        for (const f of this.jsonFields) {
+          const json = r[f.column] as Row | null | undefined;
+          row[f.alias] = json?.[f.key] ?? null;
+          delete row[f.column];
+        }
+        return row;
+      });
     return { data: this.one ? (out[0] ?? null) : out, error: null, count };
   }
 
@@ -267,12 +289,24 @@ class FakeDb {
   /** PostgREST's max_rows (supabase/config.toml: 1000); unlimited unless a test sets it. */
   maxRows = Infinity;
   signed: string[][] = [];
+  uploads: Array<{ bucket: string; path: string; body: unknown; opts: unknown }> = [];
+  rpcs: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  /** What each RPC answers. */
+  rpcData: Record<string, unknown> = {};
   constructor(readonly tables: Record<string, Row[]>) {}
   from(table: string) {
     return new FakeQuery(this, table);
   }
+  async rpc(fn: string, args: Record<string, unknown>) {
+    this.rpcs.push({ fn, args });
+    return { data: this.rpcData[fn] ?? null, error: null };
+  }
   storage = {
     from: (bucket: string) => ({
+      upload: async (path: string, body: unknown, opts: unknown) => {
+        this.uploads.push({ bucket, path, body, opts });
+        return { data: { path }, error: null };
+      },
       createSignedUrl: async (path: string) => ({
         data: { signedUrl: `https://storage.test/${bucket}/${path}` },
         error: null,
@@ -367,8 +401,17 @@ describe('SupabaseSource.getSiteDetail', () => {
     const demoPhotos = store.data.sources.filter(
       (s) => s.kind === 'photo' && siteReports.has(s.report_id),
     ).length;
-    // A long-running site: 150 more photos (more than one IN_CHUNK) on one of its reports.
+    // A long-running site: 150 more photos (more than one IN_CHUNK) on one of its reports, which
+    // its current version lists (a copy of the row: the demo store keeps its own).
     const reportId = [...siteReports][0]!;
+    const report = store.data.reports.find((r) => r.id === reportId)!;
+    const versions = db.tables.report_versions!;
+    const vIndex = versions.findIndex(
+      (v) => v.report_id === reportId && v.version === report.current_version,
+    );
+    const vData = versions[vIndex]!.data as DailyReportData;
+    const extra: DailyReportData['photos'] = [];
+    versions[vIndex] = { ...versions[vIndex]!, data: { ...vData, photos: [...vData.photos] } };
     for (let i = 0; i < 150; i++) {
       const at = `2026-09-21T15:${String(i % 60).padStart(2, '0')}:00Z`;
       db.tables.messages!.push({
@@ -384,7 +427,9 @@ describe('SupabaseSource.getSiteDetail', () => {
         caption: null,
         taken_at: at,
       });
+      extra.push({ messageId: `msg-extra-${i}`, takenAt: at });
     }
+    (versions[vIndex]!.data as DailyReportData).photos.push(...extra);
 
     db.calls = [];
     const d = await live.getSiteDetail(site.id, '2026-09');
@@ -414,6 +459,138 @@ describe('SupabaseSource.getSiteDetail', () => {
     expect(strip(await detailOf(live, site.id, '2026-09'))).toEqual(
       strip(await detailOf(demo, site.id, '2026-09')),
     );
+  });
+});
+
+describe('SupabaseSource: office photos', () => {
+  const lena = demoUserFor('admin');
+  const user = { id: lena.id, email: lena.email, name: lena.name, role: lena.role };
+  const jpeg = () => new Blob(['jpeg'], { type: 'image/jpeg' });
+
+  it('shows each report’s photos as its current version lists them, reading only data->photos', async () => {
+    const store = new DemoStore();
+    const setup = new DemoSource(store, user);
+    const elm = store.data.sites.find((s) => s.project_code === 'ES-0377')!;
+    const a = await setup.uploadReportPhoto(elm.id, jpeg(), 'image/jpeg');
+    const b = await setup.uploadReportPhoto(elm.id, jpeg(), 'image/jpeg');
+    const { reportId } = await setup.createOfficeReport({
+      siteId: elm.id,
+      date: '2026-10-09',
+      data: { ...emptyReportData('2026-10-09'), summary: 'Framing.' },
+      photos: [
+        { path: a.path, mime: a.mime, caption: 'North wall', takenAt: '2026-10-09T15:00:00Z' },
+        { path: b.path, mime: b.mime, caption: null, takenAt: '2026-10-09T16:00:00Z' },
+      ],
+    });
+    const v1 = (await setup.getReportDetail(reportId)).data;
+    // v2 drops the first photo and captions the second.
+    await setup.createReportVersion(
+      reportId,
+      { ...v1, photos: [{ ...v1.photos[1]!, caption: 'South wall' }] },
+      'Wrong photo',
+    );
+
+    const { db, live, demo } = sources(store);
+    db.calls = [];
+    const d = await live.getSiteDetail(elm.id, '2026-10');
+    const office = d.photos!.filter((p) => p.reportId === reportId);
+    expect(office).toEqual([
+      expect.objectContaining({
+        caption: 'South wall',
+        takenAt: '2026-10-09T16:00:00.000Z',
+        storagePath: b.path,
+        url: `https://storage.test/photos/${b.path}`,
+      }),
+    ]);
+    expect(await detailOf(live, elm.id, '2026-10')).toEqual(
+      await detailOf(demo, elm.id, '2026-10'),
+    );
+    expect(db.calls).toContainEqual({
+      table: 'report_versions',
+      method: 'select',
+      value: 'report_id, version, photos:data->photos',
+    });
+  });
+
+  it('uploads to {org}/{site}/office/{uuid}.jpg without overwrite and passes p_photos', async () => {
+    const { store, db, live } = sources();
+    const elm = store.data.sites.find((s) => s.project_code === 'ES-0377')!;
+    const up = await live.uploadReportPhoto(elm.id, jpeg(), 'image/jpeg');
+    expect(up.mime).toBe('image/jpeg');
+    expect(up.path).toMatch(
+      new RegExp(
+        `^${store.data.org.id}/${elm.id}/office/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.jpg$`,
+      ),
+    );
+    expect(db.uploads).toEqual([
+      {
+        bucket: 'photos',
+        path: up.path,
+        body: expect.any(Blob),
+        opts: { contentType: 'image/jpeg', upsert: false, cacheControl: '3600' },
+      },
+    ]);
+
+    const photos = [
+      { path: up.path, mime: up.mime, caption: 'Deck', takenAt: '2026-10-09T15:00:00Z' },
+    ];
+    db.rpcData.create_office_report = { reportId: 'r1', reportNo: 'ES-0377-0042', created: true };
+    db.rpcData.create_report_version = { version: 2 };
+    const data = emptyReportData('2026-10-09');
+    await live.createOfficeReport({ siteId: elm.id, date: '2026-10-09', data, photos });
+    await live.createReportVersion('r1', data, 'Added a photo', photos);
+    // Without photos the calls stay as before (the default p_photos is []).
+    await live.createOfficeReport({ siteId: elm.id, date: '2026-10-08', data });
+    await live.createReportVersion('r1', data, 'Typo');
+    expect(db.rpcs).toEqual([
+      {
+        fn: 'create_office_report',
+        args: { p_site_id: elm.id, p_date: '2026-10-09', p_data: data, p_photos: photos },
+      },
+      {
+        fn: 'create_report_version',
+        args: { p_report_id: 'r1', p_data: data, p_change_note: 'Added a photo', p_photos: photos },
+      },
+      {
+        fn: 'create_office_report',
+        args: { p_site_id: elm.id, p_date: '2026-10-08', p_data: data },
+      },
+      {
+        fn: 'create_report_version',
+        args: { p_report_id: 'r1', p_data: data, p_change_note: 'Typo' },
+      },
+    ]);
+  });
+});
+
+describe('SupabaseSource.findDayReport', () => {
+  it('finds the day’s report that is not void, like create_office_report, as DemoSource does', async () => {
+    const { store, db, live, demo } = sources();
+    const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
+    const elm = store.data.sites.find((s) => s.project_code === 'ES-0377')!;
+    for (const [siteId, date] of [
+      [hero.site_id, '2026-10-09'],
+      [elm.id, '2026-08-01'],
+      [elm.id, '2026-10-09'],
+    ] as const)
+      expect(await live.findDayReport(siteId, date)).toEqual(
+        await demo.findDayReport(siteId, date),
+      );
+    expect(await live.findDayReport(hero.site_id, '2026-10-09')).toEqual({
+      reportId: hero.id,
+      reportNo: 'RL-2041-0187',
+    });
+    expect(db.calls).toContainEqual({
+      table: 'reports',
+      method: 'neq',
+      column: 'status',
+      value: 'void',
+    });
+    // A voided report does not hold the day.
+    db.tables.reports = db.tables.reports!.map((r) =>
+      r.id === hero.id ? { ...r, status: 'void' } : r,
+    );
+    expect(await live.findDayReport(hero.site_id, '2026-10-09')).toBeNull();
   });
 });
 

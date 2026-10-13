@@ -484,7 +484,8 @@ export const copy = {
       title: (n: number) => `${plural(n, 'photo')}`,
       dateFilter: 'Date',
       allDates: 'All dates',
-      empty: 'No photos yet. Site managers can send them with the voice note.',
+      empty:
+        'No photos yet. Site managers send them with the voice note; the office adds them to a report with Edit.',
       open: (caption: string) => `Open photo: ${caption}`,
       noPreview: 'Preview not available',
       openReport: (no: string) => `Open report ${no}`,
@@ -610,7 +611,11 @@ export const copy = {
     cancel: 'Cancel',
     filed: (no: string) => `${no} filed.`,
     exists: (no: string) =>
-      `${no} already covers this site and date. Opened it; use Edit to change it.`,
+      `${no} already covers this site and date, so this report was not filed. What you typed is still here: open ${no} and use Edit to add to it, or pick another site or date.`,
+    openExisting: (no: string) => `Open ${no}`,
+    restored:
+      'Restored the report you were typing in this tab. Photos are not kept: add them again.',
+    startOver: 'Start over',
     pdfLater: 'The report is filed. The PDF could not be made yet; open the report and press PDF.',
   },
 
@@ -720,6 +725,7 @@ export const copy = {
     questionAsked: (time: string) => `Asked ${time}`,
     confirmedByReply: 'Confirmed by reply',
     photoCaption: (time: string) => `Taken ${time}`,
+    photoAlt: (time: string | null) => (time ? `Site photo taken ${time}` : 'Site photo'),
     title: (weekday: string, site: string) => `${weekday} — ${site}`,
     versionLine: (author: string, time: string, note: string | null) =>
       `${author} · ${time}${note ? ` · ${note}` : ''}`,
@@ -828,6 +834,41 @@ export const copy = {
       cancelBody: 'Your edits will be lost.',
       discard: 'Discard',
       keepEditing: 'Keep editing',
+      photos: {
+        title: 'Photos',
+        hint: 'Photos from your phone or computer. They are resized and uploaded when you save.',
+        pdfHint: (n: number) =>
+          n === 1
+            ? 'The PDF prints the first photo; move the one it should show to the front.'
+            : `The PDF prints the first ${n}; move the ones it should show to the front.`,
+        inPdf: 'In PDF',
+        moveEarlier: (i: number) => `Move photo ${i} earlier`,
+        moveLater: (i: number) => `Move photo ${i} later`,
+        add: 'Add photos',
+        count: (n: number, max: number) => `${n} of ${max}`,
+        countLabel: (n: number, max: number) => `${plural(n, 'photo')} of ${max}`,
+        full: (max: number) => `A report holds up to ${max} photos. Remove one to add another.`,
+        empty: 'No photos yet.',
+        alt: (i: number) => `Photo ${i}`,
+        caption: (i: number) => `Caption for photo ${i}`,
+        captionPlaceholder: 'Caption (optional)',
+        remove: (i: number) => `Remove photo ${i}`,
+        preparing: 'Preparing…',
+        taken: (when: string) => `Taken ${when}`,
+        dismiss: 'Dismiss',
+        notImage: (name: string) => `${name} is not an image.`,
+        tooLarge: (name: string) => `${name} is larger than 25 MB.`,
+        tooManyPixels: (name: string, megapixels: number) =>
+          `${name} is a ${megapixels}-megapixel photo, too large to prepare here. Use a copy under 50 megapixels.`,
+        heic: (name: string) =>
+          `${name} is a HEIC photo this browser can’t open. Use Safari, or save it as JPEG first.`,
+        unreadable: (name: string) => `${name} couldn’t be opened. Try a JPEG or PNG.`,
+        limit: (max: number, skipped: number) =>
+          `A report holds up to ${max} photos; ${plural(skipped, 'photo was', 'photos were')} not added.`,
+        notReady: 'A photo couldn’t be prepared. Check the Photos section and save again.',
+        uploading: (i: number, n: number) => `Uploading photos ${i} of ${n}`,
+        uploadFailed: 'A photo couldn’t be uploaded. Nothing was saved; try again.',
+      },
     },
   },
 

@@ -1,4 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+
+/** A 48 × 36 PNG: the panel turns it into a JPEG before it is "uploaded". */
+const SITE_PHOTO = fileURLToPath(new URL('./fixtures/site-photo.png', import.meta.url));
 
 async function signIn(page: Page, as?: string) {
   await page.goto(as ? `/login?as=${as}` : '/login');
@@ -108,7 +112,9 @@ test.describe('SiteLog panel (demo mode)', () => {
     await expect(row.getByText('Filed', { exact: true })).toBeVisible();
   });
 
-  test('new report: type Elm St.’s missing report, file it and open its PDF', async ({ page }) => {
+  test('new report: type Elm St.’s missing report with a photo, file it and open its PDF', async ({
+    page,
+  }) => {
     await signIn(page);
     await expect(page.getByRole('heading', { name: 'Today across 6 sites' })).toBeVisible();
     await page
@@ -125,11 +131,26 @@ test.describe('SiteLog panel (demo mode)', () => {
     await editor.getByRole('textbox').first().fill('Framing continued on units 3 and 4.');
     await editor.getByRole('button', { name: 'Add work item' }).click();
     await editor.getByLabel('Activity').first().fill('Wall framing');
+    // A photo: prepared in the browser (decoded, JPEG), previewed, captioned.
+    const picker = editor.getByTestId('photo-picker');
+    await picker.getByTestId('photo-input').setInputFiles(SITE_PHOTO);
+    const thumb = picker.getByRole('img', { name: 'Photo 1' });
+    await expect(thumb).toBeVisible();
+    await expect(thumb).toHaveJSProperty('complete', true);
+    expect(await thumb.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(48);
+    await picker.getByLabel('Caption for photo 1').fill('Units 3 and 4 framed');
+    await expect(picker.getByTestId('photo-count')).toContainText('1 photo of 20');
     await page.getByTestId('file-report').click();
 
     await expect(page).toHaveURL(/\/reports\/(?!new)[^/?]+$/);
     await expect(page.getByText(/Entered by .+ in SiteLog at/)).toBeVisible();
     await expect(page.getByText('Wall framing')).toBeVisible();
+    // The filed report shows the photo with its caption.
+    const photos = page.getByTestId('section-photos');
+    const photo = photos.getByRole('img', { name: 'Units 3 and 4 framed' });
+    await expect(photo).toBeVisible();
+    expect(await photo.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(48);
+    await expect(photos.getByText('Units 3 and 4 framed')).toBeVisible();
 
     // Capture the URL the PDF button opens (headless Chromium has no PDF viewer, so a PDF tab
     // stays blank there) and check that it really is a PDF.
@@ -146,14 +167,16 @@ test.describe('SiteLog panel (demo mode)', () => {
       const urls = (window as unknown as { __opened: string[] }).__opened;
       return urls.find((u) => u.startsWith('blob:')) ?? null;
     });
-    const head = await page.evaluate(
+    const pdf = await page.evaluate(
       async (url) => {
-        const bytes = await (await fetch(url)).arrayBuffer();
-        return new TextDecoder().decode(bytes.slice(0, 5));
+        const text = new TextDecoder('latin1').decode(await (await fetch(url)).arrayBuffer());
+        return { head: text.slice(0, 5), hasImage: /\/Subtype\s*\/Image/.test(text) };
       },
       (await opened.jsonValue()) as string,
     );
-    expect(head).toBe('%PDF-');
+    expect(pdf.head).toBe('%PDF-');
+    // "08 Site photos" embeds the uploaded photo.
+    expect(pdf.hasImage).toBe(true);
 
     await page
       .getByRole('navigation', { name: 'Main navigation' })

@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -23,10 +23,12 @@ import {
 } from '@/components/ui/Select';
 import { copy } from '@/copy/en';
 import { useDataSource } from '@/data/DataProvider';
-import { useCreateOfficeReport, useGlossary, useReportPdf } from '@/data/hooks';
+import { useCreateOfficeReport, useGlossary, useReportPdf, useSettings } from '@/data/hooks';
 import type { CompanyOption, SiteOption } from '@/data/types';
 import { errorMessage } from '@/lib/utils';
+import { PhotoPicker } from '../report/PhotoPicker';
 import { ReportEditor } from '../report/ReportEditor';
+import { usePhotoDraft } from '../report/usePhotoDraft';
 import {
   reportFormSchema,
   toFormValues,
@@ -34,13 +36,17 @@ import {
   withoutOfficeEdits,
   type ReportFormValues,
 } from '../report/reportForm';
+import { newReportDraftKey, readNewReportDraft, writeNewReportDraft } from './draft';
 
 const c = copy.newReport;
+const cp = copy.report.editMode.photos;
 
 /**
- * New report — the office types a site's daily report (no WhatsApp, no AI). It is filed on save
- * as version 1 (create_office_report) and its PDF is rendered in the browser with the worker's
- * document. `?site=` and `?date=` preselect the fields.
+ * New report — the office types a site's daily report (no WhatsApp, no AI), with photos. It is
+ * filed on save as version 1 (create_office_report, after the photos are uploaded) and its PDF
+ * is rendered in the browser with the worker's document. `?site=` and `?date=` preselect the
+ * fields. A day that already has a report is caught before anything is uploaded, and the page
+ * keeps what was typed (also across a reload: ./draft).
  */
 export default function NewReportPage() {
   // The glossary view model carries the org's sites and companies.
@@ -65,31 +71,121 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
   const [params] = useSearchParams();
   const create = useCreateOfficeReport();
   const reportPdf = useReportPdf();
-  const [siteId, setSiteId] = useState(() => {
+  const settings = useSettings();
+  const draftKey = newReportDraftKey(source.orgId, source.user.id);
+  // The form with nothing typed (the report date is chosen above, not in the form).
+  const [blank] = useState(() =>
+    toFormValues(emptyReportData(source.now().toISOString().slice(0, 10))),
+  );
+  const paramSite = () => {
     const wanted = params.get('site');
     if (wanted && sites.some((s) => s.id === wanted)) return wanted;
     return sites.length === 1 ? sites[0]!.id : '';
+  };
+  const paramDate = () => {
+    const wanted = params.get('date');
+    return wanted && /^\d{4}-\d{2}-\d{2}$/.test(wanted) ? wanted : null;
+  };
+  // What this tab was typing before a reload, unless the link asks for another site or day.
+  const [{ draft: restoredDraft, skipped: skippedDraft }] = useState(() => {
+    const d = readNewReportDraft(draftKey, blank);
+    if (!d) return { draft: null, skipped: false };
+    const wantSite = params.get('site');
+    const wantDate = params.get('date');
+    if ((wantSite && wantSite !== d.siteId) || (wantDate && wantDate !== d.date))
+      return { draft: null, skipped: true };
+    return { draft: d, skipped: false };
   });
+  // The tab's draft slot is this page's, except while another day's draft sits there untouched.
+  const ownsDraft = useRef(!skippedDraft);
+  const [restored, setRestored] = useState(restoredDraft !== null);
+  const [siteId, setSiteId] = useState(() =>
+    restoredDraft && sites.some((s) => s.id === restoredDraft.siteId)
+      ? restoredDraft.siteId
+      : paramSite(),
+  );
   const site = sites.find((s) => s.id === siteId) ?? null;
   // "Today" is the site's local date (before a site is picked, the org's).
   const today = formatDateInTz(source.now(), site?.timezone ?? currentOrg?.timezone ?? 'UTC');
   // null: follow the selected site's today until the user picks a date.
-  const [pickedDate, setPickedDate] = useState<string | null>(() => {
-    const wanted = params.get('date');
-    return wanted && /^\d{4}-\d{2}-\d{2}$/.test(wanted) ? wanted : null;
-  });
+  const [pickedDate, setPickedDate] = useState<string | null>(
+    () => restoredDraft?.date ?? paramDate(),
+  );
   const date = pickedDate ?? today;
   const [fieldError, setFieldError] = useState<{ site?: string; date?: string; body?: string }>({});
   const [busy, setBusy] = useState(false);
+  // The site-day's report when it already has one: nothing is filed or uploaded then.
+  const [existing, setExisting] = useState<{ reportId: string; reportNo: string } | null>(null);
+  const photos = usePhotoDraft();
+  // False once the page is gone (the user left mid-save): nothing is filed after that.
+  const alive = useRef(true);
+  const filed = useRef(false);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
-  // An empty report: every section starts with no rows (the date is chosen above).
-  const [defaultValues] = useState(() => toFormValues(emptyReportData(today)));
+  const [defaultValues] = useState(() => restoredDraft?.values ?? blank);
   const form = useForm<ReportFormValues>({
     resolver: zodResolver(reportFormSchema),
     defaultValues,
   });
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  // Keeps the draft while typing, and at once when the tab is hidden (the camera opens).
+  useEffect(() => {
+    const saveDraft = () => {
+      if (filed.current) return;
+      const values = form.getValues();
+      if (JSON.stringify(values) === JSON.stringify(blank)) {
+        if (ownsDraft.current) writeNewReportDraft(draftKey, null);
+        return;
+      }
+      ownsDraft.current = true;
+      writeNewReportDraft(draftKey, { v: 1, siteId, date, values });
+    };
+    saveDraft();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = form.subscribe({
+      formState: { values: true },
+      callback: () => {
+        clearTimeout(timer);
+        timer = setTimeout(saveDraft, 400);
+      },
+    });
+    const flush = () => {
+      clearTimeout(timer);
+      saveDraft();
+    };
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    window.addEventListener('pagehide', flush);
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+      document.removeEventListener('visibilitychange', onHidden);
+      window.removeEventListener('pagehide', flush);
+    };
+  }, [form, draftKey, blank, siteId, date]);
+
+  const discardDraft = () => {
+    if (ownsDraft.current) writeNewReportDraft(draftKey, null);
+  };
+  const startOver = () => {
+    discardDraft();
+    form.reset(blank);
+    photos.reset();
+    setSiteId(paramSite());
+    setPickedDate(paramDate());
+    setFieldError({});
+    setExisting(null);
+    setRestored(false);
+  };
+
+  const fileReport = async (values: ReportFormValues) => {
     const errors: typeof fieldError = {};
     if (!site) errors.site = c.pickSite;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > today) errors.date = c.future;
@@ -117,23 +213,82 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
       return;
     }
     setBusy(true);
+    setExisting(null);
+    // One toast follows the save: photo uploads, then the PDF.
+    let toastId: string | number | undefined;
     try {
-      const res = await create.mutateAsync({ siteId: site.id, date, data });
-      if (!res.created) {
-        toast.message(c.exists(res.reportNo));
-      } else {
-        const id = toast.loading(copy.report.pdfPreparing);
-        const ok = await reportPdf.prepare(res.reportId, 1);
-        if (ok) toast.success(c.filed(res.reportNo), { id });
-        else toast.warning(c.pdfLater, { id });
+      // A day that has a report already: say so before uploading anything.
+      let found;
+      try {
+        found = await source.findDayReport(site.id, date);
+      } catch (err) {
+        toast.error(errorMessage(err, copy.errors.generic));
+        return;
       }
-      void navigate(`/reports/${res.reportId}`);
+      if (!alive.current) return;
+      if (found) {
+        setExisting(found);
+        return;
+      }
+      const picked = await photos.settle();
+      if (!alive.current) return;
+      if (!picked) {
+        toast.error(cp.notReady);
+        return;
+      }
+      let uploads: Awaited<ReturnType<typeof photos.upload>> = [];
+      if (picked.length) {
+        toastId = toast.loading(cp.uploading(1, picked.length));
+        try {
+          uploads = await photos.upload(source, site.id, picked, (i, n) =>
+            toast.loading(cp.uploading(i, n), { id: toastId }),
+          );
+        } catch {
+          if (alive.current) toast.error(cp.uploadFailed, { id: toastId });
+          else toast.dismiss(toastId);
+          return;
+        }
+      }
+      // The user left while the photos uploaded: file nothing.
+      if (!alive.current) {
+        if (toastId !== undefined) toast.dismiss(toastId);
+        return;
+      }
+      const res = await create.mutateAsync({ siteId: site.id, date, data, photos: uploads });
+      if (!res.created) {
+        // Filed from elsewhere meanwhile: keep what was typed here.
+        if (toastId !== undefined) toast.dismiss(toastId);
+        if (alive.current) setExisting({ reportId: res.reportId, reportNo: res.reportNo });
+        return;
+      }
+      filed.current = true;
+      discardDraft();
+      const id = toast.loading(copy.report.pdfPreparing, { id: toastId });
+      const ok = await reportPdf.prepare(res.reportId, 1);
+      if (ok) toast.success(c.filed(res.reportNo), { id });
+      else toast.warning(c.pdfLater, { id });
+      if (alive.current) void navigate(`/reports/${res.reportId}`);
     } catch {
       // useSourceMutation already showed the error.
+      if (toastId !== undefined) toast.dismiss(toastId);
     } finally {
-      setBusy(false);
+      if (alive.current) setBusy(false);
     }
-  });
+  };
+  const onSubmit = () => form.handleSubmit(fileReport)();
+
+  // While saving, Cancel would leave a save that still files: it waits instead.
+  const cancel = busy ? (
+    <Button variant="ghost" disabled>
+      {c.cancel}
+    </Button>
+  ) : (
+    <Button variant="ghost" asChild>
+      <Link to="/reports" onClick={discardDraft}>
+        {c.cancel}
+      </Link>
+    </Button>
+  );
 
   return (
     <>
@@ -144,9 +299,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
         actions={
           sites.length ? (
             <>
-              <Button variant="ghost" asChild>
-                <Link to="/reports">{c.cancel}</Link>
-              </Button>
+              {cancel}
               <Button onClick={() => void onSubmit()} loading={busy} data-testid="file-report">
                 {c.submit}
               </Button>
@@ -166,74 +319,121 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
         />
       ) : (
         <div className="space-y-4">
-          <Card className="grid gap-4 p-4 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="nr-site">{c.site}</Label>
-              <Select
-                value={siteId}
-                onValueChange={(v) => {
-                  setSiteId(v);
-                  setFieldError((e) => ({ ...e, site: undefined }));
-                }}
-              >
-                <SelectTrigger
-                  id="nr-site"
-                  aria-invalid={!!fieldError.site}
-                  data-testid="new-report-site"
-                >
-                  <SelectValue placeholder={c.pickSite} />
-                </SelectTrigger>
-                <SelectContent>
-                  {sites.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name} · {s.projectCode}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {fieldError.site ? (
-                <p role="alert" className="text-caption font-medium text-missing">
-                  {fieldError.site}
-                </p>
-              ) : null}
+          {restored ? (
+            <div
+              role="status"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-rebar bg-chalk px-4 py-3 text-caption"
+              data-testid="draft-restored"
+            >
+              <span>{c.restored}</span>
+              <Button variant="link" size="sm" onClick={startOver} disabled={busy}>
+                {c.startOver}
+              </Button>
             </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="nr-date">{c.date}</Label>
-              <Input
-                id="nr-date"
-                type="date"
-                value={date}
-                max={today}
-                onChange={(e) => {
-                  setPickedDate(e.target.value);
-                  setFieldError((x) => ({ ...x, date: undefined }));
-                }}
-                aria-invalid={!!fieldError.date}
-                className="font-mono"
-                data-testid="new-report-date"
-              />
-              {fieldError.date ? (
-                <p role="alert" className="text-caption font-medium text-missing">
-                  {fieldError.date}
-                </p>
-              ) : null}
-            </div>
-          </Card>
-
-          {fieldError.body ? (
-            <p role="alert" className="text-caption font-medium text-missing">
-              {fieldError.body}
-            </p>
           ) : null}
+          {existing ? (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-card border border-signal bg-signal-tint/40 px-4 py-3 text-caption"
+              data-testid="day-has-report"
+            >
+              <span className="font-medium">{c.exists(existing.reportNo)}</span>
+              <Button variant="secondary" size="sm" asChild>
+                <Link to={`/reports/${existing.reportId}`}>
+                  {c.openExisting(existing.reportNo)}
+                </Link>
+              </Button>
+            </div>
+          ) : null}
+          {/* Locked while saving: the report was read when the save started. `inert` also stops
+              the Radix selects, which open on pointerdown even in a disabled fieldset. */}
+          <fieldset
+            disabled={busy}
+            inert={busy}
+            className="min-w-0 space-y-4"
+            data-testid="new-report-form"
+          >
+            <Card className="grid gap-4 p-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="nr-site">{c.site}</Label>
+                <Select
+                  value={siteId}
+                  onValueChange={(v) => {
+                    setSiteId(v);
+                    setExisting(null);
+                    setFieldError((e) => ({ ...e, site: undefined }));
+                  }}
+                  disabled={busy}
+                >
+                  <SelectTrigger
+                    id="nr-site"
+                    aria-invalid={!!fieldError.site}
+                    data-testid="new-report-site"
+                  >
+                    <SelectValue placeholder={c.pickSite} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sites.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name} · {s.projectCode}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {fieldError.site ? (
+                  <p role="alert" className="text-caption font-medium text-missing">
+                    {fieldError.site}
+                  </p>
+                ) : null}
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="nr-date">{c.date}</Label>
+                <Input
+                  id="nr-date"
+                  type="date"
+                  value={date}
+                  max={today}
+                  onChange={(e) => {
+                    setPickedDate(e.target.value);
+                    setExisting(null);
+                    setFieldError((x) => ({ ...x, date: undefined }));
+                  }}
+                  aria-invalid={!!fieldError.date}
+                  className="font-mono"
+                  data-testid="new-report-date"
+                />
+                {fieldError.date ? (
+                  <p role="alert" className="text-caption font-medium text-missing">
+                    {fieldError.date}
+                  </p>
+                ) : null}
+              </div>
+            </Card>
 
-          <Form {...form}>
-            <ReportEditor companies={companies} />
-          </Form>
+            {fieldError.body ? (
+              <p role="alert" className="text-caption font-medium text-missing">
+                {fieldError.body}
+              </p>
+            ) : null}
+
+            <Form {...form}>
+              <ReportEditor
+                companies={companies}
+                photos={
+                  <PhotoPicker
+                    draft={photos}
+                    timezone={site?.timezone}
+                    reportDate={date}
+                    pdfMaxPhotos={settings.data?.settings.pdf_max_photos}
+                    disabled={busy}
+                  />
+                }
+              />
+            </Form>
+          </fieldset>
 
           <div className="flex justify-end gap-2 pb-6">
-            <Button variant="ghost" asChild>
-              <Link to="/reports">{c.cancel}</Link>
-            </Button>
+            {cancel}
             <Button onClick={() => void onSubmit()} loading={busy}>
               {c.submit}
             </Button>

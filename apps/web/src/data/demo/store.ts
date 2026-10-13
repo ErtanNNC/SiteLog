@@ -29,8 +29,16 @@ import type {
   ReporterStatus,
   SiteDayStatus,
 } from '@sitelog/shared/enums.ts';
-import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import type { DailyReportData, Photo } from '@sitelog/shared/schemas/report.ts';
 import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import {
+  OFFICE_PHOTO_MAX,
+  PHOTO_CAPTION_MAX,
+  isOfficePhotoMime,
+  placeOfficePhotos,
+  type OfficePhotoMime,
+  type OfficePhotoUpload,
+} from '@sitelog/shared/report/photos.ts';
 import {
   formatReportNo,
   logoStoragePath,
@@ -83,12 +91,23 @@ export function demoUserFor(key: DemoLoginKey | string | null | undefined): Demo
   }
 }
 
+/** An office upload that passed checkOfficePhotos(). */
+interface CheckedPhoto {
+  path: string;
+  mime: OfficePhotoMime;
+  caption: string | null;
+  takenAt: string;
+  position: number | null;
+}
+
 export class DemoStore {
   readonly data: DemoDataset;
   private listeners = new Set<(e: ChangeEvent) => void>();
   private timers: Array<ReturnType<typeof setTimeout>> = [];
   /** Demo logo: an object URL of the picked file, kept for this session only. */
   logoUrl: string | null = null;
+  /** The demo `photos` bucket: paths of office uploads (DemoSource keeps their object URLs). */
+  private readonly uploadedPhotos = new Set<string>();
 
   constructor(dataset: DemoDataset = kestrelDemo()) {
     this.data = structuredClone(dataset);
@@ -265,6 +284,7 @@ export class DemoStore {
     author: ReportVersionRow['author'],
     userId: string | null,
     changeNote: string | null,
+    auditExtra: Record<string, number> = {},
   ): number {
     const next = report.current_version + 1;
     const site = this.site(report.site_id);
@@ -295,7 +315,7 @@ export class DemoStore {
       action: 'report.version_created',
       entity: 'report',
       entity_id: report.id,
-      diff: { version: next, change_note: changeNote },
+      diff: { version: next, change_note: changeNote, ...auditExtra },
     });
     if (wasSigned) {
       this.audit({
@@ -436,26 +456,186 @@ export class DemoStore {
     };
   }
 
+  /**
+   * Mirror of create_report_version(): `data.photos` keeps the report's photos it still lists
+   * (first occurrence, caption as sent, time as recorded), with `photos` (new uploads) placed
+   * among them at their positions (placeOfficePhotos).
+   */
   createReportVersion(
     reportId: string,
     data: DailyReportData,
     changeNote: string,
     userId: string,
+    photos: OfficePhotoUpload[] = [],
   ): number {
     const r = this.report(reportId);
     if (!changeNote.trim()) throw new Error(copy.report.edit.changeNoteRequired);
     const pending = r.review_reasons
       .filter((x) => x.startsWith('unknown_company:'))
       .map((x) => x.slice('unknown_company:'.length));
+
+    const photoSources = this.data.sources.filter(
+      (s) => s.report_id === r.id && s.kind === 'photo',
+    );
+    const byMessage = new Map(photoSources.map((s) => [s.message_id.toLowerCase(), s]));
+    const prevData = this.data.versions.find(
+      (v) => v.report_id === r.id && v.version === r.current_version,
+    )?.data as unknown as Partial<DailyReportData> | undefined;
+    const prevList = Array.isArray(prevData?.photos) ? prevData.photos : null;
+    const prevIds = prevList
+      ? prevList.flatMap((p) => byMessage.get(String(p.messageId).toLowerCase())?.message_id ?? [])
+      : photoSources.map((s) => s.message_id);
+    const listed: Array<Partial<Photo>> = Array.isArray(data.photos)
+      ? data.photos
+      : (prevList ??
+        photoSources.map((s) => ({ messageId: s.message_id, caption: s.caption ?? undefined })));
+    const seen = new Set<string>();
+    const kept: Photo[] = [];
+    for (const p of listed) {
+      const key = typeof p?.messageId === 'string' ? p.messageId.toLowerCase() : '';
+      const src = byMessage.get(key);
+      if (!src || seen.has(key)) continue;
+      seen.add(key);
+      const caption = typeof p.caption === 'string' ? p.caption.trim() : '';
+      if (caption.length > PHOTO_CAPTION_MAX) throw new Error('photo caption is too long');
+      const recorded = prevList?.find(
+        (x) => String(x.messageId).toLowerCase() === key && typeof x.takenAt === 'string',
+      )?.takenAt;
+      const message = this.data.messages.find((m) => m.id === src.message_id);
+      kept.push({
+        messageId: src.message_id,
+        ...(caption ? { caption } : {}),
+        takenAt: recorded ?? src.taken_at ?? message?.created_at ?? this.nowIso(),
+      });
+    }
+    const uploads = this.checkOfficePhotos(r.org_id, r.site_id, photos);
+    const added = this.insertOfficePhotos(r.id, r.org_id, uploads, userId);
+    const shown = placeOfficePhotos(kept, added, uploads);
+    const ids = shown.map((p) => p.messageId);
+
     const next = this.pushVersion(
       r,
-      this.linkTypedCompanies(structuredClone(data), r.id, userId, pending),
+      {
+        ...this.linkTypedCompanies(structuredClone(data), r.id, userId, pending),
+        photos: shown,
+      },
       'office_user',
       userId,
       changeNote.trim(),
+      {
+        photos: ids.length,
+        photos_added: ids.filter((id) => !prevIds.includes(id)).length,
+        photos_removed: new Set(prevIds.filter((id) => !ids.includes(id))).size,
+      },
     );
     this.emit({ table: 'reports', id: r.id });
     return next;
+  }
+
+  /** The demo bucket received this office upload (DemoSource.uploadReportPhoto). */
+  recordPhotoUpload(path: string): void {
+    this.uploadedPhotos.add(path);
+  }
+
+  /**
+   * Mirror of attach_office_photos()'s checks, all before anything is written (the RPC is one
+   * transaction): office path of this org and site, type matching the name, uploaded, unused.
+   */
+  private checkOfficePhotos(
+    orgId: string,
+    siteId: string,
+    photos: OfficePhotoUpload[] | undefined,
+  ): CheckedPhoto[] {
+    const list: unknown = photos ?? [];
+    if (!Array.isArray(list)) throw new Error('photos must be a JSON array');
+    if (list.length > OFFICE_PHOTO_MAX) throw new Error('at most 20 photos at a time');
+    const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pathRe = new RegExp(
+      `^${esc(orgId)}/${esc(siteId)}/office/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.(jpg|jpeg|png|webp)$`,
+    );
+    const now = this.now.getTime();
+    const seen = new Set<string>();
+    return (list as Array<Partial<OfficePhotoUpload> | null>).map((p) => {
+      if (!p || typeof p !== 'object') throw new Error('photo must be a JSON object');
+      const path = typeof p.path === 'string' ? p.path : '';
+      if (!pathRe.test(path)) throw new Error('unexpected photo path');
+      const mime = String(p.mime ?? '');
+      if (!isOfficePhotoMime(mime)) throw new Error('unsupported photo type');
+      const ext = path.slice(path.lastIndexOf('.') + 1);
+      const extMime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      if (mime !== extMime) throw new Error('photo type does not match its file name');
+      if (p.caption != null && typeof p.caption !== 'string')
+        throw new Error('photo caption must be text');
+      const caption = p.caption?.trim() || null;
+      if (caption && caption.length > PHOTO_CAPTION_MAX)
+        throw new Error('photo caption is too long');
+      let taken = now;
+      if (typeof p.takenAt === 'string') {
+        const t = Date.parse(p.takenAt);
+        if (!Number.isFinite(t)) throw new Error('invalid photo time');
+        taken = Math.min(t, now);
+      } else if (p.takenAt != null) throw new Error('invalid photo time');
+      const position = p.position ?? null;
+      if (
+        position !== null &&
+        (typeof position !== 'number' ||
+          !Number.isInteger(position) ||
+          position < 0 ||
+          position > 1000)
+      )
+        throw new Error('invalid photo position');
+      if (seen.has(path) || this.data.messages.some((m) => m.storage_path === path))
+        throw new Error('photo already attached');
+      if (!this.uploadedPhotos.has(path)) throw new Error('photo not uploaded');
+      seen.add(path);
+      return { path, mime, caption, takenAt: new Date(taken).toISOString(), position };
+    });
+  }
+
+  /** Each checked upload as an org-level message + photo source; returns its data.photos entry. */
+  private insertOfficePhotos(
+    reportId: string,
+    orgId: string,
+    uploads: CheckedPhoto[],
+    userId: string,
+  ): Photo[] {
+    return uploads.map((u) => {
+      const id = localId('msg');
+      this.data.messages.push({
+        id,
+        conversation_id: null,
+        org_id: orgId,
+        direction: 'in',
+        wa_message_id: null,
+        type: 'image',
+        body: u.caption,
+        payload: { source: 'office_upload', uploaded_by: userId },
+        media_id: null,
+        media_mime: u.mime,
+        storage_path: u.path,
+        duration_s: null,
+        template_name: null,
+        status: 'received',
+        error: null,
+        created_at: this.nowIso(),
+      });
+      this.data.sources.push({
+        id: localId('src'),
+        report_id: reportId,
+        message_id: id,
+        kind: 'photo',
+        caption: u.caption,
+        taken_at: u.takenAt,
+      });
+      return { messageId: id, ...(u.caption ? { caption: u.caption } : {}), takenAt: u.takenAt };
+    });
+  }
+
+  /** The report (not void) the site's day has, as createOfficeReport() looks it up. */
+  findDayReport(siteId: string, date: string): { reportId: string; reportNo: string } | null {
+    const day = this.data.siteDays.find((x) => x.site_id === siteId && x.date === date);
+    const r = day && this.data.reports.find((x) => x.site_day_id === day.id && x.status !== 'void');
+    return r ? { reportId: r.id, reportNo: r.report_no } : null;
   }
 
   /** Mirror of create_office_report(): a report typed in the panel, filed at once as version 1. */
@@ -464,6 +644,7 @@ export class DemoStore {
     date: string;
     data: DailyReportData;
     userId: string;
+    photos?: OfficePhotoUpload[];
   }): { reportId: string; reportNo: string; created: boolean } {
     const d = this.data;
     const site = this.site(input.siteId);
@@ -476,15 +657,22 @@ export class DemoStore {
     const sd = this.siteDayFor(site, input.date);
     const live = d.reports.find((r) => r.site_day_id === sd.id && r.status !== 'void');
     if (live) return { reportId: live.id, reportNo: live.report_no, created: false };
+    const uploads = this.checkOfficePhotos(d.org.id, site.id, input.photos);
 
     site.report_seq += 1;
     const reportNo = formatReportNo(site.project_code, site.report_seq);
     const at = this.nowIso();
     const isLate = Date.parse(at) > Date.parse(sd.deadline_at);
     const reportId = localId('report');
+    // Version 1 shows exactly the photos uploaded with it, ordered by their positions.
+    const photos = placeOfficePhotos(
+      [],
+      this.insertOfficePhotos(reportId, d.org.id, uploads, input.userId),
+      uploads,
+    );
     // Every crew row here was typed by the office: each "Add new…" name becomes a company.
     const data: DailyReportData = this.linkTypedCompanies(
-      { ...structuredClone(input.data), reportDate: input.date, schemaVersion: 1 },
+      { ...structuredClone(input.data), reportDate: input.date, schemaVersion: 1, photos },
       reportId,
       input.userId,
     );
@@ -534,7 +722,13 @@ export class DemoStore {
       action: 'report.filed',
       entity: 'report',
       entity_id: report.id,
-      diff: { trigger: 'office_entry', version: 1, is_late: isLate, date: input.date },
+      diff: {
+        trigger: 'office_entry',
+        version: 1,
+        is_late: isLate,
+        date: input.date,
+        photos: photos.length,
+      },
     });
     this.emit({ table: 'reports', id: report.id });
     this.emit({ table: 'site_days', id: sd.id });
@@ -1343,6 +1537,7 @@ export class DemoStore {
       const msg: MessageRow = {
         id: audioId,
         conversation_id: convo.id,
+        org_id: null,
         direction: 'in',
         wa_message_id: `wamid.demo.sim.${audioId.slice(-6)}`,
         type: 'audio',
@@ -1593,6 +1788,7 @@ export class DemoStore {
       this.data.messages.push({
         id: m.id,
         conversation_id: convo.id,
+        org_id: null,
         direction: m.direction,
         wa_message_id: null,
         type: m.type,

@@ -1,7 +1,12 @@
 import { Camera } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { formatDateShort, formatMonthDay, formatTimeInTz } from '@sitelog/shared/format.ts';
+import {
+  formatDateInTz,
+  formatDateShort,
+  formatMonthDay,
+  formatTimeInTz,
+} from '@sitelog/shared/format.ts';
 import { EmptyState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -22,6 +27,7 @@ import {
 } from '@/components/ui/Select';
 import { copy } from '@/copy/en';
 import type { SitePhoto } from '@/data/types';
+import { formatDateTimeShort } from '@/lib/format';
 import { uniq } from '@/lib/utils';
 
 /** Photos tab: grid with a date filter; click opens a lightbox with the caption and report link. */
@@ -31,6 +37,13 @@ export function PhotosTab({ photos, timezone }: { photos: SitePhoto[]; timezone:
   const dates = useMemo(() => uniq(photos.map((p) => p.date)).filter(Boolean), [photos]);
   const visible = date === 'all' ? photos : photos.filter((p) => p.date === date);
 
+  // The time, or "Taken Oct 12 · 14:05" for a photo taken another day than its report's.
+  const takenOf = (p: SitePhoto) =>
+    p.takenAt && formatDateInTz(p.takenAt, timezone) !== p.date
+      ? copy.report.photoCaption(formatDateTimeShort(p.takenAt, timezone))
+      : p.takenAt
+        ? formatTimeInTz(p.takenAt, timezone)
+        : '';
   const captionOf = (p: SitePhoto) =>
     p.caption ??
     copy.siteDetail.photosTab.caption(
@@ -84,7 +97,7 @@ export function PhotosTab({ photos, timezone }: { photos: SitePhoto[]; timezone:
                     </span>
                     <span className="block font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
                       {formatMonthDay(p.date)}
-                      {p.takenAt ? ` · ${formatTimeInTz(p.takenAt, timezone)}` : ''}
+                      {p.takenAt ? ` · ${takenOf(p)}` : ''}
                     </span>
                   </span>
                 </button>
@@ -108,7 +121,7 @@ export function PhotosTab({ photos, timezone }: { photos: SitePhoto[]; timezone:
                   <DialogTitle>{captionOf(open)}</DialogTitle>
                   <DialogDescription>
                     {formatDateShort(open.date)}
-                    {open.takenAt ? ` · ${formatTimeInTz(open.takenAt, timezone)}` : ''} ·{' '}
+                    {open.takenAt ? ` · ${takenOf(open)}` : ''} ·{' '}
                     <span className="font-mono">{open.reportNo}</span>
                   </DialogDescription>
                 </DialogHeader>

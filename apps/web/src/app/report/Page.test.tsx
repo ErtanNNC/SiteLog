@@ -1,10 +1,29 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { toast } from 'sonner';
+import { describe, expect, it, vi } from 'vitest';
+import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore, demoUserFor, type DemoLoginKey } from '@/data/demo/store';
-import { renderWithProviders } from '@/test/render';
+import type * as PhotosModule from '@/lib/photos';
+import { makeSource, renderWithProviders } from '@/test/render';
 import ReportDetailPage from './Page';
+
+// The browser PDF renderer (react-pdf, fonts) is exercised by the e2e smoke test.
+vi.mock('@/lib/reportPdf', () => ({
+  renderReportDetailPdf: async () => new Blob(['%PDF-1.3'], { type: 'application/pdf' }),
+}));
+
+// jsdom has no canvas: the image encoder is stubbed (lib/photos.test.ts covers the real steps).
+vi.mock('@/lib/photos', async (importOriginal) => ({
+  ...(await importOriginal<typeof PhotosModule>()),
+  preparePhoto: async () => ({
+    blob: new Blob(['jpeg'], { type: 'image/jpeg' }),
+    mime: 'image/jpeg' as const,
+    width: 2000,
+    height: 1500,
+    takenAt: '2026-10-09T23:00:00.000Z',
+  }),
+}));
 
 function renderReport(reportNo: string, opts: { v?: number; as?: DemoLoginKey } = {}) {
   const store = new DemoStore();
@@ -143,6 +162,188 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
     expect(screen.getByTestId('manpower-total-hours')).toHaveTextContent('200');
     expect(screen.getByTestId('provenance')).toHaveTextContent('edited by Lena Ortiz');
   }, 30_000);
+});
+
+describe('ReportDetailPage: photos in Edit', () => {
+  it('removes a WhatsApp photo and adds an office photo as a new version', async () => {
+    const user = userEvent.setup();
+    const { store, report } = renderReport('RL-2041-0187');
+    await screen.findByRole('heading', { name: 'Friday, Oct 9 — Riverside B' });
+    const before = within(screen.getByTestId('section-photos')).getAllByTestId('report-photo');
+    expect(before).toHaveLength(2);
+    const v2 = store.data.versions.find((v) => v.report_id === report.id && v.version === 2)!;
+    const [first, second] = (v2.data as unknown as DailyReportData).photos;
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const picker = within(await screen.findByTestId('report-editor')).getByTestId('photo-picker');
+    expect(within(picker).getAllByTestId('photo-item')).toHaveLength(2);
+    expect(within(picker).getByLabelText('Caption for photo 1')).toHaveValue(first!.caption);
+    await user.click(within(picker).getByRole('button', { name: 'Remove photo 1' }));
+    await user.upload(
+      within(picker).getByTestId('photo-input'),
+      new File(['png'], 'pump.png', { type: 'image/png' }),
+    );
+    expect(await within(picker).findByTestId('photo-thumb')).toBeInTheDocument();
+    await user.type(within(picker).getByLabelText('Caption for photo 2'), 'Pump truck at 13:00');
+    expect(within(picker).getByTestId('photo-count')).toHaveTextContent('2 photos of 20');
+
+    await user.click(screen.getByTestId('save-version'));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(
+      within(dialog).getByLabelText('Change note'),
+      'Wrong morning photo; pump added',
+    );
+    await user.click(within(dialog).getByTestId('confirm-save'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    const row = store.data.reports.find((r) => r.id === report.id)!;
+    expect(row.current_version).toBe(3);
+    const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
+    const added = store.data.messages.find((m) => m.org_id === store.data.org.id)!;
+    expect(added).toMatchObject({ body: 'Pump truck at 13:00', type: 'image' });
+    expect((v3.data as unknown as DailyReportData).photos).toEqual([
+      second,
+      { messageId: added.id, caption: 'Pump truck at 13:00', takenAt: '2026-10-09T23:00:00.000Z' },
+    ]);
+    expect(store.data.audit).toContainEqual(
+      expect.objectContaining({
+        action: 'report.version_created',
+        diff: expect.objectContaining({
+          version: 3,
+          photos: 2,
+          photos_added: 1,
+          photos_removed: 1,
+        }),
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('version-switcher')).toHaveTextContent('v3 · current'),
+    );
+    const section = await screen.findByTestId('section-photos');
+    await waitFor(() =>
+      expect(within(section).getByText('Pump truck at 13:00')).toBeInTheDocument(),
+    );
+    expect(within(section).getAllByTestId('report-photo')).toHaveLength(2);
+    expect(within(section).getByRole('img', { name: 'Pump truck at 13:00' })).toHaveAttribute(
+      'src',
+      expect.stringMatching(/^blob:/),
+    );
+  }, 30_000);
+
+  it('counts a changed caption alone as an edit; an untouched form is "Nothing changed"', async () => {
+    const user = userEvent.setup();
+    const message = vi.spyOn(toast, 'message');
+    const { store, report } = renderReport('RL-2041-0187');
+    await screen.findByRole('heading', { name: 'Friday, Oct 9 — Riverside B' });
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByTestId('save-version'));
+    await waitFor(() => expect(message).toHaveBeenCalledWith('Nothing changed.'));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    message.mockRestore();
+
+    const caption = screen.getByLabelText('Caption for photo 2');
+    await user.clear(caption);
+    await user.type(caption, 'Slab edge, end of day');
+    await user.click(screen.getByTestId('save-version'));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Change note'), 'Clearer caption');
+    await user.click(within(dialog).getByTestId('confirm-save'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
+    expect((v3.data as unknown as DailyReportData).photos.map((p) => p.caption)).toEqual([
+      'Conditions this morning',
+      'Slab edge, end of day',
+    ]);
+  }, 30_000);
+
+  it('places a new photo first, and locks Cancel while the photo uploads', async () => {
+    const user = userEvent.setup();
+    const store = new DemoStore();
+    const source = makeSource('admin', store);
+    const report = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const upload = source.uploadReportPhoto.bind(source);
+    vi.spyOn(source, 'uploadReportPhoto').mockImplementation(async (...args) => {
+      await gate;
+      return upload(...args);
+    });
+    renderWithProviders(<ReportDetailPage />, {
+      source,
+      route: `/reports/${report.id}`,
+      path: '/reports/:reportId',
+    });
+    await screen.findByRole('heading', { name: 'Friday, Oct 9 — Riverside B' });
+    const v2 = store.data.versions.find((v) => v.report_id === report.id && v.version === 2)!;
+    const [first, second] = (v2.data as unknown as DailyReportData).photos;
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const picker = within(await screen.findByTestId('report-editor')).getByTestId('photo-picker');
+    await user.upload(
+      within(picker).getByTestId('photo-input'),
+      new File(['png'], 'crane.png', { type: 'image/png' }),
+    );
+    await within(picker).findByTestId('photo-thumb');
+    await user.click(within(picker).getByRole('button', { name: 'Move photo 3 earlier' }));
+    await user.click(within(picker).getByRole('button', { name: 'Move photo 2 earlier' }));
+    await user.type(within(picker).getByLabelText('Caption for photo 1'), 'Crane lift');
+
+    await user.click(screen.getByTestId('save-version'));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByLabelText('Change note'), 'Crane photo first');
+    await user.click(within(dialog).getByTestId('confirm-save'));
+    // Uploading: neither Cancel can leave a save that still creates the version.
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled(),
+    );
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    release();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
+    const added = store.data.messages.find((m) => m.org_id === store.data.org.id)!;
+    expect((v3.data as unknown as DailyReportData).photos).toEqual([
+      { messageId: added.id, caption: 'Crane lift', takenAt: '2026-10-09T23:00:00.000Z' },
+      first,
+      second,
+    ]);
+  }, 30_000);
+
+  it('dates a photo taken another day than the report’s', async () => {
+    const store = new DemoStore();
+    const report = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
+    const current = store.data.versions.find(
+      (v) => v.report_id === report.id && v.version === report.current_version,
+    )!;
+    const data = current.data as unknown as DailyReportData;
+    data.photos[0] = { ...data.photos[0]!, takenAt: '2026-10-08T19:05:00.000Z' };
+    data.photos[1] = { ...data.photos[1]!, takenAt: '2026-10-09T21:40:00.000Z' };
+    renderWithProviders(<ReportDetailPage />, {
+      store,
+      route: `/reports/${report.id}`,
+      path: '/reports/:reportId',
+    });
+    const section = await screen.findByTestId('section-photos');
+    expect(within(section).getByText('Taken Oct 8 · 14:05')).toBeInTheDocument();
+    expect(within(section).getByText('Taken 16:40')).toBeInTheDocument();
+  });
+
+  it('asks before discarding photo changes', async () => {
+    const user = userEvent.setup();
+    renderReport('RL-2041-0187');
+    await screen.findByRole('heading', { name: 'Friday, Oct 9 — Riverside B' });
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Remove photo 2' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Discard changes?');
+    await user.click(within(dialog).getByRole('button', { name: 'Discard' }));
+    expect(screen.queryByTestId('report-editor')).not.toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('section-photos')).getAllByTestId('report-photo'),
+    ).toHaveLength(2);
+  });
 });
 
 describe('ReportDetailPage (report typed in the panel)', () => {

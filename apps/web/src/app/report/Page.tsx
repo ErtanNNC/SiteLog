@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ChevronLeft, ChevronRight, FileDown, Pencil, PenLine, Undo2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
@@ -40,6 +40,7 @@ import {
   useReportDetail,
   useReportPdf,
   useResolveUnknownCompany,
+  useSettings,
   useSignOff,
   useUndoSignOff,
 } from '@/data/hooks';
@@ -48,6 +49,7 @@ import type { ReportDetail } from '@/data/types';
 import { formatDateTimeShort } from '@/lib/format';
 import { openInNewTab } from '@/lib/tab';
 import { errorMessage } from '@/lib/utils';
+import { PhotoPicker } from './PhotoPicker';
 import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
 import { SourcePanel } from './SourcePanel';
@@ -58,8 +60,10 @@ import {
   toReportData,
   type ReportFormValues,
 } from './reportForm';
+import { reportPhotoEntries, usePhotoDraft } from './usePhotoDraft';
 
 const UNDO_WINDOW_MS = 10 * 60_000;
+const cp = copy.report.editMode.photos;
 
 /** P7 · Report review — structured report + source panel, versions, sign-off, edit → new version (§11.4, F14). */
 export default function ReportDetailPage() {
@@ -117,6 +121,18 @@ function ReportScreen({
   const [discardOpen, setDiscardOpen] = useState(false);
   const [openMessageId, setOpenMessageId] = useState<string | null>(null);
   const [pendingData, setPendingData] = useState<ReportDetail['data'] | null>(null);
+  // The version's photos while editing: re-caption, move, remove, add (uploaded on save).
+  const photos = usePhotoDraft(detail.photos);
+  const settings = useSettings();
+  const [saving, setSaving] = useState(false);
+  // False once the page is gone (the user left mid-save): no version is created after that.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   const r = detail.report;
   const tz = detail.site.timezone;
@@ -147,22 +163,31 @@ function ReportScreen({
       return;
     }
     reset(toFormValues(detail.data));
+    photos.reset(detail.photos);
     setEditing(true);
   };
 
   const onSaveClick = form.handleSubmit((values) => {
     let data: ReportDetail['data'];
     try {
-      data = toReportData(values, detail.data, {
-        userId: source.user.id,
-        at: source.now().toISOString(),
-        companies: detail.companies,
-      });
+      // data.photos: the version's photos still listed, with their captions (new picks are
+      // uploaded on confirm and appended by the server).
+      data = toReportData(
+        values,
+        { ...detail.data, photos: photos.kept() },
+        {
+          userId: source.user.id,
+          at: source.now().toISOString(),
+          companies: detail.companies,
+        },
+      );
     } catch (err) {
       toast.error(errorMessage(err, copy.errors.generic));
       return;
     }
-    if (sameReportData(data, detail.data)) {
+    // A photo change alone is an edit.
+    const shown = { ...detail.data, photos: reportPhotoEntries(detail.photos) };
+    if (sameReportData(data, shown) && !photos.hasNew) {
       toast.message(copy.report.editMode.noChanges);
       return;
     }
@@ -178,20 +203,57 @@ function ReportScreen({
       setNoteError(copy.report.edit.changeNoteRequired);
       return;
     }
-    const res = await createVersion.mutateAsync({
-      reportId: r.id,
-      data: pendingData,
-      changeNote: note.trim(),
-    });
-    setNoteOpen(false);
-    setEditing(false);
-    setPendingData(null);
-    void reportPdf.prepare(r.id, res.version);
-    void navigate(`/reports/${r.id}?v=${res.version}`, { replace: true });
+    setSaving(true);
+    let toastId: string | number | undefined;
+    try {
+      const picked = await photos.settle();
+      if (!alive.current) return;
+      if (!picked) {
+        setNoteOpen(false);
+        toast.error(cp.notReady);
+        return;
+      }
+      let uploads: Awaited<ReturnType<typeof photos.upload>> = [];
+      if (picked.length) {
+        toastId = toast.loading(cp.uploading(1, picked.length));
+        try {
+          uploads = await photos.upload(source, detail.site.id, picked, (i, n) =>
+            toast.loading(cp.uploading(i, n), { id: toastId }),
+          );
+        } catch {
+          if (alive.current) toast.error(cp.uploadFailed, { id: toastId });
+          else toast.dismiss(toastId);
+          return;
+        }
+      }
+      // The user left while the photos uploaded: create no version.
+      if (!alive.current) {
+        if (toastId !== undefined) toast.dismiss(toastId);
+        return;
+      }
+      const res = await createVersion.mutateAsync({
+        reportId: r.id,
+        data: pendingData,
+        changeNote: note.trim(),
+        photos: uploads,
+      });
+      if (toastId !== undefined) toast.dismiss(toastId);
+      void reportPdf.prepare(r.id, res.version);
+      if (!alive.current) return;
+      setNoteOpen(false);
+      setEditing(false);
+      setPendingData(null);
+      void navigate(`/reports/${r.id}?v=${res.version}`, { replace: true });
+    } catch {
+      // useSourceMutation already showed the error.
+      if (toastId !== undefined) toast.dismiss(toastId);
+    } finally {
+      if (alive.current) setSaving(false);
+    }
   };
 
   const onCancelEdit = () => {
-    if (form.formState.isDirty) setDiscardOpen(true);
+    if (form.formState.isDirty || photos.changed) setDiscardOpen(true);
     else setEditing(false);
   };
 
@@ -355,13 +417,14 @@ function ReportScreen({
         actions={
           editing ? (
             <>
-              <Button variant="ghost" onClick={onCancelEdit}>
+              {/* While saving, Cancel would leave a save that still creates the version. */}
+              <Button variant="ghost" onClick={onCancelEdit} disabled={saving}>
                 {copy.report.actions.cancel}
               </Button>
               <Button
                 variant="primary"
                 onClick={() => void onSaveClick()}
-                loading={createVersion.isPending}
+                loading={saving}
                 data-testid="save-version"
               >
                 <PenLine aria-hidden="true" />
@@ -444,7 +507,18 @@ function ReportScreen({
           {editing ? (
             <Form {...form}>
               <form onSubmit={(e) => e.preventDefault()}>
-                <ReportEditor companies={detail.companies} />
+                <ReportEditor
+                  companies={detail.companies}
+                  photos={
+                    <PhotoPicker
+                      draft={photos}
+                      timezone={tz}
+                      reportDate={r.date}
+                      pdfMaxPhotos={settings.data?.settings.pdf_max_photos}
+                      disabled={saving}
+                    />
+                  }
+                />
               </form>
             </Form>
           ) : (
@@ -478,7 +552,7 @@ function ReportScreen({
         }
       />
 
-      <Dialog open={noteOpen} onOpenChange={(o) => !createVersion.isPending && setNoteOpen(o)}>
+      <Dialog open={noteOpen} onOpenChange={(o) => !saving && setNoteOpen(o)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{copy.report.editMode.saveTitle(r.reportNo)}</DialogTitle>
@@ -512,12 +586,12 @@ function ReportScreen({
             ) : null}
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setNoteOpen(false)}>
+            <Button variant="ghost" onClick={() => setNoteOpen(false)} disabled={saving}>
               {copy.common.cancel}
             </Button>
             <Button
               variant="primary"
-              loading={createVersion.isPending}
+              loading={saving}
               onClick={() => void onConfirmSave()}
               data-testid="confirm-save"
             >
@@ -539,6 +613,7 @@ function ReportScreen({
           setDiscardOpen(false);
           setEditing(false);
           reset(toFormValues(detail.data));
+          photos.reset(detail.photos);
         }}
       />
     </>

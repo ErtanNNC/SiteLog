@@ -4,8 +4,14 @@
  */
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { ReportRow } from '@sitelog/shared/db/types.ts';
+import {
+  officePhotoStoragePath,
+  type OfficePhotoMime,
+  type OfficePhotoUpload,
+} from '@sitelog/shared/report/photos.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { copy } from '@/copy/en';
+import { randomUuid } from '@/lib/photos';
 import { sleep } from '@/lib/utils';
 import {
   assembleBilling,
@@ -49,6 +55,7 @@ import {
   type UpdateOrgInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
+  type UploadedPhoto,
 } from '../source';
 import type { ChangeEvent, OrgSettingsPatch, ReportFilters } from '../types';
 import { demoOpsFor } from './ops';
@@ -69,6 +76,8 @@ export class DemoSource implements DataSource {
   private platformAdmin: boolean;
   /** PDFs rendered in this browser session (object URLs), by `${reportId}:${version}`. */
   private readonly pdfUrls = new Map<string, string>();
+  /** Photos uploaded in this browser session (object URLs), by storage path. */
+  private readonly photoUrls = new Map<string, string>();
 
   constructor(
     readonly store: DemoStore,
@@ -94,6 +103,11 @@ export class DemoSource implements DataSource {
     return fn();
   }
 
+  /** The seeded WhatsApp photos have no image in the demo; office uploads do. */
+  private photoUrl(path: string | null): string | null {
+    return path ? (this.photoUrls.get(path) ?? null) : null;
+  }
+
   // ─── Reads ───
   getOrgs() {
     return this.run(() => [orgSummary(this.store.rows(), this.ctx())]);
@@ -105,7 +119,11 @@ export class DemoSource implements DataSource {
     return this.run(() => assembleSiteCards(this.store.rows(), this.ctx()));
   }
   getSiteDetail(siteId: string, month: string) {
-    return this.run(() => assembleSiteDetail(this.store.rows(), this.ctx(), siteId, month));
+    return this.run(() => {
+      const detail = assembleSiteDetail(this.store.rows(), this.ctx(), siteId, month);
+      detail.photos = detail.photos?.map((p) => ({ ...p, url: this.photoUrl(p.storagePath) }));
+      return detail;
+    });
   }
   listReports(filters: ReportFilters) {
     return this.run(() => {
@@ -123,6 +141,7 @@ export class DemoSource implements DataSource {
     return this.run(() => {
       const detail = assembleReportDetail(this.store.rows(), this.ctx(), reportId, version);
       detail.pdfUrl = this.pdfUrls.get(`${detail.report.id}:${detail.version}`) ?? null;
+      detail.photos = detail.photos.map((p) => ({ ...p, url: this.photoUrl(p.storagePath) }));
       return detail;
     });
   }
@@ -207,13 +226,30 @@ export class DemoSource implements DataSource {
   undoSignOff(reportId: string) {
     return this.run(() => this.store.undoSignOff(reportId, this.user.id));
   }
-  createReportVersion(reportId: string, data: DailyReportData, changeNote: string) {
+  createReportVersion(
+    reportId: string,
+    data: DailyReportData,
+    changeNote: string,
+    photos: OfficePhotoUpload[] = [],
+  ) {
     return this.run(() => ({
-      version: this.store.createReportVersion(reportId, data, changeNote, this.user.id),
+      version: this.store.createReportVersion(reportId, data, changeNote, this.user.id, photos),
     }));
+  }
+  /** Demo: the photo lives in memory as an object URL, so the report and its PDF show it. */
+  uploadReportPhoto(siteId: string, photo: Blob, mime: OfficePhotoMime) {
+    return this.run((): UploadedPhoto => {
+      const path = officePhotoStoragePath(this.orgId, siteId, randomUuid(), mime);
+      this.photoUrls.set(path, URL.createObjectURL(photo));
+      this.store.recordPhotoUpload(path);
+      return { path, mime };
+    });
   }
   createOfficeReport(input: CreateOfficeReportInput) {
     return this.run(() => this.store.createOfficeReport({ ...input, userId: this.user.id }));
+  }
+  findDayReport(siteId: string, date: string) {
+    return this.run(() => this.store.findDayReport(siteId, date));
   }
   saveReportPdf(input: SaveReportPdfInput) {
     return this.run(() => {

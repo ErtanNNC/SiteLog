@@ -1,12 +1,15 @@
+import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { admin, ANON_KEY, APP_URL, SUPABASE_URL } from './support';
 
 /**
  * A brand-new customer on a deployment without the worker or the scheduler: one org and its
- * admin, then one site with no reporter, then a report typed in the panel. Every page must load
- * (no "Couldn't load …") and the typed report's PDF must be stored for its version.
+ * admin, then one site with no reporter, then a report typed in the panel with a photo. Every
+ * page must load (no "Couldn't load …"), the photo must be stored and listed by the version, and
+ * the typed report's PDF (with the photo) must be stored for its version.
  */
+const SITE_PHOTO = fileURLToPath(new URL('../fixtures/site-photo.png', import.meta.url));
 test.describe.configure({ mode: 'serial' });
 
 const EMAIL = `fresh-${Date.now()}@sitelog.example`;
@@ -106,7 +109,7 @@ test('one site, no reporter and no site-days yet: every page loads', async ({ pa
   await expect(page.getByText(/^Couldn’t load|^Couldn't load/)).toHaveCount(0);
 });
 
-test('a typed report is filed with its PDF stored, then every page still loads', async ({
+test('a typed report is filed with a photo and its PDF stored, then every page still loads', async ({
   page,
 }) => {
   await signIn(page);
@@ -115,11 +118,69 @@ test('a typed report is filed with its PDF stored, then every page still loads',
   await editor.getByRole('textbox').first().fill('Framing on level 2; drywall delivered.');
   await editor.getByRole('button', { name: 'Add work item' }).click();
   await editor.getByLabel('Activity').first().fill('Level 2 framing');
+  const picker = editor.getByTestId('photo-picker');
+  await picker.getByTestId('photo-input').setInputFiles(SITE_PHOTO);
+  await expect(picker.getByRole('img', { name: 'Photo 1' })).toBeVisible();
+  await picker.getByLabel('Caption for photo 1').fill('Level 2 deck');
   await page.getByTestId('file-report').click();
   await page.waitForURL(/\/reports\/(?!new)[0-9a-f-]{36}$/, { timeout: 60_000 });
   await expect(page.getByText(/Entered by .+ in SiteLog at/)).toBeVisible();
 
   const reportId = new URL(page.url()).pathname.split('/').at(-1)!;
+  // The photo: a JPEG in the private bucket, an org-level message, a photo source of the report
+  // and the one entry of version 1's data.photos; the report page shows it from a signed URL.
+  const { data: sources, error: sourcesError } = await admin()
+    .from('report_sources')
+    .select(
+      'message_id, caption, taken_at, messages(storage_path, media_mime, org_id, conversation_id, body)',
+    )
+    .eq('report_id', reportId)
+    .eq('kind', 'photo');
+  if (sourcesError) throw sourcesError;
+  expect(sources).toHaveLength(1);
+  const source = sources![0] as unknown as {
+    message_id: string;
+    caption: string | null;
+    taken_at: string;
+    messages: {
+      storage_path: string;
+      media_mime: string;
+      org_id: string;
+      conversation_id: string | null;
+      body: string | null;
+    };
+  };
+  expect(source.caption).toBe('Level 2 deck');
+  expect(source.messages).toMatchObject({
+    org_id: orgId,
+    conversation_id: null,
+    media_mime: 'image/jpeg',
+    body: 'Level 2 deck',
+  });
+  expect(source.messages.storage_path).toMatch(
+    new RegExp(`^${orgId}/${siteId}/office/[0-9a-f-]{36}\\.jpg$`),
+  );
+  const { data: photoFile, error: photoError } = await admin()
+    .storage.from('photos')
+    .download(source.messages.storage_path);
+  if (photoError) throw photoError;
+  expect([...new Uint8Array((await photoFile.arrayBuffer()).slice(0, 3))]).toEqual([
+    0xff, 0xd8, 0xff,
+  ]);
+  const { data: v1, error: v1Error } = await admin()
+    .from('report_versions')
+    .select('data')
+    .eq('report_id', reportId)
+    .eq('version', 1)
+    .single();
+  if (v1Error) throw v1Error;
+  expect((v1 as { data: { photos: unknown[] } }).data.photos).toEqual([
+    { messageId: source.message_id, caption: 'Level 2 deck', takenAt: expect.any(String) },
+  ]);
+  const shown = page.getByTestId('section-photos').getByRole('img', { name: 'Level 2 deck' });
+  await expect(shown).toBeVisible();
+  await expect.poll(() => shown.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(48);
+
   // The browser rendered the PDF, uploaded it and attached it to version 1.
   await expect
     .poll(
@@ -139,7 +200,10 @@ test('a typed report is filed with its PDF stored, then every page still loads',
     .storage.from('pdfs')
     .download(`${orgId}/${siteId}/HL-0101-0001_v1.pdf`);
   if (error) throw error;
-  expect(new TextDecoder().decode((await file.arrayBuffer()).slice(0, 5))).toBe('%PDF-');
+  const pdf = new TextDecoder('latin1').decode(await file.arrayBuffer());
+  expect(pdf.slice(0, 5)).toBe('%PDF-');
+  // "08 Site photos" embeds the photo.
+  expect(pdf).toMatch(/\/Subtype\s*\/Image/);
 
   await visitAll(page);
 });

@@ -70,7 +70,7 @@ where status = 'queued' and created_at < now() - interval '1 hour';
 - **Re-render a PDF**: `select enqueue_job('render_pdf', jsonb_build_object('reportId', '<uuid>', 'version', <n>, 'emailRecipients', false));`
 - **Reminders not firing**: check `scheduler_state.last_tick`, the pg_cron job (`select * from cron.job_run_details order by start_time desc limit 20;`) and that `site_days` for today exist with the right `deadline_at` (site time zone + DST).
 - **A reporter changed phones**: Team → row menu → Disable, then Invite reporter with the new number (messages are matched by number, so Team → Edit only changes name, role, sites and languages).
-- **Retention**: the nightly `retention_cleanup` job deletes audio/photos older than `AUDIO_RETENTION_DAYS` (default 730) and `done` jobs finished more than 30 days ago (dead and discarded jobs stay for `/ops`). Reports and PDFs are kept.
+- **Retention**: the nightly `retention_cleanup` job deletes audio/photos older than `AUDIO_RETENTION_DAYS` (default 730), photos uploaded in the panel that no report attached after a day (`photos/{org}/{site}/office/`, listed by `list_orphan_office_photos()`), and `done` jobs finished more than 30 days ago (dead and discarded jobs stay for `/ops`). Reports and PDFs are kept.
 - **Backups**: Supabase PITR/daily backups; restore drill = restore to a branch project, run `pnpm test:db` against it, check the latest `reports` row.
 
 ## 4. Incident playbooks

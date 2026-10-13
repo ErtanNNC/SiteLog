@@ -22,11 +22,37 @@ describe('buildReportPdfInput', () => {
       {
         messageId: 'p1',
         storagePath: 'o/s/a.JPG',
+        mime: 'image/jpeg',
         url: 'https://x/a',
         caption: 'Pour',
         takenAt: '2026-10-09T20:00:00Z',
       },
-      { messageId: 'p2', storagePath: 'o/s/b.png', url: null, caption: null, takenAt: null },
+      {
+        messageId: 'p2',
+        storagePath: 'o/s/b.png',
+        mime: 'image/png',
+        url: null,
+        caption: null,
+        takenAt: null,
+      },
+      // react-pdf embeds JPEG and PNG only: a WebP is left out, as the worker does.
+      {
+        messageId: 'p3',
+        storagePath: 'o/s/c.webp',
+        mime: 'image/webp',
+        url: 'https://x/c',
+        caption: 'WebP',
+        takenAt: '2026-10-09T20:05:00Z',
+      },
+      // No extension: the message's type decides.
+      {
+        messageId: 'p4',
+        storagePath: 'o/s/d',
+        mime: 'image/png',
+        url: 'https://x/d',
+        caption: null,
+        takenAt: '2026-10-09T20:10:00Z',
+      },
     ];
     const input = buildReportPdfInput(detail, settings, {
       logo: null,
@@ -38,9 +64,10 @@ describe('buildReportPdfInput', () => {
     expect(input.reporterName).toBe('Marco Ruiz');
     expect(input.enteredBy).toBeNull();
     expect(input.edits.map((e) => e.version)).toEqual([1, 2]);
-    // Only photos with a URL are embedded; the format comes from the path.
+    // Only JPEG / PNG photos with a URL are embedded; the format comes from the path or type.
     expect(input.photos).toEqual([
       { url: 'https://x/a', format: 'jpg', takenAt: '2026-10-09T20:00:00Z', caption: 'Pour' },
+      { url: 'https://x/d', format: 'png', takenAt: '2026-10-09T20:10:00Z', caption: null },
     ]);
     expect(input.settings.paper).toBe(settings.settings.pdf_paper === 'a4' ? 'a4' : 'letter');
     expect(input.generatedAt).toBe('2026-10-10T00:00:00.000Z');
@@ -71,5 +98,7 @@ describe('buildReportPdfInput', () => {
     expect(imageFormatOf('a/b/p.jpeg?token=1')).toBe('jpg');
     expect(imageFormatOf('a/b/logo.svg')).toBeNull();
     expect(imageFormatOf(null)).toBeNull();
+    expect(imageFormatOf('a/b/office/x.webp', 'image/webp')).toBeNull();
+    expect(imageFormatOf('a/b/blob', 'image/jpeg')).toBe('jpg');
   });
 });

@@ -1,8 +1,8 @@
 /**
  * Edit-mode form model for P7. Numbers are edited as strings (empty = unknown) and converted
- * back into a valid `DailyReportData` on save; untouched sections (photos, equipment, issues,
- * newTerms…) are carried over from the version being edited. Changed rows get an
- * `office_edit` source so every value keeps its provenance (§10.3).
+ * back into a valid `DailyReportData` on save; untouched sections (equipment, issues, newTerms…)
+ * are carried over from the version being edited, photos from the PhotoPicker's draft. Changed
+ * rows get an `office_edit` source so every value keeps its provenance (§10.3).
  */
 import { z } from 'zod';
 import {
@@ -352,11 +352,24 @@ export function withoutOfficeEdits(data: DailyReportData): DailyReportData {
   };
 }
 
-/** Cheap structural comparison for the "Nothing changed" guard. */
+/** JSON with object keys sorted, so key order (zod's parse reorders them) does not count. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)))
+      : v,
+  );
+}
+
+/**
+ * Cheap structural comparison for the "Nothing changed" guard. Photos count by which ones are
+ * listed, in what order and with what caption (their times are the server's to keep).
+ */
 export function sameReportData(a: DailyReportData, b: DailyReportData): boolean {
   const strip = (d: DailyReportData) =>
-    JSON.stringify({
+    stableJson({
       ...d,
+      photos: (d.photos ?? []).map((p) => [p.messageId.toLowerCase(), p.caption?.trim() || null]),
       manpower: d.manpower.map(({ source: _s, confidence: _c, ...m }) => m),
       weather: {
         ...d.weather,

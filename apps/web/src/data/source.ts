@@ -10,6 +10,7 @@ import type {
   ReporterStatus,
   TermKind,
 } from '@sitelog/shared/enums.ts';
+import type { OfficePhotoMime, OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
 import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import type {
   BillingData,
@@ -169,6 +170,15 @@ export interface CreateOfficeReportInput {
   /** YYYY-MM-DD in the site's time zone; today or earlier. */
   date: string;
   data: DailyReportData;
+  /** Photos uploaded with uploadReportPhoto() for this site (at most OFFICE_PHOTO_MAX). */
+  photos?: OfficePhotoUpload[];
+}
+
+/** An office photo in the `photos` bucket, not attached to a report yet. */
+export interface UploadedPhoto {
+  /** {org}/{site}/office/{uuid}.jpg (officePhotoStoragePath). */
+  path: string;
+  mime: OfficePhotoMime;
 }
 
 export interface CreateOfficeReportResult {
@@ -231,13 +241,35 @@ export interface DataSource {
   // ─── Mutations ───
   signOff(reportId: string): Promise<void>;
   undoSignOff(reportId: string): Promise<void>;
+  /**
+   * create_report_version. `data.photos` lists the report's photos the new version keeps (with
+   * their captions, in order); `photos` are new uploads, each placed at its `position` among them
+   * (none: after them).
+   */
   createReportVersion(
     reportId: string,
     data: DailyReportData,
     changeNote: string,
+    photos?: OfficePhotoUpload[],
   ): Promise<{ version: number }>;
-  /** create_office_report: returns the existing report when the site-day already has one. */
+  /**
+   * create_office_report: returns the existing report when the site-day already has one (its
+   * photos are then not attached).
+   */
   createOfficeReport(input: CreateOfficeReportInput): Promise<CreateOfficeReportResult>;
+  /**
+   * The report (not void) a site's day already has, as create_office_report() finds it; New
+   * report checks this before it uploads any photo.
+   */
+  findDayReport(
+    siteId: string,
+    date: string,
+  ): Promise<{ reportId: string; reportNo: string } | null>;
+  /**
+   * Uploads a prepared photo for a report of this site, before the call that files it. Supabase:
+   * photos/{org}/{site}/office/{uuid}.jpg (no overwrite); demo: an in-memory object URL.
+   */
+  uploadReportPhoto(siteId: string, photo: Blob, mime: OfficePhotoMime): Promise<UploadedPhoto>;
   /**
    * Stores a browser-rendered PDF as the version's PDF and returns a URL to open it. Supabase:
    * pdfs/{org}/{site}/{report_no}_v{n}.pdf + attach_version_pdf; demo: an in-memory object URL.

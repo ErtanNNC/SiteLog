@@ -6,10 +6,13 @@
 import type { PdfImage, PdfPhoto, ReportPdfInput } from '@sitelog/pdf';
 import type { ReportDetail, SettingsData } from './types';
 
-export function imageFormatOf(path: string | null | undefined): 'png' | 'jpg' | null {
+export function imageFormatOf(
+  path: string | null | undefined,
+  mime?: string | null,
+): 'png' | 'jpg' | null {
   const ext = (path ?? '').split('?')[0]!.split('.').pop()?.toLowerCase();
-  if (ext === 'png') return 'png';
-  if (ext === 'jpg' || ext === 'jpeg') return 'jpg';
+  if (ext === 'png' || mime === 'image/png') return 'png';
+  if (ext === 'jpg' || ext === 'jpeg' || mime === 'image/jpeg') return 'jpg';
   return null;
 }
 
@@ -29,11 +32,15 @@ export function buildReportPdfInput(
   const r = detail.report;
   const maxPhotos = s.pdf_max_photos;
   const photos: PdfPhoto[] = [];
+  // The version's photos in its order, as the worker's loadPhotos: react-pdf embeds JPEG and PNG
+  // only, so another type (a WebP from WhatsApp) is left out rather than printed as a blank cell.
   for (const p of detail.photos) {
     if (!p.url || photos.length >= maxPhotos) continue;
+    const format = imageFormatOf(p.storagePath, p.mime);
+    if (!format) continue;
     photos.push({
       url: p.url,
-      format: imageFormatOf(p.storagePath) ?? 'jpg',
+      format,
       takenAt: p.takenAt ?? r.receivedAt ?? opts.now.toISOString(),
       caption: p.caption,
     });

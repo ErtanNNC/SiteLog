@@ -354,9 +354,12 @@ export interface AudioSourceInfo {
   language: string | null;
 }
 
+/** A photo the viewed version shows (its data.photos, in order): WhatsApp or office upload. */
 export interface PhotoSourceInfo {
   messageId: string;
   storagePath: string | null;
+  /** messages.media_mime (image/jpeg, image/png, image/webp…). */
+  mime: string | null;
   url: string | null;
   caption: string | null;
   takenAt: string | null;

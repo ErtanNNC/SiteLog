@@ -1,10 +1,11 @@
 import { Camera, CloudRain, Package, ShieldCheck, Sunrise } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { formatHours, formatTimeInTz } from '@sitelog/shared/format.ts';
+import { formatHours } from '@sitelog/shared/format.ts';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { copy } from '@/copy/en';
 import type { ReportDetail } from '@/data/types';
+import { formatWhen } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { ManpowerTable, SourceLinks } from './ManpowerTable';
 
@@ -314,11 +315,20 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
         ) : (
           <ul className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
             {detail.photos.map((p) => (
-              <li key={p.messageId} className="overflow-hidden rounded-card border border-rebar">
+              <li
+                key={p.messageId}
+                className="overflow-hidden rounded-card border border-rebar"
+                data-testid="report-photo"
+              >
                 {p.url ? (
                   <img
                     src={p.url}
-                    alt={p.caption ?? ''}
+                    alt={
+                      p.caption ??
+                      copy.report.photoAlt(
+                        p.takenAt ? formatWhen(p.takenAt, tz, detail.report.date) : null,
+                      )
+                    }
                     className="aspect-[4/3] w-full object-cover"
                   />
                 ) : (
@@ -335,7 +345,8 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
                   <div className="truncate text-caption font-medium">{p.caption ?? '—'}</div>
                   {p.takenAt ? (
                     <div className="font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
-                      {copy.report.photoCaption(formatTimeInTz(p.takenAt, tz))}
+                      {/* A photo taken another day than the report's shows that date too. */}
+                      {copy.report.photoCaption(formatWhen(p.takenAt, tz, detail.report.date))}
                     </div>
                   ) : null}
                 </div>
