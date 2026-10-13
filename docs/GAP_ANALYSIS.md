@@ -661,6 +661,8 @@ Remove each item only after its replacement works and its consumers are switched
 
 Each item: what the repo does, what v1.2 (or the kit `CLAUDE.md`) says, and a recommendation. Items marked **owner** need your answer before the related step; the others are recommendations we will follow unless you object. Numbers (D1–D45) are stable ids for reference from tickets and the plan; they are grouped by topic, so they do not run in order.
 
+**Decided 2026-10-13:** the owner accepted every recommendation in this section, including the **owner** items. Two of them still hang on facts: D19 follows the read-only staging inventory (section 4.1 stage 1; rename if staging holds only demo reporters, otherwise set real ones to `invited`), and D41 needs the owner to create the second free Supabase project and its `preview` GitHub Environment. D23 keeps `CLAUDE_MODEL=claude-sonnet-5-5` for now.
+
 ### Stack and tooling
 
 - **D1 · Node 20 vs 22.** Repo Node 22 (`.nvmrc:1`, `package.json:8`); kit Node 20 (`docs/START_HERE.md:25`, `docs/PLAN_WEEK1.md:26`). Node 20 cannot install this repo or run Vitest 5, and reached end-of-life on 2026-04-30. **Recommend:** keep Node 22 (maintenance LTS to 2027-04-30), plan Node 24 later, record it in README.
