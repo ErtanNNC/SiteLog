@@ -37,10 +37,10 @@ import type {
   DayOffClassification,
 } from '@sitelog/shared/schemas/ai.ts';
 import type {
-  DailyReportData,
-  ObservedWeather,
+  DailyReportDataV1,
+  ObservedWeatherV1,
   QuestionField,
-  Source,
+  SourceV1,
 } from '@sitelog/shared/schemas/report.ts';
 import { ButtonSets, parseButtonId, type Button } from '@sitelog/shared/wa/buttons.ts';
 import { looksLikeDayOff, quickClassify, quickDayOff } from '@sitelog/shared/wa/replies.ts';
@@ -69,7 +69,7 @@ export interface SimFiledSnapshot {
   id: string;
   reportNo: string;
   version: number;
-  data: DailyReportData;
+  data: DailyReportDataV1;
   filedAt: string;
 }
 
@@ -105,7 +105,7 @@ export interface SimContext {
    */
   reminders: Array<{ stage: 'reminder1' | 'reminder2'; at: string }>;
   /** Today's observed weather at the site (extract_report adds it to the report in code). */
-  observedWeather: ObservedWeather | null;
+  observedWeather: ObservedWeatherV1 | null;
   companies: SimCompany[];
   today: {
     /** Today's site-day before the simulator touched it. */
@@ -217,7 +217,7 @@ export interface SimReport {
   reportNo: string;
   kind: SimReportKind;
   status: SimReportStatus;
-  data: DailyReportData | null;
+  data: DailyReportDataV1 | null;
   sources: SimSource[];
   questions: SimQuestion[];
   reviewReasons: string[];
@@ -252,7 +252,13 @@ export type SimEffect =
       status: 'awaiting_answer' | 'awaiting_confirmation';
       at: string;
     }
-  | { type: 'draft'; reportId: string; data: DailyReportData; messageId: string | null; at: string }
+  | {
+      type: 'draft';
+      reportId: string;
+      data: DailyReportDataV1;
+      messageId: string | null;
+      at: string;
+    }
   | { type: 'review_flag'; reportId: string; reasons: string[]; at: string }
   | { type: 'reminders_paused'; at: string }
   | {
@@ -260,7 +266,7 @@ export type SimEffect =
       reportId: string;
       reportNo: string;
       kind: SimReportKind;
-      data: DailyReportData;
+      data: DailyReportDataV1;
       trigger: 'confirm' | 'weather_day' | 'no_work';
       reasons: string[];
       questions: SimQuestion[];
@@ -272,7 +278,7 @@ export type SimEffect =
       type: 'version';
       reportId: string;
       version: number;
-      data: DailyReportData;
+      data: DailyReportDataV1;
       author: 'agent' | 'reporter_reply';
       changeNote: string;
       messageId: string;
@@ -1146,12 +1152,12 @@ function selfPerformIds(s: SimState): Set<string> {
 }
 
 /** The recorded extraction for the scenario, moved onto today and the demo org's ids. */
-function extractionFor(t: Turn, r: SimReport): DailyReportData {
+function extractionFor(t: Turn, r: SimReport): DailyReportDataV1 {
   const sc = t.s.scenario;
   const main = r.sources.find((x) => x.kind === 'audio' || x.kind === 'text');
   let json = JSON.stringify(sc.extraction);
   if (main) for (const id of sc.sourceMessageIds) json = json.split(id).join(main.messageId);
-  const data = JSON.parse(json) as DailyReportData;
+  const data = JSON.parse(json) as DailyReportDataV1;
   data.reportDate = t.ctx.date;
   data.manpower = data.manpower.map((m) => ({ ...m, companyId: mapCompany(t.s, sc, m.companyId) }));
   data.photos = photosOf(r);
@@ -1178,13 +1184,13 @@ function storeDraft(t: Turn, r: SimReport, messageId: string | null): void {
   t.effect({ type: 'draft', reportId: r.id, data: r.data, messageId, at: t.now() });
 }
 
-function photosOf(r: SimReport): DailyReportData['photos'] {
+function photosOf(r: SimReport): DailyReportDataV1['photos'] {
   return r.sources
     .filter((x) => x.kind === 'photo')
     .map((x) => ({ messageId: x.messageId, caption: x.caption ?? undefined, takenAt: x.at }));
 }
 
-function validate(t: Turn, data: DailyReportData, photoCount: number): ValidationResult {
+function validate(t: Turn, data: DailyReportDataV1, photoCount: number): ValidationResult {
   return validateReport(data, { requiredFields: t.ctx.settings.requiredFields, photoCount });
 }
 
@@ -1227,9 +1233,9 @@ function decideNext(t: Turn, r: SimReport): void {
 }
 
 function mergePhotos(
-  have: DailyReportData['photos'],
-  from: DailyReportData['photos'],
-): DailyReportData['photos'] {
+  have: DailyReportDataV1['photos'],
+  from: DailyReportDataV1['photos'],
+): DailyReportDataV1['photos'] {
   const ids = new Set(have.map((p) => p.messageId));
   return [...have, ...from.filter((p) => !ids.has(p.messageId))];
 }
@@ -1537,7 +1543,7 @@ function fileReport(
       ? validate(t, data, photos.length)
       : { gaps: [], missingRequired: [], lowConfidence: [], reviewReasons: [], isComplete: true };
   const reasons = reviewReasonsOf(validation, r.questions, r.reviewReasons);
-  const frozen: DailyReportData = {
+  const frozen: DailyReportDataV1 = {
     ...data,
     missingRequired: validation.missingRequired,
     lowConfidence: validation.lowConfidence,
@@ -1640,7 +1646,7 @@ function attachLatePhotos(t: Turn, r: SimReport, photos: ChatMessage[]): void {
 function newVersion(
   t: Turn,
   r: SimReport,
-  data: DailyReportData,
+  data: DailyReportDataV1,
   author: 'agent' | 'reporter_reply',
   changeNote: string,
   messageId: string,
@@ -1755,7 +1761,7 @@ export interface CorrectionContext {
 }
 
 export type CorrectionOutcome =
-  | { kind: 'patched'; data: DailyReportData; changeNote: string }
+  | { kind: 'patched'; data: DailyReportDataV1; changeNote: string }
   | { kind: 'clarify'; question: string }
   /** The crew and the numbers were understood, and the report already says that. */
   | { kind: 'unchanged' }
@@ -1768,7 +1774,7 @@ export type CorrectionOutcome =
  * are recomputed in code. Anything else is the model's job in production.
  */
 export function correctDraft(
-  data: DailyReportData,
+  data: DailyReportDataV1,
   text: string,
   ctx: CorrectionContext,
 ): CorrectionOutcome {
@@ -1821,7 +1827,7 @@ function escapeRe(s: string): string {
 }
 
 function findCrew(
-  data: DailyReportData,
+  data: DailyReportDataV1,
   text: string,
   companies: ReadonlyArray<SimCompany>,
 ): { index: number; matched: string } | null {
@@ -1904,7 +1910,7 @@ function logWeatherDay(
   }
   const carried = [...photos, ...voidOpenDaily(t)];
   const r = createReport(t, 'weather_day', msg.text);
-  const source: Source =
+  const source: SourceV1 =
     msg.kind === 'voice'
       ? { type: 'audio', messageId: msg.id, start: 0 }
       : { type: 'reply', messageId: msg.id };

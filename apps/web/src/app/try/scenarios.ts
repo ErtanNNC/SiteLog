@@ -3,7 +3,7 @@
  * DailyReportData the extraction must produce for it). The simulator has no AI, so where
  * production transcribes and extracts a free-form note, it replays these recorded results.
  */
-import { DailyReportDataSchema, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { DailyReportDataV1Schema, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import type { QuestionField } from '@sitelog/shared/schemas/report.ts';
 import elmNoWorkExpected from '../../../../../fixtures/expected/elm-2026-10-08-no-work.json';
 import elmNoWorkTranscript from '../../../../../fixtures/transcripts/elm-2026-10-08-no-work.json';
@@ -71,7 +71,7 @@ export interface Scenario {
   /** The day the golden case was recorded; the simulator replays it as today. */
   recordedOn: string;
   /** What the extraction returns for this note (fixtures/expected). */
-  extraction: DailyReportData;
+  extraction: DailyReportDataV1;
   /** Fixture company id → name, to map onto the demo org's companies. */
   fixtureCompanies: Record<string, string>;
   expectedQuestion: { field: QuestionField; path: string } | null;
@@ -86,7 +86,7 @@ function build(
   const voiceIds = [...new Set(t.segments.map((s) => s.messageId))];
   const texts = t.texts ?? [];
   const kind = voiceIds.length > 0 ? 'voice' : 'text';
-  const extraction = DailyReportDataSchema.parse(expected);
+  const extraction = DailyReportDataV1Schema.parse(expected);
   const segEnd = t.segments.reduce((a, s) => Math.max(a, s.end), 0);
   return {
     id: t.id as ScenarioId,

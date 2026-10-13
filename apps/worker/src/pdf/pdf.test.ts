@@ -75,7 +75,7 @@ describe('weatherExcerpts', () => {
           {
             condition: 'Rain',
             lostHours: 1,
-            source: [{ type: 'audio' as const, messageId: 'm', start: 41 }],
+            source: [{ type: 'voice_note' as const, uploadId: 'm', start: 41 }],
           },
         ],
       },

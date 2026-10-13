@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
+import { storedV1 } from '@/test/storedData';
 import { DemoSource } from './DemoSource';
 import { DemoStore, demoUserFor } from './store';
 
@@ -25,8 +26,8 @@ function setup() {
   return { store, source, elm, upload };
 }
 
-const typed = (summary = 'Framing on units 3 and 4.'): DailyReportData => ({
-  ...emptyReportData('2026-10-09'),
+const typed = (summary = 'Framing on units 3 and 4.'): DailyReportDataV1 => ({
+  ...emptyReportDataV1('2026-10-09'),
   summary,
 });
 
@@ -77,7 +78,7 @@ describe('demo: photos on a report typed in the panel', () => {
       ['photo', null, store.nowIso()],
     ]);
     const v1 = store.data.versions.find((v) => v.report_id === reportId)!
-      .data as unknown as DailyReportData;
+      .data as unknown as DailyReportDataV1;
     expect(v1.photos).toEqual([
       { messageId: messages[0]!.id, caption: 'North wall', takenAt: '2026-10-09T15:00:00.000Z' },
       { messageId: messages[1]!.id, takenAt: store.nowIso() },
@@ -149,7 +150,7 @@ describe('demo: photos on a report typed in the panel', () => {
       data: typed(),
       photos: [],
     });
-    const v1 = (await source.getReportDetail(reportId)).data;
+    const v1 = storedV1(await source.getReportDetail(reportId));
     await expect(
       source.createReportVersion(reportId, v1, 'Again', [{ path: ok.path, mime: 'image/jpeg' }]),
     ).rejects.toThrow('photo already attached');
@@ -169,7 +170,7 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
         { path: b.path, mime: 'image/jpeg', caption: 'B', takenAt: '2026-10-09T15:00:00Z' },
       ],
     });
-    const v1 = (await source.getReportDetail(reportId)).data;
+    const v1 = storedV1(await source.getReportDetail(reportId));
     const [pa, pb] = v1.photos;
 
     // Drop A, re-caption B (its time stays the recorded one, whatever is sent), add C.
@@ -192,10 +193,8 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
       ['B, east side', '2026-10-09T15:00:00.000Z'],
       ['C', '2026-10-09T16:00:00.000Z'],
     ]);
-    expect(v2.data.photos.map((p) => p.messageId)).toEqual([
-      pb!.messageId,
-      v2.photos[1]!.messageId,
-    ]);
+    // The v2 view keeps each photo's message UUID as its uploadId.
+    expect(v2.data.photos.map((p) => p.uploadId)).toEqual([pb!.messageId, v2.photos[1]!.messageId]);
     expect(store.data.audit).toContainEqual(
       expect.objectContaining({
         action: 'report.version_created',
@@ -223,12 +222,15 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
     // photo is an edit of its own.
     await source.createReportVersion(
       reportId,
-      { ...v2.data, photos: [{ messageId: pa!.messageId, caption: '', takenAt: pa!.takenAt }] },
+      {
+        ...storedV1(v2),
+        photos: [{ messageId: pa!.messageId, caption: '', takenAt: pa!.takenAt }],
+      },
       'Back to A, no caption',
     );
     const v3 = await source.getReportDetail(reportId);
     expect(v3.photos.map((p) => [p.messageId, p.caption])).toEqual([[pa!.messageId, null]]);
-    await source.createReportVersion(reportId, { ...v3.data, photos: [] }, 'No photos');
+    await source.createReportVersion(reportId, { ...storedV1(v3), photos: [] }, 'No photos');
     expect((await source.getReportDetail(reportId)).photos).toEqual([]);
   });
 
@@ -246,7 +248,7 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
     });
     const v1 = await source.getReportDetail(reportId);
     expect(v1.photos.map((p) => p.caption)).toEqual(['B', 'A']);
-    await source.createReportVersion(reportId, v1.data, 'Two more, one first', [
+    await source.createReportVersion(reportId, storedV1(v1), 'Two more, one first', [
       { path: c.path, mime: 'image/jpeg', caption: 'C' },
       { path: d.path, mime: 'image/jpeg', caption: 'D', position: 0 },
     ]);
@@ -257,7 +259,7 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
       'C',
     ]);
     await expect(
-      source.createReportVersion(reportId, v1.data, 'Bad', [
+      source.createReportVersion(reportId, storedV1(v1), 'Bad', [
         { path: (await upload()).path, mime: 'image/jpeg', position: -1 },
       ]),
     ).rejects.toThrow('invalid photo position');
@@ -284,7 +286,7 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
     const row = store.data.versions.find(
       (v) => v.report_id === hero.id && v.version === hero.current_version,
     )!;
-    const { photos: _drop, ...legacy } = row.data as unknown as DailyReportData;
+    const { photos: _drop, ...legacy } = row.data as unknown as DailyReportDataV1;
     row.data = legacy as unknown as typeof row.data;
     for (const s of store.data.sources) if (s.report_id === hero.id) s.caption = null;
     const d = await source.getReportDetail(hero.id);

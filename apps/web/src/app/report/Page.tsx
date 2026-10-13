@@ -58,6 +58,7 @@ import {
   sameReportData,
   toFormValues,
   toReportData,
+  withPhotoEntries,
   type ReportFormValues,
 } from './reportForm';
 import { reportPhotoEntries, usePhotoDraft } from './usePhotoDraft';
@@ -120,7 +121,7 @@ function ReportScreen({
   const [noteError, setNoteError] = useState<string | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [openMessageId, setOpenMessageId] = useState<string | null>(null);
-  const [pendingData, setPendingData] = useState<ReportDetail['data'] | null>(null);
+  const [pendingData, setPendingData] = useState<ReportDetail['storedData'] | null>(null);
   // The version's photos while editing: re-caption, move, remove, add (uploaded on save).
   const photos = usePhotoDraft(detail.photos);
   const settings = useSettings();
@@ -168,25 +169,22 @@ function ReportScreen({
   };
 
   const onSaveClick = form.handleSubmit((values) => {
-    let data: ReportDetail['data'];
+    let data: ReportDetail['storedData'];
     try {
-      // data.photos: the version's photos still listed, with their captions (new picks are
-      // uploaded on confirm and appended by the server).
-      data = toReportData(
-        values,
-        { ...detail.data, photos: photos.kept() },
-        {
-          userId: source.user.id,
-          at: source.now().toISOString(),
-          companies: detail.companies,
-        },
-      );
+      // The new version has the edited version's stored shape (v1 until W1-12), not the v2 view
+      // the form shows. data.photos: the version's photos still listed, with their captions (new
+      // picks are uploaded on confirm and appended by the server).
+      data = toReportData(values, withPhotoEntries(detail.storedData, photos.kept()), {
+        userId: source.user.id,
+        at: source.now().toISOString(),
+        companies: detail.companies,
+      });
     } catch (err) {
       toast.error(errorMessage(err, copy.errors.generic));
       return;
     }
     // A photo change alone is an edit.
-    const shown = { ...detail.data, photos: reportPhotoEntries(detail.photos) };
+    const shown = withPhotoEntries(detail.storedData, reportPhotoEntries(detail.photos));
     if (sameReportData(data, shown) && !photos.hasNew) {
       toast.message(copy.report.editMode.noChanges);
       return;

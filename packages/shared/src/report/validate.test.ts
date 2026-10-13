@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData, type DailyReportData, type ManpowerEntry } from '../schemas/report.ts';
+import {
+  emptyReportDataV1,
+  type DailyReportDataV1,
+  type ManpowerEntryV1,
+} from '../schemas/report.ts';
 import {
   applyAnswer,
   closestCompany,
@@ -10,7 +14,7 @@ import {
 
 const REQUIRED = ['manpower', 'hours', 'weather', 'work_performed', 'safety', 'photo'] as const;
 
-const mp = (over: Partial<ManpowerEntry>): ManpowerEntry => ({
+const mp = (over: Partial<ManpowerEntryV1>): ManpowerEntryV1 => ({
   companyId: 'apex',
   companyNameHeard: 'Apex',
   companyName: 'Apex Concrete',
@@ -23,8 +27,8 @@ const mp = (over: Partial<ManpowerEntry>): ManpowerEntry => ({
   ...over,
 });
 
-function complete(): DailyReportData {
-  const d = emptyReportData('2026-10-09');
+function complete(): DailyReportDataV1 {
+  const d = emptyReportDataV1('2026-10-09');
   d.manpower = [mp({})];
   d.weather = {
     conditionsText: 'Light rain AM',

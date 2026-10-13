@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { sameReportData } from './reportForm';
 
-const base: DailyReportData = {
-  ...emptyReportData('2026-10-09'),
+const base: DailyReportDataV1 = {
+  ...emptyReportDataV1('2026-10-09'),
   summary: 'Deck pour.',
   photos: [
     { messageId: 'm1', caption: 'Rebar mats', takenAt: '2026-10-09T14:00:00.000Z' },
@@ -13,7 +13,7 @@ const base: DailyReportData = {
 
 describe('sameReportData', () => {
   it('ignores key order (zod’s parse reorders keys) and photo times (the server keeps them)', () => {
-    const reordered = Object.fromEntries(Object.entries(base).reverse()) as DailyReportData;
+    const reordered = Object.fromEntries(Object.entries(base).reverse()) as DailyReportDataV1;
     expect(sameReportData(reordered, base)).toBe(true);
     const retimed = { ...base, photos: base.photos.map((p) => ({ ...p, takenAt: '' })) };
     expect(sameReportData(retimed, base)).toBe(true);

@@ -2,7 +2,8 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { upgradeV1toV2 } from '@sitelog/shared/report/upgrade.ts';
+import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore, demoUserFor, type DemoLoginKey } from '@/data/demo/store';
 import type * as PhotosModule from '@/lib/photos';
 import { makeSource, renderWithProviders } from '@/test/render';
@@ -151,9 +152,15 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
     expect(v3.change_note).toBe('BrightLine had 6, not 5');
     expect(v3.author).toBe('office_user');
-    const data = v3.data as unknown as { manpower: Array<{ workers: number; source: unknown[] }> };
+    const data = v3.data as unknown as DailyReportDataV1;
     expect(data.manpower[1]!.workers).toBe(6);
     expect(data.manpower[1]!.source).toHaveLength(2); // audio + office_edit
+    // The view reads v2, but the new version keeps the edited version's stored shape (v1 until
+    // the writers move to v2, W1-12): v1 sources, photos keyed by message id.
+    expect(data.schemaVersion).toBe(1);
+    expect(data.manpower[1]!.source[0]).toMatchObject({ type: 'audio' });
+    expect(data.photos.every((p) => typeof p.messageId === 'string')).toBe(true);
+    expect(data).not.toHaveProperty('units');
     await waitFor(() =>
       expect(screen.getByTestId('version-switcher')).toHaveTextContent('v3 · current'),
     );
@@ -164,6 +171,62 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
   }, 30_000);
 });
 
+describe('ReportDetailPage: report data stored as v2 (§10.3)', () => {
+  /** The hero report with every version stored as schemaVersion 2 (as W1-06 seeds data). */
+  function heroAsV2(change?: (data: ReturnType<typeof upgradeV1toV2>) => void): DemoStore {
+    const store = new DemoStore();
+    const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
+    for (const v of store.data.versions) {
+      if (v.report_id !== hero.id) continue;
+      const v2 = upgradeV1toV2(v.data as unknown as DailyReportDataV1);
+      change?.(v2);
+      v.data = v2 as unknown as typeof v.data;
+    }
+    return store;
+  }
+
+  async function articleText(store: DemoStore): Promise<string> {
+    const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
+    const view = renderWithProviders(<ReportDetailPage />, {
+      store,
+      route: `/reports/${hero.id}`,
+      path: '/reports/:reportId',
+    });
+    const article = await screen.findByRole('article', { name: 'RL-2041-0187' });
+    await waitFor(() => expect(screen.getByTestId('manpower-total-crew')).toHaveTextContent('24'));
+    const text = article.textContent ?? '';
+    view.unmount();
+    return text;
+  }
+
+  it('shows a version stored as v2 exactly like the v1 version it upgrades from', async () => {
+    const v1 = await articleText(new DemoStore());
+    const v2 = await articleText(heroAsV2());
+    expect(v1).toContain('audio 0:41');
+    expect(v2).toBe(v1);
+  });
+
+  it('prints observed weather in the report’s units', async () => {
+    const store = heroAsV2((d) => {
+      d.units = 'metric';
+      d.weather.observed = {
+        precip: 10.2,
+        tempMin: 14.4,
+        tempMax: 17.8,
+        wind: 15,
+        gust: 29,
+        provider: 'Open-Meteo',
+      };
+    });
+    const text = await articleText(store);
+    expect(text).toContain('10.2 mm');
+    expect(text).toContain('14–18 °C');
+    expect(text).toContain('15 km/h');
+    expect(text).toContain('29 km/h');
+    expect(text).not.toMatch(/\d in\b|°F|mph/);
+  });
+});
+
 describe('ReportDetailPage: photos in Edit', () => {
   it('removes a WhatsApp photo and adds an office photo as a new version', async () => {
     const user = userEvent.setup();
@@ -172,7 +235,7 @@ describe('ReportDetailPage: photos in Edit', () => {
     const before = within(screen.getByTestId('section-photos')).getAllByTestId('report-photo');
     expect(before).toHaveLength(2);
     const v2 = store.data.versions.find((v) => v.report_id === report.id && v.version === 2)!;
-    const [first, second] = (v2.data as unknown as DailyReportData).photos;
+    const [first, second] = (v2.data as unknown as DailyReportDataV1).photos;
 
     await user.click(screen.getByRole('button', { name: 'Edit' }));
     const picker = within(await screen.findByTestId('report-editor')).getByTestId('photo-picker');
@@ -201,7 +264,7 @@ describe('ReportDetailPage: photos in Edit', () => {
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
     const added = store.data.messages.find((m) => m.org_id === store.data.org.id)!;
     expect(added).toMatchObject({ body: 'Pump truck at 13:00', type: 'image' });
-    expect((v3.data as unknown as DailyReportData).photos).toEqual([
+    expect((v3.data as unknown as DailyReportDataV1).photos).toEqual([
       second,
       { messageId: added.id, caption: 'Pump truck at 13:00', takenAt: '2026-10-09T23:00:00.000Z' },
     ]);
@@ -250,7 +313,7 @@ describe('ReportDetailPage: photos in Edit', () => {
     await user.click(within(dialog).getByTestId('confirm-save'));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
-    expect((v3.data as unknown as DailyReportData).photos.map((p) => p.caption)).toEqual([
+    expect((v3.data as unknown as DailyReportDataV1).photos.map((p) => p.caption)).toEqual([
       'Conditions this morning',
       'Slab edge, end of day',
     ]);
@@ -275,7 +338,7 @@ describe('ReportDetailPage: photos in Edit', () => {
     });
     await screen.findByRole('heading', { name: 'Friday, Oct 9 — Riverside B' });
     const v2 = store.data.versions.find((v) => v.report_id === report.id && v.version === 2)!;
-    const [first, second] = (v2.data as unknown as DailyReportData).photos;
+    const [first, second] = (v2.data as unknown as DailyReportDataV1).photos;
 
     await user.click(screen.getByRole('button', { name: 'Edit' }));
     const picker = within(await screen.findByTestId('report-editor')).getByTestId('photo-picker');
@@ -303,7 +366,7 @@ describe('ReportDetailPage: photos in Edit', () => {
 
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
     const added = store.data.messages.find((m) => m.org_id === store.data.org.id)!;
-    expect((v3.data as unknown as DailyReportData).photos).toEqual([
+    expect((v3.data as unknown as DailyReportDataV1).photos).toEqual([
       { messageId: added.id, caption: 'Crane lift', takenAt: '2026-10-09T23:00:00.000Z' },
       first,
       second,
@@ -316,7 +379,7 @@ describe('ReportDetailPage: photos in Edit', () => {
     const current = store.data.versions.find(
       (v) => v.report_id === report.id && v.version === report.current_version,
     )!;
-    const data = current.data as unknown as DailyReportData;
+    const data = current.data as unknown as DailyReportDataV1;
     data.photos[0] = { ...data.photos[0]!, takenAt: '2026-10-08T19:05:00.000Z' };
     data.photos[1] = { ...data.photos[1]!, takenAt: '2026-10-09T21:40:00.000Z' };
     renderWithProviders(<ReportDetailPage />, {
@@ -354,7 +417,7 @@ describe('ReportDetailPage (report typed in the panel)', () => {
       siteId: site.id,
       date: '2026-09-14',
       data: {
-        ...emptyReportData('2026-09-14'),
+        ...emptyReportDataV1('2026-09-14'),
         summary: 'Typed in the office.',
         weather: { conditionsText: 'Clear, 68°F', periods: [] },
       },
@@ -378,7 +441,7 @@ describe('ReportDetailPage (typed company filed before companies were linked on 
       siteId: elm.id,
       date: '2026-10-09',
       data: {
-        ...emptyReportData('2026-10-09'),
+        ...emptyReportDataV1('2026-10-09'),
         summary: 'Typed in the office.',
         manpower: [
           {
@@ -446,7 +509,7 @@ describe('ReportDetailPage (WhatsApp report still being collected)', () => {
       siteId: elm.id,
       date: '2026-10-09',
       data: {
-        ...emptyReportData('2026-10-09'),
+        ...emptyReportDataV1('2026-10-09'),
         summary: 'Still talking to the site manager.',
         manpower: [
           {

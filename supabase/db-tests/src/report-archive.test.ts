@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared';
+import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared';
 import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
 import { asService, asUser, bootDatabase } from './harness.ts';
 
@@ -45,8 +45,8 @@ async function archiveAs(user: string, where = 'true', params: unknown[] = []) {
   ).rows;
 }
 
-function withIncident(date: string, incident: boolean, summary: string): DailyReportData {
-  const d = emptyReportData(date);
+function withIncident(date: string, incident: boolean, summary: string): DailyReportDataV1 {
+  const d = emptyReportDataV1(date);
   return {
     ...d,
     summary,

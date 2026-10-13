@@ -27,8 +27,8 @@ import type {
 } from '../db/types.ts';
 import { addDays, isoWeekday } from '../format.ts';
 import { deadlineInstant } from '../schedule/reminders.ts';
-import type { DailyReportData, ManpowerEntry, WeatherPeriod } from '../schemas/report.ts';
-import { emptyReportData } from '../schemas/report.ts';
+import type { DailyReportDataV1, ManpowerEntryV1, WeatherPeriodV1 } from '../schemas/report.ts';
+import { emptyReportDataV1 } from '../schemas/report.ts';
 import { deriveTotals } from '../report/hours.ts';
 import { formatReportNo } from '../report/numbering.ts';
 import { PAYROLL_COLUMNS } from '../report/payroll.ts';
@@ -567,7 +567,7 @@ function planFor(site: SiteKey, date: string): DayPlan {
   return base;
 }
 
-function manpowerFor(crews: Crew[], audioMessageId: string, offset = 10): ManpowerEntry[] {
+function manpowerFor(crews: Crew[], audioMessageId: string, offset = 10): ManpowerEntryV1[] {
   return crews.map((c, i) => ({
     companyId: c.company === 'ridgeway' ? null : companyId(c.company),
     companyNameHeard: c.heard ?? companyName(c.company),
@@ -985,7 +985,7 @@ export function buildKestrelDemo(): DemoDataset {
 
       const pushVersion = (
         version: number,
-        d: DailyReportData,
+        d: DailyReportDataV1,
         author: ReportVersionRow['author'],
         changeNote: string | null,
         createdAt: string,
@@ -1634,17 +1634,17 @@ function buildData(
   crews: Crew[],
   plan: DayPlan,
   audioId: string,
-  photos: DailyReportData['photos'],
+  photos: DailyReportDataV1['photos'],
   isHero: boolean,
-): DailyReportData {
-  const d = emptyReportData(date);
+): DailyReportDataV1 {
+  const d = emptyReportDataV1(date);
   const src = (start: number, end?: number) => [
     { type: 'audio' as const, messageId: audioId, start, end: end ?? start + 7.5 },
   ];
   d.languageDetected = s.reporter.languages.includes('es') ? ['es', 'en'] : ['en'];
   d.photos = photos;
   d.workingHours = { start: '07:00', end: '15:30' };
-  const periods: WeatherPeriod[] = plan.weather
+  const periods: WeatherPeriodV1[] = plan.weather
     ? [
         {
           start: plan.weather.start,

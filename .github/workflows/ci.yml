@@ -26,6 +26,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
+      # pdftotext for the worker's PDF text snapshots (apps/worker/src/pdf/snapshot.test.ts).
+      - name: Install poppler-utils
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils
       - run: pnpm test
       - name: Build web + worker
         run: pnpm build

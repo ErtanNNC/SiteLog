@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import {
-  DailyReportDataSchema,
-  emptyReportData,
+  DailyReportDataV1Schema,
+  emptyReportDataV1,
   officePhotoStoragePath,
-  type DailyReportData,
+  type DailyReportDataV1,
   type OfficePhotoUpload,
 } from '@sitelog/shared';
 import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
@@ -100,9 +100,9 @@ function upload(
   };
 }
 
-function body(date: string, extra: Partial<DailyReportData> = {}): DailyReportData {
-  return DailyReportDataSchema.parse({
-    ...emptyReportData(date),
+function body(date: string, extra: Partial<DailyReportDataV1> = {}): DailyReportDataV1 {
+  return DailyReportDataV1Schema.parse({
+    ...emptyReportDataV1(date),
     summary: 'Typed with photos.',
     ...extra,
   });
@@ -110,7 +110,7 @@ function body(date: string, extra: Partial<DailyReportData> = {}): DailyReportDa
 
 async function versionData(reportId: string, version: number) {
   return (
-    await svc<{ data: DailyReportData }>(
+    await svc<{ data: DailyReportDataV1 }>(
       `select data from report_versions where report_id = $1 and version = $2`,
       [reportId, version],
     )
@@ -232,7 +232,7 @@ describe('create_office_report with photos', () => {
       { messageId: msgs[1]!.id, takenAt: byMsg.get(msgs[1]!.id)!.taken_at.toISOString() },
       { messageId: msgs[2]!.id, takenAt: byMsg.get(msgs[2]!.id)!.taken_at.toISOString() },
     ]);
-    expect(DailyReportDataSchema.safeParse(v1).success).toBe(true);
+    expect(DailyReportDataV1Schema.safeParse(v1).success).toBe(true);
     // The delay record counts them (claim-ready needs audio + photo + observed data).
     const wx = await svc<{ photo_count: number }>(
       `select photo_count from weather_events where report_id = $1 and version = 1`,
@@ -390,7 +390,7 @@ describe('create_office_report with photos', () => {
 
 describe('create_report_version with photos', () => {
   let reportId: string;
-  let v1: DailyReportData;
+  let v1: DailyReportDataV1;
   let ids: { a: string; b: string; c: string };
 
   beforeAll(async () => {
@@ -433,7 +433,7 @@ describe('create_report_version with photos', () => {
       { messageId: ids.a, takenAt: '2026-08-10T14:00:00.000Z' },
       { messageId: dMsg!.id, caption: 'Delivered rebar', takenAt: '2026-08-10T16:00:00.000Z' },
     ]);
-    expect(DailyReportDataSchema.safeParse(v2).success).toBe(true);
+    expect(DailyReportDataV1Schema.safeParse(v2).success).toBe(true);
     // Version 1 is immutable and still shows A, B, C.
     expect(await versionData(reportId, 1)).toEqual(v1);
     expect(v1.photos.map((p) => p.messageId)).toEqual([ids.a, ids.b, ids.c]);

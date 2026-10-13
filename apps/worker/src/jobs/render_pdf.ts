@@ -2,8 +2,9 @@ import {
   pdfFileName,
   pdfStoragePath,
   waCopy,
+  readReportData,
   weekdayName,
-  type DailyReportData,
+  type StoredReportData,
 } from '@sitelog/shared';
 import { buildReportPdfInput, renderReportPdf } from '../pdf/render';
 import { sendBusinessInitiated, sendDocumentMessage } from '../wa/send';
@@ -17,7 +18,8 @@ export const renderPdf: JobHandler<'render_pdf'> = async (ctx, payload, job) => 
   if (!version) throw new PermanentJobError(`version ${payload.version} of ${report.id} not found`);
   const site = await ctx.db.siteContext(report.site_id);
   if (!site) throw new PermanentJobError(`site ${report.site_id} not found`);
-  const data = version.data as DailyReportData;
+  // Stored v1 or v2; the PDF reads the v2 view (D20).
+  const data = readReportData(version.data as unknown as StoredReportData);
 
   const input = await buildReportPdfInput(ctx, { report, version, site, data });
   const buffer = await renderReportPdf(input);

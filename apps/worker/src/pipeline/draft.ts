@@ -3,7 +3,7 @@ import {
   deriveTotals,
   formatDraftCard,
   type ConversationRow,
-  type DailyReportData,
+  type DailyReportDataV1,
   type MessageRow,
   type ReportRow,
   type ReportSourceRow,
@@ -21,7 +21,7 @@ import { contextOf } from '../router/context';
 export async function storeDraft(
   ctx: Ctx,
   report: ReportRow,
-  data: DailyReportData,
+  data: DailyReportDataV1,
   opts: { authorMessageId?: string | null; changeNote?: string | null } = {},
 ): Promise<ReportVersionRow> {
   const version = report.current_version || 1;
@@ -44,17 +44,17 @@ export async function storeDraft(
 export async function syncDraftPhotos(
   ctx: Ctx,
   report: ReportRow,
-  data: DailyReportData,
+  data: DailyReportDataV1,
   sources: Array<
     Pick<ReportSourceRow, 'message_id' | 'kind' | 'caption' | 'taken_at'> & {
       message_created_at?: string;
     }
   >,
-): Promise<DailyReportData> {
+): Promise<DailyReportDataV1> {
   const have = new Set(data.photos.map((p) => p.messageId));
   const missing = sources.filter((s) => s.kind === 'photo' && !have.has(s.message_id));
   if (missing.length === 0) return data;
-  const next: DailyReportData = {
+  const next: DailyReportDataV1 = {
     ...data,
     photos: [
       ...data.photos,
@@ -74,12 +74,12 @@ export function isPlainPhoto(s: Pick<ReportSourceRow, 'kind' | 'caption'>): bool
   return s.kind === 'photo' && !(s.caption ?? '').trim();
 }
 
-export async function currentData(ctx: Ctx, report: ReportRow): Promise<DailyReportData | null> {
+export async function currentData(ctx: Ctx, report: ReportRow): Promise<DailyReportDataV1 | null> {
   const v = await ctx.db.getVersion(report.id, report.current_version || 1);
-  return (v?.data as DailyReportData | null) ?? null;
+  return (v?.data as DailyReportDataV1 | null) ?? null;
 }
 
-export function draftCardFor(data: DailyReportData, site: SiteContext): string {
+export function draftCardFor(data: DailyReportDataV1, site: SiteContext): string {
   const self = new Set(site.companies.filter((c) => c.is_self_perform).map((c) => c.id));
   return formatDraftCard(data, {
     siteName: site.site.name,
@@ -93,7 +93,7 @@ export async function sendDraft(
   convo: ConversationRow,
   report: ReportRow,
   site: SiteContext,
-  data: DailyReportData,
+  data: DailyReportDataV1,
 ): Promise<MessageRow> {
   const msg = await sendFreeForm(
     ctx,

@@ -1,14 +1,14 @@
 import {
-  DailyReportDataSchema,
+  DailyReportDataV1Schema,
   ExtractionOutputSchema,
   extractionToolInputSchema,
   hoursFromEndTime,
   recomputeManpowerTotals,
   toObserved,
-  type DailyReportData,
+  type DailyReportDataV1,
   type ExtractionOutput,
   type HoursDiscrepancy,
-  type ManpowerEntry,
+  type ManpowerEntryV1,
 } from '@sitelog/shared';
 import type { Logger } from '../log';
 import { callTool, type MessagesClient, type ToolCallResult } from './claude';
@@ -31,7 +31,7 @@ export const EXTRACTION_TOOL = {
 } as const;
 
 export interface ExtractionResult {
-  data: DailyReportData;
+  data: DailyReportDataV1;
   raw: ExtractionOutput;
   discrepancies: HoursDiscrepancy[];
   call: Omit<ToolCallResult<ExtractionOutput>, 'data'>;
@@ -76,7 +76,7 @@ function normalize(s: string): string {
 
 /** Map the model's company reference to a known company by id, name or alias (case-insensitive). */
 export function matchCompany(
-  entry: Pick<ManpowerEntry, 'companyId' | 'companyName' | 'companyNameHeard'>,
+  entry: Pick<ManpowerEntryV1, 'companyId' | 'companyName' | 'companyNameHeard'>,
   companies: ExtractionCompany[],
 ): ExtractionCompany | null {
   if (entry.companyId) {
@@ -113,10 +113,10 @@ export function matchCompany(
 export function postProcessExtraction(
   raw: ExtractionOutput,
   input: ExtractionInput,
-): { data: DailyReportData; discrepancies: HoursDiscrepancy[] } {
+): { data: DailyReportDataV1; discrepancies: HoursDiscrepancy[] } {
   const manpower = raw.manpower.map((m) => {
     const company = matchCompany(m, input.companies);
-    let entry: ManpowerEntry = company
+    let entry: ManpowerEntryV1 = company
       ? {
           ...m,
           companyId: company.id,
@@ -136,7 +136,7 @@ export function postProcessExtraction(
   // An explicit end time in the answers beats everything (§10.4 rule 2); handled by applyAnswer, kept here for drafts.
   void hoursFromEndTime;
 
-  const data: DailyReportData = DailyReportDataSchema.parse({
+  const data: DailyReportDataV1 = DailyReportDataV1Schema.parse({
     ...raw,
     schemaVersion: 1,
     reportDate: input.reportDate,

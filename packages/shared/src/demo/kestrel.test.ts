@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { kestrelDemo, DEMO_TODAY } from './kestrel.ts';
 import { deriveTotals } from '../report/hours.ts';
-import type { DailyReportData } from '../schemas/report.ts';
-import { DailyReportDataSchema } from '../schemas/report.ts';
+import type { DailyReportDataV1 } from '../schemas/report.ts';
+import { DailyReportDataV1Schema } from '../schemas/report.ts';
 
 const demo = kestrelDemo();
 const byName = (n: string) => demo.companies.find((c) => c.name === n)!.id;
@@ -66,9 +66,9 @@ describe('Kestrel demo data (§18)', () => {
     const hero = demo.reports.find((r) => r.report_no === 'RL-2041-0187')!;
     expect(hero.current_version).toBe(2);
     const v1 = demo.versions.find((v) => v.report_id === hero.id && v.version === 1)!
-      .data as unknown as DailyReportData;
+      .data as unknown as DailyReportDataV1;
     const v2 = demo.versions.find((v) => v.report_id === hero.id && v.version === 2)!
-      .data as unknown as DailyReportData;
+      .data as unknown as DailyReportDataV1;
     const self = new Set([byName('Kestrel self-perform')]);
     expect(deriveTotals(v1, { selfPerformCompanyIds: self })).toMatchObject({
       crewOnSite: 23,
@@ -87,7 +87,8 @@ describe('Kestrel demo data (§18)', () => {
       workers: 5,
       fullDay: true,
     });
-    for (const v of demo.versions) expect(() => DailyReportDataSchema.parse(v.data)).not.toThrow();
+    for (const v of demo.versions)
+      expect(() => DailyReportDataV1Schema.parse(v.data)).not.toThrow();
   });
 
   it('matches the weather log: 10 site-days, 36.5 h, 7 claim-ready', () => {

@@ -1,5 +1,5 @@
 import type { ClassifiedReply, DayOffClassification } from '../schemas/ai.ts';
-import type { DailyReportData } from '../schemas/report.ts';
+import type { DailyReportDataV1 } from '../schemas/report.ts';
 import { resolveDayReference } from '../schedule/day.ts';
 
 /**
@@ -112,7 +112,7 @@ const DAY_OFF_WORDS =
 
 /** The note described a day off: no crew and no work in the draft, and the speaker said so. */
 export function looksLikeDayOff(
-  data: Pick<DailyReportData, 'workPerformed' | 'manpower'>,
+  data: Pick<DailyReportDataV1, 'workPerformed' | 'manpower'>,
   text: string,
 ): boolean {
   return (

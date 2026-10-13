@@ -4,7 +4,7 @@
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
-import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import type { OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
 import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthProvider';
@@ -195,7 +195,7 @@ export function useCreateReportVersion() {
   return useSourceMutation(
     (vars: {
       reportId: string;
-      data: DailyReportData;
+      data: StoredReportData;
       changeNote: string;
       photos?: OfficePhotoUpload[];
     }) => s.createReportVersion(vars.reportId, vars.data, vars.changeNote, vars.photos),

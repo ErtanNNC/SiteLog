@@ -6,6 +6,8 @@
     "zod": "npm:zod@4.6.6",
     "date-fns": "npm:date-fns@4.4.0",
     "date-fns-tz": "npm:date-fns-tz@3.2.0",
+    "libphonenumber-js": "npm:libphonenumber-js@1.13.14",
+    "libphonenumber-js/min": "npm:libphonenumber-js@1.13.14/min",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.117.3",
     "stripe": "npm:stripe@23.0.0"
   },

@@ -3,7 +3,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import type { Sql } from 'postgres';
-import { emptyReportData, officePhotoStoragePath, type DailyReportData } from '@sitelog/shared';
+import {
+  emptyReportDataV1,
+  officePhotoStoragePath,
+  readReportData,
+  type DailyReportDataV1,
+  type StoredReportData,
+} from '@sitelog/shared';
 // The @sitelog/db harness (supabase/db-tests) boots PGlite with the Supabase stubs, every
 // migration and the demo seed. Imported by path so the worker image does not need that package.
 import { bootDatabase } from '../../../supabase/db-tests/src/harness.ts';
@@ -502,9 +508,9 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
 });
 
 /** A complete draft for Riverside on Mon Oct 12 that touches every denormalised column. */
-function draftFor(date: string, audioId: string, photoId: string): DailyReportData {
+function draftFor(date: string, audioId: string, photoId: string): DailyReportDataV1 {
   return {
-    ...emptyReportData(date),
+    ...emptyReportDataV1(date),
     summary: 'Level 5 slab poured after a wet start; 11 on site.',
     languageDetected: ['es', 'en'],
     manpower: [
@@ -897,8 +903,8 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
   });
 
   it('create_report_version (office edit RPC) builds v2 on the worker-filed report', async () => {
-    const v1 = (await db.getVersion(reportId, 1))!.data as DailyReportData;
-    const edited: DailyReportData = {
+    const v1 = (await db.getVersion(reportId, 1))!.data as DailyReportDataV1;
+    const edited: DailyReportDataV1 = {
       ...v1,
       manpower: v1.manpower.map((m) =>
         m.companyName === 'Apex Concrete' ? { ...m, workers: 8, totalHours: 64 } : m,
@@ -1348,8 +1354,8 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
       kind: 'daily',
     });
     expect(report.report_no).toBe('RL-2042-0001');
-    const data: DailyReportData = {
-      ...emptyReportData('2026-10-13'),
+    const data: DailyReportDataV1 = {
+      ...emptyReportDataV1('2026-10-13'),
       weather: {
         conditionsText: 'High wind PM',
         periods: [
@@ -1390,7 +1396,7 @@ describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
        order by r.report_no limit 1`,
     );
     const before = (await db.getVersion(report.id, report.current_version))!;
-    const beforeData = before.data as DailyReportData;
+    const beforeData = before.data as DailyReportDataV1;
     const [kept, dropped] = beforeData.photos;
     const upload = officePhotoStoragePath(ORG, report.site_id, randomUUID(), 'image/png');
 
@@ -1441,7 +1447,7 @@ describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
         report: (await db.getReport(report.id))!,
         version: v,
         site,
-        data: v.data as DailyReportData,
+        data: readReportData(v.data as unknown as StoredReportData),
       });
       return input.photos.map((p) => [
         'data' in p ? Buffer.from(p.data).toString() : p.url,

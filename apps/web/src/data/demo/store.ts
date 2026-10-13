@@ -29,8 +29,12 @@ import type {
   ReporterStatus,
   SiteDayStatus,
 } from '@sitelog/shared/enums.ts';
-import type { DailyReportData, Photo } from '@sitelog/shared/schemas/report.ts';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import type {
+  DailyReportDataV1,
+  PhotoV1,
+  StoredReportData,
+} from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import {
   OFFICE_PHOTO_MAX,
   PHOTO_CAPTION_MAX,
@@ -215,7 +219,7 @@ export class DemoStore {
   }
 
   /** Mirror of denormalize_report_version() in the migrations. */
-  private denormalize(report: ReportRow, version: number, data: DailyReportData): void {
+  private denormalize(report: ReportRow, version: number, data: DailyReportDataV1): void {
     const d = this.data;
     d.manpower = d.manpower.filter((m) => !(m.report_id === report.id && m.version === version));
     d.workItems = d.workItems.filter((w) => !(w.report_id === report.id && w.version === version));
@@ -280,7 +284,7 @@ export class DemoStore {
 
   private pushVersion(
     report: ReportRow,
-    data: DailyReportData,
+    data: DailyReportDataV1,
     author: ReportVersionRow['author'],
     userId: string | null,
     changeNote: string | null,
@@ -385,11 +389,11 @@ export class DemoStore {
    * review reasons) stay unlinked for the review banner.
    */
   private linkTypedCompanies(
-    data: DailyReportData,
+    data: DailyReportDataV1,
     reportId: string,
     userId: string,
     skip: string[] = [],
-  ): DailyReportData {
+  ): DailyReportDataV1 {
     const d = this.data;
     const skipped = new Set(skip.map((s) => s.trim().toLowerCase()));
     const links = new Map<string, CompanyRow>();
@@ -463,11 +467,15 @@ export class DemoStore {
    */
   createReportVersion(
     reportId: string,
-    data: DailyReportData,
+    stored: StoredReportData,
     changeNote: string,
     userId: string,
     photos: OfficePhotoUpload[] = [],
   ): number {
+    // Like the migrated create_report_version, this mirror handles v1 data only; v2 arrives with
+    // the SQL readers of report data (W1-05, GAP §7 step 10). Every stored version is v1 until then.
+    if (stored.schemaVersion !== 1) throw new Error(copy.errors.generic);
+    const data: DailyReportDataV1 = stored;
     const r = this.report(reportId);
     if (!changeNote.trim()) throw new Error(copy.report.edit.changeNoteRequired);
     const pending = r.review_reasons
@@ -480,17 +488,17 @@ export class DemoStore {
     const byMessage = new Map(photoSources.map((s) => [s.message_id.toLowerCase(), s]));
     const prevData = this.data.versions.find(
       (v) => v.report_id === r.id && v.version === r.current_version,
-    )?.data as unknown as Partial<DailyReportData> | undefined;
+    )?.data as unknown as Partial<DailyReportDataV1> | undefined;
     const prevList = Array.isArray(prevData?.photos) ? prevData.photos : null;
     const prevIds = prevList
       ? prevList.flatMap((p) => byMessage.get(String(p.messageId).toLowerCase())?.message_id ?? [])
       : photoSources.map((s) => s.message_id);
-    const listed: Array<Partial<Photo>> = Array.isArray(data.photos)
+    const listed: Array<Partial<PhotoV1>> = Array.isArray(data.photos)
       ? data.photos
       : (prevList ??
         photoSources.map((s) => ({ messageId: s.message_id, caption: s.caption ?? undefined })));
     const seen = new Set<string>();
-    const kept: Photo[] = [];
+    const kept: PhotoV1[] = [];
     for (const p of listed) {
       const key = typeof p?.messageId === 'string' ? p.messageId.toLowerCase() : '';
       const src = byMessage.get(key);
@@ -598,7 +606,7 @@ export class DemoStore {
     orgId: string,
     uploads: CheckedPhoto[],
     userId: string,
-  ): Photo[] {
+  ): PhotoV1[] {
     return uploads.map((u) => {
       const id = localId('msg');
       this.data.messages.push({
@@ -642,7 +650,7 @@ export class DemoStore {
   createOfficeReport(input: {
     siteId: string;
     date: string;
-    data: DailyReportData;
+    data: DailyReportDataV1;
     userId: string;
     photos?: OfficePhotoUpload[];
   }): { reportId: string; reportNo: string; created: boolean } {
@@ -671,7 +679,7 @@ export class DemoStore {
       uploads,
     );
     // Every crew row here was typed by the office: each "Add new…" name becomes a company.
-    const data: DailyReportData = this.linkTypedCompanies(
+    const data: DailyReportDataV1 = this.linkTypedCompanies(
       { ...structuredClone(input.data), reportDate: input.date, schemaVersion: 1, photos },
       reportId,
       input.userId,
@@ -826,7 +834,7 @@ export class DemoStore {
       });
     }
     const cur = d.versions.find((v) => v.report_id === r.id && v.version === r.current_version)!;
-    const data = structuredClone(cur.data as unknown as DailyReportData);
+    const data = structuredClone(cur.data as unknown as DailyReportDataV1);
     const cid = company.id;
     const cname = company.name;
     data.manpower = data.manpower.map((m) =>
@@ -1477,8 +1485,8 @@ export class DemoStore {
     const reportId = localId('report');
     site.report_seq += 1;
     const reportNo = formatReportNo(site.project_code, site.report_seq);
-    const data: DailyReportData = {
-      ...emptyReportData(today),
+    const data: DailyReportDataV1 = {
+      ...emptyReportDataV1(today),
       languageDetected: ['en'],
       summary:
         'Framing continued at Units 1–4 with 6 on site (48 h). Roof trusses set on Unit 2; backfill at the north trench completed. Dry all day. No incidents reported.',
@@ -1893,7 +1901,7 @@ export class DemoStore {
   /** storeDraft: the working draft lives in version 1 until filing freezes it. */
   storeFieldDraft(input: {
     reportId: string;
-    data: DailyReportData;
+    data: DailyReportDataV1;
     messageId: string | null;
     at: string;
   }): void {
@@ -2214,7 +2222,7 @@ export interface FieldSourceInput {
 export interface FieldFileInput {
   reportId: string;
   kind: 'daily' | 'weather_day' | 'no_work';
-  data: DailyReportData;
+  data: DailyReportDataV1;
   trigger: 'confirm' | 'weather_day' | 'no_work';
   reasons: string[];
   at: string;
@@ -2237,7 +2245,7 @@ export interface FieldFileInput {
 export interface FieldVersionInput {
   reportId: string;
   version: number;
-  data: DailyReportData;
+  data: DailyReportDataV1;
   author: 'agent' | 'reporter_reply';
   changeNote: string;
   messageId: string | null;

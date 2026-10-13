@@ -31,11 +31,19 @@ import type {
 import type { InvoiceStatus } from '@sitelog/shared/enums.ts';
 import { reportChip, siteDayChip } from '@sitelog/shared/status.ts';
 import type { ChipVariant } from '@sitelog/shared/status.ts';
-import type { DailyReportData, ManpowerEntry, Source } from '@sitelog/shared/schemas/report.ts';
+import type {
+  DailyReportData,
+  ManpowerEntry,
+  Photo,
+  PhotoV1,
+  Source,
+  StoredReportData,
+} from '@sitelog/shared/schemas/report.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import { normalizePayrollColumns, type PayrollColumn } from '@sitelog/shared/report/payroll.ts';
 import { versionPhotos } from '@sitelog/shared/report/photos.ts';
+import { readReportData, upgradePhotosV1 } from '@sitelog/shared/report/upgrade.ts';
 import { isWorkingDay } from '@sitelog/shared/schedule/day.ts';
 import {
   addDays,
@@ -147,7 +155,13 @@ export interface RowSet {
    * `data.photos` of report versions whose full row is not in `versions` (the Supabase Photos
    * tab loads only this column for the site's older reports).
    */
-  photoLists?: Array<{ report_id: string; version: number; photos: unknown }>;
+  photoLists?: Array<{
+    report_id: string;
+    version: number;
+    photos: unknown;
+    /** `data.schemaVersion` of that version (its photos are v1 entries unless it is 2). */
+    schemaVersion?: unknown;
+  }>;
 }
 
 export interface AssembleCtx {
@@ -239,9 +253,26 @@ export function toReporterSummary(r: ReporterRow, isPrimary: boolean): ReporterS
   };
 }
 
+/** A version's data as stored: v1 (WhatsApp era, and every writer until W1-12) or v2. */
+export function storedVersionData(v: ReportVersionRow): StoredReportData {
+  return v.data as unknown as StoredReportData;
+}
+
+/**
+ * A version's data as every view reads it: §10.3 v2, a stored v1 upgraded on read (D20). Null
+ * without the row, or for a row loaded without its `data` column (list queries select less).
+ */
 export function versionData(v: ReportVersionRow | undefined): DailyReportData | null {
-  if (!v) return null;
-  return v.data as unknown as DailyReportData;
+  if (!v || !isRecord(v.data)) return null;
+  return readReportData(storedVersionData(v));
+}
+
+/** A version's `data->photos` loaded on its own (RowSet.photoLists), in v2 terms like versionData. */
+function photoListOf(
+  p: { photos: unknown; schemaVersion?: unknown } | undefined,
+): DailyReportData['photos'] | undefined {
+  if (!p || !Array.isArray(p.photos)) return undefined;
+  return p.schemaVersion === 2 ? (p.photos as Photo[]) : upgradePhotosV1(p.photos as PhotoV1[]);
 }
 
 export function memberName(rows: RowSet, userId: string | null | undefined): string | null {
@@ -939,7 +970,7 @@ function crewRowsFor(
           ),
         ),
       });
-    if (m.hoursBasis === 'reply' && !q)
+    if (m.hoursBasis === 'answer' && !q)
       badges.push({ kind: 'confirmed_by_reply', label: copy.chips.confirmedByReply });
     if (unconfirmed) badges.push({ kind: 'unconfirmed', label: copy.chips.unconfirmed });
     return {
@@ -1088,8 +1119,9 @@ export function assembleSiteDetail(
       const v = currentVersion(ix, r);
       const list = v
         ? versionData(v)?.photos
-        : rows.photoLists?.find((p) => p.report_id === r.id && p.version === r.current_version)
-            ?.photos;
+        : photoListOf(
+            rows.photoLists?.find((p) => p.report_id === r.id && p.version === r.current_version),
+          );
       return shownPhotos(list, photoSources.get(r.id) ?? [], msgById).map((p) => ({
         messageId: p.source.message_id,
         reportId: r.id,
@@ -1307,8 +1339,8 @@ function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): Tran
     mapped: string,
     section: TranscriptExcerpt['section'],
   ) => {
-    const a = src?.find((s) => s.type === 'audio');
-    if (!a || a.type !== 'audio') return;
+    const a = src?.find((s) => s.type === 'voice_note');
+    if (!a || a.type !== 'voice_note') return;
     const seg =
       segments.find((s) => a.start >= s.start - 0.01 && a.start < s.end) ??
       segments.find((s) => s.end > a.start);
@@ -1388,7 +1420,7 @@ export function assembleReportDetail(
     selected && versions.some((v) => v.version === selected) ? selected : report.current_version;
   const vRow = versions.find((v) => v.version === version);
   const data = versionData(vRow);
-  if (!data) throw new Error(copy.errors.notFound);
+  if (!vRow || !data) throw new Error(copy.errors.notFound);
   const previousData = versionData(versions.find((v) => v.version === version - 1));
 
   const sources = rows.sources.filter((s) => s.report_id === report.id);
@@ -1511,6 +1543,7 @@ export function assembleReportDetail(
     reporter: reporter ? toReporterSummary(reporter, true) : null,
     version,
     data,
+    storedData: storedVersionData(vRow),
     previousData,
     versions: versions.map((v) => ({
       version: v.version,

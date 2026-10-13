@@ -11,7 +11,7 @@ import {
   PHOTO_CAPTION_MAX,
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
-import type { Photo } from '@sitelog/shared/schemas/report.ts';
+import type { PhotoV1 } from '@sitelog/shared/schemas/report.ts';
 import { copy } from '@/copy/en';
 import type { DataSource, UploadedPhoto } from '@/data/source';
 import type { PhotoSourceInfo } from '@/data/types';
@@ -63,8 +63,12 @@ export interface PhotoDraft {
   dismissErrors(): void;
   /** Back to the report's photos, dropping every pick. */
   reset(photos?: readonly PhotoSourceInfo[] | null): void;
-  /** data.photos entries of the report's photos still listed, in order, with their captions. */
-  kept(): Photo[];
+  /**
+   * data.photos entries of the report's photos still listed, in order, with their captions; keyed
+   * by the photo's message id (the v1 entry shape). The editor stores them in the edited version's
+   * own shape with withPhotoEntries() (reportForm.ts).
+   */
+  kept(): PhotoV1[];
   /**
    * Waits for every pick to be prepared; null when one failed meanwhile (the picker says why).
    * Each pick comes with its position in the list.
@@ -88,13 +92,15 @@ export function photoEntry(
   messageId: string,
   caption: string | null | undefined,
   takenAt: string | null | undefined,
-): Photo {
+): PhotoV1 {
   const text = caption?.trim();
   return { messageId, ...(text ? { caption: text } : {}), takenAt: takenAt ?? '' };
 }
 
 /** data.photos as the viewed version shows it (the baseline an edit is compared with). */
-export function reportPhotoEntries(photos: readonly PhotoSourceInfo[] | null | undefined): Photo[] {
+export function reportPhotoEntries(
+  photos: readonly PhotoSourceInfo[] | null | undefined,
+): PhotoV1[] {
   return (photos ?? []).map((p) => photoEntry(p.messageId, p.caption, p.takenAt));
 }
 
@@ -109,7 +115,7 @@ function fromReport(photos: readonly PhotoSourceInfo[] | null | undefined): Draf
   }));
 }
 
-function keptOf(items: readonly DraftPhoto[]): Photo[] {
+function keptOf(items: readonly DraftPhoto[]): PhotoV1[] {
   return items.flatMap((x) => (x.messageId ? [photoEntry(x.messageId, x.caption, x.takenAt)] : []));
 }
 
@@ -118,7 +124,7 @@ export function usePhotoDraft(
   opts: { prepare?: (file: File) => Promise<PreparedPhoto> } = {},
 ): PhotoDraft {
   const [items, setItemsState] = useState<DraftPhoto[]>(() => fromReport(initial));
-  const [base, setBase] = useState<Photo[]>(() => reportPhotoEntries(initial));
+  const [base, setBase] = useState<PhotoV1[]>(() => reportPhotoEntries(initial));
   const [errors, setErrors] = useState<string[]>([]);
   // The list as the latest update left it (callbacks read it between renders).
   const itemsRef = useRef(items);

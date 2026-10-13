@@ -1,5 +1,12 @@
 import { Image, StyleSheet, Text, View } from '@react-pdf/renderer';
-import { abbreviateArea, deriveTotals, formatHours, type DailyReportData } from '@sitelog/shared';
+import {
+  abbreviateArea,
+  deriveTotals,
+  formatHours,
+  MEASURE_DIGITS,
+  UNIT_LABELS,
+  type DailyReportData,
+} from '@sitelog/shared';
 import type { ComponentProps, ReactNode } from 'react';
 import { styles } from './styles';
 import type { PdfImage, PdfPhoto } from './types';
@@ -203,15 +210,23 @@ export function WeatherTable({ data }: { data: DailyReportData }) {
     lost: p.lostHours > 0 ? formatHours(p.lostHours) : '—',
   }));
   const observed = data.weather.observed;
+  // Observed values are in the report's units (imperial: in, °F, mph; metric: mm, °C, km/h).
+  const unit = UNIT_LABELS[data.units];
   return (
     <View>
       <Text style={{ marginBottom: 4 }}>
         {data.weather.conditionsText || 'Conditions not stated.'}
         {observed ? (
           <Text style={styles.muted}>
-            {'  '}Observed: {observed.precipIn.toFixed(2)} in precipitation · {observed.tempMinF}–
-            {observed.tempMaxF} °F · wind {observed.windMph} mph
-            {observed.gustMph !== undefined ? ` · gusts ${observed.gustMph} mph` : ''}
+            {/* Text runs split as before v2: a run boundary drops kerning, so this keeps the
+                imperial line pixel-identical. */}
+            {'  '}Observed: {observed.precip.toFixed(MEASURE_DIGITS[data.units].precipitation)}
+            {` ${unit.precipitation} precipitation · `}
+            {observed.tempMin}–{observed.tempMax}
+            {` ${unit.temperature} · wind `}
+            {observed.wind}
+            {` ${unit.wind}`}
+            {observed.gust !== undefined ? ` · gusts ${observed.gust} ${unit.wind}` : ''}
           </Text>
         ) : null}
       </Text>
@@ -245,7 +260,7 @@ export function ManpowerTable({
         {m.companyId === null || unconfirmed.has(m.companyId) ? (
           <Text style={styles.chip}> UNCONFIRMED</Text>
         ) : null}
-        {m.source.some((s) => s.type === 'reply') ? (
+        {m.source.some((s) => s.type === 'answer') ? (
           <Text style={styles.chip}> CONFIRMED BY REPLY</Text>
         ) : null}
         {m.source.some((s) => s.type === 'office_edit') ? (

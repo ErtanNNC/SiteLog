@@ -1,4 +1,4 @@
-import type { CompanyRow, GlossaryTermRow, NewTerm } from '@sitelog/shared';
+import type { CompanyRow, GlossaryTermRow, NewTermV1 } from '@sitelog/shared';
 import type { Ctx } from '../context';
 
 /**
@@ -8,13 +8,13 @@ import type { Ctx } from '../context';
  */
 export const AUTO_LEARN_CONFIDENCE = 0.9;
 
-export function termStatusFor(term: NewTerm): 'auto_learned' | 'needs_review' {
+export function termStatusFor(term: NewTermV1): 'auto_learned' | 'needs_review' {
   return term.kind === 'term' && term.confidence >= AUTO_LEARN_CONFIDENCE
     ? 'auto_learned'
     : 'needs_review';
 }
 
-function known(term: NewTerm, companies: CompanyRow[], glossary: GlossaryTermRow[]): boolean {
+function known(term: NewTermV1, companies: CompanyRow[], glossary: GlossaryTermRow[]): boolean {
   const heard = term.heard.trim().toLowerCase();
   if (!heard) return true;
   for (const c of companies) {
@@ -34,7 +34,7 @@ export async function learnTerms(
     orgId: string;
     siteId: string | null;
     reporterId?: string | null;
-    terms: NewTerm[];
+    terms: NewTermV1[];
     companies: CompanyRow[];
     glossary: GlossaryTermRow[];
   },

@@ -1,5 +1,5 @@
 import { waCopy } from '../copy/whatsapp.ts';
-import type { DailyReportData } from '../schemas/report.ts';
+import type { DailyReportDataV1 } from '../schemas/report.ts';
 import { deriveTotals } from './hours.ts';
 
 /**
@@ -11,7 +11,7 @@ export interface ProgressFacts {
   /** Every voice note of the report has a transcript (false for text-only reports). */
   transcribed: boolean;
   /** The extracted draft, once extraction finished on a settled set of sources. */
-  draft?: DailyReportData | null;
+  draft?: DailyReportDataV1 | null;
   selfPerformCompanyIds?: ReadonlySet<string>;
 }
 

@@ -25,8 +25,8 @@ describe('versionPhotos', () => {
   it('follows data.photos: order, captions and times of the version', () => {
     const out = versionPhotos(
       [
-        { messageId: 'p3', caption: '  North wall  ', takenAt: '2026-10-09T16:00:00.000Z' },
-        { messageId: 'p1', takenAt: '2026-10-09T15:00:00.000Z' },
+        { uploadId: 'p3', caption: '  North wall  ', takenAt: '2026-10-09T16:00:00.000Z' },
+        { uploadId: 'p1', takenAt: '2026-10-09T15:00:00.000Z' },
       ],
       sources,
     );
@@ -40,10 +40,10 @@ describe('versionPhotos', () => {
   it('skips entries that are not photos of the report and repeated entries', () => {
     const out = versionPhotos(
       [
-        { messageId: 'a', takenAt: 'x' },
-        { messageId: 'gone', takenAt: 'x' },
-        { messageId: 'P2', caption: 'first', takenAt: '' },
-        { messageId: 'p2', caption: 'second', takenAt: 'y' },
+        { uploadId: 'a', takenAt: 'x' },
+        { uploadId: 'gone', takenAt: 'x' },
+        { uploadId: 'P2', caption: 'first', takenAt: '' },
+        { uploadId: 'p2', caption: 'second', takenAt: 'y' },
       ],
       sources,
     );

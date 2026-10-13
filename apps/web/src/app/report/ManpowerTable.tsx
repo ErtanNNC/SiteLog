@@ -23,7 +23,7 @@ interface Row {
   was: { workers: number | null; totalHours: number | null } | null;
 }
 
-/** Sources of one value, de-duplicated by type + message, rendered as SourceLinks. */
+/** Sources of one value (§10.3 v2), de-duplicated by kind + position or id, rendered as SourceLinks. */
 export function SourceLinks({
   sources,
   detail,
@@ -40,6 +40,14 @@ export function SourceLinks({
   if (!sources?.length) return null;
   const seen = new Set<string>();
   const msgAt = (id: string) => detail.messages.find((m) => m.id === id)?.at ?? null;
+  // An answer to one of the report's questions shows when it came in. An upgraded v1 reply keeps
+  // the reply message's id in questionId (report/upgrade.ts): it shows and opens that message.
+  const answer = (questionId: string) => {
+    const q = detail.questions.find((x) => x.id === questionId);
+    return q
+      ? { at: q.answeredAt, messageId: null }
+      : { at: msgAt(questionId), messageId: questionId };
+  };
   const editor = (s: Source) =>
     s.type === 'office_edit'
       ? (detail.versions.find((v) => v.author === 'office_user' && v.createdAt === s.at)
@@ -49,13 +57,16 @@ export function SourceLinks({
     <span className={cn('inline-flex flex-wrap items-center gap-1', className)}>
       {sources.map((s, i) => {
         const key =
-          s.type === 'audio'
-            ? `audio:${s.start}`
-            : s.type === 'office_edit'
-              ? `edit:${s.at}`
-              : s.type === 'weather_api'
-                ? 'wx'
-                : `${s.type}:${s.messageId}`;
+          s.type === 'voice_note'
+            ? `voice_note:${s.uploadId}:${s.start}`
+            : s.type === 'call'
+              ? `call:${s.callId}:${s.start}`
+              : s.type === 'office_edit'
+                ? `edit:${s.at}`
+                : s.type === 'weather_api'
+                  ? 'wx'
+                  : `answer:${s.questionId}`;
+        const given = s.type === 'answer' ? answer(s.questionId) : null;
         if (seen.has(key)) return null;
         seen.add(key);
         return (
@@ -63,7 +74,8 @@ export function SourceLinks({
             key={`${key}-${i}`}
             source={s}
             timezone={detail.site.timezone}
-            messageAt={s.type === 'reply' || s.type === 'text' ? msgAt(s.messageId) : null}
+            messageAt={given?.at ?? null}
+            messageId={given?.messageId ?? null}
             editorName={editor(s)}
             onOpenMessage={onOpenMessage}
             onOpenHistory={onOpenHistory}
@@ -95,7 +107,7 @@ export function ManpowerTable({ detail, onOpenMessage, onOpenHistory }: Manpower
         kind: 'asked',
         label: copy.report.questionAsked(formatTimeInTz(q.askedAt, tz)),
       });
-    else if (entry.hoursBasis === 'reply')
+    else if (entry.hoursBasis === 'answer')
       badges.push({ kind: 'confirmed', label: copy.report.confirmedByReply });
     const company = entry.companyId ? companyById.get(entry.companyId) : undefined;
     if (!company || company.status === 'unconfirmed')

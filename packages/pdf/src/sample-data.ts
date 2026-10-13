@@ -1,12 +1,16 @@
-import type { DailyReportData } from '@sitelog/shared';
+import { upgradeV1toV2, type DailyReportData, type DailyReportDataV1 } from '@sitelog/shared';
 import type { EvidencePackInput, PdfPhoto, ReportPdfInput } from './types';
 
-/** The §18 hero report (RL-2041-0187, Fri Oct 9, v2 after "Apex 6 → 7") as PDF input, for visual checks and the smoke test. */
+/**
+ * The §18 hero report (RL-2041-0187, Fri Oct 9, v2 after "Apex 6 → 7") as PDF input, for visual
+ * checks, the smoke test and the PDF text snapshot. The report data is stored as v1 (WhatsApp
+ * era); the documents read it the way every reader does, through upgradeV1toV2.
+ */
 
 const AUDIO = 'a1b2c3d4-0000-4000-8000-000000000001';
 const REPLY = 'a1b2c3d4-0000-4000-8000-000000000002';
 
-export const heroReportData: DailyReportData = {
+export const heroReportDataV1: DailyReportDataV1 = {
   schemaVersion: 1,
   reportDate: '2026-10-09',
   languageDetected: ['es', 'en'],
@@ -175,6 +179,9 @@ export const heroReportData: DailyReportData = {
   proposedQuestions: [],
 };
 
+/** The hero report as the PDF reads it (§10.3 v2). */
+export const heroReportData: DailyReportData = upgradeV1toV2(heroReportDataV1);
+
 /** A tiny valid 1×1 PNG, tinted grey, so sample photos render without binary fixtures. */
 export const samplePng: Uint8Array = Uint8Array.from(
   atob(
@@ -266,13 +273,13 @@ export const sampleEvidencePackInput: EvidencePackInput = {
       reportNo: 'RL-2041-0182',
       version: 1,
       signedOff: true,
-      data: {
-        ...heroReportData,
+      data: upgradeV1toV2({
+        ...heroReportDataV1,
         reportDate: '2026-10-02',
         summary:
           'Rain from 06:30 to 10:00 stopped exterior masonry for 3.5 h; crew reassigned to interior blockwork. Level 3 slab prep continued.',
         weather: {
-          ...heroReportData.weather,
+          ...heroReportDataV1.weather,
           periods: [
             {
               start: '06:30',
@@ -284,7 +291,7 @@ export const sampleEvidencePackInput: EvidencePackInput = {
             },
           ],
         },
-      },
+      }),
       lostHours: 3.5,
       fullDay: false,
       claimReady: true,

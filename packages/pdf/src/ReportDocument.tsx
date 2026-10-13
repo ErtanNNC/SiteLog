@@ -14,7 +14,7 @@ import {
   WorkTable,
 } from './components';
 import { registerFonts } from './fonts';
-import { styles } from './styles';
+import { INK, styles } from './styles';
 import type { ReportPdfInput } from './types';
 
 /** §12 — the two-page daily site report. */
@@ -40,7 +40,7 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
     : data.weather.conditionsText || 'Not stated';
   const edits = input.edits.filter((e) => e.version > 1);
   const footnotes: string[] = [];
-  if (data.manpower.some((m) => m.source.some((s) => s.type === 'reply')))
+  if (data.manpower.some((m) => m.source.some((s) => s.type === 'answer')))
     footnotes.push(
       'Confirmed by reply: the value was confirmed by the site manager in a WhatsApp reply.',
     );
@@ -115,9 +115,7 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
               <Text style={styles.orgName}>{org.name}</Text>
             )}
             {org.logo ? (
-              <Text style={[styles.orgLine, { fontWeight: 600, color: '#16181B' }]}>
-                {org.name}
-              </Text>
+              <Text style={[styles.orgLine, { fontWeight: 600, color: INK }]}>{org.name}</Text>
             ) : null}
             {org.address ? <Text style={styles.orgLine}>{org.address}</Text> : null}
             {org.licenseNo ? <Text style={styles.orgLine}>License {org.licenseNo}</Text> : null}

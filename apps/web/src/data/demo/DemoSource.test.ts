@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore, demoUserFor } from './store';
 import { DemoSource, demoPayrollCsv } from './DemoSource';
 
@@ -249,7 +249,7 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     const typed = store.createOfficeReport({
       siteId: elm.id,
       date: '2026-10-09',
-      data: { ...emptyReportData('2026-10-09'), summary: 'Typed in the office.' },
+      data: { ...emptyReportDataV1('2026-10-09'), summary: 'Typed in the office.' },
       userId: demoUserFor('admin').id,
     });
     expect(store.data.versions.find((v) => v.report_id === typed.reportId)!.pdf_path).toBeNull();

@@ -1,4 +1,4 @@
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { describe, expect, it } from 'vitest';
 import { makeSource } from '@/test/render';
 import { DemoStore } from './store';
@@ -73,7 +73,7 @@ describe('DemoStore field-simulator writes', () => {
     let row = (await source.getOverview()).sitesToday.find((r) => r.siteId === site.id)!;
     expect(row.chip.label).toBe('Awaiting');
 
-    const data = emptyReportData('2026-10-09');
+    const data = emptyReportDataV1('2026-10-09');
     data.summary = 'Test day.';
     data.manpower = [
       {
@@ -143,7 +143,7 @@ describe('DemoStore field-simulator writes', () => {
       kind: 'weather_day',
       at,
     });
-    const data = emptyReportData('2026-10-09');
+    const data = emptyReportDataV1('2026-10-09');
     data.weather.periods = [{ condition: 'Rain', fullDay: true, lostHours: 8, source: [] }];
     store.fileFieldReport({
       reportId: 'sim-wx',

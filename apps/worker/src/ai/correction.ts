@@ -2,7 +2,7 @@ import {
   CorrectionResultSchema,
   toolInputSchema,
   type CorrectionResult,
-  type DailyReportData,
+  type DailyReportDataV1,
 } from '@sitelog/shared';
 import type { Logger } from '../log';
 import { callTool, type MessagesClient, type ToolCallResult } from './claude';
@@ -16,7 +16,7 @@ export const CORRECTION_TOOL = {
 } as const;
 
 export interface CorrectionRequest {
-  data: DailyReportData;
+  data: DailyReportDataV1;
   correctionText: string;
   messageId: string;
   defaultShiftHours: number;

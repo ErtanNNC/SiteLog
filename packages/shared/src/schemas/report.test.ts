@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   DailyReportDataSchema,
+  DailyReportDataV1Schema,
   ExtractionOutputSchema,
+  StoredReportDataSchema,
   emptyReportData,
+  emptyReportDataV1,
   extractionToolInputSchema,
 } from './report.ts';
 import { CorrectionResultSchema, ParsedAnswerSchema, toolInputSchema } from './ai.ts';
@@ -11,15 +14,15 @@ import { PG_ENUMS } from '../enums.ts';
 
 describe('report schemas', () => {
   it('accepts the empty skeleton and rejects invented shapes', () => {
-    expect(DailyReportDataSchema.parse(emptyReportData('2026-10-09')).reportDate).toBe(
+    expect(DailyReportDataV1Schema.parse(emptyReportDataV1('2026-10-09')).reportDate).toBe(
       '2026-10-09',
     );
     expect(() =>
-      DailyReportDataSchema.parse({ ...emptyReportData('2026-10-09'), reportDate: 'Oct 9' }),
+      DailyReportDataV1Schema.parse({ ...emptyReportDataV1('2026-10-09'), reportDate: 'Oct 9' }),
     ).toThrow();
     expect(() =>
-      DailyReportDataSchema.parse({
-        ...emptyReportData('2026-10-09'),
+      DailyReportDataV1Schema.parse({
+        ...emptyReportDataV1('2026-10-09'),
         manpower: [{ companyName: 'x' }],
       }),
     ).toThrow();
@@ -54,5 +57,101 @@ describe('report schemas', () => {
       expect(values.length, name).toBeGreaterThan(0);
       expect(new Set(values).size, name).toBe(values.length);
     }
+  });
+});
+
+describe('report data v2 (§10.3) and the stored-data union', () => {
+  const v1 = () => emptyReportDataV1('2026-10-09');
+  const v2 = () => emptyReportData('2026-10-09', { reportLanguage: 'tr', units: 'metric' });
+  const rejects = (data: unknown) =>
+    expect(StoredReportDataSchema.safeParse(data).success).toBe(false);
+  const audio = { type: 'audio', messageId: 'm1', start: 3 };
+  const voice = { type: 'voice_note', uploadId: 'u1', start: 3 };
+  const crew = (hoursBasis: string, source: unknown[]) => ({
+    companyId: 'c1',
+    companyNameHeard: 'Apex',
+    companyName: 'Apex Concrete',
+    workers: 6,
+    hoursPerWorker: 8,
+    totalHours: 48,
+    hoursBasis,
+    confidence: 0.9,
+    source,
+  });
+
+  it('accepts a v1 and a v2 skeleton and tells them apart by schemaVersion', () => {
+    expect(StoredReportDataSchema.parse(v1()).schemaVersion).toBe(1);
+    const parsed = StoredReportDataSchema.parse(v2());
+    expect(parsed).toEqual(DailyReportDataSchema.parse(v2()));
+    expect(parsed).toMatchObject({ schemaVersion: 2, reportLanguage: 'tr', units: 'metric' });
+  });
+
+  it('accepts every v2 source kind', () => {
+    const source = [
+      voice,
+      { type: 'call', callId: 'call-1', start: 12, end: 15.5 },
+      { type: 'answer', questionId: 'q1' },
+      { type: 'office_edit', userId: 'u1', at: '2026-10-10T01:10:00Z' },
+      { type: 'weather_api' },
+    ];
+    expect(
+      StoredReportDataSchema.parse({ ...v2(), manpower: [crew('answer', source)] }).manpower[0]!
+        .source,
+    ).toEqual(source);
+  });
+
+  it('rejects malformed data', () => {
+    rejects({ ...v2(), schemaVersion: 3 });
+    rejects({ ...v2(), schemaVersion: undefined });
+    rejects(null);
+    rejects('{"schemaVersion":2}');
+    // A v2 shape labelled v1 and the other way round (unknown keys are stripped, as for the
+    // model's output, so what tells them apart is what each version requires).
+    rejects({ ...v2(), schemaVersion: 1, photos: [{ uploadId: 'p1', takenAt: 'T' }] });
+    rejects({ ...v1(), schemaVersion: 2 });
+    // v2 needs the report language and units, from their lists.
+    const { reportLanguage: _l, ...noLanguage } = v2();
+    void _l;
+    rejects(noLanguage);
+    rejects({ ...v2(), reportLanguage: 'es' });
+    rejects({ ...v2(), units: 'si' });
+    // Sources, bases, photos and terms of the other version.
+    rejects({ ...v2(), manpower: [crew('stated', [audio])] });
+    rejects({ ...v1(), manpower: [crew('stated', [voice])] });
+    rejects({ ...v2(), manpower: [crew('reply', [voice])] });
+    rejects({ ...v1(), manpower: [crew('answer', [audio])] });
+    rejects({ ...v2(), manpower: [crew('stated', [{ type: 'text', messageId: 'm1' }])] });
+    rejects({ ...v2(), manpower: [crew('stated', [{ type: 'call', start: 1 }])] });
+    rejects({ ...v2(), photos: [{ messageId: 'p1', takenAt: 'T' }] });
+    rejects({ ...v1(), photos: [{ uploadId: 'p1', takenAt: 'T' }] });
+    rejects({
+      ...v2(),
+      newTerms: [
+        { heard: 'colado', proposedOfficial: 'Concrete pour', kind: 'term', confidence: 1 },
+      ],
+    });
+    rejects({
+      ...v2(),
+      weather: {
+        conditionsText: 'Rain',
+        periods: [],
+        observed: { precipIn: 0.4, tempMinF: 58, tempMaxF: 64, windMph: 9, provider: 'x' },
+      },
+    });
+    // Constraints both versions share.
+    rejects({ ...v2(), reportDate: 'Oct 9' });
+    rejects({ ...v2(), manpower: [{ ...crew('stated', []), workers: -1 }] });
+    rejects({
+      ...v2(),
+      proposedQuestions: [{ field: 'photo', question: 'Photo?', options: ['a', 'b', 'c'] }],
+    });
+  });
+
+  it('keeps the Claude tool on v1 until W1-12', () => {
+    const tool = JSON.stringify(extractionToolInputSchema());
+    expect(tool).toContain('"reply"');
+    expect(tool).toContain('"messageId"');
+    expect(tool).not.toContain('voice_note');
+    expect(tool).not.toContain('uploadId');
   });
 });

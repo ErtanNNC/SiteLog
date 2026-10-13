@@ -2,7 +2,7 @@ import {
   pickNextQuestion,
   validateReport,
   type CompanyRow,
-  type DailyReportData,
+  type DailyReportDataV1,
   type OrgSettingsRow,
   type QuestionRow,
   type QuestionSpec,
@@ -27,7 +27,7 @@ export function requiredFieldsOf(
 }
 
 export function validateDraft(
-  data: DailyReportData,
+  data: DailyReportDataV1,
   settings: Pick<OrgSettingsRow, 'required_fields'>,
   photoCount: number,
 ): ValidationResult {
@@ -43,7 +43,7 @@ export function askedPathsOf(questions: QuestionRow[]): string[] {
 }
 
 export function selectNextQuestion(
-  data: DailyReportData,
+  data: DailyReportDataV1,
   validation: ValidationResult,
   questions: QuestionRow[],
   settings: Pick<OrgSettingsRow, 'max_questions_per_report'>,

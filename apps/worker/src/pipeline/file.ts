@@ -1,6 +1,6 @@
 import {
   waCopy,
-  type DailyReportData,
+  type DailyReportDataV1,
   type ReportRow,
   type ReportVersionRow,
   type SiteDayStatus,
@@ -54,7 +54,7 @@ export async function fileReport(
   if (!site) throw new Error(`site ${report.site_id} not found`);
   const siteDay = await ctx.db.getSiteDay(report.site_day_id);
   if (!siteDay) throw new Error(`site_day ${report.site_day_id} not found`);
-  const data = (await currentData(ctx, report)) as DailyReportData;
+  const data = (await currentData(ctx, report)) as DailyReportDataV1;
   const sources = await ctx.db.listReportSources(report.id);
   const questions = await ctx.db.listQuestions(report.id);
   const now = ctx.now();
@@ -70,7 +70,7 @@ export async function fileReport(
   const reasons = reviewReasons(validation, questions, extras);
 
   // Freeze: write the computed missingRequired / lowConfidence into the version data.
-  const frozen: DailyReportData = {
+  const frozen: DailyReportDataV1 = {
     ...data,
     missingRequired: validation.missingRequired,
     lowConfidence: validation.lowConfidence,

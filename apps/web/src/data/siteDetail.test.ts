@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { DemoSource } from './demo/DemoSource';
 import { DemoStore, demoUserFor } from './demo/store';
 
@@ -21,7 +21,7 @@ async function newSiteWithReports(dates: string[]) {
     await source.createOfficeReport({
       siteId,
       date,
-      data: { ...emptyReportData(date), summary: `Work on ${date}.` },
+      data: { ...emptyReportDataV1(date), summary: `Work on ${date}.` },
     });
   return { source, siteId };
 }

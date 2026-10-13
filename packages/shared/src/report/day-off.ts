@@ -1,5 +1,5 @@
 import type { DayOffClassification } from '../schemas/ai.ts';
-import { emptyReportData, type DailyReportData, type Source } from '../schemas/report.ts';
+import { emptyReportDataV1, type DailyReportDataV1, type SourceV1 } from '../schemas/report.ts';
 import { hoursBetween, splitWorkingHours } from './hours.ts';
 
 /**
@@ -14,8 +14,8 @@ function cap(s: string): string {
 export function weatherDayData(
   date: string,
   cls: DayOffClassification,
-  opts: { defaultShiftHours: number; workingHours: string | null; source: Source },
-): DailyReportData {
+  opts: { defaultShiftHours: number; workingHours: string | null; source: SourceV1 },
+): DailyReportDataV1 {
   const cause = cls.cause ?? 'weather';
   const [start, end] = splitWorkingHours(opts.workingHours);
   const released = cls.releasedAt;
@@ -28,7 +28,7 @@ export function weatherDayData(
     lost = opts.defaultShiftHours / 2;
   }
   const fullDay = cls.fullDay || !released;
-  const data = emptyReportData(date);
+  const data = emptyReportDataV1(date);
   data.summary = fullDay
     ? `Weather day: no work because of ${cause}. Site closed for the day.`
     : `Weather day: work stopped at ${released} because of ${cause}; crew released. ${lost} h lost.`;

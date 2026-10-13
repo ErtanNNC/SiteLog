@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-  DailyReportDataSchema,
-  emptyReportData,
+  DailyReportDataV1Schema,
+  emptyReportDataV1,
   officePhotoStoragePath,
-  type DailyReportData,
+  readReportData,
+  upgradeV1toV2,
+  type DailyReportDataV1,
   type EvidencePackRow,
   type MessageRow,
 } from '@sitelog/shared';
@@ -79,15 +81,15 @@ async function setup() {
     await h.storage.upload('photos', m.storage_path!, Buffer.from(m.id), m.media_mime!);
   }
 
-  const base: DailyReportData = DailyReportDataSchema.parse({
-    ...emptyReportData(DATE),
+  const base: DailyReportDataV1 = DailyReportDataV1Schema.parse({
+    ...emptyReportDataV1(DATE),
     summary: 'Deck formwork.',
     weather: {
       conditionsText: 'Rain',
       periods: [{ condition: 'Rain', lostHours: 2, source: [] }],
     },
   });
-  const v1Data: DailyReportData = {
+  const v1Data: DailyReportDataV1 = {
     ...base,
     photos: [
       { messageId: wa.id, caption: 'Level 2 deck', takenAt: wa.created_at },
@@ -96,7 +98,7 @@ async function setup() {
     ],
   };
   // Office edit: North wall removed, the stair photo captioned and moved first.
-  const v2Data: DailyReportData = {
+  const v2Data: DailyReportDataV1 = {
     ...base,
     photos: [
       { messageId: stair.id, caption: 'East stair', takenAt: stair.created_at },
@@ -131,14 +133,24 @@ describe('PDF photos follow the version', () => {
   it('prints each version with its own photos, order and captions', async () => {
     const { h, site, report, wa, north, stair, v1, v2, v1Data, v2Data } = await setup();
 
-    const first = await buildReportPdfInput(h.ctx, { report, version: v1, site, data: v1Data });
+    const first = await buildReportPdfInput(h.ctx, {
+      report,
+      version: v1,
+      site,
+      data: readReportData(v1Data),
+    });
     expect(shown(first.photos)).toEqual([
       [wa.id, 'Level 2 deck', wa.created_at],
       [north.id, 'North wall', north.created_at],
       [stair.id, null, stair.created_at],
     ]);
 
-    const second = await buildReportPdfInput(h.ctx, { report, version: v2, site, data: v2Data });
+    const second = await buildReportPdfInput(h.ctx, {
+      report,
+      version: v2,
+      site,
+      data: readReportData(v2Data),
+    });
     expect(shown(second.photos)).toEqual([
       [stair.id, 'East stair', stair.created_at],
       [wa.id, 'Level 2 deck', wa.created_at],
@@ -152,7 +164,7 @@ describe('PDF photos follow the version', () => {
       report,
       version: v2,
       site,
-      data: { ...v2Data, photos: [] },
+      data: readReportData({ ...v2Data, photos: [] }),
     });
     expect(none.photos).toEqual([]);
 
@@ -160,7 +172,7 @@ describe('PDF photos follow the version', () => {
       report,
       version: v1,
       site: { ...site, settings: { ...site.settings, pdf_max_photos: 2 } },
-      data: v1Data,
+      data: readReportData(v1Data),
     });
     expect(two.photos).toHaveLength(2);
   });
@@ -173,7 +185,8 @@ describe('PDF photos follow the version', () => {
       report,
       version: v1,
       site,
-      data: legacy as DailyReportData,
+      // Read like every stored version: the missing list stays missing in the v2 view.
+      data: readReportData(legacy as DailyReportDataV1),
     });
     expect(shown(input.photos)).toEqual([
       [wa.id, 'Level 2 deck', wa.created_at],
@@ -185,13 +198,18 @@ describe('PDF photos follow the version', () => {
   it('skips a photo whose file is gone and keeps the rest', async () => {
     const { h, site, report, v1, v1Data, north } = await setup();
     await h.storage.remove('photos', [north.storage_path!]);
-    const input = await buildReportPdfInput(h.ctx, { report, version: v1, site, data: v1Data });
+    const input = await buildReportPdfInput(h.ctx, {
+      report,
+      version: v1,
+      site,
+      data: readReportData(v1Data),
+    });
     expect(input.photos.map(bytesOf)).not.toContain(north.id);
     expect(input.photos).toHaveLength(2);
   });
 
   it('builds the evidence pack day from the current version’s photos', async () => {
-    const { h, site, wa, stair } = await setup();
+    const { h, site, report, wa, stair } = await setup();
     const pack = {
       id: randomUUID(),
       org_id: ORG_ID,
@@ -215,5 +233,16 @@ describe('PDF photos follow the version', () => {
       [stair.id, 'East stair'],
       [wa.id, 'Level 2 deck'],
     ]);
+    expect(day.data.schemaVersion).toBe(2); // the pack reads the v2 view of the stored v1
+
+    // The same versions stored as v2 (photos keyed by upload id): the same pack day.
+    for (const version of [1, 2]) {
+      const row = (await h.db.getVersion(report.id, version))!;
+      await h.db.updateVersion(report.id, version, {
+        data: upgradeV1toV2(row.data as unknown as DailyReportDataV1) as never,
+      });
+    }
+    const again = await buildEvidencePackInput(h.ctx, pack, site);
+    expect(again.days).toEqual(input.days);
   });
 });

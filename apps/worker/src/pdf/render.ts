@@ -17,11 +17,13 @@ import {
   type ReportPdfInput,
 } from '@sitelog/pdf';
 import {
+  readReportData,
   versionPhotos,
   type DailyReportData,
   type EvidencePackRow,
   type ReportRow,
   type ReportVersionRow,
+  type StoredReportData,
   type VersionPhoto,
 } from '@sitelog/shared';
 import type { Ctx } from '../context';
@@ -136,6 +138,7 @@ async function loadPhotos(
   return out;
 }
 
+/** `data`: the version's data as readers see it (§10.3 v2; `readReportData` of the stored JSON). */
 export async function buildReportPdfInput(
   ctx: Ctx,
   args: { report: ReportRow; version: ReportVersionRow; site: SiteContext; data: DailyReportData },
@@ -238,7 +241,7 @@ export async function buildEvidencePackInput(
   for (const r of reports) {
     const version = await ctx.db.getVersion(r.id, r.current_version);
     if (!version) continue;
-    const data = version.data as DailyReportData;
+    const data = readReportData(version.data as unknown as StoredReportData);
     const dayEvents = events.filter((e) => e.report_id === r.id);
     const lost =
       Math.round(
@@ -303,7 +306,7 @@ export function weatherExcerpts(
 ): Array<{ start: number; end: number; text: string }> {
   if (segments.length === 0) return [];
   const starts = data.weather.periods.flatMap((p) =>
-    p.source.filter((s) => s.type === 'audio').map((s) => (s as { start: number }).start),
+    p.source.flatMap((s) => (s.type === 'voice_note' ? [s.start] : [])),
   );
   const picked = new Set<number>();
   for (const st of starts) {

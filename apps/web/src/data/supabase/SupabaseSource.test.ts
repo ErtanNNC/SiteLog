@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import type { Db } from '@/lib/supabase';
 import { buildIndex, currentVersion, type RowSet } from '../assemble';
 import type { ReportFilters } from '../types';
+import { storedV1 } from '@/test/storedData';
 import { DemoSource } from '../demo/DemoSource';
 import { DemoStore, demoUserFor } from '../demo/store';
 import { SupabaseSource } from './SupabaseSource';
@@ -74,7 +75,7 @@ function tablesFrom(rows: RowSet): Record<string, Row[]> {
       if (!FILED.has(r.status)) return [];
       const site = ix.siteById.get(r.site_id)!;
       const v = currentVersion(ix, r);
-      const data = v?.data as unknown as DailyReportData | undefined;
+      const data = v?.data as unknown as DailyReportDataV1 | undefined;
       const lost = rows.weatherEvents
         .filter((w) => w.report_id === r.id && w.version === r.current_version)
         .reduce((a, w) => a + Number(w.lost_hours), 0);
@@ -380,7 +381,7 @@ describe('SupabaseSource.getSiteDetail', () => {
     store.createOfficeReport({
       siteId: site.id,
       date: '2026-09-14',
-      data: { ...emptyReportData('2026-09-14'), summary: 'Back-filled from the paper diary.' },
+      data: { ...emptyReportDataV1('2026-09-14'), summary: 'Back-filled from the paper diary.' },
       userId: demoUserFor('admin').id,
     });
     const { live, demo } = sources(store);
@@ -409,8 +410,8 @@ describe('SupabaseSource.getSiteDetail', () => {
     const vIndex = versions.findIndex(
       (v) => v.report_id === reportId && v.version === report.current_version,
     );
-    const vData = versions[vIndex]!.data as DailyReportData;
-    const extra: DailyReportData['photos'] = [];
+    const vData = versions[vIndex]!.data as DailyReportDataV1;
+    const extra: DailyReportDataV1['photos'] = [];
     versions[vIndex] = { ...versions[vIndex]!, data: { ...vData, photos: [...vData.photos] } };
     for (let i = 0; i < 150; i++) {
       const at = `2026-09-21T15:${String(i % 60).padStart(2, '0')}:00Z`;
@@ -429,7 +430,7 @@ describe('SupabaseSource.getSiteDetail', () => {
       });
       extra.push({ messageId: `msg-extra-${i}`, takenAt: at });
     }
-    (versions[vIndex]!.data as DailyReportData).photos.push(...extra);
+    (versions[vIndex]!.data as DailyReportDataV1).photos.push(...extra);
 
     db.calls = [];
     const d = await live.getSiteDetail(site.id, '2026-09');
@@ -476,13 +477,13 @@ describe('SupabaseSource: office photos', () => {
     const { reportId } = await setup.createOfficeReport({
       siteId: elm.id,
       date: '2026-10-09',
-      data: { ...emptyReportData('2026-10-09'), summary: 'Framing.' },
+      data: { ...emptyReportDataV1('2026-10-09'), summary: 'Framing.' },
       photos: [
         { path: a.path, mime: a.mime, caption: 'North wall', takenAt: '2026-10-09T15:00:00Z' },
         { path: b.path, mime: b.mime, caption: null, takenAt: '2026-10-09T16:00:00Z' },
       ],
     });
-    const v1 = (await setup.getReportDetail(reportId)).data;
+    const v1 = storedV1(await setup.getReportDetail(reportId));
     // v2 drops the first photo and captions the second.
     await setup.createReportVersion(
       reportId,
@@ -508,7 +509,7 @@ describe('SupabaseSource: office photos', () => {
     expect(db.calls).toContainEqual({
       table: 'report_versions',
       method: 'select',
-      value: 'report_id, version, photos:data->photos',
+      value: 'report_id, version, photos:data->photos, schemaVersion:data->schemaVersion',
     });
   });
 
@@ -536,7 +537,7 @@ describe('SupabaseSource: office photos', () => {
     ];
     db.rpcData.create_office_report = { reportId: 'r1', reportNo: 'ES-0377-0042', created: true };
     db.rpcData.create_report_version = { version: 2 };
-    const data = emptyReportData('2026-10-09');
+    const data = emptyReportDataV1('2026-10-09');
     await live.createOfficeReport({ siteId: elm.id, date: '2026-10-09', data, photos });
     await live.createReportVersion('r1', data, 'Added a photo', photos);
     // Without photos the calls stay as before (the default p_photos is []).
@@ -595,8 +596,8 @@ describe('SupabaseSource.findDayReport', () => {
 });
 
 /** Typed in the panel (no WhatsApp): optionally with an incident. */
-function typed(date: string, summary: string, incident: boolean): DailyReportData {
-  const d = emptyReportData(date);
+function typed(date: string, summary: string, incident: boolean): DailyReportDataV1 {
+  const d = emptyReportDataV1(date);
   return {
     ...d,
     summary,
@@ -845,7 +846,7 @@ describe('SupabaseSource.getWeather', () => {
     const store = new DemoStore();
     const site = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
     // Typed in the panel: a stoppage with no photo, and nobody was asked for one.
-    const data = emptyReportData('2026-09-14');
+    const data = emptyReportDataV1('2026-09-14');
     data.weather.periods.push({ condition: 'Heavy rain', lostHours: 3, source: [] });
     const typed = store.createOfficeReport({
       siteId: site.id,

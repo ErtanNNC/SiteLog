@@ -1,4 +1,4 @@
-import type { ObservedWeather } from '../schemas/report.ts';
+import type { ObservedWeatherV1 } from '../schemas/report.ts';
 import { splitWorkingHours } from '../report/hours.ts';
 
 /** §10.10 — Open-Meteo hourly data for a site-day. */
@@ -34,7 +34,7 @@ export interface SiteDayWeather {
   fetchedAt: string;
   units: { precip: 'in'; temp: 'F'; wind: 'mph' };
   hours: WeatherHour[];
-  summary: ObservedWeather & { precipWorkingHoursIn: number; maxGustWorkingHoursMph: number };
+  summary: ObservedWeatherV1 & { precipWorkingHoursIn: number; maxGustWorkingHoursMph: number };
 }
 
 export const WEATHER_THRESHOLDS = { precipIn: 0.05, gustMph: 25 } as const;
@@ -144,7 +144,7 @@ export function weatherPhrase(w: SiteDayWeather): string {
 }
 
 /** Observed block for the report (§10.3 weather.observed). */
-export function toObserved(w: SiteDayWeather): ObservedWeather {
+export function toObserved(w: SiteDayWeather): ObservedWeatherV1 {
   const { precipIn, tempMinF, tempMaxF, windMph, gustMph, provider } = w.summary;
   return { precipIn, tempMinF, tempMaxF, windMph, gustMph, provider };
 }

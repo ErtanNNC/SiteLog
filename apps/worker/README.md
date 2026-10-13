@@ -147,11 +147,19 @@ added`), anything else is treated as an edit of that report (within the 14-day w
   on text styles, not the page (react-pdf drops render-prop text inside fixed elements otherwise).
 - **`render_pdf.notifyReporter`** (set by the `create_report_version` RPC) is read from the raw payload
   because the shared schema strips it.
+- **Report data versions**: the extraction, the pipeline and the router write `schemaVersion 1`
+  (`DailyReportDataV1`) until W1-12; `render_pdf`, `send_email` and the evidence pack read every
+  stored version through `readReportData()` (§10.3 v2, GAP D20).
+- **PDF text snapshots**: `src/pdf/snapshot.test.ts` compares `pdftotext -layout` of the §18 hero
+  sample with `src/pdf/__snapshots__/*.pdf.txt` (needs poppler-utils; CI installs it). The
+  snapshots collapse whitespace runs and drop blank lines, so a poppler upgrade that only moves
+  column padding does not fail them; words, order, lines and page breaks still count. After an
+  intended PDF change, run `npx vitest run src/pdf/snapshot.test.ts -u` here and review the diff.
 
 ## Fixtures and eval
 
 `fixtures/transcripts/*.json` are extraction inputs (`ExtractionInput`), `fixtures/expected/*.json` the
-expected `DailyReportData`, `fixtures/tool-outputs/*.json` recorded model outputs the tests use without
+expected `DailyReportDataV1`, `fixtures/tool-outputs/*.json` recorded model outputs the tests use without
 API keys, `fixtures/webhooks/*.json` Meta payloads for `scripts/replay-webhook`. `pnpm eval` runs the
 real extraction on every transcript and prints a results table (exit 1 on failure; "skipped" without
 `ANTHROPIC_API_KEY`).

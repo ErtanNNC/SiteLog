@@ -25,6 +25,8 @@ export const copy = {
     settings: 'Settings',
     billing: 'Billing',
     try: 'Try it on WhatsApp',
+    /** v1.2 `/dev/phone` (§5.2 console SMS driver); the page and its nav item come in W1-03. */
+    devPhone: 'Demo phone',
     badges: {
       reportsToReview: (n: number) => `${plural(n, 'report')} to review`,
       unknownSenders: (n: number) => `${plural(n, 'unknown number')}`,
@@ -66,6 +68,8 @@ export const copy = {
     },
     footer: {
       listening: 'Agent listening on WhatsApp',
+      /** v1.2 footer (§11.2), next to the org's SiteLog number(s); replaces `listening` in W1-03. */
+      agentReady: 'Agent ready · texts & calls',
       profile: 'Profile',
       signOut: 'Sign out',
       userMenu: 'Account menu',
@@ -229,7 +233,7 @@ export const copy = {
   source: {
     audio: (ts: string) => `audio ${ts}`,
     reply: (time: string) => `reply ${time}`,
-    text: (time: string) => `text ${time}`,
+    call: (ts: string) => `call ${ts}`,
     editedBy: (name: string) => `edited by ${name}`,
     weatherApi: 'weather data',
     seekTo: (ts: string) => `Play voice note from ${ts}`,
@@ -1211,6 +1215,8 @@ export const copy = {
       pdf: 'PDF template',
       recipients: 'Recipients',
       payroll: 'Payroll export',
+      /** v1.2 `/settings/channels` (§11.1); a placeholder in W1-03, the real tab in W1-08. */
+      fieldChannels: 'Field channels',
     },
     save: 'Save changes',
     saved: 'Settings saved.',

@@ -1,4 +1,4 @@
-import type { DailyReportData } from '../schemas/report.ts';
+import type { DailyReportDataV1 } from '../schemas/report.ts';
 import { abbreviateArea, formatDraftDate, formatHours } from '../format.ts';
 import { deriveTotals, type ReportTotals } from './hours.ts';
 
@@ -17,7 +17,7 @@ function line(label: string, value: string): string {
   return `${label.padEnd(LABEL_WIDTH)}${value}`;
 }
 
-export function workItemPhrase(w: DailyReportData['workPerformed'][number]): string {
+export function workItemPhrase(w: DailyReportDataV1['workPerformed'][number]): string {
   const area = w.area ? abbreviateArea(w.area) : '';
   const activity = w.activity.charAt(0).toLowerCase() + w.activity.slice(1);
   let suffix = '';
@@ -41,7 +41,7 @@ export function workItemPhrase(w: DailyReportData['workPerformed'][number]): str
   return `${area ? `${area} ` : ''}${activity}${suffix}`.trim();
 }
 
-export function weatherPhraseForCard(data: DailyReportData): string {
+export function weatherPhraseForCard(data: DailyReportDataV1): string {
   const periods = data.weather.periods;
   if (periods.length === 0) return data.weather.conditionsText || 'Not stated';
   return periods
@@ -65,7 +65,7 @@ function shortImpact(impact: string): string {
   return lowered.length > 40 ? `${lowered.slice(0, 39).trimEnd()}…` : lowered;
 }
 
-export function safetyPhrase(data: DailyReportData): string {
+export function safetyPhrase(data: DailyReportDataV1): string {
   const parts: string[] = [];
   if (data.safety.toolboxTalk) parts.push('Toolbox talk');
   if (data.safety.incidents.length > 0) {
@@ -79,7 +79,7 @@ export function safetyPhrase(data: DailyReportData): string {
 }
 
 /** §F7 — the draft card sent to WhatsApp. */
-export function formatDraftCard(data: DailyReportData, opts: DraftCardOptions): string {
+export function formatDraftCard(data: DailyReportDataV1, opts: DraftCardOptions): string {
   const totals = opts.totals ?? deriveTotals(data);
   const crew = totals.headcountKnown ? `${totals.crewOnSite} on site` : 'headcount pending';
   const subs = `${totals.subcontractors} sub${totals.subcontractors === 1 ? '' : 's'}`;

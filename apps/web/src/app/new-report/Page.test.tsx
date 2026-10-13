@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore } from '@/data/demo/store';
 import type { ReportDetail } from '@/data/types';
 import type * as PhotosModule from '@/lib/photos';
@@ -156,7 +156,7 @@ describe('NewReportPage', () => {
       expect.objectContaining({ report_id: report.id, message_id: message.id, kind: 'photo' }),
     );
     const v1 = store.data.versions.find((v) => v.report_id === report.id && v.version === 1)!;
-    expect((v1.data as unknown as DailyReportData).photos).toEqual([
+    expect((v1.data as unknown as DailyReportDataV1).photos).toEqual([
       { messageId: message.id, caption: 'Unit 2 trusses', takenAt: '2026-10-09T21:30:00.000Z' },
     ]);
     // The PDF was rendered from the filed version with the uploaded photo.
@@ -340,7 +340,7 @@ describe('NewReportPage', () => {
           v: 1,
           siteId: elm.id,
           date: '2026-10-08',
-          values: { ...toFormValues(emptyReportData('2026-10-09')), summary },
+          values: { ...toFormValues(emptyReportDataV1('2026-10-09')), summary },
         }),
       );
 

@@ -1,12 +1,13 @@
 import { StyleSheet } from '@react-pdf/renderer';
+import { colors, printColors } from '@sitelog/shared';
 import { FONT_MONO, FONT_SANS, FONT_SANS_EXPANDED } from './fonts';
 
-/** §12 ink: near-black on white, header fill #F2F0EB, rules #C9C4B9, orange only on the badge. */
-export const INK = '#16181B';
-export const INK_SOFT = '#5C5850';
-export const RULE = '#C9C4B9';
-export const FILL = '#F2F0EB';
-export const SIGNAL = '#FF6A13';
+/** §12 ink: near-black on white, header fill and rules (print tokens), orange only on the badge. */
+export const INK = colors.asphalt;
+export const INK_SOFT = colors.dust;
+export const RULE = printColors.rule;
+export const FILL = printColors.fill;
+export const SIGNAL = colors.signal;
 export const MARGIN = 54; // 0.75 in
 
 export const styles = StyleSheet.create({

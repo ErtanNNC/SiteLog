@@ -1,4 +1,4 @@
-import type { DailyReportData, ReportRow, ReportVersionRow } from '@sitelog/shared';
+import type { DailyReportDataV1, ReportRow, ReportVersionRow } from '@sitelog/shared';
 import type { Ctx } from '../context';
 
 /**
@@ -23,7 +23,7 @@ export interface NewVersionResult {
 export async function createReportVersion(
   ctx: Ctx,
   report: ReportRow,
-  data: DailyReportData,
+  data: DailyReportDataV1,
   opts: NewVersionOptions,
 ): Promise<NewVersionResult> {
   if (report.status !== 'filed' && report.status !== 'signed_off') {

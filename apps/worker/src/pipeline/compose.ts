@@ -1,5 +1,5 @@
 import type {
-  DailyReportData,
+  DailyReportDataV1,
   ReportRow,
   ReporterRow,
   SiteDayWeather,
@@ -17,7 +17,7 @@ import type { SiteContext } from '../db';
  */
 
 export interface ComposeOptions {
-  previousDraft?: DailyReportData | null;
+  previousDraft?: DailyReportDataV1 | null;
   reportDate: string;
   observedWeather?: SiteDayWeather | null;
 }

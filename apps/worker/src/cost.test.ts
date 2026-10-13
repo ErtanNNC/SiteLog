@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Sentry from '@sentry/node';
 import {
   deadlineInstant,
-  emptyReportData,
+  emptyReportDataV1,
   type ReportCostRow,
   type ReportRow,
 } from '@sitelog/shared';
@@ -267,7 +267,7 @@ describe('filing hook', () => {
     await h.db.insertVersion({
       report_id: report.id,
       version: 1,
-      data: emptyReportData('2026-10-09'),
+      data: emptyReportDataV1('2026-10-09'),
       summary: null,
       author: 'agent',
     });
@@ -308,7 +308,7 @@ describe('filing hook', () => {
     await h.db.insertVersion({
       report_id: report.id,
       version: 1,
-      data: emptyReportData('2026-10-09'),
+      data: emptyReportDataV1('2026-10-09'),
       summary: null,
       author: 'agent',
     });

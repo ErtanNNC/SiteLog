@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { PageSkeleton } from '@/components/sitelog/Skeletons';
@@ -75,7 +75,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
   const draftKey = newReportDraftKey(source.orgId, source.user.id);
   // The form with nothing typed (the report date is chosen above, not in the form).
   const [blank] = useState(() =>
-    toFormValues(emptyReportData(source.now().toISOString().slice(0, 10))),
+    toFormValues(emptyReportDataV1(source.now().toISOString().slice(0, 10))),
   );
   const paramSite = () => {
     const wanted = params.get('site');
@@ -202,7 +202,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
     let data;
     try {
       data = withoutOfficeEdits(
-        toReportData(values, emptyReportData(date), {
+        toReportData(values, emptyReportDataV1(date), {
           userId: source.user.id,
           at: source.now().toISOString(),
           companies,

@@ -16,7 +16,11 @@ import type {
   VersionAuthor,
 } from '@sitelog/shared/enums.ts';
 import type { ChipVariant } from '@sitelog/shared/status.ts';
-import type { DailyReportData, ObservedWeather } from '@sitelog/shared/schemas/report.ts';
+import type {
+  DailyReportData,
+  ObservedWeatherV1,
+  StoredReportData,
+} from '@sitelog/shared/schemas/report.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import type { OrgSettingsRow } from '@sitelog/shared/db/types.ts';
 
@@ -434,8 +438,14 @@ export interface ReportDetail {
   reporter: ReporterSummary | null;
   /** The version being viewed (current unless `?v=` selects another). */
   version: number;
+  /** The viewed version's data as every view reads it: §10.3 v2 (a stored v1 is upgraded, D20). */
   data: DailyReportData;
-  /** Previous version's data for the "EDITED V2 · was …" diff, if any. */
+  /**
+   * The same version as stored (v1 or v2). The office editor builds the new version from this, so
+   * create_report_version receives the stored version's own shape (writers stay v1 until W1-12).
+   */
+  storedData: StoredReportData;
+  /** Previous version's data (v2, like `data`) for the "EDITED V2 · was …" diff, if any. */
   previousData: DailyReportData | null;
   versions: ReportVersionSummary[];
   totals: ReportTotals;
@@ -558,7 +568,11 @@ export interface DelayEntry {
   end: string | null;
   lostHours: number;
   fullDay: boolean;
-  observed: ObservedWeather | null;
+  /**
+   * weather_events.observed, the SQL copy of the version's weather.observed: v1 (imperial) until
+   * the SQL readers of report data accept v2 (W1-05, GAP §7 step 10).
+   */
+  observed: ObservedWeatherV1 | null;
   evidence: DelayEvidence;
   claimReady: boolean;
 }

@@ -1,4 +1,4 @@
-import { formatDateShort, formatHours, type ReportTotals } from '@sitelog/shared';
+import { colors, formatDateShort, formatHours, type ReportTotals } from '@sitelog/shared';
 import type { DigestStats } from '../db';
 
 /**
@@ -12,18 +12,8 @@ export interface RenderedEmail {
   text: string;
 }
 
-const T = {
-  signal: '#FF6A13',
-  signalDeep: '#B23A0B',
-  asphalt: '#16181B',
-  concrete: '#EFEDE7',
-  chalk: '#FBFAF7',
-  rebar: '#D9D5CC',
-  dust: '#5C5850',
-  level: '#1D4ED8',
-  filed: '#15803D',
-  missing: '#B91C1C',
-} as const;
+/** §14.1 colours from the shared tokens (packages/shared/src/tokens.ts). */
+const T = colors;
 
 export function esc(s: string): string {
   return s
@@ -132,10 +122,10 @@ export function reportFiledEmail(i: ReportFiledInput): RenderedEmail {
     ? `${formatHours(i.totals.lostHours)} lost to weather`
     : 'No weather stoppage';
   const chips = [
-    ...(i.isLate ? [chip('Late', '#FFE7D4', '#9A3412')] : []),
+    ...(i.isLate ? [chip('Late', T.chipAwaitBg, T.chipAwaitFg)] : []),
     ...(i.reviewReasons.length
-      ? [chip('Needs review', '#E0E7FB', '#1E3A8A')]
-      : [chip(updated ? `Version ${i.version}` : 'Filed', '#DCEFE2', '#14532D')]),
+      ? [chip('Needs review', T.chipReviewBg, T.chipReviewFg)]
+      : [chip(updated ? `Version ${i.version}` : 'Filed', T.chipFiledBg, T.chipFiledFg)]),
   ].join(' ');
   const reasons = i.reviewReasons.length
     ? `<p style="margin:12px 0 0 0"><strong>Review reasons</strong></p><ul style="margin:4px 0 0 18px;padding:0">${i.reviewReasons.map((r) => `<li>${esc(reasonLabel(r))}</li>`).join('')}</ul>`
@@ -206,7 +196,7 @@ export function reportMissingEmail(i: ReportMissingInput): RenderedEmail {
   const call = i.reporterPhone
     ? `<p style="margin:12px 0 0 0"><a href="tel:${esc(i.reporterPhone)}" style="color:${T.level}">Call ${esc(who)}</a></p>`
     : '';
-  const bodyHtml = `<p style="margin:0 0 8px 0">${chip('Missing', '#FBE1DF', '#991B1B')}</p><p style="margin:0">${esc(line)}</p>${call}`;
+  const bodyHtml = `<p style="margin:0 0 8px 0">${chip('Missing', T.chipMissBg, T.chipMissFg)}</p><p style="margin:0">${esc(line)}</p>${call}`;
   const text = [
     subject,
     '',

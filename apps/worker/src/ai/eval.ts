@@ -4,17 +4,17 @@ import { fileURLToPath } from 'node:url';
 import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import {
-  DailyReportDataSchema,
+  DailyReportDataV1Schema,
   ExtractionOutputSchema,
-  ObservedWeatherSchema,
-  PhotoSchema,
+  ObservedWeatherV1Schema,
+  PhotoV1Schema,
   QUESTION_FIELDS,
   REQUIRED_FIELD_KEYS,
   pickNextQuestion,
   round2,
   toObserved,
   validateReport,
-  type DailyReportData,
+  type DailyReportDataV1,
   type ExtractionOutput,
   type QuestionField,
   type RequiredFieldKey,
@@ -77,7 +77,7 @@ const SiteDayWeatherSchema = z.strictObject({
       gustMph: z.number().min(0).nullable(),
     }),
   ),
-  summary: ObservedWeatherSchema.extend({
+  summary: ObservedWeatherV1Schema.extend({
     precipWorkingHoursIn: z.number().min(0),
     maxGustWorkingHoursMph: z.number().min(0),
   }),
@@ -129,8 +129,8 @@ export const EvalTranscriptSchema = z.strictObject({
       messageId: z.string().min(1),
     }),
   ),
-  previousDraft: DailyReportDataSchema.nullable(),
-  photos: z.array(PhotoSchema),
+  previousDraft: DailyReportDataV1Schema.nullable(),
+  photos: z.array(PhotoV1Schema),
   segments: z.array(SegmentSchema),
   texts: z.array(z.strictObject({ messageId: z.string().min(1), text: z.string().min(1) })),
 });
@@ -141,7 +141,7 @@ export interface EvalFixture {
   description: string;
   expectedQuestion: ExpectedQuestion | null;
   input: ExtractionInput;
-  expected: DailyReportData;
+  expected: DailyReportDataV1;
   /** Recorded `submit_daily_report` input (fixtures/tool-outputs/<id>.json). */
   recorded: ExtractionOutput | null;
   /** The JSON as stored, to spot keys the schemas would silently drop. */
@@ -181,7 +181,7 @@ export function loadFixture(id: string, dir = FIXTURES_DIR): EvalFixture {
   const ePath = join(dir, 'expected', `${id}.json`);
   if (!existsSync(ePath)) throw new Error(`${ePath}: missing`);
   const rawExpected = readJson(ePath);
-  const e = DailyReportDataSchema.safeParse(rawExpected);
+  const e = DailyReportDataV1Schema.safeParse(rawExpected);
   if (!e.success) throw new Error(`${ePath}: ${issuesOf(e.error)}`);
   const rPath = join(dir, 'tool-outputs', `${id}.json`);
   let recorded: ExtractionOutput | null = null;
@@ -304,7 +304,7 @@ interface Crew {
 }
 
 /** Crews per company; split entries ("Apex: 4 on the ramp, 2 on the columns") are summed. */
-function crewsOf(data: DailyReportData): Map<string, Crew> {
+function crewsOf(data: DailyReportDataV1): Map<string, Crew> {
   const out = new Map<string, Crew>();
   for (const m of data.manpower) {
     const k = companyKey(m.companyName) || companyKey(m.companyNameHeard);
@@ -342,7 +342,7 @@ function fmtSet(a: Iterable<string | number>): string {
 }
 
 /** Quantities and percentages said for the work (spoken numbers must come out exact). */
-function workNumbers(data: DailyReportData): number[] {
+function workNumbers(data: DailyReportDataV1): number[] {
   const out: number[] = [];
   for (const w of data.workPerformed) {
     if (w.quantity) out.push(w.quantity.value);
@@ -357,7 +357,7 @@ function lang(code: string): string {
 
 /** The question code would ask first for this data (§10.5 steps 2–5), as field + path. */
 export function nextQuestionOf(
-  data: DailyReportData,
+  data: DailyReportDataV1,
   ctx: CompareContext,
 ): { field: QuestionField; path: string } | null {
   const v = validateReport(data, {
@@ -373,7 +373,7 @@ export function nextQuestionOf(
   return q ? { field: q.field, path: q.path } : null;
 }
 
-function requiredGapsOf(data: DailyReportData, ctx: CompareContext): string[] {
+function requiredGapsOf(data: DailyReportDataV1, ctx: CompareContext): string[] {
   return validateReport(data, {
     requiredFields: ctx.requiredFields,
     photoCount: ctx.photoCount,
@@ -386,8 +386,8 @@ function requiredGapsOf(data: DailyReportData, ctx: CompareContext): string[] {
  * question, and checks that rejected glossary mappings were not used.
  */
 export function compareReport(
-  actual: DailyReportData,
-  expected: DailyReportData,
+  actual: DailyReportDataV1,
+  expected: DailyReportDataV1,
   ctx?: CompareContext,
 ): EvalCheck[] {
   const checks: EvalCheck[] = [];

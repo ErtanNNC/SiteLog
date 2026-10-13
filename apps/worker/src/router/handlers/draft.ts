@@ -1,6 +1,6 @@
 import {
   applyPatch,
-  DailyReportDataSchema,
+  DailyReportDataV1Schema,
   recomputeManpowerTotals,
   waCopy,
   type ReportRow,
@@ -79,7 +79,7 @@ export async function applyFix(
   }
   const patched = applyPatch(data, res.data.operations);
   const { entries } = recomputeManpowerTotals(patched.manpower);
-  const next = DailyReportDataSchema.parse({ ...patched, manpower: entries });
+  const next = DailyReportDataV1Schema.parse({ ...patched, manpower: entries });
   await storeDraft(ctx, report, next, {
     authorMessageId: s.message.id,
     changeNote: res.data.changeNote,

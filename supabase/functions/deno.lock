@@ -5,6 +5,7 @@
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "npm:@supabase/supabase-js@2.117.3": "2.117.3",
     "npm:date-fns-tz@3.2.0": "3.2.0_date-fns@4.4.0",
+    "npm:libphonenumber-js@1.13.14": "1.13.14",
     "npm:stripe@23.0.0": "23.0.0",
     "npm:zod@4.6.6": "4.6.6"
   },
@@ -77,6 +78,9 @@
     "iceberg-js@0.8.1": {
       "integrity": "sha512-1dhVQZXhcHje7798IVM+xoo/1ZdVfzOMIc8/rgVSijRK38EDqOJoGula9N/8ZI5RD8QTxNQtK/Gozpr+qUqRRA=="
     },
+    "libphonenumber-js@1.13.14": {
+      "integrity": "sha512-llihgCcx0BFLksecLP+x1J+6JDE1GsXS1RN/LoPF6qcwpeQcnjj0lcvZxY8AzbEpYwyZWPZW/nDuqkqzm3amiw=="
+    },
     "stripe@23.0.0": {
       "integrity": "sha512-MDE2A5ZVVluYURORaZEVghSmnLJc3w6aHAlZSxDQMsOjOb3V0O6ro/CiaeFlJS4N7uIVmsg98ocRsPmUK6YfyA=="
     },
@@ -93,6 +97,7 @@
       "npm:@supabase/supabase-js@2.117.3",
       "npm:date-fns-tz@3.2.0",
       "npm:date-fns@4.4.0",
+      "npm:libphonenumber-js@1.13.14",
       "npm:stripe@23.0.0",
       "npm:zod@4.6.6"
     ]

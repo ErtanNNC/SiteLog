@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DailyReportData } from '@sitelog/shared';
+import type { DailyReportDataV1 } from '@sitelog/shared';
 import {
   companyKey,
   compareContextOf,
@@ -114,7 +114,7 @@ describe('compareReport', () => {
   });
 
   it('sums a company split over two entries and ignores crews reported absent', () => {
-    const actual: DailyReportData = structuredClone(riverside.expected);
+    const actual: DailyReportDataV1 = structuredClone(riverside.expected);
     const apex = actual.manpower[0]!;
     actual.manpower.splice(
       0,
@@ -134,7 +134,7 @@ describe('compareReport', () => {
   });
 
   it('flags an invented headcount, a guessed answer to the open question and invented numbers', () => {
-    const actual: DailyReportData = structuredClone(riverside.expected);
+    const actual: DailyReportDataV1 = structuredClone(riverside.expected);
     const delta = actual.manpower.find((m) => m.companyName === 'Delta Mechanical')!;
     delta.workers = 5;
     delta.totalHours = 40;
@@ -157,7 +157,7 @@ describe('compareReport', () => {
     expect(companyKey('the Ridgeway crew')).toBe('ridgeway');
     expect(companyKey('los de Ramírez')).toBe('ramirez');
     const oak = loadFixture('oakmont-unknown-sub');
-    const actual: DailyReportData = structuredClone(oak.expected);
+    const actual: DailyReportDataV1 = structuredClone(oak.expected);
     actual.manpower[2]!.companyName = 'Ridgeway Crew';
     actual.newTerms = [];
     actual.proposedQuestions = [];
@@ -169,7 +169,7 @@ describe('compareReport', () => {
 
   it('checks rejected glossary mappings and the weather question', () => {
     const ng = loadFixture('northgate-2026-10-07-glossary-mishearing');
-    const actual: DailyReportData = structuredClone(ng.expected);
+    const actual: DailyReportDataV1 = structuredClone(ng.expected);
     actual.equipment[0]!.item = 'Lift (concrete placement height)';
     actual.weather.conditionsText = '';
     const failed = compareReport(actual, ng.expected, compareContextOf(ng.input))

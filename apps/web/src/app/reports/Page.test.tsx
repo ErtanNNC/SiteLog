@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
 import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import type { DemoDataset } from '@sitelog/shared/demo/types.ts';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { DemoSource } from '@/data/demo/DemoSource';
 import { DemoStore, demoUserFor } from '@/data/demo/store';
 import type { PdfLinkBatch, PdfSelection } from '@/data/source';
@@ -96,7 +96,7 @@ function withTypedReport() {
   const typed = store.createOfficeReport({
     siteId: site.id,
     date: '2026-09-14',
-    data: { ...emptyReportData('2026-09-14'), summary: 'Typed in the office.' },
+    data: { ...emptyReportDataV1('2026-09-14'), summary: 'Typed in the office.' },
     userId: demoUserFor('admin').id,
   });
   return { store, typed };

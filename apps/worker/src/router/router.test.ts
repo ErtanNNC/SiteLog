@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   ButtonIds,
   deadlineInstant,
-  type DailyReportData,
+  type DailyReportDataV1,
   type ExtractionOutput,
 } from '@sitelog/shared';
 import { postProcessExtraction, type ExtractionInput } from '../ai/extract';
@@ -38,7 +38,7 @@ const replies = JSON.parse(
 async function seedReport(
   h: Harness,
   status: 'awaiting_confirmation' | 'awaiting_answer' | 'filed' | 'signed_off',
-  data?: DailyReportData,
+  data?: DailyReportDataV1,
 ) {
   const date = '2026-10-09';
   const siteDay = await h.db.getOrCreateSiteDay(
@@ -358,7 +358,7 @@ describe('router: reminder buttons (F9, F10)', () => {
     expect(report.kind).toBe('weather_day');
     expect(report.status).toBe('filed');
     expect((await h.db.getSiteDay(day.id))!.status).toBe('weather_day');
-    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportData;
+    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
     expect(data.weather.periods[0]).toMatchObject({ fullDay: true, lostHours: 8 });
     expect(h.db.data.denormalized).toContainEqual({ report_id: report.id, version: 1 });
     // The follow-up photo goes into the delay record as a new version.
@@ -461,7 +461,7 @@ describe('router: draft confirmation and filing (F7)', () => {
       context: { active_report_id: report.id },
     });
     await h.send(convo, { type: 'text', body: 'Apex had 7 not 6' });
-    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportData;
+    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
     expect(data.manpower[0]).toMatchObject({
       companyName: 'Apex Concrete',
       workers: 7,
@@ -524,7 +524,7 @@ describe('router: questions (F6)', () => {
     const answered = (await h.db.getQuestion(q.id))!;
     expect(answered.answered_at).not.toBeNull();
     await h.drain(['decide_next']);
-    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportData;
+    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
     expect(data.manpower[2]).toMatchObject({
       workers: 5,
       totalHours: 40,
@@ -609,7 +609,7 @@ describe('router: edit after filing (F8)', () => {
     const v2 = (await h.db.getVersion(report.id, 2))!;
     expect(v2.author).toBe('reporter_reply');
     expect(v2.change_note).toBe('Apex Concrete 6 → 7 workers');
-    expect((v2.data as DailyReportData).manpower[0]!.totalHours).toBe(56);
+    expect((v2.data as DailyReportDataV1).manpower[0]!.totalHours).toBe(56);
     expect(h.sentTexts()).toEqual([
       'Updated Friday: Apex Concrete 6 → 7 workers. Version 2 sent to the office · version 1 kept in history.',
     ]);
@@ -687,7 +687,7 @@ describe('router: weather day by text (F10)', () => {
       "Logged as a weather day: crew released 11:00, cause rain. It's now in the delay record for extension claims.",
     );
     const report = Array.from(h.db.data.reports.values())[0]!;
-    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportData;
+    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
     expect(data.weather.periods[0]).toMatchObject({
       start: '11:00',
       end: '15:30',

@@ -95,9 +95,12 @@ export interface VersionPhoto<S extends PhotoSourceLike> {
  * caption and time from the entry (an entry without a caption has none). Without it (legacy data):
  * every photo source of the report, as given, with its recorded caption and time. Entries whose
  * message is not a photo of the report are skipped.
+ *
+ * `photos` is the v2 list (report/upgrade.ts): an entry's `uploadId` is the UUID of the photo's
+ * message (a v1 `messageId`, kept as is by the upgrade), matched against `message_id`.
  */
 export function versionPhotos<S extends PhotoSourceLike>(
-  photos: ReadonlyArray<Pick<Photo, 'messageId' | 'caption' | 'takenAt'>> | null | undefined,
+  photos: ReadonlyArray<Pick<Photo, 'uploadId' | 'caption' | 'takenAt'>> | null | undefined,
   sources: readonly S[],
 ): Array<VersionPhoto<S>> {
   const photoSources = sources.filter((s) => s.kind === 'photo');
@@ -112,7 +115,7 @@ export function versionPhotos<S extends PhotoSourceLike>(
   const seen = new Set<string>();
   const out: Array<VersionPhoto<S>> = [];
   for (const p of photos) {
-    const key = typeof p?.messageId === 'string' ? p.messageId.toLowerCase() : '';
+    const key = typeof p?.uploadId === 'string' ? p.uploadId.toLowerCase() : '';
     const source = byMessage.get(key);
     if (!source || seen.has(key)) continue;
     seen.add(key);

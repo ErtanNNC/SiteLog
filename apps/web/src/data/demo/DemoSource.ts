@@ -9,7 +9,7 @@ import {
   type OfficePhotoMime,
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
-import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { copy } from '@/copy/en';
 import { randomUuid } from '@/lib/photos';
 import { sleep } from '@/lib/utils';
@@ -228,7 +228,7 @@ export class DemoSource implements DataSource {
   }
   createReportVersion(
     reportId: string,
-    data: DailyReportData,
+    data: StoredReportData,
     changeNote: string,
     photos: OfficePhotoUpload[] = [],
   ) {

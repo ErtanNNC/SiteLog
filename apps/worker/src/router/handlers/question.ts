@@ -7,7 +7,7 @@ import {
   type AnswerValue,
   type Button,
   type ConversationRow,
-  type DailyReportData,
+  type DailyReportDataV1,
   type QuestionField,
   type QuestionRow,
   type QuestionSpec,
@@ -172,7 +172,7 @@ export async function handleAnswer(
     confidence,
     companies,
   });
-  let next: DailyReportData = applied.data;
+  let next: DailyReportDataV1 = applied.data;
   if (
     field === 'company.unknown' &&
     value.companyAction === 'map' &&

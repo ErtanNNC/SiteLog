@@ -1,7 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { deadlineInstant, type DailyReportData, type ExtractionOutput } from '@sitelog/shared';
+import {
+  deadlineInstant,
+  readReportData,
+  upgradeV1toV2,
+  type DailyReportDataV1,
+  type ExtractionOutput,
+  type StoredReportData,
+} from '@sitelog/shared';
+import { buildEmail } from '../jobs/send_email';
+import { buildReportPdfInput } from '../pdf/render';
 import { postProcessExtraction, type ExtractionInput } from '../ai/extract';
 import { compareReport } from '../ai/eval';
 import { createHarness, scriptedClaude, SITE_OAKMONT, SITE_RIVERSIDE } from '../test/harness';
@@ -65,10 +74,10 @@ describe('pipeline: validate + question selection', () => {
 
   it('expected fixtures pass the eval comparison against themselves and fail when numbers change', () => {
     for (const id of ['riverside-2026-10-09', 'oakmont-unknown-sub', 'hillcrest-weather-day']) {
-      const expected = load<DailyReportData>('expected', id);
+      const expected = load<DailyReportDataV1>('expected', id);
       expect(compareReport(expected, expected).every((c) => c.ok)).toBe(true);
     }
-    const expected = load<DailyReportData>('expected', 'hillcrest-weather-day');
+    const expected = load<DailyReportDataV1>('expected', 'hillcrest-weather-day');
     const wrong = structuredClone(expected);
     wrong.manpower[0]!.workers = 6;
     wrong.weather.periods[0]!.lostHours = 7;
@@ -310,7 +319,7 @@ describe('pipeline: compose + extract job + filing', () => {
       segments: fixture.segments.map((x) => ({ start: x.start, end: x.end, text: x.text })),
       model: 'whisper-1',
     });
-    await storeDraft(h.ctx, report, load<DailyReportData>('expected', 'elm-2026-10-08-no-work'));
+    await storeDraft(h.ctx, report, load<DailyReportDataV1>('expected', 'elm-2026-10-08-no-work'));
 
     await h.runJob('decide_next', { reportId: report.id });
 
@@ -411,6 +420,62 @@ describe('pipeline: compose + extract job + filing', () => {
     expect(h.email.sent[0]!.subject).toBe(
       'Daily report · Riverside Lofts · Fri Oct 9 · RL-2041-0187',
     );
+    expect(h.email.sent[0]!.attachments![0]!.filename).toBe('RL-2041-0187_2026-10-09_v1.pdf');
+  }, 60_000);
+
+  it('render_pdf and the filed email read a version stored as v2 like the v1 it upgrades from', async () => {
+    const h = createHarness();
+    const siteDay = await h.db.getOrCreateSiteDay(
+      SITE_RIVERSIDE,
+      '2026-10-09',
+      deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+    );
+    const report = await h.db.insertReport({
+      org_id: h.org.id,
+      site_id: SITE_RIVERSIDE,
+      site_day_id: siteDay.id,
+      report_no: 'RL-2041-0187',
+      reporter_id: h.marco.id,
+      received_at: '2026-10-09T22:31:00Z',
+      kind: 'daily',
+      status: 'filed',
+    });
+    const input = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
+    const { data } = postProcessExtraction(
+      load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09'),
+      input,
+    );
+    await storeDraft(h.ctx, report, data);
+    const filed = await h.db.updateReport(report.id, { filed_at: h.now, confirmed_at: h.now });
+    const site = (await h.db.siteContext(SITE_RIVERSIDE))!;
+    const emailPayload = { kind: 'report_filed' as const, reportId: report.id, version: 1 };
+    const read = async () => {
+      const version = (await h.db.getVersion(report.id, 1))!;
+      const data = readReportData(version.data as unknown as StoredReportData);
+      return {
+        data,
+        pdf: await buildReportPdfInput(h.ctx, { report: filed, version, site, data }),
+        email: await buildEmail(h.ctx, emailPayload),
+      };
+    };
+    const fromV1 = await read();
+    expect(fromV1.data.schemaVersion).toBe(2); // the v2 view of the stored v1
+
+    // The same version stored as v2 (as W1-06 seeds it): every reader gives the same result.
+    const stored = (await h.db.getVersion(report.id, 1))!.data as unknown as DailyReportDataV1;
+    expect(stored.schemaVersion).toBe(1);
+    await h.db.updateVersion(report.id, 1, { data: upgradeV1toV2(stored) as never });
+    const fromV2 = await read();
+    expect(fromV2.data).toEqual(fromV1.data);
+    expect(fromV2.pdf).toEqual(fromV1.pdf);
+    expect(fromV2.email).toEqual(fromV1.email);
+
+    await h.conversation('idle');
+    await h.runJob('render_pdf', { reportId: report.id, version: 1, emailRecipients: true });
+    const v = (await h.db.getVersion(report.id, 1))!;
+    const pdf = await h.storage.download('pdfs', v.pdf_path!);
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    await h.drain(['send_email']);
     expect(h.email.sent[0]!.attachments![0]!.filename).toBe('RL-2041-0187_2026-10-09_v1.pdf');
   }, 60_000);
 

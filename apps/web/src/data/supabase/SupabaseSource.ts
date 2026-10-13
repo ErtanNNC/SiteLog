@@ -35,7 +35,7 @@ import type {
   OpsQueueStatRow,
 } from '@sitelog/shared/db/types.ts';
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
-import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/shared/format.ts';
 import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numbering.ts';
 import {
@@ -606,18 +606,18 @@ export class SupabaseSource implements DataSource {
         reports.map((r) => r.site_day_id).filter((id) => !haveDay.has(id)),
         (part) => this.sb.from('site_days').select('*').in('id', part).then(unwrap),
       ),
-      // Only the photos column of each version, not the whole report.
+      // Only the photos of each version (and the data version they are in), not the whole report.
       inChunks(uniq(sources.map((s) => s.report_id)), (part) =>
         this.sb
           .from('report_versions')
-          .select('report_id, version, photos:data->photos')
+          .select('report_id, version, photos:data->photos, schemaVersion:data->schemaVersion')
           .in('report_id', part)
           .then(unwrap),
       ),
     ]);
-    const photoLists = (
-      lists as unknown as Array<{ report_id: string; version: number; photos: unknown }>
-    ).filter((v) => current.get(v.report_id) === v.version);
+    const photoLists = (lists as unknown as NonNullable<RowSet['photoLists']>).filter(
+      (v) => current.get(v.report_id) === v.version,
+    );
     return { sources, reports, siteDays, messages, photoLists };
   }
 
@@ -1358,7 +1358,7 @@ export class SupabaseSource implements DataSource {
   }
   async createReportVersion(
     reportId: string,
-    data: DailyReportData,
+    data: StoredReportData,
     changeNote: string,
     photos: OfficePhotoUpload[] = [],
   ) {

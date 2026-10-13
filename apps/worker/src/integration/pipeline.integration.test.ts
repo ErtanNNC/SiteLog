@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { DailyReportData, SiteDayWeather } from '@sitelog/shared';
+import type { DailyReportDataV1, SiteDayWeather } from '@sitelog/shared';
 import { startPgliteDatabase, type PgliteDatabase } from '../test/pglite';
 import {
   createSim,
@@ -269,7 +269,7 @@ describe('integration: webhook → worker → outbound (real database, faked out
       version: number;
       author: string;
       pdf_path: string | null;
-      data: DailyReportData;
+      data: DailyReportDataV1;
     }>(
       `select version, author::text as author, pdf_path, data from report_versions where report_id = $1`,
       [report!.id],

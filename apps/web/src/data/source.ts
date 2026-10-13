@@ -11,7 +11,7 @@ import type {
   TermKind,
 } from '@sitelog/shared/enums.ts';
 import type { OfficePhotoMime, OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
-import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import type { DailyReportDataV1, StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import type {
   BillingData,
   ChangeEvent,
@@ -169,7 +169,8 @@ export interface CreateOfficeReportInput {
   siteId: string;
   /** YYYY-MM-DD in the site's time zone; today or earlier. */
   date: string;
-  data: DailyReportData;
+  /** v1, as create_office_report stamps it (writers stay v1 until W1-12). */
+  data: DailyReportDataV1;
   /** Photos uploaded with uploadReportPhoto() for this site (at most OFFICE_PHOTO_MAX). */
   photos?: OfficePhotoUpload[];
 }
@@ -244,11 +245,11 @@ export interface DataSource {
   /**
    * create_report_version. `data.photos` lists the report's photos the new version keeps (with
    * their captions, in order); `photos` are new uploads, each placed at its `position` among them
-   * (none: after them).
+   * (none: after them). `data` has the shape of the version it edits (ReportDetail.storedData).
    */
   createReportVersion(
     reportId: string,
-    data: DailyReportData,
+    data: StoredReportData,
     changeNote: string,
     photos?: OfficePhotoUpload[],
   ): Promise<{ version: number }>;

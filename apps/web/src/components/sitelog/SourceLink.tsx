@@ -5,9 +5,12 @@ import { cn } from '@/lib/utils';
 import { useVoicePlayer } from './VoicePlayer';
 
 export interface SourceLinkProps {
+  /** A §10.3 v2 source (stored v1 data is upgraded on read). */
   source: Source | undefined;
-  /** For reply/text sources: the message time, shown as "reply 17:41". */
+  /** For answer sources: when the answer came in, shown as "reply 17:41". */
   messageAt?: string | null;
+  /** For an answer given in a message (an upgraded v1 reply): the message the link opens. */
+  messageId?: string | null;
   timezone: string;
   editorName?: string | null;
   onOpenMessage?: (messageId: string) => void;
@@ -19,6 +22,7 @@ export interface SourceLinkProps {
 export function SourceLink({
   source,
   messageAt,
+  messageId,
   timezone,
   editorName,
   onOpenMessage,
@@ -30,9 +34,10 @@ export function SourceLink({
     'inline-flex h-6 items-center rounded-chip px-1.5 font-mono text-[12px] font-medium text-level underline-offset-2 hover:bg-chip-review-bg hover:underline',
     className,
   );
+  const plain = cn(base, 'text-dust hover:bg-transparent hover:no-underline');
   if (!source) return null;
   switch (source.type) {
-    case 'audio': {
+    case 'voice_note': {
       const ts = formatAudioTimestamp(source.start);
       return (
         <button
@@ -40,25 +45,37 @@ export function SourceLink({
           className={base}
           onClick={() => player?.seek(source.start)}
           aria-label={copy.source.seekTo(ts)}
-          data-source="audio"
+          data-source="voice_note"
         >
           {copy.source.audio(ts)}
         </button>
       );
     }
-    case 'reply':
-    case 'text': {
+    // Call recordings play in the panel from week 2 (M7): until then the second is shown only.
+    case 'call':
+      return (
+        <span className={plain} data-source="call">
+          {copy.source.call(formatAudioTimestamp(source.start))}
+        </span>
+      );
+    case 'answer': {
       const t = messageAt ? formatTimeInTz(messageAt, timezone) : '';
-      const label = source.type === 'reply' ? copy.source.reply(t) : copy.source.text(t);
+      const label = copy.source.reply(t).trim();
+      if (!messageId)
+        return (
+          <span className={plain} data-source="answer">
+            {label}
+          </span>
+        );
       return (
         <button
           type="button"
           className={base}
-          onClick={() => onOpenMessage?.(source.messageId)}
+          onClick={() => onOpenMessage?.(messageId)}
           aria-label={copy.source.openMessage}
-          data-source={source.type}
+          data-source="answer"
         >
-          {label.trim()}
+          {label}
         </button>
       );
     }
@@ -76,10 +93,7 @@ export function SourceLink({
       );
     case 'weather_api':
       return (
-        <span
-          className={cn(base, 'text-dust hover:bg-transparent hover:no-underline')}
-          data-source="weather_api"
-        >
+        <span className={plain} data-source="weather_api">
           {copy.source.weatherApi}
         </span>
       );

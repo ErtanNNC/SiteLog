@@ -1,6 +1,11 @@
 import type { RequiredFieldKey } from '../enums.ts';
 import type { AnswerValue } from '../schemas/ai.ts';
-import type { DailyReportData, ManpowerEntry, QuestionField, Source } from '../schemas/report.ts';
+import type {
+  DailyReportDataV1,
+  ManpowerEntryV1,
+  QuestionField,
+  SourceV1,
+} from '../schemas/report.ts';
 import { hoursFromEndTime, recomputeManpowerTotals, round2 } from './hours.ts';
 
 export const LOW_CONFIDENCE_THRESHOLD = 0.7;
@@ -46,7 +51,7 @@ export interface ValidationContext {
 }
 
 /** §10.5 steps 2–3. Pure: never mutates `data`. */
-export function validateReport(data: DailyReportData, ctx: ValidationContext): ValidationResult {
+export function validateReport(data: DailyReportDataV1, ctx: ValidationContext): ValidationResult {
   const req = new Set(ctx.requiredFields);
   const gaps: ValidationGap[] = [];
   const missingRequired: string[] = [];
@@ -155,7 +160,7 @@ function gapFor(
   field: QuestionField,
   path: string,
   reason: GapReason,
-  m: ManpowerEntry,
+  m: ManpowerEntryV1,
   i: number,
 ): ValidationGap {
   return {
@@ -194,7 +199,7 @@ export interface QuestionContext {
 
 /** §10.5 step 4–5 — the single most important gap, with tap-able options. */
 export function pickNextQuestion(
-  data: DailyReportData,
+  data: DailyReportDataV1,
   validation: ValidationResult,
   ctx: QuestionContext,
 ): QuestionSpec | null {
@@ -219,7 +224,7 @@ function coveredByEarlierQuestion(gap: ValidationGap, asked: Set<string>): boole
 }
 
 function buildQuestion(
-  data: DailyReportData,
+  data: DailyReportDataV1,
   gap: ValidationGap,
   ctx: QuestionContext,
 ): QuestionSpec {
@@ -479,13 +484,13 @@ export interface ApplyAnswerContext {
 
 /** Apply a parsed answer to the draft (§F6 step 5). Pure. */
 export function applyAnswer(
-  data: DailyReportData,
+  data: DailyReportDataV1,
   question: Pick<QuestionSpec, 'field' | 'target'>,
   answer: AnswerValue,
   ctx: ApplyAnswerContext,
-): { data: DailyReportData; ackText: string | null } {
-  const next: DailyReportData = structuredClone(data);
-  const src: Source = { type: 'reply', messageId: ctx.messageId };
+): { data: DailyReportDataV1; ackText: string | null } {
+  const next: DailyReportDataV1 = structuredClone(data);
+  const src: SourceV1 = { type: 'reply', messageId: ctx.messageId };
   const conf = ctx.confidence ?? 1;
   switch (question.field) {
     case 'manpower.workers':

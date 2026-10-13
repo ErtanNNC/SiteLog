@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { weatherDayData } from '../report/day-off.ts';
 import { progressSteps } from '../report/progress.ts';
-import { emptyReportData } from '../schemas/report.ts';
+import { emptyReportDataV1 } from '../schemas/report.ts';
 import { looksLikeDayOff, quickClassify, quickDayOff, stripDayReference } from './replies.ts';
 
 const now = new Date('2026-10-09T23:00:00Z');
@@ -28,7 +28,7 @@ describe('deterministic reply handling (worker + field simulator)', () => {
       cause: 'rain',
     });
     expect(quickDayOff('No work today, the city closed the street').kind).toBe('no_work');
-    const empty = emptyReportData('2026-10-09');
+    const empty = emptyReportDataV1('2026-10-09');
     expect(looksLikeDayOff(empty, 'Nobody worked today, told everyone to stay home.')).toBe(true);
     expect(looksLikeDayOff(empty, 'Quiet day.')).toBe(false);
   });

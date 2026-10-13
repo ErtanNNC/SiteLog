@@ -3,7 +3,8 @@ import {
   firstName,
   formatDateShort,
   pdfFileName,
-  type DailyReportData,
+  readReportData,
+  type StoredReportData,
 } from '@sitelog/shared';
 import type { Ctx } from '../context';
 import type { EmailAttachment } from '../email/provider';
@@ -61,7 +62,7 @@ export async function buildEmail(
       const site = await ctx.db.siteContext(report.site_id);
       if (!version || !site)
         throw new PermanentJobError(`report ${report.id} version/site missing`);
-      const data = version.data as DailyReportData;
+      const data = readReportData(version.data as unknown as StoredReportData);
       const to = payload.to ?? [...site.recipients];
       if (payload.kind === 'report_updated' && report.signed_off_by) {
         const signer = await ctx.db.getUserContact(report.signed_off_by);

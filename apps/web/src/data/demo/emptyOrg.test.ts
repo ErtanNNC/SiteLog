@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import type { DemoDataset } from '@sitelog/shared/demo/types.ts';
-import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { DemoSource } from './DemoSource';
 import { DemoStore } from './store';
 
@@ -102,7 +102,7 @@ describe('a new org with no data', () => {
     const filed = await source.createOfficeReport({
       siteId: site.id,
       date: today,
-      data: { ...emptyReportData(today), summary: 'Framing on level 2.' },
+      data: { ...emptyReportDataV1(today), summary: 'Framing on level 2.' },
     });
     expect(filed.created).toBe(true);
     const { sites } = await readEverything(source);

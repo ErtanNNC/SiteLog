@@ -1,6 +1,6 @@
 import { Camera, CloudRain, Package, ShieldCheck, Sunrise } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { formatHours } from '@sitelog/shared/format.ts';
+import { formatHours, MEASURE_DIGITS, UNIT_LABELS } from '@sitelog/shared/format.ts';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { copy } from '@/copy/en';
@@ -52,6 +52,8 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
     />
   );
   const observed = d.weather.observed;
+  // Observed values are in the report's units (imperial: in, °F, mph; metric: mm, °C, km/h).
+  const unit = UNIT_LABELS[d.units];
   const weatherDay = detail.report.kind === 'weather_day';
 
   return (
@@ -93,20 +95,20 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
               <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-caption">
                 <Obs
                   label={copy.report.weather.precip}
-                  value={`${observed.precipIn.toFixed(2)} in`}
+                  value={`${observed.precip.toFixed(MEASURE_DIGITS[d.units].precipitation)} ${unit.precipitation}`}
                 />
                 <Obs
                   label={copy.report.weather.temp}
-                  value={`${Math.round(observed.tempMinF)}–${Math.round(observed.tempMaxF)} °F`}
+                  value={`${Math.round(observed.tempMin)}–${Math.round(observed.tempMax)} ${unit.temperature}`}
                 />
                 <Obs
                   label={copy.report.weather.wind}
-                  value={`${Math.round(observed.windMph)} mph`}
+                  value={`${Math.round(observed.wind)} ${unit.wind}`}
                 />
-                {observed.gustMph !== undefined ? (
+                {observed.gust !== undefined ? (
                   <Obs
                     label={copy.report.weather.gusts}
-                    value={`${Math.round(observed.gustMph)} mph`}
+                    value={`${Math.round(observed.gust)} ${unit.wind}`}
                   />
                 ) : null}
               </dl>

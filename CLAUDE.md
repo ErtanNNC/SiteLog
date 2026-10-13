@@ -80,7 +80,7 @@ Keep these scripts working; add new ones to the root `package.json` and list the
 
 **Design**
 
-- Use tokens only (spec §14.1; in this repo `apps/web/src/styles/tokens.css`, Tailwind 4 CSS-first) — no raw hex in components. Archivo (stretch 112–125% for headings), IBM Plex Mono for numbers and labels.
+- Use tokens only (spec §14.1; in this repo `packages/shared/src/tokens.css`, the Tailwind 4 `@theme` imported by `apps/web`, and `packages/shared/src/tokens.ts` for the PDF and email) — no raw hex in components. Archivo (stretch 112–125% for headings), IBM Plex Mono for numbers and labels.
 - Orange (`signal`) is for the primary action and live state only; it is a signal, not decoration. Text on orange is Asphalt, never white.
 - No gradients, no emoji, no left-border accent cards, no fake status bars. Borders over shadows.
 - Targets ≥ 44 px (field: ≥ 56 px, Record ≥ 120 px). WCAG 2.2 AA; status never by colour alone.

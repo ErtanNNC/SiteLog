@@ -1,6 +1,6 @@
 import {
   looksLikeDayOff,
-  type DailyReportData,
+  type DailyReportDataV1,
   type MessageRow,
   type ReportRow,
   type TranscriptRow,
@@ -125,7 +125,7 @@ export { looksLikeDayOff };
 export async function rerouteDayOff(
   ctx: Ctx,
   report: ReportRow,
-  data: DailyReportData,
+  data: DailyReportDataV1,
 ): Promise<boolean> {
   if (report.kind !== 'daily' || report.status !== 'collecting') return false;
   if (data.workPerformed.length > 0 || data.manpower.some((m) => m.workers !== 0)) return false;

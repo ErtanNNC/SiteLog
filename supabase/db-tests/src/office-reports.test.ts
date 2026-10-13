@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import {
-  DailyReportDataSchema,
-  emptyReportData,
+  DailyReportDataV1Schema,
+  emptyReportDataV1,
   pdfStoragePath,
-  type DailyReportData,
+  type DailyReportDataV1,
 } from '@sitelog/shared';
 import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
 import { asService, asUser, bootDatabase } from './harness.ts';
@@ -57,8 +57,8 @@ function attachPdf(user: string, reportId: string, version: number, path: string
 
 /** What the panel's office entry form sends: a full DailyReportData. */
 function body(date: string, summary = 'Level 2 deck formwork; Apex Concrete on site.') {
-  const data: DailyReportData = {
-    ...emptyReportData(date),
+  const data: DailyReportDataV1 = {
+    ...emptyReportDataV1(date),
     languageDetected: ['en'],
     summary,
     weather: { conditionsText: 'Clear, 68°F', periods: [] },
@@ -95,7 +95,7 @@ function body(date: string, summary = 'Level 2 deck formwork; Apex Concrete on s
       source: [],
     },
   };
-  return DailyReportDataSchema.parse(data);
+  return DailyReportDataV1Schema.parse(data);
 }
 
 async function siteDay(siteId: string, date: string) {
@@ -203,7 +203,7 @@ describe('create_office_report', () => {
       author: string;
       author_user_id: string;
       summary: string;
-      data: DailyReportData;
+      data: DailyReportDataV1;
       pdf_path: string | null;
     }>(
       `select version, author::text, author_user_id, summary, data, pdf_path from report_versions where report_id = $1`,
@@ -218,7 +218,7 @@ describe('create_office_report', () => {
       pdf_path: null,
     });
     expect(versions[0]!.data).toEqual(body(date));
-    expect(DailyReportDataSchema.safeParse(versions[0]!.data).success).toBe(true);
+    expect(DailyReportDataV1Schema.safeParse(versions[0]!.data).success).toBe(true);
 
     // Site-day created by the RPC: deadline = org default 17:30 in America/Chicago (CDT, UTC−5).
     const day = await siteDay(riverside, date);
@@ -331,7 +331,7 @@ describe('create_office_report', () => {
     expect(res.reportNo).toMatch(/^OM-1187-\d{4}$/);
     const day = await siteDay(oakmont, date);
     expect(new Date(day!.deadline_at).toISOString()).toBe('2026-09-14T20:00:00.000Z');
-    const v = await svc<{ data: DailyReportData; author_user_id: string }>(
+    const v = await svc<{ data: DailyReportDataV1; author_user_id: string }>(
       `select data, author_user_id from report_versions where report_id = $1 and version = 1`,
       [res.reportId],
     );

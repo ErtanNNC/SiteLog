@@ -1,4 +1,4 @@
-import type { DailyReportData, SiteDayWeather } from '@sitelog/shared';
+import type { DailyReportDataV1, SiteDayWeather } from '@sitelog/shared';
 
 /** §10.4 system prompt (v1) — verbatim. */
 export const EXTRACTION_SYSTEM_PROMPT = `You are SiteLog's report writer for construction daily site reports.
@@ -68,7 +68,7 @@ export interface ExtractionInput {
   rejectedMappings: Array<{ heard: string; official: string }>;
   observedWeather: SiteDayWeather | null;
   previousAnswers: Array<{ field: string; question: string; answer: string; messageId: string }>;
-  previousDraft: DailyReportData | null;
+  previousDraft: DailyReportDataV1 | null;
   photos: Array<{ messageId: string; caption?: string; takenAt: string }>;
   /** Voice notes: segments grouped by message in arrival order. */
   segments: ExtractionSegment[];
