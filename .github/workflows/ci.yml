@@ -128,11 +128,19 @@ jobs:
         run: |
           supabase gen types typescript --local --schema public > "$RUNNER_TEMP/db.gen.ts"
           pnpm --filter @sitelog/scripts db-types-drift -- "$RUNNER_TEMP/db.gen.ts"
-      - name: Export API URL and keys
+      - name: Export API URL, keys and DB URL
         run: |
           supabase status -o env 2>/dev/null \
             | sed -E 's/^([A-Z0-9_]+)="(.*)"$/\1=\2/' \
-            | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY)=' >> "$GITHUB_ENV"
+            | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL)=' >> "$GITHUB_ENV"
+      # Real-Postgres tests that PGlite (one session) cannot run, e.g. next_report_no under
+      # concurrency (supabase/db-tests/stack). They create and delete their own org.
+      - name: Real-Postgres tests (test:stack)
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+        run: |
+          test -n "$SUPABASE_DB_URL" || { echo "::error::supabase status gave no DB_URL"; exit 1; }
+          pnpm test:stack
       # First request per function downloads its npm/jsr imports; do it before the browser waits.
       - name: Warm up Edge Functions
         run: |

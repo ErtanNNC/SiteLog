@@ -1,6 +1,17 @@
+import { z } from 'zod';
+
 /**
- * TypeScript mirrors of the Postgres enums in supabase/migrations/0001_enums.sql (§6.2).
- * Keep both in sync — the DB tests assert the values match.
+ * TypeScript mirrors of the Postgres enums (§6.2): supabase/migrations/20261011000001_enums.sql
+ * and the v1.2 additions in 20261013000006_enums_v1_2.sql. Labels are in the database's order.
+ * Keep both in sync: supabase/db-tests asserts that every PG_ENUMS entry matches pg_enum and that
+ * PG_ENUMS lists every enum in `public`; CI's db-types-drift compares db/types.ts `Enums` with the
+ * generated types. Each enum also has a Zod schema built from the same array (`…Schema`, listed in
+ * PG_ENUM_SCHEMAS).
+ *
+ * Expand/contract (docs/GAP_ANALYSIS.md §7): until step 11 `reporter_status` still has `verified`
+ * (renamed to `active`), `version_author` has `reporter_reply` (→ `reporter`) and the contact
+ * status type is `sender_status` (→ `contact_status`); `msg_type`, `convo_state` and the
+ * WhatsApp-only `msg_status` label `read` go in step 23.
  */
 
 export const MEMBER_ROLES = ['admin', 'pm', 'ops', 'accounts'] as const;
@@ -12,11 +23,26 @@ export type SiteStatus = (typeof SITE_STATUSES)[number];
 export const REPORTER_ROLES = ['site_manager', 'backup'] as const;
 export type ReporterRole = (typeof REPORTER_ROLES)[number];
 
-export const REPORTER_STATUSES = ['invited', 'verified', 'disabled'] as const;
+/** `opted_out` from v1.2 (§6.2); `verified` becomes `active` in step 11. */
+export const REPORTER_STATUSES = ['invited', 'verified', 'opted_out', 'disabled'] as const;
 export type ReporterStatus = (typeof REPORTER_STATUSES)[number];
+
+/** The reporter's preferred channel (§2.3): `link` (SMS + web recorder) or `call`. */
+export const CONTACT_PREFS = ['link', 'call'] as const;
+export type ContactPref = (typeof CONTACT_PREFS)[number];
+
+export const CONSENT_TYPES = ['sms', 'auto_call', 'recording', 'data_processing'] as const;
+export type ConsentType = (typeof CONSENT_TYPES)[number];
 
 export const COMPANY_STATUSES = ['confirmed', 'unconfirmed'] as const;
 export type CompanyStatus = (typeof COMPANY_STATUSES)[number];
+
+/**
+ * How a report or answer reached SiteLog (§6.2 `field_channel`), plus `office` for reports typed
+ * in the panel (GAP D13, a recorded deviation). WhatsApp-era rows have no channel (null).
+ */
+export const FIELD_CHANNELS = ['web', 'voice', 'sms', 'office'] as const;
+export type FieldChannel = (typeof FIELD_CHANNELS)[number];
 
 export const MSG_DIRECTIONS = ['in', 'out'] as const;
 export type MsgDirection = (typeof MSG_DIRECTIONS)[number];
@@ -33,8 +59,55 @@ export const MSG_TYPES = [
 ] as const;
 export type MsgType = (typeof MSG_TYPES)[number];
 
-export const MSG_STATUSES = ['received', 'queued', 'sent', 'delivered', 'read', 'failed'] as const;
+/** `undeliverable` from v1.2 (SMS); `read` is WhatsApp-only and goes in step 23. */
+export const MSG_STATUSES = [
+  'received',
+  'queued',
+  'sent',
+  'delivered',
+  'read',
+  'failed',
+  'undeliverable',
+] as const;
 export type MsgStatus = (typeof MSG_STATUSES)[number];
+
+export const LINK_KINDS = ['personal', 'daily', 'photos'] as const;
+export type LinkKind = (typeof LINK_KINDS)[number];
+
+export const UPLOAD_KINDS = ['audio', 'photo'] as const;
+export type UploadKind = (typeof UPLOAD_KINDS)[number];
+
+export const CALL_DIRECTIONS = ['inbound', 'outbound'] as const;
+export type CallDirection = (typeof CALL_DIRECTIONS)[number];
+
+/** Phone network (SIP) or Talk now in the browser. */
+export const CALL_TRANSPORTS = ['pstn', 'web'] as const;
+export type CallTransport = (typeof CALL_TRANSPORTS)[number];
+
+export const CALL_STATUSES = [
+  'queued',
+  'ringing',
+  'in_progress',
+  'completed',
+  'no_answer',
+  'busy',
+  'failed',
+  'voicemail',
+] as const;
+export type CallStatus = (typeof CALL_STATUSES)[number];
+
+export const CALL_OUTCOMES = [
+  'filed',
+  'draft_saved',
+  'no_work',
+  'weather_day',
+  'edit_applied',
+  'callback_requested',
+  'fallback_recording',
+  'abandoned',
+  'not_reached',
+] as const;
+export type CallOutcome = (typeof CALL_OUTCOMES)[number];
 
 export const CONVO_STATES = [
   'new',
@@ -60,8 +133,10 @@ export const SITE_DAY_STATUSES = [
 ] as const;
 export type SiteDayStatus = (typeof SITE_DAY_STATUSES)[number];
 
+/** `processing` from v1.2 (§7.2). */
 export const REPORT_STATUSES = [
   'collecting',
+  'processing',
   'awaiting_answer',
   'awaiting_confirmation',
   'filed',
@@ -72,6 +147,10 @@ export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
 export const VERSION_AUTHORS = ['agent', 'reporter_reply', 'office_user'] as const;
 export type VersionAuthor = (typeof VERSION_AUTHORS)[number];
+
+/** What a report source is (§6.3 `report_sources.kind`, §10.3 `source[].type`). */
+export const SOURCE_KINDS = ['voice_note', 'call', 'photo', 'answer', 'text'] as const;
+export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 export const TERM_STATUSES = [
   'built_in',
@@ -131,23 +210,94 @@ export type FilingMode = (typeof FILING_MODES)[number];
 export const INVOICE_STATUSES = ['open', 'queried', 'resolved'] as const;
 export type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
-/** All enum names → values, for the DB sync test. */
+/** All enum names → values, for the DB sync test (every Postgres enum in `public`). */
 export const PG_ENUMS = {
   member_role: MEMBER_ROLES,
   site_status: SITE_STATUSES,
   reporter_role: REPORTER_ROLES,
   reporter_status: REPORTER_STATUSES,
+  contact_pref: CONTACT_PREFS,
+  consent_type: CONSENT_TYPES,
   company_status: COMPANY_STATUSES,
+  field_channel: FIELD_CHANNELS,
   msg_direction: MSG_DIRECTIONS,
   msg_type: MSG_TYPES,
   msg_status: MSG_STATUSES,
   convo_state: CONVO_STATES,
+  link_kind: LINK_KINDS,
+  upload_kind: UPLOAD_KINDS,
+  call_direction: CALL_DIRECTIONS,
+  call_transport: CALL_TRANSPORTS,
+  call_status: CALL_STATUSES,
+  call_outcome: CALL_OUTCOMES,
   site_day_status: SITE_DAY_STATUSES,
   report_status: REPORT_STATUSES,
   version_author: VERSION_AUTHORS,
+  source_kind: SOURCE_KINDS,
   term_status: TERM_STATUSES,
   term_kind: TERM_KINDS,
   sender_status: SENDER_STATUSES,
   job_status: JOB_STATUSES,
   pack_status: PACK_STATUSES,
 } as const;
+export type PgEnumName = keyof typeof PG_ENUMS;
+
+// Zod schemas, built from the arrays above ----------------------------------------------------------
+export const MemberRoleSchema = z.enum(MEMBER_ROLES);
+export const SiteStatusSchema = z.enum(SITE_STATUSES);
+export const ReporterRoleSchema = z.enum(REPORTER_ROLES);
+export const ReporterStatusSchema = z.enum(REPORTER_STATUSES);
+export const ContactPrefSchema = z.enum(CONTACT_PREFS);
+export const ConsentTypeSchema = z.enum(CONSENT_TYPES);
+export const CompanyStatusSchema = z.enum(COMPANY_STATUSES);
+export const FieldChannelSchema = z.enum(FIELD_CHANNELS);
+export const MsgDirectionSchema = z.enum(MSG_DIRECTIONS);
+export const MsgTypeSchema = z.enum(MSG_TYPES);
+export const MsgStatusSchema = z.enum(MSG_STATUSES);
+export const ConvoStateSchema = z.enum(CONVO_STATES);
+export const LinkKindSchema = z.enum(LINK_KINDS);
+export const UploadKindSchema = z.enum(UPLOAD_KINDS);
+export const CallDirectionSchema = z.enum(CALL_DIRECTIONS);
+export const CallTransportSchema = z.enum(CALL_TRANSPORTS);
+export const CallStatusSchema = z.enum(CALL_STATUSES);
+export const CallOutcomeSchema = z.enum(CALL_OUTCOMES);
+export const SiteDayStatusSchema = z.enum(SITE_DAY_STATUSES);
+export const ReportStatusSchema = z.enum(REPORT_STATUSES);
+export const VersionAuthorSchema = z.enum(VERSION_AUTHORS);
+export const SourceKindSchema = z.enum(SOURCE_KINDS);
+export const TermStatusSchema = z.enum(TERM_STATUSES);
+export const TermKindSchema = z.enum(TERM_KINDS);
+export const SenderStatusSchema = z.enum(SENDER_STATUSES);
+export const JobStatusSchema = z.enum(JOB_STATUSES);
+export const PackStatusSchema = z.enum(PACK_STATUSES);
+
+/** Postgres enum name → its Zod schema (same keys as PG_ENUMS). */
+export const PG_ENUM_SCHEMAS = {
+  member_role: MemberRoleSchema,
+  site_status: SiteStatusSchema,
+  reporter_role: ReporterRoleSchema,
+  reporter_status: ReporterStatusSchema,
+  contact_pref: ContactPrefSchema,
+  consent_type: ConsentTypeSchema,
+  company_status: CompanyStatusSchema,
+  field_channel: FieldChannelSchema,
+  msg_direction: MsgDirectionSchema,
+  msg_type: MsgTypeSchema,
+  msg_status: MsgStatusSchema,
+  convo_state: ConvoStateSchema,
+  link_kind: LinkKindSchema,
+  upload_kind: UploadKindSchema,
+  call_direction: CallDirectionSchema,
+  call_transport: CallTransportSchema,
+  call_status: CallStatusSchema,
+  call_outcome: CallOutcomeSchema,
+  site_day_status: SiteDayStatusSchema,
+  report_status: ReportStatusSchema,
+  version_author: VersionAuthorSchema,
+  source_kind: SourceKindSchema,
+  term_status: TermStatusSchema,
+  term_kind: TermKindSchema,
+  sender_status: SenderStatusSchema,
+  job_status: JobStatusSchema,
+  pack_status: PackStatusSchema,
+} as const satisfies Record<PgEnumName, z.ZodEnum>;

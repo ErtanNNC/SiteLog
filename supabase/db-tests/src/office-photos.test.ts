@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import {
@@ -11,7 +9,7 @@ import {
   type OfficePhotoUpload,
 } from '@sitelog/shared';
 import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
-import { MIGRATIONS_DIR, asService, asUser, bootDatabase } from './harness.ts';
+import { asService, asUser, bootDatabase, installStorageStub, storageBlocks } from './harness.ts';
 
 /**
  * 20261013000005_office_photos.sql: photos the office uploads in the panel are stored as
@@ -731,27 +729,11 @@ describe('messages without a conversation', () => {
 // Last: creates a stand-in for Supabase's storage schema, which every later upload would need.
 describe('with the storage schema', () => {
   beforeAll(async () => {
-    await db.exec(`
-      create schema storage;
-      create table storage.objects (
-        id uuid primary key default gen_random_uuid(),
-        bucket_id text not null,
-        name text not null,
-        owner uuid default auth.uid(),
-        created_at timestamptz not null default now()
-      );
-      create function storage.foldername(name text) returns text[] language sql immutable as $$
-        select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1]
-      $$;
-      alter table storage.objects enable row level security;
-      grant usage on schema storage to authenticated;
-      grant all on storage.objects to authenticated;
-    `);
-    // The migration's storage block, as Supabase runs it.
-    const sql = readFileSync(join(MIGRATIONS_DIR, '20261013000005_office_photos.sql'), 'utf8');
-    const block = /-- 2\. Storage[\s\S]*?\nend \$\$;/.exec(sql)?.[0];
-    expect(block).toBeTruthy();
-    await db.exec(block!);
+    await installStorageStub(db);
+    // Only this migration's storage block (its upload policy), as Supabase runs it.
+    const blocks = storageBlocks('20261013000005_office_photos.sql');
+    expect(blocks).toHaveLength(1);
+    await db.exec(blocks[0]!);
   });
 
   const put = (user: string, name: string, bucket = 'photos') =>

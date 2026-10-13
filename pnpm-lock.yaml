@@ -419,6 +419,9 @@ importers:
       '@sitelog/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
     devDependencies:
       '@types/node':
         specifier: ^26.6.5

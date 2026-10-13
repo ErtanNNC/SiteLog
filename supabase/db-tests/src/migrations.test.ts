@@ -30,6 +30,13 @@ describe('migrations', () => {
         name,
       ).toEqual([...values]);
     }
+    // And the other way: every Postgres enum in public is in PG_ENUMS (a new type cannot be
+    // forgotten in enums.ts; db-types-drift checks db/types.ts `Enums` against the real schema).
+    const types = await db.query<{ typname: string }>(
+      `select t.typname from pg_type t join pg_namespace n on n.oid = t.typnamespace
+       where n.nspname = 'public' and t.typtype = 'e' order by 1`,
+    );
+    expect(types.rows.map((r) => r.typname)).toEqual(Object.keys(PG_ENUMS).sort());
   });
 
   it('enables RLS on every public table', async () => {

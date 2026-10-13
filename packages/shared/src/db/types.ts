@@ -1,7 +1,15 @@
 import type {
+  CallDirection,
+  CallOutcome,
+  CallStatus,
+  CallTransport,
   CompanyStatus,
+  ConsentType,
+  ContactPref,
   ConvoState,
+  FieldChannel,
   JobStatus,
+  LinkKind,
   MemberRole,
   MsgDirection,
   MsgStatus,
@@ -13,8 +21,10 @@ import type {
   SenderStatus,
   SiteDayStatus,
   SiteStatus,
+  SourceKind,
   TermKind,
   TermStatus,
+  UploadKind,
   VersionAuthor,
 } from '../enums.ts';
 
@@ -895,14 +905,24 @@ export type Database = {
       site_status: SiteStatus;
       reporter_role: ReporterRole;
       reporter_status: ReporterStatus;
+      contact_pref: ContactPref;
+      consent_type: ConsentType;
       company_status: CompanyStatus;
+      field_channel: FieldChannel;
       msg_direction: MsgDirection;
       msg_type: MsgType;
       msg_status: MsgStatus;
       convo_state: ConvoState;
+      link_kind: LinkKind;
+      upload_kind: UploadKind;
+      call_direction: CallDirection;
+      call_transport: CallTransport;
+      call_status: CallStatus;
+      call_outcome: CallOutcome;
       site_day_status: SiteDayStatus;
       report_status: ReportStatus;
       version_author: VersionAuthor;
+      source_kind: SourceKind;
       term_status: TermStatus;
       term_kind: TermKind;
       sender_status: SenderStatus;

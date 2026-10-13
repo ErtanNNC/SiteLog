@@ -882,6 +882,7 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 8. Which `CLAUDE_MODEL` should v1.2 use (D23)?
 9. For W1-19, should the worker run on a developer machine, or should we create the Fly app now?
 10. Please confirm or change the **owner** items in section 6: D10, D13, D14, D19, D22, D23, D30, D40, D41, D42.
+11. Should deleting an org, site, site-day or company keep cascading to its reports, versions and invoices as built, or refuse the delete as §6.3 does (spec §19 question 17)? Until you answer, the end-state allowlist keeps the repo's 15 `ON DELETE` actions as `repo-on-delete`.
 
 ---
 

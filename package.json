@@ -19,6 +19,7 @@
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present test",
     "test:db": "pnpm --filter @sitelog/db test",
+    "test:stack": "pnpm --filter @sitelog/db test:stack",
     "e2e": "pnpm --filter @sitelog/web e2e && pnpm --filter @sitelog/field e2e",
     "e2e:supabase": "pnpm --filter @sitelog/web e2e:supabase",
     "eval": "pnpm --filter @sitelog/worker eval",

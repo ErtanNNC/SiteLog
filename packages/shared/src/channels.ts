@@ -8,10 +8,10 @@ import { assertE164, type E164 } from './format.ts';
  */
 
 /**
- * How a report reached SiteLog (§4.5). The Postgres enum `field_channel` (§6.2, plus `office`
- * for typed reports, D13) lands with its migration in W1-05.
+ * How a report reached SiteLog (§4.5): `web`, `voice` or `sms`. It mirrors the Postgres enum
+ * `field_channel` (§6.2, `enums.ts`), which also has `office` for reports typed in the panel (D13).
  */
-export type FieldChannel = 'web' | 'voice' | 'sms';
+export type { FieldChannel } from './enums.ts';
 
 /** Why SiteLog places an outbound call (§4.5, `calls.purpose`). */
 export type CallPurpose = 'daily_report' | 'reminder' | 'callback';

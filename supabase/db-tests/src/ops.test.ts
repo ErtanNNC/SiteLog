@@ -120,15 +120,17 @@ describe('platform admins', () => {
       );
     expect(await check(OPERATOR)).toBe(true);
     expect(await check(ORG_ADMIN)).toBe(false);
+    // `revoke all … from anon, authenticated` (20261012000003_ops.sql): not even RLS is reached.
     for (const user of [OPERATOR, ORG_ADMIN]) {
-      const rows = await asUser(db, user, (q) => q(`select * from platform_admins`));
-      expect(rows.rows).toEqual([]);
+      await expect(asUser(db, user, (q) => q(`select * from platform_admins`))).rejects.toThrow(
+        /permission denied for table platform_admins/,
+      );
     }
     await expect(
       asUser(db, ORG_ADMIN, (q) =>
         q(`insert into platform_admins (user_id) values ($1)`, [ORG_ADMIN]),
       ),
-    ).rejects.toThrow(/row-level security/);
+    ).rejects.toThrow(/permission denied for table platform_admins/);
     // Anonymous callers (no JWT) are never platform admins.
     expect((await svc<{ ok: boolean }>(`select is_platform_admin() as ok`))[0]!.ok).toBe(false);
   });
