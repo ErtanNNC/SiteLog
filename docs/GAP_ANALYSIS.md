@@ -691,7 +691,7 @@ Each item: what the repo does, what v1.2 (or the kit `CLAUDE.md`) says, and a re
 - **D14 · `uploads.reporter_id NOT NULL` vs office photos (owner).** **Recommend:** make `reporter_id` nullable with an `uploaded_by` user column (recorded deviation), so PDFs, the Photos tab and evidence packs read one photo model.
 - **D15 · `messages`: extend in place or new table.** **Recommend:** extend in place now (nullable SMS columns, `undeliverable`; SMS rows already satisfy the conversation-or-org check through `org_id`). After WhatsApp retires, move legacy rows to an archive, re-point foreign keys and enforce the v1.2 `NOT NULL`s and a fresh `msg_status` type.
 - **D16 · Job dedupe: active-only vs fully unique.** **Recommend:** adopt v1.2's `UNIQUE` with `on conflict do nothing`, because "once each, even if retried" (W1-15) depends on it. First null keys on finished duplicates, give repeatable jobs per-occurrence keys (e.g. reinvite), and audit the worker's keys.
-- **D19 · `verified` reporters (owner).** **Recommend:** if staging holds only demo data, rename `verified` → `active`; if it holds real reporters, set them to `invited` so they consent on the recorder (TCPA/KVKK), then rename the unused label.
+- **D19 · `verified` reporters (owner).** **Recommend:** if staging holds only demo data, rename `verified` → `active`; if it holds real reporters, set them to `invited` so they consent on the recorder (TCPA/KVKK), then rename the unused label. **Settled by the inventory (section 8):** no reporter is `verified`, so the label is renamed.
 - **D20 · Stored v1 report versions.** **Recommend:** never rewrite them; normalise v1 → v2 on read (`audio` → `voice_note`, `reply` → `answer`, `messageId` → `uploadId`, `hoursBasis 'reply'` → `'answer'`).
 - **D21 · Deferred RLS defects.** **Recommend:** fix them inside W1-05, since its role-matrix suite would fail on them (`docs/AUDIT_BACKLOG.md:36-41`, `:234-264`).
 - **D22 · Accounts role reach (owner).** Accounts users can read sites, the full audit log, all notifications and every storage file (`supabase/migrations/20261011000004_rls.sql:115`, `:166-169`, `supabase/migrations/20261011000006_platform.sql:13`). **Recommend:** tighten to §2.2 (hours and invoices) in the role matrix.
@@ -861,6 +861,13 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 ---
 
 ## 8. Open questions for the owner
+
+**Inventory of `abuanbyzttuqksdctqcp`, 2026-10-13** (read-only, Deploy run 38414734882 from `spec-v1.2` at `50b7632`; answers Q1–Q3 and settles D19):
+
+- All 16 migrations are applied; the deployed functions are the 9 of `supabase/config.toml`, including `whatsapp-webhook`.
+- Edge function secrets: only `APP_URL` and the platform's `SUPABASE_*` values. No `WA_*`, `SCHEDULER_SECRET` or `STRIPE_*`, so no Meta app can reach the webhook (Q2: no).
+- Data: 1 org (not the demo org), 1 conversation (state `new`), 1 reporter (`invited`), 0 messages, transcripts, unknown senders, reports, versions and notifications; storage holds 1 logo. No reporter is `verified`, so D19 is a plain rename `verified` → `active` (Q1: no customer reports, no WhatsApp traffic).
+- Queue: 2 queued jobs (`send_welcome`, `build_evidence_pack`) and no `render_pdf` with `notifyReporter`. pg_cron's `sitelog-scheduler-tick` is active, but the Vault secrets `scheduler_secret` and `scheduler_tick_url` are missing, so `scheduler-tick` has never run and queued nothing (Q3). The queued `send_welcome` would send a WhatsApp template if a worker ran; it is discarded at the cut-over with the rest of the backlog (W1-19).
 
 1. Does `abuanbyzttuqksdctqcp` hold only demo data, or real customer orgs with typed reports and office photos? Has it ever received real WhatsApp traffic?
 2. Is a Meta app or WhatsApp number connected to the deployed `whatsapp-webhook`, and are `WA_*` secrets set there?
