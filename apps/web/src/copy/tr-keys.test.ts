@@ -3,14 +3,19 @@ import { describe, expect, it } from 'vitest';
 import { copy } from '@/copy/en';
 
 /**
- * D9: `copy/en.ts` is the panel's English (W1-03 serves it as the i18next `panel` EN resource), and
- * the panel's Turkish lives in `@sitelog/shared` (`UI_RESOURCES.tr.panel`). Every Turkish key must
- * name a string in this file, so a renamed or removed English key cannot leave a dead translation.
+ * D9: `copy/en.ts` is the panel's English (the i18next `panel` EN resource, `src/i18n`), and the
+ * panel's Turkish lives in `@sitelog/shared` (`UI_RESOURCES.tr.panel`). Every Turkish key must name
+ * a string in this file, so a renamed or removed English key cannot leave a dead translation, and
+ * every string of the parts of the panel that speak Turkish must have its Turkish.
  */
 
-function leaves(tree: PanelCopyTree, prefix = ''): string[] {
+const PLURAL = ['_one', '_other'] as const;
+
+function leaves(tree: PanelCopyTree, prefix = ''): Array<[string, string]> {
   return Object.entries(tree).flatMap(([k, v]) =>
-    typeof v === 'string' ? [`${prefix}${k}`] : leaves(v, `${prefix}${k}.`),
+    typeof v === 'string'
+      ? [[`${prefix}${k}`, v] as [string, string]]
+      : leaves(v, `${prefix}${k}.`),
   );
 }
 
@@ -26,10 +31,81 @@ function at(path: string): unknown {
     );
 }
 
+/** The English text for a Turkish key: a plain string, or the `_other` form of a counted pair. */
+function englishFor(key: string): string | undefined {
+  const plain = at(key);
+  if (typeof plain === 'string') return plain;
+  const [one, other] = PLURAL.map((s) => at(`${key}${s}`));
+  return typeof one === 'string' && typeof other === 'string' ? other : undefined;
+}
+
+/** The English strings (counted pairs folded into one key) under the given paths. */
+function englishKeys(paths: readonly string[]): string[] {
+  const all = leaves(stringsOnly(copy) as PanelCopyTree).map(([k]) =>
+    k.replace(/_(one|other)$/, ''),
+  );
+  return [...new Set(all)].filter((k) => paths.some((p) => k === p || k.startsWith(`${p}.`)));
+}
+
+function stringsOnly(node: object): PanelCopyTree {
+  const out: Record<string, string | PanelCopyTree> = {};
+  for (const [k, v] of Object.entries(node)) {
+    if (typeof v === 'string') out[k] = v;
+    else if (v && typeof v === 'object' && !Array.isArray(v)) out[k] = stringsOnly(v);
+  }
+  return out;
+}
+
+const vars = (s: string) => [...s.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((m) => m[1]).sort();
+
+/**
+ * What speaks Turkish (W1-03): the shell (sidebar, top bar, drawer, user menu, footer), sign-in and
+ * `/auth/callback`, the global states the shell renders, the error boundary and the Demo phone
+ * placeholder. Pages that are not converted yet render in English under `<EnglishOnly>`.
+ */
+const TRANSLATED = [
+  'app',
+  'nav',
+  'shell',
+  'login',
+  'errorBoundary',
+  'devPhone',
+  'team.officeRoles',
+  'common.loading',
+  'states.error',
+  'states.errorId',
+  'states.retry',
+  'states.noAccessTitle',
+  'states.noAccess',
+  'states.goToHours',
+  'states.goHome',
+  'states.notFoundTitle',
+  'states.notFound',
+  'states.comingNextTitle',
+  'states.comingNext',
+  'a11y.searchResults',
+  'a11y.loadingPage',
+] as const;
+
 describe('panel TR copy (D9)', () => {
-  it('keys every Turkish string by a plain-string path of copy/en.ts', () => {
-    const keys = leaves(UI_RESOURCES.tr.panel);
-    expect(keys.length).toBeGreaterThan(0);
-    for (const key of keys) expect(typeof at(key), `panel.${key}`).toBe('string');
+  const tr = leaves(UI_RESOURCES.tr.panel);
+
+  it('keys every Turkish string by a string (or a counted pair) of copy/en.ts', () => {
+    expect(tr.length).toBeGreaterThan(0);
+    for (const [key] of tr) expect(englishFor(key), `panel.${key}`).toBeTypeOf('string');
+  });
+
+  it('uses the same {{variables}} as the English', () => {
+    for (const [key, text] of tr) {
+      const en = englishFor(key);
+      if (en === undefined) continue; // reported by the test above
+      expect(vars(text), `panel.${key}`).toEqual(vars(en));
+    }
+  });
+
+  it('translates every string of the shell, sign-in and global states', () => {
+    const translated = new Set(tr.map(([k]) => k));
+    const missing = englishKeys(TRANSLATED).filter((k) => !translated.has(k));
+    expect(missing).toEqual([]);
   });
 });

@@ -1,7 +1,9 @@
+import { upperIn } from '@sitelog/shared/locale.ts';
 import { CircleAlert, Inbox, Lock, RefreshCw, WifiOff, type LucideIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { captureError } from '@/lib/sentry';
 import { cn, errorMessage } from '@/lib/utils';
 import { Button } from '../ui/Button';
@@ -41,7 +43,15 @@ export function EmptyState({
   );
 }
 
-/** Inline error card "Couldn't load {thing}. Retry." + Sentry event id (§11.5). */
+/** "şirketleriniz yüklenemedi." → "Şirketleriniz yüklenemedi." (Turkish puts the thing first). */
+function sentenceCase(text: string, language: 'en' | 'tr'): string {
+  return text ? upperIn(language, text.charAt(0)) + text.slice(1) : text;
+}
+
+/**
+ * Inline error card "Couldn't load {thing}. Retry." + Sentry event id (§11.5). In the panel's
+ * language; inside a page that is not translated yet (`<EnglishOnly>`) it stays English.
+ */
 export function ErrorState({
   thing,
   error,
@@ -53,6 +63,7 @@ export function ErrorState({
   onRetry?: () => void;
   className?: string;
 }) {
+  const { t, language } = useCopy();
   // Report once per distinct error; adjusting state during render avoids an effect round-trip.
   const [captured, setCaptured] = useState<{ error: unknown; id: string | null }>({
     error: undefined,
@@ -73,17 +84,19 @@ export function ErrorState({
       <div className="flex items-start gap-3">
         <CircleAlert className="mt-0.5 size-6 shrink-0 stroke-2 text-missing" aria-hidden="true" />
         <div>
-          <p className="font-semibold">{copy.states.error(thing)}</p>
+          <p className="font-semibold">{sentenceCase(t('states.error', { thing }), language)}</p>
           {error ? <p className="text-caption text-dust">{errorMessage(error)}</p> : null}
           {eventId ? (
-            <p className="font-mono text-[12px] text-dust">{copy.states.errorId(eventId)}</p>
+            <p className="font-mono text-[12px] text-dust">
+              {t('states.errorId', { id: eventId })}
+            </p>
           ) : null}
         </div>
       </div>
       {onRetry ? (
         <Button variant="ghost" size="dense" onClick={onRetry}>
           <RefreshCw aria-hidden="true" />
-          {copy.states.retry}
+          {t('states.retry')}
         </Button>
       ) : null}
     </div>
@@ -94,21 +107,22 @@ export function ErrorState({
 export function NoAccessState({
   page,
   homeHref = '/',
-  homeLabel = copy.states.goHome,
+  homeLabel,
 }: {
   page: string;
   homeHref?: string;
   homeLabel?: string;
 }) {
+  const { t } = useCopy();
   return (
     <div className="mx-auto max-w-lg py-12">
       <EmptyState
         icon={Lock}
-        title={copy.states.noAccessTitle}
-        body={copy.states.noAccess(page)}
+        title={t('states.noAccessTitle')}
+        body={t('states.noAccess', { page })}
         action={
           <Button variant="secondary" asChild>
-            <Link to={homeHref}>{homeLabel}</Link>
+            <Link to={homeHref}>{homeLabel ?? t('states.goHome')}</Link>
           </Button>
         }
       />
@@ -118,6 +132,7 @@ export function NoAccessState({
 
 /** Top banner "You're offline — changes will retry." (hidden while online). */
 export function OfflineBanner() {
+  const { t } = useCopy();
   const [online, setOnline] = useState(() =>
     typeof navigator === 'undefined' ? true : navigator.onLine,
   );
@@ -138,7 +153,7 @@ export function OfflineBanner() {
       className="flex items-center justify-center gap-2 bg-asphalt px-4 py-2 text-caption font-medium text-chalk"
     >
       <WifiOff className="size-4" aria-hidden="true" />
-      {copy.shell.offline}
+      {t('shell.offline')}
     </div>
   );
 }

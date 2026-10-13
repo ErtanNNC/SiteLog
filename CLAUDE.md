@@ -75,7 +75,7 @@ Keep these scripts working; add new ones to the root `package.json` and list the
 
 - SQL `snake_case`, TS `camelCase`, components `PascalCase`. Timestamps UTC `timestamptz`; display in the **site's** time zone. Phones E.164. Money in minor units (integer cents).
 - Locale per org (`en-US` / `tr-TR`) decides report language, units and currency. Field UI EN/ES/TR, panel EN/TR.
-- **No hard-coded UI strings.** v1.2 puts all copy behind i18next keys (`packages/shared/src/copy/*`) in EN, ES (field) and TR. _(current)_ Panel copy lives in `apps/web/src/copy/en.ts` (English) and WhatsApp copy in `packages/shared/src/copy/whatsapp.ts`; add new panel strings there until the i18n step of the migration plan moves them. Turkish characters must render everywhere (fonts, PDF, SMS segmenting).
+- **No hard-coded UI strings.** Panel: English in `apps/web/src/copy/en.ts` (the EN resource, D9) and Turkish in `packages/shared/src/copy/ui/tr.ts`, keyed to it and read through `useCopy().t()`; pages not translated yet render inside `<EnglishOnly>` until a ticket converts them. Field app: `packages/shared/src/copy/ui/*` (EN, ES, TR). SMS: `packages/shared/src/copy/sms.*.ts`. _(current)_ WhatsApp copy stays in `packages/shared/src/copy/whatsapp.ts` until it is retired. Turkish characters must render everywhere (fonts, PDF, SMS segmenting).
 - No emoji.
 
 **Design**

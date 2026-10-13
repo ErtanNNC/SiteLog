@@ -41,6 +41,10 @@ export const DEMO_TODAY = '2026-10-09';
 export const DEMO_NOW = fromZonedTime('2026-10-09T19:05:00', DEMO_TZ).toISOString();
 export const DEMO_ORG_ID = demoId('org:kestrel');
 export const DEMO_WA_NUMBER = '+15550142290';
+/** §18.1: the org's SiteLog number for texts and calls (the panel's sidebar footer, §11.2). */
+export const DEMO_SITELOG_NUMBER = '+15550142290';
+/** §18.1: locale en-US (the DB column `orgs.locale` arrives with W1-05). */
+export const DEMO_ORG_LOCALE = 'en-US' as const;
 
 const ORG = DEMO_ORG_ID;
 

@@ -18,8 +18,8 @@ export const UI_LANGUAGES = {
 
 /**
  * Resources in i18next's shape (`{ [lng]: { [ns]: tree } }`), ready for `i18next.init({ resources })`.
- * `panel` is Turkish only: its English is `apps/web/src/copy/en.ts`, which W1-03 adds as the `en`
- * `panel` resource, and Spanish has no panel (UI_LANGUAGES).
+ * `panel` is Turkish only: its English is `apps/web/src/copy/en.ts`, which the panel serves as the
+ * `en` `panel` resource (`apps/web/src/i18n`), and Spanish has no panel (UI_LANGUAGES).
  */
 export const UI_RESOURCES: {
   en: UiResources;

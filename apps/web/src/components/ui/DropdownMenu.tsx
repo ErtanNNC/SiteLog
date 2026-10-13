@@ -1,6 +1,7 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Check } from 'lucide-react';
-import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from 'react';
+import { forwardRef, useContext, type ComponentPropsWithoutRef, type ComponentRef } from 'react';
+import { PinnedLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
 /**
@@ -21,19 +22,24 @@ export const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 export const DropdownMenuContent = forwardRef<
   ComponentRef<typeof DropdownMenuPrimitive.Content>,
   ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 6, ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-50 min-w-[12rem] overflow-hidden rounded-card border border-rebar bg-chalk p-1 text-asphalt',
-        className,
-      )}
-      {...props}
-    />
-  </DropdownMenuPrimitive.Portal>
-));
+>(({ className, sideOffset = 6, ...props }, ref) => {
+  // Portaled to <body>: carry an English-only page's language with it (WCAG 3.1.2).
+  const pinned = useContext(PinnedLanguage);
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        ref={ref}
+        lang={pinned ?? undefined}
+        sideOffset={sideOffset}
+        className={cn(
+          'z-50 min-w-[12rem] overflow-hidden rounded-card border border-rebar bg-chalk p-1 text-asphalt',
+          className,
+        )}
+        {...props}
+      />
+    </DropdownMenuPrimitive.Portal>
+  );
+});
 DropdownMenuContent.displayName = 'DropdownMenuContent';
 
 export const DropdownMenuItem = forwardRef<

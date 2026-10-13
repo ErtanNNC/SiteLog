@@ -9,6 +9,7 @@ import type { OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
 import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthProvider';
 import { copy } from '@/copy/en';
+import { translate } from '@/i18n/useCopy';
 import { pdfFileNames, saveBlob, zipFromUrls } from '@/lib/pdfZip';
 import { qk } from '@/lib/query';
 import { pendingTab } from '@/lib/tab';
@@ -695,6 +696,10 @@ export function useSimulateIncomingReport() {
       if (!s.simulateIncomingReport) return { changed: false };
       return s.simulateIncomingReport();
     },
-    { success: (_v, r) => (r.changed ? copy.shell.demo.simulated : copy.shell.demo.alreadyFiled) },
+    // A shell control (the demo menu), so the toast speaks the panel's language.
+    {
+      success: (_v, r) =>
+        r.changed ? translate('shell.demo.simulated') : translate('shell.demo.alreadyFiled'),
+    },
   );
 }

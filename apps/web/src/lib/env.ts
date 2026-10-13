@@ -15,7 +15,6 @@ export const env = {
   appUrl:
     str(e.VITE_APP_URL) ??
     (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'),
-  waDisplayNumber: str(e.VITE_WA_DISPLAY_NUMBER) ?? '+15550142290',
   sentryDsn: str(e.VITE_SENTRY_DSN),
   demo: e.VITE_DEMO === 'true' || !str(e.VITE_SUPABASE_URL),
   dev: !!e.DEV,

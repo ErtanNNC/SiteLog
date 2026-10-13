@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+import { demoId } from '@sitelog/shared/demo/ids.ts';
 
 /** A 48 × 36 PNG: the panel turns it into a JPEG before it is "uploaded". */
 const SITE_PHOTO = fileURLToPath(new URL('./fixtures/site-photo.png', import.meta.url));
@@ -39,6 +40,7 @@ test.describe('SiteLog panel (demo mode)', () => {
       ['Site glossary', /Site glossary/],
       ['Settings', /Settings/],
       ['Billing', /Billing/],
+      ['Demo phone', /Demo phone/],
       ['Overview', /Today across 6 sites/],
     ];
     for (const [label, heading] of items) {
@@ -192,5 +194,85 @@ test.describe('SiteLog panel (demo mode)', () => {
     await page.getByRole('button', { name: 'Open menu' }).click();
     await page.getByRole('dialog').getByRole('link', { name: /Sites/ }).click();
     await expect(page.getByRole('heading', { name: 'Sites', exact: true })).toBeVisible();
+  });
+});
+
+// §11.2 / F1 / §11.5: EN ⇄ TR from /login and from the account menu, keeping the route.
+test.describe('language switch', () => {
+  const HERO_REPORT = demoId('report:riverside:2026-10-09');
+
+  test('on /login: Turkish and back keep the page, survive a reload and carry into the shell', async ({
+    page,
+  }) => {
+    await page.goto('/login?as=pm');
+    const english = page.getByRole('heading', { level: 1, name: 'Sign in to the office panel' });
+    const turkish = page.getByRole('heading', { level: 1, name: 'Ofis paneline giriş yapın' });
+    await expect(english).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+
+    await page
+      .getByRole('group', { name: 'Language' })
+      .getByRole('button', { name: 'Türkçe' })
+      .click();
+    await expect(turkish).toBeVisible();
+    await expect(page.getByTestId('managers-note')).toHaveText(
+      'Şantiye şefleri giriş yapmaz. Mesajdaki link ya da telefon aramasıyla rapor verirler.',
+    );
+    await expect(page).toHaveURL(/\/login\?as=pm$/);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+
+    await page.reload();
+    await expect(turkish).toBeVisible();
+    await page.getByRole('group', { name: 'Dil' }).getByRole('button', { name: 'English' }).click();
+    await expect(english).toBeVisible();
+    await expect(page).toHaveURL(/\/login\?as=pm$/);
+
+    // Turkish again, then sign in: the shell speaks Turkish around the (English) page.
+    await page
+      .getByRole('group', { name: 'Language' })
+      .getByRole('button', { name: 'Türkçe' })
+      .click();
+    await page.getByLabel('İş e-postası').fill('sam@kestrelbuild.example');
+    await page.getByRole('button', { name: 'Bana giriş linki gönder' }).click();
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Today across 6 sites' }),
+    ).toBeVisible();
+    const nav = page.getByRole('navigation', { name: 'Ana gezinme' });
+    await expect(nav.getByRole('link', { name: /^Genel bakış/ })).toBeVisible();
+    await expect(page.getByText('Asistan hazır · mesaj ve arama')).toBeVisible();
+    await expect(page.locator('main#main [lang="en"]').first()).toBeAttached();
+  });
+
+  test('from the account menu on a deep page: EN → TR → EN keeps the route', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' }));
+    });
+    const path = `/reports/${HERO_REPORT}`;
+    await page.goto(path);
+    const reportHeading = page.getByRole('heading', { name: 'Friday, Oct 9 — Riverside B' });
+    await expect(reportHeading).toBeVisible();
+
+    await page.getByRole('button', { name: 'Account menu' }).click();
+    await page
+      .getByRole('group', { name: 'Language' })
+      .getByRole('menuitemradio', { name: 'Türkçe' })
+      .click();
+    await expect(page.getByRole('navigation', { name: 'Ana gezinme' })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(reportHeading).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+    await expect(page.getByRole('combobox', { name: 'Arama' })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByRole('navigation', { name: 'Ana gezinme' })).toBeVisible();
+    await page.getByRole('button', { name: 'Hesap menüsü' }).click();
+    await page
+      .getByRole('group', { name: 'Dil' })
+      .getByRole('menuitemradio', { name: 'English' })
+      .click();
+    await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`${path}$`));
+    await expect(reportHeading).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   });
 });

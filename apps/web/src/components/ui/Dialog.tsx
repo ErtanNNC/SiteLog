@@ -2,12 +2,14 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
 import {
   forwardRef,
+  useContext,
   useRef,
   type ComponentPropsWithoutRef,
   type ComponentRef,
   type ReactNode,
 } from 'react';
 import { copy } from '@/copy/en';
+import { PinnedLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
 
@@ -51,11 +53,14 @@ export const DialogContent = forwardRef<
     // to return focus to on close, so it lands on <body>. Remember the opener and restore it
     // (WCAG 2.4.3 focus order); a dialog with a DialogTrigger gets the same element back.
     const opener = useRef<HTMLElement | null>(null);
+    // Portaled to <body>: carry an English-only page's language with it (WCAG 3.1.2).
+    const pinned = useContext(PinnedLanguage);
     return (
       <DialogPortal>
         <DialogOverlay />
         <DialogPrimitive.Content
           ref={ref}
+          lang={pinned ?? undefined}
           onOpenAutoFocus={(e) => {
             opener.current =
               document.activeElement instanceof HTMLElement &&

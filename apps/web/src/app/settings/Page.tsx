@@ -4,6 +4,7 @@ import { Link, Navigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthProvider';
 import { TopBarControls } from '@/components/shell/TopBar';
+import { ComingNext } from '@/app/ComingNext';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { PageSkeleton } from '@/components/sitelog/Skeletons';
 import { ErrorState } from '@/components/sitelog/States';
@@ -20,8 +21,17 @@ import { RecipientsSection, type RecipientsDraft } from './RecipientsSection';
 import { ReportsSection } from './ReportsSection';
 import { useUnsavedGuard } from './useUnsavedGuard';
 
-const SECTIONS = ['reports', 'pdf', 'recipients', 'payroll'] as const;
+/** P12 tabs, in the spec's order. `channels` (Field channels) is a placeholder until W1-08. */
+const SECTIONS = ['reports', 'channels', 'pdf', 'recipients', 'payroll'] as const;
 type Section = (typeof SECTIONS)[number];
+
+const TAB_LABEL: Record<Section, string> = {
+  reports: copy.settings.tabs.reports,
+  channels: copy.settings.tabs.fieldChannels,
+  pdf: copy.settings.tabs.pdf,
+  recipients: copy.settings.tabs.recipients,
+  payroll: copy.settings.tabs.payroll,
+};
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -137,6 +147,38 @@ export default function SettingsPage() {
       </Button>
     </TopBarControls>
   );
+  // Every branch renders it: the guard stays armed while a draft is dirty (switching to the
+  // Field channels tab keeps it), so a guarded click must always have a dialog to open.
+  const leaveDialog = (
+    <ConfirmDialog
+      open={!!guard.pending}
+      onOpenChange={(o) => !o && guard.cancel()}
+      title={copy.settings.unsavedTitle}
+      description={copy.settings.unsavedBody}
+      confirmLabel={copy.settings.leave}
+      cancelLabel={copy.settings.stay}
+      destructive
+      onConfirm={guard.proceed}
+    />
+  );
+
+  if (section === 'channels') {
+    return (
+      <>
+        {controls}
+        {leaveDialog}
+        <ComingNext
+          eyebrow={settings.data?.org.name}
+          title={copy.settings.title}
+          subtitle={TAB_LABEL.channels}
+        >
+          <div className="mb-5 lg:hidden">
+            <SectionTabs current={section} />
+          </div>
+        </ComingNext>
+      </>
+    );
+  }
 
   // A failed first load leaves no data to seed the draft from: show the error, not a skeleton.
   // (A failed refetch keeps the loaded data and the draft, so the page stays editable.)
@@ -144,6 +186,7 @@ export default function SettingsPage() {
     return (
       <>
         {controls}
+        {leaveDialog}
         <ErrorState
           thing={copy.nav.settings.toLowerCase()}
           error={settings.error}
@@ -156,6 +199,7 @@ export default function SettingsPage() {
     return (
       <>
         {controls}
+        {leaveDialog}
         <PageSkeleton />
       </>
     );
@@ -167,7 +211,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow={settings.data.org.name}
         title={copy.settings.title}
-        subtitle={copy.settings.tabs[section]}
+        subtitle={TAB_LABEL[section]}
       />
       <div className="mb-5 lg:hidden">
         <SectionTabs current={section} />
@@ -190,16 +234,7 @@ export default function SettingsPage() {
       ) : null}
       {section === 'payroll' ? <PayrollSection draft={draft} update={update} /> : null}
 
-      <ConfirmDialog
-        open={!!guard.pending}
-        onOpenChange={(o) => !o && guard.cancel()}
-        title={copy.settings.unsavedTitle}
-        description={copy.settings.unsavedBody}
-        confirmLabel={copy.settings.leave}
-        cancelLabel={copy.settings.stay}
-        destructive
-        onConfirm={guard.proceed}
-      />
+      {leaveDialog}
     </>
   );
 }
@@ -222,7 +257,7 @@ function SectionTabs({ current }: { current: Section }) {
             s === current ? 'bg-asphalt text-chalk' : 'text-dust hover:text-asphalt',
           )}
         >
-          {copy.settings.tabs[s]}
+          {TAB_LABEL[s]}
         </Link>
       ))}
     </div>

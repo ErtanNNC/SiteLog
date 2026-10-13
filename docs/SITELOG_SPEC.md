@@ -1676,7 +1676,7 @@ After every filed call: batch transcript (reporter channel) → extraction → c
 - **Top bar:** global search (reports, sites, companies, transcript text) · notifications · page controls.
 - **Content:** max-width 1240 px; Concrete background.
 - **Responsive:** < 768 px sidebar → top bar + drawer; tables scroll inside cards; two-column layouts stack.
-- **i18n:** all strings via `i18next` (`en`, `tr`); dates/numbers/currency via `Intl` with the user's UI locale; report content stays in the org's report language.
+- **i18n:** all strings via `i18next` (`en`, `tr`); dates/numbers/currency via `Intl` with the user's UI locale; report content stays in the org's report language. UI language: the user's choice (`org_members.ui_locale`), else the org locale (§6.3); before sign-in (`/login`, `/auth/callback`), the browser's language when it is EN or TR, else EN.
 - **Realtime:** Overview, Reports, Report review.
 
 ### 11.3 Shared components

@@ -1,7 +1,14 @@
 /**
- * Every UI string of the web panel (§15 i18n readiness). Components import from here and never
- * hard-code copy. Interpolations are functions so word order can change per language later.
- * Tone: short, lead with the result, no blame, no emoji.
+ * Every UI string of the web panel. Components never hard-code copy. Tone: short, lead with the
+ * result, no blame, no emoji.
+ *
+ * D9: this file is the panel's English and the i18next `panel` EN resource (`src/i18n`). Its Turkish
+ * lives in `@sitelog/shared` (`UI_RESOURCES.tr.panel`), keyed by the paths here. Converted
+ * components read it through `useCopy().t('path')`, so the panel's language applies:
+ * - only plain strings are i18next resources: interpolations there use `{{name}}`, and counted
+ *   phrases are `key_one` / `key_other` pairs read as `t('key', { count })`;
+ * - pages not converted yet still import `copy` and call its functions (they render in English
+ *   under `<EnglishOnly>`, see `src/app/routes.tsx`).
  */
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -9,7 +16,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export const copy = {
   app: {
     name: 'SiteLog',
-    tagline: "Talk. It's logged.",
+    tagline: 'Talk. It’s logged.',
     skipToContent: 'Skip to content',
   },
 
@@ -25,12 +32,15 @@ export const copy = {
     settings: 'Settings',
     billing: 'Billing',
     try: 'Try it on WhatsApp',
-    /** v1.2 `/dev/phone` (§5.2 console SMS driver); the page and its nav item come in W1-03. */
+    /** v1.2 `/dev/phone` (§11.1): texts from the `console` SMS driver (§5.2). */
     devPhone: 'Demo phone',
     badges: {
-      reportsToReview: (n: number) => `${plural(n, 'report')} to review`,
-      unknownSenders: (n: number) => `${plural(n, 'unknown number')}`,
-      termsToReview: (n: number) => `${plural(n, 'term')} to review`,
+      reportsToReview_one: '{{count}} report to review',
+      reportsToReview_other: '{{count}} reports to review',
+      unknownSenders_one: '{{count}} unknown number',
+      unknownSenders_other: '{{count}} unknown numbers',
+      termsToReview_one: '{{count}} term to review',
+      termsToReview_other: '{{count}} terms to review',
     },
     openMenu: 'Open menu',
     closeMenu: 'Close menu',
@@ -40,14 +50,17 @@ export const copy = {
   shell: {
     orgSwitcher: {
       label: 'Switch company',
-      activeSites: (n: number) => `${plural(n, 'active site')}`,
+      activeSites_one: '{{count}} active site',
+      activeSites_other: '{{count}} active sites',
       currentOrg: 'Current company',
       otherOrgs: 'Your companies',
     },
     search: {
-      placeholder: 'Search reports, sites, companies, transcripts…',
+      /** Web-Overview artboard, verbatim. */
+      placeholder: 'Search reports, sites, subcontractors',
       label: 'Search',
-      noResults: (q: string) => `Nothing found for “${q}”.`,
+      clear: 'Clear search',
+      noResults: 'Nothing found for “{{query}}”.',
       hint: 'Type at least 2 characters',
       groups: {
         report: 'Reports',
@@ -60,16 +73,17 @@ export const copy = {
     },
     notifications: {
       label: 'Notifications',
-      unread: (n: number) => `${plural(n, 'unread notification')}`,
+      /** Joined to `label` as "Notifications, 3 new" (Web-Overview artboard). */
+      unread_one: '{{count}} new',
+      unread_other: '{{count}} new',
       title: 'Notifications',
       empty: 'Nothing new. Reports and alerts will show up here.',
       markAllRead: 'Mark all read',
-      showing: (n: number) => `Last ${n}`,
     },
     footer: {
-      listening: 'Agent listening on WhatsApp',
-      /** v1.2 footer (§11.2), next to the org's SiteLog number(s); replaces `listening` in W1-03. */
+      /** §11.2: the status line, then the org's SiteLog number(s) when it has one. */
       agentReady: 'Agent ready · texts & calls',
+      sitelogNumbers: 'SiteLog numbers',
       profile: 'Profile',
       signOut: 'Sign out',
       userMenu: 'Account menu',
@@ -258,17 +272,17 @@ export const copy = {
 
   states: {
     loading: (thing: string) => `Loading ${thing}…`,
-    error: (thing: string) => `Couldn’t load ${thing}.`,
-    errorId: (id: string) => `Error id ${id}`,
+    error: 'Couldn’t load {{thing}}.',
+    errorId: 'Error ID {{id}}',
     retry: 'Retry',
     noAccessTitle: 'No access',
-    noAccess: (page: string) => `You don’t have access to ${page}. Ask an admin.`,
+    noAccess: 'You don’t have access to {{page}}. Ask an admin.',
     goToHours: 'Go to crew hours',
     goHome: 'Go to overview',
     notFoundTitle: 'Page not found',
     notFound: 'That page doesn’t exist, or the link was mistyped.',
     comingNextTitle: 'Coming next',
-    comingNext: 'This page is being built. The shell, data layer and navigation already work.',
+    comingNext: 'This page is being built and will be ready soon.',
     offline: 'You’re offline — changes will retry.',
     reviewReasons: {
       title: (n: number) => `${plural(n, 'reason')} to review`,
@@ -284,16 +298,16 @@ export const copy = {
   },
 
   login: {
-    eyebrow: 'Office sign-in',
+    /** P1 and the Web-Login artboard. */
     headline: 'End-of-day reports, spoken in three minutes.',
-    bullets: [
-      'Site managers send a WhatsApp voice note. No app, no login.',
-      'Crew, hours, weather and progress are extracted and checked, not guessed.',
-      'A paper-ready PDF is filed and emailed — every number traces back to the second of audio.',
-    ],
-    tagline: "Talk. It's logged.",
-    title: 'Sign in',
-    subtitle: 'We’ll email you a link. No passwords.',
+    bullets: {
+      link: 'Site managers tap a text link or take a call — nothing to install.',
+      pdf: 'A formatted PDF daily report lands here, ready to file.',
+      trace: 'Sub hours and weather delays, each traceable to the recording.',
+    },
+    tagline: 'Talk. It’s logged.',
+    title: 'Sign in to the office panel',
+    subtitle: 'We’ll email you a one-time link. No password to remember.',
     emailLabel: 'Work email',
     emailPlaceholder: 'you@company.com',
     emailInvalid: 'Enter a valid work email.',
@@ -302,23 +316,40 @@ export const copy = {
     or: 'or',
     sso: 'Continue with company SSO',
     ssoSoon: 'Coming soon',
-    managersNote: 'Site managers don’t sign in. They report by WhatsApp.',
+    managersNoteLead: 'Site managers don’t sign in.',
+    managersNote: 'They report by text link or phone call.',
     footer: 'New here?',
     footerCta: 'Set up your company',
     footerSuffix: '— no setup fee.',
     sentTitle: 'Check your inbox',
-    sent: (email: string) => `We sent a sign-in link to ${email}. It’s valid for 1 hour.`,
+    sent: 'We sent a sign-in link to {{email}}. It’s valid for 1 hour.',
     resend: 'Resend link',
-    resendIn: (s: number) => `Resend in ${s} s`,
+    resendIn: 'Resend in {{seconds}} s',
     useAnother: 'Use a different email',
     expired: 'That link has expired. Request a new one below.',
     authError: 'Sign-in didn’t work. Try again.',
+    rateLimited: 'Too many sign-in emails. Wait a minute and try again.',
     demoHint: 'Demo mode: any email signs you in as Lena Ortiz (admin).',
-    demoHintAs: (name: string) => `Demo mode: you’ll sign in as ${name}.`,
+    demoHintAs: 'Demo mode: you’ll sign in as {{name}}.',
     callbackTitle: 'Signing you in…',
     callbackBody: 'One moment while we check your link.',
     accountThing: 'your companies',
     signOut: 'Sign out',
+  },
+
+  /** The error boundary around the whole panel (`src/app/AppErrorBoundary.tsx`). */
+  errorBoundary: {
+    title: 'Something went wrong',
+    body: 'SiteLog hit an unexpected error. Try again, or sign out and sign back in.',
+    retry: 'Try again',
+    signOut: 'Sign out',
+    reported: 'The SiteLog team has been told about it.',
+    errorId: 'Error ID {{id}}',
+  },
+
+  /** `/dev/phone` placeholder (§11.1); the real Demo phone comes in W1-08. */
+  devPhone: {
+    subtitle: 'Every text SiteLog sends through the console driver, one thread per reporter.',
   },
 
   overview: {

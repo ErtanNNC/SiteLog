@@ -1,13 +1,22 @@
 import { Bell, Menu, Search, X } from 'lucide-react';
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { useAuth } from '@/auth/AuthProvider';
-import { copy } from '@/copy/en';
 import { useMarkNotificationsRead, useNotifications, useSearch } from '@/data/hooks';
 import type { NotificationItem, SearchResult } from '@/data/types';
 import { formatWhen } from '@/lib/format';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
+import { PinnedLanguage } from '@/i18n/context';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover';
@@ -17,13 +26,33 @@ import { Logo } from './Sidebar';
 const SlotCtx = createContext<HTMLElement | null>(null);
 export const TopBarSlotProvider = SlotCtx.Provider;
 
+/**
+ * A page's controls in the top bar. They belong to the page, so an English-only page
+ * (`<EnglishOnly>`) keeps `lang="en"` on them across the portal.
+ */
 export function TopBarControls({ children }: { children: ReactNode }) {
   const el = useContext(SlotCtx);
-  return el ? createPortal(children, el) : null;
+  const pinned = useContext(PinnedLanguage);
+  if (!el) return null;
+  return createPortal(
+    pinned && children != null && children !== false ? (
+      <div lang={pinned} className="contents">
+        {children}
+      </div>
+    ) : (
+      children
+    ),
+    el,
+  );
 }
 
 // ── Global search ──
 function GlobalSearch({ className }: { className?: string }) {
+  const { t } = useCopy();
+  // The bar renders two of these (desktop and phone rows): ids must be unique, or the phone
+  // field's <label for> points at the hidden desktop one and it is named by its placeholder.
+  const inputId = useId();
+  const resultsId = useId();
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [open, setOpen] = useState(false);
@@ -51,19 +80,19 @@ function GlobalSearch({ className }: { className?: string }) {
   for (const r of list) grouped.set(r.kind, [...(grouped.get(r.kind) ?? []), r]);
   return (
     <div ref={wrap} className={cn('relative w-full max-w-xl', className)}>
-      <label className="sr-only" htmlFor="global-search">
-        {copy.shell.search.label}
+      <label className="sr-only" htmlFor={inputId}>
+        {t('shell.search.label')}
       </label>
       <Search
         className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-dust"
         aria-hidden="true"
       />
       <input
-        id="global-search"
+        id={inputId}
         type="search"
         role="combobox"
         aria-expanded={open && debounced.length >= 2}
-        aria-controls="global-search-results"
+        aria-controls={resultsId}
         aria-autocomplete="list"
         value={q}
         onChange={(e) => {
@@ -75,7 +104,7 @@ function GlobalSearch({ className }: { className?: string }) {
           if (e.key === 'Escape') setOpen(false);
           if (e.key === 'Enter' && list[0]) go(list[0]);
         }}
-        placeholder={copy.shell.search.placeholder}
+        placeholder={t('shell.search.placeholder')}
         className="h-11 w-full rounded-chip border border-rebar bg-concrete/60 pl-10 pr-10 text-[15px] placeholder:text-dust focus:border-asphalt focus:bg-chalk"
       />
       {q ? (
@@ -83,27 +112,29 @@ function GlobalSearch({ className }: { className?: string }) {
           type="button"
           className="absolute right-2 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-chip text-dust hover:bg-concrete"
           onClick={() => setQ('')}
-          aria-label={copy.common.dismiss}
+          aria-label={t('shell.search.clear')}
         >
           <X className="size-4" aria-hidden="true" />
         </button>
       ) : null}
       {open && debounced.length >= 2 ? (
         <div
-          id="global-search-results"
+          id={resultsId}
           role="listbox"
-          aria-label={copy.a11y.searchResults}
+          aria-label={t('a11y.searchResults')}
           className="absolute left-0 right-0 top-full z-40 mt-1 max-h-96 overflow-y-auto rounded-card border border-rebar bg-chalk p-1"
         >
           {list.length === 0 ? (
             <div className="px-3 py-3 text-caption text-dust">
-              {results.isFetching ? copy.common.loading : copy.shell.search.noResults(debounced)}
+              {results.isFetching
+                ? t('common.loading')
+                : t('shell.search.noResults', { query: debounced })}
             </div>
           ) : (
             [...grouped].map(([kind, items]) => (
               <div key={kind}>
                 <div className="eyebrow px-3 pb-1 pt-2 text-dust">
-                  {copy.shell.search.groups[kind]}
+                  {t(`shell.search.groups.${kind}`)}
                 </div>
                 {items.map((r) => (
                   <button
@@ -132,6 +163,7 @@ function GlobalSearch({ className }: { className?: string }) {
 // ── Notifications bell ──
 function NotificationsBell() {
   const { currentOrg } = useAuth();
+  const { t, language } = useCopy();
   const [open, setOpen] = useState(false);
   const notifications = useNotifications({ refetchInterval: 60_000 });
   const markRead = useMarkNotificationsRead();
@@ -153,8 +185,8 @@ function NotificationsBell() {
           size="icon"
           aria-label={
             unread
-              ? `${copy.shell.notifications.label} · ${copy.shell.notifications.unread(unread)}`
-              : copy.shell.notifications.label
+              ? `${t('shell.notifications.label')}, ${t('shell.notifications.unread', { count: unread })}`
+              : t('shell.notifications.label')
           }
           className="relative"
           data-testid="notifications-bell"
@@ -170,7 +202,7 @@ function NotificationsBell() {
       </PopoverTrigger>
       <PopoverContent className="w-[360px] max-w-[calc(100vw-32px)] p-0">
         <div className="flex items-center justify-between border-b border-rebar px-4 py-3">
-          <h2 className="font-h2 text-[17px]">{copy.shell.notifications.title}</h2>
+          <h2 className="font-h2 text-[17px]">{t('shell.notifications.title')}</h2>
           {unread > 0 ? (
             <Button
               variant="link"
@@ -179,17 +211,17 @@ function NotificationsBell() {
                 markRead.mutate({ ids: items.filter((n) => !n.readAt).map((n) => n.id) })
               }
             >
-              {copy.shell.notifications.markAllRead}
+              {t('shell.notifications.markAllRead')}
             </Button>
           ) : null}
         </div>
         <ul
           className="max-h-[420px] overflow-y-auto p-1 scrollbar-thin"
-          aria-label={copy.shell.notifications.title}
+          aria-label={t('shell.notifications.title')}
         >
           {items.length === 0 ? (
             <li className="px-3 py-6 text-center text-caption text-dust">
-              {copy.shell.notifications.empty}
+              {t('shell.notifications.empty')}
             </li>
           ) : (
             items.map((n) => (
@@ -215,7 +247,7 @@ function NotificationsBell() {
                       <span className="block truncate text-caption text-dust">{n.body}</span>
                     ) : null}
                     <span className="block font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
-                      {formatWhen(n.createdAt, tz, today)}
+                      {formatWhen(n.createdAt, tz, today, language)}
                     </span>
                   </span>
                 </button>
@@ -228,41 +260,53 @@ function NotificationsBell() {
   );
 }
 
-/** §11.2 top bar: Chalk, 1 px Rebar bottom border; search · bell · page controls slot. */
+/**
+ * §11.2 top bar: Chalk, 1 px Rebar bottom border; search · bell · page controls slot. A page's
+ * controls render into one of two slots, so the DOM order is the visual (and Tab) order at every
+ * width (WCAG 2.4.3): from 768 px the desktop slot before the bell; below it the mobile slot, a row
+ * of its own after the search, so a page with several controls (week picker, filters, Save) never
+ * pushes the bar wider than the phone. `AppShell` hands the matching one to `TopBarControls`.
+ */
 export function TopBar({
   onOpenMenu,
-  slotRef,
+  desktopSlotRef,
+  mobileSlotRef,
 }: {
   onOpenMenu: () => void;
-  slotRef: (el: HTMLDivElement | null) => void;
+  desktopSlotRef: (el: HTMLDivElement | null) => void;
+  mobileSlotRef: (el: HTMLDivElement | null) => void;
 }) {
+  const { t } = useCopy();
   return (
     <header className="sticky top-0 z-30 border-b border-rebar bg-chalk">
-      <div className="flex h-16 items-center gap-3 px-4 md:px-8">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 md:h-16 md:flex-nowrap md:px-8 md:py-0">
         <Button
           variant="subtle"
           size="icon"
           className="md:hidden"
           onClick={onOpenMenu}
-          aria-label={copy.nav.openMenu}
+          aria-label={t('nav.openMenu')}
         >
           <Menu aria-hidden="true" />
         </Button>
         <span className="rounded-btn bg-asphalt px-2 py-1 md:hidden">
           <Logo />
         </span>
-        <GlobalSearch className="hidden sm:block" />
+        <GlobalSearch className="hidden min-w-0 flex-1 sm:block" />
         <div className="ml-auto flex items-center gap-2">
           <div
-            ref={slotRef}
-            className="flex items-center gap-2 empty:hidden"
+            ref={desktopSlotRef}
+            className="hidden items-center gap-2 empty:hidden md:flex"
             data-testid="topbar-controls"
           />
           <NotificationsBell />
         </div>
-      </div>
-      <div className="px-4 pb-3 sm:hidden">
-        <GlobalSearch />
+        <GlobalSearch className="sm:hidden" />
+        <div
+          ref={mobileSlotRef}
+          className="flex w-full flex-wrap items-center justify-end gap-2 empty:hidden md:hidden"
+          data-testid="topbar-controls-mobile"
+        />
       </div>
     </header>
   );

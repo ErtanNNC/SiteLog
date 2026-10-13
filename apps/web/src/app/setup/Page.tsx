@@ -48,7 +48,7 @@ export default function SetupPage() {
   const source = useOptionalDataSource();
   if (!source) return <NoOrgWizard />;
   return (
-    <RequireRole roles={ROUTE_ROLES.setup!} page={copy.setup.pageName}>
+    <RequireRole roles={ROUTE_ROLES.setup} page="setup.pageName">
       <Wizard />
     </RequireRole>
   );

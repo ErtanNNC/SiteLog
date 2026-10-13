@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '@/auth/AuthProvider';
 import { homeFor } from '@/auth/guards';
 import { Logo } from '@/components/shell/Sidebar';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 
 /**
  * /auth/callback — the magic link lands here. supabase-js exchanges the code (PKCE) and
@@ -11,6 +11,7 @@ import { copy } from '@/copy/en';
  */
 export default function AuthCallbackPage() {
   const { status, orgs, role } = useAuth();
+  const { t } = useCopy();
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
@@ -51,8 +52,8 @@ export default function AuthCallbackPage() {
       <span className="rounded-btn bg-asphalt px-3 py-2">
         <Logo />
       </span>
-      <h1 className="font-display text-[26px]">{copy.login.callbackTitle}</h1>
-      <p className="text-dust">{copy.login.callbackBody}</p>
+      <h1 className="font-display text-[26px]">{t('login.callbackTitle')}</h1>
+      <p className="text-dust">{t('login.callbackBody')}</p>
     </div>
   );
 }

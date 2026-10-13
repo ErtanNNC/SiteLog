@@ -72,6 +72,34 @@ describe('SettingsPage (demo data)', () => {
     expect(store.data.settings.signoff_required).toBe(true);
   });
 
+  it('keeps asking about unsaved changes on the Field channels tab', async () => {
+    const store = new DemoStore();
+    renderWithProviders(
+      <>
+        <a href="/sites">Sites</a>
+        <SettingsPage />
+      </>,
+      opts(store),
+    );
+    await screen.findByRole('heading', { name: /^Settings$/ });
+    await userEvent.click(
+      within(screen.getByTestId('working-days')).getByRole('button', { name: 'Sat' }),
+    );
+    expect(screen.getByTestId('save-settings')).toBeEnabled();
+    // Tabs inside /settings never prompt; the draft survives the switch.
+    await userEvent.click(screen.getAllByRole('tab', { name: 'Field channels' })[0]!);
+    expect(await screen.findByText('Coming next')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Sites' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Unsaved changes');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Leave' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: /^Settings$/ })).not.toBeInTheDocument(),
+    );
+  });
+
   it('edits recipients per site and applies one list to all sites', async () => {
     const store = new DemoStore();
     renderWithProviders(<SettingsPage />, opts(store, 'recipients'));

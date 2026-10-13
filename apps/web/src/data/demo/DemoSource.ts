@@ -10,6 +10,7 @@ import {
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
 import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
+import { DEMO_ORG_LOCALE, DEMO_SITELOG_NUMBER } from '@sitelog/shared/demo/kestrel.ts';
 import { copy } from '@/copy/en';
 import { randomUuid } from '@/lib/photos';
 import { sleep } from '@/lib/utils';
@@ -110,7 +111,13 @@ export class DemoSource implements DataSource {
 
   // ─── Reads ───
   getOrgs() {
-    return this.run(() => [orgSummary(this.store.rows(), this.ctx())]);
+    return this.run(() => [
+      {
+        ...orgSummary(this.store.rows(), this.ctx()),
+        locale: DEMO_ORG_LOCALE,
+        sitelogNumbers: [DEMO_SITELOG_NUMBER],
+      },
+    ]);
   }
   getOverview() {
     return this.run(() => assembleOverview(this.store.rows(), this.ctx()));

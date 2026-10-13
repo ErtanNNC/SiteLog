@@ -1,18 +1,19 @@
 import { Link } from 'react-router';
 import { EmptyState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 
 export default function NotFoundPage() {
+  const { t } = useCopy();
   return (
     <div className="mx-auto max-w-lg py-12">
       <EmptyState
         hero
-        title={copy.states.notFoundTitle}
-        body={copy.states.notFound}
+        title={t('states.notFoundTitle')}
+        body={t('states.notFound')}
         action={
           <Button variant="secondary" asChild>
-            <Link to="/">{copy.states.goHome}</Link>
+            <Link to="/">{t('states.goHome')}</Link>
           </Button>
         }
       />

@@ -24,6 +24,13 @@ async function signInFast(page: Page, key: 'admin' | 'pm' | 'accounts' = 'admin'
   }, key);
 }
 
+/** The viewer chose Turkish on this device (what the language switch saves). */
+async function chooseTurkish(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('sitelog.language', JSON.stringify('tr'));
+  });
+}
+
 function describeViolations(violations: Awaited<ReturnType<AxeBuilder['analyze']>>['violations']) {
   return violations
     .map(
@@ -84,6 +91,12 @@ const ROUTES: RouteCase[] = [
   { name: 'settings-recipients', path: '/settings/recipients', ready: (p) => h1(p, 'Settings') },
   { name: 'settings-payroll', path: '/settings/payroll', ready: (p) => h1(p, 'Settings') },
   { name: 'billing', path: '/billing', ready: (p) => p.getByTestId('plan-card') },
+  {
+    name: 'settings-channels',
+    path: '/settings/channels',
+    ready: (p) => p.getByRole('heading', { name: 'Coming next' }),
+  },
+  { name: 'dev-phone', path: '/dev/phone', ready: (p) => h1(p, 'Demo phone') },
   { name: 'ops', path: '/ops', ready: (p) => p.getByTestId('ops-kpis') },
   { name: 'try', path: '/try', ready: (p) => p.getByTestId('try-log') },
   { name: 'setup-company', path: '/setup/company', ready: (p) => h1(p, /./) },
@@ -108,6 +121,59 @@ for (const width of WIDTHS) {
         await expectNoViolations(page);
       });
     }
+
+    test('login in Turkish', async ({ page }) => {
+      await chooseTurkish(page);
+      await page.goto('/login');
+      await expect(
+        page.getByRole('heading', { level: 1, name: 'Ofis paneline giriş yapın' }),
+      ).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+      await expectNoViolations(page);
+    });
+
+    test('the Turkish shell around an English page, with its menus open', async ({ page }) => {
+      await chooseTurkish(page);
+      await signInFast(page);
+      await page.goto('/');
+      await expect(h1(page, 'Today across 6 sites')).toBeVisible();
+      await expectNoViolations(page);
+      if (width === 375) {
+        await page.getByRole('button', { name: 'Menüyü aç' }).click();
+        await expect(page.getByRole('dialog', { name: 'Ana gezinme' })).toBeVisible();
+      }
+      await page.getByRole('button', { name: 'Hesap menüsü' }).click();
+      await expect(page.getByRole('menu')).toBeVisible();
+      await expectNoViolations(page);
+    });
+
+    // WCAG 3.1.2: what an English-only page portals to <body> is English too, not the shell's TR.
+    test('the Turkish shell: an English page’s select and dialog stay lang="en"', async ({
+      page,
+    }) => {
+      await chooseTurkish(page);
+      await signInFast(page);
+      const langOf = (l: Locator) =>
+        l.evaluate((el) => el.closest('[lang]')?.getAttribute('lang') ?? null);
+      await page.goto('/weather');
+      await expect(page.getByTestId('delay-log')).toBeVisible();
+      await page.getByRole('combobox', { name: 'Site', exact: true }).click();
+      const listbox = page.getByRole('listbox');
+      await expect(listbox).toBeVisible();
+      expect(await langOf(listbox)).toBe('en');
+      await page.keyboard.press('Escape');
+
+      await page.goto('/team');
+      await expect(page.getByTestId('unknown-sender')).toBeVisible();
+      await page
+        .getByRole('button', { name: /Invite reporter/i })
+        .first()
+        .click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      expect(await langOf(dialog)).toBe('en');
+      await expectNoViolations(page);
+    });
 
     test('accounts user: crew hours', async ({ page }) => {
       await signInFast(page, 'accounts');
@@ -388,18 +454,82 @@ test.describe('keyboard', () => {
 });
 
 test.describe('no sideways scroll on narrow phones', () => {
+  const overflow = (page: Page) =>
+    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
   for (const width of [320, 360, 390]) {
     test(`/try and Overview at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
       await signInFast(page);
       await page.goto('/try');
       await expect(page.getByTestId('try-log')).toBeVisible();
-      const overflow = () =>
-        page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-      expect(await overflow()).toBeLessThanOrEqual(0);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
       await page.goto('/');
       await expect(h1(page, 'Today across 6 sites')).toBeVisible();
-      expect(await overflow()).toBeLessThanOrEqual(0);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+    });
+  }
+
+  // W1-03: the shell itself at 390 px, in both languages: sign-in, the shell's own pages, the top
+  // bar with a page's controls, the drawer and the account menu inside it.
+  for (const lang of ['en', 'tr'] as const) {
+    test(`the shell at 390px (${lang})`, async ({ page }) => {
+      const tr = lang === 'tr';
+      await page.setViewportSize({ width: 390, height: 844 });
+      if (tr) await chooseTurkish(page);
+      await page.goto('/login');
+      await expect(
+        h1(page, tr ? 'Ofis paneline giriş yapın' : 'Sign in to the office panel'),
+      ).toBeVisible();
+      expect(await overflow(page), '/login').toBeLessThanOrEqual(0);
+
+      await page.evaluate(() =>
+        window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' })),
+      );
+      const pages: Array<[string, (p: Page) => Locator]> = [
+        ['/', (p) => h1(p, 'Today across 6 sites')],
+        ['/dev/phone', (p) => h1(p, tr ? 'Demo telefon' : 'Demo phone')],
+        ['/settings/channels', (p) => p.getByRole('heading', { name: 'Coming next' })],
+        // Pages with controls in the top bar: below 768 px they get a row of their own.
+        ['/settings/reports', (p) => p.getByTestId('ladder')],
+        ['/weather', (p) => p.getByTestId('delay-log')],
+        [
+          '/no-such-page',
+          (p) => p.getByRole('heading', { name: tr ? 'Sayfa bulunamadı' : 'Page not found' }),
+        ],
+        [`/reports/${HERO_REPORT}`, (p) => p.getByTestId('voice-player')],
+      ];
+      for (const [path, ready] of pages) {
+        await page.goto(path);
+        await expect(ready(page)).toBeVisible();
+        expect(await overflow(page), path).toBeLessThanOrEqual(0);
+      }
+
+      await page.getByRole('button', { name: tr ? 'Menüyü aç' : 'Open menu' }).click();
+      const drawer = page.getByRole('dialog', { name: tr ? 'Ana gezinme' : 'Main navigation' });
+      await expect(drawer).toBeVisible();
+      await expect(drawer.getByTestId('sidebar-footer')).toBeInViewport();
+      expect(await overflow(page), 'drawer').toBeLessThanOrEqual(0);
+      await drawer.getByRole('button', { name: tr ? 'Hesap menüsü' : 'Account menu' }).click();
+      await expect(page.getByRole('menu')).toBeVisible();
+      expect(await overflow(page), 'account menu').toBeLessThanOrEqual(0);
+
+      // WCAG 2.4.3: Tab follows the rows as seen: menu, bell (row 1), search (row 2), then the
+      // page's controls (row 3).
+      await page.goto('/weather');
+      await expect(page.getByTestId('delay-log')).toBeVisible();
+      const menuButton = page.getByRole('button', { name: tr ? 'Menüyü aç' : 'Open menu' });
+      const bell = page.getByTestId('notifications-bell');
+      const search = page.getByRole('combobox', { name: tr ? 'Arama' : 'Search', exact: true });
+      const siteSelect = page.getByRole('combobox', { name: 'Site', exact: true });
+      const top = async (l: Locator) => (await l.boundingBox())!.y;
+      expect(await top(bell)).toBeLessThan(await top(search));
+      expect(await top(search)).toBeLessThan(await top(siteSelect));
+      await menuButton.focus();
+      for (const next of [bell, search, siteSelect]) {
+        await page.keyboard.press('Tab');
+        await expect(next).toBeFocused();
+      }
     });
   }
 });

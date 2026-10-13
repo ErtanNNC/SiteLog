@@ -23,6 +23,7 @@ import type {
 } from '@sitelog/shared/schemas/report.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import type { OrgSettingsRow } from '@sitelog/shared/db/types.ts';
+import type { OrgLocale } from '@sitelog/shared/locale.ts';
 
 export interface Chip {
   variant: ChipVariant;
@@ -85,6 +86,10 @@ export interface OrgSummary {
   timezone: string;
   activeSites: number;
   role: MemberRole;
+  /** `orgs.locale` (§6.3) when known: the panel's default language without a choice (§11.2). */
+  locale?: OrgLocale;
+  /** The org's SiteLog number(s) for texts and calls, E.164 (§11.2 sidebar footer); none yet → []. */
+  sitelogNumbers?: string[];
 }
 
 // ───────────────────────────── P3 Overview ─────────────────────────────

@@ -4,7 +4,7 @@
  * structure for those two namespaces: `tr.ts` and `es.ts` must have the same keys.
  *
  * Only the keys the W1-04 field placeholders need. The panel has no English here: its English is
- * `apps/web/src/copy/en.ts`, which W1-03 serves as the `panel` EN resource, so new panel strings
+ * `apps/web/src/copy/en.ts`, which the panel serves as the `panel` EN resource, so new panel strings
  * go there (CLAUDE.md) and only their Turkish lives in `tr.ts`.
  */
 export const uiEn = {

@@ -16,16 +16,17 @@ import {
   type ReactNode,
 } from 'react';
 import { DemoSource } from '@/data/demo/DemoSource';
-import { demoUserFor, getDemoStore, resetDemoStore, type DemoLoginKey } from '@/data/demo/store';
+import { demoUserFor, getDemoStore, type DemoLoginKey } from '@/data/demo/store';
 import { fetchOrgs } from '@/data/supabase/SupabaseSource';
 import type { OrgSummary } from '@/data/types';
+import { applyOrgLanguage } from '@/i18n/useCopy';
 import { env, isDemo } from '@/lib/env';
 import { setSentryUser } from '@/lib/sentry';
 import { supabase } from '@/lib/supabase';
 import { storage } from '@/lib/utils';
+import { clearSession, DEMO_SESSION_KEY } from './session';
 
 export const CURRENT_ORG_KEY = 'sitelog.currentOrg';
-export const DEMO_SESSION_KEY = 'sitelog.demo.session';
 
 export interface AuthUser {
   id: string;
@@ -154,10 +155,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       loadedUserRef.current = list ? u.id : null;
+      const current = list ? pickOrg(list) : null;
+      // The org's locale is the default language: apply it before `signed_in` mounts the shell.
+      applyOrgLanguage(current?.locale);
       setUser(u);
       setDemoKey(key);
       setOrgs(list ?? []);
-      setCurrentOrgState(list ? pickOrg(list) : null);
+      setCurrentOrgState(current);
       setError(failure);
       setStatus(list ? 'signed_in' : 'error');
       setSentryUser({ id: u.id, email: u.email });
@@ -268,19 +272,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         options: { emailRedirectTo: `${env.appUrl}/auth/callback` },
       });
-      if (error) throw new Error(error.message);
+      // The AuthError itself: the sign-in page reads its `status` (429: too many emails).
+      if (error) throw error;
     },
     [applySignedIn],
   );
 
   const signOut = useCallback(async () => {
-    if (isDemo) {
-      storage.remove(DEMO_SESSION_KEY);
-      resetDemoStore();
-      applySignedOut();
-      return;
-    }
-    await supabase?.auth.signOut();
+    await clearSession();
     applySignedOut();
   }, [applySignedOut]);
 
@@ -294,6 +293,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError((prev: unknown) => (prev ? err : prev));
       throw err;
     }
+    // Completing a failed sign-in load (no org was current): the shell mounts next, so its
+    // language is set first. Once loaded, `AppShell` follows the current org's locale.
+    if (loadedUserRef.current !== user.id) applyOrgLanguage(pickOrg(list)?.locale);
     loadedUserRef.current = user.id;
     setOrgs(list);
     setCurrentOrgState((cur) => list.find((o) => o.id === cur?.id) ?? pickOrg(list));
