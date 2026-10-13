@@ -177,7 +177,7 @@ export function EvidencePack({ input }: { input: EvidencePackInput }) {
             )}
           </Section>
           <Section no="06" title="Photos">
-            <PhotoGrid photos={d.photos} tz={tz} />
+            <PhotoGrid photos={d.photos} tz={tz} date={d.date} />
           </Section>
           <Section no="07" title="Observed weather (hourly)">
             {d.observed ? (

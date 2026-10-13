@@ -69,6 +69,8 @@ export interface FakeDbData {
   weatherEvents: WeatherEventRow[];
   denormalized: Array<{ report_id: string; version: number }>;
   purged: string[];
+  /** storage.objects of the `photos` bucket, as list_orphan_office_photos() reads them. */
+  photoObjects: Array<{ name: string; created_at: string }>;
   /** report_costs (§15 cost guardrail). */
   reportCosts: Map<string, ReportCostRow>;
 }
@@ -108,6 +110,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     weatherEvents: [],
     denormalized: [],
     purged: [],
+    photoObjects: [],
     reportCosts: new Map(),
   };
   let jobSeq = 0;
@@ -131,7 +134,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
 
     async getConversation(id) {
-      return d.conversations.get(id) ?? null;
+      return (id && d.conversations.get(id)) || null;
     },
     async getConversationByPhone(phone) {
       return Array.from(d.conversations.values()).find((c) => c.phone_e164 === phone) ?? null;
@@ -192,6 +195,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       const row: MessageRow = {
         id: randomUUID(),
         conversation_id: input.conversation_id,
+        org_id: null,
         direction: 'out',
         wa_message_id: input.wa_message_id ?? null,
         type: input.type,
@@ -831,6 +835,21 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async getInvoiceSummary() {
       return null;
+    },
+    async listOrphanOfficePhotos(before, limit) {
+      const stored = new Set(
+        [...d.messages.values()].filter((m) => m.org_id).map((m) => m.storage_path),
+      );
+      return d.photoObjects
+        .filter(
+          (o) =>
+            /^[^/]+\/[^/]+\/office\/[^/]+$/.test(o.name) &&
+            new Date(o.created_at) < before &&
+            !stored.has(o.name),
+        )
+        .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.name.localeCompare(b.name))
+        .slice(0, limit)
+        .map((o) => o.name);
     },
     async purgeFinishedJobs(before, limit) {
       const cutoff = before.toISOString();

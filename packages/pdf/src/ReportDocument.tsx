@@ -208,7 +208,7 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
         ) : null}
 
         <Section no="08" title="Site photos">
-          <PhotoGrid photos={photos} tz={tz} />
+          <PhotoGrid photos={photos} tz={tz} date={data.reportDate} />
         </Section>
 
         <Section no="09" title="Source record">

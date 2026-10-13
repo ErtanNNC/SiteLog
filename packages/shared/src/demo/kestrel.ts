@@ -864,6 +864,7 @@ export function buildKestrelDemo(): DemoDataset {
       messages.push({
         id: audioId,
         conversation_id: convo.id,
+        org_id: null,
         direction: 'in',
         wa_message_id: `wamid.demo.${s.key}.${date}.audio`,
         type: 'audio',
@@ -890,6 +891,7 @@ export function buildKestrelDemo(): DemoDataset {
         messages.push({
           id: pid,
           conversation_id: convo.id,
+          org_id: null,
           direction: 'in',
           wa_message_id: `wamid.demo.${s.key}.${date}.photo${p}`,
           type: 'image',
@@ -915,7 +917,12 @@ export function buildKestrelDemo(): DemoDataset {
       }
 
       const crews = plan.kind === 'weather_day' ? [] : crewFor(s.key, date);
-      const data = buildData(s, date, crews, plan, audioId, photoIds, isHero);
+      // data.photos mirrors the photo sources below (caption + time), as the worker's filing does.
+      const photos = photoIds.map((pid) => {
+        const m = messages.find((x) => x.id === pid)!;
+        return { messageId: pid, caption: m.body ?? undefined, takenAt: m.created_at };
+      });
+      const data = buildData(s, date, crews, plan, audioId, photos, isHero);
       const confirmedAt = new Date(new Date(receivedAt).getTime() + 5 * 60_000).toISOString();
       const status: ReportRow['status'] = plan.kind === 'signed_off' ? 'signed_off' : 'filed';
       const needsReview = !!plan.needsReview?.length;
@@ -1093,6 +1100,7 @@ export function buildKestrelDemo(): DemoDataset {
         ): MessageRow => ({
           id,
           conversation_id: convo.id,
+          org_id: null,
           direction: 'out',
           wa_message_id: `wamid.demo.out.${id.slice(0, 8)}`,
           type,
@@ -1341,6 +1349,7 @@ export function buildKestrelDemo(): DemoDataset {
   messages.push({
     id: luisMsgId,
     conversation_id: luisConvoId,
+    org_id: null,
     direction: 'in',
     wa_message_id: 'wamid.demo.luis',
     type: 'audio',
@@ -1625,7 +1634,7 @@ function buildData(
   crews: Crew[],
   plan: DayPlan,
   audioId: string,
-  photoIds: string[],
+  photos: DailyReportData['photos'],
   isHero: boolean,
 ): DailyReportData {
   const d = emptyReportData(date);
@@ -1633,11 +1642,7 @@ function buildData(
     { type: 'audio' as const, messageId: audioId, start, end: end ?? start + 7.5 },
   ];
   d.languageDetected = s.reporter.languages.includes('es') ? ['es', 'en'] : ['en'];
-  d.photos = photoIds.map((id, i) => ({
-    messageId: id,
-    caption: i === 0 ? (plan.weather ? 'Conditions this morning' : undefined) : 'End of day',
-    takenAt: at(date, plan.receivedLocal || '17:00'),
-  }));
+  d.photos = photos;
   d.workingHours = { start: '07:00', end: '15:30' };
   const periods: WeatherPeriod[] = plan.weather
     ? [

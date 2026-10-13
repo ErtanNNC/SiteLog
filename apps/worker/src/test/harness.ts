@@ -318,6 +318,7 @@ export function createHarness(
       const row: MessageRow = {
         id: randomUUID(),
         conversation_id: convo.id,
+        org_id: null,
         direction: 'in',
         wa_message_id: `wamid.in.${++waSeq}`,
         type: input.type,

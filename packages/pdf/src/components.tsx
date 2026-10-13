@@ -138,6 +138,41 @@ export function fmtTime(iso: string, tz: string): string {
   }
 }
 
+/** YYYY-MM-DD of an instant in `tz`; null when the zone or instant is not valid. */
+function localDate(iso: string, tz: string): string | null {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(iso));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * When a photo was taken: the time, or "Oct 12, 14:05" when that is another day than `date`
+ * (the report's, YYYY-MM-DD), so a photo from another day never reads as the report's.
+ */
+export function fmtPhotoTime(iso: string, tz: string, date?: string | null): string {
+  const day = date ? localDate(iso, tz) : null;
+  if (!day || day === date) return fmtTime(iso, tz);
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date(iso));
+  } catch {
+    return fmtTime(iso, tz);
+  }
+}
+
 export function fmtDateTime(iso: string, tz: string): string {
   try {
     return new Intl.DateTimeFormat('en-US', {
@@ -277,7 +312,16 @@ function statusLabel(s: string, pct?: number): string {
   }
 }
 
-export function PhotoGrid({ photos, tz }: { photos: PdfPhoto[]; tz: string }) {
+export function PhotoGrid({
+  photos,
+  tz,
+  date,
+}: {
+  photos: PdfPhoto[];
+  tz: string;
+  /** The report's date (YYYY-MM-DD): a photo taken another day prints its date too. */
+  date?: string | null;
+}) {
   if (photos.length === 0) return <Text style={styles.muted}>No photos attached.</Text>;
   return (
     <View style={styles.photoGrid}>
@@ -285,7 +329,7 @@ export function PhotoGrid({ photos, tz }: { photos: PdfPhoto[]; tz: string }) {
         <View key={i} style={styles.photoCell} wrap={false}>
           <Image style={styles.photo} src={imageSrc(p)} />
           <Text style={styles.photoCaption}>
-            {fmtTime(p.takenAt, tz)}
+            {fmtPhotoTime(p.takenAt, tz, date)}
             {p.caption ? ` · ${p.caption}` : ''}
           </Text>
         </View>

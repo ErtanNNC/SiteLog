@@ -155,7 +155,10 @@ export type ConversationRow = {
 
 export type MessageRow = {
   id: string;
-  conversation_id: string;
+  /** null for a photo uploaded in the panel (20261013000005_office_photos.sql): org_id is set instead. */
+  conversation_id: string | null;
+  /** Set on office uploads only; a WhatsApp message takes its org from the conversation. */
+  org_id: string | null;
   direction: MsgDirection;
   wa_message_id: string | null;
   type: MsgType;
@@ -568,6 +571,8 @@ export type Database = {
       messages: Table<
         MessageRow,
         | 'id'
+        | 'conversation_id'
+        | 'org_id'
         | 'wa_message_id'
         | 'body'
         | 'payload'
@@ -762,14 +767,15 @@ export type Database = {
       next_report_no: { Args: { p_site_id: string }; Returns: string };
       sign_off_report: { Args: { p_report_id: string }; Returns: Json };
       undo_sign_off: { Args: { p_report_id: string }; Returns: Json };
+      // p_photos: new uploads [{path, mime, caption?, takenAt?, position?}] (OfficePhotoUpload), max 20 per call.
       create_report_version: {
-        Args: { p_report_id: string; p_data: Json; p_change_note: string };
+        Args: { p_report_id: string; p_data: Json; p_change_note: string; p_photos?: Json };
         Returns: Json;
       };
       mark_no_work: { Args: { p_site_day_id: string }; Returns: Json };
       // Office-entered reports (20261013000001_office_reports.sql): admin / pm / ops, checked in SQL.
       create_office_report: {
-        Args: { p_site_id: string; p_date: string; p_data: Json };
+        Args: { p_site_id: string; p_date: string; p_data: Json; p_photos?: Json };
         Returns: Json;
       };
       attach_version_pdf: {

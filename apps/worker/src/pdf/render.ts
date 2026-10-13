@@ -16,14 +16,16 @@ import {
   type PdfPhoto,
   type ReportPdfInput,
 } from '@sitelog/pdf';
-import type {
-  DailyReportData,
-  EvidencePackRow,
-  ReportRow,
-  ReportVersionRow,
+import {
+  versionPhotos,
+  type DailyReportData,
+  type EvidencePackRow,
+  type ReportRow,
+  type ReportVersionRow,
+  type VersionPhoto,
 } from '@sitelog/shared';
 import type { Ctx } from '../context';
-import type { SiteContext } from '../db';
+import type { ReportSourceWithMessage, SiteContext } from '../db';
 import { siteDayWeatherOf, transcriptSegments } from '../pipeline/compose';
 
 /**
@@ -95,29 +97,37 @@ export async function loadLogo(
   }
 }
 
+type PhotoSource = Pick<
+  ReportSourceWithMessage,
+  | 'message_id'
+  | 'kind'
+  | 'caption'
+  | 'taken_at'
+  | 'storage_path'
+  | 'media_mime'
+  | 'message_created_at'
+>;
+
+/**
+ * Downloads up to `max` of the photos a version shows (versionPhotos: its data.photos, in order,
+ * with the captions of that version). One that is missing or not JPEG/PNG (react-pdf) is skipped.
+ */
 async function loadPhotos(
-  ctx: Ctx,
-  sources: Array<{
-    kind: string;
-    storage_path: string | null;
-    media_mime: string | null;
-    taken_at: string | null;
-    message_created_at: string;
-    caption: string | null;
-  }>,
+  ctx: Pick<Ctx, 'storage' | 'log'>,
+  photos: ReadonlyArray<VersionPhoto<PhotoSource>>,
   max: number,
 ): Promise<PdfPhoto[]> {
   const out: PdfPhoto[] = [];
-  for (const s of sources) {
-    if (s.kind !== 'photo' || !s.storage_path || out.length >= max) continue;
+  for (const { source: s, caption, takenAt } of photos) {
+    if (!s.storage_path || out.length >= max) continue;
     const format = imageFormat(s.storage_path, s.media_mime);
     if (!format) continue;
     try {
       out.push({
         data: await ctx.storage.download('photos', s.storage_path),
         format,
-        takenAt: s.taken_at ?? s.message_created_at,
-        caption: s.caption,
+        takenAt: takenAt ?? s.message_created_at,
+        caption,
       });
     } catch (err) {
       ctx.log.warn('photo not loaded', { err, path: s.storage_path });
@@ -152,7 +162,7 @@ export async function buildReportPdfInput(
       : null;
   const [logo, photos] = await Promise.all([
     loadLogo(ctx, site.org.logo_path),
-    loadPhotos(ctx, sources, site.settings.pdf_max_photos),
+    loadPhotos(ctx, versionPhotos(data.photos, sources), site.settings.pdf_max_photos),
   ]);
   return {
     org: {
@@ -244,7 +254,8 @@ export async function buildEvidencePackInput(
     const transcripts = await ctx.db.listTranscripts(audio.map((a) => a.message_id));
     const siteDay = await ctx.db.getSiteDay(r.site_day_id);
     const observed = siteDayWeatherOf(siteDay?.weather);
-    const photos = await loadPhotos(ctx, sources, 4);
+    const shown = versionPhotos(data.photos, sources);
+    const photos = await loadPhotos(ctx, shown, 4);
     days.push({
       date: data.reportDate,
       reportNo: r.report_no,
@@ -262,7 +273,7 @@ export async function buildEvidencePackInput(
       ),
       photos,
       observed,
-      photoCount: sources.filter((s) => s.kind === 'photo').length,
+      photoCount: shown.length,
       audioCount: audio.length,
     });
   }

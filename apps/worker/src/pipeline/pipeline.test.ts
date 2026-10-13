@@ -534,6 +534,40 @@ describe('jobs: welcome, template, retention', () => {
     expect((await h.db.getMessage(fresh.id))!.storage_path).toBe('o/s/d/new.ogg');
   });
 
+  it('retention_cleanup deletes office uploads no report attached after a day', async () => {
+    const h = createHarness();
+    const now = h.ctx.now().getTime();
+    const ago = (hours: number) => new Date(now - hours * 3_600_000).toISOString();
+    const office = (name: string) => `${h.org.id}/site-1/office/${name}.jpg`;
+    const objects = [
+      { name: office('orphan'), created_at: ago(30) },
+      { name: office('attached'), created_at: ago(30) },
+      { name: office('just-uploaded'), created_at: ago(2) },
+      { name: `${h.org.id}/site-1/2026-10-01/wa.jpg`, created_at: ago(30) },
+    ];
+    for (const o of objects) {
+      h.db.data.photoObjects.push(o);
+      await h.storage.upload('photos', o.name, Buffer.from('x'), 'image/jpeg');
+    }
+    const convo = await h.conversation('idle');
+    const attached = await h.inbound(convo, { type: 'image', storage_path: office('attached') });
+    h.db.data.messages.set(attached.id, {
+      ...h.db.data.messages.get(attached.id)!,
+      conversation_id: null,
+      org_id: h.org.id,
+      created_at: ago(30),
+    });
+
+    await h.runJob('retention_cleanup', {});
+    expect(h.storage.files.has(`photos/${office('orphan')}`)).toBe(false);
+    for (const name of [office('attached'), office('just-uploaded'), objects[3]!.name])
+      expect(h.storage.files.has(`photos/${name}`)).toBe(true);
+    expect(h.db.data.audit.at(-1)).toMatchObject({
+      action: 'retention.cleanup',
+      diff: { orphan_photos_removed: 1 },
+    });
+  });
+
   it('retention_cleanup deletes done jobs after 30 days and keeps recent, dead and queued ones', async () => {
     const h = createHarness();
     const now = h.ctx.now().getTime();

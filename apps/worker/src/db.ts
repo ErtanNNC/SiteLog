@@ -247,7 +247,8 @@ export interface DigestStats {
 
 export interface Db {
   // conversations
-  getConversation(id: string): Promise<ConversationRow | null>;
+  /** null for a message without a conversation (a photo uploaded in the panel). */
+  getConversation(id: string | null): Promise<ConversationRow | null>;
   getConversationByPhone(phone: string): Promise<ConversationRow | null>;
   ensureConversation(phone: string, patch: ConversationPatch): Promise<ConversationRow>;
   updateConversation(id: string, patch: ConversationPatch): Promise<ConversationRow>;
@@ -411,6 +412,11 @@ export interface Db {
   ): Promise<void>;
   listWeatherEvents(siteId: string, start: string, end: string): Promise<WeatherEventRow[]>;
   listExpiredMedia(before: Date, limit: number): Promise<ExpiredMedia[]>;
+  /**
+   * `photos` bucket paths of office uploads created before `before` that no message stores (the
+   * report call never attached them): list_orphan_office_photos(), empty without storage.
+   */
+  listOrphanOfficePhotos(before: Date, limit: number): Promise<string[]>;
   getInvoiceSummary(invoiceId: string): Promise<InvoiceSummary | null>;
   purgeMessageMedia(messageId: string, purgedAt: Date): Promise<void>;
   /** Deletes `done` jobs finished before `before` (dead / failed ones stay for /ops). */
@@ -510,6 +516,7 @@ export function createDb(sql: Sql): Db {
   const db: Db = {
     // conversations -----------------------------------------------------------------------
     async getConversation(id) {
+      if (!id) return null;
       return one(await sql<ConversationRow[]>`select * from conversations where id = ${id}`);
     },
     async getConversationByPhone(phone) {
@@ -1007,6 +1014,11 @@ export function createDb(sql: Sql): Db {
         where direction = 'in' and storage_path is not null and type in ('audio','image','document')
           and created_at < ${before.toISOString()}
         order by created_at, id limit ${limit}`;
+    },
+    async listOrphanOfficePhotos(before, limit) {
+      const rows = await sql<Array<{ name: string }>>`
+        select name from list_orphan_office_photos(${before.toISOString()}, ${limit}) name`;
+      return rows.map((r) => r.name);
     },
     async getInvoiceSummary(invoiceId) {
       const rows = await sql<

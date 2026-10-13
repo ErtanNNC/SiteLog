@@ -275,7 +275,7 @@ describe('create_office_report', () => {
         actor_id: LENA,
         action: 'report.filed',
         entity: 'report',
-        diff: { trigger: 'office_entry', version: 1, is_late: true, date },
+        diff: { trigger: 'office_entry', version: 1, is_late: true, date, photos: 0 },
       },
     ]);
     // The browser renders the PDF: nothing is queued for the worker.

@@ -1,12 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import type { Sql } from 'postgres';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared';
+import { emptyReportData, officePhotoStoragePath, type DailyReportData } from '@sitelog/shared';
 // The @sitelog/db harness (supabase/db-tests) boots PGlite with the Supabase stubs, every
 // migration and the demo seed. Imported by path so the worker image does not need that package.
 import { bootDatabase } from '../../../supabase/db-tests/src/harness.ts';
+import type { Ctx } from './context';
 import { connectSql, createDb, type Db } from './db';
+import { silentLogger } from './log';
+import { buildReportPdfInput } from './pdf/render';
+import { createMemoryStorage } from './storage';
 
 /**
  * The real `createDb` (postgres.js) against PGlite through @electric-sql/pglite-socket: every
@@ -1368,6 +1373,91 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
     expect(stats.weatherHoursBySite).toEqual([
       { siteName: 'Riverside Lofts — Block B', hours: 3.5 },
       { siteName: 'Riverside Lofts — Block B', hours: 2 },
+    ]);
+  });
+});
+
+describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
+  it('reads an office upload (no conversation) and prints it on the edited version only', async () => {
+    // A WhatsApp report with two stored photos.
+    const report = await one<{ id: string; site_id: string; current_version: number }>(
+      `select r.id, r.site_id, r.current_version from reports r
+       where r.reporter_id is not null and r.status = 'filed'
+         and (select count(*) from report_sources rs join messages m on m.id = rs.message_id
+              where rs.report_id = r.id and rs.kind = 'photo' and m.storage_path is not null) = 2
+         and not exists (select 1 from report_sources rs join messages m on m.id = rs.message_id
+                         where rs.report_id = r.id and m.storage_path is null)
+       order by r.report_no limit 1`,
+    );
+    const before = (await db.getVersion(report.id, report.current_version))!;
+    const beforeData = before.data as DailyReportData;
+    const [kept, dropped] = beforeData.photos;
+    const upload = officePhotoStoragePath(ORG, report.site_id, randomUUID(), 'image/png');
+
+    await sql`select set_config('request.jwt.claim.sub', ${LENA}, false)`;
+    try {
+      const [res] = await sql<Array<{ r: { version: number } }>>`
+        select create_report_version(${report.id},
+          ${sql.json({ ...beforeData, photos: [{ ...kept!, caption: 'Kept' }] } as never)},
+          'Photo swapped',
+          ${sql.json([{ path: upload, mime: 'image/png', caption: 'From the office' }] as never)}) as r`;
+      expect(res!.r).toEqual({ version: report.current_version + 1 });
+    } finally {
+      await sql`select set_config('request.jwt.claim.sub', '', false)`;
+    }
+
+    const sources = await db.listReportSources(report.id);
+    const office = sources.find((s) => s.storage_path === upload)!;
+    expect(office).toMatchObject({
+      kind: 'photo',
+      caption: 'From the office',
+      message_type: 'image',
+      media_mime: 'image/png',
+      body: 'From the office',
+    });
+    const message = (await db.getMessage(office.message_id))!;
+    expect(message).toMatchObject({ conversation_id: null, org_id: ORG, direction: 'in' });
+    expect(await db.getConversation(message.conversation_id)).toBeNull();
+    // Customer media: the retention job deletes it like a WhatsApp photo.
+    expect(
+      (await db.listExpiredMedia(new Date('2099-01-01T00:00:00Z'), 5_000)).map((m) => m.message_id),
+    ).toContain(office.message_id);
+    // Unattached uploads are listed from storage.objects; this database has no storage schema.
+    expect(await db.listOrphanOfficePhotos(new Date('2099-01-01T00:00:00Z'), 10)).toEqual([]);
+
+    const storage = createMemoryStorage();
+    for (const s of sources.filter((x) => x.kind === 'photo'))
+      await storage.upload('photos', s.storage_path!, Buffer.from(s.message_id), 'image/jpeg');
+    const ctx = {
+      db,
+      storage,
+      log: silentLogger,
+      now: () => new Date('2026-10-13T12:00:00Z'),
+    } as unknown as Ctx;
+    const site = (await db.siteContext(report.site_id))!;
+    const printed = async (version: number) => {
+      const v = (await db.getVersion(report.id, version))!;
+      const input = await buildReportPdfInput(ctx, {
+        report: (await db.getReport(report.id))!,
+        version: v,
+        site,
+        data: v.data as DailyReportData,
+      });
+      return input.photos.map((p) => [
+        'data' in p ? Buffer.from(p.data).toString() : p.url,
+        p.caption,
+      ]);
+    };
+    expect(await printed(report.current_version)).toEqual([
+      [kept!.messageId, kept!.caption ?? null],
+      [dropped!.messageId, dropped!.caption ?? null],
+    ]);
+    expect(await printed(report.current_version + 1)).toEqual([
+      [kept!.messageId, 'Kept'],
+      [office.message_id, 'From the office'],
+    ]);
+    await q(`delete from jobs where dedupe_key = $1`, [
+      `render_pdf:${report.id}:${report.current_version + 1}`,
     ]);
   });
 });

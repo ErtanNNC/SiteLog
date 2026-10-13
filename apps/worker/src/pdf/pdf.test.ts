@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadLogo, renderEvidencePackPdf, renderReportPdf, weatherExcerpts } from './render';
 import { sampleEvidencePackInput, sampleReportInput } from '@sitelog/pdf/sample-data.ts';
+import { fmtPhotoTime } from '@sitelog/pdf/components.tsx';
 
 function pageCount(pdf: Buffer): number {
   return (pdf.toString('latin1').match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
@@ -42,6 +43,21 @@ describe('PDF rendering (smoke)', () => {
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
     expect(pageCount(pdf)).toBeGreaterThanOrEqual(4);
   }, 60_000);
+});
+
+describe('fmtPhotoTime', () => {
+  const tz = 'America/Chicago';
+  it('prints the time of a photo taken on the report’s day (site time zone)', () => {
+    expect(fmtPhotoTime('2026-10-09T21:30:00Z', tz, '2026-10-09')).toBe('16:30');
+    // 03:30 UTC on the 10th is still the 9th in Chicago.
+    expect(fmtPhotoTime('2026-10-10T03:30:00Z', tz, '2026-10-09')).toBe('22:30');
+    expect(fmtPhotoTime('2026-10-10T03:30:00Z', tz)).toBe('22:30');
+  });
+
+  it('adds the date when the photo was taken another day', () => {
+    expect(fmtPhotoTime('2026-10-10T19:05:00Z', tz, '2026-10-09')).toBe('Oct 10, 14:05');
+    expect(fmtPhotoTime('2026-10-08T19:05:00Z', tz, '2026-10-09')).toBe('Oct 8, 14:05');
+  });
 });
 
 describe('weatherExcerpts', () => {
