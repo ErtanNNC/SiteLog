@@ -1,0 +1,163 @@
+-- SiteLog · read-only staging inventory (docs/GAP_ANALYSIS.md §4.1 stage 1, W1-01 step 0).
+--
+-- Run by the Deploy workflow's `inventory` target (.github/workflows/deploy.yml):
+--   psql -X -q -A -t -F "<tab>" -v ON_ERROR_STOP=1 -f supabase/ops/inventory.sql
+-- Every statement runs in one READ ONLY transaction that is rolled back, so nothing can be written.
+-- The output is counts and labels only (enum values, job types, notification kinds, bucket ids,
+-- fixed names), never row contents: no names, phone numbers, message bodies, paths or secrets.
+--
+-- Each row has five columns: section, label, demo org, other orgs, total. "Demo org" counts rows of
+-- the seeded Kestrel org (DEMO_ORG_ID = demoId('org:kestrel'), packages/shared/src/demo/kestrel.ts
+-- and ids.ts; asserted by supabase/db-tests/src/inventory.test.ts); "other orgs" counts every other
+-- row, including rows with no org. Both are empty where a table has no org. A grouped section ends
+-- with an "all" row, so it shows even when the table is empty.
+
+set default_transaction_read_only = on;
+begin transaction isolation level repeatable read, read only;
+set local sitelog.demo_org = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d';
+
+-- Optional Supabase parts: storage, pg_cron and Vault exist on hosted projects, not on every Postgres.
+select
+  coalesce(has_table_privilege(to_regclass('storage.objects'), 'select'), false)
+    and coalesce(has_table_privilege(to_regclass('storage.buckets'), 'select'), false) as has_storage,
+  coalesce(has_table_privilege(to_regclass('cron.job'), 'select'), false) as has_cron,
+  coalesce(has_table_privilege(to_regclass('vault.secrets'), 'select'), false) as has_vault
+\gset
+
+select 'Orgs' as section, 'orgs' as label,
+  count(*) filter (where id = current_setting('sitelog.demo_org')::uuid) as demo_org,
+  count(*) filter (where id is distinct from current_setting('sitelog.demo_org')::uuid) as other_orgs,
+  count(*)::text as total
+from orgs;
+
+select 'Conversations by state', case when grouping(state) = 1 then 'all' else state::text end,
+  count(*) filter (where org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from conversations
+group by rollup (state)
+order by grouping(state), state;
+
+select 'Messages by type and conversation',
+  case when grouping(label) = 1 then 'all' else label end,
+  count(*) filter (where org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from (
+  select m.type::text || case when m.conversation_id is null then ' · no conversation'
+                              else ' · conversation' end as label,
+         coalesce(m.org_id, c.org_id) as org_id
+  from messages m
+  left join conversations c on c.id = m.conversation_id
+) x
+group by rollup (label)
+order by grouping(label), label;
+
+select 'Transcripts', 'transcripts',
+  count(*) filter (where coalesce(m.org_id, c.org_id) = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where coalesce(m.org_id, c.org_id) is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from transcripts t
+join messages m on m.id = t.message_id
+left join conversations c on c.id = m.conversation_id;
+
+select 'Unknown senders by status', case when grouping(status) = 1 then 'all' else status::text end,
+  count(*) filter (where org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from unknown_senders
+group by rollup (status)
+order by grouping(status), status;
+
+select 'Report sources by kind', case when grouping(s.kind) = 1 then 'all' else s.kind end,
+  count(*) filter (where r.org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where r.org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from report_sources s
+join reports r on r.id = s.report_id
+group by rollup (s.kind)
+order by grouping(s.kind), s.kind;
+
+select 'Reports by status', case when grouping(status) = 1 then 'all' else status::text end,
+  count(*) filter (where org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from reports
+group by rollup (status)
+order by grouping(status), status;
+
+select 'Report versions by data schemaVersion',
+  case when grouping(label) = 1 then 'all' else label end,
+  count(*) filter (where org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from (
+  select 'schemaVersion ' || coalesce(v.data ->> 'schemaVersion', 'missing') as label, r.org_id
+  from report_versions v
+  join reports r on r.id = v.report_id
+) x
+group by rollup (label)
+order by grouping(label), label;
+
+select 'Reporters by status', case when grouping(status) = 1 then 'all' else status::text end,
+  count(*) filter (where org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from reporters
+group by rollup (status)
+order by grouping(status), status;
+
+-- Jobs carry no org column.
+select 'Jobs by type and status', case when grouping(label) = 1 then 'all' else label end,
+  null::bigint, null::bigint, count(*)::text
+from (select type || ' · ' || status::text as label from jobs) x
+group by rollup (label)
+order by grouping(label), label;
+
+-- Queued office-edit PDFs that would notify the reporter on WhatsApp once a worker runs (D31).
+select 'Queued render_pdf jobs with notifyReporter', 'render_pdf · queued · notifyReporter',
+  null::bigint, null::bigint, count(*)::text
+from jobs
+where type = 'render_pdf' and status = 'queued' and (payload ->> 'notifyReporter') = 'true';
+
+select 'Notifications by kind', case when grouping(kind) = 1 then 'all' else kind end,
+  count(*) filter (where org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from notifications
+group by rollup (kind)
+order by grouping(kind), kind;
+
+-- Object names start with "{org_id}/" (supabase/migrations/20261011000006_platform.sql).
+\if :has_storage
+select 'Storage objects by bucket', case when grouping(b.id) = 1 then 'all' else b.id end,
+  count(o.id) filter (where split_part(o.name, '/', 1) = current_setting('sitelog.demo_org')),
+  count(o.id) filter (where split_part(o.name, '/', 1) is distinct from current_setting('sitelog.demo_org')),
+  count(o.id)::text
+from storage.buckets b
+left join storage.objects o on o.bucket_id = b.id
+group by rollup (b.id)
+order by grouping(b.id), b.id;
+\else
+select 'Storage objects by bucket', 'storage.objects', null::bigint, null::bigint, 'not readable';
+\endif
+
+\if :has_cron
+select 'Scheduler (pg_cron)', 'job sitelog-scheduler-tick', null::bigint, null::bigint,
+  coalesce((select case when bool_or(active) then 'present, active' else 'present, inactive' end
+            from cron.job where jobname = 'sitelog-scheduler-tick' having count(*) > 0), 'missing');
+\else
+select 'Scheduler (pg_cron)', 'cron.job', null::bigint, null::bigint, 'not readable';
+\endif
+
+-- Names only: never vault.decrypted_secrets, never a value.
+\if :has_vault
+select 'Vault secrets for scheduler-tick', n.name, null::bigint, null::bigint,
+  case when exists (select 1 from vault.secrets s where s.name = n.name) then 'present' else 'missing' end
+from (values ('scheduler_tick_url'), ('scheduler_secret')) as n (name)
+order by n.name;
+\else
+select 'Vault secrets for scheduler-tick', 'vault.secrets', null::bigint, null::bigint, 'not readable';
+\endif
+
+rollback;

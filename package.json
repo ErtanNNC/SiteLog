@@ -2,7 +2,7 @@
   "name": "sitelog",
   "private": true,
   "version": "0.1.0",
-  "description": "SiteLog \u2014 WhatsApp voice notes turned into official daily site reports.",
+  "description": "SiteLog: a site manager's 3-minute voice report, from a text link or a phone call, turned into an official daily site report, subcontractor hours and a weather-delay record.",
   "packageManager": "pnpm@10.28.0",
   "engines": {
     "node": ">=22.12.0"
@@ -23,6 +23,7 @@
     "loadtest": "pnpm --filter @sitelog/worker loadtest",
     "replay-webhook": "pnpm --filter @sitelog/scripts replay-webhook",
     "seed:demo": "pnpm --filter @sitelog/scripts seed-demo",
+    "brand": "pnpm --filter @sitelog/web brand",
     "check": "pnpm typecheck && pnpm lint && pnpm test"
   },
   "devDependencies": {

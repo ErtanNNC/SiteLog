@@ -22,6 +22,7 @@ import {
 import { createAnthropicClient, type MessagesClient } from './claude';
 import { runExtraction, type ExtractionInput } from './extract';
 import { buildExtractionUserMessage, buildOrgContextBlock } from './prompts/extraction';
+import { loadDotenv } from '../dotenv';
 import { createLogger } from '../log';
 
 /**
@@ -38,7 +39,8 @@ import { createLogger } from '../log';
  * Every case also has fixtures/tool-outputs/<id>.json: a recorded `submit_daily_report` input that
  * the worker tests replay without an API key (`--recorded` scores those offline).
  *
- *   pnpm eval                                 live run (skipped without ANTHROPIC_API_KEY)
+ *   pnpm eval                                 live run (skipped without ANTHROPIC_API_KEY; outside
+ *                                             production the key may sit in the root .env)
  *   pnpm eval -- --case riverside --case pier9 cases whose id contains one of the filters
  *   pnpm eval -- --recorded                   score the recorded tool outputs (no API calls)
  *   pnpm eval -- --list                       list the cases
@@ -1010,8 +1012,22 @@ export async function runEval(
   return cases.every((c) => c.ok) ? 0 : 1;
 }
 
-if (process.argv[1] && /eval\.(ts|js)$/.test(process.argv[1])) {
-  runEval(process.argv.slice(2)).then(
+/**
+ * The `pnpm eval` entry. `pnpm eval` runs in apps/worker, so it loads the development `.env` files
+ * first, as the worker does (`<cwd>/.env`, then the repository root's `.env`; src/dotenv.ts): a key
+ * kept in the root `.env` reaches the live run, and the shell still wins over both files.
+ */
+export async function evalMain(
+  argv: string[] = process.argv.slice(2),
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv; dir?: string } = {},
+): Promise<number> {
+  const env = opts.env ?? process.env;
+  await loadDotenv({ cwd: opts.cwd, env });
+  return runEval(argv, env, opts.dir);
+}
+
+if (process.argv[1] && /eval\.(ts|js)$/.test(process.argv[1]) && !process.env.VITEST) {
+  evalMain().then(
     (code) => process.exit(code),
     (err) => {
       console.error(err instanceof Error ? err.message : err);

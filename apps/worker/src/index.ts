@@ -5,6 +5,7 @@ import { createOpenAiClient } from './ai/transcribe';
 import { loadConfig, type Config } from './config';
 import { createMetrics, type Ctx } from './context';
 import { connectDb } from './db';
+import { loadDotenv } from './dotenv';
 import { createEmailProvider } from './email/provider';
 import { createLogger } from './log';
 import { createFfmpegRunner, resolveFfmpegPath } from './media/ffmpeg';
@@ -13,16 +14,6 @@ import { createMemoryStorage, createStorage } from './storage';
 import { createWaClient } from './wa/client';
 
 export const VERSION = '0.1.0';
-
-async function loadDotenv(): Promise<void> {
-  if (process.env.NODE_ENV === 'production') return;
-  try {
-    const dotenv = await import('dotenv');
-    dotenv.config({ quiet: true });
-  } catch {
-    /* dotenv is a dev convenience */
-  }
-}
 
 export function buildContext(config: Config): Ctx {
   const log = createLogger(

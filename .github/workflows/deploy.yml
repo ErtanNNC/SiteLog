@@ -4,9 +4,28 @@ name: Deploy
 # Each target is skipped (with a notice) until its secrets exist in the GitHub Environment, so this
 # workflow is safe to merge before the accounts are set up. Setup: docs/RUNBOOK.md §2 "Automated deploys".
 #
-#   push to main         → staging (all targets)
-#   workflow_dispatch    → staging or production, all or one target
-#   pull_request         → web preview only (Netlify deploy preview against staging Supabase)
+# Deploy guard (D40, docs/GAP_ANALYSIS.md §6): everything that changes staging or production (db push,
+# functions deploy, the Fly worker, the panel with --prod) runs only from the branch
+# claude/focused-newton-5v0u2q, the live staging branch (full refs are compared, so a tag with that
+# name does not pass). From any other ref those jobs are skipped and the `plan` job says why. The
+# guard lives in this file, and a dispatch runs the copy on the ref you pick: it stops mistakes, not an
+# edited workflow. A deploy to any Environment other than staging refuses to run if its project ref
+# is staging's (STAGING_PROJECT_REF below).
+#
+#   pull_request                          → panel preview only (alias pr-<n>), built against the `preview`
+#                                           Environment's Supabase project, or in demo mode while it has
+#                                           none; never against staging data (D41)
+#   workflow_dispatch staging|production  → all targets or one (supabase, worker, web), from the live
+#                                           branch only
+#   workflow_dispatch preview             → the Supabase target only (migrations + functions to the
+#                                           preview project), from spec-v1.2 or the live branch (D41)
+#   workflow_dispatch, target inventory   → read-only staging inventory (W1-01 step 0), from any ref
+#                                           whose deploy.yml has it
+#   push to main                          → skipped by the guard (there is no main yet, D40)
+#
+# Until the cut-over (W1-19) the live branch runs its own pre-W1-01 deploy.yml (no guard, no
+# `inventory` or `preview`): dispatch the inventory and preview targets from spec-v1.2, and create
+# `main` only from a commit that has this file.
 
 on:
   push:
@@ -15,14 +34,14 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: Target environment
+        description: Target environment (preview takes the supabase target only)
         type: choice
-        options: [staging, production]
+        options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing)
         type: choice
-        options: [all, supabase, worker, web]
+        options: [all, supabase, worker, web, inventory]
         default: all
 
 concurrency:
@@ -31,11 +50,96 @@ concurrency:
 
 env:
   ENVIRONMENT: ${{ inputs.environment || 'staging' }}
+  # The job conditions below repeat these two names literally (expressions cannot read `env`).
+  LIVE_BRANCH: claude/focused-newton-5v0u2q
+  PREVIEW_BRANCH: spec-v1.2
+  # The hosted staging project (public). No other Environment may deploy to it or build against it.
+  STAGING_PROJECT_REF: abuanbyzttuqksdctqcp
 
 jobs:
+  plan:
+    name: Plan · deploy guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      supabase: ${{ steps.plan.outputs.supabase }}
+      worker: ${{ steps.plan.outputs.worker }}
+      web: ${{ steps.plan.outputs.web }}
+      preview: ${{ steps.plan.outputs.preview }}
+      inventory: ${{ steps.plan.outputs.inventory }}
+    steps:
+      - name: Decide what this run may touch
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          # Full ref (refs/heads/… or refs/tags/…): a tag named like a branch must not pass the guard.
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          TARGET: ${{ inputs.target || 'all' }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          supabase=false worker=false web=false preview=false inventory=false
+          # `all` covers the three deploy targets; the inventory runs only when asked for.
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ]; }; }
+
+          if [ "$EVENT" = pull_request ]; then
+            web=true preview=true
+            echo "::notice::Pull request: panel preview only (alias pr-$PR_NUMBER), with the preview Environment's Supabase project or in demo mode; no migrations, functions, worker or --prod."
+          elif [ "$TARGET" = inventory ]; then
+            if [ "$ENVIRONMENT" = staging ]; then
+              inventory=true
+            else
+              echo "::notice::Inventory skipped: it reads the staging project only. Dispatch it with environment staging."
+            fi
+          elif [ "$ENVIRONMENT" = preview ]; then
+            if [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ] || [ "$REF" = "refs/heads/$LIVE_BRANCH" ]; then
+              if wants supabase; then supabase=true; fi
+            else
+              echo "::notice::Deploy guard (D41): the preview project takes deploys from the branches $PREVIEW_BRANCH or $LIVE_BRANCH only; this run is on $REF, so nothing is deployed."
+            fi
+            for t in worker web; do
+              if wants "$t"; then
+                echo "::notice::Environment preview takes the supabase target only (migrations and functions to the preview project): $t skipped."
+              fi
+            done
+          elif [ "$REF" = "refs/heads/$LIVE_BRANCH" ]; then
+            if wants supabase; then supabase=true; fi
+            if wants worker; then worker=true; fi
+            if wants web; then web=true; fi
+          else
+            echo "::notice::Deploy guard (D40): $ENVIRONMENT deploys (db push, functions deploy, the Fly worker, the panel with --prod) run only from the branch $LIVE_BRANCH; this run is on $REF, so they are skipped. Use target inventory for a read-only look at staging, or environment preview for the preview project."
+          fi
+
+          {
+            echo "supabase=$supabase"
+            echo "worker=$worker"
+            echo "web=$web"
+            echo "preview=$preview"
+            echo "inventory=$inventory"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Deploy plan"
+            echo
+            if [ "$EVENT" = pull_request ]; then
+              echo "Pull request #$PR_NUMBER: panel preview only."
+            else
+              echo "Event \`$EVENT\` on \`$REF_NAME\` (\`$REF\`), environment \`$ENVIRONMENT\`, target \`$TARGET\`. Live branch: \`$LIVE_BRANCH\`."
+            fi
+            echo
+            echo "| Job | Runs |"
+            echo "| --- | --- |"
+            for k in supabase worker web preview inventory; do echo "| $k | ${!k} |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+
   supabase:
     name: Supabase · migrations + edge functions
-    if: github.event_name != 'pull_request' && contains(fromJSON('["all","supabase"]'), inputs.target || 'all')
+    needs: plan
+    # Guard (D40/D41), repeated literally after the plan job: staging and production only from the live
+    # branch; the preview project also from spec-v1.2.
+    if: >-
+      needs.plan.outputs.supabase == 'true' &&
+      (github.ref == 'refs/heads/claude/focused-newton-5v0u2q' ||
+       (inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ${{ inputs.environment || 'staging' }}
@@ -48,6 +152,12 @@ jobs:
         id: cfg
         run: |
           if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD_SECRET" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            # A missing Environment value falls back to a repository or organization one, so `preview`
+            # (or `production`) can resolve to staging's project without anyone copying it (D40/D41).
+            if [ "$ENVIRONMENT" != staging ] && [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+              echo "::error::$ENVIRONMENT resolves to the staging Supabase project ($STAGING_PROJECT_REF); refusing to deploy. Give $ENVIRONMENT its own SUPABASE_PROJECT_REF and SUPABASE_DB_PASSWORD (docs/RUNBOOK.md §2)."
+              exit 1
+            fi
             # A password pasted on a phone often carries a trailing space or line break.
             pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
             echo "::add-mask::$pw"
@@ -82,11 +192,12 @@ jobs:
 
   worker:
     name: Worker · Fly.io
-    needs: supabase
+    needs: [plan, supabase]
+    # Guard (D40): staging and production only, from the live branch only.
     if: >-
-      always() && github.event_name != 'pull_request' &&
-      (needs.supabase.result == 'success' || needs.supabase.result == 'skipped') &&
-      contains(fromJSON('["all","worker"]'), inputs.target || 'all')
+      always() && needs.plan.outputs.worker == 'true' &&
+      github.ref == 'refs/heads/claude/focused-newton-5v0u2q' && inputs.environment != 'preview' &&
+      (needs.supabase.result == 'success' || needs.supabase.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ${{ inputs.environment || 'staging' }}
@@ -117,48 +228,126 @@ jobs:
       - name: Health check
         if: steps.cfg.outputs.ready == 'true'
         run: |
-          for i in 1 2 3 4 5 6; do
+          for _ in 1 2 3 4 5 6; do
             if curl -fsS "https://${FLY_APP}.fly.dev/health"; then exit 0; fi
             sleep 10
           done
           echo "::error::worker /health did not answer after deploy"
           exit 1
 
+  preview:
+    name: Preview · Supabase build settings
+    needs: plan
+    # D41: the PR panel preview takes its Supabase project from the `preview` Environment (non-secret
+    # variables only). Without them it builds in demo mode; it never falls back to staging.
+    if: needs.plan.outputs.preview == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: preview
+    outputs:
+      supabase_url: ${{ steps.cfg.outputs.supabase_url }}
+      anon_key: ${{ steps.cfg.outputs.anon_key }}
+    steps:
+      - name: Read the preview project settings
+        id: cfg
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_URL_VAR: ${{ vars.VITE_SUPABASE_URL }}
+          ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          url="$SUPABASE_URL_VAR"
+          if ! [[ "$url" =~ ^https://[^\<\>[:space:]]+$ ]]; then
+            url=""
+            if [ -n "$SUPABASE_PROJECT_REF" ]; then url="https://${SUPABASE_PROJECT_REF}.supabase.co"; fi
+          fi
+          if [ -n "$ANON_KEY" ] && ! [[ "$ANON_KEY" =~ ^(eyJ|sb_publishable_) ]]; then
+            echo "::warning::The preview VITE_SUPABASE_ANON_KEY is not a Supabase anon key (eyJ…) or publishable key (sb_publishable_…); the panel preview builds in demo mode."
+            ANON_KEY=""
+          fi
+          if [ -n "$url" ] && [ -n "$ANON_KEY" ]; then
+            echo "supabase_url=$url" >> "$GITHUB_OUTPUT"
+            echo "anon_key=$ANON_KEY" >> "$GITHUB_OUTPUT"
+            echo "Panel preview Supabase project: $url"
+          else
+            echo "::notice::The preview Environment has no Supabase project yet (variables SUPABASE_PROJECT_REF or VITE_SUPABASE_URL, and VITE_SUPABASE_ANON_KEY); the panel preview builds in demo mode."
+          fi
+
   web:
     name: Web panel · Netlify
-    needs: supabase
+    needs: [plan, supabase, preview]
+    # Guard (D40): --prod only from the live branch, for staging or production. Pull requests deploy
+    # the pr-<n> alias, which never reads staging data (D41).
     if: >-
-      always() &&
+      always() && needs.plan.outputs.web == 'true' &&
       (needs.supabase.result == 'success' || needs.supabase.result == 'skipped') &&
-      (github.event_name == 'pull_request' || contains(fromJSON('["all","web"]'), inputs.target || 'all'))
+      (needs.preview.result == 'success' || needs.preview.result == 'skipped') &&
+      (github.event_name == 'pull_request' ||
+       (github.ref == 'refs/heads/claude/focused-newton-5v0u2q' && inputs.environment != 'preview'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Pull requests use `staging` only for the Netlify token and site: their Supabase settings come from
+    # the `preview` job, and every other staging variable below is blanked for them (the WhatsApp number
+    # and the Sentry DSN too, so a preview neither invites live WhatsApp traffic nor reports to staging).
     environment: ${{ inputs.environment || 'staging' }}
     env:
+      EVENT: ${{ github.event_name }}
       NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
       NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
-      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
-      SUPABASE_URL_VAR: ${{ vars.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-      VITE_APP_URL: ${{ vars.VITE_APP_URL }}
-      VITE_WA_DISPLAY_NUMBER: ${{ vars.VITE_WA_DISPLAY_NUMBER }}
-      VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+      # Deploys (--prod): this Environment's project. Empty on pull requests.
+      SUPABASE_PROJECT_REF: ${{ github.event_name != 'pull_request' && vars.SUPABASE_PROJECT_REF || '' }}
+      SUPABASE_URL_VAR: ${{ github.event_name != 'pull_request' && vars.VITE_SUPABASE_URL || '' }}
+      DEPLOY_ANON_KEY: ${{ github.event_name != 'pull_request' && vars.VITE_SUPABASE_ANON_KEY || '' }}
+      VITE_APP_URL: ${{ github.event_name != 'pull_request' && vars.VITE_APP_URL || '' }}
+      # Pull requests: the preview project (both empty → demo mode).
+      PREVIEW_SUPABASE_URL: ${{ needs.preview.outputs.supabase_url }}
+      PREVIEW_ANON_KEY: ${{ needs.preview.outputs.anon_key }}
+      # Only compared with the preview settings, so a preview can never point at this project.
+      LIVE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      LIVE_PROJECT_URL: ${{ vars.VITE_SUPABASE_URL }}
+      # Empty on pull requests: the demo then shows the fictional +1 555 014 2290, and Sentry is off.
+      VITE_WA_DISPLAY_NUMBER: ${{ github.event_name != 'pull_request' && vars.VITE_WA_DISPLAY_NUMBER || '' }}
+      VITE_SENTRY_DSN: ${{ github.event_name != 'pull_request' && vars.VITE_SENTRY_DSN || '' }}
     steps:
       - name: Check configuration
         id: cfg
         run: |
+          if [ "$EVENT" = pull_request ]; then
+            url="$PREVIEW_SUPABASE_URL" key="$PREVIEW_ANON_KEY"
+            # Staging's ref is a workflow constant, so this holds even before staging's own variables exist.
+            if [ -n "$url" ] && { [[ "$url" == *"$STAGING_PROJECT_REF"* ]] || { [ -n "$LIVE_PROJECT_REF" ] && [[ "$url" == *"$LIVE_PROJECT_REF"* ]]; } || [ "$url" = "$LIVE_PROJECT_URL" ]; }; then
+              echo "::warning::The preview Environment points at the staging Supabase project; the panel preview builds in demo mode instead. Give preview its own project (docs/RUNBOOK.md §2)."
+              url="" key=""
+            fi
+            if [ -n "$url" ] && [ -n "$key" ]; then
+              { echo "VITE_DEMO=false"; echo "VITE_SUPABASE_URL=$url"; echo "VITE_SUPABASE_ANON_KEY=$key"; } >> "$GITHUB_ENV"
+              echo "mode=preview Supabase project" >> "$GITHUB_OUTPUT"
+            else
+              # Demo mode: the in-memory Kestrel data, no Supabase at all.
+              { echo "VITE_DEMO=true"; echo "VITE_SUPABASE_URL="; echo "VITE_SUPABASE_ANON_KEY="; } >> "$GITHUB_ENV"
+              echo "mode=demo (no Supabase)" >> "$GITHUB_OUTPUT"
+            fi
+            if [ -n "$NETLIFY_AUTH_TOKEN" ]; then
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice::Web preview skipped: set NETLIFY_AUTH_TOKEN (secret) in the staging Environment."
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
           # The project URL follows from the project ref; a missing or placeholder value is derived.
           VITE_SUPABASE_URL="$SUPABASE_URL_VAR"
           if ! [[ "$VITE_SUPABASE_URL" =~ ^https://[^\<\>[:space:]]+$ ]] && [ -n "$SUPABASE_PROJECT_REF" ]; then
             VITE_SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
             echo "::notice::VITE_SUPABASE_URL unset or not a URL; using $VITE_SUPABASE_URL"
           fi
-          echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" >> "$GITHUB_ENV"
-          if [ -n "$VITE_SUPABASE_ANON_KEY" ] && ! [[ "$VITE_SUPABASE_ANON_KEY" =~ ^(eyJ|sb_publishable_) ]]; then
+          if [ -n "$DEPLOY_ANON_KEY" ] && ! [[ "$DEPLOY_ANON_KEY" =~ ^(eyJ|sb_publishable_) ]]; then
             echo "::error::VITE_SUPABASE_ANON_KEY is not a Supabase anon key (eyJ…) or publishable key (sb_publishable_…)."
             exit 1
           fi
-          if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ]; then
+          { echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL"; echo "VITE_SUPABASE_ANON_KEY=$DEPLOY_ANON_KEY"; } >> "$GITHUB_ENV"
+          echo "mode=$ENVIRONMENT Supabase project" >> "$GITHUB_OUTPUT"
+          if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$DEPLOY_ANON_KEY" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::Web deploy skipped for $ENVIRONMENT: set NETLIFY_AUTH_TOKEN (secret) and VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (variables)."
@@ -183,7 +372,7 @@ jobs:
         if: steps.cfg.outputs.ready == 'true'
         # The site id comes from NETLIFY_SITE_ID or .github/netlify-sites.json (an id survives renaming
         # the site in Netlify). With neither, a site is found or created by name, so a token is all
-        # Netlify needs for the first deploy.
+        # Netlify needs for the first deploy. Pull requests look up the panel's `staging` key.
         run: |
           api=https://api.netlify.com/api/v1
           auth="Authorization: Bearer $NETLIFY_AUTH_TOKEN"
@@ -208,15 +397,148 @@ jobs:
           echo "url=$(jq -r '.ssl_url // .url' <<<"$site")" >> "$GITHUB_OUTPUT"
       - name: Deploy
         if: steps.cfg.outputs.ready == 'true'
+        env:
+          SITE_ID: ${{ steps.site.outputs.id }}
+          SITE_URL: ${{ github.event_name != 'pull_request' && vars.VITE_APP_URL || steps.site.outputs.url }}
+          PR_NUMBER: ${{ github.event.number }}
+          MODE: ${{ steps.cfg.outputs.mode }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            flags="--alias pr-${{ github.event.number }}"
+          if [ "$EVENT" = pull_request ]; then
+            flags=(--alias "pr-$PR_NUMBER")
           else
-            flags="--prod"
+            flags=(--prod)
           fi
-          npx --yes netlify-cli@27.10.2 deploy --filter @sitelog/web --dir "$GITHUB_WORKSPACE/apps/web/dist" --site "${{ steps.site.outputs.id }}" \
-            --auth "$NETLIFY_AUTH_TOKEN" --message "${GITHUB_SHA::7} ${ENVIRONMENT}" $flags --json > deploy.json
+          npx --yes netlify-cli@27.10.2 deploy --filter @sitelog/web --dir "$GITHUB_WORKSPACE/apps/web/dist" --site "$SITE_ID" \
+            --auth "$NETLIFY_AUTH_TOKEN" --message "${GITHUB_SHA::7} ${ENVIRONMENT}" "${flags[@]}" --json > deploy.json
           url=$(node -e "const d=require('./deploy.json');console.log(d.deploy_url||d.url||'')")
           echo "Deployed: $url"
-          echo "### Web panel (${ENVIRONMENT})" >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ vars.VITE_APP_URL || steps.site.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$EVENT" = pull_request ]; then
+            echo "### Web panel preview (pr-$PR_NUMBER, $MODE)" >> "$GITHUB_STEP_SUMMARY"
+            echo "$url" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Web panel (${ENVIRONMENT}, $MODE)" >> "$GITHUB_STEP_SUMMARY"
+            echo "$SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  inventory:
+    name: Inventory · staging (read-only)
+    needs: plan
+    # W1-01 step 0 (docs/GAP_ANALYSIS.md §4.1 stage 1). Read-only: migration list, function list, secret
+    # names and counts in a READ ONLY transaction. It never runs db push, functions deploy or secrets set,
+    # so the guard lets it run from any ref.
+    if: needs.plan.outputs.inventory == 'true' && inputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && [ -n "$SUPABASE_DB_PASSWORD_SECRET" ] && [ -n "$SUPABASE_PROJECT_REF" ]; then
+            pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+            echo "::add-mask::$pw"
+            { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Staging inventory (read-only)"
+              echo
+              echo "Project \`$SUPABASE_PROJECT_REF\`, ref \`$GITHUB_REF_NAME\`, commit \`${GITHUB_SHA::7}\`. Nothing was written: no db push, functions deploy or secrets set, and the counts ran in a READ ONLY transaction that was rolled back."
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice::Inventory skipped: set SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable) in staging."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: supabase/setup-cli@v1
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          version: 2.118.0
+      - name: Link project
+        if: steps.cfg.outputs.ready == 'true'
+        # Writes only supabase/.temp on the runner (project ref, pooler address), through the Management
+        # API. No database password: link has no reason to open a database connection here (older CLIs
+        # created their migration tables when given one), so it is unset for this command only.
+        run: env -u SUPABASE_DB_PASSWORD supabase link --project-ref "$SUPABASE_PROJECT_REF" < /dev/null
+      - name: Migrations
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          supabase migration list --linked > "$RUNNER_TEMP/migrations.txt"
+          cat "$RUNNER_TEMP/migrations.txt"
+          { echo "### Migrations (local = this ref, remote = staging)"; echo; echo '```'; cat "$RUNNER_TEMP/migrations.txt"; echo '```'; echo; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Edge functions
+        if: steps.cfg.outputs.ready == 'true'
+        run: |
+          supabase functions list --project-ref "$SUPABASE_PROJECT_REF" > "$RUNNER_TEMP/functions.txt"
+          cat "$RUNNER_TEMP/functions.txt"
+          { echo "### Edge functions"; echo; echo '```'; cat "$RUNNER_TEMP/functions.txt"; echo '```'; echo; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Secret names
+        if: steps.cfg.outputs.ready == 'true'
+        # Names only. The CLI also prints a digest per secret; that output stays in a temp file that
+        # is never printed and is deleted here.
+        run: |
+          raw="$RUNNER_TEMP/secrets.raw"
+          names=""
+          if supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json > "$raw" 2>/dev/null; then
+            names="$(jq -r 'if type == "array" then .[] | .name // empty else empty end' "$raw" 2>/dev/null || true)"
+          fi
+          if [ -z "$names" ] && supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" > "$raw" 2> "$RUNNER_TEMP/secrets.err"; then
+            names="$(awk -F'|' 'NF > 1 { n = $1; gsub(/[[:space:]]/, "", n); if (n != "" && n != "NAME" && n !~ /^-+$/) print n }' "$raw")"
+          fi
+          rm -f "$raw"
+          if [ -z "$names" ]; then
+            cat "$RUNNER_TEMP/secrets.err" 2>/dev/null || true
+            echo "::error::Could not read the secret names (supabase secrets list)."
+            exit 1
+          fi
+          sorted="$(sort -u <<<"$names")"
+          echo "$(wc -l <<<"$sorted") secret names:"
+          echo "$sorted"
+          {
+            echo "### Edge function secrets (names only)"
+            echo
+            echo "| Name |"
+            echo "| --- |"
+            while IFS= read -r n; do printf "| \`%s\` |\n" "$n"; done <<<"$sorted"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Database counts (read-only transaction)
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          PGDATABASE: postgres
+          PGSSLMODE: require
+          PGCONNECT_TIMEOUT: '20'
+          PGCLIENTENCODING: UTF8
+        # supabase/ops/inventory.sql: counts and labels only, in a READ ONLY transaction that is rolled
+        # back (tested on PGlite by supabase/db-tests/src/inventory.test.ts).
+        run: |
+          # Runners have no IPv6, so connect through the session pooler that `supabase link` recorded;
+          # without one, try the direct host.
+          pooler="$(cat supabase/.temp/pooler-url 2>/dev/null || true)"
+          if [[ "$pooler" =~ ^postgres(ql)?://([^:@/]+)(:[^@]*)?@([^:/?]+) ]]; then
+            export PGUSER="${BASH_REMATCH[2]}" PGHOST="${BASH_REMATCH[4]}" PGPORT=5432
+          else
+            export PGUSER=postgres PGHOST="db.${SUPABASE_PROJECT_REF}.supabase.co" PGPORT=5432
+          fi
+          export PGPASSWORD="$SUPABASE_DB_PASSWORD"
+          echo "psql to $PGHOST:$PGPORT as $PGUSER"
+          psql -X -q -A -t -F $'\t' -v ON_ERROR_STOP=1 -f supabase/ops/inventory.sql > "$RUNNER_TEMP/counts.tsv"
+          cat "$RUNNER_TEMP/counts.tsv"
+          {
+            echo "### Database counts"
+            echo
+            echo "Demo org = the seeded Kestrel org (\`7a0cfa5d-2a29-43fb-8665-fcd9bed4106d\`, \`DEMO_ORG_ID\` in \`packages/shared/src/demo/kestrel.ts\`); other orgs = every other row, including rows with no org; \`-\` = the table has no org."
+            awk -F'\t' '
+              function cell(v) { return v == "" ? "-" : v }
+              $1 != section {
+                section = $1
+                printf "\n#### %s\n\n| Item | Demo org | Other orgs | Total or state |\n| --- | ---: | ---: | ---: |\n", section
+              }
+              { printf "| %s | %s | %s | %s |\n", $2, cell($3), cell($4), cell($5) }
+            ' "$RUNNER_TEMP/counts.tsv"
+          } >> "$GITHUB_STEP_SUMMARY"

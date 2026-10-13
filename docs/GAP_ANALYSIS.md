@@ -2,6 +2,8 @@
 
 Kickoff A, steps 2–3 (`docs/START_HERE.md:57-63`). Written 2026-10-13 on branch `spec-v1.2` at `cc956dd`.
 
+**Later changes.** Line references, the summary (section 1) and the status tables describe `cc956dd`. Notes marked **Done in W1-xx**, **Since W1-xx**, **Split in W1-xx** or "(W1-xx: …)" record what changed after it and supersede the text they annotate.
+
 **How to read this.** References are repo-relative `path:line`. "v1.0" means the WhatsApp build that this repo implements; "v1.2" means `docs/SITELOG_SPEC.md` and `docs/PLAN_WEEK1.md`. GitHub Actions runs are cited by run id. The hosted Supabase project (`abuanbyzttuqksdctqcp`) could not be queried in this read-only audit, so statements about its data are marked "expected" or "not verified".
 
 **Status meanings.** _done_: every Build item and the Done-when are met as v1.2 describes them (a recorded, equivalent deviation still counts). _partial_: a meaningful part exists or is directly reusable. _missing_: essentially nothing exists. _conflicts_: an implementation exists that contradicts the ticket and needs rework or a decision first.
@@ -31,7 +33,7 @@ SMS plus a personal link to a mobile web recorder (`apps/field`, a PWA), and lat
 | missing   | 3     | W1-04, W1-07, W1-09                                    |
 | conflicts | 8     | W1-02, W1-05, W1-06, W1-08, W1-11, W1-12, W1-13, W1-15 |
 
-No ticket is _done_. W1-01 lacks the env merge, the brand files and the v1.2 README; every other ticket depends on at least one of the field channel, the v1.2 schema, report data v2 or i18n. Several _partial_ tickets (W1-01, W1-03, W1-10, W1-14, W1-16, W1-17, W1-18, W1-19) also contain a local conflict (a version, WhatsApp wording, a data path or a deploy rule) that must change; those are listed under their conflicts. A ticket is _conflicts_ when the part that exists is itself the contradiction (W1-13: the only existing pieces, answer mapping and filing, are WhatsApp-shaped).
+No ticket is _done_. W1-01 lacks the env merge, the brand files and the v1.2 README (W1-01: all three since done; see the W1-01 entry and D10); every other ticket depends on at least one of the field channel, the v1.2 schema, report data v2 or i18n. Several _partial_ tickets (W1-01, W1-03, W1-10, W1-14, W1-16, W1-17, W1-18, W1-19) also contain a local conflict (a version, WhatsApp wording, a data path or a deploy rule) that must change; those are listed under their conflicts. A ticket is _conflicts_ when the part that exists is itself the contradiction (W1-13: the only existing pieces, answer mapping and filing, are WhatsApp-shaped).
 
 ### 1.4 The biggest gaps and conflicts
 
@@ -41,7 +43,7 @@ No ticket is _done_. W1-01 lacks the env merge, the brand files and the v1.2 REA
 4. **Delivery is wired to WhatsApp throughout the pipeline**: invite and welcome, questions and drafts, filing, PDF delivery, dead-job notices and the reminder ladder (`apps/worker/src/jobs/send_welcome.ts:26-33`, `apps/worker/src/jobs/decide_next.ts:26-27`, `apps/worker/src/pipeline/file.ts:153-177`, `apps/worker/src/jobs/render_pdf.ts:41-67`, `supabase/functions/scheduler-tick/index.ts:201`) (W1-08, W1-10, W1-12, W1-15).
 5. **No i18n.** Panel copy is one English TypeScript object (`apps/web/src/copy/en.ts`, 1,858 lines, 38 lines mention WhatsApp); there is no i18next, no Turkish or Spanish, and the PDF is English and imperial only (W1-02, W1-03, W1-14).
 6. **Transcription is OpenAI `whisper-1` on WhatsApp OGG converted to MP3**, not Deepgram Nova-3 on browser uploads (`apps/worker/src/ai/transcribe.ts:18`, `apps/worker/src/config.ts:38-39`) (W1-11).
-7. **Deploy model does not match the kit.** There is no `main` branch; staging is deployed by manual dispatch with `--prod` from any ref; PR previews talk to the live staging database; there is no field site and no `/api/*` rewrite (W1-04, W1-19).
+7. **Deploy model does not match the kit.** There is no `main` branch; staging is deployed by manual dispatch with `--prod` from any ref; PR previews talk to the live staging database; there is no field site and no `/api/*` rewrite (W1-04, W1-19). (W1-01: staging deploys only from the live branch, and PR previews no longer read staging; see section 2.7, D40, D41.)
 8. **Confirmed but deferred RLS defects** (`docs/AUDIT_BACKLOG.md:29-41`, `:234-264`) would fail the two-org × role suite that W1-05 asks for.
 
 Plenty is reusable: the toolchain and CI, the panel shell and almost every page, the job queue and runner, extraction and validation, the PDF package, email, weather, the demo dataset's non-channel data, and the PGlite DB-test harness (section 5).
@@ -131,10 +133,12 @@ The `staging` GitHub Environment accepted the PR run from `spec-v1.2`, so nothin
 
 **Deploy previews, as they work here.** The kickoff assumes Netlify builds every branch as a deploy preview (`docs/START_HERE.md:50-51`). Here a preview exists only while a PR is open, only for the panel, and it is built by Actions with the `staging` Environment's variables, so it reads and writes the live staging database (`.github/workflows/deploy.yml:9`, `:133-145`, `:212-213`). A push to `spec-v1.2` without an open PR gets no CI and no preview. PR #1 is that vehicle today (D41, D44).
 
+**Since W1-01** (`.github/workflows/deploy.yml`, `docs/RUNBOOK.md` §2): a `plan` job runs first; staging and production deploys run only from the branch `claude/focused-newton-5v0u2q`, compared as a full ref so a tag of that name does not pass (D40); a Supabase deploy to any other Environment that resolves to the staging project ref fails before it links; the PR preview takes only the Netlify token and site from `staging` and its Supabase settings from the `preview` Environment, and builds in demo mode without them, never against staging (D41); a dispatch with environment `preview` runs the Supabase target only, from `spec-v1.2`; a dispatch with target `inventory` runs the read-only staging inventory from `spec-v1.2`. Until the cut-over the live branch runs its own pre-W1-01 `deploy.yml` (no guard, no `inventory` or `preview`), so those targets are dispatched from `spec-v1.2`, a dispatch on the live branch is still an unguarded staging deploy, and `main` may be created only from a commit that has the new file. The CI triggers are unchanged (D44).
+
 ### 2.8 Environment variables the code expects
 
 - At `cc956dd` the root `.env.example` was still the v1.0 template (`VITE_WA_DISPLAY_NUMBER` at `:11`, a `WA_*` block at `:15-22`, `COST_WA_TEMPLATE_USD` at `:51`) and the kit template sat unmerged at `docs/env.example:1-79`. The kickoff's step 4 merged them in the commit before this document, following Appendix 9.1: the kit's layout and `[W1]`/`[W2+]` markers, every variable the code reads today (WhatsApp ones marked `(v1.0)`), `CORS_EXTRA_ORIGINS` added, and values that keep the current code working (`TRANSCRIBE_MODEL=whisper-1` until W1-11, a non-empty `CLAUDE_MODEL`, `STRIPE_PRICE_ID_SITE` until its rename). `docs/env.example` was removed after the merge; line numbers below refer to both files at `cc956dd`.
-- `dotenv.config()` with no path reads `<cwd>/.env` (`apps/worker/src/index.ts:17-23`), and `pnpm --filter` runs in the package directory, so `pnpm dev:worker` reads `apps/worker/.env`, not the root `.env` that `apps/worker/README.md:10` describes. The merged `.env.example` header and `CLAUDE.md` (Environment) now say so; making the worker read the root file is a step-2 code change.
+- `dotenv.config()` with no path reads `<cwd>/.env` (`apps/worker/src/index.ts:17-23`), and `pnpm --filter` runs in the package directory, so `pnpm dev:worker` reads `apps/worker/.env`, not the root `.env` that `apps/worker/README.md:10` describes. The merged `.env.example` header and `CLAUDE.md` (Environment) now say so; making the worker read the root file is a step-2 code change. **Done in W1-01:** outside production the worker and `pnpm eval` load `<cwd>/.env`, then the repository root's `.env` (`apps/worker/src/dotenv.ts`, tested in `dotenv.test.ts`).
 - Local edge functions read `supabase/functions/.env` (`supabase/functions/README.md:58-59`); CI writes it with WhatsApp dummies (`.github/workflows/ci.yml:103-113`).
 - `CORS_EXTRA_ORIGINS` is read (`supabase/functions/_shared/http.ts:30`, `:45-47`) but is in neither template.
 
@@ -154,7 +158,7 @@ One edge function and its helper; five shared modules plus the WhatsApp copy; th
 
 | Ticket | Status    | One line                                                                                                                              | Key references                                                              |
 | ------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| W1-01  | partial   | Tooling and CI green; env merged; brand SVGs and v1.2 README missing; Node 22 not 20                                                  | `package.json:6-9`, `.env.example`                                          |
+| W1-01  | partial   | Tooling and CI green; env merged; brand SVGs and v1.2 README missing; Node 22 not 20 (W1-01: brand files and README done, D10)        | `package.json:6-9`, `.env.example`                                          |
 | W1-02  | conflicts | Shared package exists but is v1.0: enums, report schema v1, WhatsApp copy; no SMS, tokens, i18n                                       | `packages/shared/src/enums.ts`, `packages/shared/src/schemas/report.ts:240` |
 | W1-03  | partial   | Full tested panel shell and magic link; no i18n/TR, no `/dev/phone`, no error boundary, WhatsApp footer                               | `apps/web/src/app/routes.tsx:53-90`, `apps/web/src/copy/en.ts:68`           |
 | W1-04  | missing   | No `apps/field`, PWA, field routes or `/api` proxy                                                                                    | `apps/web/public/_redirects:1`                                              |
@@ -184,13 +188,13 @@ One edge function and its helper; five shared modules plus the WhatsApp copy; th
 - Root scripts `dev`, `build`, `typecheck`, `lint`, `test`, `format`, `seed:demo`, plus `check`, `test:db`, `e2e`, `eval` (`package.json:10-27`); `.gitignore`; README quickstart (`README.md:23-37`).
 - CI install → typecheck → lint → format:check → test → build (`.github/workflows/ci.yml:25-31`). The Done-when holds in CI from a fresh checkout with a frozen lockfile (run 38377523610 on `cc956dd`); a local fresh-clone run was not repeated in this audit.
 - Spec, plan, artboards and channel decisions committed; kit `CLAUDE.md` merged into `CLAUDE.md` (`cc956dd`). `docs/CLAUDE.v1.2.md` is not in the tree because it was merged. `docs/SITELOG_SPEC.md`, `docs/PLAN_WEEK1.md`, `docs/START_HERE.md`, `docs/env.example` (removed after the merge), `docs/decisions/channel-options.md`, the 16 `docs/design/*.dc.html` and the 6 `docs/brand/*.svg` are byte-identical to the uploaded kit zip (checked with `cmp`), and `.prettierignore:11-16` keeps them that way.
-- **`CLAUDE.md` merge notes.** `docs/CLAUDE.v1.2.md` was never committed on its own, so the merge can only be reviewed against the zip. The merge keeps every kit rule. It replaces the kit's stack and commands with the repo's: React 19, Node 22, Tailwind 4 (`CLAUDE.md:34`); `pnpm dev:worker` and hand-maintained DB types instead of `pnpm --filter worker dev` and `supabase gen types > db.types.ts` (`CLAUDE.md:38-40`). It marks v1.0 rules _(current)_ (`CLAUDE.md:27-28`, `:61`, `:78`, `:92`), adds forward-only migrations and the branch rule (`CLAUDE.md:51-52`), and allows feature flags in `VITE_*` (`CLAUDE.md:60`). The Environment section was corrected after this audit: the worker reads `.env` from its working directory (section 2.8). `CLAUDE.md:16` says the brand files are not copied yet (D10).
+- **`CLAUDE.md` merge notes.** `docs/CLAUDE.v1.2.md` was never committed on its own, so the merge can only be reviewed against the zip. The merge keeps every kit rule. It replaces the kit's stack and commands with the repo's: React 19, Node 22, Tailwind 4 (`CLAUDE.md:34`); `pnpm dev:worker` and hand-maintained DB types instead of `pnpm --filter worker dev` and `supabase gen types > db.types.ts` (`CLAUDE.md:38-40`). It marks v1.0 rules _(current)_ (`CLAUDE.md:27-28`, `:61`, `:78`, `:92`), adds forward-only migrations and the branch rule (`CLAUDE.md:51-52`), and allows feature flags in `VITE_*` (`CLAUDE.md:60`). The Environment section was corrected after this audit: the worker reads `.env` from its working directory (section 2.8) (W1-01: it now reads the root `.env` too, section 2.8). `CLAUDE.md:16` says the brand files are not copied yet (D10) (W1-01: copied by `pnpm brand`, and the row updated, D10).
 
 **Missing**
 
 - ~~Merge `docs/env.example` into the root `.env.example`~~ — done in the commit before this document (Appendix 9.1).
-- Brand SVGs in `apps/web/public/brand/`: the kit's `logo-mark.svg`, `logo-mark-inverted.svg` and `logo-mono.svg` differ from the repo's copies (`cmp`); `logo-app-icon.svg`, `favicon-16.svg`, `favicon-32.svg` are new. `apps/field/public/brand/` waits for W1-04. See D10.
-- README for v1.2: pitch (`README.md:3`), repository table (`:11`, `:15`), report flow (`:39-45`); root description (`package.json:5`); deviation rows for Node 22, pnpm 10, React 19, Vite 8 (only Tailwind 4 is recorded, `README.md:51`).
+- ~~Brand SVGs in `apps/web/public/brand/`: the kit's `logo-mark.svg`, `logo-mark-inverted.svg` and `logo-mono.svg` differ from the repo's copies (`cmp`); `logo-app-icon.svg`, `favicon-16.svg`, `favicon-32.svg` are new.~~ Done in W1-01 (`pnpm brand`, D10). `apps/field/public/brand/` waits for W1-04.
+- ~~README for v1.2: pitch (`README.md:3`), repository table (`:11`, `:15`), report flow (`:39-45`); root description (`package.json:5`); deviation rows for Node 22, pnpm 10, React 19, Vite 8 (only Tailwind 4 is recorded, `README.md:51`).~~ Done in W1-01.
 - No root Vitest workspace file; `pnpm -r --if-present test` (`package.json:18`) is functionally equivalent (D5).
 
 **Conflicts**
@@ -559,7 +563,7 @@ The ticket is three screens and their routes; none exist. What exists is shared 
 
 **Conflicts**
 
-- _Production branch._ No `main`; staging deploys by dispatch with `--prod` from any ref (`.github/workflows/deploy.yml:11-15`, `:211-216`). Kickoff: "production stays on main" (`docs/START_HERE.md:50-52`). Recommend: D40.
+- _Production branch._ No `main`; staging deploys by dispatch with `--prod` from any ref (`.github/workflows/deploy.yml:11-15`, `:211-216`). Kickoff: "production stays on main" (`docs/START_HERE.md:50-52`). Recommend: D40. (W1-01: the guard limits staging deploys to the live branch; see section 2.7 and D40.)
 - _Deployed backend channel._ `whatsapp-webhook` is deployed on `abuanbyzttuqksdctqcp` (run 38326562725 log). Recommend: add v1.2 functions first; delete `whatsapp-webhook` last with `supabase functions delete` (deploy never deletes, `.github/workflows/deploy.yml:81`).
 - _Rewrite location._ Kickoff names `netlify.toml` (`docs/START_HERE.md:62-63`); the repo deploys a prebuilt directory whose `_redirects` Netlify honours. Recommend: D43.
 
@@ -613,7 +617,7 @@ Remove each item only after its replacement works and its consumers are switched
 
 ### 4.1 Retiring live WhatsApp data safely (staged)
 
-1. **Inventory and back up** (owner-approved, read-only): `supabase migration list --linked`; row counts of `conversations`, `messages` (by `conversation_id` null or not, and by type), `transcripts`, `unknown_senders`, `report_sources` by kind, `reporters` by status, `jobs` by type and status (including queued `render_pdf` with `notifyReporter`), `notifications` by kind; `supabase functions list`; `supabase secrets list`; a `pg_dump` of these tables and the `audio`/`photos` buckets. The free tier has no point-in-time recovery.
+1. **Inventory and back up** (owner-approved, read-only): `supabase migration list --linked`; row counts of `conversations`, `messages` (by `conversation_id` null or not, and by type), `transcripts`, `unknown_senders`, `report_sources` by kind, `reporters` by status, `jobs` by type and status (including queued `render_pdf` with `notifyReporter`), `notifications` by kind; `supabase functions list`; `supabase secrets list`; a `pg_dump` of these tables and the `audio`/`photos` buckets. The free tier has no point-in-time recovery. **Split in W1-01:** the inventory is the Deploy workflow's `inventory` target (names and counts only, `supabase/ops/inventory.sql` in a read-only transaction, `docs/RUNBOOK.md` §2), run now; the backup is taken at the cut-over (W1-19, step 21), right before the first `db push`, because a dump taken now would be stale and it holds personal data that needs a storage place the owner chooses.
 2. **Expand**: add v1.2 tables and nullable columns beside the old ones; nothing dropped or renamed.
 3. **Backfill**: `uploads` rows from `messages` media with the **same UUID**, so immutable `data.photos[].messageId` and `Source.messageId` resolve; `report_sources.upload_id`/`question_id`; `transcripts.upload_id`. Prove it on a frozen copy of the v1.0 seed (`git show 388fc63:supabase/seed.sql`) plus office-photo rows.
 4. **Switch readers** (panel, PDF, evidence pack, retention, cost inputs) to uploads with a fallback, then **switch writers** (`attach_office_photos`, `create_office_report`, `create_report_version`, `list_orphan_office_photos`, `supabase/migrations/20261013000005_office_photos.sql:65-376`).
@@ -677,7 +681,7 @@ Each item: what the repo does, what v1.2 (or the kit `CLAUDE.md`) says, and a re
 ### Copy, i18n and brand
 
 - **D9 · English-only copy vs i18next EN/ES/TR.** The old repo rule (`388fc63:CLAUDE.md:21`) is superseded by the merged `CLAUDE.md:78`. **Recommend:** adopt i18next; serve `apps/web/src/copy/en.ts` as the EN resource behind `t()`, convert shell and login first, then pages incrementally.
-- **D10 · Brand SVGs (owner).** The kit's logo mark, inverted and mono files differ from the repo's; three kit files are new. **Recommend:** adopt the kit files (spec §14.5 says copy them) after a look on the preview; keep the repo's PNG favicons, apple-touch icon, lockup and avatar until regenerated from the kit.
+- **D10 · Brand SVGs (owner).** The kit's logo mark, inverted and mono files differ from the repo's; three kit files are new. **Recommend:** adopt the kit files (spec §14.5 says copy them) after a look on the preview; keep the repo's PNG favicons, apple-touch icon, lockup and avatar until regenerated from the kit. **Done in W1-01:** `pnpm brand` copies the kit SVGs and regenerates the PNG favicons, the apple-touch icon and the lockup from them; the avatar (WhatsApp profile) and the PDF and email marks (step 19) are unchanged; the owner's look on the preview is still open.
 
 ### Schema and data
 
@@ -720,11 +724,11 @@ Each item: what the repo does, what v1.2 (or the kit `CLAUDE.md`) says, and a re
 
 ### Deploy
 
-- **D40 · Production branch (owner).** There is no `main`; kickoff says "production stays on main" (`docs/START_HERE.md:51`). The remote has two branches, `claude/focused-newton-5v0u2q` and `spec-v1.2`, and GitHub's default branch is `claude/focused-newton-5v0u2q` (repository settings, read with the GitHub REST API on 2026-10-13), so PRs target it by default and the deploy workflow's `push: [main]` trigger (`.github/workflows/deploy.yml:12-13`) never fires. **Recommend:** treat `claude/focused-newton-5v0u2q` as the live staging branch for now and add a guard so `--prod` and `db push` run only from it; merge `spec-v1.2` into it at cut-over; create `main` only when you want a production environment (creating it fires the push-to-main deploy).
-- **D41 · Preview backend (owner).** PR previews read and write live staging data and get no migrations. **Recommend:** a second free Supabase project with a `preview` GitHub Environment for `spec-v1.2`, so v1.2 migrations never touch staging before cut-over.
+- **D40 · Production branch (owner).** There is no `main`; kickoff says "production stays on main" (`docs/START_HERE.md:51`). The remote has two branches, `claude/focused-newton-5v0u2q` and `spec-v1.2`, and GitHub's default branch is `claude/focused-newton-5v0u2q` (repository settings, read with the GitHub REST API on 2026-10-13), so PRs target it by default and the deploy workflow's `push: [main]` trigger (`.github/workflows/deploy.yml:12-13`) never fires. **Recommend:** treat `claude/focused-newton-5v0u2q` as the live staging branch for now and add a guard so `--prod` and `db push` run only from it; merge `spec-v1.2` into it at cut-over; create `main` only when you want a production environment (creating it fires the push-to-main deploy). **Done in W1-01:** the guard; with it, a push to `main` is skipped as well until the guard names a production branch, provided `main` is created from a commit that has the new workflow (the live branch keeps the old, unguarded one until the cut-over).
+- **D41 · Preview backend (owner).** PR previews read and write live staging data and get no migrations. **Recommend:** a second free Supabase project with a `preview` GitHub Environment for `spec-v1.2`, so v1.2 migrations never touch staging before cut-over. **Done in W1-01 (workflow side):** the PR panel preview takes only the Netlify token and site from `staging` (the WhatsApp number and Sentry DSN are blanked too) and its Supabase settings from `preview`, else demo mode; the dispatch accepts `preview` for the Supabase target only, and refuses to deploy if `preview` resolves to the staging project. The owner still creates the project and the Environment (`docs/RUNBOOK.md` §2).
 - **D42 · Field app hosting (owner).** **Recommend:** a second Netlify site (e.g. `staging-sitelog-field`) with its own key in `.github/netlify-sites.json`. Note: on `*.netlify.app` the Demo phone cannot frame the field app with its cookie, so open links in a new tab until custom domains under one registrable domain exist.
 - **D43 · `/api/*` rewrite location.** **Recommend:** generate `apps/field/dist/_redirects` at build time from `VITE_SUPABASE_URL` (`/api/*` proxy first, SPA fallback second) instead of a `netlify.toml`; record it.
-- **D44 · CI on `spec-v1.2`.** **Recommend:** keep PR #1 open as the CI and preview vehicle; optionally add `spec-v1.2` to the CI push branches.
+- **D44 · CI on `spec-v1.2`.** **Recommend:** keep PR #1 open as the CI and preview vehicle; optionally add `spec-v1.2` to the CI push branches. **Decided in W1-01:** not needed while PR #1 is open (a push trigger would run CI twice per push); `ci.yml` is unchanged.
 
 ---
 
@@ -736,12 +740,12 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 
 **Step 0 · Decisions and pre-flight** — all tickets
 
-- Change: none in code. You answer the **owner** items in section 6 and the questions in section 8. With your approval, a read-only inventory of `abuanbyzttuqksdctqcp` and a backup (section 4.1, stage 1).
+- Change: none in code. You answer the **owner** items in section 6 and the questions in section 8. With your approval, a read-only inventory of `abuanbyzttuqksdctqcp` (section 4.1, stage 1): the Deploy workflow's `inventory` target, added in W1-01. The backup moves to step 21, right before the first `db push`.
 - Verify: numbers recorded in the PR; nothing on staging changed.
 
 **Step 1 · Deploy safety** — W1-01, W1-19
 
-- Change: guard in `deploy.yml` so `--prod` and the `supabase` job run only from the agreed branch (D40); optional `preview` Environment and second Supabase project (D41); optional `spec-v1.2` CI push trigger (D44).
+- Change: guard in `deploy.yml` so `--prod` and the `supabase` job run only from the agreed branch (D40); optional `preview` Environment and second Supabase project (D41); optional `spec-v1.2` CI push trigger (D44: not needed while PR #1 is open).
 - Verify: CI green; `pr-1` preview still builds; the guard condition reviewed, and the first guarded dispatch from another ref is seen to skip.
 
 **Step 2 · Docs, env, brand** — W1-01
@@ -841,7 +845,7 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 
 **Step 21 · Cut-over and dress rehearsal** — W1-19 (owner-approved)
 
-- Change: stop the WhatsApp reminder ladder before any worker runs: `scheduler-tick` enqueues `send_template` reminders (`supabase/functions/scheduler-tick/index.ts:201`), week 1 has no ladder (`docs/PLAN_WEEK1.md:7`), and the ladder returns on SMS in M6 (this pulls the scheduler part of section 4.1 stage 5 forward); discard the queued WhatsApp-era backlog; merge `spec-v1.2` into the agreed branch; dispatch Deploy (db push → functions → web and field `--prod`); set v1.2 secrets, Auth site and redirect URLs, `CORS_EXTRA_ORIGINS`, `APP_URL`, `FIELD_APP_URL`; `seed:demo --date today` on the `is_demo` orgs; worker on the developer machine; write `docs/DEMO_NOTES.md`.
+- Change: re-run the read-only inventory and take the backup of section 4.1 stage 1 (`pg_dump` and the `audio`/`photos` buckets, stored where you choose) right before the first `db push`; stop the WhatsApp reminder ladder before any worker runs: `scheduler-tick` enqueues `send_template` reminders (`supabase/functions/scheduler-tick/index.ts:201`), week 1 has no ladder (`docs/PLAN_WEEK1.md:7`), and the ladder returns on SMS in M6 (this pulls the scheduler part of section 4.1 stage 5 forward); discard the queued WhatsApp-era backlog; merge `spec-v1.2` into the agreed branch; dispatch Deploy (db push → functions → web and field `--prod`); set v1.2 secrets, Auth site and redirect URLs, `CORS_EXTRA_ORIGINS`, `APP_URL`, `FIELD_APP_URL`; `seed:demo --date today` on the `is_demo` orgs; worker on the developer machine; write `docs/DEMO_NOTES.md`.
 - Verify: the demo script passes twice in a row on a real phone.
 
 **Step 22 · Retire WhatsApp** — cleanup after the demo

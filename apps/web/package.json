@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:artifact": "node scripts/build-artifact.mjs",
+    "brand": "node scripts/build-brand.mjs",
     "e2e": "playwright test",
     "e2e:a11y": "playwright test --project a11y",
     "e2e:supabase": "playwright test --config playwright.supabase.config.ts",

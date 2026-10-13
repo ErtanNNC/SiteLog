@@ -9,9 +9,16 @@ drives the WhatsApp conversation state machine (§7.2), renders PDFs, sends emai
 ```bash
 cp .env.example .env            # repo root; fill in SUPABASE_DB_URL at least
 pnpm install
-pnpm --filter @sitelog/worker dev          # tsx watch src/index.ts
+pnpm dev:worker                            # = pnpm --filter @sitelog/worker dev (tsx watch src/index.ts)
 curl localhost:8080/health                 # { ok, version, uptimeS, queue: { queued, running, dead } }
 ```
+
+Outside production (`NODE_ENV` other than `production`) the worker loads `apps/worker/.env` and then
+the repository root's `.env` (`src/dotenv.ts`): variables already set in the shell win, then
+`apps/worker/.env`, then the root file. So one root `.env` serves the worker, and `apps/worker/.env`
+is only needed for worker-only overrides. In production neither file is read. `pnpm eval` loads the
+same files, so `ANTHROPIC_API_KEY` can live in the root `.env`; `pnpm loadtest` reads neither (it
+needs no key, and its `DATABASE_URL` should never come from a file by accident).
 
 Useful one-offs:
 
@@ -90,6 +97,7 @@ environment; the job that needs a missing secret fails with a clear message (and
 ```
 src/
   index.ts        boot: dotenv (dev), config, Sentry, health server, runner, SIGTERM
+  dotenv.ts       development .env loading: apps/worker/.env, then the root .env
   config.ts       zod-validated env
   db.ts           Db interface + postgres implementation (RPC wrappers)
   db.pglite.test.ts  the real db.ts against PGlite (all migrations + seed) via pglite-socket
