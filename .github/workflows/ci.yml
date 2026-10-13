@@ -30,7 +30,7 @@ jobs:
       - name: Install poppler-utils
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils
       - run: pnpm test
-      - name: Build web + worker
+      - name: Build web + field + worker
         run: pnpm build
 
   db:
@@ -76,6 +76,11 @@ jobs:
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
       # Smoke flows + §15/M9 axe WCAG 2.2 AA scan of every route at 1440/375 px + keyboard checks.
       - run: pnpm --filter @sitelog/web e2e
+      # Field app (W1-04): every route in EN/ES/TR at 390 px, axe, no sideways scroll, PWA basics.
+      # Built with no env set: no Supabase URL, so no /api proxy.
+      - name: Field app smoke test
+        if: success() || failure()
+        run: pnpm --filter @sitelog/field e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -83,6 +88,8 @@ jobs:
           path: |
             apps/web/playwright-report
             apps/web/test-results
+            apps/field/playwright-report
+            apps/field/test-results
           retention-days: 7
 
   e2e-supabase:

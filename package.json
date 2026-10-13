@@ -8,7 +8,9 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @sitelog/web dev",
+    "dev": "pnpm --parallel --filter @sitelog/web --filter @sitelog/field dev",
+    "dev:web": "pnpm --filter @sitelog/web dev",
+    "dev:field": "pnpm --filter @sitelog/field dev",
     "dev:worker": "pnpm --filter @sitelog/worker dev",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
@@ -17,13 +19,13 @@
     "format:check": "prettier --check .",
     "test": "pnpm -r --if-present test",
     "test:db": "pnpm --filter @sitelog/db test",
-    "e2e": "pnpm --filter @sitelog/web e2e",
+    "e2e": "pnpm --filter @sitelog/web e2e && pnpm --filter @sitelog/field e2e",
     "e2e:supabase": "pnpm --filter @sitelog/web e2e:supabase",
     "eval": "pnpm --filter @sitelog/worker eval",
     "loadtest": "pnpm --filter @sitelog/worker loadtest",
     "replay-webhook": "pnpm --filter @sitelog/scripts replay-webhook",
     "seed:demo": "pnpm --filter @sitelog/scripts seed-demo",
-    "brand": "pnpm --filter @sitelog/web brand",
+    "brand": "pnpm --filter @sitelog/web brand && pnpm --filter @sitelog/field brand",
     "check": "pnpm typecheck && pnpm lint && pnpm test"
   },
   "devDependencies": {

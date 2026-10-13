@@ -118,6 +118,7 @@ All existing pages are real pages, not placeholders; `apps/web/src/app/ComingNex
 - **Site id:** `NETLIFY_SITE_ID` (empty in staging), else the environment's key in `.github/netlify-sites.json` (`.github/workflows/deploy.yml:190-193`), else find-or-create by name `sitelog-<environment>-<owner>` (`.github/workflows/deploy.yml:196-205`).
 - **Redirects and functions:** only the SPA fallback; no `/api/*` rewrite to `field-api`; no functions directory.
 - **Git-connected builds:** not visible from the repo. PR #1's head has no Netlify commit status, only Actions check runs, so its preview came from Actions.
+- **Since W1-04 (step 7, D42, D43):** the field app deploys to a second site by the `field` job of `deploy.yml`, keyed `field-<environment>` in `.github/netlify-sites.json` (no key yet: the first run finds or creates `sitelog-field-<environment>-<owner>` with the same token and prints the id to add), never the panel's id, key or name. Still no `netlify.toml`: the field build writes `apps/field/dist/_redirects` with the `/api/*` proxy to `{project}/functions/v1/field-api/:splat` first and the SPA fallback second, and no `/api` rule without a Supabase URL (`apps/field/config/redirects.ts`; README deviation).
 
 ### 2.7 What a push triggers
 
@@ -134,6 +135,8 @@ The `staging` GitHub Environment accepted the PR run from `spec-v1.2`, so nothin
 **Deploy previews, as they work here.** The kickoff assumes Netlify builds every branch as a deploy preview (`docs/START_HERE.md:50-51`). Here a preview exists only while a PR is open, only for the panel, and it is built by Actions with the `staging` Environment's variables, so it reads and writes the live staging database (`.github/workflows/deploy.yml:9`, `:133-145`, `:212-213`). A push to `spec-v1.2` without an open PR gets no CI and no preview. PR #1 is that vehicle today (D41, D44).
 
 **Since W1-01** (`.github/workflows/deploy.yml`, `docs/RUNBOOK.md` §2): a `plan` job runs first; staging and production deploys run only from the branch `claude/focused-newton-5v0u2q`, compared as a full ref so a tag of that name does not pass (D40); a Supabase deploy to any other Environment that resolves to the staging project ref fails before it links; the PR preview takes only the Netlify token and site from `staging` and its Supabase settings from the `preview` Environment, and builds in demo mode without them, never against staging (D41); a dispatch with environment `preview` runs the Supabase target only, from `spec-v1.2`; a dispatch with target `inventory` runs the read-only staging inventory from `spec-v1.2`. Until the cut-over the live branch runs its own pre-W1-01 `deploy.yml` (no guard, no `inventory` or `preview`), so those targets are dispatched from `spec-v1.2`, a dispatch on the live branch is still an unguarded staging deploy, and `main` may be created only from a commit that has the new file. The CI triggers are unchanged (D44).
+
+**Since W1-04** (step 7): the pull-request run also deploys the field app's `pr-<n>` alias on its own Netlify site, with `/api` to the `preview` project or no `/api` rule while it has none, never to staging; the `field` job is planned and guarded like the panel's (`--prod` only from the live branch, skipped for `preview`, a notice while `NETLIFY_AUTH_TOKEN` is missing).
 
 ### 2.8 Environment variables the code expects
 
@@ -775,7 +778,7 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 
 **Step 7 · Field hosting** — W1-04, W1-19
 
-- Change: second Netlify site; a `field` job in `deploy.yml` with its own site key (never the panel's id) and its own find-or-create name (the panel job's fallback name `sitelog-<environment>-<owner>`, `.github/workflows/deploy.yml:196-205`, must not be reused); the job skips with a notice while the key or site is missing; build-generated `_redirects` (D43); `--alias pr-<n>` for PRs, as the panel does (`:212-213`).
+- Change: second Netlify site; a `field` job in `deploy.yml` with its own site key (never the panel's id) and its own find-or-create name (the panel job's fallback name `sitelog-<environment>-<owner>`, `.github/workflows/deploy.yml:196-205`, must not be reused); with no `field-<environment>` key the job finds or creates `sitelog-field-<environment>-<owner>` with the existing `NETLIFY_AUTH_TOKEN` (owner-approved, D42) and prints its id to add to `.github/netlify-sites.json`; it skips with a notice only while `NETLIFY_AUTH_TOKEN` is missing, and for `--prod` while the Environment has no Supabase project; build-generated `_redirects` (D43); `--alias pr-<n>` for PRs, as the panel does (`:212-213`).
 - Verify: the PR deploys a field preview over HTTPS; the panel preview is unchanged; `/api/*` reaches Supabase (404 until `field-api` exists).
 
 **Step 8 · Schema expand A1: enums** — W1-05

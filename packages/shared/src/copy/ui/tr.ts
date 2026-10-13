@@ -199,5 +199,10 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       expired: 'Linkin süresi doldu',
     },
     placeholderBody: 'Bu ekran yakında geliyor.',
+    notFound: {
+      title: 'Sayfa bulunamadı',
+      body: 'Bu sayfa yok ya da link yanlış yazılmış.',
+      action: 'Bugün ekranına git',
+    },
   },
 };

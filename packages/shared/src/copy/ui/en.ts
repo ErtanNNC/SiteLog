@@ -29,5 +29,12 @@ export const uiEn = {
       expired: 'Link expired',
     },
     placeholderBody: 'This screen is coming next.',
+    /** Any other path (the field host serves the app for every path). */
+    notFound: {
+      title: 'Page not found',
+      body: 'That page doesn’t exist, or the link was mistyped.',
+      /** The screen's one action: the installed app has no URL bar or back button. */
+      action: 'Go to Today',
+    },
   },
 } as const;

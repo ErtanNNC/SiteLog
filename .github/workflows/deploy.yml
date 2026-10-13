@@ -5,18 +5,19 @@ name: Deploy
 # workflow is safe to merge before the accounts are set up. Setup: docs/RUNBOOK.md §2 "Automated deploys".
 #
 # Deploy guard (D40, docs/GAP_ANALYSIS.md §6): everything that changes staging or production (db push,
-# functions deploy, the Fly worker, the panel with --prod) runs only from the branch
+# functions deploy, the Fly worker, the panel and the field app with --prod) runs only from the branch
 # claude/focused-newton-5v0u2q, the live staging branch (full refs are compared, so a tag with that
 # name does not pass). From any other ref those jobs are skipped and the `plan` job says why. The
 # guard lives in this file, and a dispatch runs the copy on the ref you pick: it stops mistakes, not an
 # edited workflow. A deploy to any Environment other than staging refuses to run if its project ref
 # is staging's (STAGING_PROJECT_REF below).
 #
-#   pull_request                          → panel preview only (alias pr-<n>), built against the `preview`
-#                                           Environment's Supabase project, or in demo mode while it has
-#                                           none; never against staging data (D41)
-#   workflow_dispatch staging|production  → all targets or one (supabase, worker, web), from the live
-#                                           branch only
+#   pull_request                          → panel and field app previews only (alias pr-<n> on each site),
+#                                           built against the `preview` Environment's Supabase project:
+#                                           the panel in demo mode and the field app with no /api rule
+#                                           while it has none; never against staging data (D41, D42)
+#   workflow_dispatch staging|production  → all targets or one (supabase, worker, web, field), from the
+#                                           live branch only
 #   workflow_dispatch preview             → the Supabase target only (migrations + functions to the
 #                                           preview project), from spec-v1.2 or the live branch (D41)
 #   workflow_dispatch, target inventory   → read-only staging inventory (W1-01 step 0), from any ref
@@ -41,7 +42,7 @@ on:
       target:
         description: What to deploy (inventory = read-only staging inventory, deploys nothing)
         type: choice
-        options: [all, supabase, worker, web, inventory]
+        options: [all, supabase, worker, web, field, inventory]
         default: all
 
 concurrency:
@@ -65,6 +66,7 @@ jobs:
       supabase: ${{ steps.plan.outputs.supabase }}
       worker: ${{ steps.plan.outputs.worker }}
       web: ${{ steps.plan.outputs.web }}
+      field: ${{ steps.plan.outputs.field }}
       preview: ${{ steps.plan.outputs.preview }}
       inventory: ${{ steps.plan.outputs.inventory }}
     steps:
@@ -78,13 +80,13 @@ jobs:
           TARGET: ${{ inputs.target || 'all' }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          supabase=false worker=false web=false preview=false inventory=false
-          # `all` covers the three deploy targets; the inventory runs only when asked for.
+          supabase=false worker=false web=false field=false preview=false inventory=false
+          # `all` covers the four deploy targets; the inventory runs only when asked for.
           wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ]; }; }
 
           if [ "$EVENT" = pull_request ]; then
-            web=true preview=true
-            echo "::notice::Pull request: panel preview only (alias pr-$PR_NUMBER), with the preview Environment's Supabase project or in demo mode; no migrations, functions, worker or --prod."
+            web=true field=true preview=true
+            echo "::notice::Pull request: panel and field app previews only (alias pr-$PR_NUMBER), with the preview Environment's Supabase project (else the panel in demo mode and the field app without /api); no migrations, functions, worker or --prod."
           elif [ "$TARGET" = inventory ]; then
             if [ "$ENVIRONMENT" = staging ]; then
               inventory=true
@@ -97,7 +99,7 @@ jobs:
             else
               echo "::notice::Deploy guard (D41): the preview project takes deploys from the branches $PREVIEW_BRANCH or $LIVE_BRANCH only; this run is on $REF, so nothing is deployed."
             fi
-            for t in worker web; do
+            for t in worker web field; do
               if wants "$t"; then
                 echo "::notice::Environment preview takes the supabase target only (migrations and functions to the preview project): $t skipped."
               fi
@@ -106,14 +108,16 @@ jobs:
             if wants supabase; then supabase=true; fi
             if wants worker; then worker=true; fi
             if wants web; then web=true; fi
+            if wants field; then field=true; fi
           else
-            echo "::notice::Deploy guard (D40): $ENVIRONMENT deploys (db push, functions deploy, the Fly worker, the panel with --prod) run only from the branch $LIVE_BRANCH; this run is on $REF, so they are skipped. Use target inventory for a read-only look at staging, or environment preview for the preview project."
+            echo "::notice::Deploy guard (D40): $ENVIRONMENT deploys (db push, functions deploy, the Fly worker, the panel and the field app with --prod) run only from the branch $LIVE_BRANCH; this run is on $REF, so they are skipped. Use target inventory for a read-only look at staging, or environment preview for the preview project."
           fi
 
           {
             echo "supabase=$supabase"
             echo "worker=$worker"
             echo "web=$web"
+            echo "field=$field"
             echo "preview=$preview"
             echo "inventory=$inventory"
           } >> "$GITHUB_OUTPUT"
@@ -121,14 +125,14 @@ jobs:
             echo "### Deploy plan"
             echo
             if [ "$EVENT" = pull_request ]; then
-              echo "Pull request #$PR_NUMBER: panel preview only."
+              echo "Pull request #$PR_NUMBER: panel and field app previews only."
             else
               echo "Event \`$EVENT\` on \`$REF_NAME\` (\`$REF\`), environment \`$ENVIRONMENT\`, target \`$TARGET\`. Live branch: \`$LIVE_BRANCH\`."
             fi
             echo
             echo "| Job | Runs |"
             echo "| --- | --- |"
-            for k in supabase worker web preview inventory; do echo "| $k | ${!k} |"; done
+            for k in supabase worker web field preview inventory; do echo "| $k | ${!k} |"; done
           } >> "$GITHUB_STEP_SUMMARY"
 
   supabase:
@@ -238,8 +242,9 @@ jobs:
   preview:
     name: Preview · Supabase build settings
     needs: plan
-    # D41: the PR panel preview takes its Supabase project from the `preview` Environment (non-secret
-    # variables only). Without them it builds in demo mode; it never falls back to staging.
+    # D41: the PR panel and field previews take their Supabase project from the `preview` Environment
+    # (non-secret variables only). Without them the panel builds in demo mode and the field app without
+    # its /api rule; neither ever falls back to staging.
     if: needs.plan.outputs.preview == 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -269,7 +274,7 @@ jobs:
             echo "anon_key=$ANON_KEY" >> "$GITHUB_OUTPUT"
             echo "Panel preview Supabase project: $url"
           else
-            echo "::notice::The preview Environment has no Supabase project yet (variables SUPABASE_PROJECT_REF or VITE_SUPABASE_URL, and VITE_SUPABASE_ANON_KEY); the panel preview builds in demo mode."
+            echo "::notice::The preview Environment has no Supabase project yet (variables SUPABASE_PROJECT_REF or VITE_SUPABASE_URL, and VITE_SUPABASE_ANON_KEY); the panel preview builds in demo mode and the field preview without /api."
           fi
 
   web:
@@ -289,9 +294,10 @@ jobs:
     # the `preview` job, and every other staging variable below is blanked for them (the WhatsApp number
     # and the Sentry DSN too, so a preview neither invites live WhatsApp traffic nor reports to staging).
     environment: ${{ inputs.environment || 'staging' }}
+    # NETLIFY_AUTH_TOKEN is not job-wide: only the steps that call Netlify get it, so `pnpm install`
+    # and the build (third-party code) never see it.
     env:
       EVENT: ${{ github.event_name }}
-      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
       NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
       # Deploys (--prod): this Environment's project. Empty on pull requests.
       SUPABASE_PROJECT_REF: ${{ github.event_name != 'pull_request' && vars.SUPABASE_PROJECT_REF || '' }}
@@ -310,11 +316,24 @@ jobs:
     steps:
       - name: Check configuration
         id: cfg
+        env:
+          # Whether the token exists, not the token.
+          HAS_NETLIFY_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
         run: |
           if [ "$EVENT" = pull_request ]; then
             url="$PREVIEW_SUPABASE_URL" key="$PREVIEW_ANON_KEY"
+            # Compared as the browser will read it. The host must be plain ASCII (letters, digits, dots,
+            # hyphens) with an optional port, so no %-escape, credentials or Unicode can spell staging's
+            # host another way; refs and hosts are compared without case, trailing dot or port.
+            url_ok() { local LC_ALL=C; [[ "$1" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\<\>[:space:]]*)?$ ]]; }
+            host_of() { local h="${1#*://}"; h="${h%%/*}"; h="${h%%:*}"; h="${h%.}"; printf '%s' "${h,,}"; }
+            if [ -n "$url" ] && ! url_ok "$url"; then
+              echo "::warning::The preview Supabase URL is not a plain https URL; the panel preview builds in demo mode instead."
+              url="" key=""
+            fi
+            live_host="$(host_of "$LIVE_PROJECT_URL")"
             # Staging's ref is a workflow constant, so this holds even before staging's own variables exist.
-            if [ -n "$url" ] && { [[ "$url" == *"$STAGING_PROJECT_REF"* ]] || { [ -n "$LIVE_PROJECT_REF" ] && [[ "$url" == *"$LIVE_PROJECT_REF"* ]]; } || [ "$url" = "$LIVE_PROJECT_URL" ]; }; then
+            if [ -n "$url" ] && { [[ "${url,,}" == *"${STAGING_PROJECT_REF,,}"* ]] || { [ -n "$LIVE_PROJECT_REF" ] && [[ "${url,,}" == *"${LIVE_PROJECT_REF,,}"* ]]; } || { [ -n "$live_host" ] && [ "$(host_of "$url")" = "$live_host" ]; }; }; then
               echo "::warning::The preview Environment points at the staging Supabase project; the panel preview builds in demo mode instead. Give preview its own project (docs/RUNBOOK.md §2)."
               url="" key=""
             fi
@@ -326,7 +345,7 @@ jobs:
               { echo "VITE_DEMO=true"; echo "VITE_SUPABASE_URL="; echo "VITE_SUPABASE_ANON_KEY="; } >> "$GITHUB_ENV"
               echo "mode=demo (no Supabase)" >> "$GITHUB_OUTPUT"
             fi
-            if [ -n "$NETLIFY_AUTH_TOKEN" ]; then
+            if [ "$HAS_NETLIFY_TOKEN" = true ]; then
               echo "ready=true" >> "$GITHUB_OUTPUT"
             else
               echo "::notice::Web preview skipped: set NETLIFY_AUTH_TOKEN (secret) in the staging Environment."
@@ -347,7 +366,7 @@ jobs:
           fi
           { echo "VITE_SUPABASE_URL=$VITE_SUPABASE_URL"; echo "VITE_SUPABASE_ANON_KEY=$DEPLOY_ANON_KEY"; } >> "$GITHUB_ENV"
           echo "mode=$ENVIRONMENT Supabase project" >> "$GITHUB_OUTPUT"
-          if [ -n "$NETLIFY_AUTH_TOKEN" ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$DEPLOY_ANON_KEY" ]; then
+          if [ "$HAS_NETLIFY_TOKEN" = true ] && [ -n "$VITE_SUPABASE_URL" ] && [ -n "$DEPLOY_ANON_KEY" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
             echo "::notice::Web deploy skipped for $ENVIRONMENT: set NETLIFY_AUTH_TOKEN (secret) and VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (variables)."
@@ -373,6 +392,8 @@ jobs:
         # The site id comes from NETLIFY_SITE_ID or .github/netlify-sites.json (an id survives renaming
         # the site in Netlify). With neither, a site is found or created by name, so a token is all
         # Netlify needs for the first deploy. Pull requests look up the panel's `staging` key.
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
         run: |
           api=https://api.netlify.com/api/v1
           auth="Authorization: Bearer $NETLIFY_AUTH_TOKEN"
@@ -398,6 +419,7 @@ jobs:
       - name: Deploy
         if: steps.cfg.outputs.ready == 'true'
         env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           SITE_ID: ${{ steps.site.outputs.id }}
           SITE_URL: ${{ github.event_name != 'pull_request' && vars.VITE_APP_URL || steps.site.outputs.url }}
           PR_NUMBER: ${{ github.event.number }}
@@ -417,6 +439,236 @@ jobs:
             echo "$url" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "### Web panel (${ENVIRONMENT}, $MODE)" >> "$GITHUB_STEP_SUMMARY"
+            echo "$SITE_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  field:
+    name: Field app · Netlify
+    needs: [plan, supabase, preview]
+    # D42: the field web recorder on its own Netlify site (its routes, /settings among them, cannot share
+    # the panel's origin). Guard (D40): --prod only from the live branch, for staging or production.
+    # Pull requests deploy the pr-<n> alias of the field site, whose /api reaches the preview project
+    # (D41), never staging.
+    if: >-
+      always() && needs.plan.outputs.field == 'true' &&
+      (needs.supabase.result == 'success' || needs.supabase.result == 'skipped') &&
+      (needs.preview.result == 'success' || needs.preview.result == 'skipped') &&
+      (github.event_name == 'pull_request' ||
+       (github.ref == 'refs/heads/claude/focused-newton-5v0u2q' && inputs.environment != 'preview'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # As for the panel, pull requests take only the Netlify token from `staging`. The site is the field
+    # app's own (key "field-<environment>" or name sitelog-field-<environment>-<owner>), never the panel's.
+    environment: ${{ inputs.environment || 'staging' }}
+    # NETLIFY_AUTH_TOKEN is not job-wide: only the steps that call Netlify get it, so `pnpm install`
+    # and the build (vite-plugin-pwa, Workbox and their dependencies) never see it.
+    env:
+      EVENT: ${{ github.event_name }}
+      # Deploys (--prod): this Environment's project, for the /api rule. Empty on pull requests.
+      SUPABASE_PROJECT_REF: ${{ github.event_name != 'pull_request' && vars.SUPABASE_PROJECT_REF || '' }}
+      SUPABASE_URL_VAR: ${{ github.event_name != 'pull_request' && vars.VITE_SUPABASE_URL || '' }}
+      # Pull requests: the preview project (empty → no /api rule).
+      PREVIEW_SUPABASE_URL: ${{ needs.preview.outputs.supabase_url }}
+      # Only compared: a preview never points at this project, and the field site is never the panel's.
+      LIVE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      LIVE_PROJECT_URL: ${{ vars.VITE_SUPABASE_URL }}
+      PANEL_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+    steps:
+      - name: Check configuration
+        id: cfg
+        # Decides the one value the build gets: the Supabase project URL for the /api rule (D43).
+        env:
+          # Whether the token exists, not the token.
+          HAS_NETLIFY_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
+        run: |
+          # The build reads the URL with a URL parser, which lowercases the host and decodes escapes, so
+          # the checks below take the host as plain ASCII only (letters, digits, dots, hyphens) with an
+          # optional port, and compare refs and hosts without case, trailing dot or port. The Build
+          # step checks the host the generated rule really forwards to once more.
+          url_ok() { local LC_ALL=C; [[ "$1" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[^\<\>[:space:]]*)?$ ]]; }
+          host_of() { local h="${1#*://}"; h="${h%%/*}"; h="${h%%:*}"; h="${h%.}"; printf '%s' "${h,,}"; }
+          if [ "$EVENT" = pull_request ]; then
+            url="$PREVIEW_SUPABASE_URL"
+            if [ -n "$url" ] && ! url_ok "$url"; then
+              echo "::warning::The preview Supabase URL is not a plain https URL; the field preview builds without /api."
+              url=""
+            fi
+            live_host="$(host_of "$LIVE_PROJECT_URL")"
+            # Staging's ref is a workflow constant, so this holds even before staging's own variables exist.
+            if [ -n "$url" ] && { [[ "${url,,}" == *"${STAGING_PROJECT_REF,,}"* ]] || { [ -n "$LIVE_PROJECT_REF" ] && [[ "${url,,}" == *"${LIVE_PROJECT_REF,,}"* ]]; } || { [ -n "$live_host" ] && [ "$(host_of "$url")" = "$live_host" ]; }; }; then
+              echo "::warning::The preview Environment points at the staging Supabase project; the field preview builds without /api instead. Give preview its own project (docs/RUNBOOK.md §2)."
+              url=""
+            fi
+            echo "supabase_url=$url" >> "$GITHUB_OUTPUT"
+            if [ -n "$url" ]; then
+              echo "mode=/api to the preview Supabase project" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=no /api (the preview Environment has no Supabase project)" >> "$GITHUB_OUTPUT"
+            fi
+            if [ "$HAS_NETLIFY_TOKEN" = true ]; then
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice::Field preview skipped: set NETLIFY_AUTH_TOKEN (secret) in the staging Environment."
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          # The project URL follows from the project ref; a missing or placeholder value is derived.
+          url="$SUPABASE_URL_VAR"
+          if ! url_ok "$url"; then
+            url=""
+            if [ -n "$SUPABASE_PROJECT_REF" ]; then
+              url="https://${SUPABASE_PROJECT_REF}.supabase.co"
+              echo "::notice::VITE_SUPABASE_URL unset or not a plain https URL; the field app's /api goes to $url"
+            fi
+          fi
+          if [ -n "$url" ] && ! url_ok "$url"; then
+            echo "::error::SUPABASE_PROJECT_REF does not make a valid project URL."
+            exit 1
+          fi
+          # A missing Environment value falls back to a repository or organization one (D40/D41).
+          if [ "$ENVIRONMENT" != staging ] && [ -n "$url" ] && [[ "${url,,}" == *"${STAGING_PROJECT_REF,,}"* ]]; then
+            echo "::error::$ENVIRONMENT resolves to the staging Supabase project ($STAGING_PROJECT_REF); refusing to deploy its field app against it. Give $ENVIRONMENT its own SUPABASE_PROJECT_REF (docs/RUNBOOK.md §2)."
+            exit 1
+          fi
+          echo "supabase_url=$url" >> "$GITHUB_OUTPUT"
+          echo "mode=/api to the $ENVIRONMENT Supabase project" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_NETLIFY_TOKEN" = true ] && [ -n "$url" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Field deploy skipped for $ENVIRONMENT: set NETLIFY_AUTH_TOKEN (secret) and SUPABASE_PROJECT_REF or VITE_SUPABASE_URL (variables)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: pnpm/action-setup@v4
+        if: steps.cfg.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.cfg.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.cfg.outputs.ready == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        if: steps.cfg.outputs.ready == 'true'
+        # The build writes dist/_redirects (D43, apps/field/config/redirects.ts): /api/* to
+        # {url}/functions/v1/field-api first, the app fallback second, and no /api rule without a URL.
+        # Only the URL checked above reaches the build: no key, no other Supabase or VITE_* value.
+        # Then the staging guard once more, on the host the /api rule really forwards to.
+        env:
+          SUPABASE_URL: ${{ steps.cfg.outputs.supabase_url }}
+          VITE_SUPABASE_URL: ${{ steps.cfg.outputs.supabase_url }}
+        run: |
+          pnpm --filter @sitelog/field build
+          file=apps/field/dist/_redirects
+          rules="$(grep -v -e '^#' -e '^[[:space:]]*$' "$file" || true)"
+          if [ -n "$SUPABASE_URL" ]; then
+            if [[ "$(head -n 1 <<<"$rules")" != '/api/*  '* ]]; then
+              echo "::error::$file does not start with the /api rule although a Supabase URL was given (the build log says why)."
+              exit 1
+            fi
+          elif grep -q '^/api' <<<"$rules"; then
+            echo "::error::$file forwards /api although no Supabase URL was given."
+            exit 1
+          fi
+          if [ "$(tail -n 1 <<<"$rules")" != '/*  /index.html  200' ]; then
+            echo "::error::$file does not end with the app fallback."
+            exit 1
+          fi
+          # Pull requests and Environments other than staging must not reach the staging project. The
+          # host is read the way the browser and Netlify read it (WHATWG URL: lowercased, escapes
+          # decoded), whatever spelling the Environment used.
+          hostname_of() {
+            node -e 'try { console.log(new URL(process.argv[1]).hostname.replace(/\.$/, "").toLowerCase()) } catch { console.log("") }' "$1"
+          }
+          target="$(grep -m 1 '^/api/' <<<"$rules" | awk '{ print $2 }' || true)"
+          if [ -n "$target" ] && { [ "$EVENT" = pull_request ] || [ "$ENVIRONMENT" != staging ]; }; then
+            host="$(hostname_of "$target")"
+            staging=""
+            if [ -z "$host" ] || [[ "$host" == *"${STAGING_PROJECT_REF,,}"* ]]; then staging=yes; fi
+            if [ "$EVENT" = pull_request ]; then
+              live_host="$(hostname_of "$LIVE_PROJECT_URL")"
+              if [ -n "$LIVE_PROJECT_REF" ] && [[ "$host" == *"${LIVE_PROJECT_REF,,}"* ]]; then staging=yes; fi
+              if [ -n "$live_host" ] && [ "$host" = "$live_host" ]; then staging=yes; fi
+            fi
+            if [ -n "$staging" ]; then
+              run="a $ENVIRONMENT deploy"
+              if [ "$EVENT" = pull_request ]; then run="a pull request"; fi
+              echo "::error::$file forwards /api to ${host:-a host that cannot be read}; $run must never reach the staging Supabase project. Refusing to deploy it."
+              exit 1
+            fi
+          fi
+          cat "$file"
+      - name: Netlify site
+        id: site
+        if: steps.cfg.outputs.ready == 'true'
+        # The field app's own site (D42): its key "field-<environment>" in .github/netlify-sites.json (an
+        # id survives renaming the site), else found or created by its own name
+        # sitelog-field-<environment>-<owner>, so the token is all Netlify needs. Never NETLIFY_SITE_ID, the
+        # panel's key or the panel's name: a site that resolves to the panel's stops the job. Pull requests
+        # look up "field-staging".
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          api=https://api.netlify.com/api/v1
+          auth="Authorization: Bearer $NETLIFY_AUTH_TOKEN"
+          key="field-${ENVIRONMENT}"
+          owner="$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')"
+          id="" panel_id=""
+          if [ -f .github/netlify-sites.json ]; then
+            id=$(jq -r --arg k "$key" '.[$k] // empty' .github/netlify-sites.json)
+            panel_id=$(jq -r --arg e "$ENVIRONMENT" '.[$e] // empty' .github/netlify-sites.json)
+          fi
+          if [ -n "$id" ]; then
+            site=$(curl -sS --fail-with-body -H "$auth" "$api/sites/$id")
+          else
+            name="sitelog-field-${ENVIRONMENT}-${owner}"
+            site=$(curl -sS --fail-with-body -H "$auth" "$api/sites?name=$name&filter=all" \
+              | jq -c --arg n "$name" '[.[] | select(.name == $n)][0] // empty')
+            if [ -z "$site" ]; then
+              site=$(jq -n --arg n "$name" '{name: $n}' \
+                | curl -sS --fail-with-body -H "$auth" -H 'Content-Type: application/json' -d @- "$api/sites")
+              echo "Created Netlify site $name"
+            fi
+            echo "::notice::Netlify field site $(jq -r .name <<<"$site") has id $(jq -r .id <<<"$site"); add it to .github/netlify-sites.json under \"$key\" so a rename keeps deploys on it."
+          fi
+          site_id=$(jq -r '.id // empty' <<<"$site")
+          site_name=$(jq -r '.name // empty' <<<"$site")
+          if [ -z "$site_id" ]; then
+            echo "::error::Netlify returned no site id for the field app."
+            exit 1
+          fi
+          if { [ -n "$panel_id" ] && [ "$site_id" = "$panel_id" ]; } || { [ -n "$PANEL_SITE_ID" ] && [ "$site_id" = "$PANEL_SITE_ID" ]; } || [ "$site_name" = "sitelog-${ENVIRONMENT}-${owner}" ]; then
+            echo "::error::The field app's site ($site_name, $site_id) is the panel's; refusing to deploy over the panel. Give \"$key\" its own site (docs/RUNBOOK.md §2)."
+            exit 1
+          fi
+          echo "id=$site_id" >> "$GITHUB_OUTPUT"
+          echo "url=$(jq -r '.ssl_url // .url' <<<"$site")" >> "$GITHUB_OUTPUT"
+      - name: Deploy
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          SITE_ID: ${{ steps.site.outputs.id }}
+          SITE_URL: ${{ steps.site.outputs.url }}
+          PR_NUMBER: ${{ github.event.number }}
+          MODE: ${{ steps.cfg.outputs.mode }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            flags=(--alias "pr-$PR_NUMBER")
+          else
+            flags=(--prod)
+          fi
+          npx --yes netlify-cli@27.10.2 deploy --filter @sitelog/field --dir "$GITHUB_WORKSPACE/apps/field/dist" --site "$SITE_ID" \
+            --auth "$NETLIFY_AUTH_TOKEN" --message "${GITHUB_SHA::7} ${ENVIRONMENT} field" "${flags[@]}" --json > deploy.json
+          url=$(node -e "const d=require('./deploy.json');console.log(d.deploy_url||d.url||'')")
+          echo "Deployed: $url"
+          if [ "$EVENT" = pull_request ]; then
+            echo "### Field app preview (pr-$PR_NUMBER, $MODE)" >> "$GITHUB_STEP_SUMMARY"
+            echo "$url/today" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Field app (${ENVIRONMENT}, $MODE)" >> "$GITHUB_STEP_SUMMARY"
             echo "$SITE_URL" >> "$GITHUB_STEP_SUMMARY"
           fi
 

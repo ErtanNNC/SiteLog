@@ -1383,6 +1383,8 @@ Spanish (`es`) versions mirror EN.
 
 PWA: manifest name "SiteLog", icon = logo mark, `display: standalone`, theme `#16181B`. No dependence on web push (iOS only allows it for installed PWAs); SMS carries all prompts.
 
+UI language: the reporter's locale (`reporters.locale`) once the link is resolved; before that (link check, expired link), the first of the phone's preferred languages that is EN, ES or TR, else EN. `<html lang>` follows it.
+
 ### 9.4 Voice assistant
 
 **Persona:** "the SiteLog assistant" — calm, brief, practical; never claims to be a person; first names only.

@@ -24,5 +24,10 @@ export const uiEs: UiResources = {
       expired: 'Enlace vencido',
     },
     placeholderBody: 'Esta pantalla llega pronto.',
+    notFound: {
+      title: 'Página no encontrada',
+      body: 'Esa página no existe o el enlace está mal escrito.',
+      action: 'Ir a Hoy',
+    },
   },
 };

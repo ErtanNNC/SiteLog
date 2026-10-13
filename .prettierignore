@@ -7,6 +7,7 @@ pnpm-lock.yaml
 docs/SITELOG_SPEC.md
 supabase/.temp
 apps/web/public/brand
+apps/field/public/brand
 **/fonts/*.ttf
 # Spec v1.2 kit files, kept byte-identical to the delivered kit
 docs/START_HERE.md
