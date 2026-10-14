@@ -210,6 +210,28 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(results.map((r) => r.kind)).toContain('term');
   });
 
+  it('shows each role the notifications §13 addresses to it, as RLS does on Supabase', async () => {
+    const titles = async (as: 'admin' | 'pm' | 'ops' | 'accounts') =>
+      (await source(as).source.getNotifications()).map((n) => n.kind).sort();
+    expect(await titles('admin')).toEqual([
+      'glossary_review',
+      'invoice_gap',
+      'missing_report',
+      'needs_review',
+      'unknown_sender',
+    ]);
+    expect(await titles('pm')).toEqual(['glossary_review', 'needs_review', 'pack_ready']);
+    expect(await titles('ops')).toEqual([
+      'glossary_review',
+      'invoice_gap',
+      'missing_report',
+      'needs_review',
+      'unknown_sender',
+    ]);
+    expect(await titles('accounts')).toEqual(['invoice_gap']);
+    expect((await source('accounts').source.getNavBadges()).unreadNotifications).toBe(1);
+  });
+
   it('mutations persist in memory: sign off, undo, no work, resolve company, simulate report', async () => {
     const { source: s, store } = source('pm');
     const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;

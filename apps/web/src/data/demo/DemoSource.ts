@@ -9,6 +9,7 @@ import {
   type OfficePhotoMime,
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
+import { seesNotification } from '@sitelog/shared/notifications.ts';
 import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { DEMO_ORG_LOCALE, DEMO_SITELOG_NUMBER } from '@sitelog/shared/demo/kestrel.ts';
 import { copy } from '@/copy/en';
@@ -174,11 +175,19 @@ export class DemoSource implements DataSource {
   getBilling() {
     return this.run(() => assembleBilling(this.store.rows(), this.ctx()));
   }
+  /** The rows with the notifications RLS shows this user on Supabase (§13 audiences). */
+  private rowsSeenByUser() {
+    const rows = this.store.rows();
+    return {
+      ...rows,
+      notifications: rows.notifications.filter((n) => seesNotification(n, this.user)),
+    };
+  }
   getNotifications() {
-    return this.run(() => assembleNotifications(this.store.rows(), this.ctx()));
+    return this.run(() => assembleNotifications(this.rowsSeenByUser(), this.ctx()));
   }
   getNavBadges() {
-    return this.run(() => assembleNavBadges(this.store.rows(), this.ctx()));
+    return this.run(() => assembleNavBadges(this.rowsSeenByUser(), this.ctx()));
   }
   getSetupState() {
     return this.run(() => assembleSetupState(this.store.rows()));

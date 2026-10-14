@@ -4,6 +4,7 @@ import {
   audioStoragePath,
   evidencePackStoragePath,
   formatReportNo,
+  isOwnEvidencePackPath,
   logoStoragePath,
   pdfFileName,
   pdfStoragePath,
@@ -40,6 +41,23 @@ describe('report numbering (§F5, §12)', () => {
       'org/site/eot_2026-10-01_2026-10-09.pdf',
     );
     expect(logoStoragePath('org', 'svg')).toBe('org/logo.svg');
+  });
+
+  it("signs an evidence pack path only under the pack's own org and site", () => {
+    const pack = { org_id: 'orgA', site_id: 'siteA' };
+    const own = evidencePackStoragePath('orgA', 'siteA', '2026-10-01', '2026-10-09');
+    expect(isOwnEvidencePackPath({ ...pack, pdf_path: own })).toBe(true);
+    for (const pdf_path of [
+      null,
+      '',
+      'orgB/siteB/eot_2026-10-01_2026-10-09.pdf', // another org's pack
+      'orgA/siteB/eot_2026-10-01_2026-10-09.pdf', // another site of the org
+      'orgA/siteAB/eot.pdf', // a prefix of the site id is not the site
+      'orgA/siteA/../../orgB/siteB/eot.pdf',
+      'orgA/eot.pdf',
+    ])
+      expect(isOwnEvidencePackPath({ ...pack, pdf_path }), String(pdf_path)).toBe(false);
+    expect(isOwnEvidencePackPath({ org_id: 'orgA', site_id: null, pdf_path: own })).toBe(false);
   });
 
   it('matches every report number in the §18 demo data', () => {

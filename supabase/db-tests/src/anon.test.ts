@@ -42,50 +42,39 @@ interface AnonGap {
   closes: string;
 }
 
-const STEP_9 = 'W1-05 step 9';
-const HELPER: AnonGap = {
-  reason:
-    'org lookup helper: turns an id into its org or a membership answer (GAP W1-05 "anon … cannot run the lookup helpers"; docs/AUDIT_BACKLOG.md, site_org)',
-  closes: STEP_9,
-};
-const RPC = (reason: string): AnonGap => ({
-  reason: `RPC for signed-in office users: ${reason}; anon has no use for it`,
-  closes: STEP_9,
-});
-
 /**
  * Every function in `public` anon can execute today (`regprocedure`, so overloads are distinct),
- * except trigger functions and extension members.
+ * except trigger functions and extension members. Empty since W1-05 step 9
+ * (20261014000001_queue_rls_fixes.sql revoked the lookup helpers, is_service(), job_priority()
+ * and the office RPCs): a new entry needs a reason and the step that closes it.
  */
-const ANON_GAPS: Record<string, AnonGap> = {
-  'conversation_org(uuid)': HELPER,
-  'has_role(uuid,member_role[])': HELPER,
-  'is_member(uuid)': HELPER,
-  'message_org(uuid)': HELPER,
-  'my_org_ids()': HELPER,
-  'report_org(uuid)': HELPER,
-  'reporter_org(uuid)': HELPER,
-  'site_org(uuid)': HELPER,
-  'is_service()': {
-    reason:
-      'helper of the owner-privileged views (whoever queries a view needs execute on its functions); anon reads no view row, so revoke it from anon only, never from authenticated',
-    closes: STEP_9,
-  },
-  'job_priority(text)': {
-    reason: 'queue helper called inside claim_jobs (security definer); no API caller needs it',
-    closes: STEP_9,
-  },
-  'create_org(text,text,text,text)': RPC('refuses a caller without auth.uid() ("not signed in")'),
-  'invoice_gaps(uuid,date,date)': RPC('security invoker, so RLS returns no row to a non-member'),
-  'mark_no_work(uuid)': RPC('role-checked (42501)'),
-  'mark_notifications_read(uuid[])': RPC("updates only rows of the caller's orgs"),
-  'resolve_unknown_company(uuid,text,text,uuid)': RPC('role-checked (42501)'),
-  'review_glossary_term(uuid,text,text,uuid)': RPC('role-checked (42501)'),
-  'sign_off_report(uuid)': RPC('role-checked (42501), but "report not found" comes first'),
-  'undo_sign_off(uuid)': RPC(
-    'answers "report not found" or "report is not signed off" before its role check, so anon learns whether a report id exists and its status',
-  ),
-};
+const ANON_GAPS: Record<string, AnonGap> = {};
+
+/**
+ * What 20261014000001 revoked from anon, which signed-in office users still run: the lookup
+ * helpers inside RLS and storage policies, is_service() inside the owner-privileged views, and
+ * the office RPCs of the panel (create_org in the setup wizard, after sign-in).
+ */
+const AUTHENTICATED_KEEPS = [
+  'conversation_org(uuid)',
+  'has_role(uuid,member_role[])',
+  'is_member(uuid)',
+  'message_org(uuid)',
+  'my_org_ids()',
+  'report_org(uuid)',
+  'reporter_org(uuid)',
+  'site_org(uuid)',
+  'notification_audience(text)',
+  'is_service()',
+  'create_org(text,text,text,text)',
+  'invoice_gaps(uuid,date,date)',
+  'mark_no_work(uuid)',
+  'mark_notifications_read(uuid[])',
+  'resolve_unknown_company(uuid,text,text,uuid)',
+  'review_glossary_term(uuid,text,text,uuid)',
+  'sign_off_report(uuid)',
+  'undo_sign_off(uuid)',
+] as const;
 
 let db: PGlite;
 
@@ -168,6 +157,35 @@ describe('anon (no session)', () => {
     } else {
       expect(denied(res), res.ok ? 'anon ran it' : res.message).toBe(true);
     }
+  });
+
+  it('cannot call the office RPCs it could call before step 9', async () => {
+    const calls = [
+      `select create_org('Anon Co') as v`,
+      `select sign_off_report('${A.report}') as v`,
+      `select undo_sign_off('${A.report}') as v`,
+      `select mark_no_work('${A.siteDay2}') as v`,
+      `select mark_notifications_read(array['${A.notification}']::uuid[]) as v`,
+      `select * from invoice_gaps('${A.org}', '2026-10-01', '2026-10-31')`,
+    ];
+    const ran: string[] = [];
+    for (const sql of calls) {
+      const res = await anon(sql);
+      if (!denied(res)) ran.push(`${sql}: ${res.ok ? 'ran' : res.message}`);
+    }
+    expect(ran).toEqual([]);
+  });
+
+  it('leaves signed-in users and the service the functions it revoked from anon', async () => {
+    const res = await db.query<{ fn: string; authenticated: boolean; service: boolean }>(
+      `select f as fn, has_function_privilege('authenticated', f, 'execute') as authenticated,
+              has_function_privilege('service_role', f, 'execute') as service
+       from unnest($1::text[]) f order by 1`,
+      [[...AUTHENTICATED_KEEPS]],
+    );
+    const missing = res.rows.filter((r) => !r.authenticated || !r.service).map((r) => r.fn);
+    expect(missing).toEqual([]);
+    expect(res.rows).toHaveLength(AUTHENTICATED_KEEPS.length);
   });
 
   it('gives every gap a reason and the step that closes it', () => {

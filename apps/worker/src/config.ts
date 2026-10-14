@@ -20,6 +20,16 @@ const intFrom = (def: number) =>
     .transform((v) => (typeof v === 'number' ? v : Number.parseInt(v, 10)))
     .pipe(z.number().int().min(0));
 
+/**
+ * claim_jobs() takes a running job back after this long (GAP D18; the interval in
+ * supabase/migrations/20261014000001_queue_rls_fixes.sql). JOB_TIMEOUT_MS ends a minute before
+ * it, so a live worker fails (and re-queues) its own job before anyone reclaims it, and a reclaim
+ * only picks up the job of a worker that died mid-job. It does not stop a handler that timed out:
+ * withTimeout() (runner.ts) only races it, so the handler may keep running while fail_job's
+ * re-queued copy runs on another slot (docs/AUDIT_BACKLOG.md; W1-10 adds an AbortSignal to Ctx).
+ */
+export const STALE_LOCK_MS = 10 * 60_000;
+
 export const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -52,7 +62,9 @@ export const ConfigSchema = z.object({
   WORKER_CONCURRENCY: intFrom(4).pipe(z.number().min(1).max(64)),
   WORKER_PORT: intFrom(8080),
   WORKER_ID: z.string().default(''),
-  JOB_TIMEOUT_MS: intFrom(5 * 60_000),
+  JOB_TIMEOUT_MS: intFrom(5 * 60_000).pipe(
+    z.number().max(STALE_LOCK_MS - 60_000, 'must end a minute before claim_jobs reclaims (10 min)'),
+  ),
   POLL_INTERVAL_MS: intFrom(1000),
   SWEEP_INTERVAL_MS: intFrom(60_000),
   AUDIO_RETENTION_DAYS: intFrom(730),

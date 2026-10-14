@@ -2,6 +2,7 @@ import {
   deriveTotals,
   firstName,
   formatDateShort,
+  isOwnEvidencePackPath,
   pdfFileName,
   readReportData,
   type StoredReportData,
@@ -141,6 +142,10 @@ export async function buildEmail(
       if (!payload.packId) throw new PermanentJobError('packId required');
       const pack = await ctx.db.getEvidencePack(payload.packId);
       if (!pack || !pack.pdf_path) throw new PermanentJobError(`pack ${payload.packId} not ready`);
+      // Only a path under the pack's own org and site (a row from before 20261014000001 may name
+      // another org's PDF).
+      if (!isOwnEvidencePackPath(pack))
+        throw new PermanentJobError(`pack ${pack.id}: pdf_path is outside its org and site`);
       const org = await ctx.db.getOrg(pack.org_id);
       const site = pack.site_id ? await ctx.db.getSite(pack.site_id) : null;
       const url = await ctx.storage.signedUrl('exports', pack.pdf_path, 7 * 24 * 3600);

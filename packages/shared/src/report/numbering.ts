@@ -48,6 +48,22 @@ export function evidencePackStoragePath(
   return `${orgId}/${siteId}/eot_${periodStart}_${periodEnd}.pdf`;
 }
 
+/**
+ * Whether a pack's stored `pdf_path` lies under its own org and site, where the worker stores it
+ * (`evidencePackStoragePath`). Readers sign only such a path (api-evidence-pack, the worker's
+ * send_email): until 20261014000001_queue_rls_fixes.sql a client could write a pack row with any
+ * path, for example another org's PDF.
+ */
+export function isOwnEvidencePackPath(pack: {
+  org_id: string;
+  site_id: string | null;
+  pdf_path: string | null;
+}): boolean {
+  const { org_id, site_id, pdf_path } = pack;
+  if (!pdf_path || !site_id) return false;
+  return pdf_path.startsWith(`${org_id}/${site_id}/`) && !pdf_path.split('/').includes('..');
+}
+
 /** Company logo in bucket `logos` (§F2, §F18): one object per org, PNG or SVG. */
 export function logoStoragePath(orgId: string, ext: 'png' | 'svg'): string {
   return `${orgId}/logo.${ext}`;

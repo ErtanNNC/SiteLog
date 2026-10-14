@@ -675,6 +675,16 @@ export type ReportArchiveRow = ReportRow & {
   summary: string | null;
 };
 
+/**
+ * The site names every member of an org reads (20261014000001_queue_rls_fixes.sql): Crew hours'
+ * site names and filter for the accounts role, which cannot read `sites`, and the org switcher's
+ * active-site count.
+ */
+export type SiteOptionRow = Pick<
+  SiteRow,
+  'id' | 'org_id' | 'name' | 'project_code' | 'timezone' | 'status'
+>;
+
 type Table<Row, OptionalInsert extends keyof Row> = {
   Row: Row;
   Insert: Insert<Row, OptionalInsert>;
@@ -1011,6 +1021,7 @@ export type Database = {
       current_manpower: { Row: CurrentManpowerRow; Relationships: [] };
       current_weather: { Row: CurrentWeatherRow; Relationships: [] };
       report_archive: { Row: ReportArchiveRow; Relationships: [] };
+      site_options: { Row: SiteOptionRow; Relationships: [] };
     };
     Functions: {
       is_member: { Args: { org: string }; Returns: boolean };
@@ -1074,6 +1085,8 @@ export type Database = {
       complete_job: { Args: { p_job_id: number }; Returns: undefined };
       fail_job: { Args: { p_job_id: number; p_error: string }; Returns: undefined };
       mark_notifications_read: { Args: { p_ids: string[] }; Returns: undefined };
+      // §13 roles that see an org-wide notification of a kind (20261014000001), used by RLS.
+      notification_audience: { Args: { p_kind: string }; Returns: MemberRole[] };
       set_org_logo: {
         Args: { p_org_id: string; p_logo_path: string | null };
         Returns: Json;

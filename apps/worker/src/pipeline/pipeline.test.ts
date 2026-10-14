@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   deadlineInstant,
+  evidencePackStoragePath,
   readReportData,
   upgradeV1toV2,
   type DailyReportDataV1,
@@ -13,7 +14,13 @@ import { buildEmail } from '../jobs/send_email';
 import { buildReportPdfInput } from '../pdf/render';
 import { postProcessExtraction, type ExtractionInput } from '../ai/extract';
 import { compareReport } from '../ai/eval';
-import { createHarness, scriptedClaude, SITE_OAKMONT, SITE_RIVERSIDE } from '../test/harness';
+import {
+  createHarness,
+  ORG_ID,
+  scriptedClaude,
+  SITE_OAKMONT,
+  SITE_RIVERSIDE,
+} from '../test/harness';
 import { composeExtractionInput } from './compose';
 import { currentData, draftCardFor, storeDraft } from './draft';
 import { fileReport } from './file';
@@ -655,5 +662,45 @@ describe('jobs: welcome, template, retention', () => {
     await h.runJob('retention_cleanup', {});
     expect(h.db.data.jobs.has(oldDone)).toBe(false);
     for (const id of [recentDone, oldDead, queued]) expect(h.db.data.jobs.has(id)).toBe(true);
+  });
+});
+
+describe('send_email: evidence pack ready', () => {
+  const pack = (pdf_path: string) => ({
+    id: 'pack-1',
+    org_id: ORG_ID,
+    site_id: SITE_OAKMONT,
+    period_start: '2026-10-01',
+    period_end: '2026-10-09',
+    status: 'ready' as const,
+    pdf_path,
+    sections: ['summary'],
+    error: null,
+    created_by: null,
+    created_at: '2026-10-09T20:00:00Z',
+    ready_at: '2026-10-09T20:05:00Z',
+  });
+
+  it('signs a pack stored under its own org and site', async () => {
+    const h = createHarness();
+    const path = evidencePackStoragePath(ORG_ID, SITE_OAKMONT, '2026-10-01', '2026-10-09');
+    h.db.data.packs.set('pack-1', pack(path));
+    const email = await buildEmail(h.ctx, {
+      kind: 'evidence_pack_ready',
+      packId: 'pack-1',
+      to: ['pm@kestrel.example'],
+    });
+    expect(email!.rendered.html).toContain(`memory://exports/${path}?signed=1`);
+  });
+
+  it("refuses to sign a path outside the pack's org and site (a row forged before 20261014000001)", async () => {
+    const h = createHarness();
+    h.db.data.packs.set(
+      'pack-1',
+      pack('bbbbbbbb-0000-4000-8000-000000000001/bbbbbbbb-0000-4000-8000-000000000003/eot.pdf'),
+    );
+    await expect(
+      buildEmail(h.ctx, { kind: 'evidence_pack_ready', packId: 'pack-1', to: ['pm@x.example'] }),
+    ).rejects.toThrow(/outside its org and site/);
   });
 });

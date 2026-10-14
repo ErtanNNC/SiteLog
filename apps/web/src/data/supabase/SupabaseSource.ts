@@ -23,6 +23,7 @@ import type {
   ReporterRow,
   SiteDayRow,
   SiteRecipientRow,
+  SiteOptionRow,
   SiteReporterRow,
   SiteRow,
   SubInvoiceRow,
@@ -109,6 +110,25 @@ const SIGNED_URL_TTL = 600; // 10 minutes (§15)
 const IN_CHUNK = 100;
 /** Rows per request when reading a whole filtered set, under PostgREST's max_rows (1000). */
 const ARCHIVE_ROWS_PER_REQUEST = 500;
+
+/**
+ * A site as the accounts role reads it (the `site_options` view: §2.2 gives accounts hours and
+ * invoices, so not the `sites` table): the rest of the row is what a site without it would have.
+ */
+function siteFromOption(o: SiteOptionRow): SiteRow {
+  return {
+    ...o,
+    address: null,
+    lat: null,
+    lng: null,
+    deadline: null,
+    working_hours: null,
+    active_since: null,
+    paused_at: null,
+    report_seq: 0,
+    created_at: '',
+  };
+}
 
 function chunks<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
@@ -245,28 +265,35 @@ export class SupabaseSource implements DataSource {
     return core.sites.map((s) => s.id);
   }
 
-  /** Rows most pages need; cheap for ≤ 50 sites. Some tables are hidden by RLS for `accounts`. */
+  /**
+   * Rows most pages need; cheap for ≤ 50 sites. Some tables are hidden by RLS for `accounts`,
+   * which reads the site names of Crew hours from `site_options` instead of `sites`.
+   */
   private async core(): Promise<Core> {
     const sb = this.sb;
-    const [org, settings, members, sites, companies] = await Promise.all([
+    const accounts = this.user.role === 'accounts';
+    const [org, settings, members, siteRows, companies] = await Promise.all([
       sb.from('orgs').select('*').eq('id', this.orgId).single(),
       sb.from('org_settings').select('*').eq('org_id', this.orgId).single(),
       sb.from('org_members').select('*').eq('org_id', this.orgId),
-      sb.from('sites').select('*').eq('org_id', this.orgId).order('name'),
+      accounts
+        ? sb
+            .from('site_options')
+            .select('*')
+            .eq('org_id', this.orgId)
+            .order('name')
+            .then((r) => unwrap(r).map(siteFromOption))
+        : sb.from('sites').select('*').eq('org_id', this.orgId).order('name').then(unwrap),
       sb.from('companies').select('*').eq('org_id', this.orgId).order('name'),
     ]);
-    const siteRows = unwrap(sites);
     const ids = siteRows.map((s) => s.id);
-    const [reporters, siteReporters, recipients] =
-      this.user.role === 'accounts'
-        ? [[], [], []]
-        : await Promise.all([
-            sb.from('reporters').select('*').eq('org_id', this.orgId).then(unwrap),
-            ids.length ? sb.from('site_reporters').select('*').in('site_id', ids).then(unwrap) : [],
-            ids.length
-              ? sb.from('site_recipients').select('*').in('site_id', ids).then(unwrap)
-              : [],
-          ]);
+    const [reporters, siteReporters, recipients] = accounts
+      ? [[], [], []]
+      : await Promise.all([
+          sb.from('reporters').select('*').eq('org_id', this.orgId).then(unwrap),
+          ids.length ? sb.from('site_reporters').select('*').in('site_id', ids).then(unwrap) : [],
+          ids.length ? sb.from('site_recipients').select('*').in('site_id', ids).then(unwrap) : [],
+        ]);
     return {
       org: unwrapOne<OrgRow>(org),
       settings: unwrapOne<OrgSettingsRow>(settings),
@@ -1860,7 +1887,8 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
     role: MemberRole;
     orgs: { id: string; name: string; timezone: string } | null;
   }>;
-  const sites = unwrap(await sb.from('sites').select('org_id, status'));
+  // site_options: an accounts user cannot read `sites`, and every member counts active sites.
+  const sites = unwrap(await sb.from('site_options').select('org_id, status'));
   return members
     .filter((m) => m.orgs)
     .map((m) => ({

@@ -46,7 +46,7 @@ The Dockerfile installs the Debian package and sets `FFMPEG_PATH`.
 | `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM`            | `resend`, '', `SiteLog <reports@sitelog.app>` | email (falls back to the `console` provider without a key)    |
 | `APP_URL`                                                   | `https://app.sitelog.app`                     | links in emails                                               |
 | `WORKER_CONCURRENCY`, `WORKER_PORT`, `WORKER_ID`            | 4, 8080, hostname-pid                         | runner + health server                                        |
-| `JOB_TIMEOUT_MS`, `POLL_INTERVAL_MS`, `SWEEP_INTERVAL_MS`   | 300000, 1000, 60000                           | per-job timeout, claim polling, timeout sweep                 |
+| `JOB_TIMEOUT_MS`, `POLL_INTERVAL_MS`, `SWEEP_INTERVAL_MS`   | 300000, 1000, 60000                           | per-job timeout (at most 9 min), claim polling, timeout sweep |
 | `AUDIO_RETENTION_DAYS`                                      | 730                                           | `retention_cleanup`                                           |
 | `SENTRY_DSN`, `LOG_LEVEL`, `NODE_ENV`                       | '', `info`, `development`                     | monitoring, JSON logs                                         |
 | `FFMPEG_PATH`                                               | ''                                            | ffmpeg binary override                                        |
@@ -77,7 +77,11 @@ environment; the job that needs a missing secret fails with a clear message (and
 ## Retries, timeouts, idempotency
 
 - Jobs are claimed with `claim_jobs(worker, limit)` (`FOR UPDATE SKIP LOCKED`; stuck `running` jobs
-  are reclaimed after 15 min) and finished with `complete_job` / `fail_job`. `fail_job` applies the
+  are reclaimed after 10 min, `STALE_LOCK_MS` in `src/config.ts`; `JOB_TIMEOUT_MS` stays a minute
+  below it, so the reclaim covers a worker that died mid-job) and finished with `complete_job` /
+  `fail_job`. A timeout does not stop the handler: `withTimeout` only races it, so a hung handler
+  can still be running when `fail_job` re-queues its job for another slot, until W1-10 passes an
+  `AbortSignal` through `Ctx` (`docs/AUDIT_BACKLOG.md`). `fail_job` applies the
   §10.1 backoff (30 s, 2 min, 10 min, 30 min, 2 h) and marks the job `dead` after 5 attempts. A dead
   job is reported to Sentry and the reporter gets `error_retry` once per report (flag
   `conversations.context.error_notified_for`).

@@ -13,6 +13,7 @@ import {
 // The @sitelog/db harness (supabase/db-tests) boots PGlite with the Supabase stubs, every
 // migration and the demo seed. Imported by path so the worker image does not need that package.
 import { bootDatabase } from '../../../supabase/db-tests/src/harness.ts';
+import { STALE_LOCK_MS } from './config';
 import type { Ctx } from './context';
 import { connectSql, createDb, type Db } from './db';
 import { silentLogger } from './log';
@@ -1201,14 +1202,26 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
     }
   });
 
-  it('reclaims jobs stuck in running for more than 15 minutes', async () => {
+  it('reclaims jobs stuck in running for more than 10 minutes (GAP D18)', async () => {
     await q(`delete from jobs`);
     const id = await db.enqueueJob('render_pdf', { reportId: 'r', version: 1 });
     await db.claimJobs('worker-a', 1);
     expect(await db.claimJobs('worker-b', 1)).toEqual([]);
-    await q(`update jobs set locked_at = now() - interval '16 minutes' where id = $1`, [id]);
+    // Twice JOB_TIMEOUT_MS: a live worker fails its own job first; this is a dead worker's job.
+    await q(`update jobs set locked_at = now() - interval '9 minutes' where id = $1`, [id]);
+    expect(await db.claimJobs('worker-b', 1)).toEqual([]);
+    await q(`update jobs set locked_at = now() - interval '11 minutes' where id = $1`, [id]);
     const [again] = await db.claimJobs('worker-b', 1);
     expect(again).toMatchObject({ id, attempts: 2, locked_by: 'worker-b' });
+  });
+
+  it("reclaims after the worker's STALE_LOCK_MS, the interval claim_jobs() uses", async () => {
+    const [row] = await q<{ def: string }>(
+      `select pg_get_functiondef('claim_jobs(text, int)'::regprocedure) as def`,
+    );
+    const intervals = [...row!.def.matchAll(/interval '(\d+) minutes'/g)].map((m) => Number(m[1]));
+    expect(intervals.length).toBeGreaterThan(0);
+    expect(new Set(intervals)).toEqual(new Set([STALE_LOCK_MS / 60_000]));
   });
 });
 

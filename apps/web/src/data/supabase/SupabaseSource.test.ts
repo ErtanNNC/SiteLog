@@ -37,6 +37,15 @@ function tablesFrom(rows: RowSet): Record<string, Row[]> {
     org_settings: copyOf([rows.settings]),
     org_members: copyOf(rows.members),
     sites: copyOf(rows.sites),
+    // site_options (20261014000001): the site columns every member reads, accounts included.
+    site_options: rows.sites.map(({ id, org_id, name, project_code, timezone, status }) => ({
+      id,
+      org_id,
+      name,
+      project_code,
+      timezone,
+      status,
+    })),
     companies: copyOf(rows.companies),
     reporters: copyOf(rows.reporters),
     site_reporters: copyOf(rows.siteReporters),
@@ -834,6 +843,29 @@ describe('SupabaseSource.getHours', () => {
     expect(pick(hours).length).toBeGreaterThan(0);
     expect(pick(hours)).toEqual(pick(admin));
     expect(pick(hours).every(([, , no, site]) => !!no && !!site)).toBe(true);
+  });
+
+  it('names the sites for an accounts user from site_options, as RLS hides the sites table', async () => {
+    const { db, live } = sources(new DemoStore(), 'accounts');
+    // What RLS returns to accounts (20261014000001): no site, report or source row.
+    db.tables.sites = [];
+    db.tables.reports = [];
+    db.tables.report_sources = [];
+    db.calls = [];
+    const hours = await live.getHours('2026-W41');
+    expect(db.calls.some((c) => c.table === 'sites')).toBe(false);
+    expect(db.calls.some((c) => c.table === 'site_options')).toBe(true);
+    const admin = await sources().live.getHours('2026-W41');
+    expect(hours.sites).toEqual(admin.sites);
+    expect(hours.rows.map((r) => [r.companyName, r.siteNames])).toEqual(
+      admin.rows.map((r) => [r.companyName, r.siteNames]),
+    );
+    expect(hours.sites.length).toBeGreaterThan(0);
+    for (const siteId of [null, ...admin.sites.map((o) => o.id)]) {
+      const mine = await live.getHours('2026-W41', siteId);
+      const theirs = await sources().live.getHours('2026-W41', siteId);
+      expect(mine.kpis, String(siteId)).toEqual(theirs.kpis);
+    }
   });
 });
 

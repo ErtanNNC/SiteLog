@@ -18,6 +18,8 @@ export const APP_URL = 'http://localhost:5173';
 export const SEED = {
   orgId: '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d',
   admin: { id: '3dee836a-fca5-4d0c-8572-5e8e0c3fb25a', email: 'lena@kestrelbuild.example' },
+  /** The seeded accounts (payroll) user: Crew hours and invoices only (§2.2). */
+  accounts: { email: 'accounts@kestrelbuild.example' },
   sites: {
     riverside: 'a72cfd9d-46d6-4d33-8bd6-eb11c2437b8d',
     elm: 'fa26ea08-3843-4e06-8ba5-0bc44aea9a38',
@@ -55,9 +57,14 @@ export async function pinSeedClock(page: Page) {
 /**
  * Signs in like a user opening an emailed magic link (§17: "Login (Supabase admin
  * generateLink)"): the admin API mints the link, the browser follows it through GoTrue's
- * /verify redirect to /auth/callback, and the panel lands on its home page.
+ * /verify redirect to /auth/callback, and the panel lands on the role's home page (`landing`:
+ * `/`, or `/hours` for an accounts user, §11.1).
  */
-export async function signInWithMagicLink(page: Page, email: string = SEED.admin.email) {
+export async function signInWithMagicLink(
+  page: Page,
+  email: string = SEED.admin.email,
+  landing = '/',
+) {
   const { data, error } = await admin().auth.admin.generateLink({
     type: 'magiclink',
     email,
@@ -65,7 +72,7 @@ export async function signInWithMagicLink(page: Page, email: string = SEED.admin
   });
   if (error) throw error;
   await page.goto(data.properties.action_link);
-  await page.waitForURL((url) => url.origin === APP_URL && url.pathname === '/', {
+  await page.waitForURL((url) => url.origin === APP_URL && url.pathname === landing, {
     timeout: 30_000,
   });
   // The tokens never stay in the address bar.
