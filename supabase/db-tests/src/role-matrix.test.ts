@@ -106,6 +106,17 @@ const key = (c: { table: string; op: CellOp; role: Role; scope: Scope }) =>
 const scopes = ['own', 'other'] as const;
 const orgs = ['A', 'B'] as const;
 
+/** Not org-scoped (TableCase.orgless): only tables can be; views, buckets and RPCs are org data. */
+const isOrgless = (table: string) => TABLES[table]?.orgless === true;
+
+/**
+ * The expectation of a cell: allowed for the matrix's roles in their own org, denied in the other
+ * org. An orgless table has no other org's row: its other-org probe repeats the own one, so it
+ * expects the same answer. Used by measure() and the KNOWN_DEFECTS check alike.
+ */
+const expectedFor = (table: string, scope: Scope, roles: readonly Role[], role: Role) =>
+  (scope === 'own' || isOrgless(table)) && roles.includes(role);
+
 /** Every cell: org × role × own/other for each statement, run as that caller and rolled back. */
 async function measure(): Promise<Cell[]> {
   const cells: Cell[] = [];
@@ -114,20 +125,19 @@ async function measure(): Promise<Cell[]> {
     op: CellOp,
     sqlFor: (target: OrgKey) => string,
     roles: readonly Role[],
-    orgless = false,
   ) => {
     for (const org of orgs)
       for (const role of ROLES)
         for (const scope of scopes) {
-          const sql = sqlFor(scope === 'own' || orgless ? org : other(org));
+          const sql = sqlFor(scope === 'own' || isOrgless(table) ? org : other(org));
           const actual = allowed(await probeAs(db, caller(org, role), sql), op);
-          const expected = scope === 'own' && roles.includes(role);
+          const expected = expectedFor(table, scope, roles, role);
           cells.push({ org, table, op, role, scope, expected, actual, sql });
         }
   };
   for (const [table, t] of Object.entries(TABLES))
     for (const op of OPS)
-      await run(table, op, (target) => statement(table, op, target), t.allow[op], t.orgless);
+      await run(table, op, (target) => statement(table, op, target), t.allow[op]);
   for (const [view, v] of Object.entries(VIEWS))
     await run(
       view,
@@ -233,7 +243,7 @@ describe('role matrix (§2.2)', () => {
         continue;
       }
       const roles = allowedRoles(d.table, d.op) ?? [];
-      if ((d.scope === 'own' && roles.includes(d.role)) === d.today)
+      if (expectedFor(d.table, d.scope, roles, d.role) === d.today)
         wrong.push(`KNOWN_DEFECTS entry agrees with the expectation: ${key(d)}`);
     }
     expect(wrong).toEqual([]);

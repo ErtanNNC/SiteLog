@@ -133,7 +133,12 @@ describe('Demir Yapı A.Ş. (§18.2)', () => {
       /^Merhaba Selin, ben SiteLog, Demir Yapı A\.Ş\. için Ataşehir Ofis Binası/,
     );
     for (const m of demir.messages) {
-      expect(m).toMatchObject({ copy_key: 'welcome', provider: 'console', org_id: DEMIR_ORG_ID });
+      expect(m).toMatchObject({
+        copy_key: 'welcome',
+        provider: 'console',
+        channel: 'sms',
+        org_id: DEMIR_ORG_ID,
+      });
       expect(m.body).not.toMatch(/STOP|HELP|arayın/); // one-way, no number
       const link = demir.fieldLinks.find((l) => l.code_hash === linkCodeHash(code(m.body!)))!;
       expect(link).toMatchObject({ kind: 'personal', reporter_id: m.reporter_id });

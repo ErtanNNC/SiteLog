@@ -809,6 +809,8 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
     contact_pref: s.reporter.contactPref,
     activated_at: t(s.activeSince, '09:40'),
     opted_out_at: null,
+    // null = the country pack's order (§4.5); a preference comes with week 2.
+    message_channel: null,
   }));
   // §18.1: backup for Riverside B and Pier 9, ES, Text link, invite sent (no consent yet).
   reporters.push({
@@ -827,6 +829,8 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
     contact_pref: 'link',
     activated_at: null,
     opted_out_at: null,
+    // null = the country pack's order (§4.5); a preference comes with week 2.
+    message_channel: null,
   });
   const reporterById = new Map(reporters.map((r) => [r.id, r]));
 

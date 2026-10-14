@@ -417,7 +417,12 @@ describe('Kestrel demo data (§18.1)', () => {
       ['Marco Ruiz', 'edit_applied', '20:10'],
     ]);
     for (const m of demo.messages) {
-      expect(m).toMatchObject({ org_id: demo.org.id, direction: 'out', provider: 'console' });
+      expect(m).toMatchObject({
+        org_id: demo.org.id,
+        direction: 'out',
+        provider: 'console',
+        channel: 'sms',
+      });
       expect(m.phone_e164).toBe(demo.reporters.find((r) => r.id === m.reporter_id)!.phone_e164);
     }
     const marcoDaily = demo.messages.find(

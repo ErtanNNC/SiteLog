@@ -251,6 +251,8 @@ describe('job queue for v1.2 (spec §10.1)', () => {
           // v1.2 (§10.1).
           'send_sms',
           'place_call',
+          // W1-06a: the channel-neutral Notifier job (W1-10).
+          'notify',
           'transcribe_upload',
           'post_call_reconcile',
           'fetch_weather',
@@ -274,6 +276,7 @@ describe('job queue for v1.2 (spec §10.1)', () => {
       retention_cleanup: 3,
       send_sms: 0,
       place_call: 0,
+      notify: 0,
       transcribe_upload: 2,
       post_call_reconcile: 2,
       fetch_weather: 3,

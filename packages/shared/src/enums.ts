@@ -10,8 +10,8 @@ import { z } from 'zod';
  *
  * Expand/contract (docs/GAP_ANALYSIS.md §7): step 11 (20261014000003_renames_billing.sql) renamed
  * `reporter_status` `verified` → `active`, `version_author` `reporter_reply` → `reporter` and the
- * type `sender_status` → `contact_status`; `msg_type`, `convo_state` and the WhatsApp-only
- * `msg_status` label `read` go in step 23.
+ * type `sender_status` → `contact_status`; `msg_type` and `convo_state` go in step 23. W1-06a
+ * (20261014000004_country_packs.sql) added `message_channel`.
  */
 
 export const MEMBER_ROLES = ['admin', 'pm', 'ops', 'accounts'] as const;
@@ -39,10 +39,20 @@ export type CompanyStatus = (typeof COMPANY_STATUSES)[number];
 
 /**
  * How a report or answer reached SiteLog (§6.2 `field_channel`), plus `office` for reports typed
- * in the panel (GAP D13, a recorded deviation). WhatsApp-era rows have no channel (null).
+ * in the panel (GAP D13, a recorded deviation). null = v1.0 Meta WhatsApp rows (D13, amended by
+ * D49).
  */
 export const FIELD_CHANNELS = ['web', 'voice', 'sms', 'office'] as const;
 export type FieldChannel = (typeof FIELD_CHANNELS)[number];
+
+/**
+ * How SiteLog reaches a person (§6.2 `message_channel`, §4.5; GAP D48): the Notifier's channel
+ * order is the person's `reporters.message_channel`, then the country pack's `message_channels`.
+ * Separate from `field_channel` (how a report reached SiteLog): push is never inbound. Week 1
+ * builds SMS only; WhatsApp (through Twilio) and web push come with M6 (week 2).
+ */
+export const MESSAGE_CHANNELS = ['sms', 'whatsapp', 'push'] as const;
+export type MessageChannel = (typeof MESSAGE_CHANNELS)[number];
 
 export const MSG_DIRECTIONS = ['in', 'out'] as const;
 export type MsgDirection = (typeof MSG_DIRECTIONS)[number];
@@ -59,7 +69,10 @@ export const MSG_TYPES = [
 ] as const;
 export type MsgType = (typeof MSG_TYPES)[number];
 
-/** `undeliverable` from v1.2 (SMS); `read` is WhatsApp-only and goes in step 23. */
+/**
+ * `undeliverable` from v1.2 (SMS). `read` is kept for WhatsApp receipts (D49); step 23 does not
+ * recreate msg_status.
+ */
 export const MSG_STATUSES = [
   'received',
   'queued',
@@ -239,6 +252,7 @@ export const PG_ENUMS = {
   consent_type: CONSENT_TYPES,
   company_status: COMPANY_STATUSES,
   field_channel: FIELD_CHANNELS,
+  message_channel: MESSAGE_CHANNELS,
   msg_direction: MSG_DIRECTIONS,
   msg_type: MSG_TYPES,
   msg_status: MSG_STATUSES,
@@ -270,6 +284,7 @@ export const ContactPrefSchema = z.enum(CONTACT_PREFS);
 export const ConsentTypeSchema = z.enum(CONSENT_TYPES);
 export const CompanyStatusSchema = z.enum(COMPANY_STATUSES);
 export const FieldChannelSchema = z.enum(FIELD_CHANNELS);
+export const MessageChannelSchema = z.enum(MESSAGE_CHANNELS);
 export const MsgDirectionSchema = z.enum(MSG_DIRECTIONS);
 export const MsgTypeSchema = z.enum(MSG_TYPES);
 export const MsgStatusSchema = z.enum(MSG_STATUSES);
@@ -300,6 +315,7 @@ export const PG_ENUM_SCHEMAS = {
   consent_type: ConsentTypeSchema,
   company_status: CompanyStatusSchema,
   field_channel: FieldChannelSchema,
+  message_channel: MessageChannelSchema,
   msg_direction: MsgDirectionSchema,
   msg_type: MsgTypeSchema,
   msg_status: MsgStatusSchema,

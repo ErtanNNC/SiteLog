@@ -463,6 +463,7 @@ Alternatives checked: **Vapi** ($10 credit, then $0.05/min platform fee plus pro
 
 ```mermaid
 erDiagram
+  countries ||--o{ orgs : "country pack"
   orgs ||--o{ org_members : has
   orgs ||--|| org_settings : has
   orgs ||--o{ sites : has
@@ -473,7 +474,7 @@ erDiagram
   reporters ||--o{ consents : gives
   reporters ||--o{ field_links : has
   reporters ||--o{ field_devices : has
-  reporters ||--o{ messages : "sms in/out"
+  reporters ||--o{ messages : "messages in/out"
   reporters ||--o{ calls : has
   sites ||--o{ site_days : has
   site_days ||--o| reports : has
@@ -505,8 +506,9 @@ create type contact_pref     as enum ('link','call');
 create type consent_type     as enum ('sms','auto_call','recording','data_processing');
 create type company_status   as enum ('confirmed','unconfirmed');
 create type field_channel    as enum ('web','voice','sms');
+create type message_channel  as enum ('sms','whatsapp','push');
 create type msg_direction    as enum ('in','out');
-create type msg_status       as enum ('received','queued','sent','delivered','failed','undeliverable');
+create type msg_status       as enum ('received','queued','sent','delivered','read','failed','undeliverable');  -- read: WhatsApp receipts (week 2)
 create type link_kind        as enum ('personal','daily','photos');
 create type upload_kind      as enum ('audio','photo');
 create type call_direction   as enum ('inbound','outbound');
@@ -528,20 +530,47 @@ create type pack_status      as enum ('queued','building','ready','failed');
 ### 6.3 Tables (DDL)
 
 ```sql
+-- COUNTRY PACKS (§4.6) ------------------------------------------------------
+create table countries (
+  code text primary key check (code ~ '^[A-Z]{2}$'),                     -- ISO 3166-1 alpha-2; also the default phone region
+  default_locale text not null check (default_locale in ('en-US','tr-TR')),  -- the org's locale at creation (report language)
+  field_locales text[] not null check (cardinality(field_locales) > 0 and field_locales <@ array['en-US','es-US','tr-TR']),  -- field UI, messages, voice; first = a new reporter's default
+  units text not null check (units in ('imperial','metric')),
+  paper text not null check (paper in ('letter','a4')),                  -- PDF paper (§12), preset into org_settings.pdf_paper
+  currency text not null check (currency ~ '^[A-Z]{3}$'),                -- ISO 4217
+  default_timezone text not null,                                        -- IANA; create_org's time zone when none is given
+  message_channels message_channel[] not null check (cardinality(message_channels) > 0),  -- the Notifier's order (§4.5)
+  sms_provider text not null default 'twilio' check (sms_provider in ('twilio','iletimerkezi')),
+  whatsapp_provider text not null default 'twilio' check (whatsapp_provider in ('twilio')),  -- WhatsApp transport: week 2 (M6)
+  sms_sender_type text not null check (sms_sender_type in ('toll_free','long_code','short_code','alphanumeric')),
+  sms_sender_id text,                                                    -- per environment (set_country_endpoints()); null = console
+  two_way_sms boolean not null,                                          -- replies (STOP/HELP/CALL/TEXT, OK) reach SiteLog
+  sms_links_allowed boolean not null,                                    -- message keys with a link may go by SMS
+  voice_number text check (voice_number ~ '^\+[1-9][0-9]{6,14}$'),      -- per environment; null = Talk now only
+  legal_keys jsonb not null default '{}'::jsonb check (jsonb_typeof(legal_keys) = 'object'),  -- privacy_notice, recording_notice, consent (§19 Q28)
+  created_at timestamptz not null default now(),
+  check (sms_sender_type <> 'alphanumeric' or not two_way_sms),          -- an alphanumeric title cannot receive replies
+  check (sms_links_allowed or message_channels && array['whatsapp','push']::message_channel[]),  -- link keys need another channel
+  check (sms_sender_id is null or (sms_sender_id = btrim(sms_sender_id) and case sms_sender_type  -- the sender id fits its type:
+    when 'alphanumeric' then sms_sender_id ~ '^[A-Za-z0-9 ]{1,11}$'      -- a title of 1–11 letters, digits, spaces
+    when 'short_code' then sms_sender_id ~ '^[0-9]{3,8}$'                -- 3–8 digits
+    else sms_sender_id ~ '^\+[1-9][0-9]{6,14}$' end))                    -- E.164 (toll-free, long code); a type change clears the sender
+);
+
 -- ORGS & MEMBERS ------------------------------------------------------------
 create table orgs (
   id uuid primary key default gen_random_uuid(),
   name text not null,                          -- "Kestrel Build Group"
-  country text not null default 'US' check (country in ('US','TR')),
-  locale text not null default 'en-US' check (locale in ('en-US','tr-TR')),  -- report language, panel default
-  units text not null default 'imperial' check (units in ('imperial','metric')),
-  currency text not null default 'USD',
+  country text not null default 'US' references countries(code),  -- country pack (§4.6)
+  locale text not null default 'en-US' check (locale in ('en-US','tr-TR')),  -- report language, panel default; create_org presets it from the pack
+  units text not null default 'imperial' check (units in ('imperial','metric')),  -- preset from the pack by create_org
+  currency text not null default 'USD',        -- preset from the pack by create_org
   address text, license_no text, tax_no text,
   logo_path text,
-  timezone text not null default 'America/Chicago',
+  timezone text not null default 'America/Chicago',  -- preset from the pack by create_org
   billing_provider text default 'stripe', billing_customer_id text, billing_subscription_id text,
   billing_status text default 'trialing',
-  is_demo boolean not null default false,      -- demo orgs: console SMS driver + /dev/phone allowed in prod
+  is_demo boolean not null default false,      -- demo orgs: console transport on every message channel + /dev/phone allowed in prod
   created_at timestamptz default now()
 );
 
@@ -558,7 +587,7 @@ create table org_settings (
   default_deadline time not null default '17:30',
   working_days smallint[] not null default '{1,2,3,4,5}',   -- ISO weekday, 1 = Mon
   default_shift_hours numeric(4,2) not null default 8,
-  daily_link_time time default '17:00',                     -- daily SMS link for 'link' reporters
+  daily_link_time time default '17:00',                     -- daily link message for 'link' reporters
   heads_up_enabled boolean default true,
   heads_up_offset_min int default -35,
   reminder1_offset_min int default 15,
@@ -573,7 +602,8 @@ create table org_settings (
   signoff_required boolean default true,
   email_pdf_on_file boolean default true,
   max_questions_per_report int default 3,
-  payroll_csv_format text default 'generic'
+  payroll_csv_format text default 'generic',
+  pdf_paper text not null default 'letter' check (pdf_paper in ('letter','a4'))  -- preset from the country pack by on_org_created (§12)
 );
 
 -- SITES & PEOPLE ------------------------------------------------------------
@@ -599,9 +629,10 @@ create table reporters (
   name text not null,
   phone_e164 text not null,
   role reporter_role not null default 'site_manager',
-  locale text not null default 'en-US',                 -- language SiteLog speaks/texts: en-US, es-US, tr-TR
+  locale text not null default 'en-US',                 -- language SiteLog speaks/texts: one of the pack's field_locales (en-US, es-US, tr-TR)
   languages text[] default '{en}',                       -- languages they may speak in reports
   contact_pref contact_pref not null default 'link',
+  message_channel message_channel,                       -- preferred message channel; null = the pack's order (§4.5)
   status reporter_status not null default 'invited',
   invited_at timestamptz, activated_at timestamptz, opted_out_at timestamptz,
   unique (org_id, phone_e164)
@@ -612,7 +643,7 @@ create table consents (
   reporter_id uuid not null references reporters on delete cascade,
   type consent_type not null,
   method text not null,                          -- 'web_checkbox' | 'sms_reply_yes' | 'voice_yes' | 'office_attested'
-  text_version text not null,                    -- version of the consent wording shown/spoken
+  text_version text not null,                    -- version of the wording shown/spoken; the pack's legal key when set (§4.6)
   evidence jsonb,                                -- {upload_id|call_id|message_id, ip, user_agent}
   given_at timestamptz not null default now(),
   revoked_at timestamptz
@@ -660,19 +691,20 @@ create table field_devices (
   reporter_id uuid not null references reporters on delete cascade,
   device_token_hash text not null unique,        -- httpOnly cookie, 180 days
   user_agent text,
-  verified_at timestamptz,                       -- after SMS one-time code
+  verified_at timestamptz,                       -- after the one-time code (SMS, §19 Q25)
   last_seen_at timestamptz,
   revoked_at timestamptz
 );
 
--- SMS ------------------------------------------------------------------------
-create table messages (                          -- SMS only (in + out)
+-- MESSAGES -------------------------------------------------------------------
+create table messages (                          -- every message channel (in + out): SMS now; WhatsApp and push from week 2
   id uuid primary key default gen_random_uuid(),
   org_id uuid references orgs,
   reporter_id uuid references reporters on delete set null,
+  channel message_channel not null,              -- sms · whatsapp · push (§4.5)
   phone_e164 text not null,
   direction msg_direction not null,
-  provider text, provider_message_id text unique,
+  provider text, provider_message_id text unique,  -- twilio | iletimerkezi | console (webpush from week 2)
   copy_key text,                                 -- e.g. 'daily_link', 'reminder_1'
   body text not null,
   status msg_status not null default 'queued',
@@ -941,6 +973,7 @@ create view current_weather as
 - The field app reaches `field-api` **same-origin**: the field host rewrites `/api/*` → `{SUPABASE_URL}/functions/v1/field-api/*` (Vite proxy in dev; Netlify/Vercel/Cloudflare rewrite in prod). This keeps the device cookie first-party — Safari blocks third-party cookies.
 - The voice agent calls `field-api` tool routes with `VOICE_AGENT_TOOL_SECRET` and a per-call token minted when the call starts (bound to `call_id` + reporter).
 - Storage: private buckets; uploads via signed upload URLs (10 min) issued by `field-api`; panel reads via signed URLs.
+- `countries`: every signed-in user reads it (the setup wizard runs before the user has an org); no client writes. `set_country_endpoints()` is service-role only. Field users get the pack fields they need from `field-api resolve`.
 
 ---
 

@@ -205,8 +205,11 @@ describe('orgs column lockdown', () => {
     ]);
   });
 
-  it('checks country, locale and units', async () => {
-    for (const set of [`country = 'DE'`, `locale = 'fr-FR'`, `units = 'stone'`]) {
+  it('checks country (a country pack since W1-06a), locale and units', async () => {
+    await expect(
+      svc(`update orgs set country = 'DE' where id = $1`, [orgId]),
+    ).rejects.toMatchObject({ code: '23503' });
+    for (const set of [`locale = 'fr-FR'`, `units = 'stone'`]) {
       await expect(svc(`update orgs set ${set} where id = $1`, [orgId]), set).rejects.toMatchObject(
         { code: '23514' },
       );

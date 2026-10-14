@@ -11,6 +11,7 @@ import type {
   JobStatus,
   LinkKind,
   MemberRole,
+  MessageChannel,
   MsgDirection,
   MsgStatus,
   MsgType,
@@ -27,7 +28,8 @@ import type {
   UploadKind,
   VersionAuthor,
 } from '../enums.ts';
-import type { ReportLanguage } from '../locale.ts';
+import type { ReportLanguage, OrgLocale, ReporterLocale, UnitSystem } from '../locale.ts';
+import type { PaperSize, SmsProvider, SmsSenderType, WhatsappProvider } from '../countries.ts';
 
 /**
  * Hand-maintained Supabase `Database` type for @supabase/supabase-js (§6.3).
@@ -39,6 +41,38 @@ type Json = string | number | boolean | null | { [key: string]: Json | undefined
 
 /** Insert type: columns with defaults / nullable become optional. */
 type Insert<Row, Optional extends keyof Row> = Omit<Row, Optional> & Partial<Pick<Row, Optional>>;
+
+/**
+ * A country pack (spec §4.6; 20261014000004_country_packs.sql, GAP D47). Every signed-in user
+ * reads the table; policy values change only by migration, and sms_sender_id / voice_number only
+ * through the service-role set_country_endpoints(). Parse a row with `CountryRowSchema`
+ * (countries.ts), whose inferred type is this one.
+ */
+export type CountryRow = {
+  /** ISO 3166-1 alpha-2, e.g. 'US', 'TR'. */
+  code: string;
+  default_locale: OrgLocale;
+  field_locales: ReporterLocale[];
+  units: UnitSystem;
+  paper: PaperSize;
+  /** ISO 4217. */
+  currency: string;
+  /** IANA; create_org's time zone when the wizard sends none. */
+  default_timezone: string;
+  message_channels: MessageChannel[];
+  /** Column default 'twilio' (D48). */
+  sms_provider: SmsProvider;
+  whatsapp_provider: WhatsappProvider;
+  sms_sender_type: SmsSenderType;
+  /** Per environment; null = console (not registered in this database). */
+  sms_sender_id: string | null;
+  two_way_sms: boolean;
+  sms_links_allowed: boolean;
+  /** Per environment, E.164; null = Talk now only. */
+  voice_number: string | null;
+  legal_keys: { privacy_notice?: string; recording_notice?: string; consent?: string };
+  created_at: string;
+};
 
 export type OrgRow = {
   id: string;
@@ -60,14 +94,17 @@ export type OrgRow = {
    * §6.3 profile (20261013000007_schema_expand_v1_2.sql). An admin may update name, address,
    * license_no, tax_no, timezone, locale and units directly; country, currency, logo_path, the
    * billing columns and is_demo only through the service role or RPCs (column grants).
+   * create_org presets locale, units, currency and timezone from the country pack.
+   *
+   * country: countries.code (a foreign key since 20261014000004), the org's country pack.
    */
-  country: 'US' | 'TR';
+  country: string;
   /** Report language and the panel's default (§0 Conventions). */
   locale: 'en-US' | 'tr-TR';
   units: 'imperial' | 'metric';
   currency: string;
   tax_no: string | null;
-  /** Demo orgs: console SMS driver and the Demo phone (§4.5, §5.2). */
+  /** Demo orgs: console transport on every message channel and the Demo phone (§4.5, §5.2). */
   is_demo: boolean;
   /** §6.3 billing (20261014000003): 'stripe' (US); service role and RPCs only. */
   billing_provider: string | null;
@@ -161,6 +198,8 @@ export type ReporterRow = {
   contact_pref: ContactPref;
   activated_at: string | null;
   opted_out_at: string | null;
+  /** Preferred message channel (20261014000005); null = the country pack's order (§4.5). */
+  message_channel: MessageChannel | null;
 };
 
 export type SiteReporterRow = {
@@ -232,6 +271,11 @@ export type MessageRow = {
   provider_message_id: string | null;
   /** §9.2 copy key, e.g. `daily_link`. */
   copy_key: string | null;
+  /**
+   * The message channel (20261014000005): every v1.2 writer sets it. null = v1.0 Meta WhatsApp
+   * or office-photo row (NOT NULL at step 23, D49).
+   */
+  channel: MessageChannel | null;
 };
 
 export type TranscriptRow = {
@@ -723,6 +767,15 @@ type Table<Row, OptionalInsert extends keyof Row> = {
 export type Database = {
   public: {
     Tables: {
+      countries: Table<
+        CountryRow,
+        | 'sms_provider'
+        | 'whatsapp_provider'
+        | 'sms_sender_id'
+        | 'voice_number'
+        | 'legal_keys'
+        | 'created_at'
+      >;
       orgs: Table<
         OrgRow,
         | 'id'
@@ -778,6 +831,7 @@ export type Database = {
         | 'contact_pref'
         | 'activated_at'
         | 'opted_out_at'
+        | 'message_channel'
       >;
       consents: Table<ConsentRow, 'id' | 'evidence' | 'given_at' | 'revoked_at'>;
       field_links: Table<
@@ -834,6 +888,7 @@ export type Database = {
         | 'provider'
         | 'provider_message_id'
         | 'copy_key'
+        | 'channel'
       >;
       transcripts: Table<
         TranscriptRow,
@@ -1067,8 +1122,15 @@ export type Database = {
           p_timezone?: string;
           p_address?: string | null;
           p_license_no?: string | null;
+          /** countries.code (default 'US'); presets locale, units, currency, time zone, paper. */
+          p_country?: string;
         };
         Returns: Json;
+      };
+      // Service role only (revoked from anon and authenticated): a pack's per-environment values.
+      set_country_endpoints: {
+        Args: { p_code: string; p_sms_sender_id: string | null; p_voice_number: string | null };
+        Returns: CountryRow;
       };
       next_report_no: { Args: { p_site_id: string }; Returns: string };
       sign_off_report: { Args: { p_report_id: string }; Returns: Json };
@@ -1207,6 +1269,7 @@ export type Database = {
       consent_type: ConsentType;
       company_status: CompanyStatus;
       field_channel: FieldChannel;
+      message_channel: MessageChannel;
       msg_direction: MsgDirection;
       msg_type: MsgType;
       msg_status: MsgStatus;

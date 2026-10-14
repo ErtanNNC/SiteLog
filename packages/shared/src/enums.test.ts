@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   FIELD_CHANNELS,
   FieldChannelSchema,
+  MESSAGE_CHANNELS,
+  MessageChannelSchema,
   MSG_STATUSES,
   PG_ENUM_SCHEMAS,
   PG_ENUMS,
@@ -29,8 +31,17 @@ describe('Postgres enum mirrors (§6.2)', () => {
 
   it('parses only known labels', () => {
     expect(FieldChannelSchema.parse('office')).toBe('office');
+    // WhatsApp is a message channel (D48), not a way a report reaches SiteLog (§19 Q26).
     expect(FieldChannelSchema.safeParse('whatsapp').success).toBe(false);
     expect(SourceKindSchema.safeParse('voice_note').success).toBe(true);
     expect(SourceKindSchema.safeParse('audio').success).toBe(false);
+  });
+
+  it('keeps message channels apart from field channels (D48)', () => {
+    expect(MESSAGE_CHANNELS).toEqual(['sms', 'whatsapp', 'push']);
+    expect(MessageChannelSchema.parse('whatsapp')).toBe('whatsapp');
+    expect(MessageChannelSchema.safeParse('web').success).toBe(false);
+    expect(MessageChannelSchema.safeParse('office').success).toBe(false);
+    expect(PG_ENUMS.message_channel).toBe(MESSAGE_CHANNELS);
   });
 });

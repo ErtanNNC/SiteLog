@@ -148,6 +148,7 @@ export function demoSms(input: {
     provider: 'console',
     provider_message_id: `console:${id}`,
     copy_key: input.copyKey,
+    channel: 'sms',
   };
 }
 

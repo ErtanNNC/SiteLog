@@ -32,11 +32,16 @@ describe('schema end state (D11)', () => {
     const blocks = specSqlBlocks();
     expect(blocks['6.2']).toMatch(/create type member_role/);
     expect(blocks['6.3']).toMatch(/create table orgs/);
+    // countries before orgs: orgs.country references it.
+    expect(blocks['6.3']!.indexOf('create table countries')).toBeLessThan(
+      blocks['6.3']!.indexOf('create table orgs'),
+    );
     expect(blocks['6.4']).toMatch(/create view current_manpower/);
-    // The whole spec schema was read: 30 tables (GAP 9.2) and the 25 enums of §6.2, and from
-    // §6.4 its 9 indexes and 2 views (spec.indexes also holds §6.3's one, on jobs).
-    expect(spec.tables.size).toBe(30);
-    expect(spec.enums.size).toBe(25);
+    // The whole spec schema was read: 31 tables (GAP 9.2, plus countries since W1-06a) and the
+    // 26 enums of §6.2 (message_channel since W1-06a), and from §6.4 its 9 indexes and 2 views
+    // (spec.indexes also holds §6.3's one, on jobs).
+    expect(spec.tables.size).toBe(31);
+    expect(spec.enums.size).toBe(26);
     expect(blocks['6.4']!.match(/^create index /gm)).toHaveLength(9);
     const indexes = [...spec.indexes.values()].reduce((n, set) => n + set.size, 0);
     expect(indexes).toBe(10);

@@ -47,7 +47,7 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'd12-columns',
     reason:
-      'Repo-only columns kept as recorded additions: reminder-ladder toggles, PDF template, payroll and billing-grace settings (§F18, §P12, §F19), the 14-day trial, reports.kind (§F10 weather/no-work days), the "stop" flag on site-days.',
+      'Repo-only columns kept as recorded additions: reminder-ladder toggles, PDF template (footer, photos, letterhead; pdf_paper is in §6.3 since W1-06a), payroll and billing-grace settings (§F18, §P12, §F19), the 14-day trial, reports.kind (§F10 weather/no-work days), the "stop" flag on site-days.',
     closes: 'kept',
     decision: 'D12',
     diffs: [
@@ -59,7 +59,6 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
       "column extra: org_settings.payroll_columns (text[] not null default '{date,site,project_code,company,trade,workers,hours,report_no,version}'::text[])",
       'column extra: org_settings.pdf_footer_enabled (boolean not null default true)',
       'column extra: org_settings.pdf_max_photos (integer not null default 4)',
-      "column extra: org_settings.pdf_paper (text not null default 'letter'::text)",
       'column extra: org_settings.reminder1_enabled (boolean not null default true)',
       'column extra: org_settings.reminder2_enabled (boolean not null default true)',
       'column extra: org_settings.updated_at (timestamp with time zone not null default now())',
@@ -67,7 +66,6 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
       "column extra: reports.kind (text not null default 'daily'::text)",
       'column extra: site_days.reminders_paused (boolean not null default false)',
       "constraint extra: org_settings CHECK (((payroll_columns <@ '{date,site,project_code,company,trade,workers,hours,report_no,version}'::text[]) AND ((cardinality(payroll_columns) >= 1) AND (cardinality(payroll_columns) <= 9))))",
-      "constraint extra: org_settings CHECK ((pdf_paper = ANY (ARRAY['letter'::text, 'a4'::text])))",
       "constraint extra: reports CHECK ((kind = ANY (ARRAY['daily'::text, 'weather_day'::text, 'no_work'::text])))",
     ],
   },
@@ -213,7 +211,7 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'd13-office',
     reason:
-      'field_channel has office for reports typed in the panel (typed reports are a recorded office fallback, D30).',
+      'field_channel has office for reports typed in the panel (typed reports are a recorded office fallback, D30). It has no whatsapp: WhatsApp is a message channel (message_channel, D48), and an inbound label waits for spec §19 Q26.',
     closes: 'kept',
     decision: 'D13',
     diffs: ['enum labels: field_channel (spec web,voice,sms; repo web,voice,sms,office)'],
@@ -221,7 +219,7 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'd13-channel-nullable',
     reason:
-      'channel stays nullable: WhatsApp-era reports and questions have none. Every v1.2 writer sets it (field-api web, office RPCs office, W1-12 questions web) and an insert trigger rejects a null channel from step 22.',
+      'channel stays nullable: v1.0 Meta WhatsApp reports and questions have none. Every v1.2 writer sets it (field-api web, office RPCs office, W1-12 questions web) and an insert trigger rejects a null channel from step 22.',
     closes: 'kept',
     decision: 'D13',
     diffs: [
@@ -232,7 +230,7 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'd13-unknown-contacts-channel',
     reason:
-      'unknown_contacts.channel stays nullable for the unknown WhatsApp senders it was renamed from (20261014000003) and the WhatsApp worker that writes them until step 22; sms-webhook (W1-08) writes sms and the voice agent (week 2) voice, and the step 22 insert trigger rejects a null channel.',
+      'unknown_contacts.channel stays nullable for the unknown v1.0 Meta WhatsApp senders it was renamed from (20261014000003) and the v1.0 Meta WhatsApp worker that writes them until step 22; sms-webhook (W1-08) writes sms and the voice agent (week 2) voice, and the step 22 insert trigger rejects a null channel.',
     closes: 'kept',
     decision: 'D13',
     diffs: ['column nullability: unknown_contacts.channel (spec not null; repo null)'],
@@ -325,14 +323,14 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'step23-messages',
     reason:
-      'messages is extended in place (D15): WhatsApp rows have no body or phone number and start as received, office photo rows have no phone number, and the WhatsApp-only label read stays in msg_status. After WhatsApp retires, legacy rows move to an archive and messages gets the v1.2 NOT NULLs, default and a fresh msg_status type.',
+      'messages is extended in place (D15): v1.0 Meta WhatsApp rows have no body, phone number or message channel and start as received; office photo rows have no phone number. msg_status keeps read for WhatsApp receipts (D49). After the Meta integration is retired (step 22), legacy rows move to an archive and messages gets the v1.2 NOT NULLs (body, phone_e164, channel) and default.',
     closes: 'step 23',
     decision: 'D15',
     diffs: [
       "column default: messages.status (spec 'queued'::msg_status; repo 'received'::msg_status)",
       'column nullability: messages.body (spec not null; repo null)',
+      'column nullability: messages.channel (spec not null; repo null)',
       'column nullability: messages.phone_e164 (spec not null; repo null)',
-      'enum labels: msg_status (spec received,queued,sent,delivered,failed,undeliverable; repo received,queued,sent,delivered,read,failed,undeliverable)',
     ],
   },
   {

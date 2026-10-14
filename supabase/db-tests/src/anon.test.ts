@@ -66,7 +66,7 @@ const AUTHENTICATED_KEEPS = [
   'site_org(uuid)',
   'notification_audience(text)',
   'is_service()',
-  'create_org(text,text,text,text)',
+  'create_org(text,text,text,text,text)',
   'invoice_gaps(uuid,date,date)',
   'mark_no_work(uuid)',
   'mark_notifications_read(uuid[])',

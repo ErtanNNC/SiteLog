@@ -193,6 +193,21 @@ describe('seed.sql (§18 demo orgs)', () => {
     ]);
   });
 
+  it('records every seeded text on the SMS channel (messages.channel, W1-06a)', async () => {
+    // Every v1.2 writer sets messages.channel: the step 23 NOT NULL depends on it (allowlist
+    // step23-messages). A fresh db reset seeds after the 20261014000005 backfill, so seed.sql
+    // must set it itself.
+    const [row] = (
+      await db.query<{ sms: number; unmarked: number }>(
+        `select count(*) filter (where channel = 'sms')::int as sms,
+                count(*) filter (where conversation_id is null and phone_e164 is not null
+                                   and channel is distinct from 'sms')::int as unmarked
+         from messages`,
+      )
+    ).rows;
+    expect(row).toEqual({ sms: 21 + buildDemirDemo().messages.length, unmarked: 0 });
+  });
+
   it('loads Demir Yapı A.Ş. (§18.2) with its Turkish text intact', async () => {
     const demir = buildDemirDemo();
     const org = (

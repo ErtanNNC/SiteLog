@@ -4,12 +4,17 @@ type Rows = Database['public']['Tables'];
 
 /**
  * What the v1.2 columns of 20261013000007_schema_expand_v1_2.sql (and the billing columns of
- * 20261014000003_renames_billing.sql) hold on a row whose writer does not set them: the column's
- * database default, or null. In-memory stores that build rows by hand
+ * 20261014000003_renames_billing.sql, the message channel columns of
+ * 20261014000005_message_channel_columns.sql) hold on a row whose writer does not set them: the
+ * column's database default, or null. In-memory stores that build rows by hand
  * (the Kestrel dataset, the panel's demo store, the worker's fake database) spread these, so their
  * rows have every column a select returns. A v1.2 writer sets its own values instead.
  */
 export const V12_ROW_DEFAULTS = {
+  /**
+   * The column defaults: the US pack's values, the fallback for a service insert. create_org
+   * presets them from the org's country pack instead (orgDefaultsFor, countries.ts).
+   */
   orgs: {
     country: 'US',
     locale: 'en-US',
@@ -29,13 +34,21 @@ export const V12_ROW_DEFAULTS = {
     call_window_start: '07:00:00',
     call_window_end: '20:00:00',
   },
-  reporters: { locale: 'en-US', contact_pref: 'link', activated_at: null, opted_out_at: null },
+  reporters: {
+    locale: 'en-US',
+    contact_pref: 'link',
+    activated_at: null,
+    opted_out_at: null,
+    message_channel: null,
+  },
   messages: {
     reporter_id: null,
     phone_e164: null,
     provider: null,
     provider_message_id: null,
     copy_key: null,
+    /** null = v1.0 Meta WhatsApp or office-photo row; an SMS writer sets 'sms'. */
+    channel: null,
   },
   transcripts: { upload_id: null, call_id: null },
   /**

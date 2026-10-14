@@ -52,7 +52,10 @@ export interface TableCase {
   insert: (o: OrgIds) => string;
   /** A no-op assignment for the update probe (`set …`). */
   set: string;
-  /** Not org-scoped (service tables): the other-org probes repeat the own-org ones. */
+  /**
+   * Not org-scoped (service tables, the country packs): the other-org probes repeat the own-org
+   * ones and expect the same answer, since there is no other org's row.
+   */
   orgless?: true;
 }
 
@@ -65,6 +68,15 @@ const readOnly = (select: readonly Role[]): TableCase['allow'] => ({
 const serviceOnly = readOnly(NONE);
 
 export const TABLES: Record<string, TableCase> = {
+  countries: {
+    why: 'Country packs (spec §4.6, §6.5; GAP D47): every signed-in user reads them, an org member or not (the setup wizard runs before the user has an org); no client writes them: packs change by migration, sender ids and voice numbers through the service-only set_country_endpoints().',
+    allow: readOnly(ALL),
+    where: () => `code = 'US'`,
+    insert: () =>
+      `insert into countries (code, default_locale, field_locales, units, paper, currency, default_timezone, message_channels, sms_sender_type, two_way_sms, sms_links_allowed) values ('ZY', 'en-US', '{en-US}', 'metric', 'a4', 'EUR', 'UTC', '{sms}', 'long_code', true, true)`,
+    set: 'code = code',
+    orgless: true,
+  },
   orgs: {
     why: '§2.2 "Settings … billing: admin"; every member reads its org (§2.2 silent: the shell shows the name). Orgs are created by create_org() (README deviation).',
     allow: { select: ALL, insert: NONE, update: ADMIN, delete: NONE },

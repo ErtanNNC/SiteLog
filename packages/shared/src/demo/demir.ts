@@ -170,6 +170,8 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
     contact_pref: s.reporter.contactPref,
     activated_at: setup('09:40'),
     opted_out_at: null,
+    // null = the country pack's order (§4.5); a preference comes with week 2.
+    message_channel: null,
   }));
 
   const siteReporters = SITES.map((s) => ({
