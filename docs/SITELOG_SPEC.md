@@ -400,7 +400,7 @@ APP_URL=https://app.sitelog.app            # office panel
 FIELD_APP_URL=https://go.sitelog.app       # field web recorder
 FIELD_API_URL=                             # server-side callers (worker, voice agent) → field-api
 LINK_SHORT_DOMAIN=https://sl.link          # short personal links
-LINK_SIGNING_SECRET=
+LINK_SIGNING_SECRET=                       # field-api: HMAC key of the device codes (F4; field_devices.code_hash)
 DAILY_LINK_TTL_HOURS=72
 
 # Messaging providers (credentials only). Which provider, sender, two-way SMS and links each country
@@ -754,7 +754,9 @@ create table field_devices (
   user_agent text,
   verified_at timestamptz,                       -- after the one-time code (SMS, §19 Q25)
   last_seen_at timestamptz,
-  revoked_at timestamptz
+  revoked_at timestamptz,
+  code_hash text,                                -- the one-time code (F4): HMAC of device + code, never the code
+  code_expires_at timestamptz                    -- 10 minutes after sending; both cleared on verification
 );
 
 -- MESSAGES -------------------------------------------------------------------
@@ -985,7 +987,7 @@ create table jobs (
 create index on jobs (status, run_after);
 
 create table rate_limits (                       -- field-api throttling (per device / per phone)
-  key text not null,                             -- 'dev:<device_id>' | 'code:<e164>'
+  key text not null,                             -- 'dev:<device_id>' | 'code:<e164>' (verifications) | 'code_send:<e164>'
   window_start timestamptz not null,
   count int not null default 0,
   primary key (key, window_start)
@@ -1030,10 +1032,10 @@ create view current_weather as
 
 - RLS on every table. Helpers `is_member(org)` and `has_role(org, roles[])` as before; office users only see their org.
 - Sign-off and office edits only through RPCs `sign_off_report` and `create_report_version` (security definer, role-checked).
-- **Field users never get a database session.** The field app talks only to `field-api`, which authenticates a request by `(link code → field_links)` + `(device cookie → field_devices.verified_at)` and then acts with the service role, scoped to that reporter's sites. Rate limits: 30 requests/min per device, 5 code verifications/hour per phone.
+- **Field users never get a database session.** The field app talks only to `field-api`, which authenticates a request by `(link code → field_links)` + `(device cookie → field_devices.verified_at)` and then acts with the service role, scoped to that reporter's sites. The device cookie is one per reporter (`sl_dev_<8 hex>`, so one phone can serve two reporters), and `field-api` counts a device as verified for 180 days from `verified_at`, whatever cookie the browser still sends. Rate limits: 30 requests/min per device, 5 code sends and 5 code verifications/hour per phone (`rate_limits`, a window from each key's first hit). Every route looks the link code up before any limit applies; the routes that need a verified device answer an unknown code like a valid one (401), but `resolve` and `device/*` tell them apart: §19 Q42.
 - The field app reaches `field-api` **same-origin**: the field host rewrites `/api/*` → `{SUPABASE_URL}/functions/v1/field-api/*` (Vite proxy in dev; Netlify/Vercel/Cloudflare rewrite in prod). This keeps the device cookie first-party — Safari blocks third-party cookies.
 - The voice agent calls `field-api` tool routes with `VOICE_AGENT_TOOL_SECRET` and a per-call token minted when the call starts (bound to `call_id` + reporter).
-- Storage: private buckets; uploads via signed upload URLs (10 min) issued by `field-api`; panel reads via signed URLs.
+- Storage: private buckets; uploads via signed upload URLs (10 min) issued by `field-api`; panel reads via signed URLs. A signed upload URL fixes neither the type nor the size, so `field-api` checks each stored object when its upload completes (the media type the upload named, at most 50 MB; the stored size goes to `uploads.bytes`) and removes one that fails. The `audio` bucket takes `audio/*` only and the `audio` and `photos` buckets 50 MB a file; `photos` takes any type until the WhatsApp intake, which stores documents there, is removed (step 22 of the migration plan).
 - `countries`: every signed-in user reads it (the setup wizard runs before the user has an org); no client writes. `set_country_endpoints()` is service-role only. Field users get the pack fields they need from `field-api resolve`.
 
 ---
@@ -1220,7 +1222,7 @@ Each flow lists the trigger, steps, data changes, edge cases and acceptance crit
 
 ### F5 · Daily report on the web recorder (happy path)
 
-**Trigger:** reporter opens today's link or their personal link (home-screen icon) any time after 12:00 site time (before noon: "Is this for today or yesterday?").
+**Trigger:** reporter opens today's link or their personal link (home-screen icon) any time after 12:00 site time (before noon: "Is this for today or yesterday?", where yesterday is the org's previous working day, §19 Q43; from 12:00 a personal link reports today only, and a daily link always its own date).
 1. **Today (Field-03):** site name, date, deadline, status ("Not sent yet"), a short prompt list (*work done · crew by company · weather · deliveries · safety*), the big **Record** button, **Add photos**, secondary actions *No work today* · *Site closed: weather*, and "Prefer to talk?" → **Talk now** (plus *Call {number}* where the pack has a voice number).
 2. **Recording (Field-04):** timer, live level meter, the prompt list as a checklist (ticks as the AI hears topics — optional, based on streaming partials if available, otherwise static), **Pause**, **Stop & send**, **Add photo** while recording. Max 15 min per clip; multiple clips allowed.
 3. Upload: chunked to Storage via signed URL; if offline → queued in IndexedDB with "Saved on your phone — will send when you have signal" and retried on `online`/app open.
@@ -1351,7 +1353,7 @@ Runs in `scheduler-tick` (every 5 min) per site-day not `filed | weather_day | n
 ### F16 · Expired link or new phone
 
 - Expired daily link → screen "This link has expired" + **Send me today's link** (a message to the phone number on file) + "Or call {number}" where the pack has a voice number.
-- New phone → device check (F4 step 2). After 5 failed code attempts → 1-hour lock, office notified.
+- New phone → device check (F4 step 2). Code checks are limited to 5 an hour per phone, counted from the first attempt of the window (§6.5): once the limit is reached the right code is refused too until the window ends; office notified (M6, with F14–F16).
 - Lost phone → office revokes devices on the Team page (all device cookies invalidated).
 
 ---
@@ -2222,6 +2224,9 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 38 | Outbound SIP trunk per country | Env `LIVEKIT_SIP_OUTBOUND_TRUNKS=CC:trunk_id` · A pack column set per environment like the voice number | The env list until M8 designs outbound calls, then decide. A pack without a trunk places no outbound calls. |
 | 39 | Where the WhatsApp sender and its approved template ids (per language and environment) live | A pack column (e.g. `whatsapp_sender_id`, with the template ids per language beside it) set per database with `set_country_endpoints()`, null = `console` · One global env sender and template ids in env or code | **Open (owner, blocks M6).** Recommendation: the pack column, so the Q29 rule holds for WhatsApp too (null = `console`; set per database by the service-only, audited function, owner-approved on hosted databases) and a pack can have its own WhatsApp number. Until you answer, nothing holds a WhatsApp sender, no WhatsApp transport is built, and no env var is added for one (§5.1). |
 | 40 | Per-channel opt-out: where it is stored and what it means (§4.5 and `deliverableChannels` take an opt-out per channel; §6.3 has only the reporter-wide `reporters.status 'opted_out'` and `opted_out_at`, which F15 sets on SMS STOP) | `status 'opted_out'` stays SMS-only (STOP; the Team label "Opted out of texts"), and a WhatsApp or push opt-out is a revoked consent of that channel's type · A per-channel opt-out column or table · STOP on any channel stops every message channel (`status 'opted_out'` then means no messages at all) | **Open (owner, blocks M6).** Recommendation: the first, one model with the consents already audited: `reporters.status 'opted_out'` keeps meaning "opted out of texts" and blocks SMS only, and the WhatsApp and push opt-outs come with their consent types (Q25, Q27). Whether an SMS STOP must also stop WhatsApp and push is checked with counsel before M6 (§15.2); if it must, the third. Week 1 has SMS only, so today `opted_out` stops every message. |
+| 41 | What the recorder's *No work today* and *Site closed: weather* buttons write (F12, `day-status`) | The site-day only (pending or reminded → `no_work` or `weather_day`), the F12 details in the audit row; no report, so no `weather_events`, lost hours or PDF from the recorder · A `weather_day` / `no_work` report like the WhatsApp path (numbered, a version built from the details, filed through `file_report` with trigger `weather_day` / `no_work`, the no-work PDF when `no_work_pdf` is on); its values need a §10.3 source, and v2 has none for a tap: the details as answered `questions` rows (`{type:'answer', questionId}`) · A new `Source` kind for recorder input | **Open (owner, before W1-09 wires the buttons to more than the status).** As built (W1-07): the first; the route refuses while the day has a live report (`report_in_progress`, `report_filed`) and on any state §7.1 does not allow (`wrong_state`). Recommendation: the second with answered questions as the source (no new `Source` kind; the panel already shows answers), in M6 with the F12 follow-ups (photo of the conditions, claim-ready). |
+| 42 | Guessing link codes through any `field-api` route (every route looks the code up before any limit applies) | Per-device and per-phone limits only (as built: a request without a device cookie is not limited; the routes that need a verified device answer an unknown code like a valid one, 401, but `resolve` answers 404 or 200 and `device/send-code` texts the reporter of a valid code) · A limit per client address on every route, before the link lookup, counting failed lookups only so shared carrier addresses are spared (behind the field host's proxy only its `x-nf-client-connection-ip` identifies the client, and a direct caller can forge it, so the address is trusted only on requests the proxy signs, e.g. Netlify signed proxy redirects, an owner setting) · Longer codes | **Open (owner, before go-live; not blocking week 1).** Recommendation: longer codes for personal links (12 characters of `LINK_CODE_ALPHABET`, about 2^59; today 6, about 7 × 10^8) and the per-address limit on every route, trusted only through the signed proxy, both before real reporters; a Deno test then hits a header route with unknown codes until it answers 429. |
+| 43 | What "yesterday" means for a report started before noon (F5 "Is this for today or yesterday?") | The org's previous working day (`org_settings.working_days`: Monday morning reports Friday) · The previous calendar day (Monday morning reports Sunday) · Both | **As built (W1-07), for you to confirm:** the previous working day, and only before 12:00 site time (`allowedReportDates()`, `field-api`); `today` lists the allowed dates (`allowedDates`), so the field app asks only when there is a choice. A site that worked on a non-working day reports it that same day, or the office types it. |
 
 ---
 
@@ -2260,22 +2265,22 @@ sitelog/
 
 ### Appendix B · Server API surface
 
-**`field-api` (field app)** — auth: link code + device cookie
+**`field-api` (field app)** — auth: link code + device cookie. *As built (W1-07):* the field app calls `/api/<route>` same-origin, which the field host proxies to the function; the `/field/…` prefix below is a logical grouping (GAP D39). `resolve` takes the link code in its body, every other route in the `X-Link-Code` header, with the reporter's device cookie `sl_dev_<first 8 hex of sha256(reporter id)>` (httpOnly, Secure, SameSite=Lax, Path=/, 180 days, set by `device/send-code` and renewed by `device/verify`; one per reporter). Every route but `resolve` and `device/*` needs a device of the link's reporter verified in the last 180 days, and answers 401 `device_unverified` without one whatever the code (unknown, revoked or expired alike); every route but `resolve`, `device/*` and `consent` needs the reporter's `recording` and `data_processing` consents. Every answer is `Cache-Control: no-store`; errors are JSON `{error: <code>, …}` (`packages/shared/src/field-contract.ts`). A browser `Origin` must be `FIELD_APP_URL` or one of `CORS_EXTRA_ORIGINS`. The writes that must be atomic are service-only RPCs: `field_complete_upload()` (number and insert the site-day's report, attach the upload, enqueue `transcribe_upload`; refused while the report is being filed), `field_confirm_report()` (under the same site-day lock, enqueue `file_report` for the confirmed version), `field_set_day_status()`, `field_rate_limit()`.
 
 | Route | Purpose |
 |---|---|
 | `POST /field/resolve` `{code}` | Reporter first name, sites, locale, `needsDeviceCheck`, `needsConsent`, and the pack subset (voice number, field locales, two-way SMS, channel order, legal keys) |
 | `POST /field/device/send-code` · `POST /field/device/verify` `{code}` | Device verification |
 | `POST /field/consent` `{types[], textVersion, contactPref, locale}` | Store consents + preference; `textVersion` must match the pack's consent key when set (§19 Q28) |
-| `GET /field/today?site=` | Site-day status, deadline, current report state |
-| `POST /field/uploads` `{kind, mime, bytes}` → `{uploadId, signedUrl}` · `POST /field/uploads/:id/complete` | Upload voice notes / photos |
+| `GET /field/today?site=` | Site-day status, deadline, current report state, `allowedDates` (today; before 12:00 site time also the previous working day, F5) |
+| `POST /field/uploads` `{kind, mime, bytes, siteId?, date?, recordedAt?}` → `{uploadId, bucket, path, signedUrl, token}` · `POST /field/uploads/:id/complete` | Upload voice notes / photos. `siteId` is required when a personal link has more than one active site; `date` is one of `allowedDates`. `complete` checks the stored object (there, of the named type, at most 50 MB; `uploads.bytes` is the stored size) |
 | `GET /field/reports/:id` | Question / draft / filed view model |
 | `POST /field/reports/:id/answer` `{questionId, optionId or value or uploadId}` | Answer a question |
 | `POST /field/reports/:id/correction` `{text or uploadId}` → preview · `POST …/correction/:cid/apply` | Fix draft or edit filed report |
-| `POST /field/reports/:id/confirm` | File |
-| `POST /field/day-status` `{siteId, status: no_work or weather_day, details}` | No work / weather day |
+| `POST /field/reports/:id/confirm` `{version?}` | File the draft version the reporter saw (default the current one): 409 `wrong_state` unless awaiting confirmation, 409 `draft_changed` when a newer draft replaced it; the worker files only that version |
+| `POST /field/day-status` `{siteId, status: no_work or weather_day, details}` | No work / weather day (W1-07: the site-day only, details `{since, workersBefore}` in the audit row; §19 Q41) |
 | `GET /field/history` | Last 14 days |
-| `PATCH /field/preferences` `{contactPref, locale, noCallsToday, messageChannel}` | Preferences (`messageChannel` from week 2, §19 Q21) |
+| `PATCH /field/preferences` `{contactPref, locale, noCallsToday, messageChannel}` | Preferences (`messageChannel` from week 2, §19 Q21; `noCallsToday` from M8; both refused with 400 until then) |
 | `POST /field/voice/token` `{siteId}` → `{livekitUrl, token, room, callId}` | Start **Talk now**: creates the `calls` row (`transport = web`), the room and the agent dispatch |
 
 **`field-api` voice routes** — auth: `VOICE_AGENT_TOOL_SECRET` (+ per-call token for tools): `POST /voice/calls/start {room, from?, callId?}` → `{callToken, reporter?, locale}` (SIP calls resolve the caller here; web calls pass `callId`) · `POST /voice/tools/{get_context, update_draft, record_answer, apply_correction, file_report, set_day_status, schedule_callback, set_preference, load_report, start_fallback_recording, end_call}`.

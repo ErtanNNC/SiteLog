@@ -107,13 +107,18 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.118.0
-      # `supabase start` loads supabase/functions/.env into the Edge Runtime. Only APP_URL matters
-      # here (CORS origin of the panel under test); the rest are dummies so no function boots
-      # half-configured. Nothing here reaches Meta, Stripe or Anthropic.
+      # `supabase start` loads supabase/functions/.env into the Edge Runtime. APP_URL is the CORS
+      # origin of the panel under test; field-api signs device codes with LINK_SIGNING_SECRET and
+      # accepts browser origins FIELD_APP_URL and CORS_EXTRA_ORIGINS (the field app's dev and
+      # preview servers). The rest are dummies so no function boots half-configured. Nothing here
+      # reaches Meta, Stripe, Twilio or Anthropic.
       - name: Edge Function env
         run: |
           cat > supabase/functions/.env <<'ENV'
           APP_URL=http://localhost:5173
+          LINK_SIGNING_SECRET=e2e-link-signing-secret-not-for-production
+          FIELD_APP_URL=http://localhost:5174
+          CORS_EXTRA_ORIGINS=http://localhost:4174
           WA_VERIFY_TOKEN=e2e-verify-token
           WA_APP_SECRET=e2e-app-secret
           SCHEDULER_SECRET=e2e-scheduler-secret
@@ -143,12 +148,13 @@ jobs:
           pnpm test:stack
       # First request per function downloads its npm/jsr imports; do it before the browser waits.
       - name: Warm up Edge Functions
-        # Each function must boot and answer 401 to the anon key. The Edge Runtime container has no
+        # Each function must boot and answer 401: the api-* functions to the anon key, field-api
+        # (no gateway JWT check) to a request without a link code. The Edge Runtime container has no
         # restart policy, so if it exits while booting the first worker it is started again (a run
         # once failed with 502 here and 503 in the payroll and EOT specs).
         run: |
           container=supabase_edge_runtime_sitelog
-          for fn in api-export-payroll api-evidence-pack; do
+          for fn in api-export-payroll api-evidence-pack field-api/today; do
             code=000
             for attempt in 1 2 3 4 5 6; do
               code=$(curl -sS -o "$RUNNER_TEMP/warm.out" -m 180 -w '%{http_code}' \
@@ -166,6 +172,17 @@ jobs:
               exit 1
             fi
           done
+      # field-api (W1-07) through the gateway: resolve → send-code → verify (the code from the
+      # console messages row) → consent → upload by signed URL → complete (site-day, report, job),
+      # confirm, the device cookie, no-store and the refusals (supabase/db-tests/stack/
+      # field-api.test.ts; its RPC race on two sessions already ran in test:stack above).
+      - name: field-api against the stack
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+          FIELD_API_URL: ${{ env.API_URL }}/functions/v1/field-api
+        run: |
+          test -n "$API_URL" || { echo "::error::supabase status gave no API_URL"; exit 1; }
+          pnpm --filter @sitelog/db exec vitest run --config vitest.stack.config.ts stack/field-api.test.ts -t "field-api on the local stack"
       - name: Install Chromium
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
       - name: Login · realtime · edit → v2 · sign-off · payroll CSV · EOT pack

@@ -1,0 +1,838 @@
+import { Hono, type Context } from 'hono';
+import { getCookie, setCookie } from 'hono/cookie';
+import type { z } from 'zod';
+import {
+  ConfirmRequestSchema,
+  ConsentRequestSchema,
+  DayStatusRequestSchema,
+  FIELD_LINK_HEADER,
+  FIELD_RATE_LIMITS,
+  HISTORY_DAYS,
+  PreferencesRequestSchema,
+  REQUIRED_CONSENTS,
+  ResolveRequestSchema,
+  SIGNED_URL_SECONDS,
+  UploadRequestSchema,
+  VERIFY_CODE_TTL_S,
+  VerifyRequestSchema,
+  deviceCookieName,
+  firstName,
+  linkCodeHash,
+  readReportData,
+  sha256Hex,
+  toCountryPack,
+  uploadBucket,
+  uploadMediaType,
+  uploadStoragePath,
+  deadlineInstant,
+  type CompleteResponse,
+  type ConfirmResponse,
+  type ConsentResponse,
+  type ConsentType,
+  type CountryPack,
+  type DayStatusResponse,
+  type FieldDeviceRow,
+  type FieldLinkRow,
+  type HistoryResponse,
+  type LinkExpiredBody,
+  type NotifyOutcome,
+  type PreferencesResponse,
+  type ReportView,
+  type ReporterRow,
+  type ResolveResponse,
+  type SendCodeResponse,
+  type SiteRow,
+  type TodayResponse,
+  type UploadResponse,
+  type VerifyResponse,
+} from '@sitelog/shared';
+import { EnvError } from '../_shared/env.ts';
+import { formatIssues, timingSafeEqual } from '../_shared/http.ts';
+import { errorMessage, logError } from '../_shared/log.ts';
+import {
+  DEVICE_COOKIE_OPTIONS,
+  FieldError,
+  allowedReportDates,
+  clientIp,
+  consentState,
+  deviceVerified,
+  fieldCountryView,
+  fieldSite,
+  historyStart,
+  nearestDeadlineSite,
+  needsConsent,
+  newDeviceToken,
+  newVerifyCode,
+  originAllowed,
+  questionOptions,
+  retryAfterSeconds,
+  scopeSites,
+  siteDeadline,
+  storedObjectProblem,
+  verifyCodeHash,
+} from './logic.ts';
+import { FieldDbError, type FieldStore, type OrgContext } from './store.ts';
+
+/**
+ * field-api (W1-07; spec §6.5, Appendix B, F4, F5, F12): the field app's only backend. Hono
+ * (D6), mounted under /field-api; the field host proxies /api/<route> here (D39). A request is
+ * authenticated by its link code (`resolve`'s body, else the X-Link-Code header → field_links) and
+ * the reporter's device cookie (`sl_dev_<8 hex>` → field_devices.verified_at, 180 days), then
+ * served with the service role, scoped to that link's reporter and sites. Every answer is
+ * `Cache-Control: no-store`.
+ */
+
+/** What `device/send-code` hands the sender: W1-07 writes a console text, W1-08 the Notifier. */
+export interface VerifyCodeMessage {
+  org: OrgContext['org'];
+  pack: CountryPack;
+  reporter: ReporterRow;
+  consents: { held: ReadonlySet<ConsentType>; revoked: ReadonlySet<ConsentType> };
+  code: string;
+}
+
+/** Sends `verify_code` by SMS (SMS_ONLY_KEYS, spec §19 Q25); the Notifier's outcome. */
+export type SendVerifyCode = (message: VerifyCodeMessage) => Promise<NotifyOutcome>;
+
+export interface FieldApiDeps {
+  store: FieldStore;
+  sendVerifyCode: SendVerifyCode;
+  /** LINK_SIGNING_SECRET, read when a code is sent or checked (throws EnvError when unset). */
+  linkSigningSecret: () => string;
+  /** FIELD_APP_URL and CORS_EXTRA_ORIGINS (`fieldOrigins`). */
+  allowedOrigins: () => readonly string[];
+  now?: () => Date;
+  randomBytes?: (n: number) => Uint8Array;
+  randomUUID?: () => string;
+}
+
+interface LinkContext {
+  link: FieldLinkRow;
+  reporter: ReporterRow;
+  org: OrgContext;
+  pack: CountryPack;
+}
+
+interface DeviceContext extends LinkContext {
+  device: FieldDeviceRow;
+  /** The link's sites (all statuses); routes that write check `status = 'active'`. */
+  sites: SiteRow[];
+  consents: { held: Set<ConsentType>; revoked: Set<ConsentType> };
+}
+
+type Env = { Variables: { field: DeviceContext } };
+type Ctx = Context<Env>;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
+  const store = deps.store;
+  const now = deps.now ?? (() => new Date());
+  const randomBytes =
+    deps.randomBytes ?? ((n: number) => crypto.getRandomValues(new Uint8Array(n)));
+  const randomUUID = deps.randomUUID ?? (() => crypto.randomUUID());
+
+  const app = new Hono<Env>().basePath('/field-api');
+
+  // ── Every answer: no-store (registered first, so it wraps everything, errors included) ───────
+  app.use('*', async (c, next) => {
+    await next();
+    c.header('Cache-Control', 'no-store');
+  });
+  // Only from the field app's origin when the browser names one.
+  app.use('*', async (c, next) => {
+    if (!originAllowed(c.req.header('origin'), deps.allowedOrigins())) {
+      throw new FieldError(
+        403,
+        'origin_not_allowed',
+        'Origin not allowed: field-api takes FIELD_APP_URL and CORS_EXTRA_ORIGINS',
+      );
+    }
+    await next();
+  });
+
+  app.onError((err, c) => errorResponse(c, err, now()));
+  app.notFound((c) => c.json({ error: 'not_found' }, 404, { 'Cache-Control': 'no-store' }));
+
+  // ── Authentication helpers ───────────────────────────────────────────────────────────────────
+  /** The link, its reporter, org and pack; refuses a revoked or expired link, a disabled reporter. */
+  async function linkContext(link: FieldLinkRow | null): Promise<LinkContext> {
+    if (!link) throw new FieldError(404, 'link_not_found');
+    const reporter = await store.getReporter(link.reporter_id);
+    if (!reporter) throw new FieldError(404, 'link_not_found');
+    const org = await store.getOrgContext(reporter.org_id);
+    if (!org) throw new FieldError(404, 'link_not_found');
+    const pack = toCountryPack(org.country);
+    if (link.revoked_at !== null) throw new FieldError(410, 'link_revoked');
+    if (link.expires_at !== null && new Date(link.expires_at).getTime() <= now().getTime()) {
+      throw new FieldError(410, 'link_expired', undefined, {
+        locale: reporter.locale,
+        country: fieldCountryView(pack),
+      });
+    }
+    if (reporter.status === 'disabled') throw new FieldError(403, 'reporter_disabled');
+    return { link, reporter, org, pack };
+  }
+
+  async function loadLink(code: string): Promise<LinkContext> {
+    return linkContext(await store.findLink(linkCodeHash(code)));
+  }
+
+  function headerCode(c: Ctx): string {
+    const code = c.req.header(FIELD_LINK_HEADER)?.trim();
+    if (!code) throw new FieldError(401, 'link_required');
+    return code;
+  }
+
+  function linkFromHeader(c: Ctx): Promise<LinkContext> {
+    return loadLink(headerCode(c));
+  }
+
+  /** The reporter's cookie's device, if it is that reporter's and not revoked (verified or not). */
+  async function cookieDevice(c: Ctx, reporterId: string): Promise<FieldDeviceRow | null> {
+    const token = getCookie(c, deviceCookieName(reporterId));
+    if (!token) return null;
+    const device = await store.findDevice(sha256Hex(token));
+    if (!device || device.reporter_id !== reporterId || device.revoked_at !== null) return null;
+    return device;
+  }
+
+  const setDeviceCookie = (c: Ctx, reporterId: string, token: string) =>
+    setCookie(c, deviceCookieName(reporterId), token, DEVICE_COOKIE_OPTIONS);
+
+  /** 30 requests a minute per device (spec §6.5), and last_seen_at on each call. */
+  async function seeDevice(device: FieldDeviceRow): Promise<void> {
+    const { limit, windowSeconds } = FIELD_RATE_LIMITS.device;
+    const rl = await store.rateLimit(`dev:${device.id}`, limit, windowSeconds);
+    if (!rl.allowed) throw rateLimited(rl.resetAt, now());
+    await store.updateDevice(device.id, { last_seen_at: now().toISOString() });
+  }
+
+  /**
+   * Link + verified device + the link's sites + consents; `consent` false for the consent route.
+   * Without a device of the link's reporter verified in the last 180 days, every code answers the
+   * same 401 (unknown, revoked or expired alike), so these routes tell a caller nothing about a
+   * code it guesses (`resolve` and `device/*` still do: spec §19 Q42).
+   */
+  async function authenticate(c: Ctx, opts: { consent: boolean }): Promise<DeviceContext> {
+    const link = await store.findLink(linkCodeHash(headerCode(c)));
+    const device = link ? await cookieDevice(c, link.reporter_id) : null;
+    if (!device || !deviceVerified(device, now())) throw new FieldError(401, 'device_unverified');
+    const linkCtx = await linkContext(link);
+    await seeDevice(device);
+    const [reporterSites, consentRows] = await Promise.all([
+      store.listReporterSites(linkCtx.reporter.id),
+      store.listConsents(linkCtx.reporter.id),
+    ]);
+    const consents = consentState(consentRows);
+    if (opts.consent && needsConsent(consents.held)) {
+      throw new FieldError(403, 'consent_required');
+    }
+    const ctx: DeviceContext = {
+      ...linkCtx,
+      device,
+      sites: scopeSites(linkCtx.link, reporterSites),
+      consents,
+    };
+    c.set('field', ctx);
+    return ctx;
+  }
+
+  const audit = (ctx: LinkContext, action: string, entity: string, entityId: string, diff = {}) =>
+    store.audit({
+      orgId: ctx.reporter.org_id,
+      actorType: 'reporter',
+      actorId: ctx.reporter.id,
+      action,
+      entity,
+      entityId,
+      diff,
+    });
+
+  function siteInScope(ctx: DeviceContext, siteId: string | undefined | null): SiteRow {
+    const site = siteId ? ctx.sites.find((s) => s.id === siteId) : undefined;
+    if (!site) throw new FieldError(404, 'not_found', 'Site not found');
+    return site;
+  }
+
+  function activeSites(ctx: DeviceContext): SiteRow[] {
+    return ctx.sites.filter((s) => s.status === 'active');
+  }
+
+  /** The site a write is for: the body's, the link's, or the reporter's only active one. */
+  function writeSite(ctx: DeviceContext, siteId: string | undefined): SiteRow {
+    const id =
+      siteId ??
+      ctx.link.site_id ??
+      (activeSites(ctx).length === 1 ? activeSites(ctx)[0]!.id : null);
+    if (!id) throw new FieldError(400, 'invalid_request', 'siteId is required');
+    const site = siteInScope(ctx, id);
+    if (site.status !== 'active') throw new FieldError(409, 'site_inactive');
+    return site;
+  }
+
+  function reportDate(ctx: DeviceContext, site: SiteRow, requested: string | undefined): string {
+    const allowed = allowedReportDates(ctx.link, site, now(), ctx.org.settings?.working_days);
+    const date = requested ?? allowed[0]!;
+    if (!allowed.includes(date))
+      throw new FieldError(400, 'date_not_allowed', undefined, { allowed });
+    return date;
+  }
+
+  async function reportInScope(ctx: DeviceContext, id: string) {
+    if (!UUID.test(id)) throw new FieldError(404, 'not_found');
+    const report = await store.getReport(id);
+    if (!report || report.status === 'void' || !ctx.sites.some((s) => s.id === report.site_id)) {
+      throw new FieldError(404, 'not_found');
+    }
+    return report;
+  }
+
+  // ── resolve (F4 step 1) ──────────────────────────────────────────────────────────────────────
+  app.post('/resolve', async (c) => {
+    const { code } = await parseBody(c, ResolveRequestSchema);
+    const ctx = await loadLink(code);
+    const device = await cookieDevice(c, ctx.reporter.id);
+    if (device) await seeDevice(device);
+    const verified = device !== null && deviceVerified(device, now());
+    if (await store.markLinkOpened(ctx.link.id, now().toISOString())) {
+      await audit(ctx, 'link.opened', 'field_link', ctx.link.id, { kind: ctx.link.kind });
+    }
+    const [sites, consentRows] = await Promise.all([
+      verified ? store.listReporterSites(ctx.reporter.id) : Promise.resolve([]),
+      store.listConsents(ctx.reporter.id),
+    ]);
+    const body: ResolveResponse = {
+      reporter: {
+        name: ctx.reporter.name,
+        firstName: firstName(ctx.reporter.name),
+        locale: ctx.reporter.locale as ResolveResponse['reporter']['locale'],
+        contactPref: ctx.reporter.contact_pref,
+        status: ctx.reporter.status,
+      },
+      link: {
+        kind: ctx.link.kind,
+        siteId: ctx.link.site_id,
+        reportDate: ctx.link.report_date,
+        expiresAt: ctx.link.expires_at,
+      },
+      needsDeviceCheck: !verified,
+      needsConsent: needsConsent(consentState(consentRows).held),
+      sites: scopeSites(ctx.link, sites)
+        .filter((s) => s.status !== 'archived')
+        .map(fieldSite),
+      country: fieldCountryView(ctx.pack),
+    };
+    return c.json(body);
+  });
+
+  // ── device/send-code (F4 step 2) ─────────────────────────────────────────────────────────────
+  app.post('/device/send-code', async (c) => {
+    const ctx = await linkFromHeader(c);
+    let device = await cookieDevice(c, ctx.reporter.id);
+    if (device && deviceVerified(device, now())) {
+      await seeDevice(device);
+      return c.json({ alreadyVerified: true } satisfies SendCodeResponse);
+    }
+    // A device past its 180 days gets a new code like a new one (verify re-stamps it).
+    const secret = deps.linkSigningSecret();
+    const { limit, windowSeconds } = FIELD_RATE_LIMITS.codeSend;
+    const rl = await store.rateLimit(`code_send:${ctx.reporter.phone_e164}`, limit, windowSeconds);
+    if (!rl.allowed) throw rateLimited(rl.resetAt, now());
+
+    const userAgent = c.req.header('user-agent')?.slice(0, 500) ?? null;
+    if (!device) {
+      const token = newDeviceToken(randomBytes);
+      device = await store.insertDevice({
+        reporter_id: ctx.reporter.id,
+        device_token_hash: sha256Hex(token),
+        user_agent: userAgent,
+      });
+      setDeviceCookie(c, ctx.reporter.id, token);
+      await audit(ctx, 'device.created', 'field_device', device.id);
+    }
+    const code = newVerifyCode(randomBytes);
+    const expiresAt = new Date(now().getTime() + VERIFY_CODE_TTL_S * 1000).toISOString();
+    await store.updateDevice(device.id, {
+      code_hash: await verifyCodeHash(secret, device.id, code),
+      code_expires_at: expiresAt,
+      user_agent: userAgent,
+    });
+    const consents = consentState(await store.listConsents(ctx.reporter.id));
+    const outcome = await deps.sendVerifyCode({
+      org: ctx.org.org,
+      pack: ctx.pack,
+      reporter: ctx.reporter,
+      consents,
+      code,
+    });
+    if (outcome.channel === null) {
+      await audit(ctx, 'device.code_skipped', 'field_device', device.id, {
+        reason: outcome.reason,
+      });
+      throw new FieldError(409, 'code_undeliverable', undefined, { reason: outcome.reason });
+    }
+    await audit(ctx, 'device.code_sent', 'field_device', device.id, {
+      channel: outcome.channel,
+      message_id: outcome.messageId,
+      expires_at: expiresAt,
+    });
+    return c.json({ sent: true, expiresAt } satisfies SendCodeResponse, 202);
+  });
+
+  // ── device/verify (F4 step 2) ────────────────────────────────────────────────────────────────
+  app.post('/device/verify', async (c) => {
+    const ctx = await linkFromHeader(c);
+    const { code } = await parseBody(c, VerifyRequestSchema);
+    const device = await cookieDevice(c, ctx.reporter.id);
+    if (!device) throw new FieldError(409, 'device_required', 'Send a code first');
+    const consentNeeded = async () =>
+      needsConsent(consentState(await store.listConsents(ctx.reporter.id)).held);
+    if (deviceVerified(device, now())) {
+      await seeDevice(device);
+      return c.json({
+        verified: true,
+        needsConsent: await consentNeeded(),
+      } satisfies VerifyResponse);
+    }
+    const secret = deps.linkSigningSecret();
+    const { limit, windowSeconds } = FIELD_RATE_LIMITS.codeVerify;
+    const rl = await store.rateLimit(`code:${ctx.reporter.phone_e164}`, limit, windowSeconds);
+    if (!rl.allowed) {
+      if (rl.count === limit + 1) {
+        await audit(ctx, 'device.verify_locked', 'field_device', device.id, { until: rl.resetAt });
+      }
+      throw rateLimited(rl.resetAt, now());
+    }
+    if (!device.code_hash || !device.code_expires_at) throw new FieldError(409, 'no_code');
+    if (new Date(device.code_expires_at).getTime() <= now().getTime()) {
+      throw new FieldError(400, 'code_expired');
+    }
+    if (!timingSafeEqual(await verifyCodeHash(secret, device.id, code), device.code_hash)) {
+      await audit(ctx, 'device.code_failed', 'field_device', device.id, { attempt: rl.count });
+      throw new FieldError(400, 'code_invalid', undefined, { attemptsLeft: limit - rl.count });
+    }
+    const at = now().toISOString();
+    await store.updateDevice(device.id, {
+      verified_at: at,
+      last_seen_at: at,
+      code_hash: null,
+      code_expires_at: null,
+      user_agent: c.req.header('user-agent')?.slice(0, 500) ?? device.user_agent,
+    });
+    await audit(ctx, 'device.verified', 'field_device', device.id);
+    // The 180 days count from verification.
+    const token = getCookie(c, deviceCookieName(ctx.reporter.id));
+    if (token) setDeviceCookie(c, ctx.reporter.id, token);
+    return c.json({ verified: true, needsConsent: await consentNeeded() } satisfies VerifyResponse);
+  });
+
+  // ── consent (F4 step 3, Field-02) ────────────────────────────────────────────────────────────
+  app.post('/consent', async (c) => {
+    const ctx = await authenticate(c, { consent: false });
+    const body = await parseBody(c, ConsentRequestSchema);
+    if (!REQUIRED_CONSENTS.every((t) => body.types.includes(t))) {
+      throw new FieldError(400, 'consent_required', 'Recording and processing consent is required');
+    }
+    const required = ctx.pack.legalKeys.consent;
+    if (required !== undefined && body.textVersion !== required) {
+      throw new FieldError(409, 'text_version_mismatch', undefined, { textVersion: required });
+    }
+    if (!ctx.pack.fieldLocales.includes(body.locale)) {
+      throw new FieldError(400, 'locale_not_offered', undefined, {
+        offered: ctx.pack.fieldLocales,
+      });
+    }
+    const fresh = [...new Set(body.types)].filter((t) => !ctx.consents.held.has(t));
+    const evidence = {
+      device_id: ctx.device.id,
+      user_agent: c.req.header('user-agent')?.slice(0, 500) ?? null,
+      ip: clientIp(c.req.raw.headers),
+    };
+    const inserted = await store.insertConsents(
+      fresh.map((type) => ({
+        reporter_id: ctx.reporter.id,
+        type,
+        method: 'web_checkbox',
+        text_version: body.textVersion,
+        evidence,
+      })),
+    );
+    for (const row of inserted) {
+      await audit(ctx, 'consent.given', 'consent', row.id, {
+        type: row.type,
+        method: row.method,
+        text_version: row.text_version,
+      });
+    }
+    // F3 step 3: the first consent makes the reporter active. Opted-out stays opted-out (STOP is
+    // undone by START only); a disabled reporter never gets here.
+    const activate = ctx.reporter.status === 'invited';
+    const changed = {
+      ...(body.contactPref !== ctx.reporter.contact_pref ? { contact_pref: body.contactPref } : {}),
+      ...(body.locale !== ctx.reporter.locale ? { locale: body.locale } : {}),
+    };
+    let reporter = ctx.reporter;
+    if (activate || Object.keys(changed).length > 0) {
+      reporter = await store.updateReporter(ctx.reporter.id, {
+        ...changed,
+        ...(activate ? { status: 'active', activated_at: now().toISOString() } : {}),
+      });
+    }
+    if (Object.keys(changed).length > 0) {
+      await audit(ctx, 'reporter.preferences_changed', 'reporter', reporter.id, {
+        from: { contact_pref: ctx.reporter.contact_pref, locale: ctx.reporter.locale },
+        to: changed,
+        channel: 'web',
+      });
+    }
+    if (activate) {
+      await audit(ctx, 'reporter.activated', 'reporter', reporter.id, {
+        from: 'invited',
+        via: 'web',
+      });
+    }
+    const held = new Set([...ctx.consents.held, ...inserted.map((r) => r.type)]);
+    const response: ConsentResponse = {
+      consents: [...held].sort(),
+      status: reporter.status,
+      contactPref: reporter.contact_pref,
+      locale: reporter.locale as ConsentResponse['locale'],
+    };
+    return c.json(response);
+  });
+
+  // ── today (F5 step 1, F14) ───────────────────────────────────────────────────────────────────
+  app.get('/today', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const active = activeSites(ctx);
+    // The asked site, else a daily link's own, else the nearest deadline (F14).
+    const named = c.req.query('site') || ctx.link.site_id;
+    const site = named
+      ? siteInScope(ctx, named)
+      : nearestDeadlineSite(active, ctx.org.settings, now());
+    if (!site) throw new FieldError(404, 'not_found', 'No active site');
+    const allowedDates = allowedReportDates(ctx.link, site, now(), ctx.org.settings?.working_days);
+    const date = allowedDates[0]!;
+    const day = await store.getSiteDay(site.id, date);
+    const report = day ? await store.getLiveReport(day.id) : null;
+    const deadlineAt =
+      day?.deadline_at ??
+      deadlineInstant(date, siteDeadline(site, ctx.org.settings), site.timezone).toISOString();
+    const body: TodayResponse = {
+      site: fieldSite(site),
+      sites: active.map(fieldSite),
+      date,
+      allowedDates,
+      deadlineAt: new Date(deadlineAt).toISOString(),
+      dayStatus: day?.status ?? 'pending',
+      report: report ? { id: report.id, reportNo: report.report_no, status: report.status } : null,
+    };
+    return c.json(body);
+  });
+
+  // ── uploads (F5 step 3) ──────────────────────────────────────────────────────────────────────
+  app.post('/uploads', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const body = await parseBody(c, UploadRequestSchema);
+    const media = uploadMediaType(body.mime);
+    if (!media || media.kind !== body.kind) throw new FieldError(400, 'media_type_not_allowed');
+    if (ctx.link.kind === 'photos' && body.kind !== 'photo') {
+      throw new FieldError(400, 'kind_not_allowed', 'A photos link takes photos only (F9)');
+    }
+    const site = writeSite(ctx, body.siteId);
+    const date = reportDate(ctx, site, body.date);
+    // The RPC checks again when the upload completes; this spares an upload that cannot attach.
+    const day = await store.getSiteDay(site.id, date);
+    const live = day ? await store.getLiveReport(day.id) : null;
+    if (live && (live.status === 'filed' || live.status === 'signed_off')) {
+      throw new FieldError(409, 'report_filed');
+    }
+    if (!live && day && ['filed', 'weather_day', 'no_work'].includes(day.status)) {
+      throw new FieldError(409, 'day_closed');
+    }
+    const id = randomUUID();
+    const bucket = uploadBucket(body.kind);
+    const path = uploadStoragePath(ctx.reporter.org_id, site.id, date, id, media.ext);
+    await store.insertUpload({
+      id,
+      reporter_id: ctx.reporter.id,
+      site_id: site.id,
+      kind: body.kind,
+      storage_path: path,
+      mime: media.mime,
+      bytes: body.bytes,
+      recorded_at: body.recordedAt ?? null,
+    });
+    const signed = await store.createSignedUploadUrl(bucket, path);
+    await audit(ctx, 'upload.created', 'upload', id, { kind: body.kind, site_id: site.id, date });
+    const res: UploadResponse = { uploadId: id, bucket, path, ...signed };
+    return c.json(res, 201);
+  });
+
+  // ── uploads/:id/complete ─────────────────────────────────────────────────────────────────────
+  app.post('/uploads/:id/complete', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const id = c.req.param('id');
+    if (!UUID.test(id)) throw new FieldError(404, 'not_found');
+    const upload = await store.getUpload(id);
+    if (
+      !upload ||
+      upload.reporter_id !== ctx.reporter.id ||
+      !ctx.sites.some((s) => s.id === upload.site_id)
+    ) {
+      throw new FieldError(404, 'not_found');
+    }
+    // A signed upload URL fixes neither the type nor the size: check what Storage holds, keep
+    // its real size, and drop an object that is not what the upload named.
+    let bytes = upload.bytes;
+    if (upload.report_id === null) {
+      const bucket = uploadBucket(upload.kind);
+      const object = await store.objectInfo(bucket, upload.storage_path);
+      const problem = storedObjectProblem(upload.mime, object);
+      if (problem === 'upload_missing') {
+        throw new FieldError(409, problem, 'The file has not reached storage yet');
+      }
+      if (problem) {
+        await store.removeObject(bucket, upload.storage_path);
+        await audit(ctx, 'upload.rejected', 'upload', upload.id, {
+          reason: problem,
+          content_type: object?.contentType ?? null,
+          bytes: object?.size ?? null,
+        });
+        throw new FieldError(409, problem);
+      }
+      bytes = object!.size;
+    }
+    const result = await store.completeUpload(upload.id, ctx.reporter.id, bytes);
+    const res: CompleteResponse = {
+      reportId: result.reportId,
+      reportNo: result.reportNo,
+      reportStatus: result.reportStatus,
+      created: result.created,
+      alreadyComplete: result.alreadyComplete,
+    };
+    return c.json(res);
+  });
+
+  // ── reports/:id (question, draft, filed; processing poll) ────────────────────────────────────
+  app.get('/reports/:id', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const report = await reportInScope(ctx, c.req.param('id'));
+    const site = ctx.sites.find((s) => s.id === report.site_id)!;
+    const [day, version, question, progress] = await Promise.all([
+      store.getSiteDayById(report.site_day_id),
+      store.getVersion(report.id, report.current_version),
+      store.getOpenQuestion(report.id),
+      store.countReportMedia(report.id),
+    ]);
+    const filed = report.status === 'filed' || report.status === 'signed_off';
+    const pdfUrl =
+      filed && version?.pdf_path
+        ? await store.createSignedUrl('pdfs', version.pdf_path, SIGNED_URL_SECONDS)
+        : null;
+    const view: ReportView = {
+      id: report.id,
+      reportNo: report.report_no,
+      status: report.status,
+      siteId: site.id,
+      siteName: site.name,
+      date: day?.date ?? '',
+      channel: report.channel,
+      currentVersion: report.current_version,
+      needsReview: report.needs_review,
+      filedAt: report.filed_at,
+      confirmedAt: report.confirmed_at,
+      question: question
+        ? {
+            id: question.id,
+            field: question.field,
+            prompt: question.prompt,
+            options: questionOptions(question.options),
+          }
+        : null,
+      data: version ? readReportData(version.data as Parameters<typeof readReportData>[0]) : null,
+      progress,
+      pdfUrl,
+    };
+    return c.json(view);
+  });
+
+  // ── reports/:id/confirm (F8: Confirm & send) ─────────────────────────────────────────────────
+  app.post('/reports/:id/confirm', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const report = await reportInScope(ctx, c.req.param('id'));
+    const body = await parseBody(c, ConfirmRequestSchema);
+    if (report.status === 'filed' || report.status === 'signed_off') {
+      return c.json({ status: 'filed' } satisfies ConfirmResponse);
+    }
+    if (report.status !== 'awaiting_confirmation') {
+      throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    }
+    const version = body.version ?? report.current_version;
+    if (version !== report.current_version) {
+      throw new FieldError(409, 'draft_changed', undefined, {
+        currentVersion: report.current_version,
+      });
+    }
+    // field_confirm_report() checks both again under the site-day lock that completing an upload
+    // takes, enqueues file_report for this version (the dedupe key of the WhatsApp confirm and
+    // the timeouts, so one filing wins) and audits report.confirm_requested; the worker files
+    // only that version (apps/worker/src/pipeline/file.ts).
+    const res = await store.confirmReport(report.id, ctx.reporter.id, version);
+    return res.status === 'filed'
+      ? c.json({ status: 'filed' } satisfies ConfirmResponse)
+      : c.json({ status: 'queued' } satisfies ConfirmResponse, 202);
+  });
+
+  // ── day-status (F12 buttons) ─────────────────────────────────────────────────────────────────
+  app.post('/day-status', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const body = await parseBody(c, DayStatusRequestSchema);
+    const site = writeSite(ctx, body.siteId);
+    const date = reportDate(ctx, site, body.date);
+    const res = await store.setDayStatus({
+      reporterId: ctx.reporter.id,
+      siteId: site.id,
+      date,
+      status: body.status,
+      details: body.details ?? {},
+    });
+    return c.json(res satisfies DayStatusResponse);
+  });
+
+  // ── history (F10 Past reports, last 14 days) ─────────────────────────────────────────────────
+  app.get('/history', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const starts = new Map(
+      ctx.sites.map((s) => [s.id, historyStart(now(), s.timezone, HISTORY_DAYS)]),
+    );
+    const since = [...starts.values()].sort()[0];
+    const rows = since
+      ? await store.listRecentReports(
+          ctx.sites.map((s) => s.id),
+          since,
+        )
+      : [];
+    const body: HistoryResponse = {
+      reports: rows
+        .filter((r) => r.date >= (starts.get(r.site_id) ?? r.date))
+        .sort((a, b) =>
+          a.date === b.date ? b.report_no.localeCompare(a.report_no) : b.date.localeCompare(a.date),
+        )
+        .map((r) => ({
+          id: r.id,
+          reportNo: r.report_no,
+          status: r.status,
+          siteId: r.site_id,
+          siteName: ctx.sites.find((s) => s.id === r.site_id)?.name ?? '',
+          date: r.date,
+          filedAt: r.filed_at,
+          currentVersion: r.current_version,
+        })),
+    };
+    return c.json(body);
+  });
+
+  // ── preferences (F15) ────────────────────────────────────────────────────────────────────────
+  app.patch('/preferences', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const body = await parseBody(c, PreferencesRequestSchema);
+    if (body.locale !== undefined && !ctx.pack.fieldLocales.includes(body.locale)) {
+      throw new FieldError(400, 'locale_not_offered', undefined, {
+        offered: ctx.pack.fieldLocales,
+      });
+    }
+    const changed = {
+      ...(body.contactPref !== undefined && body.contactPref !== ctx.reporter.contact_pref
+        ? { contact_pref: body.contactPref }
+        : {}),
+      ...(body.locale !== undefined && body.locale !== ctx.reporter.locale
+        ? { locale: body.locale }
+        : {}),
+    };
+    let reporter = ctx.reporter;
+    if (Object.keys(changed).length > 0) {
+      reporter = await store.updateReporter(ctx.reporter.id, changed);
+      await audit(ctx, 'reporter.preferences_changed', 'reporter', reporter.id, {
+        from: { contact_pref: ctx.reporter.contact_pref, locale: ctx.reporter.locale },
+        to: changed,
+        channel: 'web',
+      });
+    }
+    const body2: PreferencesResponse = {
+      contactPref: reporter.contact_pref,
+      locale: reporter.locale as PreferencesResponse['locale'],
+    };
+    return c.json(body2);
+  });
+
+  return app;
+}
+
+// ── Request and error helpers ──────────────────────────────────────────────────────────────────
+
+async function parseBody<S extends z.ZodType>(c: Ctx, schema: S): Promise<z.output<S>> {
+  const text = await c.req.text();
+  let raw: unknown = {};
+  if (text.trim()) {
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      throw new FieldError(400, 'invalid_request', 'Body must be valid JSON');
+    }
+  }
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    throw new FieldError(400, 'invalid_request', 'Invalid request', {
+      details: formatIssues(parsed.error),
+    });
+  }
+  return parsed.data as z.output<S>;
+}
+
+function rateLimited(resetAt: string, now: Date): FieldError {
+  return new FieldError(429, 'rate_limited', undefined, {
+    retryAfter: retryAfterSeconds(resetAt, now),
+  });
+}
+
+/** The RPC refusals as answers. */
+const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']]> = {
+  upload_not_found: [404, 'not_found'],
+  site_not_found: [404, 'not_found'],
+  upload_path_mismatch: [409, 'wrong_state'],
+  report_not_found: [404, 'not_found'],
+  report_filed: [409, 'report_filed'],
+  report_filing: [409, 'report_filing'],
+  draft_changed: [409, 'draft_changed'],
+  report_in_progress: [409, 'report_in_progress'],
+  day_closed: [409, 'day_closed'],
+  wrong_state: [409, 'wrong_state'],
+  invalid_status: [400, 'invalid_request'],
+};
+
+function errorResponse(c: Context, err: unknown, now: Date): Response {
+  let fe: FieldError;
+  if (err instanceof FieldError) fe = err;
+  else if (err instanceof FieldDbError && DB_ERROR_ANSWERS[err.code]) {
+    const [status, code] = DB_ERROR_ANSWERS[err.code]!;
+    fe = new FieldError(status, code);
+  } else if (err instanceof EnvError) {
+    logError('field-api.config', err, { variable: err.variable });
+    fe = new FieldError(500, 'internal', 'Function is not configured');
+  } else {
+    logError('field-api.unhandled', err, { message: errorMessage(err), at: now.toISOString() });
+    fe = new FieldError(500, 'internal', 'Internal error');
+  }
+  const headers: Record<string, string> = { 'Cache-Control': 'no-store' };
+  if (fe.status === 429 && typeof fe.extra.retryAfter === 'number') {
+    headers['Retry-After'] = String(fe.extra.retryAfter);
+  }
+  const body = {
+    error: fe.code,
+    ...(fe.message !== fe.code ? { message: fe.message } : {}),
+    ...fe.extra,
+  };
+  return c.json(body as LinkExpiredBody | Record<string, unknown>, fe.status, headers);
+}

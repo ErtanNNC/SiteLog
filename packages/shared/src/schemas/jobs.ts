@@ -12,6 +12,8 @@ export const JobPayloadSchemas = {
     reportId: uuid.optional(),
     testMode: z.boolean().optional(),
   }),
+  /** §10.1: a voice note of the web recorder (field-api uploads/:id/complete, W1-07; handler W1-11). */
+  transcribe_upload: z.object({ uploadId: uuid }),
   extract_report: z.object({ reportId: uuid, reason: z.string().optional() }),
   decide_next: z.object({ reportId: uuid }),
   parse_reply: z.object({ messageId: uuid, reportId: uuid }),
@@ -21,6 +23,11 @@ export const JobPayloadSchemas = {
       .enum(['confirm', 'auto', 'timeout', 'office', 'weather_day', 'no_work'])
       .default('confirm'),
     confirmMessageId: uuid.optional(),
+    /**
+     * The draft version a field-api confirm was for (field_confirm_report()): the worker files
+     * only while the report is still awaiting confirmation at that version.
+     */
+    version: z.number().int().min(1).optional(),
   }),
   render_pdf: z.object({
     reportId: uuid,

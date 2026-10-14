@@ -565,6 +565,12 @@ export type FieldDeviceRow = {
   verified_at: string | null;
   last_seen_at: string | null;
   revoked_at: string | null;
+  /**
+   * The one-time code of F4 (20261014000006_field_api.sql): an HMAC of the device id and the
+   * 6-digit code under LINK_SIGNING_SECRET (field-api), never the code; null once verified.
+   */
+  code_hash: string | null;
+  code_expires_at: string | null;
 };
 
 /**
@@ -846,7 +852,13 @@ export type Database = {
       >;
       field_devices: Table<
         FieldDeviceRow,
-        'id' | 'user_agent' | 'verified_at' | 'last_seen_at' | 'revoked_at'
+        | 'id'
+        | 'user_agent'
+        | 'verified_at'
+        | 'last_seen_at'
+        | 'revoked_at'
+        | 'code_hash'
+        | 'code_expires_at'
       >;
       site_reporters: Table<SiteReporterRow, 'is_primary'>;
       site_recipients: Table<SiteRecipientRow, never>;
@@ -1133,6 +1145,34 @@ export type Database = {
         Returns: CountryRow;
       };
       next_report_no: { Args: { p_site_id: string }; Returns: string };
+      // field-api (20261014000006_field_api.sql), service role only: uploads/:id/complete numbers
+      // and inserts the site-day's report in one transaction and enqueues transcribe_upload.
+      field_complete_upload: {
+        Args: { p_upload_id: string; p_reporter_id: string; p_bytes?: number | null };
+        Returns: Json;
+      };
+      // day-status (F12 buttons): pending or reminded → no_work or weather_day.
+      field_set_day_status: {
+        Args: {
+          p_reporter_id: string;
+          p_site_id: string;
+          p_date: string;
+          p_status: string;
+          p_details?: Json;
+        };
+        Returns: Json;
+      };
+      // A rolling window per key over rate_limits: {allowed, count, resetAt}.
+      field_rate_limit: {
+        Args: { p_key: string; p_limit: number; p_window_seconds: number };
+        Returns: Json;
+      };
+      // reports/:id/confirm (F8): enqueues file_report for the confirmed version under the
+      // site-day lock: {status: 'queued' | 'filed', jobId, version}.
+      field_confirm_report: {
+        Args: { p_report_id: string; p_reporter_id: string; p_version: number };
+        Returns: Json;
+      };
       sign_off_report: { Args: { p_report_id: string }; Returns: Json };
       undo_sign_off: { Args: { p_report_id: string }; Returns: Json };
       // p_photos: new uploads [{path, mime, caption?, takenAt?, position?}] (OfficePhotoUpload), max 20 per call.

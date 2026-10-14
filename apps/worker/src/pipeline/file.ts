@@ -16,7 +16,10 @@ import { contextOf } from '../router/context';
 /**
  * §F7 step 3 — filing: freeze the current version, write the denormalised rows, set filed_at /
  * confirmed_at / is_late, flip the site-day, flag review reasons, render + deliver the PDF.
- * Idempotent: a report that is already filed or signed off is returned unchanged.
+ * Idempotent: a report that is already filed or signed off is returned unchanged. A field-api
+ * confirm names the version the reporter confirmed (`opts.version`, field_confirm_report()): if the
+ * report has left awaiting_confirmation or moved to another version since, nothing is filed
+ * (`report.confirm_stale`); the reporter confirms the new draft, or the timeouts file it.
  * Last step: the AI + WhatsApp cost estimate (§15 cost guardrail, src/cost.ts); it never fails filing.
  */
 
@@ -25,6 +28,8 @@ export type FileTrigger = 'confirm' | 'auto' | 'timeout' | 'office' | 'weather_d
 export interface FileOptions {
   trigger: FileTrigger;
   confirmMessageId?: string | null;
+  /** The draft version a field-api confirm was for (with trigger 'confirm'). */
+  version?: number;
   extraReasons?: string[];
   /** Skip the WhatsApp "Filed." messages (weather day / no work have their own copy). */
   silent?: boolean;
@@ -35,6 +40,8 @@ export interface FileResult {
   version: ReportVersionRow;
   reasons: string[];
   alreadyFiled: boolean;
+  /** A confirm for a state or version the report has left: nothing was filed. */
+  stale?: boolean;
 }
 
 export async function fileReport(
@@ -49,6 +56,31 @@ export async function fileReport(
   if (!existing) throw new Error(`report ${reportId} has no version ${versionNo}`);
   if (report.status === 'filed' || report.status === 'signed_off') {
     return { report, version: existing, reasons: report.review_reasons, alreadyFiled: true };
+  }
+  if (
+    opts.trigger === 'confirm' &&
+    opts.version !== undefined &&
+    (report.status !== 'awaiting_confirmation' || report.current_version !== opts.version)
+  ) {
+    await ctx.db.logAudit({
+      org_id: report.org_id,
+      actor_type: 'system',
+      action: 'report.confirm_stale',
+      entity: 'report',
+      entity_id: report.id,
+      diff: {
+        confirmed_version: opts.version,
+        current_version: report.current_version,
+        status: report.status,
+      },
+    });
+    return {
+      report,
+      version: existing,
+      reasons: report.review_reasons,
+      alreadyFiled: false,
+      stale: true,
+    };
   }
   const site = await ctx.db.siteContext(report.site_id);
   if (!site) throw new Error(`site ${report.site_id} not found`);

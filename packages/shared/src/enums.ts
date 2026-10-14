@@ -209,6 +209,8 @@ export type PackStatus = (typeof PACK_STATUSES)[number];
 export const JOB_TYPES = [
   'inbound_message',
   'transcribe_audio',
+  /** A field upload's voice note (W1-07 enqueues it; the handler is W1-11). */
+  'transcribe_upload',
   'extract_report',
   'decide_next',
   'parse_reply',

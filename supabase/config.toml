@@ -53,8 +53,9 @@ deno_version = 2
 # Edge Functions (§4.2, Appendix B).
 # All functions share one Deno config / import map: ./functions/deno.json. The CLI accepts a
 # deno.json for `import_map` (it reads its "imports" key), the same way it accepts import_map.json.
-# `verify_jwt = false` only for the three endpoints that are not called with a Supabase JWT:
-# Meta (HMAC signature), Stripe (Stripe-Signature) and pg_cron (SCHEDULER_SECRET bearer token).
+# `verify_jwt = false` only for the endpoints that are not called with a Supabase JWT: Meta
+# (HMAC signature), Stripe (Stripe-Signature), pg_cron (SCHEDULER_SECRET bearer token) and
+# field-api (the field app through its host's /api proxy: link code + device cookie, §6.5).
 # Every api-* function keeps the gateway JWT check and additionally resolves the user + org role.
 
 [functions.whatsapp-webhook]
@@ -74,6 +75,13 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/stripe-webhook/index.ts"
+
+# The field app's backend (W1-07): field users never get a database session or a JWT.
+[functions.field-api]
+enabled = true
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/field-api/index.ts"
 
 [functions.api-invite-reporter]
 enabled = true

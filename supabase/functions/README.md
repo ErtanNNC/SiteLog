@@ -15,11 +15,19 @@ worker and the web panel use.
 | `api-export-payroll`      | Supabase JWT, any member role                     | `GET ?org&week&site` → payroll CSV                                                            |
 | `api-evidence-pack`       | Supabase JWT, admin/pm/ops                        | Request an EOT evidence pack; fetch a 7-day signed download URL                               |
 | `api-billing`             | Supabase JWT, admin                               | Stripe checkout / portal / quantity sync / pause & resume site / invoices / status            |
+| `field-api`               | link code + `sl_dev_*` device cookie (no JWT)     | The field app's only backend (W1-07, spec §6.5, Appendix B): link, device, consent, uploads   |
 
-Every function is `Deno.serve(withHandler(...))`: CORS preflight for the panel origin
+Every function but `field-api` is `Deno.serve(withHandler(...))`: CORS preflight for the panel origin
 (`APP_URL`), Zod-validated input, typed `createClient<AppDatabase>` (service role), JSON logs via
 `console.log(JSON.stringify(...))`, and error mapping that never leaks internals. Decision logic
 lives in `logic.ts` / `csv.ts` modules next to `*_test.ts` files; `index.ts` only does I/O.
+
+`field-api` is a Hono app (GAP D6) mounted under `/field-api`: `app.ts` builds it from injected
+dependencies (`FieldStore`, the code sender, the secret, the clock), `store_supabase.ts` is the
+service-role store, `fake_store.ts` the in-memory one its Deno tests use, `logic.ts` the pure
+decisions. The field host proxies `/api/<route>` to it (D39, D43), so the device cookie stays
+first-party and there is no CORS: a browser `Origin` must be `FIELD_APP_URL` or one of
+`CORS_EXTRA_ORIGINS`. Every answer is `Cache-Control: no-store`.
 
 ## Layout
 
@@ -51,8 +59,11 @@ supabase secrets set \
   STRIPE_SECRET_KEY=sk_live_... \
   STRIPE_WEBHOOK_SECRET=whsec_... \
   STRIPE_PRICE_ID_SITE_US=price_...   # api-billing falls back to the old STRIPE_PRICE_ID_SITE
-# optional: extra browser origins allowed by CORS (comma-separated), e.g. a preview deployment
+# optional: extra browser origins allowed by CORS (comma-separated), e.g. a preview deployment;
+# field-api also accepts them as the Origin of the field app (a field preview)
 supabase secrets set CORS_EXTRA_ORIGINS=https://preview.sitelog.app
+# field-api: the HMAC key of the device codes, and the field app's origin
+supabase secrets set LINK_SIGNING_SECRET=$(openssl rand -hex 32) FIELD_APP_URL=https://go.sitelog.app
 ```
 
 Local development reads the same names from `supabase/functions/.env` (`supabase functions serve
@@ -81,6 +92,7 @@ supabase db push
 supabase functions deploy whatsapp-webhook --no-verify-jwt
 supabase functions deploy stripe-webhook   --no-verify-jwt
 supabase functions deploy scheduler-tick   --no-verify-jwt
+supabase functions deploy field-api        --no-verify-jwt   # link code + device cookie
 
 # panel API: gateway JWT check stays on; each function also resolves the user + org role
 supabase functions deploy api-invite-reporter
@@ -132,7 +144,25 @@ curl -X POST http://127.0.0.1:54321/functions/v1/scheduler-tick -H "Authorizatio
 
 # Stripe events
 stripe listen --forward-to http://127.0.0.1:54321/functions/v1/stripe-webhook
+
+# field-api: resolve a link (the demo seed's codes come from demoLinkCode(), packages/shared/src/demo/ids.ts)
+curl -i -X POST http://127.0.0.1:54321/functions/v1/field-api/resolve \
+  -H 'content-type: application/json' -d '{"code":"K7Q2MX"}'
+# the field-api suite of test:stack (the RPC race needs only the database)
+SUPABASE_DB_URL=... FIELD_API_URL=http://127.0.0.1:54321/functions/v1/field-api pnpm test:stack
 ```
+
+Inside the local Edge Runtime `SUPABASE_URL` is the gateway's internal address (`http://kong:8000`),
+so the signed upload URLs field-api returns name that host: replace the origin with the stack's API
+URL to use one from the host machine (the stack test does).
+
+Testing the field app on a phone against the local stack: use an HTTPS tunnel to the field app's
+dev or preview server, not a LAN address. The device cookie is `Secure`, so a plain-http
+`http://192.168.x.x:5174` page never keeps it and the device check loops. field-api reads its
+allowed `Origin` from `supabase/functions/.env`, not from the root `.env`: put the tunnel URL in
+`FIELD_APP_URL` (or `CORS_EXTRA_ORIGINS`) there too and restart `supabase functions serve`, or
+every POST answers 403 `origin_not_allowed`. The device code of a demo org appears as a console
+text in the Demo phone (`messages`); a real org gets no code before W1-08.
 
 ## Type-check, lint and tests (what CI runs)
 
@@ -197,6 +227,21 @@ Notes:
   `org_members` row up front so the membership exists on first sign-in. For an email that already
   has an account no invite can be sent; the membership is added and the user signs in with their
   usual magic link (`emailSent: false` in the response).
+- **field-api** (W1-07). `resolve` takes the link code in its body, every other route in the
+  `X-Link-Code` header; a new device gets the reporter's cookie `sl_dev_<8 hex>` (one per
+  reporter; httpOnly, Secure, SameSite=Lax, Path=/, 180 days) from `device/send-code`, and
+  `device/verify` marks it verified; field-api counts the 180 days from `verified_at` too. The
+  one-time code is stored only as an HMAC under `LINK_SIGNING_SECRET` (`field_devices.code_hash`,
+  10 min). Until W1-08 the code is a `console` text (a `messages` row the Demo phone shows) on demo
+  orgs only, never a real SMS. Every query is scoped to the link's reporter and sites (a daily
+  link: its site); the writes that must be atomic are the service-only RPCs
+  `field_complete_upload()` (numbers and inserts the site-day's report in one transaction,
+  enqueues `transcribe_upload`, refuses while the report is being filed), `field_confirm_report()`
+  (enqueues `file_report` for the confirmed version under the same site-day lock),
+  `field_set_day_status()` and `field_rate_limit()` (30 a minute per device, 5 code sends and 5
+  checks an hour per phone). `uploads/:id/complete` checks the stored object's type and size
+  (Storage's object info) before it attaches it. Refusals are JSON `{error: <code>}` from
+  `packages/shared/src/field-contract.ts`.
 - **stripe-webhook** maps Stripe statuses as trialing→trialing, active→active,
   past_due/unpaid/incomplete→past_due, canceled/incomplete_expired→canceled, paused→paused; an
   unknown status leaves `billing_status` untouched. `invoice.paid` only promotes to `active` when the

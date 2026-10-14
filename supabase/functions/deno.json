@@ -9,7 +9,9 @@
     "libphonenumber-js": "npm:libphonenumber-js@1.13.14",
     "libphonenumber-js/min": "npm:libphonenumber-js@1.13.14/min",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.117.3",
-    "stripe": "npm:stripe@23.0.0"
+    "stripe": "npm:stripe@23.0.0",
+    "hono": "npm:hono@4.13.12",
+    "hono/cookie": "npm:hono@4.13.12/cookie"
   },
   "compilerOptions": {
     "strict": true,

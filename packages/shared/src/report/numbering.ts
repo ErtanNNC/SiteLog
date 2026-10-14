@@ -29,6 +29,21 @@ export function audioStoragePath(
   return `${orgId}/${siteId}/${date}/${messageId}.${ext}`;
 }
 
+/**
+ * Storage path of a field upload (W1-07, `field-api` `uploads`): `{org}/{site}/{date}/{upload_id}.{ext}`
+ * in bucket `audio` (voice notes) or `photos` (`uploadBucket`), `date` the report date
+ * (`YYYY-MM-DD`, the site's day). field_complete_upload() reads the date back from the path.
+ */
+export function uploadStoragePath(
+  orgId: string,
+  siteId: string,
+  date: string,
+  uploadId: string,
+  ext: string,
+): string {
+  return `${orgId}/${siteId}/${date}/${uploadId}.${ext}`;
+}
+
 export function photoStoragePath(
   orgId: string,
   siteId: string,

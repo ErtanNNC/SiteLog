@@ -67,10 +67,11 @@ export const SUPABASE_STUB = `
 `;
 
 /**
- * A stand-in for Supabase's `storage` schema (supabase/storage migrations): buckets, objects with
- * RLS, `storage.foldername()`, and the API roles' grants (all privileges on the tables to `anon`,
- * `authenticated` and `service_role`; RLS decides). There is no foreign key from objects to
- * buckets, so a test can put objects in a bucket the migrations never created.
+ * A stand-in for Supabase's `storage` schema (supabase/storage migrations): buckets (with their
+ * type and size limits), objects with RLS, `storage.foldername()`, and the API roles' grants (all
+ * privileges on the tables to `anon`, `authenticated` and `service_role`; RLS decides). There is
+ * no foreign key from objects to buckets, so a test can put objects in a bucket the migrations
+ * never created.
  */
 export const STORAGE_STUB = `
   create schema if not exists storage;
@@ -78,6 +79,8 @@ export const STORAGE_STUB = `
     id text primary key,
     name text not null,
     public boolean default false,
+    file_size_limit bigint,
+    allowed_mime_types text[],
     created_at timestamptz not null default now()
   );
   create table storage.objects (

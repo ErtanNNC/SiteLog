@@ -15,9 +15,9 @@ import {
  * The §2.2 role matrix as data: for every table in `public`, which office roles may select,
  * insert, update and delete their own organisation's rows; which may read each storage bucket;
  * and which may run the two role-checked report RPCs of §2.2 (edit, sign off). Every other
- * organisation's rows, objects and reports are closed to every role. role-matrix.test.ts
- * measures each cell on PGlite against the two-org fixture (two-orgs.ts); anon.test.ts reuses the
- * statements.
+ * organisation's rows, objects and reports are closed to every role, and field-api's service-only
+ * RPCs to all of them. role-matrix.test.ts measures each cell on PGlite against the two-org
+ * fixture (two-orgs.ts); anon.test.ts reuses the statements.
  *
  * Known, deferred defects are listed in KNOWN_DEFECTS with the step that fixes them: the test
  * expects today's (wrong) result for those cells, so a fix fails the test until its entry is
@@ -438,6 +438,29 @@ export const RPCS: Record<
     allow: OFFICE,
     call: (o) =>
       `select create_report_version('${o.report}', '${V1_DATA}'::jsonb, 'matrix edit') as v`,
+  },
+  // field-api's RPCs (W1-07, 20261014000006_field_api.sql): the service role only; field users
+  // never get a database session (§6.5) and no office role writes field reports.
+  field_complete_upload: {
+    why: '§6.5: field-api only (service role), scoped to the link’s reporter in SQL.',
+    allow: NONE,
+    call: (o) => `select field_complete_upload('${o.upload}', '${o.reporter}') as v`,
+  },
+  field_set_day_status: {
+    why: '§6.5: field-api only (service role); the office marks no work with mark_no_work().',
+    allow: NONE,
+    call: (o) =>
+      `select field_set_day_status('${o.reporter}', '${o.site}', '2026-12-01', 'no_work') as v`,
+  },
+  field_rate_limit: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) => `select field_rate_limit('matrix:${o.org}', 1, 60) as v`,
+  },
+  field_confirm_report: {
+    why: '§6.5: field-api only (service role); the office files with sign-off and edits instead.',
+    allow: NONE,
+    call: (o) => `select field_confirm_report('${o.report}', '${o.reporter}', 1) as v`,
   },
 };
 

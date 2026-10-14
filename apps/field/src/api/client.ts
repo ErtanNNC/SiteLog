@@ -4,9 +4,12 @@
  * forwards `/api/<route>` to `{SUPABASE_URL}/functions/v1/field-api/<route>` (Vite proxy in dev and
  * preview, the host rewrite in production), so the device cookie stays first-party.
  *
- * W1-04 stub: nothing calls it yet. W1-07 builds `field-api` and its routes (Appendix B), W1-09 the
- * screens that call them.
+ * The routes' request schemas are `@sitelog/shared/field-api.ts`, their answers, error codes and
+ * constants `field-contract.ts` (no zod, so this bundle stays small; W1-07). `resolve` takes the
+ * link code in its body, every other route in the `X-Link-Code` header (`linkCode` below), and the
+ * device cookie goes with every call. W1-09 builds the screens that call them.
  */
+import { FIELD_LINK_HEADER } from '@sitelog/shared/field-contract.ts';
 
 /** The same-origin base path of field-api; `/api` unless the build sets another. */
 export const FIELD_API_URL = (import.meta.env.VITE_FIELD_API_URL || '/api').replace(/\/+$/, '');
@@ -45,6 +48,8 @@ export interface FieldApiRequest {
   method?: 'GET' | 'POST' | 'PATCH';
   /** Sent as JSON. */
   body?: unknown;
+  /** The link code, for every route but `resolve` (sent as the X-Link-Code header). */
+  linkCode?: string;
   signal?: AbortSignal;
 }
 
@@ -69,13 +74,14 @@ export function createFieldApi(
     url,
     async request<T>(route: FieldApiRoute, init: FieldApiRequest = {}): Promise<T> {
       const hasBody = init.body !== undefined;
+      const headers: Record<string, string> = { Accept: 'application/json' };
+      if (hasBody) headers['Content-Type'] = 'application/json';
+      if (init.linkCode) headers[FIELD_LINK_HEADER] = init.linkCode;
       const res = await doFetch(url(route), {
         method: init.method ?? (hasBody ? 'POST' : 'GET'),
         // Same origin: the device cookie goes with every call, and nowhere else.
         credentials: 'same-origin',
-        headers: hasBody
-          ? { Accept: 'application/json', 'Content-Type': 'application/json' }
-          : { Accept: 'application/json' },
+        headers,
         body: hasBody ? JSON.stringify(init.body) : undefined,
         signal: init.signal,
       });
@@ -104,5 +110,5 @@ export function createFieldApi(
   };
 }
 
-/** The app's client (unused until W1-09). */
+/** The app's client (the screens call it from W1-09). */
 export const fieldApi = createFieldApi();

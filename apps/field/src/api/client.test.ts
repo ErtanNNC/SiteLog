@@ -16,7 +16,7 @@ function fakeFetch(status: number, body: string, contentType: string | null = JS
 /** What the field host answers for /api/* when the build has no /api rule (the app fallback). */
 const INDEX_HTML = '<!doctype html><html lang="en"><head><title>SiteLog</title></head></html>';
 
-describe('field-api client stub (D39)', () => {
+describe('field-api client (D39)', () => {
   it('calls field-api same-origin at /api by default', () => {
     expect(FIELD_API_URL).toBe('/api');
     const api = createFieldApi();
@@ -44,6 +44,18 @@ describe('field-api client stub (D39)', () => {
       fetch: fakeFetch(200, '{"ok":true}', 'application/problem+json'),
     });
     await expect(problem.request('resolve')).resolves.toEqual({ ok: true });
+  });
+
+  it('sends the link code in the X-Link-Code header when given (every route but resolve)', async () => {
+    const fetch = fakeFetch(200, '{"dayStatus":"pending"}');
+    await createFieldApi({ fetch }).request('today?site=1', { linkCode: 'K7Q2MX' });
+    expect(fetch.mock.calls[0]![1]).toMatchObject({
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json', 'X-Link-Code': 'K7Q2MX' },
+    });
+    await createFieldApi({ fetch }).request('resolve', { body: { code: 'K7Q2MX' } });
+    expect(fetch.mock.calls[1]![1]!.headers).not.toHaveProperty('X-Link-Code');
   });
 
   it('GETs without a body, and returns null for an empty answer', async () => {

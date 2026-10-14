@@ -22,6 +22,21 @@ Fix the critical and high items before real customer data (other organisations, 
 - **Problem:** `withTimeout` only races the handler; no `AbortSignal` reaches it. When `JOB_TIMEOUT_MS` passes, the runner calls `fail_job`, which re-queues the job with a 30 s backoff and clears its lock, so `claim_jobs` hands it to another slot while the first handler may still be running (a hung Claude, Deepgram, provider or HTTP call). Both runs then write and send, and the lock key no longer serialises the report or conversation. Keeping `JOB_TIMEOUT_MS` a minute below the 10-minute stale lock (`STALE_LOCK_MS`) only makes the reclaim cover a worker that died mid-job; it does not cover a job that times out.
 - **Fix:** Add an `AbortSignal` to `Ctx` and pass it to the provider and HTTP calls, so a timeout stops the work. Call `failJob` only after the handler promise settles, or keep the row `running` and refresh `locked_at` as a heartbeat until it does (tracked in `docs/PLAN_WEEK1.md`, W1-10).
 
+### Office users can read reporters' device codes and personal links
+
+`supabase/functions/field-api/console_code.ts` · authorization / impersonation · Known (W1-07) · Device-code half closed in W1-07; link-code half in W1-08
+
+- **Problem:** Every SMS is logged in full in `messages.body`, which admin, pm and ops of the org read (`messages_select`, the Demo phone, realtime). The `welcome` text carries the reporter's personal link code and the `verify_code` text the device code. An office user who reads both can open the link on their own phone, verify it as the reporter, and then give consent, upload and confirm reports in the reporter's name: field-api audits it all as `actor_type 'reporter'`.
+- **Closed in W1-07 (device code):** the W1-07 console sender writes `verify_code` only for `is_demo` orgs (the Demo phone needs the text); a real org gets `no_channel` (409 `code_undeliverable`) and no `messages` row (`console_code_test.ts`, `app_test.ts`, the stack test). A masked code would be useless to the reporter, so a console `verify_code` has no use on a real org: W1-08's Notifier keeps that rule (`console` sends `verify_code` only on demo orgs; a real org without a sender id gets no code).
+- **Fix (link code, W1-08):** In the Notifier's `messages` logging, store the code part of a personal link masked (`…/r/••••••`) unless the transport is `console` on an `is_demo` org; or keep the full text in a service-only column. The device and consent audit rows (user agent, IP) help spot misuse until then.
+
+### The photos bucket takes any media type until step 22
+
+`supabase/migrations/20261014000006_field_api.sql` (section 7) · storage hardening · Known (W1-07) · Close in step 22
+
+- **Problem:** A signed upload URL fixes neither the type nor the size. W1-07 limits the `audio` bucket to `audio/*` and both upload buckets to 50 MB, and `field-api` checks every object before its upload completes and removes one that fails; but the `photos` bucket still stores any type, because the WhatsApp intake puts documents there (`apps/worker/src/router/media.ts`). An object uploaded through a field signed URL and never completed stays in the bucket with the type its uploader chose; no panel view lists it.
+- **Fix:** With step 22 (WhatsApp removed), a forward migration sets `allowed_mime_types` on `photos` to `image/*` (the `UPLOAD_MEDIA_TYPES` photo types and the office photo types), and the retention job also removes the objects of field `uploads` rows that never completed, as `list_orphan_office_photos()` already does for office photos after a day.
+
 ## Critical (1)
 
 ### Inviting a phone already used by another org's reporter gives the inviting org that reporter's conversation and full message history

@@ -11,6 +11,7 @@ import { sendEmail } from './send_email';
 import { sendMessage, sendTemplate } from './send_template';
 import { sendWelcome } from './send_welcome';
 import { transcribeAudioJob } from './transcribe_audio';
+import { transcribeUploadJob } from './transcribe_upload';
 import type { JobRegistry } from './types';
 import { weeklyDigest } from './weekly_digest';
 
@@ -18,6 +19,7 @@ import { weeklyDigest } from './weekly_digest';
 export const registry: JobRegistry = {
   inbound_message: inboundMessage,
   transcribe_audio: transcribeAudioJob,
+  transcribe_upload: transcribeUploadJob,
   extract_report: extractReport,
   decide_next: decideNext,
   parse_reply: parseReply,

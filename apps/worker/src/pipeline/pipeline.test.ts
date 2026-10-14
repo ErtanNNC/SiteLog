@@ -376,6 +376,52 @@ describe('pipeline: compose + extract job + filing', () => {
     expect((await h.db.getSiteDay(siteDay.id))!.report_id).toBe(report.id);
   });
 
+  it('fileReport files a field-api confirm only at the confirmed version and state', async () => {
+    const h = createHarness();
+    const siteDay = await h.db.getOrCreateSiteDay(
+      SITE_OAKMONT,
+      '2026-10-09',
+      deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+    );
+    const report = await h.db.insertReport({
+      org_id: h.org.id,
+      site_id: SITE_OAKMONT,
+      site_day_id: siteDay.id,
+      report_no: 'OM-1187-0122',
+      reporter_id: h.jorge.id,
+      received_at: '2026-10-09T22:00:00Z',
+      kind: 'daily',
+      status: 'awaiting_confirmation',
+    });
+    const input = load<ExtractionInput>('transcripts', 'oakmont-unknown-sub');
+    const { data } = postProcessExtraction(
+      load<ExtractionOutput>('tool-outputs', 'oakmont-unknown-sub'),
+      input,
+    );
+    await storeDraft(h.ctx, report, data);
+    h.setNow(new Date('2026-10-09T22:21:00Z'));
+
+    // More audio arrived after the confirm (a second reporter, a queued offline clip).
+    await h.db.updateReport(report.id, { status: 'processing' });
+    const moved = await fileReport(h.ctx, report.id, { trigger: 'confirm', version: 1 });
+    expect([moved.stale, moved.alreadyFiled, moved.report.status]).toEqual([
+      true,
+      false,
+      'processing',
+    ]);
+    // A newer draft than the one confirmed.
+    await h.db.updateReport(report.id, { status: 'awaiting_confirmation' });
+    const newer = await fileReport(h.ctx, report.id, { trigger: 'confirm', version: 2 });
+    expect(newer.stale).toBe(true);
+    expect(h.db.jobsOfType('render_pdf')).toHaveLength(0);
+    expect(h.db.data.audit.filter((a) => a.action === 'report.confirm_stale')).toHaveLength(2);
+    expect((await h.db.getReport(report.id))!.status).toBe('awaiting_confirmation');
+
+    // The confirmed version, still awaiting confirmation: filed.
+    const filed = await fileReport(h.ctx, report.id, { trigger: 'confirm', version: 1 });
+    expect([filed.stale, filed.report.status]).toEqual([undefined, 'filed']);
+  });
+
   it('render_pdf stores the PDF, sends it on WhatsApp with the edit hint and enqueues the email', async () => {
     const h = createHarness();
     const siteDay = await h.db.getOrCreateSiteDay(

@@ -1,0 +1,320 @@
+import type { FieldCountryView } from './countries.ts';
+import type {
+  ConsentType,
+  ContactPref,
+  FieldChannel,
+  LinkKind,
+  ReportStatus,
+  ReporterStatus,
+  SiteDayStatus,
+  SiteStatus,
+  UploadKind,
+} from './enums.ts';
+import type { ReporterLocale } from './locale.ts';
+import type { DailyReportData } from './schemas/report.ts';
+
+/**
+ * The contract between the field app (`apps/field`) and `field-api` (W1-07; spec §6.5, Appendix B,
+ * F4, F5, F12): response shapes, error codes and the constants both sides use. No zod here, so the
+ * field app imports it without the schema library; the request schemas are `field-api.ts`.
+ * The field app reaches field-api only same-origin at `/api/<route>` (D39); field-api mounts its
+ * routes under `/field-api` (Hono, D6).
+ *
+ * Authentication: `resolve` takes the link code in its body; every other route takes it in the
+ * `X-Link-Code` header, with the reporter's device cookie (`sl_dev_<8 hex>`, one per reporter;
+ * httpOnly, so the app never sees it). Every route but `resolve` and `device/*` needs a device
+ * verified within the last 180 days (and answers an unknown link like a valid one without one: 401
+ * `device_unverified`), and every route but `resolve`, `device/*` and `consent` the reporter's
+ * recording and data-processing consents.
+ *
+ * Errors are JSON `{ error: FieldApiErrorCode, message?, details?, retryAfter? }`; the app maps
+ * the code to its own copy (no server text reaches the screen).
+ */
+
+/** The header that carries the link code on every route but `resolve`. */
+export const FIELD_LINK_HEADER = 'X-Link-Code';
+
+/**
+ * The device cookie (§6.5, F4): httpOnly, Secure, SameSite=Lax, 180 days. One per reporter, named
+ * `sl_dev_` + the first 8 hex characters of the SHA-256 of the reporter id (`deviceCookieName()`,
+ * field-api.ts), so a phone that opens two reporters' links (a demo phone, a person in two orgs)
+ * keeps both verifications. field-api also counts the 180 days from `verified_at`.
+ */
+export const DEVICE_COOKIE_PREFIX = 'sl_dev_';
+export const DEVICE_COOKIE_MAX_AGE_S = 180 * 24 * 60 * 60;
+
+/** F4 step 2: a 6-digit code by SMS, valid for 10 minutes. */
+export const VERIFY_CODE_LENGTH = 6;
+export const VERIFY_CODE_TTL_S = 10 * 60;
+
+/**
+ * Rate limits on `rate_limits` (spec §6.5, GAP D26): 30 requests a minute per device; 5 code sends
+ * and 5 code verifications an hour per phone. A window starts at the key's first hit.
+ */
+export const FIELD_RATE_LIMITS = {
+  device: { limit: 30, windowSeconds: 60 },
+  codeSend: { limit: 5, windowSeconds: 60 * 60 },
+  codeVerify: { limit: 5, windowSeconds: 60 * 60 },
+} as const;
+
+/** `history`: the last 14 days (F10 "Past reports"), in each site's time zone. */
+export const HISTORY_DAYS = 14;
+
+/** Signed download URLs field-api hands out (a filed report's PDF): 10 minutes (§6.5). */
+export const SIGNED_URL_SECONDS = 10 * 60;
+
+/** The largest file field-api signs an upload for: Supabase Storage's default per-file limit. */
+export const UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
+
+/**
+ * The media types the recorder may upload, with the kind and file extension field-api stores them
+ * under (§9.3: `audio/webm;codecs=opus` on Chrome and Android, `audio/mp4` on iOS Safari; the
+ * `<input capture>` fallback and photos).
+ */
+export const UPLOAD_MEDIA_TYPES: Readonly<Record<string, { kind: UploadKind; ext: string }>> = {
+  'audio/webm': { kind: 'audio', ext: 'webm' },
+  'audio/mp4': { kind: 'audio', ext: 'm4a' },
+  'audio/x-m4a': { kind: 'audio', ext: 'm4a' },
+  'audio/aac': { kind: 'audio', ext: 'aac' },
+  'audio/ogg': { kind: 'audio', ext: 'ogg' },
+  'audio/mpeg': { kind: 'audio', ext: 'mp3' },
+  'audio/wav': { kind: 'audio', ext: 'wav' },
+  'image/jpeg': { kind: 'photo', ext: 'jpg' },
+  'image/png': { kind: 'photo', ext: 'png' },
+  'image/webp': { kind: 'photo', ext: 'webp' },
+  'image/heic': { kind: 'photo', ext: 'heic' },
+  'image/heif': { kind: 'photo', ext: 'heif' },
+};
+
+/** The base media type (lower case, parameters dropped) and its storage extension, or null. */
+export function uploadMediaType(
+  mime: string,
+): { mime: string; kind: UploadKind; ext: string } | null {
+  const base = (mime.split(';')[0] ?? '').trim().toLowerCase();
+  const known = UPLOAD_MEDIA_TYPES[base];
+  return known ? { mime: base, ...known } : null;
+}
+
+/** The private bucket of an upload kind (20261011000006_platform.sql). */
+export function uploadBucket(kind: UploadKind): 'audio' | 'photos' {
+  return kind === 'audio' ? 'audio' : 'photos';
+}
+
+/** The `error` of a field-api answer. */
+export const FIELD_API_ERRORS = [
+  'invalid_request',
+  'not_found',
+  'origin_not_allowed',
+  'link_required',
+  'link_not_found',
+  'link_expired',
+  'link_revoked',
+  'reporter_disabled',
+  'device_unverified',
+  'device_required',
+  'no_code',
+  'code_invalid',
+  'code_expired',
+  'code_undeliverable',
+  'consent_required',
+  'text_version_mismatch',
+  'locale_not_offered',
+  'site_inactive',
+  'date_not_allowed',
+  'kind_not_allowed',
+  'media_type_not_allowed',
+  'upload_missing',
+  'upload_too_large',
+  'report_filed',
+  'report_filing',
+  'draft_changed',
+  'report_in_progress',
+  'day_closed',
+  'wrong_state',
+  'rate_limited',
+  'internal',
+] as const;
+export type FieldApiErrorCode = (typeof FIELD_API_ERRORS)[number];
+
+export interface FieldApiErrorBody {
+  error: FieldApiErrorCode;
+  /** English, for logs and developers; the app shows its own copy. */
+  message?: string;
+  details?: unknown;
+  /** Seconds until a rate-limited caller may try again (also the Retry-After header). */
+  retryAfter?: number;
+}
+
+/** The consents without which the reporter cannot submit (F4 "required", F15 revoking). */
+export const REQUIRED_CONSENTS = [
+  'recording',
+  'data_processing',
+] as const satisfies readonly ConsentType[];
+
+// ───────────────────────────── Responses ─────────────────────────────
+
+export interface FieldSite {
+  id: string;
+  name: string;
+  timezone: string;
+  status: SiteStatus;
+}
+
+/** `POST resolve`. Sites are listed once the device is verified. */
+export interface ResolveResponse {
+  reporter: {
+    name: string;
+    firstName: string;
+    locale: ReporterLocale;
+    contactPref: ContactPref;
+    status: ReporterStatus;
+  };
+  link: {
+    kind: LinkKind;
+    siteId: string | null;
+    reportDate: string | null;
+    expiresAt: string | null;
+  };
+  needsDeviceCheck: boolean;
+  needsConsent: boolean;
+  sites: FieldSite[];
+  /** The org's country pack, the subset the field app needs (§4.6): never a sender or provider. */
+  country: FieldCountryView;
+}
+
+/** The body of a 410 `link_expired`: enough for the Expired screen's language and call option. */
+export interface LinkExpiredBody extends FieldApiErrorBody {
+  error: 'link_expired';
+  locale: ReporterLocale;
+  country: FieldCountryView;
+}
+
+/** `POST device/send-code`. */
+export type SendCodeResponse =
+  | { sent: true; expiresAt: string; alreadyVerified?: never }
+  | { alreadyVerified: true; sent?: never };
+
+/** `POST device/verify`. */
+export interface VerifyResponse {
+  verified: true;
+  needsConsent: boolean;
+}
+
+/** `POST consent`. */
+export interface ConsentResponse {
+  consents: ConsentType[];
+  status: ReporterStatus;
+  contactPref: ContactPref;
+  locale: ReporterLocale;
+}
+
+/** `GET today?site=` (F5 step 1, Field-03; F14 switcher). */
+export interface TodayResponse {
+  site: FieldSite;
+  /** The reporter's active sites in this link's scope (the switcher when there is more than one). */
+  sites: FieldSite[];
+  /** The report date: the link's date, else today in the site's time zone. */
+  date: string;
+  /**
+   * The dates an upload or day-status may name (first = `date`): a daily link its own; a personal
+   * link today, and before 12:00 site time also the previous working day (F5 "today or
+   * yesterday?", spec §19 Q43).
+   */
+  allowedDates: string[];
+  deadlineAt: string;
+  /** `pending` while the scheduler has not created the day yet. */
+  dayStatus: SiteDayStatus;
+  report: { id: string; reportNo: string; status: ReportStatus } | null;
+}
+
+/**
+ * `POST uploads`: PUT the file to `signedUrl` (Supabase Storage's signed upload URL; its lifetime
+ * is Storage's, 2 hours, README "Deliberate deviations"), then `POST uploads/:id/complete`.
+ */
+export interface UploadResponse {
+  uploadId: string;
+  bucket: 'audio' | 'photos';
+  path: string;
+  signedUrl: string;
+  token: string;
+}
+
+/**
+ * `POST uploads/:id/complete`. field-api checks the stored object first: there (409
+ * `upload_missing`), of the media type the upload named (409 `media_type_not_allowed`), at most
+ * `UPLOAD_MAX_BYTES` (409 `upload_too_large`); `uploads.bytes` is the stored size. While the report
+ * is being filed it refuses (409 `report_filing`).
+ */
+export interface CompleteResponse {
+  reportId: string;
+  reportNo: string;
+  reportStatus: ReportStatus;
+  /** This upload started the day's report. */
+  created: boolean;
+  /** The upload was completed before (a retry): nothing changed. */
+  alreadyComplete: boolean;
+}
+
+/** `GET reports/:id`: the question, draft or filed view model (Field-05, -06, -07; processing). */
+export interface ReportView {
+  id: string;
+  reportNo: string;
+  status: ReportStatus;
+  siteId: string;
+  siteName: string;
+  date: string;
+  channel: FieldChannel | null;
+  currentVersion: number;
+  needsReview: boolean;
+  filedAt: string | null;
+  confirmedAt: string | null;
+  /** The open question (one at a time, §10.5), if any. */
+  question: {
+    id: string;
+    field: string;
+    prompt: string;
+    options: { id: string; label: string }[] | null;
+  } | null;
+  /** The current version's data in §10.3 v2 terms; null before the first draft. */
+  data: DailyReportData | null;
+  /** For the Processing ticks (F5 step 4). */
+  progress: { voiceNotes: number; transcribed: number; photos: number };
+  /** A filed report's PDF, signed for 10 minutes. */
+  pdfUrl: string | null;
+}
+
+/**
+ * `POST reports/:id/confirm` `{version?}`: `queued` (file_report enqueued for that version, the
+ * current one when omitted) or `filed` already. 409 `wrong_state` unless awaiting confirmation,
+ * 409 `draft_changed` when a newer draft replaced the version confirmed.
+ */
+export interface ConfirmResponse {
+  status: 'queued' | 'filed';
+}
+
+/** `POST day-status`. */
+export interface DayStatusResponse {
+  siteDayId: string;
+  status: SiteDayStatus;
+  changed: boolean;
+}
+
+/** `GET history` (F10 Past reports). */
+export interface HistoryResponse {
+  reports: {
+    id: string;
+    reportNo: string;
+    status: ReportStatus;
+    siteId: string;
+    siteName: string;
+    date: string;
+    filedAt: string | null;
+    currentVersion: number;
+  }[];
+}
+
+/** `PATCH preferences`. */
+export interface PreferencesResponse {
+  contactPref: ContactPref;
+  locale: ReporterLocale;
+}

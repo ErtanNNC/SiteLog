@@ -1,0 +1,295 @@
+import {
+  DEVICE_COOKIE_MAX_AGE_S,
+  REQUIRED_CONSENTS,
+  UPLOAD_MAX_BYTES,
+  VERIFY_CODE_LENGTH,
+  addDays,
+  deadlineInstant,
+  formatDeadline,
+  localDate,
+  previousWorkingDay,
+  type ConsentRow,
+  type ConsentType,
+  type CountryPack,
+  type FieldApiErrorCode,
+  type FieldCountryView,
+  type FieldDeviceRow,
+  type FieldLinkRow,
+  type FieldSite,
+  type OrgSettingsRow,
+  type SiteRow,
+} from '@sitelog/shared';
+
+/**
+ * field-api's decisions, free of I/O (tested in logic_test.ts): errors, the device cookie and
+ * token, a device's 180 days, the one-time code, consent state, the report dates a link allows,
+ * Today's default site, the stored-object check, the origin check and the pack subset the field
+ * app may see.
+ */
+
+/** A refusal with its HTTP status and stable code (`FieldApiErrorBody`). */
+export class FieldError extends Error {
+  constructor(
+    readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 429 | 500,
+    readonly code: FieldApiErrorCode,
+    message?: string,
+    readonly extra: Record<string, unknown> = {},
+  ) {
+    super(message ?? code);
+    this.name = 'FieldError';
+  }
+}
+
+/** The device cookie's attributes (spec §6.5, F4): first-party through the field host's /api proxy. */
+export const DEVICE_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'Lax',
+  path: '/',
+  maxAge: DEVICE_COOKIE_MAX_AGE_S,
+} as const;
+
+const toHex = (bytes: Uint8Array) =>
+  Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+function toBase64Url(bytes: Uint8Array): string {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * A device counts as verified for 180 days from its verification (spec §6.5, F4, §19 Q5), the
+ * cookie's Max-Age, whatever cookie the browser still sends; revoked never.
+ */
+export function deviceVerified(
+  device: Pick<FieldDeviceRow, 'verified_at' | 'revoked_at'>,
+  now: Date,
+): boolean {
+  if (device.verified_at === null || device.revoked_at !== null) return false;
+  return now.getTime() - new Date(device.verified_at).getTime() < DEVICE_COOKIE_MAX_AGE_S * 1000;
+}
+
+/** A device token: 32 random bytes, base64url. The database keeps only its SHA-256. */
+export function newDeviceToken(randomBytes: (n: number) => Uint8Array): string {
+  return toBase64Url(randomBytes(32));
+}
+
+/** A uniformly random 6-digit code (rejection sampling over 32-bit values, no modulo bias). */
+export function newVerifyCode(randomBytes: (n: number) => Uint8Array): string {
+  const space = 10 ** VERIFY_CODE_LENGTH;
+  const limit = Math.floor(0x1_0000_0000 / space) * space;
+  for (;;) {
+    const b = randomBytes(4);
+    const n = ((b[0]! << 24) | (b[1]! << 16) | (b[2]! << 8) | b[3]!) >>> 0;
+    if (n < limit) return String(n % space).padStart(VERIFY_CODE_LENGTH, '0');
+  }
+}
+
+/**
+ * What `field_devices.code_hash` stores: HMAC-SHA-256 of `device id:code` under
+ * LINK_SIGNING_SECRET, so a 6-digit code cannot be read back from the hash by trying all million.
+ */
+export async function verifyCodeHash(
+  secret: string,
+  deviceId: string,
+  code: string,
+): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(`${deviceId}:${code}`));
+  return toHex(new Uint8Array(mac));
+}
+
+/** The consent types a reporter holds (unrevoked) and those given and revoked with none since. */
+export function consentState(rows: readonly ConsentRow[]): {
+  held: Set<ConsentType>;
+  revoked: Set<ConsentType>;
+} {
+  const held = new Set<ConsentType>();
+  const given = new Set<ConsentType>();
+  for (const r of rows) {
+    given.add(r.type);
+    if (r.revoked_at === null) held.add(r.type);
+  }
+  const revoked = new Set([...given].filter((t) => !held.has(t)));
+  return { held, revoked };
+}
+
+/** F4 step 3: the Welcome & consent screen until the required consents are held. */
+export function needsConsent(held: ReadonlySet<ConsentType>): boolean {
+  return !REQUIRED_CONSENTS.every((t) => held.has(t));
+}
+
+/** The pack subset `resolve` hands the field app (spec §4.6): never the sender id or a provider. */
+export function fieldCountryView(pack: CountryPack): FieldCountryView {
+  return {
+    code: pack.code,
+    voiceNumber: pack.voiceNumber,
+    fieldLocales: pack.fieldLocales,
+    twoWaySms: pack.twoWaySms,
+    messageChannels: pack.messageChannels,
+    legalKeys: pack.legalKeys,
+  };
+}
+
+export function fieldSite(s: Pick<SiteRow, 'id' | 'name' | 'timezone' | 'status'>): FieldSite {
+  return { id: s.id, name: s.name, timezone: s.timezone, status: s.status };
+}
+
+/** A link's sites: a daily or photos link names one; a personal link covers all of them. */
+export function scopeSites<S extends Pick<SiteRow, 'id'>>(
+  link: Pick<FieldLinkRow, 'site_id'>,
+  reporterSites: readonly S[],
+): S[] {
+  return link.site_id === null
+    ? [...reporterSites]
+    : reporterSites.filter((s) => s.id === link.site_id);
+}
+
+/** "17:30" for a site: its own deadline, else the org's default (create_office_report does the same). */
+export function siteDeadline(
+  site: Pick<SiteRow, 'deadline'>,
+  settings: Pick<OrgSettingsRow, 'default_deadline'> | null,
+): string {
+  return formatDeadline(site.deadline ?? settings?.default_deadline ?? '17:30');
+}
+
+/** F5: before this hour (site time) a personal link may also report the previous working day. */
+export const YESTERDAY_UNTIL_HOUR = 12;
+
+/**
+ * The report dates a link allows for a site (F5): a daily or photos link its own date; a personal
+ * link today in the site's time zone, and before 12:00 there also the previous working day of the
+ * org ("before noon: 'Is this for today or yesterday?'"; yesterday as the previous working day is
+ * spec §19 Q43). The first is the default.
+ */
+export function allowedReportDates(
+  link: Pick<FieldLinkRow, 'report_date'>,
+  site: Pick<SiteRow, 'timezone'>,
+  now: Date,
+  workingDays: readonly number[] | null | undefined,
+): string[] {
+  if (link.report_date) return [link.report_date];
+  const today = localDate(now, site.timezone);
+  if (
+    now.getTime() >=
+    deadlineInstant(
+      today,
+      `${String(YESTERDAY_UNTIL_HOUR).padStart(2, '0')}:00`,
+      site.timezone,
+    ).getTime()
+  )
+    return [today];
+  const days = workingDays?.length ? workingDays.map(Number) : [1, 2, 3, 4, 5];
+  return [today, previousWorkingDay(today, days)];
+}
+
+/** What Storage holds at an upload's path (`FieldStore.objectInfo`). */
+export interface StoredObject {
+  size: number | null;
+  contentType: string | null;
+}
+
+/**
+ * Why a stored object cannot complete its upload, or null (a signed upload URL fixes neither the
+ * type nor the size): missing, not the base media type the upload named, or over
+ * UPLOAD_MAX_BYTES. An unknown type or size counts as a mismatch.
+ */
+export function storedObjectProblem(
+  declaredMime: string | null,
+  object: StoredObject | null,
+): 'upload_missing' | 'media_type_not_allowed' | 'upload_too_large' | null {
+  if (!object) return 'upload_missing';
+  const base = (object.contentType?.split(';')[0] ?? '').trim().toLowerCase();
+  if (!declaredMime || base !== declaredMime.toLowerCase()) return 'media_type_not_allowed';
+  if (object.size === null || object.size > UPLOAD_MAX_BYTES) return 'upload_too_large';
+  return null;
+}
+
+/**
+ * Today's default site for a personal link with several (F14): the one whose deadline today is
+ * nearest to now. Ties keep the reporter's order.
+ */
+export function nearestDeadlineSite<S extends Pick<SiteRow, 'timezone' | 'deadline'>>(
+  sites: readonly S[],
+  settings: Pick<OrgSettingsRow, 'default_deadline'> | null,
+  now: Date,
+): S | null {
+  let best: S | null = null;
+  let bestGap = Infinity;
+  for (const s of sites) {
+    const date = localDate(now, s.timezone);
+    const gap = Math.abs(
+      deadlineInstant(date, siteDeadline(s, settings), s.timezone).getTime() - now.getTime(),
+    );
+    if (gap < bestGap) {
+      best = s;
+      bestGap = gap;
+    }
+  }
+  return best;
+}
+
+/** The first day of "the last 14 days" in a site's time zone. */
+export function historyStart(now: Date, timezone: string, days: number): string {
+  return addDays(localDate(now, timezone), -(days - 1));
+}
+
+/**
+ * Browser origins field-api accepts (an Origin header is optional, a wrong one is refused): the
+ * field app (FIELD_APP_URL) and the extra origins (CORS_EXTRA_ORIGINS, e.g. the field preview).
+ * Requests come same-origin through the field host's /api proxy, so the browser's Origin is the
+ * field host.
+ */
+export function fieldOrigins(fieldAppUrl: string | undefined, extra: string | undefined): string[] {
+  const out: string[] = [];
+  for (const candidate of [fieldAppUrl, ...(extra ?? '').split(',')]) {
+    const trimmed = candidate?.trim();
+    if (!trimmed) continue;
+    try {
+      out.push(new URL(trimmed).origin);
+    } catch {
+      // a malformed entry is a configuration mistake, not a request error
+    }
+  }
+  return out;
+}
+
+export function originAllowed(
+  origin: string | null | undefined,
+  allowed: readonly string[],
+): boolean {
+  return !origin || allowed.includes(origin);
+}
+
+/** A question's options as the field app shows them: `[{id, label}]`, else null. */
+export function questionOptions(options: unknown): { id: string; label: string }[] | null {
+  if (!Array.isArray(options)) return null;
+  const out: { id: string; label: string }[] = [];
+  for (const o of options) {
+    if (o && typeof o === 'object' && typeof o.id === 'string' && typeof o.label === 'string') {
+      out.push({ id: o.id, label: o.label });
+    }
+  }
+  return out.length ? out : null;
+}
+
+/** The caller's address for consent evidence (best effort: the proxy's header, else the first hop). */
+export function clientIp(headers: Headers): string | null {
+  const nf = headers.get('x-nf-client-connection-ip')?.trim();
+  if (nf) return nf;
+  const first = headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return first || null;
+}
+
+/** Seconds until `resetAt` (at least 1), for Retry-After. */
+export function retryAfterSeconds(resetAt: string, now: Date): number {
+  return Math.max(1, Math.ceil((new Date(resetAt).getTime() - now.getTime()) / 1000));
+}
