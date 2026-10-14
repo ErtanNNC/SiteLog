@@ -229,7 +229,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-08 · SMS layer, invite and Demo phone
 
-- [ ] **W1-08 done** · today _conflicts_ (L) · step 14
+- [x] **W1-08 done** · today _conflicts_ (L) · step 14 · _Done 2026-10-14: commit `27fc876`; CI run 38632542203 is green, including "E2E · local Supabase stack" with the worker started in the job: inviting Marco shows the welcome text in the Demo phone with a working personal link (`e2e/supabase/worker/demo-phone.spec.ts`), the Twilio driver and webhook tests pass with mocked HTTP, the existing invite tests stay green. The two review passes' findings (inbound job, office notifications, Notifier failure paths, invite locale, Demo phone at 390 px) close in the next commit. By hand on a local stack with `pnpm dev:worker`: not done here (no Docker)._
 - **Spec:** §4.5, §4.6, §9.2, §9.5, F3, §11.1 (`/dev/phone`), §5.2, §19 Q22–Q25, Q35, Q40.
 - **Already in the repo:** the channel-agnostic core of `api-invite-reporter` (admin/ops check, E.164, site ownership, same-phone reuse, audit, dedupe-keyed `send_welcome`, re-send after 48 h, disable; `supabase/functions/api-invite-reporter/index.ts:54-219`); the verify → store → enqueue → fast-ack structure of `whatsapp-webhook`; `scripts/src/replay-webhook.ts` (Meta).
 - **Moved in from W1-10:** `send_welcome` by SMS.
