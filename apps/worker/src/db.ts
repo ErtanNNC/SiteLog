@@ -1,14 +1,19 @@
 import postgres, { type Sql } from 'postgres';
 import type {
   CompanyRow,
+  ConsentRow,
+  ConsoleEmailRow,
   ConversationRow,
+  CountryRow,
   ConvoState,
   EvidencePackRow,
   GlossaryTermRow,
   JobRow,
   JobType,
   MessageRow,
+  MsgStatus,
   MsgType,
+  OutboundMessageRow,
   OrgRow,
   OrgSettingsRow,
   QuestionRow,
@@ -397,6 +402,26 @@ export interface Db {
     id: string,
     patch: { org_id?: string | null; snippet?: string | null; guessed_site_id?: string | null },
   ): Promise<void>;
+
+  // messaging (W1-08: the Notifier's store, personal links, console emails)
+  getCountry(code: string): Promise<CountryRow | null>;
+  listCountries(): Promise<CountryRow[]>;
+  listConsents(reporterId: string): Promise<Array<Pick<ConsentRow, 'type' | 'revoked_at'>>>;
+  insertSmsMessage(row: OutboundMessageRow): Promise<void>;
+  updateSmsMessage(
+    id: string,
+    patch: { status: MsgStatus; provider_message_id?: string | null; error?: string | null },
+  ): Promise<void>;
+  /** The reporter's message written under a Notifier dedupe key (`payload.dedupe_key`). */
+  findMessageByDedupeKey(
+    reporterId: string,
+    dedupeKey: string,
+  ): Promise<Pick<MessageRow, 'id' | 'channel' | 'status'> | null>;
+  /** Live personal links of a reporter, newest first. */
+  listPersonalLinks(reporterId: string): Promise<Array<{ id: string; code_hash: string }>>;
+  /** false when the code hash is taken (unique); nothing written then. */
+  insertPersonalLink(row: { id: string; code_hash: string; reporter_id: string }): Promise<boolean>;
+  insertConsoleEmail(row: Omit<ConsoleEmailRow, 'id' | 'created_at'>): Promise<string>;
 
   // notifications & audit
   notifyOrg(
@@ -945,6 +970,58 @@ export function createDb(sql: Sql): Db {
     },
     async updateUnknownContact(id, patch) {
       await sql`update unknown_contacts set ${setClause(patch as Record<string, unknown>)} where id = ${id}`;
+    },
+
+    // messaging (W1-08) ---------------------------------------------------------------------
+    async getCountry(code) {
+      return one(await sql<CountryRow[]>`select * from countries where code = ${code}`);
+    },
+    async listCountries() {
+      return sql<CountryRow[]>`select * from countries order by code`;
+    },
+    async listConsents(reporterId) {
+      return sql<Array<Pick<ConsentRow, 'type' | 'revoked_at'>>>`
+        select type, revoked_at from consents where reporter_id = ${reporterId}`;
+    },
+    async insertSmsMessage(row) {
+      await sql`
+        insert into messages (id, org_id, reporter_id, phone_e164, channel, direction, provider,
+          provider_message_id, copy_key, body, status, error, payload)
+        values (${row.id}, ${row.org_id}, ${row.reporter_id}, ${row.phone_e164}, ${row.channel},
+          ${row.direction}, ${row.provider}, ${row.provider_message_id}, ${row.copy_key}, ${row.body},
+          ${row.status}, ${row.error}, ${sql.json((row.payload ?? null) as never)})`;
+    },
+    async updateSmsMessage(id, patch) {
+      await sql`update messages set ${setClause(patch as Record<string, unknown>)} where id = ${id}`;
+    },
+    async findMessageByDedupeKey(reporterId, dedupeKey) {
+      return one(
+        await sql<Array<Pick<MessageRow, 'id' | 'channel' | 'status'>>>`
+          select id, channel, status from messages
+          where reporter_id = ${reporterId} and payload->>'dedupe_key' = ${dedupeKey}
+          order by created_at desc limit 1`,
+      );
+    },
+    async listPersonalLinks(reporterId) {
+      return sql<Array<{ id: string; code_hash: string }>>`
+        select id, code_hash from field_links
+        where reporter_id = ${reporterId} and kind = 'personal' and revoked_at is null
+        order by created_at desc`;
+    },
+    async insertPersonalLink(row) {
+      const rows = await sql<Array<{ id: string }>>`
+        insert into field_links (id, code_hash, reporter_id, kind)
+        values (${row.id}, ${row.code_hash}, ${row.reporter_id}, 'personal')
+        on conflict (code_hash) do nothing returning id`;
+      return rows.length > 0;
+    },
+    async insertConsoleEmail(row) {
+      const rows = await sql<Array<{ id: string }>>`
+        insert into console_emails (org_id, kind, recipients, subject, body_text, attachments)
+        values (${row.org_id}, ${row.kind}, ${row.recipients}, ${row.subject}, ${row.body_text},
+          ${sql.json(row.attachments as never)})
+        returning id`;
+      return rows[0]!.id;
     },
 
     // notifications & audit ---------------------------------------------------------------

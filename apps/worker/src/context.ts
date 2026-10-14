@@ -1,4 +1,5 @@
 import type OpenAI from 'openai';
+import type { SmsNotifier } from '@sitelog/shared';
 import type { Config } from './config';
 import type { Db, JobMetrics } from './db';
 import type { EmailProvider } from './email/provider';
@@ -56,6 +57,8 @@ export interface Ctx {
   storage: Storage;
   ai: AiClients;
   email: EmailProvider;
+  /** The Notifier (spec §4.5, W1-08): every text to a field reporter goes through it. */
+  notifier: SmsNotifier;
   ffmpeg: FfmpegRunner;
   log: Logger;
   now: () => Date;

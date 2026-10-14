@@ -1,0 +1,13 @@
+{
+  "path": "/status",
+  "params": {
+    "SmsSid": "{{message_sid}}",
+    "SmsStatus": "delivered",
+    "MessageStatus": "delivered",
+    "To": "{{phone}}",
+    "MessageSid": "{{message_sid}}",
+    "AccountSid": "AC00000000000000000000000000000000",
+    "From": "{{to}}",
+    "ApiVersion": "2010-04-01"
+  }
+}

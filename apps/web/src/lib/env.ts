@@ -17,6 +17,11 @@ export const env = {
     (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173'),
   sentryDsn: str(e.VITE_SENTRY_DSN),
   demo: e.VITE_DEMO === 'true' || !str(e.VITE_SUPABASE_URL),
+  /**
+   * Staging (§11.1): the Demo phone for every org, not only `is_demo` ones. A real org's texts
+   * are stored with their link codes masked, so it shows what went out without working links.
+   */
+  demoPhoneAllOrgs: e.VITE_DEMO_PHONE_ALL_ORGS === 'true',
   dev: !!e.DEV,
 } as const;
 

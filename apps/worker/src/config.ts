@@ -59,6 +59,19 @@ export const ConfigSchema = z.object({
   EMAIL_FROM: z.string().default('SiteLog <reports@sitelog.app>'),
 
   APP_URL: z.string().default('https://app.sitelog.app'),
+  /**
+   * Messaging (W1-08, spec §4.5, §5.1): the field app's host for the links in texts, the secret
+   * personal link codes are derived with (the same LINK_SIGNING_SECRET as field-api), the SMS
+   * providers' credentials (only for packs whose sender id is set in this database), and the
+   * public URL of sms-webhook for Twilio's delivery callbacks.
+   */
+  FIELD_APP_URL: z.string().default(''),
+  LINK_SIGNING_SECRET: z.string().default(''),
+  TWILIO_ACCOUNT_SID: z.string().default(''),
+  TWILIO_AUTH_TOKEN: z.string().default(''),
+  ILETIMERKEZI_API_KEY: z.string().default(''),
+  ILETIMERKEZI_API_HASH: z.string().default(''),
+  SMS_WEBHOOK_URL: z.string().default(''),
   WORKER_CONCURRENCY: intFrom(4).pipe(z.number().min(1).max(64)),
   WORKER_PORT: intFrom(8080),
   WORKER_ID: z.string().default(''),

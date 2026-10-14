@@ -1,8 +1,15 @@
 import { z } from 'zod';
-import { normalizeE164, REPORTER_ROLES } from '@sitelog/shared';
+import {
+  CONTACT_PREFS,
+  REPORTER_LOCALES,
+  REPORTER_ROLES,
+  ensurePersonalLink,
+} from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
 import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
-import { attachConversation } from '../_shared/conversations.ts';
+import { loadOrgPack } from '../_shared/countries.ts';
+import { requireEnv } from '../_shared/env.ts';
+import { supabaseLinkStore } from '../_shared/messaging.ts';
 import {
   HttpError,
   json,
@@ -14,13 +21,22 @@ import {
 import { enqueueJob } from '../_shared/jobs.ts';
 import { logInfo } from '../_shared/log.ts';
 import { adminClient, type AppClient, type TableRow } from '../_shared/supabase.ts';
-import { canResend, linkRows } from './logic.ts';
+import { canResend, invitePhone, inviteProfile, linkRows } from './logic.ts';
 
 /**
  * api-invite-reporter (§F2 step 2, §F3, §P10) — admin|ops.
- * POST { orgId, name, phone, role?, siteIds[], languages? }   → reporter + links + welcome job
+ * POST { orgId, name, phone, role?, siteIds[], languages?, locale?, contactPref? }
+ *      → reporter `invited` + site links + its personal field link + the welcome job
  * POST { action: 'resend', reporterId }                         → one re-send after 48 h
  * POST { action: 'disable', reporterId }                        → status 'disabled'
+ *
+ * W1-08: the welcome is a text with the reporter's personal link (F3, §9.2), sent by the worker's
+ * send_welcome through the Notifier. The invite creates the personal `field_links` row (its code
+ * derived from the row id under LINK_SIGNING_SECRET, `ensurePersonalLink`, so the worker can text
+ * it); no WhatsApp conversation is attached any more. The phone is read with the org's country as
+ * its default region, and `locale` / `contactPref` default from the org's pack when omitted, so
+ * the deployed panel's request (no locale, no preference) keeps working. The answer never holds
+ * the link code.
  */
 
 const InviteSchema = z.object({
@@ -30,7 +46,9 @@ const InviteSchema = z.object({
   phone: z.string().trim().min(5).max(32),
   role: z.enum(REPORTER_ROLES).default('site_manager'),
   siteIds: z.array(z.uuid()).min(1).max(50),
-  languages: z.array(z.string().trim().min(2).max(8)).min(1).max(5).default(['en']),
+  languages: z.array(z.string().trim().min(2).max(8)).min(1).max(5).optional(),
+  locale: z.enum(REPORTER_LOCALES).optional(),
+  contactPref: z.enum(CONTACT_PREFS).optional(),
 });
 const ResendSchema = z.object({ action: z.literal('resend'), reporterId: z.uuid() });
 const DisableSchema = z.object({ action: z.literal('disable'), reporterId: z.uuid() });
@@ -53,9 +71,12 @@ Deno.serve(
 
 async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof InviteSchema>) {
   await requireOrgRole(admin, user.userId, body.orgId, ['admin', 'ops']);
-  const phone = normalizeE164(body.phone);
+  const { org, pack } = await loadOrgPack(admin, body.orgId);
+  const phone = invitePhone(body.phone, org.country);
   if (!phone)
     throw new HttpError(400, 'Phone must be a valid international number, e.g. +1 555 014 3378');
+  const profile = inviteProfile(pack, body);
+  if (!profile.ok) throw new HttpError(400, profile.reason);
   const firstSiteId = body.siteIds[0];
   if (!firstSiteId) throw new HttpError(400, 'At least one site is required');
 
@@ -80,15 +101,28 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
   let reporter: Reporter;
   if (existing) {
     reporter = existing;
+    // A reused reporter keeps the language and report mode they chose, unless the office sets them.
+    const patch: Partial<Reporter> = {
+      ...(body.locale ? { locale: profile.locale } : {}),
+      ...(body.contactPref ? { contact_pref: profile.contactPref } : {}),
+    };
     if (existing.status === 'disabled') {
-      const { data: reenabled } = await admin
+      Object.assign(patch, {
+        status: 'invited',
+        invited_at: null,
+        last_invite_error: null,
+        name: body.name,
+      });
+    }
+    if (Object.keys(patch).length > 0) {
+      const { data: updated } = await admin
         .from('reporters')
-        .update({ status: 'invited', invited_at: null, last_invite_error: null, name: body.name })
+        .update(patch)
         .eq('id', existing.id)
         .select('*')
         .single()
         .throwOnError();
-      reporter = reenabled;
+      reporter = updated;
     }
   } else {
     const { data: created } = await admin
@@ -98,7 +132,9 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
         name: body.name,
         phone_e164: phone,
         role: body.role,
-        languages: body.languages,
+        languages: profile.languages,
+        locale: profile.locale,
+        contact_pref: profile.contactPref,
         status: 'invited',
       })
       .select('*')
@@ -119,12 +155,24 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     .upsert(links, { onConflict: 'site_id,reporter_id', ignoreDuplicates: true })
     .throwOnError();
 
-  const conversation = await attachConversation(admin, {
-    phone,
-    orgId: body.orgId,
-    reporterId: reporter.id,
-    state: 'new',
-  });
+  // The personal link (F3): reused when the reporter has one SiteLog can text again.
+  const personal = await ensurePersonalLink(
+    supabaseLinkStore(admin),
+    requireEnv('LINK_SIGNING_SECRET'),
+    reporter.id,
+    () => crypto.randomUUID(),
+  );
+  if (personal.created) {
+    await logAudit(admin, {
+      orgId: body.orgId,
+      actorType: 'user',
+      actorId: user.userId,
+      action: 'field_link.created',
+      entity: 'reporter',
+      entityId: reporter.id,
+      diff: { kind: 'personal', site_id: null, report_date: null },
+    });
+  }
 
   const jobId = await enqueueJob(
     admin,
@@ -139,7 +187,14 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     action: 'reporter.invited',
     entity: 'reporter',
     entityId: reporter.id,
-    diff: { siteIds: body.siteIds, role: body.role, reused: existing !== null, jobId },
+    diff: {
+      siteIds: body.siteIds,
+      role: body.role,
+      reused: existing !== null,
+      locale: reporter.locale,
+      contact_pref: reporter.contact_pref,
+      jobId,
+    },
   });
   logInfo('reporter.invited', {
     orgId: body.orgId,
@@ -152,7 +207,7 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     reused: existing !== null,
     linkedSiteIds: links.map((l) => l.site_id),
     primarySiteIds: links.filter((l) => l.is_primary).map((l) => l.site_id),
-    conversationId: conversation.id,
+    personalLinkId: personal.id,
     welcomeJobId: jobId,
   };
 }

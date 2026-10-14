@@ -16,6 +16,7 @@ worker and the web panel use.
 | `api-evidence-pack`       | Supabase JWT, admin/pm/ops                        | Request an EOT evidence pack; fetch a 7-day signed download URL                               |
 | `api-billing`             | Supabase JWT, admin                               | Stripe checkout / portal / quantity sync / pause & resume site / invoices / status            |
 | `field-api`               | link code + `sl_dev_*` device cookie (no JWT)     | The field app's only backend (W1-07, spec §6.5, Appendix B): link, device, consent, uploads   |
+| `sms-webhook`             | `X-Twilio-Signature`; `/demo-reply`: JWT, admin   | Twilio inbound texts (§9.5 keywords, F13) and delivery status; the Demo phone's typed replies |
 
 Every function but `field-api` is `Deno.serve(withHandler(...))`: CORS preflight for the panel origin
 (`APP_URL`), Zod-validated input, typed `createClient<AppDatabase>` (service role), JSON logs via
@@ -62,8 +63,17 @@ supabase secrets set \
 # optional: extra browser origins allowed by CORS (comma-separated), e.g. a preview deployment;
 # field-api also accepts them as the Origin of the field app (a field preview)
 supabase secrets set CORS_EXTRA_ORIGINS=https://preview.sitelog.app
-# field-api: the HMAC key of the device codes, and the field app's origin
+# field-api: the HMAC key of the device codes, and the field app's origin; also the key the
+# personal link codes are derived with (api-invite-reporter, sms-webhook and the worker use the
+# same value)
 supabase secrets set LINK_SIGNING_SECRET=$(openssl rand -hex 32) FIELD_APP_URL=https://go.sitelog.app
+# SMS (W1-08): sms-webhook checks X-Twilio-Signature with TWILIO_AUTH_TOKEN against SMS_WEBHOOK_URL
+# (default {SUPABASE_URL}/functions/v1/sms-webhook, which must be the URL Twilio posts to). The
+# drivers need credentials only for packs whose sender id is set (`pnpm countries:set`).
+supabase secrets set TWILIO_ACCOUNT_SID=AC... TWILIO_AUTH_TOKEN=... \
+  SMS_WEBHOOK_URL=https://<project-ref>.supabase.co/functions/v1/sms-webhook
+# only for a pack whose sms_provider is iletimerkezi (TR) and whose sender id is set
+supabase secrets set ILETIMERKEZI_API_KEY=... ILETIMERKEZI_API_HASH=...
 ```
 
 Local development reads the same names from `supabase/functions/.env` (`supabase functions serve
@@ -93,6 +103,7 @@ supabase functions deploy whatsapp-webhook --no-verify-jwt
 supabase functions deploy stripe-webhook   --no-verify-jwt
 supabase functions deploy scheduler-tick   --no-verify-jwt
 supabase functions deploy field-api        --no-verify-jwt   # link code + device cookie
+supabase functions deploy sms-webhook      --no-verify-jwt   # Twilio signature; /demo-reply checks the JWT itself
 
 # panel API: gateway JWT check stays on; each function also resolves the user + org role
 supabase functions deploy api-invite-reporter
@@ -121,6 +132,10 @@ CLI accepts a `deno.json` wherever it accepts an `import_map.json` (it reads the
   `invoice.payment_failed`, `invoice.paid`; copy the signing secret into
   `STRIPE_WEBHOOK_SECRET`. Pin the endpoint's API version to the SDK's
   (`stripe@23` → `2026-09-30.endive`) so event payload shapes match the types.
+- **Twilio** (the US pack's sender, once approved and set with `pnpm countries:set`): the number's
+  (or Messaging Service's) incoming-message webhook `POST https://<project-ref>.supabase.co/functions/v1/sms-webhook`,
+  exactly `SMS_WEBHOOK_URL`, since the signature covers the URL. Delivery callbacks need nothing:
+  each send names `{SMS_WEBHOOK_URL}/status`. Twilio's own STOP/HELP handling: spec §19 Q45.
 - **pg_cron**: nothing to register; the Vault secrets above are enough.
 
 ## Local testing
@@ -162,7 +177,17 @@ dev or preview server, not a LAN address. The device cookie is `Secure`, so a pl
 allowed `Origin` from `supabase/functions/.env`, not from the root `.env`: put the tunnel URL in
 `FIELD_APP_URL` (or `CORS_EXTRA_ORIGINS`) there too and restart `supabase functions serve`, or
 every POST answers 403 `origin_not_allowed`. The device code of a demo org appears as a console
-text in the Demo phone (`messages`); a real org gets no code before W1-08.
+text in the Demo phone (`messages`); a real org gets one only once its pack's sender id is set
+(spec §19 Q48).
+
+sms-webhook locally: put any `TWILIO_AUTH_TOKEN` and `SMS_WEBHOOK_URL=http://127.0.0.1:54321/functions/v1/sms-webhook`
+in `supabase/functions/.env`, then replay a fixture (`fixtures/sms/README.md`; the `To` must be a
+pack's sender id in that database, or the text is ignored):
+
+```bash
+pnpm replay-webhook -- --sms-url http://127.0.0.1:54321/functions/v1/sms-webhook --token <token> \
+  --to +18885550142 fixtures/sms/inbound-help.json
+```
 
 ## Type-check, lint and tests (what CI runs)
 
@@ -232,8 +257,9 @@ Notes:
   reporter; httpOnly, Secure, SameSite=Lax, Path=/, 180 days) from `device/send-code`, and
   `device/verify` marks it verified; field-api counts the 180 days from `verified_at` too. The
   one-time code is stored only as an HMAC under `LINK_SIGNING_SECRET` (`field_devices.code_hash`,
-  10 min). Until W1-08 the code is a `console` text (a `messages` row the Demo phone shows) on demo
-  orgs only, never a real SMS. Every query is scoped to the link's reporter and sites (a daily
+  10 min). It goes through the Notifier (W1-08, `code_sender.ts`): by SMS on the pack's driver, or
+  as a `console` text (a `messages` row the Demo phone shows) on demo orgs; a real org on
+  `console` gets none (409 `code_undeliverable`). Every query is scoped to the link's reporter and sites (a daily
   link: its site); the writes that must be atomic are the service-only RPCs
   `field_complete_upload()` (numbers and inserts the site-day's report in one transaction,
   enqueues `transcribe_upload`, refuses while the report is being filed), `field_confirm_report()`
@@ -242,6 +268,16 @@ Notes:
   checks an hour per phone). `uploads/:id/complete` checks the stored object's type and size
   (Storage's object info) before it attaches it. Refusals are JSON `{error: <code>}` from
   `packages/shared/src/field-contract.ts`.
+- **sms-webhook** (W1-08). `POST /` (or `/inbound`): a Twilio inbound text, signed over
+  `SMS_WEBHOOK_URL` (403 otherwise); the pack is the one whose `sms_sender_id` is the `To` (none:
+  logged and ignored). The row is stored once per `MessageSid`; on a two-way pack the keyword plan
+  (`packages/shared/src/sms/keywords.ts`, spec §9.5) runs inline: reporter changes audited as the
+  reporter, at most one reply through the Notifier (`help`, `stop_confirm`, `unknown_number`),
+  then the row is marked handled, so a Twilio retry re-runs only unhandled work; the answer is
+  empty TwiML. `POST /status`: Twilio's delivery callback moves `messages.status` forward only.
+  `POST /demo-reply` `{reporterId, body}`: the Demo phone types a text as a reporter of a demo org
+  (admin JWT; 409 on a one-way pack or a disabled reporter), handled like an inbound text on a
+  `console` row.
 - **stripe-webhook** maps Stripe statuses as trialing→trialing, active→active,
   past_due/unpaid/incomplete→past_due, canceled/incomplete_expired→canceled, paused→paused; an
   unknown status leaves `billing_status` untouched. `invoice.paid` only promotes to `active` when the

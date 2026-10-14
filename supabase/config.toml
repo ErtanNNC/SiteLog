@@ -83,6 +83,14 @@ verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/field-api/index.ts"
 
+# Twilio's messaging webhook and status callbacks (X-Twilio-Signature) and the Demo phone's replies
+# (the route checks the office user's JWT itself), W1-08.
+[functions.sms-webhook]
+enabled = true
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/sms-webhook/index.ts"
+
 [functions.api-invite-reporter]
 enabled = true
 verify_jwt = true

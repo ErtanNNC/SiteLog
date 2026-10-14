@@ -54,6 +54,7 @@ import { fromZonedTime } from 'date-fns-tz';
 import { copy } from '@/copy/en';
 import { localId } from '@/lib/utils';
 import type { RowSet } from '../assemble';
+import { demoPhoneData, demoPhoneThread, demoReply, demoWelcome } from './demoPhone';
 import type {
   AddGlossaryTermInput,
   AddInvoiceInput,
@@ -67,7 +68,13 @@ import type {
   UpdateReporterInput,
   UpdateSitePatch,
 } from '../source';
-import type { ChangeEvent, OrgSettingsPatch } from '../types';
+import type {
+  ChangeEvent,
+  DemoPhoneData,
+  DemoPhoneEmail,
+  DemoPhoneMessage,
+  OrgSettingsPatch,
+} from '../types';
 
 /** Extra demo office user so `?as=ops` has someone to be (not part of the §18 seed). */
 export const DEMO_OPS_USER: DemoUser = {
@@ -128,6 +135,8 @@ export class DemoStore {
   logoUrl: string | null = null;
   /** The demo `photos` bucket: paths of office uploads (DemoSource keeps their object URLs). */
   private readonly uploadedPhotos = new Set<string>();
+  /** What the console email provider would have sent in this session (the Demo phone's Email tab). */
+  readonly consoleEmails: DemoPhoneEmail[] = [];
 
   constructor(dataset: DemoDataset = kestrelDemo()) {
     this.data = structuredClone(dataset);
@@ -1140,8 +1149,24 @@ export class DemoStore {
       entity_id: id,
       diff: { sites: input.siteIds },
     });
+    // The worker's send_welcome (F3): a demo org's welcome text lands in the Demo phone.
+    demoWelcome(this.data, this.data.reporters.at(-1)!, input.siteIds[0], this.nowIso());
     this.emit({ table: 'all' });
     return id;
+  }
+
+  // ─── Demo phone (/dev/phone, §11.1) ───
+  demoPhone(): DemoPhoneData {
+    return demoPhoneData(this.data);
+  }
+
+  demoPhoneThread(reporterId: string): DemoPhoneMessage[] {
+    return demoPhoneThread(this.data, reporterId);
+  }
+
+  demoPhoneReply(reporterId: string, body: string): void {
+    demoReply(this.data, reporterId, body.trim(), this.nowIso());
+    this.emit({ table: 'all' });
   }
 
   linkUnknownSender(input: LinkUnknownSenderInput, userId: string): void {

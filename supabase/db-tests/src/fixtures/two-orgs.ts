@@ -70,6 +70,8 @@ function orgIds(prefix: 'aaaaaaaa' | 'bbbbbbbb') {
     /** v1.2 transcripts: of the web recorder upload, and of the call. */
     uploadTranscript: id(36),
     callTranscript: id(37),
+    /** An email the console provider stored (W1-08, 20261014000007), for the Demo phone. */
+    consoleEmail: id(38),
     users: { admin: user(1), pm: user(2), ops: user(3), accounts: user(4) } as Record<Role, string>,
   };
 }
@@ -232,6 +234,21 @@ export async function seedTwoOrgs(db: PGlite): Promise<void> {
       };
   await db.exec(orgSql('A', 1, names));
   await db.exec(orgSql('B', 2, names));
+  const consoleEmails = await db.query<{ v: boolean }>(
+    `select to_regclass('public.console_emails') is not null as v`,
+  );
+  if (consoleEmails.rows[0]!.v) {
+    for (const o of [ORG.A, ORG.B])
+      await db.exec(`
+        insert into console_emails (id, org_id, kind, recipients, subject, body_text) values
+          ('${o.consoleEmail}', '${o.org}', 'report_filed', '{pm@matrix.test}', 'Daily report', 'Filed.');
+      `);
+    // W1-08's phone-level opt-outs (no org), from the same migration.
+    await db.exec(`
+      insert into sms_opt_outs (phone_e164, country, method) values
+        ('+15550991000', 'US', 'sms_keyword'), ('+15550992000', 'US', 'provider_opt_out');
+    `);
+  }
   await db.exec(`
     insert into auth.users (id, email) values ('${SPARE_USER}', 'spare@matrix.test'), ('${OPERATOR}', 'operator@matrix.test');
     insert into platform_admins (user_id, note) values ('${OPERATOR}', 'matrix');

@@ -105,6 +105,9 @@ import {
 import type {
   BillingData,
   ChangeEvent,
+  DemoPhoneData,
+  DemoPhoneEmail,
+  DemoPhoneMessage,
   OpsData,
   OrgSettingsPatch,
   OrgSummary,
@@ -1819,6 +1822,139 @@ export class SupabaseSource implements DataSource {
 
   // ─── Realtime ───
 
+  // ─── Demo phone (/dev/phone, §11.1) ───
+
+  async getDemoPhone(): Promise<DemoPhoneData> {
+    const org = unwrapOne(
+      await this.sb.from('orgs').select('is_demo, country').eq('id', this.orgId).maybeSingle(),
+    ) as { is_demo: boolean; country: string };
+    const country = unwrapOne(
+      await this.sb
+        .from('countries')
+        .select('code, two_way_sms')
+        .eq('code', org.country)
+        .maybeSingle(),
+    ) as { code: string; two_way_sms: boolean };
+    const reporters = unwrap(
+      await this.sb
+        .from('reporters')
+        .select('id, name, phone_e164, status')
+        .eq('org_id', this.orgId)
+        .order('name'),
+    ) as Array<{ id: string; name: string; phone_e164: string; status: string }>;
+    // The newest texts of the org; enough for each thread's last line and a count.
+    const texts = unwrap(
+      await this.sb
+        .from('messages')
+        .select('reporter_id, body, created_at')
+        .eq('org_id', this.orgId)
+        .eq('channel', 'sms')
+        .order('created_at', { ascending: false })
+        .limit(1000),
+    ) as Array<{ reporter_id: string | null; body: string | null; created_at: string }>;
+    return {
+      orgIsDemo: org.is_demo,
+      pack: { code: country.code, twoWaySms: country.two_way_sms },
+      reporters: reporters
+        .map((r) => {
+          const thread = texts.filter((m) => m.reporter_id === r.id);
+          return {
+            id: r.id,
+            name: r.name,
+            phone: r.phone_e164,
+            status: r.status,
+            count: thread.length,
+            lastAt: thread[0]?.created_at ?? null,
+            lastBody: thread[0]?.body ?? null,
+          };
+        })
+        .sort(
+          (a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '') || a.name.localeCompare(b.name),
+        ),
+    };
+  }
+
+  async getDemoPhoneThread(reporterId: string): Promise<DemoPhoneMessage[]> {
+    const rows = unwrap(
+      await this.sb
+        .from('messages')
+        .select('id, direction, body, status, copy_key, provider, created_at')
+        .eq('org_id', this.orgId)
+        .eq('reporter_id', reporterId)
+        .eq('channel', 'sms')
+        .order('created_at', { ascending: true })
+        .limit(500),
+    ) as Array<{
+      id: string;
+      direction: 'in' | 'out';
+      body: string | null;
+      status: string;
+      copy_key: string | null;
+      provider: string | null;
+      created_at: string;
+    }>;
+    return rows.map((m) => ({
+      id: m.id,
+      direction: m.direction,
+      body: m.body ?? '',
+      status: m.status,
+      copyKey: m.copy_key,
+      provider: m.provider,
+      at: m.created_at,
+    }));
+  }
+
+  async getDemoPhoneEmails(): Promise<DemoPhoneEmail[]> {
+    const rows = unwrap(
+      await this.sb
+        .from('console_emails')
+        .select('id, kind, recipients, subject, body_text, attachments, created_at')
+        .eq('org_id', this.orgId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ) as Array<{
+      id: string;
+      kind: string;
+      recipients: string[];
+      subject: string;
+      body_text: string;
+      attachments: Array<{ filename: string; bytes: number }>;
+      created_at: string;
+    }>;
+    return rows.map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      recipients: e.recipients,
+      subject: e.subject,
+      body: e.body_text,
+      attachments: e.attachments,
+      at: e.created_at,
+    }));
+  }
+
+  async sendDemoPhoneReply(reporterId: string, body: string): Promise<void> {
+    // The same handler as an inbound SMS; the function checks admin, demo org and two-way pack.
+    await this.callFunction('sms-webhook/demo-reply', { reporterId, body });
+  }
+
+  subscribeDemoPhone(onChange: () => void): () => void {
+    const filter = `org_id=eq.${this.orgId}`;
+    const channel: RealtimeChannel = this.sb
+      .channel(`demo-phone:${this.orgId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter }, () =>
+        onChange(),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'console_emails', filter },
+        () => onChange(),
+      )
+      .subscribe();
+    return () => {
+      void this.sb.removeChannel(channel);
+    };
+  }
+
   subscribe(onChange: (event: ChangeEvent) => void): () => void {
     const channel: RealtimeChannel = this.sb
       .channel(`org:${this.orgId}`)
@@ -1962,12 +2098,12 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
   const members = unwrap(
     await sb
       .from('org_members')
-      .select('org_id, role, orgs(id, name, timezone, locale, country)')
+      .select('org_id, role, orgs(id, name, timezone, locale, country, is_demo)')
       .eq('user_id', userId),
   ) as unknown as Array<{
     org_id: string;
     role: MemberRole;
-    orgs: Pick<OrgRow, 'id' | 'name' | 'timezone' | 'locale' | 'country'> | null;
+    orgs: Pick<OrgRow, 'id' | 'name' | 'timezone' | 'locale' | 'country' | 'is_demo'> | null;
   }>;
   // site_options: an accounts user cannot read `sites`, and every member counts active sites.
   const sites = unwrap(await sb.from('site_options').select('org_id, status'));
@@ -1981,6 +2117,7 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
       activeSites: sites.filter((s) => s.org_id === m.org_id && s.status === 'active').length,
       locale: m.orgs!.locale,
       country: m.orgs!.country,
+      demoOrg: m.orgs!.is_demo,
     }));
 }
 

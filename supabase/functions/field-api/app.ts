@@ -82,7 +82,7 @@ import { FieldDbError, type FieldStore, type OrgContext } from './store.ts';
  * `Cache-Control: no-store`.
  */
 
-/** What `device/send-code` hands the sender: W1-07 writes a console text, W1-08 the Notifier. */
+/** What `device/send-code` hands the sender (`notifierCodeSender`, the Notifier). */
 export interface VerifyCodeMessage {
   org: OrgContext['org'];
   pack: CountryPack;

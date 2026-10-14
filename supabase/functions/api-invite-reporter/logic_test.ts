@@ -1,5 +1,6 @@
 import { assertEquals } from '@std/assert';
-import { canResend, linkRows } from './logic.ts';
+import { demoPack } from '@sitelog/shared/demo/countries.ts';
+import { canResend, invitePhone, inviteProfile, linkRows } from './logic.ts';
 
 Deno.test('canResend: one re-send, 48 h after the first invite, only while still invited', () => {
   const now = new Date('2026-10-12T12:00:00Z');
@@ -29,3 +30,44 @@ Deno.test('linkRows: primary only where the site has no primary yet, duplicates 
     { site_id: 's2', reporter_id: 'r1', is_primary: false },
   ]);
 });
+
+Deno.test('invitePhone: the org country is the default region (spec §4.6)', () => {
+  assertEquals(invitePhone('555 014 3378', 'US'), '+15550143378');
+  assertEquals(invitePhone('(555) 014-3378', 'US'), '+15550143378');
+  assertEquals(invitePhone('0532 123 45 67', 'TR'), '+905321234567');
+  // A number with its country code is read as written, whatever the org.
+  assertEquals(invitePhone('+90 532 123 45 67', 'US'), '+905321234567');
+  assertEquals(invitePhone('+1 555 014 3378', 'TR'), '+15550143378');
+  assertEquals(invitePhone('12', 'US'), null);
+});
+
+Deno.test(
+  'inviteProfile: locale and preference default from the pack; the old contract works',
+  () => {
+    const us = demoPack('US');
+    const tr = demoPack('TR');
+    // The deployed panel's request: no locale, no preference, languages given.
+    assertEquals(inviteProfile(us, { languages: ['es', 'en'] }), {
+      ok: true,
+      locale: 'en-US',
+      languages: ['es', 'en'],
+      contactPref: 'link',
+    });
+    assertEquals(inviteProfile(tr, {}), {
+      ok: true,
+      locale: 'tr-TR',
+      languages: ['tr'],
+      contactPref: 'link',
+    });
+    assertEquals(inviteProfile(us, { locale: 'es-US', contactPref: 'call' }), {
+      ok: true,
+      locale: 'es-US',
+      languages: ['es'],
+      contactPref: 'call',
+    });
+    assertEquals(inviteProfile(tr, { locale: 'es-US' }), {
+      ok: false,
+      reason: 'Locale es-US is not offered in TR (tr-TR, en-US)',
+    });
+  },
+);

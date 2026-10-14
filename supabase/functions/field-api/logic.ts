@@ -4,6 +4,7 @@ import {
   UPLOAD_MAX_BYTES,
   VERIFY_CODE_LENGTH,
   addDays,
+  consentSets,
   deadlineInstant,
   formatDeadline,
   localDate,
@@ -112,14 +113,7 @@ export function consentState(rows: readonly ConsentRow[]): {
   held: Set<ConsentType>;
   revoked: Set<ConsentType>;
 } {
-  const held = new Set<ConsentType>();
-  const given = new Set<ConsentType>();
-  for (const r of rows) {
-    given.add(r.type);
-    if (r.revoked_at === null) held.add(r.type);
-  }
-  const revoked = new Set([...given].filter((t) => !held.has(t)));
-  return { held, revoked };
+  return consentSets(rows);
 }
 
 /** F4 step 3: the Welcome & consent screen until the required consents are held. */

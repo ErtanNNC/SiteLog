@@ -1,0 +1,120 @@
+import {
+  consentSets,
+  createNotifier,
+  createSmsTransports,
+  toCountryPack,
+  type CountryPack,
+  type CountryRow,
+  type NotifierStore,
+  type PersonalLinkStore,
+  type SmsDriver,
+  type SmsNotifier,
+  type SmsTransport,
+} from '@sitelog/shared';
+import type { Config } from './config';
+import type { Db } from './db';
+
+/**
+ * The worker's messaging (W1-08; spec §4.5, §4.6): the Notifier over the worker's Postgres store,
+ * the SMS drivers with the credentials from the worker env, the org's country pack, and the
+ * personal-link store. The edge functions build the same Notifier over supabase-js
+ * (`supabase/functions/_shared/messaging.ts`).
+ */
+
+/** An org's country pack (`orgs.country` → `countries`), read fresh each time. */
+export async function loadOrgPack(db: Db, org: { country: string }): Promise<CountryPack> {
+  const row = await db.getCountry(org.country);
+  if (!row) throw new Error(`No country pack ${org.country}`);
+  return toCountryPack(row);
+}
+
+/** The Notifier's store over the worker Db. */
+export function workerNotifierStore(db: Db): NotifierStore {
+  return {
+    async loadRecipient(reporterId) {
+      const reporter = await db.getReporter(reporterId);
+      if (!reporter) return null;
+      const org = await db.getOrg(reporter.org_id);
+      if (!org) return null;
+      return {
+        reporter,
+        org: { id: org.id, isDemo: org.is_demo },
+        pack: await loadOrgPack(db, org),
+        consents: consentSets(await db.listConsents(reporterId)),
+      };
+    },
+    findByDedupeKey: (reporterId, key) => db.findMessageByDedupeKey(reporterId, key),
+    insertMessage: (row) => db.insertSmsMessage(row),
+    updateMessage: (id, patch) => db.updateSmsMessage(id, patch),
+    audit: (entry) =>
+      db.logAudit({
+        org_id: entry.orgId,
+        actor_type: 'system',
+        action: entry.action,
+        entity: entry.entity,
+        entity_id: entry.entityId,
+        diff: entry.diff,
+      }),
+  };
+}
+
+export function workerLinkStore(db: Db): PersonalLinkStore {
+  return {
+    listPersonalLinks: (reporterId) => db.listPersonalLinks(reporterId),
+    insertPersonalLink: (row) => db.insertPersonalLink(row),
+  };
+}
+
+/** The SMS drivers with the worker env's credentials. */
+export function workerTransports(
+  config: Pick<
+    Config,
+    'TWILIO_ACCOUNT_SID' | 'TWILIO_AUTH_TOKEN' | 'ILETIMERKEZI_API_KEY' | 'ILETIMERKEZI_API_HASH'
+  >,
+  fetchImpl: typeof fetch = fetch,
+): (driver: SmsDriver) => SmsTransport {
+  return createSmsTransports({
+    fetch: (url, init) => fetchImpl(url, init),
+    randomUUID: () => crypto.randomUUID(),
+    twilio: { accountSid: config.TWILIO_ACCOUNT_SID, authToken: config.TWILIO_AUTH_TOKEN },
+    iletimerkezi: { apiKey: config.ILETIMERKEZI_API_KEY, apiHash: config.ILETIMERKEZI_API_HASH },
+  });
+}
+
+/** Twilio's delivery callbacks go to sms-webhook's /status route when it has a public URL. */
+export function statusCallbackUrl(
+  config: Pick<Config, 'SMS_WEBHOOK_URL' | 'SUPABASE_URL'>,
+): string | null {
+  const base =
+    config.SMS_WEBHOOK_URL.trim().replace(/\/+$/, '') ||
+    (config.SUPABASE_URL
+      ? `${config.SUPABASE_URL.replace(/\/+$/, '')}/functions/v1/sms-webhook`
+      : '');
+  return base.startsWith('https://') ? `${base}/status` : null;
+}
+
+export function createWorkerNotifier(
+  config: Config,
+  db: Db,
+  transport: (driver: SmsDriver) => SmsTransport = workerTransports(config),
+): SmsNotifier {
+  return createNotifier({
+    store: workerNotifierStore(db),
+    transport,
+    statusCallbackUrl: statusCallbackUrl(config),
+    randomUUID: () => crypto.randomUUID(),
+  });
+}
+
+/**
+ * One line per pack for the worker's start log: which SMS transport a real org of the pack gets
+ * in this database. Demo orgs always get `console`.
+ */
+export function describePackTransports(rows: readonly CountryRow[]): Record<string, string> {
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.code,
+      row.sms_sender_id ? `${row.sms_provider} (${row.sms_sender_id})` : 'console: no sender id',
+    ]),
+  );
+}

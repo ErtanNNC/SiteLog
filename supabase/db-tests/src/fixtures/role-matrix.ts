@@ -276,6 +276,23 @@ export const TABLES: Record<string, TableCase> = {
       `insert into calls (org_id, reporter_id, site_id, direction) values ('${o.org}', '${o.reporter}', '${o.site}', 'outbound')`,
     set: 'outcome = outcome',
   },
+  console_emails: {
+    why: "The Demo phone's Email tab (§11.1, §5.1 EMAIL_PROVIDER=console): admins of the org, as the Demo phone; written by the worker with the service role only.",
+    allow: readOnly(ADMIN),
+    where: (o) => `id = '${o.consoleEmail}'`,
+    insert: (o) =>
+      `insert into console_emails (org_id, kind, recipients, subject, body_text) values ('${o.org}', 'report_filed', '{x@matrix.test}', 's', 'b')`,
+    set: 'subject = subject',
+  },
+  sms_opt_outs: {
+    why: "A phone's STOP on a pack's sender (§9.5, W1-08): sms-webhook, the Notifier and the invite use it with the service role only; no client policy, no grant.",
+    allow: serviceOnly,
+    where: () => `phone_e164 like '+1555099%'`,
+    insert: () =>
+      `insert into sms_opt_outs (phone_e164, country, method) values ('+15550990000', 'US', 'sms_keyword')`,
+    set: 'method = method',
+    orgless: true,
+  },
   rate_limits: {
     why: 'field-api throttling (§6.5): service role only; no client policy, no grant.',
     allow: serviceOnly,

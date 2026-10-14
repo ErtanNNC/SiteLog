@@ -20,7 +20,10 @@ function bothDemoOrgs() {
   });
 }
 
-/** W1-06a: `country` (the org's country pack) is read too: the setup wizard locks it. */
+/**
+ * W1-06a: `country` (the org's country pack) is read too: the setup wizard locks it. W1-08:
+ * `is_demo` too, for the Demo phone (§11.1).
+ */
 describe('fetchOrgs', () => {
   it('reads each org’s locale, so a tr-TR org opens the panel in Turkish (§6.3, §11.2)', async () => {
     const { db, selects } = bothDemoOrgs();
@@ -33,10 +36,11 @@ describe('fetchOrgs', () => {
         activeSites: 2,
         locale: 'tr-TR',
         country: 'TR',
+        demoOrg: true,
       }),
     ]);
     expect(selects).toContain(
-      'org_members: org_id, role, orgs(id, name, timezone, locale, country)',
+      'org_members: org_id, role, orgs(id, name, timezone, locale, country, is_demo)',
     );
   });
 
@@ -44,8 +48,8 @@ describe('fetchOrgs', () => {
     const { db } = bothDemoOrgs();
     const lena = DEMO_USERS.find((u) => u.email === 'lena@kestrelbuild.example')!;
     const orgs = await fetchOrgs(db, lena.id);
-    expect(orgs.map((o) => [o.name, o.activeSites, o.locale, o.country])).toEqual([
-      ['Kestrel Build Group', 6, 'en-US', 'US'],
+    expect(orgs.map((o) => [o.name, o.activeSites, o.locale, o.country, o.demoOrg])).toEqual([
+      ['Kestrel Build Group', 6, 'en-US', 'US', true],
     ]);
   });
 });

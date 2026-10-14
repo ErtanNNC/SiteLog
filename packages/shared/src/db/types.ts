@@ -241,10 +241,14 @@ export type MessageRow = {
   id: string;
   /**
    * null for a photo uploaded in the panel (20261013000005_office_photos.sql) and for an SMS
-   * (20261013000007, D15): org_id is set instead.
+   * (20261013000007, D15): org_id is set instead, or only phone_e164 for a text from an unknown
+   * number (messages_conversation_or_org, 20261014000007_sms_layer.sql).
    */
   conversation_id: string | null;
-  /** Set on office uploads and SMS rows; a WhatsApp message takes its org from the conversation. */
+  /**
+   * Set on office uploads and SMS rows of a reporter; a WhatsApp message takes its org from the
+   * conversation; null on a text to or from an unknown number (F13).
+   */
   org_id: string | null;
   direction: MsgDirection;
   wa_message_id: string | null;
@@ -254,6 +258,10 @@ export type MessageRow = {
    */
   type: MsgType | null;
   body: string | null;
+  /**
+   * WhatsApp payload; on SMS rows the Notifier's `{dedupe_key}` (an idempotent retry) and
+   * sms-webhook's `{to, keyword, handled_at}` (W1-08).
+   */
   payload: Json | null;
   media_id: string | null;
   media_mime: string | null;
@@ -292,6 +300,23 @@ export type TranscriptRow = {
   text: string;
   segments: Json;
   model: string | null;
+  created_at: string;
+};
+
+/**
+ * What EMAIL_PROVIDER=console would have sent (20261014000007_sms_layer.sql, spec §6.3), for the
+ * Demo phone's Email tab (§11.1). The worker writes it; admins of the org read it. Attachments are
+ * named and sized, never stored.
+ */
+export type ConsoleEmailRow = {
+  id: string;
+  org_id: string;
+  /** The send_email kind, e.g. `report_filed`. */
+  kind: string;
+  recipients: string[];
+  subject: string;
+  body_text: string;
+  attachments: Array<{ filename: string; bytes: number }>;
   created_at: string;
 };
 
@@ -624,6 +649,20 @@ export type CallRow = {
   created_at: string | null;
 };
 
+/**
+ * A phone's STOP on a pack's SMS sender (20261014000007_sms_layer.sql, spec §6.3, §9.5): kept with
+ * or without a reporter, so the next invite of the number on the pack starts opted out and the
+ * Notifier sends it nothing. Service role only.
+ */
+export type SmsOptOutRow = {
+  phone_e164: string;
+  /** The pack (`countries.code`). */
+  country: string;
+  /** `sms_keyword`: STOP or a synonym; `provider_opt_out`: Twilio refused a send (21610). */
+  method: 'sms_keyword' | 'provider_opt_out';
+  opted_out_at: string;
+};
+
 /** §6.3 rate_limits: field-api throttling, service role only. */
 export type RateLimitRow = {
   /** 'dev:<device_id>' | 'code:<e164>' */
@@ -906,6 +945,7 @@ export type Database = {
         TranscriptRow,
         'id' | 'message_id' | 'upload_id' | 'call_id' | 'language' | 'model' | 'created_at'
       >;
+      console_emails: Table<ConsoleEmailRow, 'id' | 'attachments' | 'created_at'>;
       unknown_contacts: Table<
         UnknownContactRow,
         | 'id'
@@ -1102,6 +1142,7 @@ export type Database = {
         | 'finished_at'
       >;
       rate_limits: Table<RateLimitRow, 'count'>;
+      sms_opt_outs: Table<SmsOptOutRow, 'opted_out_at'>;
       scheduler_state: Table<SchedulerStateRow, 'value' | 'updated_at'>;
       stripe_events: Table<StripeEventRow, 'received_at' | 'processed_at'>;
       audit_log: Table<

@@ -26,6 +26,7 @@ export const weeklyDigest: JobHandler<'weekly_digest'> = async (ctx, payload) =>
     html: rendered.html,
     text: rendered.text,
     tags: { kind: 'weekly_digest' },
+    orgId: org.id,
   });
   await ctx.db.logAudit({
     org_id: org.id,

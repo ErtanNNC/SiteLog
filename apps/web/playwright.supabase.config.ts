@@ -8,6 +8,11 @@ import { ANON_KEY, APP_URL, SUPABASE_URL } from './e2e/supabase/support';
  *   pnpm --filter @sitelog/web e2e:supabase
  * The panel is built in Supabase mode (no VITE_DEMO) and served on :5173, the origin that
  * supabase/config.toml allows as a magic-link redirect and APP_URL allows for CORS.
+ *
+ * Two projects: `supabase` (every spec but e2e/supabase/worker/) runs with no worker, so the jobs
+ * it enqueues stay queued; `worker` (e2e/supabase/worker/) needs the worker running against the
+ * same stack (`pnpm dev:worker`, its /health at WORKER_HEALTH_URL) and skips locally without it.
+ * CI runs `--project=supabase`, starts the worker, then `--project=worker` (ci.yml e2e-supabase).
  */
 const DIST = 'node_modules/.e2e/supabase';
 const PORT = new URL(APP_URL).port;
@@ -29,7 +34,10 @@ export default defineConfig({
     trace: 'retain-on-failure',
     launchOptions: { executablePath: chromiumExecutablePath },
   },
-  projects: [{ name: 'supabase' }],
+  projects: [
+    { name: 'supabase', testIgnore: /\/worker\// },
+    { name: 'worker', testMatch: /\/worker\/.*\.spec\.ts$/ },
+  ],
   webServer: {
     command: `pnpm exec vite build --outDir ${DIST} --emptyOutDir && pnpm exec vite preview --outDir ${DIST} --port ${PORT} --strictPort`,
     url: APP_URL,

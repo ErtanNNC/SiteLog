@@ -14,10 +14,11 @@ import {
 // migration and the demo seed. Imported by path so the worker image does not need that package.
 import { bootDatabase } from '../../../supabase/db-tests/src/harness.ts';
 import { DEMO_AUDIT_ID_BASE } from '@sitelog/shared/demo/rows.ts';
-import { STALE_LOCK_MS } from './config';
+import { STALE_LOCK_MS, testConfig } from './config';
 import type { Ctx } from './context';
 import { connectSql, createDb, type Db } from './db';
 import { silentLogger } from './log';
+import { createWorkerNotifier } from './messaging';
 import { buildReportPdfInput } from './pdf/render';
 import { createMemoryStorage } from './storage';
 
@@ -1687,5 +1688,95 @@ describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
     await q(`delete from jobs where dedupe_key = any($1::text[])`, [
       [1, 2].map((n) => `render_pdf:${report.id}:${report.current_version + n}`),
     ]);
+  });
+});
+
+describe('PostgresDb on PGlite: messaging (W1-08)', () => {
+  it('reads the packs and a reporter’s consents', async () => {
+    const us = await db.getCountry('US');
+    expect(us).toMatchObject({ code: 'US', sms_provider: 'twilio', sms_sender_id: null });
+    expect((await db.listCountries()).map((c) => c.code)).toEqual(['TR', 'US']);
+    const consents = await db.listConsents(MARCO);
+    expect(consents.map((c) => c.type).sort()).toEqual(['data_processing', 'recording', 'sms']);
+    expect(consents.every((c) => c.revoked_at === null)).toBe(true);
+  });
+
+  it('the Notifier over Postgres: a welcome on the demo org, its row, its retry and its audit', async () => {
+    const sent: string[] = [];
+    const notifier = createWorkerNotifier(testConfig(), db, (driver) => ({
+      driver,
+      async send(_to, body) {
+        sent.push(body);
+        return { providerId: `${driver}:${randomUUID()}` };
+      },
+    }));
+    const vars = {
+      first: 'Marco',
+      company: 'Kestrel Build Group',
+      site: 'Elm St. Townhomes',
+      deadline: '17:30',
+      link: 'https://go.sitelog.app/r/ABCDEF',
+    };
+    const out = await notifier.send(MARCO, 'welcome', vars, { dedupeKey: 'w108:test' });
+    expect(out.channel).toBe('sms');
+    const row = await one<Record<string, unknown>>(
+      `select org_id, reporter_id, phone_e164, channel, direction, provider, copy_key, body, status, payload
+       from messages where id = $1`,
+      [(out as { messageId: string }).messageId],
+    );
+    expect(row).toMatchObject({
+      org_id: ORG,
+      reporter_id: MARCO,
+      phone_e164: MARCO_PHONE,
+      channel: 'sms',
+      direction: 'out',
+      provider: 'console',
+      copy_key: 'welcome',
+      status: 'delivered',
+      payload: { dedupe_key: 'w108:test' },
+    });
+    // Kestrel is a demo org: the whole text, link and all, for the Demo phone.
+    expect(row.body).toContain('https://go.sitelog.app/r/ABCDEF');
+    expect(await notifier.send(MARCO, 'welcome', vars, { dedupeKey: 'w108:test' })).toEqual(out);
+    expect(sent).toHaveLength(1);
+    const audit = await q<{ action: string }>(
+      `select action from audit_log where entity_id = $1 and action = 'sms.sent'`,
+      [(out as { messageId: string }).messageId],
+    );
+    expect(audit).toHaveLength(1);
+  });
+
+  it('issues personal links once and refuses a taken hash', async () => {
+    const id = randomUUID();
+    expect(await db.insertPersonalLink({ id, code_hash: `w108-${id}`, reporter_id: MARCO })).toBe(
+      true,
+    );
+    expect(
+      await db.insertPersonalLink({
+        id: randomUUID(),
+        code_hash: `w108-${id}`,
+        reporter_id: MARCO,
+      }),
+    ).toBe(false);
+    const links = await db.listPersonalLinks(MARCO);
+    expect(links[0]).toEqual({ id, code_hash: `w108-${id}` });
+  });
+
+  it('files a console email for the Demo phone', async () => {
+    const id = await db.insertConsoleEmail({
+      org_id: ORG,
+      kind: 'report_filed',
+      recipients: ['pm@kestrelbuild.example'],
+      subject: 'Daily report · Riverside',
+      body_text: 'Filed.',
+      attachments: [{ filename: 'RL-2041-0187.pdf', bytes: 1234 }],
+    });
+    expect(
+      await one(`select kind, recipients, attachments from console_emails where id = $1`, [id]),
+    ).toEqual({
+      kind: 'report_filed',
+      recipients: ['pm@kestrelbuild.example'],
+      attachments: [{ filename: 'RL-2041-0187.pdf', bytes: 1234 }],
+    });
   });
 });

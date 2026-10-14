@@ -15,6 +15,9 @@ import type { DailyReportDataV1, StoredReportData } from '@sitelog/shared/schema
 import type {
   BillingData,
   ChangeEvent,
+  DemoPhoneData,
+  DemoPhoneEmail,
+  DemoPhoneMessage,
   GlossaryData,
   HoursMatrix,
   NavBadges,
@@ -151,7 +154,7 @@ export interface CreateSiteInput {
  */
 export interface CreateSiteResult {
   siteId: string;
-  /** Message of a failed manager invite (WhatsApp welcome); null when it was sent or not asked. */
+  /** Message of a failed manager invite (the welcome text); null when it was queued or not asked. */
   inviteError: string | null;
   /** Message of a failed recipients save; null when saved or not asked. */
   recipientsError: string | null;
@@ -289,7 +292,7 @@ export interface DataSource {
   ignoreUnknownSender(unknownSenderId: string): Promise<void>;
   /** Team row menu: Disable (→ `disabled`) or re-enable (→ `invited`). */
   setReporterStatus(reporterId: string, status: ReporterStatus): Promise<void>;
-  /** Team row menu: one re-send of `sitelog_welcome` (F3 edge case). */
+  /** Team row menu: one re-send of the welcome text (F3 edge case). */
   resendInvite(reporterId: string): Promise<void>;
   /** Team row menu → Edit: name, role, sites, languages in one audited change. */
   updateReporter(input: UpdateReporterInput): Promise<void>;
@@ -314,6 +317,21 @@ export interface DataSource {
   /** Object URL of the payroll CSV for a week (caller revokes it). */
   payrollCsvUrl(week: string, siteId?: string | null): Promise<string>;
   markNotificationsRead(ids: string[]): Promise<void>;
+
+  // ─── Demo phone (/dev/phone, §11.1): admins; the console texts and emails ───
+  /** The reporters and their newest text, the org's demo flag and its pack's two-way SMS. */
+  getDemoPhone(): Promise<DemoPhoneData>;
+  /** A reporter's thread, oldest first (SMS rows of the org). */
+  getDemoPhoneThread(reporterId: string): Promise<DemoPhoneMessage[]>;
+  /** What the console email provider would have sent for this org, newest first. */
+  getDemoPhoneEmails(): Promise<DemoPhoneEmail[]>;
+  /**
+   * Types a text as the reporter (demo orgs on two-way packs only): the same handler as an inbound
+   * SMS (sms-webhook `/demo-reply`), so STOP, START, HELP, CALL and TEXT act as on a phone.
+   */
+  sendDemoPhoneReply(reporterId: string, body: string): Promise<void>;
+  /** Live updates of the Demo phone's texts and emails (its own channel, not the org-wide one). */
+  subscribeDemoPhone(onChange: () => void): () => void;
 
   // ─── Platform ops (/ops, §15): SiteLog operators only, never an org role ───
   /** True when the signed-in user is in `platform_admins`; false (not an error) otherwise. */

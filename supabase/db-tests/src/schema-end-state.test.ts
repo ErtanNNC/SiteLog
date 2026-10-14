@@ -37,14 +37,19 @@ describe('schema end state (D11)', () => {
       blocks['6.3']!.indexOf('create table orgs'),
     );
     expect(blocks['6.4']).toMatch(/create view current_manpower/);
-    // The whole spec schema was read: 31 tables (GAP 9.2, plus countries since W1-06a) and the
-    // 26 enums of §6.2 (message_channel since W1-06a), and from §6.4 its 9 indexes and 2 views
-    // (spec.indexes also holds §6.3's one, on jobs).
-    expect(spec.tables.size).toBe(31);
+    // The whole spec schema was read: 33 tables (GAP 9.2, plus countries since W1-06a and
+    // console_emails and sms_opt_outs since W1-08) and the 26 enums of §6.2 (message_channel since W1-06a), and
+    // from §6.4 its 9 indexes, the unique sender id of W1-08 and 2 views (spec.indexes also holds
+    // §6.3's one, on jobs).
+    expect(spec.tables.size).toBe(33);
     expect(spec.enums.size).toBe(26);
     expect(blocks['6.4']!.match(/^create index /gm)).toHaveLength(9);
+    expect(blocks['6.4']!.match(/^create unique index /gm)).toHaveLength(1);
     const indexes = [...spec.indexes.values()].reduce((n, set) => n + set.size, 0);
-    expect(indexes).toBe(10);
+    expect(indexes).toBe(11);
+    expect(spec.indexes.get('countries')).toEqual(
+      new Set(['UNIQUE btree (sms_sender_id) WHERE (sms_sender_id IS NOT NULL)']),
+    );
     expect(spec.indexes.get('jobs')).toEqual(new Set(['btree (status, run_after)']));
     expect(spec.views.size).toBe(2);
   });

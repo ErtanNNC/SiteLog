@@ -97,6 +97,8 @@ async function addOtherOrg(): Promise<void> {
     insert into messages (id, org_id, reporter_id, phone_e164, direction, body, provider, copy_key)
       values ('${other(16)}', '${O}', '${REPORTER}', '+15550190001', 'out', 'Hello', 'console', 'welcome');
     insert into notifications (id, org_id, kind, title) values ('${other(18)}', '${O}', 'test', 'Other');
+    insert into console_emails (id, org_id, kind, recipients, subject, body_text)
+      values ('${other(25)}', '${O}', 'report_filed', '{office@other.example}', 'Other report', 'Other body');
     insert into sub_invoices (id, org_id, company_id, invoice_no, period_start, period_end)
       values ('${other(19)}', '${O}', '${COMPANY}', 'OT-1', '2026-10-05', '2026-10-09');
     insert into evidence_packs (id, org_id, site_id, period_start, period_end)

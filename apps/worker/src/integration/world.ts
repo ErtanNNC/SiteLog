@@ -1,8 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import type OpenAI from 'openai';
 import type { Sql } from 'postgres';
+import { createConsoleSmsTransport } from '@sitelog/shared';
 import { testConfig, type Config } from '../config';
 import { createMetrics, type Ctx } from '../context';
 import type { Db } from '../db';
+import { createWorkerNotifier } from '../messaging';
 import { createMemoryProvider, type EmailMessage } from '../email/provider';
 import { silentLogger, type Logger } from '../log';
 import { createRunner, type Runner, type RunnerOptions } from '../runner';
@@ -85,13 +88,16 @@ export function createWorld(opts: WorldOptions): World {
   const email = createMemoryProvider();
   const claude = createFakeClaude({ lib, sim, ...opts.claude });
   const transcriber = createFakeTranscriber(lib, sim);
+  const config = testConfig(opts.config);
   const ctx: Ctx = {
-    config: testConfig(opts.config),
+    config,
     db,
     wa,
     storage: withSimStorage(storage, sim),
     ai: { claude, openai: transcriber as unknown as OpenAI },
     email: withSimEmail(email, sim),
+    // Console only: the simulated world never reaches an SMS provider.
+    notifier: createWorkerNotifier(config, db, () => createConsoleSmsTransport(() => randomUUID())),
     ffmpeg: createFakeFfmpeg(),
     log: opts.log ?? silentLogger,
     now: () => clock.now(),

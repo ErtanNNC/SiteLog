@@ -3,6 +3,7 @@
  * mutations invalidate the org and toast (sonner). Pages never call the source directly.
  */
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
 import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import type { OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
@@ -133,6 +134,58 @@ export function useNavBadges() {
 export function useSetupState() {
   const s = useDataSource();
   return useQuery({ queryKey: qk.setup(s.orgId), queryFn: () => s.getSetupState() });
+}
+
+/** /dev/phone (§11.1): the reporter list; `enabled` false keeps it closed for other orgs. */
+export function useDemoPhone(opts: Opts = {}) {
+  const s = useDataSource();
+  return useQuery({
+    queryKey: qk.demoPhone(s.orgId),
+    queryFn: () => s.getDemoPhone(),
+    enabled: opts.enabled ?? true,
+  });
+}
+
+export function useDemoPhoneThread(reporterId: string | null) {
+  const s = useDataSource();
+  return useQuery({
+    queryKey: qk.demoPhoneThread(s.orgId, reporterId ?? ''),
+    queryFn: () => s.getDemoPhoneThread(reporterId!),
+    enabled: reporterId !== null,
+  });
+}
+
+export function useDemoPhoneEmails(opts: Opts = {}) {
+  const s = useDataSource();
+  return useQuery({
+    queryKey: qk.demoPhoneEmails(s.orgId),
+    queryFn: () => s.getDemoPhoneEmails(),
+    enabled: opts.enabled ?? true,
+  });
+}
+
+/** Refetches the Demo phone when a text or an email arrives (its own realtime channel). */
+export function useDemoPhoneLive(enabled: boolean) {
+  const s = useDataSource();
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!enabled) return;
+    return s.subscribeDemoPhone(() => {
+      void qc.invalidateQueries({ queryKey: qk.demoPhone(s.orgId) });
+    });
+  }, [s, qc, enabled]);
+}
+
+/** Types a text as the reporter; the thread refreshes, the rest of the org stays cached. */
+export function useDemoPhoneReply() {
+  const s = useDataSource();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { reporterId: string; body: string }) =>
+      s.sendDemoPhoneReply(vars.reporterId, vars.body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.demoPhone(s.orgId) }),
+    onError: (err) => toast.error(errorMessage(err, translate('devPhone.replyFailed'))),
+  });
 }
 
 export function useSearch(q: string) {

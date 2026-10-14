@@ -595,7 +595,9 @@ describe('platform wiring', () => {
     const rows = await rt.query<{ t: string }>(
       `select tablename as t from pg_publication_tables where pubname = 'supabase_realtime' order by 1`,
     );
+    // console_emails: W1-08's Demo phone Email tab (20261014000007_sms_layer.sql).
     expect(rows.rows.map((r) => r.t)).toEqual([
+      'console_emails',
       'evidence_packs',
       'messages',
       'notifications',

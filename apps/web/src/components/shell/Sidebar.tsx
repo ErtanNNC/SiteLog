@@ -6,6 +6,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useNavBadges, useSimulateIncomingReport } from '@/data/hooks';
 import { isPanelLanguage, PANEL_LANGUAGES } from '@/i18n/language';
 import { useCopy, useLanguage } from '@/i18n/useCopy';
+import { env } from '@/lib/env';
 import { cn } from '@/lib/utils';
 import { Avatar } from '../ui/Avatar';
 import { CountBadge } from '../ui/Badge';
@@ -53,7 +54,9 @@ export function Sidebar({
   const badges = useNavBadges();
   const simulate = useSimulateIncomingReport();
   const navigate = useNavigate();
-  const items = navItemsFor(role, isDemo);
+  const items = navItemsFor(role, isDemo, {
+    demoPhone: isDemo || env.demoPhoneAllOrgs || currentOrg?.demoOrg === true,
+  });
   const main = items.filter((i) => i.group === 'main');
   const setup = items.filter((i) => i.group === 'setup');
   const numbers = currentOrg?.sitelogNumbers ?? [];

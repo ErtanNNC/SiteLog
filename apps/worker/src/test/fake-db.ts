@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type {
   CompanyRow,
+  ConsentRow,
+  ConsoleEmailRow,
   ConversationRow,
+  CountryRow,
   EvidencePackRow,
   GlossaryTermRow,
   JobRow,
@@ -23,6 +26,7 @@ import type {
 } from '@sitelog/shared';
 import { formatReportNo, reportLanguageFor } from '@sitelog/shared';
 import { V12_ROW_DEFAULTS } from '@sitelog/shared';
+import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { median } from '../cost';
 import type { AuditInput, Db, ExpiredMedia, Json, ReportSourceWithMessage } from '../db';
 
@@ -74,6 +78,18 @@ export interface FakeDbData {
   photoObjects: Array<{ name: string; created_at: string }>;
   /** report_costs (§15 cost guardrail). */
   reportCosts: Map<string, ReportCostRow>;
+  /** countries (the launch packs by default; tests set sender ids). */
+  countries: CountryRow[];
+  consents: ConsentRow[];
+  fieldLinks: Array<{
+    id: string;
+    code_hash: string;
+    reporter_id: string;
+    kind: 'personal';
+    revoked_at: string | null;
+    created_at: string;
+  }>;
+  consoleEmails: ConsoleEmailRow[];
 }
 
 export interface FakeDb extends Db {
@@ -113,6 +129,10 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     purged: [],
     photoObjects: [],
     reportCosts: new Map(),
+    countries: DEMO_COUNTRIES.map((c) => structuredClone(c)),
+    consents: [],
+    fieldLinks: [],
+    consoleEmails: [],
   };
   let jobSeq = 0;
   let taken = 0;
@@ -662,6 +682,79 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async updateUnknownContact(id, patch) {
       const row = d.unknownContacts.get(id);
       if (row) d.unknownContacts.set(id, { ...row, ...patch });
+    },
+
+    async getCountry(code) {
+      return d.countries.find((c) => c.code === code) ?? null;
+    },
+    async listCountries() {
+      return [...d.countries].sort((a, b) => a.code.localeCompare(b.code));
+    },
+    async listConsents(reporterId) {
+      return d.consents
+        .filter((c) => c.reporter_id === reporterId)
+        .map((c) => ({ type: c.type, revoked_at: c.revoked_at }));
+    },
+    async insertSmsMessage(row) {
+      if (
+        row.provider_message_id &&
+        [...d.messages.values()].some((m) => m.provider_message_id === row.provider_message_id)
+      )
+        throw Object.assign(new Error('duplicate provider_message_id'), { code: '23505' });
+      d.messages.set(row.id, {
+        ...V12_ROW_DEFAULTS.messages,
+        id: row.id,
+        conversation_id: null,
+        org_id: row.org_id,
+        direction: row.direction,
+        wa_message_id: null,
+        type: null,
+        body: row.body,
+        payload: (row.payload ?? null) as MessageRow['payload'],
+        media_id: null,
+        media_mime: null,
+        storage_path: null,
+        duration_s: null,
+        template_name: null,
+        status: row.status,
+        error: row.error,
+        created_at: iso(),
+        reporter_id: row.reporter_id,
+        phone_e164: row.phone_e164,
+        provider: row.provider,
+        provider_message_id: row.provider_message_id,
+        copy_key: row.copy_key,
+        channel: row.channel,
+      });
+    },
+    async updateSmsMessage(id, patch) {
+      Object.assign(d.messages.get(id)!, patch);
+    },
+    async findMessageByDedupeKey(reporterId, dedupeKey) {
+      const m = [...d.messages.values()]
+        .reverse()
+        .find(
+          (x) =>
+            x.reporter_id === reporterId &&
+            (x.payload as { dedupe_key?: string } | null)?.dedupe_key === dedupeKey,
+        );
+      return m ? { id: m.id, channel: m.channel, status: m.status } : null;
+    },
+    async listPersonalLinks(reporterId) {
+      return d.fieldLinks
+        .filter((l) => l.reporter_id === reporterId && l.kind === 'personal' && !l.revoked_at)
+        .reverse()
+        .map(({ id, code_hash }) => ({ id, code_hash }));
+    },
+    async insertPersonalLink(row) {
+      if (d.fieldLinks.some((l) => l.code_hash === row.code_hash)) return false;
+      d.fieldLinks.push({ ...row, kind: 'personal', revoked_at: null, created_at: iso() });
+      return true;
+    },
+    async insertConsoleEmail(row) {
+      const id = randomUUID();
+      d.consoleEmails.push({ ...row, id, created_at: iso() });
+      return id;
     },
 
     async notifyOrg(orgId, kind, title, body = null, targetPath = null, userId = null) {

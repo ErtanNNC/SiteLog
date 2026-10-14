@@ -14,9 +14,9 @@ import {
 } from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { EnvError } from '../_shared/env.ts';
-import type { AppClient } from '../_shared/supabase.ts';
 import { createFieldApp, type VerifyCodeMessage } from './app.ts';
-import { consoleVerifyCodeSender } from './console_code.ts';
+import { fakeMessaging } from '../_shared/fake_messaging.ts';
+import { notifierCodeSender } from './code_sender.ts';
 import { FakeFieldStore } from './fake_store.ts';
 
 /**
@@ -1059,27 +1059,14 @@ Deno.test(
 Deno.test(
   'send-code on a real org: the console sender writes nothing and answers 409',
   async () => {
-    const writes: string[] = [];
-    const done = { throwOnError: () => Promise.resolve({ data: null, error: null }) };
-    const admin = {
-      from: (table: string) => ({
-        insert: () => {
-          writes.push(table);
-          return done;
-        },
-      }),
-      rpc: (fn: string) => {
-        writes.push(fn);
-        return done;
-      },
-    } as unknown as AppClient;
-    const h = setup({ isDemo: false, sender: () => consoleVerifyCodeSender(admin) });
+    const messaging = fakeMessaging();
+    const h = setup({ isDemo: false, sender: () => notifierCodeSender(messaging.notifier) });
     const res = await h.call('POST', 'device/send-code');
     assertEquals(
       [res.status, res.json.error, res.json.reason],
       [409, 'code_undeliverable', 'no_channel'],
     );
-    assertEquals(writes, [], 'no messages row holds the code');
+    assertEquals(messaging.rows, [], 'no messages row holds the code');
     assert(h.store.audits.some((a) => a.action === 'device.code_skipped'));
   },
 );

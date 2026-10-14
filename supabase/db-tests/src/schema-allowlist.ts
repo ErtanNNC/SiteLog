@@ -306,7 +306,7 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
       'column extra: reporters.last_invite_error (text)',
       'column extra: reporters.verified_at (timestamp with time zone)',
       'column extra: transcripts.message_id (uuid)',
-      'constraint extra: messages CHECK (((conversation_id IS NOT NULL) OR (org_id IS NOT NULL)))',
+      'constraint extra: messages CHECK (((conversation_id IS NOT NULL) OR (org_id IS NOT NULL) OR (phone_e164 IS NOT NULL)))',
       'constraint extra: messages FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE',
       'constraint extra: messages UNIQUE (wa_message_id)',
       'constraint extra: questions FOREIGN KEY (answered_message_id) REFERENCES messages(id) ON DELETE SET NULL',

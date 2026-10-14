@@ -33,7 +33,7 @@ async function submitSite(code: string, manager: string, phone: string) {
   await userEvent.type(screen.getByLabelText('Site address'), '1 Test St');
   await userEvent.type(screen.getByLabelText('Name'), manager);
   await userEvent.type(screen.getByTestId('manager-phone'), phone);
-  await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
   expect(await screen.findByRole('heading', { name: 'Reports & reminders' })).toBeInTheDocument();
 }
 
@@ -94,13 +94,13 @@ describe('SetupPage (demo org)', () => {
       expect(screen.getByText('$399')).toBeInTheDocument();
       expect(screen.getByText('$0 setup · billed per active site')).toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
       expect(
         await screen.findByRole('heading', { name: 'Reports & reminders' }),
       ).toBeInTheDocument();
       // The invite only queues the welcome; it goes out once a worker sends it.
       expect(success).toHaveBeenCalledWith(
-        'Site added. The WhatsApp welcome to Elena Vasquez is queued.',
+        'Site added. The welcome text to Elena Vasquez is queued.',
       );
       const site = store.data.sites.find((s) => s.project_code === 'HV-5120')!;
       expect(site).toMatchObject({
@@ -148,11 +148,11 @@ describe('SetupPage (demo org)', () => {
       expect(await screen.findByDisplayValue('Pending site')).toBe(
         screen.getByLabelText('Site name'),
       );
-      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
       expect(screen.getByText('That project number is already in use.')).toBeInTheDocument();
       expect(screen.getByText('Enter the site manager’s name.')).toBeInTheDocument();
       expect(
-        screen.getByText('Enter a valid WhatsApp number for the chosen country.'),
+        screen.getByText('Enter a valid mobile number for the chosen country.'),
       ).toBeInTheDocument();
       expect(store.data.sites).toHaveLength(6);
     },
@@ -167,7 +167,7 @@ describe('SetupPage (demo org)', () => {
     await userEvent.type(screen.getByLabelText('Site address'), '12 West St, Chicago, IL');
     await userEvent.type(screen.getByLabelText('Name'), 'Omar Haddad');
     await userEvent.type(screen.getByTestId('manager-phone'), '5550149001');
-    await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
     expect(await screen.findByRole('heading', { name: 'Sites landing' })).toBeInTheDocument();
     await waitFor(() =>
       expect(store.data.sites.some((s) => s.project_code === 'WG-0100')).toBe(true),
@@ -346,7 +346,7 @@ describe('SetupPage (demo org)', () => {
       await userEvent.type(screen.getByLabelText('Site address'), '400 Harbor Dr, Chicago, IL');
       await userEvent.type(screen.getByLabelText('Name'), 'Elena Vasquez');
       await userEvent.type(screen.getByTestId('manager-phone'), '555 014 8001');
-      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
 
       expect(
         await screen.findByRole('heading', { name: 'Reports & reminders' }),
@@ -357,16 +357,16 @@ describe('SetupPage (demo org)', () => {
         createdSites: [{ id: site.id, name: 'Harbor View Apartments', code: 'HV-5120' }],
       });
       expect(error).toHaveBeenCalledWith(
-        'The site was created, but the WhatsApp welcome to Elena Vasquez couldn’t be queued (api-invite-reporter failed (502)). Invite them from Team & numbers.',
+        'The site was created, but the welcome text to Elena Vasquez couldn’t be queued (api-invite-reporter failed (502)). Invite them from Team & numbers.',
       );
       expect(success).not.toHaveBeenCalledWith(
-        'Site added. The WhatsApp welcome to Elena Vasquez is queued.',
+        'Site added. The welcome text to Elena Vasquez is queued.',
       );
 
       // Back on the site step, the same project number is already taken (no second insert).
       await userEvent.click(screen.getByRole('button', { name: 'Back' }));
       await userEvent.type(await screen.findByLabelText('Project number'), 'HV-5120');
-      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
       expect(screen.getByText('That project number is already in use.')).toBeInTheDocument();
       expect(store.data.sites.filter((s) => s.project_code === 'HV-5120')).toHaveLength(1);
     },

@@ -238,3 +238,15 @@ pnpm e2e:supabase      # builds the panel in Supabase mode and signs in a seeded
 ```
 
 The specs live in `apps/web/e2e/supabase/`; the payroll CSV and EOT pack tests need the edge runtime (`supabase start` serves `supabase/functions`; put dummy values for their env in `supabase/functions/.env`). Where AWS ECR is blocked, prefix `supabase start` with `SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io`.
+
+The `worker` project (`apps/web/e2e/supabase/worker/`, W1-08: invite → the welcome text in the Demo phone → the personal link resolves at field-api → HELP) needs the worker on the same stack, with the functions' `LINK_SIGNING_SECRET`; without a worker at `WORKER_HEALTH_URL` (default `http://127.0.0.1:8080/health`) it is skipped locally. Run it after the other specs, as CI does, since those expect their jobs to stay queued:
+
+```sh
+pnpm --filter @sitelog/web e2e:supabase --project=supabase
+SUPABASE_DB_URL="$DB_URL" SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
+  EMAIL_PROVIDER=console LINK_SIGNING_SECRET=<the value in supabase/functions/.env> \
+  FIELD_APP_URL=http://localhost:5174 pnpm dev:worker &
+pnpm --filter @sitelog/web e2e:supabase --project=worker
+```
+
+`supabase/functions/.env` needs `TWILIO_AUTH_TOKEN` (any value) for `sms-webhook`, which the Demo phone's replies go through. To replay Twilio payloads against it: `pnpm replay-webhook -- --sms-url http://127.0.0.1:54321/functions/v1/sms-webhook --token <that value> --to <a pack's sender id> fixtures/sms/inbound-help.json` (`fixtures/sms/README.md`); a sender id no pack has in that database is ignored, so set one first with `pnpm countries:set` on the local stack only.

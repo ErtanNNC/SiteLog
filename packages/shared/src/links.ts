@@ -9,13 +9,16 @@
  * - Codes are upper case and read back from an SMS, so the hash is taken of the trimmed, upper case
  *   code: `k7q2mx` and `K7Q2MX` are the same link.
  * - The SMS link is `{FIELD_APP_URL}/r/{code}` until the `sl.link` short domain exists (GAP §8 Q7).
+ * - A personal link's code is derived from its id under LINK_SIGNING_SECRET (`deriveLinkCode`,
+ *   W1-08), so the service can text the same link again; demo links keep their seeded codes.
  *
  * - Expiry by kind: a personal link never expires; a daily link after `DAILY_LINK_TTL_HOURS` (§5.1,
  *   default 72); a photos link at 23:59 of the day after its report date in the site's time zone
  *   (F9), whatever the TTL.
  *
- * Pure and synchronous (Node, browser, Deno): the hash is a small SHA-256 over UTF-8, so builders of
- * demo rows need no async WebCrypto. Not for secrets that need constant-time handling.
+ * Pure (Node, browser, Deno). The hash is a small synchronous SHA-256 over UTF-8, so builders of
+ * demo rows need no async WebCrypto; only `deriveLinkCode` (an HMAC) uses WebCrypto. Not for
+ * secrets that need constant-time handling.
  */
 import { fromZonedTime } from 'date-fns-tz';
 import { addDays } from './format.ts';
@@ -47,6 +50,97 @@ export function linkCodeHash(code: string): string {
 /** The link an SMS carries: `{base}/r/{code}` (base = FIELD_APP_URL, or the short domain later). */
 export function fieldLinkUrl(base: string, code: string): string {
   return `${base.replace(/\/+$/, '')}/r/${normalizeLinkCode(code)}`;
+}
+
+/** Characters of a link code (spec §19 Q42 asks for 12 before real reporters). */
+export const LINK_CODE_LENGTH = 6;
+
+/** What `messages.body` shows instead of a code (`maskFieldLinkUrl`, `MASKED_CODE`). */
+export const MASKED_CODE = '••••••';
+
+/**
+ * A field link with its code masked: `https://go.sitelog.app/r/K7Q2MX` → `…/r/••••••`, also a
+ * Filed-screen link (`/r/{code}/report/{id}`). A text without `/r/` is returned unchanged.
+ * The Notifier stores texts this way unless the console transport writes them for a demo org
+ * (spec §4.5; docs/AUDIT_BACKLOG.md "Office users can read reporters' device codes and personal
+ * links"), so an office user who reads `messages` cannot open a reporter's link.
+ */
+export function maskFieldLinkUrl(url: string): string {
+  return url.replace(/\/r\/[^/?#\s]+/g, `/r/${MASKED_CODE}`);
+}
+
+/**
+ * A personal link's code, derived from its row id (W1-08): HMAC-SHA-256 of
+ * `sitelog/field_link/v1/<id>` under LINK_SIGNING_SECRET, mapped to LINK_CODE_ALPHABET by
+ * rejection sampling (a byte under 240 picks `byte % 30`, so every character is equally likely).
+ * The code is still never stored (`field_links.code_hash` is its SHA-256), but whoever holds the
+ * secret (field-api, sms-webhook, api-invite-reporter, the worker) can text the same link again:
+ * the welcome, its re-send and the HELP reply all carry it. A link whose hash does not match its
+ * derived code (a seeded link, or a rotated secret) is never re-sent; `ensurePersonalLink` issues
+ * a new one. WebCrypto, so Node, Deno and browsers share it.
+ */
+export async function deriveLinkCode(
+  secret: string,
+  linkId: string,
+  length: number = LINK_CODE_LENGTH,
+): Promise<string> {
+  if (!secret) throw new Error('deriveLinkCode needs LINK_SIGNING_SECRET');
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const limit = Math.floor(256 / LINK_CODE_ALPHABET.length) * LINK_CODE_ALPHABET.length;
+  let code = '';
+  for (let round = 0; code.length < length; round++) {
+    const label =
+      round === 0 ? `sitelog/field_link/v1/${linkId}` : `sitelog/field_link/v1/${linkId}/${round}`;
+    const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(label)));
+    for (const b of bytes) {
+      if (b >= limit) continue;
+      code += LINK_CODE_ALPHABET[b % LINK_CODE_ALPHABET.length];
+      if (code.length === length) break;
+    }
+  }
+  return code;
+}
+
+/** What `ensurePersonalLink` reads and writes (field-api, api-invite-reporter, sms-webhook, worker). */
+export interface PersonalLinkStore {
+  /** The reporter's personal links that are not revoked, newest first. */
+  listPersonalLinks(reporterId: string): Promise<Array<{ id: string; code_hash: string }>>;
+  /** Inserts a `kind 'personal'` row; false when its code_hash is taken (unique), nothing written. */
+  insertPersonalLink(row: { id: string; code_hash: string; reporter_id: string }): Promise<boolean>;
+}
+
+/**
+ * The reporter's personal link (F2, F3, §6.3 `field_links`), and its code: the newest live personal
+ * link whose code can be derived again (`deriveLinkCode`), else a new row. One link serves every
+ * text that carries "your link" (welcome, re-send, HELP), so the reporter's home-screen link keeps
+ * working; revoking stays an office action (F16).
+ */
+export async function ensurePersonalLink(
+  store: PersonalLinkStore,
+  secret: string,
+  reporterId: string,
+  newId: () => string,
+): Promise<{ id: string; code: string; created: boolean }> {
+  for (const link of await store.listPersonalLinks(reporterId)) {
+    const code = await deriveLinkCode(secret, link.id);
+    if (linkCodeHash(code) === link.code_hash) return { id: link.id, code, created: false };
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const id = newId();
+    const code = await deriveLinkCode(secret, id);
+    if (
+      await store.insertPersonalLink({ id, code_hash: linkCodeHash(code), reporter_id: reporterId })
+    )
+      return { id, code, created: true };
+  }
+  throw new Error(`Could not issue a personal link for reporter ${reporterId}`);
 }
 
 // ───────────────────────────── SHA-256 (FIPS 180-4) ─────────────────────────────

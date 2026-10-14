@@ -94,6 +94,8 @@ export interface OrgSummary {
   country?: string;
   /** The org's SiteLog number(s) for texts and calls, E.164 (§11.2 sidebar footer); none yet → []. */
   sitelogNumbers?: string[];
+  /** `orgs.is_demo` (§6.3): a demo org, whose texts all go to the Demo phone (§4.5, §11.1). */
+  demoOrg?: boolean;
 }
 
 // ───────────────────────────── P3 Overview ─────────────────────────────
@@ -782,6 +784,52 @@ export interface NavBadges {
 }
 
 /** Realtime change event — hooks invalidate the matching queries. */
+// ───────────────────────────── Demo phone (/dev/phone, §11.1) ─────────────────────────────
+
+/** A reporter of the Demo phone's list, with the newest text of their thread. */
+export interface DemoPhoneReporter {
+  id: string;
+  name: string;
+  /** E.164. */
+  phone: string;
+  status: string;
+  /** Texts in the thread. */
+  count: number;
+  lastAt: string | null;
+  lastBody: string | null;
+}
+
+export interface DemoPhoneData {
+  /** `orgs.is_demo`: the Demo phone is for demo orgs (staging also shows real orgs' texts). */
+  orgIsDemo: boolean;
+  /** The org's country pack: replies can be typed only where SMS is two-way (spec §19 Q35). */
+  pack: { code: string; twoWaySms: boolean };
+  reporters: DemoPhoneReporter[];
+}
+
+/** One text of a thread: `out` from SiteLog to the reporter, `in` from the reporter. */
+export interface DemoPhoneMessage {
+  id: string;
+  direction: 'in' | 'out';
+  body: string;
+  status: string;
+  /** §9.2 copy key of a text SiteLog sent (`welcome`, `verify_code`, …). */
+  copyKey: string | null;
+  provider: string | null;
+  at: string;
+}
+
+/** An email the console provider would have sent (`console_emails`). */
+export interface DemoPhoneEmail {
+  id: string;
+  kind: string;
+  recipients: string[];
+  subject: string;
+  body: string;
+  attachments: Array<{ filename: string; bytes: number }>;
+  at: string;
+}
+
 export interface ChangeEvent {
   table: 'site_days' | 'reports' | 'notifications' | 'unknown_contacts' | 'evidence_packs' | 'all';
   id?: string | null;

@@ -118,6 +118,7 @@ export class DemoSource implements DataSource {
         locale: DEMO_ORG_LOCALE,
         country: this.store.data.org.country,
         sitelogNumbers: [DEMO_SITELOG_NUMBER],
+        demoOrg: this.store.data.org.is_demo,
       },
     ]);
   }
@@ -405,6 +406,23 @@ export class DemoSource implements DataSource {
   // ─── Realtime ───
   subscribe(onChange: (event: ChangeEvent) => void): () => void {
     return this.store.subscribe(onChange);
+  }
+
+  // ─── Demo phone ───
+  getDemoPhone() {
+    return this.run(() => this.store.demoPhone());
+  }
+  getDemoPhoneThread(reporterId: string) {
+    return this.run(() => this.store.demoPhoneThread(reporterId));
+  }
+  getDemoPhoneEmails() {
+    return this.run(() => [...this.store.consoleEmails].reverse());
+  }
+  sendDemoPhoneReply(reporterId: string, body: string) {
+    return this.run(() => this.store.demoPhoneReply(reporterId, body));
+  }
+  subscribeDemoPhone(onChange: () => void): () => void {
+    return this.store.subscribe(() => onChange());
   }
 
   simulateIncomingReport() {

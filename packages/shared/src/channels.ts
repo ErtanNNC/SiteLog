@@ -14,9 +14,9 @@ import type { E164 } from './format.ts';
  * §4.5 Channel layer: every field interaction goes through these interfaces, so a channel is
  * added without touching the pipeline. Outbound messages go through the Notifier on each person's
  * channel order, which comes from the org's country pack (spec §4.6) and the person's preference.
- * Types and pure helpers only: the Notifier (`createNotifier`) and the SMS drivers (Twilio,
- * İletimerkezi, console) arrive with W1-08, the WhatsApp (Twilio) and web push transports with
- * week 2 (M6), the calls with M8.
+ * Types and pure helpers only: the Notifier is `createNotifier` (`notify/notifier.ts`) and the SMS
+ * drivers (Twilio, İletimerkezi, console) are `sms/transports.ts` (W1-08); the WhatsApp (Twilio)
+ * and web push transports come with week 2 (M6), the calls with M8.
  *
  * Nothing here reads env: the provider, the sender id, two-way SMS, links in SMS and the voice
  * number are the pack's (GAP D47, D48); credentials stay global env in the transports.
@@ -94,10 +94,22 @@ export interface CallContext {
   date: string;
 }
 
+/**
+ * Why a skip happened beyond its reason, for callers that answer differently: `disabled` (the
+ * office disabled the reporter), `console_real_org` (a real org's pack has no sender id in this
+ * environment, so the text would reach no phone), `phone_opted_out` (the phone sent STOP on the
+ * pack, `sms_opt_outs`, though this reporter row is not opted out).
+ */
+export type NotifySkipDetail = 'disabled' | 'console_real_org' | 'phone_opted_out';
+
 /** What `Notifier.send` did: the channel it used, or why nothing went out (audited). */
 export type NotifyOutcome =
   | { channel: MessageChannel; messageId: string }
-  | { channel: null; reason: 'no_channel' | 'no_consent' | 'opted_out' };
+  | {
+      channel: null;
+      reason: 'no_channel' | 'no_consent' | 'opted_out';
+      detail?: NotifySkipDetail;
+    };
 
 export interface Notifier {
   /**
@@ -214,7 +226,7 @@ export function deliverableChannels(input: {
  * is the one text after STOP). Only the pack decides: it must have two-way SMS, and allow links in
  * SMS for a key that carries one (`help`). The webhook renders with `smsRenderOptions(pack)`,
  * sends through `pickMessageTransport()` with `smsSendOptionsFor(pack)` and audits the reply
- * (W1-08). Spec §19 Q25 asks the owner to confirm this with `PRE_CONSENT_SMS_KEYS`.
+ * (`SmsNotifier.reply`). Spec §19 Q25 asks the owner to confirm this with `PRE_CONSENT_SMS_KEYS`.
  */
 export function smsReplyAllowed(pack: CountryPack, key: TwoWaySmsKey): boolean {
   if (!pack.twoWaySms) return false;

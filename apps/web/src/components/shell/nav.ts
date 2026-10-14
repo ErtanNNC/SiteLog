@@ -94,8 +94,7 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'setup',
   },
   { key: 'billing', to: '/billing', label: 'nav.billing', icon: CreditCard, group: 'setup' },
-  // §11.1: admins only. The "staging or `is_demo` orgs" gate comes with the real page (W1-08),
-  // once W1-05 adds `orgs.is_demo`.
+  // §11.1: admins, of a demo org (`orgs.is_demo`) or on staging (`VITE_DEMO_PHONE_ALL_ORGS`).
   {
     key: 'devPhone',
     to: '/dev/phone',
@@ -105,10 +104,21 @@ export const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-/** Role-aware nav: hide Settings/Billing for non-admins; accounts users only see Crew hours. */
-export function navItemsFor(role: MemberRole | null, isDemo = false): NavItem[] {
+/**
+ * Role-aware nav: hide Settings/Billing for non-admins; accounts users only see Crew hours. The
+ * Demo phone shows only where it works (`demoPhone`: the panel's demo mode, a demo org, staging).
+ */
+export function navItemsFor(
+  role: MemberRole | null,
+  isDemo = false,
+  opts: { demoPhone?: boolean } = {},
+): NavItem[] {
   if (!role) return [];
+  const demoPhone = opts.demoPhone ?? isDemo;
   return NAV_ITEMS.filter(
-    (item) => canAccess(role, ROUTE_ROLES[item.key]) && (!item.demoOnly || isDemo),
+    (item) =>
+      canAccess(role, ROUTE_ROLES[item.key]) &&
+      (!item.demoOnly || isDemo) &&
+      (item.key !== 'devPhone' || demoPhone),
   );
 }

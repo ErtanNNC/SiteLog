@@ -25,7 +25,7 @@ import { PermanentJobError, type JobHandler } from './types';
 export const sendEmail: JobHandler<'send_email'> = async (ctx, payload) => {
   const built = await buildEmail(ctx, payload);
   if (!built) return;
-  const { to, rendered, attachments } = built;
+  const { to, rendered, attachments, orgId } = built;
   if (to.length === 0) {
     ctx.log.info('email skipped: no recipients', { kind: payload.kind });
     return;
@@ -37,6 +37,7 @@ export const sendEmail: JobHandler<'send_email'> = async (ctx, payload) => {
     text: rendered.text,
     attachments,
     tags: { kind: payload.kind },
+    orgId,
   });
   ctx.log.info('email sent', {
     kind: payload.kind,
@@ -51,7 +52,13 @@ type EmailPayload = Parameters<JobHandler<'send_email'>>[1];
 export async function buildEmail(
   ctx: Ctx,
   payload: EmailPayload,
-): Promise<{ to: string[]; rendered: RenderedEmail; attachments?: EmailAttachment[] } | null> {
+): Promise<{
+  to: string[];
+  rendered: RenderedEmail;
+  attachments?: EmailAttachment[];
+  /** The org the email is about: the console provider files it there (the Demo phone's Email tab). */
+  orgId: string;
+} | null> {
   const appUrl = ctx.config.APP_URL;
   switch (payload.kind) {
     case 'report_filed':
@@ -101,7 +108,7 @@ export async function buildEmail(
         reporterFirstName: reporter ? firstName(reporter.name) : null,
         url: `${appUrl}/reports/${report.id}`,
       });
-      return { to: Array.from(new Set(to)), rendered, attachments };
+      return { to: Array.from(new Set(to)), rendered, attachments, orgId: report.org_id };
     }
     case 'report_missing': {
       if (!payload.siteDayId) throw new PermanentJobError('siteDayId required');
@@ -119,7 +126,7 @@ export async function buildEmail(
         reporterPhone: reporter?.phone_e164 ?? null,
         url: `${appUrl}/sites/${site.site.id}`,
       });
-      return { to: payload.to ?? members.map((m) => m.email), rendered };
+      return { to: payload.to ?? members.map((m) => m.email), rendered, orgId: site.org.id };
     }
     case 'invoice_query': {
       if (!payload.invoiceId) throw new PermanentJobError('invoiceId required');
@@ -136,7 +143,7 @@ export async function buildEmail(
         reportedHours: inv.reported_hours,
         url: `${appUrl}/hours`,
       });
-      return { to: payload.to ?? [], rendered };
+      return { to: payload.to ?? [], rendered, orgId: inv.org_id };
     }
     case 'evidence_pack_ready': {
       if (!payload.packId) throw new PermanentJobError('packId required');
@@ -162,7 +169,7 @@ export async function buildEmail(
         downloadUrl: url,
         panelUrl: `${appUrl}/weather`,
       });
-      return { to, rendered };
+      return { to, rendered, orgId: pack.org_id };
     }
     case 'weekly_digest': {
       if (!payload.orgId) throw new PermanentJobError('orgId required');
@@ -181,7 +188,7 @@ export async function buildEmail(
         stats,
         url: appUrl,
       });
-      return { to: payload.to ?? members.map((m) => m.email), rendered };
+      return { to: payload.to ?? members.map((m) => m.email), rendered, orgId: org.id };
     }
     case 'unknown_contact': {
       if (!payload.unknownContactId && !payload.orgId)
@@ -199,7 +206,7 @@ export async function buildEmail(
         snippet: sender?.snippet ?? null,
         url: `${appUrl}/team`,
       });
-      return { to: payload.to ?? members.map((m) => m.email), rendered };
+      return { to: payload.to ?? members.map((m) => m.email), rendered, orgId: org.id };
     }
     case 'report_edited_after_signoff': {
       if (!payload.reportId) throw new PermanentJobError('reportId required');
@@ -213,7 +220,7 @@ export async function buildEmail(
         version: payload.version ?? report.current_version,
         url: `${appUrl}/reports/${report.id}`,
       });
-      return { to: payload.to ?? [], rendered };
+      return { to: payload.to ?? [], rendered, orgId: report.org_id };
     }
   }
 }

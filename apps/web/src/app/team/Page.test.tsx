@@ -80,7 +80,7 @@ describe('TeamPage (demo data)', () => {
     expect(dialog).toHaveTextContent('+1 555 014 8800');
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Elm St. Townhomes' }));
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Spanish' }));
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Send WhatsApp welcome' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send welcome text' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const nora = store.data.reporters.find((r) => r.name === 'Nora Haddad')!;
     expect(nora.phone_e164).toBe('+15550148800');
@@ -210,7 +210,7 @@ describe('TeamPage (demo data)', () => {
       'href',
       '/setup/site',
     );
-    expect(within(dialog).getByRole('button', { name: 'Send WhatsApp welcome' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Send welcome text' })).toBeDisabled();
   });
 
   it('an ops user with no sites is told to ask an admin (adding a site is admin-only)', async () => {

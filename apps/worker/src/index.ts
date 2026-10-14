@@ -8,6 +8,7 @@ import { connectDb } from './db';
 import { loadDotenv } from './dotenv';
 import { createEmailProvider } from './email/provider';
 import { createLogger } from './log';
+import { createWorkerNotifier, describePackTransports } from './messaging';
 import { createFfmpegRunner, resolveFfmpegPath } from './media/ffmpeg';
 import { createRunner } from './runner';
 import { createMemoryStorage, createStorage } from './storage';
@@ -45,7 +46,9 @@ export function buildContext(config: Config): Ctx {
     email: createEmailProvider(
       { provider: config.EMAIL_PROVIDER, apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM },
       log,
+      { insertConsoleEmail: (row) => db.insertConsoleEmail(row) },
     ),
+    notifier: createWorkerNotifier(config, db),
     ffmpeg: createFfmpegRunner(
       resolveFfmpegPath({
         ...process.env,
@@ -108,6 +111,17 @@ export async function main(): Promise<void> {
       ffmpeg: resolveFfmpegPath(),
     }),
   );
+  // One line per country pack: the SMS transport a real org of the pack gets here (demo orgs:
+  // always console). A failure here only loses the line.
+  ctx.db
+    .listCountries()
+    .then((rows) =>
+      ctx.log.info('sms transport per country pack', {
+        packs: describePackTransports(rows),
+        email: config.EMAIL_PROVIDER,
+      }),
+    )
+    .catch((err: unknown) => ctx.log.warn('could not read the country packs', { err }));
   runner.start();
 
   let stopping = false;

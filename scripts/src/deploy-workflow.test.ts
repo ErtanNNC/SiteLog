@@ -186,7 +186,7 @@ describe('deploy.yml', () => {
         new Set(['secrets.NETLIFY_AUTH_TOKEN']),
       );
     }
-    for (const name of ['VITE_WA_DISPLAY_NUMBER', 'VITE_SENTRY_DSN']) {
+    for (const name of ['VITE_WA_DISPLAY_NUMBER', 'VITE_SENTRY_DSN', 'VITE_DEMO_PHONE_ALL_ORGS']) {
       expect(JOBS.get('web')!.text, name).toContain(
         `${name}: \${{ github.event_name != 'pull_request' && vars.${name} || '' }}`,
       );

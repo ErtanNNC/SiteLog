@@ -197,6 +197,7 @@ export const PRUNE: ReadonlyArray<readonly [table: string, where: (k: PruneScope
   ['conversations', (k) => `org_id = ${k.o} or reporter_id in ${k.R}`],
   ['site_days', (k) => `site_id in ${k.S}`],
   ['notifications', (k) => `org_id = ${k.o}`],
+  ['console_emails', (k) => `org_id = ${k.o}`],
   ['sub_invoices', (k) => `org_id = ${k.o}`],
   [
     'glossary_terms',

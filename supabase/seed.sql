@@ -82,6 +82,7 @@ delete from messages where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d' or re
 delete from conversations where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d' or reporter_id in (select id from reporters where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d');
 delete from site_days where site_id in (select id from sites where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d');
 delete from notifications where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d';
+delete from console_emails where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d';
 delete from sub_invoices where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d';
 delete from glossary_terms where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d' or scope_site_id in (select id from sites where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d') or scope_reporter_id in (select id from reporters where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d');
 delete from consents where reporter_id in (select id from reporters where org_id = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d');
@@ -1802,6 +1803,7 @@ delete from messages where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de' or re
 delete from conversations where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de' or reporter_id in (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de');
 delete from site_days where site_id in (select id from sites where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de');
 delete from notifications where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de';
+delete from console_emails where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de';
 delete from sub_invoices where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de';
 delete from glossary_terms where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de' or scope_site_id in (select id from sites where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de') or scope_reporter_id in (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de');
 delete from consents where reporter_id in (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de');

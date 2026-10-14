@@ -108,10 +108,12 @@ jobs:
         with:
           version: 2.118.0
       # `supabase start` loads supabase/functions/.env into the Edge Runtime. APP_URL is the CORS
-      # origin of the panel under test; field-api signs device codes with LINK_SIGNING_SECRET and
-      # accepts browser origins FIELD_APP_URL and CORS_EXTRA_ORIGINS (the field app's dev and
-      # preview servers). The rest are dummies so no function boots half-configured. Nothing here
-      # reaches Meta, Stripe, Twilio or Anthropic.
+      # origin of the panel under test; field-api signs device codes and derives personal link
+      # codes with LINK_SIGNING_SECRET (the worker below uses the same one) and accepts browser
+      # origins FIELD_APP_URL and CORS_EXTRA_ORIGINS (the field app's dev and preview servers).
+      # sms-webhook checks X-Twilio-Signature with TWILIO_AUTH_TOKEN against SMS_WEBHOOK_URL. The
+      # rest are dummies so no function boots half-configured. No pack has a sender id here, so
+      # every text goes to the console driver: nothing reaches Meta, Stripe, Twilio or Anthropic.
       - name: Edge Function env
         run: |
           cat > supabase/functions/.env <<'ENV'
@@ -119,6 +121,8 @@ jobs:
           LINK_SIGNING_SECRET=e2e-link-signing-secret-not-for-production
           FIELD_APP_URL=http://localhost:5174
           CORS_EXTRA_ORIGINS=http://localhost:4174
+          TWILIO_AUTH_TOKEN=e2e-twilio-auth-token
+          SMS_WEBHOOK_URL=http://127.0.0.1:54321/functions/v1/sms-webhook
           WA_VERIFY_TOKEN=e2e-verify-token
           WA_APP_SECRET=e2e-app-secret
           SCHEDULER_SECRET=e2e-scheduler-secret
@@ -148,26 +152,30 @@ jobs:
           pnpm test:stack
       # First request per function downloads its npm/jsr imports; do it before the browser waits.
       - name: Warm up Edge Functions
-        # Each function must boot and answer 401: the api-* functions to the anon key, field-api
-        # (no gateway JWT check) to a request without a link code. The Edge Runtime container has no
-        # restart policy, so if it exits while booting the first worker it is started again (a run
-        # once failed with 502 here and 503 in the payroll and EOT specs).
+        # Each function must boot and refuse: the api-* functions the anon key (401), field-api
+        # (no gateway JWT check) a request without a link code (401), sms-webhook (no gateway JWT
+        # check either) a POST without X-Twilio-Signature (403, so TWILIO_AUTH_TOKEN is loaded).
+        # The Edge Runtime container has no restart policy, so if it exits while booting the first
+        # worker it is started again (a run once failed with 502 here and 503 in the payroll and
+        # EOT specs).
         run: |
           container=supabase_edge_runtime_sitelog
-          for fn in api-export-payroll api-evidence-pack field-api/today; do
+          for probe in GET:api-export-payroll:401 GET:api-evidence-pack:401 GET:field-api/today:401 POST:sms-webhook:403; do
+            IFS=: read -r method fn want <<< "$probe"
             code=000
             for attempt in 1 2 3 4 5 6; do
-              code=$(curl -sS -o "$RUNNER_TEMP/warm.out" -m 180 -w '%{http_code}' \
+              code=$(curl -sS -o "$RUNNER_TEMP/warm.out" -m 180 -w '%{http_code}' -X "$method" \
                 -H "Authorization: Bearer $ANON_KEY" "$API_URL/functions/v1/$fn" || echo 000)
               echo "$fn attempt $attempt: HTTP $code"
-              [ "$code" = 401 ] && break
+              [ "$code" = "$want" ] && break
               state=$(docker inspect -f '{{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}}' "$container" 2>&1 || true)
               echo "Edge Runtime: $state"
               case "$state" in running*) ;; *) docker start "$container" ;; esac
               sleep 5
             done
-            if [ "$code" != 401 ]; then
-              echo "::error::$fn did not boot (last HTTP $code)"
+            if [ "$code" != "$want" ]; then
+              echo "::error::$fn did not boot (last HTTP $code, want $want)"
+              cat "$RUNNER_TEMP/warm.out" || true
               docker logs "$container" --tail 100 2>&1 || true
               exit 1
             fi
@@ -185,8 +193,39 @@ jobs:
           pnpm --filter @sitelog/db exec vitest run --config vitest.stack.config.ts stack/field-api.test.ts -t "field-api on the local stack"
       - name: Install Chromium
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
+      # The `supabase` project: no worker runs, so the jobs these specs enqueue stay queued.
       - name: Login · realtime · edit → v2 · sign-off · payroll CSV · EOT pack
-        run: pnpm --filter @sitelog/web e2e:supabase
+        run: pnpm --filter @sitelog/web e2e:supabase --project=supabase
+      # The worker (W1-08) against the stack, keyless: console SMS and console email (both land in
+      # the Demo phone), no AI or weather keys (those jobs fail and retry), the same
+      # LINK_SIGNING_SECRET as the functions. It starts after the panel specs, so their jobs (the
+      # EOT pack, PDFs) are processed now and the specs above still see them queued.
+      - name: Start the worker
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+          SUPABASE_URL: ${{ env.API_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SERVICE_ROLE_KEY }}
+          EMAIL_PROVIDER: console
+          LINK_SIGNING_SECRET: e2e-link-signing-secret-not-for-production
+          FIELD_APP_URL: http://localhost:5174
+          WORKER_PORT: '8080'
+        run: |
+          nohup pnpm --filter @sitelog/worker exec tsx src/index.ts > "$RUNNER_TEMP/worker.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/worker.pid"
+          for attempt in $(seq 1 60); do
+            code=$(curl -sS -o /dev/null -m 5 -w '%{http_code}' http://127.0.0.1:8080/health || echo 000)
+            [ "$code" = 200 ] && { echo "worker healthy after ${attempt}s"; exit 0; }
+            sleep 1
+          done
+          echo "::error::the worker did not answer /health with 200 (last HTTP $code)"
+          cat "$RUNNER_TEMP/worker.log" || true
+          exit 1
+      # The `worker` project: invite → the worker's welcome text in the Demo phone → the personal
+      # link resolves at field-api → HELP re-sends it (W1-08 Done when).
+      - name: Invite → welcome text in the Demo phone (worker)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+        run: pnpm --filter @sitelog/web e2e:supabase --project=worker
       - name: Supabase logs
         if: failure()
         run: |
@@ -194,6 +233,7 @@ jobs:
           for c in edge_runtime realtime auth rest; do
             echo "::group::$c"; docker logs "supabase_${c}_sitelog" --tail 150 2>&1 || true; echo "::endgroup::"
           done
+          echo "::group::worker"; tail -n 200 "$RUNNER_TEMP/worker.log" 2>/dev/null || true; echo "::endgroup::"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

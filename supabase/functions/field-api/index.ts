@@ -1,7 +1,8 @@
 import { optionalEnv, requireEnv } from '../_shared/env.ts';
+import { edgeNotifier } from '../_shared/messaging.ts';
 import { adminClient } from '../_shared/supabase.ts';
 import { createFieldApp } from './app.ts';
-import { consoleVerifyCodeSender } from './console_code.ts';
+import { notifierCodeSender } from './code_sender.ts';
 import { fieldOrigins } from './logic.ts';
 import { supabaseFieldStore } from './store_supabase.ts';
 
@@ -19,8 +20,8 @@ function fieldApp() {
     const admin = adminClient();
     app = createFieldApp({
       store: supabaseFieldStore(admin),
-      // W1-08 replaces the console text with the Notifier (spec §4.5) and the pack's SMS driver.
-      sendVerifyCode: consoleVerifyCodeSender(admin),
+      // The Notifier (spec §4.5): the pack's SMS driver, console for demo orgs and unset senders.
+      sendVerifyCode: notifierCodeSender(edgeNotifier(admin)),
       linkSigningSecret: () => requireEnv('LINK_SIGNING_SECRET'),
       allowedOrigins: () =>
         fieldOrigins(optionalEnv('FIELD_APP_URL'), optionalEnv('CORS_EXTRA_ORIGINS')),

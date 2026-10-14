@@ -36,6 +36,10 @@ export const qk = {
   notifications: (org: string) => [org, 'notifications'] as const,
   setup: (org: string) => [org, 'setup'] as const,
   search: (org: string, q: string) => [org, 'search', q] as const,
+  demoPhone: (org: string) => [org, 'demoPhone'] as const,
+  demoPhoneThread: (org: string, reporterId: string) =>
+    [org, 'demoPhone', 'thread', reporterId] as const,
+  demoPhoneEmails: (org: string) => [org, 'demoPhone', 'emails'] as const,
   /** /ops is platform-wide (not org data): keyed by the signed-in user, invalidated by ['ops']. */
   opsAccess: (userId: string) => ['ops', userId, 'access'] as const,
   ops: (userId: string) => ['ops', userId, 'dashboard'] as const,

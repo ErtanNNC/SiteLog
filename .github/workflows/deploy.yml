@@ -313,6 +313,9 @@ jobs:
       # Empty on pull requests: the demo then shows the fictional +1 555 014 2290, and Sentry is off.
       VITE_WA_DISPLAY_NUMBER: ${{ github.event_name != 'pull_request' && vars.VITE_WA_DISPLAY_NUMBER || '' }}
       VITE_SENTRY_DSN: ${{ github.event_name != 'pull_request' && vars.VITE_SENTRY_DSN || '' }}
+      # §11.1: 'true' on staging shows admins the Demo phone in every org (real orgs' link codes
+      # masked); unset elsewhere, where only demo orgs (`orgs.is_demo`) have it.
+      VITE_DEMO_PHONE_ALL_ORGS: ${{ github.event_name != 'pull_request' && vars.VITE_DEMO_PHONE_ALL_ORGS || '' }}
     steps:
       - name: Check configuration
         id: cfg

@@ -19,6 +19,8 @@ import type { MessagesClient } from '../ai/claude';
 import { testConfig } from '../config';
 import { createMetrics, type Ctx } from '../context';
 import { createMemoryProvider } from '../email/provider';
+import { createWorkerNotifier } from '../messaging';
+import type { SmsDriver, SmsTransport } from '@sitelog/shared';
 import { registry } from '../jobs/registry';
 import { silentLogger } from '../log';
 import type { FfmpegRunner } from '../media/ffmpeg';
@@ -139,6 +141,8 @@ export interface Harness {
   drain(types?: JobTypeKey[]): Promise<JobRow[]>;
   claude(client: MessagesClient | null): void;
   sentTexts(): string[];
+  /** What the SMS drivers were asked to send (no HTTP). */
+  sms: Array<{ driver: SmsDriver; to: string; body: string; sender?: string }>;
 }
 
 /** Fri Oct 9 2026 17:31 America/Chicago (CDT, UTC-5). */
@@ -157,13 +161,26 @@ export function createHarness(
   const wa = createFakeWaClient();
   const email = createMemoryProvider();
   const storage = createMemoryStorage();
+  const config = testConfig({
+    LINK_SIGNING_SECRET: 'test-link-signing-secret',
+    FIELD_APP_URL: 'https://go.sitelog.app',
+  });
+  const sms: Harness['sms'] = [];
+  const transport = (driver: SmsDriver): SmsTransport => ({
+    driver,
+    async send(to, body, o) {
+      sms.push({ driver, to, body, sender: o.sender });
+      return { providerId: `${driver}:${sms.length}` };
+    },
+  });
   const ctx: Ctx = {
-    config: testConfig(),
+    config,
     db,
     wa,
     storage,
     ai: { claude: opts.claude ?? null, openai: null },
     email,
+    notifier: createWorkerNotifier(config, db, transport),
     ffmpeg: fakeFfmpeg,
     log: silentLogger,
     now: () => now,
@@ -412,6 +429,7 @@ export function createHarness(
     sentTexts() {
       return wa.sent.map((s) => s.body ?? '').filter(Boolean);
     },
+    sms,
   };
   return h;
 }

@@ -2,8 +2,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  MASKED_CODE,
+  SmsSendError,
   deadlineInstant,
+  deriveLinkCode,
   evidencePackStoragePath,
+  linkCodeHash,
   readReportData,
   upgradeV1toV2,
   type DailyReportDataV1,
@@ -14,9 +18,11 @@ import { buildEmail } from '../jobs/send_email';
 import { buildReportPdfInput } from '../pdf/render';
 import { postProcessExtraction, type ExtractionInput } from '../ai/extract';
 import { compareReport } from '../ai/eval';
+import { createWorkerNotifier } from '../messaging';
 import {
   createHarness,
   ORG_ID,
+  PHONE_MARCO,
   scriptedClaude,
   SITE_OAKMONT,
   SITE_RIVERSIDE,
@@ -572,27 +578,118 @@ describe('pipeline: compose + extract job + filing', () => {
 });
 
 describe('jobs: welcome, template, retention', () => {
-  it('send_welcome sends the approved template and opens welcome_sent', async () => {
+  it('send_welcome texts the welcome with the personal link: a demo org through console', async () => {
     const h = createHarness();
-    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
-    await h.runJob('send_welcome', { reporterId: h.marco.id, reinvite: false });
-    expect(h.wa.sent[0]!.kind).toBe('template');
-    const t = h.wa.sent[0]!.template as {
-      name: string;
-      components: Array<{ type: string; parameters: Array<{ text?: string; payload?: string }> }>;
-    };
-    expect(t.name).toBe('sitelog_welcome');
-    expect(t.components[0]!.parameters.map((p) => p.text)).toEqual([
-      'Marco',
-      'Kestrel Build Group',
-      'Riverside Lofts — Block B',
-      '17:30',
+    h.db.data.orgs.get(h.org.id)!.is_demo = true;
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    marco.status = 'invited';
+    marco.invited_at = null;
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    // No WhatsApp any more (W1-08).
+    expect(h.wa.sent).toHaveLength(0);
+    const link = h.db.data.fieldLinks[0]!;
+    const code = await deriveLinkCode('test-link-signing-secret', link.id);
+    expect(link).toMatchObject({
+      reporter_id: h.marco.id,
+      kind: 'personal',
+      code_hash: linkCodeHash(code),
+    });
+    expect(h.sms).toEqual([
+      {
+        driver: 'console',
+        to: PHONE_MARCO,
+        body: `Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: https://go.sitelog.app/r/${code} · Reply STOP to opt out, HELP for help`,
+        sender: undefined,
+      },
     ]);
-    expect(t.components[1]!.parameters[0]!.payload).toBe('welcome:ok');
-    const convo = (await h.db.getConversationByPhone(h.marco.phone_e164))!;
-    expect(convo.state).toBe('welcome_sent');
-    expect(h.db.data.messages.size).toBe(1);
-    expect(Array.from(h.db.data.messages.values())[0]!.template_name).toBe('sitelog_welcome');
+    const [message] = [...h.db.data.messages.values()];
+    expect(message).toMatchObject({
+      channel: 'sms',
+      direction: 'out',
+      copy_key: 'welcome',
+      provider: 'console',
+      status: 'delivered',
+      reporter_id: h.marco.id,
+      org_id: h.org.id,
+      body: h.sms[0]!.body,
+    });
+    expect(h.db.data.reporters.get(h.marco.id)!.invited_at).not.toBeNull();
+    expect(h.db.data.audit.map((a) => a.action)).toEqual([
+      'field_link.created',
+      'sms.sent',
+      'reporter.invited',
+    ]);
+    // A retry of the same job sends nothing more; a re-send reuses the same link.
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toHaveLength(1);
+    expect(h.db.data.fieldLinks).toHaveLength(1);
+  });
+
+  it("send_welcome on a real org: the pack's provider and sender, the link masked in messages", async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms[0]).toMatchObject({ driver: 'twilio', sender: '+18885550142', to: PHONE_MARCO });
+    expect(h.sms[0]!.body).toMatch(/https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{6} /);
+    const [message] = [...h.db.data.messages.values()];
+    expect(message!.provider).toBe('twilio');
+    expect(message!.status).toBe('sent');
+    expect(message!.body).toContain(`/r/${MASKED_CODE}`);
+  });
+
+  it('send_welcome sends nothing to a reporter who opted out, and says why', async () => {
+    const h = createHarness();
+    h.db.data.reporters.get(h.marco.id)!.status = 'opted_out';
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toHaveLength(0);
+    expect(h.db.data.audit.find((a) => a.action === 'notify.skipped')).toMatchObject({
+      diff: { copy_key: 'welcome', reason: 'opted_out' },
+    });
+    expect(h.db.data.audit.some((a) => a.action === 'reporter.invited')).toBe(false);
+    // §13 "Message undeliverable / opted out": the office is told, with the reason.
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_invite_failed',
+        title: 'Marco Ruiz: the welcome text was not sent',
+        body: expect.stringMatching(/opted out of texts/),
+        target_path: '/team',
+      }),
+    ]);
+  });
+
+  it('send_welcome: a number the provider refuses for good is flagged for the office', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.ctx.notifier = createWorkerNotifier(h.ctx.config, h.db, () => ({
+      driver: 'twilio',
+      send: () =>
+        Promise.reject(
+          new SmsSendError("twilio 400 21614: 'To' is not a mobile number", {
+            driver: 'twilio',
+            retryable: false,
+            undeliverable: true,
+            code: '21614',
+          }),
+        ),
+    }));
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.db.data.reporters.get(h.marco.id)!.last_invite_error).toMatch(/21614/);
+    expect(h.db.data.notifications[0]).toMatchObject({
+      kind: 'reporter_invite_failed',
+      target_path: '/team',
+    });
+    expect([...h.db.data.messages.values()][0]!.status).toBe('undeliverable');
+    // A provider outage is retried by the queue instead.
+    h.ctx.notifier = createWorkerNotifier(h.ctx.config, h.db, () => ({
+      driver: 'twilio',
+      send: () =>
+        Promise.reject(new SmsSendError('twilio 503', { driver: 'twilio', retryable: true })),
+    }));
+    await expect(
+      h.runJob('send_welcome', { reporterId: h.jorge.id, siteId: SITE_RIVERSIDE }),
+    ).rejects.toThrow(/503/);
   });
 
   it('send_template uses free-form inside the window and the template outside, bumping reminder_stage', async () => {

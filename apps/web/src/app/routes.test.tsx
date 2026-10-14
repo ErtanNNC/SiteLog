@@ -12,10 +12,10 @@ async function chooseTurkish() {
 }
 
 describe('routes (§11.1)', () => {
-  it('/dev/phone is a Demo phone placeholder for admins', async () => {
+  it('/dev/phone is the Demo phone for admins (W1-08)', async () => {
     renderWithProviders(<AppRoutes />, { as: 'admin', route: '/dev/phone' });
     expect(await screen.findByRole('heading', { level: 1, name: 'Demo phone' })).toBeVisible();
-    expect(screen.getByText('Coming next')).toBeInTheDocument();
+    expect(await screen.findByRole('navigation', { name: 'Reporters' })).toBeInTheDocument();
     expect(
       within(screen.getAllByRole('navigation', { name: 'Main navigation' })[0]!).getByRole('link', {
         name: 'Demo phone',
@@ -59,7 +59,8 @@ describe('routes (§11.1)', () => {
       route: '/dev/phone',
     });
     expect(await screen.findByRole('heading', { level: 1, name: 'Demo telefon' })).toBeVisible();
-    expect(screen.getByText('Yakında')).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Mesajlar' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Rapor verenler' })).toBeInTheDocument();
     unmount();
 
     renderWithProviders(<AppRoutes />, { as: 'admin', route: '/settings/channels' });
