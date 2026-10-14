@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderSms, SMS_KEYS, SMS_VARS, US_ONLY_SMS_KEYS, type SharedSmsKey } from '../copy/sms.ts';
+import { isTwoWaySmsKey, renderSms, SMS_KEYS, SMS_VARS, type SharedSmsKey } from '../copy/sms.ts';
 import { countSmsSegments, SMS_SEGMENT_SIZES } from './segments.ts';
 
 const GSM_BASIC_PRINTED =
@@ -114,7 +114,7 @@ describe('countSmsSegments: Turkish', () => {
         deadline: '17:30',
         link: 'go.sitelog.app/r/K4T9QZ',
       },
-      { hasVoiceNumber: false },
+      { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
     );
     expect(text).toHaveLength(174);
     const c = countSmsSegments(text);
@@ -134,7 +134,7 @@ describe('countSmsSegments: Turkish', () => {
       'reminder_2',
       'tr',
       { time: '19:00', link: 'go.sitelog.app/r/K4T9QZ' },
-      { hasVoiceNumber: false },
+      { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
     );
     const c = countSmsSegments(text);
     expect(c.nonGsm).toContain('â'); // "hâlâ"
@@ -147,16 +147,14 @@ describe('countSmsSegments: Turkish', () => {
       'filed',
       'tr',
       { report_no: 'AY-0412-0031', pdf_link: 'go.sitelog.app/p/AY0031' },
-      { hasVoiceNumber: false },
+      { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
     );
     expect(countSmsSegments(text).default).toMatchObject({ encoding: 'gsm7', segments: 1 });
     const draft = renderSms(
       'draft_ready',
       'tr',
       { link: 'go.sitelog.app/r/K4T9QZ' },
-      {
-        hasVoiceNumber: false,
-      },
+      { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
     );
     const d = countSmsSegments(draft);
     expect(d.default).toMatchObject({ encoding: 'ucs2', segments: 1 });
@@ -211,11 +209,15 @@ describe('countSmsSegments: every Turkish text (spec §19 Q15)', () => {
   it('matches the per-key counts recorded in §19 Q15', () => {
     const actual: Record<string, [number, number]> = {};
     for (const key of SMS_KEYS) {
-      if ((US_ONLY_SMS_KEYS as readonly string[]).includes(key)) continue;
+      if (isTwoWaySmsKey(key)) continue;
       const withCall = (SMS_VARS[key] as readonly string[]).includes('number');
       for (const hasVoiceNumber of withCall ? [true, false] : [true]) {
         const label = withCall ? `${key} ${hasVoiceNumber ? '+' : '-'}number` : key;
-        const text = renderSms(key as SharedSmsKey, 'tr', vars as never, { hasVoiceNumber });
+        const text = renderSms(key as SharedSmsKey, 'tr', vars as never, {
+          hasVoiceNumber,
+          twoWay: false,
+          linksAllowed: true,
+        });
         const c = countSmsSegments(text);
         actual[label] = [c.turkishShift.segments, c.default.segments];
       }

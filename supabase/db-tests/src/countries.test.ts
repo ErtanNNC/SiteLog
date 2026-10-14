@@ -2,7 +2,18 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
-import { CountryRowSchema, toCountryPack, type CountryRow } from '@sitelog/shared';
+import {
+  CountryRowSchema,
+  deliverableChannels,
+  IMPLEMENTED_MESSAGE_CHANNELS,
+  messageChannelOrder,
+  packCopyGaps,
+  pickMessageTransport,
+  smsRenderOptions,
+  smsReplyAllowed,
+  toCountryPack,
+  type CountryRow,
+} from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import {
   applyMigration,
@@ -19,8 +30,9 @@ import {
  * 20261014000005_message_channel_columns.sql. The `countries` rows are the source of truth and
  * DEMO_COUNTRIES (packages/shared/src/demo/countries.ts) must equal them; the checks, the orgs
  * foreign key, create_org(p_country) with the deployed panel's 4-argument call, on_org_created's
- * paper, the service-only set_country_endpoints(), who reads the packs, a synthetic ZZ pack ("a
- * new country is a new row") and the messages.channel backfill on a live-shaped database.
+ * paper, the service-only set_country_endpoints(), who reads the packs, every row's copy and
+ * channels (packCopyGaps, the channel layer), a synthetic ZZ pack ("a new country is a new row")
+ * and the messages.channel backfill on a live-shaped database.
  */
 
 const PACKS = '20261014000004_country_packs.sql';
@@ -108,6 +120,41 @@ describe('country pack rows (§4.6)', () => {
     // created_at is the moment the migration ran; the fixture holds the migration's date.
     const strip = ({ created_at: _created, ...rest }: CountryRow) => rest;
     expect(rows.map((r) => strip(r.row))).toEqual(DEMO_COUNTRIES.map(strip));
+  });
+
+  it('every row has its copy and a built channel, and sends through console in week 1', async () => {
+    const rows = await svc<{ row: CountryRow }>(
+      `select to_jsonb(c) as row from countries c order by code`,
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const { row } of rows) {
+      const pack = toCountryPack(row);
+      // Every field locale has every SMS key the pack can send, in its two-way variant (§4.6).
+      expect(packCopyGaps(pack), row.code).toEqual([]);
+      expect(
+        pack.messageChannels.some((c) =>
+          (IMPLEMENTED_MESSAGE_CHANNELS as readonly string[]).includes(c),
+        ),
+        row.code,
+      ).toBe(true);
+      // No sender id in a fresh database: console, demo org or not (D47).
+      expect(pickMessageTransport({ isDemo: false }, pack, 'sms'), row.code).toBe('console');
+    }
+    // The copy variant follows the pack: two-way US, one-way TR, links in both; no voice number yet.
+    const byCode = new Map(rows.map(({ row }) => [row.code, toCountryPack(row)]));
+    expect(smsRenderOptions(byCode.get('US')!)).toEqual({
+      hasVoiceNumber: false,
+      twoWay: true,
+      linksAllowed: true,
+    });
+    expect(smsRenderOptions(byCode.get('TR')!)).toEqual({
+      hasVoiceNumber: false,
+      twoWay: false,
+      linksAllowed: true,
+    });
+    // HELP, STOP and unknown senders get an answer on the two-way pack only.
+    expect(smsReplyAllowed(byCode.get('US')!, 'help')).toBe(true);
+    expect(smsReplyAllowed(byCode.get('TR')!, 'help')).toBe(false);
   });
 
   it('holds the US and TR launch values (spec §4.6), nothing per environment', async () => {
@@ -473,7 +520,32 @@ describe('a new country is a new row (ZZ)', () => {
       const [{ row }] = (await svc<{ row: CountryRow }>(
         `select to_jsonb(c) as row from countries c where code = 'ZZ'`,
       )) as [{ row: CountryRow }];
-      expect(toCountryPack(row).messageChannels).toEqual(['whatsapp', 'sms']);
+      const zz = toCountryPack(row);
+      expect(zz.messageChannels).toEqual(['whatsapp', 'sms']);
+      // Its language (Spanish) has all the one-way copy: no code change for this row.
+      expect(packCopyGaps(zz)).toEqual([]);
+      // The channel layer follows its flags: WhatsApp first, but not built until week 2; this
+      // pack forbids links in SMS, so a link message has no channel yet, while the device code
+      // (no link) goes by SMS.
+      expect(messageChannelOrder(zz, null)).toEqual(['whatsapp', 'sms']);
+      const reach = (key: 'daily_link' | 'verify_code' | 'edit_applied') =>
+        deliverableChannels({
+          pack: zz,
+          key,
+          preferred: null,
+          consents: new Set(['sms', 'recording']),
+          revoked: new Set(),
+          optedOut: new Set(),
+        });
+      expect(reach('daily_link')).toEqual([]);
+      expect(reach('verify_code')).toEqual(['sms']);
+      expect(reach('edit_applied')).toEqual(['sms']);
+      expect(smsRenderOptions(zz)).toEqual({
+        hasVoiceNumber: false,
+        twoWay: false,
+        linksAllowed: false,
+      });
+      expect(smsReplyAllowed(zz, 'stop_confirm')).toBe(false); // one-way
     });
   });
 });

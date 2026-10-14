@@ -1,9 +1,11 @@
 import type { SharedSmsKey, SmsCatalog } from './sms.ts';
 
 /**
- * §9.2 SMS copy, Turkish: verbatim from the spec table. Turkish texts go out one-way from the
- * `SITELOG` sender title, so they never ask for a reply, and the US-only keys (unknown_number,
- * help, stop_confirm) have no Turkish text. Formal "siz", no exclamation marks (§9.7).
+ * §9.2 SMS copy, Turkish: verbatim from the spec table. The TR pack's SMS is one-way (the
+ * `SITELOG` alphanumeric title, `two_way_sms = false`), so these texts never ask for a reply,
+ * Turkish has no welcome reply hint, and the two-way keys (unknown_number, help, stop_confirm)
+ * have no Turkish text: a pack with two-way SMS and Turkish fails `packCopyGaps()` until they
+ * exist. Formal "siz", no exclamation marks (§9.7).
  */
 export const smsTr: SmsCatalog<SharedSmsKey> = {
   welcome: {

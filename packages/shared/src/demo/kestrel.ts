@@ -58,9 +58,11 @@ import { deriveTotals } from '../report/hours.ts';
 import { formatReportNo } from '../report/numbering.ts';
 import { PAYROLL_COLUMNS } from '../report/payroll.ts';
 import { upgradeV1toV2 } from '../report/upgrade.ts';
-import { renderSms, type SmsKey } from '../copy/sms.ts';
+import { smsRenderOptions } from '../channels.ts';
+import { renderSms, type RenderSmsOptions, type SmsKey } from '../copy/sms.ts';
 import { demoId, demoRand } from './ids.ts';
 import { DEMO_CANONICAL_TODAY, DEMO_LIVE_START, demoCalendar } from './calendar.ts';
+import { demoPack } from './countries.ts';
 import {
   DEMO_LINK_BASE,
   demoConsents,
@@ -770,6 +772,8 @@ function sourcesToCall(data: DailyReportData, callId: string): DailyReportData {
 
 export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
   const cal = demoCalendar(opts.date);
+  /** §18.1: Kestrel is a US org; its SMS variant and paper come from the US pack (spec §4.6). */
+  const usPack = demoPack('US');
   const linkBase = opts.linkBase ?? DEMO_LINK_BASE;
   /** Canonical date + local Chicago time → instant on the mapped date. */
   const t = (c: string, time: string) => cal.at(c, time, DEMO_TZ);
@@ -791,6 +795,15 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
   /** The last canonical day kept as history (a live day's yesterday). */
   const lastHistoryDay = DAYS.filter((c) => c < DEMO_TODAY && cal.isHistory(c)).at(-1)!;
   const sitelogNumber = formatPhone(DEMO_SITELOG_NUMBER);
+  /**
+   * Kestrel's SMS variant: two-way and links from the US pack (spec §4.6). The call option stays
+   * on as §18.1 story data (`DEMO_SITELOG_NUMBER` for texts and calls), while the US pack's live
+   * voice number is null until the LiveKit number exists (spec §19 Q34).
+   */
+  const smsOptions: RenderSmsOptions = {
+    ...smsRenderOptions(usPack),
+    hasVoiceNumber: true,
+  };
 
   const reporters: ReporterRow[] = SITES.map((s) => ({
     id: reporterId(s.reporter.key),
@@ -1096,7 +1109,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
           number: sitelogNumber,
           link: l.url,
         },
-        { hasVoiceNumber: true },
+        smsOptions,
       ),
       r.invited_at!,
     );
@@ -1241,7 +1254,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
             'daily_link',
             'en',
             { site: s.name, link: dailyLink.url, number: sitelogNumber },
-            { hasVoiceNumber: true },
+            smsOptions,
           ),
           t(c, '17:00'),
         );
@@ -1285,12 +1298,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
             `reminder_1:${s.key}:${c}`,
             reporter,
             'reminder_1',
-            renderSms(
-              'reminder_1',
-              'en',
-              { site: s.name, link: dailyLink.url },
-              { hasVoiceNumber: true },
-            ),
+            renderSms('reminder_1', 'en', { site: s.name, link: dailyLink.url }, smsOptions),
             t(c, '17:45'),
           );
           sms(
@@ -1301,7 +1309,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
               'reminder_2',
               'en',
               { time: MISSING_AT, link: dailyLink.url, number: sitelogNumber },
-              { hasVoiceNumber: true },
+              smsOptions,
             ),
             t(c, '18:30'),
           );
@@ -1692,12 +1700,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
           `filed:${reportId}`,
           reporter,
           'filed',
-          renderSms(
-            'filed',
-            'en',
-            { report_no: reportNo, pdf_link: dailyLink!.url },
-            { hasVoiceNumber: true },
-          ),
+          renderSms('filed', 'en', { report_no: reportNo, pdf_link: dailyLink!.url }, smsOptions),
           filedAt,
         );
         sms(
@@ -1708,7 +1711,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
             'edit_applied',
             'en',
             { weekday: 'Friday', change: 'Apex Concrete 7 workers · 56 h (was 6 · 48 h)', v: 2 },
-            { hasVoiceNumber: true },
+            smsOptions,
           ),
           t(c, '20:10'),
         );
@@ -1777,7 +1780,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
             'missed_call',
             'en',
             { number: sitelogNumber, link: personal.get(reporter.id)!.url },
-            { hasVoiceNumber: true },
+            smsOptions,
           ),
           t(c, '17:46'),
         );
@@ -1788,12 +1791,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
         `filed:${reportId}`,
         reporter,
         'filed',
-        renderSms(
-          'filed',
-          'en',
-          { report_no: reportNo, pdf_link: reportLink.url },
-          { hasVoiceNumber: true },
-        ),
+        renderSms('filed', 'en', { report_no: reportNo, pdf_link: reportLink.url }, smsOptions),
         filedAt,
       );
       if (call) {
@@ -1810,7 +1808,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
           `photos_link:${s.key}:${c}`,
           reporter,
           'photos_link',
-          renderSms('photos_link', 'en', { link: photosLink.url }, { hasVoiceNumber: true }),
+          renderSms('photos_link', 'en', { link: photosLink.url }, smsOptions),
           filedAt,
         );
       }
@@ -2082,7 +2080,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       email_pdf_on_file: true,
       max_questions_per_report: 3,
       payroll_csv_format: 'generic',
-      pdf_paper: 'letter',
+      pdf_paper: usPack.paper,
       pdf_footer_enabled: true,
       pdf_max_photos: 4,
       letterhead_lines: [

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { smsCopyGaps } from './copy/sms.ts';
 import type { CountryRow } from './db/types.ts';
 import { MessageChannelSchema, type MessageChannel } from './enums.ts';
 import { assertE164, isE164, type E164 } from './format.ts';
@@ -240,4 +241,16 @@ export function reporterDefaultsFor(pack: CountryPack): {
   const locale = pack.fieldLocales[0];
   if (!locale) throw new Error(`Country pack ${pack.code} has no field locale`);
   return { locale, languages: [languageOf(locale)] };
+}
+
+/**
+ * The SMS copy a pack lacks (spec §4.6: a new country is only a row when its languages have their
+ * copy), as `<field locale>.<key>[.<variant>]`: every shared key in each of its field locales, and
+ * with two-way SMS also the two-way keys and the welcome's reply hint. Empty = the pack has all
+ * the copy it can be sent; supabase/db-tests checks it for every `countries` row.
+ */
+export function packCopyGaps(pack: CountryPack): string[] {
+  return pack.fieldLocales.flatMap((locale) =>
+    smsCopyGaps(languageOf(locale), { twoWay: pack.twoWaySms }).map((gap) => `${locale}.${gap}`),
+  );
 }

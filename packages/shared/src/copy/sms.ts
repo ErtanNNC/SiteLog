@@ -1,17 +1,24 @@
 import type { Language } from '../locale.ts';
-import { smsEn } from './sms.en.ts';
-import { smsEs } from './sms.es.ts';
+import { smsEn, smsReplyHintEn } from './sms.en.ts';
+import { smsEs, smsReplyHintEs } from './sms.es.ts';
 import { smsTr } from './sms.tr.ts';
 
 /**
- * §9.2 SMS copy catalog. Keys are stable ids; the texts live in `sms.{en,es,tr}.ts`.
+ * §9.2 SMS copy catalog. Keys are stable ids; the texts live in `sms.{en,es,tr}.ts`. WhatsApp
+ * templates and push texts reuse these keys from week 2 (spec §4.5, `MessageKey`).
  *
+ * Which variant a message gets is the country pack's business (spec §4.6), never the driver's:
+ * - Two-way packs only (`two_way_sms`): the keys `unknown_number`, `help` and `stop_confirm`
+ *   (EN and ES text only), and the welcome's reply clause (`SMS_REPLY_HINT`, EN and ES), which
+ *   `renderSms` appends. One-way packs never get reply instructions: those keys throw and the
+ *   welcome goes out without the clause. Catalogue text + hint is the §9.2 cell, byte for byte.
+ * - Packs without links in SMS (`sms_links_allowed` false): the keys with a link
+ *   (`MESSAGE_KEYS_WITH_LINK`) throw, so no SMS path can send a link the pack forbids.
  * - EN and TR are verbatim from the spec table; ES mirrors EN (§9.2 "Spanish versions mirror EN").
- * - `unknown_number`, `help` and `stop_confirm` are US-only (two-way Twilio): EN and ES only.
- * - TR texts never ask for a reply (one-way alphanumeric sender), and `renderSms` adds nothing.
- * - "No voice number yet" (§9.2): a message with an "or call {number}" clause stores a second
- *   text without that clause, and `renderSms` picks it when `hasVoiceNumber` is false. The texts
- *   are data, so no string surgery happens at send time; a test proves each `withoutNumber` is its
+ *   TR has no two-way text, so a two-way pack with Turkish fails `packCopyGaps()`.
+ * - "No voice number" (§9.2): a message with an "or call {number}" clause stores a second text
+ *   without that clause, and `renderSms` picks it when the pack has no voice number. The texts are
+ *   data, so no string surgery happens at send time; a test proves each `withoutNumber` is its
  *   `withNumber` minus exactly one clause that holds `{number}`.
  */
 
@@ -37,10 +44,14 @@ export const SMS_KEYS = [
 ] as const;
 export type SmsKey = (typeof SMS_KEYS)[number];
 
-/** Keys that exist only for US (two-way) numbers: no Turkish text. */
-export const US_ONLY_SMS_KEYS = ['unknown_number', 'help', 'stop_confirm'] as const;
-export type UsOnlySmsKey = (typeof US_ONLY_SMS_KEYS)[number];
-export type SharedSmsKey = Exclude<SmsKey, UsOnlySmsKey>;
+/**
+ * Keys sent only on packs with two-way SMS (replies to STOP and HELP, and to an unknown sender,
+ * §9.5): EN and ES text only.
+ */
+export const TWO_WAY_SMS_KEYS = ['unknown_number', 'help', 'stop_confirm'] as const;
+export type TwoWaySmsKey = (typeof TWO_WAY_SMS_KEYS)[number];
+/** Keys every pack can send, in every language. */
+export type SharedSmsKey = Exclude<SmsKey, TwoWaySmsKey>;
 
 /** SMS languages (§9.6): a reporter's language, from `reporters.locale`. */
 export type SmsLocale = Language;
@@ -69,6 +80,23 @@ export const SMS_VARS = {
 
 export type SmsVarName<K extends SmsKey> = (typeof SMS_VARS)[K][number];
 
+/** Keys whose text carries a link (`{link}` or `{pdf_link}`). */
+export type MessageKeyWithLink = {
+  [K in SmsKey]: [Extract<SmsVarName<K>, 'link' | 'pdf_link'>] extends [never] ? never : K;
+}[SmsKey];
+
+/**
+ * The keys a pack without links in SMS (`sms_links_allowed = false`) cannot send by SMS (spec
+ * §4.5; §19 Q24). Derived from `SMS_VARS`, so a new key with a link joins it.
+ */
+export const MESSAGE_KEYS_WITH_LINK: readonly MessageKeyWithLink[] = SMS_KEYS.filter((key) =>
+  (SMS_VARS[key] as readonly string[]).some((v) => v === 'link' || v === 'pdf_link'),
+) as MessageKeyWithLink[];
+
+export function messageKeyHasLink(key: SmsKey): key is MessageKeyWithLink {
+  return (MESSAGE_KEYS_WITH_LINK as readonly string[]).includes(key);
+}
+
 /** Keys whose text offers "or call {number}". */
 export type SmsKeyWithNumber = {
   [K in SmsKey]: 'number' extends SmsVarName<K> ? K : never;
@@ -94,13 +122,22 @@ export type SmsVars<K extends SmsKey> = {
   [P in Exclude<SmsVarName<K>, 'number'>]: SmsVarValue;
 } & { number?: SmsVarValue };
 
+/**
+ * The variant of a message, from the org's country pack (`smsRenderOptions(pack)` in
+ * `channels.ts`). Every field is required, so no caller falls into a reply prompt or a link by
+ * default.
+ */
 export interface RenderSmsOptions {
-  /** False when the org's country has no SiteLog voice number (e.g. `VOICE_NUMBER_TR` empty). */
+  /** False when the org's pack has no voice number (`countries.voice_number` null): Talk now only. */
   hasVoiceNumber: boolean;
+  /** The pack's `two_way_sms`: the two-way keys and the welcome's reply clause exist only then. */
+  twoWay: boolean;
+  /** The pack's `sms_links_allowed`: a key that carries a link renders only then (§19 Q24). */
+  linksAllowed: boolean;
 }
 
-/** US-only keys accept only the US languages. */
-export type SmsLocaleFor<K extends SmsKey> = K extends UsOnlySmsKey ? 'en' | 'es' : SmsLocale;
+/** Two-way keys accept only the languages that have their text (EN, ES). */
+export type SmsLocaleFor<K extends SmsKey> = K extends TwoWaySmsKey ? 'en' | 'es' : SmsLocale;
 
 export const SMS_CATALOGS: {
   en: SmsCatalog<SmsKey>;
@@ -108,31 +145,97 @@ export const SMS_CATALOGS: {
   tr: SmsCatalog<SharedSmsKey>;
 } = { en: smsEn, es: smsEs, tr: smsTr };
 
-export function isUsOnlySmsKey(key: SmsKey): key is UsOnlySmsKey {
-  return (US_ONLY_SMS_KEYS as readonly string[]).includes(key);
+/**
+ * The `welcome` reply clause, appended only for packs with two-way SMS (§9.2). Turkish has none:
+ * the TR pack is one-way.
+ */
+export const SMS_REPLY_HINT: Readonly<Partial<Record<SmsLocale, string>>> = {
+  en: smsReplyHintEn,
+  es: smsReplyHintEs,
+};
+
+export function isTwoWaySmsKey(key: SmsKey): key is TwoWaySmsKey {
+  return (TWO_WAY_SMS_KEYS as readonly string[]).includes(key);
 }
 
-/** The raw text for a key, language and voice-number state (placeholders not filled). */
-export function smsTemplate(key: SmsKey, locale: SmsLocale, hasVoiceNumber: boolean): string {
+/**
+ * The raw text for a key, language and pack variant (placeholders not filled). Throws on an
+ * unknown key or language, a two-way key for a one-way pack or in a language without its text, a
+ * key with a link for a pack that forbids links in SMS, and a two-way welcome in a language
+ * without a reply hint.
+ */
+export function smsTemplate(key: SmsKey, locale: SmsLocale, opts: RenderSmsOptions): string {
   if (!Object.hasOwn(SMS_CATALOGS, locale)) throw new Error(`No SMS copy for locale "${locale}"`);
   const catalog = SMS_CATALOGS[locale] as Partial<Record<SmsKey, string | SmsWithCallOption>>;
   const template = Object.hasOwn(catalog, key) ? catalog[key] : undefined;
   if (template === undefined) {
     throw new Error(
-      isUsOnlySmsKey(key)
-        ? `SMS "${key}" is US-only and has no "${locale}" text`
+      isTwoWaySmsKey(key)
+        ? `SMS "${key}" exists only for packs with two-way SMS and has no "${locale}" text`
         : `Unknown SMS key "${key}"`,
     );
   }
-  if (typeof template === 'string') return template;
-  return hasVoiceNumber ? template.withNumber : template.withoutNumber;
+  if (isTwoWaySmsKey(key) && !opts.twoWay) {
+    throw new Error(`SMS "${key}" exists only for packs with two-way SMS`);
+  }
+  if (messageKeyHasLink(key) && !opts.linksAllowed) {
+    throw new Error(`SMS "${key}" carries a link and the pack forbids links in SMS`);
+  }
+  const text =
+    typeof template === 'string'
+      ? template
+      : opts.hasVoiceNumber
+        ? template.withNumber
+        : template.withoutNumber;
+  if (key !== 'welcome' || !opts.twoWay) return text;
+  const hint = Object.hasOwn(SMS_REPLY_HINT, locale) ? SMS_REPLY_HINT[locale] : undefined;
+  if (hint === undefined) {
+    throw new Error(`SMS "welcome" has no "${locale}" reply hint for a pack with two-way SMS`);
+  }
+  return text + hint;
+}
+
+/** Where `smsCopyGaps` reads the copy: the catalogues and reply hints, by language. */
+export interface SmsCopySource {
+  catalogs: Readonly<Record<string, Partial<Record<SmsKey, string | SmsWithCallOption>>>>;
+  hints: Readonly<Partial<Record<string, string>>>;
 }
 
 /**
- * Render a §9.2 message. Fails loudly (throws) on an unknown key, a US-only key in Turkish, or a
- * variable the text needs that is missing, null or empty. Extra variables are ignored (a caller
- * may always pass `number`). Values are inserted as given; nothing is appended, so a Turkish
- * text never gains a reply prompt.
+ * The copy one language lacks for a pack (spec §4.6: a new country is only a row when its
+ * languages have their copy): every shared key, in both call-option variants; with two-way SMS
+ * also the two-way keys and the welcome's reply hint. A missing or empty text is a gap. Entries
+ * are `<key>[.<variant>]` (`withNumber`, `withoutNumber`, `replyHint`); empty means complete.
+ * `packCopyGaps()` runs it for each of a pack's field locales; `source` defaults to this
+ * catalogue (tests pass a partial one).
+ */
+export function smsCopyGaps(
+  locale: string,
+  opts: { twoWay: boolean },
+  source: SmsCopySource = { catalogs: SMS_CATALOGS, hints: SMS_REPLY_HINT },
+): string[] {
+  const catalog = Object.hasOwn(source.catalogs, locale) ? source.catalogs[locale]! : {};
+  const gaps: string[] = [];
+  for (const key of SMS_KEYS) {
+    if (isTwoWaySmsKey(key) && !opts.twoWay) continue;
+    const template = Object.hasOwn(catalog, key) ? catalog[key] : undefined;
+    if (template === undefined || template === '') {
+      gaps.push(key);
+    } else if (typeof template !== 'string') {
+      if (!template.withNumber) gaps.push(`${key}.withNumber`);
+      if (!template.withoutNumber) gaps.push(`${key}.withoutNumber`);
+    }
+  }
+  const hint = Object.hasOwn(source.hints, locale) ? source.hints[locale] : undefined;
+  if (opts.twoWay && !hint) gaps.push('welcome.replyHint');
+  return gaps;
+}
+
+/**
+ * Render a §9.2 message. Fails loudly (throws) where `smsTemplate` does, and on a variable the
+ * text needs that is missing, null or empty. Extra variables are ignored (a caller may always pass
+ * `number`). Values are inserted as given; the only addition is the welcome's reply clause on a
+ * two-way pack, so a one-way pack's text never gains a reply prompt.
  */
 export function renderSms<K extends SmsKey>(
   key: K,
@@ -140,7 +243,7 @@ export function renderSms<K extends SmsKey>(
   vars: SmsVars<K>,
   opts: RenderSmsOptions,
 ): string {
-  const template = smsTemplate(key, locale, opts.hasVoiceNumber);
+  const template = smsTemplate(key, locale, opts);
   const values = vars as Readonly<Record<string, SmsVarValue | null | undefined>>;
   return template.replace(/\{([a-z0-9_]+)\}/g, (_match, name: string) => {
     const value = values[name];

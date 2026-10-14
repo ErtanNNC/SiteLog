@@ -34,8 +34,10 @@ import { V12_ROW_DEFAULTS } from '../db/defaults.ts';
 import type { ContactPref } from '../enums.ts';
 import { firstName } from '../format.ts';
 import { PAYROLL_COLUMNS } from '../report/payroll.ts';
+import { smsRenderOptions } from '../channels.ts';
 import { renderSms } from '../copy/sms.ts';
 import { demoCalendar } from './calendar.ts';
+import { demoPack } from './countries.ts';
 import { demoId } from './ids.ts';
 import {
   DEMO_LINK_BASE,
@@ -129,8 +131,10 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
   // The set-up day as it lands before today (already mapped: atDate, not at, which maps again).
   const setupDay = cal.pastDay(SETUP_DAY);
   const setup = (time: string) => cal.atDate(setupDay, time, DEMIR_TZ);
-  // §18.2: no Turkish voice number yet (VOICE_NUMBER_TR empty), so texts carry no "or call".
-  const hasVoiceNumber = false;
+  // §18.2: the TR pack (spec §4.6). TR pack: no voice number, so texts carry no "or call"; one-way
+  // SMS (the SITELOG title), so no reply prompt.
+  const trPack = demoPack('TR');
+  const smsOptions = smsRenderOptions(trPack);
 
   const siteId = (k: string) => demoId(`demir:site:${k}`);
   const reporterId = (k: string) => demoId(`demir:reporter:${k}`);
@@ -251,7 +255,7 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
           deadline: DEADLINE,
           link: personal.url,
         },
-        { hasVoiceNumber },
+        smsOptions,
       ),
       at: r.invited_at!,
     });
@@ -325,7 +329,7 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
     email_pdf_on_file: true,
     max_questions_per_report: 3,
     payroll_csv_format: 'generic',
-    pdf_paper: 'a4',
+    pdf_paper: trPack.paper,
     pdf_footer_enabled: true,
     pdf_max_photos: 4,
     letterhead_lines: [],
@@ -352,11 +356,12 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
       trial_ends_at: null,
       created_at: setup('09:00'),
       ...V12_ROW_DEFAULTS.orgs,
-      // §18.2: Turkey, tr-TR, metric, TRY; a demo org (console SMS driver, Demo phone).
-      country: 'TR',
-      locale: 'tr-TR',
-      units: 'metric',
-      currency: 'TRY',
+      // §18.2: Turkey, preset from the TR pack as create_org does (tr-TR, metric, TRY); a demo
+      // org (console SMS driver, Demo phone).
+      country: trPack.code,
+      locale: trPack.defaultLocale,
+      units: trPack.units,
+      currency: trPack.currency,
       is_demo: true,
     },
     settings,

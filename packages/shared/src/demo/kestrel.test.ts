@@ -9,9 +9,10 @@ import {
 } from './kestrel.ts';
 import { deriveTotals } from '../report/hours.ts';
 import { readReportData } from '../report/upgrade.ts';
-import { renderSms } from '../copy/sms.ts';
+import { renderSms, SMS_REPLY_HINT } from '../copy/sms.ts';
 import { formatDateInTz, formatPhone, formatTimeInTz } from '../format.ts';
 import { linkCodeHash } from '../links.ts';
+import { languageOf } from '../locale.ts';
 import {
   DailyReportDataSchema,
   DailyReportDataV1Schema,
@@ -425,6 +426,11 @@ describe('Kestrel demo data (§18.1)', () => {
       });
       expect(m.phone_e164).toBe(demo.reporters.find((r) => r.id === m.reporter_id)!.phone_e164);
     }
+    // The US pack is two-way: every welcome carries the reply clause in its language (§9.2).
+    for (const m of demo.messages.filter((x) => x.copy_key === 'welcome')) {
+      const reporterLocale = demo.reporters.find((r) => r.id === m.reporter_id)!.locale;
+      expect(m.body!.endsWith(SMS_REPLY_HINT[languageOf(reporterLocale)]!), m.body!).toBe(true);
+    }
     const marcoDaily = demo.messages.find(
       (m) => m.copy_key === 'daily_link' && m.reporter_id === reporter('Marco Ruiz').id,
     )!;
@@ -438,7 +444,8 @@ describe('Kestrel demo data (§18.1)', () => {
           link: `https://go.sitelog.app/r/${link}`,
           number: formatPhone(DEMO_SITELOG_NUMBER),
         },
-        { hasVoiceNumber: true },
+        // Two-way with links from the US pack; the number is §18.1 story data (spec §19 Q34).
+        { hasVoiceNumber: true, twoWay: true, linksAllowed: true },
       ),
     );
     // The link resolves: its hash is a daily field link of Marco's for Riverside today.

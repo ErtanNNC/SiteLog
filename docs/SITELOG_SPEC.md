@@ -1369,7 +1369,7 @@ Team → *Add office user* → email + role + UI language → magic-link invite 
 
 ### 9.2 SMS copy catalog
 
-Keys are stable IDs (`copy/sms.{en,es,tr}.ts`). Keep each message ≤ 1 segment where possible (TR: Turkish characters reduce segment size unless the provider supports the Turkish shift table). TR messages never ask for a reply.
+Keys are stable IDs (`copy/sms.{en,es,tr}.ts`). Keep each message ≤ 1 segment where possible (TR: Turkish characters reduce segment size unless the provider supports the Turkish shift table). Packs without two-way SMS never get reply instructions: the welcome's reply clause (' · Reply STOP to opt out, HELP for help', EN/ES) is sent only on two-way packs, and the (two-way) keys exist only there. When a pack forbids links in SMS, link keys are not sent by SMS (§19 Q24). WhatsApp templates and push texts reuse these keys (week 2).
 
 | Key | EN | TR |
 |---|---|---|
@@ -1388,13 +1388,13 @@ Keys are stable IDs (`copy/sms.{en,es,tr}.ts`). Keep each message ≤ 1 segment 
 | `edit_applied` | Updated {weekday}: {change}. Version {v} sent to the office. | {weekday} güncellendi: {change}. Sürüm {v} ofise gönderildi. |
 | `finish_report` | Your call ended before filing. Finish in one tap: {link} | Görüşme kayıttan önce bitti. Tek dokunuşla tamamlayın: {link} |
 | `site_paused` | {site} is paused in SiteLog. Ask the office to resume it. | {site} SiteLog'da duraklatıldı. Ofisten yeniden açmasını isteyin. |
-| `unknown_number` (US) | This number isn't set up with SiteLog. Ask your office to add you. | — |
-| `help` (US) | SiteLog daily reports for {company}. Your link: {link} · Call {number} · Text CALL or TEXT to switch · STOP to opt out. Msg & data rates may apply. | — |
-| `stop_confirm` (US) | You won't get more texts from SiteLog. Reply START to resume. | — |
+| `unknown_number` (two-way) | This number isn't set up with SiteLog. Ask your office to add you. | — |
+| `help` (two-way) | SiteLog daily reports for {company}. Your link: {link} · Call {number} · Text CALL or TEXT to switch · STOP to opt out. Msg & data rates may apply. | — |
+| `stop_confirm` (two-way) | You won't get more texts from SiteLog. Reply START to resume. | — |
 
 Spanish (`es`) versions mirror EN.
 
-**No voice number yet** (e.g. TR before the SIP trunk, `VOICE_NUMBER_TR` empty): every "or call {number}" clause is dropped from the copy, and the call option is offered only as **Talk now** inside the recorder.
+**No voice number** (the pack's `voice_number` is null, e.g. TR before the SIP trunk): every "or call {number}" clause is dropped from the copy, and the call option is offered only as **Talk now** inside the recorder.
 
 ### 9.3 Field web recorder (`apps/field`)
 

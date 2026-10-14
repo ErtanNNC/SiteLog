@@ -7,6 +7,7 @@ import {
   isIanaTimeZone,
   isValidSmsSenderId,
   orgDefaultsFor,
+  packCopyGaps,
   reporterDefaultsFor,
   toCountryPack,
   type FieldCountryView,
@@ -126,8 +127,32 @@ describe('country pack rows (spec §4.6)', () => {
   it('takes a new country as a row (ZZ)', () => {
     const zz = toCountryPack(ZZ_ROW);
     expect(zz.messageChannels).toEqual(['whatsapp', 'sms']);
+    expect(packCopyGaps(zz)).toEqual([]); // Spanish, one-way: every key it can be sent exists
     expect(orgDefaultsFor(zz)).toMatchObject({ country: 'ZZ', timezone: 'UTC', pdfPaper: 'a4' });
     expect(reporterDefaultsFor(zz)).toEqual({ locale: 'es-US', languages: ['es'] });
+  });
+
+  it('has all the SMS copy each launch pack can send (packCopyGaps)', () => {
+    for (const row of DEMO_COUNTRIES)
+      expect(packCopyGaps(toCountryPack(row)), row.code).toEqual([]);
+  });
+
+  it('catches a pack whose languages lack copy for its capabilities', () => {
+    // A valid row (a long code can take replies), but Turkish has no two-way text and no reply
+    // hint: a new country is a row only when its languages have the copy (spec §4.6).
+    const trTwoWay = toCountryPack({
+      ...DEMO_COUNTRIES.find((c) => c.code === 'TR')!,
+      sms_sender_type: 'long_code',
+      two_way_sms: true,
+    });
+    expect(packCopyGaps(trTwoWay)).toEqual([
+      'tr-TR.unknown_number',
+      'tr-TR.help',
+      'tr-TR.stop_confirm',
+      'tr-TR.welcome.replyHint',
+    ]);
+    // The same pack with English only is complete.
+    expect(packCopyGaps({ ...trTwoWay, fieldLocales: ['en-US'] })).toEqual([]);
   });
 
   it.each([

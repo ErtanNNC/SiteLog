@@ -23,7 +23,7 @@ import {
   UNIT_LABELS,
   weekdayName,
 } from './format.ts';
-import { languageOf, reportLanguageFor, unitsFor, upperIn } from './locale.ts';
+import { languageOf, reportLanguageFor, upperIn } from './locale.ts';
 import { kestrelDemo } from './demo/kestrel.ts';
 
 /** The formatter that W1-02 replaced, kept here to prove US numbers print exactly as before. */
@@ -159,9 +159,7 @@ describe('hours, units and money per locale', () => {
     expect(formatHoursIn(undefined, 'en-US')).toBe(formatHours(undefined));
   });
 
-  it('picks units and report language per org locale (§9.6)', () => {
-    expect(unitsFor('en-US')).toBe('imperial');
-    expect(unitsFor('tr-TR')).toBe('metric');
+  it('picks the report language per org locale (§9.6; units come from the pack, §4.6)', () => {
     expect(reportLanguageFor('en-US')).toBe('en');
     expect(reportLanguageFor('tr-TR')).toBe('tr');
     expect(languageOf('es-US')).toBe('es');

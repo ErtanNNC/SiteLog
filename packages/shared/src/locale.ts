@@ -1,12 +1,14 @@
 /**
- * Locales, languages and unit systems (spec Conventions, §9.6).
+ * Locales, languages and unit systems (spec Conventions, §4.6, §9.6).
  *
- * - The org locale (`orgs.locale`, `en-US` | `tr-TR`) sets the report language, units and currency.
+ * - `ORG_LOCALES`, `REPORTER_LOCALES`: the locales with copy. A country pack (`countries`, spec
+ *   §4.6) chooses among them (`default_locale`, `field_locales`); the DB checks mirror them, so a
+ *   new language is code (copy, prompts, PDF labels, voices) before any pack can name it.
+ * - The org locale (`orgs.locale`, `en-US` | `tr-TR`) sets the report language and the panel's
+ *   default. Units and currency are org columns, preset from the pack by `create_org`.
  * - The reporter locale (`reporters.locale`, `en-US` | `es-US` | `tr-TR`) is the language SiteLog
  *   texts and speaks with that person.
  * - The panel speaks EN and TR; the field app and SMS speak EN, ES and TR.
- *
- * These are TypeScript constants only. The matching DB columns arrive with W1-05.
  */
 
 export const LANGUAGES = ['en', 'es', 'tr'] as const;
@@ -44,11 +46,6 @@ export function languageOf(locale: AnyLocale | string): Language {
 /** The BCP 47 tag handed to `Intl` (and `toLocaleUpperCase`) for a locale or bare language. */
 export function intlLocaleOf(locale: AnyLocale): string {
   return INTL_LOCALE[languageOf(locale)];
-}
-
-/** §9.6: US orgs report in imperial units, TR orgs in metric. */
-export function unitsFor(locale: OrgLocale): UnitSystem {
-  return languageOf(locale) === 'tr' ? 'metric' : 'imperial';
 }
 
 /** §9.6: the report and PDF language of an org. */

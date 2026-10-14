@@ -3,14 +3,16 @@ import type { SmsCatalog, SmsKey } from './sms.ts';
 /**
  * §9.2 SMS copy, English: verbatim from the spec table. A message with an "or call {number}"
  * clause has two texts: `withNumber` (verbatim) and `withoutNumber`, the same text with only
- * that clause removed, for orgs without a voice number (§9.2 "No voice number yet").
+ * that clause removed, for orgs whose country pack has no voice number (§9.2 "No voice number").
+ * The welcome's reply clause is `smsReplyHintEn`, which `renderSms` appends only for packs with
+ * two-way SMS; catalogue text + hint is the §9.2 cell.
  */
 export const smsEn: SmsCatalog<SmsKey> = {
   welcome: {
     withNumber:
-      "Hi {first}, I'm SiteLog, the daily report assistant for {company} at {site}. Each workday before {deadline}, tap your link and talk for ~3 min, or call {number}: {link} · Reply STOP to opt out, HELP for help",
+      "Hi {first}, I'm SiteLog, the daily report assistant for {company} at {site}. Each workday before {deadline}, tap your link and talk for ~3 min, or call {number}: {link}",
     withoutNumber:
-      "Hi {first}, I'm SiteLog, the daily report assistant for {company} at {site}. Each workday before {deadline}, tap your link and talk for ~3 min: {link} · Reply STOP to opt out, HELP for help",
+      "Hi {first}, I'm SiteLog, the daily report assistant for {company} at {site}. Each workday before {deadline}, tap your link and talk for ~3 min: {link}",
   },
   verify_code: 'SiteLog code: {code}. It expires in 10 minutes.',
   daily_link: {
@@ -46,3 +48,6 @@ export const smsEn: SmsCatalog<SmsKey> = {
   },
   stop_confirm: "You won't get more texts from SiteLog. Reply START to resume.",
 };
+
+/** The `welcome` reply clause for packs with two-way SMS (§9.2), appended by `renderSms`. */
+export const smsReplyHintEn = ' · Reply STOP to opt out, HELP for help';

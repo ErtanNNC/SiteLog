@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildDemirDemo, DEMIR_GLOSSARY, DEMIR_ORG_ID, DEMIR_USERS } from './demir.ts';
+import { smsRenderOptions } from '../channels.ts';
 import { renderSms } from '../copy/sms.ts';
 import { formatDateInTz, isE164 } from '../format.ts';
 import { buildKestrelDemo, DEMO_USERS } from './kestrel.ts';
+import { demoPack } from './countries.ts';
 import { demoId } from './ids.ts';
 import { linkCodeHash } from '../links.ts';
 
@@ -126,9 +128,15 @@ describe('Demir Yapı A.Ş. (§18.2)', () => {
           deadline: '17:30',
           link: `https://go.sitelog.app/r/${code(emre!.body!)}`,
         },
-        { hasVoiceNumber: false },
+        // The TR pack: no voice number, one-way SMS, links allowed (spec §4.6).
+        { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
       ),
     );
+    expect(smsRenderOptions(demoPack('TR'))).toEqual({
+      hasVoiceNumber: false,
+      twoWay: false,
+      linksAllowed: true,
+    });
     expect(selin!.body).toMatch(
       /^Merhaba Selin, ben SiteLog, Demir Yapı A\.Ş\. için Ataşehir Ofis Binası/,
     );

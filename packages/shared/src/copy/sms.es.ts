@@ -6,14 +6,15 @@ import type { SmsCatalog, SmsKey } from './sms.ts';
  * assistant writing to a site manager); "reporte", "enlace", "obra". The SMS keywords STOP, HELP,
  * START, CALL and TEXT stay in English because `sms-webhook` matches them (§9.5). Accents force
  * UCS-2 (70 code units per segment), so the texts without variables are kept to 70 units: one
- * segment, like their GSM-7 English versions.
+ * segment, like their GSM-7 English versions. The welcome's reply clause is `smsReplyHintEs`,
+ * appended by `renderSms` only for packs with two-way SMS.
  */
 export const smsEs: SmsCatalog<SmsKey> = {
   welcome: {
     withNumber:
-      'Hola {first}, soy SiteLog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min, o llame al {number}: {link} · Responda STOP para darse de baja, HELP para ayuda',
+      'Hola {first}, soy SiteLog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min, o llame al {number}: {link}',
     withoutNumber:
-      'Hola {first}, soy SiteLog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min: {link} · Responda STOP para darse de baja, HELP para ayuda',
+      'Hola {first}, soy SiteLog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min: {link}',
   },
   verify_code: 'Su código de SiteLog: {code}. Vence en 10 minutos.',
   daily_link: {
@@ -51,3 +52,6 @@ export const smsEs: SmsCatalog<SmsKey> = {
   },
   stop_confirm: 'Ya no recibirá mensajes de SiteLog. Responda START para reactivarlos.',
 };
+
+/** The `welcome` reply clause for packs with two-way SMS (mirrors `smsReplyHintEn`). */
+export const smsReplyHintEs = ' · Responda STOP para darse de baja, HELP para ayuda';

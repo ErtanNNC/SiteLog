@@ -1,10 +1,25 @@
-import type { SmsKey, SmsVars } from './copy/sms.ts';
-import { assertE164, type E164 } from './format.ts';
+import {
+  isTwoWaySmsKey,
+  messageKeyHasLink,
+  type RenderSmsOptions,
+  type SmsKey,
+  type SmsVars,
+  type TwoWaySmsKey,
+} from './copy/sms.ts';
+import type { CountryPack } from './countries.ts';
+import type { ConsentType, MessageChannel } from './enums.ts';
+import type { E164 } from './format.ts';
 
 /**
- * §4.5 Channel layer: every field interaction goes through these interfaces, so a channel can be
- * added later without touching the pipeline. Types and pure helpers only; the drivers (Twilio,
- * İletimerkezi, console) arrive with W1-08 and the calls with week 2.
+ * §4.5 Channel layer: every field interaction goes through these interfaces, so a channel is
+ * added without touching the pipeline. Outbound messages go through the Notifier on each person's
+ * channel order, which comes from the org's country pack (spec §4.6) and the person's preference.
+ * Types and pure helpers only: the Notifier (`createNotifier`) and the SMS drivers (Twilio,
+ * İletimerkezi, console) arrive with W1-08, the WhatsApp (Twilio) and web push transports with
+ * week 2 (M6), the calls with M8.
+ *
+ * Nothing here reads env: the provider, the sender id, two-way SMS, links in SMS and the voice
+ * number are the pack's (GAP D47, D48); credentials stay global env in the transports.
  */
 
 /**
@@ -12,6 +27,59 @@ import { assertE164, type E164 } from './format.ts';
  * `field_channel` (§6.2, `enums.ts`), which also has `office` for reports typed in the panel (D13).
  */
 export type { FieldChannel } from './enums.ts';
+
+/**
+ * How SiteLog reaches a person (§4.5, enum `message_channel`): `sms`, `whatsapp`, `push`. Push can
+ * never be inbound, so it is a separate type from `FieldChannel`.
+ */
+export type { MessageChannel } from './enums.ts';
+
+/** A message's copy key. WhatsApp templates and push texts reuse the SMS keys (week 2). */
+export type MessageKey = SmsKey;
+
+/**
+ * The keys the Notifier sends: every key except the two-way replies (`help`, `stop_confirm`,
+ * `unknown_number`), which sms-webhook sends in answer to an inbound text (`smsReplyAllowed`).
+ */
+export type NotifierKey = Exclude<MessageKey, TwoWaySmsKey>;
+
+/**
+ * The message channels with a transport. Week 1 builds SMS only; WhatsApp (Twilio) and web push
+ * join with the M6 reminders (week 2).
+ */
+export const IMPLEMENTED_MESSAGE_CHANNELS = ['sms'] as const satisfies readonly MessageChannel[];
+
+/**
+ * The consent each message channel needs (`consents.type`). null = no consent label yet
+ * (WhatsApp and push wait for spec §19 Q25 and Q27), so the channel is never deliverable.
+ */
+export const CONSENT_FOR_CHANNEL: Readonly<Record<MessageChannel, ConsentType | null>> = {
+  sms: 'sms',
+  whatsapp: null,
+  push: null,
+};
+
+/**
+ * Keys the spec sends before the person has consented: the welcome at invite (F3 step 1, before
+ * the consent screen of F4) and the device code (F4 step 2, before step 3's consent). Their SMS
+ * skips the consent check only while the person has no consent of any type, given or revoked:
+ * once they have answered a consent prompt, a missing SMS consent (declined, or revoked in the
+ * field app's Settings, §9.3) blocks every SMS, so the office's "Re-send welcome" (§11 Team) does
+ * not text them. The opt-out always applies. Every other key needs the channel's consent. Spec
+ * §19 Q25 asks the owner to confirm this with the device code's channel.
+ */
+export const PRE_CONSENT_SMS_KEYS = [
+  'welcome',
+  'verify_code',
+] as const satisfies readonly NotifierKey[];
+
+/**
+ * Keys that go by SMS on every pack, whatever its `message_channels` and the person's preference:
+ * the device code, a one-time code by SMS (F4 step 2, §6.3 `field_devices.verified_at`; spec §19
+ * Q25). Every pack has an SMS sender (`sms_provider`, `sms_sender_type`), even one that lists no
+ * SMS for its messages.
+ */
+export const SMS_ONLY_KEYS = ['verify_code'] as const satisfies readonly NotifierKey[];
 
 /** Why SiteLog places an outbound call (§4.5, `calls.purpose`). */
 export type CallPurpose = 'daily_report' | 'reminder' | 'callback';
@@ -26,81 +94,165 @@ export interface CallContext {
   date: string;
 }
 
+/** What `Notifier.send` did: the channel it used, or why nothing went out (audited). */
+export type NotifyOutcome =
+  | { channel: MessageChannel; messageId: string }
+  | { channel: null; reason: 'no_channel' | 'no_consent' | 'opted_out' };
+
 export interface Notifier {
-  /** Picks the SMS text by the reporter's locale; respects opt-out, quiet hours and two-way capability. */
-  text<K extends SmsKey>(reporterId: string, key: K, vars: SmsVars<K>): Promise<void>;
+  /**
+   * Sends on the first channel of `deliverableChannels()` (the person's order from the pack),
+   * in the reporter's language with the pack's variant (`smsRenderOptions(pack)`), through
+   * `pickMessageTransport()`; writes `messages` (with `channel`) and the audit row. `channels`
+   * narrows that order and never widens it (e.g. F16's "Send me today's link" by SMS);
+   * `dedupeKey` is one per logical message (e.g. `notify:filed:{report_id}`). Falling back to the
+   * next channel waits for spec §19 Q22. The two-way replies are not Notifier keys
+   * (`smsReplyAllowed`).
+   */
+  send<K extends NotifierKey>(
+    reporterId: string,
+    key: K,
+    vars: SmsVars<K>,
+    opts?: { channels?: readonly MessageChannel[]; dedupeKey?: string },
+  ): Promise<NotifyOutcome>;
   /** Places an outbound call if the reporter prefers calls, has auto-call consent and is inside the call window. */
   call(reporterId: string, purpose: CallPurpose, ctx: CallContext): Promise<void>;
 }
 
-/** SMS drivers, picked per org country from env (`SMS_US_PROVIDER` / `SMS_TR_PROVIDER`). */
+/**
+ * SMS drivers: a pack's `sms_provider` (`twilio` by default, `iletimerkezi` for the TR pack), or
+ * `console` for demo orgs and packs with no sender id in this environment (`pickMessageTransport`).
+ */
 export const SMS_DRIVERS = ['twilio', 'iletimerkezi', 'console'] as const;
 export type SmsDriver = (typeof SMS_DRIVERS)[number];
 
 export interface SmsSendOptions {
-  /** Alphanumeric sender title (TR: `SITELOG`) or the sending number. */
+  /** The pack's sender id (`countries.sms_sender_id`): TR `SITELOG`, US the toll-free number. */
   sender?: string;
   /** Delivery-status webhook (Twilio). */
   statusCallback?: string;
 }
 
+/**
+ * One SMS driver. Whether replies reach SiteLog is the pack's `two_way_sms`, never the driver's:
+ * `console` follows the pack too, so the Demo phone takes replies only on two-way packs.
+ */
 export interface SmsTransport {
+  readonly driver: SmsDriver;
   send(to: E164, body: string, opts: SmsSendOptions): Promise<{ providerId: string }>;
-  /** twilio: true · iletimerkezi: false · console: true (demo inbox). */
-  twoWay: boolean;
-}
-
-/** §4.5: which drivers can receive replies. */
-export const SMS_DRIVER_TWO_WAY: Readonly<Record<SmsDriver, boolean>> = {
-  twilio: true,
-  iletimerkezi: false,
-  console: true,
-};
-
-/** Org countries (§6.3 `orgs.country`). */
-export type OrgCountry = 'US' | 'TR';
-
-/** Drivers each country may use (§5.1: US `twilio | console`, TR `iletimerkezi | console`). */
-export const SMS_DRIVERS_BY_COUNTRY: Readonly<Record<OrgCountry, readonly SmsDriver[]>> = {
-  US: ['twilio', 'console'],
-  TR: ['iletimerkezi', 'console'],
-};
-
-/** The env values the channel helpers read (§5.1). Missing values mean "not set up". */
-export interface ChannelEnv {
-  SMS_US_PROVIDER?: string;
-  SMS_TR_PROVIDER?: string;
-  VOICE_NUMBER_US?: string;
-  VOICE_NUMBER_TR?: string;
 }
 
 /**
- * §4.5 / §5.2: the SMS driver for an org. Demo orgs always use `console`, so they never text real
- * people; otherwise the country's env setting, `console` when unset. A driver that does not serve
- * the country (e.g. `SMS_TR_PROVIDER=twilio`) is a configuration error and throws.
+ * The Notifier's order for a person (§4.5): their preferred channel first when the pack offers it,
+ * then the pack's `message_channels`. A preference the pack does not list is ignored (the pack is
+ * the allow-list, spec §19 Q21).
  */
-export function pickSmsDriver(
-  org: { country: OrgCountry; isDemo: boolean },
-  env: ChannelEnv,
-): SmsDriver {
-  if (org.isDemo) return 'console';
-  const raw = (org.country === 'US' ? env.SMS_US_PROVIDER : env.SMS_TR_PROVIDER)?.trim() ?? '';
-  if (raw === '') return 'console';
-  const allowed = SMS_DRIVERS_BY_COUNTRY[org.country];
-  if (!(allowed as readonly string[]).includes(raw)) {
-    throw new Error(
-      `SMS_${org.country}_PROVIDER=${raw} is not a ${org.country} SMS driver (${allowed.join(' | ')})`,
-    );
+export function messageChannelOrder(
+  pack: CountryPack,
+  preferred: MessageChannel | null,
+): MessageChannel[] {
+  const order = [...pack.messageChannels];
+  const ranked = preferred !== null && order.includes(preferred) ? [preferred, ...order] : order;
+  return [...new Set(ranked)];
+}
+
+/**
+ * The channels a Notifier message may go on, in order (§4.5). The order is computed here, so no
+ * caller can step outside the pack's allow-list: `messageChannelOrder(pack, preferred)`, or
+ * `['sms']` for `SMS_ONLY_KEYS`, kept to the channels in `narrow` when given. A channel then stays
+ * only if it is built (`implemented`, default `IMPLEMENTED_MESSAGE_CHANNELS`); its consent label
+ * exists and is held (`PRE_CONSENT_SMS_KEYS` skip the SMS consent while the person has none,
+ * given or revoked); the person has not opted out of it; and, for SMS, the pack allows links when
+ * the key carries one (spec §19 Q24). Throws on a two-way key: those replies are sms-webhook's
+ * (`smsReplyAllowed`).
+ */
+export function deliverableChannels(input: {
+  pack: CountryPack;
+  key: NotifierKey;
+  /** The person's preferred channel (`reporters.message_channel`); null = the pack's order. */
+  preferred: MessageChannel | null;
+  /** Keeps only these channels of the order (never adds one). */
+  narrow?: readonly MessageChannel[];
+  /** The person's unrevoked consent types. */
+  consents: ReadonlySet<ConsentType>;
+  /** Consent types the person gave and revoked, with no unrevoked consent of that type since. */
+  revoked: ReadonlySet<ConsentType>;
+  optedOut: ReadonlySet<MessageChannel>;
+  implemented?: readonly MessageChannel[];
+}): MessageChannel[] {
+  const key: MessageKey = input.key;
+  if (isTwoWaySmsKey(key)) {
+    throw new Error(`SMS "${key}" answers an inbound text: sms-webhook sends it, not the Notifier`);
   }
-  return raw as SmsDriver;
+  const implemented: readonly MessageChannel[] = input.implemented ?? IMPLEMENTED_MESSAGE_CHANNELS;
+  const base: MessageChannel[] = (SMS_ONLY_KEYS as readonly MessageKey[]).includes(key)
+    ? ['sms']
+    : messageChannelOrder(input.pack, input.preferred);
+  const narrow = input.narrow;
+  const order = narrow ? base.filter((c) => narrow.includes(c)) : base;
+  const neverConsented = input.consents.size === 0 && input.revoked.size === 0;
+  const preConsent =
+    neverConsented && (PRE_CONSENT_SMS_KEYS as readonly MessageKey[]).includes(key);
+  return order.filter((channel) => {
+    if (!implemented.includes(channel)) return false;
+    const consent = CONSENT_FOR_CHANNEL[channel];
+    if (consent === null) return false;
+    if (input.optedOut.has(channel)) return false;
+    if (channel !== 'sms') return input.consents.has(consent);
+    if (!preConsent && !input.consents.has(consent)) return false;
+    if (messageKeyHasLink(key) && !input.pack.smsLinksAllowed) return false;
+    return true;
+  });
 }
 
 /**
- * The SiteLog voice number for an org's country, or null when there is none yet (§9.2 "No voice
- * number yet": `VOICE_NUMBER_TR` empty). Feeds `renderSms(..., { hasVoiceNumber })`.
+ * Whether sms-webhook may answer an inbound text with a two-way key (§9.5, F13, F15): HELP →
+ * `help`, STOP → `stop_confirm`, a sender who is not a reporter → `unknown_number`. These replies
+ * never go through the Notifier: they answer a text the person just sent, by SMS, to a sender
+ * who may have no reporter row, so neither the person's channel order nor their consent or
+ * opt-out applies (HELP is answered before any consent, as the welcome invites it; `stop_confirm`
+ * is the one text after STOP). Only the pack decides: it must have two-way SMS, and allow links in
+ * SMS for a key that carries one (`help`). The webhook renders with `smsRenderOptions(pack)`,
+ * sends through `pickMessageTransport()` with `smsSendOptionsFor(pack)` and audits the reply
+ * (W1-08). Spec §19 Q25 asks the owner to confirm this with `PRE_CONSENT_SMS_KEYS`.
  */
-export function voiceNumberFor(country: OrgCountry, env: ChannelEnv): E164 | null {
-  const raw = (country === 'US' ? env.VOICE_NUMBER_US : env.VOICE_NUMBER_TR)?.trim() ?? '';
-  if (raw === '') return null;
-  return assertE164(raw); // a malformed number is a configuration error: throw, do not drop it
+export function smsReplyAllowed(pack: CountryPack, key: TwoWaySmsKey): boolean {
+  if (!pack.twoWaySms) return false;
+  return !messageKeyHasLink(key) || pack.smsLinksAllowed;
+}
+
+/**
+ * The transport for a message channel (§4.5, §5.2). Demo orgs always use `console` (they never
+ * text real people); so does a pack with no sender id in this environment (nothing goes out before
+ * a sender is approved and set, `set_country_endpoints()`); otherwise the pack's `sms_provider`.
+ * WhatsApp and push have no transport until week 2 (M6), so asking for one throws.
+ */
+export function pickMessageTransport(
+  org: { isDemo: boolean },
+  pack: CountryPack,
+  channel: MessageChannel,
+): SmsDriver {
+  if (!(IMPLEMENTED_MESSAGE_CHANNELS as readonly MessageChannel[]).includes(channel)) {
+    throw new Error(`Message channel "${channel}" is not built until week 2 (M6)`);
+  }
+  if (org.isDemo) return 'console';
+  if (pack.smsSenderId === null) return 'console';
+  return pack.smsProvider;
+}
+
+/**
+ * The SMS copy variant of a pack: the "or call {number}" clauses, the two-way texts and whether a
+ * text may carry a link.
+ */
+export function smsRenderOptions(pack: CountryPack): RenderSmsOptions {
+  return {
+    hasVoiceNumber: pack.voiceNumber !== null,
+    twoWay: pack.twoWaySms,
+    linksAllowed: pack.smsLinksAllowed,
+  };
+}
+
+/** The send options of a pack's SMS: its sender id, when set in this environment. */
+export function smsSendOptionsFor(pack: CountryPack): SmsSendOptions {
+  return pack.smsSenderId === null ? {} : { sender: pack.smsSenderId };
 }
