@@ -15,14 +15,15 @@
  * is given. It also needs, from the environment (this script reads no .env file):
  * - the field app's URL for the links in the seeded texts: `--link-base URL` or FIELD_APP_URL;
  * - DEMO_OFFICE_PASSWORD (16+ characters, never seed.sql's "sitelog-demo"): set as the demo
- *   office users' password, never printed.
+ *   office users' password, never printed. The database hashes it from a bind parameter first and
+ *   the script carries only the hash, since a server may log the script's text.
  *
  * A live day (`--date`) built on that day before 17:00 Chicago stops at the clock: nothing of the
  * target day after it is seeded (before 16:59, Pier 9 is awaiting too).
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildSeedSql } from '@sitelog/shared/demo/seed-sql.ts';
+import { buildSeedSql, OFFICE_PASSWORD_HASH_SQL } from '@sitelog/shared/demo/seed-sql.ts';
 import { todayIn } from '@sitelog/shared/demo/calendar.ts';
 import { buildKestrelDemo, DEMO_TZ } from '@sitelog/shared/demo/kestrel.ts';
 import { formatTimeInTz } from '@sitelog/shared/format.ts';
@@ -58,7 +59,6 @@ async function main(argv: string[]): Promise<void> {
     officePassword,
   });
   if (refusal) throw new Error(refusal);
-  const sql = buildSeedSql({ date, clock, linkBase, officePassword, globalRows: false });
   console.log(`seed:demo --apply → ${describeTarget(dbUrl)}`);
   const now = date !== undefined ? buildKestrelDemo({ date, clock }).now : null;
   console.log(
@@ -69,6 +69,15 @@ async function main(argv: string[]): Promise<void> {
   const { default: postgres } = await import('postgres');
   const db = postgres(dbUrl, { max: 1, onnotice: () => undefined });
   try {
+    // The password goes to the database only as a bind parameter; the script gets its hash.
+    const [row] = await db.unsafe<{ hash: string }[]>(OFFICE_PASSWORD_HASH_SQL, [officePassword]);
+    const sql = buildSeedSql({
+      date,
+      clock,
+      linkBase,
+      officePasswordHash: row!.hash,
+      globalRows: false,
+    });
     // The script holds its own begin … commit: one transaction, all or nothing.
     await db.unsafe(sql);
     console.log('  applied: Kestrel Build Group, Demir Yapı A.Ş.');
@@ -80,7 +89,9 @@ async function main(argv: string[]): Promise<void> {
 const isMain = process.argv[1]?.endsWith('seed-demo.ts');
 if (isMain) {
   main(process.argv.slice(2)).catch((err: unknown) => {
-    console.error(`seed:demo: ${err instanceof Error ? err.message : String(err)}`);
+    // The script's own refusal already starts with "seed:demo:".
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(message.startsWith('seed:demo:') ? message : `seed:demo: ${message}`);
     process.exit(1);
   });
 }

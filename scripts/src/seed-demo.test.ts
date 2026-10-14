@@ -92,14 +92,20 @@ describe('the apply target', () => {
     ).toBeNull();
   });
 
-  it("writes the given office password into the apply, not seed.sql's", () => {
-    const password = 'correct horse battery staple';
-    const apply = buildSeedSql({ officePassword: password, globalRows: false });
+  it("writes only the hash of the apply's office password, not seed.sql's password", () => {
+    // What OFFICE_PASSWORD_HASH_SQL returns: the password itself never enters the script, whose
+    // text a server may log (a failing statement, or every DDL-bearing one).
+    const hash = '$2a$06$e21uF2kPqgSJku7DR8MMdOsyheuCAKDeJ3iFnId3W3u.HQkbujmn2';
+    const apply = buildSeedSql({ officePasswordHash: hash, globalRows: false });
     expect(apply).not.toContain('sitelog-demo');
-    expect(apply).toContain(`crypt('${password}', gen_salt('bf'))`);
+    expect(apply).toContain(`'authenticated', '${hash}', now()`);
+    expect(apply).not.toContain('crypt(');
     expect(apply).toContain(
       'on conflict (id) do update set encrypted_password = excluded.encrypted_password;',
     );
+    expect(() =>
+      buildSeedSql({ officePasswordHash: 'correct horse battery staple', globalRows: false }),
+    ).toThrow(/bcrypt hash, never the password/);
     // seed.sql (local stacks) keeps its password and leaves an existing user alone.
     const local = buildSeedSql();
     expect(local).toContain("crypt('sitelog-demo', gen_salt('bf'))");

@@ -1,6 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
-import { buildSeedSql, PRUNED_TABLES, pruneSql } from '@sitelog/shared/demo/seed-sql.ts';
+import {
+  buildSeedSql,
+  OFFICE_PASSWORD_HASH_SQL,
+  PRUNED_TABLES,
+  pruneSql,
+} from '@sitelog/shared/demo/seed-sql.ts';
 import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
 import { DEMIR_ORG_ID } from '@sitelog/shared/demo/demir.ts';
 import { bootDatabase } from './harness.ts';
@@ -232,14 +237,23 @@ describe('seed:demo --apply (D8)', () => {
           [password, lena],
         )
       ).rows[0]!.ok;
+    // As seed-demo.ts: the database hashes the password from a bind parameter, the script gets
+    // only the hash.
+    const applyWith = async (password: string) => {
+      const hash = (await db.query<{ hash: string }>(OFFICE_PASSWORD_HASH_SQL, [password])).rows[0]!
+        .hash;
+      const sql = buildSeedSql({ globalRows: false, officePasswordHash: hash });
+      expect(sql).not.toContain(password);
+      await db.exec(sql);
+    };
     expect(await matches('sitelog-demo')).toBe(true);
-    await db.exec(buildSeedSql({ globalRows: false, officePassword: 'rehearsal-password-1' }));
+    await applyWith('rehearsal-password-1');
     expect(await matches('rehearsal-password-1')).toBe(true);
     expect(await matches('sitelog-demo')).toBe(false);
     // seed.sql's script leaves an existing user's password alone; another apply sets its own.
     await db.exec(APPLY);
     expect(await matches('rehearsal-password-1')).toBe(true);
-    await db.exec(buildSeedSql({ globalRows: false, officePassword: 'rehearsal-password-2' }));
+    await applyWith('rehearsal-password-2');
     expect(await matches('rehearsal-password-2')).toBe(true);
     // Only the demo users: the other org's owner keeps no password.
     const owner = await db.query<{ p: string | null }>(
@@ -247,7 +261,7 @@ describe('seed:demo --apply (D8)', () => {
       [OTHER_USER],
     );
     expect(owner.rows[0]!.p).toBeNull();
-    await db.exec(buildSeedSql({ globalRows: false, officePassword: 'sitelog-demo' }));
+    await applyWith('sitelog-demo');
   });
 
   it('refuses an org with a demo id that is not a demo org, and writes nothing', async () => {
