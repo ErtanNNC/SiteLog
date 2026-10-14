@@ -9,7 +9,8 @@ supabase/.temp
 apps/web/public/brand
 apps/field/public/brand
 **/fonts/*.ttf
-# Spec v1.2 kit files, kept byte-identical to the delivered kit
+# Spec v1.2 kit files, kept in the delivered kit's format (docs/decisions/channel-options.md
+# also carries the owner's 2026-10-14 amendment, GAP D47–D49)
 docs/START_HERE.md
 docs/decisions
 docs/design

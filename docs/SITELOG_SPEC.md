@@ -1,6 +1,6 @@
 # SiteLog — Product & Build Spec
 
-**Version:** 1.2 · **Date:** 2026-10-13 · **Owner:** NoNeedCode Agency
+**Version:** 1.2 (amended 2026-10-14: country packs) · **Date:** 2026-10-14 · **Owner:** NoNeedCode Agency
 **Status:** Ready to build (MVP)
 **Design source:** "SiteLog — App, UX & Brand" canvas (brand, UX, field channels, web panel, PDF report)
 
@@ -11,6 +11,7 @@
 
 | Version | Date | Change |
 |---|---|---|
+| 1.2 (amendment) | 2026-10-14 | **Country packs and message channels.** *Owner decision:* SiteLog is a global product: everything country-specific is a **country pack** (configuration, not code), and a new country is a new row. The pack holds the country code, default languages, units, paper size, currency, message channel order, SMS sender type and sender id, two-way SMS, links in SMS, the voice number (none = Talk now only) and the legal text keys; US and TR packs for now. The Notifier takes its order from the pack and the person's preference; the message channel types gain `whatsapp` and `push`, built in week 2 with the M6 reminders. **Twilio** is the default SMS + WhatsApp provider, overridable per country; two-way SMS and links in SMS come from the pack, not the driver. *Derived (as built in W1-06a; open points in the new §19 questions 19–40):* the pack is the `countries` table (§4.6) and also presets the time zone; the TR pack keeps İletimerkezi for SMS (Q20); a pack with no sender id in an environment sends through `console` (Q29); WhatsApp goes through Twilio, not the v1.0 Meta Cloud API (GAP D49); `msg_status` keeps `read`; `org_settings.pdf_paper` joins §6.3. Schema: 31 tables, 26 enums. §0, §1–§5, §6, §7–§13, §15–§20 updated. |
 | 1.2 | 2026-10-13 | **Providers chosen, demo on free tiers.** Voice: **LiveKit Agents (Python) on LiveKit Cloud** with Deepgram Nova-3 STT, Claude, Deepgram Aura-2 (EN/ES) and Azure Neural (TR) TTS; free US number for inbound calls; new **Talk now** browser call in the field app (no phone number needed, used for the TR demo). SMS: **Twilio** (US), **İletimerkezi** (TR), plus a `console` driver with a demo inbox. Batch transcription moves to **Deepgram** (OpenAI as fallback). New §5.2 (providers, free allowances, demo setup); §4, §5.1, §6 (`calls.transport`), §9, §10.2, §16, §19, §20 updated. Build-readiness: `orgs.is_demo`, `jobs.dedupe_key`, `rate_limits` table (schema re-validated on Postgres 16: 30 tables), field app reaches `field-api` same-origin (§6.5), env adds `SUPABASE_DB_URL`, `VITE_*`, `FIELD_API_URL`, `SENTRY_DSN`; week-1 Question screen pulled into M3; repo kit (CLAUDE.md, PLAN_WEEK1.md, brand SVGs, design references) in the SiteLog project. |
 | 1.1 | 2026-10-13 | **WhatsApp removed.** Field channels are now **SMS + personal link (mobile web recorder)** and **phone call with a live voice assistant**; each site manager picks their preferred channel and can use the other any time. Launch markets **US and Turkey** (locale per org: report language, units, currency). New: field app, voice agent, consent & compliance, SMS/voice providers per country. Sections 0–20 updated accordingly. |
 | 1.0 | 2026-10-11 | First complete spec (WhatsApp-based). |
@@ -24,7 +25,7 @@ This file is the single source of truth for building SiteLog. It is written so a
 - **Sections 1–3** say *what* we are building and for whom.
 - **Sections 4–7** are the technical foundation: architecture, stack, database, state machines.
 - **Section 8** lists every user flow, step by step, including edge cases.
-- **Section 9** defines the field channels: SMS copy, the mobile web recorder and the live voice assistant. **Section 10** is the AI pipeline (prompts, schemas).
+- **Section 9** defines the field channels: message copy (SMS now; WhatsApp and push from week 2), the mobile web recorder and the live voice assistant. **Section 10** is the AI pipeline (prompts, schemas).
 - **Sections 11–12** specify every web page and the PDF report.
 - **Sections 13–15** cover notifications, the design system and non-functional requirements (incl. compliance).
 - **Section 16** is the build plan: milestones, task checklists and acceptance criteria. **Start here when coding.**
@@ -32,7 +33,7 @@ This file is the single source of truth for building SiteLog. It is written so a
 
 ### Contents
 
-1. Product summary · 2. Users, roles and permissions · 3. Scope · 4. System architecture · 5. Tech stack · 6. Data model · 7. Statuses and state machines · 8. User flows (F1–F24) · 9. Field channels (SMS, web recorder, voice assistant) · 10. AI pipeline · 11. Web panel — pages · 12. PDF daily report · 13. Notifications · 14. Design system · 15. Non-functional requirements & compliance · 16. Build plan · 17. Testing strategy · 18. Seed data · 19. Open decisions · 20. Appendices
+1. Product summary · 2. Users, roles and permissions · 3. Scope · 4. System architecture · 5. Tech stack · 6. Data model · 7. Statuses and state machines · 8. User flows (F1–F24) · 9. Field channels (messages, web recorder, voice assistant) · 10. AI pipeline · 11. Web panel — pages · 12. PDF daily report · 13. Notifications · 14. Design system · 15. Non-functional requirements & compliance · 16. Build plan · 17. Testing strategy · 18. Seed data · 19. Open decisions · 20. Appendices
 
 ### Conventions
 
@@ -40,7 +41,7 @@ This file is the single source of truth for building SiteLog. It is written so a
 - All timestamps stored in UTC (`timestamptz`). All site-facing times are shown in the **site's** time zone.
 - Phone numbers stored in E.164 (`+15550143378`, `+905XXXXXXXXX`).
 - Money in integer minor units (`39900` = $399.00).
-- **Locale per org** (`en-US` or `tr-TR`) sets the panel's default language, the **report language**, units (imperial / metric) and currency. Field speech can be in any supported language (EN, ES, TR at launch); the report is always written in the org's report language.
+- **Country pack per org** (`orgs.country` → `countries`, §4.6) presets locale, units (imperial / metric), paper, currency and time zone when the org is created, and sets the message channel order, SMS sender, two-way SMS, links in SMS, voice number and legal texts. The org's locale (`en-US` or `tr-TR`) sets the panel's default language and the **report language**. Field speech can be in any supported language (EN, ES, TR at launch); the report is always written in the org's report language. Languages are code: a pack chooses among the supported languages.
 - Every number shown in a report must be traceable to a source (audio timestamp, answer, or manual edit). See principle 02.
 - Words **MUST / SHOULD / MAY** follow RFC 2119 meaning.
 
@@ -61,12 +62,12 @@ Manual reporting takes about **1.5 hours** per day per site manager.
 ### 1.2 Solution
 
 - At the end of the day the site manager reports by **voice in about 3 minutes**, through the channel they prefer:
-  - **Text link:** an SMS with a personal link opens a one-button **web recorder** (no install, no password). Record, add 1–2 photos, answer at most a couple of tap questions, confirm.
+  - **Text link:** a message with a personal link (SMS in week 1; WhatsApp or web push from week 2 where the country pack offers them, §4.5) opens a one-button **web recorder** (no install, no password). Record, add 1–2 photos, answer at most a couple of tap questions, confirm.
   - **Phone call:** SiteLog calls them at report time (or they call SiteLog) and a **live voice assistant** listens, asks about anything missing, reads back a short summary and files it when they say "OK".
 - An AI pipeline transcribes, filters site noise, translates slang into official construction terms, extracts crew counts, subcontractor hours, weather, work progress, deliveries and safety — and **asks instead of guessing**.
-- Confirmed reports become a **formatted PDF daily report**, emailed to the office; the PDF link is texted back to the site manager.
+- Confirmed reports become a **formatted PDF daily report**, emailed to the office; the PDF link is sent back to the site manager in a message.
 - The office uses a **web panel** to see every site's status, review exceptions, sign off reports, reconcile subcontractor invoices and build EOT evidence packs.
-- If a report is late, SiteLog sends a text or calls (per preference) and finally alerts the office.
+- If a report is late, SiteLog sends a message or calls (per preference) and finally alerts the office.
 
 ### 1.3 Business model
 
@@ -94,7 +95,7 @@ Manual reporting takes about **1.5 hours** per day per site manager.
 
 ### 1.5 Five UX principles (non-negotiable)
 
-1. **No app to install in the field.** A text link or a phone call — the site manager picks. Zero passwords.
+1. **No app to install in the field.** A link in a message or a phone call — the site manager picks. Zero passwords.
 2. **Every number traces back.** Each field links to the second of audio (voice note or call), the answer, or the edit it came from.
 3. **Ask, don't guess.** Missing hours or headcount trigger one question — a tap on the recorder, a short question on the call. Never invent values.
 4. **Exceptions first.** The office sees what's missing or risky before what's fine.
@@ -108,7 +109,7 @@ Manual reporting takes about **1.5 hours** per day per site manager.
 
 | Persona | Surface | Job to be done | Pain today | SiteLog gives |
 |---|---|---|---|---|
-| **Site manager** ("the voice") | SMS link → web recorder, **or** phone call (their choice) | Tell the office what happened today without typing | ~1.5 h of forms; hours from memory; skipped when tired | 3-min voice report, one question if needed, a nudge or a call if late |
+| **Site manager** ("the voice") | Link in a message → web recorder, **or** phone call (their choice) | Tell the office what happened today without typing | ~1.5 h of forms; hours from memory; skipped when tired | 3-min voice report, one question if needed, a nudge or a call if late |
 | **Operations manager** ("the reviewer") | Web panel, daily, desktop | Know every site's status by 6 pm and fix gaps before payroll | Chasing reports by phone; reconciling hours by hand | Exceptions-first overview, one-click sign-off, invoice check |
 | **Owner / project manager** ("the claimant") | PDF email + weekly panel | Have dated, specific proof when the schedule slips | Gaps in the record; delays can't be proven | Weather & delay log with sources, EOT evidence pack |
 | **Accounts / payroll** | Web panel (hours only) | Pay subs correctly | Invoices can't be verified | Weekly hours by company + payroll CSV |
@@ -137,7 +138,7 @@ Manual reporting takes about **1.5 hours** per day per site manager.
 | `backup` reporter | Same as above for the sites they're linked to |
 | Unknown caller / number | Nothing is filed. Held in "Unknown contacts" for the office to link or ignore |
 
-Each reporter has a **preferred channel** — `link` (SMS + web recorder) or `call` (voice assistant) — which decides how reminders reach them. Both channels always work: a "link" person can call in, a "call" person can open their personal link.
+Each reporter has a **preferred channel** — `link` (a message with the link + web recorder) or `call` (voice assistant) — which decides how reminders reach them; the message channel follows the country pack and the person's preference (§4.5). Both channels always work: a "link" person can call in, a "call" person can open their personal link.
 
 ---
 
@@ -146,20 +147,21 @@ Each reporter has a **preferred channel** — `link` (SMS + web recorder) or `ca
 ### 3.1 MVP (this spec)
 
 - **Field app (mobile web recorder, PWA):** personal links, device verification, today screen, voice recording, photos, one-tap questions, draft review, confirm, filed screen with PDF, past reports & edits, no-work / weather-day buttons, offline queue, channel preference.
-- **SMS:** welcome, daily links, reminders, filed confirmation with PDF link, weather heads-up. Two-way keywords (STOP/HELP/CALL/TEXT, and OK for call follow-ups) where the number supports replies (US); one-way notification SMS where it doesn't (TR alphanumeric sender).
+- **Messages:** welcome, daily links, reminders, filed confirmation with PDF link, weather heads-up, sent on each person's channel order (country pack + preference, §4.5): **SMS** in week 1; **WhatsApp (via Twilio)** and **web push** to the installed field app from week 2 (M6). Two-way keywords (STOP/HELP/CALL/TEXT, and OK for call follow-ups) on packs with two-way SMS; one-way copy otherwise (e.g. the TR pack's alphanumeric sender).
+- **Country packs (§4.6):** US and TR at launch; a new country is a new row.
 - **Voice assistant:** inbound and outbound calls, recording disclosure, live listening, clarifying questions, read-back, verbal confirmation, edits by call, fallback to plain recording.
-- **AI pipeline:** transcription, structured extraction, glossary-aware normalisation, translation into the report language (EN or TR), summary writing, correction parsing.
-- **PDF daily report** (EN or TR), emailed to recipients; link texted to the reporter.
-- **Web panel** (EN and TR UI): Sign in, Setup wizard, Overview, Sites, Site detail, Reports archive, Report review, Crew hours, Weather & delays (+ EOT pack), Team & numbers, Site glossary, Settings (incl. Field channels), Billing.
+- **AI pipeline:** transcription, structured extraction, glossary-aware normalisation, translation into the report language (the pack's languages; EN or TR at launch), summary writing, correction parsing.
+- **PDF daily report** (the pack's languages; EN or TR at launch), emailed to recipients; link sent to the reporter.
+- **Web panel** (EN and TR UI at launch; the org's pack sets the default language): Sign in, Setup wizard, Overview, Sites, Site detail, Reports archive, Report review, Crew hours, Weather & delays (+ EOT pack), Team & numbers, Site glossary, Settings (incl. Field channels), Billing.
 - **Weather data** for site location.
-- **Billing:** per active site; Stripe for US (TR billing provider: see §19).
+- **Billing:** per active site; Stripe for US (TR billing provider: see §19); not part of the country pack yet (§19 Q30).
 
 ### 3.2 Out of scope for MVP (later)
 
-- WhatsApp, Telegram or Teams channels (the channel layer is pluggable; see §4.5).
+- Telegram or Teams channels (the channel layer is pluggable; see §4.5). WhatsApp is a week-2 message channel through Twilio (§4.5); the v1.0 Meta Cloud API integration stays retired (GAP step 22).
 - Native mobile apps (field and office).
 - Integrations with Procore, Autodesk Build, QuickBooks, Logo/Netsis, Sage (CSV export only in MVP).
-- Dedicated phone numbers per customer (shared SiteLog numbers per country in MVP; §19).
+- Dedicated phone numbers per customer (shared SiteLog numbers per country pack in MVP, §4.6; per-customer numbers later as an org override; §19).
 - Qualified e-signatures (sign-off is an audit-logged action).
 - Schedule / Gantt tracking, RFIs, punch lists.
 
@@ -172,13 +174,14 @@ Each reporter has a **preferred channel** — `link` (SMS + web recorder) or `ca
 ```mermaid
 flowchart LR
   subgraph Field[Site manager's phone]
-    SMSAPP[SMS inbox]
+    MSGAPP[SMS / WhatsApp inbox]
+    PUSHN[Push notification<br/>installed field app · week 2]
     BROWSER[Browser<br/>field web recorder]
     DIALER[Phone call]
   end
   subgraph Providers
-    SMSP[SMS<br/>Twilio US · İletimerkezi TR]
-    TEL[LiveKit telephony<br/>US number · SIP trunks]
+    SMSP[Messaging<br/>Twilio SMS + WhatsApp by default · İletimerkezi for TR pack SMS]
+    TEL[LiveKit telephony<br/>pack voice numbers · SIP trunks]
   end
   subgraph Voice[voice-agent · LiveKit Agents, Python]
     VA[Dialog runtime<br/>Deepgram STT · Claude · Aura-2 / Azure TTS]
@@ -198,15 +201,16 @@ flowchart LR
     TR[Batch transcription]
     EX[Extraction & writing · Claude]
     PDF[PDF renderer]
-    OUT[SMS send · outbound call scheduling · email]
+    OUT[Messages via the Notifier · outbound call scheduling · email]
   end
   WEB[Web panel · React SPA]
   WX[Weather API]
   EM[Email provider]
   PAY[Billing · Stripe US / TR provider]
 
-  SMSP --> SMSAPP
-  SMSAPP -- link --> BROWSER
+  SMSP --> MSGAPP
+  MSGAPP -- link --> BROWSER
+  PUSHN -- link --> BROWSER
   BROWSER <--> FAPI
   BROWSER -- signed upload --> ST
   DIALER <--> TEL
@@ -214,7 +218,7 @@ flowchart LR
   BROWSER <-- Talk now · WebRTC --> VA
   TEL -- LiveKit webhooks --> CALLWH
   VA <-- tools: context, draft, file --> FAPI
-  SMSAPP -- replies (US) --> SMSP --> SMSWH
+  MSGAPP -- replies (two-way packs · WhatsApp per Q26) --> SMSP --> SMSWH
   SMSWH --> DB
   CALLWH --> DB
   FAPI --> DB
@@ -223,6 +227,7 @@ flowchart LR
   Q --> PDF --> ST
   Q --> OUT
   OUT --> SMSP
+  OUT -- web push --> PUSHN
   OUT -- start outbound call --> TEL
   OUT --> EM
   CRON --> DB
@@ -238,75 +243,126 @@ flowchart LR
 | Component | Responsibility | Why here |
 |---|---|---|
 | **Field app** (`apps/field`, Vite + React PWA) | Mobile web recorder opened from personal links. Records audio with `MediaRecorder`, takes photos, uploads to Storage via signed URLs, shows questions and the draft, confirms, lists past reports. Installable to the home screen; offline queue. | No install, full control of the field UX, works on any smartphone browser. |
-| **`field-api`** (Edge Function) | Resolves a link code, verifies the device, returns today's context, issues signed upload URLs, receives "upload complete", answers, confirmations, edits, preference changes. Also the tool endpoint the voice agent calls (`get_context`, `update_draft`, `file_report`, …) with a service credential. | One API for both field channels. |
+| **`field-api`** (Edge Function) | Resolves a link code (with the pack fields the field app needs: voice number, field locales, two-way SMS, channel order, legal keys), verifies the device, returns today's context, issues signed upload URLs, receives "upload complete", answers, confirmations, edits, preference changes. Also the tool endpoint the voice agent calls (`get_context`, `update_draft`, `file_report`, …) with a service credential. | One API for both field channels. |
 | **voice-agent service** (`apps/voice-agent`, Python, LiveKit Agents) | Handles live calls from the phone network (SIP) and from the browser (**Talk now**, WebRTC): audio ⇄ Deepgram streaming STT ⇄ dialog policy (Claude) ⇄ TTS. Barge-in, turn-taking, recording disclosure, read-back, verbal confirmation, fallback to plain recording. Runs on LiveKit Cloud for the demo; the same code can be self-hosted later (§5.2). | Real-time audio needs a dedicated low-latency runtime; open source avoids lock-in. |
-| **`sms-webhook`** (Edge Function) | Inbound SMS (US two-way numbers): STOP/HELP/START, CALL/TEXT preference, OK/EDIT for call follow-ups; delivery receipts. Signature validation. | Fast ack, store + enqueue. |
+| **`sms-webhook`** (Edge Function) | Inbound SMS on packs with two-way SMS (the pack found by the receiving sender id): STOP/HELP/START, CALL/TEXT preference, OK/EDIT for call follow-ups; delivery receipts; Twilio WhatsApp inbound from week 2 (receipt and handling per §19 Q26) on the same signature (never named `whatsapp-webhook`). Signature validation. | Fast ack, store + enqueue. |
 | **`voice-events`** (Edge Function) | LiveKit webhooks (signed JWT: `room_started`, `participant_joined`, `participant_left`, `room_finished`) plus SIP status for outbound calls (answered, no-answer, busy, failed). Updates `calls`, enqueues post-call jobs. | Provider callbacks must be acknowledged fast. |
-| **`scheduler-tick`** (Edge Function, every 5 min via `pg_cron` + `pg_net`) | Creates today's `site_days`, fetches weather, runs the reminder ladder per reporter preference (SMS or outbound call), marks missing reports. | Postgres-native scheduling. |
+| **`scheduler-tick`** (Edge Function, every 5 min via `pg_cron` + `pg_net`) | Creates today's `site_days`, fetches weather, runs the reminder ladder per reporter preference (a message on the Notifier's order, or an outbound call), marks missing reports. | Postgres-native scheduling. |
 | **App API Edge Functions** | Sign-off, invite reporter, link unknown contact, export CSV, build evidence pack, billing. | Privileged operations (service role). |
-| **`sitelog-worker`** (Node 20 container) | Job runner: batch transcription of voice notes and call recordings, extraction, question selection, filing, PDF rendering, SMS sending, starting outbound calls, email. | Long-running calls (30–90 s) and PDF rendering. |
+| **`sitelog-worker`** (Node 20 container) | Job runner: batch transcription of voice notes and call recordings, extraction, question selection, filing, PDF rendering, message sending (Notifier), starting outbound calls, email. | Long-running calls (30–90 s) and PDF rendering. |
 | **Postgres / Storage** | Source of truth, job queue (`FOR UPDATE SKIP LOCKED`), audit log; private buckets `audio`, `photos`, `calls`, `pdfs`, `exports`. | One backend. |
 
 ### 4.3 Lifecycles (happy paths)
 
 **A. Web recorder (link channel)**
 
-1. 17:00 site time (or at R1) the worker texts the reporter a **daily link** (`https://sl.link/r/{code}`).
-2. The link opens the field app; `field-api` resolves the code → reporter + site + date; the device is verified (first time: 6-digit SMS code, §9.3).
+1. 17:00 site time (or at R1) the worker sends the reporter a **daily link** (`https://sl.link/r/{code}`) in a message (Notifier, §4.5).
+2. The link opens the field app; `field-api` resolves the code → reporter + site + date; the device is verified (first time: 6-digit code by SMS, §9.3, §19 Q25).
 3. Reporter records (one or more clips) and adds photos; each file uploads directly to Storage with a signed URL; `uploads` rows are created; `field-api` enqueues `transcribe_upload`.
 4. Worker transcribes (browser recordings are `audio/webm` or `audio/mp4` — accepted by the transcription API, no conversion), runs extraction, validates required fields.
 5. The field app polls/subscribes for the report state: shows **one question at a time** (buttons) if needed, then the **draft**.
-6. Reporter taps **Confirm & send** → `field-api` → `file_report` job → PDF → email to office → SMS with PDF link → filed screen.
+6. Reporter taps **Confirm & send** → `field-api` → `file_report` job → PDF → email to office → message with PDF link → filed screen.
 
 **B. Phone call (call channel)**
 
-1. Three ways in, same agent: the reporter **calls the country number** (inbound SIP; caller ID → reporter); taps **Talk now** in the field app (browser call over WebRTC; `field-api` mints a LiveKit token bound to reporter + site + call token); or, at R1, the worker **calls the reporter** (outbound SIP via `CreateSIPParticipant` on a provider trunk; needs `auto_call` consent).
+1. Three ways in, same agent: the reporter **calls the pack's voice number** (inbound SIP; caller ID → reporter; a pack without one offers Talk now only); taps **Talk now** in the field app (browser call over WebRTC; `field-api` mints a LiveKit token bound to reporter + site + call token); or, at R1, the worker **calls the reporter** (outbound SIP via `CreateSIPParticipant` on the pack's trunk; needs `auto_call` consent).
 2. The call connects to the voice agent. It plays the recording disclosure, greets by first name, confirms the site if the reporter has more than one, and invites the report.
 3. While the reporter talks, streaming STT produces text; after each turn the agent calls `update_draft` (Claude extraction on the transcript so far) and decides: ask a question, or read back.
 4. The agent reads back a short summary (≤ 30 s) and asks "Shall I file it?". "Yes / OK / tamam" → `file_report`. "Change …" → `apply_correction` → read back the changed part → confirm.
-5. After the call: the dual-channel recording (written by the agent: reporter track + agent audio as two channels) is uploaded to Storage; a post-call job transcribes the full recording with timestamps (source links) and checks it against the confirmed draft (differences → `needs_review`, never silent changes); PDF → email; **SMS with the PDF link and a "add photos" link**.
+5. After the call: the dual-channel recording (written by the agent: reporter track + agent audio as two channels) is uploaded to Storage; a post-call job transcribes the full recording with timestamps (source links) and checks it against the confirmed draft (differences → `needs_review`, never silent changes); PDF → email; **a message with the PDF link and an "add photos" link**.
 
 ### 4.4 External services
 
 | Service | Use | Notes |
 |---|---|---|
-| SMS — US: **Twilio** | Two-way SMS from a US toll-free number (10DLC later if volume needs it) | Any US business SMS needs **toll-free verification or A2P 10DLC registration** before it is delivered — lead time days to weeks; must honour STOP/HELP. Trial limits in §5.2. |
-| SMS — Turkey: **İletimerkezi** | One-way notification SMS with an approved **alphanumeric sender title** (`SITELOG`) | BTK rules require an approved title (1–2 business days after the subscription is approved via e-Devlet). Recipients can't reply → all TR interaction happens on the recorder or the call. Check İYS applicability; these are operational messages to the customer's staff. Alternative: Verimor or Netgsm (both also sell Turkish numbers). |
-| Telephony: **LiveKit** | US inbound number (LiveKit Phone Numbers); outbound and Turkish numbers through SIP trunks (Twilio Elastic SIP Trunking for US; a Turkish SIP provider for TR); browser calls over WebRTC | LiveKit's own numbers are US-only and documented for inbound; outbound uses `CreateSIPParticipant` with a provider trunk. Answering-machine detection: our agent classifies the first utterance (no voicemail message is left). |
+| Messaging (default for every pack): **Twilio** | SMS, and WhatsApp from week 2, for packs whose `sms_provider` / `whatsapp_provider` is `twilio` (the column default) | Real sends start only when the pack's sender id is set in that environment (§4.6); until then `console`. US pack: two-way SMS from a toll-free number (10DLC later if volume needs it); any US business SMS needs **toll-free verification or A2P 10DLC registration** before it is delivered — lead time days to weeks; must honour STOP/HELP. One account and `X-Twilio-Signature` for SMS and WhatsApp webhooks. Trial limits in §5.2. Per-country registration rules: §9.1, §15.2. |
+| SMS override: **İletimerkezi** | One-way SMS for packs with `sms_provider = 'iletimerkezi'` (the TR pack), with an approved **alphanumeric sender title** (`SITELOG`) | BTK rules require an approved title (1–2 business days after the subscription is approved via e-Devlet). Recipients can't reply → the TR pack has `two_way_sms = false`, and all TR interaction happens on the recorder or the call. Check İYS applicability; these are operational messages to the customer's staff. Alternative: Verimor or Netgsm (both also sell Turkish numbers). Whether TR SMS stays on this override: §19 Q20. |
+| WhatsApp (week 2, M6): **Twilio** WhatsApp sender | Message channel `whatsapp` where a pack lists it | Meta business verification and a WhatsApp sender through Twilio; business-initiated messages need pre-approved templates per language; free-form text only inside the 24 h service window; opt-in before the first business-initiated message (§15.2, §19 Q25). Long lead: start before week 2. Not the v1.0 Meta Cloud API integration (retired, GAP step 22). |
+| Web push (week 2, M6) | Message channel `push` to the installed field app | Standard Web Push with VAPID keys (§5.1), no provider. iOS delivers push only to installed PWAs, so push is never a person's only channel. |
+| Telephony: **LiveKit** | Inbound numbers per pack (`countries.voice_number`; the US number from LiveKit Phone Numbers); outbound through SIP trunks (Twilio Elastic SIP Trunking for US; a Turkish SIP provider for TR); browser calls over WebRTC everywhere | A pack without a voice number is Talk now only. LiveKit's own numbers are US-only and documented for inbound; outbound uses `CreateSIPParticipant` with a provider trunk. Answering-machine detection: our agent classifies the first utterance (no voicemail message is left). |
 | Voice agent runtime: **LiveKit Agents** (open source, Python) on **LiveKit Cloud** | Turn-taking, barge-in, VAD/turn detection, plugin pipeline STT → LLM → TTS | Plugins: `deepgram` (STT + Aura-2 TTS), `anthropic` (Claude), `azure` (TR TTS; plugin is Python-only — the reason the agent is Python). Self-host on our infra later if minutes grow (§5.2). |
-| Speech: **Deepgram** | Streaming STT on calls (Nova-3), batch transcription of voice notes and call recordings (Nova-3 pre-recorded, word timestamps), TTS for EN/ES (Aura-2) | Nova-3 supports EN, ES (incl. code-switching via `multi`) and TR (`tr`). Aura-2 has no Turkish voice → Azure for TR. **OpenAI speech-to-text** stays as a fallback batch provider (max 25 MB per file). |
+| Speech: **Deepgram** | Streaming STT on calls (Nova-3), batch transcription of voice notes and call recordings (Nova-3 pre-recorded, word timestamps), TTS for EN/ES (Aura-2) | Nova-3 supports EN, ES (incl. code-switching via `multi`) and TR (`tr`). Aura-2 has no Turkish voice → Azure for TR. **OpenAI speech-to-text** stays as a fallback batch provider (max 25 MB per file). Keyed by language, not country: a new pack needs speech work only for a new language. |
 | TTS — Turkish: **Azure AI Speech** | Neural Turkish voices for calls (`tr-TR`) | Free F0 tier for the demo (§5.2). |
 | Anthropic Claude API | Extraction (tool use + JSON schema), dialog policy on calls, summaries, corrections | Model names in env; prompt caching for system prompt + glossary. |
-| Weather API (Open-Meteo recommended) | Hourly precipitation, temperature, wind, gusts for site lat/lng | Free tier is not licensed for commercial use → paid plan; CC BY 4.0 attribution. Units per org locale. |
+| Weather API (Open-Meteo recommended) | Hourly precipitation, temperature, wind, gusts for site lat/lng | Free tier is not licensed for commercial use → paid plan; CC BY 4.0 attribution. Units per org (`orgs.units`, preset from the pack). |
 | Email (Resend / Postmark) | Filed PDFs, alerts, digests, magic links | Transactional only. |
-| Billing | US: Stripe subscription (quantity = active sites). TR: see §19. | |
+| Billing | US: Stripe subscription (quantity = active sites). TR: see §19. | Outside the country pack until §19 Q30. |
 
 ### 4.5 Channel layer
 
-All field interaction goes through one module so channels can be added later (WhatsApp, Telegram, Teams) without touching the pipeline:
+All field interaction goes through one module, so channels are added without touching the pipeline. Outbound messages go through the **Notifier** on each person's channel order, which comes from the org's country pack (§4.6) and the person's preference.
 
 ```ts
-// packages/shared/src/channels.ts
-export type FieldChannel = 'web' | 'voice' | 'sms';
+// packages/shared/src/channels.ts (types and pure helpers; the Notifier itself and the SMS drivers: W1-08)
+export type FieldChannel = 'web' | 'voice' | 'sms';        // how a report reached SiteLog (inbound; enum field_channel)
+export type MessageChannel = 'sms' | 'whatsapp' | 'push';  // how SiteLog reaches a person (enum message_channel)
+export type MessageKey = SmsKey;                           // WhatsApp templates and push texts reuse the §9.2 keys
+
+export type NotifyOutcome =
+  | { channel: MessageChannel; messageId: string }
+  | { channel: null; reason: 'no_channel' | 'no_consent' | 'opted_out' };   // nothing sent; audited
 
 export interface Notifier {
-  // Picks SMS template by locale; respects opt-out, quiet hours and two-way capability.
-  text(reporterId: string, key: SmsKey, vars: Record<string, string>): Promise<void>;
+  // First deliverable channel of the person's order; copy by the reporter's language and the pack's variant;
+  // writes messages (with channel) and the audit row. Respects consent, opt-out and quiet hours.
+  send(reporterId: string, key: NotifierKey, vars: SmsVars<NotifierKey>,
+       opts?: { channels?: MessageChannel[]; dedupeKey?: string }): Promise<NotifyOutcome>;
   // Places an outbound call if the reporter prefers calls, has auto-call consent and is inside the call window.
   call(reporterId: string, purpose: 'daily_report' | 'reminder' | 'callback', ctx: CallContext): Promise<void>;
 }
 
-export function remind(reporter: Reporter, stage: ReminderStage): Action; // pure decision function, unit-tested
+// The person's preferred channel first when the pack offers it, then the pack's message_channels.
+export function messageChannelOrder(pack: CountryPack, preferred: MessageChannel | null): MessageChannel[];
+export function remind(reporter: Reporter, pack: CountryPack, stage: ReminderStage): Action; // pure decision function (M6), unit-tested
 
-// SMS drivers, picked per org country from env (SMS_US_PROVIDER / SMS_TR_PROVIDER).
+// SMS drivers: the pack's sms_provider (default twilio), or console for is_demo orgs and for packs with
+// no sender id in this environment (pickMessageTransport).
 export type SmsDriver = 'twilio' | 'iletimerkezi' | 'console';
 export interface SmsTransport {
+  readonly driver: SmsDriver;   // two-way SMS is the pack's two_way_sms, never the driver's
   send(to: E164, body: string, opts: { sender?: string; statusCallback?: string }): Promise<{ providerId: string }>;
-  twoWay: boolean; // twilio: true · iletimerkezi: false · console: true (demo inbox)
 }
+// WhatsApp (Twilio) and web push transports: week 2 (M6), same shape.
 ```
 
-`console` writes the message to `messages` only and shows it in the panel's **Demo phone** (`/dev/phone`, staging or orgs with `is_demo = true`), where replies can be typed as if from the reporter. It lets the full loop be demoed before any SMS registration is approved. The driver comes from the country's env setting, except that `is_demo` orgs always use `console` — so demo orgs never text real people by accident, and customer orgs never land in the demo inbox once the real driver is on.
+**Channel order.** `Notifier.send` takes the person's `reporters.message_channel` first when the pack's `message_channels` lists it, then the pack's order (`messageChannelOrder`); the pack is the allow-list (§19 Q21). A channel stays in the order only if it is **built** (SMS only in week 1), its **consent** is held (`sms` for SMS; the WhatsApp and push consents come in week 2, §19 Q25, Q27), the person has **not opted out** of it (where a WhatsApp or push opt-out is stored: §19 Q40) and, for SMS, the pack **allows links** when the message key carries one (§19 Q24). The message goes on the first channel left; if none is left, nothing is sent and the skip is audited. Falling back to the next channel after a failure waits for §19 Q22. One dedupe key per logical message (e.g. `notify:filed:{report_id}`), with attempts logged per channel. Two exceptions, for the owner to confirm (§19 Q25): the device code (`verify_code`) always goes by SMS, whatever the order; and `welcome` and `verify_code` skip the SMS consent check while the person has never answered a consent prompt (the opt-out always applies). The two-way replies (`help`, `stop_confirm`, `unknown_number`) are not Notifier messages: `sms-webhook` sends them in answer to an inbound text, on packs with two-way SMS only.
+
+**Copy variant.** The reporter's language picks the text; the pack picks the variant: `two_way_sms` (the welcome's reply clause and the two-way keys), `voice_number` (the "or call {number}" clauses) and `sms_links_allowed` (§9.2).
+
+`console` writes the message to `messages` only and shows it in the panel's **Demo phone** (`/dev/phone`, staging or orgs with `is_demo = true`). It lets the full loop be demoed before any registration is approved. The transport is otherwise the pack's provider (`sms_provider`, default `twilio`; the TR pack `iletimerkezi`). `console` is used for orgs with `is_demo = true` on every message channel and, per channel, for packs with no sender for that channel in that environment, so demo orgs never text real people by accident and nothing is sent before a sender is approved and set (§4.6). Only the SMS sender has a home today (`sms_sender_id`); where the WhatsApp sender and its approved template ids live is undecided until §19 Q39 is answered. Replies can be typed in the Demo phone only for two-way packs (§19 Q35). Two-way SMS and links in SMS come from the pack, never from the driver.
+
+### 4.6 Country packs
+
+SiteLog is a global product. Everything country-specific is a row of the `countries` table (§6.3), the **country pack**, and a new country is a new row. `orgs.country` references it.
+
+| Field (`countries` column) | Meaning | US | TR |
+|---|---|---|---|
+| `code` | ISO 3166-1 alpha-2; also the default phone region of the org's numbers | `US` | `TR` |
+| `default_locale` | The org's locale at creation: report and PDF language, panel default (§9.6) | `en-US` | `tr-TR` |
+| `field_locales` | Languages SiteLog texts and speaks with field users; the first is a new reporter's default | `en-US`, `es-US` | `tr-TR`, `en-US` |
+| `units` | Imperial or metric (report, weather) | `imperial` | `metric` |
+| `paper` | PDF paper (§12), preset into `org_settings.pdf_paper` | `letter` | `a4` |
+| `currency` | ISO 4217 | `USD` | `TRY` |
+| `default_timezone` | IANA; the org's time zone when the wizard leaves it empty | `America/Chicago` | `Europe/Istanbul` |
+| `message_channels` | The Notifier's order when the person has no preference (§4.5) | `{sms}` | `{sms}` |
+| `sms_provider` | SMS transport (default `twilio`) | `twilio` | `iletimerkezi` (§19 Q20) |
+| `whatsapp_provider` | WhatsApp transport, week 2 (default `twilio`); its sender and template ids: §19 Q39 | `twilio` | `twilio` |
+| `sms_sender_type` | How the SMS sender is registered (§4.4); decides the sender id's shape and whether replies are possible | `toll_free` | `alphanumeric` |
+| `sms_sender_id` | Per environment; null = `console` | null until set | null until set (`SITELOG` once approved) |
+| `two_way_sms` | Replies (STOP/HELP/CALL/TEXT, OK) reach SiteLog; otherwise one-way copy only | true | false |
+| `sms_links_allowed` | Message keys with a link may go by SMS (§19 Q24) | true | true |
+| `voice_number` | Per environment, E.164; null = **Talk now** only | null until set | null |
+| `legal_keys` | Versioned ids of the privacy notice, recording notice and consent wording (§9.1, §15.2, §19 Q28) | `{}` | `{}` |
+
+Week 1 orders both packs `{sms}`: WhatsApp and web push are built in week 2 (M6), and their real orders are §19 Q19. The table checks what it can: an alphanumeric sender cannot have two-way SMS, a sender id must fit its sender type, and a pack that forbids links in SMS must list WhatsApp or push. That last check is necessary, not sufficient: such a pack cannot deliver the `welcome`, which carries the personal link, under §19 Q25's recommended first contact (welcome by SMS, WhatsApp only after an opt-in on the recorder), so it can onboard no one until §19 Q24 settles that case. No launch pack forbids links.
+
+**Who reads it.** SQL directly: `create_org(p_country)` presets the org's locale, units, currency and time zone (an explicit time zone wins), and `on_org_created` presets `org_settings.pdf_paper`. The panel reads every row under RLS (the setup wizard lists the countries before the user has an org; names come from the browser, no copy key). The worker and edge functions read the org's pack with the service role. The field app never reads the table: `field-api resolve` returns the subset it needs (voice number, field locales, two-way SMS, channel order, legal keys).
+
+**Two kinds of value.** Policy values (languages, units, paper, currency, time zone, channel order, providers, sender type, two-way SMS, links, legal keys) change only by a forward migration. Per-environment values (`sms_sender_id`, `voice_number`) are null in every migration and set per database with the service-only, audited `set_country_endpoints()` (`pnpm countries:set`, owner-approved on hosted databases; §19 Q29). A null sender id means `console`, so nothing is sent before a sender is approved. The rule applies per channel: SMS has `sms_sender_id`; the WhatsApp sender and its template ids per language have no column, env var or function yet (§19 Q39), so no WhatsApp transport is built before that answer. Sender ids are unique across packs: `sms-webhook` finds the pack by the receiving sender id (`To`, F13), so two packs may not share one (a partial unique index on `countries.sms_sender_id` in W1-08's migration, before `sms-webhook` reads it; M7 does the same for `voice_number` if inbound calls look up the pack by the number called). A pack that wants to share another pack's sender needs a different lookup first (From → reporter → org pack). Because the table checks a sender id's shape against its sender type, a migration that changes a pack's sender type clears its sender id in the same update, and the new sender is set again per environment.
+
+**Org values after creation.** Values copied into the org at creation are the org's own afterwards: admins edit locale and units (within the supported lists) and the paper in Settings; country and currency stay service-only (§19 Q31). Billing (provider, price) is outside the pack until §19 Q30.
+
+**A new country is only a row** when its languages already have their copy (SMS, field and panel UI, legal texts), voice prompts, PDF labels and TTS voices, its providers have drivers, counsel has reviewed its legal texts (§15.2), and the panel's phone-country picker lists it (`PHONE_COUNTRIES` in `apps/web/src/components/sitelog/PhoneInput.tsx` is a fixed list of 12 countries; for a pack outside it, the wizard's and the invite's phone country silently fall back to US, until M10 derives the picker from libphonenumber's regions). Otherwise it is code (or counsel work) plus the row. Billing (§19 Q30) and outbound trunks (§19 Q38) stay outside the pack for now. `pnpm test:db` checks every row: the table checks, the shared row schema, and that each field locale has every message the pack can send in its variant.
 
 ---
 
@@ -315,13 +371,13 @@ export interface SmsTransport {
 | Layer | Choice |
 |---|---|
 | Web panel | Vite + React 18 + TypeScript, React Router, TanStack Query, Tailwind CSS, shadcn/ui (restyled), React Hook Form + Zod, date-fns-tz, i18n with `i18next` (EN, TR) |
-| Field app | Vite + React + TypeScript PWA (`vite-plugin-pwa` / Workbox), `MediaRecorder` (Chrome/Android → `audio/webm;codecs=opus`, iOS Safari → `audio/mp4`), IndexedDB upload queue, camera via `<input type="file" accept="image/*" capture="environment">`, i18n EN/ES/TR |
+| Field app | Vite + React + TypeScript PWA (`vite-plugin-pwa` / Workbox; web push for installed PWAs from week 2, an optional message channel and never the only one), `MediaRecorder` (Chrome/Android → `audio/webm;codecs=opus`, iOS Safari → `audio/mp4`), IndexedDB upload queue, camera via `<input type="file" accept="image/*" capture="environment">`, i18n EN/ES/TR |
 | Backend data | Supabase Postgres 15+, RLS, Supabase Auth (office users), Storage (signed upload/download URLs), Realtime |
 | Server functions | Supabase Edge Functions (Deno, TypeScript) |
-| Worker | Node 20, TypeScript, `postgres`, `@deepgram/sdk` (batch transcription), Anthropic SDK, OpenAI SDK (fallback transcription), `@react-pdf/renderer` (or Playwright HTML→PDF), `twilio`, İletimerkezi REST (fetch), `livekit-server-sdk` (outbound calls, tokens), email SDK, ffmpeg (only for call-recording channel split / normalisation) |
+| Worker | Node 20, TypeScript, `postgres`, `@deepgram/sdk` (batch transcription), Anthropic SDK, OpenAI SDK (fallback transcription), `@react-pdf/renderer` (or Playwright HTML→PDF), `twilio` (SMS; WhatsApp from week 2), İletimerkezi REST (fetch), `web-push` (week 2), `livekit-server-sdk` (outbound calls, tokens), email SDK, ffmpeg (only for call-recording channel split / normalisation) |
 | Voice agent | Python 3.11+, `livekit-agents` with plugins `deepgram`, `anthropic`, `azure`, `silero` (VAD) and the audio turn detector `inference.TurnDetector` (EN/ES/TR; `v1` free on LiveKit Cloud, `v1-mini` runs locally); `httpx` for `field-api` tool calls; deployed to LiveKit Cloud (`lk agent deploy`) |
 | Scheduling | `pg_cron` + `pg_net` → `scheduler-tick` every 5 min |
-| Payments | Stripe (US); TR provider per §19 |
+| Payments | Stripe (US); TR provider per §19 (not part of the country pack yet, §19 Q30) |
 | Hosting | Panel & field app: static (Vercel/Netlify). Worker: Fly.io / Render. Voice agent: LiveKit Cloud (demo and pilot), self-hosted LiveKit server + agent workers as an option later (region near users; see compliance §15). Supabase for DB/Auth/Storage/Functions |
 | Monitoring | Sentry (panel, field app, worker, voice agent), call quality metrics (latency, interruptions, drop rate) |
 | Tests | Vitest, Playwright (panel + field app incl. iOS Safari & Android Chrome via device cloud), pipeline fixtures, scripted call simulations |
@@ -347,27 +403,24 @@ LINK_SHORT_DOMAIN=https://sl.link          # short personal links
 LINK_SIGNING_SECRET=
 DAILY_LINK_TTL_HOURS=72
 
-# SMS — US (two-way) · twilio | console
-SMS_US_PROVIDER=console          # switch to twilio once the toll-free number is verified
+# Messaging providers (credentials only). Which provider, sender, two-way SMS and links each country
+# uses is its country pack (`countries`, §4.6). A pack with no SMS sender id in this database sends SMS
+# through `console`; set one with `pnpm countries:set` once the sender is approved (owner-approved on hosted
+# databases), e.g. the US toll-free number (+18885550142 is an example) or the TR title SITELOG.
 TWILIO_ACCOUNT_SID=
-TWILIO_AUTH_TOKEN=               # also validates X-Twilio-Signature on sms-webhook
-SMS_US_FROM=+18885550142         # Twilio toll-free number (example)
-
-# SMS — TR (one-way, alphanumeric sender) · iletimerkezi | console
-SMS_TR_PROVIDER=console          # switch to iletimerkezi once the sender title is approved
-ILETIMERKEZI_API_KEY=
+TWILIO_AUTH_TOKEN=               # default provider for SMS and (week 2) WhatsApp; also validates X-Twilio-Signature
+ILETIMERKEZI_API_KEY=            # only for packs whose sms_provider = iletimerkezi (TR)
 ILETIMERKEZI_API_HASH=
-SMS_TR_SENDER_TITLE=SITELOG
+# The WhatsApp sender and its template ids (week 2) have no env var: where they live is §19 Q39.
 
 # Telephony + voice agent (LiveKit)
 LIVEKIT_URL=wss://<project>.livekit.cloud
 LIVEKIT_API_KEY=
 LIVEKIT_API_SECRET=              # also verifies LiveKit webhooks in voice-events
 LIVEKIT_AGENT_NAME=sitelog-voice # explicit dispatch name for SIP and web calls
-VOICE_NUMBER_US=+15550142290     # LiveKit Phone Number (free on Build plan, inbound)
-VOICE_NUMBER_TR=                 # empty until a TR SIP trunk exists → TR uses Talk now only
-LIVEKIT_SIP_OUTBOUND_TRUNK_US=   # trunk id (Twilio Elastic SIP Trunking); empty = no outbound calls
-LIVEKIT_SIP_OUTBOUND_TRUNK_TR=
+# Voice numbers are the packs' (countries.voice_number, set with `pnpm countries:set`; null = Talk now only),
+# e.g. the US LiveKit Phone Number +15550142290 (free on the Build plan, inbound) once it exists.
+LIVEKIT_SIP_OUTBOUND_TRUNKS=     # [M8] CC:trunk_id pairs, e.g. US:ST_xxx (Twilio Elastic SIP Trunking); a pack without an entry places no outbound calls (§19 Q38)
 VOICE_AGENT_TOOL_SECRET=         # auth for agent → field-api tool calls
 DEEPGRAM_API_KEY=                # streaming STT, batch STT, Aura-2 TTS
 STT_MODEL=nova-3
@@ -394,6 +447,11 @@ EMAIL_PROVIDER=resend           # resend | console (logs + Demo phone "Email" ta
 RESEND_API_KEY=
 EMAIL_FROM="SiteLog <reports@sitelog.app>"
 
+# Web push (week 2, M6)
+VAPID_PUBLIC_KEY=                # field-api serves it to the field app (no VITE_* key)
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=                   # mailto: or https: contact
+
 # Billing
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
@@ -415,13 +473,15 @@ Goal: run the demo (and early pilots) on free tiers, and pay only when real cust
 | Need | Provider | Why |
 |---|---|---|
 | Live voice runtime | **LiveKit Agents** (open source) on **LiveKit Cloud** | Largest free allowance found; Claude, Deepgram and Azure plugins; phone (SIP) and browser (WebRTC) calls through one agent; can be self-hosted later, so no platform lock-in. |
-| Phone number (US) | **LiveKit Phone Numbers** | One US local number free on the Build plan; inbound. |
-| Outbound calls, TR numbers | SIP trunk: **Twilio Elastic SIP Trunking** (US) · Turkish SIP provider (Verimor / Netgsm, to be confirmed) | Only needed for reminder calls (M8) and real TR phone calls; the demo works without them. |
+| Phone numbers (per pack, `countries.voice_number`) | **LiveKit Phone Numbers** (US) | One US local number free on the Build plan; inbound. A pack without a number is Talk now only. |
+| Outbound calls (a trunk per pack), TR numbers | SIP trunk: **Twilio Elastic SIP Trunking** (US) · Turkish SIP provider for TR (Verimor / Netgsm, to be confirmed) | Only needed for reminder calls (M8) and real TR phone calls; the demo works without them. |
 | STT (live + batch), EN/ES TTS | **Deepgram** (Nova-3, Aura-2) | One key for live calls, voice notes and English/Spanish voices; large sign-up credit; Turkish STT supported. |
 | Turkish TTS | **Azure AI Speech** (neural `tr-TR` voices) | Aura-2 has no Turkish voice; Azure has a free monthly tier. |
-| SMS — US | **Twilio** | Standard choice, good docs, same vendor as the US SIP trunk. |
-| SMS — TR | **İletimerkezi** | Free test credit, documented API, sender title in 1–2 business days. |
-| Demo without SMS | `console` driver + **Demo phone** page | Zero cost, no registration; texts appear in the panel. |
+| Messaging, SMS + WhatsApp (default for every pack) | **Twilio** | Standard choice, good docs, same vendor as the US SIP trunk; one account for SMS and WhatsApp. A pack may override the provider (`countries.sms_provider`, `whatsapp_provider`). |
+| SMS — TR pack override | **İletimerkezi** | Free test credit, documented API, sender title in 1–2 business days; BTK-approved alphanumeric title (§19 Q20). |
+| WhatsApp (week 2, M6) | **Twilio** (WhatsApp Sandbox for development) | Same account and webhook signature as SMS; templates per language. |
+| Web push (week 2, M6) | Standard Web Push (VAPID) | No provider; installed field app only. |
+| Demo without real messages | `console` transport + **Demo phone** page | Zero cost, no registration; every message channel's texts appear in the panel. |
 
 **Free allowances** (checked 2026-10-13 on the providers' pricing pages; re-check before relying on them)
 
@@ -432,6 +492,7 @@ Goal: run the demo (and early pilots) on free tiers, and pay only when real cust
 | Azure AI Speech — F0 | 0.5 M neural TTS characters/month · 5 h real-time STT/month | Enough for Turkish demo calls (a 3-minute call speaks roughly 1,000–1,500 characters). |
 | Twilio — trial | Free units (≈100 SMS, 75 voice minutes), 30 days | Only up to **5 verified recipients**, sign-up country only, and trial Messages API bodies must use **preset templates** → our link texts can't be sent on a trial. For real US texts: upgrade (pay-as-you-go), toll-free number $2.15/month, **toll-free verification**, SMS $0.0083 per segment + carrier fees (≈$0.003–0.005). |
 | İletimerkezi | 100 test SMS credits on new accounts | Real sends need the approved `SITELOG` title; the `APITEST` sender replaces our text with a fixed message, so it only tests the API flow. |
+| Twilio WhatsApp | Sandbox for development | Re-check the sandbox limits, template rules and per-country prices on Twilio's pricing page before M6. |
 | Anthropic (Claude) | — | Paid from the first call; small per report. |
 
 Alternatives checked: **Vapi** ($10 credit, then $0.05/min platform fee plus provider costs, numbers $2/month), **ElevenLabs Agents** (15 free minutes/month, then $0.08/min), **Deepgram Voice Agent API** ($200 credit, $0.075/min, but Aura has no Turkish voice). All are good managed options; LiveKit wins on free minutes, Turkish flexibility and having no platform fee once self-hosted.
@@ -442,16 +503,16 @@ Alternatives checked: **Vapi** ($10 credit, then $0.05/min platform fee plus pro
 2. **Deepgram:** sign up → API key with the $200 credit → `DEEPGRAM_API_KEY`.
 3. **Azure:** create a Speech resource on the **F0** tier (West Europe) → `AZURE_SPEECH_KEY/REGION`.
 4. **Voice agent:** `apps/voice-agent` → try it locally with `lk agent console` (talk through the laptop mic), then `lk agent create` / `lk agent deploy` (secrets: LiveKit, Deepgram, Azure, Anthropic, `VOICE_AGENT_TOOL_SECRET`, `FIELD_API_URL`).
-5. **SMS:** set `SMS_US_PROVIDER=console` and `SMS_TR_PROVIDER=console`; demo with the **Demo phone** page.
+5. **Messages:** leave every pack's `sms_sender_id` empty (the migration default) → `console`; demo with the **Demo phone** page.
 6. **Rest of the stack for demos:** Supabase free project; panel and field app on a free static host (Vercel / Netlify / Cloudflare Pages); the worker runs on the developer's machine (`pnpm --filter worker dev`) until pilots, then Fly.io / Render; weather from Open-Meteo's free endpoint during development only (`WEATHER_API_BASE=https://api.open-meteo.com/v1/forecast`, no key) — switch to the paid customer API before pilots; email via Resend.
-7. In parallel (lead time): **İletimerkezi** account → subscription approval in e-Devlet → request title `SITELOG` (1–2 business days) → switch `SMS_TR_PROVIDER=iletimerkezi`. **Twilio**: upgrade → buy a toll-free number → submit toll-free verification (business details, use case "employee daily report reminders", opt-in = the consent screen of F4, sample messages from §9.2) → when approved, `SMS_US_PROVIDER=twilio`.
+7. In parallel (lead time): **İletimerkezi** account → subscription approval in e-Devlet → request title `SITELOG` (1–2 business days) → set the TR pack's sender id in that environment: `pnpm countries:set -- --code TR --sms-sender SITELOG` (owner-approved on hosted databases). **Twilio**: upgrade → buy a toll-free number → submit toll-free verification (business details, use case "employee daily report reminders", opt-in = the consent screen of F4, sample messages from §9.2) → when approved, `pnpm countries:set -- --code US --sms-sender <the toll-free number>`. **WhatsApp:** a Twilio WhatsApp sender, Meta business verification and template approval before week 2.
 
 **What each demo can show**
 
-| Market | Link channel | Call channel |
+| Country pack | Link channel | Call channel |
 |---|---|---|
-| US | Recorder via a link from the Demo phone (or real SMS once Twilio is verified) | Call the free US number, or **Talk now** in the recorder |
-| TR | Recorder via the Demo phone (real SMS from `SITELOG` once the title is approved) | **Talk now** in the recorder (no Turkish number needed); a Turkish number comes with the TR SIP trunk in M11 |
+| US pack | Recorder via a link from the Demo phone (or, for a non-demo org, real SMS once Twilio is verified and the pack's sender id is set) | Call the pack's voice number once set, or **Talk now** in the recorder |
+| TR pack | Recorder via the Demo phone (for a non-demo org, real SMS from `SITELOG` once the title is approved and set) | **Talk now** in the recorder (no Turkish number needed); a Turkish number comes with the TR SIP trunk in M11 |
 
 **When to upgrade:** more than ~800 agent minutes/month, more than 5 simultaneous calls (17:45 peak) or the first paying customer → LiveKit Ship plan or self-host; Deepgram credit below $50 → add a card; Azure F0 limit hit → S0 (pay-as-you-go).
 
@@ -1019,8 +1080,8 @@ Rules:
 
 - One report per site-day. New clips, photos or a second call for the same site-day merge into it (re-extract with all sources).
 - Web: `awaiting_answer` with no answer for 60 min → draft is prepared with the gap flagged `needs_review` (reason `unanswered:<field>`); the reporter sees it next time they open the link.
-- Web: draft not confirmed → SMS nudge after 30 min; filed at +2 h with reason `unconfirmed` (or after 15 min if `filing_mode='auto_15min'`).
-- Call: hang-up before confirmation → draft saved (`draft_saved`); SMS with link "Finish today's report" (US/TR); reason `unconfirmed` if not confirmed within 2 h.
+- Web: draft not confirmed → message nudge after 30 min; filed at +2 h with reason `unconfirmed` (or after 15 min if `filing_mode='auto_15min'`).
+- Call: hang-up before confirmation → draft saved (`draft_saved`); `finish_report` message (Notifier) with the link "Finish today's report"; reason `unconfirmed` if not confirmed within 2 h.
 
 ### 7.3 Call dialog states
 
@@ -1042,24 +1103,24 @@ stateDiagram-v2
   fixing --> read_back
   listening --> special: "no work today" / "rained out" / "call me later" / "edit Friday"
   special --> goodbye
-  filed --> goodbye: PDF link texted
+  filed --> goodbye: PDF link sent (Notifier)
   listening --> fallback_recording: STT failing twice or agent error
   fallback_recording --> goodbye: recording processed after the call
 ```
 
-Limits: max call 12 min (warning at 10); silence 8 s → "Are you still there?"; second silence → save draft + SMS link; end-of-turn detection tuned for long pauses (≥ 1.5 s, adaptive).
+Limits: max call 12 min (warning at 10); silence 8 s → "Are you still there?"; second silence → save draft + link message; end-of-turn detection tuned for long pauses (≥ 1.5 s, adaptive).
 
 ### 7.4 Reminder ladder (defaults; per org) — channel by reporter preference
 
 | Stage | When (site time) | `link` reporters | `call` reporters |
 |---|---|---|---|
-| Daily link | `daily_link_time` (17:00) | SMS with today's link | — (optional SMS "I'll call you at 17:45") |
-| Weather heads-up | deadline − 35 min (16:55), only if weather was observed | SMS heads-up | SMS heads-up |
-| Reminder 1 | deadline + 15 (17:45) | SMS reminder with link | **Outbound call** (if auto-call consent and inside call window), else SMS |
-| Reminder 2 | deadline + 60 (18:30) | SMS "office at 19:00" with link + call number | Second call if `second_call_enabled`, plus SMS |
+| Daily link | `daily_link_time` (17:00) | Message with today's link | — (optional message "I'll call you at 17:45") |
+| Weather heads-up | deadline − 35 min (16:55), only if weather was observed | Message heads-up | Message heads-up |
+| Reminder 1 | deadline + 15 (17:45) | Message reminder with link | **Outbound call** on the pack's trunk (if auto-call consent and inside call window), else a message |
+| Reminder 2 | deadline + 60 (18:30) | Message "office at 19:00" with link + call number when the pack has one | Second call on the pack's trunk if `second_call_enabled`, plus a message |
 | Missing | deadline + 90 (19:00) | Office email + panel alert; site-day `missing` | Same |
 
-A filed, weather-day or no-work site-day stops the ladder. Reporter "STOP" (US) or opt-out on the recorder stops texts; "don't call me today" stops calls for the day.
+Messages go on the person's channel order (§4.5). A filed, weather-day or no-work site-day stops the ladder. An opt-out per channel (SMS STOP on two-way packs, or the opt-out on the recorder) stops that channel's messages (where a WhatsApp or push opt-out is stored, and whether an SMS STOP also stops them: §19 Q40); "don't call me today" stops calls for the day.
 
 ---
 
@@ -1073,20 +1134,20 @@ Each flow lists the trigger, steps, data changes, edge cases and acceptance crit
 |---|---|---|---|---|
 | F1 | Sign in (magic link) | Office user | Web | Web-Login |
 | F2 | Company setup & first site | Admin | Web | Web-Setup |
-| F3 | Invite reporter: welcome SMS, consent, channel choice | Office → site manager | Web → SMS | Web-Setup, Web-Team, Field-01 |
+| F3 | Invite reporter: welcome message, consent, channel choice | Office → site manager | Web → message | Web-Setup, Web-Team, Field-01 |
 | F4 | First open: device check & preference | Site manager | Field app | Field-02 |
 | F5 | Daily report on the web recorder | Site manager | Field app | Field-03 → Field-07 |
 | F6 | Daily report on a phone call | Site manager ⇄ voice assistant | Call | Field-08 |
 | F7 | Clarification questions | Agent ⇄ site manager | Field app / call | Field-05, Field-08 |
 | F8 | Draft confirmation, fix & filing | Site manager | Field app / call | Field-06, Field-07, Field-08 |
-| F9 | Add photos after a call | Site manager | SMS → field app | Field-07 |
-| F10 | Edit after filing | Site manager | Field app / call / SMS (US) | Field-07 |
-| F11 | Daily link, heads-up, reminders & missing escalation | System → manager → office | SMS / call / email / web | Field-09, Web-Overview |
-| F12 | Weather day / no work today | Site manager | Field app / call / SMS (US) | Field-03, Field-09 |
-| F13 | Unknown caller or texter | Unknown → office | Call / SMS → web | Web-Team |
+| F9 | Add photos after a call | Site manager | Message → field app | Field-07 |
+| F10 | Edit after filing | Site manager | Field app / call / SMS keywords (two-way packs) | Field-07 |
+| F11 | Daily link, heads-up, reminders & missing escalation | System → manager → office | Message / call / email / web | Field-09, Web-Overview |
+| F12 | Weather day / no work today | Site manager | Field app / call / SMS keywords (two-way packs) | Field-03, Field-09 |
+| F13 | Unknown caller or texter | Unknown → office | Call / SMS (two-way packs) → web | Web-Team |
 | F14 | Multi-site reporter | Backup reporter | Field app / call | Field-03 |
-| F15 | Change channel preference, opt-out | Site manager / office | Field app / call / SMS / web | Field-02, Web-Team |
-| F16 | Expired link or new phone | Site manager | SMS → field app | Field-02 |
+| F15 | Change channel preference, opt-out | Site manager / office | Field app / call / SMS keywords (two-way packs) / web | Field-02, Web-Team |
+| F16 | Expired link or new phone | Site manager | Message → field app | Field-02 |
 | F17 | Daily overview & exception handling | Ops | Web | Web-Overview |
 | F18 | Review, edit & sign off a report | PM/ops | Web | Web-Report, Web-Reports |
 | F19 | Weekly crew hours, invoice check & payroll CSV | Ops/accounts | Web | Web-Hours |
@@ -1113,43 +1174,43 @@ Each flow lists the trigger, steps, data changes, edge cases and acceptance crit
 ### F2 · Company setup & first site (wizard)
 
 **Route:** `/setup` (1 Company · 2 First site & manager · 3 Reports & reminders).
-1. **Company:** name, **country (US / Türkiye)** → presets locale, units, currency, time zone, report language; address, tax/license no., logo (PNG/SVG ≤ 2 MB).
-2. **First site & manager:** site name, project number, address (geocoded; needed for weather), time zone, deadline (default 17:30); site manager name, **mobile number** (country picker, E.164), **language SiteLog should use with them** (EN / ES / TR), languages they may speak, **preferred channel** (*Text link* · *Phone call* — "they can always use the other"), optional backup reporter.
-   - Live preview of the welcome SMS in the chosen language.
+1. **Company:** name, **country** (one option per `countries` row, §4.6; names from the browser; US preselected, §19 Q32) → presets locale, units, currency, paper, time zone, report language from the pack (shown read-only under the select); address, tax/license no., logo (PNG/SVG ≤ 2 MB). Once the org exists the country is shown locked (§19 Q31).
+2. **First site & manager:** site name, project number, address (geocoded; needed for weather), time zone, deadline (default 17:30); site manager name, **mobile number** (country picker defaulting to the pack's country, E.164), **language SiteLog should use with them** (the pack's field locales; EN / ES / TR at launch), languages they may speak, **preferred channel** (*Text link* · *Phone call* — "they can always use the other"), optional backup reporter.
+   - Live preview of the welcome message in the chosen language, rendered with the pack's two-way SMS and voice number for its first channel, in the neutral bubble of §14.6.
    - Pricing card (country price; "$0 setup · billed per active site").
    - Buttons: Back · Add another site · **Send welcome text** (primary).
 3. **Reports & reminders:** deadline, ladder, call window, recipients, required fields.
 4. Billing starts when step 2 completes (US: Stripe; TR: §19). 14-day trial (§19).
 
 **Data:** `orgs`, `org_settings`, `sites`, `reporters (status='invited')`, `site_reporters`, `site_recipients`, `field_links (kind='personal')`, `jobs(send_welcome)`.
-**Edge cases:** same phone already a reporter → link to new site; number not mobile / not SMS-capable (lookup) → warn, allow *Phone call* only; address not geocodable → manual pin.
+**Edge cases:** same phone already a reporter → link to new site; number not mobile / not SMS-capable (lookup) → allow *Phone call* only where SiteLog can reach the number by phone (the pack's voice number to call in, or an outbound trunk, §19 Q38); otherwise block the invite with a message (Talk now needs the personal link and a device code, both sent by SMS); address not geocodable → manual pin; a phone number from another country than the org's pack → warn (§19 Q23).
 
 ---
 
-### F3 · Invite reporter: welcome SMS, consent, channel choice
+### F3 · Invite reporter: welcome message, consent, channel choice
 
 **Trigger:** "Send welcome text" (F2) or "Invite reporter" (Team).
-1. Worker sends the **welcome SMS** in the reporter's language (§9.2 `welcome`): who SiteLog is, which company and site, the deadline, their **personal link**, and the call number. US numbers add: "Reply STOP to opt out, HELP for help." Team page status: **Invite sent**.
+1. Worker sends the **welcome message** in the reporter's language (§9.2 `welcome`; by SMS, §19 Q25): who SiteLog is, which company and site, the deadline, their **personal link**, and the call number when the pack has one. Packs with two-way SMS add: "Reply STOP to opt out, HELP for help." Team page status: **Invite sent**.
 2. The reporter either:
    - **opens the link** → F4 (device check, consent, preference), or
    - **calls the number** → the voice assistant recognises the caller ID, plays the recording notice, explains in 20 seconds how it works, asks for consent ("Is it OK if I record these calls and text you report links? Say yes or no.") and whether they prefer a call or a text each day → consents stored with `method='voice_yes'` and the call recording as evidence, or
-   - (US only) **replies YES / CALL / TEXT** by SMS.
+   - (two-way packs) **replies YES / CALL / TEXT** by SMS.
 3. On the first consent → reporter `status='active'`, `activated_at`; Team page shows **Active · Prefers call/link**.
 
-**Edge cases:** SMS undeliverable → Team shows **Can't text this number**; office can switch the reporter to *Phone call* and place a first call from the panel (button "Call now", only with office attestation that the person agreed — stored as `office_attested`); no reaction in 48 h → one re-send.
+**Edge cases:** message undeliverable → Team shows **Can't reach this number**; office can switch the reporter to *Phone call* and place a first call from the panel (button "Call now", only with office attestation that the person agreed — stored as `office_attested`); no reaction in 48 h → one re-send.
 
 ---
 
 ### F4 · First open: device check & preference
 
 1. Reporter opens a link (personal or daily). `field-api` resolves the code.
-2. **New device:** screen "Is this Marco Ruiz's phone?" → send a 6-digit code by SMS to the reporter's number → enter code (auto-fill on iOS/Android via `autocomplete="one-time-code"`) → device cookie set (180 days).
-   - TR: same, code via one-way SMS.
+2. **New device:** screen "Is this Marco Ruiz's phone?" → send a 6-digit code by SMS to the reporter's number (always SMS, whatever the channel order, §19 Q25) → enter code (auto-fill on iOS/Android via `autocomplete="one-time-code"`) → device cookie set (180 days).
+   - One-way packs (TR): same; the code needs no reply.
 3. **First time only — consent & preference (Field-02):**
-   - Plain-language notice: voice notes, photos and calls are recorded to write the daily report for {company}; who sees them; retention; link to privacy notice (KVKK / US privacy policy).
-   - Checkboxes: *I agree to the recording and processing of my reports* (required) · *Text me daily report links* (default on) · *Call me at report time* (default per office choice; required for automated calls).
+   - Plain-language notice: voice notes, photos and calls are recorded to write the daily report for {company}; who sees them; retention; link to the privacy notice (the pack's `legal_keys.privacy_notice`: KVKK aydınlatma metni / US privacy policy, §19 Q28).
+   - Checkboxes: *I agree to the recording and processing of my reports* (required) · *Text me daily report links* (default on; one consent per message channel the pack offers, SMS in week 1) · *Call me at report time* (default per office choice; required for automated calls).
    - Preference: **Text link** / **Phone call** (radio, explains "You can always use the other one").
-   - Language: EN / ES / TR.
+   - Language: the pack's field locales (EN / ES / TR at launch).
    - Optional 20-second **test recording**: "Say anything — nothing gets filed." → transcript snippet shown back ("Heard you clearly: '…'").
 4. → Today screen (F5).
 
@@ -1160,32 +1221,32 @@ Each flow lists the trigger, steps, data changes, edge cases and acceptance crit
 ### F5 · Daily report on the web recorder (happy path)
 
 **Trigger:** reporter opens today's link or their personal link (home-screen icon) any time after 12:00 site time (before noon: "Is this for today or yesterday?").
-1. **Today (Field-03):** site name, date, deadline, status ("Not sent yet"), a short prompt list (*work done · crew by company · weather · deliveries · safety*), the big **Record** button, **Add photos**, secondary actions *No work today* · *Site closed: weather*, and "Prefer to talk?" → **Talk now** (plus *Call {number}* where the country has a number).
+1. **Today (Field-03):** site name, date, deadline, status ("Not sent yet"), a short prompt list (*work done · crew by company · weather · deliveries · safety*), the big **Record** button, **Add photos**, secondary actions *No work today* · *Site closed: weather*, and "Prefer to talk?" → **Talk now** (plus *Call {number}* where the pack has a voice number).
 2. **Recording (Field-04):** timer, live level meter, the prompt list as a checklist (ticks as the AI hears topics — optional, based on streaming partials if available, otherwise static), **Pause**, **Stop & send**, **Add photo** while recording. Max 15 min per clip; multiple clips allowed.
 3. Upload: chunked to Storage via signed URL; if offline → queued in IndexedDB with "Saved on your phone — will send when you have signal" and retried on `online`/app open.
-4. **Processing:** "Writing your report…" with step ticks (transcribed · crew found · weather logged · checking hours). Typically 20–60 s; the screen can be closed — an SMS is sent when the draft or a question is ready.
+4. **Processing:** "Writing your report…" with step ticks (transcribed · crew found · weather logged · checking hours). Typically 20–60 s; the screen can be closed — a message is sent when the draft or a question is ready.
 5. → F7 (question) or F8 (draft).
 
 **Data:** `reports (channel='web')`, `uploads`, `transcripts`, `report_sources`, draft `report_versions(v1, author='agent')`.
-**Edge cases:** microphone permission denied → show steps for iOS/Android settings + "Or call {number}"; recording < 5 s or silent → "I couldn't hear anything — try again"; very noisy → warning after transcription with "Record again" option; photos only → "Add a short voice note about today"; browser not supporting `MediaRecorder` → fall back to `<input type="file" accept="audio/*" capture>` (native recorder) → upload.
+**Edge cases:** microphone permission denied → show steps for iOS/Android settings + "Or call {number}" (where the pack has a voice number; otherwise Talk now); recording < 5 s or silent → "I couldn't hear anything — try again"; very noisy → warning after transcription with "Record again" option; photos only → "Add a short voice note about today"; browser not supporting `MediaRecorder` → fall back to `<input type="file" accept="audio/*" capture>` (native recorder) → upload.
 
 ---
 
 ### F6 · Daily report on a phone call (live voice assistant)
 
 **Trigger:** outbound call at R1 (reporter prefers *call*) or inbound call from the reporter at any time.
-1. **Answer / connect:** answering-machine detection; if voicemail → leave no message, send SMS "Missed you — call {number} or tap {link}", outcome `not_reached`.
-2. **Disclosure (always, first 5 s):** "Hi Marco, it's SiteLog for Kestrel Build Group. This call is recorded to write your daily report." (TR: "Merhaba Emre, ben SiteLog, {company} adına arıyorum. Günlük raporunuz için bu görüşme kaydediliyor.")
+1. **Answer / connect:** answering-machine detection; if voicemail → leave no message, send the `missed_call` message ("Missed you — call {number} or tap {link}"), outcome `not_reached`.
+2. **Disclosure (always, first 5 s):** "Hi Marco, it's SiteLog for Kestrel Build Group. This call is recorded to write your daily report." (TR: "Merhaba Emre, ben SiteLog, {company} adına arıyorum. Günlük raporunuz için bu görüşme kaydediliyor.") The sentence is the pack's recording notice in the call language (§19 Q28).
 3. **Identify:** caller ID → reporter; one site → proceed; several → "Which site is this for — Riverside or Pier 9?"
 4. **Listen:** "Go ahead — what got done today, who was on site, weather, deliveries, anything else." The reporter talks freely (minutes). Back-channel only if silence > 3 s ("Mm-hm, go on").
 5. After each long turn the agent updates the draft (§10.4 live mode) and decides:
    - something required missing → **F7** (one question, spoken with choices),
    - nothing missing → **read-back** (≤ 30 s, numbers first): "Here's what I've got: 23 on site from 4 companies, 184 hours. Rain from 7 to 10:30 stopped the masonry for three and a half hours. Level 4 slab pour complete, Level 3 rough-in about 60 percent. Two loads of rebar from Ironclad. Toolbox talk, no incidents. Shall I file it?"
 6. → **F8** (confirm / fix by voice).
-7. **Goodbye:** "Filed. I've texted you the PDF and a link to add photos. Have a good evening." Outcome `filed`.
+7. **Goodbye:** "Filed. I've sent you the PDF and a link to add photos. Have a good evening." Outcome `filed`.
 
 **Special intents during the call:** "no work today" / "rained out" → F12; "call me back in half an hour" → schedule callback (respect call window), outcome `callback_requested`; "change Friday's report" → F10; "stop calling me" → switch preference to *link* (F15).
-**Failure handling:** STT confidence low twice or agent error → "Let's do it the simple way — tell me everything after the tone and hang up when you're done." → plain recording → post-call pipeline → SMS with link to confirm the draft (outcome `fallback_recording`).
+**Failure handling:** STT confidence low twice or agent error → "Let's do it the simple way — tell me everything after the tone and hang up when you're done." → plain recording → post-call pipeline → a message with the link to confirm the draft (outcome `fallback_recording`).
 **Acceptance:** response latency ≤ 1.2 s p50 / 2.5 s p95; barge-in stops TTS within 300 ms; full call ≤ 6 min for a typical report.
 
 ---
@@ -1209,17 +1270,17 @@ Each flow lists the trigger, steps, data changes, edge cases and acceptance crit
 **Filing (both):**
 - Freeze version, write denormalised rows, set `filed_at`, `confirmed_at`, `confirmed_via`, `is_late`.
 - `render_pdf` (report language) → Storage; `send_email` to site recipients.
-- SMS to reporter (`filed`): "Filed: Daily Report RL-2041-0187. PDF: {link}. Need a change? Open your link → Past reports." (+ "add photos" link after calls).
+- `filed` message to the reporter (Notifier): "Filed: Daily Report RL-2041-0187. PDF: {link}. Need a change? Open your link → Past reports." (+ "add photos" link after calls).
 - Web shows **Filed (Field-07)** with the PDF link, "Add more photos", "Past reports".
 - site-day → `filed`.
 
-**Acceptance:** PDF link SMS within 60 s of confirmation; email within 2 min.
+**Acceptance:** PDF link message within 60 s of confirmation; email within 2 min.
 
 ---
 
 ### F9 · Add photos after a call
 
-1. After a call-filed report, SMS includes a **photos link** (`kind='photos'`, valid until 23:59 next day).
+1. After a call-filed report, a message carries a **photos link** (`kind='photos'`, valid until 23:59 next day).
 2. The link opens a photo-only screen: take/add up to 4 photos with optional voice caption.
 3. Photos attach to the report → new version (`author='reporter'`, `via='web'`, change note "2 photos added") → PDF re-rendered; weather events get `photo_count` updated (claim-ready).
 
@@ -1229,8 +1290,8 @@ Each flow lists the trigger, steps, data changes, edge cases and acceptance crit
 
 - **Web:** personal link → *Past reports* (last 14 days) → pick a day → see the report → *Change something* → speak or type the correction → preview the change ("Apex Concrete 6 → 7 workers, 48 → 56 h") → **Save change** → new version.
 - **Call:** "I need to change Friday's report" → the agent loads Friday → "What should I change?" → `apply_correction` → reads back the change → "Save it?" → yes.
-- **SMS (US two-way only):** "EDIT FRI Apex was 7 not 6" → parsed → reply with the change and a link to confirm (never applied without confirmation).
-- New `report_versions(n+1, author='reporter', via=…)`, PDF `_v{n+1}`, email "Updated: …", SMS "Updated Friday: … Version 2 sent to the office; version 1 kept."
+- **SMS (two-way packs only):** "EDIT FRI Apex was 7 not 6" → parsed → reply with the change and a link to confirm (never applied without confirmation).
+- New `report_versions(n+1, author='reporter', via=…)`, PDF `_v{n+1}`, email "Updated: …", `edit_applied` message "Updated Friday: … Version 2 sent to the office; version 1 kept."
 - If the report was signed off → back to `filed`; signer notified.
 - **Limits:** 14 days; older → "That report is locked. Ask the office to change it."
 
@@ -1242,31 +1303,31 @@ Runs in `scheduler-tick` (every 5 min) per site-day not `filed | weather_day | n
 
 | Stage | Link reporter | Call reporter |
 |---|---|---|
-| 17:00 daily link | SMS `daily_link` | (optional) SMS `call_coming` |
-| 16:55 heads-up (weather observed) | SMS `weather_headsup` | SMS `weather_headsup` |
-| 17:45 R1 | SMS `reminder_1` + link | Outbound call (`purpose='reminder'`); no answer → SMS `missed_call` |
-| 18:30 R2 | SMS `reminder_2` | Second call if enabled + SMS `reminder_2` |
+| 17:00 daily link | Message `daily_link` | (optional) message `call_coming` |
+| 16:55 heads-up (weather observed) | Message `weather_headsup` | Message `weather_headsup` |
+| 17:45 R1 | Message `reminder_1` + link | Outbound call (`purpose='reminder'`, on the pack's trunk); no answer → message `missed_call` |
+| 18:30 R2 | Message `reminder_2` | Second call if enabled + message `reminder_2` |
 | 19:00 missing | Office email + panel alert | Same |
 
-**Rules:** each stage fires once (`reminder_stage`); calls only inside `call_window` and with `auto_call` consent; TR reporters never receive "reply" instructions (one-way SMS); DST-safe per site time zone.
+**Rules:** each stage fires once (`reminder_stage`); messages go on the person's channel order (§4.5); calls only inside `call_window`, with `auto_call` consent and where the pack has an outbound trunk; recipients on a pack without two-way SMS never receive reply instructions; DST-safe per site time zone.
 
 ---
 
 ### F12 · Weather day / no work today
 
 - **Web:** Today screen buttons *No work today* · *Site closed: weather* → for weather: "Since when?" (time chips 07:00 · 09:00 · 11:00 · Never started) + "How many were on site before?" (number) + "Add a photo of the conditions" (recommended) → site-day `weather_day`, `weather_events(full_day | start, lost_hours)`.
-- **Call:** "We got rained out, sent everyone home at eleven" → the agent confirms "Weather day from 11:00, crew sent home — how many were on site this morning?" → logs it → "A photo of the conditions makes the record stronger — I've texted you a link."
-- **SMS (US):** reply "WEATHER" or "NO WORK" to a reminder → a link to add details.
+- **Call:** "We got rained out, sent everyone home at eleven" → the agent confirms "Weather day from 11:00, crew sent home — how many were on site this morning?" → logs it → "A photo of the conditions makes the record stronger — I've sent you a link."
+- **SMS (two-way packs):** reply "WEATHER" or "NO WORK" to a reminder → a link to add details.
 - **No work:** site-day `no_work`; ladder stops; optional short PDF (setting).
 
 ---
 
 ### F13 · Unknown caller or texter
 
-1. Inbound call from an unknown number: disclosure + "This number isn't set up with SiteLog yet. Tell me your name, your company and the site, and I'll pass it to the office." → short recording → hang up. Inbound SMS (US): auto-reply "This number isn't set up with SiteLog. Ask your office to add you."
+1. Inbound call from an unknown number: disclosure + "This number isn't set up with SiteLog yet. Tell me your name, your company and the site, and I'll pass it to the office." → short recording → hang up. Inbound SMS (two-way packs; the pack found by the receiving sender id): auto-reply "This number isn't set up with SiteLog. Ask your office to add you."
 2. `unknown_contacts` row (channel, snippet from transcript, guessed org/site).
 3. Web: Team page alert **Link to {guessed site}** · **Ignore**; sidebar badge.
-4. Link → create reporter + `site_reporters` → welcome SMS (F3); a same-day held recording can be processed as that day's report after the office confirms.
+4. Link → create reporter + `site_reporters` → welcome message (F3); a same-day held recording can be processed as that day's report after the office confirms.
 
 ---
 
@@ -1279,17 +1340,17 @@ Runs in `scheduler-tick` (every 5 min) per site-day not `filed | weather_day | n
 
 ### F15 · Change channel preference, opt-out
 
-- **Field app:** Settings sheet (gear on Today): preference *Text link / Phone call*, language, "Don't call me today", notifications.
-- **Call:** "Text me instead from now on" → preference `link`, confirmation SMS.
-- **SMS (US):** CALL / TEXT keywords; STOP → `opted_out_at`, no more SMS (calls continue only if they still prefer calls and consented); START → re-subscribe; HELP → help text.
-- **Office:** Team page can change preference only with the reporter's agreement (logged as `office_attested`).
+- **Field app:** Settings sheet (gear on Today): preference *Text link / Phone call*, message channel (week 2: one of the channels the pack offers, §19 Q21), language, "Don't call me today", notifications.
+- **Call:** "Text me instead from now on" → preference `link`, confirmation message.
+- **SMS (two-way packs):** CALL / TEXT keywords; STOP → `opted_out_at`, no more SMS (calls continue only if they still prefer calls and consented; what the opt-out means for WhatsApp and push: §19 Q40); START → re-subscribe; HELP → help text. On one-way packs the opt-out is on the recorder (Settings) or the call.
+- **Office:** Team page can change preference (and, from M10, the message channel) only with the reporter's agreement (logged as `office_attested`).
 - Revoking recording consent → reporter can no longer submit; office notified.
 
 ---
 
 ### F16 · Expired link or new phone
 
-- Expired daily link → screen "This link has expired" + **Send me today's link** (SMS to the phone number on file) + "Or call {number}".
+- Expired daily link → screen "This link has expired" + **Send me today's link** (a message to the phone number on file) + "Or call {number}" where the pack has a voice number.
 - New phone → device check (F4 step 2). After 5 failed code attempts → 1-hour lock, office notified.
 - Lost phone → office revokes devices on the Team page (all device cookies invalidated).
 
@@ -1298,15 +1359,15 @@ Runs in `scheduler-tick` (every 5 min) per site-day not `filed | weather_day | n
 ### F17 · Daily overview & exception handling (web)
 
 1. `/` today per site time zone: KPIs (Reports in x/y, Crew on site, Labor hours, Weather-affected sites), **Sites today** table (with channel icon: link or call), **Needs attention** list.
-2. Attention types, priority order: `missing` → `needs_review` (unknown company, low confidence, unanswered, unconfirmed, call/transcript mismatch) → `invoice_gap` → `unknown_contact` → `glossary_review` → `undeliverable_sms`.
-3. Actions: *Call {manager}* (`tel:`), *Text link again*, *Mark no work*, *Review report*, *Compare hours*.
+2. Attention types, priority order: `missing` → `needs_review` (unknown company, low confidence, unanswered, unconfirmed, call/transcript mismatch) → `invoice_gap` → `unknown_contact` → `glossary_review` → `undeliverable_sms` (an undeliverable message on any channel).
+3. Actions: *Call {manager}* (`tel:`), *Text link again* (a message on the reporter's channel order), *Mark no work*, *Review report*, *Compare hours*.
 4. Realtime updates via Supabase Realtime.
 
 ---
 
 ### F18 · Review, edit & sign off a report (web)
 
-1. `/reports/:id`: structured sections + **source panel**: voice-note player or **call player** (dual-channel; agent lines shown muted in the transcript), excerpts with timestamps, activity timeline (link opened, clips uploaded, questions, confirmation, SMS sent, calls).
+1. `/reports/:id`: structured sections + **source panel**: voice-note player or **call player** (dual-channel; agent lines shown muted in the transcript), excerpts with timestamps, activity timeline (link opened, clips uploaded, questions, confirmation, messages sent, calls).
 2. Every value links to its source (*audio 0:41*, *call 2:15*, *answer 17:41*, *edited by Lena*).
 3. **Edit** → new version (change note required) → PDF.
 4. **Sign off** (admin/pm) → `signed_off`.
@@ -1336,7 +1397,7 @@ Extraction proposes `newTerms` (heard → official, with the heard phrase's lang
 
 `/settings/reports`, `/settings/channels`, `/settings/pdf`, `/settings/recipients`, `/settings/payroll`.
 - **Reports & reminders:** deadline, working days, ladder offsets, required fields, filing mode, sign-off, email PDF.
-- **Field channels:** SiteLog numbers in use (US/TR), daily link time, auto-call on/off, second call, call window, default preference for new reporters, link expiry, recording notice text (read-only, per language, versioned).
+- **Field channels:** the org's country pack, read-only (sender type and id or "not set up", voice number or "Talk now only", channel order, two-way SMS, links in SMS), daily link time, auto-call on/off, second call, call window, default preference for new reporters, link expiry, recording notice text (read-only, per language, versioned).
 - **PDF template:** logo, letterhead lines, footer, paper size, language preview.
 - **Recipients**, **Payroll export** as before.
 
@@ -1354,18 +1415,22 @@ Team → *Add office user* → email + role + UI language → magic-link invite 
 
 ---
 
-## 9. Field channels — SMS, web recorder, voice assistant
+## 9. Field channels — messages (SMS; WhatsApp and push from week 2), web recorder, voice assistant
 
 ### 9.1 Setup checklist
 
-- [ ] **Demo first:** `console` SMS driver + Demo phone page work end-to-end (no registrations needed). Steps in §5.2.
-- [ ] **US SMS (Twilio):** upgrade the account; buy a toll-free number; submit toll-free verification (10DLC later if needed); messaging webhook → `sms-webhook` (validate `X-Twilio-Signature`); STOP/HELP/START handled; status callbacks on.
-- [ ] **TR SMS (İletimerkezi):** subscription approved via e-Devlet; sender title `SITELOG` approved; Turkish character encoding checked (keep messages ~1 segment); confirm İYS requirements for operational messages.
-- [ ] **Telephony (LiveKit):** free US number with a dispatch rule to `sitelog-voice`; webhooks → `voice-events`; for outbound calls an outbound SIP trunk (Twilio Elastic SIP Trunking) stored in `LIVEKIT_SIP_OUTBOUND_TRUNK_US`; TR inbound/outbound via a Turkish SIP trunk when the pilot needs a TR number.
+- [ ] **Demo first:** `console` transport + Demo phone page work end-to-end (no registrations needed). Steps in §5.2.
+- [ ] **Per country pack** (§4.6):
+  - sender registered: US pack toll-free verification on Twilio (10DLC later if needed); TR pack İletimerkezi subscription via e-Devlet, title `SITELOG` approved, İYS requirements for operational messages confirmed;
+  - the sender id set in each environment with `pnpm countries:set` (owner-approved on hosted databases), never before its registration is approved;
+  - if `two_way_sms`: messaging webhook → `sms-webhook` (validate `X-Twilio-Signature`), STOP/HELP/START handled, status callbacks on;
+  - Turkish character encoding checked for the TR provider (keep messages ~1 segment, §19 #15).
+- [ ] **Telephony (LiveKit):** free US number with a dispatch rule to `sitelog-voice`; webhooks → `voice-events`; each pack's voice number set with `pnpm countries:set` (a pack without one is Talk now only); outbound trunks (Twilio Elastic SIP Trunking for US) in `LIVEKIT_SIP_OUTBOUND_TRUNKS`; TR inbound/outbound via a Turkish SIP trunk when the pilot needs a TR number.
+- [ ] **Week 2 (M6):** a Twilio WhatsApp sender, Meta business verification and templates per language; VAPID keys for web push.
 - [ ] **Voice agent** deployed to LiveKit Cloud; EN/ES (Aura-2) and TR (Azure) voices picked after listening tests; STT tested on noisy site audio in all three languages.
 - [ ] **Short link domain** (`sl.link`) with HTTPS, redirects to `FIELD_APP_URL/r/{code}`.
-- [ ] Privacy notices published (US privacy policy; TR KVKK aydınlatma metni) and linked from the consent screen and SMS HELP text.
-- [ ] Recording notice wording approved per language and versioned (`consents.text_version`).
+- [ ] Privacy notices published per pack (US privacy policy; TR KVKK aydınlatma metni), referenced by the pack's `legal_keys` (§19 Q28) and linked from the consent screen and the SMS HELP text.
+- [ ] Recording notice wording approved per pack and language and versioned (`legal_keys.recording_notice`, `consents.text_version`).
 
 ### 9.2 SMS copy catalog
 
@@ -1403,20 +1468,20 @@ Spanish (`es`) versions mirror EN.
 | Screen | Content | Notes |
 |---|---|---|
 | **Link check / device** | "Is this Marco Ruiz's phone?" → send code → 6-digit input (`autocomplete="one-time-code"`) | New devices only. |
-| **Welcome & consent** (Field-02) | Plain-language notice, required consent checkbox, *Text me links* / *Call me at report time*, preference *Text link · Phone call*, language EN/ES/TR, optional 20-s test | First open only; consents stored with `text_version`. |
-| **Today** (Field-03) | Site + date + deadline + status; prompt list; huge **Record** button (≥ 120 px); **Add photos**; *No work today* · *Site closed: weather*; "Prefer to talk?" → **Talk now** (browser call to the assistant) and, if the country has a number, *Call {number}*; site switcher if > 1; gear → settings | Readable in sunlight: Asphalt on Chalk, 18 px+ body. Talk now asks for microphone permission once; on a call-preference reporter it is the second-largest button. |
+| **Welcome & consent** (Field-02) | Plain-language notice (the pack's privacy notice), required consent checkbox, consent checkboxes per message channel the pack offers (*Text me links*; SMS in week 1), *Call me at report time*, preference *Text link · Phone call*, language from the pack's field locales, optional 20-s test | First open only; consents stored with `text_version` (the pack's consent key when set, §19 Q28). |
+| **Today** (Field-03) | Site + date + deadline + status; prompt list; huge **Record** button (≥ 120 px); **Add photos**; *No work today* · *Site closed: weather*; "Prefer to talk?" → **Talk now** (browser call to the assistant) and, if the pack has a voice number, *Call {number}*; site switcher if > 1; gear → settings | Readable in sunlight: Asphalt on Chalk, 18 px+ body. Talk now asks for microphone permission once; on a call-preference reporter it is the second-largest button. |
 | **Recording** (Field-04) | Timer, level meter, topic checklist, Pause, **Stop & send**, add photo | Screen Wake Lock while recording; haptic tick on start/stop; mime: `audio/webm;codecs=opus` (Chrome/Android) or `audio/mp4` (iOS Safari). |
-| **Processing** | Step ticks; "You can close this — I'll text you" | Subscribes to report status. |
+| **Processing** | Step ticks; "You can close this — I'll message you" | Subscribes to report status. |
 | **Question** (Field-05) | "Quick check" card, ≤ 2 answer buttons + *Other…* (mic or number input) | One question per screen. |
 | **Draft** (Field-06) | Sections with numbers; tap a number for a stepper; **Fix by voice**; **Confirm & send** | Sticky bottom bar with the primary button. |
 | **Filed** (Field-07) | Report no., PDF link, *Add more photos*, *Past reports*, edit hint | Confetti-free; one line of thanks. |
 | **Past reports** | Last 14 days list → report view → *Change something* | Edits create a new version (F10). |
-| **Settings** | Preference, language, "Don't call me today", revoke consent, sign out this device | |
+| **Settings** | Preference, message channel (week 2), language, "Don't call me today", revoke consent, sign out this device | |
 | **Expired / offline** | Expired link → *Send me today's link*; offline banner + queued uploads count | |
 
-PWA: manifest name "SiteLog", icon = logo mark, `display: standalone`, theme `#16181B`. No dependence on web push (iOS only allows it for installed PWAs); SMS carries all prompts.
+PWA: manifest name "SiteLog", icon = logo mark, `display: standalone`, theme `#16181B`. Web push is an optional message channel for installed PWAs from week 2 (iOS allows it only there); it is never a person's only channel, and the channel order (§4.5) carries every prompt. In week 1 the service worker caches the shell only.
 
-UI language: the reporter's locale (`reporters.locale`) once the link is resolved; before that (link check, expired link), the first of the phone's preferred languages that is EN, ES or TR, else EN. `<html lang>` follows it.
+UI language: the reporter's locale (`reporters.locale`) once the link is resolved; before that (link check, expired link), the first of the phone's preferred languages that is EN, ES or TR, else the pack's default (from `resolve`), else EN. `<html lang>` follows it.
 
 ### 9.4 Voice assistant
 
@@ -1428,15 +1493,17 @@ UI language: the reporter's locale (`reporters.locale`) once the link is resolve
 
 | Entry | Transport | Identity | Room / dispatch |
 |---|---|---|---|
-| Reporter calls the number | SIP (LiveKit number or TR trunk) | Caller number from the SIP participant attributes → `POST /voice/calls/start {from}` → reporter (unknown → F13) | Dispatch rule → room `call-{uuid}`, agent `sitelog-voice` |
+| Reporter calls the number | SIP (the pack's voice number: a LiveKit number or the TR trunk) | Caller number from the SIP participant attributes → `POST /voice/calls/start {from}` → reporter (unknown → F13) | Dispatch rule → room `call-{uuid}`, agent `sitelog-voice` |
 | **Talk now** in the recorder | WebRTC (browser mic) | Already known from the link + device cookie; `POST /field/voice/token` returns a LiveKit token, room name and call token | Room created with the agent dispatched explicitly |
-| Reminder / callback | Outbound SIP (`CreateSIPParticipant` on the country trunk) | Known before dialling | Worker creates the room, dispatches the agent, then dials |
+| Reminder / callback | Outbound SIP (`CreateSIPParticipant` on the pack's trunk, `LIVEKIT_SIP_OUTBOUND_TRUNKS`) | Known before dialling | Worker creates the room, dispatches the agent, then dials |
 
-Talk now uses the same disclosure, prompts and tools; it is free of telephony cost and works in any country, so it is the default call option in TR until a Turkish number exists.
+Talk now uses the same disclosure, prompts and tools; it is free of telephony cost and works in any country, so it is the default call option wherever the pack has no voice number (TR until a Turkish number exists).
 
 **Opening (outbound, EN):** "Hi {first}, it's the SiteLog assistant for {company}. This call is recorded to write your daily report. Ready to give me today's report for {site}?" → "Yes" → "Go ahead — what got done, who was on site, weather, deliveries, anything else."
 **Opening (inbound, EN):** "SiteLog, hi {first}. This call is recorded for your daily report. Go ahead with today's report for {site}."
 **Opening (TR):** "Merhaba {first}, ben {company} için SiteLog asistanı. Günlük raporunuz için bu görüşme kaydediliyor. {site} için bugünün raporunu alabilir miyim?"
+
+The disclosure sentence ("This call is recorded …") is the pack's recording notice in the call language (§19 Q28).
 
 **Dialog policy (system prompt essentials):**
 
@@ -1466,7 +1533,7 @@ Speak in {reporter_locale}. Keep every turn under 2 sentences, except the read-b
 | `update_draft` | transcript so far (reporter channel, with timestamps) | `{ missing: [...], question?: {text, choices[]}, readBack?: string }` (runs extraction §10.4) |
 | `record_answer` | question id, utterance | parsed value + confirmation sentence |
 | `apply_correction` | utterance | changed lines + read-back of the change |
-| `file_report` | — | report no., PDF pending; triggers SMS |
+| `file_report` | — | report no., PDF pending; triggers the `filed` message |
 | `set_day_status` | `no_work` or `weather_day` + details | confirmation sentence |
 | `schedule_callback` | minutes | scheduled time (inside call window) |
 | `set_preference` | `link` or `call` | ok |
@@ -1475,12 +1542,12 @@ Speak in {reporter_locale}. Keep every turn under 2 sentences, except the read-b
 | `end_call` | outcome | — |
 
 **Turn-taking & audio:** end-of-turn silence threshold adaptive (start 1.5 s, extend to 2.5 s during long reports); barge-in stops TTS ≤ 300 ms; noise suppression on the inbound channel; numbers spoken naturally ("one eighty-four hours", TR: "yüz seksen dört saat").
-**Calls policy:** outbound only inside `call_window` and with `auto_call` consent; max 2 attempts per day; answering-machine detection → no voicemail message, SMS `missed_call` instead; max call 12 min.
+**Calls policy:** outbound only inside `call_window` and with `auto_call` consent; max 2 attempts per day; answering-machine detection → no voicemail message, the `missed_call` message instead; max call 12 min.
 **Recording:** dual-channel, written by the agent (reporter track left, agent audio right; Opus/OGG), uploaded to the `calls` bucket at call end; disclosure always played before any recording-dependent processing; `calls.disclosure_played = true`.
 
 ### 9.5 Intents and keywords
 
-| Intent | Call examples (EN / ES / TR) | SMS keyword (US only) |
+| Intent | Call examples (EN / ES / TR) | SMS keyword (two-way packs) |
 |---|---|---|
 | `confirm` | yes · OK · file it · sí · dale · evet · tamam · kaydet | OK (for call follow-ups) |
 | `fix` | change the hours · Apex had seven · no, cinco · hayır, yedi kişiydi | — |
@@ -1492,14 +1559,11 @@ Speak in {reporter_locale}. Keep every turn under 2 sentences, except the read-b
 | `opt_out` | stop calling me · beni arama | STOP (START to resume) |
 | `help` | how does this work · nasıl çalışıyor | HELP |
 
-### 9.6 Languages
+### 9.6 Languages and country packs
 
-| Org | Report & PDF language | Panel default | Field languages (SiteLog speaks/texts) | Units |
-|---|---|---|---|---|
-| US | English | English | English, Spanish | Imperial (°F, in, mph, yd³) |
-| TR | Turkish | Turkish | Turkish (English optional) | Metric (°C, mm, km/h, m³) |
+Per-pack languages and units are the `countries` rows (§4.6): **US** — report, PDF and panel default English, field English and Spanish, imperial (°F, in, mph, yd³); **TR** — report, PDF and panel default Turkish, field Turkish (English optional), metric (°C, mm, km/h, m³).
 
-Reporters may speak any supported language; the report is written in the org's report language; transcript excerpts keep the original words with the mapped facts.
+Reporters may speak any supported language; the report is written in the org's report language; transcript excerpts keep the original words with the mapped facts. A new country with a new language needs copy, prompts, PDF labels and TTS (code) first, then its row.
 
 ### 9.7 Tone
 
@@ -1519,15 +1583,15 @@ Reporters may speak any supported language; the report is written in the org's r
 |---|---|---|
 | `transcribe_upload` | upload_id | `transcripts` → `extract_report` |
 | `extract_report` | report_id | Draft version data → `decide_next` |
-| `decide_next` | report_id | question / draft ready → `send_sms(question_ready / draft_ready)` if the recorder isn't open |
-| `file_report` | report_id, via | Freeze, denormalise → `render_pdf` → `send_sms(filed)`, `send_email` |
+| `decide_next` | report_id | question / draft ready → `notify(question_ready / draft_ready)` if the recorder isn't open |
+| `file_report` | report_id, via | Freeze, denormalise → `render_pdf` → `notify(filed)`, `send_email` |
 | `post_call_reconcile` | call_id | Batch-transcribe recording, attach sources, compare with confirmed data → `needs_review` on mismatch |
 | `place_call` | reporter_id, purpose | Telephony API call start (respects window, consent, attempts) |
-| `send_sms` | reporter_id, key, vars | Provider send, `messages` row |
+| `notify` | reporter_id, key, vars, dedupe_key | Notifier (§4.5): channel order, transport, `messages` row (with `channel`) |
 | `render_pdf` | report_id, version | PDF in Storage (report language) |
 | `send_email` | kind, ids | Email |
 | `fetch_weather` | site_id, date | `site_days.weather` |
-| `send_welcome` | reporter_id | `welcome` SMS + personal link |
+| `send_welcome` | reporter_id | `welcome` message (SMS) + personal link |
 | `build_evidence_pack` | pack_id | PDF, email |
 
 Retries: backoff 30 s · 2 min · 10 min · 30 min · 2 h; after 5 → `dead`, Sentry alert, office notified for reporter-facing failures.
@@ -1648,7 +1712,7 @@ Question (field, target, options) + utterance → `{ field, value, confidence }`
 
 ### 10.8 Intent classification (`classify_utterance`, fast model)
 
-Used for call turns outside the main report and for US inbound SMS. Output: one intent from §9.5 + entities (day, numbers, minutes).
+Used for call turns outside the main report and for inbound SMS on two-way packs. Output: one intent from §9.5 + entities (day, numbers, minutes).
 
 ### 10.9 Post-call reconciliation
 
@@ -1699,14 +1763,14 @@ After every filed call: batch transcript (reporter channel) → extraction → c
 | `/glossary` | Site glossary | admin, pm, ops | Web-Glossary |
 | `/settings/reports` · `/settings/channels` · `/settings/pdf` · `/settings/recipients` · `/settings/payroll` | Settings | admin | Web-Settings |
 | `/billing` | Billing | admin | Web-Billing |
-| `/dev/phone` | **Demo phone**: per-reporter SMS threads from the `console` driver (plus an *Email* tab for `EMAIL_PROVIDER=console`); type replies as the reporter; open links in a phone-sized frame | admin; staging, or orgs with `is_demo = true` | — |
+| `/dev/phone` | **Demo phone**: per-reporter threads from the `console` transport (every message channel; plus an *Email* tab for `EMAIL_PROVIDER=console`); type replies as the reporter, only for two-way packs (§19 Q35); open links in a phone-sized frame | admin; staging, or orgs with `is_demo = true` | — |
 | `*` | Not found · No access | — | — |
 
 `accounts` users land on `/hours`. The field app has its own routes (§9.3).
 
 ### 11.2 App shell
 
-- **Sidebar** (240 px, Asphalt): logo → org switcher (name + "6 active sites") → Overview, Sites, Reports (blue badge = needs review), Crew hours, Weather & delays → **SETUP** → Team & numbers (orange badge = unknown contacts / undeliverable texts), Site glossary (badge = terms to review), Settings, Billing → footer: green dot **"Agent ready · texts & calls"**, the org's SiteLog number(s) in mono, user avatar + name (menu: Language EN/TR, Profile, Sign out).
+- **Sidebar** (240 px, Asphalt): logo → org switcher (name + "6 active sites") → Overview, Sites, Reports (blue badge = needs review), Crew hours, Weather & delays → **SETUP** → Team & numbers (orange badge = unknown contacts / undeliverable texts), Site glossary (badge = terms to review), Settings, Billing → footer: green dot **"Agent ready · texts & calls"**, the org's SiteLog number(s) from its pack in mono (or "Talk now only"), user avatar + name (menu: Language EN/TR, Profile, Sign out).
 - Active item: Steel background, white text, orange icon stroke. No left-border accent bars.
 - **Top bar:** global search (reports, sites, companies, transcript text) · notifications · page controls.
 - **Content:** max-width 1240 px; Concrete background.
@@ -1734,13 +1798,13 @@ After every filed call: batch transcript (reporter channel) → extraction → c
 Split layout. Left brand panel: headline "End-of-day reports, spoken in three minutes."; bullets: *Site managers tap a text link or take a call — nothing to install.* · *A formatted PDF daily report lands here, ready to file.* · *Sub hours and weather delays, each traceable to the recording.* Right: email form, SSO (disabled), info box "Site managers don't sign in. They report by text link or phone call." Language switch EN/TR.
 
 #### P2 · Setup wizard — `/setup/*`
-- Step 1 Company: name, **country** (US / Türkiye → locale, units, currency, report language presets), address, tax/license no., logo.
-- Step 2 First site & manager (designed): site fields; manager: name, **mobile number**, **language SiteLog uses** (EN/ES/TR), languages spoken, **preferred channel** (segmented: *Text link* · *Phone call*), backup reporter. Aside: **preview of the welcome text** (SMS bubble in the chosen language) + note "They can also call {number} any time"; pricing card. Primary **Send welcome text**.
+- Step 1 Company: name, **country** (one option per country pack, §4.6; names from the browser → locale, units, currency, paper, time zone, report language presets, shown read-only), address, tax/license no., logo. Locked once the org exists.
+- Step 2 First site & manager (designed): site fields; manager: name, **mobile number**, **language SiteLog uses** (EN/ES/TR), languages spoken, **preferred channel** (segmented: *Text link* · *Phone call*), backup reporter. Aside: **preview of the welcome text** (message bubble in the chosen language, with the pack's variant) + note "They can also call {number} any time" when the pack has a voice number; pricing card. Primary **Send welcome text**.
 - Step 3 Reports & reminders (incl. call window).
-- Validation: E.164; SMS-capability lookup (warn if landline: "Calls only").
+- Validation: E.164; SMS-capability lookup: a landline gets *Phone call* only where SiteLog can reach it by phone (the pack's voice number or an outbound trunk, §19 Q38); otherwise the invite is blocked with a message, since Talk now needs the personal link and a device code by SMS (F2).
 
 #### P3 · Overview — `/`
-KPIs as before. **Sites today** table adds a **channel** column (icon + "Link"/"Call") and "In at". **Needs attention** includes: missing · needs review (incl. `call_mismatch`, `no_photo`) · invoice gap · unknown contact · undeliverable text. Actions: *Call {first}* · *Text today's link* · *Mark no work* · *Review report*.
+KPIs as before. **Sites today** table adds a **channel** column (icon + "Link"/"Call") and "In at". **Needs attention** includes: missing · needs review (incl. `call_mismatch`, `no_photo`) · invoice gap · unknown contact · undeliverable message. Actions: *Call {first}* · *Text today's link* · *Mark no work* · *Review report*.
 
 #### P4 · Sites — `/sites`
 Subtitle "{n} active · each reports daily by text link or call". Cards: name, code, today's chip, streak, footer: reporter + phone + **preference icon**, crew today, weather days this month. Dashed "Connect another site" card with country price.
@@ -1754,7 +1818,7 @@ Filters add **Channel** (Any · Link · Call). Table flags include channel icon,
 #### P7 · Report review — `/reports/:reportId`
 - Provenance line examples: "Reported by Marco Ruiz · voice note via text link at 17:38 · confirmed on the recorder 17:43 · edited 20:10" / "Reported by Aisha Bello · phone call 18:41 (2 min 05 s) · confirmed by voice".
 - Source panel: `MediaPlayer` (voice note or call), excerpts with speaker labels, language ("ES + EN → EN" / "TR → TR"), *Full transcript* drawer.
-- Activity: link opened · clips uploaded · question asked/answered · draft shown · confirmed · SMS sent (delivered) · call placed/answered/ended · PDF emailed · edits.
+- Activity: link opened · clips uploaded · question asked/answered · draft shown · confirmed · message sent (channel, delivered) · call placed/answered/ended · PDF emailed · edits.
 - Review reasons banner incl. `call_mismatch` ("The call recording says 5 workers, the confirmed report says 4 — check") with *Play at 2:15*.
 
 #### P8 · Crew hours — `/hours`
@@ -1777,10 +1841,10 @@ Tabs All · Companies · Spanish · Turkish. Cards and table as v1.0; "Heard in 
 #### P12 · Settings — `/settings/*`
 Tabs: Reports & reminders · **Field channels** · PDF template · Recipients · Payroll export.
 - **Reports & reminders:** deadline, working days, reminder ladder cards (−35 heads-up · 17:00 daily link · +15 R1 "Text or call — per person" · +60 R2 · +90 missing), required fields, filing (radio *Reporter confirms — on the recorder or by voice on the call* vs auto after 15 min; sign-off required; email PDF).
-- **Field channels:** SiteLog numbers (US/TR) read-only, daily link time, *Call people who prefer calls* toggle, *Second call at reminder 2* toggle, call window (from–to), default preference for new reporters, daily link expiry (hours), recording notice (per language, read-only + version), test buttons (*Send me a test text*, *Call me now*).
+- **Field channels:** the org's country pack, read-only (sender type and id or "not set up", voice number or "Talk now only", channel order, two-way SMS, links in SMS), daily link time, *Call people who prefer calls* toggle, *Second call at reminder 2* toggle, call window (from–to), default preference for new reporters, daily link expiry (hours), recording notice (per language, read-only + version), test buttons (*Send me a test message*; *Call me now*, hidden without an outbound trunk).
 
 #### P13 · Billing — `/billing`
-Price and currency per org country; US via Stripe; TR provider (§19). Sites table with Pause/Resume; invoices.
+Price and currency per org (outside the country pack until §19 Q30); US via Stripe; TR provider (§19). Sites table with Pause/Resume; invoices.
 
 ### 11.5 Global states
 
@@ -1793,7 +1857,7 @@ Loading skeletons · inline errors with retry · no-access page · offline banne
 | Item | Spec |
 |---|---|
 | Language | Org report language: EN "Daily Site Report" · TR "Günlük Şantiye Raporu" (all labels localised) |
-| Paper | Letter (US) or A4 (TR); portrait; margins 0.75 in / 19 mm |
+| Paper | `org_settings.pdf_paper`, preset from the country pack (Letter US, A4 TR) and editable in Settings → PDF; portrait; margins 0.75 in / 19 mm |
 | Fonts | Archivo + IBM Plex Mono, embedded (Turkish glyphs included) |
 | File name | `{report_no}_{YYYY-MM-DD}_v{version}.pdf` |
 | Page 1 | Letterhead (contractor logo/name, address/license/tax line) · orange badge **DAILY SITE REPORT** / **GÜNLÜK ŞANTİYE RAPORU** · "No. RL-2041-0187 · v2" · meta grid (Date, Project no., Site manager, Working hours, Weather, Filed/edited) · 01 Summary · 02 Weather & delays · 03 Manpower on site (+ footnote for answers/edits) |
@@ -1807,15 +1871,15 @@ Loading skeletons · inline errors with retry · no-access page · offline banne
 
 | Event | Channel | Recipients | Content |
 |---|---|---|---|
-| Daily link / reminders / heads-up | SMS or call (per preference, §7.4) | Reporter | §9.2 keys |
-| Question or draft ready (recorder closed) | SMS | Reporter | `question_ready` / `draft_ready` |
-| Report filed | SMS (PDF link) | Reporter | `filed` (+ `photos_link` after calls) |
+| Daily link / reminders / heads-up | Message (Notifier order, §4.5) or call (per preference, §7.4) | Reporter | §9.2 keys |
+| Question or draft ready (recorder closed) | Message (Notifier order) | Reporter | `question_ready` / `draft_ready` |
+| Report filed | Message (Notifier order; PDF link) | Reporter | `filed` (+ `photos_link` after calls) |
 | Report filed | Email (PDF attached) | Site recipients | Subject `Daily report · {site} · {date} · {report_no}` (TR: `Günlük rapor · …`) |
-| Report updated | Email (+ SMS `edit_applied` to reporter if they edited) | Recipients + signer | Change note, new PDF |
+| Report updated | Email (+ `edit_applied` message to reporter if they edited) | Recipients + signer | Change note, new PDF |
 | Report missing | Email + panel | ops + admin | "{site} — no report. {first} didn't answer {n} reminders." + Call link |
 | Needs review / call mismatch / no photo | Panel | ops, pm | Reasons |
 | Unknown contact | Panel (+ optional email) | ops, admin | Number, channel, snippet |
-| Text undeliverable / opted out | Panel | ops, admin | Reporter, reason, suggested action |
+| Message undeliverable / opted out | Panel | ops, admin | Reporter, channel, reason, suggested action |
 | Invoice gap | Panel | ops, accounts | Company, gap |
 | Weekly digest (Mon 07:00) | Email | admin, pm | On-time %, channel mix, weather hours, invoice gaps, unsigned reports |
 | EOT pack ready | Email + panel | Requester | Download link |
@@ -1919,7 +1983,7 @@ export default {
 
 - Designed for one-handed use outdoors, with gloves: primary actions ≥ 56 px tall, the Record button ≥ 120 px, body text 17–18 px, high contrast (Asphalt on Chalk; orange only for the primary action).
 - One decision per screen; sticky bottom action bar; no hamburger menus.
-- Same tokens as the panel; SMS previews in the panel use Chalk bubbles with Rebar borders (never imitate a specific messaging app's look).
+- Same tokens as the panel; message previews in the panel (SMS, and WhatsApp from week 2) use Chalk bubbles with Rebar borders (never imitate a specific messaging app's look).
 - No fake status bars or keyboards in mockups.
 
 ---
@@ -1930,58 +1994,62 @@ export default {
 
 | Area | Requirement |
 |---|---|
-| **Security** | RLS on all tables; service role only in functions/worker/voice agent; webhook signature validation (SMS, voice events, billing); field access only via `field-api` (link code + verified device); per-call tool tokens; signed URLs (10 min); secrets in Vault/host secrets; rate limits on code verification. |
+| **Security** | RLS on all tables; service role only in functions/worker/voice agent; webhook signature validation (SMS, WhatsApp, voice events, billing); field access only via `field-api` (link code + verified device); per-call tool tokens; signed URLs (10 min); secrets in Vault/host secrets; rate limits on code verification. |
 | **Privacy** | Voice notes, call recordings, transcripts and photos are customer data; retained `AUDIO_RETENTION_DAYS` (default 730) then deleted nightly (reports + PDFs kept). No phone numbers or personal data sent to LLMs. DPA for customers. |
-| **Audit** | All state changes, consents, link/device events, calls and SMS are logged; report versions immutable. |
+| **Audit** | All state changes, consents, link/device events, calls, messages (every channel) and country-pack endpoint changes are logged; report versions immutable. |
 | **Reliability** | Webhook ack < 2 s p95; idempotent jobs; at-least-once with dedupe; field uploads resumable and queued offline; call fallback to plain recording. |
 | **Performance** | Web: upload → draft ≤ 60 s p50 / 150 s p95. Call: response ≤ 1.2 s p50 / 2.5 s p95, barge-in ≤ 300 ms. Panel pages < 1.5 s on 4G. Field app first load < 2 s on 4G (≤ 200 KB JS). |
 | **Scale target** | 2,500 reports/day; up to 300 concurrent calls at the 17:45 peak (stagger outbound calls over 10 min). |
 | **Time zones** | Per-site scheduling, DST-safe; call window enforced in the reporter's site time zone. |
 | **Observability** | Sentry everywhere; per-job and per-call metrics (latency, tokens, audio seconds, interruptions, STT confidence, cost). |
 | **Accessibility** | WCAG 2.2 AA (panel and field app). |
-| **i18n** | Panel EN/TR, field app EN/ES/TR, SMS and voice EN/ES/TR, reports EN/TR. |
-| **Cost guardrail** | Track AI + SMS + telephony cost per report; alert at 3× median. |
+| **i18n** | Panel EN/TR, field app EN/ES/TR, messages and voice EN/ES/TR, reports EN/TR; a pack chooses among these (§4.6). |
+| **Cost guardrail** | Track AI + messaging + telephony cost per report; alert at 3× median. |
 
 ### 15.2 Compliance (verify with counsel before launch)
 
-| Topic | US | Turkey |
+The columns are the counsel checklists behind the US and TR country packs and their `legal_keys` (§4.6). A new pack ships only after counsel review of its own column and its legal texts.
+
+| Topic | US pack | TR pack |
 |---|---|---|
-| Business SMS | A2P 10DLC registration (or toll-free verification); STOP/HELP/START keywords; consent before marketing-type messages (ours are operational). | Licensed provider + registered sender title; check İYS applicability; one-way messages. |
+| Business SMS | (two-way) A2P 10DLC registration (or toll-free verification); STOP/HELP/START keywords; consent before marketing-type messages (ours are operational). | (one-way) Licensed provider + registered sender title; check İYS applicability; one-way messages. |
+| WhatsApp (week 2) — verify with counsel | Opt-in before business-initiated messages; approved templates; 24 h service window; Meta and Twilio as sub-processors. | Same, plus KVKK cross-border transfer for Meta and Twilio and an İYS applicability check. |
+| Web push (week 2) — verify with counsel | Browser permission; recorded as consent per §19 Q27; no personal data in the payload beyond the message text. | Same. |
 | Automated / AI-voice calls | Calls using artificial or AI-generated voices to mobile phones need the person's **prior express consent** (TCPA; the FCC treats AI-generated voices as "artificial"). Capture `auto_call` consent (F3/F4); honour opt-outs immediately; call only inside the call window. | Inform and obtain consent; respect working hours; easy opt-out. |
 | Call recording | Some states require all-party consent → **always** play the recording notice before recording; store `disclosure_played`. | KVKK: inform (aydınlatma) before recording; obtain explicit consent where required; purpose limitation (daily reports). |
-| Personal data | Privacy policy; data access/deletion on request; DPA with each customer (customer = controller, SiteLog = processor). | KVKK compliance as processor; cross-border transfer of personal data (hosting outside Türkiye) needs a valid transfer mechanism (e.g. standard contracts notified to the Authority) — or host TR data in an approved setup. Voice and transcripts pass through LiveKit, Deepgram, Azure and Anthropic: list them as sub-processors and use an EU region where offered. |
+| Personal data | Privacy policy; data access/deletion on request; DPA with each customer (customer = controller, SiteLog = processor). | KVKK compliance as processor; cross-border transfer of personal data (hosting outside Türkiye) needs a valid transfer mechanism (e.g. standard contracts notified to the Authority) — or host TR data in an approved setup. Voice and transcripts pass through LiveKit, Deepgram, Azure and Anthropic, messages through Twilio (SMS, WhatsApp), İletimerkezi (TR SMS) and Meta (WhatsApp, week 2): list them as sub-processors and use an EU region where offered. |
 | Records | Daily reports and versions immutable; audit log retained ≥ contract term. | Same. |
 
 ---
 
 ## 16. Build plan
 
-The pitch promises **a working demo within one week**. The web-recorder channel needs no third-party approvals, so the week-1 demo runs on it (texts through the `console` driver and Demo phone if registrations are still pending); the voice assistant follows in week 2 on the free LiveKit number and Talk now. **Start Twilio toll-free verification and the İletimerkezi sender title on day 1** — they have the longest lead times. Provider setup: §5.2.
+The pitch promises **a working demo within one week**. The web-recorder channel needs no third-party approvals, so the week-1 demo runs on it (messages through the `console` transport and Demo phone while the packs' senders are not set up); the voice assistant follows in week 2 on the free LiveKit number and Talk now. **Start each pack's sender registration on day 1** (Twilio toll-free verification for the US pack, the İletimerkezi `SITELOG` title for the TR pack), and the Twilio WhatsApp sender and Meta templates before week 2 — they have the longest lead times. Provider setup: §5.2.
 
-> SiteLog is **multi-tenant**: onboarding a contractor is the setup wizard plus their company list, glossary seeds and PDF letterhead — no per-customer code.
+> SiteLog is **multi-tenant and global**: onboarding a contractor is the setup wizard plus their company list, glossary seeds and PDF letterhead — no per-customer code; a new country is a country pack row (§4.6).
 
 ### 16.1 Timeline
 
 | Week | Milestones | Outcome |
 |---|---|---|
 | 1 | M0 Foundations · M1 Data · M2 Field app + SMS · M3 Pipeline v1 · M4 PDF & email · M5 Panel core | **Live demo:** text link → record → draft → confirm → PDF by SMS + email; Overview and Report review in the panel |
-| 2 | M6 Questions, corrections, edits, reminder ladder (SMS) · M7 Voice assistant v1 | Full web loop incl. late path; calls that listen, read back and file |
+| 2 | M6 Questions, corrections, edits, reminder ladder (messages: SMS, WhatsApp, web push) · M7 Voice assistant v1 | Full web loop incl. late path; calls that listen, read back and file |
 | 3 | M8 Voice assistant v2 · M9 Hours, weather & EOT, glossary | Questions/corrections/special intents on calls, outbound reminder calls, post-call reconcile |
-| 4 | M10 Setup, team, settings, billing · M11 Turkish market | Self-serve onboarding; TR panel, SMS, voice, PDF, metric units |
+| 4 | M10 Setup, team, settings, billing · M11 Turkish market | Self-serve onboarding; TR pack go-live: panel, messages, voice, PDF, metric units |
 | 5 | M12 Hardening & pilots | Evals green, compliance checklist done, US + TR pilot sites |
 
 ### 16.2 Milestones, tasks and acceptance criteria
 
 #### M0 · Foundations (day 1)
 - [ ] **Accounts (free tiers, §5.2):** LiveKit Cloud (Build) + free US number, Deepgram, Azure Speech F0, Anthropic, Supabase.
-- [ ] **Long-lead items:** Twilio upgrade + toll-free number + toll-free verification; İletimerkezi subscription (e-Devlet) + `SITELOG` title; short link domain. TR SIP trunk only when the TR pilot needs a Turkish number.
+- [ ] **Long-lead items:** per pack: Twilio upgrade + toll-free number + toll-free verification (US); İletimerkezi subscription (e-Devlet) + `SITELOG` title (TR); a Twilio WhatsApp sender with Meta business verification and templates before week 2; short link domain. TR SIP trunk only when the TR pilot needs a Turkish number.
 - [ ] Monorepo (Appendix A), pnpm, TS strict, ESLint/Prettier, Vitest; Supabase staging + prod; CI.
 - [ ] Panel scaffold (Vite + React + Tailwind + shadcn) with tokens (§14), app shell, i18n (EN/TR), auth (magic link), org switcher, role guard.
 - [ ] Field app scaffold (Vite PWA) with tokens, i18n (EN/ES/TR), routing (§9.3).
 - **Done when:** an office user signs in to the empty shell; the field app shell loads on iOS Safari and Android Chrome.
 
 #### M1 · Data model & seed (day 1–2)
-- [ ] Migrations for §6; RLS + RPCs (`sign_off_report`, `create_report_version`, `next_report_no`).
+- [ ] Migrations for §6; RLS + RPCs (`sign_off_report`, `create_report_version`, `next_report_no`); the `countries` table with the US and TR packs, `orgs.country` a foreign key to it, `create_org(p_country)`.
 - [ ] Shared Zod schemas (`DailyReportData` v2, enums, SMS keys) in `packages/shared`.
 - [ ] Seed: US demo org + TR demo org (§18).
 - **Done when:** RLS tests pass for every role; seeded screens render.
@@ -1989,7 +2057,7 @@ The pitch promises **a working demo within one week**. The web-recorder channel 
 #### M2 · Field app + SMS (day 2–3)
 - [ ] `field-api`: resolve link, device code (send/verify), consent, today, signed uploads, upload complete, day status, preferences.
 - [ ] Field screens: device check, consent & preference, Today, Recording (MediaRecorder + wake lock + IndexedDB queue), Processing.
-- [ ] SMS sender abstraction (`Notifier.text`, `SmsTransport`) with drivers `console` (+ Demo phone page), `twilio`, `iletimerkezi`; `messages` logging; `sms-webhook` (Twilio) with STOP/HELP/START/CALL/TEXT.
+- [ ] Notifier (`Notifier.send`, the channel order from the pack and the person, §4.5) with SMS transports `console` (+ Demo phone page), `twilio`, `iletimerkezi` chosen by the pack; `messages` logging (with `channel`); `sms-webhook` (Twilio) with STOP/HELP/START/CALL/TEXT on two-way packs.
 - [ ] Personal + daily links (`field_links`), short-link redirect.
 - **Done when:** a test reporter receives the welcome text, verifies the phone, records 2 minutes with 2 photos, and the files are in Storage — also when recorded offline and sent later.
 
@@ -2001,30 +2069,31 @@ The pitch promises **a working demo within one week**. The web-recorder channel 
 - **Done when:** a 3-minute mixed EN/ES voice note becomes a correct draft in ≤ 60 s p50 and confirming files it.
 
 #### M4 · PDF & email (day 4–5)
-- [ ] `ReportDocument` (EN layout first), storage, `filed` SMS with PDF link, Filed screen, email with PDF.
-- **Done when:** the PDF matches the report artboards and arrives by SMS link and email.
+- [ ] `ReportDocument` (EN layout first), storage, `filed` message with PDF link, Filed screen, email with PDF.
+- **Done when:** the PDF matches the report artboards and arrives by message link and email.
 
 #### M5 · Panel core (day 5–7) → **demo**
 - [ ] Overview (realtime), Reports archive, Report review (MediaPlayer, sources, activity, sign-off), Sites, Site detail.
-- **Demo script:** (1) Overview shows 5 sites awaiting. (2) Site manager taps the text link and talks for 2 minutes, adds 2 photos. (3) One question appears ("Delta — 4 or 5?") → tap. (4) Draft → Confirm & send. (5) PDF link arrives by SMS (or in the Demo phone while SMS registration is pending); the Overview row flips to Filed live. (6) Open the report, click "audio 0:41" to hear the rain stoppage. (7) Sign off.
+- **Demo script:** (1) Overview shows 5 sites awaiting. (2) Site manager taps the text link and talks for 2 minutes, adds 2 photos. (3) One question appears ("Delta — 4 or 5?") → tap. (4) Draft → Confirm & send. (5) PDF link arrives in the Demo phone (the demo org Kestrel has `is_demo = true`, so every message goes through `console`; a real SMS needs a non-demo org and the pack's sender id set with `pnpm countries:set`); the Overview row flips to Filed live. (6) Open the report, click "audio 0:41" to hear the rain stoppage. (7) Sign off.
 
-#### M6 · Questions, corrections, edits, reminders — SMS (week 2)
+#### M6 · Questions, corrections, edits, reminders — messages (week 2)
 - [ ] Question selection (§10.5), Question screen, `parse_answer`, "Other…" by voice or number.
 - [ ] Fix by voice on the draft; Past reports + edit after filing (`apply_correction`, versions, emails).
-- [ ] `scheduler-tick`: site-days, weather fetch, daily link, heads-up, R1/R2 SMS, missing alert; idempotent stages; DST tests.
+- [ ] `scheduler-tick`: site-days, weather fetch, daily link, heads-up, R1/R2 messages (`notify`), missing alert; idempotent stages; DST tests.
+- [ ] WhatsApp (Twilio) and web push transports, their consents and push subscriptions; the real pack channel orders (§19 Q19) and the fallback rule (§19 Q22); `remind(reporter, pack, stage)` with tests per pack capability.
 - [ ] No work / weather day (F12), multi-site switcher (F14), expired link + new phone (F16), preferences & opt-out (F15).
 - **Done when:** scripted e2e tests for F4–F5, F7–F8, F10–F12, F14–F16 pass on real phones (iOS + Android).
 
 #### M7 · Voice assistant v1 (week 2)
 - [ ] `apps/voice-agent` (Python, LiveKit Agents) deployed to LiveKit Cloud; free US number + dispatch rule; `field-api` `/voice/calls/start` and `/field/voice/token`.
-- [ ] Inbound calls **and Talk now**: caller ID or link → reporter, disclosure, opening, free listening, filler + `update_draft`, read-back, verbal confirm → `file_report`; `filed` + `photos_link` SMS.
+- [ ] Inbound calls **and Talk now**: caller ID or link → reporter, disclosure, opening, free listening, filler + `update_draft`, read-back, verbal confirm → `file_report`; `filed` + `photos_link` messages.
 - [ ] `voice-events` (LiveKit webhooks), `calls` table incl. `transport`, agent-side dual-channel recording → Storage, peaks.
-- [ ] Fallback recording mode; hang-up handling (`draft_saved` + `finish_report` SMS).
+- [ ] Fallback recording mode; hang-up handling (`draft_saved` + `finish_report` message).
 - **Done when:** 10 scripted calls (EN, ES; phone number and Talk now) file correct reports; latency ≤ 1.2 s p50 measured.
 
 #### M8 · Voice assistant v2 (week 3)
 - [ ] Questions with spoken choices, `record_answer`, corrections, special intents (no work, weather day, callback, preference, edit another day).
-- [ ] Outbound reminder calls through the Twilio SIP trunk (`CreateSIPParticipant`; consent, call window, voicemail detection, max attempts, staggering), `missed_call` SMS.
+- [ ] Outbound reminder calls through each pack's SIP trunk (Twilio for US; `CreateSIPParticipant`; consent, call window, voicemail detection, max attempts, staggering), `missed_call` message.
 - [ ] Post-call reconcile (§10.9) and `call_mismatch` review reason; panel call player with speaker lanes.
 - [ ] Unknown caller flow (F13).
 - **Done when:** call reporters in the pilot org get their report done by an outbound call ≥ 85% of the time without office help.
@@ -2036,11 +2105,11 @@ The pitch promises **a working demo within one week**. The web-recorder channel 
 - **Done when:** BrightLine shows +16 h with evidence; Riverside October EOT pack builds in < 2 min.
 
 #### M10 · Setup, team, settings, billing (week 4)
-- [ ] Setup wizard (country presets, preferred channel, welcome text preview), Team (preferences, statuses, unknown contacts, devices, office users), Settings incl. Field channels, Billing (Stripe US; TR per §19).
+- [ ] Setup wizard (preferred channel, welcome text preview; the country choice from the packs is built in W1-06a), Team (preferences and message channel, statuses, unknown contacts, devices, office users), Settings incl. Field channels (the pack read-only), Billing (Stripe US; TR per §19); the phone-country picker derived from libphonenumber's regions instead of the fixed `PHONE_COUNTRIES` list (§4.6).
 - **Done when:** a new contractor self-onboards a site and gets the first report via link **and** via call without SiteLog staff.
 
 #### M11 · Turkish market (week 4)
-- [ ] Panel TR strings, field app TR, SMS TR (one-way rules), voice TR (STT/TTS voices, prompts, number reading), PDF TR + A4 + metric, report language TR in extraction/writing, TR glossary seeds, KVKK notices.
+- [ ] TR pack go-live: `SITELOG` sender id set, legal texts (`legal_keys`). Panel TR strings, field app TR, SMS TR (one-way rules), voice TR (STT/TTS voices, prompts, number reading), PDF TR + A4 + metric, report language TR in extraction/writing, TR glossary seeds, KVKK notices.
 - [ ] İletimerkezi live with `SITELOG`; Azure `tr-TR` voice tuned (numbers, units, company names); TR calls via Talk now, plus a Turkish number on a TR SIP trunk if the pilot asks for it; TR billing provider.
 - **Done when:** the TR demo org completes link and call reports end-to-end in Turkish, PDF in Turkish.
 
@@ -2058,12 +2127,12 @@ The pitch promises **a working demo within one week**. The web-recorder channel 
 
 | Level | What | Tools |
 |---|---|---|
-| Unit | Hours math, report numbering, reminder decisions per preference/consent/window (incl. DST), link expiry, SMS segmenting, intent parsing, patch application | Vitest |
-| DB | RLS per role, RPCs, views | pgTAP / Vitest + local Supabase |
+| Unit | Hours math, report numbering, reminder decisions per preference/consent/window (incl. DST), channel order and deliverable channels per pack capability (two-way true/false, links true/false, voice number null), link expiry, SMS segmenting, intent parsing, patch application | Vitest |
+| DB | RLS per role, RPCs, views; every country pack row valid and with its copy, a synthetic pack proving "a new country is a new row" | pgTAP / Vitest + local Supabase |
 | Pipeline | Golden transcripts → expected `DailyReportData` (EN/ES/TR), corrections, answers, post-call reconcile | Vitest + fixtures |
 | Field app | Recording on iOS Safari + Android Chrome (mime, permissions, wake lock), offline queue, device check, consent | Playwright + real-device cloud |
 | Voice | Scripted call simulations (TTS reporter, noise added): happy path, questions, corrections, no work, weather day, callback, fallback, unknown caller; latency and barge-in metrics | Simulation harness + staging numbers |
-| SMS | Keyword handling (US), TR one-way copy, delivery receipts, opt-out | Integration tests with provider sandbox |
+| SMS | Keyword handling (two-way packs), one-way copy (packs without two-way SMS), delivery receipts, opt-out | Integration tests with provider sandbox |
 | E2E panel | Login, Overview realtime, report edit/sign-off, hours CSV, EOT pack, TR locale | Playwright |
 | Visual | Key screens vs canvas at 1440 and 390 widths | Playwright screenshots (review) |
 
@@ -2073,7 +2142,7 @@ The pitch promises **a working demo within one week**. The web-recorder channel 
 
 ### 18.1 US demo org — Kestrel Build Group
 
-Time zone America/Chicago · deadline 17:30 · default shift 8 h · locale en-US · imperial · USD · SiteLog number **+1 (555) 014-2290** (texts & calls).
+Time zone America/Chicago · deadline 17:30 · default shift 8 h · locale en-US · imperial · USD · SiteLog number **+1 (555) 014-2290** in the seeded story (texts & calls; the US pack's live voice number and SMS sender are set per environment, §4.6, §19 Q34).
 Office users: Lena Ortiz (admin, Operations) · Sam Kowalski (pm) · Accounts (accounts).
 
 | Site | Code | Primary reporter | Phone | Language | Prefers | Active since |
@@ -2095,7 +2164,7 @@ Backup: Jorge Medina (+1 555 014 3390, ES, Text link) for Riverside B and Pier 9
 
 ### 18.2 TR demo org — Demir Yapı A.Ş. (fictional)
 
-Time zone Europe/Istanbul · deadline 17:30 · locale tr-TR · metric · TRY · no Turkish number yet (calls via **Talk now**; `VOICE_NUMBER_TR` empty) · SMS sender **SITELOG**.
+Time zone Europe/Istanbul · deadline 17:30 · locale tr-TR · metric · TRY · A4 (all from the TR pack) · TR pack: no voice number (calls via **Talk now**) · SMS sender **SITELOG** once set in that environment.
 
 | Site | Code | Reporter | Language | Prefers |
 |---|---|---|---|---|
@@ -2114,9 +2183,9 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | # | Decision | Options | Recommendation |
 |---|---|---|---|
 | 1 | Voice agent runtime | Vapi · ElevenLabs Agents · Deepgram Voice Agent API · LiveKit Agents · Pipecat | **Decided (v1.2): LiveKit Agents (Python) on LiveKit Cloud Build**, Deepgram STT, Claude, Aura-2 / Azure TTS (§5.2). Re-check the TR voice quality in a listening test in week 2. |
-| 2 | Telephony provider(s) | One global provider · US provider + TR SIP trunk | **Decided (v1.2):** LiveKit free US number (inbound) + Twilio Elastic SIP Trunking (outbound, M8). **Open:** Turkish SIP provider and number (Verimor / Netgsm) — only when the TR pilot needs one; Talk now covers TR until then. |
-| 3 | SMS providers | One global · US provider + Turkish provider | **Decided (v1.2): Twilio (US, toll-free) + İletimerkezi (TR, `SITELOG`)**, `console` driver for demos. |
-| 4 | Number model | Shared SiteLog numbers per country · dedicated per customer | **Shared** for MVP; dedicated numbers as an add-on. |
+| 2 | Telephony provider(s) | One global provider · US provider + TR SIP trunk | **Decided (v1.2):** LiveKit free US number (inbound) + Twilio Elastic SIP Trunking (outbound, M8). **Open:** Turkish SIP provider and number (Verimor / Netgsm) — only when the TR pilot needs one; Talk now covers TR until then. Numbers and trunks are per country pack (`countries.voice_number`; trunks in `LIVEKIT_SIP_OUTBOUND_TRUNKS` until Q38). |
+| 3 | SMS providers | One global · US provider + Turkish provider | **Decided by the owner, 2026-10-14:** Twilio is the default provider for SMS and WhatsApp; each country pack may override it; two-way SMS and links in SMS come from the pack, not the driver. **As built, pending Q20 and Q29:** the TR pack keeps İletimerkezi for SMS (`SITELOG`, Q20); `console` for demo orgs and for packs with no sender id in that environment (§4.5, §4.6; Q29, and for WhatsApp Q39). (v1.2 before the amendment: Twilio for US, İletimerkezi for TR.) |
+| 4 | Number model | Shared SiteLog numbers per country · dedicated per customer | **Shared** per country pack for MVP (`countries.sms_sender_id`, `voice_number`); dedicated numbers later as an org override (an add-on). |
 | 5 | Field link security | Device code on first open (designed) · PIN every time · no check | **Device code on first open**, device cookie 180 days, revocable. |
 | 6 | Weather provider | Open-Meteo paid · other | Open-Meteo Standard; attribution. |
 | 7 | Trial & payment | Card upfront · 14-day trial | 14-day trial per org. |
@@ -2127,10 +2196,32 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 12 | Data retention & TR data location | 1/2/7 years · hosting region | 2 years audio; TR data location per counsel (§15.2). |
 | 13 | Sign-off weight | Audit-logged · qualified e-signature | Audit-logged in MVP. |
 | 14 | Lovable vs hand-coded | Lovable for panel/field UI · Claude Code for all | Either; keep schemas in `packages/shared`. |
-| 15 | SMS characters outside GSM-7 (§9.2) | Keep the §9.2 texts as written: "—" and "·" (EN, ES, TR) and "hâlâ" (TR) force UCS-2 (70 / 67 characters per segment), so before variables EN `help` is 3 segments instead of 1, EN `welcome` 4 instead of 2, `weather_headsup` 2 instead of 1, and TR `daily_link`, `weather_headsup` and `reminder_2` cannot use the Turkish shift table; ES accents (á í ó ú) force UCS-2 on most texts · Use GSM-7 punctuation in the SMS copy ("-" for "—" and "·") · Rely on provider substitution (Twilio Smart Encoding; İletimerkezi unknown) | **Open** (W1-02). `countSmsSegments` (`packages/shared/src/sms/segments.ts`) gives both counts per text; decide before the Twilio toll-free verification samples (§5.2). TR counts per key with the §18.2 demo values (Ataşehir Ofis Binası, `go.sitelog.app/r/K4T9QZ`, number `+90 850 123 4567`), as *with the Turkish single shift table / plain UCS-2*: `welcome` 2 / 4 with the number and 2 / 3 without (its length, not any one character); `daily_link` with the number, `weather_headsup` and `reminder_2` (both variants) 2 / 2 ("—" and "â" rule out the shift table); `call_coming`, `reminder_1`, `missed_call` with the number, `finish_report` and `site_paused` 1 / 2, and `edit_applied` 1 / 2 with a typical change note (its `{change}` is free text); every other key 1 / 1. `segments.test.ts` pins these counts. **Sub-question:** does İletimerkezi send with the Turkish single shift table (3GPP TS 23.038 national language shift)? If not, the 1 / 2 keys above cost two segments each and `welcome` three or four. |
+| 15 | SMS characters outside GSM-7 (§9.2) | Keep the §9.2 texts as written: "—" and "·" (EN, ES, TR) and "hâlâ" (TR) force UCS-2 (70 / 67 characters per segment), so before variables EN `help` is 3 segments instead of 1, EN `welcome` 4 instead of 2, `weather_headsup` 2 instead of 1, and TR `daily_link`, `weather_headsup` and `reminder_2` cannot use the Turkish shift table; ES accents (á í ó ú) force UCS-2 on most texts · Use GSM-7 punctuation in the SMS copy ("-" for "—" and "·") · Rely on provider substitution (Twilio Smart Encoding; İletimerkezi unknown) | **Open** (W1-02). `countSmsSegments` (`packages/shared/src/sms/segments.ts`) gives both counts per text; decide before the Twilio toll-free verification samples (§5.2). TR counts per key with the §18.2 demo values (Ataşehir Ofis Binası, `go.sitelog.app/r/K4T9QZ`, number `+90 850 123 4567`), as *with the Turkish single shift table / plain UCS-2*: `welcome` 2 / 4 with the number and 2 / 3 without (its length, not any one character); `daily_link` with the number, `weather_headsup` and `reminder_2` (both variants) 2 / 2 ("—" and "â" rule out the shift table); `call_coming`, `reminder_1`, `missed_call` with the number, `finish_report` and `site_paused` 1 / 2, and `edit_applied` 1 / 2 with a typical change note (its `{change}` is free text); every other key 1 / 1. `segments.test.ts` pins these counts. **Sub-question:** does İletimerkezi send with the Turkish single shift table (3GPP TS 23.038 national language shift)? If not, the 1 / 2 keys above cost two segments each and `welcome` three or four. The sub-question applies while the TR pack overrides SMS to İletimerkezi (Q20). |
 | 16 | Stored v1 report data with no exact §10.3 form (GAP D20: readers see v1 through `upgradeV1toV2()`, `packages/shared/src/report/upgrade.ts`) | As built: a v1 `text` source (a typed WhatsApp message) is left out of the v2 view; a v1 `reply` becomes `{type:'answer', questionId}` with the reply message's UUID, since v1 never stored the question id (it is that question's `answered_message_id`); a v1 new term gets `heardLanguage` 'und' (BCP 47 "undetermined") · Add a `text` kind to `Source` (§6.2 `source_kind` already has `text`, with `report_sources.message_id`) · Resolve `questionId` from `questions.answered_message_id` when a version is read · Guess a term's language from the transcript | **Open** (W1-02). Stored versions are never rewritten, so any answer changes only the v2 view, with no data migration. Until then the panel shows no source link for a value whose only source was a typed message (the PDF never printed one). |
 | 17 | Deleting a row that reports, invoices or other rows point to (17 foreign keys to orgs, sites, site-days, companies, reporters, users, messages and reports, where §6.3 has no `ON DELETE`, so Postgres refuses the delete) | Keep the repo's actions as built: deleting an org, site or site-day hard-deletes its reports (with every version and source), evidence packs, weather rows, messages and site-scoped glossary terms, and an org its unknown contacts; deleting a company deletes its sub invoices, a message its report-source rows, a reporter its reporter-scoped glossary terms; deleting a company, reporter, user or report leaves the other rows with a null link, and deleting a message leaves an unknown contact with a null `message_id` · Spec as written: no action on all 17 keys, so deleting any row that others point to fails while they exist (an org or site is archived instead) · Mixed: no action only on the keys that carry reports, versions and invoices, and keep the null links | **Open** (W1-05). Kept as built until answered: the D11 end-state allowlist lists the 17 keys as `repo-on-delete` (`supabase/db-tests/src/schema-allowlist.ts`). The panel deletes none of these rows today; the load test (`apps/worker/src/integration/loadtest.ts`) and `test:stack` (`supabase/db-tests/stack`) delete the orgs they create. Either other option takes one forward migration that changes the keys, and those cleanups then delete in order. |
 | 18 | Who signs in to the TR demo org Demir Yapı A.Ş. (§18.2 as delivered named no office user; §18.1 has Lena Ortiz, Sam Kowalski and Accounts for Kestrel) | A separate fictional TR admin, e.g. a `@demiryapi.example` user whose panel language is TR · Make Lena a member of both demo orgs and use the org switcher · Both | **Decided (owner, 2026-10-14): a separate fictional TR admin**, Elif Aydın (`elif@demiryapi.example`), `admin`, title Operasyon, a member of Demir Yapı A.Ş. only (§18.2). Her own panel language is unset (`ui_locale` null), so the org's tr-TR opens the panel in Turkish (the panel reads `orgs.locale` with the memberships); Lena stays in Kestrel only, so the Kestrel e2e (Lena signs in and sees "Kestrel Build Group") is unaffected. W1-06 seeds her with the same user and membership code as Kestrel's office users (`packages/shared/src/demo/demir.ts`: `seed.sql`, the apply mode), and every seeded membership, hers and Kestrel's three, has its `member.added` audit row; `apps/web/e2e/supabase/demir.spec.ts` signs in as her (GAP D46). |
+| 19 | Message channel order of each pack from week 2 (`countries.message_channels`) | Both `{sms}` · US `{sms, whatsapp}` (SMS first), TR `{whatsapp, sms}` (WhatsApp first) · WhatsApp first everywhere | **Open (owner, blocks M6).** Week 1 seeds `{sms}` for both packs (WhatsApp and push are not built). Recommendation from M6: the second option, set by a data migration: TR SMS is one-way, so WhatsApp gives TR users replies, and US site staff expect SMS. Push joins either order only per Q27. |
+| 20 | TR SMS provider under the Twilio default | Keep the TR pack's İletimerkezi override (BTK-approved `SITELOG` title, Turkish shift table #15) · Move TR SMS to a Twilio alphanumeric sender. TR WhatsApp stays on the Twilio default either way | Keep İletimerkezi (as seeded, `countries.sms_provider = 'iletimerkezi'`); revisit at M11 with Twilio's TR registration rules and prices. Not blocking. |
+| 21 | Shape and owner of the person's channel preference | One preferred channel, `reporters.message_channel`, null = the pack's order · A full ordered list per person · New `contact_pref` labels | The first, **as built** (W1-06a): the pack is the allow-list (a preference the pack does not list is ignored), and `contact_pref` stays the report mode (link or call). The reporter sets it in the field app's Settings (week 2, `PATCH /field/preferences`) and the office at invite and on Team (M10), audited; no client writes the column today. |
+| 22 | Fallback between message channels | Next channel only on a send error · Also on a `failed` or `undeliverable` status callback · Also when WhatsApp is not read within N minutes | **Open (owner, blocks M6).** Recommendation: the second. Never two channels for one message unless one has failed; one dedupe key per logical message, with attempts logged per channel. Week 1 has one channel, so nothing falls back. |
+| 23 | Which pack applies to a reporter with a foreign number (e.g. a +52 number in a US org) | The org's pack · The phone number's country pack | The org's pack (the sender and the number belong to the org); warn at invite when the number's country differs (F2, M10). Not blocking. |
+| 24 | A pack that forbids links in SMS (`sms_links_allowed = false`) | Skip SMS for the 12 keys with a link and use the next channel; if none is left, send nothing, audit it and alert the office (F17) · Link-free SMS variants · Forbid such a pack | The first, **as built** (W1-06a): the Notifier drops SMS for a key with a link on such a pack, rendering a link key by SMS throws, and the table requires such a pack to list WhatsApp or push. No launch pack forbids links. The office alert lands with the Notifier (W1-08). **First contact on such a pack (decide with Q25):** `welcome` carries the personal link and `help` a link. Under Q25's first option the welcome goes only by SMS and WhatsApp needs an opt-in on Field-02, which the person reaches only through that link; push needs the installed app, reached the same way. So on such a pack the welcome reaches no one (`deliverableChannels` returns no channel, and `smsReplyAllowed` refuses `help`), and nobody can be onboarded, whatever WhatsApp or push the pack lists. Options for that case: a link-free `welcome` variant · a WhatsApp template welcome before any opt-in (Q25's second option) · forbid such packs until one of those exists. Recommendation: forbid them until one exists (no launch pack needs it); the table's check is tightened by a forward migration if you agree. |
+| 25 | First contact, WhatsApp consent and the device code | `welcome` and `verify_code` always by SMS; WhatsApp only after an explicit opt-in on Field-02 (`consent_type 'whatsapp'`, method `web_checkbox`) · `welcome` by a WhatsApp template when the pack orders WhatsApp first | **Open (owner, blocks M6).** Recommendation: the first. With the first, a pack with `sms_links_allowed = false` has no channel for `welcome` (see Q24). **As built, for you to confirm:** the device code goes by SMS whatever the channel order (it proves the number and needs no prior opt-in); `welcome` and `verify_code` skip the SMS consent check while the person has never answered a consent prompt (F3 sends the welcome before the consent screen of F4); once any consent is given or revoked, a missing SMS consent blocks every SMS; the opt-out always applies. The two-way replies (`help`, `stop_confirm`, `unknown_number`) answer an inbound text through `sms-webhook`, outside the channel order and the consent check, on two-way packs only (`channels.ts` `PRE_CONSENT_SMS_KEYS`, `SMS_ONLY_KEYS`, `smsReplyAllowed`). No `consent_type` label for WhatsApp is added before your answer (labels cannot be dropped). |
+| 26 | Inbound WhatsApp | Outbound only · Keywords, OK/EDIT and answers over WhatsApp (adds a permanent `field_channel 'whatsapp'`) · Also voice notes over WhatsApp | **Open (owner, before week 2).** Recommendation: keywords and answers, no voice notes (the recorder link stays the way to report, so no OGG conversion returns). No enum label before the answer. |
+| 27 | Web push | Keys by push: all · `question_ready`, `draft_ready`, `filed` and the reminders. Consent: a `consent_type 'push'` row · the browser permission only. Storage: a new table · `field_devices` columns. Logging: in `messages` (no phone) · elsewhere | **Open (owner, before week 2).** Recommendation: those four kinds of keys, never `welcome` or `verify_code`; a consent row for a uniform audit; a `push_subscriptions` table written by `field-api`; `messages` rows with `channel 'push'` and no phone (step 23 then keeps `phone_e164` nullable for push). |
+| 28 | Legal text keys of a pack (`countries.legal_keys`) | A jsonb map of versioned ids (slots `privacy_notice`, `recording_notice`, `consent`; later an SMS-terms footer) · Separate columns · URLs | **Open (owner, before go-live; not blocking week 1).** As built: the jsonb map with those three slots, `{}` in both launch packs. Recommendation: ids `<CC>.<doc>.v<n>` (e.g. `US.consent.v1`), filled by a data migration once counsel approves each text, and stored in `consents.text_version`; until then the field app's own wording version is stored (Appendix B `textVersion`). |
+| 29 | Values that differ per environment (SMS sender id, voice number; the WhatsApp sender: Q39; the outbound trunk: Q38) | Seeded null, set per database with the service-only, audited `set_country_endpoints()` (`pnpm countries:set`), owner-approved on hosted databases · Env keyed by pack code · Production values in migrations | The first, **as built** (W1-06a). A null sender id is `console`, a null voice number is Talk now only; no migration writes those two columns except to clear a sender when it changes the pack's sender type. |
+| 30 | Country-specific values outside the pack | Billing provider, price and Stripe price id · call window and quiet hours (the Notifier promises quiet hours, but no column holds them) · working days (Saturday in TR?) · default deadline · opt-out keywords per language · payroll CSV delimiter | **Open (owner: billing before M10).** Recommendation: only the default time zone is in the pack now (F2 presets it). Billing joins with #8 and #9 (M10). Quiet hours reuse `call_window_*` until M6. The rest stay org settings. |
+| 31 | Org values after creation | Country fixed (service role only); locale and units admin-editable within the supported lists; paper editable in Settings · Country editable through an RPC that re-presets | The first, **as built**: country and currency decide provider and billing, so no office user can change them (the `orgs` column grant; `update_org` takes neither) and the wizard shows the country locked once the org exists. |
+| 32 | Wizard default country | US preselected · The pack matching the browser's region · None (a required choice) | US preselected now, **as built** (today's behaviour and `create_org`'s default); a browser-region preselect with self-serve onboarding (M10). |
+| 33 | `contact_pref 'call'` in a pack without a voice number (§18.2's Emre Yıldız) | Allowed: Talk now is the main button and there are no automatic calls · Not offered | Allowed; no `auto_call` consent is asked while the pack has no outbound trunk. |
+| 34 | The US voice number versus §18.1 | Keep +1 (555) 014-2290 as seeded story data, with the US pack's `voice_number` null until the LiveKit number is bought · Re-render Kestrel without a number | Keep it as story data, **as built** (the Kestrel texts offer the number; the US pack's live values are null in week 1). The pack keeps the SMS sender and the voice number separate (§18.1 shows one number for texts and calls). |
+| 35 | Demo phone replies on a one-way pack | Hide the reply box when the reporter's pack has no two-way SMS · Keep it | Hide it (W1-08), so a demo never shows what a real TR sender cannot do. |
+| 36 | Spec version for the country-pack change | A dated 1.2 amendment · 1.3 | The amendment, **as written** (header and changelog): no renaming across CLAUDE.md, the plan and the gap analysis. |
+| 37 | Region-coupled reporter locales (`es-US`; `en-US` in the TR pack) | Keep the tags · Store the language only and take the region from the pack | Keep the tags until a pack needs Spanish outside the US. |
+| 38 | Outbound SIP trunk per country | Env `LIVEKIT_SIP_OUTBOUND_TRUNKS=CC:trunk_id` · A pack column set per environment like the voice number | The env list until M8 designs outbound calls, then decide. A pack without a trunk places no outbound calls. |
+| 39 | Where the WhatsApp sender and its approved template ids (per language and environment) live | A pack column (e.g. `whatsapp_sender_id`, with the template ids per language beside it) set per database with `set_country_endpoints()`, null = `console` · One global env sender and template ids in env or code | **Open (owner, blocks M6).** Recommendation: the pack column, so the Q29 rule holds for WhatsApp too (null = `console`; set per database by the service-only, audited function, owner-approved on hosted databases) and a pack can have its own WhatsApp number. Until you answer, nothing holds a WhatsApp sender, no WhatsApp transport is built, and no env var is added for one (§5.1). |
+| 40 | Per-channel opt-out: where it is stored and what it means (§4.5 and `deliverableChannels` take an opt-out per channel; §6.3 has only the reporter-wide `reporters.status 'opted_out'` and `opted_out_at`, which F15 sets on SMS STOP) | `status 'opted_out'` stays SMS-only (STOP; the Team label "Opted out of texts"), and a WhatsApp or push opt-out is a revoked consent of that channel's type · A per-channel opt-out column or table · STOP on any channel stops every message channel (`status 'opted_out'` then means no messages at all) | **Open (owner, blocks M6).** Recommendation: the first, one model with the consents already audited: `reporters.status 'opted_out'` keeps meaning "opted out of texts" and blocks SMS only, and the WhatsApp and push opt-outs come with their consent types (Q25, Q27). Whether an SMS STOP must also stop WhatsApp and push is checked with counsel before M6 (§15.2); if it must, the third. Week 1 has SMS only, so today `opted_out` stops every message. |
 
 ---
 
@@ -2153,7 +2244,7 @@ sitelog/
 │     ├─ recording.py      # dual-channel writer → Supabase Storage
 │     └─ pyproject.toml  livekit.toml  Dockerfile
 ├─ supabase/
-│  ├─ migrations/  seed.sql
+│  ├─ migrations/  seed.sql   # incl. *_country_packs.sql (the countries rows, §4.6)
 │  └─ functions/
 │     ├─ field-api/        # field app + voice tool routes
 │     ├─ sms-webhook/
@@ -2161,9 +2252,9 @@ sitelog/
 │     ├─ scheduler-tick/
 │     ├─ api-invite-reporter/  api-link-unknown-contact/  api-export-payroll/
 │     ├─ api-evidence-pack/    api-billing/               billing-webhook/
-├─ packages/shared/        # zod schemas, enums, copy keys, channel interfaces, formatting
+├─ packages/shared/        # zod schemas, enums, copy keys, channel interfaces, country-pack schema (countries.ts), formatting
 ├─ fixtures/               # voice/, calls/, transcripts/, expected/, sms/
-├─ scripts/                # seed-demo.ts, simulate-call.ts, replay-webhook.ts
+├─ scripts/                # seed-demo.ts, simulate-call.ts, replay-webhook.ts, countries-set.ts
 └─ docs/  SITELOG_SPEC.md  RUNBOOK.md
 ```
 
@@ -2173,9 +2264,9 @@ sitelog/
 
 | Route | Purpose |
 |---|---|
-| `POST /field/resolve` `{code}` | Reporter first name, sites, locale, `needsDeviceCheck`, `needsConsent` |
+| `POST /field/resolve` `{code}` | Reporter first name, sites, locale, `needsDeviceCheck`, `needsConsent`, and the pack subset (voice number, field locales, two-way SMS, channel order, legal keys) |
 | `POST /field/device/send-code` · `POST /field/device/verify` `{code}` | Device verification |
-| `POST /field/consent` `{types[], textVersion, contactPref, locale}` | Store consents + preference |
+| `POST /field/consent` `{types[], textVersion, contactPref, locale}` | Store consents + preference; `textVersion` must match the pack's consent key when set (§19 Q28) |
 | `GET /field/today?site=` | Site-day status, deadline, current report state |
 | `POST /field/uploads` `{kind, mime, bytes}` → `{uploadId, signedUrl}` · `POST /field/uploads/:id/complete` | Upload voice notes / photos |
 | `GET /field/reports/:id` | Question / draft / filed view model |
@@ -2184,12 +2275,12 @@ sitelog/
 | `POST /field/reports/:id/confirm` | File |
 | `POST /field/day-status` `{siteId, status: no_work or weather_day, details}` | No work / weather day |
 | `GET /field/history` | Last 14 days |
-| `PATCH /field/preferences` `{contactPref, locale, noCallsToday}` | Preferences |
+| `PATCH /field/preferences` `{contactPref, locale, noCallsToday, messageChannel}` | Preferences (`messageChannel` from week 2, §19 Q21) |
 | `POST /field/voice/token` `{siteId}` → `{livekitUrl, token, room, callId}` | Start **Talk now**: creates the `calls` row (`transport = web`), the room and the agent dispatch |
 
 **`field-api` voice routes** — auth: `VOICE_AGENT_TOOL_SECRET` (+ per-call token for tools): `POST /voice/calls/start {room, from?, callId?}` → `{callToken, reporter?, locale}` (SIP calls resolve the caller here; web calls pass `callId`) · `POST /voice/tools/{get_context, update_draft, record_answer, apply_correction, file_report, set_day_status, schedule_callback, set_preference, load_report, start_fallback_recording, end_call}`.
 
-**Office RPCs & functions:** `sign_off_report`, `create_report_version`, `next_report_no`, `mark_no_work`, `resolve_unknown_company`, `api-invite-reporter` (name, mobile, role, sites, locale, contactPref → welcome SMS), `api-link-unknown-contact`, `api-export-payroll`, `api-evidence-pack`, `api-billing`, `billing-webhook`, `sms-webhook`, `voice-events`, `scheduler-tick`, plus panel actions *Text today's link* and *Call now* (attested).
+**Office RPCs & functions:** `sign_off_report`, `create_report_version`, `next_report_no`, `mark_no_work`, `resolve_unknown_company`, `api-invite-reporter` (name, mobile, role, sites, locale, contactPref → welcome message; the phone parsed with the org's pack, locale and languages defaulting from it), `api-link-unknown-contact`, `api-export-payroll`, `api-evidence-pack`, `api-billing`, `billing-webhook`, `sms-webhook`, `voice-events`, `scheduler-tick`, `set_country_endpoints()` (service role only, `pnpm countries:set`), plus panel actions *Text today's link* and *Call now* (attested).
 
 ### Appendix C · Kickoff prompts
 
@@ -2220,8 +2311,8 @@ Use the seed data in §18. No gradients, no emoji, no left-border accent cards.
 - Typecheck, lint and tests pass; new logic has unit tests.
 - RLS / field-api scoping considered; no service key in any browser bundle.
 - UI matches tokens; works at 390 px and 1440 px; keyboard and screen-reader basics.
-- Copy from copy files in every supported language (EN/TR panel; EN/ES/TR field, SMS, voice).
-- Audit log for state changes; consent checks for any SMS or call; errors to Sentry.
+- Copy from copy files in every supported language (EN/TR panel; EN/ES/TR field, messages, voice).
+- Audit log for state changes; consent checks for any message (SMS, WhatsApp, push) or call (exceptions pending §19 Q25: `welcome` and `verify_code` before any consent answer; two-way replies sent by `sms-webhook`); errors to Sentry.
 - Spec updated if behaviour changed.
 
 ### Appendix E · Terms

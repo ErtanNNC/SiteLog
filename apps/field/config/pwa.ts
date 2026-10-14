@@ -13,8 +13,10 @@
  *   (Archivo and IBM Plex Mono, latin and latin-ext, bundled by `src/fonts.css`), so the installed
  *   shell paints with its own fonts and no third-party request. No runtime caching, so `/api`
  *   (field-api) always goes to the network, and the navigation fallback to `index.html` never
- *   answers `/api`. No web push (§9.3: SMS carries every prompt). Registered by the plain `registerSW.js` script. The first install takes control of the
- *   open page (`clientsClaim`). A new version does not take over an open page: no `skipWaiting`, so it
+ *   answers `/api`. No web push in week 1: push arrives as a message channel with M6 (spec §4.5,
+ *   §9.3), never a person's only channel; it will need `injectManifest` for its push handlers.
+ *   Registered by the plain `registerSW.js` script. The first install takes control of the open
+ *   page (`clientsClaim`). A new version does not take over an open page: no `skipWaiting`, so it
  *   waits until every window of the app is closed. On activation Workbox deletes the precached files
  *   the new build no longer lists, and the host answers an old build's missing hashed files with
  *   `index.html` (the app fallback), so a page left on the old build would fail to load its next lazy

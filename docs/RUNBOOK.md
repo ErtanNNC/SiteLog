@@ -4,18 +4,19 @@ Operational guide for staging and production. The product spec is `SITELOG_SPEC.
 
 ## 1. Environments
 
-| Piece                                   | Where                                                  | Notes                                                                  |
-| --------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------- |
-| Postgres, Auth, Storage, Edge Functions | Supabase (staging, preview and prod projects)          | migrations in `supabase/migrations`, functions in `supabase/functions` |
-| Worker                                  | Fly.io / Render / Railway container                    | `apps/worker/Dockerfile`; needs ffmpeg (in the image)                  |
-| Web panel                               | Vercel / Netlify static                                | `apps/web`, `VITE_*` env vars                                          |
-| Field app                               | Netlify static, its own site (GAP D42)                 | `apps/field`; `/api/*` → `field-api` by a build-generated `_redirects` |
-| WhatsApp                                | Meta Cloud API                                         | one shared SiteLog number (§19 #1)                                     |
-| AI                                      | OpenAI (transcription), Anthropic (extraction)         | model names are env vars                                               |
-| Weather                                 | Open-Meteo Standard (commercial)                       | `WEATHER_API_BASE`, `WEATHER_API_KEY`                                  |
-| Email                                   | Resend                                                 | `RESEND_API_KEY`, `EMAIL_FROM`                                         |
-| Billing                                 | Stripe                                                 | per-site subscription quantity                                         |
-| Monitoring                              | Sentry (web + worker), Supabase logs, worker `/health` |                                                                        |
+| Piece                                   | Where                                                          | Notes                                                                                             |
+| --------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Postgres, Auth, Storage, Edge Functions | Supabase (staging, preview and prod projects)                  | migrations in `supabase/migrations`, functions in `supabase/functions`                            |
+| Worker                                  | Fly.io / Render / Railway container                            | `apps/worker/Dockerfile`; needs ffmpeg (in the image)                                             |
+| Web panel                               | Vercel / Netlify static                                        | `apps/web`, `VITE_*` env vars                                                                     |
+| Field app                               | Netlify static, its own site (GAP D42)                         | `apps/field`; `/api/*` → `field-api` by a build-generated `_redirects`                            |
+| WhatsApp (v1.0)                         | Meta Cloud API                                                 | one shared SiteLog number (§19 #1); retired at GAP step 22                                        |
+| Messages (v1.2)                         | Twilio (SMS; WhatsApp from week 2), İletimerkezi (TR pack SMS) | provider, sender, two-way SMS and links per country pack (`countries`, below); credentials in env |
+| AI                                      | OpenAI (transcription), Anthropic (extraction)                 | model names are env vars                                                                          |
+| Weather                                 | Open-Meteo Standard (commercial)                               | `WEATHER_API_BASE`, `WEATHER_API_KEY`                                                             |
+| Email                                   | Resend                                                         | `RESEND_API_KEY`, `EMAIL_FROM`                                                                    |
+| Billing                                 | Stripe                                                         | per-site subscription quantity                                                                    |
+| Monitoring                              | Sentry (web + worker), Supabase logs, worker `/health`         |                                                                                                   |
 
 ## 2. First deployment
 
@@ -77,7 +78,7 @@ The field web recorder is its own Netlify site: its routes (`/settings` among th
 - **Check a preview's `/api`** (needs D41): `curl -i https://pr-<n>--sitelog-field-staging-<owner>.netlify.app/api/resolve` answers from Supabase (a JSON 404 until `field-api` is deployed to the preview project, W1-07); an HTML page means the build had no `/api` rule (see the run summary of the Build step).
 - **Owner check on a phone** (W1-04 Done when). Open the preview's `/today` link from the run summary on iOS Safari and on Android Chrome: it loads over HTTPS in the phone's language (EN, ES or TR, else English). Add it to the home screen (iOS: Share → Add to Home Screen; Android: menu → Add to Home screen or Install app), then open it from the icon: it starts full screen on Today with the SiteLog icon. Record the result in PR #1. Without the token (no preview), use a tunnel to `pnpm --filter @sitelog/field preview` (port 4174, with the tunnel's URL in `FIELD_APP_URL`): a plain-http LAN address is not a secure context.
 - **Demo phone.** On `*.netlify.app` the panel's Demo phone cannot frame the field app with its cookie (two registrable domains), so open its links in a new tab until both apps have custom domains under one domain (GAP D42, §8 Q7).
-- **Cut-over (W1-19).** The W1-05 step 11 migration (`20261014000003_renames_billing.sql`) renames `unknown_senders` → `unknown_contacts` and the labels `verified` → `active`, `reporter_reply` → `reporter`, which the deployed pre-v1.2 panel and functions read: push it only in the same Deploy run as this branch's functions and panel (db push → functions → web and field), never alone. Its billing columns need no ordering (the `orgs_billing_ids` trigger keeps `stripe_*` and `billing_*` equal for either generation of writer). The staging field site gets `--prod` from the live branch with `/api` to the staging project. Then set `FIELD_APP_URL` (and `LINK_SHORT_DOMAIN` until `sl.link` exists) on the staging project to the field site's URL, with the owner's approval.
+- **Cut-over (W1-19).** The W1-05 step 11 migration (`20261014000003_renames_billing.sql`) renames `unknown_senders` → `unknown_contacts` and the labels `verified` → `active`, `reporter_reply` → `reporter`, which the deployed pre-v1.2 panel and functions read: push it only in the same Deploy run as this branch's functions and panel (db push → functions → web and field), never alone. Its billing columns need no ordering (the `orgs_billing_ids` trigger keeps `stripe_*` and `billing_*` equal for either generation of writer). The staging field site gets `--prod` from the live branch with `/api` to the staging project. Then set `FIELD_APP_URL` (and `LINK_SHORT_DOMAIN` until `sl.link` exists) on the staging project to the field site's URL, with the owner's approval. The country-pack migration (`20261014000004_country_packs.sql`) stops the push with "orgs outside the country packs" if an org has a country with no pack; on staging this is only a backstop, since staging's v1.0 schema has no `orgs.country` and `20261013000007` gives every existing org 'US' in the same push. After the push, `select code, sms_provider, sms_sender_id, voice_number from countries;` must show every `sms_sender_id` and `voice_number` null (every message goes to `console` until a sender is set, below). That the old panel's `create_org` call still creates a US org is proven in CI (`supabase/db-tests/src/countries.test.ts`, `apps/web/e2e/supabase/fresh-org.spec.ts`), not checked after the push: the same Deploy dispatch replaces that panel.
 
 #### The `preview` project (GAP D41, owner setup)
 
@@ -100,6 +101,22 @@ Actions → Deploy → Run workflow → branch `spec-v1.2`, environment `staging
 - counts from `supabase/ops/inventory.sql`, run with `psql` through the session pooler that `supabase link` records (link runs without the database password, through the Management API only), in a `READ ONLY` transaction that is rolled back: orgs (the demo orgs, by `is_demo` where the column exists and otherwise the seeded Kestrel org by its fixed id, a row says which; and the rest; every count below splits the same way), conversations, messages (by type, with or without a conversation), transcripts, unknown contacts (`unknown_contacts`, or `unknown_senders` on a database from before W1-05 step 11), report sources by kind, reports by status, report versions by data schema version, reporters by status, jobs by type and status (and queued `render_pdf` jobs that would notify a reporter), notifications by kind, storage objects per bucket, whether the `sitelog-scheduler-tick` pg_cron job exists and is active, and whether its two Vault secrets exist. Counts and labels only, never row contents. `supabase/db-tests/src/inventory.test.ts` runs the same SQL on PGlite.
 
 It never runs `db push`, `functions deploy` or `secrets set`. Copy the summary into PR #1. At the W1-19 re-run, "Reporters by status" must show no `verified` reporter outside the demo orgs (D19: step 11 renames the label to `active` as it is); otherwise stop and set those reporters to `invited` first. The backup (a `pg_dump` and a copy of the `audio`/`photos` buckets) is taken at the cut-over, right before the first `db push` to staging (W1-19), to a place the owner chooses: it holds personal data, and a dump taken now would be stale by then.
+
+### Country packs per environment (GAP D47, W1-06a)
+
+Everything country-specific is a row of `countries` (spec §4.6): languages, units, paper, currency, default time zone, message channel order, SMS and WhatsApp provider, SMS sender type, two-way SMS, links in SMS, legal keys. Two kinds of value:
+
+- **Policy values change only by migration** (a new forward migration, with `packages/shared/src/demo/countries.ts` changed in the same commit; `pnpm test:db` fails until the fixture equals the rows). A new country is a new `insert into countries`.
+- **Per-environment values** (`sms_sender_id`, `voice_number`) are null in every migration and set per database with `pnpm countries:set`, which calls the service-only `set_country_endpoints()`, prints the target (never the password) and the pack before and after, and writes one `country.endpoints_set` audit row. No migration writes these two columns, with one exception: a migration that changes a pack's `sms_sender_type` sets its `sms_sender_id` to null in the same update. The table's check rejects a sender id that does not fit its type, so a type change that keeps a set sender fails at push time on that database; set the new sender afterwards with `pnpm countries:set`.
+
+```sh
+SUPABASE_DB_URL='<the database>' pnpm countries:set -- --code TR --sms-sender SITELOG           # after the BTK title is approved
+SUPABASE_DB_URL='<the database>' pnpm countries:set -- --code US --sms-sender +1888…           # the verified toll-free number
+SUPABASE_DB_URL='<the database>' pnpm countries:set -- --code US --voice +1…                   # the LiveKit number, once bought
+SUPABASE_DB_URL='<the database>' pnpm countries:set -- --code TR --clear-sms-sender            # back to console
+```
+
+A local stack needs no more flags; a hosted database needs the owner's approval and `--yes`, and the staging project also `--allow-staging`. **Never set a sender before its registration is approved** (US toll-free verification, the TR BTK title): from that moment every message of every non-demo org on that pack goes out from it. A pack with no sender keeps real customers on `console` (their texts reach only `messages` and the Demo phone). Demo orgs (`is_demo`) stay on `console` whatever the pack holds, so seeding or re-seeding them never texts anyone.
 
 ### Before the worker runs (typed reports)
 
