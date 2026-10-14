@@ -585,6 +585,41 @@ function draftFor(date: string, audioId: string, photoId: string): DailyReportDa
 }
 
 describe('PostgresDb on PGlite: site days, reports, versions', () => {
+  it('writes each report in its org’s report language (§9.6), or the one given', async () => {
+    const day = async (date: string) =>
+      (
+        await q<{ id: string }>(
+          `insert into site_days (site_id, date, deadline_at) values ($1, $2, now()) returning id`,
+          [RIVERSIDE, date],
+        )
+      )[0]!.id;
+    const input = (siteDayId: string, no: string) => ({
+      org_id: ORG,
+      site_id: RIVERSIDE,
+      site_day_id: siteDayId,
+      report_no: no,
+      reporter_id: MARCO,
+      received_at: new Date('2026-07-01T21:00:00Z'),
+      kind: 'daily' as const,
+    });
+    await q(`update orgs set locale = 'tr-TR' where id = $1`, [ORG]);
+    try {
+      const tr = await db.insertReport(input(await day('2026-07-01'), 'LANG-0001'));
+      expect(tr.language).toBe('tr');
+    } finally {
+      await q(`update orgs set locale = 'en-US' where id = $1`, [ORG]);
+    }
+    const given = await db.insertReport({
+      ...input(await day('2026-07-02'), 'LANG-0002'),
+      language: 'tr',
+    });
+    expect(given.language).toBe('tr');
+    await q(`delete from reports where report_no like 'LANG-%'`);
+    await q(`delete from site_days where site_id = $1 and date in ('2026-07-01', '2026-07-02')`, [
+      RIVERSIDE,
+    ]);
+  });
+
   let siteDayId = '';
   let reportId = '';
   let audioId = '';
@@ -656,6 +691,9 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
       received_at: '2026-10-12T21:00:00.000Z',
       review_reasons: [],
       needs_review: false,
+      // §6.3: the org's report language; a WhatsApp report has no channel (D13).
+      language: 'en',
+      channel: null,
     });
     await expect(
       db.insertReport({
@@ -1274,11 +1312,11 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
     const expired = await db.listExpiredMedia(before, 500);
     expect(expired.length).toBeGreaterThan(1);
     for (const m of expired) {
-      expect(['audio', 'image', 'document']).toContain(m.type);
+      expect(['audio', 'photos']).toContain(m.bucket);
       expect(m.storage_path).toBeTruthy();
       expect(m.created_at < '2026-10-12T21:00:10.000Z').toBe(true);
     }
-    const ids = expired.map((m) => m.message_id);
+    const ids = expired.map((m) => m.id);
     expect(ids).toContain(inDoc);
     expect(ids).not.toContain(outDoc);
     const times = expired.map((m) => m.created_at);
@@ -1286,22 +1324,118 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
     expect(await db.listExpiredMedia(before, 1)).toHaveLength(1);
 
     const audio = expired.find((m) => m.created_at === '2026-10-12T21:00:00.000Z')!;
-    expect(audio.type).toBe('audio');
-    expect(await db.getTranscript(audio.message_id)).not.toBeNull();
-    await db.purgeMessageMedia(audio.message_id, new Date('2026-11-12T03:00:00Z'));
-    const purged = (await db.getMessage(audio.message_id))!;
+    expect(audio.bucket).toBe('audio');
+    expect(await db.getTranscript(audio.id)).not.toBeNull();
+    await db.purgeMedia(audio.id, new Date('2026-11-12T03:00:00Z'));
+    const purged = (await db.getMessage(audio.id))!;
     expect(purged.storage_path).toBeNull();
     expect(purged.payload).toEqual({ voice: true, purged_at: '2026-11-12T03:00:00.000Z' });
-    expect(await db.getTranscript(audio.message_id)).toBeNull();
-    expect((await db.listExpiredMedia(before, 500)).map((m) => m.message_id)).not.toContain(
-      audio.message_id,
-    );
+    expect(await db.getTranscript(audio.id)).toBeNull();
+    expect((await db.listExpiredMedia(before, 500)).map((m) => m.id)).not.toContain(audio.id);
     // A message without payload gets one.
-    const other = expired.find((m) => m.message_id !== audio.message_id)!;
-    await q(`update messages set payload = null where id = $1`, [other.message_id]);
-    await db.purgeMessageMedia(other.message_id, new Date('2026-11-12T03:00:00Z'));
-    expect((await db.getMessage(other.message_id))!.payload).toEqual({
+    const other = expired.find((m) => m.id !== audio.id)!;
+    await q(`update messages set payload = null where id = $1`, [other.id]);
+    await db.purgeMedia(other.id, new Date('2026-11-12T03:00:00Z'));
+    expect((await db.getMessage(other.id))!.payload).toEqual({
       purged_at: '2026-11-12T03:00:00.000Z',
+    });
+  });
+
+  it('expires an upload once, with its transcript, keeping the upload row and every source key', async () => {
+    const convo = (await db.getConversationByPhone(MARCO_PHONE))!;
+    const report = await one<{ id: string; site_id: string }>(
+      `select id, site_id from reports where status = 'filed' order by report_no limit 1`,
+    );
+    // A voice note the migration backfilled (upload with the message id) and an upload alone.
+    const [voice] = await q<{ id: string }>(
+      `insert into messages (conversation_id, direction, type, media_mime, storage_path, created_at)
+       values ($1, 'in', 'audio', 'audio/ogg', 'org/site/2020-01-01/old.ogg', '2020-01-01T10:00:00Z')
+       returning id`,
+      [convo.id],
+    );
+    await q(
+      `insert into uploads (id, report_id, site_id, kind, storage_path, mime, received_at)
+       values ($1, $2, $3, 'audio', 'org/site/2020-01-01/old.ogg', 'audio/ogg', '2020-01-01T10:00:00Z')`,
+      [voice!.id, report.id, report.site_id],
+    );
+    await q(
+      `insert into report_sources (report_id, message_id, upload_id, kind) values ($1, $2, $2, 'voice_note')`,
+      [report.id, voice!.id],
+    );
+    await q(
+      `insert into transcripts (message_id, upload_id, text, segments) values ($1, $1, 'old', '[]')`,
+      [voice!.id],
+    );
+    const [photo] = await q<{ id: string }>(
+      `insert into uploads (report_id, site_id, kind, storage_path, mime, received_at)
+       values ($1, $2, 'photo', 'org/site/office/old.jpg', 'image/jpeg', '2020-01-01T11:00:00Z')
+       returning id`,
+      [report.id, report.site_id],
+    );
+    await q(`insert into report_sources (report_id, upload_id, kind) values ($1, $2, 'photo')`, [
+      report.id,
+      photo!.id,
+    ]);
+
+    const expired = await db.listExpiredMedia(new Date('2020-02-01T00:00:00Z'), 50);
+    // Listed once each (the backfilled message is not listed beside its upload), oldest first.
+    expect(expired).toEqual([
+      {
+        id: voice!.id,
+        storage_path: 'org/site/2020-01-01/old.ogg',
+        bucket: 'audio',
+        created_at: '2020-01-01T10:00:00.000Z',
+      },
+      {
+        id: photo!.id,
+        storage_path: 'org/site/office/old.jpg',
+        bucket: 'photos',
+        created_at: '2020-01-01T11:00:00.000Z',
+      },
+    ]);
+    for (const m of expired) await db.purgeMedia(m.id, new Date('2026-11-12T03:00:00Z'));
+    // The upload rows stay, marked purged (storage_path keeps the deleted object's name).
+    expect(
+      await q(
+        `select id, storage_path, purged_at from uploads where id = any($1::uuid[]) order by received_at`,
+        [[voice!.id, photo!.id]],
+      ),
+    ).toEqual([
+      {
+        id: voice!.id,
+        storage_path: 'org/site/2020-01-01/old.ogg',
+        purged_at: new Date('2026-11-12T03:00:00Z'),
+      },
+      {
+        id: photo!.id,
+        storage_path: 'org/site/office/old.jpg',
+        purged_at: new Date('2026-11-12T03:00:00Z'),
+      },
+    ]);
+    expect(await db.getTranscript(voice!.id)).toBeNull();
+    expect((await db.getMessage(voice!.id))!.storage_path).toBeNull();
+    // The sources keep their keys (an office photo has no other) and read as files that are gone.
+    const kept = (await db.listReportSources(report.id)).filter((s) =>
+      [voice!.id, photo!.id].includes(s.media_id!),
+    );
+    expect(
+      kept
+        .map((s) => ({
+          kind: s.kind,
+          message_id: s.message_id,
+          upload_id: s.upload_id,
+          storage_path: s.storage_path,
+        }))
+        .sort((a, b) => a.kind.localeCompare(b.kind)),
+    ).toEqual([
+      { kind: 'photo', message_id: null, upload_id: photo!.id, storage_path: null },
+      { kind: 'voice_note', message_id: voice!.id, upload_id: voice!.id, storage_path: null },
+    ]);
+    expect(await db.listExpiredMedia(new Date('2020-02-01T00:00:00Z'), 50)).toEqual([]);
+    // A second purge (the retention job's retry after a failed delete) keeps the first time.
+    await db.purgeMedia(photo!.id, new Date('2026-12-12T03:00:00Z'));
+    expect(await one(`select purged_at from uploads where id = $1`, [photo!.id])).toEqual({
+      purged_at: new Date('2026-11-12T03:00:00Z'),
     });
   });
 
@@ -1427,26 +1561,31 @@ describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
 
     const sources = await db.listReportSources(report.id);
     const office = sources.find((s) => s.storage_path === upload)!;
+    // An upload (D14), with no message: listReportSources reads its file from uploads.
     expect(office).toMatchObject({
       kind: 'photo',
       caption: 'From the office',
+      message_id: null,
       message_type: 'image',
       media_mime: 'image/png',
       body: 'From the office',
     });
-    const message = (await db.getMessage(office.message_id))!;
-    expect(message).toMatchObject({ conversation_id: null, org_id: ORG, direction: 'in' });
-    expect(await db.getConversation(message.conversation_id)).toBeNull();
+    expect(office.upload_id).toBe(office.media_id);
+    const [row] = await q<{ reporter_id: string | null; uploaded_by: string; report_id: string }>(
+      `select reporter_id, uploaded_by, report_id from uploads where id = $1`,
+      [office.media_id],
+    );
+    expect(row).toEqual({ reporter_id: null, uploaded_by: LENA, report_id: report.id });
     // Customer media: the retention job deletes it like a WhatsApp photo.
     expect(
-      (await db.listExpiredMedia(new Date('2099-01-01T00:00:00Z'), 5_000)).map((m) => m.message_id),
-    ).toContain(office.message_id);
+      (await db.listExpiredMedia(new Date('2099-01-01T00:00:00Z'), 5_000)).map((m) => m.id),
+    ).toContain(office.media_id);
     // Unattached uploads are listed from storage.objects; this database has no storage schema.
     expect(await db.listOrphanOfficePhotos(new Date('2099-01-01T00:00:00Z'), 10)).toEqual([]);
 
     const storage = createMemoryStorage();
     for (const s of sources.filter((x) => x.kind === 'photo'))
-      await storage.upload('photos', s.storage_path!, Buffer.from(s.message_id), 'image/jpeg');
+      await storage.upload('photos', s.storage_path!, Buffer.from(s.media_id!), 'image/jpeg');
     const ctx = {
       db,
       storage,
@@ -1473,10 +1612,44 @@ describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
     ]);
     expect(await printed(report.current_version + 1)).toEqual([
       [kept!.messageId, 'Kept'],
-      [office.message_id, 'From the office'],
+      [office.media_id, 'From the office'],
     ]);
-    await q(`delete from jobs where dedupe_key = $1`, [
-      `render_pdf:${report.id}:${report.current_version + 1}`,
+
+    // Retention deletes the office photo's file: the source keeps its upload, so the photo stays
+    // listed (without a file) and an unrelated office edit neither drops it nor counts it removed.
+    await db.purgeMedia(office.media_id!, new Date('2026-11-12T03:00:00Z'));
+    const purged = (await db.listReportSources(report.id)).find(
+      (s) => s.media_id === office.media_id,
+    );
+    expect(purged).toMatchObject({ kind: 'photo', upload_id: office.media_id, storage_path: null });
+    const edited = (await db.getVersion(report.id, report.current_version + 1))!;
+    await sql`select set_config('request.jwt.claim.sub', ${LENA}, false)`;
+    try {
+      await sql`select create_report_version(${report.id},
+        ${sql.json({ ...(edited.data as DailyReportDataV1), summary: 'Reworded' } as never)},
+        'Summary reworded', '[]'::jsonb)`;
+    } finally {
+      await sql`select set_config('request.jwt.claim.sub', '', false)`;
+    }
+    const after = (await db.getVersion(report.id, report.current_version + 2))!;
+    expect((after.data as DailyReportDataV1).photos).toEqual(
+      (edited.data as DailyReportDataV1).photos,
+    );
+    const [audit] = await q<{ diff: Record<string, unknown> }>(
+      `select diff from audit_log where entity_id = $1 and action = 'report.version_created'
+       order by created_at desc, id desc limit 1`,
+      [report.id],
+    );
+    expect(audit!.diff).toMatchObject({
+      version: report.current_version + 2,
+      photos: 2,
+      photos_added: 0,
+      photos_removed: 0,
+    });
+    // The PDF of the new version prints the photo that still has its file.
+    expect(await printed(report.current_version + 2)).toEqual([[kept!.messageId, 'Kept']]);
+    await q(`delete from jobs where dedupe_key = any($1::text[])`, [
+      [1, 2].map((n) => `render_pdf:${report.id}:${report.current_version + n}`),
     ]);
   });
 });

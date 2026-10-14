@@ -18,7 +18,7 @@ import type {
 import type { ChipVariant } from '@sitelog/shared/status.ts';
 import type {
   DailyReportData,
-  ObservedWeatherV1,
+  ObservedWeather,
   StoredReportData,
 } from '@sitelog/shared/schemas/report.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
@@ -353,6 +353,7 @@ export interface ReportVersionSummary {
 }
 
 export interface AudioSourceInfo {
+  /** The voice note's media id: its upload, else its WhatsApp message (one UUID once backfilled). */
   messageId: string;
   peaks: number[];
   durationS: number;
@@ -365,9 +366,13 @@ export interface AudioSourceInfo {
 
 /** A photo the viewed version shows (its data.photos, in order): WhatsApp or office upload. */
 export interface PhotoSourceInfo {
+  /**
+   * The photo's media id (the key of its data.photos entry: `messageId` in v1, `uploadId` in v2):
+   * its upload, else its WhatsApp message (one UUID for media the migration backfilled).
+   */
   messageId: string;
   storagePath: string | null;
-  /** messages.media_mime (image/jpeg, image/png, image/webp…). */
+  /** uploads.mime, else messages.media_mime (image/jpeg, image/png, image/webp…). */
   mime: string | null;
   url: string | null;
   caption: string | null;
@@ -574,10 +579,10 @@ export interface DelayEntry {
   lostHours: number;
   fullDay: boolean;
   /**
-   * weather_events.observed, the SQL copy of the version's weather.observed: v1 (imperial) until
-   * the SQL readers of report data accept v2 (W1-05, GAP §7 step 10).
+   * weather_events.observed, the SQL copy of the version's weather.observed, in §10.3 v2 terms:
+   * a v1 version's copy (precipIn …) is upgraded on read (observedWeatherOf in assemble.ts).
    */
-  observed: ObservedWeatherV1 | null;
+  observed: ObservedWeather | null;
   evidence: DelayEvidence;
   claimReady: boolean;
 }

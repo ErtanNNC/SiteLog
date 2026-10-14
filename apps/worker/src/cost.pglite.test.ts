@@ -31,8 +31,8 @@ async function filedReport(date: string, no: string, filedAt: string) {
     [site, date, `${date}T22:30:00Z`],
   );
   const [r] = await q<{ id: string }>(
-    `insert into reports (org_id, site_id, site_day_id, report_no, status, kind, filed_at)
-     values ($1, $2, $3, $4, 'filed', 'daily', $5) returning id`,
+    `insert into reports (org_id, site_id, site_day_id, report_no, status, kind, filed_at, language)
+     values ($1, $2, $3, $4, 'filed', 'daily', $5, 'en') returning id`,
     [org, site, sd!.id, no, filedAt],
   );
   return { id: r!.id, siteDayId: sd!.id };
@@ -133,5 +133,30 @@ describe('cost per report on PGlite', () => {
       detail: { aiUsd: 0.25, waTemplates: 1, waTemplateUsd: 0.004, jobs: 1 },
     });
     expect(row.computed_at).toMatch(/Z$/);
+  });
+
+  it('counts the jobs of the report’s uploads (transcribe_upload, W1-11) once', async () => {
+    const report = await filedReport('2026-11-02', 'RL-2041-0300', '2026-11-02T22:31:00Z');
+    const [upload] = await q<{ id: string }>(
+      `insert into uploads (report_id, site_id, kind, storage_path) values ($1, $2, 'audio', $3) returning id`,
+      [report.id, site, `${org}/${site}/2026-11-02/a.webm`],
+    );
+    await q(
+      `insert into report_sources (report_id, upload_id, kind) values ($1, $2, 'voice_note')`,
+      [report.id, upload!.id],
+    );
+    await db.enqueueJob('extract_report', { reportId: report.id, metrics: { estCostUsd: 0.2 } });
+    await q(`insert into jobs (type, payload) values ('transcribe_upload', $1)`, [
+      JSON.stringify({ uploadId: upload!.id, metrics: { estCostUsd: 0.05 } }),
+    ]);
+    // Another report's upload job does not count.
+    await q(`insert into jobs (type, payload) values ('transcribe_upload', $1)`, [
+      JSON.stringify({ uploadId: crypto.randomUUID(), metrics: { estCostUsd: 9 } }),
+    ]);
+    expect(await db.reportCostInputs(report.id)).toEqual({
+      aiUsd: 0.25,
+      jobCount: 2,
+      waTemplates: 0,
+    });
   });
 });

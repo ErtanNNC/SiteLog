@@ -147,8 +147,8 @@ function orgSql(k: OrgKey, n: number): string {
     insert into site_days (id, site_id, date, status, deadline_at) values
       ('${o.siteDay}', '${o.site}', '2026-10-09', 'filed', '2026-10-09T22:30:00Z'),
       ('${o.siteDay2}', '${o.site}', '2026-10-10', 'pending', '2026-10-10T22:30:00Z');
-    insert into reports (id, org_id, site_id, site_day_id, report_no, status, reporter_id, filed_at) values
-      ('${o.report}', '${o.org}', '${o.site}', '${o.siteDay}', '${k}-100-0001', 'filed', '${o.reporter}', now());
+    insert into reports (id, org_id, site_id, site_day_id, report_no, status, reporter_id, filed_at, language) values
+      ('${o.report}', '${o.org}', '${o.site}', '${o.siteDay}', '${k}-100-0001', 'filed', '${o.reporter}', now(), 'en');
     update site_days set report_id = '${o.report}' where id = '${o.siteDay}';
     insert into report_versions (report_id, version, data, summary, author) values
       ('${o.report}', 1, '${V1_DATA}', 'Matrix ${k}', 'agent');

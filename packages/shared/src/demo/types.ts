@@ -22,6 +22,7 @@ import type {
   SubInvoiceRow,
   TranscriptRow,
   UnknownSenderRow,
+  UploadRow,
   WeatherEventRow,
   WorkItemRow,
 } from '../db/types.ts';
@@ -64,6 +65,8 @@ export interface DemoDataset {
   siteDays: SiteDayRow[];
   reports: ReportRow[];
   versions: ReportVersionRow[];
+  /** Files of report sources (D14); none in the WhatsApp-era Kestrel data (W1-06 adds them). */
+  uploads: UploadRow[];
   sources: ReportSourceRow[];
   manpower: ManpowerEntryRow[];
   workItems: WorkItemRow[];

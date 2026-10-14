@@ -77,9 +77,10 @@ export async function fileReport(
     photos: data.photos.length
       ? data.photos
       : sources
-          .filter((s) => s.kind === 'photo')
+          .filter((s) => s.kind === 'photo' && s.media_id)
           .map((s) => ({
-            messageId: s.message_id,
+            // v1 data keys a photo by its media id (an upload's id, or the message's).
+            messageId: s.media_id!,
             caption: s.caption ?? undefined,
             takenAt: s.taken_at ?? s.message_created_at,
           })),

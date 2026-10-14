@@ -127,46 +127,59 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
   await expect(page.getByText(/Entered by .+ in SiteLog at/)).toBeVisible();
 
   const reportId = new URL(page.url()).pathname.split('/').at(-1)!;
-  // The photo: a JPEG in the private bucket, an org-level message, a photo source of the report
+  // The photo: a JPEG in the private bucket, an office upload (no reporter, uploaded by the
+  // signed-in user, no message: 20261014000002), a photo source of the report with its upload_id
   // and the one entry of version 1's data.photos; the report page shows it from a signed URL.
   const { data: sources, error: sourcesError } = await admin()
     .from('report_sources')
     .select(
-      'message_id, caption, taken_at, messages(storage_path, media_mime, org_id, conversation_id, body)',
+      'upload_id, message_id, caption, taken_at, uploads(storage_path, mime, site_id, reporter_id, uploaded_by, caption)',
     )
     .eq('report_id', reportId)
     .eq('kind', 'photo');
   if (sourcesError) throw sourcesError;
   expect(sources).toHaveLength(1);
   const source = sources![0] as unknown as {
-    message_id: string;
+    upload_id: string;
+    message_id: string | null;
     caption: string | null;
     taken_at: string;
-    messages: {
+    uploads: {
       storage_path: string;
-      media_mime: string;
-      org_id: string;
-      conversation_id: string | null;
-      body: string | null;
+      mime: string;
+      site_id: string;
+      reporter_id: string | null;
+      uploaded_by: string | null;
+      caption: string | null;
     };
   };
   expect(source.caption).toBe('Level 2 deck');
-  expect(source.messages).toMatchObject({
-    org_id: orgId,
-    conversation_id: null,
-    media_mime: 'image/jpeg',
-    body: 'Level 2 deck',
+  expect(source.message_id).toBeNull();
+  expect(source.uploads).toMatchObject({
+    site_id: siteId,
+    reporter_id: null,
+    uploaded_by: expect.any(String),
+    mime: 'image/jpeg',
+    caption: 'Level 2 deck',
   });
-  expect(source.messages.storage_path).toMatch(
+  expect(source.uploads.storage_path).toMatch(
     new RegExp(`^${orgId}/${siteId}/office/[0-9a-f-]{36}\\.jpg$`),
   );
   const { data: photoFile, error: photoError } = await admin()
     .storage.from('photos')
-    .download(source.messages.storage_path);
+    .download(source.uploads.storage_path);
   if (photoError) throw photoError;
   expect([...new Uint8Array((await photoFile.arrayBuffer()).slice(0, 3))]).toEqual([
     0xff, 0xd8, 0xff,
   ]);
+  // Filed by the office in the org's report language (D13).
+  const { data: filed, error: filedError } = await admin()
+    .from('reports')
+    .select('channel, language')
+    .eq('id', reportId)
+    .single();
+  if (filedError) throw filedError;
+  expect(filed).toEqual({ channel: 'office', language: 'en' });
   const { data: v1, error: v1Error } = await admin()
     .from('report_versions')
     .select('data')
@@ -175,7 +188,7 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
     .single();
   if (v1Error) throw v1Error;
   expect((v1 as { data: { photos: unknown[] } }).data.photos).toEqual([
-    { messageId: source.message_id, caption: 'Level 2 deck', takenAt: expect.any(String) },
+    { messageId: source.upload_id, caption: 'Level 2 deck', takenAt: expect.any(String) },
   ]);
   const shown = page.getByTestId('section-photos').getByRole('img', { name: 'Level 2 deck' });
   await expect(shown).toBeVisible();

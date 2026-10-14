@@ -6,9 +6,9 @@ import { DemoStore, demoUserFor } from './store';
 
 /**
  * Photos the office uploads in the panel, in demo mode: DemoStore mirrors
- * create_office_report / create_report_version with p_photos (20261013000005_office_photos.sql)
- * and DemoSource keeps the uploads as object URLs. Every view shows the photos the viewed
- * version lists.
+ * create_office_report / create_report_version with p_photos (20261013000005_office_photos.sql,
+ * stored as uploads since 20261014000002_backfill_uploads_compat.sql) and DemoSource keeps the
+ * uploads as object URLs. Every view shows the photos the viewed version lists.
  */
 const lena = demoUserFor('admin');
 
@@ -32,7 +32,7 @@ const typed = (summary = 'Framing on units 3 and 4.'): DailyReportDataV1 => ({
 });
 
 describe('demo: photos on a report typed in the panel', () => {
-  it('files the uploads as org-level image messages + photo sources, listed by version 1', async () => {
+  it('files the uploads as office uploads + photo sources, listed by version 1', async () => {
     const { store, source, elm, upload } = setup();
     const a = await upload();
     const b = await upload();
@@ -57,31 +57,37 @@ describe('demo: photos on a report typed in the panel', () => {
     });
     expect(created).toBe(true);
 
-    const messages = store.data.messages.filter((m) => m.storage_path?.includes('/office/'));
-    expect(messages).toEqual([
+    // Uploads (D14), no messages: no reporter, uploaded_by the office user.
+    expect(store.data.messages.filter((m) => m.storage_path?.includes('/office/'))).toEqual([]);
+    const uploads = store.data.uploads.filter((u) => u.report_id === reportId);
+    expect(uploads).toEqual([
       expect.objectContaining({
-        conversation_id: null,
-        org_id: store.data.org.id,
-        direction: 'in',
-        type: 'image',
-        body: 'North wall',
-        media_mime: 'image/jpeg',
+        reporter_id: null,
+        uploaded_by: lena.id,
+        site_id: elm.id,
+        kind: 'photo',
+        caption: 'North wall',
+        mime: 'image/jpeg',
         storage_path: a.path,
-        status: 'received',
-        payload: { source: 'office_upload', uploaded_by: lena.id },
+        recorded_at: '2026-10-09T15:00:00.000Z',
       }),
-      expect.objectContaining({ body: null, storage_path: b.path }),
+      expect.objectContaining({ caption: null, storage_path: b.path }),
     ]);
     const sources = store.data.sources.filter((s) => s.report_id === reportId);
-    expect(sources.map((s) => [s.kind, s.caption, s.taken_at])).toEqual([
-      ['photo', 'North wall', '2026-10-09T15:00:00.000Z'],
-      ['photo', null, store.nowIso()],
+    expect(sources.map((s) => [s.kind, s.upload_id, s.message_id, s.caption, s.taken_at])).toEqual([
+      ['photo', uploads[0]!.id, null, 'North wall', '2026-10-09T15:00:00.000Z'],
+      ['photo', uploads[1]!.id, null, null, store.nowIso()],
     ]);
+    // Filed by the office, in the org's report language (D13).
+    expect(store.data.reports.find((r) => r.id === reportId)).toMatchObject({
+      channel: 'office',
+      language: 'en',
+    });
     const v1 = store.data.versions.find((v) => v.report_id === reportId)!
       .data as unknown as DailyReportDataV1;
     expect(v1.photos).toEqual([
-      { messageId: messages[0]!.id, caption: 'North wall', takenAt: '2026-10-09T15:00:00.000Z' },
-      { messageId: messages[1]!.id, takenAt: store.nowIso() },
+      { messageId: uploads[0]!.id, caption: 'North wall', takenAt: '2026-10-09T15:00:00.000Z' },
+      { messageId: uploads[1]!.id, takenAt: store.nowIso() },
     ]);
     expect(store.data.audit).toContainEqual(
       expect.objectContaining({
@@ -95,7 +101,7 @@ describe('demo: photos on a report typed in the panel', () => {
     const detail = await source.getReportDetail(reportId);
     expect(detail.photos).toEqual([
       {
-        messageId: messages[0]!.id,
+        messageId: uploads[0]!.id,
         storagePath: a.path,
         mime: 'image/jpeg',
         url: expect.stringMatching(/^blob:/),
@@ -141,6 +147,7 @@ describe('demo: photos on a report typed in the panel', () => {
     // Nothing was written by a refused call.
     expect(store.data.reports).toHaveLength(before);
     expect(store.data.messages.some((m) => m.org_id)).toBe(false);
+    expect(store.data.uploads).toEqual([]);
 
     await file([{ path: ok.path, mime: 'image/jpeg' }]);
     const { reportId } = await source.createOfficeReport({
@@ -232,6 +239,68 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
     expect(v3.photos.map((p) => [p.messageId, p.caption])).toEqual([[pa!.messageId, null]]);
     await source.createReportVersion(reportId, { ...storedV1(v3), photos: [] }, 'No photos');
     expect((await source.getReportDetail(reportId)).photos).toEqual([]);
+  });
+
+  it('edits a v2 version as create_report_version does: uploadId entries in and out', async () => {
+    const { store, source, elm, upload } = setup();
+    const [a, b, c] = [await upload(), await upload(), await upload()];
+    const { reportId } = await source.createOfficeReport({
+      siteId: elm.id,
+      date: '2026-10-09',
+      data: typed(),
+      photos: [
+        { path: a.path, mime: 'image/jpeg', caption: 'A', takenAt: '2026-10-09T14:00:00Z' },
+        { path: b.path, mime: 'image/jpeg', caption: 'B', takenAt: '2026-10-09T15:00:00Z' },
+      ],
+    });
+    // A v2 version on top (as W1-06 seeds and W1-12 writes them): the v2 view of version 1.
+    const detail = await source.getReportDetail(reportId);
+    const report = store.data.reports.find((r) => r.id === reportId)!;
+    store.data.versions.push({
+      ...store.data.versions.find((v) => v.report_id === reportId)!,
+      version: 2,
+      data: detail.data as unknown as (typeof store.data.versions)[number]['data'],
+    });
+    report.current_version = 2;
+    const [pa, pb] = detail.data.photos;
+
+    const { version } = await source.createReportVersion(
+      reportId,
+      {
+        ...detail.data,
+        photos: [
+          { ...pb!, caption: 'B2' },
+          { uploadId: 'not-a-photo', takenAt: 'x' },
+        ],
+      },
+      'v2 edit',
+      [{ path: c.path, mime: 'image/jpeg', caption: 'C', position: 0 }],
+    );
+    expect(version).toBe(3);
+    const cId = store.data.uploads.find((u) => u.storage_path === c.path)!.id;
+    const v3 = store.data.versions.find((v) => v.report_id === reportId && v.version === 3)!
+      .data as unknown as { schemaVersion: number; photos: unknown[] };
+    expect(v3.schemaVersion).toBe(2);
+    expect(v3.photos).toEqual([
+      { uploadId: cId, caption: 'C', takenAt: store.nowIso() },
+      { uploadId: pb!.uploadId, caption: 'B2', takenAt: pb!.takenAt },
+    ]);
+    expect(store.data.audit).toContainEqual(
+      expect.objectContaining({
+        action: 'report.version_created',
+        diff: expect.objectContaining({
+          version: 3,
+          photos: 2,
+          photos_added: 1,
+          photos_removed: 1,
+        }),
+      }),
+    );
+    expect((await source.getReportDetail(reportId)).photos.map((p) => p.caption)).toEqual([
+      'C',
+      'B2',
+    ]);
+    expect(pa).toBeDefined();
   });
 
   it('places new uploads at their positions, as create_report_version does', async () => {

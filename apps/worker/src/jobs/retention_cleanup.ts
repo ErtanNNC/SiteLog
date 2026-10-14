@@ -12,7 +12,9 @@ export const ORPHAN_PHOTO_GRACE_MS = 24 * 3_600_000;
 
 /**
  * §15 privacy — delete audio and photos (and their transcripts) older than AUDIO_RETENTION_DAYS,
- * and office photo uploads no report ever attached; reports + PDFs are kept.
+ * and office photo uploads no report ever attached; reports + PDFs are kept. Files are uploads
+ * (with the WhatsApp media the migration backfilled) or, without an upload, WhatsApp messages
+ * (listExpiredMedia).
  */
 export const retentionCleanup: JobHandler<'retention_cleanup'> = async (ctx, payload) => {
   const before = payload.before
@@ -25,19 +27,19 @@ export const retentionCleanup: JobHandler<'retention_cleanup'> = async (ctx, pay
     if (batch.length === 0) break;
     for (const m of batch) {
       try {
-        await ctx.storage.remove(m.type === 'audio' ? 'audio' : 'photos', [m.storage_path]);
-        await ctx.db.purgeMessageMedia(m.message_id, ctx.now());
+        await ctx.storage.remove(m.bucket, [m.storage_path]);
+        await ctx.db.purgeMedia(m.id, ctx.now());
         purged++;
       } catch (err) {
         failed++;
-        ctx.log.warn('retention: purge failed', { err, message_id: m.message_id });
+        ctx.log.warn('retention: purge failed', { err, media_id: m.id });
         // Avoid looping forever on the same row: mark it purged in the DB anyway.
-        await ctx.db.purgeMessageMedia(m.message_id, ctx.now());
+        await ctx.db.purgeMedia(m.id, ctx.now());
       }
     }
     if (batch.length < RETENTION_BATCH) break;
   }
-  // Office uploads without a message: the walk above never sees them (no messages row).
+  // Office files no report call attached: the walk above never sees them (no upload, no message).
   const orphansBefore = new Date(ctx.now().getTime() - ORPHAN_PHOTO_GRACE_MS);
   let orphansRemoved = 0;
   for (let round = 0; round < 20; round++) {

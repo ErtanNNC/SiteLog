@@ -27,6 +27,7 @@ import type {
   UploadKind,
   VersionAuthor,
 } from '../enums.ts';
+import type { ReportLanguage } from '../locale.ts';
 
 /**
  * Hand-maintained Supabase `Database` type for @supabase/supabase-js (§6.3).
@@ -291,8 +292,11 @@ export type ReportRow = {
   updated_at: string;
   /** Channel of the first submission; null on WhatsApp-era reports (D13). */
   channel: FieldChannel | null;
-  /** Report output language, `en` | `tr`; null until step 10 backfills it. */
-  language: string | null;
+  /**
+   * Report output language (§6.3, §9.6), from the org locale (`reportLanguageFor`); NOT NULL
+   * with no default since 20261014000002 (backfilled 'en'): every writer sets it.
+   */
+  language: ReportLanguage;
   confirmed_via: FieldChannel | null;
 };
 
@@ -311,18 +315,27 @@ export type ReportVersionRow = {
   via: FieldChannel | null;
 };
 
+/**
+ * `report_sources.kind`: the §6.2 `source_kind` labels, plus the WhatsApp-era `audio` and `reply`
+ * that the WhatsApp worker writes until step 22 (20261014000002 re-keyed the stored ones:
+ * audio → voice_note, reply → answer or text). Read with `isVoiceSourceKind` and
+ * `isAnswerSourceKind` (report/media.ts), which accept both.
+ */
+export type ReportSourceKind = SourceKind | 'audio' | 'reply';
+
 export type ReportSourceRow = {
   id: string;
   report_id: string;
   /**
-   * The WhatsApp or office-photo message. Nullable in the database since 20261013000007, and
-   * the kind check also takes the §6.2 `source_kind` labels (voice_note, call, answer); both are
-   * typed as today's rows have them until step 10 moves the writers and readers to uploads.
+   * The WhatsApp message (or an office photo's message from before 20261014000002). Null for a
+   * source with no message: an office photo from 20261014000002 on (upload_id), and the v1.2
+   * uploads, calls and answers. `sourceMediaId()` gives a source's media id.
    */
-  message_id: string;
-  kind: 'audio' | 'photo' | 'text' | 'reply';
+  message_id: string | null;
+  kind: ReportSourceKind;
   caption: string | null;
   taken_at: string | null;
+  /** The upload; the same UUID as message_id for media backfilled from a message. */
   upload_id: string | null;
   call_id: string | null;
   question_id: string | null;
@@ -516,6 +529,8 @@ export type UploadRow = {
   received_at: string | null;
   caption: string | null;
   uploaded_by: string | null;
+  /** + Retention deleted the file (20261014000002): the row and its sources' key stay (D12). */
+  purged_at: string | null;
 };
 
 /** §6.3 calls (rows written from week 2): admin, pm and ops read them. */
@@ -847,7 +862,6 @@ export type Database = {
         | 'created_at'
         | 'updated_at'
         | 'channel'
-        | 'language'
         | 'confirmed_via'
       >;
       uploads: Table<
@@ -863,6 +877,7 @@ export type Database = {
         | 'received_at'
         | 'caption'
         | 'uploaded_by'
+        | 'purged_at'
       >;
       calls: Table<
         CallRow,

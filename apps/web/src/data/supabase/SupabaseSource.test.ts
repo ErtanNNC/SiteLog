@@ -55,6 +55,7 @@ function tablesFrom(rows: RowSet): Record<string, Row[]> {
     report_versions: copyOf(rows.versions),
     report_sources: copyOf(rows.sources),
     messages: copyOf(rows.messages),
+    uploads: copyOf(rows.uploads ?? []),
     questions: copyOf(rows.questions),
     sub_invoices: copyOf(rows.invoices),
     evidence_packs: copyOf(rows.packs),
@@ -217,6 +218,9 @@ class FakeQuery implements PromiseLike<Result> {
   }
   lte(column: string, value: string) {
     return this.add('lte', column, value, (v) => v != null && String(v) <= value);
+  }
+  lt(column: string, value: string) {
+    return this.add('lt', column, value, (v) => v != null && String(v) < value);
   }
   not(column: string, op: string, value: unknown) {
     if (op !== 'is' || value !== null) throw new Error(`fake: unsupported not(${op})`);
@@ -925,5 +929,132 @@ describe('SupabaseSource.getWeather', () => {
     expect(log.kpis.hours).toBe(before.kpis.hours + 600);
     const lists = inListsChunked(db);
     expect(lists.filter((c) => c.table === 'reports').length).toBeGreaterThan(1);
+  });
+});
+
+describe('SupabaseSource: report files in uploads (W1-05 step 10)', () => {
+  /**
+   * The fake database as 20261014000002_backfill_uploads_compat.sql leaves it: every stored voice
+   * note and photo of a report has an upload with its message's id, its source carries upload_id
+   * and the v1.2 kind (audio → voice_note), and its transcript the upload_id. With
+   * `photosWithoutMessages`, the photos are uploads only (as office photos are from then on): no
+   * messages row and a source without message_id.
+   */
+  function backfill(db: FakeDb, opts: { photosWithoutMessages?: boolean } = {}) {
+    const t = db.tables;
+    const messages = new Map(t.messages!.map((m) => [m.id as string, m]));
+    const siteOf = new Map(t.reports!.map((r) => [r.id as string, r.site_id as string]));
+    const uploads: Row[] = [];
+    const dropped = new Set<string>();
+    t.report_sources = t.report_sources!.map((s) => {
+      const m = messages.get(s.message_id as string);
+      if (!m?.storage_path || (s.kind !== 'audio' && s.kind !== 'photo')) return s;
+      const payload = (m.payload ?? {}) as { peaks?: unknown };
+      if (!uploads.some((u) => u.id === m.id))
+        uploads.push({
+          id: m.id,
+          report_id: s.report_id,
+          reporter_id: null,
+          site_id: siteOf.get(s.report_id as string),
+          kind: s.kind === 'audio' ? 'audio' : 'photo',
+          storage_path: m.storage_path,
+          mime: m.media_mime,
+          bytes: null,
+          duration_s: m.duration_s,
+          peaks: Array.isArray(payload.peaks) ? payload.peaks : null,
+          recorded_at: s.taken_at ?? m.created_at,
+          received_at: m.created_at,
+          caption: s.kind === 'photo' ? (s.caption ?? m.body) : null,
+          uploaded_by: null,
+          purged_at: null,
+        });
+      const photoOnly = opts.photosWithoutMessages && s.kind === 'photo';
+      if (photoOnly) dropped.add(m.id as string);
+      return {
+        ...s,
+        kind: s.kind === 'audio' ? 'voice_note' : s.kind,
+        upload_id: m.id,
+        message_id: photoOnly ? null : s.message_id,
+      };
+    });
+    t.uploads = uploads;
+    t.messages = t.messages!.filter((m) => !dropped.has(m.id as string));
+    const ids = new Set(uploads.map((u) => u.id));
+    t.transcripts = t.transcripts!.map((x) =>
+      ids.has(x.message_id) ? { ...x, upload_id: x.message_id } : x,
+    );
+    return uploads;
+  }
+
+  const view = (d: Awaited<ReturnType<SupabaseSource['getReportDetail']>>) => ({
+    audio: d.audio,
+    transcript: d.transcript,
+    excerpts: d.excerpts,
+    photos: d.photos,
+    messages: d.messages,
+  });
+
+  it('shows a report the same from backfilled uploads as from the WhatsApp messages', async () => {
+    const { store, db, live } = sources();
+    const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
+    const before = view(await live.getReportDetail(hero.id));
+    expect(before.audio).not.toBeNull();
+    expect(before.audio!.peaks.length).toBeGreaterThan(0);
+    expect(before.transcript).not.toBeNull();
+    expect(before.photos.length).toBeGreaterThan(0);
+    expect(before.messages.length).toBeGreaterThan(0);
+
+    backfill(db);
+    db.calls = [];
+    expect(view(await live.getReportDetail(hero.id))).toEqual(before);
+    expect(db.calls).toContainEqual(expect.objectContaining({ table: 'uploads', method: 'in' }));
+    // The transcript is found by the voice note's upload or message id.
+    expect(db.calls).toContainEqual({
+      table: 'transcripts',
+      method: 'or',
+      value: `upload_id.eq.${before.audio!.messageId},message_id.eq.${before.audio!.messageId}`,
+    });
+  });
+
+  it('reads a photo that has no message (an office photo from step 10 on) from its upload', async () => {
+    const { store, db, live } = sources();
+    const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
+    const before = view(await live.getReportDetail(hero.id));
+    const uploads = backfill(db, { photosWithoutMessages: true });
+    expect(
+      db.tables.report_sources!.filter((s) => s.report_id === hero.id && s.kind === 'photo').length,
+    ).toBeGreaterThan(0);
+    expect(
+      db.tables.report_sources!.every((s) => s.kind !== 'photo' || s.message_id === null),
+    ).toBe(true);
+    db.calls = [];
+    const after = view(await live.getReportDetail(hero.id));
+    // The same report; the WhatsApp thread lacks only the photo messages the fake dropped.
+    const left = new Set(db.tables.messages!.map((m) => m.id));
+    expect({ ...after, messages: [] }).toEqual({ ...before, messages: [] });
+    expect(after.messages).toEqual(before.messages.filter((m) => left.has(m.id)));
+    expect(after.photos.map((p) => p.storagePath)).toEqual(
+      after.photos.map((p) => uploads.find((u) => u.id === p.messageId)!.storage_path),
+    );
+    // No null id reaches a messages lookup.
+    for (const c of db.calls.filter((x) => x.table === 'messages' && x.method === 'in'))
+      expect(c.value as unknown[]).not.toContain(null);
+  });
+
+  it('keeps the Photos tab, Hours and the transcript search the same on backfilled rows', async () => {
+    const { store, db, live } = sources();
+    const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
+    const word = (store.data.transcripts[0]!.text.match(/[A-Za-z]{6,}/) ?? ['concrete'])[0];
+    const before = {
+      site: await detailOf(live, riverside.id, '2026-10'),
+      hours: await live.getHours('2026-W41'),
+      search: await live.listReports({ q: word }),
+    };
+    expect(before.site.photos.length).toBeGreaterThan(0);
+    expect(before.search.total).toBeGreaterThan(0);
+    backfill(db, { photosWithoutMessages: true });
+    expect(await detailOf(live, riverside.id, '2026-10')).toEqual(before.site);
+    expect(await live.getHours('2026-W41')).toEqual(before.hours);
+    expect(await live.listReports({ q: word })).toEqual(before.search);
   });
 });

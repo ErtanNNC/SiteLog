@@ -86,6 +86,11 @@ export interface ReportInput {
   received_at: string | Date;
   kind: 'daily' | 'weather_day' | 'no_work';
   status?: ReportRow['status'];
+  /**
+   * §6.3 `reports.language`. Default: the org's report language (org_report_language(), from
+   * `orgs.locale`, like `reportLanguageFor`). WhatsApp reports have no channel (D13).
+   */
+  language?: ReportRow['language'];
 }
 
 export interface ReportPatch {
@@ -193,19 +198,31 @@ export interface SiteContext {
   reporters: ReporterRow[];
 }
 
+/**
+ * A report source with its file (listReportSources): from its upload when there is one (office
+ * photos since 20261014000002, and media the migration backfilled with the message id), else from
+ * its WhatsApp message (report/media.ts).
+ */
 export interface ReportSourceWithMessage extends ReportSourceRow {
-  message_type: MsgType;
+  /** The source's media id: upload_id, else message_id (one UUID for backfilled media). */
+  media_id: string | null;
+  /** The message type, or `audio` / `image` for an upload without a message; null for neither. */
+  message_type: MsgType | null;
   storage_path: string | null;
   duration_s: number | null;
+  /** When the file or message arrived (message, else upload, else the source row). */
   message_created_at: string;
   media_mime: string | null;
+  /** The message body, else the upload's caption. */
   body: string | null;
 }
 
+/** A stored file past retention: an upload, or a message media without one. */
 export interface ExpiredMedia {
-  message_id: string;
+  /** Upload id, else message id (the same UUID for backfilled media). */
+  id: string;
   storage_path: string;
-  type: MsgType;
+  bucket: 'audio' | 'photos';
   created_at: string;
 }
 
@@ -268,7 +285,11 @@ export interface Db {
 
   // transcripts
   getTranscript(messageId: string): Promise<TranscriptRow | null>;
-  listTranscripts(messageIds: string[]): Promise<TranscriptRow[]>;
+  /**
+   * Transcripts of these voice notes, by media id (a transcript's upload_id, else its message_id),
+   * in the order given.
+   */
+  listTranscripts(mediaIds: string[]): Promise<TranscriptRow[]>;
   upsertTranscript(input: TranscriptInput): Promise<TranscriptRow>;
 
   // reporters, sites, orgs
@@ -413,12 +434,19 @@ export interface Db {
   listWeatherEvents(siteId: string, start: string, end: string): Promise<WeatherEventRow[]>;
   listExpiredMedia(before: Date, limit: number): Promise<ExpiredMedia[]>;
   /**
-   * `photos` bucket paths of office uploads created before `before` that no message stores (the
-   * report call never attached them): list_orphan_office_photos(), empty without storage.
+   * `photos` bucket paths of office uploads created before `before` that no upload or office
+   * message stores (the report call never attached them): list_orphan_office_photos(), empty
+   * without storage.
    */
   listOrphanOfficePhotos(before: Date, limit: number): Promise<string[]>;
   getInvoiceSummary(invoiceId: string): Promise<InvoiceSummary | null>;
-  purgeMessageMedia(messageId: string, purgedAt: Date): Promise<void>;
+  /**
+   * Retention, after the file is deleted: the transcript goes; the upload keeps its row with
+   * purged_at (its report sources keep their upload_id, so a purged photo stays listed) and the
+   * message keeps its row with storage_path null and payload.purged_at. Readers treat either as a
+   * missing file.
+   */
+  purgeMedia(id: string, purgedAt: Date): Promise<void>;
   /** Deletes `done` jobs finished before `before` (dead / failed ones stay for /ops). */
   purgeFinishedJobs(before: Date, limit: number): Promise<number>;
   digestStats(orgId: string, weekStart: string, weekEnd: string): Promise<DigestStats>;
@@ -599,14 +627,14 @@ export function createDb(sql: Sql): Db {
         await sql<TranscriptRow[]>`select * from transcripts where message_id = ${messageId}`,
       );
     },
-    async listTranscripts(messageIds) {
-      if (messageIds.length === 0) return [];
+    async listTranscripts(mediaIds) {
+      if (mediaIds.length === 0) return [];
       // Callers pass voice notes in chronological order; keep it (heap/index order is arbitrary
       // and transcription jobs finish out of order), so PDFs and evidence packs stay stable.
-      const ids = sql.array(messageIds);
-      return sql<
-        TranscriptRow[]
-      >`select * from transcripts where message_id = any(${ids}::uuid[]) order by array_position(${ids}::uuid[], message_id)`;
+      const ids = sql.array(mediaIds);
+      return sql<TranscriptRow[]>`select * from transcripts
+        where upload_id = any(${ids}::uuid[]) or message_id = any(${ids}::uuid[])
+        order by array_position(${ids}::uuid[], coalesce(upload_id, message_id))`;
     },
     async upsertTranscript(input) {
       const rows = await sql<TranscriptRow[]>`
@@ -766,8 +794,9 @@ export function createDb(sql: Sql): Db {
     },
     async insertReport(input) {
       const rows = await sql<ReportRow[]>`
-        insert into reports (org_id, site_id, site_day_id, report_no, reporter_id, received_at, kind, status)
-        values (${input.org_id}, ${input.site_id}, ${input.site_day_id}, ${input.report_no}, ${input.reporter_id}, ${iso(input.received_at)}, ${input.kind}, ${input.status ?? 'collecting'})
+        insert into reports (org_id, site_id, site_day_id, report_no, reporter_id, received_at, kind, status, language)
+        values (${input.org_id}, ${input.site_id}, ${input.site_day_id}, ${input.report_no}, ${input.reporter_id}, ${iso(input.received_at)}, ${input.kind}, ${input.status ?? 'collecting'},
+                coalesce(${input.language ?? null}::text, org_report_language(${input.org_id})))
         returning *`;
       return rows[0]!;
     },
@@ -855,10 +884,19 @@ export function createDb(sql: Sql): Db {
         on conflict (report_id, message_id) do nothing`;
     },
     async listReportSources(reportId) {
-      return sql<
-        ReportSourceWithMessage[]
-      >`select rs.*, m.type as message_type, m.storage_path, m.duration_s, m.created_at as message_created_at, m.media_mime, m.body
-        from report_sources rs join messages m on m.id = rs.message_id where rs.report_id = ${reportId} order by m.created_at`;
+      return sql<ReportSourceWithMessage[]>`
+        select rs.*, coalesce(rs.upload_id, rs.message_id) as media_id,
+               coalesce(m.type, case u.kind when 'audio' then 'audio'::msg_type when 'photo' then 'image'::msg_type end) as message_type,
+               coalesce(case when u.purged_at is null then u.storage_path end, m.storage_path) as storage_path,
+               coalesce(u.duration_s, m.duration_s) as duration_s,
+               coalesce(m.created_at, u.received_at, rs.created_at) as message_created_at,
+               coalesce(u.mime, m.media_mime) as media_mime,
+               coalesce(m.body, u.caption) as body
+        from report_sources rs
+        left join uploads u on u.id = coalesce(rs.upload_id, rs.message_id)
+        left join messages m on m.id = rs.message_id
+        where rs.report_id = ${reportId}
+        order by coalesce(m.created_at, u.received_at, rs.created_at), rs.id`;
     },
 
     // questions ---------------------------------------------------------------------------
@@ -1008,11 +1046,21 @@ export function createDb(sql: Sql): Db {
       >`select * from current_weather where site_id = ${siteId} and date between ${start} and ${end} order by date, start_local`;
     },
     async listExpiredMedia(before, limit) {
-      return sql<
-        ExpiredMedia[]
-      >`select id as message_id, storage_path, type, created_at from messages
-        where direction = 'in' and storage_path is not null and type in ('audio','image','document')
-          and created_at < ${before.toISOString()}
+      // Uploads not purged yet; a message's file only when no upload holds it (WhatsApp media
+      // the worker stored after the backfill, or never attached to a report).
+      return sql<ExpiredMedia[]>`
+        select id, storage_path, bucket, created_at from (
+          select u.id, u.storage_path, case u.kind when 'audio' then 'audio' else 'photos' end as bucket,
+                 coalesce(u.received_at, u.recorded_at) as created_at
+          from uploads u
+          where u.purged_at is null and coalesce(u.received_at, u.recorded_at) < ${before.toISOString()}
+          union all
+          select m.id, m.storage_path, case m.type when 'audio' then 'audio' else 'photos' end, m.created_at
+          from messages m
+          where m.direction = 'in' and m.storage_path is not null and m.type in ('audio','image','document')
+            and m.created_at < ${before.toISOString()}
+            and not exists (select 1 from uploads u where u.id = m.id)
+        ) media
         order by created_at, id limit ${limit}`;
     },
     async listOrphanOfficePhotos(before, limit) {
@@ -1059,10 +1107,13 @@ export function createDb(sql: Sql): Db {
         ) returning id`;
       return rows.length;
     },
-    async purgeMessageMedia(messageId, purgedAt) {
+    async purgeMedia(id, purgedAt) {
       await sql.begin(async (tx) => {
-        await tx`delete from transcripts where message_id = ${messageId}`;
-        await tx`update messages set storage_path = null, payload = coalesce(payload, '{}'::jsonb) || jsonb_build_object('purged_at', ${purgedAt.toISOString()}::text) where id = ${messageId}`;
+        await tx`delete from transcripts where message_id = ${id} or upload_id = ${id}`;
+        // The upload row stays (storage_path is required and keeps the deleted object's name):
+        // an office photo's source has no other key, and a version still lists the photo.
+        await tx`update uploads set purged_at = coalesce(purged_at, ${purgedAt.toISOString()}::timestamptz) where id = ${id}`;
+        await tx`update messages set storage_path = null, payload = coalesce(payload, '{}'::jsonb) || jsonb_build_object('purged_at', ${purgedAt.toISOString()}::text) where id = ${id}`;
       });
     },
     async digestStats(orgId, weekStart, weekEnd) {

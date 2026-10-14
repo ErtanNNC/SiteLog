@@ -240,7 +240,7 @@ describe('report lifecycle RPCs', () => {
     };
     reportId = await asService(db, async (q) => {
       const r = await q<{ id: string }>(
-        `insert into reports (org_id, site_id, site_day_id, report_no, status, filed_at, needs_review, review_reasons) values ($1, $2, $3, 'RL-2041-0187', 'filed', now(), true, '{unknown_company:Ridgeway}') returning id`,
+        `insert into reports (org_id, site_id, site_day_id, report_no, status, filed_at, needs_review, review_reasons, language) values ($1, $2, $3, 'RL-2041-0187', 'filed', now(), true, '{unknown_company:Ridgeway}', 'en') returning id`,
         [orgId, siteId, siteDayId],
       );
       await q(

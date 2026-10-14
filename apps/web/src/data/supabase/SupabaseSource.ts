@@ -29,6 +29,7 @@ import type {
   SubInvoiceRow,
   TranscriptRow,
   UnknownSenderRow,
+  UploadRow,
   CurrentManpowerRow,
   CurrentWeatherRow,
   OpsCostOutlierRow,
@@ -44,6 +45,12 @@ import {
   type OfficePhotoMime,
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
+import {
+  isVoiceSourceKind,
+  mediaOf,
+  sourceMediaId,
+  transcriptMediaId,
+} from '@sitelog/shared/report/media.ts';
 import { copy } from '@/copy/en';
 import { functionsUrl } from '@/lib/env';
 import { rasterizeSvgLogo } from '@/lib/logo';
@@ -158,9 +165,22 @@ async function allPages<T>(
 async function inChunks<T>(
   ids: readonly string[],
   query: (part: string[]) => PromiseLike<T[]>,
+  size = IN_CHUNK,
 ): Promise<T[]> {
   if (!ids.length) return [];
-  return (await Promise.all(chunks(uniq(ids), IN_CHUNK).map((part) => query(part)))).flat();
+  return (await Promise.all(chunks(uniq(ids), size).map((part) => query(part)))).flat();
+}
+
+/**
+ * Ids per `or=(upload_id.in.(…),message_id.in.(…))` filter: the list appears twice in the URL,
+ * so half an IN_CHUNK keeps the request as short as one `.in()` list.
+ */
+const MEDIA_OR_CHUNK = IN_CHUNK / 2;
+
+/** `upload_id` or `message_id` in `ids`: a source's or a transcript's media id (report/media.ts). */
+function mediaIdFilter(ids: readonly string[]): string {
+  const list = ids.join(',');
+  return `upload_id.in.(${list}),message_id.in.(${list})`;
 }
 
 /** Site detail Photos tab: the newest photos of the site, one page under PostgREST max_rows. */
@@ -571,6 +591,7 @@ export class SupabaseSource implements DataSource {
       questions,
       sources: photos.sources,
       messages: photos.messages,
+      uploads: photos.uploads,
       photoLists: photos.photoLists,
     };
     const detail = assembleSiteDetail(rows, this.ctx(), siteId, month);
@@ -588,8 +609,9 @@ export class SupabaseSource implements DataSource {
   /**
    * The Photos tab shows the site's photos from every report, not only the viewed month's
    * (§11.4): the newest SITE_PHOTO_LIMIT photo sources, plus the reports and site days (for the
-   * report number and date) and messages (for the storage path) that are not loaded yet, and the
-   * current versions' data.photos (which of them each report shows, with what caption).
+   * report number and date) and the files (uploads, else the WhatsApp messages: the storage
+   * path) that are not loaded yet, and the current versions' data.photos (which of them each
+   * report shows, with what caption).
    */
   private async sitePhotos(
     siteId: string,
@@ -600,6 +622,7 @@ export class SupabaseSource implements DataSource {
     reports: ReportRow[];
     siteDays: SiteDayRow[];
     messages: MessageRow[];
+    uploads: UploadRow[];
     photoLists: NonNullable<RowSet['photoLists']>;
   }> {
     const sources: ReportSourceRow[] = unwrap(
@@ -612,17 +635,14 @@ export class SupabaseSource implements DataSource {
         .limit(SITE_PHOTO_LIMIT),
     ).map(({ reports: _site, ...s }) => s);
     if (!sources.length)
-      return { sources, reports: [], siteDays: [], messages: [], photoLists: [] };
+      return { sources, reports: [], siteDays: [], messages: [], uploads: [], photoLists: [] };
     const haveReport = new Set(loadedReports.map((r) => r.id));
-    const [reports, messages] = await Promise.all([
+    const [reports, { messages, uploads }] = await Promise.all([
       inChunks(
         sources.map((s) => s.report_id).filter((id) => !haveReport.has(id)),
         (part) => this.sb.from('reports').select('*').in('id', part).then(unwrap),
       ),
-      inChunks(
-        sources.map((s) => s.message_id),
-        (part) => this.sb.from('messages').select('*').in('id', part).then(unwrap),
-      ),
+      this.sourceFiles(sources),
     ]);
     const haveDay = new Set(loadedSiteDays.map((d) => d.id));
     const current = new Map(
@@ -645,7 +665,45 @@ export class SupabaseSource implements DataSource {
     const photoLists = (lists as unknown as NonNullable<RowSet['photoLists']>).filter(
       (v) => current.get(v.report_id) === v.version,
     );
-    return { sources, reports, siteDays, messages, photoLists };
+    return { sources, reports, siteDays, messages, uploads, photoLists };
+  }
+
+  /**
+   * The files of report sources (report/media.ts): the uploads of their media ids (upload_id,
+   * else message_id: one UUID for media the migration backfilled) and the messages of the sources
+   * that have one (WhatsApp media without an upload, and the WhatsApp thread's ids).
+   */
+  private async sourceFiles(
+    sources: ReadonlyArray<Pick<ReportSourceRow, 'upload_id' | 'message_id'>>,
+  ): Promise<{ messages: MessageRow[]; uploads: UploadRow[] }> {
+    const [uploads, messages] = await Promise.all([
+      inChunks(
+        sources.flatMap((s) => {
+          const id = sourceMediaId(s);
+          return id ? [id] : [];
+        }),
+        (part) => this.sb.from('uploads').select('*').in('id', part).then(unwrap),
+      ),
+      inChunks(
+        sources.flatMap((s) => (s.message_id ? [s.message_id] : [])),
+        (part) => this.sb.from('messages').select('*').in('id', part).then(unwrap),
+      ),
+    ]);
+    return { messages: messages as MessageRow[], uploads: uploads as UploadRow[] };
+  }
+
+  /** The report_sources rows (selected columns) of these media ids: by upload_id or message_id. */
+  private sourcesOfMedia<T>(ids: readonly string[], columns: string): Promise<T[]> {
+    return inChunks(
+      ids,
+      (part) =>
+        this.sb
+          .from('report_sources')
+          .select(columns)
+          .or(mediaIdFilter(part))
+          .then((r) => unwrap(r) as unknown as T[]),
+      MEDIA_OR_CHUNK,
+    );
   }
 
   /**
@@ -666,14 +724,17 @@ export class SupabaseSource implements DataSource {
     const tr = unwrap(
       await this.sb
         .from('transcripts')
-        .select('message_id')
+        .select('message_id, upload_id')
         .textSearch('text', safe, { type: 'websearch', config: 'english' })
         .limit(IN_CHUNK),
     );
-    const srcs = await inChunks(
-      tr.map((t) => t.message_id),
-      (part) =>
-        this.sb.from('report_sources').select('report_id').in('message_id', part).then(unwrap),
+    // A transcript's voice note: its upload, else its WhatsApp message (report/media.ts).
+    const srcs = await this.sourcesOfMedia<{ report_id: string }>(
+      tr.flatMap((t) => {
+        const id = transcriptMediaId(t);
+        return id ? [id] : [];
+      }),
+      'report_id',
     );
     // At most IN_CHUNK ids, so the request URL stays well under proxy limits.
     const ids = uniq(srcs.map((x) => x.report_id)).slice(0, IN_CHUNK);
@@ -861,29 +922,36 @@ export class SupabaseSource implements DataSource {
         .then(unwrap),
       sb.from('current_weather').select('*').eq('report_id', reportId).then(unwrap),
     ]);
-    const messageIds = sources.map((s) => s.message_id);
-    const srcMessages: MessageRow[] = messageIds.length
-      ? unwrap(await sb.from('messages').select('*').in('id', messageIds))
-      : [];
-    const audioMsg = srcMessages.find((m) => m.type === 'audio');
+    // The sources' files: uploads first, WhatsApp messages as the fallback (report/media.ts).
+    const { messages: srcMessages, uploads } = await this.sourceFiles(sources);
+    const uploadById = new Map(uploads.map((u) => [u.id, u]));
+    const msgById = new Map(srcMessages.map((m) => [m.id, m]));
+    const audioSrc = sources.find(
+      (s) => isVoiceSourceKind(s.kind) && mediaOf(s, uploadById, msgById),
+    );
+    const audioFile = audioSrc ? mediaOf(audioSrc, uploadById, msgById) : undefined;
     const dayStart = fromZonedTime(`${siteDay.date}T00:00:00`, site.timezone).toISOString();
     const dayEnd = fromZonedTime(
       `${addDays(siteDay.date, 1)}T00:00:00`,
       site.timezone,
     ).toISOString();
     const [convoMessages, transcripts, siteReports] = await Promise.all([
-      audioMsg?.conversation_id
+      audioFile?.conversationId
         ? sb
             .from('messages')
             .select('*')
-            .eq('conversation_id', audioMsg.conversation_id)
+            .eq('conversation_id', audioFile.conversationId)
             .gte('created_at', dayStart)
             .lt('created_at', dayEnd)
             .order('created_at')
             .then(unwrap)
         : Promise.resolve([] as MessageRow[]),
-      audioMsg
-        ? sb.from('transcripts').select('*').eq('message_id', audioMsg.id).then(unwrap)
+      audioFile
+        ? sb
+            .from('transcripts')
+            .select('*')
+            .or(`upload_id.eq.${audioFile.id},message_id.eq.${audioFile.id}`)
+            .then(unwrap)
         : Promise.resolve([] as TranscriptRow[]),
       sb
         .from('reports')
@@ -928,6 +996,7 @@ export class SupabaseSource implements DataSource {
       versions,
       sources: sources as ReportSourceRow[],
       messages,
+      uploads,
       transcripts,
       questions,
       audit: audit as AuditLogRow[],
@@ -966,18 +1035,23 @@ export class SupabaseSource implements DataSource {
       inChunks(reportIds, (part) =>
         this.sb.from('reports').select('*').in('id', part).then(unwrap),
       ),
+      // Voice notes: WhatsApp `audio` or v1.2 `voice_note` (report/media.ts).
       inChunks(reportIds, (part) =>
         this.sb
           .from('report_sources')
           .select('*')
-          .eq('kind', 'audio')
+          .in('kind', ['audio', 'voice_note'])
           .in('report_id', part)
           .then(unwrap),
       ),
     ]);
     const transcripts = await inChunks(
-      sources.map((s) => s.message_id),
-      (part) => this.sb.from('transcripts').select('*').in('message_id', part).then(unwrap),
+      sources.flatMap((s) => {
+        const id = sourceMediaId(s);
+        return id ? [id] : [];
+      }),
+      (part) => this.sb.from('transcripts').select('*').or(mediaIdFilter(part)).then(unwrap),
+      MEDIA_OR_CHUNK,
     );
     const rows: RowSet = {
       ...this.rowsFrom(core),
@@ -1220,10 +1294,12 @@ export class SupabaseSource implements DataSource {
         .limit(5)
         .then(unwrap),
       this.user.role === 'accounts'
-        ? Promise.resolve([] as Array<Pick<TranscriptRow, 'id' | 'message_id' | 'text'>>)
+        ? Promise.resolve(
+            [] as Array<Pick<TranscriptRow, 'id' | 'message_id' | 'upload_id' | 'text'>>,
+          )
         : sb
             .from('transcripts')
-            .select('id, message_id, text')
+            .select('id, message_id, upload_id, text')
             .textSearch('text', needle.replace(/[,()]/g, ' '), {
               type: 'websearch',
               config: 'english',
@@ -1252,17 +1328,18 @@ export class SupabaseSource implements DataSource {
     for (const c of companies)
       out.push({ kind: 'company', id: c.id, title: c.name, subtitle: c.trade, href: '/hours' });
     if (transcripts.length) {
-      const srcs = unwrap(
-        await sb
-          .from('report_sources')
-          .select('report_id, message_id')
-          .in(
-            'message_id',
-            transcripts.map((t) => t.message_id),
-          ),
+      const srcs = await this.sourcesOfMedia<
+        Pick<ReportSourceRow, 'report_id' | 'message_id' | 'upload_id'>
+      >(
+        transcripts.flatMap((t) => {
+          const id = transcriptMediaId(t);
+          return id ? [id] : [];
+        }),
+        'report_id, message_id, upload_id',
       );
       for (const t of transcripts) {
-        const src = srcs.find((s) => s.message_id === t.message_id);
+        const id = transcriptMediaId(t);
+        const src = srcs.find((s) => id !== null && sourceMediaId(s) === id);
         const i = t.text.toLowerCase().indexOf(needle.toLowerCase());
         const snippet =
           i >= 0

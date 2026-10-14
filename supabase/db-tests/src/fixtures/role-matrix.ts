@@ -173,7 +173,7 @@ export const TABLES: Record<string, TableCase> = {
     allow: readOnly(OFFICE),
     where: (o) => `id = '${o.report}'`,
     insert: (o) =>
-      `insert into reports (org_id, site_id, site_day_id, report_no) values ('${o.org}', '${o.site}', '${o.siteDay2}', 'NEW-0001')`,
+      `insert into reports (org_id, site_id, site_day_id, report_no, language) values ('${o.org}', '${o.site}', '${o.siteDay2}', 'NEW-0001', 'en')`,
     set: 'needs_review = needs_review',
   },
   report_versions: {

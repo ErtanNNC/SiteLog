@@ -182,7 +182,7 @@ describe('job queue for v1.2 (spec §10.1)', () => {
       [site!.id],
     );
     const [report] = await svc<{ id: string }>(
-      `insert into reports (org_id, site_id, site_day_id, report_no, channel) values ($1, $2, $3, 'LK-0001', 'web') returning id`,
+      `insert into reports (org_id, site_id, site_day_id, report_no, channel, language) values ($1, $2, $3, 'LK-0001', 'web', 'en') returning id`,
       [site!.org_id, site!.id, day!.id],
     );
     const r = report!.id;
@@ -336,7 +336,7 @@ describe('reports', () => {
     );
     const insert = (no: string) =>
       svc<{ id: string }>(
-        `insert into reports (org_id, site_id, site_day_id, report_no) values ($1, $2, $3, $4) returning id`,
+        `insert into reports (org_id, site_id, site_day_id, report_no, language) values ($1, $2, $3, $4, 'en') returning id`,
         [day!.org_id, day!.site_id, day!.id, no],
       );
     const [first] = await insert('T-0001');

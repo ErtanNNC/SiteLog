@@ -61,7 +61,7 @@ export function WeatherTab({ siteId, month }: { siteId: string; month: string; t
                         ? copy.siteDetail.weatherTab.fullDay
                         : copy.report.period(e.start ?? undefined, e.end ?? undefined),
                       e.observed
-                        ? copy.weather.observed(`${e.observed.precipIn.toFixed(2)} in`)
+                        ? copy.weather.observed(`${e.observed.precip.toFixed(2)} in`)
                         : null,
                       e.reportNo,
                     ]

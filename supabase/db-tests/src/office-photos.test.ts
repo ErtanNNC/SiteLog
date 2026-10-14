@@ -12,9 +12,12 @@ import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
 import { asService, asUser, bootDatabase, installStorageStub, storageBlocks } from './harness.ts';
 
 /**
- * 20261013000005_office_photos.sql: photos the office uploads in the panel are stored as
- * org-level messages (no conversation) + photo sources of the report, and each version's
- * data.photos lists the photos that version shows.
+ * Photos the office uploads in the panel (20261013000005_office_photos.sql, stored as uploads
+ * since 20261014000002_backfill_uploads_compat.sql, D14): each one is an uploads row (no reporter,
+ * uploaded_by the office user) + a photo source of the report with its upload_id, and each
+ * version's data.photos lists the photos that version shows, keyed by the upload id (`messageId`
+ * in v1 data). Office photos stored as messages before the migration still count (the last
+ * describe blocks).
  */
 
 const LENA = DEMO_USERS[0]!.id; // admin
@@ -28,17 +31,16 @@ let riverside: string;
 let oakmont: string;
 
 type Filed = { reportId: string; reportNo: string; created: boolean };
-type MessageOut = {
+type UploadOut = {
   id: string;
-  org_id: string | null;
-  conversation_id: string | null;
-  direction: string;
-  type: string;
-  body: string | null;
-  payload: unknown;
-  media_mime: string | null;
-  storage_path: string | null;
-  status: string;
+  report_id: string | null;
+  reporter_id: string | null;
+  site_id: string;
+  kind: string;
+  storage_path: string;
+  mime: string | null;
+  caption: string | null;
+  uploaded_by: string | null;
 };
 
 async function svc<T = Record<string, unknown>>(sql: string, params: unknown[] = []) {
@@ -115,21 +117,24 @@ async function versionData(reportId: string, version: number) {
   )[0]!.data;
 }
 
-async function messagesAt(paths: string[]) {
-  return svc<MessageOut>(
-    `select id, org_id, conversation_id, direction::text, type::text, body, payload, media_mime,
-            storage_path, status::text
-     from messages where storage_path = any($1::text[])
+async function uploadsAt(paths: string[]) {
+  return svc<UploadOut>(
+    `select id, report_id, reporter_id, site_id, kind::text, storage_path, mime, caption, uploaded_by
+     from uploads where storage_path = any($1::text[])
      order by array_position($1::text[], storage_path)`,
     [paths],
   );
 }
 
+/** The report's photo sources with their media id (upload, else a pre-migration message). */
 async function photoSources(reportId: string) {
-  return svc<{ message_id: string; caption: string | null; taken_at: Date }>(
-    `select rs.message_id, rs.caption, rs.taken_at from report_sources rs
-     join messages m on m.id = rs.message_id
-     where rs.report_id = $1 and rs.kind = 'photo' order by m.created_at, rs.message_id`,
+  return svc<{ media_id: string; caption: string | null; taken_at: Date }>(
+    `select coalesce(rs.upload_id, rs.message_id) as media_id, rs.caption, rs.taken_at
+     from report_sources rs
+     left join uploads u on u.id = coalesce(rs.upload_id, rs.message_id)
+     left join messages m on m.id = rs.message_id
+     where rs.report_id = $1 and rs.kind = 'photo'
+     order by coalesce(m.created_at, u.received_at), 1`,
     [reportId],
   );
 }
@@ -170,7 +175,7 @@ beforeAll(async () => {
 });
 
 describe('create_office_report with photos', () => {
-  it('stores each upload as an org-level photo message and lists it in data.photos', async () => {
+  it('stores each upload as an office upload and lists it in data.photos', async () => {
     const date = '2026-08-03';
     const a = upload(riverside, {
       caption: '  North elevation  ',
@@ -187,34 +192,57 @@ describe('create_office_report with photos', () => {
         periods: [{ condition: 'Rain', lostHours: 2, source: [] }],
       },
     });
+    const messagesBefore = (await svc<{ n: number }>(`select count(*)::int as n from messages`))[0]!
+      .n;
     const res = await officeReport(LENA, riverside, date, data, [a, b, c]);
     expect(res.created).toBe(true);
 
-    const msgs = await messagesAt([a.path, b.path, c.path]);
+    const msgs = await uploadsAt([a.path, b.path, c.path]);
     expect(msgs).toEqual([
       {
         id: expect.any(String),
-        org_id: DEMO_ORG_ID,
-        conversation_id: null,
-        direction: 'in',
-        type: 'image',
-        body: 'North elevation',
-        payload: { source: 'office_upload', uploaded_by: LENA },
-        media_mime: 'image/jpeg',
+        report_id: res.reportId,
+        reporter_id: null,
+        site_id: riverside,
+        kind: 'photo',
         storage_path: a.path,
-        status: 'received',
+        mime: 'image/jpeg',
+        caption: 'North elevation',
+        uploaded_by: LENA,
       },
-      expect.objectContaining({ body: null, media_mime: 'image/png', storage_path: b.path }),
-      expect.objectContaining({ body: null, media_mime: 'image/webp', storage_path: c.path }),
+      expect.objectContaining({ caption: null, mime: 'image/png', storage_path: b.path }),
+      expect.objectContaining({ caption: null, mime: 'image/webp', storage_path: c.path }),
     ]);
+    // No message: the panel, the PDFs and retention read uploads (D14).
+    expect((await svc<{ n: number }>(`select count(*)::int as n from messages`))[0]!.n).toBe(
+      messagesBefore,
+    );
+    // Filed by the office, in the org's report language.
+    expect(
+      await svc(`select channel::text, language from reports where id = $1`, [res.reportId]),
+    ).toEqual([{ channel: 'office', language: 'en' }]);
 
-    const sources = await svc<{ message_id: string; caption: string | null; taken_at: Date }>(
-      `select message_id, caption, taken_at from report_sources
+    const sources = await svc<{
+      upload_id: string;
+      message_id: string | null;
+      caption: string | null;
+      taken_at: Date;
+    }>(
+      `select upload_id, message_id, caption, taken_at from report_sources
        where report_id = $1 and kind = 'photo'`,
       [res.reportId],
     );
     expect(sources).toHaveLength(3);
-    const byMsg = new Map(sources.map((s) => [s.message_id, s]));
+    expect(sources.every((s) => s.message_id === null)).toBe(true);
+    const byMsg = new Map(sources.map((s) => [s.upload_id, s]));
+    // The upload records the same time and caption as its source.
+    for (const u of await svc<{ id: string; recorded_at: Date; caption: string | null }>(
+      `select id, recorded_at, caption from uploads where report_id = $1`,
+      [res.reportId],
+    )) {
+      expect(u.recorded_at).toEqual(byMsg.get(u.id)!.taken_at);
+      expect(u.caption).toBe(byMsg.get(u.id)!.caption);
+    }
     expect(byMsg.get(msgs[0]!.id)!.caption).toBe('North elevation');
     expect(byMsg.get(msgs[0]!.id)!.taken_at.toISOString()).toBe('2026-08-03T15:20:00.000Z');
     // No time sent: the filing time. A time in the future is never stored.
@@ -266,7 +294,7 @@ describe('create_office_report with photos', () => {
     const c = upload(riverside);
     const d = upload(riverside, { position: 1 });
     const res = await officeReport(LENA, riverside, date, body(date), [a, b, c, d]);
-    const msgs = await messagesAt([a.path, b.path, c.path, d.path]);
+    const msgs = await uploadsAt([a.path, b.path, c.path, d.path]);
     const id = (path: string) => msgs.find((m) => m.storage_path === path)!.id;
     expect((await versionData(res.reportId, 1)).photos.map((p) => p.messageId)).toEqual([
       id(b.path),
@@ -282,7 +310,7 @@ describe('create_office_report with photos', () => {
     const first = await officeReport(LENA, riverside, date, body(date), [a]);
     const again = await officeReport(LENA, riverside, date, body(date), [a]);
     expect(again).toEqual({ ...first, created: false });
-    expect(await messagesAt([a.path])).toHaveLength(1);
+    expect(await uploadsAt([a.path])).toHaveLength(1);
     expect(await photoSources(first.reportId)).toHaveLength(1);
   });
 
@@ -292,7 +320,7 @@ describe('create_office_report with photos', () => {
       (await svc<{ n: number }>(`select report_seq as n from sites where id = $1`, [riverside]))[0]!
         .n;
     const seqBefore = await seq();
-    const messagesBefore = (await svc<{ n: number }>(`select count(*)::int as n from messages`))[0]!
+    const uploadsBefore = (await svc<{ n: number }>(`select count(*)::int as n from uploads`))[0]!
       .n;
     const file = (photos: unknown) => () => officeReport(LENA, riverside, date, body(date), photos);
     const id = randomUUID();
@@ -355,8 +383,8 @@ describe('create_office_report with photos', () => {
       ),
     ).toEqual([]);
     expect(await seq()).toBe(seqBefore);
-    expect((await svc<{ n: number }>(`select count(*)::int as n from messages`))[0]!.n).toBe(
-      messagesBefore,
+    expect((await svc<{ n: number }>(`select count(*)::int as n from uploads`))[0]!.n).toBe(
+      uploadsBefore,
     );
 
     // Exactly 20 is fine.
@@ -380,7 +408,9 @@ describe('create_office_report with photos', () => {
     const reportId = (await svc<{ id: string }>(`select id from reports limit 1`))[0]!.id;
     expect(
       await errorOf(() =>
-        asUser(db, OUTSIDER, (q) => q(`select attach_office_photos($1, '[]'::jsonb)`, [reportId])),
+        asUser(db, OUTSIDER, (q) =>
+          q(`select attach_office_photos($1, '[]'::jsonb, 'messageId')`, [reportId]),
+        ),
       ),
     ).toMatch(/not allowed|permission denied/);
   });
@@ -397,7 +427,7 @@ describe('create_report_version with photos', () => {
     const b = upload(riverside, { caption: 'B', takenAt: '2026-08-10T14:05:00Z' });
     const c = upload(riverside, { takenAt: '2026-08-10T14:10:00Z' });
     reportId = (await officeReport(LENA, riverside, date, body(date), [a, b, c])).reportId;
-    const msgs = await messagesAt([a.path, b.path, c.path]);
+    const msgs = await uploadsAt([a.path, b.path, c.path]);
     ids = { a: msgs[0]!.id, b: msgs[1]!.id, c: msgs[2]!.id };
     v1 = await versionData(reportId, 1);
   });
@@ -423,7 +453,7 @@ describe('create_report_version with photos', () => {
       [d],
     );
     expect(version).toBe(2);
-    const [dMsg] = await messagesAt([d.path]);
+    const [dMsg] = await uploadsAt([d.path]);
 
     const v2 = await versionData(reportId, 2);
     expect(v2.photos).toEqual([
@@ -435,8 +465,8 @@ describe('create_report_version with photos', () => {
     // Version 1 is immutable and still shows A, B, C.
     expect(await versionData(reportId, 1)).toEqual(v1);
     expect(v1.photos.map((p) => p.messageId)).toEqual([ids.a, ids.b, ids.c]);
-    // B stays a source of the report (its message and object are not deleted).
-    expect((await photoSources(reportId)).map((s) => s.message_id).sort()).toEqual(
+    // B stays a source of the report (its upload and object are not deleted).
+    expect((await photoSources(reportId)).map((s) => s.media_id).sort()).toEqual(
       [ids.a, ids.b, ids.c, dMsg!.id].sort(),
     );
 
@@ -529,7 +559,7 @@ describe('create_report_version with photos', () => {
       beyond,
       first,
     ]);
-    const msgs = await messagesAt([first.path, middle.path, last.path, beyond.path]);
+    const msgs = await uploadsAt([first.path, middle.path, last.path, beyond.path]);
     expect((await versionData(reportId, version)).photos.map((p) => p.messageId)).toEqual([
       msgs[0]!.id,
       ids.c,
@@ -556,9 +586,7 @@ describe('create_report_version with photos', () => {
     const before = await current();
     const data = await versionData(reportId, before);
     const used = (
-      await svc<{ storage_path: string }>(`select storage_path from messages where id = $1`, [
-        ids.a,
-      ])
+      await svc<{ storage_path: string }>(`select storage_path from uploads where id = $1`, [ids.a])
     )[0]!.storage_path;
     expect(await errorOf(() => editReport(LENA, reportId, data, [upload(oakmont)]))).toBe(
       'unexpected photo path',
@@ -596,7 +624,7 @@ describe('create_report_version with photos', () => {
     const extra = upload(wa.site_id, { caption: 'From the office' });
     const version = await editReport(LENA, wa.id, data, [extra]);
     const next = await versionData(wa.id, version);
-    const [extraMsg] = await messagesAt([extra.path]);
+    const [extraMsg] = await uploadsAt([extra.path]);
     expect(next.photos).toEqual([
       ...data.photos.map((p) => ({
         messageId: p.messageId,
@@ -614,37 +642,113 @@ describe('create_report_version with photos', () => {
   });
 });
 
-describe('messages without a conversation', () => {
+describe('office photos and the messages from before the migration', () => {
   let officeIds: string[];
+  /** An office photo stored the pre-migration way: an org-level message and its photo source. */
+  let legacy: { id: string; path: string; reportId: string };
 
   beforeAll(async () => {
     officeIds = (
       await svc<{ id: string }>(
-        `select id from messages where org_id = $1 and payload->>'source' = 'office_upload'`,
+        `select u.id from uploads u join sites s on s.id = u.site_id
+         where s.org_id = $1 and u.reporter_id is null and u.uploaded_by is not null`,
         [DEMO_ORG_ID],
       )
     ).map((m) => m.id);
     expect(officeIds.length).toBeGreaterThan(0);
+    const reportId = (
+      await svc<{ id: string }>(
+        `select id from reports where org_id = $1 and channel = 'office' order by created_at limit 1`,
+        [DEMO_ORG_ID],
+      )
+    )[0]!.id;
+    const path = upload(riverside).path;
+    const [m] = await svc<{ id: string }>(
+      `insert into messages (org_id, direction, type, payload, media_mime, storage_path, status)
+       values ($1, 'in', 'image', $2, 'image/jpeg', $3, 'received') returning id`,
+      [DEMO_ORG_ID, JSON.stringify({ source: 'office_upload', uploaded_by: LENA }), path],
+    );
+    await svc(`insert into report_sources (report_id, message_id, kind) values ($1, $2, 'photo')`, [
+      reportId,
+      m!.id,
+    ]);
+    legacy = { id: m!.id, path, reportId };
   });
 
   const visible = (user: string, sql: string, params: unknown[] = []) =>
     asUser(db, user, async (q) => (await q<{ n: number }>(sql, params)).rows[0]!.n);
 
   it('lets admin, pm and ops of the org read the office photos, nobody else', async () => {
-    const sql = `select count(*)::int as n from messages where id = any($1::uuid[])`;
+    const sql = `select count(*)::int as n from uploads where id = any($1::uuid[])`;
     expect(await visible(LENA, sql, [officeIds])).toBe(officeIds.length);
     expect(await visible(SAM, sql, [officeIds])).toBe(officeIds.length);
     expect(await visible(ACCOUNTS, sql, [officeIds])).toBe(0);
     expect(await visible(OUTSIDER, sql, [officeIds])).toBe(0);
     // Nor their photo sources.
-    const src = `select count(*)::int as n from report_sources where message_id = any($1::uuid[])`;
+    const src = `select count(*)::int as n from report_sources where upload_id = any($1::uuid[])`;
     expect(await visible(OUTSIDER, src, [officeIds])).toBe(0);
     expect(await visible(LENA, src, [officeIds])).toBe(officeIds.length);
     const orgs = await svc<{ org: string }>(
-      `select distinct message_org(id) as org from messages where id = any($1::uuid[])`,
+      `select distinct upload_org(id) as org from uploads where id = any($1::uuid[])`,
       [officeIds],
     );
     expect(orgs).toEqual([{ org: DEMO_ORG_ID }]);
+    // A pre-migration office message reads as before.
+    const msg = `select count(*)::int as n from messages where id = $1`;
+    expect(await visible(LENA, msg, [legacy.id])).toBe(1);
+    expect(await visible(ACCOUNTS, msg, [legacy.id])).toBe(0);
+    expect(await visible(OUTSIDER, msg, [legacy.id])).toBe(0);
+    expect((await svc<{ org: string }>(`select message_org($1) as org`, [legacy.id]))[0]!.org).toBe(
+      DEMO_ORG_ID,
+    );
+  });
+
+  it('refuses attaching a file an upload or a pre-migration office message already stores', async () => {
+    const reportId = legacy.reportId;
+    const current = (
+      await svc<{ v: number }>(`select current_version as v from reports where id = $1`, [reportId])
+    )[0]!.v;
+    const data = await versionData(reportId, current);
+    expect(
+      await errorOf(() =>
+        editReport(LENA, reportId, data, [{ path: legacy.path, mime: 'image/jpeg' }]),
+      ),
+    ).toBe('photo already attached');
+    // One upload per stored object, whoever writes it.
+    const used = (
+      await svc<{ storage_path: string; site_id: string }>(
+        `select storage_path, site_id from uploads where id = $1`,
+        [officeIds[0]],
+      )
+    )[0]!;
+    await expect(
+      svc(`insert into uploads (site_id, kind, storage_path) values ($1, 'photo', $2)`, [
+        used.site_id,
+        used.storage_path,
+      ]),
+    ).rejects.toMatchObject({ code: '23505' });
+  });
+
+  it('shows a pre-migration office photo in an edit and keys it by its message id', async () => {
+    const reportId = legacy.reportId;
+    const current = (
+      await svc<{ v: number }>(`select current_version as v from reports where id = $1`, [reportId])
+    )[0]!.v;
+    const data = await versionData(reportId, current);
+    const version = await editReport(LENA, reportId, {
+      ...data,
+      photos: [
+        ...data.photos,
+        { messageId: legacy.id, caption: 'Legacy', takenAt: '2000-01-01T00:00:00Z' },
+      ],
+    });
+    const photos = (await versionData(reportId, version)).photos;
+    expect(photos.at(-1)).toEqual({
+      messageId: legacy.id,
+      caption: 'Legacy',
+      takenAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
+    expect(photos.at(-1)!.takenAt).not.toBe('2000-01-01T00:00:00Z');
   });
 
   it('keeps WhatsApp messages scoped by their conversation as before', async () => {
@@ -692,7 +796,7 @@ describe('messages without a conversation', () => {
     expect(key).toBe(`convo:${convo}`);
   });
 
-  it('requires a conversation or an org on every message, and one message per office upload', async () => {
+  it('still requires a conversation or an org on every message, and one message per office file', async () => {
     const code = async (sql: string, params: unknown[] = []) => {
       try {
         await svc(sql, params);
@@ -704,14 +808,10 @@ describe('messages without a conversation', () => {
     expect(
       await code(`insert into messages (direction, type, body) values ('in', 'text', 'x')`),
     ).toBe('23514');
-    expect(await code(`update messages set org_id = null where id = $1`, [officeIds[0]])).toBe(
+    expect(await code(`update messages set org_id = null where id = $1`, [legacy.id])).toBe(
       '23514',
     );
-    const path = (
-      await svc<{ p: string }>(`select storage_path as p from messages where id = $1`, [
-        officeIds[0],
-      ])
-    )[0]!.p;
+    const path = legacy.path;
     expect(
       await code(
         `insert into messages (org_id, direction, type, storage_path) values ($1, 'in', 'image', $2)`,
@@ -805,12 +905,26 @@ describe('with the storage schema', () => {
     expect(listed).toContain(dropped.path);
     for (const name of [attached.path, fresh.path, whatsapp]) expect(listed).not.toContain(name);
     expect(listed.filter((n) => !already.includes(n))).toEqual([dropped.path]);
-    // Every office object listed has no message (the earlier tests' refused uploads, say).
+    // Every office object listed has no upload and no message (the earlier tests' refused
+    // uploads, say).
     const stored = await svc<{ n: number }>(
-      `select count(*)::int as n from messages where storage_path = any($1::text[])`,
+      `select ((select count(*) from uploads where storage_path = any($1::text[]))
+             + (select count(*) from messages where storage_path = any($1::text[])))::int as n`,
       [listed],
     );
     expect(stored[0]!.n).toBe(0);
+    // An office photo stored as a message before the migration is attached, not an orphan.
+    const legacyPath = (
+      await svc<{ p: string }>(
+        `select storage_path as p from messages
+         where org_id is not null and payload->>'source' = 'office_upload' limit 1`,
+      )
+    )[0]!.p;
+    await svc(
+      `insert into storage.objects (bucket_id, name, created_at) values ('photos', $1, $2)`,
+      [legacyPath, '2026-08-12T10:00:00Z'],
+    );
+    expect(await orphans()).not.toContain(legacyPath);
     expect(await orphans('2026-08-12T09:00:00Z')).not.toContain(dropped.path);
     expect(
       await svc(`select * from list_orphan_office_photos('2999-01-01T00:00:00Z', 1)`),

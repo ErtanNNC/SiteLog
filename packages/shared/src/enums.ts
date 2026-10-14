@@ -148,6 +148,23 @@ export type ReportStatus = (typeof REPORT_STATUSES)[number];
 export const VERSION_AUTHORS = ['agent', 'reporter_reply', 'office_user'] as const;
 export type VersionAuthor = (typeof VERSION_AUTHORS)[number];
 
+/*
+ * Readers across the step 11 renames (GAP §7 step 10: "code accepts both old and new labels"):
+ * step 11 renames `verified` → `active` and `reporter_reply` → `reporter` in the database, so a
+ * reader of this commit must accept either label. Writers keep the current label until step 11
+ * switches them (the new one does not exist in the database before that).
+ */
+
+/** A reporter who has accepted (WhatsApp `verified`; `active` from step 11, §6.2). */
+export function isActiveReporterStatus(status: string): boolean {
+  return status === 'verified' || status === 'active';
+}
+
+/** A version the site manager wrote (WhatsApp `reporter_reply`; `reporter` from step 11). */
+export function isReporterAuthor(author: string): boolean {
+  return author === 'reporter_reply' || author === 'reporter';
+}
+
 /** What a report source is (§6.3 `report_sources.kind`, §10.3 `source[].type`). */
 export const SOURCE_KINDS = ['voice_note', 'call', 'photo', 'answer', 'text'] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];

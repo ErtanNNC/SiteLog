@@ -1,5 +1,5 @@
 import { Document, Image, Page, Text, View } from '@react-pdf/renderer';
-import { formatDateLong, formatDuration } from '@sitelog/shared';
+import { formatDateLong, formatDuration, isReporterAuthor } from '@sitelog/shared';
 import {
   Bullets,
   imageSrc,
@@ -46,7 +46,7 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
     );
   for (const e of edits)
     footnotes.push(
-      `v${e.version} · ${e.author === 'office_user' ? 'office edit' : e.author === 'reporter_reply' ? 'edit by reply' : 'update'}${e.changeNote ? `: ${e.changeNote}` : ''} · ${fmtDateTime(e.createdAt, tz)}`,
+      `v${e.version} · ${e.author === 'office_user' ? 'office edit' : isReporterAuthor(e.author) ? 'edit by reply' : 'update'}${e.changeNote ? `: ${e.changeNote}` : ''} · ${fmtDateTime(e.createdAt, tz)}`,
     );
   const photos = input.photos.slice(0, input.settings.maxPhotos);
   const nextItems = data.nextWorkday.map((n) => n.item);

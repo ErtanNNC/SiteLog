@@ -1,12 +1,14 @@
 import type { Photo } from '../schemas/report.ts';
+import { sourceMediaId } from './media.ts';
 
 /**
  * Photos of a report version (§10.3 `photos`, §12 "08 Site photos", site Photos tab).
  *
- * Every photo of a report is a `report_sources` row (kind 'photo') joined to its `messages` row:
- * WhatsApp photos, and since 20261013000005_office_photos.sql the photos the office uploads in
- * the panel. A version shows the photos its `data.photos` lists, in that order: an office edit can
- * remove a photo or change its caption without touching the older versions.
+ * Every photo of a report is a `report_sources` row (kind 'photo') with its file in `uploads`
+ * (office photos since 20261014000002, and every stored photo the migration backfilled with its
+ * message's id) or, for a WhatsApp photo without an upload, in `messages` (report/media.ts). A
+ * version shows the photos its `data.photos` lists, in that order: an office edit can remove a
+ * photo or change its caption without touching the older versions.
  */
 
 /** Office uploads: at most this many new photos per create_office_report / create_report_version call. */
@@ -77,7 +79,8 @@ export function placeOfficePhotos<T>(
 
 /** The report_sources fields the selection reads (plus whatever the caller joined to it). */
 export interface PhotoSourceLike {
-  message_id: string;
+  message_id: string | null;
+  upload_id?: string | null;
   kind: string;
   caption: string | null;
   taken_at: string | null;
@@ -96,8 +99,9 @@ export interface VersionPhoto<S extends PhotoSourceLike> {
  * every photo source of the report, as given, with its recorded caption and time. Entries whose
  * message is not a photo of the report are skipped.
  *
- * `photos` is the v2 list (report/upgrade.ts): an entry's `uploadId` is the UUID of the photo's
- * message (a v1 `messageId`, kept as is by the upgrade), matched against `message_id`.
+ * `photos` is the v2 list (report/upgrade.ts): an entry's `uploadId` (a v1 `messageId`, kept as
+ * is by the upgrade) is matched against the source's media id, its `upload_id` or else its
+ * `message_id` (one UUID for media the migration backfilled).
  */
 export function versionPhotos<S extends PhotoSourceLike>(
   photos: ReadonlyArray<Pick<Photo, 'uploadId' | 'caption' | 'takenAt'>> | null | undefined,
@@ -111,12 +115,17 @@ export function versionPhotos<S extends PhotoSourceLike>(
       takenAt: source.taken_at,
     }));
   }
-  const byMessage = new Map(photoSources.map((s) => [s.message_id.toLowerCase(), s]));
+  const byMedia = new Map(
+    photoSources.flatMap((s) => {
+      const id = sourceMediaId(s);
+      return id ? [[id.toLowerCase(), s] as const] : [];
+    }),
+  );
   const seen = new Set<string>();
   const out: Array<VersionPhoto<S>> = [];
   for (const p of photos) {
     const key = typeof p?.uploadId === 'string' ? p.uploadId.toLowerCase() : '';
-    const source = byMessage.get(key);
+    const source = byMedia.get(key);
     if (!source || seen.has(key)) continue;
     seen.add(key);
     out.push({

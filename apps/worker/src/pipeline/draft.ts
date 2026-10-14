@@ -2,6 +2,7 @@ import {
   ButtonSets,
   deriveTotals,
   formatDraftCard,
+  sourceMediaId,
   type ConversationRow,
   type DailyReportDataV1,
   type MessageRow,
@@ -46,20 +47,24 @@ export async function syncDraftPhotos(
   report: ReportRow,
   data: DailyReportDataV1,
   sources: Array<
-    Pick<ReportSourceRow, 'message_id' | 'kind' | 'caption' | 'taken_at'> & {
+    Pick<ReportSourceRow, 'message_id' | 'upload_id' | 'kind' | 'caption' | 'taken_at'> & {
       message_created_at?: string;
     }
   >,
 ): Promise<DailyReportDataV1> {
   const have = new Set(data.photos.map((p) => p.messageId));
-  const missing = sources.filter((s) => s.kind === 'photo' && !have.has(s.message_id));
+  // A photo's media id: its upload, else its message (report/media.ts); v1 data calls it messageId.
+  const missing = sources.flatMap((s) => {
+    const id = sourceMediaId(s);
+    return s.kind === 'photo' && id && !have.has(id) ? [{ ...s, id }] : [];
+  });
   if (missing.length === 0) return data;
   const next: DailyReportDataV1 = {
     ...data,
     photos: [
       ...data.photos,
       ...missing.map((s) => ({
-        messageId: s.message_id,
+        messageId: s.id,
         caption: s.caption ?? undefined,
         takenAt: s.taken_at ?? s.message_created_at ?? ctx.now().toISOString(),
       })),

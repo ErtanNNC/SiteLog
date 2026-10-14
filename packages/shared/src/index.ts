@@ -18,6 +18,7 @@ export * from './report/draft-card.ts';
 export * from './report/day-off.ts';
 export * from './report/progress.ts';
 export * from './report/photos.ts';
+export * from './report/media.ts';
 export * from './wa/buttons.ts';
 export * from './wa/window.ts';
 export * from './wa/templates.ts';

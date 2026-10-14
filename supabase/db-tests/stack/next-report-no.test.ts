@@ -65,8 +65,8 @@ describeStack('next_report_no on real Postgres', () => {
             { n: string },
           ];
           await tx`
-            insert into reports (org_id, site_id, site_day_id, report_no, status)
-            values (${orgId!}, ${siteId}, ${days[firstDay + i]!}, ${n}, 'filed')`;
+            insert into reports (org_id, site_id, site_day_id, report_no, status, language)
+            values (${orgId!}, ${siteId}, ${days[firstDay + i]!}, ${n}, 'filed', 'en')`;
           await tx`select pg_sleep(0.01)`;
           if (rollback(i)) throw new Error(`rollback ${n}`);
           return n;

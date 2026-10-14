@@ -5,7 +5,7 @@ import type {
   SiteDayWeather,
   TranscriptRow,
 } from '@sitelog/shared';
-import { firstName } from '@sitelog/shared';
+import { firstName, isVoiceSourceKind } from '@sitelog/shared';
 import type { ExtractionInput, ExtractionSegment } from '../ai/extract';
 import type { Ctx } from '../context';
 import type { SiteContext } from '../db';
@@ -48,23 +48,32 @@ export async function composeExtractionInput(
   opts: ComposeOptions,
 ): Promise<ExtractionInput> {
   const sources = await ctx.db.listReportSources(report.id);
-  const audioIds = sources.filter((s) => s.kind === 'audio').map((s) => s.message_id);
+  // Voice notes and photos by media id (upload, else message: the id v1 data calls messageId).
+  const audioIds = sources.flatMap((s) =>
+    isVoiceSourceKind(s.kind) && s.media_id ? [s.media_id] : [],
+  );
   const transcripts = await ctx.db.listTranscripts(audioIds);
-  const byMessage = new Map(transcripts.map((t) => [t.message_id, t]));
+  const byMedia = new Map(transcripts.map((t) => [t.upload_id ?? t.message_id, t]));
 
   const segments: ExtractionSegment[] = [];
-  for (const id of audioIds) segments.push(...transcriptSegments(id, byMessage.get(id) ?? null));
+  for (const id of audioIds) segments.push(...transcriptSegments(id, byMedia.get(id) ?? null));
 
-  const texts = sources
-    .filter((s) => s.kind === 'text' && s.body?.trim())
-    .map((s) => ({ messageId: s.message_id, text: s.body!.trim() }));
-  const photos = sources
-    .filter((s) => s.kind === 'photo')
-    .map((s) => ({
-      messageId: s.message_id,
-      caption: s.caption ?? undefined,
-      takenAt: s.taken_at ?? s.message_created_at,
-    }));
+  const texts = sources.flatMap((s) =>
+    s.kind === 'text' && s.body?.trim() && s.message_id
+      ? [{ messageId: s.message_id, text: s.body.trim() }]
+      : [],
+  );
+  const photos = sources.flatMap((s) =>
+    s.kind === 'photo' && s.media_id
+      ? [
+          {
+            messageId: s.media_id,
+            caption: s.caption ?? undefined,
+            takenAt: s.taken_at ?? s.message_created_at,
+          },
+        ]
+      : [],
+  );
 
   const questions = await ctx.db.listQuestions(report.id);
   const previousAnswers = questions

@@ -142,18 +142,24 @@ describe('NewReportPage', () => {
     );
     const report = store.data.reports.find((r) => r.site_id === elm.id && !r.reporter_id)!;
     expect(loading).toHaveBeenCalledWith('Uploading photos 1 of 1');
-    const message = store.data.messages.find((m) => m.org_id === store.data.org.id)!;
+    // An office upload (D14): no reporter, uploaded_by the user, no message.
+    const message = store.data.uploads.find((u) => u.report_id === report.id)!;
     expect(message).toMatchObject({
-      conversation_id: null,
-      type: 'image',
-      body: 'Unit 2 trusses',
-      media_mime: 'image/jpeg',
+      reporter_id: null,
+      kind: 'photo',
+      caption: 'Unit 2 trusses',
+      mime: 'image/jpeg',
       storage_path: expect.stringMatching(
         new RegExp(`^${store.data.org.id}/${elm.id}/office/[0-9a-f-]{36}\\.jpg$`),
       ),
     });
     expect(store.data.sources).toContainEqual(
-      expect.objectContaining({ report_id: report.id, message_id: message.id, kind: 'photo' }),
+      expect.objectContaining({
+        report_id: report.id,
+        upload_id: message.id,
+        message_id: null,
+        kind: 'photo',
+      }),
     );
     const v1 = store.data.versions.find((v) => v.report_id === report.id && v.version === 1)!;
     expect((v1.data as unknown as DailyReportDataV1).photos).toEqual([

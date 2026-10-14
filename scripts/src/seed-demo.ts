@@ -78,6 +78,7 @@ end $$;
       .join('\n') + '\n',
   );
   parts.push(insertRows('report_versions', d.versions, { chunk: 25 }));
+  parts.push(insertRows('uploads', d.uploads));
   parts.push(insertRows('report_sources', d.sources));
   parts.push(insertRows('manpower_entries', d.manpower));
   parts.push(insertRows('work_items', d.workItems));

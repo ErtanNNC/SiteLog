@@ -58,8 +58,8 @@ async function report(opts: { date: string; kind?: string; filedAt?: string }) {
     [siteId, opts.date, `${opts.date}T22:30:00Z`],
   );
   const r = await svc<{ id: string }>(
-    `insert into reports (org_id, site_id, site_day_id, report_no, status, kind, filed_at)
-     values ($1, $2, $3, $4, 'filed', $5, $6) returning id`,
+    `insert into reports (org_id, site_id, site_day_id, report_no, status, kind, filed_at, language)
+     values ($1, $2, $3, $4, 'filed', $5, $6, 'en') returning id`,
     [
       orgId,
       siteId,

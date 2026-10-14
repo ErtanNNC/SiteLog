@@ -365,7 +365,7 @@ export default function WeatherPage() {
 }
 
 function DelayCard({ entry }: { entry: DelayEntry }) {
-  const precip = entry.observed?.precipIn;
+  const precip = entry.observed?.precip;
   const details: string[] = [];
   if (typeof precip === 'number') details.push(copy.weather.observed(`${precip} in`));
   if (entry.fullDay) details.push(copy.weather.fullDay);

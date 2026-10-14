@@ -34,7 +34,11 @@ export const V12_ROW_DEFAULTS = {
     copy_key: null,
   },
   transcripts: { upload_id: null, call_id: null },
-  reports: { channel: null, language: null, confirmed_via: null },
+  /**
+   * language: NOT NULL with no default since 20261014000002, so every writer sets it; the rows built
+   * here are the en-US Kestrel org's (reportLanguageFor('en-US')).
+   */
+  reports: { channel: null, language: 'en', confirmed_via: null },
   report_versions: { via: null },
   /** created_at: null as on the rows from before the migration; new rows get now(). */
   report_sources: { upload_id: null, call_id: null, question_id: null, created_at: null },

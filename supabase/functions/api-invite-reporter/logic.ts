@@ -1,3 +1,5 @@
+import { isActiveReporterStatus } from '@sitelog/shared';
+
 /** Pure rules of the reporter invite flow (§F3). */
 
 export const RESEND_AFTER_HOURS = 48;
@@ -16,7 +18,7 @@ export function canResend(
   now: Date,
 ): ResendCheck {
   if (reporter.status === 'disabled') return { ok: false, reason: 'This reporter is disabled.' };
-  if (reporter.status === 'verified') {
+  if (isActiveReporterStatus(reporter.status)) {
     return { ok: false, reason: 'This reporter already replied; no welcome re-send is needed.' };
   }
   if (previousResends >= MAX_RESENDS) {

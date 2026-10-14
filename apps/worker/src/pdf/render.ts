@@ -17,6 +17,7 @@ import {
   type ReportPdfInput,
 } from '@sitelog/pdf';
 import {
+  isVoiceSourceKind,
   readReportData,
   versionPhotos,
   type DailyReportData,
@@ -102,6 +103,7 @@ export async function loadLogo(
 type PhotoSource = Pick<
   ReportSourceWithMessage,
   | 'message_id'
+  | 'upload_id'
   | 'kind'
   | 'caption'
   | 'taken_at'
@@ -144,9 +146,12 @@ export async function buildReportPdfInput(
   args: { report: ReportRow; version: ReportVersionRow; site: SiteContext; data: DailyReportData },
 ): Promise<ReportPdfInput> {
   const { report, version, site, data } = args;
+  // Files from the uploads, else the WhatsApp messages (listReportSources).
   const sources = await ctx.db.listReportSources(report.id);
-  const audio = sources.filter((s) => s.kind === 'audio');
-  const transcripts = await ctx.db.listTranscripts(audio.map((a) => a.message_id));
+  const audio = sources.filter((s) => isVoiceSourceKind(s.kind));
+  const transcripts = await ctx.db.listTranscripts(
+    audio.flatMap((a) => (a.media_id ? [a.media_id] : [])),
+  );
   const languages = Array.from(
     new Set(transcripts.flatMap((t) => (t.language ?? '').split('+').filter(Boolean))),
   );
@@ -253,8 +258,10 @@ export async function buildEvidencePackInput(
       dayEvents.some((e) => e.full_day) || data.weather.periods.some((p) => p.fullDay === true);
     if (lost <= 0 && !fullDay) continue;
     const sources = await ctx.db.listReportSources(r.id);
-    const audio = sources.filter((s) => s.kind === 'audio');
-    const transcripts = await ctx.db.listTranscripts(audio.map((a) => a.message_id));
+    const audio = sources.filter((s) => isVoiceSourceKind(s.kind));
+    const transcripts = await ctx.db.listTranscripts(
+      audio.flatMap((a) => (a.media_id ? [a.media_id] : [])),
+    );
     const siteDay = await ctx.db.getSiteDay(r.site_day_id);
     const observed = siteDayWeatherOf(siteDay?.weather);
     const shown = versionPhotos(data.photos, sources);
@@ -272,7 +279,7 @@ export async function buildEvidencePackInput(
         (audio.length > 0 && photos.length > 0 && !!observed),
       transcriptExcerpts: weatherExcerpts(
         data,
-        transcripts.flatMap((t) => transcriptSegments(t.message_id, t)),
+        transcripts.flatMap((t) => transcriptSegments(t.upload_id ?? t.message_id, t)),
       ),
       photos,
       observed,

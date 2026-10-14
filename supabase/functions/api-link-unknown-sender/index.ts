@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { REPORTER_ROLES } from '@sitelog/shared';
+import { isActiveReporterStatus, REPORTER_ROLES } from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
 import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
 import { attachConversation } from '../_shared/conversations.ts';
@@ -79,7 +79,7 @@ async function link(admin: AppClient, user: AuthedUser, body: z.output<typeof Li
   let reporterId: string;
   if (existing) {
     reporterId = existing.id;
-    if (existing.status !== 'verified') {
+    if (!isActiveReporterStatus(existing.status)) {
       await admin
         .from('reporters')
         .update({ status: 'verified', verified_at: now, invited_at: existing.invited_at ?? now })

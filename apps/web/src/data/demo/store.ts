@@ -30,11 +30,7 @@ import type {
   ReporterStatus,
   SiteDayStatus,
 } from '@sitelog/shared/enums.ts';
-import type {
-  DailyReportDataV1,
-  PhotoV1,
-  StoredReportData,
-} from '@sitelog/shared/schemas/report.ts';
+import type { DailyReportDataV1, StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import {
   OFFICE_PHOTO_MAX,
@@ -50,6 +46,8 @@ import {
   pdfStoragePath,
 } from '@sitelog/shared/report/numbering.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
+import { sourceMediaId } from '@sitelog/shared/report/media.ts';
+import { reportLanguageFor } from '@sitelog/shared/locale.ts';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
 import { deadlineInstant } from '@sitelog/shared/schedule/reminders.ts';
 import { fromZonedTime } from 'date-fns-tz';
@@ -105,6 +103,23 @@ interface CheckedPhoto {
   position: number | null;
 }
 
+/** The key a version's data.photos entries use: `uploadId` in v2 data, `messageId` in v1. */
+type PhotoKey = 'uploadId' | 'messageId';
+/** A data.photos entry of either version. */
+type PhotoEntry = Partial<{
+  uploadId: unknown;
+  messageId: unknown;
+  caption: unknown;
+  takenAt: unknown;
+}>;
+type KeyedPhoto = { caption?: string; takenAt: string } & Partial<Record<PhotoKey, string>>;
+
+/** The media id of a data.photos entry (lower case), whichever key it has. */
+function photoEntryId(p: PhotoEntry | null | undefined): string {
+  const id = typeof p?.uploadId === 'string' ? p.uploadId : p?.messageId;
+  return typeof id === 'string' ? id.toLowerCase() : '';
+}
+
 export class DemoStore {
   readonly data: DemoDataset;
   private listeners = new Set<(e: ChangeEvent) => void>();
@@ -157,6 +172,7 @@ export class DemoStore {
       siteDays: d.siteDays,
       reports: d.reports,
       versions: d.versions,
+      uploads: d.uploads,
       sources: d.sources,
       manpower: d.manpower,
       weatherEvents: d.weatherEvents,
@@ -220,8 +236,14 @@ export class DemoStore {
     return s;
   }
 
-  /** Mirror of denormalize_report_version() in the migrations. */
-  private denormalize(report: ReportRow, version: number, data: DailyReportDataV1): void {
+  /**
+   * Mirror of denormalize_report_version() in the migrations, for v1 and v2 data: the fields it
+   * copies have one shape in both (the voice note of a weather period is a v1 `audio` or a v2
+   * `voice_note` source; `observed` is copied as written). The report_sources sync of the SQL is
+   * not mirrored: the demo's sources are written with the media.
+   */
+  private denormalize(report: ReportRow, version: number, stored: StoredReportData): void {
+    const data = stored as DailyReportDataV1;
     const d = this.data;
     d.manpower = d.manpower.filter((m) => !(m.report_id === report.id && m.version === version));
     d.workItems = d.workItems.filter((w) => !(w.report_id === report.id && w.version === version));
@@ -262,7 +284,11 @@ export class DemoStore {
     });
     const date = data.reportDate;
     data.weather.periods.forEach((p, i) => {
-      const audio = p.source.find((s) => s.type === 'audio') ?? null;
+      const audio =
+        p.source.find((s) => {
+          const type: string = s.type;
+          return type === 'audio' || type === 'voice_note';
+        }) ?? null;
       const row: WeatherEventRow = {
         id: demoId(`wx:${report.id}:${version}:${i}`),
         report_id: report.id,
@@ -286,7 +312,7 @@ export class DemoStore {
 
   private pushVersion(
     report: ReportRow,
-    data: DailyReportDataV1,
+    data: StoredReportData,
     author: ReportVersionRow['author'],
     userId: string | null,
     changeNote: string | null,
@@ -391,12 +417,14 @@ export class DemoStore {
    * a new confirmed company, with an audit row. Names in `skip` (pending `unknown_company:`
    * review reasons) stay unlinked for the review banner.
    */
-  private linkTypedCompanies(
-    data: DailyReportDataV1,
+  private linkTypedCompanies<D extends StoredReportData>(
+    stored: D,
     reportId: string,
     userId: string,
     skip: string[] = [],
-  ): DailyReportDataV1 {
+  ): D {
+    // The crew rows it reads and writes have one shape in v1 and v2 data.
+    const data = stored as DailyReportDataV1;
     const d = this.data;
     const skipped = new Set(skip.map((s) => s.trim().toLowerCase()));
     const links = new Map<string, CompanyRow>();
@@ -453,20 +481,22 @@ export class DemoStore {
       }
       links.set(key, company);
     }
-    if (!links.size) return data;
+    if (!links.size) return stored;
     return {
       ...data,
       manpower: data.manpower.map((m) => {
         const company = m.companyId === null ? links.get(m.companyName.trim().toLowerCase()) : null;
         return company ? { ...m, companyId: company.id, companyName: company.name } : m;
       }),
-    };
+    } as D;
   }
 
   /**
-   * Mirror of create_report_version(): `data.photos` keeps the report's photos it still lists
-   * (first occurrence, caption as sent, time as recorded), with `photos` (new uploads) placed
-   * among them at their positions (placeOfficePhotos).
+   * Mirror of create_report_version() for v1 and v2 data: `data.photos` keeps the report's photos
+   * it still lists (by `uploadId` or `messageId`: first occurrence, caption as sent, time as
+   * recorded), with `photos` (new uploads) placed among them at their positions
+   * (placeOfficePhotos), each keyed as the version's data keys photos (`uploadId` in v2,
+   * `messageId` in v1).
    */
   createReportVersion(
     reportId: string,
@@ -475,10 +505,7 @@ export class DemoStore {
     userId: string,
     photos: OfficePhotoUpload[] = [],
   ): number {
-    // Like the migrated create_report_version, this mirror handles v1 data only; v2 arrives with
-    // the SQL readers of report data (W1-05, GAP §7 step 10). Every stored version is v1 until then.
-    if (stored.schemaVersion !== 1) throw new Error(copy.errors.generic);
-    const data: DailyReportDataV1 = stored;
+    const key: PhotoKey = stored.schemaVersion === 2 ? 'uploadId' : 'messageId';
     const r = this.report(reportId);
     if (!changeNote.trim()) throw new Error(copy.report.edit.changeNoteRequired);
     const pending = r.review_reasons
@@ -486,50 +513,62 @@ export class DemoStore {
       .map((x) => x.slice('unknown_company:'.length));
 
     const photoSources = this.data.sources.filter(
-      (s) => s.report_id === r.id && s.kind === 'photo',
+      (s) => s.report_id === r.id && s.kind === 'photo' && sourceMediaId(s),
     );
-    const byMessage = new Map(photoSources.map((s) => [s.message_id.toLowerCase(), s]));
+    const byMedia = new Map(photoSources.map((s) => [sourceMediaId(s)!.toLowerCase(), s]));
     const prevData = this.data.versions.find(
       (v) => v.report_id === r.id && v.version === r.current_version,
-    )?.data as unknown as Partial<DailyReportDataV1> | undefined;
-    const prevList = Array.isArray(prevData?.photos) ? prevData.photos : null;
+    )?.data as unknown as { photos?: unknown } | undefined;
+    const prevList: PhotoEntry[] | null = Array.isArray(prevData?.photos)
+      ? (prevData.photos as PhotoEntry[])
+      : null;
     const prevIds = prevList
-      ? prevList.flatMap((p) => byMessage.get(String(p.messageId).toLowerCase())?.message_id ?? [])
-      : photoSources.map((s) => s.message_id);
-    const listed: Array<Partial<PhotoV1>> = Array.isArray(data.photos)
-      ? data.photos
+      ? prevList.flatMap((p) => {
+          const src = byMedia.get(photoEntryId(p));
+          return src ? [sourceMediaId(src)!] : [];
+        })
+      : photoSources.map((s) => sourceMediaId(s)!);
+    const listed: PhotoEntry[] = Array.isArray(stored.photos)
+      ? (stored.photos as PhotoEntry[])
       : (prevList ??
-        photoSources.map((s) => ({ messageId: s.message_id, caption: s.caption ?? undefined })));
+        photoSources.map((s) => ({
+          uploadId: sourceMediaId(s)!,
+          caption: s.caption ?? undefined,
+        })));
     const seen = new Set<string>();
-    const kept: PhotoV1[] = [];
+    const kept: KeyedPhoto[] = [];
     for (const p of listed) {
-      const key = typeof p?.messageId === 'string' ? p.messageId.toLowerCase() : '';
-      const src = byMessage.get(key);
-      if (!src || seen.has(key)) continue;
-      seen.add(key);
+      const id = photoEntryId(p);
+      const src = byMedia.get(id);
+      if (!src || seen.has(id)) continue;
+      seen.add(id);
       const caption = typeof p.caption === 'string' ? p.caption.trim() : '';
       if (caption.length > PHOTO_CAPTION_MAX) throw new Error('photo caption is too long');
       const recorded = prevList?.find(
-        (x) => String(x.messageId).toLowerCase() === key && typeof x.takenAt === 'string',
+        (x) => photoEntryId(x) === id && typeof x.takenAt === 'string',
       )?.takenAt;
-      const message = this.data.messages.find((m) => m.id === src.message_id);
+      const mediaId = sourceMediaId(src)!;
+      const file =
+        this.data.uploads.find((u) => u.id === mediaId) ??
+        this.data.messages.find((m) => m.id === src.message_id);
+      const fileTime = file && ('received_at' in file ? file.received_at : file.created_at);
       kept.push({
-        messageId: src.message_id,
+        [key]: mediaId,
         ...(caption ? { caption } : {}),
-        takenAt: recorded ?? src.taken_at ?? message?.created_at ?? this.nowIso(),
-      });
+        takenAt: recorded ?? src.taken_at ?? fileTime ?? this.nowIso(),
+      } as KeyedPhoto);
     }
     const uploads = this.checkOfficePhotos(r.org_id, r.site_id, photos);
-    const added = this.insertOfficePhotos(r.id, r.org_id, uploads, userId);
+    const added = this.insertOfficePhotos(r.id, r.site_id, uploads, userId, key);
     const shown = placeOfficePhotos(kept, added, uploads);
-    const ids = shown.map((p) => p.messageId);
+    const ids = shown.map((p) => photoEntryId(p));
 
     const next = this.pushVersion(
       r,
       {
-        ...this.linkTypedCompanies(structuredClone(data), r.id, userId, pending),
+        ...this.linkTypedCompanies(structuredClone(stored), r.id, userId, pending),
         photos: shown,
-      },
+      } as StoredReportData,
       'office_user',
       userId,
       changeNote.trim(),
@@ -595,7 +634,11 @@ export class DemoStore {
           position > 1000)
       )
         throw new Error('invalid photo position');
-      if (seen.has(path) || this.data.messages.some((m) => m.storage_path === path))
+      if (
+        seen.has(path) ||
+        this.data.uploads.some((u) => u.storage_path === path) ||
+        this.data.messages.some((m) => m.storage_path === path)
+      )
         throw new Error('photo already attached');
       if (!this.uploadedPhotos.has(path)) throw new Error('photo not uploaded');
       seen.add(path);
@@ -603,44 +646,52 @@ export class DemoStore {
     });
   }
 
-  /** Each checked upload as an org-level message + photo source; returns its data.photos entry. */
+  /**
+   * Each checked upload as an office upload (no reporter, uploaded_by the user, D14) + a photo
+   * source with its upload_id; returns its data.photos entry, keyed as `key`.
+   */
   private insertOfficePhotos(
     reportId: string,
-    orgId: string,
+    siteId: string,
     uploads: CheckedPhoto[],
     userId: string,
-  ): PhotoV1[] {
+    key: PhotoKey,
+  ): KeyedPhoto[] {
     return uploads.map((u) => {
-      const id = localId('msg');
-      this.data.messages.push({
-        ...V12_ROW_DEFAULTS.messages,
+      const id = localId('upload');
+      this.data.uploads.push({
         id,
-        conversation_id: null,
-        org_id: orgId,
-        direction: 'in',
-        wa_message_id: null,
-        type: 'image',
-        body: u.caption,
-        payload: { source: 'office_upload', uploaded_by: userId },
-        media_id: null,
-        media_mime: u.mime,
+        report_id: reportId,
+        reporter_id: null,
+        site_id: siteId,
+        kind: 'photo',
         storage_path: u.path,
+        mime: u.mime,
+        bytes: null,
         duration_s: null,
-        template_name: null,
-        status: 'received',
-        error: null,
-        created_at: this.nowIso(),
+        peaks: null,
+        recorded_at: u.takenAt,
+        received_at: this.nowIso(),
+        caption: u.caption,
+        uploaded_by: userId,
+        purged_at: null,
       });
       this.data.sources.push({
         ...V12_ROW_DEFAULTS.report_sources,
         id: localId('src'),
         report_id: reportId,
-        message_id: id,
+        message_id: null,
+        upload_id: id,
         kind: 'photo',
         caption: u.caption,
         taken_at: u.takenAt,
+        created_at: this.nowIso(),
       });
-      return { messageId: id, ...(u.caption ? { caption: u.caption } : {}), takenAt: u.takenAt };
+      return {
+        [key]: id,
+        ...(u.caption ? { caption: u.caption } : {}),
+        takenAt: u.takenAt,
+      } as KeyedPhoto;
     });
   }
 
@@ -677,12 +728,12 @@ export class DemoStore {
     const at = this.nowIso();
     const isLate = Date.parse(at) > Date.parse(sd.deadline_at);
     const reportId = localId('report');
-    // Version 1 shows exactly the photos uploaded with it, ordered by their positions.
+    // Version 1 (v1 data) shows exactly the photos uploaded with it, ordered by their positions.
     const photos = placeOfficePhotos(
       [],
-      this.insertOfficePhotos(reportId, d.org.id, uploads, input.userId),
+      this.insertOfficePhotos(reportId, site.id, uploads, input.userId, 'messageId'),
       uploads,
-    );
+    ) as DailyReportDataV1['photos'];
     // Every crew row here was typed by the office: each "Add new…" name becomes a company.
     const data: DailyReportDataV1 = this.linkTypedCompanies(
       { ...structuredClone(input.data), reportDate: input.date, schemaVersion: 1, photos },
@@ -710,6 +761,9 @@ export class DemoStore {
       kind: 'daily',
       created_at: at,
       updated_at: at,
+      // As create_office_report: typed in the panel, in the org's report language (D13).
+      channel: 'office',
+      language: reportLanguageFor(d.org.locale),
     };
     d.reports.push(report);
     d.versions.push({

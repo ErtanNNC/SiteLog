@@ -1,4 +1,4 @@
-import { firstName, formatDeadline } from '@sitelog/shared';
+import { firstName, formatDeadline, isActiveReporterStatus } from '@sitelog/shared';
 import { WaApiError } from '../wa/client';
 import { sendBusinessInitiated } from '../wa/send';
 import { PermanentJobError, type JobHandler } from './types';
@@ -57,7 +57,7 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload) => {
   await ctx.db.updateReporter(reporter.id, {
     invited_at: ctx.now().toISOString(),
     last_invite_error: null,
-    ...(reporter.status === 'verified' ? {} : { status: 'invited' as const }),
+    ...(isActiveReporterStatus(reporter.status) ? {} : { status: 'invited' as const }),
   });
   if (convo.state === 'new' || payload.reinvite) {
     await ctx.db.updateConversation(convo.id, {

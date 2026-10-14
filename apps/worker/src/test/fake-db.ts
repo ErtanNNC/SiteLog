@@ -21,7 +21,7 @@ import type {
   UnknownSenderRow,
   WeatherEventRow,
 } from '@sitelog/shared';
-import { formatReportNo } from '@sitelog/shared';
+import { formatReportNo, reportLanguageFor } from '@sitelog/shared';
 import { V12_ROW_DEFAULTS } from '@sitelog/shared';
 import { median } from '../cost';
 import type { AuditInput, Db, ExpiredMedia, Json, ReportSourceWithMessage } from '../db';
@@ -235,6 +235,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return d.transcripts.get(messageId) ?? null;
     },
     async listTranscripts(ids) {
+      // Transcripts are keyed by message id here (the fake has no uploads).
       return ids.map((id) => d.transcripts.get(id)).filter((t): t is TranscriptRow => !!t);
     },
     async upsertTranscript(input) {
@@ -443,8 +444,10 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return d.reports.get(id) ?? null;
     },
     async insertReport(input) {
+      const org = d.orgs.get(input.org_id);
       const row: ReportRow = {
         ...V12_ROW_DEFAULTS.reports,
+        language: input.language ?? reportLanguageFor(org?.locale ?? 'en-US'),
         id: randomUUID(),
         org_id: input.org_id,
         site_id: input.site_id,
@@ -579,10 +582,11 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return d.sources
         .filter((s) => s.report_id === reportId)
         .map((s): ReportSourceWithMessage | null => {
-          const m = d.messages.get(s.message_id);
+          const m = s.message_id ? d.messages.get(s.message_id) : undefined;
           if (!m) return null;
           return {
             ...s,
+            media_id: s.upload_id ?? s.message_id,
             message_type: m.type,
             storage_path: m.storage_path,
             duration_s: m.duration_s,
@@ -834,9 +838,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         .sort((a, b) => a.created_at.localeCompare(b.created_at))
         .slice(0, limit)
         .map((m): ExpiredMedia => ({
-          message_id: m.id,
+          id: m.id,
           storage_path: m.storage_path!,
-          type: m.type,
+          bucket: m.type === 'audio' ? 'audio' : 'photos',
           created_at: m.created_at,
         }));
     },
@@ -867,7 +871,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       for (const id of ids) d.jobs.delete(id);
       return ids.length;
     },
-    async purgeMessageMedia(messageId, purgedAt) {
+    async purgeMedia(messageId, purgedAt) {
       const m = d.messages.get(messageId);
       if (m) {
         d.messages.set(messageId, {

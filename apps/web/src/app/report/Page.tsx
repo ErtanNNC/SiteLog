@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { formatTimeInTz, formatWeekdayMonthDay } from '@sitelog/shared/format.ts';
+import { isReporterAuthor } from '@sitelog/shared/enums.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { TopBarControls } from '@/components/shell/TopBar';
@@ -650,7 +651,7 @@ function buildProvenance(detail: ReportDetail): string {
   for (const v of detail.versions) {
     if (v.version === 1) continue;
     const t = formatTimeInTz(v.createdAt, tz);
-    if (v.author === 'reporter_reply') parts.push(copy.report.provenance.editedByReply(t));
+    if (isReporterAuthor(v.author)) parts.push(copy.report.provenance.editedByReply(t));
     else if (v.author === 'office_user')
       parts.push(copy.report.provenance.editedBy(v.authorName, t));
   }

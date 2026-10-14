@@ -262,8 +262,12 @@ describe('ReportDetailPage: photos in Edit', () => {
     const row = store.data.reports.find((r) => r.id === report.id)!;
     expect(row.current_version).toBe(3);
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
-    const added = store.data.messages.find((m) => m.org_id === store.data.org.id)!;
-    expect(added).toMatchObject({ body: 'Pump truck at 13:00', type: 'image' });
+    const added = store.data.uploads.find((u) => u.report_id === report.id)!;
+    expect(added).toMatchObject({
+      caption: 'Pump truck at 13:00',
+      kind: 'photo',
+      reporter_id: null,
+    });
     expect((v3.data as unknown as DailyReportDataV1).photos).toEqual([
       second,
       { messageId: added.id, caption: 'Pump truck at 13:00', takenAt: '2026-10-09T23:00:00.000Z' },
@@ -365,7 +369,7 @@ describe('ReportDetailPage: photos in Edit', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
-    const added = store.data.messages.find((m) => m.org_id === store.data.org.id)!;
+    const added = store.data.uploads.find((u) => u.report_id === report.id)!;
     expect((v3.data as unknown as DailyReportDataV1).photos).toEqual([
       { messageId: added.id, caption: 'Crane lift', takenAt: '2026-10-09T23:00:00.000Z' },
       first,

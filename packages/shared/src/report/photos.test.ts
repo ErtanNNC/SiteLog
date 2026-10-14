@@ -53,6 +53,34 @@ describe('versionPhotos', () => {
     expect(out[0]!.takenAt).toBe(sources[2]!.taken_at); // empty time falls back to the source's
   });
 
+  it('matches a photo by its upload, else its message (one UUID after the backfill)', () => {
+    const mixed: PhotoSourceLike[] = [
+      // An office photo from 20261014000002 on: an upload, no message.
+      { message_id: null, upload_id: 'u1', kind: 'photo', caption: 'Deck', taken_at: 't1' },
+      // A WhatsApp photo the migration backfilled: upload and message share the id.
+      { message_id: 'm2', upload_id: 'm2', kind: 'photo', caption: null, taken_at: 't2' },
+      // A WhatsApp photo stored after the migration: a message only.
+      { message_id: 'm3', upload_id: null, kind: 'photo', caption: null, taken_at: 't3' },
+      // A source with neither key (its upload purged by retention) matches nothing.
+      { message_id: null, upload_id: null, kind: 'photo', caption: null, taken_at: 't4' },
+    ];
+    const out = versionPhotos(
+      [
+        { uploadId: 'M3', takenAt: '' },
+        { uploadId: 'u1', caption: 'Deck', takenAt: 'x1' },
+        { uploadId: 'm2', takenAt: 'x2' },
+      ],
+      mixed,
+    );
+    expect(out.map((p) => [p.source.upload_id ?? p.source.message_id, p.takenAt])).toEqual([
+      ['m3', 't3'],
+      ['u1', 'x1'],
+      ['m2', 'x2'],
+    ]);
+    // Legacy data (no list): every photo source with a file key, in source order.
+    expect(versionPhotos(null, mixed)).toHaveLength(4);
+  });
+
   it('shows no photos for a version that lists none', () => {
     expect(versionPhotos([], sources)).toEqual([]);
   });

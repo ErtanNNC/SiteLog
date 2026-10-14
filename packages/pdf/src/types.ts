@@ -11,7 +11,8 @@ export type PdfPhoto = PdfImage & {
 
 export interface PdfEdit {
   version: number;
-  author: 'agent' | 'reporter_reply' | 'office_user';
+  /** version_author: `reporter_reply` is renamed `reporter` in step 11 (isReporterAuthor). */
+  author: 'agent' | 'reporter_reply' | 'reporter' | 'office_user';
   changeNote: string | null;
   createdAt: string;
 }

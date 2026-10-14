@@ -245,11 +245,12 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
     ],
   },
   {
-    id: 'step10-language',
+    id: 'd12-uploads-purged',
     reason:
-      'reports.language is added nullable in step 9; step 10 backfills it from the org locale (en for every existing org) and makes it NOT NULL, with every report writer setting it in the same commit.',
-    closes: 'W1-05 step 10',
-    diffs: ['column nullability: reports.language (spec not null; repo null)'],
+      'Retention (§15) deletes an expired file and its transcript and keeps the uploads row with purged_at (20261014000002), as it keeps a WhatsApp message with storage_path null: report_sources keep their upload_id (an office photo has no other key), so a version still lists a purged photo and an office edit does not drop it unaudited. Readers treat a purged upload as a missing file.',
+    closes: 'kept',
+    decision: 'D12',
+    diffs: ['column extra: uploads.purged_at (timestamp with time zone)'],
   },
   {
     id: 'w1-10-dedupe',

@@ -26,14 +26,21 @@ import type {
   SubInvoiceRow,
   TranscriptRow,
   UnknownSenderRow,
+  UploadRow,
   WeatherEventRow,
 } from '@sitelog/shared/db/types.ts';
-import type { InvoiceStatus } from '@sitelog/shared/enums.ts';
+import {
+  isActiveReporterStatus,
+  isReporterAuthor,
+  type InvoiceStatus,
+} from '@sitelog/shared/enums.ts';
 import { reportChip, siteDayChip } from '@sitelog/shared/status.ts';
 import type { ChipVariant } from '@sitelog/shared/status.ts';
 import type {
   DailyReportData,
   ManpowerEntry,
+  ObservedWeather,
+  ObservedWeatherV1,
   Photo,
   PhotoV1,
   Source,
@@ -43,7 +50,19 @@ import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import { normalizePayrollColumns, type PayrollColumn } from '@sitelog/shared/report/payroll.ts';
 import { versionPhotos } from '@sitelog/shared/report/photos.ts';
-import { readReportData, upgradePhotosV1 } from '@sitelog/shared/report/upgrade.ts';
+import {
+  isVoiceSourceKind,
+  mediaOf,
+  sourceMediaId,
+  transcriptMediaId,
+  voiceMediaIdOf,
+  type MediaRef,
+} from '@sitelog/shared/report/media.ts';
+import {
+  readReportData,
+  upgradeObservedV1,
+  upgradePhotosV1,
+} from '@sitelog/shared/report/upgrade.ts';
 import { isWorkingDay } from '@sitelog/shared/schedule/day.ts';
 import {
   addDays,
@@ -137,6 +156,12 @@ export interface RowSet {
   companies: CompanyRow[];
   glossary: GlossaryTermRow[];
   messages: MessageRow[];
+  /**
+   * Files of report sources (D14): office photos since 20261014000002 and the media the
+   * migration backfilled with their message ids. Readers take a source's file from here first and
+   * from `messages` otherwise (mediaIndex). Optional: rows from before W1-06 have none.
+   */
+  uploads?: UploadRow[];
   transcripts: TranscriptRow[];
   unknownSenders: UnknownSenderRow[];
   siteDays: SiteDayRow[];
@@ -377,34 +402,60 @@ export function currentVersion(ix: Index, report: ReportRow): ReportVersionRow |
   return ix.versionsByReport.get(report.id)?.find((v) => v.version === report.current_version);
 }
 
-/** One photo a version shows, with its message (storage path, type). */
+/** Uploads and messages by id: where a source's file is (report/media.ts mediaOf). */
+export interface MediaIndex {
+  uploads: ReadonlyMap<string, UploadRow>;
+  messages: ReadonlyMap<string, MessageRow>;
+}
+
+export function mediaIndex(rows: Pick<RowSet, 'uploads' | 'messages'>): MediaIndex {
+  return {
+    uploads: new Map((rows.uploads ?? []).map((u) => [u.id, u])),
+    messages: new Map(rows.messages.map((m) => [m.id, m])),
+  };
+}
+
+/** A source's file: its upload, else its message. */
+export function sourceMedia(source: ReportSourceRow, media: MediaIndex): MediaRef | undefined {
+  return mediaOf(source, media.uploads, media.messages);
+}
+
+/** One photo a version shows, with its file (storage path, type). */
 export interface ShownPhoto {
   source: ReportSourceRow;
-  message: MessageRow | undefined;
+  /** The source's media id (upload, else message): the id data.photos keys it by. */
+  id: string;
+  media: MediaRef | undefined;
   caption: string | null;
   takenAt: string | null;
 }
 
 /**
  * The photos a version shows (versionPhotos: its data.photos in order; every photo of the report
- * for data without the list). The message body stands in for a missing caption only then: with
- * a list, a caption cleared in an edit stays cleared.
+ * for data without the list). The file's caption (an upload's, or a WhatsApp message's body)
+ * stands in for a missing caption only then: with a list, a caption cleared in an edit stays
+ * cleared.
  */
 export function shownPhotos(
   photos: unknown,
   sources: readonly ReportSourceRow[],
-  msgById: ReadonlyMap<string, MessageRow>,
+  media: MediaIndex,
 ): ShownPhoto[] {
   const listed = Array.isArray(photos);
-  return versionPhotos(listed ? (photos as DailyReportData['photos']) : null, sources).map(
+  return versionPhotos(listed ? (photos as DailyReportData['photos']) : null, sources).flatMap(
     ({ source, caption, takenAt }) => {
-      const message = msgById.get(source.message_id);
-      return {
-        source,
-        message,
-        caption: listed ? caption : (caption ?? message?.body ?? null),
-        takenAt: takenAt ?? message?.created_at ?? null,
-      };
+      const id = sourceMediaId(source);
+      if (!id) return [];
+      const file = sourceMedia(source, media);
+      return [
+        {
+          source,
+          id,
+          media: file,
+          caption: listed ? caption : (caption ?? file?.text ?? null),
+          takenAt: takenAt ?? file?.receivedAt ?? null,
+        },
+      ];
     },
   );
 }
@@ -501,10 +552,17 @@ function weatherImpactText(data: DailyReportData | null): string | null {
   return p.impact ? `${head} · ${p.impact}` : head;
 }
 
-export function peaksOf(payload: unknown): number[] {
-  if (!isRecord(payload)) return [];
-  const p = payload.peaks;
-  return Array.isArray(p) ? p.filter((x): x is number => typeof x === 'number') : [];
+/**
+ * weather_events.observed (the version's weather.observed, copied as written) in v2 terms: a v1
+ * copy (precipIn, tempMinF …) is upgraded, a v2 one (precip, tempMin …) passes; anything else is
+ * null.
+ */
+export function observedWeatherOf(json: unknown): ObservedWeather | null {
+  if (!isRecord(json)) return null;
+  if (typeof json.precipIn === 'number')
+    return upgradeObservedV1(json as unknown as ObservedWeatherV1);
+  if (typeof json.precip === 'number') return json as unknown as ObservedWeather;
+  return null;
 }
 
 export function segmentsOf(json: unknown): TranscriptSegment[] {
@@ -841,7 +899,9 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
   // with the first reminder turned off, the "Reminders go out at …" line would be false.
   const activeIds = new Set(active.map((s) => s.id));
   const hasReporter = rows.siteReporters.some(
-    (sr) => activeIds.has(sr.site_id) && ix.reporterById.get(sr.reporter_id)?.status === 'verified',
+    (sr) =>
+      activeIds.has(sr.site_id) &&
+      isActiveReporterStatus(ix.reporterById.get(sr.reporter_id)?.status ?? ''),
   );
 
   return {
@@ -1108,7 +1168,7 @@ export function assembleSiteDetail(
     .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
 
   // Each report's photos as its current version shows them (an edit may remove or re-caption).
-  const msgById = new Map(rows.messages.map((m) => [m.id, m]));
+  const media = mediaIndex(rows);
   const photoSources = groupBy(
     rows.sources.filter((s) => s.kind === 'photo'),
     (s) => s.report_id,
@@ -1122,14 +1182,14 @@ export function assembleSiteDetail(
         : photoListOf(
             rows.photoLists?.find((p) => p.report_id === r.id && p.version === r.current_version),
           );
-      return shownPhotos(list, photoSources.get(r.id) ?? [], msgById).map((p) => ({
-        messageId: p.source.message_id,
+      return shownPhotos(list, photoSources.get(r.id) ?? [], media).map((p) => ({
+        messageId: p.id,
         reportId: r.id,
         reportNo: r.report_no,
         date: ix.reportDate.get(r.id) ?? '',
         caption: p.caption,
         takenAt: p.takenAt,
-        storagePath: p.message?.storage_path ?? null,
+        storagePath: p.media?.storagePath ?? null,
         url: null,
       }));
     })
@@ -1231,8 +1291,8 @@ export function filterReports(
   for (const w of wx)
     lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
   const incidentIds = new Set<string>();
-  const transcriptByMessage = new Map(
-    rows.transcripts.map((t) => [t.message_id, t.text.toLowerCase()]),
+  const transcriptByMedia = new Map(
+    rows.transcripts.map((t) => [transcriptMediaId(t), t.text.toLowerCase()]),
   );
   const sourcesByReport = groupBy(rows.sources, (s) => s.report_id);
 
@@ -1267,7 +1327,7 @@ export function filterReports(
         .join(' ')
         .toLowerCase();
       const transcripts = (sourcesByReport.get(r.id) ?? [])
-        .map((s) => transcriptByMessage.get(s.message_id) ?? '')
+        .map((s) => transcriptByMedia.get(sourceMediaId(s)) ?? '')
         .join(' ');
       if (!hay.includes(q) && !transcripts.includes(q)) return false;
     }
@@ -1424,18 +1484,19 @@ export function assembleReportDetail(
   const previousData = versionData(versions.find((v) => v.version === version - 1));
 
   const sources = rows.sources.filter((s) => s.report_id === report.id);
-  const msgById = new Map(rows.messages.map((m) => [m.id, m]));
-  const audioSrc = sources.find((s) => s.kind === 'audio');
-  const audioMsg = audioSrc ? msgById.get(audioSrc.message_id) : undefined;
-  const transcriptRow = audioMsg
-    ? rows.transcripts.find((t) => t.message_id === audioMsg.id)
+  const media = mediaIndex(rows);
+  // The voice note (WhatsApp `audio` or v1.2 `voice_note`), from its upload or its message.
+  const audioSrc = sources.find((s) => isVoiceSourceKind(s.kind) && sourceMedia(s, media));
+  const audioFile = audioSrc ? sourceMedia(audioSrc, media) : undefined;
+  const transcriptRow = audioFile
+    ? rows.transcripts.find((t) => transcriptMediaId(t) === audioFile.id)
     : undefined;
   const segments = transcriptRow ? segmentsOf(transcriptRow.segments) : [];
   // The viewed version's photos: an office edit may have removed some or changed a caption.
-  const photos = shownPhotos(data.photos, sources, msgById).map((p) => ({
-    messageId: p.source.message_id,
-    storagePath: p.message?.storage_path ?? null,
-    mime: p.message?.media_mime ?? null,
+  const photos = shownPhotos(data.photos, sources, media).map((p) => ({
+    messageId: p.id,
+    storagePath: p.media?.storagePath ?? null,
+    mime: p.media?.mime ?? null,
     url: null,
     caption: p.caption,
     takenAt: p.takenAt,
@@ -1479,10 +1540,13 @@ export function assembleReportDetail(
       };
     });
   const date = ix.reportDate.get(report.id) ?? data.reportDate;
+  // The WhatsApp thread of the day, when the voice note came by WhatsApp.
+  const convoId = audioFile?.conversationId ?? null;
   const convoMessages = rows.messages
     .filter(
       (m) =>
-        (audioMsg ? m.conversation_id === audioMsg.conversation_id : false) &&
+        convoId !== null &&
+        m.conversation_id === convoId &&
         formatDateInTz(m.created_at, tz) === date,
     )
     .sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
@@ -1551,7 +1615,7 @@ export function assembleReportDetail(
       authorName:
         v.author === 'office_user'
           ? (memberName(rows, v.author_user_id) ?? 'Office')
-          : v.author === 'reporter_reply'
+          : isReporterAuthor(v.author)
             ? reporterName
             : 'SiteLog agent',
       changeNote: v.change_note,
@@ -1560,14 +1624,14 @@ export function assembleReportDetail(
       pdfPath: v.pdf_path,
     })),
     totals: totalsOf(rows, data),
-    audio: audioMsg
+    audio: audioFile
       ? {
-          messageId: audioMsg.id,
-          peaks: peaksOf(audioMsg.payload),
-          durationS: Number(audioMsg.duration_s ?? 0),
-          storagePath: audioMsg.storage_path,
+          messageId: audioFile.id,
+          peaks: audioFile.peaks ?? [],
+          durationS: Number(audioFile.durationS ?? 0),
+          storagePath: audioFile.storagePath,
           url: null,
-          receivedAt: audioMsg.created_at,
+          receivedAt: audioFile.receivedAt,
           language: transcriptRow?.language ?? null,
         }
       : null,
@@ -1700,9 +1764,9 @@ export function assembleHours(
   };
   const gapRows = rowsOut.filter((r) => r.status === 'gap');
 
-  const transcriptByMessage = new Map(rows.transcripts.map((t) => [t.message_id, t]));
+  const transcriptByMedia = new Map(rows.transcripts.map((t) => [transcriptMediaId(t), t]));
   const audioByReport = new Map<string, ReportSourceRow>();
-  for (const s of rows.sources) if (s.kind === 'audio') audioByReport.set(s.report_id, s);
+  for (const s of rows.sources) if (isVoiceSourceKind(s.kind)) audioByReport.set(s.report_id, s);
 
   const invoices: InvoiceDetail[] = rowsOut
     .filter((r) => r.invoiceId)
@@ -1730,11 +1794,16 @@ export function assembleHours(
           const entries = subs.filter((m) => m.report_id === rid && keyOf(m) === r.key);
           const entry = entries[0];
           if (!rep && !entry) continue;
+          // The manpower row's voice-note source: v1 audio (messageId) or v2 voice_note (uploadId).
           const src =
-            entry && isRecord(entry.source) && entry.source.type === 'audio' ? entry.source : null;
+            entry &&
+            isRecord(entry.source) &&
+            (entry.source.type === 'audio' || entry.source.type === 'voice_note')
+              ? entry.source
+              : null;
           const audioStart = src && typeof src.start === 'number' ? src.start : null;
           const audio = audioByReport.get(rid);
-          const transcript = audio ? transcriptByMessage.get(audio.message_id) : undefined;
+          const transcript = audio ? transcriptByMedia.get(sourceMediaId(audio)) : undefined;
           const seg =
             transcript && audioStart !== null
               ? segmentsOf(transcript.segments).find(
@@ -1753,8 +1822,8 @@ export function assembleHours(
             quote,
             audioStart,
             messageId:
-              audio?.message_id ??
-              (src && typeof src.messageId === 'string' ? src.messageId : null),
+              (audio && sourceMediaId(audio)) ??
+              (src ? voiceMediaIdOf(src as unknown as Source) : null),
           });
         }
       }
@@ -1873,11 +1942,10 @@ export function assembleWeather(
     .map((w) => {
       const site = ix.siteById.get(w.site_id);
       const report = ix.reportById.get(w.report_id);
+      // The voice note of the period: v1 `audio` (messageId) or v2 `voice_note` (uploadId).
       const audio = isRecord(w.audio_source) ? w.audio_source : null;
       const audioStart = audio && typeof audio.start === 'number' ? audio.start : null;
-      const observed = isRecord(w.observed)
-        ? (w.observed as unknown as DelayEntry['observed'])
-        : null;
+      const observed = observedWeatherOf(w.observed);
       return {
         id: w.id,
         reportId: w.report_id,
@@ -1895,7 +1963,7 @@ export function assembleWeather(
         observed,
         evidence: {
           audioStart,
-          messageId: audio && typeof audio.messageId === 'string' ? audio.messageId : null,
+          messageId: audio ? voiceMediaIdOf(audio as unknown as Source) : null,
           photos: w.photo_count,
           weatherData: !!observed,
           // Only a site manager's report asks for a photo; one typed in the panel has no reporter.
@@ -1994,7 +2062,7 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
     const chipStatus: TeamReporter['chipStatus'] =
       r.status === 'disabled'
         ? 'disabled'
-        : r.status === 'verified'
+        : isActiveReporterStatus(r.status)
           ? 'verified'
           : r.last_invite_error
             ? 'not_on_whatsapp'
@@ -2225,10 +2293,10 @@ export function searchRows(rows: RowSet, q: string, limit = 12): SearchResult[] 
     if (has(c.name) || c.aliases.some(has))
       out.push({ kind: 'company', id: c.id, title: c.name, subtitle: c.trade, href: `/hours` });
   }
-  const sourceByMessage = new Map(rows.sources.map((s) => [s.message_id, s]));
+  const sourceByMedia = new Map(rows.sources.map((s) => [sourceMediaId(s), s]));
   for (const t of rows.transcripts) {
     if (!has(t.text)) continue;
-    const src = sourceByMessage.get(t.message_id);
+    const src = sourceByMedia.get(transcriptMediaId(t));
     const r = src ? ix.reportById.get(src.report_id) : undefined;
     const i = t.text.toLowerCase().indexOf(needle);
     const snippet = `…${t.text.slice(Math.max(0, i - 30), i + needle.length + 40).trim()}…`;

@@ -396,7 +396,7 @@ describe('create_office_report', () => {
     )[0]!.id;
     const voidId = (
       await svc<{ id: string }>(
-        `insert into reports (org_id, site_id, site_day_id, report_no, status) values ($1, $2, $3, 'RL-2041-VOID-1', 'void') returning id`,
+        `insert into reports (org_id, site_id, site_day_id, report_no, status, language) values ($1, $2, $3, 'RL-2041-VOID-1', 'void', 'en') returning id`,
         [DEMO_ORG_ID, riverside, day],
       )
     )[0]!.id;

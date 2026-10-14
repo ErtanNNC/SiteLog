@@ -1639,6 +1639,7 @@ export function buildKestrelDemo(): DemoDataset {
     siteDays,
     reports,
     versions,
+    uploads: [],
     sources,
     manpower,
     workItems,

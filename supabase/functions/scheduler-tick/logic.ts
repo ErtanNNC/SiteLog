@@ -2,6 +2,7 @@ import {
   addDays,
   deadlineInstant,
   firstName,
+  isActiveReporterStatus,
   isoWeekday,
   isWeatherObserved,
   isWorkingDay,
@@ -268,7 +269,7 @@ export function pickReminderTarget(
   for (const link of candidates) {
     const reporter = reporterById.get(link.reporter_id);
     const conversationId = conversationByReporter.get(link.reporter_id);
-    if (reporter && reporter.status === 'verified' && conversationId) {
+    if (reporter && isActiveReporterStatus(reporter.status) && conversationId) {
       return { conversationId, reporterId: reporter.id, firstName: firstName(reporter.name) };
     }
   }
