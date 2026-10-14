@@ -65,22 +65,24 @@
 --   sends cannot link another report's media. Rows are never deleted: sources belong to the
 --   report, not a version.
 --
--- Live database: one transaction (the Supabase CLI runs each file in one). The first statement
--- takes the reports lock (ACCESS EXCLUSIVE, held until commit), so every RPC or worker write
--- already running finishes first and the backfill sees its rows, and the writes that wait for
--- the lock run against the new functions and the NOT NULL column (an old create_office_report
--- call already inside the function fails with 23502 and is submitted again). A write from the
--- old code that
--- commits after the backfill (an office photo stored as a message, a WhatsApp voice note) needs
--- nothing from it: readers fall back to the message, and denormalize_report_version re-keys its
--- source on the next filing or edit.
+-- Live database: one transaction. The Supabase CLI sends each file as one extended-protocol
+-- pipeline with a single Sync and no BEGIN: one transaction, but on Postgres 17 not a transaction
+-- block, where a top-level LOCK TABLE fails (25P01), so the lock is taken inside a DO block; it is
+-- still held until the file commits. That is the first statement after lock_timeout: it takes the
+-- reports lock (ACCESS EXCLUSIVE), so every RPC or worker write already running finishes first and
+-- the backfill sees its rows, and the writes that wait for the lock run against the new functions
+-- and the NOT NULL column (an old create_office_report call already inside the function fails with
+-- 23502 and is submitted again). A write from the old code that commits after the backfill (an
+-- office photo stored as a message, a WhatsApp voice note) needs nothing from it: readers fall
+-- back to the message, and denormalize_report_version re-keys its source on the next filing or
+-- edit.
 -- Batches would not shorten the locks inside one transaction; the tables are small (staging
 -- holds 0 messages and 0 reports, GAP §8), so each step is one set-based statement.
 
 set local lock_timeout = '5s';
 
 -- 1. reports.language and the office channel ------------------------------------------------------
-lock table reports in access exclusive mode;
+do $$ begin lock table reports in access exclusive mode; end $$;
 
 -- §9.6: the report language of an org (packages/shared/src/locale.ts reportLanguageFor()).
 create or replace function org_report_language(p_org_id uuid) returns text
