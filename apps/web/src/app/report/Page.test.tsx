@@ -177,10 +177,14 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
     await waitFor(() =>
       expect(screen.getByTestId('version-switcher')).toHaveTextContent('v3 · current'),
     );
-    // The v3 detail query may still be settling right after the switcher updates (slow CI runners).
-    await waitFor(() => expect(screen.getByTestId('manpower-total-crew')).toHaveTextContent('25'));
-    expect(screen.getByTestId('manpower-total-hours')).toHaveTextContent('200');
-    expect(screen.getByTestId('provenance')).toHaveTextContent('edited by Lena Ortiz');
+    // The v3 detail query may still be settling right after the switcher updates (slow CI runners):
+    // the page can swap back to its loading skeleton for a render between the totals appearing
+    // and the provenance line, so every assertion on the settled page sits inside one waitFor.
+    await waitFor(() => {
+      expect(screen.getByTestId('manpower-total-crew')).toHaveTextContent('25');
+      expect(screen.getByTestId('manpower-total-hours')).toHaveTextContent('200');
+      expect(screen.getByTestId('provenance')).toHaveTextContent('edited by Lena Ortiz');
+    });
   }, 30_000);
 });
 
