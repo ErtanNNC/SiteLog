@@ -1,41 +1,42 @@
-import { expect, test } from '@playwright/test';
-import { DEMIR_ORG_ID } from '@sitelog/shared/demo/demir.ts';
-import { admin, pinSeedClock, signInWithMagicLink } from './support';
+import { expect, test, type Page } from '@playwright/test';
+import { pinSeedClock, SEED, signInWithMagicLink } from './support';
 
 /**
  * §18.2 TR demo org Demir Yapı A.Ş. in the panel (W1-06 Done when): its sites with the shell in
- * Turkish, from the org's tr-TR locale. The seed has no Demir Yapı office user (spec §19 question
- * 18), so this test makes a temporary one with the service role and deletes it afterwards. Its
- * pages get Turkish copy in W1-16 … W1-18; the Overview is still English inside the TR shell.
+ * Turkish, from the org's tr-TR locale. Its seeded office user is the TR admin Elif Aydın (spec §19
+ * question 18, GAP D46), a member of Demir Yapı only, with no panel language of her own
+ * (`ui_locale` null), so the org decides it. Its pages get Turkish copy in W1-16 … W1-18; the
+ * Overview is still English inside the TR shell. Nothing here writes to the database.
  */
 test.describe.configure({ mode: 'serial' });
 
-const EMAIL = `e2e-tr-${Date.now()}@demiryapi.example`;
-let userId = '';
+/**
+ * The org switcher's names: the visible text (org, active-site count), then its purpose. Chromium
+ * puts a space before the comma, since the purpose is an `sr-only` span (absolutely positioned,
+ * so a block in the name computation); jsdom has no CSS and none (`Sidebar.test.tsx`).
+ */
+const DEMIR_SWITCHER = /^Demir Yapı A\.Ş\. 2 aktif şantiye ?, Şirket değiştir$/;
+const KESTREL_SWITCHER = /^Kestrel Build Group 6 active sites ?, Switch company$/;
 
-test.beforeAll(async () => {
-  const created = await admin().auth.admin.createUser({ email: EMAIL, email_confirm: true });
-  if (created.error) throw created.error;
-  userId = created.data.user!.id;
-  // A project manager, not an admin: removing the seat needs no other admin (guard_last_admin).
-  await admin()
-    .from('org_members')
-    .insert({ org_id: DEMIR_ORG_ID, user_id: userId, role: 'pm', display_name: 'E2E TR' })
-    .throwOnError();
-});
-
-test.afterAll(async () => {
-  // Deleting the user deletes the membership (org_members cascades from auth.users).
-  if (userId) await admin().auth.admin.deleteUser(userId);
-});
+/** The org switcher's companies (Radix radio items), by their names. */
+async function switcherOrgs(page: Page, trigger: RegExp): Promise<string[]> {
+  await page.getByRole('button', { name: trigger }).click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  const items = menu.getByRole('menuitemradio');
+  // Each item is the org's name, then its active-site count; the current org is checked.
+  const names = (await items.allInnerTexts()).map((t) => t.replace(/\s*\d+\s*$/, '').trim());
+  await expect(menu.getByRole('menuitemradio', { checked: true })).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  return names;
+}
 
 test('Demir Yapı A.Ş.: the org’s sites with the shell in Turkish', async ({ page }) => {
   await pinSeedClock(page);
-  await signInWithMagicLink(page, EMAIL);
+  await signInWithMagicLink(page, SEED.demirAdmin.email);
   await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
-  await expect(
-    page.getByRole('button', { name: 'Demir Yapı A.Ş. 2 aktif şantiye, Şirket değiştir' }),
-  ).toBeVisible();
+  await expect(page.getByRole('button', { name: DEMIR_SWITCHER })).toBeVisible();
   const nav = page.getByRole('navigation', { name: 'Ana gezinme' });
   for (const name of ['Genel bakış', 'Şantiyeler', 'Raporlar', 'Puantaj'])
     await expect(nav.getByRole('link', { name })).toBeVisible();
@@ -46,4 +47,16 @@ test('Demir Yapı A.Ş.: the org’s sites with the shell in Turkish', async ({ 
   await expect(table.getByText('Emre Yıldız')).toBeVisible();
   // Only its own org: nothing of Kestrel's.
   await expect(page.getByText('Riverside Lofts — Block B')).toHaveCount(0);
+  // Her name as seeded, dotless ı included (the account menu shows it).
+  await expect(page.getByTestId('sidebar').getByText('Elif Aydın', { exact: true })).toBeVisible();
+  // The org switcher lists Demir Yapı A.Ş. only.
+  expect(await switcherOrgs(page, DEMIR_SWITCHER)).toEqual(['Demir Yapı A.Ş.']);
+});
+
+test('Lena still sees Kestrel Build Group only', async ({ page }) => {
+  await pinSeedClock(page);
+  await signInWithMagicLink(page);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  expect(await switcherOrgs(page, KESTREL_SWITCHER)).toEqual(['Kestrel Build Group']);
+  await expect(page.getByText('Kartal Konutları — B Blok')).toHaveCount(0);
 });

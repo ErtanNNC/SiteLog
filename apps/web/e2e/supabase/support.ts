@@ -14,10 +14,12 @@ const SERVICE_ROLE_KEY = process.env.SERVICE_ROLE_KEY ?? '';
 /** Panel origin; must be in supabase/config.toml auth.additional_redirect_urls. */
 export const APP_URL = 'http://localhost:5173';
 
-/** §18 seed (supabase/seed.sql, generated from packages/shared/src/demo/kestrel.ts). */
+/** §18 seed (supabase/seed.sql, generated from packages/shared/src/demo/kestrel.ts and demir.ts). */
 export const SEED = {
   orgId: '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d',
   admin: { id: '3dee836a-fca5-4d0c-8572-5e8e0c3fb25a', email: 'lena@kestrelbuild.example' },
+  /** §18.2 Demir Yapı A.Ş.'s TR admin, Elif Aydın, a member of that org only (spec §19 question 18). */
+  demirAdmin: { email: 'elif@demiryapi.example' },
   /** The seeded accounts (payroll) user: Crew hours and invoices only (§2.2). */
   accounts: { email: 'accounts@kestrelbuild.example' },
   sites: {

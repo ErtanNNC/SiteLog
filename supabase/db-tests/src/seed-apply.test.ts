@@ -7,7 +7,7 @@ import {
   pruneSql,
 } from '@sitelog/shared/demo/seed-sql.ts';
 import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
-import { DEMIR_ORG_ID } from '@sitelog/shared/demo/demir.ts';
+import { DEMIR_ORG_ID, DEMIR_USERS } from '@sitelog/shared/demo/demir.ts';
 import { bootDatabase } from './harness.ts';
 
 /**
@@ -187,6 +187,21 @@ describe('seed:demo --apply (D8)', () => {
       'auth.users': after['auth.users']!.filter((u) => !isVisitor(u)),
     }).toEqual(seeded);
     expect(await snapshot({ ids: OTHER_IDS })).toEqual(others);
+    // Demir Yapı keeps its seeded admin next to the visitor; Kestrel's members are unchanged.
+    const members = await db.query<{ org_id: string; email: string; role: string }>(
+      `select m.org_id::text, u.email, m.role::text from org_members m join auth.users u on u.id = m.user_id
+       where m.org_id in ($1, $2) order by 1, 2`,
+      [DEMO_ORG_ID, DEMIR_ORG_ID],
+    );
+    expect(members.rows.filter((m) => m.org_id === DEMIR_ORG_ID)).toEqual([
+      { org_id: DEMIR_ORG_ID, email: 'elif@demiryapi.example', role: 'admin' },
+      { org_id: DEMIR_ORG_ID, email: 'visitor@example.com', role: 'pm' },
+    ]);
+    expect(members.rows.filter((m) => m.org_id === DEMO_ORG_ID).map((m) => m.email)).toEqual([
+      'accounts@kestrelbuild.example',
+      'lena@kestrelbuild.example',
+      'sam@kestrelbuild.example',
+    ]);
     await db.exec(`delete from jobs where status = 'done'`);
     await db.exec(`delete from auth.users where id = '0b000000-0000-4000-8000-000000000001'`);
   });
@@ -229,14 +244,20 @@ describe('seed:demo --apply (D8)', () => {
   });
 
   it("sets the apply's office password on the demo users, never seed.sql's", async () => {
-    const lena = DEMO_USERS[0]!.id;
-    const matches = async (password: string) =>
-      (
-        await db.query<{ ok: boolean }>(
-          `select encrypted_password = crypt($1, encrypted_password) as ok from auth.users where id = $2`,
-          [password, lena],
-        )
-      ).rows[0]!.ok;
+    // Every demo office user, Kestrel's and Demir Yapı's TR admin alike.
+    const users = [...DEMO_USERS, ...DEMIR_USERS].map((u) => u.id);
+    expect(users).toHaveLength(4);
+    const matches = async (password: string) => {
+      const rows = await db.query<{ ok: boolean }>(
+        `select encrypted_password = crypt($1, encrypted_password) as ok from auth.users where id = any($2::uuid[])`,
+        [password, users],
+      );
+      expect(rows.rows).toHaveLength(users.length);
+      const ok = new Set(rows.rows.map((r) => r.ok));
+      // All four or none: one mechanism for every demo user.
+      expect(ok.size).toBe(1);
+      return [...ok][0]!;
+    };
     // As seed-demo.ts: the database hashes the password from a bind parameter, the script gets
     // only the hash.
     const applyWith = async (password: string) => {

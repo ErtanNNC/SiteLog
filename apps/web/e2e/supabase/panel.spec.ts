@@ -29,10 +29,11 @@ function realtimeReady(page: Page): Promise<void> {
 
 test('magic-link sign-in lands on the Overview with the seeded sites', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Today across 6 sites' })).toBeVisible();
-  // lena@kestrelbuild.example is in Kestrel Build Group only (W1-06; the TR demo org has no
-  // office user, demir.spec.ts).
+  // lena@kestrelbuild.example is in Kestrel Build Group only (W1-06; the TR demo org has its own
+  // admin, Elif Aydın, demir.spec.ts). Chromium names the switcher with a space before the comma:
+  // the purpose is an `sr-only` span, a block in the name computation (jsdom: Sidebar.test.tsx).
   await expect(
-    page.getByRole('button', { name: 'Kestrel Build Group 6 active sites, Switch company' }),
+    page.getByRole('button', { name: /^Kestrel Build Group 6 active sites ?, Switch company$/ }),
   ).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.getByTestId('demo-chip')).toHaveCount(0);

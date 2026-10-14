@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { DEMO_ORG_ID } from '@sitelog/shared/demo/kestrel.ts';
+import { DEMIR_ORG_ID } from '@sitelog/shared/demo/demir.ts';
 import { demoId } from '@sitelog/shared/demo/ids.ts';
 import { bootDatabase } from './harness.ts';
 
@@ -19,8 +20,12 @@ type Flags = {
   has_storage: boolean;
   has_cron: boolean;
   has_vault: boolean;
+  has_is_demo: boolean;
   has_unknown_contacts: boolean;
 };
+
+/** The script's own flag query (the one psql ends with \gset). */
+const FLAG_QUERY = /select\s+coalesce[\s\S]*?as has_unknown_contacts/.exec(SCRIPT)![0];
 type Row = [
   section: string,
   label: string,
@@ -52,19 +57,25 @@ function forPglite(sql: string, flags: Flags): string {
   return out.join('\n');
 }
 
+/** The first column of each query the script ends with \gset. */
+const GSET_COLUMNS = new Set(['has_storage', 'demo_orgs']);
+
 async function runInventory(db: PGlite, flags: Flags): Promise<Row[]> {
   const results = await db.exec(forPglite(SCRIPT, flags), { rowMode: 'array' });
   await db.exec('reset default_transaction_read_only');
-  return results
-    .filter((r) => r.fields.length === 5)
-    .flatMap((r) => r.rows as unknown as Row[])
-    .map(([s, l, d, o, t]) => [
-      s,
-      l,
-      d === null ? null : Number(d),
-      o === null ? null : Number(o),
-      t,
-    ]);
+  return (
+    results
+      // psql prints nothing for a \gset query (the flags, the demo org set): leave those out.
+      .filter((r) => r.fields.length === 5 && !GSET_COLUMNS.has(r.fields[0]!.name))
+      .flatMap((r) => r.rows as unknown as Row[])
+      .map(([s, l, d, o, t]) => [
+        s,
+        l,
+        d === null ? null : Number(d),
+        o === null ? null : Number(o),
+        t,
+      ])
+  );
 }
 
 function section(rows: Row[], name: string): Map<string, Row> {
@@ -82,9 +93,9 @@ afterAll(async () => {
 });
 
 describe('supabase/ops/inventory.sql', () => {
-  it('names the seeded demo org by its fixed id', () => {
+  it('names the seeded Kestrel org by its fixed id, for a database without orgs.is_demo', () => {
     expect(DEMO_ORG_ID).toBe(demoId('org:kestrel'));
-    expect(SCRIPT).toContain(`set local sitelog.demo_org = '${DEMO_ORG_ID}';`);
+    expect(SCRIPT).toContain(`set local sitelog.demo_orgs = '{${DEMO_ORG_ID}}';`);
   });
 
   it('only reads: every statement is a select, set, begin or rollback inside a read-only transaction', () => {
@@ -102,25 +113,41 @@ describe('supabase/ops/inventory.sql', () => {
     expect(SCRIPT).not.toMatch(/from\s+vault\.decrypted_secrets/i);
   });
 
-  it('counts the seeded tables, split into the demo org and the rest', async () => {
-    const rows = await runInventory(db, {
+  it('counts the seeded tables, split into the demo orgs (is_demo) and the rest', async () => {
+    // A customer org next to the two demo orgs, with one reporter.
+    await db.exec(`
+      insert into orgs (id, name) values ('0c000000-0000-4000-8000-000000000001', 'Customer Builders');
+      insert into reporters (org_id, name, phone_e164, status)
+        values ('0c000000-0000-4000-8000-000000000001', 'Customer Person', '+15550107777', 'invited');
+    `);
+    const flags = await db.query<Flags>(FLAG_QUERY);
+    expect(flags.rows[0]).toEqual({
       has_storage: false,
       has_cron: false,
       has_vault: false,
+      has_is_demo: true,
       has_unknown_contacts: true,
     });
+    const rows = await runInventory(db, flags.rows[0]!);
     for (const r of rows) {
       expect(r).toHaveLength(5);
       expect(typeof r[0]).toBe('string');
       expect(typeof r[1]).toBe('string');
     }
 
-    // The Kestrel demo org by its fixed id; the TR demo org (W1-06) counts with the rest.
-    expect(section(rows, 'Orgs').get('orgs')).toEqual(['Orgs', 'orgs', 1, 1, '2']);
+    // Both seeded demo orgs (Kestrel and the TR org Demir Yapı) by is_demo; the customer is the rest.
+    expect(section(rows, 'Orgs').get('demo orgs by')).toEqual([
+      'Orgs',
+      'demo orgs by',
+      null,
+      null,
+      'is_demo',
+    ]);
+    expect(section(rows, 'Orgs').get('orgs')).toEqual(['Orgs', 'orgs', 2, 1, '3']);
 
     const seeded = await db.query<{ t: string; n: number }>(`
       select 'messages' as t, count(*)::int as n from messages union all
-      select 'kestrel_reporters', count(*)::int from reporters where org_id = '${DEMO_ORG_ID}' union all
+      select 'demo_reporters', count(*)::int from reporters where org_id in ('${DEMO_ORG_ID}', '${DEMIR_ORG_ID}') union all
       select 'reports', count(*)::int from reports union all
       select 'reporters', count(*)::int from reporters union all
       select 'versions', count(*)::int from report_versions union all
@@ -138,10 +165,14 @@ describe('supabase/ops/inventory.sql', () => {
     expect(all('Reporters by status')).toEqual([
       'Reporters by status',
       'all',
-      n.kestrel_reporters,
-      n.reporters! - n.kestrel_reporters!,
+      n.demo_reporters,
+      1,
       String(n.reporters),
     ]);
+    expect(n.demo_reporters).toBe(9); // Kestrel's 7 and Demir Yapı's 2
+    // The TR demo org's texts are demo rows too: every SMS row is a demo org's.
+    const sms = section(rows, 'Messages by type and conversation').get('sms · no conversation')!;
+    expect(sms[3]).toBe(0);
     expect(all('Report versions by data schemaVersion')?.[4]).toBe(String(n.versions));
     expect(all('Report sources by kind')?.[4]).toBe(String(n.sources));
     expect(all('Notifications by kind')?.[4]).toBe(String(n.notifications));
@@ -196,14 +227,12 @@ describe('supabase/ops/inventory.sql', () => {
       create table vault.secrets (id uuid primary key default gen_random_uuid(), name text, secret text);
       insert into vault.secrets (name, secret) values ('scheduler_tick_url', 'https://private-secret.example/tick');
     `);
-    // The script's own flag query (the one psql ends with \gset).
-    const flags = await db.query<Flags>(
-      /select\s+coalesce[\s\S]*?as has_unknown_contacts/.exec(SCRIPT)![0],
-    );
+    const flags = await db.query<Flags>(FLAG_QUERY);
     expect(flags.rows[0]).toEqual({
       has_storage: true,
       has_cron: true,
       has_vault: true,
+      has_is_demo: true,
       has_unknown_contacts: true,
     });
 
@@ -235,25 +264,29 @@ describe('supabase/ops/inventory.sql', () => {
   it('reads a database from before W1-05 step 11 (staging until the cut-over re-run, W1-19)', async () => {
     const old = await bootDatabase({ until: '20261014000003_renames_billing.sql' });
     try {
+      // is_demo exists (step 9 flagged the Kestrel org on staging); a second demo org counts too.
       await old.exec(`
-        insert into orgs (id, name) values ('${DEMO_ORG_ID}', 'Kestrel'), (gen_random_uuid(), 'Customer');
+        insert into orgs (id, name, is_demo) values
+          ('${DEMO_ORG_ID}', 'Kestrel', true), ('${DEMIR_ORG_ID}', 'Demir', true),
+          (gen_random_uuid(), 'Customer', false);
         insert into reporters (org_id, name, phone_e164, status)
           select id, 'R', '+15550109999', 'verified' from orgs where name = 'Customer';
-        insert into unknown_senders (org_id, phone_e164) values ('${DEMO_ORG_ID}', '+15550108888');
+        insert into unknown_senders (org_id, phone_e164) values
+          ('${DEMO_ORG_ID}', '+15550108888'), ('${DEMIR_ORG_ID}', '+905320009999');
       `);
-      const flags = await old.query<Flags>(
-        /select\s+coalesce[\s\S]*?as has_unknown_contacts/.exec(SCRIPT)![0],
-      );
+      const flags = await old.query<Flags>(FLAG_QUERY);
       expect(flags.rows[0]!.has_unknown_contacts).toBe(false);
+      expect(flags.rows[0]!.has_is_demo).toBe(true);
       const rows = await runInventory(old, flags.rows[0]!);
+      expect(section(rows, 'Orgs').get('orgs')).toEqual(['Orgs', 'orgs', 2, 1, '3']);
       expect(section(rows, 'Unknown contacts by status').get('pending')).toEqual([
         'Unknown contacts by status',
         'pending',
-        1,
+        2,
         0,
-        '1',
+        '2',
       ]);
-      // D19: a verified reporter outside the demo org stops the cut-over (docs/RUNBOOK.md §2).
+      // D19: a verified reporter outside the demo orgs stops the cut-over (docs/RUNBOOK.md §2).
       expect(section(rows, 'Reporters by status').get('verified')).toEqual([
         'Reporters by status',
         'verified',
@@ -263,6 +296,60 @@ describe('supabase/ops/inventory.sql', () => {
       ]);
     } finally {
       await old.close();
+    }
+  });
+
+  it('reads the staging v1.0 schema (no orgs.is_demo): the Kestrel org by its fixed id', async () => {
+    const v10 = await bootDatabase({ until: '20261013000006_enums_v1_2.sql' });
+    try {
+      // Another org is not a demo org here, whatever its id: only the fixed Kestrel id is.
+      await v10.exec(`
+        insert into orgs (id, name) values
+          ('${DEMO_ORG_ID}', 'Kestrel'), ('${DEMIR_ORG_ID}', 'Demir'), (gen_random_uuid(), 'Customer');
+        insert into reporters (org_id, name, phone_e164, status)
+          select id, 'R', '+15550109999', 'verified' from orgs where name = 'Customer';
+        insert into reporters (org_id, name, phone_e164, status)
+          values ('${DEMO_ORG_ID}', 'K', '+15550109998', 'verified');
+        insert into unknown_senders (org_id, phone_e164) values
+          ('${DEMO_ORG_ID}', '+15550108888'), ('${DEMIR_ORG_ID}', '+905320009999');
+      `);
+      const flags = await v10.query<Flags>(FLAG_QUERY);
+      expect(flags.rows[0]).toEqual({
+        has_storage: false,
+        has_cron: false,
+        has_vault: false,
+        has_is_demo: false,
+        has_unknown_contacts: false,
+      });
+      const rows = await runInventory(v10, flags.rows[0]!);
+      expect(section(rows, 'Orgs').get('demo orgs by')).toEqual([
+        'Orgs',
+        'demo orgs by',
+        null,
+        null,
+        'fixed Kestrel id (no is_demo column)',
+      ]);
+      expect(section(rows, 'Orgs').get('orgs')).toEqual(['Orgs', 'orgs', 1, 2, '3']);
+      expect(section(rows, 'Unknown contacts by status').get('pending')).toEqual([
+        'Unknown contacts by status',
+        'pending',
+        1,
+        1,
+        '2',
+      ]);
+      expect(section(rows, 'Reporters by status').get('verified')).toEqual([
+        'Reporters by status',
+        'verified',
+        1,
+        1,
+        '2',
+      ]);
+      // Every section ran: the read-only transaction got to the end.
+      expect(section(rows, 'Vault secrets for scheduler-tick').get('vault.secrets')?.[4]).toBe(
+        'not readable',
+      );
+    } finally {
+      await v10.close();
     }
   });
 });

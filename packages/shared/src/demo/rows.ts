@@ -1,6 +1,7 @@
 /**
  * Row helpers the demo org builders share (kestrel.ts, demir.ts): SMS rows, consents, field links,
- * the denormalised rows of a report version and the audit ids.
+ * the denormalised rows of a report version, the office users' memberships' audit rows and the
+ * audit ids.
  */
 import type {
   AuditLogRow,
@@ -8,6 +9,7 @@ import type {
   FieldLinkRow,
   ManpowerEntryRow,
   MessageRow,
+  OrgMemberRow,
   ReporterRow,
   WeatherEventRow,
   WorkItemRow,
@@ -44,6 +46,26 @@ export function numberAudit(audit: AuditLogRow[], orgIndex: number): AuditLogRow
     .map(({ a }) => a);
   sorted.forEach((a, i) => (a.id = DEMO_AUDIT_ID_BASE + orgIndex * 1_000_000 + i + 1));
   return sorted;
+}
+
+/**
+ * The `member.added` audit row of each office user's membership, at the member's `created_at`. The
+ * seed writes members as the service, which the `org_members_audit` trigger does not log (its WHEN
+ * clause runs as the caller), so the seed logs them itself, with the trigger's action, entity and
+ * diff (`20261014000001_queue_rls_fixes.sql`) and a `system` actor. Ids come from `numberAudit`.
+ */
+export function memberAudit(members: readonly OrgMemberRow[]): AuditLogRow[] {
+  return members.map((m) => ({
+    id: 0,
+    org_id: m.org_id,
+    actor_type: 'system',
+    actor_id: null,
+    action: 'member.added',
+    entity: 'org_member',
+    entity_id: m.user_id,
+    diff: { role: m.role },
+    created_at: m.created_at,
+  }));
 }
 
 /** A demo field link: the code (for the SMS text) and its row (hash only, as field-api stores it). */

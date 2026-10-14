@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildDemirDemo, DEMIR_GLOSSARY, DEMIR_ORG_ID } from './demir.ts';
+import { buildDemirDemo, DEMIR_GLOSSARY, DEMIR_ORG_ID, DEMIR_USERS } from './demir.ts';
 import { renderSms } from '../copy/sms.ts';
 import { formatDateInTz, isE164 } from '../format.ts';
-import { buildKestrelDemo } from './kestrel.ts';
+import { buildKestrelDemo, DEMO_USERS } from './kestrel.ts';
+import { demoId } from './ids.ts';
 import { linkCodeHash } from '../links.ts';
 
 const demir = buildDemirDemo();
@@ -62,13 +63,53 @@ describe('Demir Yapı A.Ş. (§18.2)', () => {
     expect(new Set(demir.glossary.map((g) => g.id)).size).toBe(5);
   });
 
-  it('invents nothing §18.2 does not give: no reports, no office user', () => {
+  it('invents nothing §18.2 does not give: no reports', () => {
     expect(demir.reports).toEqual([]);
     expect(demir.siteDays).toEqual([]);
     expect(demir.manpower).toEqual([]);
-    expect(demir.users).toEqual([]);
-    expect(demir.members).toEqual([]);
     for (const s of demir.sites) expect([s.address, s.lat, s.lng]).toEqual([null, null, null]);
+  });
+
+  it('has its own TR admin, Elif Aydın, a member of Demir Yapı only (spec §19 question 18)', () => {
+    expect(demir.users).toEqual([
+      {
+        id: demoId('user:elif'),
+        email: 'elif@demiryapi.example',
+        name: 'Elif Aydın',
+        title: 'Operasyon',
+        role: 'admin',
+      },
+    ]);
+    expect(DEMIR_USERS).toBe(demir.users);
+    // Her panel language is the org's tr-TR (ui_locale null), set up with the org.
+    expect(demir.members).toEqual([
+      {
+        org_id: DEMIR_ORG_ID,
+        user_id: demoId('user:elif'),
+        role: 'admin',
+        display_name: 'Elif Aydın',
+        title: 'Operasyon',
+        created_at: demir.org.created_at,
+        ui_locale: null,
+      },
+    ]);
+    // Not one of Kestrel's office users, and the dotless ı survives as one character.
+    const kestrel = buildKestrelDemo();
+    expect(kestrel.members.map((m) => m.user_id)).not.toContain(demoId('user:elif'));
+    expect(DEMO_USERS.map((u) => u.id)).not.toContain(demoId('user:elif'));
+    expect(kestrel.members.every((m) => m.org_id === kestrel.org.id)).toBe(true);
+    expect([...'Aydın']).toHaveLength(5);
+    expect(demir.users[0]!.name.normalize('NFC')).toBe(demir.users[0]!.name);
+    // The seed logs the membership itself (the org_members trigger skips the service).
+    expect(demir.audit.filter((a) => a.entity === 'org_member')).toEqual([
+      expect.objectContaining({
+        action: 'member.added',
+        actor_type: 'system',
+        entity_id: demoId('user:elif'),
+        diff: { role: 'admin' },
+        created_at: demir.org.created_at,
+      }),
+    ]);
   });
 
   it('texts the welcome in Turkish without a call number (no TR voice number yet)', () => {
@@ -118,6 +159,7 @@ describe('Demir Yapı A.Ş. (§18.2)', () => {
       const instants = [
         d.org.created_at,
         d.settings.updated_at,
+        ...d.members.map((m) => m.created_at),
         ...d.sites.map((s) => s.created_at),
         ...d.reporters.flatMap((r) => [r.created_at, r.invited_at, r.activated_at]),
         ...d.companies.map((c) => c.created_at),

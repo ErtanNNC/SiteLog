@@ -5,6 +5,7 @@ import {
   DEMO_SITELOG_NUMBER,
   DEMO_TODAY,
   DEMO_TZ,
+  DEMO_USERS,
 } from './kestrel.ts';
 import { deriveTotals } from '../report/hours.ts';
 import { readReportData } from '../report/upgrade.ts';
@@ -324,6 +325,12 @@ describe('Kestrel demo data (§18.1)', () => {
     });
     expect(new Set(ngData.manpower.map((m) => m.companyId)).size).toBe(2);
     expect(demo.invoices.find((i) => i.invoice_no === 'BL-3381')!.total_hours).toBe(212);
+    // Hillcrest's weather day: the summary says it once; the period keeps its own impact (5 h).
+    const hs = data(todayReport('HS-0418')!.id, 1);
+    expect(hs.summary).toBe('Rain stopped work; crew released at 11:00.');
+    expect(hs.weather.periods).toMatchObject([
+      { start: '11:00', impact: 'Rained out; crew released at 11:00', lostHours: 5 },
+    ]);
   });
 
   it('has the §18.1 calls: Northgate, Hillcrest R1 and call-back, the unknown caller', () => {
@@ -484,6 +491,25 @@ describe('Kestrel demo data (§18.1)', () => {
     expect(events).toHaveLength(10);
     expect(events.reduce((a, w) => a + Number(w.lost_hours), 0)).toBe(36.5);
     expect(events.filter((w) => w.claim_ready)).toHaveLength(7);
+  });
+
+  it('logs each office user’s membership, as Demir Yapı does (member.added)', () => {
+    expect(demo.members.map((m) => m.user_id)).toEqual(DEMO_USERS.map((u) => u.id));
+    // The org's first audit rows: the members join when the org is set up, before anything else.
+    expect(demo.audit.filter((a) => a.entity === 'org_member')).toEqual(
+      demo.members.map((m, i) => ({
+        id: 9_000_000_000_000 + 1_000_000 + i + 1,
+        org_id: demo.org.id,
+        actor_type: 'system',
+        actor_id: null,
+        action: 'member.added',
+        entity: 'org_member',
+        entity_id: m.user_id,
+        diff: { role: m.role },
+        created_at: m.created_at,
+      })),
+    );
+    expect(demo.audit.slice(0, 3).every((a) => a.action === 'member.added')).toBe(true);
   });
 
   it('uses valid, unique ids, audit ids included', () => {

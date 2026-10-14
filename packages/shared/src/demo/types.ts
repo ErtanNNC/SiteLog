@@ -54,7 +54,10 @@ export interface DemoInvoice {
 export interface DemoOrgRows {
   org: OrgRow;
   settings: OrgSettingsRow;
-  /** Office users (auth.users) of the org; none for Demir Yapı (spec §19 question 18). */
+  /**
+   * Office users (auth.users) of the org: Kestrel's three (§18.1), Demir Yapı's TR admin (spec §19
+   * question 18). Each user is a member of their own org only.
+   */
   users: DemoUser[];
   members: OrgMemberRow[];
   sites: SiteRow[];

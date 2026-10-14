@@ -1,12 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
-import { buildDemirDemo, DEMIR_ORG_ID } from '@sitelog/shared/demo/demir.ts';
+import { buildDemirDemo, DEMIR_ORG_ID, DEMIR_USERS } from '@sitelog/shared/demo/demir.ts';
 import { asUser, bootDatabase } from './harness.ts';
 
 let db: PGlite;
 const LENA = DEMO_USERS[0]!.id;
 const ACCOUNTS = DEMO_USERS[2]!.id;
+const ELIF = DEMIR_USERS[0]!.id;
 
 beforeAll(async () => {
   db = await bootDatabase({ seed: true });
@@ -255,8 +256,88 @@ describe('seed.sql (§18 demo orgs)', () => {
     expect(
       await count(`select count(*)::int as n from reports where org_id = $1`, [DEMIR_ORG_ID]),
     ).toBe(0);
-    expect(
-      await count(`select count(*)::int as n from org_members where org_id = $1`, [DEMIR_ORG_ID]),
-    ).toBe(0);
+  });
+
+  it('has each org’s office users: Elif Aydın admin of Demir Yapı only, Lena of Kestrel only', async () => {
+    // Who is a member of which demo org (org name, email, role, display name, title, ui_locale).
+    const members = await db.query<Record<string, unknown>>(
+      `select o.name as org, u.email, m.role::text as role, m.display_name, m.title, m.ui_locale
+       from org_members m join orgs o on o.id = m.org_id join auth.users u on u.id = m.user_id
+       order by o.name, u.email`,
+    );
+    expect(members.rows).toEqual([
+      {
+        org: 'Demir Yapı A.Ş.',
+        email: 'elif@demiryapi.example',
+        role: 'admin',
+        display_name: 'Elif Aydın',
+        title: 'Operasyon',
+        ui_locale: null,
+      },
+      ...[
+        ['accounts@kestrelbuild.example', 'accounts', 'Accounts', 'Payroll'],
+        ['lena@kestrelbuild.example', 'admin', 'Lena Ortiz', 'Operations'],
+        ['sam@kestrelbuild.example', 'pm', 'Sam Kowalski', 'Project manager'],
+      ].map(([email, role, display_name, title]) => ({
+        org: 'Kestrel Build Group',
+        email,
+        role,
+        display_name,
+        title,
+        ui_locale: null,
+      })),
+    ]);
+    // Her name in the database's own terms: "Aydın" is 5 characters, 6 bytes (ı is two).
+    const name = await db.query<{ chars: number; bytes: number; meta: string }>(
+      `select length(m.display_name)::int as chars, octet_length(m.display_name)::int as bytes,
+              u.raw_user_meta_data->>'name' as meta
+       from org_members m join auth.users u on u.id = m.user_id where m.user_id = $1`,
+      [ELIF],
+    );
+    expect(name.rows).toEqual([{ chars: 10, bytes: 11, meta: 'Elif Aydın' }]);
+    // The seed's local password, as for Kestrel's users.
+    const password = await db.query<{ ok: boolean }>(
+      `select encrypted_password = crypt('sitelog-demo', encrypted_password) as ok from auth.users where id = $1`,
+      [ELIF],
+    );
+    expect(password.rows).toEqual([{ ok: true }]);
+    // Through RLS each sees their own org only: the panel's org switcher lists exactly one.
+    const orgsOf = async (user: string) =>
+      (
+        await asUser(db, user, (q) => q<{ name: string }>(`select name from orgs order by name`))
+      ).rows.map((r) => r.name);
+    expect(await orgsOf(ELIF)).toEqual(['Demir Yapı A.Ş.']);
+    expect(await orgsOf(LENA)).toEqual(['Kestrel Build Group']);
+    const sites = await asUser(db, ELIF, (q) =>
+      q<{ name: string }>(`select name from sites order by project_code desc`),
+    );
+    expect(sites.rows.map((r) => r.name)).toEqual([
+      'Kartal Konutları — B Blok',
+      'Ataşehir Ofis Binası',
+    ]);
+    // Every membership has its `member.added` row, the first fixed id of its org's range, at the
+    // time the member joined (Kestrel's three, then Elif in Demir Yapı's range).
+    const audit = await db.query<Record<string, unknown>>(
+      `select a.id::text as id, u.email, a.actor_type, a.action, a.diff,
+              a.created_at = m.created_at as at_join
+       from audit_log a join auth.users u on u.id = a.entity_id
+       join org_members m on m.org_id = a.org_id and m.user_id = a.entity_id
+       where a.entity = 'org_member' order by a.id`,
+    );
+    expect(audit.rows).toEqual(
+      [
+        ['9000001000001', 'lena@kestrelbuild.example', 'admin'],
+        ['9000001000002', 'sam@kestrelbuild.example', 'pm'],
+        ['9000001000003', 'accounts@kestrelbuild.example', 'accounts'],
+        ['9000002000001', 'elif@demiryapi.example', 'admin'],
+      ].map(([id, email, role]) => ({
+        id,
+        email,
+        actor_type: 'system',
+        action: 'member.added',
+        diff: { role },
+        at_join: true,
+      })),
+    );
   });
 });

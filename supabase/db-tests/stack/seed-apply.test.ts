@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Sql } from 'postgres';
-import { buildSeedSql, PRUNED_TABLES } from '@sitelog/shared/demo/seed-sql.ts';
-import { DEMO_ORG_ID, DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
+import { buildSeedSql, demoOrgs, PRUNED_TABLES } from '@sitelog/shared/demo/seed-sql.ts';
+import { DEMO_ORG_ID } from '@sitelog/shared/demo/kestrel.ts';
 import { DEMIR_ORG_ID } from '@sitelog/shared/demo/demir.ts';
 import { connectStack, STACK_DB_URL } from './db.ts';
 
@@ -18,6 +18,8 @@ const describeStack = STACK_DB_URL ? describe : describe.skip;
 // PGlite test checks which jobs an apply drops).
 const TABLES = ['orgs', 'org_members', ...PRUNED_TABLES.filter((t) => t !== 'jobs')];
 const APPLY = buildSeedSql({ globalRows: false });
+/** The demo office users of both orgs (Kestrel's three and Demir Yapı's TR admin). */
+const DEMO_USER_IDS = demoOrgs().flatMap((d) => d.users.map((u) => u.id));
 
 describeStack('seed:demo --apply on real Postgres', () => {
   let sql: Sql;
@@ -34,7 +36,7 @@ describeStack('seed:demo --apply on real Postgres', () => {
     }
     const users = await sql<{ r: unknown }[]>`
       select to_jsonb(u) - 'encrypted_password' - 'updated_at' - 'last_sign_in_at' as r
-      from auth.users u where id in ${sql(DEMO_USERS.map((u) => u.id))} order by id`;
+      from auth.users u where id in ${sql(DEMO_USER_IDS)} order by id`;
     out['auth.users'] = users.map((r) => JSON.stringify(r.r));
     return out;
   }
@@ -55,6 +57,7 @@ describeStack('seed:demo --apply on real Postgres', () => {
     await sql.unsafe(APPLY);
     const first = await snapshot();
     expect(first.reports!.length).toBeGreaterThan(60);
+    expect(first['auth.users']).toHaveLength(4);
     await sql.unsafe(APPLY);
     expect(await snapshot()).toEqual(first);
   });

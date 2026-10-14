@@ -784,12 +784,12 @@ jobs:
           {
             echo "### Database counts"
             echo
-            echo "Demo org = the seeded Kestrel org (\`7a0cfa5d-2a29-43fb-8665-fcd9bed4106d\`, \`DEMO_ORG_ID\` in \`packages/shared/src/demo/kestrel.ts\`); other orgs = every other row, including rows with no org; \`-\` = the table has no org."
+            echo "Demo orgs = the orgs with \`is_demo\` (W1-05 step 9 on), or, on a database without that column, the seeded Kestrel org (\`7a0cfa5d-2a29-43fb-8665-fcd9bed4106d\`, \`DEMO_ORG_ID\` in \`packages/shared/src/demo/kestrel.ts\`): the row \"demo orgs by\" says which; other orgs = every other row, including rows with no org; \`-\` = the table has no org."
             awk -F'\t' '
               function cell(v) { return v == "" ? "-" : v }
               $1 != section {
                 section = $1
-                printf "\n#### %s\n\n| Item | Demo org | Other orgs | Total or state |\n| --- | ---: | ---: | ---: |\n", section
+                printf "\n#### %s\n\n| Item | Demo orgs | Other orgs | Total or state |\n| --- | ---: | ---: | ---: |\n", section
               }
               { printf "| %s | %s | %s | %s |\n", $2, cell($3), cell($4), cell($5) }
             ' "$RUNNER_TEMP/counts.tsv"

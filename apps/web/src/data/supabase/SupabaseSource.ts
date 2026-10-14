@@ -1953,17 +1953,21 @@ function toOpsData(
   };
 }
 
-/** Org memberships of a user (used by the AuthProvider before any org is selected). */
+/**
+ * Org memberships of a user (used by the AuthProvider before any org is selected). Each carries
+ * the org's `locale` (§6.3): with no language chosen, it decides the panel's language (§11.2), so
+ * a tr-TR org (Demir Yapı A.Ş., §18.2) opens the panel in Turkish before the shell mounts.
+ */
 export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
   const members = unwrap(
     await sb
       .from('org_members')
-      .select('org_id, role, orgs(id, name, timezone)')
+      .select('org_id, role, orgs(id, name, timezone, locale)')
       .eq('user_id', userId),
   ) as unknown as Array<{
     org_id: string;
     role: MemberRole;
-    orgs: { id: string; name: string; timezone: string } | null;
+    orgs: Pick<OrgRow, 'id' | 'name' | 'timezone' | 'locale'> | null;
   }>;
   // site_options: an accounts user cannot read `sites`, and every member counts active sites.
   const sites = unwrap(await sb.from('site_options').select('org_id, status'));
@@ -1975,6 +1979,7 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
       timezone: m.orgs!.timezone,
       role: m.role,
       activeSites: sites.filter((s) => s.org_id === m.org_id && s.status === 'active').length,
+      locale: m.orgs!.locale,
     }));
 }
 

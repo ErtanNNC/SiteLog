@@ -25,6 +25,7 @@ import type {
   ManpowerEntryRow,
   MessageRow,
   NotificationRow,
+  OrgMemberRow,
   QuestionRow,
   ReportRow,
   ReportSourceRow,
@@ -65,6 +66,7 @@ import {
   demoConsents,
   demoLink,
   demoSms,
+  memberAudit,
   numberAudit,
   versionRows,
   type DemoLink,
@@ -2023,6 +2025,18 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
     created_at: reporterById.get(reporterId('jorge'))!.invited_at!,
   });
 
+  // The office users join when the org is set up; each membership has its `member.added` row,
+  // as Demir Yapı's does (rows.ts `memberAudit`).
+  const members: OrgMemberRow[] = DEMO_USERS.map((u) => ({
+    org_id: ORG,
+    user_id: u.id,
+    role: u.role,
+    display_name: u.name,
+    title: u.title,
+    created_at: t('2026-03-02', '09:00'),
+    ...V12_ROW_DEFAULTS.org_members,
+  }));
+
   return {
     now,
     org: {
@@ -2079,15 +2093,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       ...V12_ROW_DEFAULTS.org_settings,
     },
     users: DEMO_USERS,
-    members: DEMO_USERS.map((u) => ({
-      org_id: ORG,
-      user_id: u.id,
-      role: u.role,
-      display_name: u.name,
-      title: u.title,
-      created_at: t('2026-03-02', '09:00'),
-      ...V12_ROW_DEFAULTS.org_members,
-    })),
+    members,
     sites,
     reporters,
     siteReporters,
@@ -2115,7 +2121,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
     invoices,
     packs,
     notifications,
-    audit: numberAudit(audit, 1),
+    audit: numberAudit([...audit, ...memberAudit(members)], 1),
     billing: {
       monthlyCents: 6 * 39900,
       nextInvoiceDate: '2026-11-01',
@@ -2251,7 +2257,8 @@ function buildData(
   if (plan.kind === 'weather_day') {
     d.summary = plan.weather?.fullDay
       ? 'Site closed for the day because of heavy rain; crew did not start. No work performed.'
-      : `Rain stopped work; crew released at ${plan.weather?.start}. ${plan.weather?.impact ?? ''}`.trim();
+      : // The period's impact ("Rained out; crew released at 11:00") is in the weather log, not here.
+        `Rain stopped work; crew released at ${plan.weather?.start}.`;
     d.safety = { incidents: [], noIncidentsStated: true, visitors: [], source: src(20) };
     return d;
   }

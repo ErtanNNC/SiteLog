@@ -28,6 +28,39 @@ describe('buildSeedSql (supabase/seed.sql and --apply)', () => {
     expect(sql).toContain("'İş güvenliği bilgilendirmesi'");
   });
 
+  it('adds every demo org’s office users by the same mechanism, Demir Yapı’s TR admin included', () => {
+    const [kestrel, demir] = demoOrgs();
+    const users = [...kestrel.users, ...demir.users];
+    expect(users.map((u) => u.email)).toEqual([
+      'lena@kestrelbuild.example',
+      'sam@kestrelbuild.example',
+      'accounts@kestrelbuild.example',
+      'elif@demiryapi.example',
+    ]);
+    const sql = buildSeedSql();
+    const authInsert = sql.slice(
+      sql.indexOf('insert into auth.users'),
+      sql.indexOf('do $$\nbegin\n  if exists'),
+    );
+    for (const u of users) {
+      expect(authInsert).toContain(
+        `('${u.id}', '00000000-0000-0000-0000-000000000000', '${u.email}'`,
+      );
+      expect(sql).toContain(`'{"sub":"${u.id}","email":"${u.email}"}'::jsonb`);
+    }
+    expect(authInsert).toContain(`'{"name":"Elif Aydın"}'::jsonb`);
+    // Her membership is in Demir Yapı's block only, with the org's language (ui_locale null).
+    const demirBlock = sql.slice(sql.indexOf(`-- Demir Yapı A.Ş. (${DEMIR_ORG_ID})`));
+    expect(demirBlock).toContain(
+      `('${DEMIR_ORG_ID}', '${demir.users[0]!.id}', 'admin', 'Elif Aydın', 'Operasyon', '${demir.org.created_at}', NULL)`,
+    );
+    const kestrelBlock = sql.slice(
+      sql.indexOf(`-- Kestrel Build Group (${DEMO_ORG_ID})`),
+      sql.indexOf(`-- Demir Yapı A.Ş. (${DEMIR_ORG_ID})`),
+    );
+    expect(kestrelBlock).not.toContain(demir.users[0]!.id);
+  });
+
   it('writes one scoped delete per prune entry, queued and running jobs first', () => {
     const lines = pruneSql(DEMO_ORG_ID).trimEnd().split('\n');
     expect(lines.map((l) => /^delete from (\w+) where /.exec(l)?.[1])).toEqual(

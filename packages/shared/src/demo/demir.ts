@@ -8,13 +8,15 @@
  * What §18.2 does not give is left out rather than invented:
  * - No reports: §18.2 has no crew counts, hours, dates or voice notes for a report (its sample
  *   report text is a sentence, not a report), so the org starts with its sites awaiting.
- * - No office user: §18.2 names none (spec §19 question 18). The e2e test that opens the org in the
- *   panel creates a temporary user itself.
  * - No addresses or coordinates for the sites (null), no aliases for the companies.
  *
  * Seed values that a row needs and §18.2 does not give: the reporters' phone numbers (fictional
  * +90 532 000 … numbers that only the console SMS driver ever "texts", since the org is a demo
  * org, §4.5), and the org's set-up dates (Mon Oct 5, 2026, the week of the demo).
+ *
+ * The office user is the owner's answer to spec §19 question 18 (2026-10-14, GAP D46), not §18.2:
+ * a separate fictional TR admin, Elif Aydın, a member of this org only. Her panel language is left
+ * unset (`ui_locale` null), so the org's tr-TR decides it, as Lena's en-US does for Kestrel.
  */
 import type {
   AuditLogRow,
@@ -23,6 +25,7 @@ import type {
   FieldLinkRow,
   GlossaryTermRow,
   MessageRow,
+  OrgMemberRow,
   OrgSettingsRow,
   ReporterRow,
   SiteRow,
@@ -34,12 +37,33 @@ import { PAYROLL_COLUMNS } from '../report/payroll.ts';
 import { renderSms } from '../copy/sms.ts';
 import { demoCalendar } from './calendar.ts';
 import { demoId } from './ids.ts';
-import { DEMO_LINK_BASE, demoConsents, demoLink, demoSms, numberAudit } from './rows.ts';
-import type { DemoOrgRows } from './types.ts';
+import {
+  DEMO_LINK_BASE,
+  demoConsents,
+  demoLink,
+  demoSms,
+  memberAudit,
+  numberAudit,
+} from './rows.ts';
+import type { DemoOrgRows, DemoUser } from './types.ts';
 
 export const DEMIR_TZ = 'Europe/Istanbul';
 export const DEMIR_ORG_ID = demoId('org:demir');
 export const DEMIR_ORG_NAME = 'Demir Yapı A.Ş.';
+/**
+ * The org's office user (spec §19 question 18, decided 2026-10-14: a separate fictional TR admin;
+ * GAP D46). Like Kestrel's DEMO_USERS: a fixed id, the seed's password, a member of this org only.
+ */
+export const DEMIR_USERS: DemoUser[] = [
+  {
+    id: demoId('user:elif'),
+    email: 'elif@demiryapi.example',
+    name: 'Elif Aydın',
+    title: 'Operasyon',
+    role: 'admin',
+  },
+];
+
 /** Consent wording the Turkish reporters agreed to (§6.3 consents.text_version). */
 export const DEMIR_CONSENT_TEXT_VERSION = 'demo-tr-1';
 
@@ -181,10 +205,22 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
     last_seen_at: null,
   }));
 
+  // The admin joins when the org is set up (her panel language: the org's, ui_locale null).
+  const members: OrgMemberRow[] = DEMIR_USERS.map((u) => ({
+    org_id: ORG,
+    user_id: u.id,
+    role: u.role,
+    display_name: u.name,
+    title: u.title,
+    created_at: setup('09:00'),
+    ...V12_ROW_DEFAULTS.org_members,
+  }));
+
   const messages: MessageRow[] = [];
   const consents: ConsentRow[] = [];
   const fieldLinks: FieldLinkRow[] = [];
-  const audit: AuditLogRow[] = [];
+  // The membership's `member.added` row, as for Kestrel's office users (rows.ts `memberAudit`).
+  const audit: AuditLogRow[] = memberAudit(members);
   for (const [i, r] of reporters.entries()) {
     const site = sites[i]!;
     const personal = demoLink({
@@ -322,8 +358,8 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
       is_demo: true,
     },
     settings,
-    users: [],
-    members: [],
+    users: DEMIR_USERS,
+    members,
     sites,
     reporters,
     siteReporters,
