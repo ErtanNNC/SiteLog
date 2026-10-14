@@ -1,4 +1,4 @@
-import type { DailyReportData, SiteDayWeather } from '@sitelog/shared';
+import type { DailyReportData, SiteDayWeather, VersionAuthor } from '@sitelog/shared';
 
 /** Image bytes (worker) or a URL react-pdf fetches itself (browser). */
 export type PdfImage =
@@ -11,8 +11,8 @@ export type PdfPhoto = PdfImage & {
 
 export interface PdfEdit {
   version: number;
-  /** version_author: `reporter_reply` is renamed `reporter` in step 11 (isReporterAuthor). */
-  author: 'agent' | 'reporter_reply' | 'reporter' | 'office_user';
+  /** §6.2 version_author. */
+  author: VersionAuthor;
   changeNote: string | null;
   createdAt: string;
 }

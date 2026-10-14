@@ -75,8 +75,8 @@ export function baseSummary(
   org: {
     billing_status: string | null;
     trial_ends_at: string | null;
-    stripe_customer_id: string | null;
-    stripe_subscription_id: string | null;
+    billing_customer_id: string | null;
+    billing_subscription_id: string | null;
   },
   activeSites: number,
 ): BillingSummary {
@@ -86,11 +86,20 @@ export function baseSummary(
     activeSites,
     pricePerSiteCents: PRICE_PER_SITE_CENTS,
     monthlyTotalCents: PRICE_PER_SITE_CENTS * activeSites,
-    hasCustomer: org.stripe_customer_id !== null,
-    hasSubscription: org.stripe_subscription_id !== null,
+    hasCustomer: org.billing_customer_id !== null,
+    hasSubscription: org.billing_subscription_id !== null,
     subscriptionStatus: null,
     subscriptionQuantity: null,
     nextInvoiceAt: null,
     paymentMethod: null,
   };
+}
+
+/**
+ * The Stripe price of one active site (§5.1 `STRIPE_PRICE_ID_SITE_US`). Until the secret is
+ * renamed on every project (GAP 9.1: set the new one, read new with fallback, unset the old), the
+ * old name `STRIPE_PRICE_ID_SITE` still works. Null when neither is set.
+ */
+export function sitePriceId(env: (name: string) => string | undefined): string | null {
+  return env('STRIPE_PRICE_ID_SITE_US') ?? env('STRIPE_PRICE_ID_SITE') ?? null;
 }

@@ -1,5 +1,11 @@
 import { assertEquals } from '@std/assert';
-import { baseSummary, checkoutQuantity, invoiceSummary, syncDecision } from './logic.ts';
+import {
+  baseSummary,
+  checkoutQuantity,
+  invoiceSummary,
+  sitePriceId,
+  syncDecision,
+} from './logic.ts';
 
 Deno.test('invoiceSummary maps a Stripe invoice to the panel row', () => {
   assertEquals(
@@ -47,8 +53,8 @@ Deno.test('baseSummary prices $399 per active site', () => {
     {
       billing_status: 'active',
       trial_ends_at: null,
-      stripe_customer_id: 'cus_1',
-      stripe_subscription_id: null,
+      billing_customer_id: 'cus_1',
+      billing_subscription_id: null,
     },
     6,
   );
@@ -56,4 +62,14 @@ Deno.test('baseSummary prices $399 per active site', () => {
   assertEquals(s.pricePerSiteCents, 39_900);
   assertEquals(s.hasCustomer, true);
   assertEquals(s.hasSubscription, false);
+});
+
+Deno.test('sitePriceId reads STRIPE_PRICE_ID_SITE_US before the old STRIPE_PRICE_ID_SITE', () => {
+  const env = (values: Record<string, string>) => (name: string) => values[name];
+  assertEquals(
+    sitePriceId(env({ STRIPE_PRICE_ID_SITE_US: 'price_us', STRIPE_PRICE_ID_SITE: 'price_old' })),
+    'price_us',
+  );
+  assertEquals(sitePriceId(env({ STRIPE_PRICE_ID_SITE: 'price_old' })), 'price_old');
+  assertEquals(sitePriceId(env({})), null);
 });

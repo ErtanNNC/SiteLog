@@ -161,6 +161,8 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
       'column nullability: sub_invoices.org_id (spec null; repo not null)',
       'column nullability: sub_invoices.status (spec null; repo not null)',
       'column nullability: transcripts.created_at (spec null; repo not null)',
+      'column nullability: unknown_contacts.created_at (spec null; repo not null)',
+      'column nullability: unknown_contacts.status (spec null; repo not null)',
       'column nullability: weather_events.full_day (spec null; repo not null)',
       'column nullability: weather_events.photo_count (spec null; repo not null)',
     ],
@@ -168,7 +170,7 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'repo-on-delete',
     reason:
-      'ON DELETE actions the spec leaves as NO ACTION, kept as built until the owner answers: deleting an org, site or site-day removes its reports with their versions, evidence packs and weather rows (org deletion, test and load-test cleanup), deleting a company its invoices, and deleting a company, reporter, user or report keeps the history with a null link. If the owner picks the spec, a forward migration changes the keys and this entry goes.',
+      "ON DELETE actions the spec leaves as NO ACTION (17 keys), kept as built until the owner answers: deleting an org, site or site-day removes its reports with their versions, evidence packs and weather rows (org deletion, test and load-test cleanup), deleting an org also its unknown contacts, deleting a company its invoices, and deleting a company, reporter, user or report keeps the history with a null link, as deleting a message does for an unknown contact's message link (message_id becomes null). If the owner picks the spec, a forward migration changes the keys and this entry goes.",
     closes: 'kept',
     decision: 'pending owner: spec §19 question 17 (GAP §8 question 11)',
     diffs: [
@@ -186,6 +188,8 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
       'constraint extra: reports FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE',
       'constraint extra: site_days FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE SET NULL',
       'constraint extra: sub_invoices FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE',
+      'constraint extra: unknown_contacts FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE SET NULL',
+      'constraint extra: unknown_contacts FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE',
       'constraint extra: weather_events FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE',
       'constraint missing: evidence_packs FOREIGN KEY (site_id) REFERENCES sites(id)',
       'constraint missing: glossary_terms FOREIGN KEY (company_id) REFERENCES companies(id)',
@@ -201,6 +205,8 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
       'constraint missing: reports FOREIGN KEY (site_id) REFERENCES sites(id)',
       'constraint missing: site_days FOREIGN KEY (report_id) REFERENCES reports(id)',
       'constraint missing: sub_invoices FOREIGN KEY (company_id) REFERENCES companies(id)',
+      'constraint missing: unknown_contacts FOREIGN KEY (message_id) REFERENCES messages(id)',
+      'constraint missing: unknown_contacts FOREIGN KEY (org_id) REFERENCES orgs(id)',
       'constraint missing: weather_events FOREIGN KEY (site_id) REFERENCES sites(id)',
     ],
   },
@@ -226,12 +232,21 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'd13-unknown-contacts-channel',
     reason:
-      'unknown_contacts.channel stays nullable for the unknown WhatsApp senders it is renamed from.',
+      'unknown_contacts.channel stays nullable for the unknown WhatsApp senders it was renamed from (20261014000003) and the WhatsApp worker that writes them until step 22; sms-webhook (W1-08) writes sms and the voice agent (week 2) voice, and the step 22 insert trigger rejects a null channel.',
     closes: 'kept',
     decision: 'D13',
-    pending: 'W1-05 step 11 renames unknown_senders',
-    pendingWhile: ['table missing: unknown_contacts'],
     diffs: ['column nullability: unknown_contacts.channel (spec not null; repo null)'],
+  },
+  {
+    id: 'd12-unknown-contacts-guess',
+    reason:
+      'unknown_contacts.guessed_site_id: the site the content names, for the "Link to {guessed site}" action (§F13 "guessed org/site", GAP 9.2 "keep guessed_site_id"); cleared when the site is deleted.',
+    closes: 'kept',
+    decision: 'D12',
+    diffs: [
+      'column extra: unknown_contacts.guessed_site_id (uuid)',
+      'constraint extra: unknown_contacts FOREIGN KEY (guessed_site_id) REFERENCES sites(id) ON DELETE SET NULL',
+    ],
   },
   {
     id: 'd14-office-uploads',
@@ -261,35 +276,9 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
     diffs: ['constraint missing: jobs UNIQUE (dedupe_key)'],
   },
   {
-    id: 'step11-renames',
-    reason:
-      'Renames of step 11: verified → active, reporter_reply → reporter, sender_status → contact_status, unknown_senders → unknown_contacts (D19).',
-    closes: 'W1-05 step 11',
-    decision: 'D19',
-    diffs: [
-      'enum extra: sender_status',
-      'enum missing: contact_status',
-      'table extra: unknown_senders',
-      'table missing: unknown_contacts',
-      'enum labels: reporter_status (spec invited,active,opted_out,disabled; repo invited,verified,opted_out,disabled)',
-      'enum labels: version_author (spec agent,reporter,office_user; repo agent,reporter_reply,office_user)',
-    ],
-  },
-  {
-    id: 'step11-billing',
-    reason:
-      'stripe_* → billing_* by expand/contract: step 11 adds the billing columns (and code reads them), step 23 drops stripe_* (GAP 9.1).',
-    closes: 'W1-05 step 11',
-    diffs: [
-      'column missing: orgs.billing_customer_id (text)',
-      "column missing: orgs.billing_provider (text default 'stripe'::text)",
-      'column missing: orgs.billing_subscription_id (text)',
-    ],
-  },
-  {
     id: 'step23-stripe',
     reason:
-      'The stripe_* columns stay until the contract after step 11 moved every reader and writer to billing_*.',
+      'stripe_* → billing_* by expand/contract (GAP 9.1): since step 11 (20261014000003) every reader and writer uses billing_*, and the orgs_billing_ids trigger keeps the legacy stripe_* columns equal to them for the functions deployed before the cut-over; the contract drops them. The trigger is declared UPDATE OF both stripe_* columns, so they depend on it: the contract runs `drop trigger orgs_billing_ids on orgs; drop function sync_org_billing_ids();` before `alter table orgs drop column stripe_customer_id, drop column stripe_subscription_id` (without CASCADE, which would drop the trigger and leave the function behind).',
     closes: 'step 23',
     diffs: [
       'column extra: orgs.stripe_customer_id (text)',

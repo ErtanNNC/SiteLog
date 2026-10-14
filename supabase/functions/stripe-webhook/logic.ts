@@ -31,20 +31,24 @@ export interface SubscriptionLike {
   trial_end?: number | null;
 }
 
+/**
+ * The §6.3 billing columns (20261014000003_renames_billing.sql). The legacy stripe_* columns
+ * follow them through the orgs_billing_ids trigger until step 23.
+ */
 export interface OrgBillingPatch {
   billing_status?: BillingStatus;
-  stripe_subscription_id?: string;
-  stripe_customer_id?: string;
+  billing_subscription_id?: string;
+  billing_customer_id?: string;
   trial_ends_at?: string;
 }
 
 /** orgs columns to update from a subscription event; unknown Stripe statuses leave the status alone. */
 export function subscriptionPatch(sub: SubscriptionLike, deleted = false): OrgBillingPatch {
-  const patch: OrgBillingPatch = { stripe_subscription_id: sub.id };
+  const patch: OrgBillingPatch = { billing_subscription_id: sub.id };
   const status = deleted ? 'canceled' : mapStripeStatus(sub.status);
   if (status) patch.billing_status = status;
   const customerId = idOf(sub.customer);
-  if (customerId) patch.stripe_customer_id = customerId;
+  if (customerId) patch.billing_customer_id = customerId;
   const trialEndsAt = unixToIso(sub.trial_end);
   if (trialEndsAt) patch.trial_ends_at = trialEndsAt;
   return patch;

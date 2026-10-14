@@ -168,7 +168,7 @@ export class DemoStore {
       glossary: d.glossary,
       messages: d.messages,
       transcripts: d.transcripts,
-      unknownSenders: d.unknownSenders,
+      unknownContacts: d.unknownContacts,
       siteDays: d.siteDays,
       reports: d.reports,
       versions: d.versions,
@@ -1145,8 +1145,11 @@ export class DemoStore {
   }
 
   linkUnknownSender(input: LinkUnknownSenderInput, userId: string): void {
-    const u = this.data.unknownSenders.find((x) => x.id === input.unknownSenderId);
+    const u = this.data.unknownContacts.find((x) => x.id === input.unknownSenderId);
     if (!u) throw new Error(copy.errors.notFound);
+    // As api-link-unknown-sender (checkLink): WhatsApp senders only; a text or a call needs
+    // consent first and is linked by api-link-unknown-contact (W1-16).
+    if (u.channel !== null) throw new Error(copy.errors.notAllowed);
     const id = this.inviteReporter(
       {
         name: input.name,
@@ -1158,19 +1161,20 @@ export class DemoStore {
       userId,
     );
     const r = this.data.reporters.find((x) => x.id === id)!;
-    r.status = 'verified';
+    r.status = 'active';
     r.verified_at = this.nowIso();
+    r.activated_at = r.verified_at;
     u.status = 'linked';
     this.audit({
       org_id: this.data.org.id,
       actor_type: 'user',
       actor_id: userId,
-      action: 'unknown_sender.linked',
+      action: 'unknown_contact.linked',
       entity: 'reporter',
       entity_id: id,
       diff: { site_id: input.siteId },
     });
-    this.emit({ table: 'unknown_senders', id: u.id });
+    this.emit({ table: 'unknown_contacts', id: u.id });
   }
 
   setReporterStatus(reporterId: string, status: ReporterStatus, userId: string): void {
@@ -1319,19 +1323,19 @@ export class DemoStore {
   }
 
   ignoreUnknownSender(id: string, userId: string): void {
-    const u = this.data.unknownSenders.find((x) => x.id === id);
+    const u = this.data.unknownContacts.find((x) => x.id === id);
     if (!u) throw new Error(copy.errors.notFound);
     u.status = 'ignored';
     this.audit({
       org_id: this.data.org.id,
       actor_type: 'user',
       actor_id: userId,
-      action: 'unknown_sender.ignored',
-      entity: 'unknown_sender',
+      action: 'unknown_contact.ignored',
+      entity: 'unknown_contact',
       entity_id: id,
       diff: null,
     });
-    this.emit({ table: 'unknown_senders', id });
+    this.emit({ table: 'unknown_contacts', id });
   }
 
   addOfficeUser(input: { email: string; role: MemberRole; name?: string }, userId: string): void {
@@ -2209,8 +2213,8 @@ export class DemoStore {
     this.denormalize(r, input.version, data);
     this.audit({
       org_id: d.org.id,
-      actor_type: input.author === 'reporter_reply' ? 'reporter' : 'agent',
-      actor_id: input.author === 'reporter_reply' ? r.reporter_id : null,
+      actor_type: input.author === 'reporter' ? 'reporter' : 'agent',
+      actor_id: input.author === 'reporter' ? r.reporter_id : null,
       action: 'report.version_created',
       entity: 'report',
       entity_id: r.id,
@@ -2323,7 +2327,7 @@ export interface FieldVersionInput {
   reportId: string;
   version: number;
   data: DailyReportDataV1;
-  author: 'agent' | 'reporter_reply';
+  author: 'agent' | 'reporter';
   changeNote: string;
   messageId: string | null;
   source: FieldSourceInput | null;

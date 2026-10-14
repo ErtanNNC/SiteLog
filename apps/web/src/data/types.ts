@@ -617,7 +617,7 @@ export interface WeatherLog {
 
 // ───────────────────────────── P10 Team ─────────────────────────────
 
-export type ReporterChipStatus = 'verified' | 'invite_sent' | 'not_on_whatsapp' | 'disabled';
+export type ReporterChipStatus = 'active' | 'invite_sent' | 'not_on_whatsapp' | 'disabled';
 
 export interface TeamReporter {
   id: string;
@@ -775,7 +775,7 @@ export interface NavBadges {
 
 /** Realtime change event — hooks invalidate the matching queries. */
 export interface ChangeEvent {
-  table: 'site_days' | 'reports' | 'notifications' | 'unknown_senders' | 'evidence_packs' | 'all';
+  table: 'site_days' | 'reports' | 'notifications' | 'unknown_contacts' | 'evidence_packs' | 'all';
   id?: string | null;
 }
 

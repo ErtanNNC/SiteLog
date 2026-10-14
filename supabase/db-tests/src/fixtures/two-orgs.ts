@@ -112,7 +112,17 @@ export const SHARED = {
 
 export const other = (k: OrgKey): OrgKey => (k === 'A' ? 'B' : 'A');
 
-function orgSql(k: OrgKey, n: number): string {
+/**
+ * The names a schema from before W1-05 step 11 (20261014000003_renames_billing.sql) uses: tests of
+ * an earlier migration seed the fixture on a database as deployed before it (`until`).
+ */
+interface SchemaNames {
+  unknownContacts: 'unknown_contacts' | 'unknown_senders';
+  activeStatus: 'active' | 'verified';
+  customerId: 'billing_customer_id' | 'stripe_customer_id';
+}
+
+function orgSql(k: OrgKey, n: number, names: SchemaNames): string {
   const o = ORG[k];
   const u = o.users;
   const phone = (base: number) => `+1555000${base}${n}`;
@@ -120,7 +130,7 @@ function orgSql(k: OrgKey, n: number): string {
     insert into auth.users (id, email) values
       ('${u.admin}', 'admin-${k}@matrix.test'), ('${u.pm}', 'pm-${k}@matrix.test'),
       ('${u.ops}', 'ops-${k}@matrix.test'), ('${u.accounts}', 'accounts-${k}@matrix.test');
-    insert into orgs (id, name, stripe_customer_id, billing_status) values
+    insert into orgs (id, name, ${names.customerId}, billing_status) values
       ('${o.org}', 'Org ${k}', 'cus_${k}', 'active');
     insert into org_members (org_id, user_id, role) values
       ('${o.org}', '${u.admin}', 'admin'), ('${o.org}', '${u.pm}', 'pm'),
@@ -129,7 +139,7 @@ function orgSql(k: OrgKey, n: number): string {
     insert into sites (id, org_id, name, project_code, timezone) values
       ('${o.site}', '${o.org}', 'Site ${k}', '${k}-100', 'America/Chicago');
     insert into reporters (id, org_id, name, phone_e164, status) values
-      ('${o.reporter}', '${o.org}', 'Reporter ${k}', '${phone(10)}', 'verified'),
+      ('${o.reporter}', '${o.org}', 'Reporter ${k}', '${phone(10)}', '${names.activeStatus}'),
       ('${o.reporter2}', '${o.org}', 'Backup ${k}', '${phone(11)}', 'invited');
     insert into reporters (id, org_id, name, phone_e164, status, opted_out_at) values
       ('${o.optedOut}', '${o.org}', 'Opted out ${k}', '${phone(12)}', 'opted_out', now());
@@ -142,7 +152,7 @@ function orgSql(k: OrgKey, n: number): string {
       ('${o.message2}', '${o.conversation}', 'in', 'text', null);
     insert into transcripts (id, message_id, text, segments) values
       ('${o.transcript}', '${o.message}', 'six from Apex', '[]');
-    insert into unknown_senders (id, org_id, phone_e164, snippet) values
+    insert into ${names.unknownContacts} (id, org_id, phone_e164, snippet) values
       ('${o.unknownSender}', '${o.org}', '${phone(20)}', 'hello');
     insert into site_days (id, site_id, date, status, deadline_at) values
       ('${o.siteDay}', '${o.site}', '2026-10-09', 'filed', '2026-10-09T22:30:00Z'),
@@ -187,7 +197,7 @@ function orgSql(k: OrgKey, n: number): string {
       ('${o.notification}', '${o.org}', null, 'missing_report', 'Site ${k}: no report'),
       ('${o.notifications.invoiceGap}', '${o.org}', null, 'invoice_gap', 'Apex ${k}: 8 h gap'),
       ('${o.notifications.needsReview}', '${o.org}', null, 'needs_review', '${k}-100-0001 needs review'),
-      ('${o.notifications.unknownSender}', '${o.org}', null, 'unknown_sender', 'Unknown number'),
+      ('${o.notifications.unknownSender}', '${o.org}', null, 'unknown_contact', 'Unknown number'),
       ('${o.notifications.billing}', '${o.org}', null, 'billing', 'Payment failed'),
       ('${o.notifications.packReadyForPm}', '${o.org}', '${u.pm}', 'pack_ready', 'EOT pack ready');
     insert into storage.objects (bucket_id, name) values
@@ -206,8 +216,22 @@ export async function seedTwoOrgs(db: PGlite): Promise<void> {
     `select to_regclass('storage.objects')::text as t`,
   );
   if (!storage.rows[0]?.t) throw new Error('seedTwoOrgs needs bootDatabase({ storage: true })');
-  await db.exec(orgSql('A', 1));
-  await db.exec(orgSql('B', 2));
+  const renamed = await db.query<{ v: boolean }>(
+    `select to_regclass('public.unknown_contacts') is not null as v`,
+  );
+  const names: SchemaNames = renamed.rows[0]!.v
+    ? {
+        unknownContacts: 'unknown_contacts',
+        activeStatus: 'active',
+        customerId: 'billing_customer_id',
+      }
+    : {
+        unknownContacts: 'unknown_senders',
+        activeStatus: 'verified',
+        customerId: 'stripe_customer_id',
+      };
+  await db.exec(orgSql('A', 1, names));
+  await db.exec(orgSql('B', 2, names));
   await db.exec(`
     insert into auth.users (id, email) values ('${SPARE_USER}', 'spare@matrix.test'), ('${OPERATOR}', 'operator@matrix.test');
     insert into platform_admins (user_id, note) values ('${OPERATOR}', 'matrix');

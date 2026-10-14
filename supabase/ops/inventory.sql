@@ -17,11 +17,14 @@ begin transaction isolation level repeatable read, read only;
 set local sitelog.demo_org = '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d';
 
 -- Optional Supabase parts: storage, pg_cron and Vault exist on hosted projects, not on every Postgres.
+-- has_unknown_contacts: the schema after W1-05 step 11 (20261014000003 renamed unknown_senders), so
+-- the same script reads staging before the cut-over (W1-19 re-runs it right before the push) and after.
 select
   coalesce(has_table_privilege(to_regclass('storage.objects'), 'select'), false)
     and coalesce(has_table_privilege(to_regclass('storage.buckets'), 'select'), false) as has_storage,
   coalesce(has_table_privilege(to_regclass('cron.job'), 'select'), false) as has_cron,
-  coalesce(has_table_privilege(to_regclass('vault.secrets'), 'select'), false) as has_vault
+  coalesce(has_table_privilege(to_regclass('vault.secrets'), 'select'), false) as has_vault,
+  to_regclass('public.unknown_contacts') is not null as has_unknown_contacts
 \gset
 
 select 'Orgs' as section, 'orgs' as label,
@@ -61,13 +64,23 @@ from transcripts t
 join messages m on m.id = t.message_id
 left join conversations c on c.id = m.conversation_id;
 
-select 'Unknown senders by status', case when grouping(status) = 1 then 'all' else status::text end,
+\if :has_unknown_contacts
+select 'Unknown contacts by status', case when grouping(status) = 1 then 'all' else status::text end,
+  count(*) filter (where org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from unknown_contacts
+group by rollup (status)
+order by grouping(status), status;
+\else
+select 'Unknown contacts by status', case when grouping(status) = 1 then 'all' else status::text end,
   count(*) filter (where org_id = current_setting('sitelog.demo_org')::uuid),
   count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
   count(*)::text
 from unknown_senders
 group by rollup (status)
 order by grouping(status), status;
+\endif
 
 select 'Report sources by kind', case when grouping(s.kind) = 1 then 'all' else s.kind end,
   count(*) filter (where r.org_id = current_setting('sitelog.demo_org')::uuid),

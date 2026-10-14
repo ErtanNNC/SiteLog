@@ -248,9 +248,10 @@ export function createHarness(
     phone_e164: phone,
     role,
     languages,
-    status: 'verified',
+    status: 'active',
     invited_at: '2026-03-01T00:00:00Z',
     verified_at: '2026-03-01T00:00:00Z',
+    activated_at: '2026-03-01T00:00:00Z',
     last_invite_error: null,
     created_at: '2026-03-01T00:00:00Z',
   });

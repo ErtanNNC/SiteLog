@@ -15,7 +15,12 @@ import { bootDatabase } from './harness.ts';
 const SCRIPT_PATH = join(import.meta.dirname, '..', '..', 'ops', 'inventory.sql');
 const SCRIPT = readFileSync(SCRIPT_PATH, 'utf8');
 
-type Flags = { has_storage: boolean; has_cron: boolean; has_vault: boolean };
+type Flags = {
+  has_storage: boolean;
+  has_cron: boolean;
+  has_vault: boolean;
+  has_unknown_contacts: boolean;
+};
 type Row = [
   section: string,
   label: string,
@@ -98,7 +103,12 @@ describe('supabase/ops/inventory.sql', () => {
   });
 
   it('counts the seeded tables, split into the demo org and the rest', async () => {
-    const rows = await runInventory(db, { has_storage: false, has_cron: false, has_vault: false });
+    const rows = await runInventory(db, {
+      has_storage: false,
+      has_cron: false,
+      has_vault: false,
+      has_unknown_contacts: true,
+    });
     for (const r of rows) {
       expect(r).toHaveLength(5);
       expect(typeof r[0]).toBe('string');
@@ -115,7 +125,7 @@ describe('supabase/ops/inventory.sql', () => {
       select 'sources', count(*)::int from report_sources union all
       select 'notifications', count(*)::int from notifications union all
       select 'transcripts', count(*)::int from transcripts union all
-      select 'unknown', count(*)::int from unknown_senders union all
+      select 'unknown', count(*)::int from unknown_contacts union all
       select 'conversations', count(*)::int from conversations union all
       select 'jobs', count(*)::int from jobs`);
     const n = Object.fromEntries(seeded.rows.map((r) => [r.t, r.n]));
@@ -133,7 +143,7 @@ describe('supabase/ops/inventory.sql', () => {
     expect(all('Report versions by data schemaVersion')?.[4]).toBe(String(n.versions));
     expect(all('Report sources by kind')?.[4]).toBe(String(n.sources));
     expect(all('Notifications by kind')?.[4]).toBe(String(n.notifications));
-    expect(all('Unknown senders by status')?.[4]).toBe(String(n.unknown));
+    expect(all('Unknown contacts by status')?.[4]).toBe(String(n.unknown));
     expect(all('Conversations by state')?.[4]).toBe(String(n.conversations));
     expect(all('Jobs by type and status')).toEqual([
       'Jobs by type and status',
@@ -146,7 +156,7 @@ describe('supabase/ops/inventory.sql', () => {
 
     // Labels are enum values and fixed names.
     expect([...section(rows, 'Reporters by status').keys()]).toEqual(
-      expect.arrayContaining(['verified', 'all']),
+      expect.arrayContaining(['active', 'all']),
     );
     expect(section(rows, 'Report versions by data schemaVersion').has('schemaVersion 1')).toBe(
       true,
@@ -184,8 +194,15 @@ describe('supabase/ops/inventory.sql', () => {
       insert into vault.secrets (name, secret) values ('scheduler_tick_url', 'https://private-secret.example/tick');
     `);
     // The script's own flag query (the one psql ends with \gset).
-    const flags = await db.query<Flags>(/select\s+coalesce[\s\S]*?as has_vault/.exec(SCRIPT)![0]);
-    expect(flags.rows[0]).toEqual({ has_storage: true, has_cron: true, has_vault: true });
+    const flags = await db.query<Flags>(
+      /select\s+coalesce[\s\S]*?as has_unknown_contacts/.exec(SCRIPT)![0],
+    );
+    expect(flags.rows[0]).toEqual({
+      has_storage: true,
+      has_cron: true,
+      has_vault: true,
+      has_unknown_contacts: true,
+    });
 
     const rows = await runInventory(db, flags.rows[0]!);
 
@@ -210,5 +227,39 @@ describe('supabase/ops/inventory.sql', () => {
       `select name as v from reporters union select phone_e164 from reporters union select name from orgs`,
     );
     for (const { v } of people.rows) expect(printed).not.toContain(v);
+  });
+
+  it('reads a database from before W1-05 step 11 (staging until the cut-over re-run, W1-19)', async () => {
+    const old = await bootDatabase({ until: '20261014000003_renames_billing.sql' });
+    try {
+      await old.exec(`
+        insert into orgs (id, name) values ('${DEMO_ORG_ID}', 'Kestrel'), (gen_random_uuid(), 'Customer');
+        insert into reporters (org_id, name, phone_e164, status)
+          select id, 'R', '+15550109999', 'verified' from orgs where name = 'Customer';
+        insert into unknown_senders (org_id, phone_e164) values ('${DEMO_ORG_ID}', '+15550108888');
+      `);
+      const flags = await old.query<Flags>(
+        /select\s+coalesce[\s\S]*?as has_unknown_contacts/.exec(SCRIPT)![0],
+      );
+      expect(flags.rows[0]!.has_unknown_contacts).toBe(false);
+      const rows = await runInventory(old, flags.rows[0]!);
+      expect(section(rows, 'Unknown contacts by status').get('pending')).toEqual([
+        'Unknown contacts by status',
+        'pending',
+        1,
+        0,
+        '1',
+      ]);
+      // D19: a verified reporter outside the demo org stops the cut-over (docs/RUNBOOK.md §2).
+      expect(section(rows, 'Reporters by status').get('verified')).toEqual([
+        'Reporters by status',
+        'verified',
+        0,
+        1,
+        '1',
+      ]);
+    } finally {
+      await old.close();
+    }
   });
 });

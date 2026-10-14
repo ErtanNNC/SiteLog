@@ -96,7 +96,7 @@ describe('seed.sql (Kestrel demo)', () => {
     );
     expect(hero.rows).toEqual([
       { version: 1, change_note: null, author: 'agent' },
-      { version: 2, change_note: 'Apex Concrete 6 → 7 workers', author: 'reporter_reply' },
+      { version: 2, change_note: 'Apex Concrete 6 → 7 workers', author: 'reporter' },
     ]);
     const transcript = await asUser(db, LENA, (q) =>
       q<{ n: number }>(

@@ -115,7 +115,7 @@ describe('BillingPage (demo data)', () => {
     const store = new DemoStore();
     store.data.org = {
       ...store.data.org,
-      stripe_subscription_id: null,
+      billing_subscription_id: null,
       billing_status: 'trialing',
     };
     const u = demoUserFor('admin');
@@ -152,8 +152,8 @@ describe('BillingPage (demo data)', () => {
       ...d,
       org: {
         ...d.org,
-        stripe_customer_id: null,
-        stripe_subscription_id: null,
+        billing_customer_id: null,
+        billing_subscription_id: null,
         billing_status: 'trialing',
         trial_ends_at: '2026-10-26T15:00:00.000Z',
       },
@@ -191,8 +191,8 @@ describe('BillingPage (demo data)', () => {
       ...d,
       org: {
         ...d.org,
-        stripe_customer_id: null,
-        stripe_subscription_id: null,
+        billing_customer_id: null,
+        billing_subscription_id: null,
         billing_status: 'trialing',
         trial_ends_at: '2026-10-26T15:00:00.000Z',
       },

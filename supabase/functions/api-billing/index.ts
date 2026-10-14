@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { logAudit } from '../_shared/audit.ts';
 import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
 import { checkoutTrial, periodEndOf, unixToIso } from '../_shared/billing.ts';
-import { requireEnv } from '../_shared/env.ts';
+import { EnvError, optionalEnv, requireEnv } from '../_shared/env.ts';
 import {
   HttpError,
   json,
@@ -18,12 +18,15 @@ import {
   baseSummary,
   checkoutQuantity,
   invoiceSummary,
+  sitePriceId,
   syncDecision,
   type BillingSummary,
 } from './logic.ts';
 
 /**
- * api-billing (§F19, §P13, §19 #4/#5) — admin only.
+ * api-billing (§F19, §P13, §19 #4/#5) — admin only. Reads and writes the §6.3 billing columns
+ * (billing_customer_id, billing_subscription_id, billing_provider); the legacy stripe_* columns
+ * follow them by trigger until step 23 (20261014000003_renames_billing.sql).
  * POST { orgId, action, siteId? } with action:
  *   checkout     → Stripe Checkout Session (subscription, quantity = active sites ≥ 1, keeps the
  *                  rest of the org's 14-day trial)
@@ -109,7 +112,7 @@ async function ensureCustomer(
   org: Org,
   user: AuthedUser,
 ): Promise<string> {
-  if (org.stripe_customer_id) return org.stripe_customer_id;
+  if (org.billing_customer_id) return org.billing_customer_id;
   const customer = await stripe.customers.create({
     name: org.name,
     email: user.email ?? undefined,
@@ -117,16 +120,17 @@ async function ensureCustomer(
   });
   await admin
     .from('orgs')
-    .update({ stripe_customer_id: customer.id })
+    .update({ billing_provider: 'stripe', billing_customer_id: customer.id })
     .eq('id', org.id)
     .throwOnError();
-  org.stripe_customer_id = customer.id;
+  org.billing_provider = 'stripe';
+  org.billing_customer_id = customer.id;
   logInfo('billing.customer_created', { orgId: org.id, customerId: customer.id });
   return customer.id;
 }
 
 async function checkout(stripe: Stripe, admin: AppClient, org: Org, user: AuthedUser) {
-  if (org.stripe_subscription_id && org.billing_status !== 'canceled') {
+  if (org.billing_subscription_id && org.billing_status !== 'canceled') {
     throw new HttpError(
       409,
       'This organisation already has a subscription; use the billing portal to manage it',
@@ -140,6 +144,8 @@ async function checkout(stripe: Stripe, admin: AppClient, org: Org, user: Authed
       'Add a site before starting the subscription; billing is per active site',
     );
   }
+  const price = sitePriceId(optionalEnv);
+  if (!price) throw new EnvError('STRIPE_PRICE_ID_SITE_US');
   const customer = await ensureCustomer(stripe, admin, org, user);
   const trial = checkoutTrial(org, new Date());
   const base = appUrl();
@@ -147,7 +153,7 @@ async function checkout(stripe: Stripe, admin: AppClient, org: Org, user: Authed
     mode: 'subscription',
     customer,
     client_reference_id: org.id,
-    line_items: [{ price: requireEnv('STRIPE_PRICE_ID_SITE'), quantity }],
+    line_items: [{ price, quantity }],
     subscription_data: { metadata: { orgId: org.id }, ...trial },
     success_url: `${base}/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${base}/billing?checkout=canceled`,
@@ -166,10 +172,10 @@ async function checkout(stripe: Stripe, admin: AppClient, org: Org, user: Authed
 }
 
 async function portal(stripe: Stripe, org: Org) {
-  if (!org.stripe_customer_id)
+  if (!org.billing_customer_id)
     throw new HttpError(409, 'No Stripe customer yet; start a subscription first');
   const session = await stripe.billingPortal.sessions.create({
-    customer: org.stripe_customer_id,
+    customer: org.billing_customer_id,
     return_url: `${appUrl()}/billing`,
   });
   return { url: session.url };
@@ -177,10 +183,10 @@ async function portal(stripe: Stripe, org: Org) {
 
 async function syncQuantity(stripe: Stripe, admin: AppClient, org: Org) {
   const activeSites = await activeSiteCount(admin, org.id);
-  if (!org.stripe_subscription_id) {
+  if (!org.billing_subscription_id) {
     return { synced: false, reason: 'no_subscription', activeSites };
   }
-  const subscription = await stripe.subscriptions.retrieve(org.stripe_subscription_id);
+  const subscription = await stripe.subscriptions.retrieve(org.billing_subscription_id);
   const item = subscription.items.data[0];
   if (!item) return { synced: false, reason: 'no_subscription_item', activeSites };
   const decision = syncDecision(item.quantity ?? null, activeSites);
@@ -253,21 +259,21 @@ async function setSiteStatus(
 }
 
 async function invoices(stripe: Stripe, org: Org) {
-  if (!org.stripe_customer_id) return { invoices: [] };
-  const list = await stripe.invoices.list({ customer: org.stripe_customer_id, limit: 12 });
+  if (!org.billing_customer_id) return { invoices: [] };
+  const list = await stripe.invoices.list({ customer: org.billing_customer_id, limit: 12 });
   return { invoices: list.data.map(invoiceSummary) };
 }
 
 async function status(stripe: Stripe, admin: AppClient, org: Org): Promise<BillingSummary> {
   const summary = baseSummary(org, await activeSiteCount(admin, org.id));
-  if (org.stripe_subscription_id) {
-    const subscription = await stripe.subscriptions.retrieve(org.stripe_subscription_id);
+  if (org.billing_subscription_id) {
+    const subscription = await stripe.subscriptions.retrieve(org.billing_subscription_id);
     summary.subscriptionStatus = subscription.status;
     summary.subscriptionQuantity = subscription.items.data[0]?.quantity ?? null;
     summary.nextInvoiceAt = unixToIso(periodEndOf(subscription));
   }
-  if (org.stripe_customer_id)
-    summary.paymentMethod = await defaultPaymentMethod(stripe, org.stripe_customer_id);
+  if (org.billing_customer_id)
+    summary.paymentMethod = await defaultPaymentMethod(stripe, org.billing_customer_id);
   return summary;
 }
 

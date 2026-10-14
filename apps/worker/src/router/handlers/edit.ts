@@ -152,7 +152,7 @@ export async function applyEdit(
   const next = DailyReportDataV1Schema.parse({ ...patched, manpower: entries });
   const result = await createReportVersion(ctx, report, next, {
     changeNote: res.data.changeNote,
-    author: 'reporter_reply',
+    author: 'reporter',
     authorMessageId: messageId,
     emailRecipients: true,
   });

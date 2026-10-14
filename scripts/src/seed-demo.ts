@@ -60,7 +60,7 @@ end $$;
   parts.push(insertRows('conversations', d.conversations));
   parts.push(insertRows('messages', d.messages));
   parts.push(insertRows('transcripts', d.transcripts));
-  parts.push(insertRows('unknown_senders', d.unknownSenders));
+  parts.push(insertRows('unknown_contacts', d.unknownContacts));
   parts.push(
     '-- Days, reports, versions ------------------------------------------------------------------------',
   );

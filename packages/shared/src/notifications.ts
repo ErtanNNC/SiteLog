@@ -11,8 +11,8 @@ const AUDIENCE: Readonly<Record<string, readonly MemberRole[]>> = {
   invoice_gap: ['admin', 'ops', 'accounts'], // §13 "Invoice gap: ops, accounts"
   billing: ['admin'], // §13 "Billing: admin"
   missing_report: ['admin', 'ops'], // §13 "Report missing: ops + admin"
-  unknown_sender: ['admin', 'ops'], // §13 "Unknown contact: ops, admin"
-  unknown_contact: ['admin', 'ops'],
+  unknown_contact: ['admin', 'ops'], // §13 "Unknown contact: ops, admin"
+  unknown_sender: ['admin', 'ops'], // the same, written before step 11 (legacy rows)
   reporter_invite_failed: ['admin', 'ops'], // §13 "Text undeliverable / opted out"
   reporter_wrong_site: ['admin', 'ops'], // §2.2 "Manage reporters": admin, ops
 };

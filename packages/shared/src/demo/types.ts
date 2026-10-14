@@ -21,7 +21,7 @@ import type {
   SiteRow,
   SubInvoiceRow,
   TranscriptRow,
-  UnknownSenderRow,
+  UnknownContactRow,
   UploadRow,
   WeatherEventRow,
   WorkItemRow,
@@ -61,7 +61,7 @@ export interface DemoDataset {
   conversations: ConversationRow[];
   messages: MessageRow[];
   transcripts: TranscriptRow[];
-  unknownSenders: UnknownSenderRow[];
+  unknownContacts: UnknownContactRow[];
   siteDays: SiteDayRow[];
   reports: ReportRow[];
   versions: ReportVersionRow[];

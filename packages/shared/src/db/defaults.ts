@@ -3,8 +3,9 @@ import type { Database } from './types.ts';
 type Rows = Database['public']['Tables'];
 
 /**
- * What the v1.2 columns of 20261013000007_schema_expand_v1_2.sql hold on a row whose writer does
- * not set them: the column's database default, or null. In-memory stores that build rows by hand
+ * What the v1.2 columns of 20261013000007_schema_expand_v1_2.sql (and the billing columns of
+ * 20261014000003_renames_billing.sql) hold on a row whose writer does not set them: the column's
+ * database default, or null. In-memory stores that build rows by hand
  * (the Kestrel dataset, the panel's demo store, the worker's fake database) spread these, so their
  * rows have every column a select returns. A v1.2 writer sets its own values instead.
  */
@@ -16,6 +17,9 @@ export const V12_ROW_DEFAULTS = {
     currency: 'USD',
     tax_no: null,
     is_demo: false,
+    billing_provider: 'stripe',
+    billing_customer_id: null,
+    billing_subscription_id: null,
   },
   org_members: { ui_locale: null },
   org_settings: {

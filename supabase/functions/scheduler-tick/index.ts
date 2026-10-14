@@ -183,7 +183,7 @@ async function runTick(admin: AppClient, now: Date): Promise<TickResult> {
         continue;
       }
       if (!target) {
-        // Nobody verified to remind: leave the stage untouched; the office alert still fires later.
+        // Nobody active to remind: leave the stage untouched; the office alert still fires later.
         logWarn('scheduler.reminder.no_reporter', { siteId: site.id, siteDayId: sd.id, stage });
         continue;
       }

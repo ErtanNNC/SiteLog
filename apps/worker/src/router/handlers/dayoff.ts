@@ -305,7 +305,7 @@ export async function handleWeatherFollowupAnswer(
   );
   await createReportVersion(ctx, report, applied.data, {
     changeNote: `Crew on site this morning: ${workers}`,
-    author: 'reporter_reply',
+    author: 'reporter',
     authorMessageId: s.message.id,
     emailRecipients: false,
   });

@@ -116,7 +116,7 @@ describe('DemoStore field-simulator writes', () => {
       reportId: 'sim-r1',
       version: 2,
       data: { ...data, manpower: [{ ...data.manpower[0]!, workers: 7, totalHours: 56 }] },
-      author: 'reporter_reply',
+      author: 'reporter',
       changeNote: 'Apex Concrete 7 workers · 56 h (was 6 · 48 h)',
       messageId: 'sim-m9',
       source: null,
@@ -124,7 +124,7 @@ describe('DemoStore field-simulator writes', () => {
     });
     const detail = await source.getReportDetail('sim-r1');
     expect(detail.version).toBe(2);
-    expect(detail.versions.map((v) => v.author)).toEqual(['agent', 'reporter_reply']);
+    expect(detail.versions.map((v) => v.author)).toEqual(['agent', 'reporter']);
   });
 
   it('no work flips the site-day without a report; a weather day files its own record', () => {

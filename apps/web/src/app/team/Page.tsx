@@ -38,8 +38,9 @@ import { EditReporterDialog } from './EditReporterDialog';
 import { InviteReporterDialog } from './InviteReporterDialog';
 import { LinkSenderDialog } from './LinkSenderDialog';
 
+// `active` (§6.2) keeps the WhatsApp-era "Verified" label until the Team statuses of M10.
 const CHIP: Record<ReporterChipStatus, { box: string; dot: string; label: string }> = {
-  verified: {
+  active: {
     box: 'bg-chip-filed-bg text-chip-filed-fg border-chip-filed-bg',
     dot: 'bg-filed',
     label: copy.chips.verified,
@@ -183,7 +184,7 @@ export default function TeamPage() {
               {copy.team.rowMenu.edit}
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={r.chipStatus === 'verified'}
+              disabled={r.chipStatus === 'active'}
               onSelect={() => resend.mutate({ reporterId: r.id, name: r.name })}
             >
               {copy.team.rowMenu.resendInvite}

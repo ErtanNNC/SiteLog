@@ -25,7 +25,7 @@ import type {
   SiteRow,
   SubInvoiceRow,
   TranscriptRow,
-  UnknownSenderRow,
+  UnknownContactRow,
   UploadRow,
   WeatherEventRow,
 } from '@sitelog/shared/db/types.ts';
@@ -163,7 +163,7 @@ export interface RowSet {
    */
   uploads?: UploadRow[];
   transcripts: TranscriptRow[];
-  unknownSenders: UnknownSenderRow[];
+  unknownContacts: UnknownContactRow[];
   siteDays: SiteDayRow[];
   reports: ReportRow[];
   versions: ReportVersionRow[];
@@ -846,7 +846,7 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
   gapItems.sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
   attention.push(...gapItems.map(({ gap: _g, ...item }) => item));
 
-  for (const u of rows.unknownSenders.filter((x) => x.status === 'pending')) {
+  for (const u of rows.unknownContacts.filter((x) => x.status === 'pending')) {
     const snippet = (u.snippet ?? '').replace(/…$/, '');
     const short = snippet.length > 42 ? `${snippet.slice(0, 41).trimEnd()}…` : snippet;
     attention.push({
@@ -2063,7 +2063,7 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
       r.status === 'disabled'
         ? 'disabled'
         : isActiveReporterStatus(r.status)
-          ? 'verified'
+          ? 'active'
           : r.last_invite_error
             ? 'not_on_whatsapp'
             : 'invite_sent';
@@ -2082,7 +2082,7 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
     };
   });
   reporters.sort((a, b) => a.name.localeCompare(b.name));
-  const unknownSenders = rows.unknownSenders
+  const unknownSenders = rows.unknownContacts
     .filter((u) => u.status === 'pending')
     .map((u) => ({
       id: u.id,
@@ -2093,7 +2093,7 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
       guessedSiteName: u.guessed_site_id
         ? (ix.siteById.get(u.guessed_site_id)?.name ?? null)
         : null,
-      messageId: u.first_message_id,
+      messageId: u.message_id,
     }));
   return {
     reporters,
@@ -2196,7 +2196,7 @@ export function assembleBilling(rows: RowSet, ctx: AssembleCtx): BillingData {
       status: rows.org.billing_status,
       trialEndsAt: rows.org.trial_ends_at,
       hasSubscription:
-        rows.org.stripe_subscription_id != null && rows.org.billing_status !== 'canceled',
+        rows.org.billing_subscription_id != null && rows.org.billing_status !== 'canceled',
     },
     sites: rows.sites
       .filter((s) => s.status !== 'archived')
@@ -2252,7 +2252,7 @@ export function assembleNotifications(rows: RowSet, ctx: AssembleCtx): Notificat
 export function assembleNavBadges(rows: RowSet, ctx: AssembleCtx): NavBadges {
   return {
     reportsToReview: rows.reports.filter((r) => r.status === 'filed' && r.needs_review).length,
-    unknownSenders: rows.unknownSenders.filter((u) => u.status === 'pending').length,
+    unknownSenders: rows.unknownContacts.filter((u) => u.status === 'pending').length,
     termsToReview: rows.glossary.filter((t) => t.status === 'needs_review').length,
     unreadNotifications: rows.notifications.filter(
       (n) => !n.read_at && (n.user_id === null || n.user_id === ctx.userId),

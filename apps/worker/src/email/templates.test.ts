@@ -7,7 +7,7 @@ import {
   reportEditedAfterSignoffEmail,
   reportFiledEmail,
   reportMissingEmail,
-  unknownSenderEmail,
+  unknownContactEmail,
   weeklyDigestEmail,
 } from './templates';
 
@@ -102,7 +102,7 @@ describe('email templates', () => {
         },
         url: 'u',
       }),
-      unknownSenderEmail({
+      unknownContactEmail({
         orgName: 'K',
         phone: '+15550194410',
         snippet: 'this is Luis, covering Elm St. today',

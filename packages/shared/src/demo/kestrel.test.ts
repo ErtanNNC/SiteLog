@@ -121,7 +121,7 @@ describe('Kestrel demo data (§18)', () => {
     });
     expect(state('HS-0418').status).toBe('weather_day');
     expect(state('ES-0377').status).toBe('missing');
-    expect(demo.unknownSenders[0]!.phone_e164).toBe('+15550194410');
+    expect(demo.unknownContacts[0]!.phone_e164).toBe('+15550194410');
     expect(demo.invoices.find((i) => i.invoice_no === 'BL-3381')!.total_hours).toBe(212);
   });
 

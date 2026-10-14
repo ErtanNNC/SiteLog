@@ -18,7 +18,7 @@ import type {
   ReportStatus,
   ReporterRole,
   ReporterStatus,
-  SenderStatus,
+  ContactStatus,
   SiteDayStatus,
   SiteStatus,
   SourceKind,
@@ -47,6 +47,10 @@ export type OrgRow = {
   license_no: string | null;
   logo_path: string | null;
   timezone: string;
+  /**
+   * Legacy (step 23 drops them): kept equal to billing_customer_id / billing_subscription_id by
+   * the orgs_billing_ids trigger (20261014000003_renames_billing.sql). Read and write billing_*.
+   */
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   billing_status: string | null;
@@ -65,6 +69,10 @@ export type OrgRow = {
   tax_no: string | null;
   /** Demo orgs: console SMS driver and the Demo phone (§4.5, §5.2). */
   is_demo: boolean;
+  /** §6.3 billing (20261014000003): 'stripe' (US); service role and RPCs only. */
+  billing_provider: string | null;
+  billing_customer_id: string | null;
+  billing_subscription_id: string | null;
 };
 
 export type OrgMemberRow = {
@@ -244,15 +252,21 @@ export type TranscriptRow = {
   created_at: string;
 };
 
-export type UnknownSenderRow = {
+/**
+ * §6.3 unknown_contacts (unknown_senders until 20261014000003). channel is null for the WhatsApp
+ * senders (D13); 'sms' or 'voice' from W1-08 and week 2. guessed_site_id is a repo addition.
+ */
+export type UnknownContactRow = {
   id: string;
   org_id: string | null;
   phone_e164: string;
-  first_message_id: string | null;
+  message_id: string | null;
   snippet: string | null;
   guessed_site_id: string | null;
-  status: SenderStatus;
+  status: ContactStatus;
   created_at: string;
+  channel: FieldChannel | null;
+  call_id: string | null;
 };
 
 export type SiteDayRow = {
@@ -728,6 +742,9 @@ export type Database = {
         | 'currency'
         | 'tax_no'
         | 'is_demo'
+        | 'billing_provider'
+        | 'billing_customer_id'
+        | 'billing_subscription_id'
       >;
       org_members: Table<
         OrgMemberRow,
@@ -822,15 +839,17 @@ export type Database = {
         TranscriptRow,
         'id' | 'upload_id' | 'call_id' | 'language' | 'model' | 'created_at'
       >;
-      unknown_senders: Table<
-        UnknownSenderRow,
+      unknown_contacts: Table<
+        UnknownContactRow,
         | 'id'
         | 'org_id'
-        | 'first_message_id'
+        | 'message_id'
         | 'snippet'
         | 'guessed_site_id'
         | 'status'
         | 'created_at'
+        | 'channel'
+        | 'call_id'
       >;
       site_days: Table<
         SiteDayRow,
@@ -1204,7 +1223,7 @@ export type Database = {
       source_kind: SourceKind;
       term_status: TermStatus;
       term_kind: TermKind;
-      sender_status: SenderStatus;
+      contact_status: ContactStatus;
       job_status: JobStatus;
       pack_status: PackStatus;
     };

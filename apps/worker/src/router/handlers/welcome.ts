@@ -3,15 +3,20 @@ import type { Session } from '../session';
 import { handleTestContent } from './test';
 
 /**
- * §F3 steps 3–4: the first reply after the welcome template verifies the reporter and opens
- * test mode; "Wrong site" tells the office.
+ * §F3 steps 3–4: the first reply after the welcome template activates the reporter (§6.2 `active`,
+ * `activated_at` as on the first consent, §F3 step 3) and opens test mode; "Wrong site" tells the
+ * office.
  */
 export async function handleFirstReply(s: Session): Promise<void> {
   const { ctx } = s;
   const now = s.now;
   for (const r of s.reporters) {
     if (r.status === 'invited' || !r.verified_at) {
-      await ctx.db.updateReporter(r.id, { status: 'verified', verified_at: now.toISOString() });
+      await ctx.db.updateReporter(r.id, {
+        status: 'active',
+        verified_at: now.toISOString(),
+        activated_at: r.activated_at ?? now.toISOString(),
+      });
       await ctx.db.logAudit({
         org_id: r.org_id,
         actor_type: 'reporter',

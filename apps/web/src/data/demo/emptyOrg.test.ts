@@ -23,7 +23,7 @@ function emptyOrg(): DemoDataset {
     conversations: [],
     messages: [],
     transcripts: [],
-    unknownSenders: [],
+    unknownContacts: [],
     siteDays: [],
     reports: [],
     versions: [],

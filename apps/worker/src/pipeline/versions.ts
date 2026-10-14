@@ -8,7 +8,7 @@ import type { Ctx } from '../context';
 
 export interface NewVersionOptions {
   changeNote: string;
-  author: 'reporter_reply' | 'agent';
+  author: 'reporter' | 'agent';
   authorMessageId?: string | null;
   emailRecipients?: boolean;
   sendToWhatsApp?: boolean;
@@ -50,8 +50,8 @@ export async function createReportVersion(
   });
   await ctx.db.logAudit({
     org_id: report.org_id,
-    actor_type: opts.author === 'reporter_reply' ? 'reporter' : 'agent',
-    actor_id: opts.author === 'reporter_reply' ? (report.reporter_id ?? null) : null,
+    actor_type: opts.author === 'reporter' ? 'reporter' : 'agent',
+    actor_id: opts.author === 'reporter' ? (report.reporter_id ?? null) : null,
     action: 'report.version_created',
     entity: 'report',
     entity_id: report.id,

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isActiveReporterStatus, isReporterAuthor } from '../enums.ts';
+import {
+  isActiveReporterStatus,
+  isReporterAuthor,
+  REPORTER_STATUSES,
+  VERSION_AUTHORS,
+} from '../enums.ts';
 import {
   isAnswerSourceKind,
   isVoiceSourceKind,
@@ -161,12 +166,11 @@ describe('report media across the move to uploads (W1-05 step 10)', () => {
 });
 
 describe('labels renamed in step 11', () => {
-  it('reads the old and the new label alike', () => {
-    expect(
-      ['invited', 'verified', 'active', 'opted_out', 'disabled'].filter(isActiveReporterStatus),
-    ).toEqual(['verified', 'active']);
-    expect(['agent', 'reporter_reply', 'reporter', 'office_user'].filter(isReporterAuthor)).toEqual(
-      ['reporter_reply', 'reporter'],
-    );
+  it('reads the §6.2 labels only: the database has no other since 20261014000003', () => {
+    expect(REPORTER_STATUSES.filter(isActiveReporterStatus)).toEqual(['active']);
+    expect(VERSION_AUTHORS.filter(isReporterAuthor)).toEqual(['reporter']);
+    // The WhatsApp-era labels are gone from the enums and read as neither.
+    expect(['verified', 'reporter_reply'].some((l) => isActiveReporterStatus(l))).toBe(false);
+    expect(isReporterAuthor('reporter_reply')).toBe(false);
   });
 });

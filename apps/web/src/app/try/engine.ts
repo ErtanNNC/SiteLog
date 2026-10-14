@@ -279,7 +279,7 @@ export type SimEffect =
       reportId: string;
       version: number;
       data: DailyReportDataV1;
-      author: 'agent' | 'reporter_reply';
+      author: 'agent' | 'reporter';
       changeNote: string;
       messageId: string;
       source: SimSource | null;
@@ -1647,7 +1647,7 @@ function newVersion(
   t: Turn,
   r: SimReport,
   data: DailyReportDataV1,
-  author: 'agent' | 'reporter_reply',
+  author: 'agent' | 'reporter',
   changeNote: string,
   messageId: string,
   source: SimSource | null,
@@ -1744,7 +1744,7 @@ function applyEdit(t: Turn, r: SimReport, text: string, msg: ChatMessage): void 
     t.note('unchanged_fix');
     return;
   }
-  newVersion(t, r, res.data, 'reporter_reply', res.changeNote, msg.id, null);
+  newVersion(t, r, res.data, 'reporter', res.changeNote, msg.id, null);
   t.s.convo = 'idle';
   t.s.editingReportId = null;
   t.say(
@@ -2035,15 +2035,7 @@ function weatherFollowupAnswer(t: Turn, r: SimReport, text: string, msg: ChatMes
       messageId: msg.id,
     },
   );
-  newVersion(
-    t,
-    r,
-    applied.data,
-    'reporter_reply',
-    `Crew on site this morning: ${workers}`,
-    msg.id,
-    null,
-  );
+  newVersion(t, r, applied.data, 'reporter', `Crew on site this morning: ${workers}`, msg.id, null);
   t.s.weatherFollowup = null;
   t.say(applied.ackText ?? waCopy.weatherPhotoAck(), 'answer_ack');
 }

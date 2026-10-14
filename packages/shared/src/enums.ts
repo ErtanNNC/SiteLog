@@ -8,10 +8,10 @@ import { z } from 'zod';
  * generated types. Each enum also has a Zod schema built from the same array (`…Schema`, listed in
  * PG_ENUM_SCHEMAS).
  *
- * Expand/contract (docs/GAP_ANALYSIS.md §7): until step 11 `reporter_status` still has `verified`
- * (renamed to `active`), `version_author` has `reporter_reply` (→ `reporter`) and the contact
- * status type is `sender_status` (→ `contact_status`); `msg_type`, `convo_state` and the
- * WhatsApp-only `msg_status` label `read` go in step 23.
+ * Expand/contract (docs/GAP_ANALYSIS.md §7): step 11 (20261014000003_renames_billing.sql) renamed
+ * `reporter_status` `verified` → `active`, `version_author` `reporter_reply` → `reporter` and the
+ * type `sender_status` → `contact_status`; `msg_type`, `convo_state` and the WhatsApp-only
+ * `msg_status` label `read` go in step 23.
  */
 
 export const MEMBER_ROLES = ['admin', 'pm', 'ops', 'accounts'] as const;
@@ -23,8 +23,8 @@ export type SiteStatus = (typeof SITE_STATUSES)[number];
 export const REPORTER_ROLES = ['site_manager', 'backup'] as const;
 export type ReporterRole = (typeof REPORTER_ROLES)[number];
 
-/** `opted_out` from v1.2 (§6.2); `verified` becomes `active` in step 11. */
-export const REPORTER_STATUSES = ['invited', 'verified', 'opted_out', 'disabled'] as const;
+/** §6.2: `opted_out` and `active` (WhatsApp's `verified` until step 11) from v1.2. */
+export const REPORTER_STATUSES = ['invited', 'active', 'opted_out', 'disabled'] as const;
 export type ReporterStatus = (typeof REPORTER_STATUSES)[number];
 
 /** The reporter's preferred channel (§2.3): `link` (SMS + web recorder) or `call`. */
@@ -145,24 +145,25 @@ export const REPORT_STATUSES = [
 ] as const;
 export type ReportStatus = (typeof REPORT_STATUSES)[number];
 
-export const VERSION_AUTHORS = ['agent', 'reporter_reply', 'office_user'] as const;
+/** §6.2: `reporter` (WhatsApp's `reporter_reply` until step 11) is a version the site manager wrote. */
+export const VERSION_AUTHORS = ['agent', 'reporter', 'office_user'] as const;
 export type VersionAuthor = (typeof VERSION_AUTHORS)[number];
 
 /*
- * Readers across the step 11 renames (GAP §7 step 10: "code accepts both old and new labels"):
- * step 11 renames `verified` → `active` and `reporter_reply` → `reporter` in the database, so a
- * reader of this commit must accept either label. Writers keep the current label until step 11
- * switches them (the new one does not exist in the database before that).
+ * Step 10 read both labels of a renamed enum while step 11 was pending. Since step 11 the database
+ * holds only the new ones (the rename changes every row with it), and no code of this commit runs
+ * against a database without that migration (the W1-19 cut-over pushes the database before it
+ * deploys the functions, the worker and the panel), so these accept the §6.2 labels only.
  */
 
-/** A reporter who has accepted (WhatsApp `verified`; `active` from step 11, §6.2). */
+/** A reporter who has accepted (§6.2 `active`). */
 export function isActiveReporterStatus(status: string): boolean {
-  return status === 'verified' || status === 'active';
+  return status === 'active';
 }
 
-/** A version the site manager wrote (WhatsApp `reporter_reply`; `reporter` from step 11). */
+/** A version the site manager wrote (§6.2 `reporter`), not the agent or the office. */
 export function isReporterAuthor(author: string): boolean {
-  return author === 'reporter_reply' || author === 'reporter';
+  return author === 'reporter';
 }
 
 /** What a report source is (§6.3 `report_sources.kind`, §10.3 `source[].type`). */
@@ -181,8 +182,9 @@ export type TermStatus = (typeof TERM_STATUSES)[number];
 export const TERM_KINDS = ['term', 'company', 'area', 'unit'] as const;
 export type TermKind = (typeof TERM_KINDS)[number];
 
-export const SENDER_STATUSES = ['pending', 'linked', 'ignored'] as const;
-export type SenderStatus = (typeof SENDER_STATUSES)[number];
+/** An unknown caller or texter held for the office (§6.3 `unknown_contacts.status`). */
+export const CONTACT_STATUSES = ['pending', 'linked', 'ignored'] as const;
+export type ContactStatus = (typeof CONTACT_STATUSES)[number];
 
 export const JOB_STATUSES = ['queued', 'running', 'done', 'failed', 'dead'] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
@@ -253,7 +255,7 @@ export const PG_ENUMS = {
   source_kind: SOURCE_KINDS,
   term_status: TERM_STATUSES,
   term_kind: TERM_KINDS,
-  sender_status: SENDER_STATUSES,
+  contact_status: CONTACT_STATUSES,
   job_status: JOB_STATUSES,
   pack_status: PACK_STATUSES,
 } as const;
@@ -284,7 +286,7 @@ export const VersionAuthorSchema = z.enum(VERSION_AUTHORS);
 export const SourceKindSchema = z.enum(SOURCE_KINDS);
 export const TermStatusSchema = z.enum(TERM_STATUSES);
 export const TermKindSchema = z.enum(TERM_KINDS);
-export const SenderStatusSchema = z.enum(SENDER_STATUSES);
+export const ContactStatusSchema = z.enum(CONTACT_STATUSES);
 export const JobStatusSchema = z.enum(JOB_STATUSES);
 export const PackStatusSchema = z.enum(PACK_STATUSES);
 
@@ -314,7 +316,7 @@ export const PG_ENUM_SCHEMAS = {
   source_kind: SourceKindSchema,
   term_status: TermStatusSchema,
   term_kind: TermKindSchema,
-  sender_status: SenderStatusSchema,
+  contact_status: ContactStatusSchema,
   job_status: JobStatusSchema,
   pack_status: PackStatusSchema,
 } as const satisfies Record<PgEnumName, z.ZodEnum>;

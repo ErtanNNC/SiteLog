@@ -533,7 +533,7 @@ describe('integration: webhook → worker → outbound (real database, faked out
     );
     expect(delivered!.status).toBe('delivered');
 
-    // An unknown number: held in unknown_senders, one reply, nothing filed.
+    // An unknown number: held in unknown_contacts, one reply, nothing filed.
     const hello = await world.deliver(
       textPayload('Hi, this is Dave from Ridgeway Roofing, where do I send the daily report?', {
         from: STRANGER,
@@ -555,14 +555,20 @@ describe('integration: webhook → worker → outbound (real database, faked out
       reporter_id: string | null;
     }>(`select id, org_id, reporter_id from conversations where phone_e164 = $1`, [STRANGER]);
     expect(convo).toMatchObject({ org_id: null, reporter_id: null });
-    const unknown = await database.q<{ status: string; snippet: string | null; first: string }>(
-      `select us.status::text as status, us.snippet, m.wa_message_id as first from unknown_senders us
-       join messages m on m.id = us.first_message_id where us.phone_e164 = $1`,
+    const unknown = await database.q<{
+      status: string;
+      channel: string | null;
+      snippet: string | null;
+      first: string;
+    }>(
+      `select uc.status::text as status, uc.channel::text as channel, uc.snippet, m.wa_message_id as first
+       from unknown_contacts uc join messages m on m.id = uc.message_id where uc.phone_e164 = $1`,
       [STRANGER],
     );
     expect(unknown).toEqual([
       {
         status: 'pending',
+        channel: null,
         snippet: 'Hi, this is Dave from Ridgeway Roofing, where do I send the daily report?',
         first: 'wamid.it.C.stranger.1',
       },

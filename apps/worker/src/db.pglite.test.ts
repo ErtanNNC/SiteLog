@@ -479,10 +479,10 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
     expect(asCompany.company_id).toBe(company['Apex Concrete']);
   });
 
-  it('records unknown senders', async () => {
-    const seeded = (await db.findPendingUnknownSender('+15550194410'))!;
+  it('records unknown contacts', async () => {
+    const seeded = (await db.findPendingUnknownContact('+15550194410'))!;
     expect(seeded.guessed_site_id).toBe(ELM);
-    expect((await db.getUnknownSender(seeded.id))!.snippet).toMatch(/^this is Luis/);
+    expect((await db.getUnknownContact(seeded.id))!.snippet).toMatch(/^this is Luis/);
 
     const convo = await db.ensureConversation('+15550000002', {});
     const msg = await db.insertOutboundMessage({
@@ -491,20 +491,37 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       body: 'unknownNumber',
       status: 'sent',
     });
-    const row = await db.insertUnknownSender({
+    const row = await db.insertUnknownContact({
       org_id: null,
       phone_e164: '+15550000002',
-      first_message_id: msg.id,
+      channel: null,
+      message_id: msg.id,
       snippet: 'Hi, this is Dana from the Pier 9 site',
     });
-    expect(row).toMatchObject({ status: 'pending', org_id: null, guessed_site_id: null });
-    await db.updateUnknownSender(row.id, { org_id: ORG, guessed_site_id: OAKMONT });
-    expect(await db.getUnknownSender(row.id)).toMatchObject({
+    expect(row).toMatchObject({
+      status: 'pending',
+      org_id: null,
+      guessed_site_id: null,
+      channel: null,
+      call_id: null,
+      message_id: msg.id,
+    });
+    await db.updateUnknownContact(row.id, { org_id: ORG, guessed_site_id: OAKMONT });
+    expect(await db.getUnknownContact(row.id)).toMatchObject({
       org_id: ORG,
       guessed_site_id: OAKMONT,
     });
-    await q(`update unknown_senders set status = 'linked' where id = $1`, [row.id]);
-    expect(await db.findPendingUnknownSender('+15550000002')).toBeNull();
+    // A text from an unknown number (W1-08) carries its channel.
+    const sms = await db.insertUnknownContact({
+      org_id: null,
+      phone_e164: '+15550000003',
+      channel: 'sms',
+      message_id: null,
+      snippet: 'who do I report to',
+    });
+    expect(sms).toMatchObject({ channel: 'sms', message_id: null });
+    await q(`update unknown_contacts set status = 'linked' where id = $1`, [row.id]);
+    expect(await db.findPendingUnknownContact('+15550000002')).toBeNull();
   });
 });
 
@@ -1000,7 +1017,7 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
         version: 2,
         data: v1,
         summary: v1.summary,
-        author: 'reporter_reply',
+        author: 'reporter',
         change_note: 'Apex 7 → 9 workers',
       }),
     ).rejects.toThrow('already exists and is immutable');
@@ -1472,7 +1489,7 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
     });
     await db.updateReporter(MARCO, { status: 'disabled' });
     expect(await db.listReportersByPhone(MARCO_PHONE)).toEqual([]);
-    await db.updateReporter(MARCO, { status: 'verified', last_invite_error: null });
+    await db.updateReporter(MARCO, { status: 'active', last_invite_error: null });
     const created = await db.insertCompany(ORG, 'Ridgeway', 'unconfirmed', 'Framing');
     expect(created).toMatchObject({ name: 'Ridgeway' });
     const fresh = await db.insertCompany(ORG, 'Northside Roofing', 'unconfirmed');

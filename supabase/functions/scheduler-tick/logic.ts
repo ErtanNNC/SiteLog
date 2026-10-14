@@ -253,7 +253,7 @@ export interface ReminderTarget {
   firstName: string;
 }
 
-/** The primary verified reporter with a conversation, else any verified linked reporter. */
+/** The primary active reporter with a conversation, else any active linked reporter. */
 export function pickReminderTarget(
   siteId: string,
   links: readonly SiteReporterLink[],

@@ -152,12 +152,12 @@ export const TABLES: Record<string, TableCase> = {
       `insert into transcripts (message_id, text, segments) values ('${o.message2}', 't', '[]')`,
     set: 'text = text',
   },
-  unknown_senders: {
-    why: '§2.2 "Manage reporters, phone numbers": admin, ops (Unknown contacts on Team); created by the service.',
+  unknown_contacts: {
+    why: '§2.2 "Manage reporters, phone numbers": admin, ops (Unknown contacts on Team); created by the service, and the office only links (api-link-unknown-sender) or ignores it: status is its one client-writable column (20261014000003, PROBES).',
     allow: { select: ADMIN_OPS, insert: NONE, update: ADMIN_OPS, delete: NONE },
     where: (o) => `id = '${o.unknownSender}'`,
     insert: (o) =>
-      `insert into unknown_senders (org_id, phone_e164) values ('${o.org}', '+15550007777')`,
+      `insert into unknown_contacts (org_id, phone_e164) values ('${o.org}', '+15550007777')`,
     set: 'status = status',
   },
   site_days: {
@@ -505,7 +505,7 @@ const NOTIFICATION_AUDIENCES: {
     sees: { admin: true, ops: true, pm: true, accounts: false },
   },
   {
-    kind: 'unknown_sender',
+    kind: 'unknown_contact',
     id: (o) => o.notifications.unknownSender,
     why: '§13 "Unknown contact: ops, admin"',
     sees: { admin: true, ops: true, pm: false, accounts: false },
@@ -687,8 +687,11 @@ export const PROBES: Probe[] = [
   // country, currency and logo_path are service / RPC only; the profile columns stay the admin's.
   ...(
     [
-      ['the billing columns', `billing_status = 'active', stripe_customer_id = 'cus_B'`],
-      ['the subscription id', `stripe_subscription_id = 'sub_B'`],
+      ['the billing columns', `billing_status = 'active', billing_customer_id = 'cus_B'`],
+      ['the subscription id', `billing_subscription_id = 'sub_B'`],
+      ['the billing provider', `billing_provider = 'iyzico'`],
+      ['the legacy Stripe customer id', `stripe_customer_id = 'cus_B'`],
+      ['the legacy Stripe subscription id', `stripe_subscription_id = 'sub_B'`],
       ['the trial end', `trial_ends_at = now() + interval '1 year'`],
       ['is_demo', 'is_demo = true'],
       ['the country', `country = 'TR'`],
@@ -756,12 +759,7 @@ export const PROBES: Probe[] = [
       ['ops', 'moves a reporter out of opted_out', `status = 'invited'`, A.optedOut],
       ['admin', 'disables a reporter who opted out', `status = 'disabled'`, A.optedOut],
       ['admin', 'opts a reporter out', `status = 'opted_out'`, A.reporter],
-      [
-        'ops',
-        'marks an invited reporter verified (no consent)',
-        `status = 'verified'`,
-        A.reporter2,
-      ],
+      ['ops', 'marks an invited reporter active (no consent)', `status = 'active'`, A.reporter2],
     ] as const
   ).map(([role, what, set, id]): Probe => ({
     name: `reporters: ${role} ${what}`,
@@ -793,6 +791,31 @@ export const PROBES: Probe[] = [
     role: 'admin',
     kind: 'write',
     sql: `update reporters set status = 'invited', invited_at = now() where id = '${A.reporter}'`,
+    expect: true,
+  },
+  // unknown_contacts lockdown (20261014000003; the unknown_senders half of the same finding): the
+  // number, its org, the snippet and the keys are the service's; the office ignores (status).
+  ...(
+    [
+      ['ops', "rewrites an unknown contact's phone number", `phone_e164 = '+15550006666'`],
+      ['admin', 'changes the guessed site', `guessed_site_id = null`],
+      ['ops', 'sets the channel', `channel = 'sms'`],
+      ['admin', 'rewrites the held message', `message_id = null`],
+    ] as const
+  ).map(([role, what, set]): Probe => ({
+    name: `unknown_contacts: ${role} ${what}`,
+    org: 'A',
+    role,
+    kind: 'write',
+    sql: `update unknown_contacts set ${set} where id = '${A.unknownSender}'`,
+    expect: false,
+  })),
+  {
+    name: 'unknown_contacts: ops ignores an unknown contact (ignoreUnknownSender)',
+    org: 'A',
+    role: 'ops',
+    kind: 'write',
+    sql: `update unknown_contacts set status = 'ignored' where id = '${A.unknownSender}'`,
     expect: true,
   },
   // v1.2 transcripts (upload_id or call_id, no message): transcripts_select finds their org.

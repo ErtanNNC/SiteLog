@@ -375,14 +375,14 @@ export function weeklyDigestEmail(i: WeeklyDigestInput): RenderedEmail {
   };
 }
 
-export interface UnknownSenderInput {
+export interface UnknownContactInput {
   orgName: string;
   phone: string;
   snippet: string | null;
   url: string;
 }
 
-export function unknownSenderEmail(i: UnknownSenderInput): RenderedEmail {
+export function unknownContactEmail(i: UnknownContactInput): RenderedEmail {
   const subject = 'Unknown number tried to report';
   const bodyHtml = `${kv([
     ['Number', esc(i.phone)],

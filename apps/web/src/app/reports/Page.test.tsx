@@ -69,7 +69,7 @@ function newOrg(withSites: boolean): DemoStore {
     conversations: [],
     messages: [],
     transcripts: [],
-    unknownSenders: [],
+    unknownContacts: [],
     siteDays: [],
     reports: [],
     versions: [],

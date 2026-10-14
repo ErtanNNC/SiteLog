@@ -119,7 +119,7 @@ jobs:
           SCHEDULER_SECRET=e2e-scheduler-secret
           STRIPE_SECRET_KEY=sk_test_e2e_dummy
           STRIPE_WEBHOOK_SECRET=whsec_e2e_dummy
-          STRIPE_PRICE_ID_SITE=price_e2e_dummy
+          STRIPE_PRICE_ID_SITE_US=price_e2e_dummy
           ENV
       - name: Start Supabase (migrations + seed.sql)
         run: supabase start -x studio,imgproxy,logflare,vector,supavisor,postgres-meta,mailpit

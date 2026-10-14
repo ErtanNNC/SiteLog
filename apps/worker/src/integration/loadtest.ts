@@ -288,7 +288,7 @@ async function createLoadOrg(
           phone_e164: phoneAt(base, i),
           role: 'site_manager',
           languages: ['en', 'es'],
-          status: 'verified',
+          status: 'active',
           verified_at: new Date().toISOString(),
         })),
       )} returning id, phone_e164`;

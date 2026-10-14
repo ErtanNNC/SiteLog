@@ -17,7 +17,7 @@ Deno.test('canResend: one re-send, 48 h after the first invite, only while still
     false,
   );
   assertEquals(
-    canResend({ status: 'verified', invited_at: '2026-10-01T12:00:00Z' }, 0, now).ok,
+    canResend({ status: 'active', invited_at: '2026-10-01T12:00:00Z' }, 0, now).ok,
     false,
   );
   assertEquals(canResend({ status: 'disabled', invited_at: null }, 0, now).ok, false);

@@ -9,7 +9,7 @@ worker and the web panel use.
 | ------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `whatsapp-webhook`        | Meta `X-Hub-Signature-256` (HMAC with app secret) | GET handshake; POST stores inbound messages + delivery statuses, enqueues `inbound_message`   |
 | `scheduler-tick`          | `Authorization: Bearer $SCHEDULER_SECRET`         | Every 5 min via pg_cron: site-days, reminder ladder, missing alerts, weather, digest, cleanup |
-| `stripe-webhook`          | `Stripe-Signature`                                | Mirrors Stripe into `orgs.billing_status`, idempotent per event (`stripe_events`)             |
+| `stripe-webhook`          | `Stripe-Signature`                                | Mirrors Stripe into `orgs.billing_*`, idempotent per event (`stripe_events`)                  |
 | `api-invite-reporter`     | Supabase JWT, org role admin/ops                  | Invite / re-send welcome / disable a reporter                                                 |
 | `api-link-unknown-sender` | Supabase JWT, admin/ops of the site's org         | Link or ignore an unknown number, re-process the held message                                 |
 | `api-export-payroll`      | Supabase JWT, any member role                     | `GET ?org&week&site` → payroll CSV                                                            |
@@ -50,7 +50,7 @@ supabase secrets set \
   SCHEDULER_SECRET=... \
   STRIPE_SECRET_KEY=sk_live_... \
   STRIPE_WEBHOOK_SECRET=whsec_... \
-  STRIPE_PRICE_ID_SITE=price_...
+  STRIPE_PRICE_ID_SITE_US=price_...   # api-billing falls back to the old STRIPE_PRICE_ID_SITE
 # optional: extra browser origins allowed by CORS (comma-separated), e.g. a preview deployment
 supabase secrets set CORS_EXTRA_ORIGINS=https://preview.sitelog.app
 ```
@@ -159,13 +159,13 @@ Notes:
   cannot parse. The one exception is a storage failure (database unreachable): it answers 500 so
   Meta redelivers, which is safe because `messages.wa_message_id` is unique and the job dedupe key
   is `inbound:<wa_message_id>`. Unknown numbers get a conversation with `org_id = null`; the worker
-  creates the `unknown_senders` row after transcription (§F11). A phone that exists in several orgs
+  creates the `unknown_contacts` row (no `channel`, D13) after transcription (§F11). A phone that exists in several orgs
   gets `context.candidate_reporter_ids` and no `org_id` (§19 #1).
 - **scheduler-tick** runs the ladder only for site-days in `pending`/`reminded` (§7.1 has no
   `processing → missing` transition: a report in flight is never "missing"). Stages are claimed
   with `update … where reminder_stage < stage`, so overlapping ticks cannot double-send. Reminders
-  go to the primary **verified** reporter's conversation (fallback: any verified linked reporter);
-  with nobody verified the stage is left alone and only the office alert fires. The past_due grace
+  go to the primary **active** reporter's conversation (fallback: any active linked reporter);
+  with nobody active the stage is left alone and only the office alert fires. The past_due grace
   period starts at the latest `billing.status_changed → past_due` audit row written by
   `stripe-webhook`; a past_due org without such a row is treated as still inside the grace period.
   The weekly digest covers the previous Mon–Sun week and is tracked per org in
@@ -173,13 +173,17 @@ Notes:
   (`scheduler_state['retention_cleanup']`); `scheduler_state['last_tick']` holds the last run and
   its counters.
 - **api-invite-reporter** always enqueues `send_welcome` (also when an existing reporter is linked
-  to another site). The worker should treat a welcome for an already-verified reporter as
+  to another site). The worker should treat a welcome for an already-active reporter as
   informational and not reset the conversation. A re-send is allowed once, 48 h after `invited_at`
   (which the worker sets when the template was actually sent); the count comes from
   `reporter.reinvited` audit rows.
-- **api-link-unknown-sender** creates the reporter as `verified` (the number already wrote to us),
-  enqueues `inbound_message` for the held message (`reprocess:<unknown_sender_id>`) and then
-  `send_welcome`.
+- **api-link-unknown-sender** reads `unknown_contacts` (the function keeps its name until W1-16's
+  `api-link-unknown-contact`, D38) and links WhatsApp senders only (`channel` null): it creates the
+  reporter as `active` (the number already wrote to us), enqueues `inbound_message` for the held
+  WhatsApp message (`reprocess:<unknown_contact_id>`) and then `send_welcome`. A contact from a
+  text or a call (`channel 'sms'`/`'voice'`) gets 409, because it becomes active only after F3
+  consent (W1-16), and so does a number whose reporter opted out (STOP; only START reactivates
+  it). The rules are `checkLink` in `logic.ts`. Ignore works for every channel.
 - **api-export-payroll** exports the whole ISO week (Mon–Sun) from `current_manpower`; with
   `include_unconfirmed_in_payroll = false` rows of unconfirmed or unknown companies are dropped.
   Column order is exactly `date,site,project_code,company,trade,workers,hours,report_no,version`.

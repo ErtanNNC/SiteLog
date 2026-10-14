@@ -5,7 +5,7 @@ import type { AppClient } from './supabase.ts';
 export type NotificationKind =
   | 'missing_report'
   | 'needs_review'
-  | 'unknown_sender'
+  | 'unknown_contact'
   | 'invoice_gap'
   | 'glossary_review'
   | 'pack_ready'

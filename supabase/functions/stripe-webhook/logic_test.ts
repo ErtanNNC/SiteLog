@@ -16,9 +16,9 @@ Deno.test('subscriptionPatch mirrors Stripe status, ids and trial end', () => {
       trial_end: 1_792_000_000,
     }),
     {
-      stripe_subscription_id: 'sub_1',
+      billing_subscription_id: 'sub_1',
       billing_status: 'trialing',
-      stripe_customer_id: 'cus_1',
+      billing_customer_id: 'cus_1',
       trial_ends_at: '2026-10-14T17:46:40.000Z',
     },
   );
@@ -30,9 +30,9 @@ Deno.test('subscriptionPatch mirrors Stripe status, ids and trial end', () => {
       trial_end: null,
     }),
     {
-      stripe_subscription_id: 'sub_1',
+      billing_subscription_id: 'sub_1',
       billing_status: 'past_due',
-      stripe_customer_id: 'cus_2',
+      billing_customer_id: 'cus_2',
     },
   );
   assertEquals(

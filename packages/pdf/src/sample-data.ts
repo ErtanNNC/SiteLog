@@ -248,7 +248,7 @@ export const sampleReportInput: ReportPdfInput = {
     { version: 1, author: 'agent', changeNote: null, createdAt: '2026-10-09T22:43:00Z' },
     {
       version: 2,
-      author: 'reporter_reply',
+      author: 'reporter',
       changeNote: 'Apex Concrete 6 → 7 workers',
       createdAt: '2026-10-10T01:10:00Z',
     },

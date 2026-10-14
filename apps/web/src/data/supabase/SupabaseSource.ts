@@ -28,7 +28,7 @@ import type {
   SiteRow,
   SubInvoiceRow,
   TranscriptRow,
-  UnknownSenderRow,
+  UnknownContactRow,
   UploadRow,
   CurrentManpowerRow,
   CurrentWeatherRow,
@@ -237,7 +237,7 @@ function emptyRows(org: OrgRow, settings: OrgSettingsRow): RowSet {
     glossary: [],
     messages: [],
     transcripts: [],
-    unknownSenders: [],
+    unknownContacts: [],
     siteDays: [],
     reports: [],
     versions: [],
@@ -464,10 +464,10 @@ export class SupabaseSource implements DataSource {
     const reports = await this.reportsForSiteDays(siteDays.map((d) => d.id));
     const today = formatDateInTz(now, core.org.timezone);
     const { start, sunday } = isoWeekRange(isoWeekOf(today));
-    const [versions, unknownSenders, glossary, invoices, manpower] = await Promise.all([
+    const [versions, unknownContacts, glossary, invoices, manpower] = await Promise.all([
       this.currentVersions(reports),
       this.sb
-        .from('unknown_senders')
+        .from('unknown_contacts')
         .select('*')
         .eq('org_id', this.orgId)
         .eq('status', 'pending')
@@ -492,7 +492,7 @@ export class SupabaseSource implements DataSource {
       siteDays,
       reports,
       versions,
-      unknownSenders,
+      unknownContacts,
       glossary,
       invoices,
       manpower,
@@ -1103,10 +1103,10 @@ export class SupabaseSource implements DataSource {
   async getTeam() {
     const core = await this.core();
     const today = formatDateInTz(this.now(), core.org.timezone);
-    const [siteDays, unknownSenders] = await Promise.all([
+    const [siteDays, unknownContacts] = await Promise.all([
       this.siteDays(this.siteIds(core), addDays(today, -30), today),
       this.sb
-        .from('unknown_senders')
+        .from('unknown_contacts')
         .select('*')
         .eq('org_id', this.orgId)
         .eq('status', 'pending')
@@ -1115,7 +1115,7 @@ export class SupabaseSource implements DataSource {
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays,
-      unknownSenders: unknownSenders as UnknownSenderRow[],
+      unknownContacts: unknownContacts as UnknownContactRow[],
     };
     return assembleTeam(rows, this.ctx());
   }
@@ -1220,7 +1220,7 @@ export class SupabaseSource implements DataSource {
       ),
       count(
         sb
-          .from('unknown_senders')
+          .from('unknown_contacts')
           .select('id', { count: 'exact', head: true })
           .eq('org_id', this.orgId)
           .eq('status', 'pending'),
@@ -1648,8 +1648,9 @@ export class SupabaseSource implements DataSource {
     });
   }
   async ignoreUnknownSender(unknownSenderId: string) {
+    // unknown_contacts: the panel may update only status (20261014000003).
     const { error } = await this.sb
-      .from('unknown_senders')
+      .from('unknown_contacts')
       .update({ status: 'ignored' })
       .eq('id', unknownSenderId);
     if (error) throw new Error(error.message);
@@ -1839,10 +1840,10 @@ export class SupabaseSource implements DataSource {
         {
           event: '*',
           schema: 'public',
-          table: 'unknown_senders',
+          table: 'unknown_contacts',
           filter: `org_id=eq.${this.orgId}`,
         },
-        (p) => onChange({ table: 'unknown_senders', id: idOf(p.new) }),
+        (p) => onChange({ table: 'unknown_contacts', id: idOf(p.new) }),
       )
       .on(
         'postgres_changes',

@@ -21,7 +21,7 @@ import type {
   SiteRow,
   SubInvoiceRow,
   TranscriptRow,
-  UnknownSenderRow,
+  UnknownContactRow,
   WeatherEventRow,
   WorkItemRow,
 } from '../db/types.ts';
@@ -630,12 +630,14 @@ export function buildKestrelDemo(): DemoDataset {
     phone_e164: s.reporter.phone,
     role: 'site_manager',
     languages: s.reporter.languages,
-    status: 'verified',
+    status: 'active',
     invited_at: at(s.activeSince, '09:05'),
     verified_at: at(s.activeSince, '09:40'),
     last_invite_error: null,
     created_at: at(s.activeSince, '09:05'),
     ...V12_REPORTER,
+    // As the step 10 backfill sets it for an active (WhatsApp-verified) reporter.
+    activated_at: at(s.activeSince, '09:40'),
   }));
   reporters.push({
     id: reporterId('jorge'),
@@ -766,7 +768,7 @@ export function buildKestrelDemo(): DemoDataset {
   });
 
   const conversations: ConversationRow[] = reporters.map((r) => {
-    const verified = r.status === 'verified';
+    const verified = r.status === 'active';
     const lastIn =
       r.id === reporterId('marco')
         ? at(DEMO_TODAY, '20:10')
@@ -1090,7 +1092,7 @@ export function buildKestrelDemo(): DemoDataset {
         pushVersion(
           2,
           data,
-          'reporter_reply',
+          'reporter',
           'Apex Concrete 6 → 7 workers',
           at(date, '20:10'),
           editMsgId,
@@ -1410,12 +1412,15 @@ export function buildKestrelDemo(): DemoDataset {
     created_at: at(DEMO_TODAY, '17:53'),
     ...V12_TRANSCRIPT,
   });
-  const unknownSenders: UnknownSenderRow[] = [
+  // A WhatsApp sender: no channel (D13). W1-06 rebuilds Luis as the §18.1 unknown caller.
+  const unknownContacts: UnknownContactRow[] = [
     {
       id: demoId('unknown:luis'),
       org_id: ORG,
       phone_e164: '+15550194410',
-      first_message_id: luisMsgId,
+      message_id: luisMsgId,
+      channel: null,
+      call_id: null,
       snippet:
         'this is Luis, covering Elm St. today for Priya. We framed units one through four, six guys, no rain…',
       guessed_site_id: siteId('elm'),
@@ -1499,7 +1504,7 @@ export function buildKestrelDemo(): DemoDataset {
       id: demoId('notif:unknown:luis'),
       org_id: ORG,
       user_id: null,
-      kind: 'unknown_sender',
+      kind: 'unknown_contact',
       title: 'Unknown number tried to report',
       body: '+1 555 019 4410 · "this is Luis, covering Elm St. today…"',
       target_path: '/team',
@@ -1573,12 +1578,15 @@ export function buildKestrelDemo(): DemoDataset {
       license_no: 'IL GC-104-5582',
       logo_path: null,
       timezone: DEMO_TZ,
-      stripe_customer_id: 'cus_demo_kestrel',
-      stripe_subscription_id: 'sub_demo_kestrel',
       billing_status: 'active',
       trial_ends_at: null,
       created_at: at('2026-03-02', '09:00'),
       ...V12_ROW_DEFAULTS.orgs,
+      // Legacy stripe_* mirror billing_* (the orgs_billing_ids trigger) until step 23.
+      billing_customer_id: 'cus_demo_kestrel',
+      billing_subscription_id: 'sub_demo_kestrel',
+      stripe_customer_id: 'cus_demo_kestrel',
+      stripe_subscription_id: 'sub_demo_kestrel',
       // §18 demo org: console SMS driver and the Demo phone. 20261013000007 sets it on databases
       // that already hold the org; a fresh one gets it here.
       is_demo: true,
@@ -1635,7 +1643,7 @@ export function buildKestrelDemo(): DemoDataset {
     conversations,
     messages,
     transcripts,
-    unknownSenders,
+    unknownContacts,
     siteDays,
     reports,
     versions,

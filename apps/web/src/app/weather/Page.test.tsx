@@ -81,7 +81,7 @@ function noSites(): DemoStore {
     conversations: [],
     messages: [],
     transcripts: [],
-    unknownSenders: [],
+    unknownContacts: [],
     siteDays: [],
     reports: [],
     versions: [],

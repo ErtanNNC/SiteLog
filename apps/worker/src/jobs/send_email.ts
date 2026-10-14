@@ -15,7 +15,7 @@ import {
   reportEditedAfterSignoffEmail,
   reportFiledEmail,
   reportMissingEmail,
-  unknownSenderEmail,
+  unknownContactEmail,
   weeklyDigestEmail,
   type RenderedEmail,
 } from '../email/templates';
@@ -183,17 +183,17 @@ export async function buildEmail(
       });
       return { to: payload.to ?? members.map((m) => m.email), rendered };
     }
-    case 'unknown_sender': {
-      if (!payload.unknownSenderId && !payload.orgId)
-        throw new PermanentJobError('unknownSenderId or orgId required');
+    case 'unknown_contact': {
+      if (!payload.unknownContactId && !payload.orgId)
+        throw new PermanentJobError('unknownContactId or orgId required');
       const orgId = payload.orgId;
-      const sender = payload.unknownSenderId
-        ? await ctx.db.getUnknownSender(payload.unknownSenderId)
+      const sender = payload.unknownContactId
+        ? await ctx.db.getUnknownContact(payload.unknownContactId)
         : null;
       const org = orgId ? await ctx.db.getOrg(orgId) : null;
       if (!org) return null;
       const members = await ctx.db.listMemberEmails(org.id, ['ops', 'admin']);
-      const rendered = unknownSenderEmail({
+      const rendered = unknownContactEmail({
         orgName: org.name,
         phone: sender?.phone_e164 ?? 'unknown number',
         snippet: sender?.snippet ?? null,

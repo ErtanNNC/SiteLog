@@ -694,7 +694,7 @@ Each item: what the repo does, what v1.2 (or the kit `CLAUDE.md`) says, and a re
 - **D14 · `uploads.reporter_id NOT NULL` vs office photos (owner).** **Recommend:** make `reporter_id` nullable with an `uploaded_by` user column (recorded deviation), so PDFs, the Photos tab and evidence packs read one photo model.
 - **D15 · `messages`: extend in place or new table.** **Recommend:** extend in place now (nullable SMS columns, `undeliverable`; SMS rows already satisfy the conversation-or-org check through `org_id`). After WhatsApp retires, move legacy rows to an archive, re-point foreign keys and enforce the v1.2 `NOT NULL`s and a fresh `msg_status` type.
 - **D16 · Job dedupe: active-only vs fully unique.** **Recommend:** adopt v1.2's `UNIQUE` with `on conflict do nothing`, because "once each, even if retried" (W1-15) depends on it. First null keys on finished duplicates, give repeatable jobs per-occurrence keys (e.g. reinvite), and audit the worker's keys.
-- **D19 · `verified` reporters (owner).** **Recommend:** if staging holds only demo data, rename `verified` → `active`; if it holds real reporters, set them to `invited` so they consent on the recorder (TCPA/KVKK), then rename the unused label. **Settled by the inventory (section 8):** no reporter is `verified`, so the label is renamed.
+- **D19 · `verified` reporters (owner).** **Recommend:** if staging holds only demo data, rename `verified` → `active`; if it holds real reporters, set them to `invited` so they consent on the recorder (TCPA/KVKK), then rename the unused label. **Settled by the inventory (section 8):** no reporter is `verified`, so the label is renamed. **Done in W1-05 step 11:** `20261014000003_renames_billing.sql` renames the label (with `reporter_reply` → `reporter`, `sender_status` → `contact_status`, `unknown_senders` → `unknown_contacts`); the W1-19 inventory re-run checks again that no reporter outside the demo org is `verified` before the push.
 - **D20 · Stored v1 report versions.** **Recommend:** never rewrite them; normalise v1 → v2 on read (`audio` → `voice_note`, `reply` → `answer`, `messageId` → `uploadId`, `hoursBasis 'reply'` → `'answer'`).
 - **D21 · Deferred RLS defects.** **Recommend:** fix them inside W1-05, since its role-matrix suite would fail on them (`docs/AUDIT_BACKLOG.md:36-41`, `:234-264`).
 - **D22 · Accounts role reach (owner).** Accounts users can read sites, the full audit log, all notifications and every storage file (`supabase/migrations/20261011000004_rls.sql:115`, `:166-169`, `supabase/migrations/20261011000006_platform.sql:13`). **Recommend:** tighten to §2.2 (hours and invoices) in the role matrix.
@@ -858,7 +858,7 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 
 **Step 23 · Contract** — later release
 
-- Change: drop legacy tables and columns after a fresh dump and at least one stable release; recreate enum types; enforce the `transcripts` XOR check and `report_sources.kind source_kind`; clean storage prefixes.
+- Change: drop legacy tables and columns after a fresh dump and at least one stable release (for `orgs.stripe_*`, first `drop trigger orgs_billing_ids on orgs; drop function sync_org_billing_ids();`, since the trigger's `UPDATE OF` list depends on both columns and `drop column` fails without it, then `alter table orgs drop column stripe_customer_id, drop column stripe_subscription_id`; never `CASCADE`, which would leave the function behind); recreate enum types; enforce the `transcripts` XOR check and `report_sources.kind source_kind`; clean storage prefixes.
 - Verify: `pnpm test:db`; staging smoke test; restore tested from the dump.
 
 ---
@@ -882,7 +882,7 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 8. Which `CLAUDE_MODEL` should v1.2 use (D23)?
 9. For W1-19, should the worker run on a developer machine, or should we create the Fly app now?
 10. Please confirm or change the **owner** items in section 6: D10, D13, D14, D19, D22, D23, D30, D40, D41, D42.
-11. Should deleting an org, site, site-day or company keep cascading to its reports, versions and invoices as built, or refuse the delete as §6.3 does (spec §19 question 17)? Until you answer, the end-state allowlist keeps the repo's 15 `ON DELETE` actions as `repo-on-delete`.
+11. Should deleting an org, site, site-day or company keep cascading to its reports, versions and invoices (and an org to its unknown contacts) as built, or refuse the delete as §6.3 does (spec §19 question 17)? Until you answer, the end-state allowlist keeps the repo's 17 `ON DELETE` actions as `repo-on-delete`; besides the cascades, deleting a company, reporter, user or report leaves a null link, and deleting a message leaves an unknown contact with a null `message_id`.
 
 ---
 

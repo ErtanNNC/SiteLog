@@ -342,16 +342,16 @@ Deno.test('billing grace: past_due orgs are blocked only after past_due_grace_da
   assertEquals(orgIsBlocked(org('paused', null), now), true);
 });
 
-Deno.test('pickReminderTarget prefers the primary verified reporter with a conversation', () => {
+Deno.test('pickReminderTarget prefers the primary active reporter with a conversation', () => {
   const links = [
     { site_id: 's1', reporter_id: 'backup', is_primary: false },
     { site_id: 's1', reporter_id: 'primary', is_primary: true },
     { site_id: 's2', reporter_id: 'other', is_primary: true },
   ];
   const reporters = [
-    { id: 'primary', name: 'Priya Natarajan', status: 'verified' },
-    { id: 'backup', name: 'Luis Ortega', status: 'verified' },
-    { id: 'other', name: 'Sam', status: 'verified' },
+    { id: 'primary', name: 'Priya Natarajan', status: 'active' },
+    { id: 'backup', name: 'Luis Ortega', status: 'active' },
+    { id: 'other', name: 'Sam', status: 'active' },
   ];
   const conversations = [
     { id: 'c-primary', reporter_id: 'primary' },
@@ -362,7 +362,7 @@ Deno.test('pickReminderTarget prefers the primary verified reporter with a conve
     reporterId: 'primary',
     firstName: 'Priya',
   });
-  // primary not verified yet → fall back to the verified backup
+  // primary not active yet → fall back to the active backup
   assertEquals(
     pickReminderTarget(
       's1',

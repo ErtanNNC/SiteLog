@@ -115,6 +115,9 @@ describe('orgs column lockdown', () => {
     ['billing_status', `billing_status = 'active'`],
     ['stripe_customer_id', `stripe_customer_id = 'cus_other'`],
     ['stripe_subscription_id', `stripe_subscription_id = 'sub_other'`],
+    ['billing_provider', `billing_provider = 'iyzico'`],
+    ['billing_customer_id', `billing_customer_id = 'cus_other'`],
+    ['billing_subscription_id', `billing_subscription_id = 'sub_other'`],
     ['trial_ends_at', `trial_ends_at = now() + interval '1 year'`],
     ['country', `country = 'TR'`],
     ['currency', `currency = 'TRY'`],
@@ -256,7 +259,7 @@ describe('reporters lockdown', () => {
 
   it('leaves STOP and START to the service, and keeps the opt-out from the office', async () => {
     const [rep] = await svc<{ id: string }>(
-      `insert into reporters (org_id, name, phone_e164, status) values ($1, 'Stop', '+15550104040', 'verified')
+      `insert into reporters (org_id, name, phone_e164, status) values ($1, 'Stop', '+15550104040', 'active')
        returning id`,
       [orgId],
     );
@@ -274,15 +277,15 @@ describe('reporters lockdown', () => {
     }
     expect(await status()).toBe('opted_out');
     // START.
-    await svc(`update reporters set status = 'verified', opted_out_at = null where id = $1`, [id]);
-    // The office disables and re-invites; it never marks a reporter verified or opted out.
+    await svc(`update reporters set status = 'active', opted_out_at = null where id = $1`, [id]);
+    // The office disables and re-invites; it never marks a reporter active or opted out.
     for (const s of ['disabled', 'invited']) {
       const res = await asUser(db, ADMIN, (q) =>
         q(`update reporters set status = $2, invited_at = now() where id = $1`, [id, s]),
       );
       expect(res.affectedRows, s).toBe(1);
     }
-    for (const s of ['verified', 'opted_out']) {
+    for (const s of ['active', 'opted_out']) {
       const res = await admin(`update reporters set status = $2 where id = $1`, [id, s]);
       expect(res.ok ? 'allowed' : res.code, s).toBe('42501');
     }
@@ -595,7 +598,7 @@ describe('platform wiring', () => {
       'notifications',
       'reports',
       'site_days',
-      'unknown_senders',
+      'unknown_contacts',
     ]);
   });
 

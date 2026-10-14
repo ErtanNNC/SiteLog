@@ -22,7 +22,7 @@ import type {
   TermKind,
   TermStatus,
   TranscriptRow,
-  UnknownSenderRow,
+  UnknownContactRow,
   WeatherEventRow,
 } from '@sitelog/shared';
 
@@ -298,7 +298,10 @@ export interface Db {
   updateReporter(
     id: string,
     patch: Partial<
-      Pick<ReporterRow, 'status' | 'verified_at' | 'invited_at' | 'last_invite_error'>
+      Pick<
+        ReporterRow,
+        'status' | 'verified_at' | 'activated_at' | 'invited_at' | 'last_invite_error'
+      >
     >,
   ): Promise<void>;
   listSitesForReporter(reporterId: string): Promise<SiteRow[]>;
@@ -379,17 +382,18 @@ export interface Db {
   listQuestions(reportId: string): Promise<QuestionRow[]>;
   updateQuestion(id: string, patch: QuestionPatch): Promise<void>;
 
-  // unknown senders
-  findPendingUnknownSender(phone: string): Promise<UnknownSenderRow | null>;
-  getUnknownSender(id: string): Promise<UnknownSenderRow | null>;
-  insertUnknownSender(input: {
+  // unknown contacts (§6.3; the WhatsApp router writes them with no channel, D13)
+  findPendingUnknownContact(phone: string): Promise<UnknownContactRow | null>;
+  getUnknownContact(id: string): Promise<UnknownContactRow | null>;
+  insertUnknownContact(input: {
     org_id: string | null;
     phone_e164: string;
-    first_message_id: string | null;
+    channel: UnknownContactRow['channel'];
+    message_id: string | null;
     snippet: string | null;
     guessed_site_id?: string | null;
-  }): Promise<UnknownSenderRow>;
-  updateUnknownSender(
+  }): Promise<UnknownContactRow>;
+  updateUnknownContact(
     id: string,
     patch: { org_id?: string | null; snippet?: string | null; guessed_site_id?: string | null },
   ): Promise<void>;
@@ -922,25 +926,25 @@ export function createDb(sql: Sql): Db {
       await sql`update questions set ${setClause(p)} where id = ${id}`;
     },
 
-    // unknown senders ---------------------------------------------------------------------
-    async findPendingUnknownSender(phone) {
+    // unknown contacts --------------------------------------------------------------------
+    async findPendingUnknownContact(phone) {
       return one(
         await sql<
-          UnknownSenderRow[]
-        >`select * from unknown_senders where phone_e164 = ${phone} and status = 'pending' order by created_at desc limit 1`,
+          UnknownContactRow[]
+        >`select * from unknown_contacts where phone_e164 = ${phone} and status = 'pending' order by created_at desc limit 1`,
       );
     },
-    async getUnknownSender(id) {
-      return one(await sql<UnknownSenderRow[]>`select * from unknown_senders where id = ${id}`);
+    async getUnknownContact(id) {
+      return one(await sql<UnknownContactRow[]>`select * from unknown_contacts where id = ${id}`);
     },
-    async insertUnknownSender(input) {
-      const rows = await sql<UnknownSenderRow[]>`
-        insert into unknown_senders (org_id, phone_e164, first_message_id, snippet, guessed_site_id)
-        values (${input.org_id}, ${input.phone_e164}, ${input.first_message_id}, ${input.snippet}, ${input.guessed_site_id ?? null}) returning *`;
+    async insertUnknownContact(input) {
+      const rows = await sql<UnknownContactRow[]>`
+        insert into unknown_contacts (org_id, phone_e164, channel, message_id, snippet, guessed_site_id)
+        values (${input.org_id}, ${input.phone_e164}, ${input.channel}, ${input.message_id}, ${input.snippet}, ${input.guessed_site_id ?? null}) returning *`;
       return rows[0]!;
     },
-    async updateUnknownSender(id, patch) {
-      await sql`update unknown_senders set ${setClause(patch as Record<string, unknown>)} where id = ${id}`;
+    async updateUnknownContact(id, patch) {
+      await sql`update unknown_contacts set ${setClause(patch as Record<string, unknown>)} where id = ${id}`;
     },
 
     // notifications & audit ---------------------------------------------------------------

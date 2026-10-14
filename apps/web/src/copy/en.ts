@@ -764,7 +764,7 @@ export const copy = {
     title: (weekday: string, site: string) => `${weekday} — ${site}`,
     versionLine: (author: string, time: string, note: string | null) =>
       `${author} · ${time}${note ? ` · ${note}` : ''}`,
-    versionAuthor: { agent: 'SiteLog agent', reporter_reply: 'Reply', office_user: 'Office' },
+    versionAuthor: { agent: 'SiteLog agent', reporter: 'Reply', office_user: 'Office' },
     viewingOld: (v: number, current: number) =>
       `You’re viewing version ${v}. Version ${current} is current.`,
     viewCurrent: 'View current',

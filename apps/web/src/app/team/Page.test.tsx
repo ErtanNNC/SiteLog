@@ -41,8 +41,8 @@ describe('TeamPage (demo data)', () => {
     await waitFor(() => expect(screen.queryByTestId('unknown-sender')).not.toBeInTheDocument());
     const luis = store.data.reporters.find((r) => r.phone_e164 === '+15550194410')!;
     expect(luis.name).toBe('Luis');
-    expect(luis.status).toBe('verified');
-    expect(store.data.unknownSenders[0]!.status).toBe('linked');
+    expect(luis.status).toBe('active');
+    expect(store.data.unknownContacts[0]!.status).toBe('linked');
     const table = screen.getByRole('table', { name: 'Field reporters' });
     await waitFor(() => expect(within(table).getByText('Luis')).toBeInTheDocument());
   });
@@ -53,7 +53,7 @@ describe('TeamPage (demo data)', () => {
     const alert = await screen.findByTestId('unknown-sender');
     await userEvent.click(within(alert).getByRole('button', { name: 'Ignore' }));
     await waitFor(() => expect(screen.queryByTestId('unknown-sender')).not.toBeInTheDocument());
-    expect(store.data.unknownSenders[0]!.status).toBe('ignored');
+    expect(store.data.unknownContacts[0]!.status).toBe('ignored');
   });
 
   it('invites a reporter with an E.164 phone number', async () => {

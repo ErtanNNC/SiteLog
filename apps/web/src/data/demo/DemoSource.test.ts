@@ -210,6 +210,24 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(results.map((r) => r.kind)).toContain('term');
   });
 
+  it('links a WhatsApp sender as an active reporter and refuses a text or a call (W1-16)', async () => {
+    const { source: s, store } = source('ops');
+    const luis = store.data.unknownContacts.find((u) => u.status === 'pending')!;
+    expect(luis.channel).toBeNull();
+    const siteId = luis.guessed_site_id!;
+    const texter = { ...luis, id: 'unknown:texter', phone_e164: '+15550100111', channel: 'sms' };
+    store.data.unknownContacts.push(texter as typeof luis);
+    await expect(
+      s.linkUnknownSender({ unknownSenderId: texter.id, siteId, name: 'Texter' }),
+    ).rejects.toThrow('You’re not allowed to do that.');
+    expect(store.data.reporters.some((r) => r.phone_e164 === texter.phone_e164)).toBe(false);
+    await s.linkUnknownSender({ unknownSenderId: luis.id, siteId, name: 'Luis' });
+    expect(luis.status).toBe('linked');
+    const reporter = store.data.reporters.find((r) => r.phone_e164 === luis.phone_e164)!;
+    expect(reporter).toMatchObject({ status: 'active', name: 'Luis' });
+    expect(reporter.activated_at).not.toBeNull();
+  });
+
   it('shows each role the notifications §13 addresses to it, as RLS does on Supabase', async () => {
     const titles = async (as: 'admin' | 'pm' | 'ops' | 'accounts') =>
       (await source(as).source.getNotifications()).map((n) => n.kind).sort();
@@ -218,7 +236,7 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
       'invoice_gap',
       'missing_report',
       'needs_review',
-      'unknown_sender',
+      'unknown_contact',
     ]);
     expect(await titles('pm')).toEqual(['glossary_review', 'needs_review', 'pack_ready']);
     expect(await titles('ops')).toEqual([
@@ -226,7 +244,7 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
       'invoice_gap',
       'missing_report',
       'needs_review',
-      'unknown_sender',
+      'unknown_contact',
     ]);
     expect(await titles('accounts')).toEqual(['invoice_gap']);
     expect((await source('accounts').source.getNavBadges()).unreadNotifications).toBe(1);

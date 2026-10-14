@@ -110,8 +110,9 @@ describe('router: unknown number (F11)', () => {
     expect(h.sentTexts()).toEqual([
       "Hi — this number isn't set up with SiteLog yet, so nothing was filed. Ask your office to add your number.",
     ]);
-    const sender = await h.db.findPendingUnknownSender(PHONE_UNKNOWN);
+    const sender = await h.db.findPendingUnknownContact(PHONE_UNKNOWN);
     expect(sender?.snippet).toContain('Luis');
+    expect(sender).toMatchObject({ channel: null, call_id: null });
     expect(Array.from(h.db.data.reports.values())).toHaveLength(0);
     await h.send(convo, { type: 'text', body: 'hello?' });
     expect(h.wa.sent).toHaveLength(1);
@@ -122,10 +123,10 @@ describe('router: unknown number (F11)', () => {
     const convo = await h.conversation('new', {}, PHONE_UNKNOWN);
     await h.send(convo, { type: 'text', body: 'Riverside Lofts report: Apex had 6 guys' });
     expect(h.sentTexts()[0]).toContain("I've let the office know");
-    expect((await h.db.findPendingUnknownSender(PHONE_UNKNOWN))?.guessed_site_id).toBe(
+    expect((await h.db.findPendingUnknownContact(PHONE_UNKNOWN))?.guessed_site_id).toBe(
       SITE_RIVERSIDE,
     );
-    expect(h.db.data.notifications.map((n) => n.kind)).toContain('unknown_sender');
+    expect(h.db.data.notifications.map((n) => n.kind)).toContain('unknown_contact');
   });
 });
 
@@ -140,7 +141,10 @@ describe('router: welcome and test mode (F3, F4)', () => {
       body: 'Got it',
       payload: buttonPayload(ButtonIds.welcomeOk(), 'Got it'),
     });
-    expect((await h.db.getReporter(h.marco.id))!.status).toBe('verified');
+    expect((await h.db.getReporter(h.marco.id))!).toMatchObject({
+      status: 'active',
+      activated_at: expect.any(String) as unknown,
+    });
     expect((await h.db.getConversation(convo.id))!.state).toBe('test_mode');
     expect(h.sentTexts()[0]).toContain('Speak Spanish or English');
     expect(h.db.data.audit.map((a) => a.action)).toContain('reporter.verified');
@@ -607,7 +611,7 @@ describe('router: edit after filing (F8)', () => {
     const updated = (await h.db.getReport(report.id))!;
     expect(updated.current_version).toBe(2);
     const v2 = (await h.db.getVersion(report.id, 2))!;
-    expect(v2.author).toBe('reporter_reply');
+    expect(v2.author).toBe('reporter');
     expect(v2.change_note).toBe('Apex Concrete 6 → 7 workers');
     expect((v2.data as DailyReportDataV1).manpower[0]!.totalHours).toBe(56);
     expect(h.sentTexts()).toEqual([

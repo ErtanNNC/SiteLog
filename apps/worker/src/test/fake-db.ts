@@ -18,7 +18,7 @@ import type {
   SiteDayRow,
   SiteRow,
   TranscriptRow,
-  UnknownSenderRow,
+  UnknownContactRow,
   WeatherEventRow,
 } from '@sitelog/shared';
 import { formatReportNo, reportLanguageFor } from '@sitelog/shared';
@@ -50,7 +50,7 @@ export interface FakeDbData {
   conversations: Map<string, ConversationRow>;
   messages: Map<string, MessageRow>;
   transcripts: Map<string, TranscriptRow>;
-  unknownSenders: Map<string, UnknownSenderRow>;
+  unknownContacts: Map<string, UnknownContactRow>;
   siteDays: Map<string, SiteDayRow>;
   reports: Map<string, ReportRow>;
   versions: Map<string, ReportVersionRow>;
@@ -98,7 +98,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     conversations: new Map(),
     messages: new Map(),
     transcripts: new Map(),
-    unknownSenders: new Map(),
+    unknownContacts: new Map(),
     siteDays: new Map(),
     reports: new Map(),
     versions: new Map(),
@@ -633,33 +633,35 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       d.questions.set(id, next);
     },
 
-    async findPendingUnknownSender(phone) {
+    async findPendingUnknownContact(phone) {
       return (
-        Array.from(d.unknownSenders.values()).find(
+        Array.from(d.unknownContacts.values()).find(
           (u) => u.phone_e164 === phone && u.status === 'pending',
         ) ?? null
       );
     },
-    async getUnknownSender(id) {
-      return d.unknownSenders.get(id) ?? null;
+    async getUnknownContact(id) {
+      return d.unknownContacts.get(id) ?? null;
     },
-    async insertUnknownSender(input) {
-      const row: UnknownSenderRow = {
+    async insertUnknownContact(input) {
+      const row: UnknownContactRow = {
         id: randomUUID(),
         org_id: input.org_id,
         phone_e164: input.phone_e164,
-        first_message_id: input.first_message_id,
+        message_id: input.message_id,
         snippet: input.snippet,
         guessed_site_id: input.guessed_site_id ?? null,
         status: 'pending',
         created_at: iso(),
+        channel: input.channel,
+        call_id: null,
       };
-      d.unknownSenders.set(row.id, row);
+      d.unknownContacts.set(row.id, row);
       return row;
     },
-    async updateUnknownSender(id, patch) {
-      const row = d.unknownSenders.get(id);
-      if (row) d.unknownSenders.set(id, { ...row, ...patch });
+    async updateUnknownContact(id, patch) {
+      const row = d.unknownContacts.get(id);
+      if (row) d.unknownContacts.set(id, { ...row, ...patch });
     },
 
     async notifyOrg(orgId, kind, title, body = null, targetPath = null, userId = null) {
