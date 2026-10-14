@@ -20,6 +20,7 @@ import type {
   ReporterRow,
   SiteDayRow,
   SiteRow,
+  SmsOptOutRow,
   TranscriptRow,
   UnknownContactRow,
   WeatherEventRow,
@@ -81,6 +82,8 @@ export interface FakeDbData {
   /** countries (the launch packs by default; tests set sender ids). */
   countries: CountryRow[];
   consents: ConsentRow[];
+  /** sms_opt_outs (W1-08): a phone's STOP on a pack's sender, or the provider's opt-out list. */
+  smsOptOuts: SmsOptOutRow[];
   fieldLinks: Array<{
     id: string;
     code_hash: string;
@@ -131,6 +134,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     reportCosts: new Map(),
     countries: DEMO_COUNTRIES.map((c) => structuredClone(c)),
     consents: [],
+    smsOptOuts: [],
     fieldLinks: [],
     consoleEmails: [],
   };
@@ -280,6 +284,38 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async getReporter(id) {
       return d.reporters.get(id) ?? null;
+    },
+    async optOutReporter(reporterId, at) {
+      const r = d.reporters.get(reporterId);
+      if (!r) return;
+      if (r.status !== 'disabled') r.status = 'opted_out';
+      r.opted_out_at = r.opted_out_at ?? at;
+    },
+    async listInboundReporters(phone, country, scope) {
+      return [...d.reporters.values()]
+        .filter((r) => r.phone_e164 === phone)
+        .map((r) => ({ r, org: d.orgs.get(r.org_id) }))
+        .filter(
+          ({ org }) =>
+            org !== undefined &&
+            org.country === country &&
+            ('realOnly' in scope ? !org.is_demo : org.id === scope.orgId),
+        )
+        .sort((a, b) => a.r.created_at.localeCompare(b.r.created_at))
+        .map(({ r, org }) => ({
+          id: r.id,
+          orgId: r.org_id,
+          status: r.status,
+          contactPref: r.contact_pref,
+          activatedAt: r.activated_at,
+          optedOutAt: r.opted_out_at,
+          createdAt: r.created_at,
+          name: r.name,
+          phone: r.phone_e164,
+          locale: r.locale,
+          orgName: org!.name,
+          orgIsDemo: org!.is_demo,
+        }));
     },
     async updateReporter(id, patch) {
       const row = d.reporters.get(id);
@@ -738,7 +774,71 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
             x.reporter_id === reporterId &&
             (x.payload as { dedupe_key?: string } | null)?.dedupe_key === dedupeKey,
         );
-      return m ? { id: m.id, channel: m.channel, status: m.status } : null;
+      return m
+        ? {
+            id: m.id,
+            channel: m.channel,
+            status: m.status,
+            provider: m.provider,
+            error: m.error,
+            error_code: (m.payload as { error_code?: string } | null)?.error_code ?? null,
+          }
+        : null;
+    },
+    async markSmsHandled(messageId, at) {
+      const m = d.messages.get(messageId);
+      if (!m) return;
+      m.payload = { ...((m.payload as Record<string, Json> | null) ?? {}), handled_at: at };
+    },
+    async hasPendingUnknownContact(phone, channel, excludeMessageId = null) {
+      return [...d.unknownContacts.values()].some(
+        (u) =>
+          u.phone_e164 === phone &&
+          u.channel === channel &&
+          u.status === 'pending' &&
+          (excludeMessageId === null || u.message_id !== excludeMessageId),
+      );
+    },
+    async insertSmsUnknownContact(row) {
+      const existing = [...d.unknownContacts.values()].find((u) => u.message_id === row.message_id);
+      if (existing) return { id: existing.id, created: false };
+      const contact = await db.insertUnknownContact({
+        org_id: null,
+        phone_e164: row.phone_e164,
+        channel: 'sms',
+        message_id: row.message_id,
+        snippet: row.snippet,
+      });
+      return { id: contact.id, created: true };
+    },
+    async applyInboundChange(input) {
+      // One transaction: called through `db` (a test may make one of them throw), rolled back
+      // to the state before on any failure.
+      const before = d.reporters.get(input.reporterId);
+      const audited = d.audit.length;
+      const notified = d.notifications.length;
+      try {
+        await db.updateReporter(input.reporterId, input.patch);
+        await db.logAudit(input.audit);
+        const n = input.notification;
+        if (n) await db.notifyOrg(n.orgId, n.kind, n.title, n.body, n.targetPath);
+      } catch (err) {
+        if (before) d.reporters.set(input.reporterId, before);
+        d.audit.length = audited;
+        d.notifications.length = notified;
+        throw err;
+      }
+    },
+    async isSmsOptedOut(phone, country) {
+      return d.smsOptOuts.some((o) => o.phone_e164 === phone && o.country === country);
+    },
+    async recordSmsOptOut(row) {
+      if (d.smsOptOuts.some((o) => o.phone_e164 === row.phone_e164 && o.country === row.country))
+        return;
+      d.smsOptOuts.push({ ...row, opted_out_at: iso() });
+    },
+    async clearSmsOptOut(phone, country) {
+      d.smsOptOuts = d.smsOptOuts.filter((o) => !(o.phone_e164 === phone && o.country === country));
     },
     async listPersonalLinks(reporterId) {
       return d.fieldLinks

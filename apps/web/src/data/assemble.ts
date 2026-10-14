@@ -2086,11 +2086,13 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
     const chipStatus: TeamReporter['chipStatus'] =
       r.status === 'disabled'
         ? 'disabled'
-        : isActiveReporterStatus(r.status)
-          ? 'active'
-          : r.last_invite_error
-            ? 'not_on_whatsapp'
-            : 'invite_sent';
+        : r.status === 'opted_out'
+          ? 'opted_out'
+          : isActiveReporterStatus(r.status)
+            ? 'active'
+            : r.last_invite_error
+              ? 'not_on_whatsapp'
+              : 'invite_sent';
     return {
       id: r.id,
       name: r.name,

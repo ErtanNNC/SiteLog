@@ -1258,6 +1258,21 @@ export type Database = {
         };
         Returns: number;
       };
+      // sms-webhook (20261014000008_sms_inbound.sql), service role only: the inbound text, its
+      // `sms.received` audit and (Twilio, not yet handled) its `sms_inbound` job in one transaction.
+      receive_sms_inbound: {
+        Args: {
+          p_id: string;
+          p_org_id: string | null;
+          p_reporter_id: string | null;
+          p_phone_e164: string;
+          p_provider: string;
+          p_provider_message_id: string;
+          p_body: string;
+          p_payload: Json;
+        };
+        Returns: { id: string; duplicate: boolean; handled: boolean; jobId: number | null };
+      };
       claim_jobs: { Args: { p_worker: string; p_limit: number }; Returns: JobRow[] };
       complete_job: { Args: { p_job_id: number }; Returns: undefined };
       fail_job: { Args: { p_job_id: number; p_error: string }; Returns: undefined };

@@ -1,4 +1,5 @@
-import { screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { DemoStore } from '@/data/demo/store';
@@ -52,7 +53,25 @@ describe('Demo phone', () => {
         "You won't get more texts from SiteLog. Reply START to resume.",
       ),
     ).toBeInTheDocument();
-    expect(store.data.reporters.find((r) => r.name === 'Dana Whitfield')!.status).toBe('opted_out');
+    const dana = store.data.reporters.find((r) => r.name === 'Dana Whitfield')!;
+    expect(dana.status).toBe('opted_out');
+    // As the worker: the office's §13 notice and the change audited as the reporter.
+    expect(store.data.notifications).toContainEqual(
+      expect.objectContaining({
+        org_id: store.data.org.id,
+        user_id: null,
+        kind: 'reporter_opted_out',
+        title: 'Dana Whitfield opted out of texts (STOP)',
+        target_path: '/team',
+      }),
+    );
+    expect(store.data.audit.at(-1)).toMatchObject({
+      actor_type: 'reporter',
+      actor_id: dana.id,
+      action: 'reporter.opted_out',
+      entity: 'reporter',
+      entity_id: dana.id,
+    });
   });
 
   it('a one-way pack shows no reply box (spec §19 Q35)', async () => {
@@ -66,7 +85,7 @@ describe('Demo phone', () => {
     ).toBeInTheDocument();
   });
 
-  it('an invite shows the welcome text in the Demo phone (the worker’s send_welcome)', async () => {
+  it('an invite shows the welcome text in the Demo phone, in the language the office ticked (F3)', async () => {
     const store = new DemoStore();
     store.inviteReporter(
       {
@@ -78,10 +97,127 @@ describe('Demo phone', () => {
       },
       'user',
     );
+    store.inviteReporter(
+      {
+        name: 'Ben Okafor',
+        phone: '+15550149002',
+        role: 'backup',
+        siteIds: [store.data.sites[0]!.id],
+        languages: ['en', 'es'],
+      },
+      'user',
+    );
+    expect(store.data.reporters.find((r) => r.name === 'Ana Torres')!.locale).toBe('es-US');
+    expect(store.data.reporters.find((r) => r.name === 'Ben Okafor')!.locale).toBe('en-US');
     renderWithProviders(<DevPhonePage />, { as: 'admin', store });
     const thread = await openThread(/Ana Torres/);
-    expect(within(thread).getByText(/Hi Ana, I'm SiteLog/)).toBeInTheDocument();
+    expect(within(thread).getByText(/Hola Ana, soy SiteLog/)).toBeInTheDocument();
     expect(within(thread).getByRole('link', { name: /\/r\// })).toBeInTheDocument();
+  });
+
+  it('keeps 44 px tab targets at every width (the list grows with its triggers)', async () => {
+    renderWithProviders(<DevPhonePage />, { as: 'admin' });
+    const tab = await screen.findByRole('tab', { name: 'Texts' });
+    // In pixels: the panel's 15 px root makes `min-h-11` 41.25 px (e2e/a11y.spec.ts measures it).
+    expect(tab.className).toMatch(/\bmin-h-\[44px\]/);
+    expect(tab.className).not.toMatch(/\bmin-h-11\b/);
+    expect(tab.className).not.toMatch(/\bsm:min-h-9\b/);
+    expect(tab.closest('[role="tablist"]')!.className).toMatch(/\bh-auto\b/);
+  });
+
+  it('moves focus to the thread on select and back to the reporter on Back', async () => {
+    renderWithProviders(<DevPhonePage />, { as: 'admin' });
+    const list = await screen.findByRole('navigation', { name: 'Reporters' });
+    const marco = within(list).getByRole('button', { name: /Marco Ruiz/ });
+    await userEvent.click(marco);
+    const heading = await screen.findByRole('heading', { level: 2, name: 'Marco Ruiz' });
+    await waitFor(() => expect(heading).toHaveFocus());
+    // The thread box itself is a labelled, focusable region (WCAG 2.1.1 for a scroll box).
+    const region = screen.getByRole('region', { name: 'Texts with Marco Ruiz' });
+    expect(region).toHaveAttribute('tabindex', '0');
+    await userEvent.click(screen.getByRole('button', { name: 'All reporters' }));
+    await waitFor(() => expect(marco).toHaveFocus());
+    expect(screen.queryByRole('heading', { level: 2, name: 'Marco Ruiz' })).not.toBeInTheDocument();
+  });
+
+  it('scrolls the thread to its newest text on open and when one arrives; the live region is always there', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<DevPhonePage />, { as: 'admin', store });
+    await openThread(/Dana Whitfield/);
+    const region = screen.getByRole('region', { name: 'Texts with Dana Whitfield' });
+    // jsdom has no layout: give the box a height to scroll to and check where it lands.
+    Object.defineProperty(region, 'scrollHeight', { configurable: true, value: 900 });
+    region.scrollTop = 0;
+    const live = region.querySelector('[aria-live="polite"]')!;
+    // New texts only: a status moving from Sent to Delivered is not read out.
+    expect(live).toHaveAttribute('aria-relevant', 'additions');
+    const before = within(region).getAllByRole('listitem').length;
+    act(() =>
+      store.demoPhoneReply(
+        store.data.reporters.find((r) => r.name === 'Dana Whitfield')!.id,
+        'CALL',
+      ),
+    );
+    await waitFor(() => expect(within(region).getAllByRole('listitem')).toHaveLength(before + 1));
+    await waitFor(() => expect(region.scrollTop).toBe(900));
+    // The new text landed inside the live region that was mounted before it.
+    expect(live.contains(within(region).getAllByRole('listitem').at(-1)!)).toBe(true);
+  });
+
+  it('switching back to a cached thread gives it a new live region, so its texts are not read out as new', async () => {
+    // The panel's own cache (src/lib/query.ts): a thread opened in the last 5 minutes renders at
+    // once from it. renderWithProviders' client keeps nothing (gcTime 0), so this test brings one.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 30_000, gcTime: 300_000 } },
+    });
+    renderWithProviders(
+      <QueryClientProvider client={client}>
+        <DevPhonePage />
+      </QueryClientProvider>,
+      { as: 'admin' },
+    );
+    const liveOf = async (name: string) => {
+      const region = await screen.findByRole('region', { name: `Texts with ${name}` });
+      await within(region).findAllByRole('listitem');
+      return region.querySelector('[aria-live]')!;
+    };
+    await openThread(/Dana Whitfield/);
+    const dana1 = await liveOf('Dana Whitfield');
+    await openThread(/Marco Ruiz/);
+    const marco = await liveOf('Marco Ruiz');
+    expect(marco).not.toBe(dana1);
+    await openThread(/Dana Whitfield/);
+    const dana2 = await liveOf('Dana Whitfield');
+    expect(dana2).not.toBe(marco);
+    expect(dana2).not.toBe(dana1);
+    expect(dana2.isConnected && !marco.isConnected).toBe(true);
+    client.clear();
+  });
+
+  it('a thread with no texts yet announces inside the same live region', async () => {
+    const store = new DemoStore();
+    const id = store.inviteReporter(
+      {
+        name: 'Quiet Person',
+        phone: '+15550149003',
+        role: 'backup',
+        siteIds: [store.data.sites[0]!.id],
+        languages: ['en'],
+      },
+      'user',
+    );
+    // Drop the welcome the demo invite wrote, so the thread starts empty.
+    store.data.messages = store.data.messages.filter((m) => m.reporter_id !== id);
+    renderWithProviders(<DevPhonePage />, { as: 'admin', store });
+    const list = await screen.findByRole('navigation', { name: 'Reporters' });
+    await userEvent.click(within(list).getByRole('button', { name: /Quiet Person/ }));
+    const region = await screen.findByRole('region', { name: 'Texts with Quiet Person' });
+    const live = region.querySelector('[aria-live="polite"]')!;
+    expect(live).toHaveTextContent('No texts with Quiet Person yet.');
+    act(() => store.demoPhoneReply(id, 'HELP'));
+    await waitFor(() =>
+      expect(within(live as HTMLElement).getAllByRole('listitem')).toHaveLength(2),
+    );
   });
 
   it('the Email tab shows what the console email provider would have sent', async () => {

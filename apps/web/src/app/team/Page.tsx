@@ -55,6 +55,11 @@ const CHIP: Record<ReporterChipStatus, { box: string; dot: string; label: string
     dot: 'bg-missing',
     label: copy.chips.notOnWhatsApp,
   },
+  opted_out: {
+    box: 'bg-chip-review-bg text-chip-review-fg border-chip-review-bg',
+    dot: 'bg-dust',
+    label: copy.chips.optedOut,
+  },
   disabled: {
     box: 'bg-chip-wx-bg text-chip-wx-fg border-chip-wx-bg',
     dot: 'bg-dust-light',

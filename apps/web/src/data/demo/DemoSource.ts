@@ -306,7 +306,8 @@ export class DemoSource implements DataSource {
   }
   inviteReporter(input: InviteReporterInput) {
     return this.run(() => {
-      this.store.inviteReporter(input, this.user.id);
+      const id = this.store.inviteReporter(input, this.user.id);
+      return { status: this.store.data.reporters.find((r) => r.id === id)!.status };
     });
   }
   linkUnknownSender(input: LinkUnknownSenderInput) {

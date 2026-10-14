@@ -287,7 +287,11 @@ export interface DataSource {
   saveSiteRecipients(siteId: string, emails: string[]): Promise<void>;
   addInvoice(input: AddInvoiceInput): Promise<void>;
   setInvoiceStatus(invoiceId: string, status: InvoiceStatus): Promise<void>;
-  inviteReporter(input: InviteReporterInput): Promise<void>;
+  /**
+   * The reporter's status after the invite: `opted_out` when the number sent STOP before (no
+   * welcome text reaches it), else `invited` (or `active` for one already set up).
+   */
+  inviteReporter(input: InviteReporterInput): Promise<{ status: ReporterStatus }>;
   linkUnknownSender(input: LinkUnknownSenderInput): Promise<void>;
   ignoreUnknownSender(unknownSenderId: string): Promise<void>;
   /** Team row menu: Disable (→ `disabled`) or re-enable (→ `invited`). */

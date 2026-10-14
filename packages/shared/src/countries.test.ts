@@ -9,6 +9,7 @@ import {
   orgDefaultsFor,
   packCopyGaps,
   reporterDefaultsFor,
+  reporterLocaleFor,
   toCountryPack,
   type FieldCountryView,
 } from './countries.ts';
@@ -122,6 +123,20 @@ describe('country pack rows (spec §4.6)', () => {
     });
     expect(reporterDefaultsFor(demoPack('US'))).toEqual({ locale: 'en-US', languages: ['en'] });
     expect(reporterDefaultsFor(demoPack('TR'))).toEqual({ locale: 'tr-TR', languages: ['tr'] });
+  });
+
+  it("picks a reporter's locale from the languages the office says they speak (F2, F3)", () => {
+    const us = demoPack('US');
+    const tr = demoPack('TR');
+    expect(reporterLocaleFor(us, ['es'])).toBe('es-US');
+    // The pack's order decides when both match; the office's order does not.
+    expect(reporterLocaleFor(us, ['es', 'en'])).toBe('en-US');
+    expect(reporterLocaleFor(us, ['EN'])).toBe('en-US');
+    expect(reporterLocaleFor(tr, ['en'])).toBe('en-US');
+    expect(reporterLocaleFor(tr, ['es'])).toBeNull(); // the TR pack has no Spanish
+    expect(reporterLocaleFor(us, ['pl', 'hi'])).toBeNull();
+    expect(reporterLocaleFor(us, [])).toBeNull();
+    expect(reporterLocaleFor(us, undefined)).toBeNull();
   });
 
   it('takes a new country as a row (ZZ)', () => {

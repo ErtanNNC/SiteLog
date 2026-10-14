@@ -117,6 +117,7 @@ Deno.test(
     assertEquals(await notifierCodeSender(real.notifier)(message({}, { isDemo: false })), {
       channel: null,
       reason: 'no_channel',
+      detail: 'console_real_org',
     });
     assertEquals(real.rows, [], 'no messages row an office user could read the code from');
 

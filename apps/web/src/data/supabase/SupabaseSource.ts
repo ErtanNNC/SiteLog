@@ -1613,14 +1613,18 @@ export class SupabaseSource implements DataSource {
     if (error) throw new Error(error.message);
   }
   async inviteReporter(input: InviteReporterInput) {
-    await this.callFunction('api-invite-reporter', {
-      orgId: this.orgId,
-      name: input.name,
-      phone: input.phone,
-      role: input.role,
-      siteIds: input.siteIds,
-      languages: input.languages,
-    });
+    const result = await this.callFunction<{ reporter?: { status?: ReporterStatus } }>(
+      'api-invite-reporter',
+      {
+        orgId: this.orgId,
+        name: input.name,
+        phone: input.phone,
+        role: input.role,
+        siteIds: input.siteIds,
+        languages: input.languages,
+      },
+    );
+    return { status: result?.reporter?.status ?? ('invited' as const) };
   }
   async linkUnknownSender(input: LinkUnknownSenderInput) {
     await this.callFunction('api-link-unknown-sender', {
@@ -1842,30 +1846,36 @@ export class SupabaseSource implements DataSource {
         .eq('org_id', this.orgId)
         .order('name'),
     ) as Array<{ id: string; name: string; phone_e164: string; status: string }>;
-    // The newest texts of the org; enough for each thread's last line and a count.
-    const texts = unwrap(
-      await this.sb
-        .from('messages')
-        .select('reporter_id, body, created_at')
-        .eq('org_id', this.orgId)
-        .eq('channel', 'sms')
-        .order('created_at', { ascending: false })
-        .limit(1000),
-    ) as Array<{ reporter_id: string | null; body: string | null; created_at: string }>;
+    // Per reporter, one request: the thread's newest text (its last line) and the exact count of
+    // its texts, so neither a long thread nor a busy org reads low (no capped org-wide page).
+    const threads = await Promise.all(
+      reporters.map(async (r) => {
+        const res = await this.sb
+          .from('messages')
+          .select('body, created_at', { count: 'exact' })
+          .eq('org_id', this.orgId)
+          .eq('reporter_id', r.id)
+          .eq('channel', 'sms')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const rows = unwrap(res) as Array<{ body: string | null; created_at: string }>;
+        return { count: res.count ?? rows.length, last: rows[0] ?? null };
+      }),
+    );
     return {
       orgIsDemo: org.is_demo,
       pack: { code: country.code, twoWaySms: country.two_way_sms },
       reporters: reporters
-        .map((r) => {
-          const thread = texts.filter((m) => m.reporter_id === r.id);
+        .map((r, i) => {
+          const { count, last } = threads[i]!;
           return {
             id: r.id,
             name: r.name,
             phone: r.phone_e164,
             status: r.status,
-            count: thread.length,
-            lastAt: thread[0]?.created_at ?? null,
-            lastBody: thread[0]?.body ?? null,
+            count,
+            lastAt: last?.created_at ?? null,
+            lastBody: last?.body ?? null,
           };
         })
         .sort(
@@ -1875,6 +1885,8 @@ export class SupabaseSource implements DataSource {
   }
 
   async getDemoPhoneThread(reporterId: string): Promise<DemoPhoneMessage[]> {
+    // The newest 500, oldest first on the page: a long thread drops its oldest texts, never the
+    // welcome that just arrived.
     const rows = unwrap(
       await this.sb
         .from('messages')
@@ -1882,7 +1894,7 @@ export class SupabaseSource implements DataSource {
         .eq('org_id', this.orgId)
         .eq('reporter_id', reporterId)
         .eq('channel', 'sms')
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: false })
         .limit(500),
     ) as Array<{
       id: string;
@@ -1893,7 +1905,7 @@ export class SupabaseSource implements DataSource {
       provider: string | null;
       created_at: string;
     }>;
-    return rows.map((m) => ({
+    return rows.reverse().map((m) => ({
       id: m.id,
       direction: m.direction,
       body: m.body ?? '',

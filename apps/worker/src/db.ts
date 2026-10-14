@@ -8,6 +8,8 @@ import type {
   ConvoState,
   EvidencePackRow,
   GlossaryTermRow,
+  InboundReporterRow,
+  InboundScope,
   JobRow,
   JobType,
   MessageRow,
@@ -24,6 +26,7 @@ import type {
   ReporterRow,
   SiteDayRow,
   SiteRow,
+  SmsOptOutRow,
   TermKind,
   TermStatus,
   TranscriptRow,
@@ -174,6 +177,23 @@ export interface AuditInput {
   diff?: Json | null;
 }
 
+/** A row of `sms_opt_outs` (the time defaults to now). */
+export type SmsOptOutInput = Pick<SmsOptOutRow, 'phone_e164' | 'country' | 'method'>;
+
+/** One reporter change of an inbound keyword (§9.5), with its audit row and office notice. */
+export interface InboundChangeInput {
+  reporterId: string;
+  patch: Partial<Pick<ReporterRow, 'status' | 'opted_out_at' | 'contact_pref'>>;
+  audit: AuditInput;
+  notification: {
+    orgId: string;
+    kind: string;
+    title: string;
+    body: string;
+    targetPath: string;
+  } | null;
+}
+
 export interface EnqueueOptions {
   runAfter?: Date | string | null;
   dedupeKey?: string | null;
@@ -305,10 +325,31 @@ export interface Db {
     patch: Partial<
       Pick<
         ReporterRow,
-        'status' | 'verified_at' | 'activated_at' | 'invited_at' | 'last_invite_error'
+        | 'status'
+        | 'verified_at'
+        | 'activated_at'
+        | 'invited_at'
+        | 'last_invite_error'
+        | 'opted_out_at'
+        | 'contact_pref'
       >
     >,
   ): Promise<void>;
+  /**
+   * The reporter row follows an opt-out the provider reported (Twilio 21610): `opted_out` with
+   * `opted_out_at`, except a disabled reporter, who keeps `disabled` and gets `opted_out_at`. An
+   * `opted_out_at` already set is kept.
+   */
+  optOutReporter(reporterId: string, at: string): Promise<void>;
+  /**
+   * Reporters with this phone in orgs of the pack (`orgs.country`), every status, with their org:
+   * real orgs only (`realOnly`, the Twilio route) or one org (the Demo phone).
+   */
+  listInboundReporters(
+    phone: string,
+    country: string,
+    scope: InboundScope,
+  ): Promise<InboundReporterRow[]>;
   listSitesForReporter(reporterId: string): Promise<SiteRow[]>;
   listReportersForSite(siteId: string): Promise<ReporterRow[]>;
   getSite(id: string): Promise<SiteRow | null>;
@@ -410,13 +451,57 @@ export interface Db {
   insertSmsMessage(row: OutboundMessageRow): Promise<void>;
   updateSmsMessage(
     id: string,
-    patch: { status: MsgStatus; provider_message_id?: string | null; error?: string | null },
+    patch: {
+      status: MsgStatus;
+      provider_message_id?: string | null;
+      error?: string | null;
+      /** Replaces the whole payload (the Notifier passes its dedupe key back with the code). */
+      payload?: Json | null;
+    },
   ): Promise<void>;
-  /** The reporter's message written under a Notifier dedupe key (`payload.dedupe_key`). */
+  /**
+   * The reporter's message written under a Notifier dedupe key (`payload.dedupe_key`), with the
+   * provider's code of a refused send (`payload.error_code`).
+   */
   findMessageByDedupeKey(
     reporterId: string,
     dedupeKey: string,
-  ): Promise<Pick<MessageRow, 'id' | 'channel' | 'status'> | null>;
+  ): Promise<
+    | (Pick<MessageRow, 'id' | 'channel' | 'status' | 'provider' | 'error'> & {
+        error_code: string | null;
+      })
+    | null
+  >;
+  /** `messages.payload.handled_at` of an inbound text (sms_inbound). */
+  markSmsHandled(messageId: string, at: string): Promise<void>;
+  /**
+   * A pending `unknown_contacts` row of the phone on this channel exists, other than the one the
+   * inbound text `excludeMessageId` created (its retry still sends the F13 auto-reply).
+   */
+  hasPendingUnknownContact(
+    phone: string,
+    channel: 'sms',
+    excludeMessageId?: string | null,
+  ): Promise<boolean>;
+  /**
+   * The F13 `unknown_contacts` row of an inbound text (no org, channel 'sms', pending), once per
+   * message: a retry of the same text gets the first row back with `created: false`.
+   */
+  insertSmsUnknownContact(row: {
+    phone_e164: string;
+    message_id: string;
+    snippet: string;
+  }): Promise<{ id: string; created: boolean }>;
+  /**
+   * One reporter change of an inbound keyword, its audit row and its office notice in one
+   * transaction, so a failure leaves none of them and the job's retry writes all three.
+   */
+  applyInboundChange(input: InboundChangeInput): Promise<void>;
+  /** `sms_opt_outs`: the phone sent STOP on the pack's sender, or its provider refused it. */
+  isSmsOptedOut(phone: string, country: string): Promise<boolean>;
+  /** Records the phone's opt-out on the pack; a row already there keeps its method and time. */
+  recordSmsOptOut(row: SmsOptOutInput): Promise<void>;
+  clearSmsOptOut(phone: string, country: string): Promise<void>;
   /** Live personal links of a reporter, newest first. */
   listPersonalLinks(reporterId: string): Promise<Array<{ id: string; code_hash: string }>>;
   /** false when the code hash is taken (unique); nothing written then. */
@@ -685,6 +770,49 @@ export function createDb(sql: Sql): Db {
     },
     async updateReporter(id, patch) {
       await sql`update reporters set ${setClause(patch as Record<string, unknown>)} where id = ${id}`;
+    },
+    async optOutReporter(reporterId, at) {
+      await sql`update reporters
+        set status = case when status = 'disabled' then status else 'opted_out'::reporter_status end,
+            opted_out_at = coalesce(opted_out_at, ${at}::timestamptz)
+        where id = ${reporterId}`;
+    },
+    async listInboundReporters(phone, country, scope) {
+      const rows = await sql<
+        Array<{
+          id: string;
+          org_id: string;
+          name: string;
+          status: ReporterRow['status'];
+          contact_pref: ReporterRow['contact_pref'];
+          activated_at: string | null;
+          opted_out_at: string | null;
+          created_at: string;
+          phone_e164: string;
+          locale: string;
+          org_name: string;
+          org_is_demo: boolean;
+        }>
+      >`select r.id, r.org_id, r.name, r.status, r.contact_pref, r.activated_at, r.opted_out_at,
+               r.created_at, r.phone_e164, r.locale, o.name as org_name, o.is_demo as org_is_demo
+        from reporters r join orgs o on o.id = r.org_id
+        where r.phone_e164 = ${phone} and o.country = ${country}
+          and ${'realOnly' in scope ? sql`o.is_demo = false` : sql`o.id = ${scope.orgId}`}
+        order by r.created_at`;
+      return rows.map((r) => ({
+        id: r.id,
+        orgId: r.org_id,
+        status: r.status,
+        contactPref: r.contact_pref,
+        activatedAt: r.activated_at,
+        optedOutAt: r.opted_out_at,
+        createdAt: r.created_at,
+        name: r.name,
+        phone: r.phone_e164,
+        locale: r.locale,
+        orgName: r.org_name,
+        orgIsDemo: r.org_is_demo,
+      }));
     },
     async listSitesForReporter(reporterId) {
       return sql<SiteRow[]>`select s.* from sites s join site_reporters sr on sr.site_id = s.id
@@ -996,11 +1124,73 @@ export function createDb(sql: Sql): Db {
     },
     async findMessageByDedupeKey(reporterId, dedupeKey) {
       return one(
-        await sql<Array<Pick<MessageRow, 'id' | 'channel' | 'status'>>>`
-          select id, channel, status from messages
+        await sql<
+          Array<
+            Pick<MessageRow, 'id' | 'channel' | 'status' | 'provider' | 'error'> & {
+              error_code: string | null;
+            }
+          >
+        >`
+          select id, channel, status, provider, error, payload->>'error_code' as error_code
+          from messages
           where reporter_id = ${reporterId} and payload->>'dedupe_key' = ${dedupeKey}
           order by created_at desc limit 1`,
       );
+    },
+    async markSmsHandled(messageId, at) {
+      await sql`update messages
+        set payload = coalesce(payload, '{}'::jsonb) || jsonb_build_object('handled_at', ${at}::text)
+        where id = ${messageId}`;
+    },
+    async hasPendingUnknownContact(phone, channel, excludeMessageId = null) {
+      const rows = await sql<Array<{ n: number }>>`
+        select count(*)::int as n from unknown_contacts
+        where phone_e164 = ${phone} and channel = ${channel} and status = 'pending'
+          and (${excludeMessageId}::uuid is null or message_id is distinct from ${excludeMessageId}::uuid)`;
+      return (rows[0]?.n ?? 0) > 0;
+    },
+    async insertSmsUnknownContact(row) {
+      const rows = await sql<Array<{ id: string; created: boolean }>>`
+        with existing as (
+          select id from unknown_contacts where message_id = ${row.message_id} limit 1
+        ), inserted as (
+          insert into unknown_contacts (org_id, phone_e164, channel, message_id, snippet)
+          select null, ${row.phone_e164}, 'sms', ${row.message_id}, ${row.snippet}
+          where not exists (select 1 from existing)
+          returning id
+        )
+        select id, true as created from inserted
+        union all
+        select id, false as created from existing`;
+      return rows[0]!;
+    },
+    async applyInboundChange(input) {
+      const patch = Object.fromEntries(
+        Object.entries(input.patch).filter(([, v]) => v !== undefined),
+      ) as Record<string, string | null>;
+      const a = input.audit;
+      const n = input.notification;
+      await sql.begin(async (tx) => {
+        await tx`update reporters set ${tx(patch, Object.keys(patch))} where id = ${input.reporterId}`;
+        await tx`select log_audit(${a.org_id}, ${a.actor_type}, ${a.actor_id ?? null}, ${a.action},
+          ${a.entity ?? null}, ${a.entity_id ?? null}, ${tx.json((a.diff ?? null) as never)})`;
+        if (n) {
+          await tx`select notify_org(${n.orgId}, ${n.kind}, ${n.title}, ${n.body}, ${n.targetPath}, null)`;
+        }
+      });
+    },
+    async isSmsOptedOut(phone, country) {
+      const rows = await sql<Array<{ n: number }>>`
+        select count(*)::int as n from sms_opt_outs where phone_e164 = ${phone} and country = ${country}`;
+      return (rows[0]?.n ?? 0) > 0;
+    },
+    async recordSmsOptOut(row) {
+      await sql`insert into sms_opt_outs (phone_e164, country, method)
+        values (${row.phone_e164}, ${row.country}, ${row.method})
+        on conflict (phone_e164, country) do nothing`;
+    },
+    async clearSmsOptOut(phone, country) {
+      await sql`delete from sms_opt_outs where phone_e164 = ${phone} and country = ${country}`;
     },
     async listPersonalLinks(reporterId) {
       return sql<Array<{ id: string; code_hash: string }>>`

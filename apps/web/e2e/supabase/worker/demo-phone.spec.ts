@@ -6,9 +6,11 @@ import { admin, SEED, signInWithMagicLink, SUPABASE_URL } from '../support';
  * playwright.supabase.config.ts; CI starts the worker after the panel specs): inviting Marco shows
  * the welcome text in the Demo phone with a working personal link. The invite goes through
  * api-invite-reporter (the personal `field_links` row) and the queue; the worker's send_welcome
- * texts it through the Notifier on the console driver (Kestrel is a demo org), and the Demo phone
- * shows the row over Realtime. The link resolves at field-api. A HELP typed as Marco runs
- * sms-webhook's keyword handler and re-sends the same link (codes are derived, spec §4.5).
+ * texts it through the Notifier on the console driver (Kestrel is a demo org), and the Demo phone,
+ * open on Marco's thread in a second tab since before the invite, shows the row over Realtime
+ * with no navigation or reload. The link resolves at field-api. A HELP typed as Marco runs the
+ * inbound handler (sms-webhook's `/demo-reply`, inline) and re-sends the same link (codes are
+ * derived, spec §4.5).
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -37,16 +39,26 @@ function linkCode(href: string | null): string {
 }
 
 async function openMarcoThread(page: Page) {
-  await page.getByRole('link', { name: 'Demo phone' }).click();
-  await expect(page).toHaveURL(/\/dev\/phone$/);
+  await page.goto('/dev/phone');
+  await expect(page.getByRole('heading', { level: 1, name: 'Demo phone' })).toBeVisible();
   const reporters = page.getByRole('navigation', { name: 'Reporters' });
   await reporters.getByRole('button', { name: new RegExp(MARCO.name) }).click();
-  return page.getByRole('list', { name: `Texts with ${MARCO.name}` });
+  const thread = page.getByRole('list', { name: `Texts with ${MARCO.name}` });
+  await expect(thread).toBeVisible();
+  return thread;
 }
 
 test('inviting Marco to another site shows the welcome text with a working personal link', async ({
   page,
+  context,
 }) => {
+  // The Demo phone first, in a second tab of the same session, on Marco's thread: whatever the
+  // worker writes from now on can only reach it over Realtime (no navigation, no reload below).
+  const phone = await context.newPage();
+  const thread = await openMarcoThread(phone);
+  const welcomeBubbles = thread.getByRole('listitem').filter({ hasText: `at ${ELM}` });
+  const before = await welcomeBubbles.count();
+
   await page.getByRole('link', { name: 'Team & numbers' }).click();
   await page.getByRole('button', { name: 'Invite reporter' }).first().click();
   const dialog = page.getByRole('dialog', { name: 'Invite reporter' });
@@ -72,13 +84,11 @@ test('inviting Marco to another site shows the welcome text with a working perso
     .eq('site_id', SEED.sites.elm);
   expect(onElm).toHaveLength(1);
 
-  // The worker's send_welcome, on the console driver, over Realtime into the open thread.
-  const thread = await openMarcoThread(page);
-  const welcome = thread
-    .getByRole('listitem')
-    .filter({ hasText: `at ${ELM}` })
-    .last();
-  await expect(welcome).toBeVisible({ timeout: 60_000 });
+  // The worker's send_welcome, on the console driver, arrives in the thread that was already open.
+  await expect(welcomeBubbles).toHaveCount(before + 1, { timeout: 60_000 });
+  const welcome = welcomeBubbles.last();
+  await expect(welcome).toBeVisible();
+  await expect(phone).toHaveURL(/\/dev\/phone$/);
   await expect(welcome).toContainText("Hi Marco, I'm SiteLog");
   await expect(welcome).toContainText('welcome');
   const link = welcome.getByRole('link', { name: /\/r\// });
@@ -115,13 +125,14 @@ test('inviting Marco to another site shows the welcome text with a working perso
   expect(resolved.link.kind).toBe('personal');
   expect(resolved.country).toMatchObject({ code: 'US', twoWaySms: true });
 
-  // HELP typed as Marco: sms-webhook's keyword handler answers with the same personal link.
-  await page.getByRole('textbox', { name: `Reply as ${MARCO.name}` }).fill('HELP');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  // HELP typed as Marco: the inbound handler answers with the same personal link.
+  await phone.getByRole('textbox', { name: `Reply as ${MARCO.name}` }).fill('HELP');
+  await phone.getByRole('button', { name: 'Send', exact: true }).click();
   const help = thread
     .getByRole('listitem')
     .filter({ hasText: 'SiteLog daily reports for Kestrel Build Group' })
     .last();
   await expect(help).toBeVisible();
   expect(linkCode(await help.getByRole('link', { name: /\/r\// }).getAttribute('href'))).toBe(code);
+  await phone.close();
 });

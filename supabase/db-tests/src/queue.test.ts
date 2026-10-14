@@ -257,6 +257,8 @@ describe('job queue for v1.2 (spec §10.1)', () => {
           'post_call_reconcile',
           'fetch_weather',
           'build_evidence_pack',
+          // W1-08: an inbound Twilio text handled by the worker.
+          'sms_inbound',
         ],
       ],
     );
@@ -281,6 +283,7 @@ describe('job queue for v1.2 (spec §10.1)', () => {
       post_call_reconcile: 2,
       fetch_weather: 3,
       build_evidence_pack: 3,
+      sms_inbound: 0,
     });
   });
 
@@ -324,6 +327,40 @@ describe('job queue for v1.2 (spec §10.1)', () => {
     expect(await claim('w3', 1)).toEqual([]);
     await svc(`select complete_job($1)`, [b1]);
     expect((await claim('w3', 1)).map((j) => j.id)).toEqual([b2]);
+  });
+
+  it("runs one phone's inbound texts one at a time, oldest first; another phone's alongside (W1-08)", async () => {
+    const text = async (phone: string, body: string) =>
+      (
+        await svc<{ id: string }>(
+          `insert into messages (direction, channel, phone_e164, provider, provider_message_id, body, status)
+           values ('in', 'sms', $1, 'twilio', $2, $3, 'received') returning id`,
+          [phone, `SM${Math.random().toString(36).slice(2, 14)}`, body],
+        )
+      )[0]!.id;
+    const stop = await enqueue('sms_inbound', { messageId: await text('+15550100021', 'STOP') });
+    const start = await enqueue('sms_inbound', { messageId: await text('+15550100021', 'START') });
+    const other = await enqueue('sms_inbound', { messageId: await text('+15550100022', 'HELP') });
+    const keys = await svc<{ id: string; lock_key: string | null }>(
+      `select id, lock_key from jobs order by id`,
+    );
+    expect(keys.map((k) => k.lock_key)).toEqual([
+      'sms:+15550100021',
+      'sms:+15550100021',
+      'sms:+15550100022',
+    ]);
+    // The STOP and the other phone's HELP together; the START waits for the STOP.
+    expect((await claim('w', 4)).map((j) => j.id).sort((a, b) => a - b)).toEqual([stop, other]);
+    expect(await claim('w', 4)).toEqual([]);
+    await svc(`select complete_job($1)`, [stop]);
+    expect((await claim('w', 4)).map((j) => j.id)).toEqual([start]);
+    // A payload that names no message has no key (and the job fails in the worker).
+    await enqueue('sms_inbound', { messageId: 'nope' });
+    expect(
+      (
+        await svc<{ lock_key: string | null }>(`select lock_key from jobs order by id desc limit 1`)
+      )[0],
+    ).toEqual({ lock_key: null });
   });
 });
 

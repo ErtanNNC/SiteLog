@@ -37,6 +37,14 @@ Fix the critical and high items before real customer data (other organisations, 
 - **Problem:** A signed upload URL fixes neither the type nor the size. W1-07 limits the `audio` bucket to `audio/*` and both upload buckets to 50 MB, and `field-api` checks every object before its upload completes and removes one that fails; but the `photos` bucket still stores any type, because the WhatsApp intake puts documents there (`apps/worker/src/router/media.ts`). An object uploaded through a field signed URL and never completed stays in the bucket with the type its uploader chose; no panel view lists it.
 - **Fix:** With step 22 (WhatsApp removed), a forward migration sets `allowed_mime_types` on `photos` to `image/*` (the `UPLOAD_MEDIA_TYPES` photo types and the office photo types), and the retention job also removes the objects of field `uploads` rows that never completed, as `list_orphan_office_photos()` already does for office photos after a day.
 
+### The panel's buttons and inputs are 41.25 px tall, under the 44 px target
+
+`apps/web/src/components/ui/Button.tsx`, `apps/web/src/components/ui/Input.tsx` · accessibility (targets ≥ 44 px, CLAUDE.md) · Known (W1-08 review) · Open
+
+- **Problem:** The panel's root font size is 15 px, so Tailwind's `h-11` / `min-h-11` (2.75 rem) is 41.25 px, not 44 px. The shared `Button` (default size) and `Input` / `Textarea` use `h-11`, so most of the panel's buttons and text fields are 2.75 px under the 44 px target at every width. Measured in Playwright on the demo build at 390 px: the Demo phone's reply box was 41.25 px tall before it was given a pixel minimum.
+- **Fixed so far:** the Demo phone (W1-08): its tabs, Back, Send and the reply box set `min-h-[44px]`, and `e2e/a11y.spec.ts` ("the Demo phone keeps 44 px targets at 390px") measures each.
+- **Fix:** Size the shared `Button` and `Input` in pixels (`min-h-[44px]`, and the dense variants on purpose), or move the 44 px to a token (`--size-target: 44px`) that the components read, and extend the 390 px checks in `e2e/a11y.spec.ts` to the main pages' controls.
+
 ## Critical (1)
 
 ### Inviting a phone already used by another org's reporter gives the inviting org that reporter's conversation and full message history

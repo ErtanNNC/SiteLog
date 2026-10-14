@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MASKED_CODE,
   SmsSendError,
+  V12_ROW_DEFAULTS,
   deadlineInstant,
   deriveLinkCode,
   evidencePackStoragePath,
@@ -15,6 +16,7 @@ import {
   type StoredReportData,
 } from '@sitelog/shared';
 import { buildEmail } from '../jobs/send_email';
+import { PermanentJobError } from '../jobs/types';
 import { buildReportPdfInput } from '../pdf/render';
 import { postProcessExtraction, type ExtractionInput } from '../ai/extract';
 import { compareReport } from '../ai/eval';
@@ -681,6 +683,10 @@ describe('jobs: welcome, template, retention', () => {
       target_path: '/team',
     });
     expect([...h.db.data.messages.values()][0]!.status).toBe('undeliverable');
+    expect(h.db.data.audit.at(-1)).toMatchObject({
+      action: 'reporter.invite_failed',
+      diff: { undeliverable: true },
+    });
     // A provider outage is retried by the queue instead.
     h.ctx.notifier = createWorkerNotifier(h.ctx.config, h.db, () => ({
       driver: 'twilio',
@@ -690,6 +696,347 @@ describe('jobs: welcome, template, retention', () => {
     await expect(
       h.runJob('send_welcome', { reporterId: h.jorge.id, siteId: SITE_RIVERSIDE }),
     ).rejects.toThrow(/503/);
+  });
+
+  it("send_welcome: an account fault (bad credentials, no credit) is never the number's fault", async () => {
+    // Twilio 21606: the From number is not a valid, SMS-capable number of the account.
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.ctx.notifier = createWorkerNotifier(h.ctx.config, h.db, () => ({
+      driver: 'twilio',
+      send: () =>
+        Promise.reject(
+          new SmsSendError("twilio 400 21606: The 'From' number is not valid", {
+            driver: 'twilio',
+            retryable: false,
+            code: '21606',
+          }),
+        ),
+    }));
+    await expect(
+      h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE }),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    expect(marco.last_invite_error).toBeNull();
+    expect(marco.invited_at).toBe('2026-03-01T00:00:00Z');
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_invite_failed',
+        title: 'Marco Ruiz: the welcome text failed at the SMS provider',
+        body: expect.stringMatching(/Texts are failing for this account \(twilio 400 21606/),
+      }),
+    ]);
+    expect(h.db.data.audit.at(-1)).toMatchObject({
+      action: 'sms.provider_fault',
+      diff: { code: '21606', driver: 'twilio', attempt: 1 },
+    });
+    expect([...h.db.data.messages.values()][0]!.status).toBe('failed');
+    // İletimerkezi out of credit: the same, for the TR pack.
+    const tr = createHarness();
+    tr.db.data.orgs.get(tr.org.id)!.country = 'TR';
+    tr.db.data.countries.find((c) => c.code === 'TR')!.sms_sender_id = 'SITELOG';
+    const jorge = tr.db.data.reporters.get(tr.jorge.id)!;
+    jorge.status = 'invited';
+    jorge.locale = 'tr-TR';
+    tr.ctx.notifier = createWorkerNotifier(tr.ctx.config, tr.db, () => ({
+      driver: 'iletimerkezi',
+      send: () =>
+        Promise.reject(
+          new SmsSendError('iletimerkezi 200 402: Bakiye yetersiz', {
+            driver: 'iletimerkezi',
+            retryable: false,
+            code: '402',
+          }),
+        ),
+    }));
+    await expect(
+      tr.runJob('send_welcome', { reporterId: tr.jorge.id, siteId: SITE_RIVERSIDE }),
+    ).rejects.toThrow(/402/);
+    expect(tr.db.data.reporters.get(tr.jorge.id)!.last_invite_error).toBeNull();
+    expect(tr.db.data.notifications[0]!.body).toMatch(/iletimerkezi 200 402/);
+  });
+
+  it('sms_inbound: a stored Twilio text runs the keywords, the reply and the handled mark', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    const inbound = (id: string, body: string, optOutType: string | null = null) => {
+      h.db.data.messages.set(id, {
+        ...V12_ROW_DEFAULTS.messages,
+        id,
+        conversation_id: null,
+        org_id: h.org.id,
+        direction: 'in',
+        wa_message_id: null,
+        type: null,
+        body,
+        payload: { to: '+18885550142', keyword: null, pack: 'US', opt_out_type: optOutType },
+        media_id: null,
+        media_mime: null,
+        storage_path: null,
+        duration_s: null,
+        template_name: null,
+        status: 'received',
+        error: null,
+        created_at: h.now.toISOString(),
+        reporter_id: h.marco.id,
+        phone_e164: PHONE_MARCO,
+        provider: 'twilio',
+        provider_message_id: `SM${id}`,
+        copy_key: null,
+        channel: 'sms',
+      });
+      return id;
+    };
+    await h.runJob('sms_inbound', {
+      messageId: inbound('00000000-0000-4000-8000-00000000f001', 'STOP', 'STOP'),
+    });
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    expect([marco.status, marco.opted_out_at]).toEqual(['opted_out', h.now.toISOString()]);
+    expect(h.db.data.smsOptOuts).toEqual([
+      expect.objectContaining({ phone_e164: PHONE_MARCO, country: 'US', method: 'sms_keyword' }),
+    ]);
+    expect(h.sms).toEqual([
+      {
+        driver: 'twilio',
+        to: PHONE_MARCO,
+        body: "You won't get more texts from SiteLog. Reply START to resume.",
+        sender: '+18885550142',
+      },
+    ]);
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({ kind: 'reporter_opted_out', target_path: '/team' }),
+    ]);
+    expect(h.db.data.audit.map((a) => [a.action, a.actor_type])).toEqual([
+      ['reporter.opted_out', 'reporter'],
+      ['sms.sent', 'system'],
+    ]);
+    const handled = h.db.data.messages.get('00000000-0000-4000-8000-00000000f001')!;
+    expect((handled.payload as { handled_at?: string }).handled_at).toBe(h.now.toISOString());
+    // A second run of the same job (a redelivery) does nothing more.
+    await h.runJob('sms_inbound', { messageId: '00000000-0000-4000-8000-00000000f001' });
+    expect(h.sms).toHaveLength(1);
+
+    // HELP: the personal link, created once, masked in the row (a real org).
+    await h.runJob('sms_inbound', {
+      messageId: inbound('00000000-0000-4000-8000-00000000f002', 'help'),
+    });
+    expect(h.db.data.fieldLinks).toHaveLength(1);
+    expect(h.sms[1]!.body).toMatch(/Your link: https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{6} /);
+    expect([...h.db.data.messages.values()].find((m) => m.copy_key === 'help')!.body).toContain(
+      MASKED_CODE,
+    );
+
+    // A row the webhook never wrote, or one the Demo phone handled inline, is a dead job.
+    await expect(
+      h.runJob('sms_inbound', { messageId: '00000000-0000-4000-8000-00000000f0ff' }),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    inbound('00000000-0000-4000-8000-00000000f003', 'STOP');
+    h.db.data.messages.get('00000000-0000-4000-8000-00000000f003')!.provider = 'console';
+    await expect(
+      h.runJob('sms_inbound', { messageId: '00000000-0000-4000-8000-00000000f003' }),
+    ).rejects.toThrow(/handled inline/);
+  });
+
+  it('sms_inbound: a STOP whose office notice fails is retried whole: one audit row, one notice', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    const id = '00000000-0000-4000-8000-00000000f201';
+    h.db.data.messages.set(id, {
+      ...V12_ROW_DEFAULTS.messages,
+      id,
+      conversation_id: null,
+      org_id: h.org.id,
+      direction: 'in',
+      wa_message_id: null,
+      type: null,
+      body: 'STOP',
+      payload: { to: '+18885550142', keyword: 'stop', pack: 'US', opt_out_type: 'STOP' },
+      media_id: null,
+      media_mime: null,
+      storage_path: null,
+      duration_s: null,
+      template_name: null,
+      status: 'received',
+      error: null,
+      created_at: h.now.toISOString(),
+      reporter_id: h.marco.id,
+      phone_e164: PHONE_MARCO,
+      provider: 'twilio',
+      provider_message_id: `SM${id}`,
+      copy_key: null,
+      channel: 'sms',
+    });
+    // The notice insert fails once (a database blip): the change rolls back with it.
+    const notifyOrg = h.db.notifyOrg.bind(h.db);
+    let failures = 1;
+    h.db.notifyOrg = (...args) =>
+      failures-- > 0 ? Promise.reject(new Error('connection lost')) : notifyOrg(...args);
+    await expect(h.runJob('sms_inbound', { messageId: id })).rejects.toThrow(/connection lost/);
+    expect(h.db.data.reporters.get(h.marco.id)!.status).not.toBe('opted_out');
+    expect(h.db.data.audit.filter((a) => a.action === 'reporter.opted_out')).toEqual([]);
+    expect(h.sms).toEqual([]);
+    // The job's retry makes the change with its audit row and the office's notice.
+    await h.runJob('sms_inbound', { messageId: id });
+    expect(h.db.data.reporters.get(h.marco.id)!.status).toBe('opted_out');
+    expect(h.db.data.audit.filter((a) => a.action === 'reporter.opted_out')).toHaveLength(1);
+    expect(h.db.data.notifications.filter((n) => n.kind === 'reporter_opted_out')).toHaveLength(1);
+    expect(h.sms.map((m) => m.body)).toEqual([
+      "You won't get more texts from SiteLog. Reply START to resume.",
+    ]);
+  });
+
+  it('sms_inbound: a STOP never waits for the link secret; only a HELP needs it', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    Object.assign(h.ctx.config, { LINK_SIGNING_SECRET: '' });
+    const inbound = (id: string, body: string) => {
+      h.db.data.messages.set(id, {
+        ...V12_ROW_DEFAULTS.messages,
+        id,
+        conversation_id: null,
+        org_id: h.org.id,
+        direction: 'in',
+        wa_message_id: null,
+        type: null,
+        body,
+        payload: { to: '+18885550142', keyword: null, pack: 'US', opt_out_type: null },
+        media_id: null,
+        media_mime: null,
+        storage_path: null,
+        duration_s: null,
+        template_name: null,
+        status: 'received',
+        error: null,
+        created_at: h.now.toISOString(),
+        reporter_id: h.marco.id,
+        phone_e164: PHONE_MARCO,
+        provider: 'twilio',
+        provider_message_id: `SM${id}`,
+        copy_key: null,
+        channel: 'sms',
+      });
+      return id;
+    };
+    await h.runJob('sms_inbound', {
+      messageId: inbound('00000000-0000-4000-8000-00000000f101', 'STOP'),
+    });
+    expect(h.db.data.reporters.get(h.marco.id)!.status).toBe('opted_out');
+    expect(h.sms).toHaveLength(1);
+    // HELP carries the personal link: without the secret the job fails (retried, then Sentry)
+    // and the text stays unhandled for the next attempt.
+    const help = inbound('00000000-0000-4000-8000-00000000f102', 'HELP');
+    await expect(h.runJob('sms_inbound', { messageId: help })).rejects.toThrow(
+      /LINK_SIGNING_SECRET is not set/,
+    );
+    expect((h.db.data.messages.get(help)!.payload as { handled_at?: string }).handled_at).toBe(
+      undefined,
+    );
+  });
+
+  it("send_welcome: a number on the provider's opt-out list (Twilio 21610) is recorded as an opt-out", async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.ctx.notifier = createWorkerNotifier(
+      h.ctx.config,
+      h.db,
+      () => ({
+        driver: 'twilio',
+        send: () =>
+          Promise.reject(
+            new SmsSendError('twilio 400 21610: Attempt to send to unsubscribed recipient', {
+              driver: 'twilio',
+              retryable: false,
+              undeliverable: true,
+              optedOut: true,
+              code: '21610',
+            }),
+          ),
+      }),
+      () => h.now,
+    );
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    expect([marco.status, marco.opted_out_at, marco.last_invite_error]).toEqual([
+      'opted_out',
+      '2026-10-09T22:31:00.000Z',
+      null,
+    ]);
+    expect(h.db.data.smsOptOuts).toEqual([
+      expect.objectContaining({
+        phone_e164: PHONE_MARCO,
+        country: 'US',
+        method: 'provider_opt_out',
+      }),
+    ]);
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_opted_out',
+        title: 'Marco Ruiz opted out of texts',
+        body: expect.stringMatching(/opt-out list/),
+      }),
+    ]);
+    expect(h.db.data.audit.map((a) => a.action)).toEqual([
+      'field_link.created',
+      'sms.undeliverable',
+      'reporter.opted_out',
+      'reporter.invite_failed',
+    ]);
+    // The next welcome (a re-send) is skipped by the opt-out, with no provider call.
+    h.db.data.notifications.length = 0;
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.db.data.notifications[0]!.body).toMatch(/opted out of texts/);
+  });
+
+  it('send_welcome: a real org whose pack has no sender here reaches no phone and says so', async () => {
+    const h = createHarness();
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.db.data.reporters.get(h.marco.id)!.invited_at = null;
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toEqual([]);
+    const [message] = [...h.db.data.messages.values()];
+    expect(message).toMatchObject({ provider: 'console', status: 'failed' });
+    expect(message!.body).toContain(MASKED_CODE);
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    // Not invited: the 48 h re-send clock never started.
+    expect([marco.status, marco.invited_at]).toEqual(['invited', null]);
+    expect(h.db.data.audit.some((a) => a.action === 'reporter.invited')).toBe(false);
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_invite_failed',
+        title: 'Marco Ruiz: the welcome text was not sent',
+        body: expect.stringMatching(/no SMS sender is set for its country pack/),
+      }),
+    ]);
+  });
+
+  it('send_welcome: a reporter the office disabled meanwhile gets nothing and nobody is told', async () => {
+    const h = createHarness();
+    h.db.data.reporters.get(h.marco.id)!.status = 'disabled';
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toEqual([]);
+    expect(h.db.data.notifications).toEqual([]);
+    expect(h.db.data.audit).toEqual([]);
+    expect(h.db.data.fieldLinks).toEqual([]);
+  });
+
+  it("send_welcome: a phone that sent STOP on the pack's sender gets nothing, whatever the row says", async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.db.data.smsOptOuts.push({
+      phone_e164: PHONE_MARCO,
+      country: 'US',
+      method: 'sms_keyword',
+      opted_out_at: '2026-10-01T00:00:00Z',
+    });
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toEqual([]);
+    expect(h.db.data.audit.find((a) => a.action === 'notify.skipped')).toMatchObject({
+      diff: { reason: 'opted_out', detail: 'phone_opted_out' },
+    });
+    expect(h.db.data.notifications[0]!.body).toMatch(/opted out of texts/);
   });
 
   it('send_template uses free-form inside the window and the template outside, bumping reminder_stage', async () => {

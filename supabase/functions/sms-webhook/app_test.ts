@@ -1,7 +1,6 @@
 import { assert, assertEquals, assertMatch } from '@std/assert';
 import {
   EMPTY_TWIML,
-  MASKED_CODE,
   SmsSendError,
   deriveLinkCode,
   linkCodeHash,
@@ -15,7 +14,12 @@ import { fakeMessaging, type FakeMessaging } from '../_shared/fake_messaging.ts'
 import { createSmsWebhook, routeOf, signedUrls } from './app.ts';
 import { FakeSmsStore } from './fake_store.ts';
 
-/** sms-webhook (W1-08): signature, keywords, F13, status callbacks and the Demo phone's replies. */
+/**
+ * sms-webhook (W1-08): signature, store → enqueue → ack on the Twilio route, status callbacks with
+ * the welcome failure, and the Demo phone's replies (inline, inside the caller's org). The keyword
+ * handling itself is `processInboundSms` (packages/shared/src/sms/inbound.test.ts), run by the
+ * worker's `sms_inbound` job for Twilio texts.
+ */
 
 const BASE = 'https://proj.supabase.co/functions/v1/sms-webhook';
 const TOKEN = 'twilio-auth-token';
@@ -31,9 +35,11 @@ const row = (code: 'US' | 'TR', patch: Partial<CountryRow>) => ({
 const KESTREL = '00000000-0000-4000-8000-0000000000a1';
 const REAL_US = '00000000-0000-4000-8000-0000000000a2';
 const DEMIR = '00000000-0000-4000-8000-0000000000a3';
+const OTHER_DEMO = '00000000-0000-4000-8000-0000000000a4';
 const MARCO = '00000000-0000-4000-8000-0000000000c1';
 const DANA = '00000000-0000-4000-8000-0000000000c2';
 const EMRE = '00000000-0000-4000-8000-0000000000c3';
+const MARCO_TWIN = '00000000-0000-4000-8000-0000000000c4';
 const LENA = '00000000-0000-4000-8000-0000000000e1';
 const PM = '00000000-0000-4000-8000-0000000000e2';
 
@@ -65,6 +71,7 @@ function setup(opts: { token?: () => string; fail?: Error } = {}): Harness {
     {
       ...base,
       id: MARCO,
+      name: 'Marco Ruiz',
       orgId: KESTREL,
       status: 'active',
       phone: '+15550143378',
@@ -75,7 +82,21 @@ function setup(opts: { token?: () => string; fail?: Error } = {}): Harness {
     },
     {
       ...base,
+      id: MARCO_TWIN,
+      name: 'Marco Ruiz',
+      orgId: OTHER_DEMO,
+      status: 'active',
+      phone: '+15550143378',
+      locale: 'en-US',
+      orgName: 'Other Demo Co',
+      orgIsDemo: true,
+      orgCountry: 'US',
+      createdAt: '2026-04-01T00:00:00Z',
+    },
+    {
+      ...base,
       id: DANA,
+      name: 'Dana Whitfield',
       orgId: REAL_US,
       status: 'active',
       phone: '+15550145521',
@@ -87,6 +108,7 @@ function setup(opts: { token?: () => string; fail?: Error } = {}): Harness {
     {
       ...base,
       id: EMRE,
+      name: 'Emre Kaya',
       orgId: DEMIR,
       status: 'active',
       phone: '+905321234567',
@@ -183,7 +205,7 @@ Deno.test('an unsigned or wrongly signed request is refused and stores nothing',
   });
   assertEquals(other.status, 403);
   assertEquals(h.store.inbound, []);
-  assertEquals(h.store.reporters.find((r) => r.id === DANA)!.status, 'active');
+  assertEquals(h.store.jobs, []);
 });
 
 Deno.test('without TWILIO_AUTH_TOKEN nothing is checked or stored: 500', async () => {
@@ -198,121 +220,85 @@ Deno.test('without TWILIO_AUTH_TOKEN nothing is checked or stored: 500', async (
 });
 
 Deno.test(
-  'STOP: the reporter opts out, the confirmation goes once, the reply TwiML is empty',
+  'a Twilio text is stored, audited and handed to the worker; the ack is empty TwiML',
   async () => {
     const h = setup();
-    const res = await h.twilio('', sms('+15550145521', ' stop. '));
+    const params = sms('+15550145521', ' stop. ', { OptOutType: 'STOP' });
+    const res = await h.twilio('', params);
     assertEquals(res.status, 200);
     assertEquals(res.headers.get('content-type'), 'text/xml; charset=utf-8');
     assertEquals(await res.text(), EMPTY_TWIML);
-    assertEquals(h.store.reporters.find((r) => r.id === DANA)!.status, 'opted_out');
     const [inbound] = h.store.inbound;
     assertEquals(
       [inbound!.org_id, inbound!.reporter_id, inbound!.provider, inbound!.payload],
-      [REAL_US, DANA, 'twilio', { to: US_SENDER, keyword: 'stop' }],
+      [
+        REAL_US,
+        DANA,
+        'twilio',
+        { to: US_SENDER, keyword: 'stop', pack: 'US', opt_out_type: 'STOP' },
+      ],
     );
-    assert(inbound!.handled_at);
-    const optOut = h.store.audits.find((a) => a.action === 'reporter.opted_out')!;
-    assertEquals([optOut.actorType, optOut.actorId, optOut.orgId], ['reporter', DANA, REAL_US]);
-    // The real org's pack has a sender: the reply goes through Twilio from it.
-    assertEquals(h.messaging.sent, [
-      {
-        driver: 'twilio',
-        to: '+15550145521',
-        body: "You won't get more texts from SiteLog. Reply START to resume.",
-        sender: US_SENDER,
-      },
+    assertEquals(inbound!.handled_at, undefined);
+    assertEquals(h.store.jobs, [
+      { id: 1, messageId: inbound!.id, dedupeKey: `sms_inbound:${params.MessageSid}` },
     ]);
-    assertEquals(h.messaging.rows[0]!.copy_key, 'stop_confirm');
+    const received = h.store.audits.find((a) => a.action === 'sms.received')!;
+    assertEquals(
+      [received.actorType, received.actorId, received.orgId],
+      ['reporter', DANA, REAL_US],
+    );
+    // The worker's job does the rest: nothing changed and nothing was sent here.
+    assertEquals(h.store.reporters.find((r) => r.id === DANA)!.status, 'active');
+    assertEquals(h.messaging.sent, []);
+    assertEquals(h.store.phoneOptOuts.size, 0);
   },
 );
 
-Deno.test('START, CALL and TEXT: back in, and the report mode switches', async () => {
+Deno.test(
+  'a redelivery joins the job of a text not yet handled; a handled text runs nothing',
+  async () => {
+    const h = setup();
+    const params = sms('+15550145521', 'HELP');
+    await h.twilio('', params);
+    await h.twilio('', params);
+    assertEquals(h.store.inbound.length, 1);
+    assertEquals(h.store.jobs.length, 1);
+    assertEquals(h.store.audits.filter((a) => a.action === 'sms.received').length, 1);
+    // The worker handled it (handled_at set): a late redelivery enqueues nothing more.
+    h.store.inbound[0]!.handled_at = T0.toISOString();
+    h.store.jobs.length = 0;
+    assertEquals((await h.twilio('', params)).status, 200);
+    assertEquals(h.store.jobs, []);
+  },
+);
+
+Deno.test('a text from a number nobody knows is stored with no org, for the worker', async () => {
   const h = setup();
-  await h.twilio('', sms('+15550145521', 'STOP'));
-  await h.twilio('', sms('+15550145521', 'Start'));
-  assertEquals(h.store.reporters.find((r) => r.id === DANA)!.status, 'active');
-  await h.twilio('', sms('+15550145521', 'CALL'));
-  assertEquals(h.store.reporters.find((r) => r.id === DANA)!.contactPref, 'call');
-  await h.twilio('', sms('+15550145521', 'text'));
-  assertEquals(h.store.reporters.find((r) => r.id === DANA)!.contactPref, 'link');
-  // Only the STOP confirmation was texted (§9.2 has no START, CALL or TEXT reply).
-  assertEquals(
-    h.messaging.rows.map((r) => r.copy_key),
-    ['stop_confirm'],
-  );
-  assertEquals(
-    h.store.audits
-      .filter((a) => a.actorType === 'reporter' && a.action.startsWith('reporter.'))
-      .map((a) => a.action),
-    [
-      'reporter.opted_out',
-      'reporter.opted_in',
-      'reporter.preferences_changed',
-      'reporter.preferences_changed',
-    ],
-  );
+  await h.twilio('', sms('+15550194410', 'Hi, this is Carlos from Apex'));
+  assertEquals(h.store.inbound[0]!.org_id, null);
+  assertEquals(h.store.inbound[0]!.reporter_id, null);
+  assertEquals(h.store.audits[0]!.actorType, 'system');
+  assertEquals(h.store.jobs.length, 1);
+  assertEquals(h.store.unknown, []);
 });
 
 Deno.test(
-  "HELP: the help text with the reporter's personal link, masked in a real org's log",
+  "a real sender's text is filed under the real org, never a demo org's reporter",
   async () => {
+    // Marco's number is a reporter in two demo orgs; a text to the real US sender is not his.
     const h = setup();
-    await h.twilio('', sms('+15550145521', 'HELP'));
-    const link = h.store.links.links[0]!;
-    const code = await deriveLinkCode(SECRET, link.id);
-    assertEquals(link.code_hash, linkCodeHash(code));
-    assertEquals(
-      h.messaging.sent[0]!.body,
-      `SiteLog daily reports for Real Builders. Your link: https://go.sitelog.app/r/${code} · Text CALL or TEXT to switch · STOP to opt out. Msg & data rates may apply.`,
-    );
-    assertMatch(h.messaging.rows[0]!.body, new RegExp(`/r/${MASKED_CODE} `));
-    // The same link the next time.
-    await h.twilio('', sms('+15550145521', 'help'));
-    assertEquals(h.store.links.links.length, 1);
-    assertEquals(h.messaging.sent[1]!.body, h.messaging.sent[0]!.body);
+    await h.twilio('', sms('+15550143378', 'HELP'));
+    assertEquals([h.store.inbound[0]!.org_id, h.store.inbound[0]!.reporter_id], [null, null]);
   },
 );
 
-Deno.test('a redelivered text runs once; a text that failed halfway runs again', async () => {
-  const h = setup();
-  const params = sms('+15550145521', 'STOP');
-  await h.twilio('', params);
-  await h.twilio('', params);
-  assertEquals(h.store.inbound.length, 1);
-  assertEquals(h.messaging.sent.length, 1);
-
-  const crash = setup();
-  crash.store.failMarkOnce = true;
-  const p2 = sms('+15550145521', 'HELP');
-  assertEquals((await crash.twilio('', p2)).status, 500);
-  assertEquals((await crash.twilio('', p2)).status, 200);
-  assertEquals(crash.store.inbound.length, 1);
-  assert(crash.store.inbound[0]!.handled_at);
-});
-
-Deno.test('F13: an unknown number gets the auto-reply and an unknown contact, once', async () => {
-  const h = setup();
-  await h.twilio('', sms('+15550194410', 'Hi, this is Carlos from Apex'));
-  assertEquals(h.store.unknown.length, 1);
-  assertEquals(h.store.unknown[0]!.snippet, 'Hi, this is Carlos from Apex');
-  assertEquals(h.store.inbound[0]!.org_id, null);
-  assertEquals(h.messaging.rows[0]!.copy_key, 'unknown_number');
-  assertEquals(h.messaging.rows[0]!.org_id, null);
-  await h.twilio('', sms('+15550194410', 'hello?'));
-  assertEquals(h.store.unknown.length, 1);
-  assertEquals(h.messaging.rows.length, 1);
-  assert(h.store.audits.some((a) => a.action === 'unknown_contact.created'));
-});
-
-Deno.test('a one-way pack stores the text and runs no keyword (the TR pack)', async () => {
+Deno.test('a one-way pack stores the text with no keyword (the TR pack)', async () => {
   const h = setup();
   await h.twilio('', { ...sms('+905321234567', 'STOP'), To: 'SITELOG' });
   assertEquals(h.store.inbound.length, 1);
   assertEquals(h.store.inbound[0]!.payload.keyword, null);
-  assertEquals(h.store.reporters.find((r) => r.id === EMRE)!.status, 'active');
-  assertEquals(h.messaging.rows, []);
-  assertEquals(h.store.unknown, []);
+  assertEquals(h.store.inbound[0]!.payload.pack, 'TR');
+  assertEquals(h.store.jobs.length, 1);
 });
 
 Deno.test('a text to a sender no pack has is acknowledged and dropped', async () => {
@@ -320,25 +306,8 @@ Deno.test('a text to a sender no pack has is acknowledged and dropped', async ()
   const res = await h.twilio('', { ...sms('+15550145521', 'STOP'), To: '+18005550000' });
   assertEquals(res.status, 200);
   assertEquals(h.store.inbound, []);
+  assertEquals(h.store.jobs, []);
 });
-
-Deno.test(
-  'a reply Twilio refuses for good is recorded; the text still counts as handled',
-  async () => {
-    const h = setup({
-      fail: new SmsSendError('twilio 400 21610', {
-        driver: 'twilio',
-        retryable: false,
-        undeliverable: true,
-        code: '21610',
-      }),
-    });
-    const res = await h.twilio('', sms('+15550145521', 'STOP'));
-    assertEquals(res.status, 200);
-    assertEquals(h.messaging.rows[0]!.status, 'undeliverable');
-    assert(h.store.inbound[0]!.handled_at);
-  },
-);
 
 Deno.test('status callbacks move a message forward only', async () => {
   const h = setup();
@@ -347,6 +316,8 @@ Deno.test('status callbacks move a message forward only', async () => {
     provider_message_id: 'SMout1',
     status: 'sent',
     org_id: REAL_US,
+    reporter_id: DANA,
+    copy_key: 'daily_link',
     error: null,
   });
   const cb = (status: string, extra: Record<string, string> = {}) =>
@@ -363,6 +334,8 @@ Deno.test('status callbacks move a message forward only', async () => {
     [h.store.outbound[0]!.status, h.store.outbound[0]!.error],
     ['undeliverable', 'twilio 30005'],
   );
+  // Not a welcome: the reporter is not flagged.
+  assertEquals(h.store.notifications, []);
   assertEquals(
     (await h.twilio('/status', { MessageSid: 'SMnope', MessageStatus: 'delivered' })).status,
     200,
@@ -374,18 +347,170 @@ Deno.test('status callbacks move a message forward only', async () => {
   );
 });
 
-Deno.test('Demo phone: an admin of a demo org replies as the reporter, console only', async () => {
-  const h = setup();
-  const res = await h.demo({ reporterId: MARCO, body: 'HELP' });
-  assertEquals(res.status, 201);
-  const out = (await res.json()) as { keyword: string; replyId: string };
-  assertEquals(out.keyword, 'help');
-  assertEquals(h.store.inbound[0]!.provider, 'console');
-  assertMatch(h.store.inbound[0]!.provider_message_id, /^console:/);
-  // A demo org: the reply goes through console and keeps its link (the Demo phone opens it).
-  assertEquals(h.messaging.sent[0]!.driver, 'console');
-  assertMatch(h.messaging.rows[0]!.body, /https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{6} /);
-});
+Deno.test(
+  'a welcome the carrier cannot deliver flags the reporter: Team\'s "Can\'t reach this number", the office notice, the audit',
+  async () => {
+    const h = setup();
+    const dana = h.store.reporters.find((r) => r.id === DANA)!;
+    dana.status = 'invited';
+    h.store.outbound.push({
+      id: 'w1',
+      provider_message_id: 'SMwelcome',
+      status: 'sent',
+      org_id: REAL_US,
+      reporter_id: DANA,
+      copy_key: 'welcome',
+      error: null,
+    });
+    await h.twilio('/status', {
+      MessageSid: 'SMwelcome',
+      MessageStatus: 'undelivered',
+      ErrorCode: '30006',
+    });
+    assertEquals(dana.lastInviteError, 'twilio 30006');
+    assertEquals(h.store.notifications.length, 1);
+    assertEquals(h.store.notifications[0], {
+      orgId: REAL_US,
+      kind: 'reporter_invite_failed',
+      title: 'Dana Whitfield: the welcome text could not be delivered',
+      body: h.store.notifications[0]!.body,
+      targetPath: '/team',
+    });
+    assertMatch(h.store.notifications[0]!.body, /twilio 30006/);
+    assertMatch(h.store.notifications[0]!.body, /landline/);
+    const failed = h.store.audits.find((a) => a.action === 'reporter.invite_failed')!;
+    assertEquals([failed.orgId, failed.entityId], [REAL_US, DANA]);
+    assertEquals(failed.diff, {
+      error: 'twilio 30006',
+      status: 'undeliverable',
+      message_id: 'w1',
+      via: 'status_callback',
+    });
+
+    // `failed`: it never left the account. The office hears about the account; the number is
+    // not blamed and Team's "Can't reach this number" keeps what it had.
+    h.store.outbound.push({
+      id: 'w2',
+      provider_message_id: 'SMwelcome2',
+      status: 'sent',
+      org_id: REAL_US,
+      reporter_id: DANA,
+      copy_key: 'welcome',
+      error: null,
+    });
+    await h.twilio('/status', { MessageSid: 'SMwelcome2', MessageStatus: 'failed' });
+    assertEquals(dana.lastInviteError, 'twilio 30006');
+    assertEquals(
+      h.store.notifications[1]!.title,
+      'Dana Whitfield: the welcome text failed at the SMS provider',
+    );
+    assertMatch(
+      h.store.notifications[1]!.body,
+      /^Texts are failing for this account \(twilio failed\)/,
+    );
+    assertEquals(h.store.audits.filter((a) => a.action === 'reporter.invite_failed').length, 1);
+    dana.status = 'active';
+    h.store.outbound.push({
+      id: 'w3',
+      provider_message_id: 'SMwelcome3',
+      status: 'sent',
+      org_id: REAL_US,
+      reporter_id: DANA,
+      copy_key: 'welcome',
+      error: null,
+    });
+    await h.twilio('/status', {
+      MessageSid: 'SMwelcome3',
+      MessageStatus: 'undelivered',
+      ErrorCode: '30003',
+    });
+    assertEquals(h.store.notifications.length, 2);
+  },
+);
+
+Deno.test(
+  'Demo phone: an admin of a demo org replies as the reporter, console only, at once',
+  async () => {
+    const h = setup();
+    const res = await h.demo({ reporterId: MARCO, body: 'HELP' });
+    assertEquals(res.status, 201);
+    const out = (await res.json()) as { keyword: string; replyId: string; messageId: string };
+    assertEquals(out.keyword, 'help');
+    assertEquals(h.store.inbound[0]!.provider, 'console');
+    assertMatch(h.store.inbound[0]!.provider_message_id, /^console:/);
+    assertEquals(h.store.inbound[0]!.org_id, KESTREL);
+    assert(h.store.inbound[0]!.handled_at);
+    // No worker job: the Demo phone's reply is handled inline.
+    assertEquals(h.store.jobs, []);
+    // A demo org: the reply goes through console and keeps its link (the Demo phone opens it).
+    assertEquals(h.messaging.sent[0]!.driver, 'console');
+    assertMatch(h.messaging.rows[0]!.body, /https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{6} /);
+    const link = h.store.links.links[0]!;
+    const code = await deriveLinkCode(SECRET, link.id);
+    assertEquals(link.code_hash, linkCodeHash(code));
+    assertEquals(h.messaging.rows[0]!.id, out.replyId);
+  },
+);
+
+Deno.test(
+  'Demo phone: STOP opts the reporter out, tells the office, and never records the phone',
+  async () => {
+    const h = setup();
+    await h.demo({ reporterId: MARCO, body: 'STOP' });
+    assertEquals(h.store.reporters.find((r) => r.id === MARCO)!.status, 'opted_out');
+    assertEquals(
+      h.store.notifications.map((n) => [n.kind, n.orgId]),
+      [['reporter_opted_out', KESTREL]],
+    );
+    assertEquals(h.store.phoneOptOuts.size, 0);
+    assertEquals(h.messaging.rows[0]!.copy_key, 'stop_confirm');
+    const optOut = h.store.audits.find((a) => a.action === 'reporter.opted_out')!;
+    assertEquals([optOut.actorType, optOut.actorId, optOut.orgId], ['reporter', MARCO, KESTREL]);
+  },
+);
+
+Deno.test(
+  "Demo phone: a reply acts inside the caller's org only, never on another demo org's reporter",
+  async () => {
+    // The same phone is Marco in Kestrel and in another demo org; Lena is an admin of Kestrel only.
+    const h = setup();
+    await h.demo({ reporterId: MARCO, body: 'STOP' });
+    assertEquals(h.store.reporters.find((r) => r.id === MARCO)!.status, 'opted_out');
+    assertEquals(h.store.reporters.find((r) => r.id === MARCO_TWIN)!.status, 'active');
+    assertEquals(h.store.inbound[0]!.org_id, KESTREL);
+    assertEquals(h.store.notifications.length, 1);
+  },
+);
+
+Deno.test(
+  'Demo phone: a reply Twilio-style refused for good is recorded; the text still counts as handled',
+  async () => {
+    const h = setup({
+      fail: new SmsSendError('twilio 400 21610', {
+        driver: 'twilio',
+        retryable: false,
+        undeliverable: true,
+        code: '21610',
+      }),
+    });
+    const res = await h.demo({ reporterId: MARCO, body: 'STOP' });
+    assertEquals(res.status, 201);
+    assertEquals(h.messaging.rows[0]!.status, 'undeliverable');
+    assert(h.store.inbound[0]!.handled_at);
+  },
+);
+
+Deno.test(
+  'Demo phone: a crash before the handled mark is a 500 and runs again next time',
+  async () => {
+    const h = setup();
+    h.store.failMarkOnce = true;
+    assertEquals((await h.demo({ reporterId: MARCO, body: 'HELP' })).status, 500);
+    assertEquals((await h.demo({ reporterId: MARCO, body: 'HELP' })).status, 201);
+    assertEquals(h.store.links.links.length, 1);
+    assert(h.store.inbound[1]!.handled_at);
+  },
+);
 
 Deno.test(
   'Demo phone: refused without a session, for non-admins, real orgs and one-way packs',
@@ -399,5 +524,109 @@ Deno.test(
     assertEquals((await h.demo({ reporterId: MARCO, body: '' })).status, 400);
     assertEquals(h.store.inbound, []);
     assertEquals(h.store.reporters.find((r) => r.id === DANA)!.status, 'active');
+  },
+);
+
+Deno.test(
+  'a welcome refused later for the account (Twilio 30032, unverified toll-free sender) never blames the number',
+  async () => {
+    const h = setup();
+    const dana = h.store.reporters.find((r) => r.id === DANA)!;
+    dana.status = 'invited';
+    const welcome = (n: number) =>
+      h.store.outbound.push({
+        id: `w${n}`,
+        provider_message_id: `SMacct${n}`,
+        status: 'sent',
+        org_id: REAL_US,
+        reporter_id: DANA,
+        copy_key: 'welcome',
+        error: null,
+      });
+    welcome(1);
+    await h.twilio('/status', {
+      MessageSid: 'SMacct1',
+      MessageStatus: 'undelivered',
+      ErrorCode: '30032',
+    });
+    assertEquals(dana.lastInviteError ?? null, null);
+    assertEquals(h.store.outbound[0]!.status, 'undeliverable');
+    assertEquals(h.store.notifications.length, 1);
+    assertEquals(h.store.notifications[0]!.kind, 'reporter_invite_failed');
+    assertMatch(
+      h.store.notifications[0]!.body,
+      /^Texts are failing for this account \(twilio 30032\)/,
+    );
+    assert(!/landline/.test(h.store.notifications[0]!.body));
+    const fault = h.store.audits.find((a) => a.action === 'sms.provider_fault')!;
+    assertEquals([fault.orgId, fault.entity, fault.entityId], [REAL_US, 'message', 'w1']);
+    assertEquals(fault.diff.code, '30032');
+    assertEquals(fault.diff.notified, true);
+    assertEquals(
+      h.store.audits.filter((a) => a.action === 'reporter.invite_failed'),
+      [],
+    );
+
+    // The next one within the hour is audited, not notified again (one per failed text otherwise).
+    welcome(2);
+    await h.twilio('/status', {
+      MessageSid: 'SMacct2',
+      MessageStatus: 'undelivered',
+      ErrorCode: '30034',
+    });
+    assertEquals(h.store.notifications.length, 1);
+    const faults = h.store.audits.filter((a) => a.action === 'sms.provider_fault');
+    assertEquals(
+      faults.map((a) => [a.diff.code, a.diff.notified]),
+      [
+        ['30032', true],
+        ['30034', false],
+      ],
+    );
+    assertEquals(dana.lastInviteError ?? null, null);
+  },
+);
+
+Deno.test(
+  'an account notice send_welcome gave this hour is enough; an older one is not',
+  async () => {
+    const h = setup();
+    h.store.outbound.push(
+      {
+        id: 'w1',
+        provider_message_id: 'SMold1',
+        status: 'sent',
+        org_id: REAL_US,
+        reporter_id: DANA,
+        copy_key: 'welcome',
+        error: null,
+      },
+      {
+        id: 'w2',
+        provider_message_id: 'SMold2',
+        status: 'sent',
+        org_id: REAL_US,
+        reporter_id: DANA,
+        copy_key: 'welcome',
+        error: null,
+      },
+    );
+    h.store.priorFaultNotices.push({ orgId: REAL_US, at: '2026-10-09T22:30:00.000Z' });
+    await h.twilio('/status', {
+      MessageSid: 'SMold1',
+      MessageStatus: 'failed',
+      ErrorCode: '30002',
+    });
+    assertEquals(h.store.notifications, []);
+    h.store.priorFaultNotices.length = 0;
+    h.store.priorFaultNotices.push({ orgId: REAL_US, at: '2026-10-09T21:59:59.000Z' });
+    h.store.audits.length = 0;
+    await h.twilio('/status', {
+      MessageSid: 'SMold2',
+      MessageStatus: 'failed',
+      ErrorCode: '30002',
+    });
+    assertEquals(h.store.notifications.length, 1);
+    assertMatch(h.store.notifications[0]!.body, /\(twilio 30002\)/);
   },
 );

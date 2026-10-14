@@ -7,6 +7,8 @@ const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 /** Payloads for the `jobs` table, by type (§10.1). */
 export const JobPayloadSchemas = {
   inbound_message: z.object({ messageId: uuid }),
+  /** §9.5: an inbound text sms-webhook stored (`messages`, channel sms, direction in), W1-08. */
+  sms_inbound: z.object({ messageId: uuid }),
   transcribe_audio: z.object({
     messageId: uuid,
     reportId: uuid.optional(),

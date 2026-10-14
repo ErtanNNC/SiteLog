@@ -93,13 +93,18 @@ export function supabaseNotifierStore(admin: AppClient): NotifierStore {
     async findByDedupeKey(reporterId, dedupeKey) {
       const { data } = await admin
         .from('messages')
-        .select('id, channel, status')
+        .select('id, channel, status, provider, error, payload')
         .eq('reporter_id', reporterId)
         .eq('payload->>dedupe_key', dedupeKey)
         .order('created_at', { ascending: false })
         .limit(1)
         .throwOnError();
-      return data[0] ?? null;
+      const row = data[0];
+      if (!row) return null;
+      const { payload, ...prior } = row;
+      // The provider's code of a refused send, so a replay throws the same refusal.
+      const code = (payload as { error_code?: unknown } | null)?.error_code;
+      return { ...prior, error_code: typeof code === 'string' ? code : null };
     },
     async insertMessage(row) {
       await admin
@@ -107,9 +112,21 @@ export function supabaseNotifierStore(admin: AppClient): NotifierStore {
         .insert({ ...row, payload: row.payload as Json | null })
         .throwOnError();
     },
-    async updateMessage(id, patch) {
-      await admin.from('messages').update(patch).eq('id', id).throwOnError();
+    async updateMessage(id, { payload, ...patch }) {
+      await admin
+        .from('messages')
+        .update(payload === undefined ? patch : { ...patch, payload: payload as Json | null })
+        .eq('id', id)
+        .throwOnError();
     },
+    isPhoneOptedOut: (phone, country) => phoneOptedOut(admin, phone, country),
+    async recordPhoneOptOut(row) {
+      await admin
+        .from('sms_opt_outs')
+        .upsert(row, { onConflict: 'phone_e164,country', ignoreDuplicates: true })
+        .throwOnError();
+    },
+    optOutReporter: (reporterId, at) => optOutReporter(admin, reporterId, at),
     async audit(entry) {
       await logAudit(admin, {
         orgId: entry.orgId,
@@ -121,6 +138,45 @@ export function supabaseNotifierStore(admin: AppClient): NotifierStore {
       });
     },
   };
+}
+
+/** `sms_opt_outs`: the phone sent STOP on the pack's sender, or its provider refused it as unsubscribed. */
+export async function phoneOptedOut(
+  admin: AppClient,
+  phone: string,
+  country: string,
+): Promise<boolean> {
+  const { data } = await admin
+    .from('sms_opt_outs')
+    .select('phone_e164')
+    .eq('phone_e164', phone)
+    .eq('country', country)
+    .maybeSingle()
+    .throwOnError();
+  return data !== null;
+}
+
+/**
+ * The reporter row follows an opt-out: `opted_out` with `opted_out_at`, except a disabled reporter,
+ * who keeps `disabled` and gets `opted_out_at` (a re-invite then lands opted out). An
+ * `opted_out_at` already set is kept.
+ */
+export async function optOutReporter(admin: AppClient, reporterId: string, at: string) {
+  const { data } = await admin
+    .from('reporters')
+    .select('status, opted_out_at')
+    .eq('id', reporterId)
+    .maybeSingle()
+    .throwOnError();
+  if (!data) return;
+  await admin
+    .from('reporters')
+    .update({
+      ...(data.status === 'disabled' ? {} : { status: 'opted_out' as const }),
+      opted_out_at: data.opted_out_at ?? at,
+    })
+    .eq('id', reporterId)
+    .throwOnError();
 }
 
 /** `PersonalLinkStore` over supabase-js: live personal links, newest first; unique hash → false. */

@@ -48,7 +48,7 @@ export function buildContext(config: Config): Ctx {
       log,
       { insertConsoleEmail: (row) => db.insertConsoleEmail(row) },
     ),
-    notifier: createWorkerNotifier(config, db),
+    notifier: createWorkerNotifier(config, db, undefined, () => new Date()),
     ffmpeg: createFfmpegRunner(
       resolveFfmpegPath({
         ...process.env,

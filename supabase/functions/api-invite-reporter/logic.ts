@@ -3,6 +3,7 @@ import {
   languageOf,
   parseE164,
   reporterDefaultsFor,
+  reporterLocaleFor,
   type ContactPref,
   type CountryPack,
   type E164,
@@ -80,10 +81,13 @@ export function invitePhone(input: string, orgCountry: string): E164 | null {
 }
 
 /**
- * A new reporter's language and report mode (F2, F3): the request's, else the org's pack
- * (`reporterDefaultsFor`: its first field locale and that language), and `link` (the column
- * default; a pack has no report-mode default). A locale the pack does not offer is refused. The
- * request contract stays compatible: `languages`, `locale` and `contactPref` are all optional.
+ * A new reporter's language and report mode (F2, F3): the request's `locale`, else the first of
+ * the pack's field locales whose language the office ticked under "Speaks" (`reporterLocaleFor`:
+ * a US reporter who speaks Spanish gets es-US and a Spanish welcome, F3 "in the reporter's
+ * language"), else the pack's default (`reporterDefaultsFor`: its first field locale); and
+ * `link` (the column default; a pack has no report-mode default). A locale the pack does not
+ * offer is refused. The request contract stays compatible: `languages`, `locale` and
+ * `contactPref` are all optional.
  */
 export function inviteProfile(
   pack: CountryPack,
@@ -92,7 +96,7 @@ export function inviteProfile(
   | { ok: true; locale: ReporterLocale; languages: string[]; contactPref: ContactPref }
   | { ok: false; reason: string } {
   const defaults = reporterDefaultsFor(pack);
-  const locale = body.locale ?? defaults.locale;
+  const locale = body.locale ?? reporterLocaleFor(pack, body.languages) ?? defaults.locale;
   if (!pack.fieldLocales.includes(locale)) {
     return {
       ok: false,

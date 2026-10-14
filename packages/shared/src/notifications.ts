@@ -13,7 +13,8 @@ const AUDIENCE: Readonly<Record<string, readonly MemberRole[]>> = {
   missing_report: ['admin', 'ops'], // §13 "Report missing: ops + admin"
   unknown_contact: ['admin', 'ops'], // §13 "Unknown contact: ops, admin"
   unknown_sender: ['admin', 'ops'], // the same, written before step 11 (legacy rows)
-  reporter_invite_failed: ['admin', 'ops'], // §13 "Text undeliverable / opted out"
+  reporter_invite_failed: ['admin', 'ops'], // §13 "Message undeliverable / opted out"
+  reporter_opted_out: ['admin', 'ops'], // the same row of §13 (a STOP, W1-08)
   reporter_wrong_site: ['admin', 'ops'], // §2.2 "Manage reporters": admin, ops
 };
 

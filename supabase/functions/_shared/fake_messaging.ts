@@ -21,6 +21,9 @@ export interface FakeMessaging {
   audits: NotifierAuditEntry[];
   sent: Array<{ driver: SmsDriver; to: string; body: string; sender?: string }>;
   recipients: Map<string, NotifyRecipient>;
+  /** `sms_opt_outs` as `phone:country`. */
+  phoneOptOuts: Set<string>;
+  reporterOptOuts: Array<{ reporterId: string; at: string }>;
 }
 
 export function fakeMessaging(opts: { fail?: Error } = {}): FakeMessaging {
@@ -28,11 +31,33 @@ export function fakeMessaging(opts: { fail?: Error } = {}): FakeMessaging {
   const audits: NotifierAuditEntry[] = [];
   const sent: FakeMessaging['sent'] = [];
   const recipients = new Map<string, NotifyRecipient>();
+  const phoneOptOuts = new Set<string>();
+  const reporterOptOuts: FakeMessaging['reporterOptOuts'] = [];
   const store: NotifierStore = {
     loadRecipient: (id) => Promise.resolve(recipients.get(id) ?? null),
     findByDedupeKey: (reporterId, key) => {
       const row = rows.find((r) => r.reporter_id === reporterId && r.payload?.dedupe_key === key);
-      return Promise.resolve(row ? { id: row.id, channel: row.channel, status: row.status } : null);
+      return Promise.resolve(
+        row
+          ? {
+              id: row.id,
+              channel: row.channel,
+              status: row.status,
+              provider: row.provider,
+              error: row.error,
+              error_code: row.payload?.error_code ?? null,
+            }
+          : null,
+      );
+    },
+    isPhoneOptedOut: (phone, country) => Promise.resolve(phoneOptOuts.has(`${phone}:${country}`)),
+    recordPhoneOptOut: (row) => {
+      phoneOptOuts.add(`${row.phone_e164}:${row.country}`);
+      return Promise.resolve();
+    },
+    optOutReporter: (reporterId, at) => {
+      reporterOptOuts.push({ reporterId, at });
+      return Promise.resolve();
     },
     insertMessage: (row) => {
       rows.push({ ...row });
@@ -65,7 +90,7 @@ export function fakeMessaging(opts: { fail?: Error } = {}): FakeMessaging {
     statusCallbackUrl: null,
     randomUUID: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`,
   });
-  return { notifier, store, rows, audits, sent, recipients };
+  return { notifier, store, rows, audits, sent, recipients, phoneOptOuts, reporterOptOuts };
 }
 
 /** Personal links in memory (`ensurePersonalLink`). */

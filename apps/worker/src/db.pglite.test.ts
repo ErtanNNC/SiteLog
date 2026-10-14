@@ -1762,6 +1762,223 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
     expect(links[0]).toEqual({ id, code_hash: `w108-${id}` });
   });
 
+  it('reads a phone’s reporters per pack and scope, records opt-outs, marks a text handled', async () => {
+    // Kestrel (US, demo) holds Marco: a real sender never reaches him, the Demo phone does.
+    expect(await db.listInboundReporters(MARCO_PHONE, 'US', { realOnly: true })).toEqual([]);
+    const inOrg = await db.listInboundReporters(MARCO_PHONE, 'US', { orgId: ORG });
+    expect(inOrg).toHaveLength(1);
+    expect(inOrg[0]).toMatchObject({
+      id: MARCO,
+      orgId: ORG,
+      name: 'Marco Ruiz',
+      phone: MARCO_PHONE,
+      locale: 'en-US',
+      orgName: 'Kestrel Build Group',
+      orgIsDemo: true,
+      contactPref: 'link',
+    });
+    expect(await db.listInboundReporters(MARCO_PHONE, 'TR', { orgId: ORG })).toEqual([]);
+
+    expect(await db.isSmsOptedOut(MARCO_PHONE, 'US')).toBe(false);
+    await db.recordSmsOptOut({ phone_e164: MARCO_PHONE, country: 'US', method: 'sms_keyword' });
+    // A second record keeps the first (its method and time).
+    await db.recordSmsOptOut({
+      phone_e164: MARCO_PHONE,
+      country: 'US',
+      method: 'provider_opt_out',
+    });
+    expect(await db.isSmsOptedOut(MARCO_PHONE, 'US')).toBe(true);
+    expect(await db.isSmsOptedOut(MARCO_PHONE, 'TR')).toBe(false);
+    expect(
+      await one(`select method from sms_opt_outs where phone_e164 = $1 and country = 'US'`, [
+        MARCO_PHONE,
+      ]),
+    ).toEqual({ method: 'sms_keyword' });
+    await db.clearSmsOptOut(MARCO_PHONE, 'US');
+    expect(await db.isSmsOptedOut(MARCO_PHONE, 'US')).toBe(false);
+
+    // The reporter row follows a provider opt-out; a disabled one keeps its status.
+    await db.optOutReporter(MARCO, '2026-10-09T23:00:00Z');
+    expect(await one(`select status, opted_out_at from reporters where id = $1`, [MARCO])).toEqual({
+      status: 'opted_out',
+      opted_out_at: new Date('2026-10-09T23:00:00Z'),
+    });
+    await db.optOutReporter(MARCO, '2026-10-10T23:00:00Z');
+    expect(
+      (await one(`select opted_out_at from reporters where id = $1`, [MARCO])).opted_out_at,
+    ).toEqual(new Date('2026-10-09T23:00:00Z'));
+    await db.updateReporter(MARCO, { status: 'active', opted_out_at: null, contact_pref: 'call' });
+    expect(await one(`select status, contact_pref from reporters where id = $1`, [MARCO])).toEqual({
+      status: 'active',
+      contact_pref: 'call',
+    });
+    await db.updateReporter(MARCO, { contact_pref: 'link' });
+
+    // The inbound row's handled mark, beside what the webhook stored.
+    const id = randomUUID();
+    await q(
+      `insert into messages (id, org_id, reporter_id, phone_e164, channel, direction, provider, provider_message_id, body, status, payload)
+       values ($1, $2, $3, $4, 'sms', 'in', 'twilio', $5, 'STOP', 'received', '{"to":"+18885550142","pack":"US"}')`,
+      [id, ORG, MARCO, MARCO_PHONE, `SM${id}`],
+    );
+    await db.markSmsHandled(id, '2026-10-09T23:00:01.000Z');
+    expect((await one(`select payload from messages where id = $1`, [id])).payload).toEqual({
+      to: '+18885550142',
+      pack: 'US',
+      handled_at: '2026-10-09T23:00:01.000Z',
+    });
+    expect(await db.hasPendingUnknownContact('+15550194410', 'sms')).toBe(false);
+    const contact = await db.insertUnknownContact({
+      org_id: null,
+      phone_e164: '+15550194410',
+      channel: 'sms',
+      message_id: id,
+      snippet: 'hello?',
+    });
+    expect(contact.status).toBe('pending');
+    expect(await db.hasPendingUnknownContact('+15550194410', 'sms')).toBe(true);
+    expect(await db.hasPendingUnknownContact('+15550194410', 'sms')).toBe(true);
+    const prior = await db.findMessageByDedupeKey(MARCO, 'w108:test');
+    expect(prior).toMatchObject({
+      provider: 'console',
+      error: null,
+      status: 'delivered',
+      error_code: null,
+    });
+  });
+
+  it('the F13 row once per text; a retry of that text does not count its own row as pending', async () => {
+    const phone = '+15550194420';
+    const text = randomUUID();
+    await q(
+      `insert into messages (id, phone_e164, channel, direction, provider, provider_message_id, body, status)
+       values ($1, $2, 'sms', 'in', 'twilio', $3, 'who is this', 'received')`,
+      [text, phone, `SM${text}`],
+    );
+    const first = await db.insertSmsUnknownContact({
+      phone_e164: phone,
+      message_id: text,
+      snippet: 'who is this',
+    });
+    expect(first.created).toBe(true);
+    expect(
+      await db.insertSmsUnknownContact({ phone_e164: phone, message_id: text, snippet: 'x' }),
+    ).toEqual({ id: first.id, created: false });
+    expect(
+      await one(`select org_id, channel, status, snippet from unknown_contacts where id = $1`, [
+        first.id,
+      ]),
+    ).toEqual({ org_id: null, channel: 'sms', status: 'pending', snippet: 'who is this' });
+    expect(await db.hasPendingUnknownContact(phone, 'sms')).toBe(true);
+    expect(await db.hasPendingUnknownContact(phone, 'sms', text)).toBe(false);
+    expect(await db.hasPendingUnknownContact(phone, 'sms', randomUUID())).toBe(true);
+  });
+
+  it('keeps the provider code of a refused send with its dedupe key', async () => {
+    const id = randomUUID();
+    await db.insertSmsMessage({
+      id,
+      org_id: ORG,
+      reporter_id: MARCO,
+      phone_e164: MARCO_PHONE,
+      channel: 'sms',
+      direction: 'out',
+      provider: 'twilio',
+      provider_message_id: null,
+      copy_key: 'welcome',
+      body: 'Hi Marco',
+      status: 'queued',
+      error: null,
+      payload: { dedupe_key: 'w108:refused' },
+    });
+    await db.updateSmsMessage(id, {
+      status: 'undeliverable',
+      error: 'twilio 400 21610: unsubscribed',
+      payload: { dedupe_key: 'w108:refused', error_code: '21610' },
+    });
+    expect(await db.findMessageByDedupeKey(MARCO, 'w108:refused')).toEqual({
+      id,
+      channel: 'sms',
+      status: 'undeliverable',
+      provider: 'twilio',
+      error: 'twilio 400 21610: unsubscribed',
+      error_code: '21610',
+    });
+  });
+
+  it("a real sender reaches a real org's reporter, and a keyword's change commits with its audit and notice or not at all", async () => {
+    // A non-demo US org with a reporter on Marco's number (the Kestrel demo org has him too).
+    const real = (
+      await one<{ id: string }>(
+        `insert into orgs (name, country, is_demo) values ('Real Builders Inc', 'US', false) returning id`,
+      )
+    ).id;
+    try {
+      const dana = (
+        await one<{ id: string }>(
+          `insert into reporters (org_id, name, phone_e164, status, activated_at)
+           values ($1, 'Dana Whitfield', $2, 'active', now()) returning id`,
+          [real, MARCO_PHONE],
+        )
+      ).id;
+      const realOnly = await db.listInboundReporters(MARCO_PHONE, 'US', { realOnly: true });
+      expect(realOnly).toEqual([
+        expect.objectContaining({
+          id: dana,
+          orgId: real,
+          name: 'Dana Whitfield',
+          orgName: 'Real Builders Inc',
+          orgIsDemo: false,
+          status: 'active',
+        }),
+      ]);
+      expect(await db.listInboundReporters(MARCO_PHONE, 'US', { orgId: real })).toEqual(realOnly);
+      expect(
+        (await db.listInboundReporters(MARCO_PHONE, 'US', { orgId: ORG })).map((r) => r.id),
+      ).toEqual([MARCO]);
+
+      const change = (orgId: string) => ({
+        reporterId: dana,
+        patch: { status: 'opted_out' as const, opted_out_at: '2026-10-09T23:00:00.000Z' },
+        audit: {
+          org_id: real,
+          actor_type: 'reporter' as const,
+          actor_id: dana,
+          action: 'reporter.opted_out',
+          entity: 'reporter',
+          entity_id: dana,
+          diff: { method: 'sms_keyword', keyword: 'stop' },
+        },
+        notification: {
+          orgId,
+          kind: 'reporter_opted_out',
+          title: 'Dana Whitfield opted out of texts (STOP)',
+          body: 'Call them.',
+          targetPath: '/team',
+        },
+      });
+      const state = async () => ({
+        status: (
+          await one<{ status: string }>(`select status from reporters where id = $1`, [dana])
+        ).status,
+        audits: (
+          await q(
+            `select 1 from audit_log where entity_id = $1 and action = 'reporter.opted_out'`,
+            [dana],
+          )
+        ).length,
+        notices: (await q(`select 1 from notifications where org_id = $1`, [real])).length,
+      });
+      // The notice fails (an org that does not exist): the update and the audit roll back too.
+      await expect(db.applyInboundChange(change(randomUUID()))).rejects.toThrow();
+      expect(await state()).toEqual({ status: 'active', audits: 0, notices: 0 });
+      await db.applyInboundChange(change(real));
+      expect(await state()).toEqual({ status: 'opted_out', audits: 1, notices: 1 });
+    } finally {
+      await q(`delete from orgs where id = $1`, [real]);
+    }
+  });
+
   it('files a console email for the Demo phone', async () => {
     const id = await db.insertConsoleEmail({
       org_id: ORG,

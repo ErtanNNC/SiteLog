@@ -23,6 +23,11 @@ export class SmsSendError extends Error {
       retryable: boolean;
       /** The number cannot get texts (invalid, landline, unsubscribed at the provider). */
       undeliverable?: boolean;
+      /**
+       * The provider keeps its own opt-out list and the number is on it (Twilio 21610: the person
+       * replied STOP to this sender): undeliverable, and the Notifier records the opt-out.
+       */
+      optedOut?: boolean;
       /** The provider's error code, e.g. Twilio 21211. */
       code?: string | null;
     },
@@ -35,6 +40,9 @@ export class SmsSendError extends Error {
   }
   get undeliverable(): boolean {
     return this.opts.undeliverable === true;
+  }
+  get optedOut(): boolean {
+    return this.opts.optedOut === true;
   }
 }
 
@@ -80,6 +88,20 @@ export const TWILIO_UNDELIVERABLE_CODES: readonly string[] = [
   '21612',
   '21614',
 ];
+
+/** Twilio 21610: the recipient replied STOP to this sender, so Twilio refuses the send. */
+export const TWILIO_OPTED_OUT_CODE = '21610';
+
+/**
+ * Twilio error codes of a message accepted at send time that its delivery-status callback later
+ * reports `undelivered` because of the number (F3 "Can't reach this number"): 30003 the handset
+ * is unreachable, 30004 the number is blocked from getting this message, 30005 unknown or
+ * inactive number, 30006 a landline or a carrier that cannot take texts. Every other late code is
+ * not the number's fault and never flags the reporter: 30001 queue overflow, 30002 account
+ * suspended, 30007 carrier filtering, 30008 unknown error, 30032 toll-free sender not verified,
+ * 30034 unregistered 10DLC number, and the rest. A missing code counts as the number's.
+ */
+export const TWILIO_ASYNC_NUMBER_CODES: readonly string[] = ['30003', '30004', '30005', '30006'];
 
 export interface TwilioCredentials {
   accountSid: string;
@@ -135,6 +157,7 @@ export function createTwilioSmsTransport(
         driver: 'twilio',
         retryable: res.status === 429 || res.status >= 500,
         undeliverable: code !== null && TWILIO_UNDELIVERABLE_CODES.includes(code),
+        optedOut: code === TWILIO_OPTED_OUT_CODE,
         code,
       });
     },
@@ -149,6 +172,15 @@ export interface IletimerkeziCredentials {
 }
 
 export const ILETIMERKEZI_API_BASE = 'https://api.iletimerkezi.com';
+
+/**
+ * İletimerkezi status codes that mean the number cannot get this text, not that the account or
+ * the sender is at fault: 450 "no valid recipient" (the number is not a mobile number the operator
+ * routes). Every other refusal (401 credentials, 402 balance, 403 sender title, 400 request) is a
+ * configuration or account fault and is never blamed on the number. Re-check against the
+ * provider's current documentation before the first real send (spec §5.2).
+ */
+export const ILETIMERKEZI_UNDELIVERABLE_CODES: readonly string[] = ['450'];
 
 /**
  * İletimerkezi (REST, `POST /v1/send-sms/json`), the TR pack's override (spec §19 Q20): one-way,
@@ -211,6 +243,7 @@ export function createIletimerkeziSmsTransport(
       throw new SmsSendError(`iletimerkezi ${res.status}${code ? ` ${code}` : ''}: ${message}`, {
         driver: 'iletimerkezi',
         retryable: res.status === 429 || res.status >= 500,
+        undeliverable: code !== null && ILETIMERKEZI_UNDELIVERABLE_CODES.includes(code),
         code,
       });
     },

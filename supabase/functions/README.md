@@ -134,8 +134,13 @@ CLI accepts a `deno.json` wherever it accepts an `import_map.json` (it reads the
   (`stripe@23` → `2026-09-30.endive`) so event payload shapes match the types.
 - **Twilio** (the US pack's sender, once approved and set with `pnpm countries:set`): the number's
   (or Messaging Service's) incoming-message webhook `POST https://<project-ref>.supabase.co/functions/v1/sms-webhook`,
-  exactly `SMS_WEBHOOK_URL`, since the signature covers the URL. Delivery callbacks need nothing:
-  each send names `{SMS_WEBHOOK_URL}/status`. Twilio's own STOP/HELP handling: spec §19 Q45.
+  exactly `SMS_WEBHOOK_URL`, since the signature covers the URL. Add Twilio's connection
+  overrides to the URL you register, `…/sms-webhook#rp=ct,rt,5xx&rc=3` (retry connection and
+  read timeouts and a 5xx up to three times; Twilio's default `rp=ct` retries connection
+  failures only, and the fragment is never sent, so the signature and `SMS_WEBHOOK_URL` stay
+  as they are): the function stores the text, its audit and the worker's `sms_inbound` job in one
+  transaction (`receive_sms_inbound()`), and the retries cover a failure before it commits. Delivery callbacks need nothing: each send names
+  `{SMS_WEBHOOK_URL}/status`. Twilio's own STOP/HELP handling: spec §19 Q45.
 - **pg_cron**: nothing to register; the Vault secrets above are enough.
 
 ## Local testing
@@ -270,14 +275,19 @@ Notes:
   `packages/shared/src/field-contract.ts`.
 - **sms-webhook** (W1-08). `POST /` (or `/inbound`): a Twilio inbound text, signed over
   `SMS_WEBHOOK_URL` (403 otherwise); the pack is the one whose `sms_sender_id` is the `To` (none:
-  logged and ignored). The row is stored once per `MessageSid`; on a two-way pack the keyword plan
-  (`packages/shared/src/sms/keywords.ts`, spec §9.5) runs inline: reporter changes audited as the
-  reporter, at most one reply through the Notifier (`help`, `stop_confirm`, `unknown_number`),
-  then the row is marked handled, so a Twilio retry re-runs only unhandled work; the answer is
-  empty TwiML. `POST /status`: Twilio's delivery callback moves `messages.status` forward only.
-  `POST /demo-reply` `{reporterId, body}`: the Demo phone types a text as a reporter of a demo org
-  (admin JWT; 409 on a one-way pack or a disabled reporter), handled like an inbound text on a
-  `console` row.
+  logged and ignored). The row is stored once per `MessageSid` (real orgs only: a real sender
+  never reaches a demo org's reporter) and handed to the worker as an `sms_inbound` job with
+  that id as its dedupe key; the answer is empty TwiML. The worker runs the keyword plan
+  (`packages/shared/src/sms/inbound.ts` over `keywords.ts`, spec §9.5): reporter changes audited
+  as the reporter, the phone's own opt-out in `sms_opt_outs`, the office notice of a STOP
+  (§13), at most one reply through the Notifier (`help`, `stop_confirm`, `unknown_number`), then
+  the row marked handled, so a late redelivery runs nothing. `POST /status`: Twilio's delivery
+  callback moves `messages.status` forward only; a `welcome` that ends `undelivered` or `failed`
+  sets the still-invited reporter's `last_invite_error` (Team: "Can't reach this number"),
+  notifies the office and is audited. `POST /demo-reply` `{reporterId, body}`: the Demo phone
+  types a text as a reporter of a demo org (admin JWT; 409 on a one-way pack or a disabled
+  reporter), handled inline on a `console` row inside the caller's org only, and never recording
+  the phone in `sms_opt_outs`.
 - **stripe-webhook** maps Stripe statuses as trialing→trialing, active→active,
   past_due/unpaid/incomplete→past_due, canceled/incomplete_expired→canceled, paused→paused; an
   unknown status leaves `billing_status` untouched. `invoice.paid` only promotes to `active` when the

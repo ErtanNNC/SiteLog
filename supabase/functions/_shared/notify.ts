@@ -10,7 +10,10 @@ export type NotificationKind =
   | 'glossary_review'
   | 'pack_ready'
   | 'billing'
-  | 'report_edited';
+  | 'report_edited'
+  // §13 "Message undeliverable / opted out" (W1-08): admin and ops.
+  | 'reporter_invite_failed'
+  | 'reporter_opted_out';
 
 export interface Notification {
   orgId: string;

@@ -1,5 +1,5 @@
 import { ArrowLeft, Mail, MessageSquare, Send, Smartphone } from 'lucide-react';
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { formatDateInTz, formatPhone, formatTimeInTz } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { PageHeader } from '@/components/sitelog/PageHeader';
@@ -27,6 +27,13 @@ import { cn } from '@/lib/utils';
  * reply typed here goes through sms-webhook's handler as the reporter, only on a demo org whose
  * country pack has two-way SMS (spec §19 Q35). Demo orgs only, or every org on staging
  * (`VITE_DEMO_PHONE_ALL_ORGS`), where a real org's texts show their link codes masked.
+ *
+ * Below 768 px the reporter list and the thread take turns, so focus follows the person: picking
+ * a reporter moves it to the thread's heading, Back returns it to that reporter's button. The
+ * thread box scrolls to its newest text when it opens and whenever a text arrives. Each reporter's
+ * thread is its own element (keyed by reporter), so switching threads never reads a cached thread
+ * out as new; inside it one live region stays mounted from the empty state on and announces only
+ * texts that arrive (additions, never status changes), the first one into an empty thread too.
  */
 export default function DevPhonePage() {
   const { t } = useCopy();
@@ -54,12 +61,14 @@ function DemoPhone({ timezone }: { timezone: string }) {
   const [tab, setTab] = useState<'texts' | 'email'>('texts');
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as 'texts' | 'email')}>
-      <TabsList aria-label={t('devPhone.tabsLabel')}>
-        <TabsTrigger value="texts" className="min-h-11 sm:min-h-9">
+      {/* 44 px targets at every width (in pixels: the panel's 15 px root makes `min-h-11` 41.25 px);
+          the list grows with its triggers instead of clipping them. */}
+      <TabsList aria-label={t('devPhone.tabsLabel')} className="h-auto">
+        <TabsTrigger value="texts" className="h-auto min-h-[44px]">
           <MessageSquare className="size-4" aria-hidden="true" />
           {t('devPhone.tabTexts')}
         </TabsTrigger>
-        <TabsTrigger value="email" className="min-h-11 sm:min-h-9">
+        <TabsTrigger value="email" className="h-auto min-h-[44px]">
           <Mail className="size-4" aria-hidden="true" />
           {t('devPhone.tabEmail')}
         </TabsTrigger>
@@ -82,6 +91,25 @@ function Texts({ timezone }: { timezone: string }) {
   const { t } = useCopy();
   const phone = useDemoPhone();
   const [selected, setSelected] = useState<string | null>(null);
+  const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // Where focus goes once the next render has put the element on the page.
+  const pendingFocus = useRef<{ kind: 'thread' } | { kind: 'reporter'; id: string } | null>(null);
+  useEffect(() => {
+    const next = pendingFocus.current;
+    if (!next) return;
+    pendingFocus.current = null;
+    if (next.kind === 'thread') headingRef.current?.focus();
+    else buttons.current.get(next.id)?.focus();
+  }, [selected]);
+  const select = (id: string) => {
+    pendingFocus.current = { kind: 'thread' };
+    setSelected(id);
+  };
+  const back = () => {
+    if (selected) pendingFocus.current = { kind: 'reporter', id: selected };
+    setSelected(null);
+  };
 
   if (phone.isPending) return <PageSkeleton />;
   if (phone.isError)
@@ -113,10 +141,14 @@ function Texts({ timezone }: { timezone: string }) {
           {data.reporters.map((r) => (
             <li key={r.id}>
               <ReporterButton
+                ref={(el) => {
+                  if (el) buttons.current.set(r.id, el);
+                  else buttons.current.delete(r.id);
+                }}
                 reporter={r}
                 current={r.id === selected}
                 timezone={timezone}
-                onSelect={() => setSelected(r.id)}
+                onSelect={() => select(r.id)}
               />
             </li>
           ))}
@@ -125,6 +157,7 @@ function Texts({ timezone }: { timezone: string }) {
       <section className={cn('min-w-0', reporter ? 'block' : 'hidden md:block')}>
         {reporter ? (
           <Thread
+            key={reporter.id}
             reporter={reporter}
             timezone={timezone}
             canReply={data.orgIsDemo && data.pack.twoWaySms}
@@ -135,7 +168,8 @@ function Texts({ timezone }: { timezone: string }) {
                   ? null
                   : t('devPhone.oneWay', { code: data.pack.code })
             }
-            onBack={() => setSelected(null)}
+            onBack={back}
+            headingRef={headingRef}
           />
         ) : (
           <div className="rounded-card border border-dashed border-rebar bg-chalk p-6 text-[15px] text-dust">
@@ -148,11 +182,13 @@ function Texts({ timezone }: { timezone: string }) {
 }
 
 function ReporterButton({
+  ref,
   reporter,
   current,
   timezone,
   onSelect,
 }: {
+  ref: (el: HTMLButtonElement | null) => void;
   reporter: DemoPhoneReporter;
   current: boolean;
   timezone: string;
@@ -161,6 +197,7 @@ function ReporterButton({
   const { t } = useCopy();
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onSelect}
       aria-current={current ? 'true' : undefined}
@@ -194,33 +231,51 @@ function Thread({
   canReply,
   oneWayNote,
   onBack,
+  headingRef,
 }: {
   reporter: DemoPhoneReporter;
   timezone: string;
   canReply: boolean;
   oneWayNote: string | null;
   onBack: () => void;
+  headingRef: RefObject<HTMLHeadingElement | null>;
 }) {
   const { t } = useCopy();
   const thread = useDemoPhoneThread(reporter.id);
+  const box = useRef<HTMLDivElement>(null);
+  // The newest text is at the bottom: there when the thread opens, and when one arrives.
+  const lastId = thread.data?.at(-1)?.id ?? null;
+  useEffect(() => {
+    const el = box.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [reporter.id, lastId]);
   return (
     <div className="flex flex-col rounded-card border border-rebar bg-chalk">
       <header className="flex items-center gap-3 border-b border-rebar px-4 py-3">
         <Button
           variant="subtle"
           size="icon"
-          className="md:hidden"
+          className="h-[44px] w-[44px] md:hidden"
           onClick={onBack}
           aria-label={t('devPhone.back')}
         >
           <ArrowLeft aria-hidden="true" />
         </Button>
         <div className="min-w-0">
-          <h2 className="truncate font-h2 text-h2">{reporter.name}</h2>
+          <h2 ref={headingRef} tabIndex={-1} className="truncate font-h2 text-h2 outline-none">
+            {reporter.name}
+          </h2>
           <p className="font-mono text-[12px] text-dust">{formatPhone(reporter.phone)}</p>
         </div>
       </header>
-      <div className="max-h-[60vh] min-h-48 overflow-y-auto px-4 py-4">
+      <div
+        ref={box}
+        role="region"
+        aria-label={t('devPhone.threadLabel', { name: reporter.name })}
+        tabIndex={0}
+        data-testid="demo-phone-thread"
+        className="max-h-[60vh] min-h-48 overflow-y-auto px-4 py-4"
+      >
         {thread.isPending ? (
           <PageSkeleton />
         ) : thread.isError ? (
@@ -229,21 +284,23 @@ function Thread({
             error={thread.error}
             onRetry={() => void thread.refetch()}
           />
-        ) : thread.data.length === 0 ? (
-          <p className="text-[15px] text-dust">
-            {t('devPhone.threadEmpty', { name: reporter.name })}
-          </p>
         ) : (
-          <ol
-            aria-label={t('devPhone.threadLabel', { name: reporter.name })}
-            aria-live="polite"
-            aria-relevant="additions"
-            className="flex flex-col gap-3"
-          >
-            {thread.data.map((m) => (
-              <Bubble key={m.id} message={m} reporterName={reporter.name} timezone={timezone} />
-            ))}
-          </ol>
+          <div aria-live="polite" aria-relevant="additions">
+            {thread.data.length === 0 ? (
+              <p className="text-[15px] text-dust">
+                {t('devPhone.threadEmpty', { name: reporter.name })}
+              </p>
+            ) : (
+              <ol
+                aria-label={t('devPhone.threadLabel', { name: reporter.name })}
+                className="flex flex-col gap-3"
+              >
+                {thread.data.map((m) => (
+                  <Bubble key={m.id} message={m} reporterName={reporter.name} timezone={timezone} />
+                ))}
+              </ol>
+            )}
+          </div>
         )}
       </div>
       <footer className="border-t border-rebar px-4 py-3">
@@ -358,8 +415,10 @@ function ReplyForm({ reporter }: { reporter: DemoPhoneReporter }) {
         <label htmlFor={inputId} className="mb-1 block text-caption font-medium text-dust">
           {t('devPhone.replyLabel', { name: reporter.name })}
         </label>
+        {/* 44 px in pixels: the shared Input's h-11 is 41.25 px on the panel's 15 px root. */}
         <Input
           id={inputId}
+          className="min-h-[44px]"
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder={t('devPhone.replyPlaceholder')}
@@ -367,7 +426,12 @@ function ReplyForm({ reporter }: { reporter: DemoPhoneReporter }) {
           autoComplete="off"
         />
       </div>
-      <Button type="submit" variant="secondary" disabled={reply.isPending || !body.trim()}>
+      <Button
+        type="submit"
+        variant="secondary"
+        className="min-h-[44px]"
+        disabled={reply.isPending || !body.trim()}
+      >
         <Send aria-hidden="true" />
         {t('devPhone.send')}
       </Button>

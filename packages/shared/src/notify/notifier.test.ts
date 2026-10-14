@@ -6,8 +6,9 @@ import { DEMO_COUNTRIES, demoPack } from '../demo/countries.ts';
 import type { ConsentType } from '../enums.ts';
 import { assertE164 } from '../format.ts';
 import { MASKED_CODE } from '../links.ts';
-import { SmsSendError } from '../sms/transports.ts';
+import { SmsConfigError, SmsSendError } from '../sms/transports.ts';
 import {
+  consoleRealOrgError,
   createNotifier,
   maskedVars,
   type NotifierAuditEntry,
@@ -55,7 +56,8 @@ function recipient(
   };
 }
 
-function harness(opts: { fail?: Error } = {}) {
+function harness(opts: { fail?: Error; noTransport?: Error; optOutFailsOnce?: Error } = {}) {
+  let optOutFault = opts.optOutFailsOnce ?? null;
   const rows = new Map<string, OutboundMessageRow>();
   const audit: NotifierAuditEntry[] = [];
   const sent: Array<{
@@ -65,34 +67,60 @@ function harness(opts: { fail?: Error } = {}) {
     sender?: string;
     statusCallback?: string;
   }> = [];
+  const optOuts: Array<{ phone_e164: string; country: string; method: string }> = [];
+  const reporterOptOuts: Array<{ reporterId: string; at: string }> = [];
   const store: NotifierStore = {
     loadRecipient: async (id) => (id === 'r-marco' ? recipient() : null),
     findByDedupeKey: async (reporterId, key) => {
       const row = [...rows.values()].find(
         (r) => r.reporter_id === reporterId && r.payload?.dedupe_key === key,
       );
-      return row ? { id: row.id, channel: row.channel, status: row.status } : null;
+      return row
+        ? {
+            id: row.id,
+            channel: row.channel,
+            status: row.status,
+            provider: row.provider,
+            error: row.error,
+            error_code: row.payload?.error_code ?? null,
+          }
+        : null;
     },
     insertMessage: async (row) => void rows.set(row.id, { ...row }),
     updateMessage: async (id, patch) => void Object.assign(rows.get(id)!, patch),
+    isPhoneOptedOut: async (phone, country) =>
+      optOuts.some((o) => o.phone_e164 === phone && o.country === country),
+    recordPhoneOptOut: async (row) => {
+      if (optOutFault) {
+        const err = optOutFault;
+        optOutFault = null;
+        throw err;
+      }
+      optOuts.push(row);
+    },
+    optOutReporter: async (reporterId, at) => void reporterOptOuts.push({ reporterId, at }),
     audit: async (entry) => void audit.push(entry),
   };
   let n = 0;
-  const transport = (driver: SmsDriver): SmsTransport => ({
-    driver,
-    async send(to, body, o) {
-      if (opts.fail) throw opts.fail;
-      sent.push({ driver, to, body, sender: o.sender, statusCallback: o.statusCallback });
-      return { providerId: `${driver}-${sent.length}` };
-    },
-  });
+  const transport = (driver: SmsDriver): SmsTransport => {
+    if (opts.noTransport) throw opts.noTransport;
+    return {
+      driver,
+      async send(to, body, o) {
+        if (opts.fail) throw opts.fail;
+        sent.push({ driver, to, body, sender: o.sender, statusCallback: o.statusCallback });
+        return { providerId: `${driver}-${sent.length}` };
+      },
+    };
+  };
   const notifier = createNotifier({
     store,
     transport,
     statusCallbackUrl: 'https://x.supabase.co/functions/v1/sms-webhook/status',
     randomUUID: () => `m-${++n}`,
+    now: () => new Date('2026-10-09T23:00:00Z'),
   });
-  return { notifier, rows, audit, sent };
+  return { notifier, rows, audit, sent, optOuts, reporterOptOuts };
 }
 
 describe('Notifier (spec §4.5)', () => {
@@ -159,20 +187,100 @@ describe('Notifier (spec §4.5)', () => {
     expect(h.sent[0]!.body).not.toMatch(/STOP/);
   });
 
-  it('a real org whose pack has no sender id here: console, masked, and no device code at all', async () => {
+  it('a real org whose pack has no sender id here: nothing reaches the phone, a failed masked row, and no device code at all', async () => {
     const h = harness();
-    await h.notifier.deliver(recipient({ isDemo: false }), 'welcome', WELCOME);
-    expect(h.rows.get('m-1')).toMatchObject({ provider: 'console', status: 'delivered' });
+    const out = await h.notifier.deliver(recipient({ isDemo: false }), 'welcome', WELCOME, {
+      dedupeKey: 'job:1',
+    });
+    expect(out).toEqual({ channel: null, reason: 'no_channel', detail: 'console_real_org' });
+    expect(h.sent).toEqual([]);
+    expect(h.rows.get('m-1')).toMatchObject({
+      provider: 'console',
+      status: 'failed',
+      error: consoleRealOrgError('US'),
+      payload: { dedupe_key: 'job:1' },
+    });
     expect(h.rows.get('m-1')!.body).not.toContain('K7Q2MX');
+    expect(h.audit.at(-1)).toMatchObject({
+      action: 'notify.skipped',
+      entity: 'reporter',
+      diff: {
+        copy_key: 'welcome',
+        reason: 'no_channel',
+        detail: 'console_real_org',
+        message_id: 'm-1',
+      },
+    });
+    // A re-send under the same key reuses the failed row instead of adding one.
+    await h.notifier.deliver(recipient({ isDemo: false }), 'welcome', WELCOME, {
+      dedupeKey: 'job:1',
+    });
+    expect(h.rows.size).toBe(1);
     const code = await h.notifier.deliver(recipient({ isDemo: false }), 'verify_code', {
       code: '482913',
     });
-    expect(code).toEqual({ channel: null, reason: 'no_channel' });
+    expect(code).toEqual({ channel: null, reason: 'no_channel', detail: 'console_real_org' });
     expect(h.rows.size).toBe(1);
     expect(h.audit.at(-1)).toMatchObject({
       action: 'notify.skipped',
       diff: { copy_key: 'verify_code', reason: 'no_channel', detail: 'console_real_org' },
     });
+  });
+
+  it('a pack with a sender id whose provider has no credentials here fails before any send', async () => {
+    const h = harness({ noTransport: new SmsConfigError('twilio', ['TWILIO_AUTH_TOKEN']) });
+    await expect(
+      h.notifier.deliver(recipient({ isDemo: false, pack: US_LIVE }), 'welcome', WELCOME, {
+        dedupeKey: 'job:2',
+      }),
+    ).rejects.toBeInstanceOf(SmsConfigError);
+    // Never a row left `queued`: the Demo phone would show "Sending" for good.
+    expect(h.rows.get('m-1')).toMatchObject({
+      status: 'failed',
+      error: 'SMS driver "twilio" needs TWILIO_AUTH_TOKEN',
+      provider_message_id: null,
+    });
+    expect(h.audit).toEqual([
+      expect.objectContaining({
+        action: 'sms.failed',
+        entityId: 'm-1',
+        diff: {
+          copy_key: 'welcome',
+          provider: 'twilio',
+          code: null,
+          retryable: false,
+          config: true,
+        },
+      }),
+    ]);
+  });
+
+  it('a phone that sent STOP on the pack gets nothing, whichever reporter row it is now', async () => {
+    const h = harness();
+    h.optOuts.push({ phone_e164: '+15550143378', country: 'US', method: 'sms_keyword' });
+    // The row is `invited` (a re-invite after the STOP, or another org of the pack).
+    expect(
+      await h.notifier.deliver(recipient({ isDemo: false, pack: US_LIVE }), 'welcome', WELCOME),
+    ).toEqual({
+      channel: null,
+      reason: 'opted_out',
+      detail: 'phone_opted_out',
+    });
+    expect(h.rows.size).toBe(0);
+    expect(h.audit.at(-1)).toMatchObject({
+      action: 'notify.skipped',
+      diff: { copy_key: 'welcome', reason: 'opted_out', detail: 'phone_opted_out' },
+    });
+    // Another pack's sender: the opt-out is per pack.
+    expect(
+      (
+        await h.notifier.deliver(
+          recipient({ isDemo: false, pack: TR_LIVE, locale: 'tr-TR' }),
+          'welcome',
+          WELCOME,
+        )
+      ).channel,
+    ).toBe('sms');
   });
 
   it('masks the device code a real provider sends', async () => {
@@ -214,7 +322,7 @@ describe('Notifier (spec §4.5)', () => {
         'welcome',
         WELCOME,
       ),
-    ).toEqual({ channel: null, reason: 'no_channel' });
+    ).toEqual({ channel: null, reason: 'no_channel', detail: 'disabled' });
     expect(h.rows.size).toBe(1);
     expect(h.audit.filter((a) => a.action === 'notify.skipped').map((a) => a.diff.reason)).toEqual([
       'no_consent',
@@ -246,7 +354,7 @@ describe('Notifier (spec §4.5)', () => {
     });
   });
 
-  it('an undeliverable number is recorded as such', async () => {
+  it('an undeliverable number is recorded as such, and a retry under the key is refused again', async () => {
     const h = harness({
       fail: new SmsSendError("twilio 400 21614: 'To' is not a mobile number", {
         driver: 'twilio',
@@ -255,11 +363,107 @@ describe('Notifier (spec §4.5)', () => {
         code: '21614',
       }),
     });
+    const r = recipient({ isDemo: false, pack: US_LIVE });
     await expect(
-      h.notifier.deliver(recipient({ isDemo: false, pack: US_LIVE }), 'welcome', WELCOME),
+      h.notifier.deliver(r, 'welcome', WELCOME, { dedupeKey: 'job:9' }),
     ).rejects.toBeInstanceOf(SmsSendError);
     expect(h.rows.get('m-1')!.status).toBe('undeliverable');
     expect(h.audit.at(-1)).toMatchObject({ action: 'sms.undeliverable', diff: { code: '21614' } });
+    expect(h.reporterOptOuts).toEqual([]);
+    // The job retried after a crash in its own catch block: the same refusal, never a success
+    // that would wipe the "Can't reach this number" state.
+    const again = await h.notifier.deliver(r, 'welcome', WELCOME, { dedupeKey: 'job:9' }).then(
+      () => null as never,
+      (e: SmsSendError) => e,
+    );
+    expect(again).toBeInstanceOf(SmsSendError);
+    expect([
+      again.undeliverable,
+      again.retryable,
+      again.optedOut,
+      again.opts.code,
+      again.message,
+      again.opts.driver,
+    ]).toEqual([
+      true,
+      false,
+      false,
+      '21614',
+      "twilio 400 21614: 'To' is not a mobile number",
+      'twilio',
+    ]);
+    expect(h.rows.size).toBe(1);
+    expect(h.rows.get('m-1')!.payload).toEqual({ dedupe_key: 'job:9', error_code: '21614' });
+  });
+
+  it("a number on the provider's own opt-out list (Twilio 21610) opts the phone and the reporter out", async () => {
+    const h = harness({
+      fail: new SmsSendError('twilio 400 21610: Attempt to send to unsubscribed recipient', {
+        driver: 'twilio',
+        retryable: false,
+        undeliverable: true,
+        optedOut: true,
+        code: '21610',
+      }),
+    });
+    const err = await h.notifier
+      .deliver(recipient({ isDemo: false, pack: US_LIVE }), 'welcome', WELCOME)
+      .then(
+        () => null as never,
+        (e: SmsSendError) => e,
+      );
+    expect(err.optedOut).toBe(true);
+    expect(h.rows.get('m-1')!.status).toBe('undeliverable');
+    expect(h.optOuts).toEqual([
+      { phone_e164: '+15550143378', country: 'US', method: 'provider_opt_out' },
+    ]);
+    expect(h.reporterOptOuts).toEqual([{ reporterId: 'r-marco', at: '2026-10-09T23:00:00.000Z' }]);
+    expect(h.audit.map((a) => a.action)).toEqual(['sms.undeliverable', 'reporter.opted_out']);
+    expect(h.audit[1]).toMatchObject({
+      entity: 'reporter',
+      entityId: 'r-marco',
+      diff: { method: 'provider_opt_out', code: '21610', message_id: 'm-1' },
+    });
+  });
+
+  it('a 21610 row replayed under its dedupe key is still an opt-out, and writes nothing again', async () => {
+    const h = harness({
+      fail: new SmsSendError('twilio 400 21610: Attempt to send to unsubscribed recipient', {
+        driver: 'twilio',
+        retryable: false,
+        undeliverable: true,
+        optedOut: true,
+        code: '21610',
+      }),
+      // The refusal is on the row; recording the opt-out then fails (a database blip).
+      optOutFailsOnce: new Error('connection lost'),
+    });
+    const r = recipient({ isDemo: false, pack: US_LIVE });
+    const refuse = () =>
+      h.notifier.deliver(r, 'welcome', WELCOME, { dedupeKey: 'send_welcome:7' }).then(
+        () => null as never,
+        (e: Error) => e,
+      );
+    expect((await refuse()).message).toBe('connection lost');
+    expect(h.rows.get('m-1')!).toMatchObject({
+      status: 'undeliverable',
+      payload: { dedupe_key: 'send_welcome:7', error_code: '21610' },
+    });
+    // The job's retry replays the row: the code comes back with it, so send_welcome takes its
+    // opted-out branch, never "the number may be a landline". Nothing is sent or written again
+    // (a START since must not be undone).
+    const again = (await refuse()) as SmsSendError;
+    expect(again).toBeInstanceOf(SmsSendError);
+    expect([again.optedOut, again.undeliverable, again.retryable, again.opts.code]).toEqual([
+      true,
+      true,
+      false,
+      '21610',
+    ]);
+    expect(h.rows.size).toBe(1);
+    expect(h.sent).toEqual([]);
+    expect(h.optOuts).toEqual([]);
+    expect(h.audit.map((a) => a.action)).toEqual(['sms.undeliverable']);
   });
 
   it('send() loads the recipient; call() is M8', async () => {
@@ -319,6 +523,48 @@ describe('Notifier replies (sms-webhook)', () => {
         vars: {},
       }),
     ).rejects.toThrow(/smsReplyAllowed/);
+  });
+
+  it("a real org's reply on console (its pack has no sender here) is failed and refused for good", async () => {
+    const h = harness();
+    const err = await h.notifier
+      .reply({
+        pack: pack('US'),
+        org: { id: 'org-real', isDemo: false },
+        reporterId: 'r-dana',
+        phone: assertE164('+15550145521'),
+        locale: 'en-US',
+        key: 'stop_confirm',
+        vars: {},
+      })
+      .then(
+        () => null as never,
+        (e: SmsSendError) => e,
+      );
+    expect(err).toBeInstanceOf(SmsSendError);
+    expect([err.retryable, err.undeliverable, err.opts.driver, err.message]).toEqual([
+      false,
+      false,
+      'console',
+      consoleRealOrgError('US'),
+    ]);
+    expect(h.sent).toEqual([]);
+    expect([...h.rows.values()]).toEqual([
+      expect.objectContaining({
+        org_id: 'org-real',
+        reporter_id: 'r-dana',
+        provider: 'console',
+        copy_key: 'stop_confirm',
+        status: 'failed',
+        error: consoleRealOrgError('US'),
+      }),
+    ]);
+    expect(h.audit).toEqual([
+      expect.objectContaining({
+        action: 'sms.failed',
+        diff: expect.objectContaining({ provider: 'console', detail: 'console_real_org' }),
+      }),
+    ]);
   });
 
   it('masks links and codes only', () => {

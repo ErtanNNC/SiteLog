@@ -244,6 +244,21 @@ export function reporterDefaultsFor(pack: CountryPack): {
 }
 
 /**
+ * The field locale for the languages the office says a reporter speaks (F2 "Speaks", F3 "in the
+ * reporter's language"): the first of the pack's field locales whose language is among them (a
+ * US reporter who speaks Spanish gets es-US; one who speaks English and Spanish, en-US), or null
+ * when none matches (the caller falls back to `reporterDefaultsFor`).
+ */
+export function reporterLocaleFor(
+  pack: CountryPack,
+  languages: readonly string[] | undefined,
+): ReporterLocale | null {
+  if (!languages || languages.length === 0) return null;
+  const spoken = new Set(languages.map((l) => l.trim().toLowerCase()));
+  return pack.fieldLocales.find((locale) => spoken.has(languageOf(locale))) ?? null;
+}
+
+/**
  * The SMS copy a pack lacks (spec §4.6: a new country is only a row when its languages have their
  * copy), as `<field locale>.<key>[.<variant>]`: every shared key in each of its field locales, and
  * with two-way SMS also the two-way keys and the welcome's reply hint. Empty = the pack has all

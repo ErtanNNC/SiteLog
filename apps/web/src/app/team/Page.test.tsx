@@ -1,10 +1,15 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { toast } from 'sonner';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
-import { DemoStore } from '@/data/demo/store';
+import { DemoSource } from '@/data/demo/DemoSource';
+import { DemoStore, demoUserFor } from '@/data/demo/store';
+import type { InviteReporterInput } from '@/data/source';
 import { renderWithProviders } from '@/test/render';
 import TeamPage from './Page';
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('TeamPage (demo data)', () => {
   it('lists the field reporters with status chips and the office users', async () => {
@@ -25,6 +30,47 @@ describe('TeamPage (demo data)', () => {
     expect(within(office).getAllByRole('listitem')).toHaveLength(4);
     expect(office).toHaveTextContent('Lena Ortiz');
     expect(within(office).getByText('Admin')).toBeInTheDocument();
+  });
+
+  it('shows a reporter who sent STOP as "Opted out of texts" (§11)', async () => {
+    const store = new DemoStore();
+    const jorge = store.data.reporters.find((r) => r.name === 'Jorge Medina')!;
+    Object.assign(jorge, { status: 'opted_out', opted_out_at: store.nowIso() });
+    // Even with an earlier refusal recorded: the opt-out says why nothing is texted.
+    jorge.last_invite_error = 'twilio 400 21610: unsubscribed';
+    renderWithProviders(<TeamPage />, { route: '/team', store });
+    const table = await screen.findByRole('table', { name: 'Field reporters' });
+    const row = within(table).getByText('Jorge Medina').closest('tr')!;
+    const chip = within(row).getByText('Opted out of texts');
+    expect(chip.closest('[data-status]')).toHaveAttribute('data-status', 'opted_out');
+    expect(within(row).queryByText('Invite sent')).not.toBeInTheDocument();
+    expect(within(row).queryByText('Can’t reach this number')).not.toBeInTheDocument();
+  });
+
+  it('an invite the API answers opted_out says no welcome text was sent', async () => {
+    const store = new DemoStore();
+    const u = demoUserFor('admin');
+    // api-invite-reporter re-enables a number that sent STOP as `opted_out` (W1-08).
+    const source = new (class extends DemoSource {
+      override async inviteReporter(input: InviteReporterInput) {
+        await super.inviteReporter(input);
+        return { status: 'opted_out' as const };
+      }
+    })(store, { id: u.id, email: u.email, name: u.name, role: u.role });
+    const success = vi.spyOn(toast, 'success');
+    renderWithProviders(<TeamPage />, { route: '/team', source });
+    await userEvent.click(await screen.findByRole('button', { name: 'Invite reporter' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Nora Haddad');
+    await userEvent.type(within(dialog).getByTestId('invite-phone'), '(555) 014-8800');
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Elm St. Townhomes' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send welcome text' }));
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(
+        'Nora Haddad opted out of texts (STOP); no welcome text was sent.',
+      ),
+    );
+    expect(success).not.toHaveBeenCalledWith('Welcome text queued for Nora Haddad.');
   });
 
   it('shows the unknown caller without a link action until W1-16', async () => {

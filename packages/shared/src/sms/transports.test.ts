@@ -86,6 +86,8 @@ describe('twilio driver (mocked HTTP)', () => {
       [false, true, null],
     ]);
     expect(errors[0]!.message).toBe("twilio 400 21211: The 'To' number is not valid.");
+    // Only 21610 is the provider's own opt-out list (the Notifier records it as an opt-out).
+    expect(errors.map((e) => e.optedOut)).toEqual([false, true, false, false, false, false]);
   });
 
   it('refuses to send without a sender id', async () => {
@@ -135,8 +137,28 @@ describe('iletimerkezi driver (mocked HTTP)', () => {
     const refused = await driver.send(TR_PHONE, 'x', { sender: 'SITELOG' }).catch((e) => e);
     expect(refused).toBeInstanceOf(SmsSendError);
     expect([refused.retryable, refused.opts.code]).toEqual([false, '401']);
+    // An account fault is never blamed on the number (send_welcome keeps the reporter reachable).
+    expect(refused.undeliverable).toBe(false);
     const outage = await driver.send(TR_PHONE, 'x', { sender: 'SITELOG' }).catch((e) => e);
     expect(outage.retryable).toBe(true);
+  });
+
+  it('a number the operator cannot route is undeliverable; a balance fault is not', async () => {
+    const http = mockFetch(
+      json(200, {
+        response: { status: { code: '450', message: 'Gönderilecek numara bulunamadı' } },
+      }),
+      json(200, { response: { status: { code: '402', message: 'Bakiye yetersiz' } } }),
+    );
+    const driver = createIletimerkeziSmsTransport(creds, http.fetch);
+    const bad = await driver.send(TR_PHONE, 'x', { sender: 'SITELOG' }).catch((e) => e);
+    expect([bad.undeliverable, bad.retryable, bad.opts.code]).toEqual([true, false, '450']);
+    const balance = await driver.send(TR_PHONE, 'x', { sender: 'SITELOG' }).catch((e) => e);
+    expect([balance.undeliverable, balance.retryable, balance.opts.code]).toEqual([
+      false,
+      false,
+      '402',
+    ]);
   });
 });
 

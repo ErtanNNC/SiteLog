@@ -9,7 +9,7 @@ import { logAudit } from '../_shared/audit.ts';
 import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
 import { loadOrgPack } from '../_shared/countries.ts';
 import { requireEnv } from '../_shared/env.ts';
-import { supabaseLinkStore } from '../_shared/messaging.ts';
+import { phoneOptedOut, supabaseLinkStore } from '../_shared/messaging.ts';
 import {
   HttpError,
   json,
@@ -34,9 +34,12 @@ import { canResend, invitePhone, inviteProfile, linkRows } from './logic.ts';
  * send_welcome through the Notifier. The invite creates the personal `field_links` row (its code
  * derived from the row id under LINK_SIGNING_SECRET, `ensurePersonalLink`, so the worker can text
  * it); no WhatsApp conversation is attached any more. The phone is read with the org's country as
- * its default region, and `locale` / `contactPref` default from the org's pack when omitted, so
- * the deployed panel's request (no locale, no preference) keeps working. The answer never holds
- * the link code.
+ * its default region; `locale` comes from the "Speaks" languages or the org's pack and
+ * `contactPref` defaults to `link` when omitted, so the deployed panel's request (no locale, no
+ * preference) keeps working. A number that sent STOP on the pack's sender (`sms_opt_outs`, spec
+ * §9.5), or a disabled reporter who did (`opted_out_at`), is created or re-enabled `opted_out`:
+ * the welcome job then skips it and tells the office why (§13). The answer never holds the link
+ * code.
  */
 
 const InviteSchema = z.object({
@@ -90,6 +93,10 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     throw new HttpError(400, 'One or more sites do not belong to this organisation');
   }
 
+  // The phone's own opt-out on this pack's sender (STOP, or the provider's list): every STOP sticks.
+  const phoneOptOut = await phoneOptedOut(admin, phone, pack.code);
+  const now = new Date().toISOString();
+
   // Same phone already in this org → reuse the reporter and link the new sites (§F2 edge case).
   const { data: existing } = await admin
     .from('reporters')
@@ -107,8 +114,11 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
       ...(body.contactPref ? { contact_pref: profile.contactPref } : {}),
     };
     if (existing.status === 'disabled') {
+      // A disabled reporter who sent STOP meanwhile (opted_out_at) comes back opted out.
+      const optedOut = existing.opted_out_at !== null || phoneOptOut;
       Object.assign(patch, {
-        status: 'invited',
+        status: optedOut ? 'opted_out' : 'invited',
+        opted_out_at: existing.opted_out_at ?? (optedOut ? now : null),
         invited_at: null,
         last_invite_error: null,
         name: body.name,
@@ -135,7 +145,8 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
         languages: profile.languages,
         locale: profile.locale,
         contact_pref: profile.contactPref,
-        status: 'invited',
+        status: phoneOptOut ? 'opted_out' : 'invited',
+        opted_out_at: phoneOptOut ? now : null,
       })
       .select('*')
       .single()
@@ -193,6 +204,8 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
       reused: existing !== null,
       locale: reporter.locale,
       contact_pref: reporter.contact_pref,
+      status: reporter.status,
+      phone_opted_out: phoneOptOut,
       jobId,
     },
   });
@@ -200,6 +213,7 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     orgId: body.orgId,
     reporterId: reporter.id,
     reused: existing !== null,
+    status: reporter.status,
   });
 
   return {

@@ -180,7 +180,7 @@ export function createHarness(
     storage,
     ai: { claude: opts.claude ?? null, openai: null },
     email,
-    notifier: createWorkerNotifier(config, db, transport),
+    notifier: createWorkerNotifier(config, db, transport, () => now),
     ffmpeg: fakeFfmpeg,
     log: silentLogger,
     now: () => now,

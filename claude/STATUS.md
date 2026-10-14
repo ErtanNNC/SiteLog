@@ -1,6 +1,6 @@
 # SiteLog · Durum
 
-Güncelleme: 2026-10-14 (UTC) · dal `spec-v1.2` · PR #1 · son commit: W1-08 (CI sonucu bekleniyor)
+Güncelleme: 2026-10-14 (UTC) · dal `spec-v1.2` · PR #1 · son commit: `33502cc` (W1-08 `27fc876` CI'da yeşil, `7992db3` ticket işareti); W1-08 inceleme bulguları kapatıldı (W1-08 inceleme commit'i), CI bekleniyor
 
 Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün aralıklarını kullanıyorum (M0 gün 1 · M1 gün 1–2 · M2 gün 2–3 · M3 gün 3–4 · M4 gün 4–5 · M5 gün 5–7 → demo). Planın farklı bir eşlemesi varsa söyleyin, buna göre düzeltirim.
 
@@ -10,7 +10,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 ## Sürüyor
 
-**Gün 2–3 (M2)** — W1-08 _SMS katmanı, davet ve Demo phone_: kod, testler ve belgeler commit'lendi; CI bekleniyor. İki incelemenin 20 bulgusu (10 major/minor + 10) henüz uygulanmadı: en önemlileri Twilio'nun 5xx'te yeniden denememesi (gelen SMS'i job'a almak), STOP'un devre dışı sorumluda da kalıcı olması (kısmen yapıldı), opt-out ve teslim hatalarında ofise bildirim, ABD opt-out eş anlamlıları (yapıldı), `send_welcome`'da hata ayrımı, davet dilinin "Speaks" seçiminden gelmesi, Demo phone'un 390 px düzeni ve klavye odağı. Sonraki adım: bu bulguları ayrı bir commit'te kapatmak, ardından W1-09 _saha ekranları_. W1-07 `field-api` CI'da yeşil; kutusu yalnızca preview üzerinden çerez probe'unu bekliyor.
+**Gün 2–3 (M2)** — W1-08 _SMS katmanı, davet ve Demo phone_: kod, testler ve belgeler commit'lendi (`27fc876`), CI yeşil. Üç incelemenin 35 bulgusu kapatıldı (W1-08 inceleme commit'i, CI bekleniyor): gelen Twilio SMS'i `sms_inbound` job'ına alındı (Twilio 5xx'te yeniden denemediği için; `20261014000008_sms_inbound.sql` ile öncelik 0, mesaj + denetim kaydı + job tek transaction'da `receive_sms_inbound()` ile, aynı numaranın mesajları `sms:<telefon>` kilidiyle sırayla), her anahtar kelime değişikliği denetim kaydı ve ofis bildirimiyle aynı transaction'da, bilinmeyen numaraya otomatik yanıt yeniden denemede de gidiyor, STOP her durumda kalıcı (`sms_opt_outs` paket başına, bilinmeyen numara ve devre dışı sorumlu dahil; Twilio 21610 da opt-out sayılıyor), opt-out ve geç teslim hatalarında ofise §13 bildirimi (geç Twilio hatası yalnızca 30003–30006'da numaraya yazılıyor; 30032 gibi hesap hataları ofise saatte en çok bir kez hesap bildirimi), Team'de "Opted out of texts" çipi ve davet bildirimi, Notifier'ın hata yolları (gönderici yokken gerçek org'da `failed` satır ve davet edilmemiş sorumlu, eksik kimlik bilgisinde kuyrukta kalan satır yok, `undeliverable` tekrarda sağlayıcı koduyla yeniden fırlatılıyor, gerçek org'a console yanıtı `failed`), `send_welcome`'da numara hatası / sağlayıcı hatası ayrımı (`PermanentJobError`), davet dili "Speaks" seçiminden (`es` → `es-US`), Demo phone 390 px'te 44 px sekmeler ve yanıt kutusu, klavye odağı, kaydırma ve sorumlu başına ayrı canlı bölge (panel genelindeki 41,25 px kontroller `docs/AUDIT_BACKLOG.md`'de), demo modunda STOP bildirimi, panelde bir konuşmanın en yeni 500 mesajı, sorumlu başına sayım ve son satır veritabanından (`SupabaseSource.test.ts`), davet orkestrasyonu için yığın testi (`supabase/db-tests/stack/api-invite-reporter.test.ts`), Demo phone e2e'si artık Realtime'ı gerçekten kanıtlıyor (ikinci sekme davetten önce açık), CI'da `api-invite-reporter` ısınma probu, belgeler (PLAN, RUNBOOK'ta Twilio webhook adresi ve yeniden deneme ayarı, README, spec §4.5/§9.5/Q45/Q48, GAP). Sonraki: W1-09 _saha ekranları_. W1-07 `field-api` CI'da yeşil; kutusu yalnızca preview üzerinden çerez probe'unu bekliyor.
 
 ## Onayınızı bekleyen
 
@@ -21,7 +21,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
    - W1-09'dan önce: Q41 (_No work_ / _Weather_ düğmelerinin ne yazacağı). W1-16'dan önce: Q44 (paylaşımlı göndericide gelen SMS kimin).
    - Go-live'dan önce: Q28 yasal metin anahtarları, Q42 link kodu uzunluğu, Q47 imza sırrının döndürülmesi, Q49 İYS (hukuk).
    - M10'dan önce: Q30 fatura ülkesi. Hafta 1 içinde: Q15 (GSM-7 noktalama), Q16 (v1 veri görünümü).
-   - "Yapıldığı gibi" onayı istenenler: Q43 (öğleden önce başlayan rapor hangi güne), Q45/Q46 (Twilio'nun STOP/HELP'i kendisinin yanıtlaması; START/CALL/TEXT'e onay metni yok), Q48 (gerçek org'da gönderici yokken cihaz kodu gitmez).
+   - "Yapıldığı gibi" onayı istenenler: Q43 (öğleden önce başlayan rapor hangi güne), Q45/Q46 (Twilio'nun STOP/HELP'i kendisinin yanıtlaması; START/CALL/TEXT'e onay metni yok), Q48 (gerçek org'da gönderici yokken cihaz kodu gitmez; incelemeden sonra karşılama mesajı da gitmez, sorumlu davet edilmiş sayılmaz ve ofis bilgilendirilir).
 
 ## Sizden beklenen
 

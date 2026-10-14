@@ -54,7 +54,8 @@ import { fromZonedTime } from 'date-fns-tz';
 import { copy } from '@/copy/en';
 import { localId } from '@/lib/utils';
 import type { RowSet } from '../assemble';
-import { demoPhoneData, demoPhoneThread, demoReply, demoWelcome } from './demoPhone';
+import { reporterDefaultsFor, reporterLocaleFor } from '@sitelog/shared/countries.ts';
+import { demoOrgPack, demoPhoneData, demoPhoneThread, demoReply, demoWelcome } from './demoPhone';
 import type {
   AddGlossaryTermInput,
   AddInvoiceInput,
@@ -1116,6 +1117,8 @@ export class DemoStore {
 
   inviteReporter(input: InviteReporterInput, userId: string): string {
     const id = localId('reporter');
+    // As api-invite-reporter: the first pack locale among the "Speaks" languages, else the pack's.
+    const pack = demoOrgPack(this.data);
     this.data.reporters.push({
       ...V12_ROW_DEFAULTS.reporters,
       id,
@@ -1124,6 +1127,7 @@ export class DemoStore {
       phone_e164: input.phone,
       role: input.role,
       languages: input.languages,
+      locale: reporterLocaleFor(pack, input.languages) ?? reporterDefaultsFor(pack).locale,
       status: 'invited',
       invited_at: this.nowIso(),
       verified_at: null,

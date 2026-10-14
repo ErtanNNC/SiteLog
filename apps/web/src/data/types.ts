@@ -623,7 +623,8 @@ export interface WeatherLog {
 
 // ───────────────────────────── P10 Team ─────────────────────────────
 
-export type ReporterChipStatus = 'active' | 'invite_sent' | 'not_on_whatsapp' | 'disabled';
+export type ReporterChipStatus =
+  'active' | 'invite_sent' | 'not_on_whatsapp' | 'opted_out' | 'disabled';
 
 export interface TeamReporter {
   id: string;

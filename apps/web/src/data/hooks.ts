@@ -418,7 +418,10 @@ export function useSetInvoiceStatus() {
 export function useInviteReporter() {
   const s = useDataSource();
   return useSourceMutation((vars: InviteReporterInput) => s.inviteReporter(vars), {
-    success: (v) => copy.toasts.reporterInvited(v.name),
+    success: (v, result) =>
+      result.status === 'opted_out'
+        ? copy.toasts.reporterInvitedOptedOut(v.name)
+        : copy.toasts.reporterInvited(v.name),
   });
 }
 

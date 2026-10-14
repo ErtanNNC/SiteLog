@@ -10,6 +10,7 @@ import { retentionCleanup } from './retention_cleanup';
 import { sendEmail } from './send_email';
 import { sendMessage, sendTemplate } from './send_template';
 import { sendWelcome } from './send_welcome';
+import { smsInbound } from './sms_inbound';
 import { transcribeAudioJob } from './transcribe_audio';
 import { transcribeUploadJob } from './transcribe_upload';
 import type { JobRegistry } from './types';
@@ -18,6 +19,7 @@ import { weeklyDigest } from './weekly_digest';
 /** One handler per JOB_TYPES entry (§10.1). */
 export const registry: JobRegistry = {
   inbound_message: inboundMessage,
+  sms_inbound: smsInbound,
   transcribe_audio: transcribeAudioJob,
   transcribe_upload: transcribeUploadJob,
   extract_report: extractReport,

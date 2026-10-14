@@ -11,6 +11,7 @@ import type { MessageRow, ReporterRow } from '@sitelog/shared/db/types.ts';
 import { firstName, formatDeadline, formatPhone } from '@sitelog/shared/format.ts';
 import { fieldLinkUrl, linkCodeHash } from '@sitelog/shared/links.ts';
 import { languageOf } from '@sitelog/shared/locale.ts';
+import { optOutNotification } from '@sitelog/shared/sms/inbound.ts';
 import { planInboundSms } from '@sitelog/shared/sms/keywords.ts';
 import { localId } from '@/lib/utils';
 import type { DemoPhoneData, DemoPhoneMessage } from '../types';
@@ -18,8 +19,9 @@ import type { DemoPhoneData, DemoPhoneMessage } from '../types';
 /**
  * The Demo phone of the panel's demo mode (§11.1, W1-08): Kestrel's console texts in memory. A
  * welcome on invite stands in for the worker's send_welcome, and a typed reply runs the same
- * keyword plan as sms-webhook (`planInboundSms`), so STOP, START, HELP, CALL and TEXT act as they
- * do against a database.
+ * keyword plan as sms-webhook (`planInboundSms`) with what `processInboundSms` writes beside it:
+ * each reporter change audited as the reporter, the office's §13 `reporter_opted_out` notice of a
+ * STOP, and the one reply. So STOP, START, HELP, CALL and TEXT act as they do against a database.
  */
 
 /** The demo org's country pack (the launch packs; Kestrel is US). */
@@ -151,10 +153,34 @@ export function demoReply(data: DemoDataset, reporterId: string, body: string, a
     now: new Date(at),
   });
   for (const change of plan.changes) {
-    Object.assign(
-      data.reporters.find((r) => r.id === change.reporterId)!,
-      change.patch,
-    );
+    const row = data.reporters.find((r) => r.id === change.reporterId)!;
+    Object.assign(row, change.patch);
+    data.audit.push({
+      id: (data.audit.at(-1)?.id ?? 0) + 1,
+      org_id: row.org_id,
+      actor_type: 'reporter',
+      actor_id: row.id,
+      action: change.action,
+      entity: 'reporter',
+      entity_id: row.id,
+      diff: { ...change.patch, method: 'sms_keyword', keyword: plan.keyword },
+      created_at: at,
+    });
+    if (change.patch.status === 'opted_out') {
+      // §13 "Message undeliverable / opted out": admin and ops see it (notification_audience).
+      const n = optOutNotification({ orgId: row.org_id, name: row.name, phone: row.phone_e164 });
+      data.notifications.unshift({
+        id: localId('notif'),
+        org_id: n.orgId,
+        user_id: null,
+        kind: n.kind,
+        title: n.title,
+        body: n.body,
+        target_path: n.targetPath,
+        read_at: null,
+        created_at: at,
+      });
+    }
   }
   if (!plan.reply) return;
   const to = data.reporters.find((r) => r.id === plan.reply!.reporterId) ?? reporter;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { V12_ROW_DEFAULTS } from '@sitelog/shared/db/defaults.ts';
+import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import type { Db } from '@/lib/supabase';
 import { buildIndex, currentVersion, type RowSet } from '../assemble';
 import type { ReportFilters } from '../types';
@@ -245,6 +246,9 @@ class FakeQuery implements PromiseLike<Result> {
   single() {
     this.one = true;
     return this;
+  }
+  maybeSingle() {
+    return this.single();
   }
 
   private run(): Result {
@@ -1109,5 +1113,62 @@ describe('SupabaseSource: report files in uploads (W1-05 step 10)', () => {
     expect(await detailOf(live, riverside.id, '2026-10')).toEqual(before.site);
     expect(await live.getHours('2026-W41')).toEqual(before.hours);
     expect(await live.listReports({ q: word })).toEqual(before.search);
+  });
+});
+
+describe('SupabaseSource: Demo phone (§11.1, W1-08)', () => {
+  it('counts every text of a thread and shows its newest 500, however long the thread or busy the org', async () => {
+    const store = new DemoStore();
+    const byName = (name: string) => store.data.reporters.find((r) => r.name === name)!;
+    const marco = byName('Marco Ruiz');
+    const dana = byName('Dana Whitfield');
+    const template = store.data.messages.find(
+      (m) => m.channel === 'sms' && m.reporter_id === marco.id,
+    )!;
+    const at = (s: number) => new Date(Date.UTC(2030, 0, 1, 0, 0, s)).toISOString();
+    // Marco: 620 more texts; then Dana: 1,200 newer ones, more than one PostgREST page.
+    for (let i = 0; i < 620; i++)
+      store.data.messages.push({
+        ...template,
+        id: `marco-${i}`,
+        body: `Marco ${i}`,
+        created_at: at(i),
+      });
+    for (let i = 0; i < 1200; i++)
+      store.data.messages.push({
+        ...template,
+        id: `dana-${i}`,
+        reporter_id: dana.id,
+        body: `Dana ${i}`,
+        created_at: at(1000 + i),
+      });
+    const { db, live, demo } = sources(store);
+    db.tables.countries = DEMO_COUNTRIES.map((c) => ({ ...c }) as unknown as Row);
+    db.maxRows = 1000;
+
+    const phone = await live.getDemoPhone();
+    const expected = await demo.getDemoPhone();
+    // Two seeded texts of one thread may share a time, so the last line of such a thread may be
+    // either: compare the order, the counts and the times.
+    const brief = (d: typeof phone) => ({
+      ...d,
+      reporters: d.reporters.map(({ lastBody: _, ...r }) => r),
+    });
+    expect(brief(phone)).toEqual(brief(expected));
+    const total = store.data.messages.filter(
+      (m) => m.channel === 'sms' && m.reporter_id === marco.id,
+    ).length;
+    expect(phone.reporters.find((r) => r.id === marco.id)).toMatchObject({
+      count: total,
+      lastBody: 'Marco 619',
+      lastAt: at(619),
+    });
+    expect(phone.reporters.find((r) => r.id === dana.id)!.count).toBeGreaterThan(1200);
+
+    const all = await demo.getDemoPhoneThread(marco.id);
+    expect(all.length).toBeGreaterThan(500);
+    const thread = await live.getDemoPhoneThread(marco.id);
+    expect(thread).toEqual(all.slice(-500));
+    expect(thread.at(-1)!.body).toBe('Marco 619');
   });
 });

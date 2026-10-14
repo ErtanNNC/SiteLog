@@ -46,11 +46,38 @@ Deno.test(
   () => {
     const us = demoPack('US');
     const tr = demoPack('TR');
-    // The deployed panel's request: no locale, no preference, languages given.
+    // The panel's request: no locale, no preference, the "Speaks" languages. The first pack
+    // locale whose language was ticked wins (the pack's order, not the office's).
     assertEquals(inviteProfile(us, { languages: ['es', 'en'] }), {
       ok: true,
       locale: 'en-US',
       languages: ['es', 'en'],
+      contactPref: 'link',
+    });
+    assertEquals(inviteProfile(us, { languages: ['es'] }), {
+      ok: true,
+      locale: 'es-US',
+      languages: ['es'],
+      contactPref: 'link',
+    });
+    // No field locale for the languages ticked: the pack's default, the languages kept.
+    assertEquals(inviteProfile(us, { languages: ['pl'] }), {
+      ok: true,
+      locale: 'en-US',
+      languages: ['pl'],
+      contactPref: 'link',
+    });
+    assertEquals(inviteProfile(tr, { languages: ['es'] }), {
+      ok: true,
+      locale: 'tr-TR',
+      languages: ['es'],
+      contactPref: 'link',
+    });
+    // An explicit locale wins over the languages.
+    assertEquals(inviteProfile(us, { locale: 'en-US', languages: ['es'] }), {
+      ok: true,
+      locale: 'en-US',
+      languages: ['es'],
       contactPref: 'link',
     });
     assertEquals(inviteProfile(tr, {}), {

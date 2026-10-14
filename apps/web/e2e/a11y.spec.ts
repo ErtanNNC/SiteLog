@@ -470,6 +470,46 @@ test.describe('no sideways scroll on narrow phones', () => {
     });
   }
 
+  // W1-08: the Demo phone's tabs and reporter buttons are 44 px targets at phone width, the tab
+  // list grows with its triggers instead of clipping them, and picking a reporter moves focus to
+  // the thread (below 768 px the list and the thread take turns).
+  test('the Demo phone keeps 44 px targets at 390px', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signInFast(page);
+    await page.goto('/dev/phone');
+    await expect(h1(page, 'Demo phone')).toBeVisible();
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    const tab = page.getByRole('tab', { name: 'Texts' });
+    const tabBox = (await tab.boundingBox())!;
+    const listBox = (await page.getByRole('tablist').first().boundingBox())!;
+    expect(tabBox.height).toBeGreaterThanOrEqual(44);
+    expect(listBox.height).toBeGreaterThanOrEqual(tabBox.height);
+    const marco = page
+      .getByRole('navigation', { name: 'Reporters' })
+      .getByRole('button', { name: /Marco Ruiz/ });
+    expect((await marco.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await marco.click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Marco Ruiz' })).toBeFocused();
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await page.getByRole('button', { name: 'All reporters' }).click();
+    await expect(marco).toBeFocused();
+    // A two-way thread: Back, the reply box and Send are 44 px too (the shared Input's h-11 is
+    // 41.25 px on the panel's 15 px root, docs/AUDIT_BACKLOG.md).
+    await page
+      .getByRole('navigation', { name: 'Reporters' })
+      .getByRole('button', { name: /Dana Whitfield/ })
+      .click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Dana Whitfield' })).toBeFocused();
+    for (const target of [
+      page.getByRole('button', { name: 'All reporters' }),
+      page.getByRole('textbox', { name: 'Reply as Dana Whitfield' }),
+      page.getByRole('button', { name: 'Send' }),
+    ]) {
+      expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+  });
+
   // W1-03: the shell itself at 390 px, in both languages: sign-in, the shell's own pages, the top
   // bar with a page's controls, the drawer and the account menu inside it.
   for (const lang of ['en', 'tr'] as const) {

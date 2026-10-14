@@ -208,6 +208,8 @@ export type PackStatus = (typeof PACK_STATUSES)[number];
 /** Job types handled by apps/worker (§10.1). */
 export const JOB_TYPES = [
   'inbound_message',
+  /** A Twilio text stored by sms-webhook (W1-08): the keywords and the reply run in the worker. */
+  'sms_inbound',
   'transcribe_audio',
   /** A field upload's voice note (W1-07 enqueues it; the handler is W1-11). */
   'transcribe_upload',

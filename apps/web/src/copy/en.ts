@@ -193,6 +193,8 @@ export const copy = {
     inviteSent: 'Invite sent',
     /** F3 edge case: the provider refuses the number for good (key kept until the M10 statuses). */
     notOnWhatsApp: 'Can’t reach this number',
+    /** §11 "Opted out of texts": a STOP, or the SMS provider's own opt-out list (Twilio 21610). */
+    optedOut: 'Opted out of texts',
     disabled: 'Disabled',
     open: 'Open',
     queried: 'Queried',
@@ -1707,6 +1709,9 @@ export const copy = {
     invoiceAdded: 'Invoice added.',
     notificationsRead: 'Marked as read.',
     reporterInvited: (name: string) => `Welcome text queued for ${name}.`,
+    /** api-invite-reporter answered `opted_out`: the number sent STOP, so nothing is texted. */
+    reporterInvitedOptedOut: (name: string) =>
+      `${name} opted out of texts (STOP); no welcome text was sent.`,
     linked: 'Number linked.',
     ignored: 'Number ignored.',
     termReviewed: 'Glossary updated.',

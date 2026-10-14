@@ -5,6 +5,7 @@ import {
   toCountryPack,
   type CountryPack,
   type CountryRow,
+  type InboundSmsStore,
   type NotifierStore,
   type PersonalLinkStore,
   type SmsDriver,
@@ -46,6 +47,9 @@ export function workerNotifierStore(db: Db): NotifierStore {
     findByDedupeKey: (reporterId, key) => db.findMessageByDedupeKey(reporterId, key),
     insertMessage: (row) => db.insertSmsMessage(row),
     updateMessage: (id, patch) => db.updateSmsMessage(id, patch),
+    isPhoneOptedOut: (phone, country) => db.isSmsOptedOut(phone, country),
+    recordPhoneOptOut: (row) => db.recordSmsOptOut(row),
+    optOutReporter: (reporterId, at) => db.optOutReporter(reporterId, at),
     audit: (entry) =>
       db.logAudit({
         org_id: entry.orgId,
@@ -55,6 +59,51 @@ export function workerNotifierStore(db: Db): NotifierStore {
         entity_id: entry.entityId,
         diff: entry.diff,
       }),
+  };
+}
+
+/** The inbound handler's store (`processInboundSms`, the sms_inbound job) over the worker Db. */
+export function workerInboundStore(db: Db): InboundSmsStore {
+  return {
+    reportersByPhone: (phone, country, scope) => db.listInboundReporters(phone, country, scope),
+    updateReporter: (id, patch) => db.updateReporter(id, patch),
+    hasPendingUnknown: (phone, opts) =>
+      db.hasPendingUnknownContact(phone, 'sms', opts?.excludeMessageId ?? null),
+    insertUnknownContact: (row) => db.insertSmsUnknownContact(row),
+    recordPhoneOptOut: (phone, country) =>
+      db.recordSmsOptOut({ phone_e164: phone, country, method: 'sms_keyword' }),
+    clearPhoneOptOut: (phone, country) => db.clearSmsOptOut(phone, country),
+    markHandled: (messageId, at) => db.markSmsHandled(messageId, at),
+    async notifyOrg(n) {
+      await db.notifyOrg(n.orgId, n.kind, n.title, n.body, n.targetPath);
+    },
+    audit: (entry) =>
+      db.logAudit({
+        org_id: entry.orgId,
+        actor_type: entry.actorType,
+        actor_id: entry.actorId ?? null,
+        action: entry.action,
+        entity: entry.entity,
+        entity_id: entry.entityId,
+        diff: entry.diff,
+      }),
+    // The change, its audit row and the office's notice in one transaction (sql.begin).
+    applyChange: (change, entry, notification) =>
+      db.applyInboundChange({
+        reporterId: change.reporterId,
+        patch: change.patch,
+        audit: {
+          org_id: entry.orgId,
+          actor_type: entry.actorType,
+          actor_id: entry.actorId ?? null,
+          action: entry.action,
+          entity: entry.entity,
+          entity_id: entry.entityId,
+          diff: entry.diff,
+        },
+        notification,
+      }),
+    links: workerLinkStore(db),
   };
 }
 
@@ -97,12 +146,14 @@ export function createWorkerNotifier(
   config: Config,
   db: Db,
   transport: (driver: SmsDriver) => SmsTransport = workerTransports(config),
+  now: () => Date = () => new Date(),
 ): SmsNotifier {
   return createNotifier({
     store: workerNotifierStore(db),
     transport,
     statusCallbackUrl: statusCallbackUrl(config),
     randomUUID: () => crypto.randomUUID(),
+    now,
   });
 }
 

@@ -33,6 +33,7 @@ export * from './sms/segments.ts';
 export * from './sms/transports.ts';
 export * from './sms/twilio.ts';
 export * from './sms/keywords.ts';
+export * from './sms/inbound.ts';
 export * from './notify/notifier.ts';
 export * from './schedule/reminders.ts';
 export * from './schedule/day.ts';
