@@ -574,9 +574,12 @@ export function segmentsOf(json: unknown): TranscriptSegment[] {
   }));
 }
 
+/** A question's options: v1.2 `[{id,label}]` (§6.3), or WhatsApp's `[{id,title}]` buttons. */
 function optionsOf(json: unknown): string[] {
   if (!Array.isArray(json)) return [];
-  return json.map((o) => (isRecord(o) ? String(o.title ?? o.id ?? '') : String(o))).filter(Boolean);
+  return json
+    .map((o) => (isRecord(o) ? String(o.label ?? o.title ?? o.id ?? '') : String(o)))
+    .filter(Boolean);
 }
 
 function answerText(json: unknown): string | null {
@@ -1390,7 +1393,16 @@ const ACTION_LABELS: Record<string, string> = {
   'site_day.missing': 'Missing — office alerted',
 };
 
-function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): TranscriptExcerpt[] {
+/**
+ * Transcript excerpts for the values the voice note `audioId` is cited for. A value cited to
+ * another voice note of the report (a spoken correction, F10) has no excerpt here: its seconds
+ * are of that note, not of these segments.
+ */
+function excerptsFor(
+  data: DailyReportData,
+  segments: TranscriptSegment[],
+  audioId: string | null,
+): TranscriptExcerpt[] {
   if (!segments.length) return [];
   const out: TranscriptExcerpt[] = [];
   const seen = new Set<string>();
@@ -1400,7 +1412,7 @@ function excerptsFor(data: DailyReportData, segments: TranscriptSegment[]): Tran
     section: TranscriptExcerpt['section'],
   ) => {
     const a = src?.find((s) => s.type === 'voice_note');
-    if (!a || a.type !== 'voice_note') return;
+    if (!a || a.type !== 'voice_note' || a.uploadId !== audioId) return;
     const seg =
       segments.find((s) => a.start >= s.start - 0.01 && a.start < s.end) ??
       segments.find((s) => s.end > a.start);
@@ -1485,8 +1497,15 @@ export function assembleReportDetail(
 
   const sources = rows.sources.filter((s) => s.report_id === report.id);
   const media = mediaIndex(rows);
-  // The voice note (WhatsApp `audio` or v1.2 `voice_note`), from its upload or its message.
-  const audioSrc = sources.find((s) => isVoiceSourceKind(s.kind) && sourceMedia(s, media));
+  // The voice note (WhatsApp `audio` or v1.2 `voice_note`), from its upload or its message: the
+  // first one, when a spoken correction (F10) added another.
+  const audioSrc = sources
+    .filter((s) => isVoiceSourceKind(s.kind) && sourceMedia(s, media))
+    .sort((a, b) => {
+      const x = a.taken_at ?? '~';
+      const y = b.taken_at ?? '~';
+      return x < y ? -1 : x > y ? 1 : 0;
+    })[0];
   const audioFile = audioSrc ? sourceMedia(audioSrc, media) : undefined;
   const transcriptRow = audioFile
     ? rows.transcripts.find((t) => transcriptMediaId(t) === audioFile.id)
@@ -1550,13 +1569,12 @@ export function assembleReportDetail(
         formatDateInTz(m.created_at, tz) === date,
     )
     .sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
-  const messages: MessageItem[] = convoMessages.map((m) => ({
-    id: m.id,
-    direction: m.direction,
-    type: m.type,
-    body: m.body,
-    at: m.created_at,
-  }));
+  // A WhatsApp message always has its type; SMS rows (no type) have no conversation.
+  const messages: MessageItem[] = convoMessages.flatMap((m) =>
+    m.type === null
+      ? []
+      : [{ id: m.id, direction: m.direction, type: m.type, body: m.body, at: m.created_at }],
+  );
   activity.sort((a, b) => (a.at < b.at ? -1 : 1));
 
   const questions: QuestionItem[] = rows.questions
@@ -1639,7 +1657,7 @@ export function assembleReportDetail(
     transcript: transcriptRow
       ? { language: transcriptRow.language, text: transcriptRow.text, segments }
       : null,
-    excerpts: excerptsFor(data, segments),
+    excerpts: excerptsFor(data, segments, audioFile?.id ?? null),
     activity,
     messages,
     questions,
@@ -1765,8 +1783,11 @@ export function assembleHours(
   const gapRows = rowsOut.filter((r) => r.status === 'gap');
 
   const transcriptByMedia = new Map(rows.transcripts.map((t) => [transcriptMediaId(t), t]));
+  // A report's (first) voice note, for an entry that cites none.
   const audioByReport = new Map<string, ReportSourceRow>();
-  for (const s of rows.sources) if (isVoiceSourceKind(s.kind)) audioByReport.set(s.report_id, s);
+  for (const s of rows.sources)
+    if (isVoiceSourceKind(s.kind) && !audioByReport.has(s.report_id))
+      audioByReport.set(s.report_id, s);
 
   const invoices: InvoiceDetail[] = rowsOut
     .filter((r) => r.invoiceId)
@@ -1802,8 +1823,13 @@ export function assembleHours(
               ? entry.source
               : null;
           const audioStart = src && typeof src.start === 'number' ? src.start : null;
+          // The voice note the entry cites (a spoken correction is a note of its own, F10), else
+          // the report's.
           const audio = audioByReport.get(rid);
-          const transcript = audio ? transcriptByMedia.get(sourceMediaId(audio)) : undefined;
+          const mediaId =
+            (src ? voiceMediaIdOf(src as unknown as Source) : null) ??
+            (audio ? sourceMediaId(audio) : null);
+          const transcript = mediaId ? transcriptByMedia.get(mediaId) : undefined;
           const seg =
             transcript && audioStart !== null
               ? segmentsOf(transcript.segments).find(
@@ -1821,9 +1847,7 @@ export function assembleHours(
             siteName: (siteId && ix.siteById.get(siteId)?.name) || '',
             quote,
             audioStart,
-            messageId:
-              (audio && sourceMediaId(audio)) ??
-              (src ? voiceMediaIdOf(src as unknown as Source) : null),
+            messageId: mediaId,
           });
         }
       }
@@ -2079,6 +2103,7 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
       onTime30: expected ? Math.round((onTime / expected) * 100) : null,
       reports30,
       lastInviteError: r.last_invite_error,
+      contactPref: r.contact_pref,
     };
   });
   reporters.sort((a, b) => a.name.localeCompare(b.name));
@@ -2094,6 +2119,7 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
         ? (ix.siteById.get(u.guessed_site_id)?.name ?? null)
         : null,
       messageId: u.message_id,
+      channel: u.channel,
     }));
   return {
     reporters,

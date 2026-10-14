@@ -210,11 +210,10 @@ export type MessageRow = {
   direction: MsgDirection;
   wa_message_id: string | null;
   /**
-   * WhatsApp message type. Nullable in the database since 20261013000007 (SMS rows have none),
-   * typed non-null while every row is a WhatsApp or office one: W1-08 widens it with the first
-   * SMS writer and the readers of SMS rows.
+   * WhatsApp message type; null on SMS rows (nullable since 20261013000007). The W1-06 demo seed
+   * is the first writer of SMS rows (the §18 texts, `copy_key` set).
    */
-  type: MsgType;
+  type: MsgType | null;
   body: string | null;
   payload: Json | null;
   media_id: string | null;
@@ -238,11 +237,11 @@ export type MessageRow = {
 export type TranscriptRow = {
   id: string;
   /**
-   * The WhatsApp voice note. Nullable in the database since 20261013000007 (a v1.2 transcript
-   * sets upload_id or call_id instead, at most one), typed non-null while every transcript is a
-   * WhatsApp one: W1-11 widens it with transcribe_upload and its readers.
+   * The WhatsApp voice note; null on a v1.2 transcript, which sets upload_id or call_id instead
+   * (at most one; nullable since 20261013000007). The W1-06 demo seed writes the first ones (the
+   * hero voice note, the unknown caller).
    */
-  message_id: string;
+  message_id: string | null;
   upload_id: string | null;
   call_id: string | null;
   language: string | null;
@@ -819,6 +818,7 @@ export type Database = {
         | 'conversation_id'
         | 'org_id'
         | 'wa_message_id'
+        | 'type'
         | 'body'
         | 'payload'
         | 'media_id'
@@ -837,7 +837,7 @@ export type Database = {
       >;
       transcripts: Table<
         TranscriptRow,
-        'id' | 'upload_id' | 'call_id' | 'language' | 'model' | 'created_at'
+        'id' | 'message_id' | 'upload_id' | 'call_id' | 'language' | 'model' | 'created_at'
       >;
       unknown_contacts: Table<
         UnknownContactRow,

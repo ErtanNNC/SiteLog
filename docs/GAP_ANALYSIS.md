@@ -679,7 +679,7 @@ Each item: what the repo does, what v1.2 (or the kit `CLAUDE.md`) says, and a re
 - **D5 · Vitest workspace.** **Recommend:** keep per-package configs run by `pnpm -r test`.
 - **D6 · Hono for `field-api`.** **Recommend:** use Hono for `field-api` only (about 14 routes plus voice tool routes later), wrapping the existing `_shared` helpers; leave other functions as they are.
 - **D7 · Generated `db.types.ts` vs hand-maintained types.** **Recommend:** keep the hand-maintained file with the CI drift check (`README.md:58`); update it in every migration commit.
-- **D8 · `seed:demo` semantics.** Repo generates `seed.sql`; plan wants service-role, idempotent seeding with `--date today`. **Recommend:** keep the generator (it also feeds demo mode, DB tests and e2e) and add an apply mode that upserts by the deterministic ids and touches only `is_demo` orgs; default output stays Oct 9 for e2e.
+- **D8 · `seed:demo` semantics.** Repo generates `seed.sql`; plan wants service-role, idempotent seeding with `--date today`. **Recommend:** keep the generator (it also feeds demo mode, DB tests and e2e) and add an apply mode that upserts by the deterministic ids and touches only `is_demo` orgs; default output stays Oct 9 for e2e. **Done in W1-06:** `seed.sql` is one idempotent script (`packages/shared/src/demo/seed-sql.ts`) that `pnpm seed:demo -- --apply` runs over `SUPABASE_DB_URL` in one transaction: it refuses a non-demo org with a demo id, upserts the demo orgs and users by id and replaces the demo orgs' rows, audit rows included with fixed ids, and drops the queued or running jobs that name them; it needs the field app's URL for the seeded links and its own `DEMO_OFFICE_PASSWORD` (seed.sql's password is for local stacks only).
 
 ### Copy, i18n and brand
 
@@ -720,7 +720,7 @@ Each item: what the repo does, what v1.2 (or the kit `CLAUDE.md`) says, and a re
 - **D33 · Report number and PDF file name.** Report numbers already match (`packages/shared/src/report/numbering.ts:2-4`, `supabase/migrations/20261012000002_rpc_fixes.sql:15`). **Recommend:** keep the storage object `{report_no}_v{n}.pdf`; serve downloads, attachments and zip entries with the §12 name `{report_no}_{YYYY-MM-DD}_v{version}.pdf`.
 - **D34 · Turkish PDF in week 1 or M11.** **Recommend:** EN/TR labels and a Turkish sample render in week 1 (the fonts already carry the glyphs); metric weather and TR polish in M11.
 - **D35 · Artboards without a channel column or filter.** **Recommend:** the spec wins (`CLAUDE.md:20`); add them and note the mismatch.
-- **D36 · Oct 9 "awaiting" and `--date today`.** **Recommend:** with `--date today`, history ends yesterday and today's sites start pending/awaiting (the demo script's "five awaiting"); the unshifted Oct 9 output stays the default for e2e.
+- **D36 · Oct 9 "awaiting" and `--date today`.** **Recommend:** with `--date today`, history ends yesterday and today's sites start pending/awaiting (the demo script's "five awaiting"); the unshifted Oct 9 output stays the default for e2e. **Done in W1-06:** history moves by whole weeks (weekdays stay weekdays) and ends the working day before; today is §18.1's Oct 9 as of the 17:00 daily link: Pier 9 filed at 16:58, the other five awaiting. Built earlier on the day itself, it stops at the clock (nothing after it, so before 16:59 Pier 9 is awaiting too).
 - **D38 · Function names.** **Recommend:** keep `stripe-webhook` (its URL is registered in Stripe); rename `api-link-unknown-sender` → `api-link-unknown-contact` by deploy-new, switch, delete-old.
 - **D39 · `field-api` URL shape.** **Recommend:** the field app calls `/api/<route>` (e.g. `/api/resolve`); Hono mounts under `/field-api`; record Appendix B's `/field/…` prefix as a logical grouping.
 - **D45 · `COST_WA_TEMPLATE_USD`.** **Recommend:** drop it with WhatsApp; add an SMS per-segment cost when cost-per-report is reworked (§15.1).
@@ -883,6 +883,7 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 9. For W1-19, should the worker run on a developer machine, or should we create the Fly app now?
 10. Please confirm or change the **owner** items in section 6: D10, D13, D14, D19, D22, D23, D30, D40, D41, D42.
 11. Should deleting an org, site, site-day or company keep cascading to its reports, versions and invoices (and an org to its unknown contacts) as built, or refuse the delete as §6.3 does (spec §19 question 17)? Until you answer, the end-state allowlist keeps the repo's 17 `ON DELETE` actions as `repo-on-delete`; besides the cascades, deleting a company, reporter, user or report leaves a null link, and deleting a message leaves an unknown contact with a null `message_id`.
+12. Who signs in to the TR demo org Demir Yapı A.Ş.? §18.2 names no office user (spec §19 question 18). Options: a separate fictional TR admin (e.g. a `@demiryapi.example` user with panel language TR), Lena as a member of both orgs with the org switcher, or both. Recommendation: a separate TR admin, so the Kestrel e2e is unaffected. Until you answer, W1-06 seeds no Demir Yapı office user, and the `e2e:supabase` test that shows the org in Turkish creates its own temporary user.
 
 ---
 

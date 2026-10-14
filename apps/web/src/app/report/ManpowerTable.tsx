@@ -77,6 +77,7 @@ export function SourceLinks({
             messageAt={given?.at ?? null}
             messageId={given?.messageId ?? null}
             editorName={editor(s)}
+            playerAudioId={detail.audio?.messageId ?? null}
             onOpenMessage={onOpenMessage}
             onOpenHistory={onOpenHistory}
           />

@@ -1090,6 +1090,11 @@ export const copy = {
       siteRequired: 'Choose a site.',
     },
     reportsCount: (n: number) => `${plural(n, 'report')}`,
+    /** §2.3 contact preference, under the status chip (F3: "Active · Prefers call/link"). */
+    prefers: {
+      link: 'Prefers text link',
+      call: 'Prefers call',
+    },
     primary: 'Primary',
     noSites: 'No sites',
     empty: 'No reporters yet. Invite the first site manager.',

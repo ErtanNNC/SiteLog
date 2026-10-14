@@ -1827,6 +1827,13 @@ export class DemoStore {
     d.notifications = d.notifications.filter(
       (n) => !removed.some((r) => n.target_path === `/reports/${r.id}`),
     );
+    // The day's recorder files and their transcripts go with the reports; a call stays, unlinked.
+    const goneUploads = new Set(
+      d.uploads.filter((u) => u.report_id && ids.has(u.report_id)).map((u) => u.id),
+    );
+    d.uploads = d.uploads.filter((u) => !goneUploads.has(u.id));
+    d.transcripts = d.transcripts.filter((t) => !(t.upload_id && goneUploads.has(t.upload_id)));
+    for (const c of d.calls) if (c.report_id && ids.has(c.report_id)) c.report_id = null;
     const convo = d.conversations.find((c) => c.reporter_id === reporterId);
     if (convo) {
       const gone = new Set(
@@ -1840,7 +1847,7 @@ export class DemoStore {
           .map((m) => m.id),
       );
       d.messages = d.messages.filter((m) => !gone.has(m.id));
-      d.transcripts = d.transcripts.filter((t) => !gone.has(t.message_id));
+      d.transcripts = d.transcripts.filter((t) => !(t.message_id && gone.has(t.message_id)));
     }
     site.report_seq = info.reportSeqAfterReset;
     sd.status = info.statusAfterReset;
@@ -1912,7 +1919,9 @@ export class DemoStore {
     );
     if (gone.size === 0) return;
     this.data.messages = this.data.messages.filter((m) => !gone.has(m.id));
-    this.data.transcripts = this.data.transcripts.filter((t) => !gone.has(t.message_id));
+    this.data.transcripts = this.data.transcripts.filter(
+      (t) => !(t.message_id && gone.has(t.message_id)),
+    );
   }
 
   /** §F5 step 1: report row (collecting) with the site's next number. */

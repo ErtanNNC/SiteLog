@@ -13,6 +13,11 @@ export interface SourceLinkProps {
   messageId?: string | null;
   timezone: string;
   editorName?: string | null;
+  /**
+   * The voice note the page's player holds (its upload or message id). A voice-note source of
+   * another note (a spoken correction, F10) shows its second without seeking this player.
+   */
+  playerAudioId?: string | null;
   onOpenMessage?: (messageId: string) => void;
   onOpenHistory?: () => void;
   className?: string;
@@ -25,6 +30,7 @@ export function SourceLink({
   messageId,
   timezone,
   editorName,
+  playerAudioId,
   onOpenMessage,
   onOpenHistory,
   className,
@@ -39,6 +45,12 @@ export function SourceLink({
   switch (source.type) {
     case 'voice_note': {
       const ts = formatAudioTimestamp(source.start);
+      if (playerAudioId !== undefined && source.uploadId !== playerAudioId)
+        return (
+          <span className={plain} data-source="voice_note">
+            {copy.source.audio(ts)}
+          </span>
+        );
       return (
         <button
           type="button"

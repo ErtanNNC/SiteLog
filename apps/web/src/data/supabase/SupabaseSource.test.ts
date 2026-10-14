@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
+import { V12_ROW_DEFAULTS } from '@sitelog/shared/db/defaults.ts';
 import type { Db } from '@/lib/supabase';
 import { buildIndex, currentVersion, type RowSet } from '../assemble';
 import type { ReportFilters } from '../types';
@@ -986,6 +987,55 @@ describe('SupabaseSource: report files in uploads (W1-05 step 10)', () => {
     return uploads;
   }
 
+  /**
+   * The fake database before step 10, from the W1-06 seed (whose media are uploads already): each
+   * report's voice note and photos become WhatsApp messages of the reporter's conversation under
+   * the same id, their sources carry message_id and the WhatsApp kinds, transcripts message_id.
+   */
+  function whatsappEra(db: FakeDb, store: DemoStore) {
+    const t = db.tables;
+    const convoOf = new Map(store.data.conversations.map((c) => [c.reporter_id, c.id]));
+    const reporterOf = new Map(t.reports!.map((r) => [r.id as string, r.reporter_id as string]));
+    const media = t.uploads!.filter((u) => u.report_id && !u.uploaded_by);
+    const ids = new Set(media.map((u) => u.id as string));
+    t.messages = [
+      ...t.messages!,
+      ...media.map((u) => ({
+        ...V12_ROW_DEFAULTS.messages,
+        id: u.id,
+        conversation_id: convoOf.get(reporterOf.get(u.report_id as string) ?? null) ?? null,
+        org_id: null,
+        direction: 'in',
+        wa_message_id: `wamid.${String(u.id)}`,
+        type: u.kind === 'audio' ? 'audio' : 'image',
+        body: u.kind === 'photo' ? u.caption : null,
+        payload: u.peaks ? { peaks: u.peaks } : null,
+        media_id: null,
+        media_mime: u.mime,
+        storage_path: u.storage_path,
+        duration_s: u.duration_s,
+        template_name: null,
+        status: 'received',
+        error: null,
+        created_at: u.received_at,
+      })),
+    ];
+    t.report_sources = t.report_sources!.map((s) =>
+      ids.has(s.upload_id as string)
+        ? {
+            ...s,
+            kind: s.kind === 'voice_note' ? 'audio' : s.kind,
+            message_id: s.upload_id,
+            upload_id: null,
+          }
+        : s,
+    );
+    t.transcripts = t.transcripts!.map((x) =>
+      ids.has(x.upload_id as string) ? { ...x, message_id: x.upload_id, upload_id: null } : x,
+    );
+    t.uploads = t.uploads!.filter((u) => !ids.has(u.id as string));
+  }
+
   const view = (d: Awaited<ReturnType<SupabaseSource['getReportDetail']>>) => ({
     audio: d.audio,
     transcript: d.transcript,
@@ -996,6 +1046,7 @@ describe('SupabaseSource: report files in uploads (W1-05 step 10)', () => {
 
   it('shows a report the same from backfilled uploads as from the WhatsApp messages', async () => {
     const { store, db, live } = sources();
+    whatsappEra(db, store);
     const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
     const before = view(await live.getReportDetail(hero.id));
     expect(before.audio).not.toBeNull();
@@ -1018,6 +1069,7 @@ describe('SupabaseSource: report files in uploads (W1-05 step 10)', () => {
 
   it('reads a photo that has no message (an office photo from step 10 on) from its upload', async () => {
     const { store, db, live } = sources();
+    whatsappEra(db, store);
     const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
     const before = view(await live.getReportDetail(hero.id));
     const uploads = backfill(db, { photosWithoutMessages: true });
@@ -1043,6 +1095,7 @@ describe('SupabaseSource: report files in uploads (W1-05 step 10)', () => {
 
   it('keeps the Photos tab, Hours and the transcript search the same on backfilled rows', async () => {
     const { store, db, live } = sources();
+    whatsappEra(db, store);
     const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
     const word = (store.data.transcripts[0]!.text.match(/[A-Za-z]{6,}/) ?? ['concrete'])[0];
     const before = {

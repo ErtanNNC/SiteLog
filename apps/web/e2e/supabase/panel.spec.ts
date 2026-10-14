@@ -29,6 +29,12 @@ function realtimeReady(page: Page): Promise<void> {
 
 test('magic-link sign-in lands on the Overview with the seeded sites', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1, name: 'Today across 6 sites' })).toBeVisible();
+  // lena@kestrelbuild.example is in Kestrel Build Group only (W1-06; the TR demo org has no
+  // office user, demir.spec.ts).
+  await expect(
+    page.getByRole('button', { name: 'Kestrel Build Group 6 active sites, Switch company' }),
+  ).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.getByTestId('demo-chip')).toHaveCount(0);
   await expect(page.getByTestId('kpi-reports-in')).toHaveText(/4\s*\/\s*6/);
   const table = page.getByRole('table', { name: 'Sites today' });

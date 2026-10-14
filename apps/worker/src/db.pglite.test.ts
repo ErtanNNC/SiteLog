@@ -13,6 +13,7 @@ import {
 // The @sitelog/db harness (supabase/db-tests) boots PGlite with the Supabase stubs, every
 // migration and the demo seed. Imported by path so the worker image does not need that package.
 import { bootDatabase } from '../../../supabase/db-tests/src/harness.ts';
+import { DEMO_AUDIT_ID_BASE } from '@sitelog/shared/demo/rows.ts';
 import { STALE_LOCK_MS } from './config';
 import type { Ctx } from './context';
 import { connectSql, createDb, type Db } from './db';
@@ -88,7 +89,9 @@ describe('PostgresDb on PGlite: seed reads and type parsing', () => {
     const org = (await db.getOrg(ORG))!;
     expect(org.name).toBe('Kestrel Build Group');
     expect(org.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    expect((await db.listOrgs()).map((o) => o.id)).toEqual([ORG]);
+    // The two §18 demo orgs, oldest first: Kestrel Build Group, then Demir Yapı A.Ş. (W1-06).
+    const demir = await one<{ id: string }>(`select id from orgs where name = 'Demir Yapı A.Ş.'`);
+    expect((await db.listOrgs()).map((o) => o.id)).toEqual([ORG, demir.id]);
 
     const settings = (await db.getOrgSettings(ORG))!;
     expect(settings.working_days).toEqual([1, 2, 3, 4, 5]); // smallint[] → number[]
@@ -297,7 +300,16 @@ describe('PostgresDb on PGlite: conversations and messages', () => {
       ['welcome_sent', 'idle'],
       new Date('2026-10-08T00:00:00Z'),
     );
-    expect(old.map((c) => c.phone_e164)).toEqual(['+15550143390']);
+    // The seed's WhatsApp threads only serve /try (W1-06): each last changed at its reporter's
+    // invite, so all but Marco's (moved above) are older than Oct 8.
+    expect(old.map((c) => c.phone_e164).sort()).toEqual([
+      '+15550142087',
+      '+15550143390',
+      '+15550145521',
+      '+15550146604',
+      '+15550147719',
+      '+15550149932',
+    ]);
     await db.updateConversation(marco.id, { state: 'idle', context: {} });
   });
 
@@ -1121,7 +1133,11 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
       actor_id: string | null;
       diff: unknown;
       entity: string | null;
-    }>(`select actor_type, actor_id, diff, entity from audit_log order by id desc limit 2`);
+    }>(
+      // The seed's audit rows carry fixed ids above the sequence's (DEMO_AUDIT_ID_BASE, W1-06).
+      `select actor_type, actor_id, diff, entity from audit_log where id < $1 order by id desc limit 2`,
+      [DEMO_AUDIT_ID_BASE],
+    );
     expect(rows).toEqual([
       { actor_type: 'system', actor_id: null, diff: null, entity: null },
       {
@@ -1349,8 +1365,8 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
     expect(purged.payload).toEqual({ voice: true, purged_at: '2026-11-12T03:00:00.000Z' });
     expect(await db.getTranscript(audio.id)).toBeNull();
     expect((await db.listExpiredMedia(before, 500)).map((m) => m.id)).not.toContain(audio.id);
-    // A message without payload gets one.
-    const other = expired.find((m) => m.id !== audio.id)!;
+    // A message without payload gets one (the inbound document; the seed's media are uploads).
+    const other = expired.find((m) => m.id === inDoc)!;
     await q(`update messages set payload = null where id = $1`, [other.id]);
     await db.purgeMedia(other.id, new Date('2026-11-12T03:00:00Z'));
     expect((await db.getMessage(other.id))!.payload).toEqual({
@@ -1549,14 +1565,17 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
 
 describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
   it('reads an office upload (no conversation) and prints it on the edited version only', async () => {
-    // A WhatsApp report with two stored photos.
+    // A reporter's report (stored v1 data, as the seed's history is) with two stored photos.
     const report = await one<{ id: string; site_id: string; current_version: number }>(
       `select r.id, r.site_id, r.current_version from reports r
+       join report_versions v on v.report_id = r.id and v.version = r.current_version
        where r.reporter_id is not null and r.status = 'filed'
-         and (select count(*) from report_sources rs join messages m on m.id = rs.message_id
-              where rs.report_id = r.id and rs.kind = 'photo' and m.storage_path is not null) = 2
-         and not exists (select 1 from report_sources rs join messages m on m.id = rs.message_id
-                         where rs.report_id = r.id and m.storage_path is null)
+         and v.data->>'schemaVersion' is distinct from '2'
+         and jsonb_array_length(v.data->'photos') = 2
+         and (select count(*) from report_sources rs join uploads u on u.id = rs.upload_id
+              where rs.report_id = r.id and rs.kind = 'photo' and u.purged_at is null) = 2
+         and not exists (select 1 from report_sources rs join uploads u on u.id = rs.upload_id
+                         where rs.report_id = r.id and u.purged_at is not null)
        order by r.report_no limit 1`,
     );
     const before = (await db.getVersion(report.id, report.current_version))!;

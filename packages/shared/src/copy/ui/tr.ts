@@ -111,6 +111,10 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         ops: 'Operasyon',
         accounts: 'Muhasebe',
       },
+      prefers: {
+        link: 'Tercih: mesajla link',
+        call: 'Tercih: telefon araması',
+      },
     },
     settings: {
       tabs: {

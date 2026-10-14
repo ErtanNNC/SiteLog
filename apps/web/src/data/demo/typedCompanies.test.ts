@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   emptyReportDataV1,
   type DailyReportDataV1,
+  type ManpowerEntry,
   type ManpowerEntryV1,
 } from '@sitelog/shared/schemas/report.ts';
 import { upgradeV1toV2 } from '@sitelog/shared/report/upgrade.ts';
-import { storedV1 } from '@/test/storedData';
+import { storedV2 } from '@/test/storedData';
 import { unlinkedCompanyReasons } from '../assemble';
 import { DemoSource } from './DemoSource';
 import { DemoStore, demoUserFor } from './store';
@@ -132,10 +133,16 @@ describe('demo: companies typed in the panel', () => {
     const { store, s } = setup();
     const oakmont = store.data.reports.find((r) => r.report_no === 'OM-1187-0133')!;
     expect(oakmont.review_reasons).toEqual(['unknown_company:Ridgeway']);
-    const cur = storedV1(await s.getReportDetail(oakmont.id));
+    // Oakmont's Oct 9 report is stored as v1.2 data (W1-06): the edit writes v2 too.
+    const cur = storedV2(await s.getReportDetail(oakmont.id));
+    const northlineCrew: ManpowerEntry = {
+      ...crew(null, 'Northline Steel'),
+      source: [],
+      hoursBasis: 'office_edit',
+    };
     const { version } = await s.createReportVersion(
       oakmont.id,
-      { ...cur, manpower: [...cur.manpower, crew(null, 'Northline Steel')] },
+      { ...cur, manpower: [...cur.manpower, northlineCrew] },
       'Northline was on site too',
     );
     const next = await s.getReportDetail(oakmont.id, version);

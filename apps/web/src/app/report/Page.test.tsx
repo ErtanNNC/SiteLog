@@ -2,11 +2,11 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
-import { upgradeV1toV2 } from '@sitelog/shared/report/upgrade.ts';
-import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore, demoUserFor, type DemoLoginKey } from '@/data/demo/store';
 import type * as PhotosModule from '@/lib/photos';
 import { makeSource, renderWithProviders } from '@/test/render';
+import { storeHeroAs } from '@/test/heroData';
 import ReportDetailPage from './Page';
 
 // The browser PDF renderer (react-pdf, fonts) is exercised by the e2e smoke test.
@@ -66,6 +66,19 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
       4,
     );
     expect(screen.getByText('Question answered')).toBeInTheDocument();
+  });
+
+  it('cites the spoken correction for Apex in v2 without seeking the 17:38 note (F10)', async () => {
+    renderReport('RL-2041-0187');
+    const manpower = await screen.findByRole('table', { name: 'Manpower' });
+    const row = (name: string) => within(manpower).getByText(name).closest('tr')!;
+    const apex = row('Apex Concrete').querySelector('[data-source="voice_note"]')!;
+    expect(apex.tagName).toBe('SPAN'); // the 20:09 note: not the one in the player
+    expect(apex).toHaveTextContent('audio 0:00');
+    const delta = row('Delta Mechanical').querySelector('[data-source="voice_note"]')!;
+    expect(delta.tagName).toBe('BUTTON');
+    // The 17:38 note's excerpts quote no line for Apex ("Apex had six guys" is v1's source).
+    expect(screen.queryByText(/Apex Concrete · 7 workers/)).not.toBeInTheDocument();
   });
 
   it('switches to v1 and shows the original 23 crew / 184 h', async () => {
@@ -152,15 +165,15 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
     expect(v3.change_note).toBe('BrightLine had 6, not 5');
     expect(v3.author).toBe('office_user');
-    const data = v3.data as unknown as DailyReportDataV1;
+    const data = v3.data as unknown as DailyReportData;
     expect(data.manpower[1]!.workers).toBe(6);
-    expect(data.manpower[1]!.source).toHaveLength(2); // audio + office_edit
-    // The view reads v2, but the new version keeps the edited version's stored shape (v1 until
-    // the writers move to v2, W1-12): v1 sources, photos keyed by message id.
-    expect(data.schemaVersion).toBe(1);
-    expect(data.manpower[1]!.source[0]).toMatchObject({ type: 'audio' });
-    expect(data.photos.every((p) => typeof p.messageId === 'string')).toBe(true);
-    expect(data).not.toHaveProperty('units');
+    expect(data.manpower[1]!.source).toHaveLength(2); // voice note + office_edit
+    // The new version keeps the edited version's stored shape: the seeded hero is v1.2 data
+    // (W1-06), so v2 sources and photos keyed by upload id.
+    expect(data.schemaVersion).toBe(2);
+    expect(data.manpower[1]!.source[0]).toMatchObject({ type: 'voice_note' });
+    expect(data.photos.every((p) => typeof p.uploadId === 'string')).toBe(true);
+    expect(data.units).toBe('imperial');
     await waitFor(() =>
       expect(screen.getByTestId('version-switcher')).toHaveTextContent('v3 · current'),
     );
@@ -172,16 +185,19 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
 });
 
 describe('ReportDetailPage: report data stored as v2 (§10.3)', () => {
-  /** The hero report with every version stored as schemaVersion 2 (as W1-06 seeds data). */
-  function heroAsV2(change?: (data: ReturnType<typeof upgradeV1toV2>) => void): DemoStore {
+  /** The hero report as seeded (v1.2 data, W1-06), its versions changed in place. */
+  function heroAsV2(change?: (data: DailyReportData) => void): DemoStore {
     const store = new DemoStore();
     const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
-    for (const v of store.data.versions) {
-      if (v.report_id !== hero.id) continue;
-      const v2 = upgradeV1toV2(v.data as unknown as DailyReportDataV1);
-      change?.(v2);
-      v.data = v2 as unknown as typeof v.data;
-    }
+    for (const v of store.data.versions)
+      if (v.report_id === hero.id) change?.(v.data as unknown as DailyReportData);
+    return store;
+  }
+
+  /** The same facts stored as v1 and as v2 (test/heroData.ts). */
+  function heroStoredAs(schemaVersion: 1 | 2): DemoStore {
+    const store = new DemoStore();
+    storeHeroAs(store, schemaVersion);
     return store;
   }
 
@@ -200,8 +216,8 @@ describe('ReportDetailPage: report data stored as v2 (§10.3)', () => {
   }
 
   it('shows a version stored as v2 exactly like the v1 version it upgrades from', async () => {
-    const v1 = await articleText(new DemoStore());
-    const v2 = await articleText(heroAsV2());
+    const v1 = await articleText(heroStoredAs(1));
+    const v2 = await articleText(heroStoredAs(2));
     expect(v1).toContain('audio 0:41');
     expect(v2).toBe(v1);
   });
@@ -228,14 +244,14 @@ describe('ReportDetailPage: report data stored as v2 (§10.3)', () => {
 });
 
 describe('ReportDetailPage: photos in Edit', () => {
-  it('removes a WhatsApp photo and adds an office photo as a new version', async () => {
+  it('removes a recorder photo and adds an office photo as a new version', async () => {
     const user = userEvent.setup();
     const { store, report } = renderReport('RL-2041-0187');
     await screen.findByRole('heading', { name: 'Friday, Oct 9 — Riverside B' });
     const before = within(screen.getByTestId('section-photos')).getAllByTestId('report-photo');
     expect(before).toHaveLength(2);
     const v2 = store.data.versions.find((v) => v.report_id === report.id && v.version === 2)!;
-    const [first, second] = (v2.data as unknown as DailyReportDataV1).photos;
+    const [first, second] = (v2.data as unknown as DailyReportData).photos;
 
     await user.click(screen.getByRole('button', { name: 'Edit' }));
     const picker = within(await screen.findByTestId('report-editor')).getByTestId('photo-picker');
@@ -262,15 +278,15 @@ describe('ReportDetailPage: photos in Edit', () => {
     const row = store.data.reports.find((r) => r.id === report.id)!;
     expect(row.current_version).toBe(3);
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
-    const added = store.data.uploads.find((u) => u.report_id === report.id)!;
+    const added = store.data.uploads.find((u) => u.report_id === report.id && u.uploaded_by)!;
     expect(added).toMatchObject({
       caption: 'Pump truck at 13:00',
       kind: 'photo',
       reporter_id: null,
     });
-    expect((v3.data as unknown as DailyReportDataV1).photos).toEqual([
+    expect((v3.data as unknown as DailyReportData).photos).toEqual([
       second,
-      { messageId: added.id, caption: 'Pump truck at 13:00', takenAt: '2026-10-09T23:00:00.000Z' },
+      { uploadId: added.id, caption: 'Pump truck at 13:00', takenAt: '2026-10-09T23:00:00.000Z' },
     ]);
     expect(store.data.audit).toContainEqual(
       expect.objectContaining({
@@ -317,7 +333,7 @@ describe('ReportDetailPage: photos in Edit', () => {
     await user.click(within(dialog).getByTestId('confirm-save'));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
-    expect((v3.data as unknown as DailyReportDataV1).photos.map((p) => p.caption)).toEqual([
+    expect((v3.data as unknown as DailyReportData).photos.map((p) => p.caption)).toEqual([
       'Conditions this morning',
       'Slab edge, end of day',
     ]);
@@ -342,7 +358,7 @@ describe('ReportDetailPage: photos in Edit', () => {
     });
     await screen.findByRole('heading', { name: 'Friday, Oct 9 — Riverside B' });
     const v2 = store.data.versions.find((v) => v.report_id === report.id && v.version === 2)!;
-    const [first, second] = (v2.data as unknown as DailyReportDataV1).photos;
+    const [first, second] = (v2.data as unknown as DailyReportData).photos;
 
     await user.click(screen.getByRole('button', { name: 'Edit' }));
     const picker = within(await screen.findByTestId('report-editor')).getByTestId('photo-picker');
@@ -369,9 +385,9 @@ describe('ReportDetailPage: photos in Edit', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
     const v3 = store.data.versions.find((v) => v.report_id === report.id && v.version === 3)!;
-    const added = store.data.uploads.find((u) => u.report_id === report.id)!;
-    expect((v3.data as unknown as DailyReportDataV1).photos).toEqual([
-      { messageId: added.id, caption: 'Crane lift', takenAt: '2026-10-09T23:00:00.000Z' },
+    const added = store.data.uploads.find((u) => u.report_id === report.id && u.uploaded_by)!;
+    expect((v3.data as unknown as DailyReportData).photos).toEqual([
+      { uploadId: added.id, caption: 'Crane lift', takenAt: '2026-10-09T23:00:00.000Z' },
       first,
       second,
     ]);
@@ -383,7 +399,7 @@ describe('ReportDetailPage: photos in Edit', () => {
     const current = store.data.versions.find(
       (v) => v.report_id === report.id && v.version === report.current_version,
     )!;
-    const data = current.data as unknown as DailyReportDataV1;
+    const data = current.data as unknown as DailyReportData;
     data.photos[0] = { ...data.photos[0]!, takenAt: '2026-10-08T19:05:00.000Z' };
     data.photos[1] = { ...data.photos[1]!, takenAt: '2026-10-09T21:40:00.000Z' };
     renderWithProviders(<ReportDetailPage />, {

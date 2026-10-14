@@ -47,8 +47,9 @@ select 'Messages by type and conversation',
   count(*) filter (where org_id is distinct from current_setting('sitelog.demo_org')::uuid),
   count(*)::text
 from (
-  select m.type::text || case when m.conversation_id is null then ' · no conversation'
-                              else ' · conversation' end as label,
+  -- An SMS row has no WhatsApp type (v1.2, D15).
+  select coalesce(m.type::text, 'sms') || case when m.conversation_id is null then ' · no conversation'
+                                               else ' · conversation' end as label,
          coalesce(m.org_id, c.org_id) as org_id
   from messages m
   left join conversations c on c.id = m.conversation_id
@@ -56,6 +57,21 @@ from (
 group by rollup (label)
 order by grouping(label), label;
 
+\if :has_unknown_contacts
+-- v1.2 schema (W1-05 step 9 on): a transcript belongs to a WhatsApp message, an upload or a call.
+select 'Transcripts', 'transcripts',
+  count(*) filter (where o.org_id = current_setting('sitelog.demo_org')::uuid),
+  count(*) filter (where o.org_id is distinct from current_setting('sitelog.demo_org')::uuid),
+  count(*)::text
+from transcripts t
+cross join lateral (
+  select coalesce(
+    (select coalesce(m.org_id, c.org_id) from messages m
+       left join conversations c on c.id = m.conversation_id where m.id = t.message_id),
+    (select s.org_id from uploads u join sites s on s.id = u.site_id where u.id = t.upload_id),
+    (select k.org_id from calls k where k.id = t.call_id)) as org_id
+) o;
+\else
 select 'Transcripts', 'transcripts',
   count(*) filter (where coalesce(m.org_id, c.org_id) = current_setting('sitelog.demo_org')::uuid),
   count(*) filter (where coalesce(m.org_id, c.org_id) is distinct from current_setting('sitelog.demo_org')::uuid),
@@ -63,6 +79,7 @@ select 'Transcripts', 'transcripts',
 from transcripts t
 join messages m on m.id = t.message_id
 left join conversations c on c.id = m.conversation_id;
+\endif
 
 \if :has_unknown_contacts
 select 'Unknown contacts by status', case when grouping(status) = 1 then 'all' else status::text end,

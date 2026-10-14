@@ -227,7 +227,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
           m.direction === 'in' &&
           new Date(m.created_at) >= from &&
           new Date(m.created_at) <= to &&
-          (!types || types.includes(m.type)),
+          (!types || (m.type !== null && types.includes(m.type))),
       );
     },
 

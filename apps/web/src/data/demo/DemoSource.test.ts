@@ -20,9 +20,9 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(o.kpis.reportsIn).toBe(4);
     expect(o.kpis.total).toBe(6);
     expect(o.kpis.segments).toEqual({ filed: 4, weather: 1, missing: 1, awaiting: 0, noWork: 0 });
-    // Riverside 24 + Oakmont 23 + Pier 9 10 + Northgate 11
-    expect(o.kpis.crewOnSite).toBe(68);
-    expect(o.kpis.laborHours).toBe(544);
+    // Riverside 24 + Oakmont 23 + Pier 9 13 + Northgate 14 (§18.1: 14 workers, 100.0 h)
+    expect(o.kpis.crewOnSite).toBe(74);
+    expect(o.kpis.laborHours).toBe(580);
     // Riverside (3.5 h), Pier 9 (2 h), Hillcrest (weather day, 5 h)
     expect(o.kpis.weatherAffectedSites).toBe(3);
     expect(o.kpis.weatherLostHours).toBe(10.5);
@@ -212,18 +212,38 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
 
   it('links a WhatsApp sender as an active reporter and refuses a text or a call (W1-16)', async () => {
     const { source: s, store } = source('ops');
+    // §18.1: the unknown contact called (W1-06); a caller is linked from W1-16 on.
     const luis = store.data.unknownContacts.find((u) => u.status === 'pending')!;
-    expect(luis.channel).toBeNull();
+    expect(luis.channel).toBe('voice');
     const siteId = luis.guessed_site_id!;
-    const texter = { ...luis, id: 'unknown:texter', phone_e164: '+15550100111', channel: 'sms' };
-    store.data.unknownContacts.push(texter as typeof luis);
+    await expect(
+      s.linkUnknownSender({ unknownSenderId: luis.id, siteId, name: 'Luis' }),
+    ).rejects.toThrow('You’re not allowed to do that.');
+    const texter = {
+      ...luis,
+      id: 'unknown:texter',
+      phone_e164: '+15550100111',
+      channel: 'sms' as const,
+      call_id: null,
+    };
+    store.data.unknownContacts.push(texter);
     await expect(
       s.linkUnknownSender({ unknownSenderId: texter.id, siteId, name: 'Texter' }),
     ).rejects.toThrow('You’re not allowed to do that.');
-    expect(store.data.reporters.some((r) => r.phone_e164 === texter.phone_e164)).toBe(false);
-    await s.linkUnknownSender({ unknownSenderId: luis.id, siteId, name: 'Luis' });
-    expect(luis.status).toBe('linked');
-    const reporter = store.data.reporters.find((r) => r.phone_e164 === luis.phone_e164)!;
+    for (const phone of [luis.phone_e164, texter.phone_e164])
+      expect(store.data.reporters.some((r) => r.phone_e164 === phone)).toBe(false);
+    // A WhatsApp sender (no channel) is linked as before.
+    const sender = {
+      ...luis,
+      id: 'unknown:wa',
+      phone_e164: '+15550100222',
+      channel: null,
+      call_id: null,
+    };
+    store.data.unknownContacts.push(sender);
+    await s.linkUnknownSender({ unknownSenderId: sender.id, siteId, name: 'Luis' });
+    expect(sender.status).toBe('linked');
+    const reporter = store.data.reporters.find((r) => r.phone_e164 === sender.phone_e164)!;
     expect(reporter).toMatchObject({ status: 'active', name: 'Luis' });
     expect(reporter.activated_at).not.toBeNull();
   });

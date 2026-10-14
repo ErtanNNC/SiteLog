@@ -752,6 +752,21 @@ describe('office photos and the messages from before the migration', () => {
   });
 
   it('keeps WhatsApp messages scoped by their conversation as before', async () => {
+    // The W1-06 seed has WhatsApp threads but no WhatsApp messages: one voice note with its
+    // transcript, as the WhatsApp worker stores them.
+    const [thread] = await svc<{ id: string }>(
+      `select c.id from conversations c join reporters r on r.id = c.reporter_id
+       where c.org_id = $1 and r.name = 'Marco Ruiz'`,
+      [DEMO_ORG_ID],
+    );
+    const [note] = await svc<{ id: string }>(
+      `insert into messages (conversation_id, direction, type, status, duration_s)
+       values ($1, 'in', 'audio', 'received', 30) returning id`,
+      [thread!.id],
+    );
+    await svc(`insert into transcripts (message_id, text, segments) values ($1, 'Hi', '[]')`, [
+      note!.id,
+    ]);
     const counts = (
       await svc<{ own: number; total: number }>(
         `select count(*) filter (where c.org_id = $1)::int as own, count(*)::int as total

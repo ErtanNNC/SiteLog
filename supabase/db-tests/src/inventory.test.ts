@@ -115,10 +115,12 @@ describe('supabase/ops/inventory.sql', () => {
       expect(typeof r[1]).toBe('string');
     }
 
-    expect(section(rows, 'Orgs').get('orgs')).toEqual(['Orgs', 'orgs', 1, 0, '1']);
+    // The Kestrel demo org by its fixed id; the TR demo org (W1-06) counts with the rest.
+    expect(section(rows, 'Orgs').get('orgs')).toEqual(['Orgs', 'orgs', 1, 1, '2']);
 
     const seeded = await db.query<{ t: string; n: number }>(`
       select 'messages' as t, count(*)::int as n from messages union all
+      select 'kestrel_reporters', count(*)::int from reporters where org_id = '${DEMO_ORG_ID}' union all
       select 'reports', count(*)::int from reports union all
       select 'reporters', count(*)::int from reporters union all
       select 'versions', count(*)::int from report_versions union all
@@ -136,8 +138,8 @@ describe('supabase/ops/inventory.sql', () => {
     expect(all('Reporters by status')).toEqual([
       'Reporters by status',
       'all',
-      n.reporters,
-      0,
+      n.kestrel_reporters,
+      n.reporters! - n.kestrel_reporters!,
       String(n.reporters),
     ]);
     expect(all('Report versions by data schemaVersion')?.[4]).toBe(String(n.versions));
@@ -161,8 +163,9 @@ describe('supabase/ops/inventory.sql', () => {
     expect(section(rows, 'Report versions by data schemaVersion').has('schemaVersion 1')).toBe(
       true,
     );
+    // The seeded texts are SMS rows: no WhatsApp type, no conversation (W1-06).
     expect([...section(rows, 'Messages by type and conversation').keys()]).toContain(
-      'audio · conversation',
+      'sms · no conversation',
     );
 
     // Without storage, pg_cron or Vault (plain Postgres), those sections say so instead of failing.

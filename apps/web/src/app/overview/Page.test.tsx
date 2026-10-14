@@ -21,8 +21,8 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
     expect(
       screen.getByRole('img', { name: 'Breakdown: Filed 4, Weather day 1, Missing 1, Awaiting 0' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Crew on site').parentElement).toHaveTextContent('68');
-    expect(screen.getByText('Labor hours logged').parentElement).toHaveTextContent('544');
+    expect(screen.getByText('Crew on site').parentElement).toHaveTextContent('74');
+    expect(screen.getByText('Labor hours logged').parentElement).toHaveTextContent('580');
     expect(screen.getByText('Weather-affected sites').parentElement).toHaveTextContent('3');
   });
 

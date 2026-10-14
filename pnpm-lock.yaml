@@ -394,6 +394,9 @@ importers:
       dotenv:
         specifier: ^18.0.7
         version: 18.0.7
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
       zod:
         specifier: ^4.6.6
         version: 4.6.6

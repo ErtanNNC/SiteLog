@@ -122,6 +122,8 @@ describe('demo: photos on a report typed in the panel', () => {
     const { store, source, elm, upload } = setup();
     const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
     const before = store.data.reports.length;
+    const textsBefore = store.data.messages.length;
+    const uploadsBefore = store.data.uploads.length;
     const file = (photos: Parameters<DemoSource['createOfficeReport']>[0]['photos']) =>
       source.createOfficeReport({ siteId: elm.id, date: '2026-10-09', data: typed(), photos });
 
@@ -146,8 +148,8 @@ describe('demo: photos on a report typed in the panel', () => {
     );
     // Nothing was written by a refused call.
     expect(store.data.reports).toHaveLength(before);
-    expect(store.data.messages.some((m) => m.org_id)).toBe(false);
-    expect(store.data.uploads).toEqual([]);
+    expect(store.data.messages).toHaveLength(textsBefore);
+    expect(store.data.uploads).toHaveLength(uploadsBefore);
 
     await file([{ path: ok.path, mime: 'image/jpeg' }]);
     const { reportId } = await source.createOfficeReport({
@@ -344,27 +346,33 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
     expect(await source.findDayReport(elm.id, '2026-08-01')).toBeNull();
   });
 
-  it('shows every photo source with the message text as caption for data without a photo list', async () => {
+  it('shows every photo source with the upload caption for data without a photo list', async () => {
     const { store, source } = setup();
-    const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
-    const current = await source.getReportDetail(hero.id);
+    // A stored v1 report with two photos (Riverside, Fri Oct 2: rain in the morning).
+    const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
+    const day = store.data.siteDays.find(
+      (d) => d.site_id === riverside.id && d.date === '2026-10-02',
+    )!;
+    const report = store.data.reports.find((r) => r.id === day.report_id)!;
+    const current = await source.getReportDetail(report.id);
+    expect(current.photos).toHaveLength(2);
     expect(current.photos.map((p) => p.caption)).toEqual(
       current.data.photos.map((p) => p.caption ?? null),
     );
     // Legacy data: no `photos` key at all.
     const row = store.data.versions.find(
-      (v) => v.report_id === hero.id && v.version === hero.current_version,
+      (v) => v.report_id === report.id && v.version === report.current_version,
     )!;
     const { photos: _drop, ...legacy } = row.data as unknown as DailyReportDataV1;
     row.data = legacy as unknown as typeof row.data;
-    for (const s of store.data.sources) if (s.report_id === hero.id) s.caption = null;
-    const d = await source.getReportDetail(hero.id);
+    for (const s of store.data.sources) if (s.report_id === report.id) s.caption = null;
+    const d = await source.getReportDetail(report.id);
     const photoSources = store.data.sources.filter(
-      (s) => s.report_id === hero.id && s.kind === 'photo',
+      (s) => s.report_id === report.id && s.kind === 'photo',
     );
-    expect(d.photos.map((p) => p.messageId)).toEqual(photoSources.map((s) => s.message_id));
+    expect(d.photos.map((p) => p.messageId)).toEqual(photoSources.map((s) => s.upload_id));
     expect(d.photos.map((p) => p.caption)).toEqual(
-      photoSources.map((s) => store.data.messages.find((m) => m.id === s.message_id)!.body),
+      photoSources.map((s) => store.data.uploads.find((u) => u.id === s.upload_id)!.caption),
     );
   });
 });

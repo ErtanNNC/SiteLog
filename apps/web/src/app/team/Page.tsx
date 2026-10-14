@@ -166,7 +166,14 @@ export default function TeamPage() {
     {
       key: 'status',
       header: copy.team.columns.status,
-      cell: (r) => <ReporterChip status={r.chipStatus} />,
+      cell: (r) => (
+        <div className="flex flex-col items-start gap-1">
+          <ReporterChip status={r.chipStatus} />
+          <span className="font-mono text-[12px] text-dust" data-testid="contact-pref">
+            {copy.team.prefers[r.contactPref]}
+          </span>
+        </div>
+      ),
     },
     {
       key: 'menu',
@@ -266,12 +273,16 @@ export default function TeamPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  <Button variant="secondary" size="dense" onClick={() => setLinking(u)}>
-                    <Link2 aria-hidden="true" />
-                    {u.guessedSiteName
-                      ? copy.team.unknown.link(u.guessedSiteName)
-                      : copy.team.unknown.linkOther}
-                  </Button>
+                  {/* A caller or texter is linked once they consent (api-link-unknown-contact,
+                      W1-16); until then only WhatsApp senders can be linked here. */}
+                  {u.channel === null ? (
+                    <Button variant="secondary" size="dense" onClick={() => setLinking(u)}>
+                      <Link2 aria-hidden="true" />
+                      {u.guessedSiteName
+                        ? copy.team.unknown.link(u.guessedSiteName)
+                        : copy.team.unknown.linkOther}
+                    </Button>
+                  ) : null}
                   <Button
                     variant="ghost"
                     size="dense"

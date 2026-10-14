@@ -279,7 +279,10 @@ export async function buildEvidencePackInput(
         (audio.length > 0 && photos.length > 0 && !!observed),
       transcriptExcerpts: weatherExcerpts(
         data,
-        transcripts.flatMap((t) => transcriptSegments(t.upload_id ?? t.message_id, t)),
+        transcripts.flatMap((t) => {
+          const mediaId = t.upload_id ?? t.message_id;
+          return mediaId ? transcriptSegments(mediaId, t) : [];
+        }),
       ),
       photos,
       observed,

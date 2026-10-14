@@ -3,6 +3,8 @@
  * implementations (demo in-memory, Supabase) assemble them from DB-shaped rows.
  */
 import type {
+  ContactPref,
+  FieldChannel,
   InvoiceStatus,
   MemberRole,
   PackStatus,
@@ -631,6 +633,8 @@ export interface TeamReporter {
   onTime30: number | null;
   reports30: number;
   lastInviteError: string | null;
+  /** §2.3: how the reporter prefers to report, a text link or a call. */
+  contactPref: ContactPref;
 }
 
 export interface UnknownSenderItem {
@@ -641,6 +645,8 @@ export interface UnknownSenderItem {
   guessedSiteId: string | null;
   guessedSiteName: string | null;
   messageId: string | null;
+  /** null: a WhatsApp sender; `voice` or `sms`: a caller or texter (linked from W1-16 on). */
+  channel: FieldChannel | null;
 }
 
 export interface TeamData {

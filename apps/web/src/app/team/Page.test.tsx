@@ -16,6 +16,9 @@ describe('TeamPage (demo data)', () => {
     expect(within(marco).getByText('+1 555 014 3378')).toBeInTheDocument();
     expect(within(marco).getByText('Verified')).toBeInTheDocument();
     expect(within(marco).getByText('ES · EN')).toBeInTheDocument();
+    expect(within(marco).getByTestId('contact-pref')).toHaveTextContent('Prefers text link');
+    const kevin = within(table).getByText("Kevin O'Brien").closest('tr')!;
+    expect(within(kevin).getByTestId('contact-pref')).toHaveTextContent('Prefers call');
     const jorge = within(table).getByText('Jorge Medina').closest('tr')!;
     expect(within(jorge).getByText('Invite sent')).toBeInTheDocument();
     const office = screen.getByTestId('office-users');
@@ -24,13 +27,24 @@ describe('TeamPage (demo data)', () => {
     expect(within(office).getByText('Admin')).toBeInTheDocument();
   });
 
-  it('links the unknown number to the guessed site through the dialog', async () => {
+  it('shows the unknown caller without a link action until W1-16', async () => {
     const store = new DemoStore();
     renderWithProviders(<TeamPage />, { route: '/team', store });
     const alert = await screen.findByTestId('unknown-sender');
     expect(alert).toHaveAttribute('role', 'alert');
+    expect(alert).toHaveTextContent('Unknown number tried to report');
     expect(alert).toHaveTextContent('+1 555 019 4410 · 17:52');
     expect(alert).toHaveTextContent('this is Luis');
+    expect(within(alert).queryByRole('button', { name: /^Link/ })).not.toBeInTheDocument();
+    expect(within(alert).getByRole('button', { name: 'Ignore' })).toBeInTheDocument();
+  });
+
+  it('links a WhatsApp sender to the guessed site through the dialog', async () => {
+    const store = new DemoStore();
+    // A WhatsApp-era sender (no channel), as api-link-unknown-sender links them.
+    Object.assign(store.data.unknownContacts[0]!, { channel: null, call_id: null });
+    renderWithProviders(<TeamPage />, { route: '/team', store });
+    const alert = await screen.findByTestId('unknown-sender');
     await userEvent.click(within(alert).getByRole('button', { name: 'Link to Elm St. Townhomes' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByLabelText('Name')).toHaveValue('Luis');

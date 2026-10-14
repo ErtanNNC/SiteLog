@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kestrelDemo } from '../demo/kestrel.ts';
+import { heroDataV1, kestrelDemo } from '../demo/kestrel.ts';
 import {
   DailyReportDataSchema,
   DailyReportDataV1Schema,
@@ -36,11 +36,11 @@ function deepFreeze<T>(x: T): T {
 
 const demo = kestrelDemo();
 const heroReport = demo.reports.find((r) => r.report_no === 'RL-2041-0187')!;
-const heroVersions = demo.versions
-  .filter((v) => v.report_id === heroReport.id)
-  .sort((a, b) => a.version - b.version);
-/** The §18.1 hero report as stored: v2 of RL-2041-0187 (Apex 6 → 7), schemaVersion 1. */
-const heroV1 = stored(heroVersions.at(-1)!.data) as DailyReportDataV1;
+/**
+ * The §18.1 hero report (RL-2041-0187 v2, Apex 6 → 7) in the WhatsApp-era v1 shape: the seed
+ * stores the hero as v1.2 data built from it (W1-06), so the upgrade is tested on this copy.
+ */
+const heroV1 = stored(heroDataV1()) as DailyReportDataV1;
 const AUDIO = '1a4585bd-f630-4f17-8679-2191100d816d';
 
 const MSG = '3f2a1c4e-0b1d-4c8e-9f6a-1b2c3d4e5f60';
@@ -57,7 +57,7 @@ const entry = (basis: HoursBasisV1, source: SourceV1[]): ManpowerEntryV1 => ({
 });
 
 describe('the §18.1 hero report', () => {
-  it('is stored as v1 and round-trips through the v1 schema and the union unchanged', () => {
+  it('round-trips through the v1 schema and the union unchanged in its v1 shape', () => {
     expect(heroReport.current_version).toBe(2);
     expect(heroV1.schemaVersion).toBe(1);
     expect(DailyReportDataV1Schema.parse(stored(heroV1))).toEqual(heroV1);

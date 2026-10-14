@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { kestrelDemo } from '../demo/kestrel.ts';
-import { DailyReportDataV1Schema, type DailyReportDataV1 } from '../schemas/report.ts';
+import { StoredReportDataSchema, type DailyReportData } from '../schemas/report.ts';
 import { computeTotals, deriveTotals, recomputeManpowerTotals } from './hours.ts';
+import { readReportData } from './upgrade.ts';
 
 /** The §18.1 hero report RL-2041-0187 (Fri Oct 9): v1 as drafted, v2 after "Apex 6 → 7". */
-function heroVersions(): Map<number, DailyReportDataV1> {
+function heroVersions(): Map<number, DailyReportData> {
   const demo = kestrelDemo();
   const report = demo.reports.find((r) => r.report_no === 'RL-2041-0187');
   if (!report) throw new Error('hero report missing from the demo data');
   return new Map(
     demo.versions
       .filter((v) => v.report_id === report.id)
-      .map((v) => [v.version, DailyReportDataV1Schema.parse(v.data)]),
+      .map((v) => [v.version, readReportData(StoredReportDataSchema.parse(v.data))]),
   );
 }
 

@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { upgradeV1toV2 } from '@sitelog/shared/report/upgrade.ts';
-import {
-  emptyReportDataV1,
-  type DailyReportData,
-  type DailyReportDataV1,
-} from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore } from './demo/store';
 import { DemoSource } from './demo/DemoSource';
 import { buildReportPdfInput, imageFormatOf, officeEntryAuthor } from './pdfInput';
+import { storeHeroAs } from '@/test/heroData';
 
 const user = {
   id: 'u-lena',
@@ -99,13 +95,11 @@ describe('buildReportPdfInput', () => {
   });
 
   it('reads a version stored as v2 exactly like the v1 version it upgrades from', async () => {
+    // The same report with both of its versions stored as schemaVersion 1, and as 2.
     const v1Store = new DemoStore();
     const v2Store = new DemoStore();
-    const heroId = v2Store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!.id;
-    // The same report with both of its versions stored as schemaVersion 2.
-    for (const v of v2Store.data.versions)
-      if (v.report_id === heroId)
-        v.data = upgradeV1toV2(v.data as unknown as DailyReportDataV1) as unknown as typeof v.data;
+    const heroId = storeHeroAs(v1Store, 1);
+    storeHeroAs(v2Store, 2);
     const now = new Date('2026-10-10T00:00:00Z');
     const [a, b] = await Promise.all(
       [v1Store, v2Store].map(async (store) => {
@@ -134,8 +128,9 @@ describe('buildReportPdfInput', () => {
     const store = new DemoStore();
     const heroId = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!.id;
     const row = store.data.versions.find((v) => v.report_id === heroId && v.version === 2)!;
+    // The seeded hero is stored as v2 (W1-06).
     const v2: DailyReportData = {
-      ...upgradeV1toV2(row.data as unknown as DailyReportDataV1),
+      ...(row.data as unknown as DailyReportData),
       reportLanguage: 'tr',
       units: 'metric',
     };
