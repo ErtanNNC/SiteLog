@@ -6,9 +6,11 @@ import { Input } from '../ui/Input';
 import { Label } from '../ui/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select';
 
-/** Country picker for WhatsApp numbers (dial code → E.164). Extend as pilots need. */
+/** Country picker for phone numbers (dial code → E.164). Extend as pilots need. */
 export const PHONE_COUNTRIES = [
   { code: 'US', dial: '1', name: 'United States', example: '+1 555 014 3378' },
+  // The §18.2 demo range (packages/shared/src/demo/demir.ts).
+  { code: 'TR', dial: '90', name: 'Türkiye', example: '+90 532 000 0512' },
   { code: 'CA', dial: '1', name: 'Canada', example: '+1 416 555 0134' },
   { code: 'MX', dial: '52', name: 'Mexico', example: '+52 55 1234 5678' },
   { code: 'GB', dial: '44', name: 'United Kingdom', example: '+44 7700 900123' },
@@ -37,6 +39,17 @@ export function phoneValue(country: PhoneCountryCode, raw: string): PhoneValue {
 
 export function emptyPhone(country: PhoneCountryCode = 'US'): PhoneValue {
   return { country, raw: '', e164: null };
+}
+
+/**
+ * The picker's country for an org's or the wizard's country (`countries.code`): that country
+ * when the picker lists it, otherwise `fallback`.
+ */
+export function phoneCountryFor(
+  country: string | null | undefined,
+  fallback: PhoneCountryCode = 'US',
+): PhoneCountryCode {
+  return PHONE_COUNTRIES.find((c) => c.code === country)?.code ?? fallback;
 }
 
 export interface PhoneInputProps {

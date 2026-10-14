@@ -1,5 +1,6 @@
 import { storage } from '@/lib/utils';
 import type { PhoneCountryCode } from '@/components/sitelog/PhoneInput';
+import { FALLBACK_SITE_DEFAULTS, type SiteDefaults } from './countries';
 
 export const SETUP_STEPS = ['company', 'site', 'reports'] as const;
 export type SetupStep = (typeof SETUP_STEPS)[number];
@@ -8,7 +9,11 @@ export interface CompanyDraft {
   name: string;
   address: string;
   licenseNo: string;
+  /** `countries.code`, the org's country pack (spec §4.6): create_org's `p_country`. */
+  country: string;
   timezone: string;
+  /** The user chose the time zone: choosing another country no longer presets it. */
+  timezoneTouched: boolean;
 }
 
 export interface SiteDraft {
@@ -49,11 +54,23 @@ export interface SetupProgress {
 
 export const DEFAULT_TZ = 'America/Chicago';
 
-export function emptyCompany(timezone = DEFAULT_TZ): CompanyDraft {
-  return { name: '', address: '', licenseNo: '', timezone };
+/**
+ * The wizard's preselected country: create_org's default and `orgs.country`'s column default
+ * (spec §19 Q32: US preselected until self-serve onboarding). Saved progress from before the
+ * country choice reads as this one.
+ */
+export const DEFAULT_COUNTRY = 'US';
+
+/** `timezone`: the country pack's default time zone (`countries.default_timezone`). */
+export function emptyCompany(country = DEFAULT_COUNTRY, timezone = DEFAULT_TZ): CompanyDraft {
+  return { name: '', address: '', licenseNo: '', country, timezone, timezoneTouched: false };
 }
 
-export function emptySite(timezone = DEFAULT_TZ): SiteDraft {
+/** `defaults`: the org's country pack (`siteDefaultsFor`): the managers' phone country and language. */
+export function emptySite(
+  timezone = DEFAULT_TZ,
+  defaults: SiteDefaults = FALLBACK_SITE_DEFAULTS,
+): SiteDraft {
   return {
     name: '',
     projectCode: '',
@@ -63,21 +80,32 @@ export function emptySite(timezone = DEFAULT_TZ): SiteDraft {
     timezone,
     deadline: '17:30',
     managerName: '',
-    managerCountry: 'US',
+    managerCountry: defaults.phoneCountry,
     managerPhone: '',
-    languages: ['en'],
+    languages: [...defaults.languages],
     hasBackup: false,
     backupName: '',
-    backupCountry: 'US',
+    backupCountry: defaults.phoneCountry,
     backupPhone: '',
   };
 }
 
-export function emptyProgress(timezone = DEFAULT_TZ): SetupProgress {
+/** Where a fresh wizard run starts: the org's (or the preselected) country and its defaults. */
+export interface ProgressDefaults {
+  country?: string;
+  timezone?: string;
+  site?: SiteDefaults;
+}
+
+export function emptyProgress({
+  country = DEFAULT_COUNTRY,
+  timezone = DEFAULT_TZ,
+  site = FALLBACK_SITE_DEFAULTS,
+}: ProgressDefaults = {}): SetupProgress {
   return {
     done: {},
-    company: emptyCompany(timezone),
-    site: emptySite(timezone),
+    company: emptyCompany(country, timezone),
+    site: emptySite(timezone, site),
     reports: { recipients: [] },
     createdSites: [],
     updatedAt: new Date(0).toISOString(),
@@ -92,19 +120,31 @@ export function emptyProgress(timezone = DEFAULT_TZ): SetupProgress {
 export const progressKey = (userId: string, orgId?: string | null) =>
   orgId ? `sitelog.setup.${userId}.${orgId}` : `sitelog.setup.${userId}`;
 
+/**
+ * Saved progress over the defaults. Progress saved before the country choice has no `country`
+ * (reads as the default's, US for a user without an org) and no `timezoneTouched`: a time zone
+ * other than the default counts as chosen, so picking a country never overwrites it.
+ */
 export function loadProgress(
   userId: string,
   orgId: string | null,
-  timezone = DEFAULT_TZ,
+  defaults: ProgressDefaults = {},
 ): SetupProgress {
   const saved = storage.get<Partial<SetupProgress> | null>(progressKey(userId, orgId), null);
-  const base = emptyProgress(timezone);
+  const base = emptyProgress(defaults);
   if (!saved) return base;
+  const company: Partial<CompanyDraft> = saved.company ?? {};
   return {
     ...base,
     ...saved,
     done: { ...saved.done },
-    company: { ...base.company, ...saved.company },
+    company: {
+      ...base.company,
+      ...company,
+      timezoneTouched:
+        company.timezoneTouched ??
+        (company.timezone !== undefined && company.timezone !== base.company.timezone),
+    },
     site: { ...base.site, ...saved.site },
     reports: { ...base.reports, ...saved.reports },
     createdSites: saved.createdSites ?? [],

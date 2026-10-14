@@ -3,7 +3,12 @@ import { Link } from 'react-router';
 import type { ReporterRole } from '@sitelog/shared/enums.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { canAccess, ROUTE_ROLES } from '@/auth/guards';
-import { emptyPhone, PhoneInput, type PhoneValue } from '@/components/sitelog/PhoneInput';
+import {
+  emptyPhone,
+  PhoneInput,
+  phoneCountryFor,
+  type PhoneValue,
+} from '@/components/sitelog/PhoneInput';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import {
@@ -27,8 +32,10 @@ import {
 import { copy } from '@/copy/en';
 import { useInviteReporter } from '@/data/hooks';
 import type { SiteOption } from '@/data/types';
+import { reportLanguageName } from '../setup/countries';
 
-export const LANGUAGES = ['en', 'es', 'pl', 'pt', 'hi', 'fr'] as const;
+/** Languages a reporter may speak: SiteLog's field languages (EN, ES, TR) first, then others. */
+export const LANGUAGES = ['en', 'es', 'tr', 'pl', 'pt', 'hi', 'fr'] as const;
 
 interface Props {
   open: boolean;
@@ -41,12 +48,14 @@ interface Props {
 export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds = [] }: Props) {
   const c = copy.team.invite;
   const invite = useInviteReporter();
-  const { role: memberRole } = useAuth();
+  const { role: memberRole, currentOrg } = useAuth();
+  // The number's country starts as the org's (its country pack, spec §4.6).
+  const phoneCountry = phoneCountryFor(currentOrg?.country);
   // A reporter reports for a site; with none yet the dialog explains how to get one.
   const noSites = sites.length === 0;
   const canAddSite = canAccess(memberRole, ROUTE_ROLES.setup!);
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState<PhoneValue>(emptyPhone());
+  const [phone, setPhone] = useState<PhoneValue>(emptyPhone(phoneCountry));
   const [role, setRole] = useState<ReporterRole>('site_manager');
   const [siteIds, setSiteIds] = useState<string[]>(defaultSiteIds);
   const [languages, setLanguages] = useState<string[]>(['en']);
@@ -54,7 +63,7 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
 
   const reset = () => {
     setName('');
-    setPhone(emptyPhone());
+    setPhone(emptyPhone(phoneCountry));
     setRole('site_manager');
     setSiteIds(defaultSiteIds);
     setLanguages(['en']);
@@ -204,7 +213,9 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
                 );
               })}
             </div>
-            <p className="text-caption text-dust">{c.languagesHint}</p>
+            <p className="text-caption text-dust">
+              {c.languagesHint(reportLanguageName(currentOrg?.locale))}
+            </p>
           </fieldset>
           <DialogFooter className="mt-2">
             <DialogClose asChild>

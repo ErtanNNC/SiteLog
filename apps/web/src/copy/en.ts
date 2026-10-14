@@ -1160,7 +1160,8 @@ export const copy = {
       noSites: 'Add a site first. Each reporter reports for a site.',
       noSitesAskAdmin: 'Ask an admin to add a site first. Each reporter reports for a site.',
       addSite: 'Add a site',
-      languagesHint: 'Reports always come out in English.',
+      /** The org's report language (§9.6, `orgs.locale`), named as the chips name it. */
+      languagesHint: (language: string) => `Reports always come out in ${language}.`,
       languageNames: {
         en: 'English',
         es: 'Spanish',
@@ -1168,6 +1169,7 @@ export const copy = {
         pt: 'Portuguese',
         hi: 'Hindi',
         fr: 'French',
+        tr: 'Turkish',
       },
     },
     addUser: {
@@ -1455,6 +1457,26 @@ export const copy = {
       logoSaveFailed: 'The logo didn’t upload. Add it in Settings → PDF template.',
       timezone: 'Company time zone',
       next: 'Continue to first site',
+      /** Country packs (spec §4.6): one option per `countries` row, named by the browser. */
+      country: 'Country',
+      countryPlaceholder: 'Choose a country',
+      countryHint: 'Sets the report language, units, paper size, currency and time zone.',
+      countryLocked: 'The country can’t be changed after setup.',
+      countryRequired: 'Choose your company’s country.',
+      countryList: 'the country list',
+      noCountries: 'No country is set up in this SiteLog database yet.',
+      presets: {
+        title: (country: string) => `Set by ${country}`,
+        reportLanguage: 'Report language',
+        units: 'Units',
+        paper: 'Paper',
+        currency: 'Currency',
+      },
+      unitNames: { imperial: 'Imperial', metric: 'Metric' },
+      paperNames: { letter: 'Letter', a4: 'A4' },
+      errors: {
+        unknownCountry: 'That country isn’t available. Choose one from the list.',
+      },
     },
     site: {
       sectionSite: 'Site',

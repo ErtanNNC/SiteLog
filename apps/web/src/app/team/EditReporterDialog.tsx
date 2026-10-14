@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReporterRole } from '@sitelog/shared/enums.ts';
 import { formatPhone } from '@sitelog/shared/format.ts';
+import { useAuth } from '@/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import {
@@ -24,6 +25,7 @@ import {
 import { copy } from '@/copy/en';
 import { useUpdateReporter } from '@/data/hooks';
 import type { SiteOption, TeamReporter } from '@/data/types';
+import { reportLanguageName } from '../setup/countries';
 import { LANGUAGES } from './InviteReporterDialog';
 
 interface Props {
@@ -43,6 +45,7 @@ export function EditReporterDialog({ reporter, onOpenChange, sites }: Props) {
   const c = copy.team.invite;
   const e = copy.team.edit;
   const update = useUpdateReporter();
+  const { currentOrg } = useAuth();
   // The parent keys this dialog by reporter id, so state initialises per reporter.
   const [name, setName] = useState(reporter?.name ?? '');
   const [role, setRole] = useState<ReporterRole>(reporter?.role ?? 'site_manager');
@@ -190,7 +193,9 @@ export function EditReporterDialog({ reporter, onOpenChange, sites }: Props) {
                 );
               })}
             </div>
-            <p className="text-caption text-dust">{c.languagesHint}</p>
+            <p className="text-caption text-dust">
+              {c.languagesHint(reportLanguageName(currentOrg?.locale))}
+            </p>
           </fieldset>
           <DialogFooter className="mt-2">
             <DialogClose asChild>

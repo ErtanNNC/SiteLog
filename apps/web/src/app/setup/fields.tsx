@@ -88,7 +88,8 @@ export function Field({
   className?: string;
 }) {
   return (
-    <div className={cn('grid gap-1.5', className)}>
+    // content-start: side by side with a taller field (one with a hint), the control stays level.
+    <div className={cn('grid content-start gap-1.5', className)}>
       <Label htmlFor={id}>
         {label}
         {optional ? (
@@ -96,7 +97,11 @@ export function Field({
         ) : null}
       </Label>
       {children}
-      {hint ? <p className="text-caption text-dust">{hint}</p> : null}
+      {hint ? (
+        <p id={`${id}-hint`} className="text-caption text-dust">
+          {hint}
+        </p>
+      ) : null}
       {error ? (
         <p role="alert" className="text-caption font-medium text-missing">
           {error}
@@ -116,7 +121,9 @@ export function TimezoneSelect({
   onChange: (tz: string) => void;
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
+    // Radix's hidden native select reports "" when the value's option is not mounted yet (a zone
+    // outside TIMEZONES, set by choosing a country): that is no choice, so it is ignored.
+    <Select value={value} onValueChange={(tz) => tz && onChange(tz)}>
       <SelectTrigger id={id} className="font-mono text-[13px]">
         <SelectValue />
       </SelectTrigger>

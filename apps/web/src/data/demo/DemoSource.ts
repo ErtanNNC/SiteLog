@@ -116,6 +116,7 @@ export class DemoSource implements DataSource {
       {
         ...orgSummary(this.store.rows(), this.ctx()),
         locale: DEMO_ORG_LOCALE,
+        country: this.store.data.org.country,
         sitelogNumbers: [DEMO_SITELOG_NUMBER],
       },
     ]);

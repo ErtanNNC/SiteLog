@@ -457,8 +457,9 @@ describe('set_country_endpoints() (service role only)', () => {
       const res = await probeAs(db, caller, sql);
       expect(res, caller.role).toMatchObject({ ok: false, code: '42501' });
     }
-    // svc() runs as the migration owner; pnpm countries:set calls as service_role, which keeps
-    // EXECUTE through Supabase's default privileges (the revoke names public, anon, authenticated).
+    // svc() runs as the migration owner, as pnpm countries:set does (SUPABASE_DB_URL's user;
+    // countries-set.test.ts runs it as service_role). service_role keeps EXECUTE through
+    // Supabase's default privileges (the revoke names public, anon, authenticated).
     const [priv] = await svc<{ ok: boolean }>(
       `select has_function_privilege('service_role', 'set_country_endpoints(text,text,text)', 'execute') as ok`,
     );

@@ -88,6 +88,42 @@ describe('TeamPage (demo data)', () => {
     expect(nora.status).toBe('invited');
   });
 
+  it('starts the invite’s number in the org’s country and offers Turkish (W1-06a)', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<TeamPage />, {
+      route: '/team',
+      store,
+      auth: {
+        currentOrg: {
+          id: store.data.org.id,
+          name: 'Demir Yapı A.Ş.',
+          timezone: 'Europe/Istanbul',
+          activeSites: 6,
+          role: 'admin',
+          locale: 'tr-TR',
+          country: 'TR',
+        },
+      },
+    });
+    await userEvent.click(await screen.findByRole('button', { name: 'Invite reporter' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('combobox', { name: 'Country' })).toHaveTextContent('TR +90');
+    await userEvent.type(within(dialog).getByTestId('invite-phone'), '0532 000 0599');
+    expect(dialog).toHaveTextContent('+90 532 000 05 99');
+    expect(within(dialog).getByRole('checkbox', { name: 'Turkish' })).toBeInTheDocument();
+    // A TR org's reports come out in Turkish (§9.6, its locale).
+    expect(dialog).toHaveTextContent('Reports always come out in Turkish.');
+    await userEvent.keyboard('{Escape}');
+
+    // The Edit dialog says the same.
+    const table = await screen.findByRole('table', { name: 'Field reporters' });
+    await userEvent.click(within(table).getByRole('button', { name: 'Menu for Jorge Medina' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent(
+      'Reports always come out in Turkish.',
+    );
+  });
+
   it('adds an office user and refuses to remove the last admin', async () => {
     const store = new DemoStore();
     renderWithProviders(<TeamPage />, { route: '/team', store });
@@ -117,6 +153,7 @@ describe('TeamPage (demo data)', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Edit Jorge Medina');
+    expect(dialog).toHaveTextContent('Reports always come out in English.');
     const phone = within(dialog).getByTestId('edit-phone');
     expect(phone).toHaveValue('+1 555 014 3390');
     expect(phone).toHaveAttribute('readonly');

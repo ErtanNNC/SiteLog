@@ -90,6 +90,8 @@ export interface OrgSummary {
   role: MemberRole;
   /** `orgs.locale` (§6.3) when known: the panel's default language without a choice (§11.2). */
   locale?: OrgLocale;
+  /** `orgs.country` (§6.3), its country pack's code (§4.6) when known: the wizard's locked country. */
+  country?: string;
   /** The org's SiteLog number(s) for texts and calls, E.164 (§11.2 sidebar footer); none yet → []. */
   sitelogNumbers?: string[];
 }

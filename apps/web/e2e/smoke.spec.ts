@@ -187,6 +187,42 @@ test.describe('SiteLog panel (demo mode)', () => {
     await expect(page.getByTestId('kpi-reports-in')).toHaveText(/5\s*\/\s*6/);
   });
 
+  // W1-06a: the company step's country comes from the org's country pack (spec §4.6).
+  for (const width of [1440, 390]) {
+    test(`setup at ${width}px: the org’s country is shown locked, the site step starts in its pack`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await signIn(page);
+      await expect(page.getByRole('heading', { name: 'Today across 6 sites' })).toBeVisible();
+      await page.goto('/setup/company');
+      await expect(page.getByLabel('Company name')).toHaveValue('Kestrel Build Group');
+      const country = page.getByRole('combobox', { name: 'Country' });
+      await expect(country).toBeDisabled();
+      // By code: the name beside it is the browser's (ICU).
+      await expect(country).toHaveText(/\bUS$/);
+      await expect(page.getByText('The country can’t be changed after setup.')).toBeVisible();
+      await expect(page.getByTestId('country-presets')).toHaveCount(0);
+      // No horizontal scroll at either width.
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await page.getByRole('button', { name: 'Continue to first site' }).click();
+      await expect(page.getByRole('heading', { name: 'Site', exact: true })).toBeVisible();
+      // Kestrel is a US org: a US number and English, Turkish offered.
+      await expect(page.getByRole('combobox', { name: 'Country' })).toHaveText(/US \+1/);
+      await expect(page.getByRole('checkbox', { name: 'English' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+      await expect(page.getByRole('checkbox', { name: 'Turkish' })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+      await expect(page.getByText('Reports always come out in English.')).toBeVisible();
+    });
+  }
+
   test('mobile: the menu button opens the drawer navigation', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await signIn(page);

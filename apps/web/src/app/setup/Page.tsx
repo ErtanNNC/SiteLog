@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
+import type { CountryPack } from '@sitelog/shared/countries.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { RequireRole, ROUTE_ROLES } from '@/auth/guards';
 import { Logo } from '@/components/shell/Sidebar';
@@ -25,11 +26,13 @@ import { uploadOrgLogo } from '@/data/supabase/SupabaseSource';
 import type { OrgSettings } from '@/data/types';
 import { supabase } from '@/lib/supabase';
 import { CompanyStep } from './CompanyStep';
+import { packFor, reportLanguageName, siteDefaultsFor, useCountryPacks } from './countries';
 import { Stepper } from './fields';
 import { ReportsStep } from './ReportsStep';
 import { SiteStep, type SiteSubmit } from './SiteStep';
 import {
   clearProgress,
+  DEFAULT_COUNTRY,
   emptySite,
   loadProgress,
   nextStep,
@@ -42,28 +45,64 @@ import {
 /**
  * P2 · Setup wizard — /setup/company · /setup/site · /setup/reports, outside the app shell (F2).
  * A user without an org creates one (company step only); in an org, only admins set it up (the
- * site insert, recipients and settings are admin-only in RLS).
+ * site insert, recipients and settings are admin-only in RLS). The country packs (spec §4.6) load
+ * first: the company step lists them, and a new site's manager defaults come from the org's.
+ *
+ * A failed load blocks only a user without an org, who must choose a country: the error keeps the
+ * wizard's header, so "Save and finish later" still signs them out. An org already has its
+ * country, and without its pack a new site's manager starts with the fallback defaults
+ * (`siteDefaultsFor`), so its wizard (and "Add site") runs on.
  */
 export default function SetupPage() {
   const source = useOptionalDataSource();
-  if (!source) return <NoOrgWizard />;
+  const packs = useCountryPacks();
+  if (source && (packs.data || packs.isError)) {
+    return (
+      <RequireRole roles={ROUTE_ROLES.setup} page="setup.pageName">
+        <Wizard packs={packs.data ?? []} />
+      </RequireRole>
+    );
+  }
+  if (packs.data) return <NoOrgWizard packs={packs.data} />;
+  if (!packs.isError) return <PageSkeleton fullscreen />;
   return (
-    <RequireRole roles={ROUTE_ROLES.setup} page="setup.pageName">
-      <Wizard />
-    </RequireRole>
+    <SetupLayout step="company" done={{}} title={copy.setup.title}>
+      <ErrorState
+        thing={copy.setup.company.countryList}
+        error={packs.error}
+        onRetry={() => void packs.refetch()}
+      />
+    </SetupLayout>
   );
 }
 
-function useProgress() {
+/**
+ * The org's country (`orgs.country`), or the wizard's preselected one before the org exists. An
+ * org summary without it (an older cached list) reads as the column default.
+ */
+function useOrgCountry(): string {
+  const { currentOrg } = useAuth();
+  return currentOrg?.country ?? DEFAULT_COUNTRY;
+}
+
+function useProgress(packs: readonly CountryPack[]) {
   const { user, currentOrg } = useAuth();
   const userId = user?.id ?? 'anon';
   const orgId = currentOrg?.id ?? null;
+  const country = useOrgCountry();
   const [progress, setProgressState] = useState<SetupProgress>(() => {
-    const p = loadProgress(userId, orgId, currentOrg?.timezone);
+    const pack = packFor(packs, country);
+    const p = loadProgress(userId, orgId, {
+      country,
+      timezone: currentOrg?.timezone ?? pack?.defaultTimezone,
+      site: siteDefaultsFor(pack),
+    });
     if (currentOrg) {
       p.done.company = true;
       if (!p.company.name) p.company.name = currentOrg.name;
       if (!p.company.timezone) p.company.timezone = currentOrg.timezone;
+      // The org's country is fixed (spec §19 Q31), whatever an older run saved.
+      p.company.country = country;
     }
     return p;
   });
@@ -160,9 +199,9 @@ function SetupLayout({
 }
 
 /** Supabase user without an org: only the company step is possible until `create_org` runs. */
-function NoOrgWizard() {
+function NoOrgWizard({ packs }: { packs: readonly CountryPack[] }) {
   const { refreshOrgs } = useAuth();
-  const { progress, setProgress, userId } = useProgress();
+  const { progress, setProgress, userId } = useProgress(packs);
   const company = progress.company;
   const logo = useLogoPreview();
   const navigate = useNavigate();
@@ -181,8 +220,10 @@ function NoOrgWizard() {
         p_timezone: company.timezone,
         p_address: company.address.trim() || null,
         p_license_no: company.licenseNo.trim() || null,
+        // The country pack: create_org presets locale, units, currency (and paper) from it.
+        p_country: company.country,
       } as never);
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(createOrgError(error));
       const id = (data as { id?: string } | null)?.id;
       if (!id) throw new Error(copy.errors.generic);
       // The wizard continues in the new org, whose progress is kept under its own key.
@@ -190,7 +231,7 @@ function NoOrgWizard() {
       saveProgress(userId, id, {
         ...progress,
         company,
-        site: emptySite(company.timezone),
+        site: emptySite(company.timezone, siteDefaultsFor(packFor(packs, company.country))),
         done: { ...progress.done, company: true },
         flow: 'wizard',
       });
@@ -217,16 +258,28 @@ function NoOrgWizard() {
         busy={busy}
         logoUrl={logo.logoUrl}
         onLogoChange={logo.onLogoChange}
+        packs={packs}
       />
     </SetupLayout>
   );
 }
 
-function Wizard() {
+/** create_org's errors for the toast: an unknown country (22023) gets the copy, others as sent. */
+function createOrgError(error: { code?: string; message: string }): string {
+  if (error.code === '22023') return copy.setup.company.errors.unknownCountry;
+  return error.message;
+}
+
+function Wizard({ packs }: { packs: readonly CountryPack[] }) {
   const { step: stepParam } = useParams();
   const navigate = useNavigate();
   const { currentOrg, isDemo, refreshOrgs } = useAuth();
-  const { progress, setProgress, userId, orgId } = useProgress();
+  const { progress, setProgress, userId, orgId } = useProgress(packs);
+  const orgCountry = useOrgCountry();
+  const orgPack = packFor(packs, orgCountry);
+  const siteDefaults = siteDefaultsFor(orgPack);
+  // §9.6: the org's report language, from its locale (its pack's default for an older summary).
+  const reportLanguage = reportLanguageName(currentOrg?.locale ?? orgPack?.defaultLocale);
   const logo = useLogoPreview();
   const setupState = useSetupState();
   const settings = useSettings();
@@ -250,7 +303,9 @@ function Wizard() {
         name: org.name,
         address: org.address ?? '',
         licenseNo: org.licenseNo ?? '',
+        country: orgCountry,
         timezone: org.timezone,
+        timezoneTouched: true,
       },
     }));
   }
@@ -316,7 +371,8 @@ function Wizard() {
     const name = s.name.trim();
     const code = s.projectCode.trim();
     const manager = s.managerName.trim();
-    const languages = s.languages.length ? s.languages : ['en'];
+    // None ticked: the pack's first field language, as a new site's draft starts.
+    const languages = s.languages.length ? s.languages : siteDefaults.languages;
     let created: CreateSiteResult;
     try {
       created = await createSite.mutateAsync({
@@ -347,7 +403,7 @@ function Wizard() {
         ...p,
         done: { ...p.done, site: true },
         createdSites: [...p.createdSites, { id: siteId, name, code }],
-        site: emptySite(p.company.timezone),
+        site: emptySite(p.company.timezone, siteDefaults),
       }));
     }
     if (created.recipientsError) toast.error(copy.setup.site.recipientsFailed);
@@ -434,6 +490,8 @@ function Wizard() {
               busy={updateOrg.isPending || setLogo.isPending}
               logoUrl={logo.logoUrl}
               onLogoChange={logo.onLogoChange}
+              packs={packs}
+              countryLocked
             />
           ) : (
             <PageSkeleton />
@@ -451,6 +509,7 @@ function Wizard() {
           createdCount={progress.createdSites.length}
           canGeocode={!isDemo}
           siteCount={(setupState.data?.siteCount ?? 0) + 1}
+          reportLanguage={reportLanguage}
         />
       ) : null}
       {step === 'reports'

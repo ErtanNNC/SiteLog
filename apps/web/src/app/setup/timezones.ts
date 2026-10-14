@@ -1,4 +1,7 @@
-/** Common IANA zones for the setup selects (the input also accepts any zone the browser knows). */
+/**
+ * Common IANA zones for the setup selects (the input also accepts any zone the browser knows).
+ * Every country pack's default time zone is listed (`countries.default_timezone`, spec §4.6).
+ */
 export const TIMEZONES = [
   'America/New_York',
   'America/Chicago',
@@ -16,6 +19,7 @@ export const TIMEZONES = [
   'Europe/Paris',
   'Europe/Berlin',
   'Europe/Warsaw',
+  'Europe/Istanbul',
   'Asia/Kolkata',
   'Australia/Sydney',
 ] as const;

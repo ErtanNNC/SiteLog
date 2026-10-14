@@ -35,6 +35,7 @@ export function makeAuthState(
     activeSites: 6,
     role: du.role,
     locale: 'en-US',
+    country: 'US',
     sitelogNumbers: [DEMO_SITELOG_NUMBER],
   };
   return {
@@ -91,6 +92,7 @@ export function Providers({
             activeSites: 6,
             role: demoUserFor(as).role,
             locale: 'en-US',
+            country: 'US',
             sitelogNumbers: [DEMO_SITELOG_NUMBER],
           },
   });

@@ -443,6 +443,15 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
   });
 });
 
+describe('DemoSource.getOrgs', () => {
+  it('gives the org’s locale and country pack (the setup wizard locks the country)', async () => {
+    const { source: s } = source();
+    expect(await s.getOrgs()).toEqual([
+      expect.objectContaining({ name: 'Kestrel Build Group', locale: 'en-US', country: 'US' }),
+    ]);
+  });
+});
+
 describe('DemoSource.updateOrg (setup wizard company step in an existing org)', () => {
   it('edits the one org, audits only the changed fields and refuses a blank name', async () => {
     const { source: s, store } = source();

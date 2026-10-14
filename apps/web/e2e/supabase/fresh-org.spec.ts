@@ -8,6 +8,10 @@ import { admin, ANON_KEY, APP_URL, SUPABASE_URL } from './support';
  * admin, then one site with no reporter, then a report typed in the panel with a photo. Every
  * page must load (no "Couldn't load …"), the photo must be stored and listed by the version, and
  * the typed report's PDF (with the photo) must be stored for its version.
+ *
+ * The org is created with the deployed v1.0 panel's create_org call (four named arguments, no
+ * country): since W1-06a it resolves to create_org(p_country default 'US') and makes a US org.
+ * A second customer creates a TR org through the setup wizard's country choice (spec §4.6).
  */
 const SITE_PHOTO = fileURLToPath(new URL('../fixtures/site-photo.png', import.meta.url));
 test.describe.configure({ mode: 'serial' });
@@ -33,10 +37,10 @@ const PAGES: Array<[path: string, heading: RegExp]> = [
   ['/billing', /Billing/],
 ];
 
-async function signIn(page: Page) {
+async function signIn(page: Page, email = EMAIL) {
   const { data, error } = await admin().auth.admin.generateLink({
     type: 'magiclink',
-    email: EMAIL,
+    email,
     options: { redirectTo: `${APP_URL}/auth/callback` },
   });
   if (error) throw error;
@@ -69,9 +73,12 @@ test.beforeAll(async () => {
   user = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
   const signedIn = await user.auth.signInWithPassword({ email: EMAIL, password: PASSWORD });
   if (signedIn.error) throw signedIn.error;
+  // The deployed v1.0 panel's payload, as it still is on staging until W1-19.
   const org = await user.rpc('create_org', {
     p_name: 'Fresh Build Co',
     p_timezone: 'America/Chicago',
+    p_address: null,
+    p_license_no: null,
   });
   if (org.error) throw org.error;
   orgId = (org.data as { id?: string; org_id?: string }).id ?? '';
@@ -79,6 +86,23 @@ test.beforeAll(async () => {
     const { data } = await user.from('org_members').select('org_id').limit(1).single();
     orgId = (data as { org_id: string }).org_id;
   }
+});
+
+test('the v1.0 panel’s create_org call (no country) still makes a US org', async () => {
+  const { data, error } = await admin()
+    .from('orgs')
+    .select('country, locale, units, currency, timezone, org_settings(pdf_paper)')
+    .eq('id', orgId)
+    .single();
+  if (error) throw error;
+  expect(data).toEqual({
+    country: 'US',
+    locale: 'en-US',
+    units: 'imperial',
+    currency: 'USD',
+    timezone: 'America/Chicago',
+    org_settings: { pdf_paper: 'letter' },
+  });
 });
 
 test('a new org with no sites: every page loads', async ({ page }) => {
@@ -219,4 +243,74 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
   expect(pdf).toMatch(/\/Subtype\s*\/Image/);
 
   await visitAll(page);
+});
+
+test('the setup wizard creates a TR org from its country pack (W1-06a)', async ({ page }) => {
+  const email = `fresh-tr-${Date.now()}@sitelog.example`;
+  const created = await admin().auth.admin.createUser({ email, email_confirm: true });
+  if (created.error) throw created.error;
+  const userId = created.data.user.id;
+  await signIn(page, email);
+  await expect(page.getByRole('heading', { name: 'Set up your company' })).toBeVisible();
+  await page.getByLabel('Company name').fill('Yıldız İnşaat A.Ş.');
+  // Options by code: ICU names the country "Türkiye" or "Turkey".
+  await page.getByRole('combobox', { name: 'Country' }).click();
+  await page.getByRole('option', { name: / TR$/ }).click();
+  await expect(page.getByRole('combobox', { name: 'Country' })).toHaveText(/\bTR$/);
+  // Copy names (not the browser's); the zone is the select's alone.
+  const presets = page.getByTestId('country-presets');
+  for (const text of ['Turkish', 'Metric', 'A4', 'TRY'])
+    await expect(presets.getByText(text, { exact: true })).toBeVisible();
+  await expect(presets).not.toContainText('Europe/Istanbul');
+  await expect(page.getByRole('combobox', { name: 'Company time zone' })).toContainText(
+    'Europe/Istanbul',
+  );
+  await page.getByRole('button', { name: 'Continue to first site' }).click();
+  await page.waitForURL(/\/setup\/site$/, { timeout: 30_000 });
+  await expect(page.getByRole('heading', { name: 'Site', exact: true })).toBeVisible();
+  // The first site manager starts with a +90 number and Turkish, the pack's field language.
+  await expect(page.getByRole('combobox', { name: 'Country' })).toHaveText(/TR \+90/);
+  await expect(page.getByRole('checkbox', { name: 'Turkish' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(page.getByText('Reports always come out in Turkish.')).toBeVisible();
+
+  // create_org preset everything from the TR row; on_org_created the paper.
+  const { data: member, error: memberError } = await admin()
+    .from('org_members')
+    .select('org_id, role')
+    .eq('user_id', userId)
+    .single();
+  if (memberError) throw memberError;
+  expect(member.role).toBe('admin');
+  const { data: org, error: orgError } = await admin()
+    .from('orgs')
+    .select('name, country, locale, units, currency, timezone, org_settings(pdf_paper)')
+    .eq('id', member.org_id)
+    .single();
+  if (orgError) throw orgError;
+  expect(org).toEqual({
+    name: 'Yıldız İnşaat A.Ş.',
+    country: 'TR',
+    locale: 'tr-TR',
+    units: 'metric',
+    currency: 'TRY',
+    timezone: 'Europe/Istanbul',
+    org_settings: { pdf_paper: 'a4' },
+  });
+  const { data: audit, error: auditError } = await admin()
+    .from('audit_log')
+    .select('diff')
+    .eq('org_id', member.org_id)
+    .eq('action', 'org.created')
+    .single();
+  if (auditError) throw auditError;
+  expect(audit.diff).toEqual({ country: 'TR' });
+
+  // Settings → PDF shows the preset A4 paper.
+  await page.goto('/settings/pdf');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Settings/);
+  await expect(page.getByRole('radio', { name: 'A4' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Letter' })).not.toBeChecked();
 });

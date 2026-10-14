@@ -36,6 +36,7 @@ export function SiteStep({
   createdCount,
   canGeocode,
   siteCount,
+  reportLanguage,
 }: {
   draft: SiteDraft;
   onChange: (next: SiteDraft) => void;
@@ -49,6 +50,8 @@ export function SiteStep({
   /** False in demo mode (no network): the manual coordinates fallback is offered right away. */
   canGeocode: boolean;
   siteCount: number;
+  /** The org's report language, named ("Turkish"): `reportLanguageName` of its locale. */
+  reportLanguage: string;
 }) {
   const c = copy.setup.site;
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -325,7 +328,9 @@ export function SiteStep({
                     );
                   })}
                 </div>
-                <p className="text-caption text-dust">{copy.team.invite.languagesHint}</p>
+                <p className="text-caption text-dust">
+                  {copy.team.invite.languagesHint(reportLanguage)}
+                </p>
               </fieldset>
 
               {draft.hasBackup ? (

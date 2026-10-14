@@ -1962,12 +1962,12 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
   const members = unwrap(
     await sb
       .from('org_members')
-      .select('org_id, role, orgs(id, name, timezone, locale)')
+      .select('org_id, role, orgs(id, name, timezone, locale, country)')
       .eq('user_id', userId),
   ) as unknown as Array<{
     org_id: string;
     role: MemberRole;
-    orgs: Pick<OrgRow, 'id' | 'name' | 'timezone' | 'locale'> | null;
+    orgs: Pick<OrgRow, 'id' | 'name' | 'timezone' | 'locale' | 'country'> | null;
   }>;
   // site_options: an accounts user cannot read `sites`, and every member counts active sites.
   const sites = unwrap(await sb.from('site_options').select('org_id, status'));
@@ -1980,6 +1980,7 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
       role: m.role,
       activeSites: sites.filter((s) => s.org_id === m.org_id && s.status === 'active').length,
       locale: m.orgs!.locale,
+      country: m.orgs!.country,
     }));
 }
 

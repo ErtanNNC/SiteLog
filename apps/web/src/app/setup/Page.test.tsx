@@ -7,11 +7,35 @@ import { DemoStore, demoUserFor } from '@/data/demo/store';
 import { storage } from '@/lib/utils';
 import { makeSource, renderWithProviders } from '@/test/render';
 import SetupPage from './Page';
-import { progressKey } from './state';
+import { progressKey, type SetupProgress } from './state';
 
 const ADMIN = demoUserFor('admin').id;
 /** Wizard progress is kept per user and org. */
 const keyFor = (store: DemoStore) => progressKey(ADMIN, store.data.org.id);
+
+/** The demo store's org as a TR org (Demir Yapı's country and locale, spec §18.2). */
+function trOrg(source: ReturnType<typeof makeSource>) {
+  return {
+    id: source.orgId,
+    name: 'Demir Yapı A.Ş.',
+    timezone: 'Europe/Istanbul',
+    activeSites: 0,
+    role: 'admin' as const,
+    locale: 'tr-TR' as const,
+    country: 'TR',
+  };
+}
+
+/** Fills the site step with a manager and submits it; `phone` in the picker's country. */
+async function submitSite(code: string, manager: string, phone: string) {
+  await userEvent.type(await screen.findByLabelText('Site name'), `Site ${code}`);
+  await userEvent.type(screen.getByLabelText('Project number'), code);
+  await userEvent.type(screen.getByLabelText('Site address'), '1 Test St');
+  await userEvent.type(screen.getByLabelText('Name'), manager);
+  await userEvent.type(screen.getByTestId('manager-phone'), phone);
+  await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+  expect(await screen.findByRole('heading', { name: 'Reports & reminders' })).toBeInTheDocument();
+}
 
 function Harness() {
   return (
@@ -201,6 +225,96 @@ describe('SetupPage (demo org)', () => {
     });
     expect(refreshOrgs).toHaveBeenCalled();
   });
+
+  it('shows the org’s country locked on the company step (W1-06a, spec §19 Q31)', async () => {
+    const store = new DemoStore();
+    storage.set(keyFor(store), { done: {}, createdSites: [] });
+    renderWithProviders(<Harness />, { route: '/setup/company', store });
+    expect(await screen.findByLabelText('Company name')).toHaveValue('Kestrel Build Group');
+    const country = screen.getByRole('combobox', { name: 'Country' });
+    expect(country).toBeDisabled();
+    expect(country).toHaveTextContent(/\bUS$/);
+    expect(country).toHaveAccessibleDescription('The country can’t be changed after setup.');
+    expect(screen.queryByTestId('country-presets')).not.toBeInTheDocument();
+  });
+
+  it('shows the org’s country over one an older run saved, and saves it', async () => {
+    const store = new DemoStore();
+    // Progress saved before the org existed (or by an older build) names another country.
+    storage.set(keyFor(store), { done: {}, company: { country: 'TR' }, createdSites: [] });
+    renderWithProviders(<Harness />, { route: '/setup/company', store });
+    expect(await screen.findByLabelText('Company name')).toHaveValue('Kestrel Build Group');
+    const country = screen.getByRole('combobox', { name: 'Country' });
+    expect(country).toBeDisabled();
+    expect(country).toHaveTextContent(/\bUS$/);
+    await waitFor(() =>
+      expect(storage.get<SetupProgress | null>(keyFor(store), null)?.company.country).toBe('US'),
+    );
+  });
+
+  it('starts a TR org’s site manager with a +90 number and Turkish (its country pack)', async () => {
+    const store = new DemoStore();
+    const source = makeSource('admin', store);
+    storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+    renderWithProviders(<Harness />, {
+      route: '/setup/site',
+      source,
+      auth: { currentOrg: trOrg(source) },
+    });
+    expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Country' })).toHaveTextContent('TR +90');
+    expect(screen.getByRole('checkbox', { name: 'Turkish' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByRole('checkbox', { name: 'English' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    expect(screen.getByRole('combobox', { name: 'Site time zone' })).toHaveTextContent(
+      'Europe/Istanbul',
+    );
+    // A TR org's reports come out in Turkish (§9.6), whatever the manager speaks.
+    expect(screen.getByText('Reports always come out in Turkish.')).toBeInTheDocument();
+  });
+
+  it(
+    'creates a TR org’s manager speaking Turkish when no language is ticked',
+    { timeout: 30_000 },
+    async () => {
+      const store = new DemoStore();
+      const source = makeSource('admin', store);
+      storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+      renderWithProviders(<Harness />, {
+        route: '/setup/site',
+        source,
+        auth: { currentOrg: trOrg(source) },
+      });
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Turkish' }));
+      expect(screen.getByRole('checkbox', { name: 'Turkish' })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+      await submitSite('KK-1300', 'Emre Yıldız', '532 000 0599');
+      const emre = store.data.reporters.find((r) => r.name === 'Emre Yıldız')!;
+      expect(emre).toMatchObject({ phone_e164: '+905320000599', languages: ['tr'] });
+    },
+  );
+
+  it(
+    'creates a US org’s manager speaking English when no language is ticked',
+    { timeout: 30_000 },
+    async () => {
+      const store = new DemoStore();
+      storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+      renderWithProviders(<Harness />, { route: '/setup/site', store });
+      expect(await screen.findByText('Reports always come out in English.')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('checkbox', { name: 'English' }));
+      await submitSite('HV-5121', 'Elena Vasquez', '555 014 8001');
+      const elena = store.data.reporters.find((r) => r.name === 'Elena Vasquez')!;
+      expect(elena).toMatchObject({ phone_e164: '+15550148001', languages: ['en'] });
+    },
+  );
 
   it('is admin-only inside an org', async () => {
     const store = new DemoStore();

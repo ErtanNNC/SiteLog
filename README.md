@@ -95,21 +95,22 @@ The running v1.0 build follows the v1.0 spec's §19 recommendations (shared What
 
 ## Scripts
 
-| Command                                           | What                                                                                                                                                             |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev` / `pnpm dev:worker`                    | Web panel (5173) and field app (5174) / worker in watch mode; `dev:web`, `dev:field` start one app                                                               |
-| `pnpm build`                                      | Build web and field (Vite) and worker (tsup)                                                                                                                     |
-| `pnpm typecheck` · `pnpm lint` · `pnpm test`      | Across the workspace                                                                                                                                             |
-| `pnpm test:db`                                    | PGlite migration, seed, RLS and RPC tests                                                                                                                        |
-| `pnpm test:stack`                                 | Real-Postgres tests (`supabase/db-tests/stack`) against the database of a running local stack named by `SUPABASE_DB_URL`; skipped without it                     |
-| `pnpm seed:demo`                                  | Regenerate `supabase/seed.sql` (both demo orgs, Fri Oct 9); `-- --date today` prints the live demo, `-- --apply` writes it to `SUPABASE_DB_URL` (demo orgs only) |
-| `pnpm brand`                                      | Copy the kit SVGs from `docs/brand/` to the panel and the field app; render favicons, lockup and PWA icons                                                       |
-| `pnpm replay-webhook -- fixtures/webhooks/*.json` | Replay Meta payloads against a local webhook (signs them with `WA_APP_SECRET`)                                                                                   |
-| `pnpm eval`                                       | Golden-transcript extraction evals, 26 cases (needs `ANTHROPIC_API_KEY`)                                                                                         |
-| `pnpm eval -- --recorded` / `--case <id>`         | Score the recorded tool outputs offline / run a subset (`--list` shows cases)                                                                                    |
-| `pnpm e2e`                                        | Playwright on the panel's demo build (smoke, axe WCAG 2.2 AA + keyboard), then the field app's smoke test (every route in EN/ES/TR at 390 px, axe, PWA)          |
-| `pnpm e2e:supabase`                               | Playwright against a local Supabase stack (`supabase start`, see RUNBOOK §8)                                                                                     |
-| `pnpm loadtest`                                   | N reports through the real job loop on PGlite or `DATABASE_URL` (RUNBOOK §7)                                                                                     |
+| Command                                                        | What                                                                                                                                                                           |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev` / `pnpm dev:worker`                                 | Web panel (5173) and field app (5174) / worker in watch mode; `dev:web`, `dev:field` start one app                                                                             |
+| `pnpm build`                                                   | Build web and field (Vite) and worker (tsup)                                                                                                                                   |
+| `pnpm typecheck` · `pnpm lint` · `pnpm test`                   | Across the workspace                                                                                                                                                           |
+| `pnpm test:db`                                                 | PGlite migration, seed, RLS and RPC tests                                                                                                                                      |
+| `pnpm test:stack`                                              | Real-Postgres tests (`supabase/db-tests/stack`) against the database of a running local stack named by `SUPABASE_DB_URL`; skipped without it                                   |
+| `pnpm seed:demo`                                               | Regenerate `supabase/seed.sql` (both demo orgs, Fri Oct 9); `-- --date today` prints the live demo, `-- --apply` writes it to `SUPABASE_DB_URL` (demo orgs only)               |
+| `pnpm countries:set -- --code XX [--sms-sender …] [--voice …]` | Set a country pack's SMS sender id and voice number in one database (`SUPABASE_DB_URL`); audited; owner-approved on hosted databases (`--yes`, staging also `--allow-staging`) |
+| `pnpm brand`                                                   | Copy the kit SVGs from `docs/brand/` to the panel and the field app; render favicons, lockup and PWA icons                                                                     |
+| `pnpm replay-webhook -- fixtures/webhooks/*.json`              | Replay Meta payloads against a local webhook (signs them with `WA_APP_SECRET`)                                                                                                 |
+| `pnpm eval`                                                    | Golden-transcript extraction evals, 26 cases (needs `ANTHROPIC_API_KEY`)                                                                                                       |
+| `pnpm eval -- --recorded` / `--case <id>`                      | Score the recorded tool outputs offline / run a subset (`--list` shows cases)                                                                                                  |
+| `pnpm e2e`                                                     | Playwright on the panel's demo build (smoke, axe WCAG 2.2 AA + keyboard), then the field app's smoke test (every route in EN/ES/TR at 390 px, axe, PWA)                        |
+| `pnpm e2e:supabase`                                            | Playwright against a local Supabase stack (`supabase start`, see RUNBOOK §8)                                                                                                   |
+| `pnpm loadtest`                                                | N reports through the real job loop on PGlite or `DATABASE_URL` (RUNBOOK §7)                                                                                                   |
 
 ## Licences
 
