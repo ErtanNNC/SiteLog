@@ -84,7 +84,7 @@ describe('job queue fairness', () => {
     );
     expect(rows).toEqual([
       { type: 'decide_next', lock_key: `convo:${r!.convo_id}` },
-      { type: 'render_pdf', lock_key: null },
+      { type: 'render_pdf', lock_key: `convo:${r!.convo_id}` },
     ]);
   });
 
@@ -217,13 +217,12 @@ describe('job queue for v1.2 (spec §10.1)', () => {
       { type: 'file_report', lock_key: key },
       { type: 'post_call_reconcile', lock_key: key },
       { type: 'transcribe_upload', lock_key: null }, // no report yet
-      { type: 'render_pdf', lock_key: null },
+      // 20261015000060: a sign-off and its undo re-render one file, in order.
+      { type: 'render_pdf', lock_key: key },
       { type: 'send_sms', lock_key: null },
     ]);
     // One at a time, in order.
-    expect(
-      (await claim('w1')).filter((j) => j.type !== 'render_pdf' && j.type !== 'send_sms'),
-    ).toEqual([
+    expect((await claim('w1')).filter((j) => j.type !== 'send_sms')).toEqual([
       { id: expect.any(Number) as number, type: 'transcribe_upload' },
       { id: expect.any(Number) as number, type: 'transcribe_upload' },
     ]);

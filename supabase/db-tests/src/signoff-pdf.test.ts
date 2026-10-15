@@ -67,4 +67,31 @@ describe('sign-off re-renders the stored PDF', () => {
     expect(jobs).toHaveLength(3);
     expect(new Set(jobs.map((j) => j.dedupe_key)).size).toBe(3);
   });
+
+  it('runs a sign-off render and its undo render one at a time, in order (20261015000060)', async () => {
+    const [report] = await svc<{ id: string }>(
+      `select id from reports where org_id = $1 and status = 'filed' order by report_no desc limit 1`,
+      [DEMO_ORG_ID],
+    );
+    const id = report!.id;
+    await svc(`delete from jobs`);
+    await asUser(db, SAM, (q) => q(`select sign_off_report($1)`, [id]));
+    await asUser(db, SAM, (q) => q(`select undo_sign_off($1)`, [id]));
+    const keys = await svc<{ lock_key: string | null }>(`select lock_key from jobs order by id`);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]!.lock_key).not.toBeNull();
+    expect(keys[1]!.lock_key).toBe(keys[0]!.lock_key);
+
+    const claim = () => svc<{ dedupe_key: string }>(`select dedupe_key from claim_jobs('w1', 10)`);
+    const first = await claim();
+    expect(first).toHaveLength(1);
+    expect(first[0]!.dedupe_key).toMatch(/:signoff:\d+$/);
+    expect(await claim()).toEqual([]); // the undo waits for the sign-off render
+    await svc(`update jobs set status = 'done', finished_at = now() where dedupe_key = $1`, [
+      first[0]!.dedupe_key,
+    ]);
+    const second = await claim();
+    expect(second).toHaveLength(1);
+    expect(second[0]!.dedupe_key).toMatch(/:signoff_undone:\d+$/);
+  });
 });
