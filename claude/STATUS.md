@@ -18,13 +18,13 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 - **Telefon testi (W1-09):** cihaz kodları veritabanına doğru yazılıyordu (teşhis: Deploy run 38731254343), ama açık Demo phone yalnızca realtime olayıyla yenileniyordu ve preview'da olay gelmedi. Düzeltme f021c27: Demo phone açıkken 5 sn'de bir de yenileniyor. Giriş linkleri `phone-setup` özetinde (Lena: Kestrel, Elif: Demir Yapı). Telefon kontrolünüz bekleniyor.
 - **§19 kararları:** "önerilerinle devam" spec'e işleniyor; yapılmış davranışı değiştirenler (Q53 geç gelen kayıt, Q55 `missing` uyarısı vb.) testleriyle kodlanıyor.
-- **M4:** W1-13 (sahada soru → taslak → onayla gönder) ve W1-14 (PDF günlük rapor) paralel geliştiriliyor.
+- **M4–M5:** W1-13 (CI yeşil, telefon kontrolünüz bekliyor), W1-14 PDF (a5da973 öncesi: bcd7b8c, e28184b) ve W1-15 dosyalama + SMS + e-posta (a5da973) bitti, yerel testler yeşil, CI Actions açılınca. W1-16 Overview, W1-17 Raporlar, W1-18 Şantiyeler paralel geliştiriliyor. W1-19 (cut-over) her adımı sizin onayınızla.
 
 ## Onayınızı bekleyen
 
 1. Spec §19: "önerilerinle devam" kararınız işlendi (commit 25c1ead, c3b1cd4). Q10, Q19, Q20, Q22–Q28, Q30, Q33, Q35, Q37–Q48, Q50–Q62, Q64, Q65 karara bağlandı; davranışı değiştirenler kodlandı (Q53 geç kayıt 48 saat, Q55 `missing` uyarısı, Q46 CALL/TEXT onayı, Q45, Q42 12 karakterli link kodu, Q24, Q62 yarım gün = vardiyanın yarısı, Q59).
-   **Sizde bekleyenler (öneri yok ya da yalnızca sizde olan bilgi):** Q15 SMS'te GSM-7 dışı karakterler (metinler olduğu gibi mi kalsın, yoksa "-" gibi GSM-7 noktalaması mı; İletimerkezi'nin cevabı da gerekli) · Q16 eski v1 rapor verisinin v2 görünümü (şimdilik yapıldığı gibi) · Q17 bağlı satırları olan kaydın silinmesi (şimdilik yapıldığı gibi) · Q2 TR SIP sağlayıcısı ve numara · Q8/Q9 TR fatura kurumu ve fiyatı · Q49 İYS (hukuk) · Q63 ES/TR metinlerinin ana dili konuşan biri tarafından incelenmesi · Q28/Q40/Q50 avukat metinleri (go-live'dan önce) · Q30 fatura kurumu ve fiyatlar.
-2. Preview'a yeni migration'lar (W1-10 `20261015000001`, W1-12 `20261015000002`, Q53 `20261015000003`, Q24 `20261015000004`): `preview` / `supabase` Deploy işi için onayınız.
+   **Sizde bekleyenler (öneri yok ya da yalnızca sizde olan bilgi):** Q15 SMS'te GSM-7 dışı karakterler (metinler olduğu gibi mi kalsın, yoksa "-" gibi GSM-7 noktalaması mı; İletimerkezi'nin cevabı da gerekli) · Q16 eski v1 rapor verisinin v2 görünümü (şimdilik yapıldığı gibi) · Q17 bağlı satırları olan kaydın silinmesi (şimdilik yapıldığı gibi) · Q2 TR SIP sağlayıcısı ve numara · Q8/Q9 TR fatura kurumu ve fiyatı · Q49 İYS (hukuk) · Q63 ES/TR metinlerinin ana dili konuşan biri tarafından incelenmesi · Q28/Q40/Q50 avukat metinleri (go-live'dan önce) · Q30 fatura kurumu ve fiyatlar · Q66 PDF'in Türkçe metinleri ve Q68 rapor e-postasının Türkçe metni (ana dili Türkçe biri gözden geçirmeli; örnek PDF'ler sohbette).
+2. Preview'a yeni migration'lar (`20261015000001` W1-10, `…02` W1-12, `…03` Q53, `…04` Q24, `…10` W1-14 imza sonrası PDF, `…30` W1-15 dosyalama): `preview` / `supabase` Deploy işi için onayınız (Actions çalışmaya başlayınca).
 
 ## Sizden beklenen
 
