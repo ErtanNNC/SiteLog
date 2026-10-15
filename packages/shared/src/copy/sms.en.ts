@@ -5,7 +5,8 @@ import type { SmsCatalog, SmsKey } from './sms.ts';
  * clause has two texts: `withNumber` (verbatim) and `withoutNumber`, the same text with only
  * that clause removed, for orgs whose country pack has no voice number (§9.2 "No voice number").
  * The welcome's reply clause is `smsReplyHintEn`, which `renderSms` appends only for packs with
- * two-way SMS; catalogue text + hint is the §9.2 cell.
+ * two-way SMS; catalogue text + hint is the §9.2 cell. Punctuation is GSM-7 only ("-", never "—"
+ * or "·"; spec §19 Q15), so every English text is GSM-7.
  */
 export const smsEn: SmsCatalog<SmsKey> = {
   welcome: {
@@ -16,12 +17,12 @@ export const smsEn: SmsCatalog<SmsKey> = {
   },
   verify_code: 'SiteLog code: {code}. It expires in 10 minutes.',
   daily_link: {
-    withNumber: "Today's report for {site}: {link} — or just call {number}.",
+    withNumber: "Today's report for {site}: {link} - or just call {number}.",
     withoutNumber: "Today's report for {site}: {link}",
   },
   call_coming: "I'll call you at {time} for today's report. Prefer to do it now? {link}",
   weather_headsup:
-    'Heads-up: report due at {deadline}. {weather_phrase} — mention the hours lost and what stopped.',
+    'Heads-up: report due at {deadline}. {weather_phrase} - mention the hours lost and what stopped.',
   reminder_1: 'No report yet for {site} today. A one-minute voice note is plenty: {link}',
   reminder_2: {
     withNumber:
@@ -42,9 +43,9 @@ export const smsEn: SmsCatalog<SmsKey> = {
   unknown_number: "This number isn't set up with SiteLog. Ask your office to add you.",
   help: {
     withNumber:
-      'SiteLog daily reports for {company}. Your link: {link} · Call {number} · Text CALL or TEXT to switch · STOP to opt out. Msg & data rates may apply.',
+      'SiteLog daily reports for {company}. Your link: {link} - Call {number} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.',
     withoutNumber:
-      'SiteLog daily reports for {company}. Your link: {link} · Text CALL or TEXT to switch · STOP to opt out. Msg & data rates may apply.',
+      'SiteLog daily reports for {company}. Your link: {link} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.',
   },
   stop_confirm: "You won't get more texts from SiteLog. Reply START to resume.",
   pref_call_ok: 'OK, your daily report is now set to a call. Reply TEXT to switch to a link.',
@@ -53,4 +54,4 @@ export const smsEn: SmsCatalog<SmsKey> = {
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (§9.2), appended by `renderSms`. */
-export const smsReplyHintEn = ' · Reply STOP to opt out, HELP for help';
+export const smsReplyHintEn = ' - Reply STOP to opt out, HELP for help';

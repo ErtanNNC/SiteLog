@@ -5,7 +5,8 @@ import type { SharedSmsKey, SmsCatalog } from './sms.ts';
  * `SITELOG` alphanumeric title, `two_way_sms = false`), so these texts never ask for a reply,
  * Turkish has no welcome reply hint, and the two-way keys (unknown_number, help, stop_confirm,
  * pref_call_ok, pref_text_ok) have no Turkish text: a pack with two-way SMS and Turkish fails `packCopyGaps()` until they
- * exist. Formal "siz", no exclamation marks (§9.7).
+ * exist. Formal "siz", no exclamation marks (§9.7). Punctuation is GSM-7 only (spec §19 Q15), so
+ * only Turkish letters (and the "â" of "hâlâ") fall outside GSM-7.
  */
 export const smsTr: SmsCatalog<SharedSmsKey> = {
   welcome: {
@@ -16,13 +17,13 @@ export const smsTr: SmsCatalog<SharedSmsKey> = {
   },
   verify_code: 'SiteLog kodunuz: {code}. 10 dakika geçerlidir.',
   daily_link: {
-    withNumber: '{site} bugünkü rapor: {link} — ya da {number} numarayı arayın.',
+    withNumber: '{site} bugünkü rapor: {link} - ya da {number} numarayı arayın.',
     withoutNumber: '{site} bugünkü rapor: {link}',
   },
   call_coming:
     'Bugünkü rapor için sizi saat {time} gibi arayacağım. Şimdi yapmak isterseniz: {link}',
   weather_headsup:
-    'Hatırlatma: rapor saati {deadline}. {weather_phrase} — kaybedilen saatleri ve duran işleri belirtin.',
+    'Hatırlatma: rapor saati {deadline}. {weather_phrase} - kaybedilen saatleri ve duran işleri belirtin.',
   reminder_1: '{site} için bugün henüz rapor yok. Bir dakikalık sesli not yeterli: {link}',
   reminder_2: {
     withNumber:

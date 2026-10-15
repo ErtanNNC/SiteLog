@@ -139,7 +139,7 @@ Deno.test(
     assertEquals(messaging.sent.length, 1);
     assertEquals(
       messaging.sent[0]!.body,
-      `Today's report for Elm St. Townhomes: https://field.sitelog.test/r/${code} — or just call +1 555 014 2290.`,
+      `Today's report for Elm St. Townhomes: https://field.sitelog.test/r/${code} - or just call +1 555 014 2290.`,
     );
     assertEquals(messaging.rows[0]!.copy_key, 'daily_link');
     assertEquals(

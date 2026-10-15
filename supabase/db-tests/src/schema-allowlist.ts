@@ -168,9 +168,9 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'repo-on-delete',
     reason:
-      "ON DELETE actions the spec leaves as NO ACTION (17 keys), kept as built until the owner answers: deleting an org, site or site-day removes its reports with their versions, evidence packs and weather rows (org deletion, test and load-test cleanup), deleting an org also its unknown contacts, deleting a company its invoices, and deleting a company, reporter, user or report keeps the history with a null link, as deleting a message does for an unknown contact's message link (message_id becomes null). If the owner picks the spec, a forward migration changes the keys and this entry goes.",
+      "ON DELETE actions the spec leaves as NO ACTION (17 keys), kept as built (owner decision 2026-10-15, spec §19 Q17): deleting an org, site or site-day removes its reports with their versions, evidence packs and weather rows (org deletion, test and load-test cleanup), deleting an org also its unknown contacts, deleting a company its invoices, and deleting a company, reporter, user or report keeps the history with a null link, as deleting a message does for an unknown contact's message link (message_id becomes null). A stricter rule later takes a forward migration that changes the keys, and this entry goes.",
     closes: 'kept',
-    decision: 'pending owner: spec §19 question 17 (GAP §8 question 11)',
+    decision: 'owner 2026-10-15: spec §19 question 17 (GAP §8 question 11), kept as built',
     diffs: [
       'constraint extra: evidence_packs FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE',
       'constraint extra: glossary_terms FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL',

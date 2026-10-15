@@ -1710,7 +1710,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
           renderSms(
             'edit_applied',
             'en',
-            { weekday: 'Friday', change: 'Apex Concrete 7 workers · 56 h (was 6 · 48 h)', v: 2 },
+            { weekday: 'Friday', change: 'Apex Concrete 7 workers, 56 h (was 6, 48 h)', v: 2 },
             smsOptions,
           ),
           t(c, '20:10'),

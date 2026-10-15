@@ -327,7 +327,7 @@ describe('processInboundSms (W1-08)', () => {
       diff: { kind: 'personal', via: 'sms_help' },
     });
     expect(h.sent[0]!.body).toBe(
-      `SiteLog daily reports for Real Builders. Your link: https://go.sitelog.app/r/${code} · Text CALL or TEXT to switch · STOP to opt out. Msg & data rates may apply.`,
+      `SiteLog daily reports for Real Builders. Your link: https://go.sitelog.app/r/${code} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.`,
     );
     expect([...h.rows.values()][0]!.body).toContain(`/r/${MASKED_CODE} `);
     // The same link the next time.

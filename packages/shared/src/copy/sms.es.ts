@@ -7,7 +7,8 @@ import type { SmsCatalog, SmsKey } from './sms.ts';
  * START, CALL and TEXT stay in English because `sms-webhook` matches them (§9.5). Accents force
  * UCS-2 (70 code units per segment), so the texts without variables are kept to 70 units: one
  * segment, like their GSM-7 English versions. The welcome's reply clause is `smsReplyHintEs`,
- * appended by `renderSms` only for packs with two-way SMS.
+ * appended by `renderSms` only for packs with two-way SMS. Punctuation is GSM-7 only (spec §19 Q15):
+ * only accented letters take a text out of GSM-7.
  */
 export const smsEs: SmsCatalog<SmsKey> = {
   welcome: {
@@ -18,12 +19,12 @@ export const smsEs: SmsCatalog<SmsKey> = {
   },
   verify_code: 'Su código de SiteLog: {code}. Vence en 10 minutos.',
   daily_link: {
-    withNumber: 'Reporte de hoy para {site}: {link} — o simplemente llame al {number}.',
+    withNumber: 'Reporte de hoy para {site}: {link} - o simplemente llame al {number}.',
     withoutNumber: 'Reporte de hoy para {site}: {link}',
   },
   call_coming: 'Le llamaré a las {time} para el reporte de hoy. ¿Prefiere hacerlo ahora? {link}',
   weather_headsup:
-    'Aviso: el reporte se entrega a las {deadline}. {weather_phrase} — mencione las horas perdidas y qué trabajos se detuvieron.',
+    'Aviso: el reporte se entrega a las {deadline}. {weather_phrase} - mencione las horas perdidas y qué trabajos se detuvieron.',
   reminder_1:
     'Todavía no hay reporte de {site} hoy. Una nota de voz de un minuto es suficiente: {link}',
   reminder_2: {
@@ -46,9 +47,9 @@ export const smsEs: SmsCatalog<SmsKey> = {
   unknown_number: 'Este número no está en SiteLog. Pida a su oficina que lo agregue.',
   help: {
     withNumber:
-      'Reportes diarios de SiteLog para {company}. Su enlace: {link} · Llame al {number} · Envíe CALL o TEXT para elegir llamada o mensaje · STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
+      'Reportes diarios de SiteLog para {company}. Su enlace: {link} - Llame al {number} - Envíe CALL o TEXT para elegir llamada o mensaje - STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
     withoutNumber:
-      'Reportes diarios de SiteLog para {company}. Su enlace: {link} · Envíe CALL o TEXT para elegir llamada o mensaje · STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
+      'Reportes diarios de SiteLog para {company}. Su enlace: {link} - Envíe CALL o TEXT para elegir llamada o mensaje - STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
   },
   stop_confirm: 'Ya no recibirá mensajes de SiteLog. Responda START para reactivarlos.',
   // No accents, so GSM-7: one segment each (spec §19 Q46).
@@ -59,4 +60,4 @@ export const smsEs: SmsCatalog<SmsKey> = {
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (mirrors `smsReplyHintEn`). */
-export const smsReplyHintEs = ' · Responda STOP para darse de baja, HELP para ayuda';
+export const smsReplyHintEs = ' - Responda STOP para darse de baja, HELP para ayuda';

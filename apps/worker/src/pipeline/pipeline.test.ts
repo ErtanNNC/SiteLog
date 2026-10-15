@@ -633,7 +633,7 @@ describe('jobs: welcome, template, retention', () => {
       {
         driver: 'console',
         to: PHONE_MARCO,
-        body: `Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: https://go.sitelog.app/r/${code} · Reply STOP to opt out, HELP for help`,
+        body: `Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: https://go.sitelog.app/r/${code} - Reply STOP to opt out, HELP for help`,
         sender: undefined,
       },
     ]);

@@ -169,6 +169,20 @@ describe('SMS catalog (§9.2)', () => {
     }
   });
 
+  it('uses GSM-7 punctuation only: EN is all GSM-7, ES and TR leave only letters outside it (§19 Q15)', () => {
+    for (const [locale, key, t] of entries()) {
+      const texts = typeof t === 'string' ? [t] : [t.withNumber, t.withoutNumber];
+      for (const text of texts) {
+        const { nonGsm } = countSmsSegments(text);
+        if (locale === 'en') expect(nonGsm, `${locale}.${key}`).toEqual([]);
+        // Accented letters that belong to words (ES á í ó ú, TR ğ ş ı İ ç and the â of "hâlâ").
+        for (const ch of nonGsm) expect(ch, `${locale}.${key}`).toMatch(/^\p{L}$/u);
+      }
+    }
+    for (const [locale, hint] of Object.entries(SMS_REPLY_HINT))
+      expect(countSmsSegments(hint).nonGsm, locale).toEqual([]);
+  });
+
   it('uses no emoji in any language', () => {
     for (const [, key, t] of entries()) {
       const texts = typeof t === 'string' ? [t] : [t.withNumber, t.withoutNumber];
@@ -196,7 +210,7 @@ describe('renderSms', () => {
         TWO_WAY,
       ),
     ).toBe(
-      "Today's report for Riverside Lofts B: sl.link/r/Q7T2XD — or just call +1 (555) 014-2290.",
+      "Today's report for Riverside Lofts B: sl.link/r/Q7T2XD - or just call +1 (555) 014-2290.",
     );
     expect(
       renderSms(
@@ -207,10 +221,10 @@ describe('renderSms', () => {
       ),
     ).toBe("Today's report for Riverside Lofts B: sl.link/r/Q7T2XD");
     expect(renderSms('welcome', 'en', welcomeVars, TWO_WAY)).toBe(
-      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 (555) 014-2290: sl.link/r/MRZ4K7 · Reply STOP to opt out, HELP for help",
+      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 (555) 014-2290: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
     );
     expect(renderSms('welcome', 'en', welcomeVars, TWO_WAY_NO_NUMBER)).toBe(
-      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: sl.link/r/MRZ4K7 · Reply STOP to opt out, HELP for help",
+      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
     );
     expect(
       renderSms(
@@ -224,11 +238,11 @@ describe('renderSms', () => {
       renderSms(
         'edit_applied',
         'en',
-        { weekday: 'Friday', change: 'Apex Concrete 7 workers · 56 h (was 6 · 48 h)', v: 2 },
+        { weekday: 'Friday', change: 'Apex Concrete 7 workers, 56 h (was 6, 48 h)', v: 2 },
         TWO_WAY,
       ),
     ).toBe(
-      'Updated Friday: Apex Concrete 7 workers · 56 h (was 6 · 48 h). Version 2 sent to the office.',
+      'Updated Friday: Apex Concrete 7 workers, 56 h (was 6, 48 h). Version 2 sent to the office.',
     );
     expect(
       renderSms(
@@ -238,13 +252,13 @@ describe('renderSms', () => {
         TWO_WAY_NO_NUMBER,
       ),
     ).toBe(
-      'SiteLog daily reports for Kestrel Build Group. Your link: sl.link/r/Q7T2XD · Text CALL or TEXT to switch · STOP to opt out. Msg & data rates may apply.',
+      'SiteLog daily reports for Kestrel Build Group. Your link: sl.link/r/Q7T2XD - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.',
     );
   });
 
   it('renders ES with and without a voice number', () => {
     expect(renderSms('welcome', 'es', welcomeVars, TWO_WAY)).toBe(
-      'Hola Marco, soy SiteLog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min, o llame al +1 (555) 014-2290: sl.link/r/MRZ4K7 · Responda STOP para darse de baja, HELP para ayuda',
+      'Hola Marco, soy SiteLog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min, o llame al +1 (555) 014-2290: sl.link/r/MRZ4K7 - Responda STOP para darse de baja, HELP para ayuda',
     );
     expect(renderSms('missed_call', 'es', { link: 'sl.link/r/Q7T2XD' }, TWO_WAY_NO_NUMBER)).toBe(
       'No pude comunicarme con usted para el reporte de hoy. Toque sl.link/r/Q7T2XD.',
@@ -275,13 +289,13 @@ describe('renderSms', () => {
         'es',
         {
           weekday: 'viernes',
-          change: 'Apex Concrete 7 trabajadores · 56 h (antes 6 · 48 h)',
+          change: 'Apex Concrete 7 trabajadores, 56 h (antes 6, 48 h)',
           v: 2,
         },
         TWO_WAY,
       ),
     ).toBe(
-      'Reporte del viernes actualizado: Apex Concrete 7 trabajadores · 56 h (antes 6 · 48 h). Versión 2 enviada a la oficina.',
+      'Reporte del viernes actualizado: Apex Concrete 7 trabajadores, 56 h (antes 6, 48 h). Versión 2 enviada a la oficina.',
     );
   });
 
@@ -394,16 +408,16 @@ describe('the pack variant: two-way SMS (spec §4.6, §9.2)', () => {
 
   it('keeps the two-way welcome byte for byte: catalogue text + reply hint is the §9.2 text', () => {
     expect(renderSms('welcome', 'en', vars, TWO_WAY)).toBe(
-      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 (555) 014-2290: sl.link/r/MRZ4K7 · Reply STOP to opt out, HELP for help",
+      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 (555) 014-2290: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
     );
     expect(renderSms('welcome', 'en', vars, TWO_WAY_NO_NUMBER)).toBe(
-      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: sl.link/r/MRZ4K7 · Reply STOP to opt out, HELP for help",
+      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
     );
     expect(renderSms('welcome', 'es', vars, TWO_WAY)).toBe(
-      'Hola Marco, soy SiteLog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min, o llame al +1 (555) 014-2290: sl.link/r/MRZ4K7 · Responda STOP para darse de baja, HELP para ayuda',
+      'Hola Marco, soy SiteLog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min, o llame al +1 (555) 014-2290: sl.link/r/MRZ4K7 - Responda STOP para darse de baja, HELP para ayuda',
     );
     expect(renderSms('welcome', 'es', vars, TWO_WAY_NO_NUMBER)).toBe(
-      'Hola Marco, soy SiteLog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min: sl.link/r/MRZ4K7 · Responda STOP para darse de baja, HELP para ayuda',
+      'Hola Marco, soy SiteLog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min: sl.link/r/MRZ4K7 - Responda STOP para darse de baja, HELP para ayuda',
     );
   });
 

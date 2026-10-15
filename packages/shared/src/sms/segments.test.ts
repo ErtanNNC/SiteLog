@@ -188,10 +188,10 @@ describe('countSmsSegments: every Turkish text (spec §19 Q15)', () => {
     'welcome +number': [2, 4],
     'welcome -number': [2, 3],
     verify_code: [1, 1],
-    'daily_link +number': [2, 2], // "—"
+    'daily_link +number': [1, 2],
     'daily_link -number': [1, 1],
     call_coming: [1, 2],
-    weather_headsup: [2, 2], // "—"
+    weather_headsup: [1, 2],
     reminder_1: [1, 2],
     'reminder_2 +number': [2, 2], // "â"
     'reminder_2 -number': [2, 2], // "â"

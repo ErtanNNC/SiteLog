@@ -458,7 +458,7 @@ describe('Kestrel demo data (§18.1)', () => {
     const jorge = demo.messages.find((m) => m.reporter_id === reporter('Jorge Medina').id)!;
     expect(jorge.body).toMatch(/^Hola Jorge, soy SiteLog/);
     expect(demo.messages.find((m) => m.copy_key === 'edit_applied')!.body).toBe(
-      'Updated Friday: Apex Concrete 7 workers · 56 h (was 6 · 48 h). Version 2 sent to the office.',
+      'Updated Friday: Apex Concrete 7 workers, 56 h (was 6, 48 h). Version 2 sent to the office.',
     );
   });
 
