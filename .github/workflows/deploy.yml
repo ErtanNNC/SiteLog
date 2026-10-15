@@ -349,6 +349,9 @@ jobs:
           fi
           supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" "${set_args[@]}" >/dev/null
           echo "FIELD_APP_URL set to $FIELD_APP_URL."
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
       - name: Device-code diagnostics (read-only)
         # Owner-approved (2026-10-15): what happened to the last device codes. field-api's answers
         # and errors from the function logs, and the demo orgs' newest texts and device audit rows.
