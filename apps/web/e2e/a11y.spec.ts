@@ -504,6 +504,22 @@ test.describe('no sideways scroll on narrow phones', () => {
     });
   }
 
+  // /team: the Field reporters table scrolls inside its card; the page's grid track no longer
+  // grows with the table (it scrolled the page ~198 px sideways at 390 px).
+  test('Team & numbers at 390px: the reporters table scrolls inside its card', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signInFast(page);
+    await page.goto('/team');
+    const table = page.getByRole('table', { name: 'Field reporters' });
+    await expect(table).toBeVisible();
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    const region = page.getByTestId('data-table').filter({ has: table });
+    expect(
+      await region.evaluate((el) => el.scrollWidth > el.clientWidth),
+      'the table is wider than its card and scrolls in it',
+    ).toBe(true);
+  });
+
   // W1-08: the Demo phone's tabs and reporter buttons are 44 px targets at phone width, the tab
   // list grows with its triggers instead of clipping them, and picking a reporter moves focus to
   // the thread (below 768 px the list and the thread take turns).
