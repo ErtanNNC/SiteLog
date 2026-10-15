@@ -1,6 +1,6 @@
 # SiteLog · Durum
 
-Güncelleme: 2026-10-15 20:42 UTC · dal `spec-v1.2` · PR #1 · son CI yeşil: a9cc55f (run 38740645053); **tüm hafta-1 işi CI'da yeşil: run 38796723632 (f1d46c4), e2e:supabase ve worker akışları dahil**
+Güncelleme: 2026-10-15 20:52 UTC · dal `spec-v1.2` · PR #1 · son CI yeşil: a9cc55f (run 38740645053); **tüm hafta-1 işi CI'da yeşil: run 38796723632 (f1d46c4), e2e:supabase ve worker akışları dahil**
 
 Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün aralıklarını kullanıyorum (M0 gün 1 · M1 gün 1–2 · M2 gün 2–3 · M3 gün 3–4 · M4 gün 4–5 · M5 gün 5–7 → demo). Planın farklı bir eşlemesi varsa söyleyin, buna göre düzeltirim.
 
@@ -27,7 +27,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 - W1-16 Overview (5846e2a, 4d5182a) ve W1-17 Raporlar arşivi + Rapor inceleme (81c9500; kanal filtresi, "Fotoğraf yok", her ses/arama için oynatıcı ve saniyeye atlama, saha olayları, EN/TR) bitti.
 - İnceleme düzeltmeleri bitti (1d26288 … c7b79f3): imza/geri alma PDF yarışı, e-posta 409, `missing` uyarısının tek işlemde ve kaybolmadan gitmesi, Filed ekranında 3 dk sonra "PDF yolda" mesajı.
-- **Demo phone'a kod gelmemesi (çözüldü, fca8145):** cihaz kodları veritabanına doğru yazılıyordu. Ancak panel önizlemesi demo modunda derleniyordu: GitHub, anon key'i içeren job çıktısını "secret olabilir" diye düşürüyordu. Anahtar artık base64 ile geçiyor, panel önizlemesi gerçek preview projesine bağlanıyor. Telefon testi sizde.
+- **Demo phone'a kod gelmemesi (sizde bekliyor):** cihaz kodları veritabanına doğru yazılıyor. Panel önizlemesinde iki sorun vardı. (1) GitHub anon key çıktısını düşürüyordu; düzeltildi (fca8145). (2) preview Environment'taki `VITE_SUPABASE_ANON_KEY` değişkeni staging projesinin anahtarını taşıyor, bu yüzden panel preview projesine bağlanamaz. Deploy artık bunu hata olarak gösteriyor (577c0a3). **Sizden:** GitHub → Settings → Environments → preview → Variables → `VITE_SUPABASE_ANON_KEY` değerini preview projesinin (`sftfnlfbtxowotuhdwep`) anon anahtarıyla değiştirin. Anahtarı Supabase panosunda Project Settings → API Keys altında bulabilirsiniz. Sonrasında PR Deploy'u ben yeniden çalıştırıyorum.
 - Actions döndükten sonraki CI'da iki eski test güncellendi (9278b0e, a41cdec); kod hatası değildi. Tüm işin birlikte CI sonucu bekleniyor.
 - W1-19 yerel hazırlık bitti (a767f12): RUNBOOK §2 "Cut-over (W1-19), step by step" (adım 0–8, her biri komut, ön koşul, doğrulama, geri alma), `docs/DEMO_NOTES.md` (demo senaryosu tıklama tıklama), `pnpm cutover:preflight` (yerel ön kontrol; paketlerde sır yok: PASS), staging şeklindeki veritabanında cut-over provası (cutover.test.ts). Hiçbir uzak adım yapılmadı. **Hafta 1 ticket'larının tamamı kodlandı;** kalanlar sizin onay ve kontrollerinizde.
 - Sonra: W1-19 (cut-over ve prova) için yerelde yapılabilen hazırlık; uzak adımların her biri sizin onayınızla.
