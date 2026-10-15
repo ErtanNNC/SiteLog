@@ -28,7 +28,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 - W1-16 Overview (5846e2a, 4d5182a) ve W1-17 Raporlar arşivi + Rapor inceleme (81c9500; kanal filtresi, "Fotoğraf yok", her ses/arama için oynatıcı ve saniyeye atlama, saha olayları, EN/TR) bitti.
 - İnceleme düzeltmeleri bitti (1d26288 … c7b79f3): imza/geri alma PDF yarışı, e-posta 409, `missing` uyarısının tek işlemde ve kaybolmadan gitmesi, Filed ekranında 3 dk sonra "PDF yolda" mesajı.
 - Actions döndükten sonraki CI'da iki eski test güncellendi (9278b0e, a41cdec); kod hatası değildi. Tüm işin birlikte CI sonucu bekleniyor.
-- W1-19 (cut-over ve prova) için yerel hazırlık sürüyor.
+- W1-19 yerel hazırlık bitti (a767f12): RUNBOOK §2 "Cut-over (W1-19), step by step" (adım 0–8, her biri komut, ön koşul, doğrulama, geri alma), `docs/DEMO_NOTES.md` (demo senaryosu tıklama tıklama), `pnpm cutover:preflight` (yerel ön kontrol; paketlerde sır yok: PASS), staging şeklindeki veritabanında cut-over provası (cutover.test.ts). Hiçbir uzak adım yapılmadı. **Hafta 1 ticket'larının tamamı kodlandı;** kalanlar sizin onay ve kontrollerinizde.
 - Sonra: W1-19 (cut-over ve prova) için yerelde yapılabilen hazırlık; uzak adımların her biri sizin onayınızla.
 
 ## Onayınızı bekleyen
@@ -36,6 +36,20 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 1. Spec §19: "önerilerinle devam" kararınız işlendi (commit 25c1ead, c3b1cd4). Q10, Q19, Q20, Q22–Q28, Q30, Q33, Q35, Q37–Q48, Q50–Q62, Q64, Q65 karara bağlandı; davranışı değiştirenler kodlandı (Q53 geç kayıt 48 saat, Q55 `missing` uyarısı, Q46 CALL/TEXT onayı, Q45, Q42 12 karakterli link kodu, Q24, Q62 yarım gün = vardiyanın yarısı, Q59).
    **Sizde bekleyenler (öneri yok ya da yalnızca sizde olan bilgi):** Q15 SMS'te GSM-7 dışı karakterler (metinler olduğu gibi mi kalsın, yoksa "-" gibi GSM-7 noktalaması mı; İletimerkezi'nin cevabı da gerekli) · Q16 eski v1 rapor verisinin v2 görünümü (şimdilik yapıldığı gibi) · Q17 bağlı satırları olan kaydın silinmesi (şimdilik yapıldığı gibi) · Q2 TR SIP sağlayıcısı ve numara · Q8/Q9 TR fatura kurumu ve fiyatı · Q49 İYS (hukuk) · Q63 ES/TR metinlerinin ana dili konuşan biri tarafından incelenmesi · Q28/Q40/Q50 avukat metinleri (go-live'dan önce) · Q30 fatura kurumu ve fiyatlar · Q66 PDF'in Türkçe metinleri ve Q68 rapor e-postasının Türkçe metni (ana dili Türkçe biri gözden geçirmeli; örnek PDF'ler sohbette).
 2. Preview'a yeni migration'lar (`20261015000001` W1-10, `…02` W1-12, `…03` Q53, `…04` Q24, `…10` W1-14 imza sonrası PDF, `…30` W1-15 dosyalama, `…40` W1-16 sahipsiz bilinmeyen numaralar, `…60` PDF kilidi, `…61` `missing` uyarısı tek işlemde): `preview` / `supabase` Deploy işi için onayınız (Actions çalışmaya başlayınca).
+
+## Cut-over sırası (W1-19, her adım sizin onayınızla; ayrıntı RUNBOOK §2)
+
+0. Yerelde `pnpm check && pnpm cutover:preflight -- --full-db`; ön koşullar: Anthropic ve Deepgram anahtarları, yedek için bir yer, bir zaman dilimi.
+1. Deploy `staging` / `inventory` (salt okuma); demo dışı `verified` sorumlu olmadığını doğrula; `pg_dump` ve storage yedeği.
+2. Staging SQL editöründe `supabase/ops/discard-backlog.sql` (eski kuyruktaki 2 job).
+3. `supabase secrets set`: `LINK_SIGNING_SECRET` (bir kez üret, sakla; worker da aynısını kullanır), `FIELD_APP_URL`, `APP_URL`; Auth site/redirect URL'leri. Gönderici kimliği ve ses numarası girilmez.
+4. PR #1'i birleştir; canlı daldan Deploy `staging` / `all` (db push → fonksiyonlar → web ve field `--prod`); duman kontrolleri.
+5. Chicago 17:00'den sonra (İstanbul 01:00) demo verisi: `pnpm seed:demo -- --date today --apply --allow-staging`.
+6. Lena ve Elif için tek kullanımlık panel giriş linkleri.
+7. Worker'ı geliştirici makinesinde staging'e karşı başlat (`apps/worker/.env`: aynı `LINK_SIGNING_SECRET`, Deepgram, Anthropic, ücretsiz hava durumu adresi, `EMAIL_PROVIDER=console`); `/health`.
+8. `docs/DEMO_NOTES.md` provasını gerçek telefonla arka arkaya iki kez (arada adım 5).
+
+Not: `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` worker'ın `.env`'ine girer (Supabase secret değil). Preview'da önce aynı akışı denemek için 9 migration'ın preview'a yüklenmesini onaylayabilirsiniz.
 
 ## Sizden beklenen
 
