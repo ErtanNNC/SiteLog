@@ -150,6 +150,40 @@ describe('the W1-19 cut-over on a staging-shaped database', () => {
     ]);
   });
 
+  it('step 2 run again later never discards a job queued after the first run, nor a v1.2-only type', async () => {
+    // A day later (the first run's audit row moved back a day): an office edit's render_pdf and a
+    // v1.2 notify, both queued after the first run and older than an hour, and a v1.2-only type
+    // queued before the cut-over.
+    await db.exec(
+      `update audit_log set created_at = created_at - interval '1 day' where action = 'ops.backlog_discarded'`,
+    );
+    const later = await rows<{ id: number }>(
+      `insert into jobs (type, payload, created_at) values
+         ('render_pdf', '{}'::jsonb, now() - interval '2 hours'),
+         ('notify', '{}'::jsonb, now() - interval '3 hours'),
+         ('sms_inbound', '{}'::jsonb, now() - interval '3 days')
+       returning id`,
+    );
+    const ids = later.map((r) => r.id);
+    await db.exec(DISCARD_SQL);
+    expect(
+      await rows<{ status: string }>(
+        `select status::text as status from jobs where id = any($1::bigint[]) order by id`,
+        [ids],
+      ),
+    ).toEqual([{ status: 'queued' }, { status: 'queued' }, { status: 'queued' }]);
+    const [last] = await rows<{ diff: { count: number } }>(
+      `select diff from audit_log where action = 'ops.backlog_discarded' order by id desc limit 1`,
+    );
+    expect(last!.diff.count).toBe(0);
+    // Back to staging's shape for the steps that follow.
+    await db.query(`delete from jobs where id = any($1::bigint[])`, [ids]);
+    await db.exec(
+      `update audit_log set created_at = created_at + interval '1 day'
+       where action = 'ops.backlog_discarded' and created_at < now() - interval '12 hours'`,
+    );
+  });
+
   it('step 4: the db push applies every v1.2 migration in one go', async () => {
     const pending = migrationFiles().filter((f) => f >= FIRST_V1_2);
     expect(pending.length).toBeGreaterThan(10);

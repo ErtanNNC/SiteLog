@@ -2,14 +2,22 @@
 -- docs/RUNBOOK.md §2 "Cut-over (W1-19), step by step" and "Before the worker runs").
 --
 -- Owner-approved; run once in the staging SQL editor (or `psql "$SUPABASE_DB_URL" -f`) right after
--- the backup and before the db push. It works on the v1.0 schema and on v1.2 alike, and is safe to
--- run again (a second run finds nothing and records a count of 0).
+-- the backup and before the db push. It works on the v1.0 schema and on v1.2 alike.
+--
+-- What it discards is fixed by its first run, so running it again (by mistake, or after the push
+-- and the seed) never touches a v1.2 job: the cut-over line is one hour before the first
+-- `ops.backlog_discarded` audit row (now, on the first run), and only the v1.0 worker's job types
+-- count (the 15 of the v1.0 JOB_TYPES, packages/shared/src/enums.ts before cc956dd). A second run
+-- finds the same jobs already `failed` and records a count of 0. Run for the first time after the
+-- push, the line is that run's now() minus an hour: queued v1.2 jobs of those types older than an
+-- hour (an office edit's render_pdf) would be discarded too, so run it before the push.
 --
 -- What it does, in one transaction:
---   - every job still `queued`, or `running` with a lock older than 10 minutes (claim_jobs() would
---     take it back), created more than an hour ago, becomes `failed` with a `last_error` that says
---     why. `failed` is never claimed again (claim_jobs() takes only `queued` and stale `running`),
---     and `ops_discard_job` cannot be used here: it accepts only `dead` jobs.
+--   - every job of a v1.0 type still `queued`, or `running` with a lock older than 10 minutes
+--     (claim_jobs() would take it back), created before the cut-over line, becomes `failed` with a
+--     `last_error` that says why. `failed` is never claimed again (claim_jobs() takes only `queued`
+--     and stale `running`), and `ops_discard_job` cannot be used here: it accepts only `dead`
+--     jobs.
 --   - one `ops.backlog_discarded` audit row with the count per job type (names and counts only,
 --     never a payload).
 --   - the last select shows that audit row.
@@ -27,7 +35,13 @@ with discarded as (
          finished_at = now(),
          locked_at = null,
          locked_by = null
-   where created_at < now() - interval '1 hour'
+   where created_at < coalesce(
+           (select min(a.created_at) from audit_log a where a.action = 'ops.backlog_discarded'),
+           now()) - interval '1 hour'
+     and type in ('inbound_message', 'transcribe_audio', 'extract_report', 'decide_next',
+                  'parse_reply', 'file_report', 'render_pdf', 'send_email', 'fetch_weather',
+                  'send_welcome', 'send_template', 'build_evidence_pack', 'send_message',
+                  'retention_cleanup', 'weekly_digest')
      and (status = 'queued'
           or (status = 'running' and locked_at < now() - interval '10 minutes'))
   returning type
