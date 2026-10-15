@@ -261,7 +261,7 @@ describeField('field-api on the local stack', () => {
       select payload, dedupe_key from jobs where type = 'file_report' and payload->>'reportId' = ${done.json.reportId as string}`;
     expect(file).toEqual({
       payload: { reportId: done.json.reportId, trigger: 'confirm', version: 1 },
-      dedupe_key: `file:${done.json.reportId}`,
+      dedupe_key: `file:${done.json.reportId}:v1`,
     });
     // A double tap answers the same, and enqueues nothing more.
     expect((await call('POST', `reports/${done.json.reportId}/confirm`)).status).toBe(202);
