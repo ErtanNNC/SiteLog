@@ -1,7 +1,11 @@
 import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4173;
+/**
+ * 4173 unless `WEB_E2E_PORT` says otherwise, so a run beside another one on 4173 (whose server
+ * `reuseExistingServer` would otherwise test) can take a free port; CI leaves it unset.
+ */
+const PORT = Number(process.env.WEB_E2E_PORT ?? 4173);
 const baseURL = `http://localhost:${PORT}`;
 
 /**
