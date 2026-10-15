@@ -347,6 +347,66 @@ Deno.test('status callbacks move a message forward only', async () => {
   );
 });
 
+Deno.test('a late failure of a notify message queues its fallback once (W2-01, Q22)', async () => {
+  const h = setup();
+  const FILED = '00000000-0000-4000-8000-0000000000f1';
+  const sentBy = {
+    reporterId: DANA,
+    key: 'filed' as const,
+    vars: { report_no: 'RL-2041-0199', pdf_link: 'https://go.sitelog.app/r/AAAAAA/report/1' },
+    dedupeKey: 'notify:filed:r9',
+  };
+  h.store.notifyJobs.push({ id: 1, payload: sentBy, dedupeKey: sentBy.dedupeKey });
+  h.store.outbound.push({
+    id: FILED,
+    provider_message_id: 'SMfiled',
+    status: 'sent',
+    org_id: REAL_US,
+    reporter_id: DANA,
+    copy_key: 'filed',
+    error: null,
+    payload: { dedupe_key: 'notify:filed:r9', attempt: 1 },
+  });
+  const cb = () =>
+    h.twilio('/status', {
+      MessageSid: 'SMfiled',
+      MessageStatus: 'undelivered',
+      ErrorCode: '30005',
+    });
+  assertEquals((await cb()).status, 200);
+  await cb();
+  assertEquals(h.store.notifyJobs.length, 2);
+  assertEquals(h.store.notifyJobs[1], {
+    id: 101,
+    payload: { ...sentBy, afterMessageId: FILED },
+    dedupeKey: `notify:filed:r9:after:${FILED}`,
+  });
+  const queued = h.store.audits.filter((a) => a.action === 'notify.fallback_queued');
+  assertEquals(queued.length, 1);
+  assertEquals(
+    [queued[0]!.entityId, queued[0]!.diff],
+    [
+      FILED,
+      { copy_key: 'filed', dedupe_key: 'notify:filed:r9', status: 'undeliverable', job_id: 101 },
+    ],
+  );
+
+  // A message no notify job sent (an inline text) and a delivery queue nothing.
+  h.store.outbound.push({
+    id: 'inline1',
+    provider_message_id: 'SMinline',
+    status: 'sent',
+    org_id: REAL_US,
+    reporter_id: DANA,
+    copy_key: 'draft_ready',
+    error: null,
+    payload: { dedupe_key: 'notify:draft_ready:x:1', attempt: 1 },
+  });
+  await h.twilio('/status', { MessageSid: 'SMinline', MessageStatus: 'failed' });
+  await h.twilio('/status', { MessageSid: 'SMfiled', MessageStatus: 'delivered' });
+  assertEquals(h.store.notifyJobs.length, 2);
+});
+
 Deno.test(
   'a welcome the carrier cannot deliver flags the reporter: Team\'s "Can\'t reach this number", the office notice, the audit',
   async () => {

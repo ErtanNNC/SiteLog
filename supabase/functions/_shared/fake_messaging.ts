@@ -35,21 +35,21 @@ export function fakeMessaging(opts: { fail?: Error } = {}): FakeMessaging {
   const reporterOptOuts: FakeMessaging['reporterOptOuts'] = [];
   const store: NotifierStore = {
     loadRecipient: (id) => Promise.resolve(recipients.get(id) ?? null),
-    findByDedupeKey: (reporterId, key) => {
-      const row = rows.find((r) => r.reporter_id === reporterId && r.payload?.dedupe_key === key);
-      return Promise.resolve(
-        row
-          ? {
-              id: row.id,
-              channel: row.channel,
-              status: row.status,
-              provider: row.provider,
-              error: row.error,
-              error_code: row.payload?.error_code ?? null,
-            }
-          : null,
-      );
-    },
+    listByDedupeKey: (reporterId, key) =>
+      Promise.resolve(
+        rows
+          .filter((r) => r.reporter_id === reporterId && r.payload?.dedupe_key === key)
+          .map((row) => ({
+            id: row.id,
+            channel: row.channel,
+            status: row.status,
+            provider: row.provider,
+            provider_message_id: row.provider_message_id,
+            error: row.error,
+            error_code: row.payload?.error_code ?? null,
+            attempt: row.payload?.attempt ?? null,
+          })),
+      ),
     isPhoneOptedOut: (phone, country) => Promise.resolve(phoneOptOuts.has(`${phone}:${country}`)),
     recordPhoneOptOut: (row) => {
       phoneOptOuts.add(`${row.phone_e164}:${row.country}`);

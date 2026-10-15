@@ -4,6 +4,7 @@ import {
   createSmsTransports,
   toCountryPack,
   type CountryPack,
+  type ChannelRegistration,
   type CountryRow,
   type InboundSmsStore,
   type NotifierStore,
@@ -45,7 +46,7 @@ export function workerNotifierStore(db: Db): NotifierStore {
         consents: consentSets(await db.listConsents(reporterId)),
       };
     },
-    findByDedupeKey: (reporterId, key) => db.findMessageByDedupeKey(reporterId, key),
+    listByDedupeKey: (reporterId, key) => db.listMessagesByDedupeKey(reporterId, key),
     insertMessage: (row) => db.insertSmsMessage(row),
     updateMessage: (id, patch) => db.updateSmsMessage(id, patch),
     isPhoneOptedOut: (phone, country) => db.isSmsOptedOut(phone, country),
@@ -150,10 +151,13 @@ export function createWorkerNotifier(
   db: Db,
   transport: (driver: SmsDriver) => SmsTransport = workerTransports(config),
   now: () => Date = () => new Date(),
+  /** Message channels besides SMS (W2-01): push (W2-14) and WhatsApp (W2-15) register here. */
+  channels: readonly ChannelRegistration[] = [],
 ): SmsNotifier {
   return createNotifier({
     store: workerNotifierStore(db),
     transport,
+    channels,
     statusCallbackUrl: statusCallbackUrl(config),
     randomUUID: () => crypto.randomUUID(),
     now,

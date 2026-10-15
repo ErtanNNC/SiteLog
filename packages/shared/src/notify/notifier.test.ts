@@ -6,10 +6,12 @@ import { DEMO_COUNTRIES, demoPack } from '../demo/countries.ts';
 import type { ConsentType } from '../enums.ts';
 import { assertE164 } from '../format.ts';
 import { MASKED_CODE } from '../links.ts';
+import { MessageSendError } from '../channels.ts';
 import { SmsConfigError, SmsSendError } from '../sms/transports.ts';
 import {
   consoleRealOrgError,
   createNotifier,
+  type ChannelRegistration,
   maskedVars,
   type NotifierAuditEntry,
   type NotifierStore,
@@ -56,12 +58,28 @@ function recipient(
   };
 }
 
-function harness(opts: { fail?: Error; noTransport?: Error; optOutFailsOnce?: Error } = {}) {
+/** Per-channel send faults the two-channel tests switch on and off. */
+interface Faults {
+  sms?: Error | null;
+  whatsapp?: Error | null;
+}
+
+function harness(
+  opts: {
+    fail?: Error;
+    noTransport?: Error;
+    optOutFailsOnce?: Error;
+    /** Registers a fake second channel as `whatsapp` (W2-01), consent `data_processing`. */
+    second?: boolean;
+    faults?: Faults;
+  } = {},
+) {
+  const faults = opts.faults ?? {};
   let optOutFault = opts.optOutFailsOnce ?? null;
   const rows = new Map<string, OutboundMessageRow>();
   const audit: NotifierAuditEntry[] = [];
   const sent: Array<{
-    driver: SmsDriver;
+    driver: string;
     to: string;
     body: string;
     sender?: string;
@@ -71,21 +89,19 @@ function harness(opts: { fail?: Error; noTransport?: Error; optOutFailsOnce?: Er
   const reporterOptOuts: Array<{ reporterId: string; at: string }> = [];
   const store: NotifierStore = {
     loadRecipient: async (id) => (id === 'r-marco' ? recipient() : null),
-    findByDedupeKey: async (reporterId, key) => {
-      const row = [...rows.values()].find(
-        (r) => r.reporter_id === reporterId && r.payload?.dedupe_key === key,
-      );
-      return row
-        ? {
-            id: row.id,
-            channel: row.channel,
-            status: row.status,
-            provider: row.provider,
-            error: row.error,
-            error_code: row.payload?.error_code ?? null,
-          }
-        : null;
-    },
+    listByDedupeKey: async (reporterId, key) =>
+      [...rows.values()]
+        .filter((r) => r.reporter_id === reporterId && r.payload?.dedupe_key === key)
+        .map((row) => ({
+          id: row.id,
+          channel: row.channel,
+          status: row.status,
+          provider: row.provider,
+          provider_message_id: row.provider_message_id,
+          error: row.error,
+          error_code: row.payload?.error_code ?? null,
+          attempt: row.payload?.attempt ?? null,
+        })),
     insertMessage: async (row) => void rows.set(row.id, { ...row }),
     updateMessage: async (id, patch) => void Object.assign(rows.get(id)!, patch),
     isPhoneOptedOut: async (phone, country) =>
@@ -108,19 +124,38 @@ function harness(opts: { fail?: Error; noTransport?: Error; optOutFailsOnce?: Er
       driver,
       async send(to, body, o) {
         if (opts.fail) throw opts.fail;
+        if (faults.sms) throw faults.sms;
         sent.push({ driver, to, body, sender: o.sender, statusCallback: o.statusCallback });
         return { providerId: `${driver}-${sent.length}` };
       },
     };
   };
+  const second: ChannelRegistration = {
+    spec: {
+      channel: 'whatsapp',
+      consent: 'data_processing',
+      sender: (p) => (p.smsSenderId === null ? null : 'wa-sender'),
+      provider: () => 'fakewa',
+    },
+    transport: (driver) => ({
+      channel: 'whatsapp',
+      driver,
+      async send(message, o) {
+        if (faults.whatsapp) throw faults.whatsapp;
+        sent.push({ driver, to: message.to, body: message.body, sender: o.sender });
+        return { providerId: `${driver}-${sent.length}` };
+      },
+    }),
+  };
   const notifier = createNotifier({
     store,
     transport,
+    ...(opts.second ? { channels: [second] } : {}),
     statusCallbackUrl: 'https://x.supabase.co/functions/v1/sms-webhook/status',
     randomUUID: () => `m-${++n}`,
     now: () => new Date('2026-10-09T23:00:00Z'),
   });
-  return { notifier, rows, audit, sent, optOuts, reporterOptOuts };
+  return { notifier, rows, audit, sent, optOuts, reporterOptOuts, faults };
 }
 
 describe('Notifier (spec §4.5)', () => {
@@ -338,7 +373,7 @@ describe('Notifier (spec §4.5)', () => {
     const again = await h.notifier.deliver(recipient(), 'welcome', WELCOME, { dedupeKey: 'job:7' });
     expect(again).toEqual(first);
     expect(h.sent).toHaveLength(1);
-    expect(h.rows.get('m-1')!.payload).toEqual({ dedupe_key: 'job:7' });
+    expect(h.rows.get('m-1')!.payload).toEqual({ dedupe_key: 'job:7', attempt: 1 });
 
     const failing = harness({
       fail: new SmsSendError('twilio 503: busy', { driver: 'twilio', retryable: true }),
@@ -393,7 +428,11 @@ describe('Notifier (spec §4.5)', () => {
       'twilio',
     ]);
     expect(h.rows.size).toBe(1);
-    expect(h.rows.get('m-1')!.payload).toEqual({ dedupe_key: 'job:9', error_code: '21614' });
+    expect(h.rows.get('m-1')!.payload).toEqual({
+      dedupe_key: 'job:9',
+      attempt: 1,
+      error_code: '21614',
+    });
   });
 
   it("a number on the provider's own opt-out list (Twilio 21610) opts the phone and the reporter out", async () => {
@@ -573,5 +612,249 @@ describe('Notifier replies (sms-webhook)', () => {
       site: 'Pier 9',
       code: MASKED_CODE,
     });
+  });
+});
+
+describe('Notifier fallback between channels (§19 Q22, W2-01)', () => {
+  /** US with its SMS sender here, ordering SMS then the fake second channel. */
+  const TWO = pack('US', { sms_sender_id: '+18885550142', message_channels: ['sms', 'whatsapp'] });
+  const FILED = { report_no: 'RL-2041-0187', pdf_link: 'https://go.sitelog.app/r/K7Q2MX/report/1' };
+  const real = (over: Parameters<typeof recipient>[0] = {}) =>
+    recipient({
+      isDemo: false,
+      pack: TWO,
+      status: 'active',
+      consents: ['sms', 'data_processing', 'recording'],
+      ...over,
+    });
+  const notMobile = () =>
+    new SmsSendError("twilio 400 21614: 'To' is not a mobile number", {
+      driver: 'twilio',
+      retryable: false,
+      undeliverable: true,
+      code: '21614',
+    });
+  const actions = (h: ReturnType<typeof harness>) => h.audit.map((a) => a.action);
+
+  it('a first channel refused for good at send goes out once on the next, every attempt a row', async () => {
+    const h = harness({ second: true, faults: { sms: notMobile() } });
+    const out = await h.notifier.deliver(real(), 'filed', FILED, { dedupeKey: 'notify:filed:1' });
+    expect(out).toEqual({ channel: 'whatsapp', messageId: 'm-2' });
+    expect(h.rows.get('m-1')).toMatchObject({
+      channel: 'sms',
+      provider: 'twilio',
+      status: 'undeliverable',
+      payload: { dedupe_key: 'notify:filed:1', attempt: 1, error_code: '21614' },
+    });
+    expect(h.rows.get('m-2')).toMatchObject({
+      channel: 'whatsapp',
+      provider: 'fakewa',
+      provider_message_id: 'fakewa-1',
+      copy_key: 'filed',
+      status: 'sent',
+      payload: { dedupe_key: 'notify:filed:1', attempt: 2 },
+    });
+    // The link is masked in the row of a real org, whole in what the channel was asked to send.
+    expect(h.rows.get('m-2')!.body).not.toContain('K7Q2MX');
+    expect(h.sent).toEqual([
+      expect.objectContaining({ driver: 'fakewa', sender: 'wa-sender', to: '+15550143378' }),
+    ]);
+    expect(h.sent[0]!.body).toContain('K7Q2MX');
+    expect(actions(h)).toEqual(['sms.undeliverable', 'notify.attempt_failed', 'whatsapp.sent']);
+    expect(h.audit[1]).toEqual({
+      orgId: 'org-1',
+      action: 'notify.attempt_failed',
+      entity: 'message',
+      entityId: 'm-1',
+      diff: {
+        copy_key: 'filed',
+        dedupe_key: 'notify:filed:1',
+        channel: 'sms',
+        attempt: 1,
+        reason: 'undeliverable',
+        error: "twilio 400 21614: 'To' is not a mobile number",
+        code: '21614',
+        next_channel: 'whatsapp',
+      },
+    });
+    // A retry of the job: the dedupe hit is the attempt that went out, nothing is sent again.
+    h.faults.sms = null;
+    expect(
+      await h.notifier.deliver(real(), 'filed', FILED, { dedupeKey: 'notify:filed:1' }),
+    ).toEqual(out);
+    expect(h.sent).toHaveLength(1);
+    expect(h.rows.size).toBe(2);
+  });
+
+  it('a retryable error retries the same channel first, on the same row', async () => {
+    const h = harness({
+      second: true,
+      faults: { sms: new SmsSendError('twilio 503: busy', { driver: 'twilio', retryable: true }) },
+    });
+    const send = () => h.notifier.deliver(real(), 'filed', FILED, { dedupeKey: 'k:busy' });
+    await expect(send()).rejects.toThrow(/busy/);
+    expect(h.rows.get('m-1')).toMatchObject({ channel: 'sms', status: 'failed' });
+    expect(h.sent).toEqual([]);
+    h.faults.sms = null;
+    expect(await send()).toEqual({ channel: 'sms', messageId: 'm-1' });
+    expect(h.rows.size).toBe(1);
+    expect(h.rows.get('m-1')).toMatchObject({ status: 'sent', payload: { attempt: 1 } });
+    expect(actions(h)).toEqual(['sms.failed', 'sms.sent']);
+  });
+
+  it('a late failed or undeliverable callback: the re-run sends on the next channel, once', async () => {
+    for (const late of ['failed', 'undeliverable'] as const) {
+      const h = harness({ second: true });
+      const send = () => h.notifier.deliver(real(), 'filed', FILED, { dedupeKey: 'k:late' });
+      expect(await send()).toEqual({ channel: 'sms', messageId: 'm-1' });
+      // sms-webhook's /status moves the row (never backwards), then the fallback job runs.
+      Object.assign(h.rows.get('m-1')!, { status: late, error: 'twilio 30005' });
+      expect(await send()).toEqual({ channel: 'whatsapp', messageId: 'm-2' });
+      expect(await send()).toEqual({ channel: 'whatsapp', messageId: 'm-2' });
+      expect(h.sent.map((x) => x.driver)).toEqual(['twilio', 'fakewa']);
+      expect(h.audit.find((a) => a.action === 'notify.attempt_failed')).toMatchObject({
+        entityId: 'm-1',
+        diff: { reason: late, error: 'twilio 30005', next_channel: 'whatsapp', attempt: 1 },
+      });
+    }
+  });
+
+  it('every channel failed: the last refusal, at send and again on a replay', async () => {
+    const waRefusal = new MessageSendError('fakewa: no template for es', 'whatsapp', {
+      driver: 'fakewa',
+      retryable: false,
+      undeliverable: true,
+      code: 'T1',
+    });
+    const h = harness({ second: true, faults: { sms: notMobile(), whatsapp: waRefusal } });
+    const send = () =>
+      h.notifier.deliver(real(), 'filed', FILED, { dedupeKey: 'k:all' }).then(
+        () => null as never,
+        (e: MessageSendError) => e,
+      );
+    expect(await send()).toBe(waRefusal);
+    expect(actions(h)).toEqual([
+      'sms.undeliverable',
+      'notify.attempt_failed',
+      'whatsapp.undeliverable',
+    ]);
+    const again = await send();
+    expect(again).toBeInstanceOf(MessageSendError);
+    expect([again.channel, again.undeliverable, again.retryable, again.opts.code]).toEqual([
+      'whatsapp',
+      true,
+      false,
+      'T1',
+    ]);
+    expect(h.rows.size).toBe(2);
+    expect(h.sent).toEqual([]);
+  });
+
+  it('Twilio 21610 records the SMS opt-out and falls back: STOP stops texts only (§19 Q40)', async () => {
+    const h = harness({
+      second: true,
+      faults: {
+        sms: new SmsSendError('twilio 400 21610: unsubscribed', {
+          driver: 'twilio',
+          retryable: false,
+          undeliverable: true,
+          optedOut: true,
+          code: '21610',
+        }),
+      },
+    });
+    const out = await h.notifier.deliver(real(), 'filed', FILED, { dedupeKey: 'k:stop' });
+    expect(out).toEqual({ channel: 'whatsapp', messageId: 'm-2' });
+    expect(h.optOuts).toHaveLength(1);
+    expect(actions(h)).toEqual([
+      'sms.undeliverable',
+      'reporter.opted_out',
+      'notify.attempt_failed',
+      'whatsapp.sent',
+    ]);
+    // The next message: SMS is out of the order (opted out), the second channel carries it.
+    expect(
+      await h.notifier.deliver(real({ status: 'opted_out' }), 'filed', FILED, {
+        dedupeKey: 'k:next',
+      }),
+    ).toEqual({ channel: 'whatsapp', messageId: 'm-3' });
+    expect(
+      await h.notifier.deliver(real({ status: 'opted_out', consents: ['sms'] }), 'filed', FILED),
+    ).toEqual({ channel: null, reason: 'opted_out' });
+  });
+
+  it('a channel without its consent is never tried; a consent revoked between attempts is passed over', async () => {
+    const h = harness({ second: true });
+    const waFirst = pack('US', {
+      sms_sender_id: '+18885550142',
+      message_channels: ['whatsapp', 'sms'],
+    });
+    expect(
+      await h.notifier.deliver(real({ pack: waFirst, consents: ['sms'] }), 'filed', FILED),
+    ).toEqual({ channel: 'sms', messageId: 'm-1' });
+    expect([...h.rows.values()].map((r) => r.channel)).toEqual(['sms']);
+
+    h.faults.sms = new SmsSendError('twilio 503: busy', { driver: 'twilio', retryable: true });
+    await expect(
+      h.notifier.deliver(real(), 'filed', FILED, { dedupeKey: 'k:revoked' }),
+    ).rejects.toThrow(/busy/);
+    // SMS consent revoked in Settings before the job's retry.
+    const out = await h.notifier.deliver(
+      real({ consents: ['data_processing', 'recording'], revoked: ['sms'] }),
+      'filed',
+      FILED,
+      { dedupeKey: 'k:revoked' },
+    );
+    expect(out).toEqual({ channel: 'whatsapp', messageId: 'm-3' });
+    expect(h.audit.find((a) => a.action === 'notify.attempt_failed')).toMatchObject({
+      entityId: 'm-2',
+      diff: { reason: 'no_consent', channel: 'sms', next_channel: 'whatsapp' },
+    });
+  });
+
+  it('a demo org gets console on every channel; a real org keeps the W1-08 rule (no fallback)', async () => {
+    const h = harness({ second: true, faults: { sms: notMobile() } });
+    const demo = recipient({
+      pack: pack('US', { message_channels: ['whatsapp', 'sms'] }),
+      consents: ['sms', 'data_processing'],
+    });
+    expect(await h.notifier.deliver(demo, 'filed', FILED)).toEqual({
+      channel: 'whatsapp',
+      messageId: 'm-1',
+    });
+    expect(h.rows.get('m-1')).toMatchObject({ provider: 'console', status: 'delivered' });
+    expect(h.rows.get('m-1')!.body).toContain('K7Q2MX');
+    // A real org whose pack has no sender for its first channel here: W1-08's skip, until §19 Q84.
+    const noSender = recipient({
+      isDemo: false,
+      pack: pack('US', { message_channels: ['whatsapp', 'sms'] }),
+      consents: ['sms', 'data_processing'],
+    });
+    expect(await h.notifier.deliver(noSender, 'filed', FILED)).toEqual({
+      channel: null,
+      reason: 'no_channel',
+      detail: 'console_real_org',
+    });
+    expect(h.rows.get('m-2')).toMatchObject({ channel: 'whatsapp', status: 'failed' });
+  });
+
+  it('refuses a channel registered twice and names unregistered ones', () => {
+    expect(() =>
+      createNotifier({
+        store: {} as NotifierStore,
+        transport: () => {
+          throw new Error('unused');
+        },
+        channels: [
+          {
+            spec: { channel: 'sms', consent: 'sms', sender: () => null, provider: () => 'x' },
+            transport: () => {
+              throw new Error('unused');
+            },
+          },
+        ],
+        randomUUID: () => 'x',
+      }),
+    ).toThrow(/registered twice/);
   });
 });

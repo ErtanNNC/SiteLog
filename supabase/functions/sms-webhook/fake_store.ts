@@ -3,6 +3,7 @@ import type {
   InboundReporterRow,
   InboundSmsAudit,
   InboundScope,
+  JobPayloads,
   MemberRole,
   MsgStatus,
   ReporterRow,
@@ -27,6 +28,8 @@ export class FakeSmsStore implements SmsWebhookStore {
   inbound: Array<InboundMessageRow & { handled_at?: string; status: MsgStatus }> = [];
   /** The worker's jobs the inbound route enqueued (`sms_inbound`), with their dedupe keys. */
   jobs: Array<{ id: number; messageId: string; dedupeKey: string }> = [];
+  /** The `notify` jobs in the queue: those that sent messages, and the fallbacks queued (W2-01). */
+  notifyJobs: Array<{ id: number; payload: JobPayloads['notify']; dedupeKey: string }> = [];
   /** Outbound rows the status route updates (provider id → row). */
   outbound: Array<OutboundMessageState & { provider_message_id: string; error: string | null }> =
     [];
@@ -158,9 +161,23 @@ export class FakeSmsStore implements SmsWebhookStore {
             org_id: m.org_id,
             reporter_id: m.reporter_id,
             copy_key: m.copy_key,
+            payload: m.payload ?? null,
           }
         : null,
     );
+  }
+
+  notifyJobByDedupeKey(dedupeKey: string) {
+    const job = this.notifyJobs.find((j) => j.payload.dedupeKey === dedupeKey);
+    return Promise.resolve(job?.payload ?? null);
+  }
+
+  enqueueNotify(payload: JobPayloads['notify'], dedupeKey: string) {
+    const existing = this.notifyJobs.find((j) => j.dedupeKey === dedupeKey);
+    if (existing) return Promise.resolve(existing.id);
+    const id = 100 + this.notifyJobs.length;
+    this.notifyJobs.push({ id, payload, dedupeKey });
+    return Promise.resolve(id);
   }
 
   updateMessageStatus(id: string, status: MsgStatus, error: string | null) {

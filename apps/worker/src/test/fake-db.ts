@@ -910,24 +910,26 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async updateSmsMessage(id, patch) {
       Object.assign(d.messages.get(id)!, patch);
     },
-    async findMessageByDedupeKey(reporterId, dedupeKey) {
-      const m = [...d.messages.values()]
-        .reverse()
-        .find(
+    async listMessagesByDedupeKey(reporterId, dedupeKey) {
+      return [...d.messages.values()]
+        .filter(
           (x) =>
             x.reporter_id === reporterId &&
             (x.payload as { dedupe_key?: string } | null)?.dedupe_key === dedupeKey,
-        );
-      return m
-        ? {
+        )
+        .map((m) => {
+          const payload = m.payload as { error_code?: string; attempt?: number } | null;
+          return {
             id: m.id,
             channel: m.channel,
             status: m.status,
             provider: m.provider,
+            provider_message_id: m.provider_message_id,
             error: m.error,
-            error_code: (m.payload as { error_code?: string } | null)?.error_code ?? null,
-          }
-        : null;
+            error_code: payload?.error_code ?? null,
+            attempt: payload?.attempt ?? null,
+          };
+        });
     },
     async markSmsHandled(messageId, at) {
       const m = d.messages.get(messageId);

@@ -1,5 +1,12 @@
-import type { CountryRow, InboundReporterRow, Json, MemberRole } from '@sitelog/shared';
+import {
+  JobPayloadSchemas,
+  type CountryRow,
+  type InboundReporterRow,
+  type Json,
+  type MemberRole,
+} from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
+import { enqueueJob } from '../_shared/jobs.ts';
 import { supabaseLinkStore } from '../_shared/messaging.ts';
 import { notifyOrg } from '../_shared/notify.ts';
 import type { AppClient } from '../_shared/supabase.ts';
@@ -143,7 +150,7 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
     async messageByProviderId(providerId) {
       const { data } = await admin
         .from('messages')
-        .select('id, status, org_id, reporter_id, copy_key')
+        .select('id, status, org_id, reporter_id, copy_key, payload')
         .eq('provider_message_id', providerId)
         .maybeSingle()
         .throwOnError();
@@ -153,6 +160,21 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
     async updateMessageStatus(id, status, error) {
       await admin.from('messages').update({ status, error }).eq('id', id).throwOnError();
     },
+
+    async notifyJobByDedupeKey(dedupeKey) {
+      const { data } = await admin
+        .from('jobs')
+        .select('payload')
+        .eq('type', 'notify')
+        .eq('payload->>dedupeKey', dedupeKey)
+        .order('id', { ascending: true })
+        .limit(1)
+        .throwOnError();
+      const parsed = JobPayloadSchemas.notify.safeParse(data[0]?.payload);
+      return parsed.success ? parsed.data : null;
+    },
+
+    enqueueNotify: (payload, jobKey) => enqueueJob(admin, 'notify', payload, { dedupeKey: jobKey }),
 
     async reporterForInvite(id) {
       const { data } = await admin

@@ -53,6 +53,8 @@ const AUDITED: Record<string, string> = {
     'welcome:<reporter>:resend:<n>, per re-send (the nth "reporter.reinvited")',
   'jobKeys.welcomeLinked': 'welcome:<reporter>:linked:<unknown sender>, per linked sender',
   'reprocess:{}': 'per unknown sender linked (a sender is linked once)',
+  jobKey:
+    "sms-webhook's enqueueNotify (W2-01): jobKeys.notifyAfter(<message dedupe key>, <failed attempt id>) from lateFallback, the fallback after a late status callback; per logical message and failed attempt, and an attempt fails once (nextMessageStatus never moves a failed row)",
   'pack:{}': 'per evidence pack row',
   inboundDedupeKey: 'per WhatsApp message id (v1.0 webhook)',
   'weather:{}:{}:{}': 'per site, date and §10.10 slot',

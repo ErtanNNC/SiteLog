@@ -118,6 +118,10 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
             body: 'SMS sağlayıcısı numarasını reddetti ({{error}}). Numarayı Ekip ve numaralar sayfasında kontrol edin.',
           },
+          message_channels_failed: {
+            title: '{{name}}: ona giden bir mesaj gönderilemedi',
+            body: 'SiteLog onun için kullanabildiği tüm mesaj kanallarını denedi ({{channels}}) ve hiçbiri mesajı iletemedi ({{error}}). Numarasını ve kanallarını Ekip ve numaralar sayfasında kontrol edin.',
+          },
           message_no_sender: {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
             body: 'Bu ortamda şirketin ülkesi için SMS göndericisi tanımlı değil, bu yüzden mesaj hiçbir telefona ulaşmadı.',

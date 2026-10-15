@@ -163,7 +163,7 @@ function harness(
   }
   const notifierStore: NotifierStore = {
     loadRecipient: async () => null,
-    findByDedupeKey: async () => null,
+    listByDedupeKey: async () => [],
     insertMessage: async (row) => void rows.set(row.id, { ...row }),
     updateMessage: async (id, patch) => void Object.assign(rows.get(id)!, patch),
     isPhoneOptedOut: async () => false,

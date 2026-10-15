@@ -17,6 +17,7 @@ import type {
   MsgStatus,
   MsgType,
   OutboundMessageRow,
+  PriorMessage,
   OrgRow,
   OrgSettingsRow,
   QuestionRow,
@@ -558,18 +559,11 @@ export interface Db {
     },
   ): Promise<void>;
   /**
-   * The reporter's message written under a Notifier dedupe key (`payload.dedupe_key`), with the
-   * provider's code of a refused send (`payload.error_code`).
+   * The reporter's messages written under a Notifier dedupe key (`payload.dedupe_key`): every
+   * attempt, on every channel (W2-01), with the provider's code of a refused send
+   * (`payload.error_code`) and the attempt number (`payload.attempt`).
    */
-  findMessageByDedupeKey(
-    reporterId: string,
-    dedupeKey: string,
-  ): Promise<
-    | (Pick<MessageRow, 'id' | 'channel' | 'status' | 'provider' | 'error'> & {
-        error_code: string | null;
-      })
-    | null
-  >;
+  listMessagesByDedupeKey(reporterId: string, dedupeKey: string): Promise<PriorMessage[]>;
   /** `messages.payload.handled_at` of an inbound text (sms_inbound). */
   markSmsHandled(messageId: string, at: string): Promise<void>;
   /**
@@ -1385,20 +1379,15 @@ export function createDb(sql: Sql): Db {
     async updateSmsMessage(id, patch) {
       await sql`update messages set ${setClause(patch as Record<string, unknown>)} where id = ${id}`;
     },
-    async findMessageByDedupeKey(reporterId, dedupeKey) {
-      return one(
-        await sql<
-          Array<
-            Pick<MessageRow, 'id' | 'channel' | 'status' | 'provider' | 'error'> & {
-              error_code: string | null;
-            }
-          >
-        >`
-          select id, channel, status, provider, error, payload->>'error_code' as error_code
-          from messages
-          where reporter_id = ${reporterId} and payload->>'dedupe_key' = ${dedupeKey}
-          order by created_at desc limit 1`,
-      );
+    async listMessagesByDedupeKey(reporterId, dedupeKey) {
+      return await sql<PriorMessage[]>`
+        select id, channel, status, provider, provider_message_id, error,
+          payload->>'error_code' as error_code,
+          case when jsonb_typeof(payload->'attempt') = 'number' then (payload->>'attempt')::int end
+            as attempt
+        from messages
+        where reporter_id = ${reporterId} and payload->>'dedupe_key' = ${dedupeKey}
+        order by created_at, id`;
     },
     async markSmsHandled(messageId, at) {
       await sql`update messages

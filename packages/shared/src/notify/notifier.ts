@@ -1,10 +1,14 @@
 import {
   deliverableChannels,
+  MessageSendError,
   pickMessageTransport,
+  SMS_CHANNEL,
   smsReplyAllowed,
   smsRenderOptions,
   smsSendOptionsFor,
+  type MessageChannelSpec,
   type MessageKey,
+  type MessageTransport,
   type Notifier,
   type NotifierKey,
   type NotifyOutcome,
@@ -12,13 +16,20 @@ import {
   type SmsDriver,
   type SmsTransport,
 } from '../channels.ts';
-import { renderSms, type SmsLocaleFor, type SmsVars, type TwoWaySmsKey } from '../copy/sms.ts';
+import {
+  renderSms,
+  type RenderSmsOptions,
+  type SmsLocaleFor,
+  type SmsVars,
+  type TwoWaySmsKey,
+} from '../copy/sms.ts';
 import type { CountryPack } from '../countries.ts';
 import type { ConsentType, MessageChannel, MsgStatus, ReporterStatus } from '../enums.ts';
 import { assertE164, type E164 } from '../format.ts';
 import { MASKED_CODE, maskFieldLinkUrl } from '../links.ts';
 import { languageOf } from '../locale.ts';
 import { SmsSendError, TWILIO_OPTED_OUT_CODE } from '../sms/transports.ts';
+import { attemptIsFinal, attemptNumber, planAttempt, type MessageAttempt } from './walk.ts';
 
 /**
  * The Notifier (spec §4.5; W1-08): the one send function for messages to field reporters. It picks
@@ -45,10 +56,17 @@ import { SmsSendError, TWILIO_OPTED_OUT_CODE } from '../sms/transports.ts';
  *   phone needs working links). Otherwise link codes (`/r/••••••`) and the device code are masked,
  *   so no office user can open a reporter's link or verify a device as the reporter.
  * - `dedupeKey` makes a retry idempotent: a message already sent under the key is not sent again
- *   (`messages.payload.dedupe_key`); one refused for good under the key (`undeliverable`) throws
- *   that refusal again, with the provider's code the row kept (`payload.error_code`), so the
- *   caller takes the same path again (Twilio 21610 is still an opt-out) instead of reading a
- *   success. Falling back to the next channel waits for spec §19 Q22.
+ *   on any channel (`messages.payload.dedupe_key`); one refused for good on every channel of the
+ *   order throws the last refusal again, with the provider's code the row kept
+ *   (`payload.error_code`), so the caller takes the same path again (Twilio 21610 is still an
+ *   opt-out) instead of reading a success.
+ * - Fallback (spec §19 Q22, W2-01; `walk.ts`): a channel that fails for good (an `undeliverable`
+ *   refusal at send, or a later `failed` / `undeliverable` status callback, which re-runs the
+ *   message through a `notify` job) hands the message to the next deliverable channel, under the
+ *   same dedupe key. Each attempt is its own row (`payload.attempt`), and the attempt the walk
+ *   moves past is audited `notify.attempt_failed` with its reason before the next goes out. A
+ *   retryable error retries the same channel (the job's backoff). `console` on a real org
+ *   (`console_real_org`) stays W1-08's skip, with no fallback, until spec §19 Q84 is answered.
  * - A refused send (`SmsSendError`) marks the row `failed` or `undeliverable`, is audited and is
  *   thrown on, so a job retries what may pass later and records what never will. A provider that
  *   refuses because the number is on its own opt-out list (Twilio 21610, `optedOut`) also records
@@ -80,7 +98,17 @@ export interface NotifyRecipient {
   consents: { held: ReadonlySet<ConsentType>; revoked: ReadonlySet<ConsentType> };
 }
 
-/** A `messages` row the Notifier writes (channel 'sms' in week 1). */
+/** The `messages.payload` of an outbound row the Notifier writes. */
+export type OutboundMessagePayload = {
+  /** The logical message's key (one per message, across its channels). */
+  dedupe_key?: string;
+  /** The attempt this row is: 1 for the first channel tried, 2 for the next (W2-01). */
+  attempt?: number;
+  /** The provider's code of a refused send. */
+  error_code?: string;
+};
+
+/** A `messages` row the Notifier writes: one per attempt (SMS, or a registered channel). */
 export interface OutboundMessageRow {
   id: string;
   org_id: string | null;
@@ -88,14 +116,14 @@ export interface OutboundMessageRow {
   phone_e164: string;
   channel: MessageChannel;
   direction: 'out';
-  provider: SmsDriver;
+  /** The driver: an `SmsDriver` for SMS, the registered channel's driver otherwise. */
+  provider: string;
   provider_message_id: string | null;
   copy_key: MessageKey;
   body: string;
   status: MsgStatus;
   error: string | null;
-  /** The Notifier's dedupe key, and the provider's code of a refused send. */
-  payload: { dedupe_key?: string; error_code?: string } | null;
+  payload: OutboundMessagePayload | null;
 }
 
 export interface NotifierAuditEntry {
@@ -106,21 +134,39 @@ export interface NotifierAuditEntry {
   diff: Record<string, unknown>;
 }
 
-/** What `findByDedupeKey` reports about an earlier row under the key. */
+/** What `listByDedupeKey` reports about an earlier row (attempt) under the key. */
 export interface PriorMessage {
   id: string;
   channel: MessageChannel | null;
   status: MsgStatus;
   provider: string | null;
+  /** Set once the provider took the message (a later `failed` came from a status callback). */
+  provider_message_id?: string | null;
   error: string | null;
   /** `payload.error_code`: the provider's code of a refused send. */
   error_code?: string | null;
+  /** `payload.attempt` (absent on rows before W2-01: the first attempt). */
+  attempt?: number | null;
+}
+
+/** A `PriorMessage` as the walk reads it. */
+export function attemptOf(prior: PriorMessage): MessageAttempt {
+  return {
+    id: prior.id,
+    channel: prior.channel,
+    status: prior.status,
+    provider: prior.provider,
+    provider_message_id: prior.provider_message_id ?? null,
+    error: prior.error,
+    error_code: prior.error_code ?? null,
+    attempt: attemptNumber({ attempt: prior.attempt }),
+  };
 }
 
 export interface NotifierStore {
   loadRecipient(reporterId: string): Promise<NotifyRecipient | null>;
-  /** The reporter's message written under this dedupe key, if any. */
-  findByDedupeKey(reporterId: string, dedupeKey: string): Promise<PriorMessage | null>;
+  /** The reporter's messages written under this dedupe key: every attempt, on every channel. */
+  listByDedupeKey(reporterId: string, dedupeKey: string): Promise<PriorMessage[]>;
   insertMessage(row: OutboundMessageRow): Promise<void>;
   updateMessage(
     id: string,
@@ -149,10 +195,29 @@ export interface NotifierStore {
   audit(entry: NotifierAuditEntry): Promise<void>;
 }
 
+/**
+ * A message channel registered with the Notifier besides SMS (W2-01): its spec and its drivers.
+ * W2-14 registers push, W2-15 WhatsApp; the tests register a fake one.
+ */
+export interface ChannelRegistration {
+  spec: MessageChannelSpec;
+  /** The transport for a `pickMessageTransport()` answer on this channel (`console` included). */
+  transport(driver: string): MessageTransport;
+  /** The delivery-status callback URL a driver asks the provider for; none by default. */
+  statusCallback?(driver: string): string | null;
+  /**
+   * The copy variant of the channel. Default: the pack's SMS variant with links allowed (the
+   * links-in-SMS rule is SMS's, spec §19 Q24).
+   */
+  renderOptions?(pack: CountryPack): RenderSmsOptions;
+}
+
 export interface NotifierDeps {
   store: NotifierStore;
-  /** The driver for a `pickMessageTransport()` answer (`createSmsTransports`). */
+  /** The SMS driver for a `pickMessageTransport()` answer (`createSmsTransports`). */
   transport: (driver: SmsDriver) => SmsTransport;
+  /** The other channels' registrations (W2-01); SMS is always registered. */
+  channels?: readonly ChannelRegistration[];
   /** sms-webhook's status route, for Twilio delivery callbacks; null = none requested. */
   statusCallbackUrl?: string | null;
   randomUUID: () => string;
@@ -212,6 +277,7 @@ export function skipReason(
   recipient: NotifyRecipient,
   key: NotifierKey,
   narrow?: readonly MessageChannel[],
+  specs: readonly MessageChannelSpec[] = [SMS_CHANNEL],
 ): 'no_channel' | 'no_consent' | 'opted_out' {
   if (recipient.reporter.status === 'disabled') return 'no_channel';
   if (recipient.reporter.status === 'opted_out') return 'opted_out';
@@ -220,11 +286,46 @@ export function skipReason(
     key,
     preferred: recipient.reporter.message_channel,
     narrow,
-    consents: new Set<ConsentType>([...recipient.consents.held, 'sms']),
+    consents: new Set<ConsentType>([...recipient.consents.held, ...specs.map((s) => s.consent)]),
     revoked: new Set(),
     optedOut: new Set(),
+    implemented: specs.map((s) => s.channel),
+    consentFor: consentMap(specs),
   });
   return withConsent.length > 0 ? 'no_consent' : 'no_channel';
+}
+
+function consentMap(
+  specs: readonly MessageChannelSpec[],
+): Partial<Record<MessageChannel, ConsentType>> {
+  return Object.fromEntries(specs.map((s) => [s.channel, s.consent]));
+}
+
+/**
+ * The refusal an attempt recorded, thrown again when every channel has failed for the message: an
+ * `SmsSendError` for SMS (with its code, so Twilio 21610 stays an opt-out), a `MessageSendError`
+ * for another channel. A `failed` attempt (its status callback) counts as undeliverable here: the
+ * provider took it and could not deliver it.
+ */
+export function refusalOf(a: MessageAttempt): MessageSendError {
+  const driver = a.provider ?? 'console';
+  const code = a.error_code;
+  const message = a.error ?? a.status;
+  if (a.channel === 'sms' || a.channel === null) {
+    return new SmsSendError(message, {
+      driver: driver as SmsDriver,
+      retryable: false,
+      undeliverable: true,
+      optedOut: driver === 'twilio' && code === TWILIO_OPTED_OUT_CODE,
+      code,
+    });
+  }
+  return new MessageSendError(message, a.channel, {
+    driver,
+    retryable: false,
+    undeliverable: true,
+    code,
+  });
 }
 
 /** The variables with link codes and the device code masked (`messages.body` of real orgs). */
@@ -244,6 +345,33 @@ function errorText(err: unknown): string {
 export function createNotifier(deps: NotifierDeps): SmsNotifier {
   const { store } = deps;
   const now = deps.now ?? (() => new Date());
+
+  const smsRegistration: ChannelRegistration = {
+    spec: SMS_CHANNEL,
+    transport(driver) {
+      const sms = deps.transport(driver as SmsDriver);
+      return {
+        channel: 'sms',
+        driver: sms.driver,
+        send: (message, opts) => sms.send(message.to, message.body, opts),
+      };
+    },
+    statusCallback: (driver) =>
+      driver === 'twilio' && deps.statusCallbackUrl ? deps.statusCallbackUrl : null,
+    renderOptions: smsRenderOptions,
+  };
+  const registry: ChannelRegistration[] = [smsRegistration];
+  for (const r of deps.channels ?? []) {
+    if (registry.some((x) => x.spec.channel === r.spec.channel)) {
+      throw new Error(`Notifier: message channel "${r.spec.channel}" registered twice`);
+    }
+    registry.push(r);
+  }
+  const specs = registry.map((r) => r.spec);
+  const implemented = specs.map((s) => s.channel);
+  const consentFor = consentMap(specs);
+  const registrationOf = (channel: MessageChannel): ChannelRegistration =>
+    registry.find((r) => r.spec.channel === channel)!;
 
   async function skip(
     recipient: NotifyRecipient,
@@ -267,29 +395,51 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     reporterId: string | null;
     phone: E164;
     pack: CountryPack;
-    driver: SmsDriver;
+    channel: MessageChannel;
+    driver: string;
     key: MessageKey;
+    language: string;
+    vars: Readonly<Record<string, unknown>>;
     text: string;
     stored: string;
     dedupeKey?: string;
+    /** The attempt number of a Notifier message (none for a two-way reply). */
+    attempt?: number;
+    /** The row of an earlier attempt to send again on. */
     existingId?: string;
+    /** The id of a new row (default: a new UUID). */
+    newId?: string;
   }
 
-  function rowOf(input: TransmitInput, id: string, status: MsgStatus, error: string | null) {
+  function payloadOf(input: TransmitInput, code?: string | null): OutboundMessageRow['payload'] {
+    if (input.dedupeKey === undefined && input.attempt === undefined && !code) return null;
+    return {
+      ...(input.dedupeKey !== undefined ? { dedupe_key: input.dedupeKey } : {}),
+      ...(input.attempt !== undefined ? { attempt: input.attempt } : {}),
+      ...(code ? { error_code: code } : {}),
+    };
+  }
+
+  function rowOf(
+    input: TransmitInput,
+    id: string,
+    status: MsgStatus,
+    error: string | null,
+  ): OutboundMessageRow {
     return {
       id,
       org_id: input.orgId,
       reporter_id: input.reporterId,
       phone_e164: input.phone,
-      channel: 'sms' as const,
-      direction: 'out' as const,
+      channel: input.channel,
+      direction: 'out',
       provider: input.driver,
       provider_message_id: null,
       copy_key: input.key,
       body: input.stored,
       status,
       error,
-      payload: input.dedupeKey ? { dedupe_key: input.dedupeKey } : null,
+      payload: payloadOf(input),
     };
   }
 
@@ -306,17 +456,19 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
 
   /** Writes the row, sends, records the outcome. Shared by `deliver` and `reply`. */
   async function transmit(input: TransmitInput): Promise<string> {
-    const id = input.existingId ?? deps.randomUUID();
+    const id = input.existingId ?? input.newId ?? deps.randomUUID();
+    const registration = registrationOf(input.channel);
+    const prefix = input.channel;
     // The driver first: a pack whose provider has no credentials here never leaves a row queued.
-    let transport: SmsTransport;
+    let transport: MessageTransport;
     try {
-      transport = deps.transport(input.driver);
+      transport = registration.transport(input.driver);
     } catch (err) {
       const message = errorText(err);
       await writeRow(input, id, 'failed', message);
       await store.audit({
         orgId: input.orgId,
-        action: 'sms.failed',
+        action: `${prefix}.failed`,
         entity: 'message',
         entityId: id,
         diff: {
@@ -330,13 +482,26 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       throw err;
     }
     await writeRow(input, id, 'queued', null);
+    const statusCallback = registration.statusCallback?.(input.driver) ?? null;
+    const sender = registration.spec.sender(input.pack);
     try {
-      const { providerId } = await transport.send(input.phone, input.text, {
-        ...smsSendOptionsFor(input.pack),
-        ...(input.driver === 'twilio' && deps.statusCallbackUrl
-          ? { statusCallback: deps.statusCallbackUrl }
-          : {}),
-      });
+      const { providerId } = await transport.send(
+        {
+          to: input.phone,
+          body: input.text,
+          key: input.key,
+          language: input.language,
+          vars: input.vars,
+        },
+        {
+          ...(input.channel === 'sms'
+            ? smsSendOptionsFor(input.pack)
+            : sender === null
+              ? {}
+              : { sender }),
+          ...(statusCallback ? { statusCallback } : {}),
+        },
+      );
       await store.updateMessage(id, {
         status: input.driver === 'console' ? 'delivered' : 'sent',
         provider_message_id: providerId,
@@ -344,14 +509,14 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       });
       await store.audit({
         orgId: input.orgId,
-        action: 'sms.sent',
+        action: `${prefix}.sent`,
         entity: 'message',
         entityId: id,
-        diff: { copy_key: input.key, provider: input.driver, channel: 'sms' },
+        diff: { copy_key: input.key, provider: input.driver, channel: input.channel },
       });
       return id;
     } catch (err) {
-      const refused = err instanceof SmsSendError ? err : null;
+      const refused = err instanceof MessageSendError ? err : null;
       const undeliverable = refused?.undeliverable === true;
       const message = errorText(err);
       const code = refused?.opts.code ?? null;
@@ -359,31 +524,25 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         status: undeliverable ? 'undeliverable' : 'failed',
         error: message,
         // The code goes with the row, so a replay under the dedupe key throws the same refusal.
-        ...(code
-          ? {
-              payload: {
-                ...(input.dedupeKey ? { dedupe_key: input.dedupeKey } : {}),
-                error_code: code,
-              },
-            }
-          : {}),
+        ...(code ? { payload: payloadOf(input, code) } : {}),
       });
       await store.audit({
         orgId: input.orgId,
-        action: undeliverable ? 'sms.undeliverable' : 'sms.failed',
+        action: undeliverable ? `${prefix}.undeliverable` : `${prefix}.failed`,
         entity: 'message',
         entityId: id,
         diff: {
           copy_key: input.key,
           provider: input.driver,
-          code: refused?.opts.code ?? null,
+          code,
           retryable: refused?.retryable ?? false,
           ...(refused?.optedOut ? { opted_out: true } : {}),
         },
       });
-      if (refused?.optedOut) {
+      if (refused?.optedOut && input.channel === 'sms') {
         // The provider's own opt-out list (a STOP SiteLog never saw, or one before this sender):
-        // SiteLog's state catches up, for the number and for the reporter.
+        // SiteLog's state catches up, for the number and for the reporter. Another channel's
+        // opt-out is a revoked consent of its type (spec §19 Q40), its own ticket's.
         const at = now().toISOString();
         await store.recordPhoneOptOut({
           phone_e164: input.phone,
@@ -411,6 +570,14 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     }
   }
 
+  /** Why the walk moves past an attempt (`notify.attempt_failed`). */
+  function attemptFailedReason(recipient: NotifyRecipient, a: MessageAttempt): string {
+    if (attemptIsFinal(a)) return a.status;
+    // A pending attempt whose channel left the order since it was written.
+    const consent = a.channel ? consentFor[a.channel] : undefined;
+    return consent && !recipient.consents.held.has(consent) ? 'no_consent' : 'not_deliverable';
+  }
+
   async function deliver<K extends NotifierKey>(
     recipient: NotifyRecipient,
     key: K,
@@ -419,76 +586,124 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
   ): Promise<NotifyOutcome> {
     const { reporter, org, pack } = recipient;
     if (reporter.status === 'disabled') return skip(recipient, key, 'no_channel', 'disabled');
-    const channels = deliverableChannels({
+    let order = deliverableChannels({
       pack,
       key,
       preferred: reporter.message_channel,
       narrow: opts.channels,
       consents: recipient.consents.held,
       revoked: recipient.consents.revoked,
+      // `opted_out` is SMS STOP: it stops texts only (spec §19 Q40).
       optedOut: new Set<MessageChannel>(reporter.status === 'opted_out' ? ['sms'] : []),
+      implemented,
+      consentFor,
     });
-    const channel = channels[0];
-    if (!channel) return skip(recipient, key, skipReason(recipient, key, opts.channels));
-    const phone = assertE164(reporter.phone_e164);
-    if (channel === 'sms' && (await store.isPhoneOptedOut(phone, pack.code))) {
-      return skip(recipient, key, 'opted_out', 'phone_opted_out');
+    if (order.length === 0) {
+      return skip(recipient, key, skipReason(recipient, key, opts.channels, specs));
     }
-    const driver = pickMessageTransport({ isDemo: org.isDemo }, pack, channel);
-    if (driver === 'console' && !org.isDemo && CONSOLE_DEMO_ONLY_KEYS.includes(key)) {
-      return skip(recipient, key, 'no_channel', 'console_real_org');
+    const phone = assertE164(reporter.phone_e164);
+    if (order.includes('sms') && (await store.isPhoneOptedOut(phone, pack.code))) {
+      order = order.filter((c) => c !== 'sms');
+      if (order.length === 0) return skip(recipient, key, 'opted_out', 'phone_opted_out');
     }
 
-    let existingId: string | undefined;
-    if (opts.dedupeKey) {
-      const prior = await store.findByDedupeKey(reporter.id, opts.dedupeKey);
-      if (prior?.status === 'undeliverable') {
-        // The same refusal as the first time, code and all: a provider opt-out (Twilio 21610)
-        // stays an opt-out, never a bad number. Its opt-out was recorded then; a START since
-        // must not be undone here, so nothing is written again.
-        const priorDriver = (prior.provider as SmsDriver | null) ?? driver;
-        const code = prior.error_code ?? null;
-        throw new SmsSendError(prior.error ?? 'undeliverable', {
-          driver: priorDriver,
-          retryable: false,
-          undeliverable: true,
-          optedOut: priorDriver === 'twilio' && code === TWILIO_OPTED_OUT_CODE,
-          code,
+    const attempts: MessageAttempt[] = opts.dedupeKey
+      ? (await store.listByDedupeKey(reporter.id, opts.dedupeKey)).map(attemptOf)
+      : [];
+    const language = languageOf(reporter.locale);
+    for (;;) {
+      const plan = planAttempt(order, attempts);
+      if (plan.kind === 'done') {
+        return { channel: plan.attempt.channel ?? 'sms', messageId: plan.attempt.id };
+      }
+      // The same refusal as the first time, code and all: a provider opt-out (Twilio 21610)
+      // stays an opt-out, never a bad number. Its opt-out was recorded then; a START since must
+      // not be undone here, so nothing is written again.
+      if (plan.kind === 'exhausted') throw refusalOf(plan.last);
+      if (plan.kind === 'none') return skip(recipient, key, 'no_channel');
+
+      const { channel } = plan;
+      const driver = pickMessageTransport({ isDemo: org.isDemo }, pack, channel, specs);
+      if (driver === 'console' && !org.isDemo && CONSOLE_DEMO_ONLY_KEYS.includes(key)) {
+        return skip(recipient, key, 'no_channel', 'console_real_org');
+      }
+      if (plan.after) {
+        // The attempt the walk moves past, before the next goes out (spec §19 Q22).
+        const after = plan.after;
+        await store.audit({
+          orgId: reporter.org_id,
+          action: 'notify.attempt_failed',
+          entity: 'message',
+          entityId: after.id,
+          diff: {
+            copy_key: key,
+            dedupe_key: opts.dedupeKey ?? null,
+            channel: after.channel,
+            attempt: after.attempt,
+            reason: attemptFailedReason(recipient, after),
+            error: after.error,
+            code: after.error_code,
+            next_channel: channel,
+          },
         });
       }
-      if (prior && prior.status !== 'queued' && prior.status !== 'failed') {
-        return { channel: prior.channel ?? channel, messageId: prior.id };
-      }
-      // Written but not confirmed (a crash mid-send) or failed: send again on the same row.
-      if (prior) existingId = prior.id;
-    }
 
-    const locale = languageOf(reporter.locale) as SmsLocaleFor<K>;
-    const options = smsRenderOptions(pack);
-    const text = renderSms(key, locale, vars, options);
-    const stored =
-      driver === 'console' && org.isDemo ? text : renderSms(key, locale, maskedVars(vars), options);
-    const input: TransmitInput = {
-      orgId: reporter.org_id,
-      reporterId: reporter.id,
-      phone,
-      pack,
-      driver,
-      key,
-      text,
-      stored,
-      dedupeKey: opts.dedupeKey,
-      existingId,
-    };
-    if (driver === 'console' && !org.isDemo) {
-      // Nothing reaches the phone: the masked row records what would have gone out (the staging
-      // Demo phone shows it), and the caller tells the office.
-      const id = existingId ?? deps.randomUUID();
-      await writeRow(input, id, 'failed', consoleRealOrgError(pack.code));
-      return skip(recipient, key, 'no_channel', 'console_real_org', { message_id: id });
+      const registration = registrationOf(channel);
+      const options = registration.renderOptions?.(pack) ?? {
+        ...smsRenderOptions(pack),
+        linksAllowed: true,
+      };
+      const locale = language as SmsLocaleFor<K>;
+      const text = renderSms(key, locale, vars, options);
+      const stored =
+        driver === 'console' && org.isDemo
+          ? text
+          : renderSms(key, locale, maskedVars(vars), options);
+      const input: TransmitInput = {
+        orgId: reporter.org_id,
+        reporterId: reporter.id,
+        phone,
+        pack,
+        channel,
+        driver,
+        key,
+        language,
+        vars: vars as Readonly<Record<string, unknown>>,
+        text,
+        stored,
+        dedupeKey: opts.dedupeKey,
+        attempt: plan.attempt,
+        existingId: plan.retry?.id,
+      };
+      if (driver === 'console' && !org.isDemo) {
+        // Nothing reaches the phone: the masked row records what would have gone out (the
+        // staging Demo phone shows it), and the caller tells the office. No fallback: W1-08's
+        // rule stands until spec §19 Q84 is answered (W2-15).
+        const id = plan.retry?.id ?? deps.randomUUID();
+        await writeRow(input, id, 'failed', consoleRealOrgError(pack.code));
+        return skip(recipient, key, 'no_channel', 'console_real_org', { message_id: id });
+      }
+      const id = plan.retry?.id ?? deps.randomUUID();
+      try {
+        await transmit({ ...input, newId: id });
+        return { channel, messageId: id };
+      } catch (err) {
+        // Only a refusal that is final for this channel falls back; anything else (a retryable
+        // error, a missing credential) is thrown for the job to retry the same channel.
+        if (!(err instanceof MessageSendError) || err.retryable || !err.undeliverable) throw err;
+        attempts.push({
+          id,
+          channel,
+          status: 'undeliverable',
+          provider: driver,
+          provider_message_id: null,
+          error: errorText(err),
+          error_code: err.opts.code ?? null,
+          attempt: plan.attempt,
+        });
+        if (planAttempt(order, attempts).kind !== 'send') throw err;
+      }
     }
-    const messageId = await transmit(input);
-    return { channel, messageId };
   }
 
   return {
@@ -510,7 +725,8 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         input.pack,
         'sms',
       );
-      const locale = languageOf(input.locale) as SmsLocaleFor<typeof input.key>;
+      const language = languageOf(input.locale);
+      const locale = language as SmsLocaleFor<typeof input.key>;
       const options = smsRenderOptions(input.pack);
       const text = renderSms(input.key, locale, input.vars, options);
       const stored =
@@ -522,8 +738,11 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         reporterId: input.reporterId,
         phone: input.phone,
         pack: input.pack,
+        channel: 'sms',
         driver,
         key: input.key,
+        language,
+        vars: input.vars as Readonly<Record<string, unknown>>,
         text,
         stored,
       };

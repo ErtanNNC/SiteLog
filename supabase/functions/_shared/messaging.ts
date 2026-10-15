@@ -1,4 +1,5 @@
 import {
+  attemptNumber,
   consentSets,
   createNotifier,
   createSmsTransports,
@@ -90,21 +91,25 @@ export function supabaseNotifierStore(admin: AppClient): NotifierStore {
         consents: consentSets(consents),
       };
     },
-    async findByDedupeKey(reporterId, dedupeKey) {
+    async listByDedupeKey(reporterId, dedupeKey) {
       const { data } = await admin
         .from('messages')
-        .select('id, channel, status, provider, error, payload')
+        .select('id, channel, status, provider, provider_message_id, error, payload')
         .eq('reporter_id', reporterId)
         .eq('payload->>dedupe_key', dedupeKey)
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
         .throwOnError();
-      const row = data[0];
-      if (!row) return null;
-      const { payload, ...prior } = row;
-      // The provider's code of a refused send, so a replay throws the same refusal.
-      const code = (payload as { error_code?: unknown } | null)?.error_code;
-      return { ...prior, error_code: typeof code === 'string' ? code : null };
+      // Every attempt (W2-01), with the provider's code of a refused send, so a replay throws
+      // the same refusal, and the attempt number.
+      return data.map(({ payload, ...prior }) => {
+        const code = (payload as { error_code?: unknown } | null)?.error_code;
+        return {
+          ...prior,
+          error_code: typeof code === 'string' ? code : null,
+          attempt: attemptNumber(payload),
+        };
+      });
     },
     async insertMessage(row) {
       await admin

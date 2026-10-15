@@ -2001,8 +2001,10 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
     expect(contact.status).toBe('pending');
     expect(await db.hasPendingUnknownContact('+15550194410', 'sms')).toBe(true);
     expect(await db.hasPendingUnknownContact('+15550194410', 'sms')).toBe(true);
-    const prior = await db.findMessageByDedupeKey(MARCO, 'w108:test');
+    const [prior, ...more] = await db.listMessagesByDedupeKey(MARCO, 'w108:test');
+    expect(more).toEqual([]);
     expect(prior).toMatchObject({
+      attempt: 1,
       provider: 'console',
       error: null,
       status: 'delivered',
@@ -2077,14 +2079,19 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
       error: 'twilio 400 21610: unsubscribed',
       payload: { dedupe_key: 'w108:refused', error_code: '21610' },
     });
-    expect(await db.findMessageByDedupeKey(MARCO, 'w108:refused')).toEqual({
-      id,
-      channel: 'sms',
-      status: 'undeliverable',
-      provider: 'twilio',
-      error: 'twilio 400 21610: unsubscribed',
-      error_code: '21610',
-    });
+    // A row written before W2-01 has no attempt number (the walk reads it as the first).
+    expect(await db.listMessagesByDedupeKey(MARCO, 'w108:refused')).toEqual([
+      {
+        id,
+        channel: 'sms',
+        status: 'undeliverable',
+        provider: 'twilio',
+        provider_message_id: null,
+        error: 'twilio 400 21610: unsubscribed',
+        error_code: '21610',
+        attempt: null,
+      },
+    ]);
   });
 
   it("a real sender reaches a real org's reporter, and a keyword's change commits with its audit and notice or not at all", async () => {

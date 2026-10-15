@@ -2,6 +2,7 @@ import type {
   CountryRow,
   InboundSmsAudit,
   InboundSmsStore,
+  JobPayloads,
   MemberRole,
   MsgStatus,
   NoticeData,
@@ -35,6 +36,8 @@ export interface OutboundMessageState {
   org_id: string | null;
   reporter_id: string | null;
   copy_key: string | null;
+  /** `messages.payload`: the Notifier's dedupe key and attempt (W2-01). */
+  payload?: unknown;
 }
 
 /** A §13 "Message undeliverable / opted out" notification (`notify_org`). */
@@ -63,6 +66,13 @@ export interface SmsWebhookStore extends InboundSmsStore {
   ): Promise<{ id: string; duplicate: boolean; handled: boolean; jobId: number | null }>;
   messageByProviderId(providerId: string): Promise<OutboundMessageState | null>;
   updateMessageStatus(id: string, status: MsgStatus, error: string | null): Promise<void>;
+  /**
+   * The payload of the `notify` job that sent the message under this Notifier dedupe key (the
+   * first such job), or null: the late fallback's variables (W2-01, `lateFallback`).
+   */
+  notifyJobByDedupeKey(dedupeKey: string): Promise<JobPayloads['notify'] | null>;
+  /** `enqueue_job('notify', …)` under its job key; a taken key returns that job (D16). */
+  enqueueNotify(payload: JobPayloads['notify'], dedupeKey: string): Promise<number>;
   /** The reporter a welcome text was for (the status route's "Can't reach this number"). */
   reporterForInvite(
     id: string,

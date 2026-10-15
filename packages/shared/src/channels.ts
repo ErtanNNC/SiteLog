@@ -46,7 +46,8 @@ export type NotifierKey = Exclude<MessageKey, TwoWaySmsKey>;
 
 /**
  * The message channels with a transport. Week 1 builds SMS only; WhatsApp (Twilio) and web push
- * join with the M6 reminders (week 2).
+ * join with the M6 reminders (week 2), each by registering its `MessageChannelSpec` and transport
+ * with the Notifier (`NotifierDeps.channels`, W2-01) and adding itself here.
  */
 export const IMPLEMENTED_MESSAGE_CHANNELS = ['sms'] as const satisfies readonly MessageChannel[];
 
@@ -81,6 +82,95 @@ export const PRE_CONSENT_SMS_KEYS = [
  * SMS for its messages.
  */
 export const SMS_ONLY_KEYS = ['verify_code'] as const satisfies readonly NotifierKey[];
+
+/**
+ * A built message channel (§4.5; W2-01): what the Notifier needs to know about it besides its
+ * transport. The registry is the Notifier's (`NotifierDeps.channels`): SMS is always registered
+ * (`SMS_CHANNEL`); W2-14 (push) and W2-15 (WhatsApp) register theirs, tests a fake one.
+ */
+export interface MessageChannelSpec {
+  readonly channel: MessageChannel;
+  /** The consent the channel needs (`consents.type`). */
+  readonly consent: ConsentType;
+  /**
+   * The pack's sender of this channel in this environment; null = none set here, so the channel
+   * goes through `console` (§4.6, §19 Q29; WhatsApp Q39).
+   */
+  sender(pack: CountryPack): string | null;
+  /** The pack's provider driver for this channel (`sms_provider`, `whatsapp_provider`, …). */
+  provider(pack: CountryPack): string;
+}
+
+/** SMS: consent `sms`, the pack's `sms_sender_id` and `sms_provider`. */
+export const SMS_CHANNEL: MessageChannelSpec = {
+  channel: 'sms',
+  consent: 'sms',
+  sender: (pack) => pack.smsSenderId,
+  provider: (pack) => pack.smsProvider,
+};
+
+/** The channels built in this repo, as specs (`pickMessageTransport`'s default registry). */
+export const BUILT_CHANNEL_SPECS: readonly MessageChannelSpec[] = [SMS_CHANNEL];
+
+/** What a channel's transport is asked to send: the §9.2 text and what it was rendered from. */
+export interface OutboundMessage {
+  /** The person's number (push, W2-14, adds its subscription beside it). */
+  to: E164;
+  /** The text in the person's language with the pack's variant. */
+  body: string;
+  key: MessageKey;
+  /** The language the body is in (`en`, `es`, `tr`): a WhatsApp template's language (W2-15). */
+  language: string;
+  /** The key's variables, unmasked (a WhatsApp template's variables, W2-15). */
+  vars: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * One driver of one message channel (§4.5; W2-01). SMS wraps its `SmsTransport`s; W2-14 / W2-15
+ * implement this directly. A refusal throws `MessageSendError` (`SmsSendError` for SMS).
+ */
+export interface MessageTransport {
+  readonly channel: MessageChannel;
+  readonly driver: string;
+  send(message: OutboundMessage, opts: SmsSendOptions): Promise<{ providerId: string }>;
+}
+
+/**
+ * A send a channel's provider refused, or a network failure (§4.5; W2-01). `retryable`: the same
+ * channel may pass later (HTTP 429 or 5xx, network), so the job retries it with backoff;
+ * `undeliverable`: the channel cannot carry this message to this person, final for the channel,
+ * so the Notifier falls back to the next channel of the order (§19 Q22). `SmsSendError` is the
+ * SMS drivers' subclass.
+ */
+export class MessageSendError extends Error {
+  constructor(
+    message: string,
+    readonly channel: MessageChannel,
+    readonly opts: {
+      driver: string;
+      /** Try again later (rate limit, provider outage, network). */
+      retryable: boolean;
+      /** The channel cannot reach this person with this message (invalid, landline, refused). */
+      undeliverable?: boolean;
+      /** The provider's own opt-out list has the person (Twilio 21610 for SMS). */
+      optedOut?: boolean;
+      /** The provider's error code, e.g. Twilio 21211. */
+      code?: string | null;
+    },
+  ) {
+    super(message);
+    this.name = 'MessageSendError';
+  }
+  get retryable(): boolean {
+    return this.opts.retryable;
+  }
+  get undeliverable(): boolean {
+    return this.opts.undeliverable === true;
+  }
+  get optedOut(): boolean {
+    return this.opts.optedOut === true;
+  }
+}
 
 /** Why SiteLog places an outbound call (§4.5, `calls.purpose`). */
 export type CallPurpose = 'daily_report' | 'reminder' | 'callback';
@@ -118,9 +208,10 @@ export interface Notifier {
    * in the reporter's language with the pack's variant (`smsRenderOptions(pack)`), through
    * `pickMessageTransport()`; writes `messages` (with `channel`) and the audit row. `channels`
    * narrows that order and never widens it (e.g. F16's "Send me today's link" by SMS);
-   * `dedupeKey` is one per logical message (e.g. `notify:filed:{report_id}`). Falling back to the
-   * next channel waits for spec §19 Q22. The two-way replies are not Notifier keys
-   * (`smsReplyAllowed`).
+   * `dedupeKey` is one per logical message (e.g. `notify:filed:{report_id}`). A channel that fails
+   * for good (at send, or later by a status callback) hands the message to the next channel of the
+   * order under the same key, one `messages` row per attempt (§19 Q22, W2-01). The two-way replies
+   * are not Notifier keys (`smsReplyAllowed`).
    */
   send<K extends NotifierKey>(
     reporterId: string,
@@ -192,6 +283,11 @@ export function deliverableChannels(input: {
   revoked: ReadonlySet<ConsentType>;
   optedOut: ReadonlySet<MessageChannel>;
   implemented?: readonly MessageChannel[];
+  /**
+   * The consent of a channel the Notifier registered beyond `CONSENT_FOR_CHANNEL` (its
+   * `MessageChannelSpec.consent`, W2-01); a channel with no consent label is never deliverable.
+   */
+  consentFor?: Partial<Record<MessageChannel, ConsentType>>;
 }): MessageChannel[] {
   const key: MessageKey = input.key;
   if (isTwoWaySmsKey(key)) {
@@ -208,7 +304,7 @@ export function deliverableChannels(input: {
     neverConsented && (PRE_CONSENT_SMS_KEYS as readonly MessageKey[]).includes(key);
   return order.filter((channel) => {
     if (!implemented.includes(channel)) return false;
-    const consent = CONSENT_FOR_CHANNEL[channel];
+    const consent = input.consentFor?.[channel] ?? CONSENT_FOR_CHANNEL[channel];
     if (consent === null) return false;
     if (input.optedOut.has(channel)) return false;
     if (channel !== 'sms') return input.consents.has(consent);
@@ -237,22 +333,35 @@ export function smsReplyAllowed(pack: CountryPack, key: TwoWaySmsKey): boolean {
 }
 
 /**
- * The transport for a message channel (§4.5, §5.2). Demo orgs always use `console` (they never
- * text real people); so does a pack with no sender id in this environment (nothing goes out before
- * a sender is approved and set, `set_country_endpoints()`); otherwise the pack's `sms_provider`.
- * WhatsApp and push have no transport until week 2 (M6), so asking for one throws.
+ * The driver of a message channel's transport (§4.5, §5.2), for any registered channel (`specs`,
+ * default `BUILT_CHANNEL_SPECS`; the Notifier passes its registry). Per channel: demo orgs always
+ * use `console` (they never message real people); so does a pack with no sender of that channel
+ * in this environment (nothing goes out before a sender is approved and set,
+ * `set_country_endpoints()`); otherwise the pack's provider for the channel. A channel with no
+ * registration (WhatsApp, push until W2-15 / W2-14) throws.
  */
 export function pickMessageTransport(
   org: { isDemo: boolean },
   pack: CountryPack,
+  channel: 'sms',
+): SmsDriver;
+export function pickMessageTransport(
+  org: { isDemo: boolean },
+  pack: CountryPack,
   channel: MessageChannel,
-): SmsDriver {
-  if (!(IMPLEMENTED_MESSAGE_CHANNELS as readonly MessageChannel[]).includes(channel)) {
-    throw new Error(`Message channel "${channel}" is not built until week 2 (M6)`);
-  }
+  specs?: readonly MessageChannelSpec[],
+): string;
+export function pickMessageTransport(
+  org: { isDemo: boolean },
+  pack: CountryPack,
+  channel: MessageChannel,
+  specs: readonly MessageChannelSpec[] = BUILT_CHANNEL_SPECS,
+): string {
+  const spec = specs.find((s) => s.channel === channel);
+  if (!spec) throw new Error(`Message channel "${channel}" is not built until week 2 (M6)`);
   if (org.isDemo) return 'console';
-  if (pack.smsSenderId === null) return 'console';
-  return pack.smsProvider;
+  if (spec.sender(pack) === null) return 'console';
+  return spec.provider(pack);
 }
 
 /**

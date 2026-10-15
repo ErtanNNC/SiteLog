@@ -110,13 +110,17 @@ export const JobPayloadSchemas = {
    * §10.1 `notify(reporter_id, key, vars, dedupe_key)` (D48; W1-10): one message to a field
    * reporter through the Notifier (§4.5). `dedupeKey` is the logical message's key (e.g.
    * `notify:filed:{report_id}`): the job's dedupe key and the Notifier's, so neither a second
-   * enqueue nor a retry sends it twice. `vars` are the key's §9.2 variables.
+   * enqueue nor a retry sends it twice. `vars` are the key's §9.2 variables. `afterMessageId`
+   * marks the fallback after a late `failed` / `undeliverable` status callback on that attempt
+   * (W2-01, spec §19 Q22): the same message, its key's guard run again, then the next channel
+   * (job key `jobKeys.notifyAfter`).
    */
   notify: z.object({
     reporterId: uuid,
     key: z.enum(NOTIFY_KEYS),
     vars: z.record(z.string(), z.union([z.string(), z.number()])).default({}),
     dedupeKey: z.string().min(1).max(200),
+    afterMessageId: uuid.optional(),
   }),
 } as const satisfies Record<(typeof JOB_TYPES)[number], z.ZodType>;
 
@@ -191,6 +195,12 @@ export const jobKeys = {
    * Notifier's. A report is filed once, so a retried or repeated filing never texts twice.
    */
   filed: (reportId: string) => `notify:filed:${reportId}`,
+  /**
+   * The `notify` job that carries a message to its next channel after a late `failed` /
+   * `undeliverable` status callback on one attempt (W2-01, spec §19 Q22): per logical message and
+   * failed attempt, so a repeated callback queues one job and each failed attempt its own.
+   */
+  notifyAfter: (dedupeKey: string, messageId: string) => `${dedupeKey}:after:${messageId}`,
   /**
    * The `render_pdf` job of a report version (file_report, create_report_version, the WhatsApp
    * edits): one PDF per version.

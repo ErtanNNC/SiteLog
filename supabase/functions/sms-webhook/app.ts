@@ -4,6 +4,8 @@ import {
   TWILIO_ASYNC_NUMBER_CODES,
   assertE164,
   keywordOf,
+  lateFallback,
+  messageDedupeKey,
   msgStatusFromTwilio,
   nextMessageStatus,
   noticeData,
@@ -286,7 +288,45 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       if (numberFault) await flagInviteFailure(message, reason);
       else await providerFault(message, to, cb.errorCode, reason);
     }
+    if (to === 'undeliverable' || to === 'failed') await fallBack(message, to);
     return twiml();
+  }
+
+  /**
+   * A late `failed` / `undeliverable` on a Notifier message hands it to the next channel of the
+   * order (spec §19 Q22, W2-01): a `notify` job with the variables of the job that sent it,
+   * keyed per failed attempt (`jobKeys.notifyAfter`), so a repeated callback queues one job. The
+   * job runs the key's guard and the Notifier's walk; with no next channel it tells the office
+   * (`message_failed`). A message no `notify` job sent (the welcome, the device code, inline
+   * texts) has no late fallback.
+   */
+  async function fallBack(
+    message: {
+      id: string;
+      org_id: string | null;
+      reporter_id: string | null;
+      copy_key: string | null;
+      payload?: unknown;
+    },
+    to: 'undeliverable' | 'failed',
+  ): Promise<void> {
+    const messageKey = messageDedupeKey(message.payload ?? null);
+    if (!messageKey || !message.reporter_id) return;
+    const sentBy = await store.notifyJobByDedupeKey(messageKey);
+    const fallback = lateFallback({ ...message, payload: message.payload ?? null }, to, sentBy);
+    if (fallback.kind !== 'enqueue') {
+      logInfo('sms.status.no_fallback', { messageId: message.id, reason: fallback.reason });
+      return;
+    }
+    const jobId = await store.enqueueNotify(fallback.payload, fallback.dedupeKey);
+    await store.audit({
+      orgId: message.org_id,
+      actorType: 'system',
+      action: 'notify.fallback_queued',
+      entity: 'message',
+      entityId: message.id,
+      diff: { copy_key: message.copy_key, dedupe_key: messageKey, status: to, job_id: jobId },
+    });
   }
 
   async function flagInviteFailure(

@@ -158,6 +158,18 @@ export function noticeText(data: unknown): NoticeText | null {
           copyRef('shell.notifications.notices.message_refused.body', { error: n.params.error }),
         ),
       };
+    case 'message_channels_failed':
+      return {
+        title: copyRef('shell.notifications.notices.message_channels_failed.title', {
+          name: n.params.name,
+        }),
+        body: one(
+          copyRef('shell.notifications.notices.message_channels_failed.body', {
+            channels: n.params.channels,
+            error: n.params.error,
+          }),
+        ),
+      };
     case 'message_no_sender':
       return {
         title: copyRef('shell.notifications.notices.message_no_sender.title', n.params),

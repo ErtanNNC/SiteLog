@@ -1,4 +1,9 @@
-import type { SmsDriver, SmsSendOptions, SmsTransport } from '../channels.ts';
+import {
+  MessageSendError,
+  type SmsDriver,
+  type SmsSendOptions,
+  type SmsTransport,
+} from '../channels.ts';
 import type { E164 } from '../format.ts';
 
 /**
@@ -13,36 +18,15 @@ import type { E164 } from '../format.ts';
  * reach (F3 "Can't reach this number"). The Notifier records both on the `messages` row.
  */
 
-/** A send the provider refused, or a network failure. */
-export class SmsSendError extends Error {
-  constructor(
-    message: string,
-    readonly opts: {
-      driver: SmsDriver;
-      /** Try again later (rate limit, provider outage, network). */
-      retryable: boolean;
-      /** The number cannot get texts (invalid, landline, unsubscribed at the provider). */
-      undeliverable?: boolean;
-      /**
-       * The provider keeps its own opt-out list and the number is on it (Twilio 21610: the person
-       * replied STOP to this sender): undeliverable, and the Notifier records the opt-out.
-       */
-      optedOut?: boolean;
-      /** The provider's error code, e.g. Twilio 21211. */
-      code?: string | null;
-    },
-  ) {
-    super(message);
+/**
+ * A send the SMS provider refused, or a network failure: the SMS drivers' `MessageSendError`
+ * (channel `sms`, driver one of `SMS_DRIVERS`).
+ */
+export class SmsSendError extends MessageSendError {
+  declare readonly opts: MessageSendError['opts'] & { driver: SmsDriver };
+  constructor(message: string, opts: MessageSendError['opts'] & { driver: SmsDriver }) {
+    super(message, 'sms', opts);
     this.name = 'SmsSendError';
-  }
-  get retryable(): boolean {
-    return this.opts.retryable;
-  }
-  get undeliverable(): boolean {
-    return this.opts.undeliverable === true;
-  }
-  get optedOut(): boolean {
-    return this.opts.optedOut === true;
   }
 }
 

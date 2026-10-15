@@ -132,6 +132,10 @@ export const copy = {
           title: '{{name}}: a message to them was not sent',
           body: 'The SMS provider refused their number ({{error}}). Check the number in Team & numbers.',
         },
+        message_channels_failed: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'SiteLog tried every message channel it has for them ({{channels}}) and none could deliver the message ({{error}}). Check their number and channels in Team & numbers.',
+        },
         message_no_sender: {
           title: '{{name}}: a message to them was not sent',
           body: 'No SMS sender is set for this organisation’s country in this environment, so the text reached no phone.',
