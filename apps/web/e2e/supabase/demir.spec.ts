@@ -5,8 +5,8 @@ import { pinSeedClock, SEED, signInWithMagicLink } from './support';
  * §18.2 TR demo org Demir Yapı A.Ş. in the panel (W1-06 Done when): its sites with the shell in
  * Turkish, from the org's tr-TR locale. Its seeded office user is the TR admin Elif Aydın (spec §19
  * question 18, GAP D46), a member of Demir Yapı only, with no panel language of her own
- * (`ui_locale` null), so the org decides it. Its pages get Turkish copy in W1-16 … W1-18 (Sites and
- * Site detail in W1-18). Nothing here writes to the database.
+ * (`ui_locale` null), so the org decides it. Its pages get Turkish copy in W1-16 … W1-18 (the
+ * Overview in W1-16, Sites and Site detail in W1-18). Nothing here writes to the database.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -40,8 +40,8 @@ test('Demir Yapı A.Ş.: the org’s sites with the shell in Turkish', async ({ 
   const nav = page.getByRole('navigation', { name: 'Ana gezinme' });
   for (const name of ['Genel bakış', 'Şantiyeler', 'Raporlar', 'Puantaj'])
     await expect(nav.getByRole('link', { name })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 1, name: 'Today across 2 sites' })).toBeVisible();
-  const table = page.getByRole('table', { name: 'Sites today' });
+  await expect(page.getByRole('heading', { level: 1, name: 'Bugün 2 şantiyede' })).toBeVisible();
+  const table = page.getByRole('table', { name: 'Bugün şantiyeler' });
   for (const name of ['Kartal Konutları — B Blok', 'Ataşehir Ofis Binası'])
     await expect(table.getByRole('link', { name, exact: true })).toBeVisible();
   await expect(table.getByText('Emre Yıldız')).toBeVisible();
