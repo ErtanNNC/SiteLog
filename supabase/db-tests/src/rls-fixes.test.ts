@@ -611,6 +611,17 @@ describe('notifications: §13 audiences, also when marking read', () => {
     await svc(`delete from notifications where id = any($1::uuid[])`, [ids]);
   });
 
+  it('lets only the service run notify_org (every overload)', async () => {
+    const rows = await svc<{ fn: string; anon: boolean; authenticated: boolean; service: boolean }>(
+      `select p.oid::regprocedure::text as fn, has_function_privilege('anon', p.oid, 'execute') as anon,
+              has_function_privilege('authenticated', p.oid, 'execute') as authenticated,
+              has_function_privilege('service_role', p.oid, 'execute') as service
+       from pg_proc p where p.proname = 'notify_org' and p.pronamespace = 'public'::regnamespace`,
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((r) => r.anon || r.authenticated || !r.service)).toEqual([]);
+  });
+
   it('uses the same audiences as packages/shared (the demo data source filters with it)', async () => {
     const kinds = [
       ...NOTIFICATION_AUDIENCE_KINDS,
