@@ -1,3 +1,7 @@
+/** @jsxRuntime automatic @jsxImportSource react */
+// The automatic JSX runtime per file: the worker runs this package from source under tsx
+// (`pnpm dev:worker`), which compiles files outside its tsconfig's `include` with the classic
+// runtime (React.createElement, "React is not defined"). The pragma holds under every compiler.
 import { Document, Image, Page, Text, View } from '@react-pdf/renderer';
 import {
   formatAudioTimestamp,
