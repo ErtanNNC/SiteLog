@@ -58,7 +58,7 @@ import { functionsUrl } from '@/lib/env';
 import { rasterizeSvgLogo } from '@/lib/logo';
 import { randomUuid } from '@/lib/photos';
 import type { Db } from '@/lib/supabase';
-import { errorMessage, uniq, uniqBy } from '@/lib/utils';
+import { CodedError, errorMessage, uniq, uniqBy } from '@/lib/utils';
 import {
   assembleBilling,
   assembleGlossary,
@@ -441,13 +441,18 @@ export class SupabaseSource implements DataSource {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       let message = text;
+      let code: string | null = null;
       try {
-        const body = JSON.parse(text) as { error?: unknown };
+        const body = JSON.parse(text) as { error?: unknown; details?: unknown };
         if (typeof body.error === 'string' && body.error) message = body.error;
+        // HttpError's `details.code` (api-text-daily-link's 409 no_reporter / no_active_reporter).
+        const details = body.details as { code?: unknown } | null | undefined;
+        if (details && typeof details.code === 'string' && details.code) code = details.code;
       } catch {
         /* plain-text error */
       }
-      throw new Error(message || `${name} failed (${res.status})`);
+      message ||= `${name} failed (${res.status})`;
+      throw code ? new CodedError(code, message) : new Error(message);
     }
     const ct = res.headers.get('content-type') ?? '';
     return (ct.includes('application/json') ? await res.json() : await res.text()) as T;

@@ -262,6 +262,12 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           console_real_org:
             'Bu şirketin ülkesi için mesajlar henüz canlı değil, bu yüzden {{first}} bir şey almadı.',
         },
+        failed: {
+          no_reporter:
+            'Bu şantiyeye bağlı bir şantiye şefi yok. Ekip ve numaralar sayfasından ekleyin.',
+          no_active_reporter:
+            'Bu şantiyede aktif şantiye şefi yok: bağlı olanlar devre dışı, mesajlardan çıkmış ya da davetini henüz kabul etmemiş.',
+        },
       },
       markNoWorkDialog: {
         title: '{{site}} için iş yok olarak işaretlensin mi?',

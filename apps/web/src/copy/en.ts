@@ -600,6 +600,12 @@ export const copy = {
         console_real_org:
           'Texts are not live for this organisation’s country yet, so nothing reached {{first}}.',
       },
+      /** api-text-daily-link's 409 `details.code`: the site has no one to text. */
+      failed: {
+        no_reporter: 'No site manager is linked to this site. Add one on Team & numbers.',
+        no_active_reporter:
+          'No active site manager on this site: the linked ones are disabled, opted out or have not accepted their invite yet.',
+      },
     },
     markNoWorkDialog: {
       title: 'Mark no work at {{site}}?',

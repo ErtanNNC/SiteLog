@@ -163,15 +163,65 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     // A second tap texts the same link (the seeded 17:00 one).
     await s.textDailyLink(elm.id, 'req-b');
     expect(store.data.messages.at(-1)!.body).toBe(text.body);
-    priya.status = 'opted_out';
+    // Without SMS consent the Notifier sends nothing and says why.
+    const consent = store.data.consents.find(
+      (c) => c.reporter_id === priya.id && c.type === 'sms',
+    )!;
+    consent.revoked_at = '2026-10-09T12:00:00Z';
     expect(await s.textDailyLink(elm.id, 'req-c')).toEqual({
       sent: false,
-      reason: 'opted_out',
+      reason: 'no_consent',
       detail: null,
     });
+    consent.revoked_at = null;
     await expect(source('accounts', store).source.textDailyLink(elm.id, 'req-d')).rejects.toThrow(
       'You’re not allowed to do that.',
     );
+  });
+
+  it('texts the primary among the active reporters, else the first active, as the function (W1-18)', async () => {
+    const { source: s, store } = source('pm');
+    const elm = store.data.sites.find((x) => x.project_code === 'ES-0377')!;
+    const priya = store.data.reporters.find((r) => r.name === 'Priya Raman')!;
+    const other = store.data.reporters.find((r) => r.id !== priya.id && r.status === 'active')!;
+    store.data.siteReporters.push({
+      ...store.data.siteReporters.find((sr) => sr.reporter_id === priya.id)!,
+      reporter_id: other.id,
+      is_primary: false,
+    });
+    for (const c of store.data.consents) if (c.reporter_id === other.id) c.revoked_at = null;
+    if (!store.data.consents.some((c) => c.reporter_id === other.id && c.type === 'sms')) {
+      store.data.consents.push({
+        ...store.data.consents.find((c) => c.reporter_id === priya.id && c.type === 'sms')!,
+        id: 'consent-other',
+        reporter_id: other.id,
+      });
+    }
+    await s.textDailyLink(elm.id, 'req-1');
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'daily_link.texted',
+      entity_id: priya.id,
+    });
+
+    // An inactive primary ('invited' is not active) is passed over for the active one.
+    for (const status of ['invited', 'opted_out', 'disabled'] as const) {
+      priya.status = status;
+      await s.textDailyLink(elm.id, `req-${status}`);
+      expect(store.data.audit.at(-1)).toMatchObject({
+        action: 'daily_link.texted',
+        entity_id: other.id,
+      });
+    }
+
+    // Nobody active → 409 no_active_reporter; nobody linked → 409 no_reporter.
+    other.status = 'invited';
+    await expect(s.textDailyLink(elm.id, 'req-none-active')).rejects.toMatchObject({
+      code: 'no_active_reporter',
+    });
+    store.data.siteReporters = store.data.siteReporters.filter((sr) => sr.site_id !== elm.id);
+    await expect(s.textDailyLink(elm.id, 'req-none')).rejects.toMatchObject({
+      code: 'no_reporter',
+    });
   });
 
   it('hours matrix W41: Apex 472 match · BrightLine 196 (+16) · ClearView 152 (+8) · total 1,804', async () => {

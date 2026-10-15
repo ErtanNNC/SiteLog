@@ -104,6 +104,25 @@ export const storage = {
   },
 };
 
+/**
+ * An error a data source throws with a machine-readable code (an api-* function's `details.code`,
+ * or the demo store mirroring it), so the panel can show its own copy in its language instead of
+ * the server's English message.
+ */
+export class CodedError extends Error {
+  readonly code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'CodedError';
+    this.code = code;
+  }
+}
+
+/** The error's code (`CodedError`), or null. */
+export function errorCode(err: unknown): string | null {
+  return err instanceof CodedError ? err.code : null;
+}
+
 export function errorMessage(err: unknown, fallback = 'Something went wrong'): string {
   if (err instanceof Error && err.message) return err.message;
   if (typeof err === 'string' && err) return err;

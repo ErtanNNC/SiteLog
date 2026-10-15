@@ -116,6 +116,35 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
     expect(store.data.audit.at(-1)).toMatchObject({ action: 'daily_link.texted' });
   });
 
+  it('says in the panel’s language why nobody can be texted (409 no_active_reporter)', async () => {
+    const error = vi.spyOn(toast, 'error');
+    const store = new DemoStore();
+    const site = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
+    const linked = store.data.siteReporters.filter((sr) => sr.site_id === site.id);
+    for (const sr of linked)
+      store.data.reporters.find((r) => r.id === sr.reporter_id)!.status = 'invited';
+    renderRiverside(store, 'ops');
+    await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
+    await userEvent.click(screen.getByRole('button', { name: 'Text today’s link' }));
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        'No active site manager on this site: the linked ones are disabled, opted out or have not accepted their invite yet.',
+      ),
+    );
+    error.mockClear();
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      await userEvent.click(screen.getByRole('button', { name: 'Günün linkini gönder' }));
+      await waitFor(() =>
+        expect(error).toHaveBeenCalledWith(
+          'Bu şantiyede aktif şantiye şefi yok: bağlı olanlar devre dışı, mesajlardan çıkmış ya da davetini henüz kabul etmemiş.',
+        ),
+      );
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
+  });
+
   it('offers Pause site to admins only (RLS lets only admins update a site)', async () => {
     renderRiverside();
     await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });

@@ -55,7 +55,7 @@ import { formatDateInTz } from '@sitelog/shared/format.ts';
 import { deadlineInstant } from '@sitelog/shared/schedule/reminders.ts';
 import { fromZonedTime } from 'date-fns-tz';
 import { copy } from '@/copy/en';
-import { localId } from '@/lib/utils';
+import { CodedError, localId } from '@/lib/utils';
 import type { RowSet } from '../assemble';
 import { reporterDefaultsFor, reporterLocaleFor } from '@sitelog/shared/countries.ts';
 import {
@@ -86,6 +86,7 @@ import type {
   DemoPhoneMessage,
   OrgSettingsPatch,
   OrglessContacts,
+  TextDailyLinkErrorCode,
   TextDailyLinkResult,
 } from '../types';
 
@@ -901,29 +902,35 @@ export class DemoStore {
     const site = d.sites.find((x) => x.id === siteId);
     if (!site) throw new Error(copy.errors.notFound);
     if (site.status !== 'active') throw new Error('This site is not active');
+    // As api-text-daily-link's pickReporter: the primary among the active reporters, else the
+    // first active one; nobody linked → 409 no_reporter, nobody active → 409 no_active_reporter.
     const links = d.siteReporters.filter((sr) => sr.site_id === siteId);
     const reporters = links
       .map((sr) => ({ sr, r: d.reporters.find((x) => x.id === sr.reporter_id) }))
       .filter((x): x is { sr: SiteReporterRow; r: ReporterRow } => !!x.r);
-    const reporter =
-      reporters.find((x) => x.sr.is_primary)?.r ??
-      reporters.find((x) => isActiveReporterStatus(x.r.status))?.r;
-    if (!reporter) throw new Error('No site manager is linked to this site');
+    if (!reporters.length) {
+      throw new CodedError(
+        'no_reporter' satisfies TextDailyLinkErrorCode,
+        'No site manager is linked to this site',
+      );
+    }
+    const active = reporters.filter((x) => isActiveReporterStatus(x.r.status));
+    const reporter = (active.find((x) => x.sr.is_primary) ?? active[0])?.r;
+    if (!reporter) {
+      throw new CodedError(
+        'no_active_reporter' satisfies TextDailyLinkErrorCode,
+        'No active site manager on this site: the linked ones are disabled, opted out or have not accepted their invite yet',
+      );
+    }
     const date = formatDateInTz(this.now, site.timezone);
     const sms = d.consents.some(
       (c) => c.reporter_id === reporter.id && c.type === 'sms' && c.revoked_at === null,
     );
-    const reason =
-      reporter.status === 'disabled'
-        ? ('no_channel' as const)
-        : reporter.status === 'opted_out'
-          ? ('opted_out' as const)
-          : sms
-            ? null
-            : ('no_consent' as const);
+    // An active reporter: the Notifier's only refusal left is consent.
+    const reason = sms ? null : ('no_consent' as const);
     let result: TextDailyLinkResult;
     if (reason) {
-      result = { sent: false, reason, detail: reporter.status === 'disabled' ? 'disabled' : null };
+      result = { sent: false, reason, detail: null };
     } else {
       const row = demoDailyLink(d, reporter, site, date, this.nowIso());
       this.audit({

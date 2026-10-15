@@ -212,6 +212,13 @@ export interface AttentionItem {
   reportId?: string;
 }
 
+/**
+ * "Text today's link" when the site has no one to text: api-text-daily-link's 409 `details.code`
+ * (nobody linked; nobody linked is active), thrown as a `CodedError` by both data sources.
+ */
+export const TEXT_LINK_ERROR_CODES = ['no_reporter', 'no_active_reporter'] as const;
+export type TextDailyLinkErrorCode = (typeof TEXT_LINK_ERROR_CODES)[number];
+
 /** "Text today's link" (F17, W1-16): what the Notifier did. */
 export type TextDailyLinkResult =
   | { sent: true; channel: string }

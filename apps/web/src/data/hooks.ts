@@ -14,7 +14,7 @@ import { translate } from '@/i18n/useCopy';
 import { pdfFileNames, saveBlob, zipFromUrls } from '@/lib/pdfZip';
 import { qk } from '@/lib/query';
 import { pendingTab } from '@/lib/tab';
-import { errorMessage, uuid } from '@/lib/utils';
+import { errorCode, errorMessage, uuid } from '@/lib/utils';
 import { useDataSource } from './DataProvider';
 import {
   PDF_EXPORT_LIMIT,
@@ -33,7 +33,12 @@ import {
   type UpdateReporterInput,
   type UpdateSitePatch,
 } from './source';
-import type { OrgSettingsPatch, ReportFilters } from './types';
+import {
+  TEXT_LINK_ERROR_CODES,
+  type OrgSettingsPatch,
+  type ReportFilters,
+  type TextDailyLinkErrorCode,
+} from './types';
 
 interface Opts {
   enabled?: boolean;
@@ -397,8 +402,20 @@ export function useTextDailyLink() {
         toast.message(translate('overview.textLink.notSent.console_real_org', { first }));
       else toast.message(translate(`overview.textLink.notSent.${result.reason}`, { first }));
     },
-    onError: (err) => toast.error(errorMessage(err, copy.errors.generic)),
+    onError: (err) => {
+      // 409 no_reporter / no_active_reporter: the panel's copy, not the function's English.
+      const code = errorCode(err);
+      toast.error(
+        isTextLinkErrorCode(code)
+          ? translate(`overview.textLink.failed.${code}`)
+          : errorMessage(err, copy.errors.generic),
+      );
+    },
   });
+}
+
+function isTextLinkErrorCode(code: string | null): code is TextDailyLinkErrorCode {
+  return (TEXT_LINK_ERROR_CODES as readonly (string | null)[]).includes(code);
 }
 
 export function useResolveUnknownCompany() {
