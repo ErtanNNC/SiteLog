@@ -39,7 +39,9 @@ function renderNew(route = '/reports/new') {
   return store;
 }
 
-describe('NewReportPage', () => {
+// Each test types a whole report with userEvent and files it (browser PDF render included): slow on a
+// shared CI runner, so the file gets a longer limit than the 5 s default.
+describe('NewReportPage', { timeout: 20_000 }, () => {
   it('files a typed report for the chosen site and date as version 1 by the office', async () => {
     const user = userEvent.setup();
     const store = renderNew();
