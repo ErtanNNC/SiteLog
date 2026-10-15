@@ -99,7 +99,7 @@ Keep these scripts working; add new ones to the root `package.json` and list the
 - RLS / `field-api` scoping considered; no secret in a browser bundle.
 - UI matches tokens and the artboard; works at 390 and 1440 px; keyboard and screen-reader basics.
 - Copy exists in every supported language for that surface.
-- Audit log for state changes; consent checked before any message or call (exceptions pending spec §19 Q25: `welcome` and `verify_code` before any consent answer; two-way replies sent by `sms-webhook`); errors to Sentry.
+- Audit log for state changes; consent checked before any message or call (exceptions per spec §19 Q25 (decided 2026-10-15): `welcome` and `verify_code` before any consent answer; two-way replies sent by `sms-webhook`); errors to Sentry.
 - Spec updated if behaviour changed; README deviations updated if the repo knowingly differs.
 
 ## Environment

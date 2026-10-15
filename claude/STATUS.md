@@ -22,8 +22,9 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 ## Onayınızı bekleyen
 
-1. Preview'a yeni migration'ların yüklenmesi (W1-10 `20261015000001`, W1-12 `20261015000002`; aynı Deploy işi: `preview` / `supabase`).
-2. Spec §19 soruları: hepsi için "önerilerinle devam" dediniz (2026-10-15); yalnızca sizde olan bir bilgiyi gerektirenler (sağlayıcı sözleşmesi, gönderici kaydı, yasal metin, ana dil incelemesi) açık kalır.
+1. Spec §19: "önerilerinle devam" kararınız işlendi (commit 25c1ead, c3b1cd4). Q10, Q19, Q20, Q22–Q28, Q30, Q33, Q35, Q37–Q48, Q50–Q62, Q64, Q65 karara bağlandı; davranışı değiştirenler kodlandı (Q53 geç kayıt 48 saat, Q55 `missing` uyarısı, Q46 CALL/TEXT onayı, Q45, Q42 12 karakterli link kodu, Q24, Q62 yarım gün = vardiyanın yarısı, Q59).
+   **Sizde bekleyenler (öneri yok ya da yalnızca sizde olan bilgi):** Q15 SMS'te GSM-7 dışı karakterler (metinler olduğu gibi mi kalsın, yoksa "-" gibi GSM-7 noktalaması mı; İletimerkezi'nin cevabı da gerekli) · Q16 eski v1 rapor verisinin v2 görünümü (şimdilik yapıldığı gibi) · Q17 bağlı satırları olan kaydın silinmesi (şimdilik yapıldığı gibi) · Q2 TR SIP sağlayıcısı ve numara · Q8/Q9 TR fatura kurumu ve fiyatı · Q49 İYS (hukuk) · Q63 ES/TR metinlerinin ana dili konuşan biri tarafından incelenmesi · Q28/Q40/Q50 avukat metinleri (go-live'dan önce) · Q30 fatura kurumu ve fiyatlar.
+2. Preview'a yeni migration'lar (W1-10 `20261015000001`, W1-12 `20261015000002`, Q53 `20261015000003`, Q24 `20261015000004`): `preview` / `supabase` Deploy işi için onayınız.
 
 ## Sizden beklenen
 
