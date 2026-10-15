@@ -250,7 +250,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-09 · Field screens: device check → Today → Recording
 
-- [ ] **W1-09 done** · today _missing_ (XL) · step 18 (first half)
+- [ ] **W1-09 done** · today _missing_ (XL) · step 18 (first half) · _CI run 38666565445 is green, including the field flow on the local stack (link → device code → consent → record with Chromium's fake microphone → upload → report `web` and the `transcribe_upload` job → Processing, axe on each screen); the box waits for the owner's iPhone and Android checks._
 - **Spec:** §9.3, §14.6, F4, F5, F12 (buttons). **Design:** `Field-01-SMS`, `Field-02-Welcome`, `Field-03-Today`, `Field-04-Recording`, `Field-10-Today-TR`.
 - **Already in the repo:** nothing. Reuse `formatDuration`/`formatTimeInTz` (`packages/shared/src/format.ts:95`, `:145`) and the progress phrases (`packages/shared/src/report/progress.ts:18-30`, copy moves to the `field` namespace).
 - **Build (this repo):**

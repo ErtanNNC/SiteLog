@@ -1,6 +1,6 @@
 # SiteLog · Durum
 
-Güncelleme: 2026-10-15 (UTC) · dal `spec-v1.2` · PR #1 · W1-08 ve inceleme düzeltmeleri CI'da yeşil (run 38659474311) · W1-09 `spec-v1.2`'ye eklendi, CI bekleniyor
+Güncelleme: 2026-10-15 (UTC) · dal `spec-v1.2` · PR #1 · W1-08 ve inceleme düzeltmeleri CI'da yeşil (run 38659474311) · W1-09 CI'da yeşil (run 38666565445), telefon kontrolleriniz bekleniyor
 
 Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün aralıklarını kullanıyorum (M0 gün 1 · M1 gün 1–2 · M2 gün 2–3 · M3 gün 3–4 · M4 gün 4–5 · M5 gün 5–7 → demo). Planın farklı bir eşlemesi varsa söyleyin, buna göre düzeltirim.
 
@@ -12,9 +12,9 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 **Gün 2–3 (M2)** — W1-08 _SMS katmanı, davet ve Demo phone_ bitti: kod `27fc876`, üç incelemenin 35 bulgusu `31b8d81`'de kapandı, CI yeşil (davet orkestrasyonu yığın testi, Realtime ile Demo phone e2e'si ve `20261014000008_sms_inbound.sql` yerel Supabase'te geçti). W1-07 `field-api` CI'da yeşil; kutusu yalnızca preview üzerinden çerez probe'unu bekliyor.
 
-**W1-09 _saha ekranları_ (adım 18'in ilk yarısı)** — `spec-v1.2`'ye eklendi, CI bekleniyor. Yapılanlar: `/r/:code` → cihaz kontrolü (SMS kodu; demo org'larda Demo phone'a düşer) → ilk açılışta karşılama ve onay → Bugün (şantiye, tarih, son saat, durum, Kaydet ≥ 120 px, Fotoğraf ekle, _Bugün çalışma yok_ / _Hava nedeniyle kapalı_ onay sayfası) → Kayıt (MediaRecorder, sayaç, seviye göstergesi, ekran kilidi, duraklat/devam, fotoğraf, 15 dk sınırı, 32 kbps) → imzalı URL ile yükleme ve `complete` → İşleniyor (önce 2 sn'de bir, sonra seyrekleşen sorgu; sayfa gizliyken sorgu yok). IndexedDB kuyruğu: kayıt parça parça telefona yazılır, sayfa kapanırsa bir sonraki açılışta gönderilir; geri tuşu, gelen arama ya da kulaklığın çıkması kaydı kaybettirmez; tek sekme gönderir; her istekte zaman aşımı var; gönderilemeyenler nedeniyle listelenir (_Tekrar dene_ ya da _Kaldır_). Metinler EN/ES/TR. İki incelemenin 25 bulgusundan 24'ü düzeltildi, 25.si (CLAUDE.md'nin eskimesi) birleştirmede düzeltildi. Yerelde bütün kontroller yeşil; yerel Supabase'e karşı saha akışı (link → kod → onay → kayıt → yükleme → rapor ve `transcribe_upload` job'ı) ilk kez CI'da koşacak. Kutusu CI'dan ve sizin telefon kontrollerinizden sonra işaretlenecek.
+**W1-09 _saha ekranları_ (adım 18'in ilk yarısı)** — `spec-v1.2`'de, CI yeşil (run 38666565445): saha akışı yerel Supabase'te uçtan uca geçti (link → SMS kodu → onay → sahte mikrofonla kayıt → yükleme → `web` raporu ve `transcribe_upload` job'ı → İşleniyor, her ekranda axe). Yapılanlar: `/r/:code` → cihaz kontrolü (SMS kodu; demo org'larda Demo phone'a düşer) → ilk açılışta karşılama ve onay → Bugün (şantiye, tarih, son saat, durum, Kaydet ≥ 120 px, Fotoğraf ekle, _Bugün çalışma yok_ / _Hava nedeniyle kapalı_ onay sayfası) → Kayıt (MediaRecorder, sayaç, seviye göstergesi, ekran kilidi, duraklat/devam, fotoğraf, 15 dk sınırı, 32 kbps) → imzalı URL ile yükleme ve `complete` → İşleniyor (önce 2 sn'de bir, sonra seyrekleşen sorgu; sayfa gizliyken sorgu yok). IndexedDB kuyruğu: kayıt parça parça telefona yazılır, sayfa kapanırsa bir sonraki açılışta gönderilir; geri tuşu, gelen arama ya da kulaklığın çıkması kaydı kaybettirmez; tek sekme gönderir; her istekte zaman aşımı var; gönderilemeyenler nedeniyle listelenir (_Tekrar dene_ ya da _Kaldır_). Metinler EN/ES/TR. İki incelemenin 25 bulgusundan 24'ü düzeltildi, 25.si (CLAUDE.md'nin eskimesi) birleştirmede düzeltildi. Kutusu CI'dan ve sizin telefon kontrollerinizden sonra işaretlenecek.
 
-Sonraki: W1-10 _worker çalışma zamanı_ (M3).
+Sürüyor: W1-10 _worker çalışma zamanı_ (M3) `w1-10-worker` dalında: NOTIFY ile uyanma, `notify` job'ı, tekrarlanamayan job anahtarları (D16), beş adımlı yeniden deneme (D17), zaman aşımında güvenli iptal, WhatsApp hatırlatmalarının kapatılması.
 
 ## Onayınızı bekleyen
 
@@ -39,4 +39,4 @@ Sonraki: W1-10 _worker çalışma zamanı_ (M3).
 
 ## Özet
 
-Hafta-1 planının M0–M1'i ve M2'nin üç ticket'ı (W1-07, W1-08, W1-09) yazıldı, W1-09'un CI sonucu ve telefon kontrolleri bekleniyor; staging'e dokunulmadı, iş yalnızca preview token'ı ve yukarıdaki kararlar için sizi bekliyor.
+Hafta-1 planının M0–M1'i ve M2'nin üç ticket'ı (W1-07, W1-08, W1-09) yazıldı, W1-09 CI'da yeşil, telefon kontrolleriniz bekleniyor; W1-10 (worker) ayrı dalda yapılıyor; staging'e dokunulmadı, iş yalnızca preview token'ı ve yukarıdaki kararlar için sizi bekliyor.
