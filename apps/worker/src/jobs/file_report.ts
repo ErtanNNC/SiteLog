@@ -6,6 +6,7 @@ export const fileReportJob: JobHandler<'file_report'> = async (ctx, payload) => 
     trigger: payload.trigger,
     confirmMessageId: payload.confirmMessageId ?? null,
     ...(payload.version !== undefined ? { version: payload.version } : {}),
+    ...(payload.via !== undefined ? { via: payload.via } : {}),
   });
   if (result.stale) {
     ctx.log.info('confirm stale: not filed', {

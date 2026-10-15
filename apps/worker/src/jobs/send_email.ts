@@ -21,8 +21,11 @@ import {
 } from '../email/templates';
 import { PermanentJobError, type JobHandler } from './types';
 
-/** §13 — every email the worker sends, by kind. */
-export const sendEmail: JobHandler<'send_email'> = async (ctx, payload) => {
+/**
+ * §13 — every email the worker sends, by kind. The job's dedupe key (else its id) is the email's
+ * idempotency key, so a retry after the provider accepted it sends nothing twice (W1-15).
+ */
+export const sendEmail: JobHandler<'send_email'> = async (ctx, payload, job) => {
   const built = await buildEmail(ctx, payload);
   if (!built) return;
   const { to, rendered, attachments, orgId } = built;
@@ -38,6 +41,7 @@ export const sendEmail: JobHandler<'send_email'> = async (ctx, payload) => {
     attachments,
     tags: { kind: payload.kind },
     orgId,
+    idempotencyKey: job.dedupe_key ?? `send_email:${job.id}`,
   });
   ctx.log.info('email sent', {
     kind: payload.kind,
@@ -91,6 +95,7 @@ export async function buildEmail(
       const reporter = report.reporter_id ? await ctx.db.getReporter(report.reporter_id) : null;
       const rendered = reportFiledEmail({
         kind: payload.kind,
+        language: data.reportLanguage,
         orgName: site.org.name,
         siteName: site.site.name,
         reportNo: report.report_no,

@@ -7,7 +7,7 @@ import type { ReportView } from '@sitelog/shared/field-contract.ts';
  *   decide_next has run): poll.
  * - `question` (Field-05), `draft` (Field-06): the reporter's turn; no polling.
  * - `filing`: Confirm & send was accepted, the worker files it: poll until filed.
- * - `filed`: the Filed screen (Field-07 is W1-15; until then Processing's "Report filed").
+ * - `filed`: the Filed screen (Field-07, W1-15); it polls only until the PDF exists.
  * - `ready`: awaiting confirmation with no draft to show (not written by the worker): no polling.
  * - `gone`: void.
  */

@@ -6,6 +6,7 @@ import {
   deriveLinkCode,
   ensurePersonalLink,
   fieldLinkUrl,
+  fieldReportLinkUrl,
   linkCodeHash,
   maskFieldLinkUrl,
   photosLinkExpiresAt,
@@ -41,6 +42,12 @@ describe('field link codes', () => {
       'https://go.sitelog.app/r/K7Q2MX',
     );
     expect(fieldLinkUrl('http://localhost:5174', 'K7Q2MX')).toBe('http://localhost:5174/r/K7Q2MX');
+  });
+
+  it('builds the Filed-screen link of the `filed` text, masked like any field link (W1-15)', () => {
+    const url = fieldReportLinkUrl('https://go.sitelog.app/', 'k7q2mx', 'r-1');
+    expect(url).toBe('https://go.sitelog.app/r/K7Q2MX/report/r-1');
+    expect(maskFieldLinkUrl(`PDF: ${url}`)).toBe('PDF: https://go.sitelog.app/r/••••••/report/r-1');
   });
 
   it('makes deterministic six-character demo codes from the alphabet', () => {

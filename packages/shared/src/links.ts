@@ -53,6 +53,15 @@ export function fieldLinkUrl(base: string, code: string): string {
 }
 
 /**
+ * The Filed-screen link of the `filed` text (§9.2 `{pdf_link}`, F8; W1-15):
+ * `{base}/r/{code}/report/{id}`. The field app resolves the link, then opens the report, whose
+ * view carries a freshly signed PDF URL, so the text never holds a link that expires.
+ */
+export function fieldReportLinkUrl(base: string, code: string, reportId: string): string {
+  return `${fieldLinkUrl(base, code)}/report/${encodeURIComponent(reportId)}`;
+}
+
+/**
  * Characters of a personal link's derived code: 12 of the 30-character alphabet, about 2^59
  * (spec §19 Q42, decided by the owner 2026-10-15: "longer codes for personal links" before real
  * reporters; 6 characters were about 7 × 10^8). A personal link derived at 6 before this change

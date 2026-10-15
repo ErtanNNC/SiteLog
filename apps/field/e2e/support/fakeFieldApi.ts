@@ -430,7 +430,8 @@ export async function installFakeFieldApi(
           question,
           data,
           progress: { voiceNotes: audio, transcribed: written ? audio : 0, photos: 0 },
-          pdfUrl: null,
+          // A filed report's PDF, signed (W1-15's Filed screen opens it in a new tab).
+          pdfUrl: status === 'filed' ? `/__storage/pdfs/${REPORT_NO}_v1.pdf?token=e2e` : null,
         };
         if (status === 'filed') api.state.report = { id: REPORT_ID, reportNo: REPORT_NO, status };
         return json(route, 200, res);

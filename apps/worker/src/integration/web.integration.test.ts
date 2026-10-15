@@ -23,7 +23,10 @@ import { createWorld, type World } from './world';
  * recorded tool output → a v2 draft and exactly one question, the Delta headcount (D27), on the
  * web channel, with no text while the reporter's device was seen in the last 30 s (D25); then the
  * answer (field_answer_question(), as field-api's `reports/:id/answer` calls it) → the draft;
- * then a photo on the draft (§7.2) → a new extraction → the draft again.
+ * then a photo on the draft (§7.2) → a new extraction → the draft again. W1-15: Confirm & send
+ * (field_confirm_report(), as field-api's `reports/:id/confirm` calls it) → file_report → one PDF,
+ * one `filed` text and one email, even when every job is retried or the filing failed after
+ * `status = filed`.
  */
 
 let database: PgliteDatabase;
@@ -312,4 +315,128 @@ describe('W1-12: ES + EN voice note → extraction v2 → one question → answe
       /^Your report is ready to check: https:\/\/go\.sitelog\.test\/r\//,
     );
   });
+  it('W1-15: Confirm & send files it (via web): one PDF, one `filed` text, one email, retries included', async () => {
+    const jobsOf = (type: string) =>
+      database.q<JobRow>(
+        `select * from jobs where type = $1 and payload ->> 'reportId' = $2 order by id`,
+        [type, reportId],
+      );
+    const rerun = async (job: JobRow) => {
+      await database.q(`update jobs set status = 'queued' where id = $1`, [job.id]);
+      expect(await run(job.id)).toEqual({ ok: true });
+    };
+    const [{ v }] = (await database.q<{ v: number }>(
+      `select current_version as v from reports where id = $1`,
+      [reportId],
+    )) as [{ v: number }];
+    const [confirmed] = await database.q<{ r: { status: string; jobId: number } }>(
+      `select field_confirm_report($1, $2, $3) as r`,
+      [reportId, MARCO, v],
+    );
+    expect(confirmed!.r.status).toBe('queued');
+    const [fileJob] = await jobsOf('file_report');
+    expect(fileJob!.payload).toEqual({ reportId, trigger: 'confirm', version: v, via: 'web' });
+    expect(await run(fileJob!.id)).toEqual({ ok: true });
+
+    const [report] = await database.q<{
+      status: string;
+      confirmed_via: string | null;
+      confirmed_at: string | null;
+      filed_at: string | null;
+    }>(
+      `select status::text, confirmed_via::text, confirmed_at, filed_at from reports where id = $1`,
+      [reportId],
+    );
+    expect(report).toMatchObject({ status: 'filed', confirmed_via: 'web' });
+    expect(report!.confirmed_at).not.toBeNull();
+    const [day] = await database.q<{ status: string }>(
+      `select d.status::text from site_days d join reports r on r.site_day_id = d.id where r.id = $1`,
+      [reportId],
+    );
+    expect(day!.status).toBe('filed');
+
+    // The filing failed after `status = filed`, before its post-filing jobs were enqueued: its
+    // retry finds the report filed and enqueues them (the keys were free).
+    await database.q(
+      `delete from jobs where type in ('render_pdf', 'notify') and payload ->> 'reportId' = $1`,
+      [reportId],
+    );
+    await database.q(`delete from jobs where type = 'notify' and dedupe_key = $1`, [
+      `notify:filed:${reportId}`,
+    ]);
+    await rerun(fileJob!);
+    // Retried again: every key is taken, nothing new.
+    await rerun(fileJob!);
+    const renders = await jobsOf('render_pdf');
+    expect(renders.map((j) => j.dedupe_key)).toEqual([`render_pdf:${reportId}:${v}`]);
+    const notices = await database.q<JobRow>(`select * from jobs where dedupe_key = $1`, [
+      `notify:filed:${reportId}`,
+    ]);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({ type: 'notify', status: 'queued' });
+
+    // render_pdf, twice: one file, one email job.
+    expect(await run(renders[0]!.id)).toEqual({ ok: true });
+    await rerun(renders[0]!);
+    const [version] = await database.q<{ pdf_path: string | null }>(
+      `select pdf_path from report_versions where report_id = $1 and version = $2`,
+      [reportId, v],
+    );
+    expect(version!.pdf_path).toMatch(
+      new RegExp(`^${ORG}/${RIVERSIDE}/RL-2041-\\d{4}_v${v}\\.pdf$`),
+    );
+    expect(world.storage.files.has(`pdfs/${version!.pdf_path}`)).toBe(true);
+
+    // notify(filed), twice: one text, with the Filed-screen link (F8).
+    expect(await run(notices[0]!.id)).toEqual({ ok: true });
+    await rerun(notices[0]!);
+    // (The §18.1 seed has Marco's earlier `filed` texts: this report's is the one with its key.)
+    const filed = await database.q<{ body: string; channel: string }>(
+      `select body, channel::text from messages where reporter_id = $1 and copy_key = 'filed'
+         and payload ->> 'dedupe_key' = $2`,
+      [MARCO, `notify:filed:${reportId}`],
+    );
+    expect(filed).toHaveLength(1);
+    expect(filed[0]).toMatchObject({ channel: 'sms' });
+    expect(filed[0]!.body).toMatch(
+      new RegExp(
+        `^Filed: Daily Report RL-2041-\\d{4}\\. PDF: https://go\\.sitelog\\.test/r/[A-Z2-9]{12}/report/${reportId}$`,
+      ),
+    );
+
+    // send_email, twice: one email (the job's key is the provider's idempotency key).
+    const emails = await jobsOf('send_email');
+    expect(emails.map((j) => j.dedupe_key)).toEqual([`email:report_filed:${reportId}:${v}`]);
+    const before = world.emails.length;
+    expect(await run(emails[0]!.id)).toEqual({ ok: true });
+    await rerun(emails[0]!);
+    const sent = world.emails.slice(before);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.subject).toMatch(
+      /^Daily report · Riverside Lofts · Mon Oct 12 · RL-2041-\d{4}$/,
+    );
+    expect(sent[0]!.idempotencyKey).toBe(`email:report_filed:${reportId}:${v}`);
+    expect(sent[0]!.attachments?.map((a) => a.filename)).toEqual([
+      expect.stringMatching(new RegExp(`^RL-2041-\\d{4}_2026-10-12_v${v}\\.pdf$`)),
+    ]);
+    expect(sent[0]!.text).not.toMatch(/WhatsApp/);
+
+    // The console provider (no RESEND_API_KEY) files one Demo phone row per key.
+    const row = {
+      org_id: ORG,
+      kind: 'report_filed',
+      recipients: ['pm@kestrel.example'],
+      subject: sent[0]!.subject,
+      body_text: sent[0]!.text,
+      attachments: [],
+      dedupe_key: `email:report_filed:${reportId}:${v}`,
+    };
+    const first = await world.db.insertConsoleEmail(row);
+    expect(await world.db.insertConsoleEmail(row)).toBe(first);
+    const [n] = await database.q<{ n: number }>(
+      `select count(*)::int as n from console_emails where dedupe_key = $1`,
+      [row.dedupe_key],
+    );
+    expect(n!.n).toBe(1);
+  }, 60_000);
 });

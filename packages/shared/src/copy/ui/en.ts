@@ -263,7 +263,6 @@ export const uiEn = {
       },
       /** The worker has a question or a draft (their screens are W1-13's). */
       readyTitle: 'Your report is ready to check',
-      filedTitle: 'Report filed',
       failed: 'Couldn’t check on your report. Check your signal and try again.',
       /** field-api no longer finds the report for this phone. */
       notFound: 'This report isn’t available here any more.',
@@ -352,6 +351,18 @@ export const uiEn = {
     filing: {
       title: 'Filing your report…',
       body: 'You’ll get a text with the PDF in a minute.',
+    },
+    /** The Filed screen (F8, Field-07; W1-15). */
+    filed: {
+      title: 'Filed.',
+      /** `{{no}}` is set in bold mono; `{{name}}` is the reporter's first name. */
+      body: 'Daily Report {{no}} is with the office. Thanks, {{name}} — that’s it for today.',
+      pdf: 'Open the PDF',
+      pdfBadge: 'PDF',
+      /** render_pdf has not stored the file yet: the screen checks again. */
+      pdfPreparing: 'Preparing the PDF…',
+      /** Read by screen readers after "Open the PDF". */
+      opensNewTab: '(opens in a new tab)',
     },
     /** The offline banner and the upload queue (F5 step 3). */
     offline: {

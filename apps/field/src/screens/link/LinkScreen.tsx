@@ -41,11 +41,13 @@ function linkError(err: unknown): LinkErrorKey | 'failed' {
 /**
  * `/r/:code` (F4): resolves the link, then the device check on a new phone, the welcome and
  * consent on the first open, then Today. The resolved link becomes the app's session, so Today
- * and the installed app's `/` work without the SMS afterwards.
+ * and the installed app's `/` work without the SMS afterwards. `/r/:code/report/:id` (the `filed`
+ * text's link, W1-15) does the same and then opens that report instead of Today.
  */
 export function LinkScreen() {
-  const { code: raw = '' } = useParams();
+  const { code: raw = '', id } = useParams();
   const code = normalizeLinkCode(raw);
+  const target = id ? `/report/${encodeURIComponent(id)}` : '/today';
   const api = useApi();
   const navigate = useNavigate();
   const { session, update } = useSession();
@@ -72,7 +74,7 @@ export function LinkScreen() {
           code,
           next.sites.map((s) => s.id),
         );
-        navigate('/today', { replace: true });
+        navigate(target, { replace: true });
       }
     } catch (err) {
       const key = linkError(err);
@@ -84,7 +86,7 @@ export function LinkScreen() {
       }
       setPhase({ kind: 'error', key });
     }
-  }, [api, code, navigate, update, queue]);
+  }, [api, code, navigate, update, queue, target]);
 
   useEffect(() => {
     void resolve();
@@ -125,7 +127,7 @@ export function LinkScreen() {
             code,
             phase.session.sites.map((s) => s.id),
           );
-          navigate('/today', { replace: true });
+          navigate(target, { replace: true });
         }}
       />
     );

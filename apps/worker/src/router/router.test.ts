@@ -417,13 +417,22 @@ describe('router: draft confirmation and filing (F7)', () => {
     expect(render.payload).toMatchObject({
       reportId: report.id,
       version: 1,
-      sendToWhatsApp: true,
+      sendToWhatsApp: false,
       emailRecipients: true,
     });
     expect(render.dedupe_key).toBe(`render_pdf:${report.id}:1`);
-    expect(h.sentTexts()).toEqual([
-      "Filed. Daily Report RL-2041-0187 is with the office. Thanks, Marco — that's it for today.",
-    ]);
+    // W1-15: no WhatsApp "Filed." any more; the `filed` text goes through the Notifier.
+    expect(h.sentTexts()).toEqual([]);
+    const [filedText] = h.db.jobsOfType('notify');
+    expect(filedText!.dedupe_key).toBe(`notify:filed:${report.id}`);
+    expect(filedText!.payload).toMatchObject({
+      key: 'filed',
+      dedupeKey: `notify:filed:${report.id}`,
+      vars: { report_no: report.report_no },
+    });
+    expect((filedText!.payload as { vars: { pdf_link: string } }).vars.pdf_link).toMatch(
+      new RegExp(`^https://go\\.sitelog\\.app/r/[A-Z2-9]{12}/report/${report.id}$`),
+    );
     expect((await h.db.getConversation(convo.id))!.state).toBe('idle');
     expect(h.db.data.audit.map((a) => a.action)).toContain('report.filed');
     expect(h.db.data.notifications.some((n) => n.kind === 'needs_review')).toBe(true);
@@ -601,7 +610,11 @@ describe('router: questions (F6)', () => {
     expect(filed.review_reasons).toEqual(
       expect.arrayContaining(['unanswered:manpower.workers', 'unconfirmed']),
     );
-    expect(h.sentTexts()[3]).toContain('without your OK');
+    // W1-15: the `filed` text (Notifier) instead of the WhatsApp "filed without your OK".
+    expect(h.sentTexts()).toHaveLength(3);
+    expect(h.db.jobsOfType('notify').map((j) => j.dedupe_key)).toEqual([
+      `notify:filed:${report.id}`,
+    ]);
   });
 
   it('auto_15min files 15 minutes after the draft', async () => {

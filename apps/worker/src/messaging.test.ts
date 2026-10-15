@@ -82,8 +82,20 @@ describe('worker messaging (W1-08)', () => {
         subject: 'Daily report · Riverside',
         body_text: 'Filed.',
         attachments: [{ filename: 'RL-2041-0187.pdf', bytes: 42 }],
+        dedupe_key: null,
       },
     ]);
+    // W1-15: the send_email job's key goes along, so a retried job files no second row.
+    await provider.send({
+      to: ['pm@kestrelbuild.example'],
+      subject: 's',
+      html: '',
+      text: '',
+      orgId: 'org-1',
+      idempotencyKey: 'email:report_filed:r1:1',
+    });
+    expect(filed[1]).toMatchObject({ dedupe_key: 'email:report_filed:r1:1' });
+    filed.pop();
     // No org: logged only.
     expect(await provider.send({ to: ['x@y.z'], subject: 's', html: '', text: '' })).toEqual({
       id: null,

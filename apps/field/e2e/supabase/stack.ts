@@ -138,6 +138,8 @@ export async function dropFieldFixture(f: FieldFixture | undefined): Promise<voi
   for (const id of f.reportIds ?? []) if (!reportIds.includes(id)) reportIds.push(id);
   if (reportIds.length)
     steps.push(() => rest('DELETE', `jobs?payload->>reportId=${inList(reportIds)}`));
+  // The reporter's own jobs (W1-15: the `filed` text's notify job names the reporter).
+  steps.push(() => rest('DELETE', `jobs?payload->>reporterId=eq.${f.reporter.id}`));
   steps.push(() =>
     rest(
       'DELETE',

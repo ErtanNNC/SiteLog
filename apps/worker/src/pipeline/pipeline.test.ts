@@ -364,7 +364,67 @@ describe('pipeline: compose + extract job + filing', () => {
     expect(again.alreadyFiled).toBe(true);
     expect(h.db.data.denormalized).toHaveLength(1);
     expect(h.db.jobsOfType('render_pdf')).toHaveLength(1);
+    expect(h.db.jobsOfType('notify').map((j) => j.dedupe_key)).toEqual([
+      `notify:filed:${report.id}`,
+    ]);
     expect((await h.db.getSiteDay(siteDay.id))!.report_id).toBe(report.id);
+    // No `via` without a field-api confirm (the WhatsApp OK).
+    expect(first.report.confirmed_via).toBeNull();
+
+    // W1-15: a failure after `status = filed` lost the post-filing jobs: the retry enqueues them.
+    for (const [id, j] of h.db.data.jobs) if (j.type !== 'file_report') h.db.data.jobs.delete(id);
+    const retried = await fileReport(h.ctx, report.id, { trigger: 'confirm' });
+    expect(retried.alreadyFiled).toBe(true);
+    expect(h.db.jobsOfType('render_pdf')).toHaveLength(1);
+    expect(h.db.jobsOfType('notify')).toHaveLength(1);
+    expect(h.db.data.denormalized).toHaveLength(1);
+    // A day later (past every retry of the filing), or once signed off, a filing enqueues nothing.
+    for (const [id, j] of h.db.data.jobs) if (j.type !== 'file_report') h.db.data.jobs.delete(id);
+    h.setNow(new Date('2026-10-10T22:22:00Z'));
+    await fileReport(h.ctx, report.id, { trigger: 'timeout' });
+    await h.db.updateReport(report.id, { status: 'signed_off' });
+    h.setNow(new Date('2026-10-09T22:30:00Z'));
+    await fileReport(h.ctx, report.id, { trigger: 'confirm' });
+    expect(h.db.jobsOfType('render_pdf')).toHaveLength(0);
+    expect(h.db.jobsOfType('notify')).toHaveLength(0);
+  });
+
+  it('fileReport stores the confirm channel (§10.1 `file_report(report_id, via)`)', async () => {
+    const h = createHarness();
+    const siteDay = await h.db.getOrCreateSiteDay(
+      SITE_OAKMONT,
+      '2026-10-09',
+      deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+    );
+    const report = await h.db.insertReport({
+      org_id: h.org.id,
+      site_id: SITE_OAKMONT,
+      site_day_id: siteDay.id,
+      report_no: 'OM-1187-0123',
+      reporter_id: h.jorge.id,
+      received_at: '2026-10-09T22:00:00Z',
+      kind: 'daily',
+      status: 'awaiting_confirmation',
+    });
+    const input = legacyInput('oakmont-unknown-sub');
+    const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
+    await storeDraft(h.ctx, report, data);
+    h.setNow(new Date('2026-10-09T22:21:00Z'));
+    const filed = await fileReport(h.ctx, report.id, {
+      trigger: 'confirm',
+      version: 1,
+      via: 'web',
+    });
+    expect(filed.report).toMatchObject({ status: 'filed', confirmed_via: 'web' });
+    expect(h.db.data.audit.find((a) => a.action === 'report.filed')!.diff).toMatchObject({
+      via: 'web',
+    });
+    const [text] = h.db.jobsOfType('notify');
+    expect(text!.payload).toMatchObject({
+      reporterId: h.jorge.id,
+      key: 'filed',
+      vars: { report_no: 'OM-1187-0123' },
+    });
   });
 
   it('fileReport files a field-api confirm only at the confirmed version and state', async () => {
@@ -410,7 +470,7 @@ describe('pipeline: compose + extract job + filing', () => {
     expect([filed.stale, filed.report.status]).toEqual([undefined, 'filed']);
   });
 
-  it('render_pdf stores the PDF, sends it on WhatsApp with the edit hint and enqueues the email', async () => {
+  it('render_pdf stores the PDF and enqueues the email, and sends nothing on WhatsApp (W1-15)', async () => {
     const h = createHarness();
     const siteDay = await h.db.getOrCreateSiteDay(
       SITE_RIVERSIDE,
@@ -442,11 +502,10 @@ describe('pipeline: compose + extract job + filing', () => {
     expect(v.pdf_path).toBe(`${h.org.id}/${SITE_RIVERSIDE}/RL-2041-0187_v1.pdf`);
     const pdf = await h.storage.download('pdfs', v.pdf_path!);
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
-    expect(h.wa.sent.map((s) => s.kind)).toEqual(['document', 'text']);
-    expect(h.wa.sent[0]!.filename).toBe('RL-2041-0187_2026-10-09_v1.pdf');
-    expect(h.wa.sent[1]!.body).toBe(
-      'Need a change later? Reply "edit Friday" any time. The office gets a new version; the old one is kept.',
-    );
+    // The v1.0 flag is accepted and ignored: the reporter's text is the Notifier's `filed`.
+    expect(h.wa.sent).toEqual([]);
+    expect(h.db.jobsOfType('send_email')).toHaveLength(1);
+    expect(h.db.jobsOfType('send_email')[0]!.dedupe_key).toBe(`email:report_filed:${report.id}:1`);
     expect(h.db.jobsOfType('send_email')[0]!.payload).toMatchObject({
       kind: 'report_filed',
       reportId: report.id,

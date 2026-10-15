@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SMS_KEYS, TWO_WAY_SMS_KEYS } from '../copy/sms.ts';
-import type { JOB_TYPES } from '../enums.ts';
+import { FIELD_CHANNELS, type JOB_TYPES } from '../enums.ts';
 
 const uuid = z.string().uuid();
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -37,13 +37,21 @@ export const JobPayloadSchemas = {
      * only while the report is still awaiting confirmation at that version.
      */
     version: z.number().int().min(1).optional(),
+    /**
+     * §10.1 `file_report(report_id, via)`: the channel the reporter confirmed on, stored as
+     * `reports.confirmed_via` (W1-15; field_confirm_report() sends `web`). The WhatsApp confirm
+     * (v1.0, `confirmMessageId`) and the timeouts send none.
+     */
+    via: z.enum(FIELD_CHANNELS).optional(),
   }),
   render_pdf: z.object({
     reportId: uuid,
     version: z.number().int().min(1),
+    /** v1.0 WhatsApp delivery: still accepted so queued jobs parse, ignored since W1-15. */
     sendToWhatsApp: z.boolean().default(false),
     emailRecipients: z.boolean().default(false),
     changeNote: z.string().optional(),
+    /** v1.0 office-edit notice on WhatsApp (D31): accepted and ignored since W1-15. */
     notifyReporter: z.boolean().optional(),
   }),
   send_email: z.object({
@@ -171,6 +179,19 @@ export const jobKeys = {
    */
   draftReady: (reportId: string, decideJobId: number) =>
     `notify:draft_ready:${reportId}:${decideJobId}`,
+  /**
+   * The `filed` text of a report (§9.2, F8; W1-15): the `notify` job's dedupe key and the
+   * Notifier's. A report is filed once, so a retried or repeated filing never texts twice.
+   */
+  filed: (reportId: string) => `notify:filed:${reportId}`,
+  /**
+   * The `render_pdf` job of a report version (file_report, create_report_version, the WhatsApp
+   * edits): one PDF per version.
+   */
+  renderPdf: (reportId: string, version: number) => `render_pdf:${reportId}:${version}`,
+  /** The `send_email` job of a report version (render_pdf): one email per kind and version. */
+  reportEmail: (kind: 'report_filed' | 'report_updated', reportId: string, version: number) =>
+    `email:${kind}:${reportId}:${version}`,
   /**
    * The welcome of the office's nth invite of a reporter (api-invite-reporter): a double submit
    * reads the same count and enqueues once; a later invite (a disabled reporter invited again) is

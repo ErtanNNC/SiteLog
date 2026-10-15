@@ -319,6 +319,8 @@ export type ConsoleEmailRow = {
   body_text: string;
   attachments: Array<{ filename: string; bytes: number }>;
   created_at: string;
+  /** The send_email job's key (W1-15): a retried job files no second row. */
+  dedupe_key: string | null;
 };
 
 /**
@@ -950,7 +952,7 @@ export type Database = {
         TranscriptRow,
         'id' | 'message_id' | 'upload_id' | 'call_id' | 'language' | 'model' | 'created_at'
       >;
-      console_emails: Table<ConsoleEmailRow, 'id' | 'attachments' | 'created_at'>;
+      console_emails: Table<ConsoleEmailRow, 'id' | 'attachments' | 'created_at' | 'dedupe_key'>;
       unknown_contacts: Table<
         UnknownContactRow,
         | 'id'

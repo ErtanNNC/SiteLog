@@ -153,10 +153,16 @@ for (const run of RUNS) {
       await expect(send).toBeInViewport();
       await send.click();
 
-      // Filing, then filed (the Filed screen is W1-15).
+      // Filing, then the Filed screen (F8, Field-07; W1-15): the report number and the PDF.
+      await expect(page.getByRole('heading', { level: 1, name: field.filed.title })).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
+      await expect(page.getByRole('main').getByText(REPORT_NO, { exact: true })).toBeVisible();
       await expect(
-        page.getByRole('heading', { level: 1, name: field.processing.filedTitle }),
-      ).toBeVisible({ timeout: 10_000 });
+        page.getByRole('link', { name: new RegExp(`^${field.filed.pdf}`) }),
+      ).toHaveAttribute('href', `/__storage/pdfs/${REPORT_NO}_v1.pdf?token=e2e`);
+      await expectFieldScreen(page);
       expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/answer`)?.body).toEqual({
         questionId: QUESTION_ID,
         optionId: 'o2',

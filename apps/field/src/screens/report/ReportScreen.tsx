@@ -5,6 +5,7 @@ import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { NoLink } from '@/screens/NoLink';
 import { useSession } from '@/session/useSession';
 import { Draft } from './Draft';
+import { Filed } from './Filed';
 import { confirmationLine } from './lines';
 import { pollsIn, reportPhase } from './phase';
 import { ProcessingView } from './Processing';
@@ -14,18 +15,27 @@ import { useReportPoll } from './useReportPoll';
 /**
  * `/report/:id` (§9.3): Processing while the worker writes (F5 step 4), then one question per
  * screen (F7, Field-05), the draft (F8, Field-06) and, after Confirm & send, filing until the
- * report is filed (the Filed screen, Field-07, is W1-15). One poll (`useReportPoll`) runs while
- * the worker has the report and stops when it is the reporter's turn; an answer or Confirm & send
- * starts it again. After an answer, F7's confirmation line stays on the screens that follow it.
+ * report is filed: the Filed screen (Field-07, W1-15), which the `filed` text's link opens too.
+ * One poll (`useReportPoll`) runs while the worker has the report (and on Filed until the PDF
+ * exists) and stops when it is the reporter's turn; an answer or Confirm & send starts it again.
+ * After an answer, F7's confirmation line stays on the screens that follow it.
  */
 export function ReportScreen() {
   const { id = '' } = useParams();
   const { session } = useSession();
   if (!session) return <NoLink />;
-  return <ReportLoaded key={id} code={session.code} id={id} />;
+  return <ReportLoaded key={id} code={session.code} id={id} reporterName={session.reporter.name} />;
 }
 
-function ReportLoaded({ code, id }: { code: string; id: string }) {
+function ReportLoaded({
+  code,
+  id,
+  reporterName,
+}: {
+  code: string;
+  id: string;
+  reporterName: string;
+}) {
   const { t, language } = useFieldCopy();
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
   const [filing, setFiling] = useState(false);
@@ -33,7 +43,11 @@ function ReportLoaded({ code, id }: { code: string; id: string }) {
   // A refusal that sent the screen back to the latest view ("That question was already answered").
   const [notice, setNotice] = useState<string | null>(null);
   const keepPolling = useCallback(
-    (view: ReportView) => pollsIn(reportPhase(view, { answered, filing })),
+    (view: ReportView) => {
+      const next = reportPhase(view, { answered, filing });
+      // Filed before render_pdf stored the file: check again until the PDF is there.
+      return pollsIn(next) || (next === 'filed' && !view.pdfUrl);
+    },
     [answered, filing],
   );
   const { view, problem, restart } = useReportPoll(code, id, keepPolling);
@@ -109,11 +123,24 @@ function ReportLoaded({ code, id }: { code: string; id: string }) {
       />
     );
   }
+  if (view && phase === 'filed') {
+    return (
+      <Filed
+        key="filed"
+        view={view}
+        reporterName={reporterName}
+        onRefresh={restart}
+        notice={notices}
+      />
+    );
+  }
+  const shown =
+    phase === 'question' || phase === 'draft' || phase === 'filed' ? 'processing' : phase;
   return (
     <ProcessingView
-      key={`processing:${phase === 'question' || phase === 'draft' ? 'processing' : phase}`}
+      key={`processing:${shown}`}
       view={view}
-      phase={phase === 'question' || phase === 'draft' ? 'processing' : phase}
+      phase={shown}
       problem={problem}
       onRetry={restart}
       notice={notices}

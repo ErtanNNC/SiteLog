@@ -71,12 +71,14 @@ describe('Processing (F5 step 4)', () => {
     expect(screen.getByRole('link', { name: 'Back to Today' })).toHaveAttribute('href', '/today');
   });
 
-  it('says a filed report is filed (opened from Today)', async () => {
-    const routes = fakeRoutes({ report: vi.fn().mockResolvedValue(view({ status: 'filed' })) });
+  it('says a filed report is filed (opened from Today): the Filed screen', async () => {
+    const routes = fakeRoutes({
+      report: vi
+        .fn()
+        .mockResolvedValue(view({ status: 'filed', pdfUrl: 'https://s.example/a.pdf' })),
+    });
     renderApp('/report/r1', { routes });
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Report filed' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Filed.' })).toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(5_000));
     expect(routes.report).toHaveBeenCalledTimes(1);
   });

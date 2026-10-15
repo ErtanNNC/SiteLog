@@ -24,7 +24,6 @@ const AUDITED: Record<string, string> = {
   'decide:{}:timeout:{}': 'per report and the pending question that timed out',
   'parse_reply:{}': 'one parse per inbound WhatsApp message',
   'render_pdf:{}:{}': 'per report version; versions are immutable',
-  'email:{}:{}:{}': 'per email kind, report and version',
   'email:edited_after_signoff:{}:{}': 'per report and new version',
   'email:pack:{}': 'per evidence pack',
   'jobKeys.extractUpload':
@@ -37,6 +36,12 @@ const AUDITED: Record<string, string> = {
     'notify:question_ready:<question> (the Notifier key in messages.payload, W1-12): one text per question; a retried decide_next never texts twice, a new question is a new key',
   'jobKeys.draftReady':
     'notify:draft_ready:<report>:<decide job id> (the Notifier key, W1-12): per decide_next job that showed the draft; a retry never texts twice, a draft shown again after more audio or photos comes from a new decide job',
+  'jobKeys.renderPdf':
+    'render_pdf:<report>:<version> (file_report, W1-15): per report version; versions are immutable, and a retried filing finds the key taken',
+  'jobKeys.reportEmail':
+    'email:<report_filed|report_updated>:<report>:<version> (render_pdf): per email kind, report and version; also the email provider idempotency key',
+  'jobKeys.filed':
+    'notify:filed:<report> (file_report, W1-15): the notify job and its Notifier key; a report is filed once, so a retried or repeated filing never texts twice',
   'jobKeys.fileReportOn':
     'file:<report>:v<version>:m<confirm message> or :t<draft sent at>: one filing per WhatsApp confirm message or per draft sent (timeouts); drafts keep their version until filed, so a key per version alone would let a finished filing swallow later ones',
   // supabase/functions

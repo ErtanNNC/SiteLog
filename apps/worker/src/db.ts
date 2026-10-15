@@ -130,6 +130,7 @@ export interface ReportPatch {
   status?: ReportRow['status'];
   current_version?: number;
   confirmed_at?: string | Date | null;
+  confirmed_via?: ReportRow['confirmed_via'];
   filed_at?: string | Date | null;
   signed_off_by?: string | null;
   signed_off_at?: string | Date | null;
@@ -568,7 +569,10 @@ export interface Db {
   listPersonalLinks(reporterId: string): Promise<Array<{ id: string; code_hash: string }>>;
   /** false when the code hash is taken (unique); nothing written then. */
   insertPersonalLink(row: { id: string; code_hash: string; reporter_id: string }): Promise<boolean>;
-  insertConsoleEmail(row: Omit<ConsoleEmailRow, 'id' | 'created_at'>): Promise<string>;
+  /** A row with a taken `dedupe_key` (a retried send_email) is not filed again: its id is returned. */
+  insertConsoleEmail(
+    row: Omit<ConsoleEmailRow, 'id' | 'created_at' | 'dedupe_key'> & { dedupe_key?: string | null },
+  ): Promise<string>;
 
   // notifications & audit
   notifyOrg(
@@ -1356,12 +1360,18 @@ export function createDb(sql: Sql): Db {
       return rows.length > 0;
     },
     async insertConsoleEmail(row) {
+      const key = row.dedupe_key ?? null;
       const rows = await sql<Array<{ id: string }>>`
-        insert into console_emails (org_id, kind, recipients, subject, body_text, attachments)
+        insert into console_emails (org_id, kind, recipients, subject, body_text, attachments, dedupe_key)
         values (${row.org_id}, ${row.kind}, ${row.recipients}, ${row.subject}, ${row.body_text},
-          ${sql.json(row.attachments as never)})
+          ${sql.json(row.attachments as never)}, ${key})
+        on conflict (dedupe_key) do nothing
         returning id`;
-      return rows[0]!.id;
+      if (rows[0]) return rows[0].id;
+      // A retried send_email: the key's row is already filed.
+      const [existing] = await sql<Array<{ id: string }>>`
+        select id from console_emails where dedupe_key = ${key}`;
+      return existing!.id;
     },
 
     // notifications & audit ---------------------------------------------------------------

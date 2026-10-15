@@ -13,7 +13,7 @@ import { TICKS, ticksDone } from './ticks';
  * Processing (F5 step 4): "Writing your report…" with the step ticks while the worker writes the
  * draft or decides after an answer (`ReportScreen` polls). The screen can be closed; a message
  * comes when the question or the draft is ready. The same screen says "Filing your report…" after
- * Confirm & send, and "Report filed" until the Filed screen (Field-07, W1-15).
+ * Confirm & send, until the Filed screen (Field-07, W1-15).
  */
 export function ProcessingView({
   view,
@@ -23,7 +23,7 @@ export function ProcessingView({
   notice,
 }: {
   view: ReportView | null;
-  phase: Extract<ReportPhase, 'processing' | 'filing' | 'filed' | 'ready' | 'gone'>;
+  phase: Extract<ReportPhase, 'processing' | 'filing' | 'ready' | 'gone'>;
   problem: PollProblem;
   onRetry: () => void;
   /** The F7 confirmation line or a refusal, above the title. */
@@ -34,11 +34,9 @@ export function ProcessingView({
   const title =
     phase === 'filing'
       ? t('filing.title')
-      : phase === 'filed'
-        ? t('processing.filedTitle')
-        : phase === 'ready'
-          ? t('processing.readyTitle')
-          : t('processing.title');
+      : phase === 'ready'
+        ? t('processing.readyTitle')
+        : t('processing.title');
   const notFound = problem === 'notFound' || phase === 'gone';
   const waiting = phase === 'processing' || phase === 'filing';
 

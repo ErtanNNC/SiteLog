@@ -72,7 +72,13 @@ describe('Draft (F8, Field-06)', () => {
         .mockResolvedValueOnce(draftView({ currentVersion: 2 }))
         // Queued, not filed yet: "Filing your report…".
         .mockResolvedValueOnce(draftView({ currentVersion: 2 }))
-        .mockResolvedValue(draftView({ status: 'filed', currentVersion: 2 })),
+        .mockResolvedValue(
+          draftView({
+            status: 'filed',
+            currentVersion: 2,
+            pdfUrl: 'https://storage.example/a.pdf',
+          }),
+        ),
       confirm: vi.fn().mockResolvedValue({ status: 'queued' }),
     });
     renderApp('/report/r1', { routes });
@@ -83,9 +89,7 @@ describe('Draft (F8, Field-06)', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('You’ll get a text with the PDF in a minute.')).toBeInTheDocument();
     await act(() => vi.advanceTimersByTimeAsync(2_100));
-    expect(
-      await screen.findByRole('heading', { level: 1, name: 'Report filed' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Filed.' })).toBeInTheDocument();
     const calls = vi.mocked(routes.report).mock.calls.length;
     await act(() => vi.advanceTimersByTimeAsync(10_000));
     expect(routes.report).toHaveBeenCalledTimes(calls);

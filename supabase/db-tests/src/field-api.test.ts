@@ -590,7 +590,7 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
     expect(jobs).toEqual([
       {
         id: first.jobId,
-        payload: { reportId: report, trigger: 'confirm', version: 1 },
+        payload: { reportId: report, trigger: 'confirm', version: 1, via: 'web' },
         dedupe_key: `file:${report}:v1`,
         status: 'queued',
       },
@@ -681,17 +681,17 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
       {
         dedupe_key: `file:${report}:v1`,
         status: 'done',
-        payload: { reportId: report, trigger: 'confirm', version: 1 },
+        payload: { reportId: report, trigger: 'confirm', version: 1, via: 'web' },
       },
       {
         dedupe_key: `file:${report}:v1:c2`,
         status: 'failed',
-        payload: { reportId: report, trigger: 'confirm', version: 1 },
+        payload: { reportId: report, trigger: 'confirm', version: 1, via: 'web' },
       },
       {
         dedupe_key: `file:${report}:v1:c3`,
         status: 'queued',
-        payload: { reportId: report, trigger: 'confirm', version: 1 },
+        payload: { reportId: report, trigger: 'confirm', version: 1, via: 'web' },
       },
     ]);
     // A third tap while it is queued reuses it.

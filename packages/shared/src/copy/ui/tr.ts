@@ -452,7 +452,6 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         hours: 'Taşeron saatleri kontrol ediliyor…',
       },
       readyTitle: 'Raporunuz kontrole hazır',
-      filedTitle: 'Rapor gönderildi',
       failed: 'Raporunuz kontrol edilemedi. Sinyalinizi kontrol edip tekrar deneyin.',
       notFound: 'Bu rapor artık burada görüntülenemiyor.',
     },
@@ -532,6 +531,14 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     filing: {
       title: 'Raporunuz dosyalanıyor…',
       body: 'Bir dakika içinde PDF bağlantısıyla bir SMS alacaksınız.',
+    },
+    filed: {
+      title: 'Kaydedildi.',
+      body: 'Günlük Rapor {{no}} ofise iletildi. Teşekkürler {{name}}, bugünlük bu kadar.',
+      pdf: 'PDF’i aç',
+      pdfBadge: 'PDF',
+      pdfPreparing: 'PDF hazırlanıyor…',
+      opensNewTab: '(yeni sekmede açılır)',
     },
     offline: {
       banner: 'Sinyal yok — kayıtlar telefonunuza kaydediliyor',

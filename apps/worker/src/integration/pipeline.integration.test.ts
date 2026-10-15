@@ -233,15 +233,23 @@ describe('integration: webhook → worker → outbound (real database, faked out
     const okAt = clock.now();
     await drainQueue(runner);
 
-    // "Filed." → the PDF as a document → the edit hint.
-    const afterOk = sentSince(waMark).slice(beforeOk.length);
-    expect(afterOk.map((e) => e.kind)).toEqual(['text', 'document', 'text']);
-    expect(afterOk[0]!.body).toBe(
-      `Filed. Daily Report ${report!.report_no} is with the office. Thanks, Marco — that's it for today.`,
+    // W1-15: nothing more on WhatsApp; the `filed` text (§9.2) goes through the Notifier, with the
+    // Filed-screen link, within 60 s of the OK (F8).
+    expect(sentSince(waMark).slice(beforeOk.length)).toEqual([]);
+    const filedTexts = await database.q<{ body: string; channel: string }>(
+      `select m.body, m.channel::text as channel from messages m
+       join reporters r on r.id = m.reporter_id
+       where r.phone_e164 = $1 and m.copy_key = 'filed' and m.payload ->> 'dedupe_key' = $2`,
+      [MARCO, `notify:filed:${report!.id}`],
     );
-    expect(afterOk[1]!.filename).toBe(`${report!.report_no}_2026-10-13_v1.pdf`);
-    expect(afterOk[2]!.body).toMatch(/^Need a change later\? Reply "edit Tuesday"/);
-    expect(afterOk[1]!.at.getTime() - okAt.getTime()).toBeLessThan(60_000); // F7: PDF within 60 s
+    expect(filedTexts).toHaveLength(1);
+    expect(filedTexts[0]).toMatchObject({ channel: 'sms' });
+    expect(filedTexts[0]!.body).toMatch(
+      new RegExp(
+        `^Filed: Daily Report ${report!.report_no}\\. PDF: https://go\\.sitelog\\.test/r/[A-Z2-9]{12}/report/${report!.id}$`,
+      ),
+    );
+    expect(clock.now().getTime() - okAt.getTime()).toBeLessThan(60_000);
 
     // Report filed, version 1 frozen with the PDF path, denormalised rows written.
     const [filed] = await database.q<{
@@ -363,6 +371,7 @@ describe('integration: webhook → worker → outbound (real database, faked out
       'inbound_message',
       'file_report',
       'render_pdf',
+      'notify',
       'send_email',
     ]);
     expect(jobs.every((j) => j.status === 'done' && j.attempts === 1)).toBe(true);
@@ -458,8 +467,13 @@ describe('integration: webhook → worker → outbound (real database, faked out
     clock.advance(20_000);
     await world.deliver(textPayload('ok', { from: MARCO, id: 'wamid.it.B.ok', at: clock.now() }));
     await drainQueue(runner);
-    const filedMsgs = sentSince(waMark).slice(asked.length + answered.length);
-    expect(filedMsgs.map((e) => e.kind)).toEqual(['text', 'document', 'text']);
+    // W1-15: no WhatsApp "Filed." and PDF; the `filed` text goes through the Notifier.
+    expect(sentSince(waMark).slice(asked.length + answered.length)).toEqual([]);
+    const [filedText] = await database.q<{ n: number }>(
+      `select count(*)::int as n from messages where copy_key = 'filed' and payload ->> 'dedupe_key' = $1`,
+      [`notify:filed:${q!.report_id}`],
+    );
+    expect(filedText!.n).toBe(1);
 
     const [filed] = await database.q<{ status: string; review_reasons: string[] }>(
       `select status::text as status, review_reasons from reports where id = $1`,
@@ -479,9 +493,6 @@ describe('integration: webhook → worker → outbound (real database, faked out
       'question',
       'answer_ack',
       'draft',
-      'filed',
-      'pdf',
-      'edit_hint',
     ]);
     expect(world.claude.calls.slice(claudeMark).map((c) => c.tool)).toEqual([
       'submit_daily_report',

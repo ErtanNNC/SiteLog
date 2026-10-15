@@ -1,17 +1,14 @@
-import {
-  pdfFileName,
-  pdfStoragePath,
-  waCopy,
-  readReportData,
-  weekdayName,
-  type StoredReportData,
-} from '@sitelog/shared';
+import { jobKeys, pdfStoragePath, readReportData, type StoredReportData } from '@sitelog/shared';
 import { buildReportPdfInput, renderReportPdf } from '../pdf/render';
-import { sendBusinessInitiated, sendDocumentMessage } from '../wa/send';
-import { PermanentJobError, rawPayload, type JobHandler } from './types';
+import { PermanentJobError, type JobHandler } from './types';
 
-/** §M4 — render the version to `pdfs/{org}/{site}/{report_no}_v{n}.pdf`, send it on WhatsApp, email it. */
-export const renderPdf: JobHandler<'render_pdf'> = async (ctx, payload, job) => {
+/**
+ * §M4 — render the version to `pdfs/{org}/{site}/{report_no}_v{n}.pdf`, then email it (§13). Since
+ * W1-15 nothing goes out on WhatsApp: the reporter's `filed` text comes from file_report through
+ * the Notifier, and the payload's `sendToWhatsApp` and `notifyReporter` are ignored (D31: the
+ * office-edit notice ended). A retry renders the same file again and finds the email's key taken.
+ */
+export const renderPdf: JobHandler<'render_pdf'> = async (ctx, payload) => {
   const report = await ctx.db.getReport(payload.reportId);
   if (!report) throw new PermanentJobError(`report ${payload.reportId} not found`);
   const version = await ctx.db.getVersion(report.id, payload.version);
@@ -36,43 +33,12 @@ export const renderPdf: JobHandler<'render_pdf'> = async (ctx, payload, job) => 
   });
   ctx.metrics.add({ pdfBytes: buffer.length });
 
-  const reporter = report.reporter_id ? await ctx.db.getReporter(report.reporter_id) : null;
-  const convo = reporter ? await ctx.db.getConversationByPhone(reporter.phone_e164) : null;
-  const filename = pdfFileName(report.report_no, data.reportDate, version.version);
-
-  if (payload.sendToWhatsApp && convo) {
-    await sendDocumentMessage(
-      ctx,
-      convo,
-      { buffer, filename, mime: 'application/pdf', caption: `Daily Report ${report.report_no}` },
-      { kind: 'pdf', reportId: report.id },
-    );
-    await sendBusinessInitiated(
-      ctx,
-      convo,
-      'sitelog_report_edited_by_office',
-      [report.report_no, ''],
-      waCopy.editHint(weekdayName(data.reportDate)),
-      { buttons: [], meta: { kind: 'edit_hint', reportId: report.id } },
-    );
-  }
-  const notifyReporter = rawPayload(job).notifyReporter === true;
-  if (notifyReporter && convo && payload.changeNote) {
-    await sendBusinessInitiated(
-      ctx,
-      convo,
-      'sitelog_report_edited_by_office',
-      [report.report_no, payload.changeNote],
-      null,
-      { buttons: [], meta: { kind: 'office_edit', reportId: report.id } },
-    );
-  }
   if (payload.emailRecipients) {
     const kind = version.version > 1 ? 'report_updated' : 'report_filed';
     await ctx.db.enqueueJob(
       'send_email',
       { kind, reportId: report.id, version: version.version, changeNote: payload.changeNote },
-      { dedupeKey: `email:${kind}:${report.id}:${version.version}` },
+      { dedupeKey: jobKeys.reportEmail(kind, report.id, version.version) },
     );
   }
 };

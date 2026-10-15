@@ -232,7 +232,6 @@ export const uiEs: UiResources = {
         hours: 'Revisando las horas de los subcontratistas…',
       },
       readyTitle: 'Su reporte está listo para revisar',
-      filedTitle: 'Reporte enviado',
       failed: 'No se pudo consultar su reporte. Revise su señal e intente de nuevo.',
       notFound: 'Este reporte ya no está disponible aquí.',
     },
@@ -312,6 +311,14 @@ export const uiEs: UiResources = {
     filing: {
       title: 'Archivando su reporte…',
       body: 'Recibirá un mensaje de texto con el PDF en un minuto.',
+    },
+    filed: {
+      title: 'Registrado.',
+      body: 'El reporte diario {{no}} ya está en la oficina. Gracias, {{name}}, eso es todo por hoy.',
+      pdf: 'Abrir el PDF',
+      pdfBadge: 'PDF',
+      pdfPreparing: 'Preparando el PDF…',
+      opensNewTab: '(se abre en una pestaña nueva)',
     },
     offline: {
       banner: 'Sin señal — las grabaciones se guardan en su teléfono',

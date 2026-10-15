@@ -344,7 +344,28 @@ async function notifyReporter(
   orgId: string,
   notice: Notice,
 ): Promise<void> {
-  // Configuration, not data: retried with backoff, then dead (processing_failed) and in Sentry.
+  const { base, code } = await personalLinkCode(ctx, reporterId, orgId);
+  const outcome = await ctx.notifier.send(
+    reporterId,
+    notice.key,
+    { link: fieldLinkUrl(base, code) },
+    { dedupeKey: notice.dedupeKey },
+  );
+  if (outcome.channel === null)
+    ctx.log.info('decide_next: nothing sent', { key: notice.key, reason: outcome.reason });
+}
+
+/**
+ * The reporter's personal link code (created and audited when they have none the secret can
+ * derive) and the field app's base URL, for a text that carries the link (`question_ready`,
+ * `draft_ready`, `filed`). Missing configuration throws: retried with backoff, then dead
+ * (processing_failed) and in Sentry.
+ */
+export async function personalLinkCode(
+  ctx: Ctx,
+  reporterId: string,
+  orgId: string,
+): Promise<{ base: string; code: string }> {
   if (!ctx.config.LINK_SIGNING_SECRET) throw new Error('LINK_SIGNING_SECRET is not set');
   if (!ctx.config.FIELD_APP_URL) throw new Error('FIELD_APP_URL is not set');
   const link = await ensurePersonalLink(
@@ -363,12 +384,5 @@ async function notifyReporter(
       diff: { kind: 'personal', site_id: null, report_date: null },
     });
   }
-  const outcome = await ctx.notifier.send(
-    reporterId,
-    notice.key,
-    { link: fieldLinkUrl(ctx.config.FIELD_APP_URL, link.code) },
-    { dedupeKey: notice.dedupeKey },
-  );
-  if (outcome.channel === null)
-    ctx.log.info('decide_next: nothing sent', { key: notice.key, reason: outcome.reason });
+  return { base: ctx.config.FIELD_APP_URL, code: link.code };
 }

@@ -952,8 +952,11 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return true;
     },
     async insertConsoleEmail(row) {
+      const key = row.dedupe_key ?? null;
+      const taken = key ? d.consoleEmails.find((e) => e.dedupe_key === key) : undefined;
+      if (taken) return taken.id;
       const id = randomUUID();
-      d.consoleEmails.push({ ...row, id, created_at: iso() });
+      d.consoleEmails.push({ ...row, dedupe_key: key, id, created_at: iso() });
       return id;
     },
 

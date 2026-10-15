@@ -20,7 +20,10 @@ import {
  * the worker leaves it after extraction) shows with its two answers → "5 · full day" → field-api
  * maps it in code and queues decide_next → F7's confirmation line → the worker's decide_next
  * moves the report to awaiting_confirmation → the draft with Delta at 5 × 8 h → Confirm & send →
- * field-api queues file_report for the version shown. axe on every screen.
+ * field-api queues file_report (via web) for the version shown → W1-15: the worker files it, the
+ * Filed screen (Field-07) shows the PDF once render_pdf stored it, the `filed` text (console SMS:
+ * what the Demo phone shows) carries the Filed-screen link, which opens the report on this phone,
+ * and the console email (the Demo phone's Email tab) has the PDF attached. axe on every screen.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -32,13 +35,15 @@ test.beforeAll(async () => {
   test.skip(!process.env.WORKER_HEALTH_URL, 'needs the worker on the stack (WORKER_HEALTH_URL)');
   f = await createFieldFixture();
   q = await seedOpenQuestion(f);
+  // The site's email recipient (§13 "Report filed": site recipients).
+  await rest('POST', 'site_recipients', { site_id: f.site.id, email: 'pm@e2e-field.example' });
 });
 
 test.afterAll(async () => {
   await dropFieldFixture(f);
 });
 
-test('open question → answer → draft (worker decide_next) → Confirm & send queues file_report', async ({
+test('open question → answer → draft (worker decide_next) → Confirm & send → filed: PDF, text, email', async ({
   page,
   context,
 }) => {
@@ -112,22 +117,76 @@ test('open question → answer → draft (worker decide_next) → Confirm & send
   await expect(
     page.getByRole('heading', {
       level: 1,
-      name: new RegExp(`^(${copy.filing.title}|${copy.processing.filedTitle})$`),
+      name: new RegExp(`^(${copy.filing.title}|${copy.filed.title.replace('.', '\\.')})$`),
     }),
   ).toBeVisible();
-  await expectFieldScreen(page);
   const jobs = await rest<{ type: string; payload: { trigger: string; version: number } }[]>(
     'GET',
     `jobs?select=type,payload&type=eq.file_report&payload->>reportId=eq.${open.reportId}`,
   );
   expect(jobs).toHaveLength(1);
-  expect(jobs[0]!.payload).toMatchObject({ trigger: 'confirm', version: 1 });
+  expect(jobs[0]!.payload).toMatchObject({ trigger: 'confirm', version: 1, via: 'web' });
+
+  // W1-15: the worker files it → the Filed screen (Field-07), the PDF once render_pdf stored it.
+  await expect(page.getByRole('heading', { level: 1, name: copy.filed.title })).toBeVisible({
+    timeout: 60_000,
+  });
+  await expect(page.getByRole('main').getByText(open.reportNo, { exact: true })).toBeVisible();
+  const pdf = page.getByRole('link', { name: new RegExp(`^${copy.filed.pdf}`) });
+  await expect(pdf).toBeVisible({ timeout: 60_000 });
+  await expect(pdf).toHaveAttribute('href', /\/storage\/v1\/object\/sign\/pdfs\//);
+  await expectFieldScreen(page);
+  const [report] = await rest<{ status: string; confirmed_via: string | null }[]>(
+    'GET',
+    `reports?select=status,confirmed_via&id=eq.${open.reportId}`,
+  );
+  expect(report).toEqual({ status: 'filed', confirmed_via: 'web' });
+
+  // The `filed` text (§9.2), once, through the console driver of this demo org: what the Demo
+  // phone shows, with the Filed-screen link (F8).
+  const filedTexts = () =>
+    rest<{ body: string; channel: string }[]>(
+      'GET',
+      `messages?select=body,channel&reporter_id=eq.${fx.reporter.id}&copy_key=eq.filed`,
+    );
+  await expect.poll(async () => (await filedTexts()).length, { timeout: 60_000 }).toBe(1);
+  const [text] = await filedTexts();
+  expect(text!.channel).toBe('sms');
+  const linkPattern = new RegExp(
+    `^Filed: Daily Report ${open.reportNo}\\. PDF: (https?://[^ ]+/r/[A-Z2-9]{12}/report/${open.reportId})$`,
+  );
+  expect(text!.body).toMatch(linkPattern);
+
+  // The console email (the Demo phone's Email tab): the §13 subject, the PDF attached, once.
+  const emails = () =>
+    rest<
+      { kind: string; subject: string; recipients: string[]; attachments: { filename: string }[] }[]
+    >('GET', `console_emails?select=kind,subject,recipients,attachments&org_id=eq.${fx.orgId}`);
+  await expect.poll(async () => (await emails()).length, { timeout: 60_000 }).toBe(1);
+  const [email] = await emails();
+  expect(email).toMatchObject({ kind: 'report_filed', recipients: ['pm@e2e-field.example'] });
+  expect(email!.subject).toMatch(
+    new RegExp(`^Daily report · Riverside Lofts · .+ · ${open.reportNo}$`),
+  );
+  expect(email!.attachments.map((a) => a.filename)).toEqual([
+    expect.stringMatching(new RegExp(`^${open.reportNo}_\\d{4}-\\d{2}-\\d{2}_v1\\.pdf$`)),
+  ]);
+
+  // The text's link opens the report on this phone: the link check, then the Filed screen.
+  const textLink = new URL(linkPattern.exec(text!.body)![1]!);
+  await page.goto(textLink.pathname);
+  await expect(page).toHaveURL(new RegExp(`/report/${open.reportId}$`));
+  await expect(page.getByRole('heading', { level: 1, name: copy.filed.title })).toBeVisible();
+  await expect(page.getByRole('link', { name: new RegExp(`^${copy.filed.pdf}`) })).toBeVisible();
+
   const audits = await rest<{ action: string }[]>(
     'GET',
-    `audit_log?select=action&entity_id=eq.${open.reportId}&action=in.(report.question_answered,report.confirm_requested)&order=id`,
+    `audit_log?select=action&entity_id=eq.${open.reportId}&action=in.(report.question_answered,report.confirm_requested,report.filed,report.pdf_rendered)&order=id`,
   );
   expect(audits.map((a) => a.action)).toEqual([
     'report.question_answered',
     'report.confirm_requested',
+    'report.filed',
+    'report.pdf_rendered',
   ]);
 });

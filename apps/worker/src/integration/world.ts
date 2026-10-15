@@ -127,7 +127,12 @@ export function createWorld(opts: WorldOptions): World {
   const claude = createFakeClaude({ lib, sim, ...opts.claude });
   const transcriber = createFakeTranscriber(lib, sim);
   const fieldTranscriber = opts.fieldTranscriber ?? createFixtureTranscriber();
-  const config = testConfig(opts.config);
+  // The texts with a personal link (W1-12's question and draft, W1-15's `filed`) need both.
+  const config = testConfig({
+    LINK_SIGNING_SECRET: 'integration-link-secret',
+    FIELD_APP_URL: 'https://go.sitelog.test',
+    ...opts.config,
+  });
   const ctx: Ctx = {
     config,
     db,

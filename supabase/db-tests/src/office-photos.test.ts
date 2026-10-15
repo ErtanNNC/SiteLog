@@ -490,6 +490,9 @@ describe('create_report_version with photos', () => {
       jobsBefore + 1,
     );
     expect(jobs[0]).toMatchObject({ type: 'render_pdf', payload: { reportId, version: 2 } });
+    // D31 (W1-15): no WhatsApp notice of the office edit any more.
+    expect(jobs[0]!.payload).not.toHaveProperty('notifyReporter');
+    expect(jobs[0]!.payload).toMatchObject({ emailRecipients: true });
   });
 
   it('accepts a photo change alone and can bring back a removed photo', async () => {
