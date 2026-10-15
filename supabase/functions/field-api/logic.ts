@@ -9,6 +9,7 @@ import {
   formatDeadline,
   localDate,
   previousWorkingDay,
+  type AnswerValue,
   type ConsentRow,
   type ConsentType,
   type CountryPack,
@@ -18,6 +19,7 @@ import {
   type FieldLinkRow,
   type FieldSite,
   type OrgSettingsRow,
+  type QuestionOption,
   type SiteRow,
 } from '@sitelog/shared';
 
@@ -265,14 +267,35 @@ export function originAllowed(
 
 /** A question's options as the field app shows them: `[{id, label}]`, else null. */
 export function questionOptions(options: unknown): { id: string; label: string }[] | null {
-  if (!Array.isArray(options)) return null;
-  const out: { id: string; label: string }[] = [];
+  const out = storedQuestionOptions(options).map(({ id, label }) => ({ id, label }));
+  return out.length ? out : null;
+}
+
+/**
+ * A question's options as stored (W1-12, `QuestionOption`): `[{id, label, value?}]`, where `value`
+ * is what code applies for a fallback option. Anything else in the column (the WhatsApp worker's
+ * buttons have `title`, not `label`) is not an option of the web.
+ */
+export function storedQuestionOptions(options: unknown): QuestionOption[] {
+  if (!Array.isArray(options)) return [];
+  const out: QuestionOption[] = [];
   for (const o of options) {
     if (o && typeof o === 'object' && typeof o.id === 'string' && typeof o.label === 'string') {
-      out.push({ id: o.id, label: o.label });
+      const value =
+        o.value && typeof o.value === 'object' && !Array.isArray(o.value)
+          ? (o.value as AnswerValue)
+          : undefined;
+      out.push(value ? { id: o.id, label: o.label, value } : { id: o.id, label: o.label });
     }
   }
-  return out.length ? out : null;
+  return out;
+}
+
+/** The words a typed answer is stored with (D28): "5 · full day", "5 · 6 h", "5". */
+export function numberAnswerLabel(value: number, hours?: number | 'full_day'): string {
+  if (hours === 'full_day') return `${value} · full day`;
+  if (typeof hours === 'number') return `${value} · ${hours} h`;
+  return String(value);
 }
 
 /** The caller's address for consent evidence (best effort: the proxy's header, else the first hop). */

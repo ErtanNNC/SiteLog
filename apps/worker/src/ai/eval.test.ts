@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DailyReportDataV1 } from '@sitelog/shared';
+import type { DailyReportData } from '@sitelog/shared';
 import {
   companyKey,
   compareContextOf,
@@ -13,11 +13,13 @@ import {
   nextQuestionOf,
   parseArgs,
   printTable,
+  recordedFromExpected,
   replayClient,
   runEval,
   scoreRecorded,
+  textLanguage,
 } from './eval';
-import { runExtraction } from './extract';
+import { runReportExtraction } from './extract';
 
 /**
  * Offline checks for the §10.12 golden set (no API key): every fixture parses with the shared
@@ -54,6 +56,12 @@ describe('golden eval set (§10.12)', () => {
     expect(langs).toContain('es');
     expect(langs).toContain('en+es');
     expect(langs).toContain('en');
+    expect(langs).toContain('tr');
+    // Report language and units per org: Turkish metric reports beside the US ones.
+    expect(new Set(all.map((f) => `${f.input.reportLanguage}/${f.input.units}`))).toEqual(
+      new Set(['en/imperial', 'tr/metric']),
+    );
+    expect(all.filter((f) => f.input.reportLanguage === 'tr').length).toBeGreaterThanOrEqual(2);
     const asked = new Set(all.map((f) => f.expectedQuestion?.field ?? 'none'));
     for (const field of [
       'none',
@@ -75,9 +83,9 @@ describe('golden eval set (§10.12)', () => {
     expect(unknown.length).toBeGreaterThanOrEqual(3);
     const bases = new Set(all.flatMap((f) => f.expected.manpower.map((m) => m.hoursBasis)));
     expect(bases).toEqual(new Set(['stated', 'full_day_default', 'unknown']));
-    expect(all.some((f) => f.input.texts.length > 0)).toBe(true);
+    expect(all.some((f) => f.whatsappText)).toBe(true);
     expect(all.some((f) => f.input.previousAnswers.length > 0)).toBe(true);
-    expect(all.some((f) => new Set(f.input.segments.map((s) => s.messageId)).size > 1)).toBe(true);
+    expect(all.some((f) => new Set(f.input.segments.map((s) => s.uploadId)).size > 1)).toBe(true);
     expect(all.some((f) => f.input.rejectedMappings.length > 0)).toBe(true);
     expect(all.some((f) => f.expected.deliveries.length > 0)).toBe(true);
     expect(all.some((f) => f.expected.safety.visitors.length > 0)).toBe(true);
@@ -86,14 +94,39 @@ describe('golden eval set (§10.12)', () => {
     ).toBe(true);
   });
 
+  it('holds the recorded tool outputs to what --write-recorded generates from the expected data', () => {
+    for (const id of ids) {
+      const f = loadFixture(id);
+      expect(f.recorded, id).toEqual(recordedFromExpected(f));
+    }
+  });
+
   it('never sends a phone number to the model', async () => {
     for (const id of ids) {
       const f = loadFixture(id);
       const client = replayClient(f.recorded);
-      await runExtraction(client, 'claude-sonnet-4-6', f.input);
+      await runReportExtraction(client, 'claude-sonnet-4-6', f.input);
       const { system, messages } = client.calls[0]!;
       expect(findPhoneNumbers(JSON.stringify({ system, messages })), id).toEqual([]);
     }
+    // A number said in the note is redacted before the call (callTool, redactPhones).
+    const hero = loadFixture('riverside-2026-10-09');
+    const client = replayClient(hero.recorded);
+    const input = structuredClone(hero.input);
+    input.segments[0]!.text += ' Pump driver Mike, 555-014-3378, call him.';
+    input.previousAnswers.push({
+      field: 'safety',
+      question: 'Visitors?',
+      answer: 'the inspector, +1 (555) 014-2290',
+      questionId: 'q-1',
+    });
+    await runReportExtraction(client, 'claude-sonnet-4-6', input);
+    const sent = JSON.stringify({
+      system: client.calls[0]!.system,
+      messages: client.calls[0]!.messages,
+    });
+    expect(findPhoneNumbers(sent)).toEqual([]);
+    expect(sent).toContain('Pump driver Mike, [phone], call him.');
     expect(findPhoneNumbers('call me on +1 555 014 3378')).toEqual(['+1 555 014 3378']);
     expect(findPhoneNumbers('(555) 014-2290')).toEqual(['(555) 014-2290']);
     expect(
@@ -114,7 +147,7 @@ describe('compareReport', () => {
   });
 
   it('sums a company split over two entries and ignores crews reported absent', () => {
-    const actual: DailyReportDataV1 = structuredClone(riverside.expected);
+    const actual: DailyReportData = structuredClone(riverside.expected);
     const apex = actual.manpower[0]!;
     actual.manpower.splice(
       0,
@@ -134,7 +167,7 @@ describe('compareReport', () => {
   });
 
   it('flags an invented headcount, a guessed answer to the open question and invented numbers', () => {
-    const actual: DailyReportDataV1 = structuredClone(riverside.expected);
+    const actual: DailyReportData = structuredClone(riverside.expected);
     const delta = actual.manpower.find((m) => m.companyName === 'Delta Mechanical')!;
     delta.workers = 5;
     delta.totalHours = 40;
@@ -157,7 +190,7 @@ describe('compareReport', () => {
     expect(companyKey('the Ridgeway crew')).toBe('ridgeway');
     expect(companyKey('los de Ramírez')).toBe('ramirez');
     const oak = loadFixture('oakmont-unknown-sub');
-    const actual: DailyReportDataV1 = structuredClone(oak.expected);
+    const actual: DailyReportData = structuredClone(oak.expected);
     actual.manpower[2]!.companyName = 'Ridgeway Crew';
     actual.newTerms = [];
     actual.proposedQuestions = [];
@@ -169,7 +202,7 @@ describe('compareReport', () => {
 
   it('checks rejected glossary mappings and the weather question', () => {
     const ng = loadFixture('northgate-2026-10-07-glossary-mishearing');
-    const actual: DailyReportDataV1 = structuredClone(ng.expected);
+    const actual: DailyReportData = structuredClone(ng.expected);
     actual.equipment[0]!.item = 'Lift (concrete placement height)';
     actual.weather.conditionsText = '';
     const failed = compareReport(actual, ng.expected, compareContextOf(ng.input))
@@ -184,6 +217,23 @@ describe('compareReport', () => {
       field: 'weather.impact',
       path: 'weather.conditions',
     });
+  });
+});
+
+describe('report language (§10.13)', () => {
+  it('reads the language a summary is written in', () => {
+    expect(textLanguage('Level 4 slab pour completed by Apex Concrete.')).toBe('en');
+    expect(textLanguage('4. kat döşeme betonu Apex Concrete tarafından tamamlandı.')).toBe('tr');
+    expect(textLanguage('Se terminó el colado del nivel 4 con la bomba.')).toBe('es');
+    expect(textLanguage('')).toBeNull();
+  });
+
+  it('fails a Turkish report written in English', () => {
+    const tr = loadFixture('kartal-2026-10-09-tr');
+    const actual: DailyReportData = structuredClone(tr.expected);
+    actual.summary = 'Level 3 slab pour completed by Usta Beton; no incidents.';
+    const failed = compareReport(actual, tr.expected).filter((c) => !c.ok);
+    expect(failed.map((c) => c.field)).toEqual(['report_language']);
   });
 });
 

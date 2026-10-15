@@ -1,7 +1,10 @@
 {
   "languageDetected": ["en"],
   "summary": "Classroom wing east footings poured by Apex Concrete (approx. 32 yd³) after the city inspector passed the footing rebar at 10:00. South elevation CMU blockwork reached about window-sill height. Summit Drywall framed the gym office walls. One first-aid case: a mason cut his hand on a block, was treated on site and returned to work. Dry and sunny.",
-  "weather": { "conditionsText": "Dry and sunny, no impact", "periods": [] },
+  "weather": {
+    "conditionsText": "Dry and sunny, no impact",
+    "periods": []
+  },
   "manpower": [
     {
       "companyId": "00000000-0000-4000-8000-00000000d001",
@@ -16,8 +19,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "type": "voice_note",
+          "uploadId": "e0000018-0000-4000-8000-000000001801",
           "start": 6,
           "end": 13
         }
@@ -36,8 +39,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "type": "voice_note",
+          "uploadId": "e0000018-0000-4000-8000-000000001801",
           "start": 13,
           "end": 19.5
         }
@@ -56,8 +59,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "type": "voice_note",
+          "uploadId": "e0000018-0000-4000-8000-000000001801",
           "start": 19.5,
           "end": 26
         }
@@ -71,8 +74,8 @@
       "status": "complete",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "type": "voice_note",
+          "uploadId": "e0000018-0000-4000-8000-000000001801",
           "start": 6,
           "end": 13
         }
@@ -82,17 +85,21 @@
       "area": "Classroom wing",
       "activity": "East footing pour",
       "status": "complete",
-      "quantity": { "value": 32, "unit": "yd³", "heardAs": "thirty-two yards" },
+      "quantity": {
+        "value": 32,
+        "unit": "yd³",
+        "heardAs": "thirty-two yards"
+      },
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "type": "voice_note",
+          "uploadId": "e0000018-0000-4000-8000-000000001801",
           "start": 6,
           "end": 13
         },
         {
-          "type": "audio",
-          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "type": "voice_note",
+          "uploadId": "e0000018-0000-4000-8000-000000001801",
           "start": 26,
           "end": 34.5
         }
@@ -104,8 +111,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "type": "voice_note",
+          "uploadId": "e0000018-0000-4000-8000-000000001801",
           "start": 13,
           "end": 19.5
         }
@@ -117,8 +124,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000018-0000-4000-8000-000000001801",
+          "type": "voice_note",
+          "uploadId": "e0000018-0000-4000-8000-000000001801",
           "start": 19.5,
           "end": 26
         }
@@ -135,8 +142,8 @@
         "severity": "first_aid",
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000018-0000-4000-8000-000000001801",
+            "type": "voice_note",
+            "uploadId": "e0000018-0000-4000-8000-000000001801",
             "start": 34.5,
             "end": 43
           }
@@ -147,20 +154,20 @@
     "visitors": ["City building inspector (east footing rebar inspection, passed)"],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000018-0000-4000-8000-000000001801",
+        "type": "voice_note",
+        "uploadId": "e0000018-0000-4000-8000-000000001801",
         "start": 26,
         "end": 34.5
       },
       {
-        "type": "audio",
-        "messageId": "e0000018-0000-4000-8000-000000001801",
+        "type": "voice_note",
+        "uploadId": "e0000018-0000-4000-8000-000000001801",
         "start": 34.5,
         "end": 43
       },
       {
-        "type": "audio",
-        "messageId": "e0000018-0000-4000-8000-000000001801",
+        "type": "voice_note",
+        "uploadId": "e0000018-0000-4000-8000-000000001801",
         "start": 43,
         "end": 48
       }

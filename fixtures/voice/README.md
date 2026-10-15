@@ -11,7 +11,7 @@ recording (`audio`).
 | --------------------------------- | -------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `en-elm-2026-10-02.json`          | EN → en  | Priya Raman, Elm St. (EN · HI)     | Partial-day rain-out, one self-perform crew, a delivery (golden `elm-2026-10-02-rain-morning`)                 |
 | `es-en-riverside-2026-10-09.json` | ES + EN  | Marco Ruiz, Riverside (ES · EN)    | The hero report: code-switching, the Delta crew on site with no headcount (D27; golden `riverside-2026-10-09`) |
-| `tr-kartal-2026-10-09.json`       | TR → tr  | Emre Yıldız, Kartal (tr-TR, §18.2) | Four crews, a pour, the §18.2 glossary phrases; no golden case yet (W1-12 adds Turkish cases)                  |
+| `tr-kartal-2026-10-09.json`       | TR → tr  | Emre Yıldız, Kartal (tr-TR, §18.2) | Four crews, a pour, the §18.2 glossary phrases (golden `kartal-2026-10-09-tr`, W1-12)                          |
 
 ## Who reads them
 
@@ -21,7 +21,7 @@ recording (`audio`).
   first fixture in the requested language (a real recording gets the transcript of its reporter's
   language). The CI worker in `e2e-supabase` runs with it.
 - **The tests**: `apps/worker/src/ai/transcriber.test.ts` (each file parses, its language follows
-  from its reporter, the EN and ES + EN scripts equal their golden cases) and
+  from its reporter, the EN, ES + EN and TR scripts equal their golden cases) and
   `apps/worker/src/integration/upload.integration.test.ts` (a fixture upload through
   `transcribe_upload` on PGlite).
 - **`pnpm transcribe:fixture -- <id> [audio file]`**: the by-hand check with a real key. It runs a

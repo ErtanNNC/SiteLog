@@ -3,6 +3,7 @@ import type { Sql } from 'postgres';
 import {
   LINK_CODE_ALPHABET,
   deviceCookieName,
+  emptyReportData,
   linkCodeHash,
   uploadStoragePath,
 } from '@sitelog/shared';
@@ -16,7 +17,8 @@ import { connectStack, STACK_DB_URL } from './db.ts';
  * file_report for the confirmed version, after which no upload completes; the cookie and no-store
  * through the gateway; refusals, and no console code for a real org. And the RPCs raced on real
  * Postgres: transactions completing uploads of one site-day at once make one report and burn no
- * number, and a confirm raced with a voice note either files the confirmed draft or reopens it.
+ * number, and a confirm raced with a voice note either files the confirmed draft or reopens it;
+ * W1-12's field_answer_question() raced with a second answer and with a voice note.
  *
  * Needs SUPABASE_DB_URL (the stack's DB_URL) and FIELD_API_URL (`{API_URL}/functions/v1/field-api`,
  * as .env.example has it); the function must be up (CI warms it first). Skips without them.
@@ -463,5 +465,108 @@ describeRace('field_complete_upload on real Postgres', () => {
     expect(results.map((r) => r.reportNo).sort()).toEqual(
       days.map((_, i) => `FA-2-${String(i + 1).padStart(4, '0')}`),
     );
+  });
+
+  /** A web report awaiting an answer: a v2 draft (Delta's headcount unknown) and its question. */
+  async function awaitingAnswer(day: string) {
+    const first = await upload(f!.marco.id, f!.siteId, day);
+    const [done] =
+      (await sql`select field_complete_upload(${first}, ${f!.marco.id}) as r`) as unknown as [
+        { r: { reportId: string } },
+      ];
+    const reportId = done.r.reportId;
+    const draft = {
+      ...emptyReportData(day, { reportLanguage: 'en', units: 'imperial' }),
+      manpower: [
+        {
+          companyId: null,
+          companyNameHeard: 'the Delta guys',
+          companyName: 'Delta Mechanical',
+          workers: null,
+          hoursPerWorker: 8,
+          totalHours: null,
+          hoursBasis: 'full_day_default',
+          confidence: 0.85,
+          source: [],
+        },
+      ],
+    };
+    await sql`insert into report_versions (report_id, version, data, author)
+      values (${reportId}, 1, ${sql.json(draft)}, 'agent')`;
+    const [q] = await sql<{ id: string }[]>`
+      insert into questions (report_id, channel, field, target, prompt, asked_at)
+      values (${reportId}, 'web', 'manpower.workers', ${sql.json({ manpowerIndex: 0 })}, 'How many?', now())
+      returning id`;
+    await sql`update reports set status = 'awaiting_answer' where id = ${reportId}`;
+    return { reportId, questionId: q!.id, draft };
+  }
+
+  const answered = (draft: { manpower: Array<Record<string, unknown>> }, workers: number) => ({
+    ...draft,
+    manpower: [{ ...draft.manpower[0]!, workers, totalHours: workers * 8 }],
+  });
+
+  /** Runs the statements in transactions that all start before any of them takes a lock. */
+  async function raceTx(stmts: Array<(tx: Sql) => Promise<unknown>>) {
+    let started = 0;
+    let release!: () => void;
+    const all = new Promise<void>((resolve) => (release = resolve));
+    return Promise.all(
+      stmts.map((stmt) =>
+        sql
+          .begin(async (tx) => {
+            await tx`select 1`;
+            if (++started === stmts.length) release();
+            await all;
+            const out = await stmt(tx as unknown as Sql);
+            await tx`select pg_sleep(0.02)`;
+            return out;
+          })
+          .then(
+            () => 'ok',
+            (err: Error) => err.message,
+          ),
+      ),
+    );
+  }
+
+  it('answers a question once when two answers race (W1-12)', async () => {
+    const { reportId, questionId, draft } = await awaitingAnswer('2026-03-12');
+    const answer = (workers: number) => (tx: Sql) =>
+      tx`select field_answer_question(${reportId}, ${questionId}, ${f!.marco.id},
+           ${sql.json(draft)}, ${sql.json(answered(draft, workers))},
+           ${sql.json({ value: workers, text: String(workers) })},
+           ${sql.json({ type: 'answer', questionId })}, null)`;
+    const results = await raceTx([answer(4), answer(5)]);
+    expect(results.filter((r) => r === 'ok')).toHaveLength(1);
+    expect(results.filter((r) => r !== 'ok')).toEqual(['question_closed']);
+    const [state] = await sql<{ status: string; jobs: number; workers: number }[]>`
+      select r.status,
+             (select count(*)::int from jobs where dedupe_key = ${`decide:${reportId}:answer:${questionId}`}) as jobs,
+             (v.data -> 'manpower' -> 0 ->> 'workers')::int as workers
+      from reports r join report_versions v on v.report_id = r.id and v.version = 1
+      where r.id = ${reportId}`;
+    expect(state).toMatchObject({ status: 'processing', jobs: 1 });
+    expect([4, 5]).toContain(state!.workers);
+  });
+
+  it('serialises an answer with a voice note on its site-day (W1-12)', async () => {
+    const day = '2026-03-13';
+    const { reportId, questionId, draft } = await awaitingAnswer(day);
+    const voice = await upload(f!.dana.id, f!.siteId, day);
+    const [answer, complete] = await raceTx([
+      (tx) =>
+        tx`select field_answer_question(${reportId}, ${questionId}, ${f!.marco.id},
+             ${sql.json(draft)}, ${sql.json(answered(draft, 5))},
+             ${sql.json({ value: 5, text: '5' })}, ${sql.json({ type: 'answer', questionId })}, null)`,
+      (tx) => tx`select field_complete_upload(${voice}, ${f!.dana.id})`,
+    ]);
+    // The voice note always attaches; the answer lands first or finds the report processing.
+    expect(complete).toBe('ok');
+    expect(['ok', 'wrong_state']).toContain(answer);
+    const [state] = await sql<{ status: string; answered: boolean }[]>`
+      select r.status, q.answered_at is not null as answered
+      from reports r join questions q on q.report_id = r.id where r.id = ${reportId}`;
+    expect(state).toEqual({ status: 'processing', answered: answer === 'ok' });
   });
 });

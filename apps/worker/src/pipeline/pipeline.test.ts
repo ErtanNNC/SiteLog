@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   MASKED_CODE,
@@ -12,14 +10,13 @@ import {
   readReportData,
   upgradeV1toV2,
   type DailyReportDataV1,
-  type ExtractionOutput,
   type StoredReportData,
 } from '@sitelog/shared';
 import { buildEmail } from '../jobs/send_email';
 import { PermanentJobError } from '../jobs/types';
 import { buildReportPdfInput } from '../pdf/render';
-import { postProcessExtraction, type ExtractionInput } from '../ai/extract';
-import { compareReport } from '../ai/eval';
+import { postProcessExtraction } from '../ai/extract';
+import { compareReport, loadFixture } from '../ai/eval';
 import { createWorkerNotifier } from '../messaging';
 import {
   createHarness,
@@ -29,23 +26,17 @@ import {
   SITE_OAKMONT,
   SITE_RIVERSIDE,
 } from '../test/harness';
+import { legacyExpected, legacyInput, legacyRecorded } from '../test/legacy-fixtures';
 import { composeExtractionInput } from './compose';
 import { currentData, draftCardFor, storeDraft } from './draft';
 import { fileReport } from './file';
 import { learnTerms } from './glossary';
 import { selectNextQuestion, validateDraft } from './validate';
 
-const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
-const load = <T>(dir: string, id: string) =>
-  JSON.parse(readFileSync(join(FIXTURES, dir, `${id}.json`), 'utf8')) as T;
-
 describe('pipeline: validate + question selection', () => {
   it('riverside: the only gap is the Delta headcount, asked with the model options', () => {
-    const input = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09'),
-      input,
-    );
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
     const v = validateDraft(data, { required_fields: input.requiredFields }, 2);
     expect(v.isComplete).toBe(false);
     expect(v.missingRequired).toEqual([
@@ -56,17 +47,17 @@ describe('pipeline: validate + question selection', () => {
     expect(q).toMatchObject({
       field: 'manpower.workers',
       path: 'manpower.workers:Delta Mechanical',
-      options: ['4 · full day', '5 · full day'],
+      options: [
+        { id: 'o1', label: '4 · full day' },
+        { id: 'o2', label: '5 · full day' },
+      ],
     });
     expect(q!.prompt).toContain('the Delta guys');
   });
 
   it('oakmont: unknown company is flagged for review and asked with "Add"', () => {
-    const input = load<ExtractionInput>('transcripts', 'oakmont-unknown-sub');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'oakmont-unknown-sub'),
-      input,
-    );
+    const input = legacyInput('oakmont-unknown-sub');
+    const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
     const v = validateDraft(data, { required_fields: input.requiredFields }, 1);
     expect(v.isComplete).toBe(true);
     expect(v.reviewReasons).toEqual(['unknown_company:Ridgeway']);
@@ -84,15 +75,15 @@ describe('pipeline: validate + question selection', () => {
       })),
     );
     expect(q).toMatchObject({ field: 'company.unknown' });
-    expect(q!.options[0]).toBe('Add "Ridgeway"');
+    expect(q!.options[0]!.label).toBe('Add "Ridgeway"');
   });
 
   it('expected fixtures pass the eval comparison against themselves and fail when numbers change', () => {
     for (const id of ['riverside-2026-10-09', 'oakmont-unknown-sub', 'hillcrest-weather-day']) {
-      const expected = load<DailyReportDataV1>('expected', id);
+      const expected = loadFixture(id).expected;
       expect(compareReport(expected, expected).every((c) => c.ok)).toBe(true);
     }
-    const expected = load<DailyReportDataV1>('expected', 'hillcrest-weather-day');
+    const expected = loadFixture('hillcrest-weather-day').expected;
     const wrong = structuredClone(expected);
     wrong.manpower[0]!.workers = 6;
     wrong.weather.periods[0]!.lostHours = 7;
@@ -103,11 +94,8 @@ describe('pipeline: validate + question selection', () => {
   });
 
   it('draft card matches the §F7 format', () => {
-    const input = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09'),
-      input,
-    );
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
     const h = createHarness();
     const card = draftCardFor(
       {
@@ -140,9 +128,7 @@ describe('pipeline: validate + question selection', () => {
 describe('pipeline: compose + extract job + filing', () => {
   it('composes the extraction input from sources, transcripts and answers, then stores the draft', async () => {
     const h = createHarness({
-      claude: scriptedClaude([
-        { input: load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09') },
-      ]),
+      claude: scriptedClaude([{ input: legacyRecorded('riverside-2026-10-09') }]),
     });
     const siteDay = await h.db.getOrCreateSiteDay(
       SITE_RIVERSIDE,
@@ -150,8 +136,10 @@ describe('pipeline: compose + extract job + filing', () => {
       deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
     );
     await h.db.updateSiteDay(siteDay.id, {
-      weather: load<ExtractionInput>('transcripts', 'riverside-2026-10-09')
-        .observedWeather as unknown as Record<string, unknown>,
+      weather: legacyInput('riverside-2026-10-09').observedWeather as unknown as Record<
+        string,
+        unknown
+      >,
     });
     const report = await h.db.insertReport({
       org_id: h.org.id,
@@ -175,7 +163,7 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'audio',
       taken_at: audio.created_at,
     });
-    const fixture = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
+    const fixture = legacyInput('riverside-2026-10-09');
     await h.db.upsertTranscript({
       message_id: audio.id,
       language: 'es+en',
@@ -225,9 +213,7 @@ describe('pipeline: compose + extract job + filing', () => {
 
   it('a photo arriving during extraction rides along without another model call; a caption re-extracts', async () => {
     for (const caption of [null, 'L4 pour done']) {
-      const scripted = scriptedClaude([
-        { input: load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09') },
-      ]);
+      const scripted = scriptedClaude([{ input: legacyRecorded('riverside-2026-10-09') }]);
       const h = createHarness();
       const siteDay = await h.db.getOrCreateSiteDay(
         SITE_RIVERSIDE,
@@ -250,7 +236,7 @@ describe('pipeline: compose + extract job + filing', () => {
         duration_s: 168,
       });
       await h.db.insertReportSource({ report_id: report.id, message_id: audio.id, kind: 'audio' });
-      const fixture = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
+      const fixture = legacyInput('riverside-2026-10-09');
       await h.db.upsertTranscript({
         message_id: audio.id,
         language: 'es+en',
@@ -326,7 +312,7 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'audio',
       taken_at: audio.created_at,
     });
-    const fixture = load<ExtractionInput>('transcripts', 'elm-2026-10-08-no-work');
+    const fixture = legacyInput('elm-2026-10-08-no-work');
     await h.db.upsertTranscript({
       message_id: audio.id,
       language: 'en',
@@ -334,7 +320,7 @@ describe('pipeline: compose + extract job + filing', () => {
       segments: fixture.segments.map((x) => ({ start: x.start, end: x.end, text: x.text })),
       model: 'whisper-1',
     });
-    await storeDraft(h.ctx, report, load<DailyReportDataV1>('expected', 'elm-2026-10-08-no-work'));
+    await storeDraft(h.ctx, report, legacyExpected('elm-2026-10-08-no-work'));
 
     await h.runJob('decide_next', { reportId: report.id });
 
@@ -361,11 +347,8 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'daily',
       status: 'awaiting_confirmation',
     });
-    const input = load<ExtractionInput>('transcripts', 'oakmont-unknown-sub');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'oakmont-unknown-sub'),
-      input,
-    );
+    const input = legacyInput('oakmont-unknown-sub');
+    const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
     await storeDraft(h.ctx, report, data);
     await h.conversation(
       'awaiting_confirmation',
@@ -401,11 +384,8 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'daily',
       status: 'awaiting_confirmation',
     });
-    const input = load<ExtractionInput>('transcripts', 'oakmont-unknown-sub');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'oakmont-unknown-sub'),
-      input,
-    );
+    const input = legacyInput('oakmont-unknown-sub');
+    const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
     await storeDraft(h.ctx, report, data);
     h.setNow(new Date('2026-10-09T22:21:00Z'));
 
@@ -447,11 +427,8 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'daily',
       status: 'filed',
     });
-    const input = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09'),
-      input,
-    );
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
     await storeDraft(h.ctx, report, data);
     await h.db.updateReport(report.id, { filed_at: h.now, confirmed_at: h.now });
     await h.conversation('idle');
@@ -501,11 +478,8 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'daily',
       status: 'filed',
     });
-    const input = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09'),
-      input,
-    );
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
     await storeDraft(h.ctx, report, data);
     const filed = await h.db.updateReport(report.id, { filed_at: h.now, confirmed_at: h.now });
     const site = (await h.db.siteContext(SITE_RIVERSIDE))!;

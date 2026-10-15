@@ -1,4 +1,5 @@
 import type {
+  AnswerResponse,
   CompleteResponse,
   ConsentResponse,
   DayStatusResponse,
@@ -11,7 +12,12 @@ import type {
   UploadResponse,
   VerifyResponse,
 } from '@sitelog/shared/field-contract.ts';
-import type { ConsentRequest, DayStatusRequest, UploadRequest } from '@sitelog/shared/field-api.ts';
+import type {
+  AnswerRequest,
+  ConsentRequest,
+  DayStatusRequest,
+  UploadRequest,
+} from '@sitelog/shared/field-api.ts';
 import { fieldApi, FieldApiError, type FieldApiClient } from './client';
 
 /**
@@ -51,6 +57,12 @@ export function createFieldRoutes(api: FieldApiClient = fieldApi) {
       api.request<ReportView>(`reports/${encodeURIComponent(reportId)}`, {
         linkCode: code,
         signal,
+      }),
+    /** The open question's answer (W1-12; the Question screen is W1-13). */
+    answer: (code: string, reportId: string, body: AnswerRequest) =>
+      api.request<AnswerResponse>(`reports/${encodeURIComponent(reportId)}/answer`, {
+        body,
+        linkCode: code,
       }),
     dayStatus: (code: string, body: DayStatusRequest) =>
       api.request<DayStatusResponse>('day-status', { body, linkCode: code }),

@@ -1,0 +1,196 @@
+{
+  "id": "atasehir-2026-10-08-rain-tr",
+  "description": "Turkish (W1-12): Ataşehir Ofis Binası (Demir Yapı, §18.2), Selin Kaya (tr-TR). Rain 07:30–11:00 stopped the façade for 3.5 h, the own crew moved to plastering; every headcount and hour said, so nothing is asked. Metric units, report language tr.",
+  "expectedQuestion": null,
+  "site": {
+    "name": "Ataşehir Ofis Binası",
+    "projectCode": "AO-0512",
+    "timezone": "Europe/Istanbul",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-08",
+  "reportLanguage": "tr",
+  "units": "metric",
+  "reporterLocale": "tr-TR",
+  "channel": "web",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Selin",
+  "companies": [
+    {
+      "id": "d1000000-0000-4000-8000-00000000c001",
+      "name": "Usta Beton",
+      "trade": "Beton",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c002",
+      "name": "Volt Elektrik",
+      "trade": "Elektrik",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c003",
+      "name": "Akış Mekanik",
+      "trade": "Mekanik",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c004",
+      "name": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "aliases": [],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    {
+      "heard": "döküm",
+      "official": "Beton dökümü",
+      "kind": "term"
+    },
+    {
+      "heard": "kalıp söktük",
+      "official": "Kalıp sökümü yapıldı",
+      "kind": "term"
+    },
+    {
+      "heard": "demirci ekibi",
+      "official": "Donatı ekibi",
+      "kind": "term"
+    },
+    {
+      "heard": "TBM",
+      "official": "İş güvenliği bilgilendirmesi",
+      "kind": "term"
+    },
+    {
+      "heard": "tool box",
+      "official": "İş güvenliği bilgilendirmesi",
+      "kind": "term"
+    }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-08",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-08T20:30:00Z",
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
+    "hours": [
+      {
+        "time": "07:00",
+        "precipIn": 0.06,
+        "tempF": 57,
+        "windMph": 9,
+        "gustMph": 17
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0.12,
+        "tempF": 57,
+        "windMph": 10,
+        "gustMph": 19
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0.1,
+        "tempF": 58,
+        "windMph": 10,
+        "gustMph": 20
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0.05,
+        "tempF": 59,
+        "windMph": 9,
+        "gustMph": 18
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 8,
+        "gustMph": 15
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 8,
+        "gustMph": 14
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 7,
+        "gustMph": 12
+      }
+    ],
+    "summary": {
+      "precipIn": 0.33,
+      "tempMinF": 57,
+      "tempMaxF": 64,
+      "windMph": 9,
+      "gustMph": 20,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0.33,
+      "maxGustWorkingHoursMph": 20
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000b4",
+      "caption": "7. kat kolonlar",
+      "takenAt": "2026-10-08T14:10:00Z"
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000b5",
+      "takenAt": "2026-10-08T14:10:30Z"
+    }
+  ],
+  "segments": [
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+      "start": 0.0,
+      "end": 7.5,
+      "text": "Ataşehir Ofis Binası, günlük rapor. Sabah yedi buçuktan on bire kadar yağmur yağdı, dış cephede çalışamadık."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+      "start": 7.5,
+      "end": 15.0,
+      "text": "Öz ekip altı kişi tam gün çalıştı, yağmur yüzünden cephe işi üç buçuk saat durdu, o sürede beşinci katta sıvaya geçtik."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+      "start": 15.0,
+      "end": 21.5,
+      "text": "Volt Elektrik iki kişi tam gün, altıncı katta aydınlatma tesisatı, yüzde kırk bitti."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+      "start": 21.5,
+      "end": 28.0,
+      "text": "Usta Beton üç kişiyle saat birden beşe kadar yedinci kat kolonlarını döktü, yaklaşık on iki metreküp."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+      "start": 28.0,
+      "end": 34.0,
+      "text": "Sabah TBM yaptık, ıslak zeminde kayma riskini konuştuk. Kaza yok."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a2",
+      "start": 34.0,
+      "end": 39.0,
+      "text": "Yarın cephe işine devam edeceğiz. İki fotoğraf gönderiyorum."
+    }
+  ]
+}

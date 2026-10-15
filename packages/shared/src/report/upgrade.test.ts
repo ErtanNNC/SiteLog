@@ -15,6 +15,7 @@ import { deriveTotals } from './hours.ts';
 import { versionPhotos } from './photos.ts';
 import {
   UNDETERMINED_LANGUAGE,
+  downgradeV2toV1,
   readReportData,
   upgradeHoursBasisV1,
   upgradeObservedV1,
@@ -328,5 +329,42 @@ describe('upgradeV1toV2: pure and tolerant', () => {
         true,
       );
     }
+  });
+});
+
+describe('downgradeV2toV1 (the v1.0 consumers of the golden set, W1-12)', () => {
+  it('inverts upgradeV1toV2 for audio, reply and office sources', () => {
+    const v1 = DailyReportDataV1Schema.parse(stored(heroDataV1()));
+    const back = downgradeV2toV1(upgradeV1toV2(v1));
+    // New terms lose the language v1 never had; everything else round-trips.
+    expect(DailyReportDataV1Schema.parse(stored(back))).toEqual(
+      DailyReportDataV1Schema.parse(stored(v1)),
+    );
+  });
+  it('makes text sources of the ids that were typed messages, drops calls', () => {
+    const d = upgradeV1toV2(emptyReportDataV1('2026-10-07'));
+    d.workPerformed = [
+      {
+        area: 'Level 1',
+        activity: 'Framing',
+        status: 'in_progress',
+        source: [
+          { type: 'voice_note', uploadId: 't1', start: 0 },
+          { type: 'call', callId: 'c1', start: 3 },
+          { type: 'answer', questionId: 'q1' },
+        ],
+      },
+    ];
+    const v1 = downgradeV2toV1(d, { textIds: new Set(['t1']) });
+    expect(v1.workPerformed[0]!.source).toEqual([
+      { type: 'text', messageId: 't1' },
+      { type: 'reply', messageId: 'q1' },
+    ]);
+  });
+  it('refuses metric weather (v1 is imperial only)', () => {
+    const d = upgradeV1toV2(emptyReportDataV1('2026-10-07'));
+    d.units = 'metric';
+    d.weather.observed = { precip: 1, tempMin: 10, tempMax: 15, wind: 5, provider: 'Open-Meteo' };
+    expect(() => downgradeV2toV1(d)).toThrow(/imperial/);
   });
 });

@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-09",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en"],
   "summary": "The Level 2 post-tension deck passed inspection at 10:00; pour planned for Tuesday. Apex Concrete stripped edge forms and patched on Ramp B; Ironclad Steel placed shear wall rebar and the Kestrel crew formed the shear walls on Level 3. Shoring for Level 3 delivered at 13:00. Dry, cold morning. Toolbox talk on cold stress; no incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0,
-      "tempMinF": 44,
-      "tempMaxF": 60,
-      "windMph": 8,
-      "gustMph": 14,
+      "precip": 0,
+      "tempMin": 44,
+      "tempMax": 60,
+      "wind": 8,
+      "gust": 14,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Dry; cold morning, no impact",
@@ -27,12 +31,15 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "type": "voice_note",
+          "uploadId": "e0000026-0000-4000-8000-000000002601",
           "start": 6,
           "end": 13.5
         },
-        { "type": "reply", "messageId": "e0000026-0000-4000-8000-000000002603" }
+        {
+          "type": "answer",
+          "questionId": "e0000026-0000-4000-8000-000000002603"
+        }
       ]
     },
     {
@@ -48,8 +55,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "type": "voice_note",
+          "uploadId": "e0000026-0000-4000-8000-000000002601",
           "start": 13.5,
           "end": 20
         }
@@ -68,8 +75,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "type": "voice_note",
+          "uploadId": "e0000026-0000-4000-8000-000000002601",
           "start": 20,
           "end": 27
         }
@@ -83,8 +90,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "type": "voice_note",
+          "uploadId": "e0000026-0000-4000-8000-000000002601",
           "start": 6,
           "end": 13.5
         }
@@ -96,8 +103,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "type": "voice_note",
+          "uploadId": "e0000026-0000-4000-8000-000000002601",
           "start": 13.5,
           "end": 20
         }
@@ -109,8 +116,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000026-0000-4000-8000-000000002601",
+          "type": "voice_note",
+          "uploadId": "e0000026-0000-4000-8000-000000002601",
           "start": 20,
           "end": 27
         }
@@ -124,8 +131,8 @@
       "time": "13:00",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000026-0000-4000-8000-000000002602",
+          "type": "voice_note",
+          "uploadId": "e0000026-0000-4000-8000-000000002602",
           "start": 6.5,
           "end": 12
         }
@@ -140,14 +147,14 @@
     "visitors": ["Inspector (Level 2 post-tension deck, passed)"],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000026-0000-4000-8000-000000002601",
+        "type": "voice_note",
+        "uploadId": "e0000026-0000-4000-8000-000000002601",
         "start": 27,
         "end": 32
       },
       {
-        "type": "audio",
-        "messageId": "e0000026-0000-4000-8000-000000002602",
+        "type": "voice_note",
+        "uploadId": "e0000026-0000-4000-8000-000000002602",
         "start": 0,
         "end": 6.5
       }
@@ -159,25 +166,23 @@
       "item": "Level 2 post-tension deck pour on Tuesday",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000026-0000-4000-8000-000000002602",
+          "type": "voice_note",
+          "uploadId": "e0000026-0000-4000-8000-000000002602",
           "start": 0,
           "end": 6.5
         }
       ]
     }
   ],
-  "newTerms": [],
-  "missingRequired": [],
-  "lowConfidence": [],
-  "proposedQuestions": [],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-09",
   "photos": [
     {
-      "messageId": "e0000026-0000-4000-8000-000000002605",
+      "uploadId": "e0000026-0000-4000-8000-000000002605",
       "caption": "L3 shear walls",
       "takenAt": "2026-10-09T22:08:00Z"
     }
-  ]
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
 }

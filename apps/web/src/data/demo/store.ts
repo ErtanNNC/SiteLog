@@ -712,11 +712,15 @@ export class DemoStore {
     return r ? { reportId: r.id, reportNo: r.report_no } : null;
   }
 
-  /** Mirror of create_office_report(): a report typed in the panel, filed at once as version 1. */
+  /**
+   * Mirror of create_office_report(): a report typed in the panel, filed at once as version 1, in
+   * report data v2 (W1-12: the date, the org's report language and units stamped; v1 data from a
+   * panel built before W1-12 stays v1, as in SQL).
+   */
   createOfficeReport(input: {
     siteId: string;
     date: string;
-    data: DailyReportDataV1;
+    data: StoredReportData;
     userId: string;
     photos?: OfficePhotoUpload[];
   }): { reportId: string; reportNo: string; created: boolean } {
@@ -738,18 +742,33 @@ export class DemoStore {
     const at = this.nowIso();
     const isLate = Date.parse(at) > Date.parse(sd.deadline_at);
     const reportId = localId('report');
-    // Version 1 (v1 data) shows exactly the photos uploaded with it, ordered by their positions.
+    const v1 = input.data.schemaVersion === 1;
+    // Version 1 shows exactly the photos uploaded with it, ordered by their positions.
     const photos = placeOfficePhotos(
       [],
-      this.insertOfficePhotos(reportId, site.id, uploads, input.userId, 'messageId'),
+      this.insertOfficePhotos(
+        reportId,
+        site.id,
+        uploads,
+        input.userId,
+        v1 ? 'messageId' : 'uploadId',
+      ),
       uploads,
-    ) as DailyReportDataV1['photos'];
-    // Every crew row here was typed by the office: each "Add new…" name becomes a company.
-    const data: DailyReportDataV1 = this.linkTypedCompanies(
-      { ...structuredClone(input.data), reportDate: input.date, schemaVersion: 1, photos },
-      reportId,
-      input.userId,
     );
+    const stamped = (
+      v1
+        ? { ...structuredClone(input.data), reportDate: input.date, schemaVersion: 1, photos }
+        : {
+            ...structuredClone(input.data),
+            schemaVersion: 2,
+            reportDate: input.date,
+            reportLanguage: reportLanguageFor(d.org.locale),
+            units: d.org.units,
+            photos,
+          }
+    ) as StoredReportData;
+    // Every crew row here was typed by the office: each "Add new…" name becomes a company.
+    const data = this.linkTypedCompanies(stamped, reportId, input.userId);
     const report: ReportRow = {
       ...V12_ROW_DEFAULTS.reports,
       id: reportId,

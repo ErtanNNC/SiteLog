@@ -11,11 +11,12 @@ import { REPORT_LANGUAGES, UNIT_SYSTEMS, type ReportLanguage, type UnitSystem } 
  *   that reads a stored version (panel views, PDF, email, evidence pack) reads this shape, through
  *   `readReportData()` / `upgradeV1toV2()` (report/upgrade.ts).
  * - `DailyReportDataV1` (`schemaVersion: 1`) is the WhatsApp-era shape: every version stored before
- *   v1.2, and what the writers (worker extraction, `create_office_report`, the office editor for a
- *   v1 version) still write until W1-12. Stored v1 versions are never rewritten.
+ *   v1.2, and what the WhatsApp worker still writes until step 22 (W1-12 moved the web pipeline,
+ *   `create_office_report` and the panel editor to v2). Stored v1 versions are never rewritten.
  *
- * `StoredReportDataSchema` accepts either, discriminated on `schemaVersion`. The Claude tool
- * (`ExtractionOutputSchema`, `extractionToolInputSchema()`) stays v1 until W1-12.
+ * `StoredReportDataSchema` accepts either, discriminated on `schemaVersion`. The Claude tool is v2
+ * for the web recorder (`ReportExtractionSchema`, W1-12) and v1 for the WhatsApp worker until step
+ * 22 (`ExtractionOutputSchema`).
  */
 
 // ───────────────────────────── Lists both versions share ─────────────────────────────
@@ -208,7 +209,7 @@ export const ProposedQuestionSchema = z.object({
   field: z
     .string()
     .describe(
-      'Which gap this fills: manpower.workers | manpower.hours | company.unknown | weather.impact | safety | photo',
+      'The gap this fills: its missingRequired or lowConfidence path when it has one (e.g. "manpower.workers:Delta Mechanical"), else manpower.workers | manpower.hours | company.unknown | weather.impact | safety | photo',
     ),
   question: z
     .string()
@@ -254,6 +255,26 @@ export const DailyReportDataSchema = z.object({
   proposedQuestions: z.array(ProposedQuestionSchema),
 });
 export type DailyReportData = z.infer<typeof DailyReportDataSchema>;
+
+/**
+ * What the model returns in `submit_daily_report` (v2, §10.4; W1-12). Code adds `schemaVersion`,
+ * `reportDate`, `reportLanguage` and `units` (the org's), `photos` (the report's uploads) and
+ * `weather.observed` (OBSERVED_WEATHER in the org's units), and recomputes every total.
+ */
+export const ReportExtractionSchema = DailyReportDataSchema.omit({
+  schemaVersion: true,
+  reportDate: true,
+  reportLanguage: true,
+  units: true,
+  photos: true,
+}).extend({
+  summary: z
+    .string()
+    .max(700)
+    .describe('≤ 80 words, official terms, past tense, in REPORT_LANGUAGE, key facts first'),
+  weather: WeatherSchema.omit({ observed: true }),
+});
+export type ReportExtraction = z.infer<typeof ReportExtractionSchema>;
 
 /** An empty, valid v2 report skeleton in the org's report language and units. */
 export function emptyReportData(
@@ -551,7 +572,12 @@ function toJson(schema: z.ZodType): Record<string, unknown> {
   return json;
 }
 
-/** JSON Schema for the Claude `submit_daily_report` tool input (§10.4). */
+/** JSON Schema for the Claude `submit_daily_report` tool input, v1 (the WhatsApp path, step 22). */
 export function extractionToolInputSchema(): Record<string, unknown> {
   return toJson(ExtractionOutputSchema);
+}
+
+/** JSON Schema for the Claude `submit_daily_report` tool input, v2 (§10.3, §10.4; W1-12). */
+export function reportExtractionToolInputSchema(): Record<string, unknown> {
+  return toJson(ReportExtractionSchema);
 }

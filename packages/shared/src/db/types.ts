@@ -1219,6 +1219,23 @@ export type Database = {
         Args: { p_report_id: string; p_reporter_id: string; p_version: number };
         Returns: Json;
       };
+      // reports/:id/answer (W1-12, 20261015000002): stores the draft field-api computed (p_data,
+      // over p_base), the answer and its source, report → processing, decide_next queued:
+      // {status: 'processing' | 'already_answered', reportStatus, jobId}.
+      field_answer_question: {
+        Args: {
+          p_report_id: string;
+          p_question_id: string;
+          p_reporter_id: string;
+          p_base: Json;
+          p_data: Json;
+          p_answer: Json;
+          p_answer_source: Json;
+          /** "Add <company>": {name, manpowerIndex}; the unconfirmed company is created in SQL. */
+          p_new_company?: Json | null;
+        };
+        Returns: Json;
+      };
       sign_off_report: { Args: { p_report_id: string }; Returns: Json };
       undo_sign_off: { Args: { p_report_id: string }; Returns: Json };
       // p_photos: new uploads [{path, mime, caption?, takenAt?, position?}] (OfficePhotoUpload), max 20 per call.
@@ -1227,7 +1244,8 @@ export type Database = {
         Returns: Json;
       };
       mark_no_work: { Args: { p_site_day_id: string }; Returns: Json };
-      // Office-entered reports (20261013000001_office_reports.sql): admin / pm / ops, checked in SQL.
+      // Office-entered reports (20261013000001_office_reports.sql): admin / pm / ops, checked in SQL;
+      // report data v2 from W1-12 (20261015000002; v1 when the data says schemaVersion 1).
       create_office_report: {
         Args: { p_site_id: string; p_date: string; p_data: Json; p_photos?: Json };
         Returns: Json;

@@ -31,6 +31,12 @@ const AUDITED: Record<string, string> = {
     'extract:<report>:upload:<latest voice upload>: enqueued once every kept voice note of the report is transcribed (W1-11), so it names the notes up to that upload; a new voice note is a new latest upload',
   'send_welcome:{}':
     'the Notifier key of a send_welcome job (messages.payload, not jobs): per job, so a retry never texts twice',
+  'jobKeys.decideAfterExtract':
+    'decide:<report>:extract-job:<extract job id> (W1-12, web reports): per extract job that wrote the draft; a retry of that job finds its key taken, a new extraction is a new job id',
+  'jobKeys.questionReady':
+    'notify:question_ready:<question> (the Notifier key in messages.payload, W1-12): one text per question; a retried decide_next never texts twice, a new question is a new key',
+  'jobKeys.draftReady':
+    'notify:draft_ready:<report>:<decide job id> (the Notifier key, W1-12): per decide_next job that showed the draft; a retry never texts twice, a draft shown again after more audio or photos comes from a new decide job',
   'jobKeys.fileReportOn':
     'file:<report>:v<version>:m<confirm message> or :t<draft sent at>: one filing per WhatsApp confirm message or per draft sent (timeouts); drafts keep their version until filed, so a key per version alone would let a finished filing swallow later ones',
   // supabase/functions
@@ -56,6 +62,10 @@ const AUDITED: Record<string, string> = {
     'field_confirm_report: a later confirm of that version after its job finished without filing (n past the confirm_requested count; a taken n moves on)',
   "sql:'sms_inbound:' || p_provider_message_id":
     'receive_sms_inbound: per Twilio MessageSid; a redelivery whose job died re-queues it (requeue_dead_job)',
+  "sql:'extract:' || r.id || ':photo:' || u.id":
+    'field_complete_upload (W1-12): the extraction after a photo completed on a draft awaiting confirmation; per photo, and an upload completes once',
+  "sql:'decide:' || r.id || ':answer:' || q.id":
+    'field_answer_question (W1-12): decide_next after a web answer; per question, and a question is answered once (a retry returns already_answered)',
   "sql:'render_pdf:' || p_report_id || ':' || v_next":
     'per report version (office edits, sign-off)',
 };
@@ -72,7 +82,14 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 /** Not keys: type annotations and pass-throughs of a key chosen elsewhere. */
-const NOT_KEYS = ['string', 'opts.dedupeKey', 'input.dedupeKey', 'payload.dedupeKey'];
+const NOT_KEYS = [
+  'string',
+  'opts.dedupeKey',
+  'input.dedupeKey',
+  'payload.dedupeKey',
+  // decide_next's notice (apps/worker/src/pipeline/web.ts): jobKeys.questionReady / draftReady above
+  'notice.dedupeKey',
+];
 
 interface Found {
   keys: Map<string, string[]>;

@@ -68,6 +68,28 @@ export const ConfirmRequestSchema = z.strictObject({
 });
 
 /**
+ * `POST reports/:id/answer` (F7, Field-05; W1-12): the open question's answer, as an option the
+ * reporter tapped (`optionId`, one of `ReportView.question.options`) or, D28, a number they typed
+ * (`value`: the headcount, hours per worker or lost hours the question asks for), with the hours
+ * for a headcount (`hours`: a number, or `'full_day'`, the field app's default). Exactly one of
+ * `optionId` and `value`. _Other…_ (a spoken or typed free answer, Appendix B's `uploadId`) comes
+ * with M6 and is refused until then.
+ */
+export const AnswerRequestSchema = z
+  .strictObject({
+    questionId: z.uuid(),
+    optionId: z.string().trim().min(1).max(20).optional(),
+    value: z.number().min(0).max(9999).optional(),
+    hours: z.union([z.number().min(0).max(24), z.literal('full_day')]).optional(),
+  })
+  .refine((a) => (a.optionId === undefined) !== (a.value === undefined), {
+    message: 'optionId or value, not both',
+  })
+  .refine((a) => a.hours === undefined || a.value !== undefined, {
+    message: 'hours goes with value',
+  });
+
+/**
  * `POST day-status` (F12, the Today buttons): no work today, or site closed for weather. The F12
  * details are stored with the change; what they become (weather_events, lost hours) is spec §19
  * Q41.
@@ -102,5 +124,6 @@ export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 export type ConsentRequest = z.infer<typeof ConsentRequestSchema>;
 export type UploadRequest = z.infer<typeof UploadRequestSchema>;
 export type ConfirmRequest = z.infer<typeof ConfirmRequestSchema>;
+export type AnswerRequest = z.infer<typeof AnswerRequestSchema>;
 export type DayStatusRequest = z.infer<typeof DayStatusRequestSchema>;
 export type PreferencesRequest = z.infer<typeof PreferencesRequestSchema>;

@@ -1,12 +1,20 @@
 import type {
+  DailyReportData,
   DailyReportDataV1,
+  QuestionRow,
   ReportRow,
+  ReporterLocale,
   ReporterRow,
   SiteDayWeather,
   TranscriptRow,
 } from '@sitelog/shared';
-import { firstName, isVoiceSourceKind } from '@sitelog/shared';
-import type { ExtractionInput, ExtractionSegment } from '../ai/extract';
+import { REPORTER_LOCALES, firstName, isVoiceSourceKind } from '@sitelog/shared';
+import type {
+  ExtractionInput,
+  ExtractionInputV2,
+  ExtractionSegment,
+  ExtractionSegmentV2,
+} from '../ai/extract';
 import type { Ctx } from '../context';
 import type { SiteContext } from '../db';
 
@@ -121,6 +129,90 @@ export async function composeExtractionInput(
     segments,
     texts,
     reporterFirstName: reporter ? firstName(reporter.name) : 'the site manager',
+  };
+}
+
+/** An answer that came from the reporter (not resolved by a re-extraction, not given up on). */
+export function reporterAnswered(q: Pick<QuestionRow, 'answered_at' | 'answer'>): boolean {
+  if (!q.answered_at || !q.answer) return false;
+  const a = q.answer as { resolved_by?: unknown; unanswered?: unknown };
+  return !a.resolved_by && !a.unanswered;
+}
+
+export interface ComposeOptionsV2 {
+  previousDraft?: DailyReportData | null;
+  reportDate: string;
+  observedWeather?: SiteDayWeather | null;
+}
+
+/**
+ * The v2 extraction input (§10.4, W1-12) of a web recorder report: the transcript segments of its
+ * voice uploads (keyed by upload id), its photos, the answers the reporter gave (keyed by question
+ * id), the previous draft, and the org's report language and units with the reporter's locale.
+ */
+export async function composeReportExtractionInput(
+  ctx: Ctx,
+  report: ReportRow,
+  site: SiteContext,
+  reporter: ReporterRow | null,
+  opts: ComposeOptionsV2,
+): Promise<ExtractionInputV2> {
+  const sources = await ctx.db.listReportSources(report.id);
+  const voiceIds = sources.flatMap((s) =>
+    isVoiceSourceKind(s.kind) && s.upload_id ? [s.upload_id] : [],
+  );
+  const transcripts = await ctx.db.listTranscripts(voiceIds);
+  const byUpload = new Map(transcripts.map((t) => [t.upload_id, t]));
+  const segments: ExtractionSegmentV2[] = voiceIds.flatMap((id) =>
+    transcriptSegments(id, byUpload.get(id) ?? null).map(({ messageId, ...s }) => ({
+      uploadId: messageId,
+      ...s,
+    })),
+  );
+  const photos = sources.flatMap((s) =>
+    s.kind === 'photo' && s.upload_id
+      ? [
+          {
+            uploadId: s.upload_id,
+            caption: s.caption ?? undefined,
+            takenAt: s.taken_at ?? s.message_created_at,
+          },
+        ]
+      : [],
+  );
+  const questions = await ctx.db.listQuestions(report.id);
+  const previousAnswers = questions.filter(reporterAnswered).map((q) => ({
+    field: q.field,
+    question: q.prompt,
+    answer: answerText(q.answer),
+    questionId: q.id,
+  }));
+  const base = await composeExtractionInput(ctx, report, site, reporter, {
+    reportDate: opts.reportDate,
+    observedWeather: opts.observedWeather,
+  });
+  const locale = reporter?.locale ?? '';
+  const reporterLocale: ReporterLocale = (REPORTER_LOCALES as readonly string[]).includes(locale)
+    ? (locale as ReporterLocale)
+    : site.org.locale;
+  return {
+    site: base.site,
+    reportDate: opts.reportDate,
+    reportLanguage: report.language,
+    units: site.org.units,
+    reporterLocale,
+    channel: 'web',
+    defaultShiftHours: base.defaultShiftHours,
+    requiredFields: base.requiredFields,
+    companies: base.companies,
+    glossary: base.glossary,
+    rejectedMappings: base.rejectedMappings,
+    observedWeather: opts.observedWeather ?? null,
+    previousAnswers,
+    previousDraft: opts.previousDraft ?? null,
+    photos,
+    segments,
+    reporterFirstName: base.reporterFirstName,
   };
 }
 

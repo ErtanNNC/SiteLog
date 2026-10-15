@@ -1,4 +1,6 @@
-import type { CompanyRow, GlossaryTermRow, NewTermV1 } from '@sitelog/shared';
+import type { CompanyRow, GlossaryTermRow, NewTerm, NewTermV1 } from '@sitelog/shared';
+
+type AnyNewTerm = NewTerm | NewTermV1;
 import type { Ctx } from '../context';
 
 /**
@@ -8,13 +10,13 @@ import type { Ctx } from '../context';
  */
 export const AUTO_LEARN_CONFIDENCE = 0.9;
 
-export function termStatusFor(term: NewTermV1): 'auto_learned' | 'needs_review' {
+export function termStatusFor(term: AnyNewTerm): 'auto_learned' | 'needs_review' {
   return term.kind === 'term' && term.confidence >= AUTO_LEARN_CONFIDENCE
     ? 'auto_learned'
     : 'needs_review';
 }
 
-function known(term: NewTermV1, companies: CompanyRow[], glossary: GlossaryTermRow[]): boolean {
+function known(term: AnyNewTerm, companies: CompanyRow[], glossary: GlossaryTermRow[]): boolean {
   const heard = term.heard.trim().toLowerCase();
   if (!heard) return true;
   for (const c of companies) {
@@ -34,7 +36,7 @@ export async function learnTerms(
     orgId: string;
     siteId: string | null;
     reporterId?: string | null;
-    terms: NewTermV1[];
+    terms: AnyNewTerm[];
     companies: CompanyRow[];
     glossary: GlossaryTermRow[];
   },
@@ -52,7 +54,7 @@ export async function learnTerms(
       official: term.proposedOfficial.trim() || null,
       kind: term.kind,
       status: termStatusFor(term),
-      language: /[áéíóúñ¿¡]/i.test(term.heard) ? 'es' : 'en',
+      language: termLanguage(term),
     });
     out.push(row);
   }
@@ -67,4 +69,12 @@ export async function learnTerms(
     );
   }
   return out;
+}
+
+/** The language a term was heard in: v2's `heardLanguage` (en, es, tr), else guessed as before. */
+export function termLanguage(term: AnyNewTerm): string {
+  const said = 'heardLanguage' in term ? term.heardLanguage.slice(0, 2).toLowerCase() : '';
+  if (said === 'en' || said === 'es' || said === 'tr') return said;
+  if (/[çğıöşüİ]/i.test(term.heard)) return 'tr';
+  return /[áéíóúñ¿¡]/i.test(term.heard) ? 'es' : 'en';
 }

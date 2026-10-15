@@ -13,8 +13,8 @@
         "fullDay": true,
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000013-0000-4000-8000-000000001301",
+            "type": "voice_note",
+            "uploadId": "e0000013-0000-4000-8000-000000001301",
             "start": 0,
             "end": 19
           }
@@ -26,15 +26,20 @@
   "workPerformed": [],
   "deliveries": [],
   "equipment": [],
-  "safety": { "incidents": [], "noIncidentsStated": false, "visitors": [], "source": [] },
+  "safety": {
+    "incidents": [],
+    "noIncidentsStated": false,
+    "visitors": [],
+    "source": []
+  },
   "issues": [
     {
       "description": "Classroom wing footing excavations flooded",
       "impact": "Dewatering required before footing work can resume",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000013-0000-4000-8000-000000001301",
+          "type": "voice_note",
+          "uploadId": "e0000013-0000-4000-8000-000000001301",
           "start": 7.5,
           "end": 13.2
         }
@@ -46,8 +51,8 @@
       "item": "Pump out the classroom wing footings before the Apex Concrete pour",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000013-0000-4000-8000-000000001301",
+          "type": "voice_note",
+          "uploadId": "e0000013-0000-4000-8000-000000001301",
           "start": 19,
           "end": 24.5
         }

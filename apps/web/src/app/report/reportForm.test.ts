@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
-import { sameReportData } from './reportForm';
+import { readReportData } from '@sitelog/shared/report/upgrade.ts';
+import { sameReportData, toFormValues, toReportData, withPhotoEntries } from './reportForm';
 
 const base: DailyReportDataV1 = {
   ...emptyReportDataV1('2026-10-09'),
@@ -35,5 +36,49 @@ describe('sameReportData', () => {
         base,
       ),
     ).toBe(true);
+  });
+});
+
+describe('office edits write report data v2 (W1-12)', () => {
+  it('edits a stored v1 version through its v2 view into a v2 version', () => {
+    const v1: DailyReportDataV1 = {
+      ...emptyReportDataV1('2026-10-02'),
+      summary: 'Framing.',
+      manpower: [
+        {
+          companyId: 'apex',
+          companyNameHeard: 'Apex',
+          companyName: 'Apex Concrete',
+          workers: 4,
+          hoursPerWorker: 8,
+          totalHours: 32,
+          hoursBasis: 'reply',
+          confidence: 1,
+          source: [{ type: 'audio', messageId: 'm1', start: 3 }],
+        },
+      ],
+      photos: [{ messageId: 'p1', takenAt: '2026-10-02T20:00:00Z' }],
+    };
+    const base = withPhotoEntries(readReportData(v1), [
+      { messageId: 'p1', takenAt: '2026-10-02T20:00:00Z' },
+    ]);
+    const values = toFormValues(base);
+    values.manpower[0]!.workers = '5';
+    const out = toReportData(values, base, {
+      userId: 'u1',
+      at: '2026-10-03T12:00:00Z',
+      companies: [{ id: 'apex', name: 'Apex Concrete', trade: 'Concrete' } as never],
+    });
+    expect(out).toMatchObject({ schemaVersion: 2, reportLanguage: 'en', units: 'imperial' });
+    expect(out.manpower[0]).toMatchObject({
+      workers: 5,
+      totalHours: 40,
+      hoursBasis: 'office_edit',
+    });
+    expect(out.manpower[0]!.source).toEqual([
+      { type: 'voice_note', uploadId: 'm1', start: 3 },
+      { type: 'office_edit', userId: 'u1', at: '2026-10-03T12:00:00Z' },
+    ]);
+    expect(out.photos).toEqual([{ uploadId: 'p1', takenAt: '2026-10-02T20:00:00Z' }]);
   });
 });

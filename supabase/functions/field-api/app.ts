@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { getCookie, setCookie } from 'hono/cookie';
 import type { z } from 'zod';
 import {
+  AnswerRequestSchema,
   ConfirmRequestSchema,
   ConsentRequestSchema,
   DayStatusRequestSchema,
@@ -9,15 +10,19 @@ import {
   FIELD_RATE_LIMITS,
   HISTORY_DAYS,
   PreferencesRequestSchema,
+  QUESTION_FIELDS,
   REQUIRED_CONSENTS,
   ResolveRequestSchema,
   SIGNED_URL_SECONDS,
   UploadRequestSchema,
   VERIFY_CODE_TTL_S,
   VerifyRequestSchema,
+  applyAnswer,
   deviceCookieName,
   firstName,
   linkCodeHash,
+  numberAnswer,
+  optionAnswer,
   readReportData,
   sha256Hex,
   toCountryPack,
@@ -25,6 +30,8 @@ import {
   uploadMediaType,
   uploadStoragePath,
   deadlineInstant,
+  type AnswerResponse,
+  type AnswerValue,
   type CompleteResponse,
   type ConfirmResponse,
   type ConsentResponse,
@@ -37,6 +44,8 @@ import {
   type LinkExpiredBody,
   type NotifyOutcome,
   type PreferencesResponse,
+  type QuestionField,
+  type QuestionSpec,
   type ReportView,
   type ReporterRow,
   type ResolveResponse,
@@ -61,6 +70,7 @@ import {
   historyStart,
   nearestDeadlineSite,
   needsConsent,
+  numberAnswerLabel,
   newDeviceToken,
   newVerifyCode,
   originAllowed,
@@ -69,6 +79,7 @@ import {
   scopeSites,
   siteDeadline,
   storedObjectProblem,
+  storedQuestionOptions,
   verifyCodeHash,
 } from './logic.ts';
 import { FieldDbError, type FieldStore, type OrgContext } from './store.ts';
@@ -701,6 +712,88 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       : c.json({ status: 'queued' } satisfies ConfirmResponse, 202);
   });
 
+  // ── reports/:id/answer (F7, Field-05; W1-12) ─────────────────────────────────────────────────
+  app.post('/reports/:id/answer', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const report = await reportInScope(ctx, c.req.param('id'));
+    const body = await parseBody(c, AnswerRequestSchema);
+    const question = await store.getQuestion(body.questionId);
+    if (!question || question.report_id !== report.id) {
+      throw new FieldError(404, 'not_found', 'Question not found');
+    }
+    // A WhatsApp question (no channel) or one code cannot read is not the web's to answer.
+    if (
+      question.channel !== 'web' ||
+      !(QUESTION_FIELDS as readonly string[]).includes(question.field)
+    ) {
+      throw new FieldError(409, 'question_closed');
+    }
+    const field = question.field as QuestionField;
+    const target = (question.target ?? {}) as QuestionSpec['target'];
+
+    // The answer in code (§10.5): the option's value (a fallback option) or its label parsed (the
+    // model's option); D28, a typed number for the field it answers. Never a model call here.
+    let value: AnswerValue | null;
+    let label: string;
+    if (body.optionId !== undefined) {
+      const option = storedQuestionOptions(question.options).find((o) => o.id === body.optionId);
+      if (!option) throw new FieldError(400, 'answer_not_accepted', 'Unknown option');
+      value = optionAnswer(field, option);
+      label = option.label;
+    } else {
+      value = numberAnswer(field, body.value!, body.hours);
+      label = numberAnswerLabel(body.value!, body.hours);
+    }
+    // A headcount question is only answered by a headcount.
+    if (!value || (field === 'manpower.workers' && value.workers == null)) {
+      throw new FieldError(400, 'answer_not_accepted');
+    }
+    const answer = {
+      ...(body.optionId !== undefined
+        ? { optionId: body.optionId }
+        : { value: body.value, ...(body.hours !== undefined ? { hours: body.hours } : {}) }),
+      text: label,
+      parsed: value,
+      via: 'web',
+    };
+
+    const version = await store.getVersion(report.id, report.current_version);
+    if (!version) throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    const draft = readReportData(version.data as Parameters<typeof readReportData>[0]);
+    const settings = ctx.org.settings;
+    if (!settings) throw new Error(`org ${ctx.org.org.id} has no settings`);
+    const site = ctx.sites.find((s) => s.id === report.site_id)!;
+
+    let newCompany: { name: string; manpowerIndex: number } | null = null;
+    if (field === 'company.unknown' && value.companyAction === 'add') {
+      const index = target.manpowerIndex;
+      const entry = index !== undefined ? draft.manpower[index] : undefined;
+      const name = (value.companyName ?? entry?.companyName ?? target.companyName ?? '').trim();
+      if (index === undefined || !entry || !name) throw new FieldError(400, 'answer_not_accepted');
+      newCompany = { name, manpowerIndex: index };
+    }
+    const applied = applyAnswer(draft, { field, target }, value, {
+      defaultShiftHours: Number(settings.default_shift_hours),
+      workingHours: site.working_hours,
+      source: { type: 'answer', questionId: question.id },
+    });
+    // field_answer_question() checks the question is the open one, the report awaits an answer
+    // and the draft is still `version.data`, under the site-day lock; it stores the draft and the
+    // answer, audits report.question_answered and enqueues decide_next (decide:<report>:answer:<q>).
+    const res = await store.answerQuestion({
+      reportId: report.id,
+      questionId: question.id,
+      reporterId: ctx.reporter.id,
+      base: version.data,
+      data: applied.data,
+      answer,
+      answerSource: { type: 'answer', questionId: question.id },
+      newCompany,
+    });
+    const out: AnswerResponse = { status: res.status, reportStatus: res.reportStatus };
+    return c.json(out, res.status === 'processing' ? 202 : 200);
+  });
+
   // ── day-status (F12 buttons) ─────────────────────────────────────────────────────────────────
   app.post('/day-status', async (c) => {
     const ctx = await authenticate(c, { consent: true });
@@ -849,6 +942,8 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   day_closed: [409, 'day_closed'],
   wrong_state: [409, 'wrong_state'],
   invalid_status: [400, 'invalid_request'],
+  question_not_found: [404, 'not_found'],
+  question_closed: [409, 'question_closed'],
 };
 
 function errorResponse(c: Context, err: unknown, now: Date): Response {

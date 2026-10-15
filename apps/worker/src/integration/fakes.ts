@@ -2,11 +2,14 @@ import { copyFile, readFile } from 'node:fs/promises';
 import type Anthropic from '@anthropic-ai/sdk';
 import {
   ExtractionOutputSchema,
+  ReportExtractionSchema,
+  downgradeExtractionV2,
   type ClassifiedReply,
   type CorrectionResult,
   type DayOffClassification,
   type ExtractionOutput,
   type ParsedAnswer,
+  type ReportExtraction,
   type SiteDayWeather,
 } from '@sitelog/shared';
 import type { MessagesClient } from '../ai/claude';
@@ -209,7 +212,10 @@ export function sleep(ms: number): Promise<void> {
 export interface FixtureCase {
   id: string;
   fixture: EvalFixture;
+  /** The tool output in v1 terms, for the WhatsApp worker's extraction (until step 22). */
   recorded: ExtractionOutput;
+  /** The tool output as the golden set holds it (v2, W1-12), for the web recorder's extraction. */
+  recordedV2: ReportExtraction;
   /** The (first) voice note of the case: its fixture message id and segments. */
   voiceMessageId: string;
   segments: Array<{ start: number; end: number; text: string }>;
@@ -242,8 +248,8 @@ export function loadFixtureLibrary(filter: string[] = []): FixtureLibrary {
   const cases = new Map<string, FixtureCase>();
   for (const f of loadFixtures(FIXTURES_DIR, filter)) {
     if (!f.recorded) continue;
-    const voiceIds = Array.from(new Set(f.input.segments.map((s) => s.messageId)));
-    if (voiceIds.length !== 1 || f.input.texts.length > 0) continue;
+    const voiceIds = Array.from(new Set(f.input.segments.map((s) => s.uploadId)));
+    if (voiceIds.length !== 1 || f.whatsappText) continue;
     const voiceMessageId = voiceIds[0]!;
     const segments = f.input.segments.map((s) => ({ start: s.start, end: s.end, text: s.text }));
     const lang = f.recorded.languageDetected.includes('es')
@@ -254,10 +260,12 @@ export function loadFixtureLibrary(filter: string[] = []): FixtureLibrary {
     cases.set(f.id, {
       id: f.id,
       fixture: f,
-      recorded: f.recorded,
+      // v1 is US English imperial only; a Turkish case replays on the web path only.
+      recorded: downgradeExtractionV2(f.recorded),
+      recordedV2: f.recorded,
       voiceMessageId,
       segments,
-      photoIds: f.input.photos.map((p) => p.messageId),
+      photoIds: f.input.photos.map((p) => p.uploadId),
       durationS: Math.max(5, Math.ceil(Math.max(...segments.map((s) => s.end)))),
       language: lang,
     });
@@ -372,8 +380,10 @@ export interface FakeClaude extends MessagesClient {
 export interface FakeClaudeOptions {
   lib: FixtureLibrary;
   sim: Sim;
-  /** Adjust the recorded extraction of a case before it is returned. */
+  /** Adjust the recorded extraction of a case before it is returned (v1, WhatsApp). */
   extraction?: (fixtureId: string, out: ExtractionOutput) => ExtractionOutput;
+  /** The same for the web recorder's v2 extraction (W1-12). */
+  extractionV2?: (fixtureId: string, out: ReportExtraction) => ReportExtraction;
   /** classify_reply by reply text; falls back to replies.json, then a state-based guess. */
   classify?: (text: string) => ClassifiedReply | null;
   /** parse_answer by reply text; falls back to replies.json "delta-5-full-day" for headcounts. */
@@ -433,6 +443,26 @@ function toolMessage(
 }
 
 /** What Claude returns for an input without a voice note or text: nothing stated. */
+/** An empty v2 extraction (a web report whose note the library does not know). */
+export function emptyExtractionV2(): ReportExtraction {
+  return ReportExtractionSchema.parse({
+    languageDetected: [],
+    summary: '',
+    weather: { conditionsText: '', periods: [] },
+    manpower: [],
+    workPerformed: [],
+    deliveries: [],
+    equipment: [],
+    safety: { incidents: [], noIncidentsStated: false, visitors: [], source: [] },
+    issues: [],
+    nextWorkday: [],
+    newTerms: [],
+    missingRequired: [],
+    lowConfidence: [],
+    proposedQuestions: [],
+  });
+}
+
 export function emptyExtraction(): ExtractionOutput {
   return ExtractionOutputSchema.parse({
     languageDetected: [],
@@ -488,12 +518,15 @@ export function createFakeClaude(opts: FakeClaudeOptions): FakeClaude {
         const fast = { input: 900, output: 120, cacheRead: 600 };
         switch (tool) {
           case 'submit_daily_report': {
-            const voiceIds = Array.from(text.matchAll(/VOICE NOTE messageId=([0-9a-f-]{36})/g)).map(
-              (m) => m[1]!,
-            );
+            // v2 (the web recorder, W1-12) names voice notes by uploadId; v1 (WhatsApp) by messageId.
+            const v2 = /VOICE NOTE uploadId=|^CHANNEL: /m.test(text);
+            const idKey = v2 ? 'uploadId' : 'messageId';
+            const voiceIds = Array.from(
+              text.matchAll(new RegExp(`VOICE NOTE ${idKey}=([0-9a-f-]{36})`, 'g')),
+            ).map((m) => m[1]!);
             const hasText = /TEXT MESSAGE messageId=/.test(text);
             const photosLine = /^PHOTOS: (.*)$/m.exec(text)?.[1] ?? '[]';
-            const photos = JSON.parse(photosLine) as Array<{ messageId: string }>;
+            const photos = JSON.parse(photosLine) as Array<Record<string, string>>;
             const c = lib.findInText(text);
             await sim.call('claude');
             if (!c) {
@@ -501,7 +534,7 @@ export function createFakeClaude(opts: FakeClaudeOptions): FakeClaude {
               return toolMessage(
                 params,
                 tool,
-                emptyExtraction(),
+                v2 ? emptyExtractionV2() : emptyExtraction(),
                 { input: 3000, output: 400, cacheRead: 2500 },
                 n,
               );
@@ -510,9 +543,20 @@ export function createFakeClaude(opts: FakeClaudeOptions): FakeClaude {
             const map = new Map<string, string>();
             if (voiceIds[0]) map.set(c.voiceMessageId, voiceIds[0]);
             c.photoIds.forEach((id, i) => {
-              const actual = photos[i]?.messageId;
+              const actual = photos[i]?.[idKey];
               if (actual) map.set(id, actual);
             });
+            if (v2) {
+              let out2 = remapIds(structuredClone(c.recordedV2), map);
+              if (opts.extractionV2) out2 = opts.extractionV2(c.id, out2);
+              return toolMessage(
+                params,
+                tool,
+                out2,
+                { input: 7000, output: 1800, cacheRead: 5200 },
+                n,
+              );
+            }
             let out = remapIds(structuredClone(c.recorded), map);
             if (opts.extraction) out = opts.extraction(c.id, out);
             return toolMessage(

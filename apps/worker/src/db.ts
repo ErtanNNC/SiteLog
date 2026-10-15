@@ -7,6 +7,7 @@ import type {
   CountryRow,
   ConvoState,
   EvidencePackRow,
+  FieldChannel,
   GlossaryTermRow,
   InboundReporterRow,
   InboundScope,
@@ -22,6 +23,7 @@ import type {
   ReportCostRow,
   ReportRow,
   ReportSourceRow,
+  ReportStatus,
   ReportVersionRow,
   ReporterRow,
   SiteDayRow,
@@ -167,6 +169,8 @@ export interface QuestionInput {
   options: Json | null;
   asked_message_id?: string | null;
   asked_at?: string | Date | null;
+  /** 'web' for the web recorder's questions (W1-12, D13); null for the WhatsApp worker's. */
+  channel?: FieldChannel | null;
 }
 
 export interface QuestionPatch {
@@ -176,6 +180,7 @@ export interface QuestionPatch {
   answered_message_id?: string | null;
   answer?: Json | null;
   answered_at?: string | Date | null;
+  answer_source?: Json | null;
 }
 
 export interface GlossaryUpsert {
@@ -474,6 +479,17 @@ export interface Db {
   listQuestions(reportId: string): Promise<QuestionRow[]>;
   updateQuestion(id: string, patch: QuestionPatch): Promise<void>;
 
+  // web pipeline (W1-12)
+  /**
+   * Sets a report's status only while it is one of `from` (a report filed, voided or reopened by
+   * an upload meanwhile keeps its status); true when it changed.
+   */
+  setReportStatus(id: string, to: ReportStatus, from: readonly ReportStatus[]): Promise<boolean>;
+  /** When a device of the reporter (not revoked) last called field-api (D25), else null. */
+  reporterDeviceLastSeen(reporterId: string): Promise<string | null>;
+  /** A queued or running job of this type for the report, other than `exceptJobId`. */
+  hasActiveReportJob(type: JobType, reportId: string, exceptJobId?: number): Promise<boolean>;
+
   // unknown contacts (§6.3; the WhatsApp router writes them with no channel, D13)
   findPendingUnknownContact(phone: string): Promise<UnknownContactRow | null>;
   getUnknownContact(id: string): Promise<UnknownContactRow | null>;
@@ -639,6 +655,7 @@ const JSON_COLUMNS = new Set([
   'target',
   'options',
   'answer',
+  'answer_source',
   'data',
   'weather',
   'source',
@@ -1129,7 +1146,7 @@ export function createDb(sql: Sql): Db {
         values (${input.report_id}, ${input.version}, ${sql.json(input.data as never)}, ${input.summary}, ${input.author}, ${input.author_user_id ?? null}, ${input.author_message_id ?? null}, ${input.change_note ?? null})
         on conflict (report_id, version) do update set data = excluded.data, summary = excluded.summary, change_note = excluded.change_note, author_message_id = excluded.author_message_id
           where exists (select 1 from reports r where r.id = excluded.report_id
-                          and (r.status in ('collecting','awaiting_answer','awaiting_confirmation') or excluded.version > r.current_version))
+                          and (r.status in ('collecting','processing','awaiting_answer','awaiting_confirmation') or excluded.version > r.current_version))
         returning *`;
       const row = rows[0];
       if (!row)
@@ -1168,8 +1185,8 @@ export function createDb(sql: Sql): Db {
     // questions ---------------------------------------------------------------------------
     async insertQuestion(input) {
       const rows = await sql<QuestionRow[]>`
-        insert into questions (report_id, field, target, prompt, options, asked_message_id, asked_at)
-        values (${input.report_id}, ${input.field}, ${sql.json((input.target ?? null) as never)}, ${input.prompt}, ${sql.json((input.options ?? null) as never)}, ${input.asked_message_id ?? null}, ${iso(input.asked_at)})
+        insert into questions (report_id, field, target, prompt, options, asked_message_id, asked_at, channel)
+        values (${input.report_id}, ${input.field}, ${sql.json((input.target ?? null) as never)}, ${input.prompt}, ${sql.json((input.options ?? null) as never)}, ${input.asked_message_id ?? null}, ${iso(input.asked_at)}, ${input.channel ?? null})
         returning *`;
       return rows[0]!;
     },
@@ -1186,6 +1203,30 @@ export function createDb(sql: Sql): Db {
       if (patch.asked_at !== undefined) p.asked_at = iso(patch.asked_at);
       if (patch.answered_at !== undefined) p.answered_at = iso(patch.answered_at);
       await sql`update questions set ${setClause(p)} where id = ${id}`;
+    },
+
+    // web pipeline (W1-12) -------------------------------------------------------------------
+    async setReportStatus(id, to, from) {
+      const rows = await sql<Array<{ id: string }>>`
+        update reports set status = ${to}::report_status
+        where id = ${id} and status = any(${sql.array([...from])}::report_status[])
+        returning id`;
+      return rows.length > 0;
+    },
+    async reporterDeviceLastSeen(reporterId) {
+      const rows = await sql<Array<{ seen: Date | string | null }>>`
+        select max(last_seen_at) as seen from field_devices
+        where reporter_id = ${reporterId} and revoked_at is null`;
+      const seen = rows[0]?.seen ?? null;
+      return seen === null ? null : new Date(seen).toISOString();
+    },
+    async hasActiveReportJob(type, reportId, exceptJobId) {
+      const rows = await sql<Array<{ id: number }>>`
+        select id from jobs
+        where type = ${type} and payload ->> 'reportId' = ${reportId}
+          and status in ('queued', 'running') and id <> ${exceptJobId ?? -1}
+        limit 1`;
+      return rows.length > 0;
     },
 
     // unknown contacts --------------------------------------------------------------------

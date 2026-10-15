@@ -4,6 +4,7 @@ import type { AppClient } from '../_shared/supabase.ts';
 import {
   FIELD_DB_ERRORS,
   FieldDbError,
+  type AnswerResult,
   type CompleteUploadResult,
   type ConfirmResult,
   type DayStatusResult,
@@ -93,7 +94,7 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
         admin.from('countries').select('*').eq('code', org.country).single().throwOnError(),
         admin
           .from('org_settings')
-          .select('default_deadline, working_days')
+          .select('default_deadline, working_days, default_shift_hours')
           .eq('org_id', orgId)
           .maybeSingle()
           .throwOnError(),
@@ -241,6 +242,16 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       return data[0] ?? null;
     },
 
+    async getQuestion(id) {
+      const { data } = await admin
+        .from('questions')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+        .throwOnError();
+      return data;
+    },
+
     async countReportMedia(reportId) {
       const { data: uploads } = await admin
         .from('uploads')
@@ -360,6 +371,21 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
           p_report_id: reportId,
           p_reporter_id: reporterId,
           p_version: version,
+        }),
+      );
+    },
+
+    async answerQuestion(input) {
+      return await rpc<AnswerResult>(
+        admin.rpc('field_answer_question', {
+          p_report_id: input.reportId,
+          p_question_id: input.questionId,
+          p_reporter_id: input.reporterId,
+          p_base: input.base,
+          p_data: input.data,
+          p_answer: input.answer,
+          p_answer_source: input.answerSource,
+          p_new_company: input.newCompany,
         }),
       );
     },

@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-06",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en"],
   "summary": "Summit Drywall continued the Bay 3 office build-out (4 workers, 30 h). The Kestrel crew saw-cut approx. 240 linear feet of slab in Bay 2. BrightLine Electric completed the dock lighting. Dry and breezy; no weather impact. Toolbox talk on saw safety and slurry cleanup; no incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0,
-      "tempMinF": 54,
-      "tempMaxF": 66,
-      "windMph": 16,
-      "gustMph": 24,
+      "precip": 0,
+      "tempMin": 54,
+      "tempMax": 66,
+      "wind": 16,
+      "gust": 24,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Dry; breezy off the lake, no impact",
@@ -27,8 +31,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000007-0000-4000-8000-000000000701",
+          "type": "voice_note",
+          "uploadId": "e0000007-0000-4000-8000-000000000701",
           "start": 5.9,
           "end": 14.2
         }
@@ -47,8 +51,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000007-0000-4000-8000-000000000701",
+          "type": "voice_note",
+          "uploadId": "e0000007-0000-4000-8000-000000000701",
           "start": 14.2,
           "end": 22
         }
@@ -67,8 +71,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000007-0000-4000-8000-000000000701",
+          "type": "voice_note",
+          "uploadId": "e0000007-0000-4000-8000-000000000701",
           "start": 22,
           "end": 29.5
         }
@@ -82,8 +86,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000007-0000-4000-8000-000000000701",
+          "type": "voice_note",
+          "uploadId": "e0000007-0000-4000-8000-000000000701",
           "start": 5.9,
           "end": 14.2
         }
@@ -93,11 +97,15 @@
       "area": "Bay 2",
       "activity": "Slab saw-cutting",
       "status": "in_progress",
-      "quantity": { "value": 240, "unit": "lf", "heardAs": "two hundred and forty linear feet" },
+      "quantity": {
+        "value": 240,
+        "unit": "lf",
+        "heardAs": "two hundred and forty linear feet"
+      },
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000007-0000-4000-8000-000000000701",
+          "type": "voice_note",
+          "uploadId": "e0000007-0000-4000-8000-000000000701",
           "start": 14.2,
           "end": 22
         }
@@ -109,8 +117,8 @@
       "status": "complete",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000007-0000-4000-8000-000000000701",
+          "type": "voice_note",
+          "uploadId": "e0000007-0000-4000-8000-000000000701",
           "start": 22,
           "end": 29.5
         }
@@ -126,8 +134,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000007-0000-4000-8000-000000000701",
+        "type": "voice_note",
+        "uploadId": "e0000007-0000-4000-8000-000000000701",
         "start": 29.5,
         "end": 35
       }
@@ -139,21 +147,22 @@
       "item": "Dock levelers arrive Thursday at 08:00",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000007-0000-4000-8000-000000000701",
+          "type": "voice_note",
+          "uploadId": "e0000007-0000-4000-8000-000000000701",
           "start": 35,
           "end": 40
         }
       ]
     }
   ],
+  "photos": [
+    {
+      "uploadId": "e0000007-0000-4000-8000-000000000705",
+      "takenAt": "2026-10-06T21:58:00Z"
+    }
+  ],
   "newTerms": [],
   "missingRequired": [],
   "lowConfidence": [],
-  "proposedQuestions": [],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-06",
-  "photos": [
-    { "messageId": "e0000007-0000-4000-8000-000000000705", "takenAt": "2026-10-06T21:58:00Z" }
-  ]
+  "proposedQuestions": []
 }

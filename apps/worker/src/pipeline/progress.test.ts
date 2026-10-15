@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   deadlineInstant,
@@ -10,18 +8,13 @@ import {
   type ReportRow,
 } from '@sitelog/shared';
 import type { MessagesClient } from '../ai/claude';
-import type { ExtractionInput } from '../ai/extract';
 import { contextOf } from '../router/context';
 import { createHarness, scriptedClaude, SITE_RIVERSIDE, type Harness } from '../test/harness';
+import { legacyInput, legacyRecorded } from '../test/legacy-fixtures';
 import { PROGRESS_AFTER_MS, progressSteps } from './progress';
 
-const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
-const riversideInput = JSON.parse(
-  readFileSync(join(FIXTURES, 'transcripts', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionInput;
-const riversideOutput = JSON.parse(
-  readFileSync(join(FIXTURES, 'tool-outputs', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionOutput;
+const riversideInput = legacyInput('riverside-2026-10-09');
+const riversideOutput = legacyRecorded('riverside-2026-10-09');
 
 /** The riverside extraction with the Delta headcount answered (5 × 8 h), so the crew is known. */
 function riversideComplete(): ExtractionOutput {

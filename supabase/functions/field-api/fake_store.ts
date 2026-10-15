@@ -18,6 +18,8 @@ import type { AuditEntry } from '../_shared/audit.ts';
 import type { StoredObject } from './logic.ts';
 import {
   FieldDbError,
+  type AnswerInput,
+  type AnswerResult,
   type CompleteUploadResult,
   type ConfirmResult,
   type DayStatusResult,
@@ -194,6 +196,9 @@ export class FakeFieldStore implements FieldStore {
       this.questions.filter((q) => q.report_id === reportId && q.answered_at === null).at(-1) ??
         null,
     );
+  }
+  getQuestion(id: string) {
+    return Promise.resolve(this.questions.find((q) => q.id === id) ?? null);
   }
   countReportMedia(reportId: string) {
     const ups = this.uploads.filter((u) => u.report_id === reportId);
@@ -484,6 +489,57 @@ export class FakeFieldStore implements FieldStore {
       diff: { job_id: job.id, version, channel: 'web', ...(requeued ? { requeued: true } : {}) },
     });
     return Promise.resolve({ status: 'queued', jobId: job.id, version });
+  }
+
+  /** field_answer_question() (20261015000002). */
+  answerQuestion(input: AnswerInput): Promise<AnswerResult> {
+    this.calls.push('answerQuestion');
+    const r = this.reports.find((x) => x.id === input.reportId);
+    if (!r || r.status === 'void' || !this.onSite(input.reporterId, r.site_id)) {
+      return Promise.reject(new FieldDbError('report_not_found'));
+    }
+    const q = this.questions.find((x) => x.id === input.questionId && x.report_id === r.id);
+    if (!q) return Promise.reject(new FieldDbError('question_not_found'));
+    if (q.answered_at !== null) {
+      if (JSON.stringify(q.answer) === JSON.stringify(input.answer))
+        return Promise.resolve({ status: 'already_answered', reportStatus: r.status, jobId: null });
+      return Promise.reject(new FieldDbError('question_closed'));
+    }
+    if (q.channel !== 'web') return Promise.reject(new FieldDbError('question_closed'));
+    if (r.status !== 'awaiting_answer') return Promise.reject(new FieldDbError('wrong_state'));
+    const v = this.versions.find((x) => x.report_id === r.id && x.version === r.current_version);
+    if (!v || JSON.stringify(v.data) !== JSON.stringify(input.base))
+      return Promise.reject(new FieldDbError('draft_changed'));
+    v.data = input.data as ReportVersionRow['data'];
+    Object.assign(q, {
+      answer: input.answer,
+      answer_source: input.answerSource,
+      answered_at: this.iso(),
+    });
+    r.status = 'processing';
+    if (input.newCompany) r.review_reasons = [`unknown_company:${input.newCompany.name}`];
+    const key = jobKeys.decideAnswer(r.id, q.id);
+    let job = this.jobs.find((j) => j.dedupe_key === key);
+    if (!job) {
+      job = {
+        id: this.jobs.length + 1,
+        type: 'decide_next',
+        payload: { reportId: r.id },
+        dedupe_key: key,
+        status: 'queued',
+      };
+      this.jobs.push(job);
+    }
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: input.reporterId,
+      action: 'report.question_answered',
+      entity: 'report',
+      entityId: r.id,
+      diff: { question_id: q.id, field: q.field, channel: 'web', job_id: job.id },
+    });
+    return Promise.resolve({ status: 'processing', reportStatus: 'processing', jobId: job.id });
   }
 
   audit(entry: AuditEntry) {

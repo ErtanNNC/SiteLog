@@ -143,6 +143,35 @@ export const jobKeys = {
    */
   extractUpload: (reportId: string, uploadId: string) => `extract:${reportId}:upload:${uploadId}`,
   /**
+   * The extraction after a photo completed on a draft awaiting confirmation (W1-12, §7.2 "more
+   * photos": field_complete_upload() moves the report back to processing): per report and photo,
+   * and a photo completes once.
+   */
+  extractPhoto: (reportId: string, uploadId: string) => `extract:${reportId}:photo:${uploadId}`,
+  /**
+   * The web pipeline's decide_next after an extraction (W1-12): per report and the extract job
+   * that wrote the draft. A retry of that job finds its key taken; every new extraction is a new
+   * job id.
+   */
+  decideAfterExtract: (reportId: string, extractJobId: number) =>
+    `decide:${reportId}:extract-job:${extractJobId}`,
+  /**
+   * decide_next after a web answer (field_answer_question(), SQL, W1-12): per report and question;
+   * a question is answered once.
+   */
+  decideAnswer: (reportId: string, questionId: string) => `decide:${reportId}:answer:${questionId}`,
+  /**
+   * The Notifier's key (messages.payload, not jobs) of the `question_ready` text: per question, so
+   * a retried decide_next never texts twice and a new question is a new text (D25).
+   */
+  questionReady: (questionId: string) => `notify:question_ready:${questionId}`,
+  /**
+   * The Notifier's key of the `draft_ready` text: per decide_next job that showed the draft, so a
+   * retry never texts twice and a draft shown again after more audio or photos is a new text.
+   */
+  draftReady: (reportId: string, decideJobId: number) =>
+    `notify:draft_ready:${reportId}:${decideJobId}`,
+  /**
    * The welcome of the office's nth invite of a reporter (api-invite-reporter): a double submit
    * reads the same count and enqueues once; a later invite (a disabled reporter invited again) is
    * a new welcome.

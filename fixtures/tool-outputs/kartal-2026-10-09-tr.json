@@ -1,0 +1,232 @@
+{
+  "languageDetected": ["tr"],
+  "summary": "3. kat döşeme betonu dökümü Usta Beton tarafından tamamlandı (yaklaşık 45 m³). Volt Elektrik 2. katta elektrik tesisatı çekti; Akış Mekanik 13:00–17:00 arasında havalandırma kanalı montajı yaptı. 1. katta kalıp sökümü yapıldı, donatı ekibi 4. kat donatısına başladı. İskele güvenliği konulu iş güvenliği bilgilendirmesi yapıldı; kaza olmadı.",
+  "weather": {
+    "conditionsText": "Açık, yağış yok",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c001",
+      "companyNameHeard": "Usta Beton",
+      "companyName": "Usta Beton",
+      "trade": "Beton",
+      "area": "3. Kat",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 6.5,
+          "end": 14
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c002",
+      "companyNameHeard": "Volt Elektrik",
+      "companyName": "Volt Elektrik",
+      "trade": "Elektrik",
+      "area": "2. Kat",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 14,
+          "end": 20.5
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c003",
+      "companyNameHeard": "Akış Mekanik",
+      "companyName": "Akış Mekanik",
+      "trade": "Mekanik",
+      "workers": 2,
+      "hoursPerWorker": 4,
+      "totalHours": 8,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 20.5,
+          "end": 27
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c004",
+      "companyNameHeard": "Bizim öz ekip",
+      "companyName": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "area": "1. Kat",
+      "workers": 5,
+      "hoursPerWorker": null,
+      "totalHours": null,
+      "hoursBasis": "unknown",
+      "confidence": 0.85,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 27,
+          "end": 33.5
+        }
+      ]
+    },
+    {
+      "companyId": null,
+      "companyNameHeard": "demirci ekibi",
+      "companyName": "Donatı ekibi",
+      "area": "4. Kat",
+      "workers": null,
+      "hoursPerWorker": null,
+      "totalHours": null,
+      "hoursBasis": "unknown",
+      "confidence": 0.6,
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 27,
+          "end": 33.5
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "3. Kat",
+      "activity": "Döşeme betonu dökümü",
+      "status": "complete",
+      "quantity": {
+        "value": 45,
+        "unit": "m³",
+        "heardAs": "kırk beş metreküp"
+      },
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 6.5,
+          "end": 14
+        }
+      ]
+    },
+    {
+      "area": "2. Kat",
+      "activity": "Elektrik tesisatı",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 14,
+          "end": 20.5
+        }
+      ]
+    },
+    {
+      "area": "",
+      "activity": "Havalandırma kanalı montajı",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 20.5,
+          "end": 27
+        }
+      ]
+    },
+    {
+      "area": "1. Kat",
+      "activity": "Kalıp sökümü",
+      "status": "complete",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 27,
+          "end": 33.5
+        }
+      ]
+    },
+    {
+      "area": "4. Kat",
+      "activity": "Donatı işleri",
+      "status": "started",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 27,
+          "end": 33.5
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "İskele güvenliği",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "voice_note",
+        "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+        "start": 33.5,
+        "end": 40
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Sabah 07:00'de beton pompası gerekli",
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "d1000000-0000-4000-8000-0000000000a1",
+          "start": 40,
+          "end": 45.5
+        }
+      ]
+    }
+  ],
+  "newTerms": [
+    {
+      "heard": "demirci ekibi",
+      "heardLanguage": "tr",
+      "proposedOfficial": "Donatı ekibi",
+      "kind": "company",
+      "confidence": 0.6
+    }
+  ],
+  "missingRequired": [
+    "manpower.workers:Donatı ekibi",
+    "manpower.hours:Demir Yapı öz ekip",
+    "manpower.hours:Donatı ekibi"
+  ],
+  "lowConfidence": [],
+  "proposedQuestions": [
+    {
+      "field": "manpower.workers:Donatı ekibi",
+      "question": "Kısa bir kontrol: demirci ekibi 4. katta kaç kişiydi, ne kadar çalıştı?",
+      "options": []
+    }
+  ]
+}

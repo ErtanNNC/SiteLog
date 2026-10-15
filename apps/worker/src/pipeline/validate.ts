@@ -1,8 +1,8 @@
 import {
   pickNextQuestion,
   validateReport,
+  type AnyReportData,
   type CompanyRow,
-  type DailyReportDataV1,
   type OrgSettingsRow,
   type QuestionRow,
   type QuestionSpec,
@@ -27,7 +27,7 @@ export function requiredFieldsOf(
 }
 
 export function validateDraft(
-  data: DailyReportDataV1,
+  data: AnyReportData,
   settings: Pick<OrgSettingsRow, 'required_fields'>,
   photoCount: number,
 ): ValidationResult {
@@ -43,17 +43,20 @@ export function askedPathsOf(questions: QuestionRow[]): string[] {
 }
 
 export function selectNextQuestion(
-  data: DailyReportDataV1,
+  data: AnyReportData,
   validation: ValidationResult,
   questions: QuestionRow[],
   settings: Pick<OrgSettingsRow, 'max_questions_per_report'>,
   companies: CompanyRow[],
+  /** The reporter's locale for the fallback questions (EN, ES, TR); English when omitted. */
+  language: string | null = null,
 ): QuestionSpec | null {
   return pickNextQuestion(data, validation, {
     askedPaths: askedPathsOf(questions),
     askedCount: questions.length,
     maxQuestions: settings.max_questions_per_report,
     companies: companies.map((c) => ({ id: c.id, name: c.name, aliases: c.aliases })),
+    language,
   });
 }
 

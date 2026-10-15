@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-06",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en"],
   "summary": "Full weather day: heavy rain from before 06:00; the site was closed at 06:15 and no work was performed (8 h lost). The classroom wing footing excavations flooded.",
   "weather": {
     "observed": {
-      "precipIn": 1.66,
-      "tempMinF": 52,
-      "tempMaxF": 56,
-      "windMph": 14,
-      "gustMph": 26,
+      "precip": 1.66,
+      "tempMin": 52,
+      "tempMax": 56,
+      "wind": 14,
+      "gust": 26,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Heavy rain all day; site closed",
@@ -21,8 +25,8 @@
         "fullDay": true,
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000013-0000-4000-8000-000000001301",
+            "type": "voice_note",
+            "uploadId": "e0000013-0000-4000-8000-000000001301",
             "start": 0,
             "end": 19
           }
@@ -34,15 +38,20 @@
   "workPerformed": [],
   "deliveries": [],
   "equipment": [],
-  "safety": { "incidents": [], "noIncidentsStated": false, "visitors": [], "source": [] },
+  "safety": {
+    "incidents": [],
+    "noIncidentsStated": false,
+    "visitors": [],
+    "source": []
+  },
   "issues": [
     {
       "description": "Classroom wing footing excavations flooded",
       "impact": "Dewatering required before footing work can resume",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000013-0000-4000-8000-000000001301",
+          "type": "voice_note",
+          "uploadId": "e0000013-0000-4000-8000-000000001301",
           "start": 7.5,
           "end": 13.2
         }
@@ -54,12 +63,19 @@
       "item": "Pump out the classroom wing footings before the Apex Concrete pour",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000013-0000-4000-8000-000000001301",
+          "type": "voice_note",
+          "uploadId": "e0000013-0000-4000-8000-000000001301",
           "start": 19,
           "end": 24.5
         }
       ]
+    }
+  ],
+  "photos": [
+    {
+      "uploadId": "e0000013-0000-4000-8000-000000001305",
+      "caption": "Classroom wing excavations",
+      "takenAt": "2026-10-06T13:40:00Z"
     }
   ],
   "newTerms": [],
@@ -70,15 +86,6 @@
       "field": "manpower.workers",
       "question": "Logged as a weather day. Was anyone on site this morning?",
       "options": ["Nobody on site"]
-    }
-  ],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-06",
-  "photos": [
-    {
-      "messageId": "e0000013-0000-4000-8000-000000001305",
-      "caption": "Classroom wing excavations",
-      "takenAt": "2026-10-06T13:40:00Z"
     }
   ]
 }

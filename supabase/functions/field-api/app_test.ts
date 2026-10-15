@@ -1,16 +1,19 @@
 import { assert, assertEquals, assertMatch, assertStringIncludes } from '@std/assert';
 import {
-  DEVICE_COOKIE_MAX_AGE_S,
-  UPLOAD_MAX_BYTES,
-  deviceCookieName,
-  emptyReportDataV1,
-  linkCodeHash,
   type CountryRow,
+  type DailyReportData,
+  DEVICE_COOKIE_MAX_AGE_S,
+  deviceCookieName,
+  emptyReportData,
+  emptyReportDataV1,
   type FieldLinkRow,
+  linkCodeHash,
   type NotifyOutcome,
   type OrgRow,
+  type QuestionRow,
   type ReporterRow,
   type SiteRow,
+  UPLOAD_MAX_BYTES,
 } from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { EnvError } from '../_shared/env.ts';
@@ -156,6 +159,7 @@ function setup(
     org_id: ORG,
     default_deadline: '17:30:00',
     working_days: [1, 2, 3, 4, 5],
+    default_shift_hours: 8,
   } as never);
   store.sites.push(
     site(SITE_A, 'Riverside', 'RL-2041', { deadline: '17:30:00' }),
@@ -516,8 +520,9 @@ Deno.test(
       }),
       await h.call('POST', 'resolve', { body: '{bad json', code: null }),
     ];
-    for (const a of answers)
+    for (const a of answers) {
       assertEquals(a.headers.get('cache-control'), 'no-store', String(a.status));
+    }
     assertEquals(answers[5]!.json.error, 'not_found');
     assertEquals(answers[6]!.json.error, 'origin_not_allowed');
     assertEquals(answers[7]!.json.error, 'invalid_request');
@@ -1157,5 +1162,211 @@ Deno.test(
       body.signedUrl,
       `http://localhost:4174/storage/v1/object/upload/sign/audio/${body.path}?token=t`,
     );
+  },
+);
+
+/** A web report awaiting an answer: the Delta draft (v2) and its open headcount question. */
+async function awaitingAnswer(h: Harness, siteId = SITE_A) {
+  await consented(h);
+  const u = await h.call('POST', 'uploads', {
+    body: { kind: 'audio', mime: 'audio/webm', bytes: 1, siteId },
+  });
+  h.store.put(`audio/${u.json.path}`);
+  const done = await h.call('POST', `uploads/${u.json.uploadId}/complete`);
+  const reportId = done.json.reportId as string;
+  const report = h.store.reports.find((r) => r.id === reportId)!;
+  report.status = 'awaiting_answer';
+  const data: DailyReportData = {
+    ...emptyReportData('2026-10-09', { reportLanguage: 'en', units: 'imperial' }),
+    summary: 'Ductwork on Level 2.',
+    manpower: [
+      {
+        companyId: 'delta',
+        companyNameHeard: 'the Delta guys',
+        companyName: 'Delta Mechanical',
+        area: 'Level 2',
+        workers: null,
+        hoursPerWorker: 8,
+        totalHours: null,
+        hoursBasis: 'full_day_default',
+        confidence: 0.85,
+        source: [{ type: 'voice_note', uploadId: u.json.uploadId as string, start: 33 }],
+      },
+    ],
+  };
+  h.store.versions.push({
+    report_id: reportId,
+    version: 1,
+    data: data as never,
+    summary: null,
+    pdf_path: null,
+    author: 'agent',
+    author_user_id: null,
+    author_message_id: null,
+    change_note: null,
+    created_at: T0.toISOString(),
+    via: null,
+  });
+  const question = (over: Partial<QuestionRow> = {}): QuestionRow => ({
+    id: '11111111-0000-4000-8000-00000000f101',
+    report_id: reportId,
+    field: 'manpower.workers',
+    target: { manpowerIndex: 0, path: 'manpower.workers:Delta Mechanical' },
+    prompt: 'Quick check: the Delta guys on Level 2. How many?',
+    options: [
+      { id: 'o1', label: '4 · full day' },
+      { id: 'o2', label: '5 · full day' },
+    ],
+    asked_message_id: null,
+    answered_message_id: null,
+    answer: null,
+    asked_at: T0.toISOString(),
+    answered_at: null,
+    created_at: T0.toISOString(),
+    channel: 'web',
+    call_id: null,
+    answer_source: null,
+    ...over,
+  });
+  h.store.questions.push(question());
+  return { reportId, report, question, questionId: '11111111-0000-4000-8000-00000000f101' };
+}
+
+Deno.test(
+  'answer (W1-12): an option is mapped in code, the draft and question updated, decide_next queued once',
+  async () => {
+    const h = setup();
+    const { reportId, questionId } = await awaitingAnswer(h);
+    const res = await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, optionId: 'o2' },
+    });
+    assertEquals(
+      [res.status, res.json],
+      [
+        202,
+        {
+          status: 'processing',
+          reportStatus: 'processing',
+        },
+      ],
+    );
+    const data = h.store.versions[0]!.data as unknown as DailyReportData;
+    assertEquals(
+      [data.manpower[0]!.workers, data.manpower[0]!.hoursPerWorker, data.manpower[0]!.totalHours],
+      [5, 8, 40],
+    );
+    assertEquals(data.manpower[0]!.source.at(-1), { type: 'answer', questionId });
+    const q = h.store.questions[0]!;
+    assertEquals(q.answer_source, { type: 'answer', questionId });
+    assertEquals(q.answer, {
+      optionId: 'o2',
+      text: '5 · full day',
+      parsed: { workers: 5, fullDay: true },
+      via: 'web',
+    });
+    assertEquals(
+      h.store.jobs.map((j) => [j.type, j.dedupe_key]),
+      [
+        ['transcribe_upload', h.store.jobs[0]!.dedupe_key],
+        ['decide_next', `decide:${reportId}:answer:${questionId}`],
+      ].slice(h.store.jobs[0]!.type === 'transcribe_upload' ? 0 : 1),
+    );
+    assert(h.store.audits.some((a) => a.action === 'report.question_answered'));
+
+    // A retry (the answer lost on the way back) is answered the same way; nothing runs twice.
+    const again = await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, optionId: 'o2' },
+    });
+    assertEquals([again.status, again.json.status], [200, 'already_answered']);
+    assertEquals(h.store.jobs.filter((j) => j.type === 'decide_next').length, 1);
+    // Another answer to the answered question is refused.
+    const other = await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, optionId: 'o1' },
+    });
+    assertEquals([other.status, other.json.error], [409, 'question_closed']);
+  },
+);
+
+Deno.test('answer (W1-12, D28): a typed headcount with the hours the reporter set', async () => {
+  const h = setup();
+  const { reportId, questionId } = await awaitingAnswer(h);
+  // Neither or both of optionId and value: refused before anything is read.
+  assertEquals(
+    (await h.call('POST', `reports/${reportId}/answer`, { body: { questionId } })).json.error,
+    'invalid_request',
+  );
+  assertEquals(
+    (
+      await h.call('POST', `reports/${reportId}/answer`, {
+        body: { questionId, optionId: 'o1', value: 4 },
+      })
+    ).json.error,
+    'invalid_request',
+  );
+  // A fraction of a person is not a headcount.
+  const half = await h.call('POST', `reports/${reportId}/answer`, {
+    body: { questionId, value: 4.5 },
+  });
+  assertEquals([half.status, half.json.error], [400, 'answer_not_accepted']);
+  const res = await h.call('POST', `reports/${reportId}/answer`, {
+    body: { questionId, value: 4, hours: 6 },
+  });
+  assertEquals(res.status, 202);
+  const m = (h.store.versions[0]!.data as unknown as DailyReportData).manpower[0]!;
+  assertEquals([m.workers, m.hoursPerWorker, m.totalHours, m.hoursBasis], [4, 6, 24, 'answer']);
+  assertEquals((h.store.questions[0]!.answer as { text: string }).text, '4 · 6 h');
+});
+
+Deno.test(
+  'answer (W1-12): scoped like the other routes; wrong question, state or answer refused',
+  async () => {
+    const h = setup();
+    const { reportId, report, question, questionId } = await awaitingAnswer(h);
+    const answer = (body: Record<string, unknown>, o: { code?: string | null } = {}) =>
+      h.call('POST', `reports/${reportId}/answer`, { body, ...o });
+
+    // No verified device: 401 whatever the report.
+    const anon = await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, optionId: 'o1' },
+      cookies: {},
+    });
+    assertEquals([anon.status, anon.json.error], [401, 'device_unverified']);
+    // A question of another report, an unknown option, a number for an option question's field.
+    assertEquals(
+      (await answer({ questionId: '11111111-0000-4000-8000-00000000f999', optionId: 'o1' })).status,
+      404,
+    );
+    assertEquals((await answer({ questionId, optionId: 'zz' })).json.error, 'answer_not_accepted');
+    // A WhatsApp question (no channel) is not the web's to answer.
+    h.store.questions.push(
+      question({ id: '11111111-0000-4000-8000-00000000f102', channel: null, field: 'safety' }),
+    );
+    assertEquals(
+      (await answer({ questionId: '11111111-0000-4000-8000-00000000f102', optionId: 'o1' })).json
+        .error,
+      'question_closed',
+    );
+    // Not awaiting an answer (a new voice note reopened processing): refused, nothing written.
+    report.status = 'processing';
+    const busy = await answer({ questionId, optionId: 'o1' });
+    assertEquals([busy.status, busy.json.error], [409, 'wrong_state']);
+    assertEquals(h.store.questions[0]!.answered_at, null);
+    report.status = 'awaiting_answer';
+    // Safety takes no number.
+    h.store.questions[0]!.field = 'safety';
+    assertEquals((await answer({ questionId, value: 1 })).json.error, 'answer_not_accepted');
+    h.store.questions[0]!.field = 'manpower.workers';
+
+    // Dana's link: the report is on her site (Riverside), so she may answer it; a report of a site
+    // she is not on (Pier 9) is not found.
+    const pier = setup();
+    const p = await awaitingAnswer(pier, SITE_B);
+    await consented(pier, CODES.dana);
+    const theirs = await pier.call('POST', `reports/${p.reportId}/answer`, {
+      body: { questionId: p.questionId, optionId: 'o1' },
+      code: CODES.dana,
+    });
+    assertEquals([theirs.status, theirs.json.error], [404, 'not_found']);
+    assertEquals(pier.store.questions[0]!.answered_at, null);
   },
 );

@@ -32,7 +32,10 @@ import type { StoredObject } from './logic.ts';
 export interface OrgContext {
   org: Pick<OrgRow, 'id' | 'name' | 'country' | 'locale' | 'timezone' | 'is_demo'>;
   country: CountryRow;
-  settings: Pick<OrgSettingsRow, 'default_deadline' | 'working_days'> | null;
+  settings: Pick<
+    OrgSettingsRow,
+    'default_deadline' | 'working_days' | 'default_shift_hours'
+  > | null;
 }
 
 export interface RateLimitResult {
@@ -56,6 +59,30 @@ export interface ConfirmResult {
   status: 'queued' | 'filed';
   jobId: number | null;
   version: number;
+}
+
+/** field_answer_question() (20261015000002, W1-12). */
+export interface AnswerResult {
+  status: 'processing' | 'already_answered';
+  reportStatus: ReportStatus;
+  jobId: number | null;
+}
+
+/** What `reports/:id/answer` hands field_answer_question(). */
+export interface AnswerInput {
+  reportId: string;
+  questionId: string;
+  reporterId: string;
+  /** The draft the answer was applied to (the RPC refuses when it changed: `draft_changed`). */
+  base: Json;
+  /** The draft with the answer applied in code (applyAnswer). */
+  data: Json;
+  /** questions.answer: the request (option or number), its label and the value applied. */
+  answer: Json;
+  /** questions.answer_source: `{type:'answer', questionId}` (§10.3). */
+  answerSource: Json;
+  /** "Add <company>": the unconfirmed company the RPC creates and points the crew at. */
+  newCompany: { name: string; manpowerIndex: number } | null;
 }
 
 /** field_set_day_status(). */
@@ -86,6 +113,8 @@ export const FIELD_DB_ERRORS = [
   'day_closed',
   'wrong_state',
   'invalid_status',
+  'question_not_found',
+  'question_closed',
 ] as const;
 
 export interface ReportMediaCounts {
@@ -149,6 +178,7 @@ export interface FieldStore {
   getVersion(reportId: string, version: number): Promise<ReportVersionRow | null>;
   /** The open question (not answered), latest first. */
   getOpenQuestion(reportId: string): Promise<QuestionRow | null>;
+  getQuestion(id: string): Promise<QuestionRow | null>;
   countReportMedia(reportId: string): Promise<ReportMediaCounts>;
   /** Reports (not void) of these sites from `sinceDate` on, with their date. */
   listRecentReports(siteIds: string[], sinceDate: string): Promise<ReportWithDate[]>;
@@ -189,5 +219,7 @@ export interface FieldStore {
   }): Promise<DayStatusResult>;
   /** field_confirm_report(): reports/:id/confirm (F8) for that version, audited in SQL. */
   confirmReport(reportId: string, reporterId: string, version: number): Promise<ConfirmResult>;
+  /** field_answer_question(): reports/:id/answer (F7), audited in SQL; enqueues decide_next. */
+  answerQuestion(input: AnswerInput): Promise<AnswerResult>;
   audit(entry: AuditEntry): Promise<void>;
 }

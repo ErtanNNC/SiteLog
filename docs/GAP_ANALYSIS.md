@@ -503,6 +503,14 @@ Added after this analysis by the owner's decision of 2026-10-14 (D47–D49): Sit
 - _Forced tool choice, temperature 0._ With the default `claude-sonnet-5-5`, the code sends `tool_choice: auto` and no temperature (`apps/worker/src/ai/claude.ts:11-14`, `:29-48`, `:137-141`; `apps/worker/src/config.ts:41`); not recorded in README. Recommend: D23.
 - _Weather units._ Inch/°F/mph hard-coded (`packages/shared/src/weather/observed.ts:31-38`, `:55-57`). Recommend: units from `orgs.units`.
 
+**Built (W1-12, branch `w1-12-extract`)**
+
+- Extraction v2 for the web recorder (`apps/worker/src/jobs/extract_report.ts` → `runReportExtraction`): prompt v2 verbatim (`apps/worker/src/ai/prompts/extract.v2.md`, D24), the source-format note as a second cached block (§19 Q59), the v2 user message (`REPORT_LANGUAGE`, `UNITS`, `REPORTER_LOCALE`, `CHANNEL`, `WORKING_HOURS`, `OBSERVED_WEATHER` in the org's units), `ReportExtractionSchema` as the tool; code sets the v2 envelope, recomputes totals and drops sources that point at no input; `CLAUDE_MODEL` with `tool_choice: auto` + verify/re-prompt on the 5.5 generation (D23, README, §19 Q58); phone numbers redacted from every block of every Claude call (`redactPhones`, AUDIT_BACKLOG closed). The WhatsApp worker keeps prompt v1 and v1 data until step 22.
+- v2 writers: the web pipeline, `create_office_report()` (`20261015000002_extraction_v2.sql`; v1 data from an old panel stays v1) and the panel editor (New report; office edits through the v2 view).
+- Questions on `web` with `[{id, label, value?}]` options, _Other…_ hidden until M6, D28 (no code-made numbers; a headcount without model options asks for the number), EN/ES/TR fallbacks; `applyAnswer(Source)` with every caller updated; `decide_next` split into a pure plan and one Notifier call under the 30 s device rule (D25, `apps/worker/src/pipeline/web.ts`); answers applied again after a re-extraction (§19 Q60).
+- `field-api` `reports/:id/answer` and the service-only `field_answer_question()`; a photo on a draft awaiting confirmation reopens it and re-extracts (§7.2).
+- Eval v2: the 26 cases re-keyed, two Turkish cases, the report-language check; the CI replays generated from the expected data (no key; `pnpm eval -- --write-recorded`); load-test target 60 s / 150 s. Open: §19 Q58–Q63.
+
 ### W1-13 · Field screens: Question → Draft → Confirm — conflicts · effort M
 
 The ticket is three screens and their routes; none exist. What exists is shared answer logic and the filing job, both WhatsApp-shaped (options, source, trigger), and the ticket's Done-when ("answer 5 · full day") needs a decision on questions without options (D28). Hence _conflicts_, not _partial_.
@@ -748,12 +756,12 @@ Each item: what the repo does, what v1.2 (or the kit `CLAUDE.md`) says, and a re
 
 - **D17 · Backoff count.** "After 5 → dead" with five listed delays; the repo never uses the 2 h step. **Recommend:** use all five delays (dead after the 6th failure) and clarify §10.1. **Built in W1-10** (`fail_job()`, `JOB_MAX_ATTEMPTS` 6; §10.1 clarified).
 - **D18 · Stale lock 15 → 10 min.** **Recommend:** 10 min.
-- **D23 · Forced `tool_choice` and temperature 0 (owner: model).** The repo's reason is its own note that the 5.5-generation models reject forced `tool_choice` and non-default sampling (`apps/worker/src/ai/claude.ts:11-14`); the switch is per model profile (`:137-141`). **Recommend:** take the model from `CLAUDE_MODEL`; if it is a 5.5-generation model, record "tool_choice auto + verify and re-prompt" as a deviation in README and spec §19.
-- **D24 · Prompt v2 "verbatim".** **Recommend:** use v2 verbatim; if the extra weather rule is still wanted, add it to spec §10.4 first. Keep the source-format note as a separate cached block and record it.
-- **D25 · The 30 s "device not seen" rule** appears only in `docs/PLAN_WEEK1.md:100`. **Recommend:** keep 30 s and add it to the spec.
+- **D23 · Forced `tool_choice` and temperature 0 (owner: model).** The repo's reason is its own note that the 5.5-generation models reject forced `tool_choice` and non-default sampling (`apps/worker/src/ai/claude.ts:11-14`); the switch is per model profile (`:137-141`). **Recommend:** take the model from `CLAUDE_MODEL`; if it is a 5.5-generation model, record "tool_choice auto + verify and re-prompt" as a deviation in README and spec §19. **Done in W1-12:** the model is `CLAUDE_MODEL` (default `claude-sonnet-5-5`), `tool_choice: auto` with an instruction, a check and one re-prompt on the 5.5 generation; README row "Extraction model", spec §19 Q58.
+- **D24 · Prompt v2 "verbatim".** **Recommend:** use v2 verbatim; if the extra weather rule is still wanted, add it to spec §10.4 first. Keep the source-format note as a separate cached block and record it. **Done in W1-12:** `apps/worker/src/ai/prompts/extract.v2.md` is the spec text verbatim (a test compares them); the source-format note is a second cached block (README, spec §19 Q59); no extra weather sentence.
+- **D25 · The 30 s "device not seen" rule** appears only in `docs/PLAN_WEEK1.md:100`. **Recommend:** keep 30 s and add it to the spec. **Done in W1-12:** `decide_next` texts `question_ready` / `draft_ready` only when no device of the reporter was seen in the last 30 s (`apps/worker/src/pipeline/web.ts`); spec §10.1 as built; §19 Q61 for a reporter who leaves within the 30 s.
 - **D26 · Rate limit wording** (plan "5 code sends/h", spec "5 code verifications/hour"). **Recommend:** limit both. **Done in W1-07:** `field_rate_limit()` with keys `code_send:<e164>` and `code:<e164>` (5 an hour each) and `dev:<device id>` (30 a minute); spec §6.5 names both.
-- **D27 · W1-12 Done-when wording.** It says "crew with missing hours"; the hero fixture and demo script ask a headcount ("Delta — 4 or 5?"). **Recommend:** follow the fixture and fix the plan wording.
-- **D28 · Questions with no options.** **Recommend:** show a number input with "full day" as the default hours, rather than code-generated options, so code never proposes numbers the reporter did not say.
+- **D27 · W1-12 Done-when wording.** It says "crew with missing hours"; the hero fixture and demo script ask a headcount ("Delta — 4 or 5?"). **Recommend:** follow the fixture and fix the plan wording. **Done in W1-12:** the plan names the headcount question; the integration test asks exactly it.
+- **D28 · Questions with no options.** **Recommend:** show a number input with "full day" as the default hours, rather than code-generated options, so code never proposes numbers the reporter did not say. **Done in W1-12 (the route; the screen is W1-13):** a headcount question without model options has no options; `reports/:id/answer` takes `{value, hours?}` (`numberAnswer`).
 
 ### Product and UI
 
@@ -889,6 +897,7 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 
 - Change: `extract.v2.md`, new user-message variables, v2 writers everywhere: the worker (`apps/worker/src/ai/extract.ts:141`), a migration that replaces `create_office_report` (it stamps `schemaVersion 1` in SQL, `supabase/migrations/20261013000005_office_photos.sql:203`) and the panel editor; `questions.channel 'web'`; channel-neutral question options `[{id,label}]` and `applyAnswer` taking a `Source` (`{type:'answer', questionId}`), with D28 for questions without options; EN/ES/TR fallback question prompts; `decide_next` split with the 30 s rule; weather units; the model profile per D23; eval re-keyed with Turkish cases and a report-language check.
 - Verify: `pnpm eval -- --recorded`; ES+EN fixture → draft and one question; timing logged.
+- Built (W1-12): as the W1-12 entry above lists; verified on PGlite (`apps/worker/src/integration/web.integration.test.ts`: the ES + EN fixture → fake transcriber → replayed tool output → a v2 draft and one question, the Delta headcount, with no text while the device was seen in the last 30 s; the upload-to-decision time is logged), `pnpm eval -- --recorded` 28/28, and the race tests on a scratch Postgres 16. The keyed `pnpm eval` and the Deepgram + Claude timing (≤ 60 s p50) are the by-hand checks.
 
 **Step 18 · Field screens** — W1-09, W1-13
 

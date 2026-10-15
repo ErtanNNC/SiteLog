@@ -1,48 +1,60 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import {
-  DailyReportDataV1Schema,
-  ExtractionOutputSchema,
+  DailyReportDataSchema,
   ObservedWeatherV1Schema,
-  PhotoV1Schema,
+  PhotoSchema,
   QUESTION_FIELDS,
+  REPORTER_LOCALES,
+  REPORT_LANGUAGES,
   REQUIRED_FIELD_KEYS,
+  ReportExtractionSchema,
+  UNIT_SYSTEMS,
   pickNextQuestion,
   round2,
-  toObserved,
+  toObservedIn,
   validateReport,
-  type DailyReportDataV1,
-  type ExtractionOutput,
+  type DailyReportData,
+  type ReportExtraction,
   type QuestionField,
   type RequiredFieldKey,
 } from '@sitelog/shared';
 import { createAnthropicClient, type MessagesClient } from './claude';
-import { runExtraction, type ExtractionInput } from './extract';
-import { buildExtractionUserMessage, buildOrgContextBlock } from './prompts/extraction';
+import { runReportExtraction, type ExtractionInputV2 } from './extract';
+import { buildOrgContextBlock } from './prompts/extraction';
+import { buildExtractionUserMessageV2 } from './prompts/extraction.v2';
 import { loadDotenv } from '../dotenv';
 import { createLogger } from '../log';
 
 /**
- * §10.12 evaluation set: run extraction on every fixtures/transcripts/*.json (directory scan) and
- * compare with fixtures/expected/<id>.json.
+ * §10.12 evaluation set: run extraction v2 (W1-12: prompt v2, report data v2, the web recorder's
+ * input) on every fixtures/transcripts/*.json (directory scan) and compare with
+ * fixtures/expected/<id>.json. EN, ES, EN + ES and TR cases; a TR case is written in Turkish
+ * with metric units.
  *
  * Scored (see compareReport): manpower counts exact and hours exact per company, company resolution
  * (known vs unknown), weather lostHours ±0.5 and full-day flag, every non-null number has a source,
  * unknown companies flagged, incident severities, work quantities / percentages exact, languages,
- * the required gaps code derives (§10.5) and the question code would ask next, rejected glossary
- * mappings unused. Not scored: wording (summary, activities, areas, impacts), deliveries,
+ * the report language (the summary is written in REPORT_LANGUAGE), the required gaps code derives
+ * (§10.5) and the question code would ask next, rejected glossary mappings unused. Not scored: wording (summary, activities, areas, impacts), deliveries,
  * equipment, next-workday items, the model's own missingRequired / proposedQuestions text.
  *
- * Every case also has fixtures/tool-outputs/<id>.json: a recorded `submit_daily_report` input that
- * the worker tests replay without an API key (`--recorded` scores those offline).
+ * Every case also has fixtures/tool-outputs/<id>.json: a `submit_daily_report` input that the
+ * worker tests replay without an API key (`--recorded` scores those offline). From W1-12 these are
+ * NOT model recordings: no ANTHROPIC_API_KEY was available, so they are generated from the
+ * expected data (`recordedFromExpected`: the expected data without what code adds, with the
+ * `recordedNulls` a case names left null for code to derive) by `pnpm eval -- --write-recorded`,
+ * and a test holds them to that. They prove the pipeline around the model, not the model; a live
+ * `pnpm eval` with the key is the model's check.
  *
  *   pnpm eval                                 live run (skipped without ANTHROPIC_API_KEY; outside
  *                                             production the key may sit in the root .env)
  *   pnpm eval -- --case riverside --case pier9 cases whose id contains one of the filters
  *   pnpm eval -- --recorded                   score the recorded tool outputs (no API calls)
+ *   pnpm eval -- --write-recorded             regenerate fixtures/tool-outputs from fixtures/expected
  *   pnpm eval -- --list                       list the cases
  *   pnpm eval -- --concurrency 4              parallel API calls (default 3)
  *
@@ -57,7 +69,7 @@ export const FIXTURES_DIR = join(here, '..', '..', '..', '..', 'fixtures');
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const SegmentSchema = z.strictObject({
-  messageId: z.string().min(1),
+  uploadId: z.string().min(1),
   start: z.number().min(0),
   end: z.number().min(0),
   text: z.string().min(1),
@@ -95,6 +107,17 @@ export const EvalTranscriptSchema = z.strictObject({
   description: z.string().min(1),
   /** The question code asks next for the expected data (§10.5 step 4); null when nothing is asked. */
   expectedQuestion: ExpectedQuestionSchema.nullable(),
+  /**
+   * The v1.0 case was a typed WhatsApp report: the web recorder has none, so its text is one
+   * voice-note segment here; the WhatsApp worker's tests and the panel's simulator read it as text.
+   */
+  whatsappText: z.literal(true).optional(),
+  /** Paths the recorded tool output leaves null for code to derive (`recordedFromExpected`). */
+  recordedNulls: z.array(z.string().regex(/^manpower\[\d+\]\.hoursPerWorker$/)).optional(),
+  reportLanguage: z.enum(REPORT_LANGUAGES),
+  units: z.enum(UNIT_SYSTEMS),
+  reporterLocale: z.enum(REPORTER_LOCALES),
+  channel: z.enum(['web', 'call']),
   site: z.strictObject({
     name: z.string().min(1),
     projectCode: z.string().min(1),
@@ -126,13 +149,12 @@ export const EvalTranscriptSchema = z.strictObject({
       field: z.string().min(1),
       question: z.string(),
       answer: z.string(),
-      messageId: z.string().min(1),
+      questionId: z.string().min(1),
     }),
   ),
-  previousDraft: DailyReportDataV1Schema.nullable(),
-  photos: z.array(PhotoV1Schema),
+  previousDraft: DailyReportDataSchema.nullable(),
+  photos: z.array(PhotoSchema),
   segments: z.array(SegmentSchema),
-  texts: z.array(z.strictObject({ messageId: z.string().min(1), text: z.string().min(1) })),
 });
 export type EvalTranscript = z.infer<typeof EvalTranscriptSchema>;
 
@@ -140,10 +162,12 @@ export interface EvalFixture {
   id: string;
   description: string;
   expectedQuestion: ExpectedQuestion | null;
-  input: ExtractionInput;
-  expected: DailyReportDataV1;
-  /** Recorded `submit_daily_report` input (fixtures/tool-outputs/<id>.json). */
-  recorded: ExtractionOutput | null;
+  whatsappText: boolean;
+  recordedNulls: string[];
+  input: ExtractionInputV2;
+  expected: DailyReportData;
+  /** The `submit_daily_report` input the tests replay (fixtures/tool-outputs/<id>.json). */
+  recorded: ReportExtraction | null;
   /** The JSON as stored, to spot keys the schemas would silently drop. */
   raw: { expected: unknown; recorded: unknown };
 }
@@ -174,30 +198,43 @@ export function listFixtureIds(dir = FIXTURES_DIR): string[] {
 }
 
 /** Load and schema-check one case. Throws with the file and the Zod issues when a file is broken. */
-export function loadFixture(id: string, dir = FIXTURES_DIR): EvalFixture {
+export function loadFixture(
+  id: string,
+  dir = FIXTURES_DIR,
+  opts: { skipRecorded?: boolean } = {},
+): EvalFixture {
   const tPath = join(dir, 'transcripts', `${id}.json`);
   const t = EvalTranscriptSchema.safeParse(readJson(tPath));
   if (!t.success) throw new Error(`${tPath}: ${issuesOf(t.error)}`);
   const ePath = join(dir, 'expected', `${id}.json`);
   if (!existsSync(ePath)) throw new Error(`${ePath}: missing`);
   const rawExpected = readJson(ePath);
-  const e = DailyReportDataV1Schema.safeParse(rawExpected);
+  const e = DailyReportDataSchema.safeParse(rawExpected);
   if (!e.success) throw new Error(`${ePath}: ${issuesOf(e.error)}`);
   const rPath = join(dir, 'tool-outputs', `${id}.json`);
-  let recorded: ExtractionOutput | null = null;
+  let recorded: ReportExtraction | null = null;
   let rawRecorded: unknown = null;
-  if (existsSync(rPath)) {
+  if (!opts.skipRecorded && existsSync(rPath)) {
     rawRecorded = readJson(rPath);
-    const r = ExtractionOutputSchema.safeParse(rawRecorded);
+    const r = ReportExtractionSchema.safeParse(rawRecorded);
     if (!r.success) throw new Error(`${rPath}: ${issuesOf(r.error)}`);
     recorded = r.data;
   }
-  const { id: fileId, description, expectedQuestion, ...input } = t.data;
+  const {
+    id: fileId,
+    description,
+    expectedQuestion,
+    whatsappText,
+    recordedNulls,
+    ...input
+  } = t.data;
   if (fileId !== id) throw new Error(`${tPath}: id "${fileId}" does not match the file name`);
   return {
     id,
     description,
     expectedQuestion,
+    whatsappText: whatsappText ?? false,
+    recordedNulls: recordedNulls ?? [],
     input,
     expected: e.data,
     recorded,
@@ -229,6 +266,7 @@ export const EVAL_FIELDS = [
   'safety',
   'numbers',
   'language',
+  'report_language',
   'required_gaps',
   'next_question',
   'glossary',
@@ -262,7 +300,7 @@ export interface CompareContext {
   maxQuestions?: number;
 }
 
-export function compareContextOf(input: ExtractionInput): CompareContext {
+export function compareContextOf(input: ExtractionInputV2): CompareContext {
   return {
     requiredFields: input.requiredFields.filter((f): f is RequiredFieldKey =>
       (REQUIRED_FIELD_KEYS as readonly string[]).includes(f),
@@ -304,7 +342,7 @@ interface Crew {
 }
 
 /** Crews per company; split entries ("Apex: 4 on the ramp, 2 on the columns") are summed. */
-function crewsOf(data: DailyReportDataV1): Map<string, Crew> {
+function crewsOf(data: DailyReportData): Map<string, Crew> {
   const out = new Map<string, Crew>();
   for (const m of data.manpower) {
     const k = companyKey(m.companyName) || companyKey(m.companyNameHeard);
@@ -342,7 +380,7 @@ function fmtSet(a: Iterable<string | number>): string {
 }
 
 /** Quantities and percentages said for the work (spoken numbers must come out exact). */
-function workNumbers(data: DailyReportDataV1): number[] {
+function workNumbers(data: DailyReportData): number[] {
   const out: number[] = [];
   for (const w of data.workPerformed) {
     if (w.quantity) out.push(w.quantity.value);
@@ -355,9 +393,35 @@ function lang(code: string): string {
   return code.toLowerCase().slice(0, 2);
 }
 
+const LANGUAGE_MARKERS: Record<'en' | 'es' | 'tr', RegExp> = {
+  en: /\b(?:the|and|was|were|on|of|with|by|for|completed|no)\b/g,
+  es: /\b(?:el|los|las|del|con|fue|por|sin|para|se)\b/g,
+  tr: /(?:[çğışöüİ]|\b(?:ve|ile|bir|yapıldı|tarafından|olmadı|arasında|devam)\b)/g,
+};
+
+/**
+ * The language a report text is written in (en, es or tr), by its most frequent marker words and,
+ * for Turkish, letters: enough to tell a Turkish summary from an English one, which is what the
+ * report-language check needs (§10.13 "correct report language"). null for an empty text.
+ */
+export function textLanguage(text: string): 'en' | 'es' | 'tr' | null {
+  const t = text.toLowerCase();
+  if (!t.trim()) return null;
+  let best: 'en' | 'es' | 'tr' | null = null;
+  let score = 0;
+  for (const [l, re] of Object.entries(LANGUAGE_MARKERS) as Array<['en' | 'es' | 'tr', RegExp]>) {
+    const n = t.match(re)?.length ?? 0;
+    if (n > score) {
+      best = l;
+      score = n;
+    }
+  }
+  return best;
+}
+
 /** The question code would ask first for this data (§10.5 steps 2–5), as field + path. */
 export function nextQuestionOf(
-  data: DailyReportDataV1,
+  data: DailyReportData,
   ctx: CompareContext,
 ): { field: QuestionField; path: string } | null {
   const v = validateReport(data, {
@@ -373,7 +437,7 @@ export function nextQuestionOf(
   return q ? { field: q.field, path: q.path } : null;
 }
 
-function requiredGapsOf(data: DailyReportDataV1, ctx: CompareContext): string[] {
+function requiredGapsOf(data: DailyReportData, ctx: CompareContext): string[] {
   return validateReport(data, {
     requiredFields: ctx.requiredFields,
     photoCount: ctx.photoCount,
@@ -386,8 +450,8 @@ function requiredGapsOf(data: DailyReportDataV1, ctx: CompareContext): string[] 
  * question, and checks that rejected glossary mappings were not used.
  */
 export function compareReport(
-  actual: DailyReportDataV1,
-  expected: DailyReportDataV1,
+  actual: DailyReportData,
+  expected: DailyReportData,
   ctx?: CompareContext,
 ): EvalCheck[] {
   const checks: EvalCheck[] = [];
@@ -531,6 +595,17 @@ export function compareReport(
     field: 'language',
   });
 
+  // §10.13 "correct report language": REPORT_LANGUAGE, and the summary written in it.
+  const written = textLanguage(actual.summary);
+  checks.push({
+    name: 'report language',
+    ok:
+      actual.reportLanguage === expected.reportLanguage &&
+      (written === null || written === expected.reportLanguage),
+    detail: `got ${actual.reportLanguage} (summary ${written ?? 'empty'}), want ${expected.reportLanguage}`,
+    field: 'report_language',
+  });
+
   if (ctx) {
     const gapsA = requiredGapsOf(actual, ctx);
     const gapsE = requiredGapsOf(expected, ctx);
@@ -598,7 +673,13 @@ function droppedKeys(raw: unknown, parsed: unknown, path = ''): string[] {
   return [];
 }
 
-type AnySource = { type: string; messageId?: string; start?: number; end?: number };
+type AnySource = {
+  type: string;
+  uploadId?: string;
+  questionId?: string;
+  start?: number;
+  end?: number;
+};
 
 /** Every `source` array anywhere in the data, with its JSON path. */
 function sourcesIn(value: unknown, path = ''): Array<{ path: string; source: AnySource }> {
@@ -612,33 +693,31 @@ function sourcesIn(value: unknown, path = ''): Array<{ path: string; source: Any
   });
 }
 
-function sourceProblems(label: string, data: unknown, input: ExtractionInput): string[] {
+function sourceProblems(label: string, data: unknown, input: ExtractionInputV2): string[] {
   const problems: string[] = [];
   const segs = new Map<string, Array<{ start: number; end: number }>>();
-  for (const s of input.segments) segs.set(s.messageId, [...(segs.get(s.messageId) ?? []), s]);
-  const texts = new Set(input.texts.map((t) => t.messageId));
-  const replies = new Set(input.previousAnswers.map((a) => a.messageId));
+  for (const s of input.segments) segs.set(s.uploadId, [...(segs.get(s.uploadId) ?? []), s]);
+  const answers = new Set(input.previousAnswers.map((a) => a.questionId));
   const near = (a: number, b: number) => Math.abs(a - b) < 0.051;
   for (const { path, source: s } of sourcesIn(data)) {
     const at = `${label} ${path}`;
-    if (s.type === 'audio') {
-      const list = segs.get(s.messageId ?? '');
+    if (s.type === 'voice_note') {
+      const list = segs.get(s.uploadId ?? '');
       if (!list) {
-        problems.push(`${at}: audio messageId ${s.messageId} is not a voice note in the input`);
+        problems.push(`${at}: voice_note uploadId ${s.uploadId} is not a voice note in the input`);
         continue;
       }
       if (!list.some((x) => near(x.start, s.start ?? -1)))
-        problems.push(`${at}: start ${s.start} is not a segment start of ${s.messageId}`);
+        problems.push(`${at}: start ${s.start} is not a segment start of ${s.uploadId}`);
       if (s.end !== undefined && !list.some((x) => near(x.end, s.end!)))
-        problems.push(`${at}: end ${s.end} is not a segment end of ${s.messageId}`);
+        problems.push(`${at}: end ${s.end} is not a segment end of ${s.uploadId}`);
       if (s.end !== undefined && s.start !== undefined && s.end < s.start)
         problems.push(`${at}: end before start`);
-    } else if (s.type === 'text') {
-      if (!texts.has(s.messageId ?? ''))
-        problems.push(`${at}: text messageId ${s.messageId} is not a text message in the input`);
-    } else if (s.type === 'reply') {
-      if (!replies.has(s.messageId ?? ''))
-        problems.push(`${at}: reply messageId ${s.messageId} is not a previous answer`);
+    } else if (s.type === 'answer') {
+      if (!answers.has(s.questionId ?? ''))
+        problems.push(`${at}: answer questionId ${s.questionId} is not a previous answer`);
+    } else if (s.type !== 'weather_api') {
+      problems.push(`${at}: a ${s.type} source has no place in a web recorder report`);
     }
   }
   return problems;
@@ -658,20 +737,19 @@ export function fixtureProblems(f: EvalFixture): string[] {
   const { input, expected } = f;
 
   // Transcript
-  if (input.segments.length === 0 && input.texts.length === 0)
-    problems.push('transcript: no segments and no text messages');
-  const byMessage = new Map<string, Array<{ start: number; end: number }>>();
+  if (input.segments.length === 0) problems.push('transcript: no segments');
+  const byUpload = new Map<string, Array<{ start: number; end: number }>>();
   for (const s of input.segments) {
     if (!(s.end > s.start))
-      problems.push(`transcript: segment ${s.messageId}@${s.start} ends before it starts`);
-    const list = byMessage.get(s.messageId) ?? [];
+      problems.push(`transcript: segment ${s.uploadId}@${s.start} ends before it starts`);
+    const list = byUpload.get(s.uploadId) ?? [];
     const prev = list[list.length - 1];
     if (prev && s.start < prev.end - 0.051)
-      problems.push(`transcript: segment ${s.messageId}@${s.start} overlaps the previous one`);
+      problems.push(`transcript: segment ${s.uploadId}@${s.start} overlaps the previous one`);
     list.push(s);
-    byMessage.set(s.messageId, list);
+    byUpload.set(s.uploadId, list);
   }
-  const prompt = `${buildOrgContextBlock(input)}\n${buildExtractionUserMessage(input)}`;
+  const prompt = `${buildOrgContextBlock(input)}\n${buildExtractionUserMessageV2(input)}`;
   for (const p of findPhoneNumbers(prompt)) problems.push(`prompt: phone-number-like text "${p}"`);
   const companyIds = new Set(input.companies.map((c) => c.id));
 
@@ -680,9 +758,16 @@ export function fixtureProblems(f: EvalFixture): string[] {
     problems.push(`expected: unknown key ${k}`);
   if (expected.reportDate !== input.reportDate)
     problems.push(`expected: reportDate ${expected.reportDate} ≠ transcript ${input.reportDate}`);
+  if (expected.reportLanguage !== input.reportLanguage || expected.units !== input.units)
+    problems.push('expected: reportLanguage or units differ from the transcript (code sets them)');
+  if (
+    textLanguage(expected.summary) !== null &&
+    textLanguage(expected.summary) !== input.reportLanguage
+  )
+    problems.push(`expected: the summary is not written in ${input.reportLanguage}`);
   if (JSON.stringify(expected.photos) !== JSON.stringify(input.photos))
     problems.push('expected: photos differ from the transcript photos (code copies them)');
-  const obs = input.observedWeather ? toObserved(input.observedWeather) : undefined;
+  const obs = input.observedWeather ? toObservedIn(input.observedWeather, input.units) : undefined;
   if (JSON.stringify(expected.weather.observed) !== JSON.stringify(obs))
     problems.push('expected: weather.observed differs from the transcript observedWeather summary');
   expected.manpower.forEach((m, i) => {
@@ -719,8 +804,49 @@ export function fixtureProblems(f: EvalFixture): string[] {
     for (const k of droppedKeys(f.raw.recorded, f.recorded))
       problems.push(`tool-outputs: unknown key ${k}`);
     problems.push(...sourceProblems('tool-outputs', f.recorded, input));
+    if (JSON.stringify(f.raw.recorded) !== JSON.stringify(recordedFromExpected(f)))
+      problems.push(
+        'tool-outputs: not what --write-recorded generates from the expected data (run pnpm eval -- --write-recorded)',
+      );
   }
   return problems;
+}
+
+/**
+ * The tool output the tests replay, generated from the expected data (W1-12: no model recording
+ * without ANTHROPIC_API_KEY): the expected data without what code adds (`schemaVersion`,
+ * `reportDate`, `reportLanguage`, `units`, `photos`, `weather.observed`), with the case's
+ * `recordedNulls` left null so code has to derive them (a stated total, hours per worker from it).
+ */
+export function recordedFromExpected(
+  f: Pick<EvalFixture, 'expected' | 'recordedNulls'>,
+): ReportExtraction {
+  const {
+    schemaVersion: _v,
+    reportDate: _d,
+    reportLanguage: _l,
+    units: _u,
+    photos: _p,
+    ...rest
+  } = structuredClone(f.expected);
+  const { observed: _o, ...weather } = rest.weather;
+  const out: ReportExtraction = { ...rest, weather };
+  for (const path of f.recordedNulls) {
+    const i = Number(/^manpower\[(\d+)\]/.exec(path)?.[1]);
+    const m = out.manpower[i];
+    if (m) m.hoursPerWorker = null;
+  }
+  return out;
+}
+
+/** `pnpm eval -- --write-recorded`: fixtures/tool-outputs/<id>.json from the expected data. */
+export function writeRecorded(fixtures: EvalFixture[], dir = FIXTURES_DIR): void {
+  for (const f of fixtures) {
+    writeFileSync(
+      join(dir, 'tool-outputs', `${f.id}.json`),
+      `${JSON.stringify(recordedFromExpected(f), null, 2)}\n`,
+    );
+  }
 }
 
 // ───────────────────────────── Runs ─────────────────────────────
@@ -787,7 +913,7 @@ export async function scoreCase(
   model: string,
 ): Promise<EvalCase> {
   try {
-    const res = await runExtraction(
+    const res = await runReportExtraction(
       client,
       model,
       f.input,
@@ -880,6 +1006,7 @@ export function printTable(cases: EvalCase[]): string {
 export interface EvalOptions {
   cases: string[];
   recorded: boolean;
+  writeRecorded: boolean;
   list: boolean;
   help: boolean;
   concurrency: number;
@@ -889,6 +1016,7 @@ export function parseArgs(argv: string[]): EvalOptions {
   const opts: EvalOptions = {
     cases: [],
     recorded: false,
+    writeRecorded: false,
     list: false,
     help: false,
     concurrency: 3,
@@ -912,6 +1040,9 @@ export function parseArgs(argv: string[]): EvalOptions {
       case '--recorded':
         opts.recorded = true;
         break;
+      case '--write-recorded':
+        opts.writeRecorded = true;
+        break;
       case '--list':
         opts.list = true;
         break;
@@ -934,6 +1065,7 @@ export function parseArgs(argv: string[]): EvalOptions {
 const USAGE = `usage: pnpm eval [-- options]
   --case <id|part>   only cases whose id contains it (repeatable, or comma-separated)
   --recorded         score the recorded tool outputs offline (no API key needed)
+  --write-recorded   regenerate fixtures/tool-outputs from fixtures/expected (then prettier)
   --list             list the cases and exit
   --concurrency <n>  parallel API calls in a live run (default 3)`;
 
@@ -969,6 +1101,12 @@ export async function runEval(
   if (opts.list) {
     for (const id of ids) console.log(`${id}  ${loadFixture(id, dir).description}`);
     console.log(`${ids.length} cases`);
+    return 0;
+  }
+  if (opts.writeRecorded) {
+    const fixtures = ids.map((id) => loadFixture(id, dir, { skipRecorded: true }));
+    writeRecorded(fixtures, dir);
+    console.log(`wrote ${fixtures.length} tool outputs from fixtures/expected`);
     return 0;
   }
   const apiKey = env.ANTHROPIC_API_KEY ?? '';

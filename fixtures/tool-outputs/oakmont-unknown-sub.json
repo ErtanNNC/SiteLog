@@ -1,7 +1,10 @@
 {
   "languageDetected": ["en"],
   "summary": "Dry and sunny; no weather impact. Summit Drywall hung board on the second-floor east wing (approx. 70% of the wing). BrightLine Electric pulled wire on the first floor. The Ridgeway crew (6) completed firestopping at mechanical penetrations until 15:00. ClearView Glazing delivered 12 curtain-wall units for the lobby. Toolbox talk on ladder safety; one near miss (board slid off a cart), no injury.",
-  "weather": { "conditionsText": "Dry and sunny all day", "periods": [] },
+  "weather": {
+    "conditionsText": "Dry and sunny all day",
+    "periods": []
+  },
   "manpower": [
     {
       "companyId": "00000000-0000-4000-8000-00000000d006",
@@ -16,10 +19,10 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "22222222-0000-4000-8000-000000000201",
+          "type": "voice_note",
+          "uploadId": "22222222-0000-4000-8000-000000000201",
           "start": 5.5,
-          "end": 12.0
+          "end": 12
         }
       ]
     },
@@ -36,9 +39,9 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "22222222-0000-4000-8000-000000000201",
-          "start": 12.0,
+          "type": "voice_note",
+          "uploadId": "22222222-0000-4000-8000-000000000201",
+          "start": 12,
           "end": 18.4
         }
       ]
@@ -56,10 +59,10 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "22222222-0000-4000-8000-000000000201",
+          "type": "voice_note",
+          "uploadId": "22222222-0000-4000-8000-000000000201",
           "start": 18.4,
-          "end": 25.0
+          "end": 25
         }
       ]
     }
@@ -72,10 +75,10 @@
       "percentComplete": 70,
       "source": [
         {
-          "type": "audio",
-          "messageId": "22222222-0000-4000-8000-000000000201",
+          "type": "voice_note",
+          "uploadId": "22222222-0000-4000-8000-000000000201",
           "start": 5.5,
-          "end": 12.0
+          "end": 12
         }
       ]
     },
@@ -85,9 +88,9 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "22222222-0000-4000-8000-000000000201",
-          "start": 12.0,
+          "type": "voice_note",
+          "uploadId": "22222222-0000-4000-8000-000000000201",
+          "start": 12,
           "end": 18.4
         }
       ]
@@ -98,10 +101,10 @@
       "status": "complete",
       "source": [
         {
-          "type": "audio",
-          "messageId": "22222222-0000-4000-8000-000000000201",
+          "type": "voice_note",
+          "uploadId": "22222222-0000-4000-8000-000000000201",
           "start": 18.4,
-          "end": 25.0
+          "end": 25
         }
       ]
     }
@@ -113,9 +116,9 @@
       "supplier": "ClearView Glazing",
       "source": [
         {
-          "type": "audio",
-          "messageId": "22222222-0000-4000-8000-000000000201",
-          "start": 25.0,
+          "type": "voice_note",
+          "uploadId": "22222222-0000-4000-8000-000000000201",
+          "start": 25,
           "end": 31.2
         }
       ]
@@ -130,10 +133,10 @@
         "severity": "near_miss",
         "source": [
           {
-            "type": "audio",
-            "messageId": "22222222-0000-4000-8000-000000000201",
+            "type": "voice_note",
+            "uploadId": "22222222-0000-4000-8000-000000000201",
             "start": 31.2,
-            "end": 37.0
+            "end": 37
           }
         ]
       }
@@ -142,10 +145,10 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "22222222-0000-4000-8000-000000000201",
+        "type": "voice_note",
+        "uploadId": "22222222-0000-4000-8000-000000000201",
         "start": 31.2,
-        "end": 37.0
+        "end": 37
       }
     ]
   },
@@ -155,10 +158,10 @@
       "item": "Start taping and joint compound on the east wing",
       "source": [
         {
-          "type": "audio",
-          "messageId": "22222222-0000-4000-8000-000000000201",
-          "start": 37.0,
-          "end": 41.0
+          "type": "voice_note",
+          "uploadId": "22222222-0000-4000-8000-000000000201",
+          "start": 37,
+          "end": 41
         }
       ]
     }
@@ -166,6 +169,7 @@
   "newTerms": [
     {
       "heard": "the Ridgeway crew",
+      "heardLanguage": "en",
       "proposedOfficial": "Ridgeway",
       "kind": "company",
       "confidence": 0.85
@@ -175,10 +179,9 @@
   "lowConfidence": [],
   "proposedQuestions": [
     {
-      "field": "company.unknown",
+      "field": "company.unknown:Ridgeway",
       "question": "I heard \"the Ridgeway crew\" — is that a new subcontractor?",
-      "options": ["Add \"Ridgeway\""],
-      "target": { "companyNameHeard": "the Ridgeway crew", "manpowerIndex": 2 }
+      "options": ["Add \"Ridgeway\""]
     }
   ]
 }

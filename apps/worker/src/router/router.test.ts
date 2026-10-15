@@ -1,13 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  ButtonIds,
-  deadlineInstant,
-  type DailyReportDataV1,
-  type ExtractionOutput,
-} from '@sitelog/shared';
-import { postProcessExtraction, type ExtractionInput } from '../ai/extract';
+import { ButtonIds, deadlineInstant, type DailyReportDataV1 } from '@sitelog/shared';
+import { postProcessExtraction } from '../ai/extract';
 import { storeDraft } from '../pipeline/draft';
 import {
   buttonPayload,
@@ -20,16 +15,13 @@ import {
   SITE_RIVERSIDE,
   type Harness,
 } from '../test/harness';
+import { legacyInput, legacyRecorded } from '../test/legacy-fixtures';
 import { contextOf } from './context';
 import { runTimeoutSweep } from './timeouts';
 
 const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
-const riversideInput = JSON.parse(
-  readFileSync(join(FIXTURES, 'transcripts', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionInput;
-const riversideOutput = JSON.parse(
-  readFileSync(join(FIXTURES, 'tool-outputs', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionOutput;
+const riversideInput = legacyInput('riverside-2026-10-09');
+const riversideOutput = legacyRecorded('riverside-2026-10-09');
 const replies = JSON.parse(
   readFileSync(join(FIXTURES, 'tool-outputs', 'replies.json'), 'utf8'),
 ) as Record<string, Record<string, unknown>>;

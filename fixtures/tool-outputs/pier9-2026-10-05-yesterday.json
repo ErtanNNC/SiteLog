@@ -12,8 +12,8 @@
         "lostHours": 1.5,
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000009-0000-4000-8000-000000000901",
+            "type": "voice_note",
+            "uploadId": "e0000009-0000-4000-8000-000000000901",
             "start": 7.2,
             "end": 15
           }
@@ -35,8 +35,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 15,
           "end": 22.5
         }
@@ -55,8 +55,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 15,
           "end": 22.5
         }
@@ -71,14 +71,14 @@
       "percentComplete": 60,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 7.2,
           "end": 15
         },
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 22.5,
           "end": 29
         }
@@ -91,14 +91,14 @@
       "percentComplete": 50,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 15,
           "end": 22.5
         },
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 22.5,
           "end": 29
         }
@@ -113,8 +113,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000009-0000-4000-8000-000000000901",
+        "type": "voice_note",
+        "uploadId": "e0000009-0000-4000-8000-000000000901",
         "start": 29,
         "end": 34.5
       }

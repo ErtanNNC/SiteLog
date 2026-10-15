@@ -300,7 +300,8 @@ export async function handleWeatherFollowupAnswer(
     {
       defaultShiftHours: Number(site.settings.default_shift_hours),
       workingHours: site.site.working_hours,
-      messageId: s.message.id,
+      // v1 data (the WhatsApp worker, step 22): the reply message is the source.
+      source: { type: 'reply', messageId: s.message.id },
     },
   );
   await createReportVersion(ctx, report, applied.data, {

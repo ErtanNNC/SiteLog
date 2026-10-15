@@ -1,6 +1,6 @@
 {
   "id": "tr-kartal-2026-10-09",
-  "description": "Turkish. Kartal Konutları — B Blok (Demir Yapı, §18.2), Emre Yıldız (tr-TR → Deepgram language tr). Four crews with headcounts and hours, a pour, the §18.2 glossary phrases (döküm, kalıp söktük, demirci ekibi, TBM); the demirci ekibi headcount is not said. No golden extraction case yet (W1-12 adds Turkish cases).",
+  "description": "Turkish. Kartal Konutları — B Blok (Demir Yapı, §18.2), Emre Yıldız (tr-TR → Deepgram language tr). Four crews with headcounts and hours, a pour, the §18.2 glossary phrases (döküm, kalıp söktük, demirci ekibi, TBM); the demirci ekibi headcount is not said. Its golden extraction case is kartal-2026-10-09-tr (W1-12).",
   "audio": null,
   "mime": "audio/webm;codecs=opus",
   "site": "Kartal Konutları — B Blok",
@@ -10,7 +10,7 @@
   },
   "transcriptionLanguage": "tr",
   "expectedLanguage": "tr",
-  "goldenCase": null,
+  "goldenCase": "kartal-2026-10-09-tr",
   "durationS": 46,
   "text": "Kartal Konutları B Blok, günlük rapor. Bugün hava açıktı, yağmur yok. Usta Beton dört kişiyle bütün gün çalıştı, üçüncü kat döşemesinin dökümünü saat ikide bitirdik, yaklaşık kırk beş metreküp. Volt Elektrik üç kişi, ikinci katta tesisat çekti, tam gün. Akış Mekanik iki kişi öğleden sonra geldi, saat birden beşe kadar havalandırma kanalı taktılar. Bizim öz ekip beş kişi, birinci katta kalıp söktük, demirci ekibi de dördüncü katın donatısına başladı. Sabah TBM yaptık, iskele güvenliğini konuştuk. Kaza yok, yaralanan yok. Yarın sabah yedide beton pompası lazım. Üç fotoğraf gönderiyorum.",
   "segments": [

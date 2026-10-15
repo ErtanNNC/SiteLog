@@ -11,7 +11,7 @@ import type {
   TermKind,
 } from '@sitelog/shared/enums.ts';
 import type { OfficePhotoMime, OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
-import type { DailyReportDataV1, StoredReportData } from '@sitelog/shared/schemas/report.ts';
+import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import type {
   BillingData,
   ChangeEvent,
@@ -172,8 +172,11 @@ export interface CreateOfficeReportInput {
   siteId: string;
   /** YYYY-MM-DD in the site's time zone; today or earlier. */
   date: string;
-  /** v1, as create_office_report stamps it (writers stay v1 until W1-12). */
-  data: DailyReportDataV1;
+  /**
+   * Report data v2 (W1-12): create_office_report stamps the date, the org's report language and
+   * units (and keeps v1 data from a panel built before W1-12 as v1).
+   */
+  data: StoredReportData;
   /** Photos uploaded with uploadReportPhoto() for this site (at most OFFICE_PHOTO_MAX). */
   photos?: OfficePhotoUpload[];
 }

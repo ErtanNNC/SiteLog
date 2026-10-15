@@ -336,7 +336,9 @@ describe('create_office_report', () => {
       [res.reportId],
     );
     expect(v[0]!.data.reportDate).toBe(date);
-    expect(v[0]!.data.schemaVersion).toBe(1);
+    // W1-12 (20261015000002): anything but an explicit v1 is stamped report data v2, with the
+    // org's report language and units.
+    expect(v[0]!.data).toMatchObject({ schemaVersion: 2, reportLanguage: 'en', units: 'imperial' });
     expect(v[0]!.author_user_id).toBe(RAVI);
   });
 

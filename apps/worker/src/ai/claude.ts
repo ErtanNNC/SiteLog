@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { z } from 'zod';
+import { redactPhones } from '@sitelog/shared';
 import type { Logger } from '../log';
 import { estimateClaudeCostUsd, type TokenUsage } from './cost';
 import { abortableFetch, currentSignal } from '../abort';
@@ -12,7 +13,13 @@ import { abortableFetch, currentSignal } from '../abort';
  * Model differences (current API): the 5.5 generation (Opus 5.5, Sonnet 5.5) and the
  * Fable/Mythos family reject forced `tool_choice` and non-default sampling, so for those
  * the helper uses `tool_choice: auto` + an explicit instruction and verifies that the tool
- * was called (one re-prompt if not).
+ * was called (one re-prompt if not). The model comes from CLAUDE_MODEL (default
+ * claude-sonnet-5-5, GAP D23), so the §10.4 "forced tool_choice, temperature 0" is not what
+ * the default model gets: README "Deliberate deviations", spec §19.
+ *
+ * No phone number reaches the model (CLAUDE.md; spec §10.12): `buildParams` runs every system
+ * block and every text of every user turn, the corrective retry turns included, through
+ * `redactPhones`.
  */
 
 export type MessagesClient = {
@@ -123,14 +130,14 @@ export function buildParams<T>(
     .filter((b) => b.text.trim().length > 0)
     .map((b) =>
       b.cache
-        ? { type: 'text', text: b.text, cache_control: { type: 'ephemeral' } }
-        : { type: 'text', text: b.text },
+        ? { type: 'text', text: redactPhones(b.text), cache_control: { type: 'ephemeral' } }
+        : { type: 'text', text: redactPhones(b.text) },
     );
   const params: Anthropic.MessageCreateParamsNonStreaming = {
     model: req.model,
     max_tokens: req.maxTokens ?? 8192,
     system,
-    messages,
+    messages: messages.map(redactUserTurn),
     tools: [
       {
         name: req.tool.name,
@@ -145,6 +152,29 @@ export function buildParams<T>(
   if (profile.sampling) params.temperature = 0;
   if (profile.effort && req.effort) params.output_config = { effort: req.effort };
   return params;
+}
+
+/** A user turn with every text (string content, text blocks, tool_result text) redacted. */
+export function redactUserTurn(m: Anthropic.MessageParam): Anthropic.MessageParam {
+  if (m.role !== 'user') return m;
+  if (typeof m.content === 'string') return { ...m, content: redactPhones(m.content) };
+  return {
+    ...m,
+    content: m.content.map((b) => {
+      if (b.type === 'text') return { ...b, text: redactPhones(b.text) };
+      if (b.type === 'tool_result') {
+        if (typeof b.content === 'string') return { ...b, content: redactPhones(b.content) };
+        if (Array.isArray(b.content))
+          return {
+            ...b,
+            content: b.content.map((c) =>
+              c.type === 'text' ? { ...c, text: redactPhones(c.text) } : c,
+            ),
+          };
+      }
+      return b;
+    }),
+  };
 }
 
 function findToolUse(msg: Anthropic.Message, name: string): Anthropic.ToolUseBlock | null {

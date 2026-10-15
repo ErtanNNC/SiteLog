@@ -9,6 +9,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-02",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Kevin",
@@ -34,35 +38,132 @@
     }
   ],
   "glossary": [
-    { "heard": "the deck", "official": "Elevated concrete slab", "kind": "term" },
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
+    {
+      "heard": "the deck",
+      "official": "Elevated concrete slab",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
     {
       "heard": "topped out",
       "official": "Structural frame complete to roof level",
       "kind": "term"
     },
-    { "heard": "punch", "official": "Punch list items", "kind": "term" },
-    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    }
   ],
-  "rejectedMappings": [{ "heard": "lift", "official": "Lift (concrete placement height)" }],
+  "rejectedMappings": [
+    {
+      "heard": "lift",
+      "official": "Lift (concrete placement height)"
+    }
+  ],
   "observedWeather": {
     "date": "2026-10-02",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-02T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 54, "windMph": 16, "gustMph": 24 },
-      { "time": "07:00", "precipIn": 0, "tempF": 56, "windMph": 17, "gustMph": 22 },
-      { "time": "08:00", "precipIn": 0, "tempF": 58, "windMph": 18, "gustMph": 20 },
-      { "time": "09:00", "precipIn": 0, "tempF": 59, "windMph": 16, "gustMph": 23 },
-      { "time": "10:00", "precipIn": 0, "tempF": 60, "windMph": 17, "gustMph": 21 },
-      { "time": "11:00", "precipIn": 0, "tempF": 61, "windMph": 18, "gustMph": 24 },
-      { "time": "12:00", "precipIn": 0, "tempF": 61, "windMph": 16, "gustMph": 22 },
-      { "time": "13:00", "precipIn": 0, "tempF": 60, "windMph": 17, "gustMph": 31 },
-      { "time": "14:00", "precipIn": 0, "tempF": 59, "windMph": 18, "gustMph": 34 },
-      { "time": "15:00", "precipIn": 0, "tempF": 58, "windMph": 16, "gustMph": 29 },
-      { "time": "16:00", "precipIn": 0, "tempF": 56, "windMph": 17, "gustMph": 24 },
-      { "time": "17:00", "precipIn": 0, "tempF": 54, "windMph": 18, "gustMph": 22 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 54,
+        "windMph": 16,
+        "gustMph": 24
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 56,
+        "windMph": 17,
+        "gustMph": 22
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 58,
+        "windMph": 18,
+        "gustMph": 20
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 16,
+        "gustMph": 23
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 60,
+        "windMph": 17,
+        "gustMph": 21
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 18,
+        "gustMph": 24
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 16,
+        "gustMph": 22
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 60,
+        "windMph": 17,
+        "gustMph": 31
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 18,
+        "gustMph": 34
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 58,
+        "windMph": 16,
+        "gustMph": 29
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 56,
+        "windMph": 17,
+        "gustMph": 24
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 54,
+        "windMph": 18,
+        "gustMph": 22
+      }
     ],
     "summary": {
       "precipIn": 0,
@@ -79,48 +180,47 @@
   "previousDraft": null,
   "photos": [
     {
-      "messageId": "e0000010-0000-4000-8000-000000001005",
+      "uploadId": "e0000010-0000-4000-8000-000000001005",
       "caption": "L3 double tees",
       "takenAt": "2026-10-02T22:05:00Z"
     }
   ],
   "segments": [
     {
-      "messageId": "e0000010-0000-4000-8000-000000001001",
+      "uploadId": "e0000010-0000-4000-8000-000000001001",
       "start": 0,
       "end": 6,
       "text": "Northgate, Friday. Wind picked up after lunch, gusts were over thirty."
     },
     {
-      "messageId": "e0000010-0000-4000-8000-000000001001",
+      "uploadId": "e0000010-0000-4000-8000-000000001001",
       "start": 6,
       "end": 14.1,
       "text": "We stood down the crane from one to three, so no precast picks for two hours, the erection crew did connections and grouting instead."
     },
     {
-      "messageId": "e0000010-0000-4000-8000-000000001001",
+      "uploadId": "e0000010-0000-4000-8000-000000001001",
       "start": 14.1,
       "end": 21,
       "text": "Before that we set nine double tees on level three."
     },
     {
-      "messageId": "e0000010-0000-4000-8000-000000001001",
+      "uploadId": "e0000010-0000-4000-8000-000000001001",
       "start": 21,
       "end": 28.3,
       "text": "Apex, three guys, full day on the ramp B pour prep. Ironclad, three, full day, rebar on the level two post-tension deck."
     },
     {
-      "messageId": "e0000010-0000-4000-8000-000000001001",
+      "uploadId": "e0000010-0000-4000-8000-000000001001",
       "start": 28.3,
       "end": 34,
       "text": "Our crew, five, full day, that's the erection crew with the crane."
     },
     {
-      "messageId": "e0000010-0000-4000-8000-000000001001",
+      "uploadId": "e0000010-0000-4000-8000-000000001001",
       "start": 34,
       "end": 40.2,
       "text": "Toolbox talk on crane signals and wind limits. No incidents. Photo of the deck."
     }
-  ],
-  "texts": []
+  ]
 }

@@ -4,10 +4,11 @@
  * carried over from the version being edited, photos from the PhotoPicker's draft. Changed rows
  * get an `office_edit` source so every value keeps its provenance (§10.3).
  *
- * The form shows the v2 view of the version (ReportDetail.data) but saves in the shape the
- * version is stored in (ReportDetail.storedData): a v1 version is edited into a v1 version, as
- * create_report_version takes it until the writers move to v2 (W1-12). The upgrade keeps every
- * list's order and length, so a form row's `origIndex` points at the same entry in both.
+ * The form shows the v2 view of the version (ReportDetail.data) and saves report data v2 (W1-12:
+ * the editor passes `readReportData(storedData)` as the base, so a stored v1 version is edited
+ * into a v2 version; create_report_version takes either). The upgrade keeps every list's order and
+ * length, so a form row's `origIndex` points at the same entry in both. `toReportData` itself keeps
+ * the shape of the base it is given.
  */
 import { z } from 'zod';
 import {

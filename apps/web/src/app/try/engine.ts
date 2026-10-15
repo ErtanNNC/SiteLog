@@ -1242,13 +1242,14 @@ function mergePhotos(
 
 function sendQuestion(t: Turn, r: SimReport, spec: QuestionSpec): void {
   const id = t.id('q');
-  const buttons = ButtonSets.question(id, spec.options);
+  const labels = spec.options.map((o) => o.label);
+  const buttons = ButtonSets.question(id, labels);
   const q: SimQuestion = {
     id,
     field: spec.field,
     path: spec.path,
     prompt: spec.prompt,
-    options: spec.options,
+    options: labels,
     buttons,
     target: spec.target,
     askedAt: '',
@@ -1364,7 +1365,7 @@ function handleAnswer(
   const applied = applyAnswer(r.data, { field: q.field, target: q.target }, value, {
     defaultShiftHours: t.ctx.settings.defaultShiftHours,
     workingHours: t.ctx.site.workingHours,
-    messageId: msg.id,
+    source: { type: 'reply', messageId: msg.id },
     confidence,
     companies: s.companies,
   });
@@ -1807,7 +1808,7 @@ export function correctDraft(
     {
       defaultShiftHours: ctx.defaultShiftHours,
       workingHours: ctx.workingHours,
-      messageId: ctx.messageId,
+      source: { type: 'reply', messageId: ctx.messageId },
     },
   );
   const after = applied.data.manpower[idx.index]!;
@@ -2032,7 +2033,7 @@ function weatherFollowupAnswer(t: Turn, r: SimReport, text: string, msg: ChatMes
     {
       defaultShiftHours: t.ctx.settings.defaultShiftHours,
       workingHours: t.ctx.site.workingHours,
-      messageId: msg.id,
+      source: { type: 'reply', messageId: msg.id },
     },
   );
   newVersion(t, r, applied.data, 'reporter', `Crew on site this morning: ${workers}`, msg.id, null);

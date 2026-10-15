@@ -131,6 +131,8 @@ export const FIELD_API_ERRORS = [
   'report_in_progress',
   'day_closed',
   'wrong_state',
+  'question_closed',
+  'answer_not_accepted',
   'rate_limited',
   'internal',
 ] as const;
@@ -326,6 +328,18 @@ export interface ReportView {
  */
 export interface ConfirmResponse {
   status: 'queued' | 'filed';
+}
+
+/**
+ * `POST reports/:id/answer` (W1-12): `processing` when the answer was applied (the draft updated,
+ * the question answered, decide_next queued: poll `GET reports/:id` for the next question or the
+ * draft); `already_answered` when this question was answered before with the same answer (a retry).
+ * 409 `wrong_state` unless the report awaits an answer, 409 `question_closed` when the question is
+ * not the open one, 400 `answer_not_accepted` when the option or the number does not answer it.
+ */
+export interface AnswerResponse {
+  status: 'processing' | 'already_answered';
+  reportStatus: ReportStatus;
 }
 
 /** `POST day-status`. */

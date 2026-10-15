@@ -15,3 +15,5 @@ docs/START_HERE.md
 docs/decisions
 docs/design
 docs/brand
+# The extraction system prompt, verbatim from spec §10.4 (D24); a test compares it with the spec.
+apps/worker/src/ai/prompts/*.md

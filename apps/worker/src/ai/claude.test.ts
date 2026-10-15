@@ -1,22 +1,16 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ExtractionOutputSchema } from '@sitelog/shared';
 import { z } from 'zod';
 import { buildParams, callTool, modelProfile, ToolCallError } from './claude';
-import { runExtraction, type ExtractionInput } from './extract';
+import { runExtraction } from './extract';
 import { quickClassify, stripDayReference } from './classify';
 import { quickDayOff } from './dayoff';
 import { matchSiteByText } from './site-guess';
 import { scriptedClaude } from '../test/harness';
+import { legacyInput, legacyRecorded } from '../test/legacy-fixtures';
 
-const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
-const input = JSON.parse(
-  readFileSync(join(FIXTURES, 'transcripts', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionInput;
-const recorded = JSON.parse(
-  readFileSync(join(FIXTURES, 'tool-outputs', 'riverside-2026-10-09.json'), 'utf8'),
-) as Record<string, unknown>;
+const input = legacyInput('riverside-2026-10-09');
+const recorded = legacyRecorded('riverside-2026-10-09');
 
 describe('model profiles', () => {
   it('forces the tool and temperature 0 on models that accept them', () => {

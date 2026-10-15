@@ -2,8 +2,17 @@
  * "Try it on WhatsApp" scenarios: golden cases from fixtures/ (the voice-note transcript and the
  * DailyReportData the extraction must produce for it). The simulator has no AI, so where
  * production transcribes and extracts a free-form note, it replays these recorded results.
+ *
+ * The golden set is v2 from W1-12 (the web recorder's shape: voice notes keyed by uploadId); the
+ * simulator plays the v1.0 WhatsApp flow, so it reads each case in v1 terms (`downgradeV2toV1`,
+ * the same UUIDs as message ids; a `whatsappText` case is the typed message it was).
  */
-import { DailyReportDataV1Schema, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
+import {
+  DailyReportDataSchema,
+  DailyReportDataV1Schema,
+  type DailyReportDataV1,
+} from '@sitelog/shared/schemas/report.ts';
+import { downgradeV2toV1 } from '@sitelog/shared/report/upgrade.ts';
 import type { QuestionField } from '@sitelog/shared/schemas/report.ts';
 import elmNoWorkExpected from '../../../../../fixtures/expected/elm-2026-10-08-no-work.json';
 import elmNoWorkTranscript from '../../../../../fixtures/transcripts/elm-2026-10-08-no-work.json';
@@ -26,17 +35,17 @@ import heroTranscript from '../../../../../fixtures/transcripts/riverside-2026-1
 import spanishExpected from '../../../../../fixtures/expected/riverside-2026-10-07-spanish.json';
 import spanishTranscript from '../../../../../fixtures/transcripts/riverside-2026-10-07-spanish.json';
 
-/** The parts of a fixtures/transcripts/*.json file the simulator uses. */
+/** The parts of a fixtures/transcripts/*.json file the simulator uses (v2, W1-12). */
 interface TranscriptFixture {
   id: string;
   expectedQuestion: { field: string; path: string } | null;
+  whatsappText?: boolean;
   site: { projectCode: string };
   reportDate: string;
   reporterFirstName: string;
   companies: Array<{ id: string; name: string }>;
-  photos: Array<{ messageId: string; caption?: string }>;
-  segments: Array<{ messageId: string; start: number; end: number; text: string }>;
-  texts?: Array<{ messageId: string; text: string }>;
+  photos: Array<{ uploadId: string; caption?: string }>;
+  segments: Array<{ uploadId: string; start: number; end: number; text: string }>;
 }
 
 export type ScenarioId =
@@ -83,10 +92,16 @@ function build(
   expected: unknown,
   opts: { outcome: ScenarioOutcome; durationS?: number },
 ): Scenario {
-  const voiceIds = [...new Set(t.segments.map((s) => s.messageId))];
-  const texts = t.texts ?? [];
-  const kind = voiceIds.length > 0 ? 'voice' : 'text';
-  const extraction = DailyReportDataV1Schema.parse(expected);
+  const ids = [...new Set(t.segments.map((s) => s.uploadId))];
+  const kind = t.whatsappText ? 'text' : 'voice';
+  const voiceIds = kind === 'voice' ? ids : [];
+  const texts =
+    kind === 'text' ? t.segments.map((s) => ({ messageId: s.uploadId, text: s.text })) : [];
+  const extraction = DailyReportDataV1Schema.parse(
+    downgradeV2toV1(DailyReportDataSchema.parse(expected), {
+      textIds: new Set(texts.map((x) => x.messageId)),
+    }),
+  );
   const segEnd = t.segments.reduce((a, s) => Math.max(a, s.end), 0);
   return {
     id: t.id as ScenarioId,
@@ -94,7 +109,8 @@ function build(
     kind,
     durationS: kind === 'voice' ? (opts.durationS ?? Math.round(segEnd)) : null,
     languages: extraction.languageDetected.length ? extraction.languageDetected : ['en'],
-    segments: t.segments.map(({ start, end, text }) => ({ start, end, text })),
+    segments:
+      kind === 'voice' ? t.segments.map(({ start, end, text }) => ({ start, end, text })) : [],
     text:
       kind === 'voice'
         ? t.segments.map((s) => s.text).join(' ')

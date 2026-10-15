@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
-import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportData } from '@sitelog/shared/schemas/report.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { PageSkeleton } from '@/components/sitelog/Skeletons';
@@ -42,6 +42,12 @@ const c = copy.newReport;
 const cp = copy.report.editMode.photos;
 
 /**
+ * Report data v2 (W1-12). create_office_report stamps the org's report language and units (and the
+ * date) on the server, so these are placeholders the server replaces.
+ */
+const OFFICE_REPORT_STAMPS = { reportLanguage: 'en', units: 'imperial' } as const;
+
+/**
  * New report — the office types a site's daily report (no WhatsApp, no AI), with photos. It is
  * filed on save as version 1 (create_office_report, after the photos are uploaded) and its PDF
  * is rendered in the browser with the worker's document. `?site=` and `?date=` preselect the
@@ -75,7 +81,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
   const draftKey = newReportDraftKey(source.orgId, source.user.id);
   // The form with nothing typed (the report date is chosen above, not in the form).
   const [blank] = useState(() =>
-    toFormValues(emptyReportDataV1(source.now().toISOString().slice(0, 10))),
+    toFormValues(emptyReportData(source.now().toISOString().slice(0, 10), OFFICE_REPORT_STAMPS)),
   );
   const paramSite = () => {
     const wanted = params.get('site');
@@ -202,7 +208,7 @@ function NewReportForm({ sites, companies }: { sites: SiteOption[]; companies: C
     let data;
     try {
       data = withoutOfficeEdits(
-        toReportData(values, emptyReportDataV1(date), {
+        toReportData(values, emptyReportData(date, OFFICE_REPORT_STAMPS), {
           userId: source.user.id,
           at: source.now().toISOString(),
           companies,

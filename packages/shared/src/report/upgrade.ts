@@ -1,6 +1,8 @@
 import type {
   DailyReportData,
   DailyReportDataV1,
+  ExtractionOutput,
+  ReportExtraction,
   HoursBasis,
   HoursBasisV1,
   ObservedWeather,
@@ -15,7 +17,8 @@ import type {
 /**
  * Stored report data → the canonical v2 shape (§10.3), on read (GAP D20). Stored v1 versions are
  * never rewritten: the panel, the PDF builders, email and the evidence pack read every version
- * through `readReportData()`. Writers still write v1 until W1-12, so nothing here runs on write.
+ * through `readReportData()`. From W1-12 the web pipeline, `create_office_report` and the panel
+ * editor write v2; the WhatsApp worker writes v1 until step 22, so nothing here runs on write.
  *
  * The v1 → v2 mapping, field by field:
  * - `schemaVersion` 1 → 2; `reportLanguage` 'en' and `units` 'imperial' (every v1 report is a US,
@@ -166,4 +169,130 @@ export function upgradePhotosV1(photos: readonly PhotoV1[]): Photo[] {
 /** `xs.map(f)`, passing a value that is not an array (a list old data lacks) through unchanged. */
 function mapList<T, U>(xs: readonly T[], f: (x: T) => U): U[] {
   return Array.isArray(xs) ? xs.map(f) : (xs as unknown as U[]);
+}
+
+// ───────────────────────────── v2 → v1, for the v1.0 consumers of the golden set ─────────────
+
+/**
+ * The golden set (fixtures/transcripts, expected, tool-outputs) is v2 from W1-12. Two v1.0 consumers
+ * still read it in v1 terms until step 22 retires them: the WhatsApp worker's integration and load
+ * tests (its extraction is v1) and the panel's WhatsApp simulator (`/try`). This maps v2 back, the
+ * inverse of `upgradeV1toV2`: `voice_note` → `audio` (`uploadId` → `messageId`, or a `text` source
+ * for an id in `textIds`: a typed WhatsApp report), `answer` → `reply` (`questionId` →
+ * `messageId`), `hoursBasis` 'answer' → 'reply', photos `uploadId` → `messageId`, the new terms
+ * without `heardLanguage`. A `call` source has no v1 form and is left out. Never used on stored
+ * data: stored versions are never rewritten (D20).
+ */
+export interface DowngradeOptions {
+  /** Voice-note ids that were typed WhatsApp messages in v1 (become `text` sources). */
+  textIds?: ReadonlySet<string>;
+}
+
+export function downgradeSourceV2(source: Source, opts: DowngradeOptions = {}): SourceV1 | null {
+  switch (source.type) {
+    case 'voice_note':
+      if (opts.textIds?.has(source.uploadId)) return { type: 'text', messageId: source.uploadId };
+      return {
+        type: 'audio',
+        messageId: source.uploadId,
+        start: source.start,
+        ...(source.end !== undefined ? { end: source.end } : {}),
+      };
+    case 'answer':
+      return { type: 'reply', messageId: source.questionId };
+    case 'office_edit':
+      return { type: 'office_edit', userId: source.userId, at: source.at };
+    case 'weather_api':
+      return { type: 'weather_api' };
+    case 'call':
+      return null;
+  }
+}
+
+function downgradeSources(sources: readonly Source[], opts: DowngradeOptions): SourceV1[] {
+  return sources.flatMap((s) => {
+    const v1 = downgradeSourceV2(s, opts);
+    return v1 ? [v1] : [];
+  });
+}
+
+/** The model's v2 output (`submit_daily_report`) in v1 terms. */
+export function downgradeExtractionV2(
+  out: ReportExtraction,
+  opts: DowngradeOptions = {},
+): ExtractionOutput {
+  const x = structuredClone(out);
+  const src = (list: readonly Source[]) => downgradeSources(list, opts);
+  return {
+    languageDetected: x.languageDetected,
+    summary: x.summary,
+    ...(x.workingHours ? { workingHours: x.workingHours } : {}),
+    weather: {
+      conditionsText: x.weather.conditionsText,
+      periods: x.weather.periods.map((p) => ({ ...p, source: src(p.source) })),
+    },
+    manpower: x.manpower.map((m) => ({
+      ...m,
+      hoursBasis: m.hoursBasis === 'answer' ? 'reply' : m.hoursBasis,
+      source: src(m.source),
+    })),
+    workPerformed: x.workPerformed.map((w) => ({ ...w, source: src(w.source) })),
+    deliveries: x.deliveries.map((d) => ({ ...d, source: src(d.source) })),
+    equipment: x.equipment.map((e) => ({ ...e, source: src(e.source) })),
+    safety: {
+      ...x.safety,
+      incidents: x.safety.incidents.map((i) => ({ ...i, source: src(i.source) })),
+      source: src(x.safety.source),
+    },
+    issues: x.issues.map((i) => ({ ...i, source: src(i.source) })),
+    nextWorkday: x.nextWorkday.map((n) => ({ ...n, source: src(n.source) })),
+    newTerms: x.newTerms.map(({ heardLanguage: _l, ...t }) => t),
+    missingRequired: x.missingRequired,
+    lowConfidence: x.lowConfidence,
+    proposedQuestions: x.proposedQuestions.map((q) => ({
+      field: q.field,
+      question: q.question,
+      options: q.options,
+    })),
+  };
+}
+
+/** v2 report data in v1 terms (imperial only: v1 has no metric weather). */
+export function downgradeV2toV1(
+  data: DailyReportData,
+  opts: DowngradeOptions = {},
+): DailyReportDataV1 {
+  if (data.units !== 'imperial' && data.weather.observed)
+    throw new Error('downgradeV2toV1: v1 report data has imperial weather only');
+  const { schemaVersion: _v, reportDate, reportLanguage: _l, units: _u, photos, ...rest } = data;
+  const out = downgradeExtractionV2(
+    {
+      ...rest,
+      weather: { conditionsText: rest.weather.conditionsText, periods: rest.weather.periods },
+    },
+    opts,
+  );
+  const o = data.weather.observed;
+  return {
+    ...out,
+    schemaVersion: 1,
+    reportDate,
+    weather: {
+      ...(o
+        ? {
+            observed: {
+              precipIn: o.precip,
+              tempMinF: o.tempMin,
+              tempMaxF: o.tempMax,
+              windMph: o.wind,
+              ...(o.gust !== undefined ? { gustMph: o.gust } : {}),
+              provider: o.provider,
+            },
+          }
+        : {}),
+      conditionsText: out.weather.conditionsText,
+      periods: out.weather.periods,
+    },
+    photos: photos.map(({ uploadId, ...p }) => ({ messageId: uploadId, ...p })),
+  };
 }

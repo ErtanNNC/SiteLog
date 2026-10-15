@@ -63,6 +63,8 @@ export interface FakeDbData {
   sources: ReportSourceRow[];
   questions: Map<string, QuestionRow>;
   jobs: Map<number, JobRow>;
+  /** field_devices.last_seen_at per reporter (D25), set by tests. */
+  deviceSeen: Map<string, string>;
   audit: AuditInput[];
   notifications: Array<{
     org_id: string;
@@ -130,6 +132,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     sources: [],
     questions: new Map(),
     jobs: new Map(),
+    deviceSeen: new Map(),
     audit: [],
     notifications: [],
     packs: new Map(),
@@ -664,7 +667,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       const report = d.reports.get(input.report_id);
       const isDraft =
         !report ||
-        ['collecting', 'awaiting_answer', 'awaiting_confirmation'].includes(report.status);
+        ['collecting', 'processing', 'awaiting_answer', 'awaiting_confirmation'].includes(
+          report.status,
+        );
       if (existing && report && !isDraft && input.version <= report.current_version) {
         // Same rule as the SQL: a current version of a filed report is immutable.
         throw new Error(
@@ -746,9 +751,28 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         asked_at: toIso(input.asked_at),
         answered_at: null,
         created_at: iso(),
+        channel: input.channel ?? null,
       };
       d.questions.set(row.id, row);
       return row;
+    },
+    async setReportStatus(id, to, from) {
+      const row = d.reports.get(id);
+      if (!row || !from.includes(row.status)) return false;
+      d.reports.set(id, { ...row, status: to, updated_at: iso() });
+      return true;
+    },
+    async reporterDeviceLastSeen(reporterId) {
+      return d.deviceSeen.get(reporterId) ?? null;
+    },
+    async hasActiveReportJob(type, reportId, exceptJobId) {
+      return Array.from(d.jobs.values()).some(
+        (j) =>
+          j.type === type &&
+          j.id !== exceptJobId &&
+          (j.status === 'queued' || j.status === 'running') &&
+          (j.payload as { reportId?: string } | null)?.reportId === reportId,
+      );
     },
     async getQuestion(id) {
       return d.questions.get(id) ?? null;

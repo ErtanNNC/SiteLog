@@ -1,6 +1,7 @@
 /**
- * Load test (§16.2 M9: "500 reports in 30 min through the worker"; §15: draft within 90 s p50 /
- * 180 s p95 for a 3-min note).
+ * Load test (§16.2 M9: "500 reports in 30 min through the worker"; §15.1: upload → draft within
+ * 60 s p50 / 150 s p95, the v1.2 target from W1-12; v1.0 quoted 90 s / 180 s). The reports are
+ * WhatsApp voice notes until step 22 moves the load test to the web recorder.
  *
  *   pnpm loadtest                                          # 500 reports over 30 min, PGlite, scale 0.02
  *   pnpm loadtest -- --reports 50 --time-scale 0.05        # a quick run
@@ -44,6 +45,9 @@ import {
 } from './fakes';
 import { buttonReplyPayload, readdress, textPayload, webhookFixture } from './webhook';
 import { createWorld } from './world';
+
+/** §15.1: web upload → draft on screen, seconds (W1-12; v1.0 had 90 / 180). */
+export const DRAFT_TARGET_S = { p50: 60, p95: 150 } as const;
 
 const TZ = 'America/Chicago';
 
@@ -879,7 +883,8 @@ export async function runLoadTest(
       slotsFor500In30MinAt70Pct: Math.ceil((500 * slotSeconds) / 1800 / 0.7),
       meets500In30Min: per30 >= 500,
       meetsDraftTargets:
-        (lat.firstResponse.p50 ?? Infinity) <= 90 && (lat.firstResponse.p95 ?? Infinity) <= 180,
+        (lat.firstResponse.p50 ?? Infinity) <= DRAFT_TARGET_S.p50 &&
+        (lat.firstResponse.p95 ?? Infinity) <= DRAFT_TARGET_S.p95,
     },
     privacy: { phoneLeaksToClaude: world.claude.phoneLeaks.length },
   };
@@ -928,7 +933,11 @@ export function formatResult(r: LoadTestResult): string {
     '  Latency (virtual s = scale-1 seconds;    n      p50      p95      max',
     '  real CPU/DB time stretched by 1/scale)',
     row('received → ack', L.ack, 'target < 5 s (F5)'),
-    row('received → question/draft', L.firstResponse, 'target p50 90 / p95 180 (§15)'),
+    row(
+      'received → question/draft',
+      L.firstResponse,
+      `target p50 ${DRAFT_TARGET_S.p50} / p95 ${DRAFT_TARGET_S.p95} (§15.1)`,
+    ),
     row('received → draft (no question)', L.draftNoQuestion),
     row('received → draft (all)', L.draftAll, 'incl. question round trips'),
     row('OK → PDF on WhatsApp', L.confirmToPdf, 'target < 60 s (F7)'),
@@ -964,7 +973,7 @@ export function formatResult(r: LoadTestResult): string {
       `${r.projection.slots} slots file ≈ ${Math.floor(r.projection.reportsPer30MinAtScale1)} reports / 30 min`,
     `  500 reports in 30 min: ${r.projection.meets500In30Min ? 'MET' : 'NOT MET'} with ${r.projection.slots} slots ` +
       `(needs ≥ ${r.projection.slotsFor500In30Min} slots at 100 % busy, ≥ ${r.projection.slotsFor500In30MinAt70Pct} at 70 %)`,
-    `  §15 draft p50 ≤ 90 s and p95 ≤ 180 s in this run: ${r.projection.meetsDraftTargets ? 'MET' : 'NOT MET'}`,
+    `  §15.1 draft p50 ≤ ${DRAFT_TARGET_S.p50} s and p95 ≤ ${DRAFT_TARGET_S.p95} s in this run: ${r.projection.meetsDraftTargets ? 'MET' : 'NOT MET'}`,
     `  phone numbers sent to Claude: ${r.privacy.phoneLeaksToClaude}`,
     '',
   ];

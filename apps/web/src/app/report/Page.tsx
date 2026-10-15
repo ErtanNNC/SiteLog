@@ -6,6 +6,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { formatTimeInTz, formatWeekdayMonthDay } from '@sitelog/shared/format.ts';
 import { isReporterAuthor } from '@sitelog/shared/enums.ts';
+import { readReportData } from '@sitelog/shared/report/upgrade.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { TopBarControls } from '@/components/shell/TopBar';
@@ -170,12 +171,14 @@ function ReportScreen({
   };
 
   const onSaveClick = form.handleSubmit((values) => {
+    const storedV2 = readReportData(detail.storedData);
     let data: ReportDetail['storedData'];
     try {
-      // The new version has the edited version's stored shape (v1 until W1-12), not the v2 view
-      // the form shows. data.photos: the version's photos still listed, with their captions (new
-      // picks are uploaded on confirm and appended by the server).
-      data = toReportData(values, withPhotoEntries(detail.storedData, photos.kept()), {
+      // The new version is report data v2 (W1-12): a stored v1 version is edited through its v2
+      // view, which keeps every list's order, so the form rows map onto it. data.photos: the
+      // version's photos still listed, with their captions (new picks are uploaded on confirm and
+      // appended by the server).
+      data = toReportData(values, withPhotoEntries(storedV2, photos.kept()), {
         userId: source.user.id,
         at: source.now().toISOString(),
         companies: detail.companies,
@@ -185,7 +188,7 @@ function ReportScreen({
       return;
     }
     // A photo change alone is an edit.
-    const shown = withPhotoEntries(detail.storedData, reportPhotoEntries(detail.photos));
+    const shown = withPhotoEntries(storedV2, reportPhotoEntries(detail.photos));
     if (sameReportData(data, shown) && !photos.hasNew) {
       toast.message(copy.report.editMode.noChanges);
       return;
