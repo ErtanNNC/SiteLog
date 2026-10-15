@@ -323,7 +323,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-13 · Field screens: Question → Draft → Confirm
 
-- [ ] **W1-13 done** · today _conflicts_ (M) · step 18 (second half)
+- [ ] **W1-13 done** · today _conflicts_ (M) · step 18 (second half) · _CI green (run 38740645053, the e2e:supabase worker flow included); waits only for the owner's phone check through the preview with the worker on the preview project._
 - **Spec:** §9.3, F7 (buttons only), F8. **Design:** `Field-05-Question`, `Field-06-Draft`.
 - **Already in the repo:** code-only answer mapping (5 × 8 h = 40 h, `packages/shared/src/report/validate.ts:361`, `:481-488`), re-keyed in W1-12; the idempotent `file_report` job (`apps/worker/src/jobs/file_report.ts`); the `confirm` route (W1-07) and the `answer` route (W1-12).
 - **Build (this repo):**
