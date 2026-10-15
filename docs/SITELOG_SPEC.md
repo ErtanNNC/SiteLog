@@ -1098,7 +1098,7 @@ stateDiagram-v2
   missing --> no_work: office marks no work
 ```
 
-*As built (W1-10):* until the reminder ladder returns on SMS (M6), `scheduler-tick` sends no reminder, so no site-day becomes `reminded`; it still moves a `pending` (or `reminded`) day to `missing` at deadline + the org's missing offset (`reminder_stage` 4, audited `site_day.status_changed`), and alerts the office: the `missing_report` panel notice and the `report_missing` email, worded without any reminder (§19 Q55).
+*As built (W1-10):* until the reminder ladder returns on SMS (M6), `scheduler-tick` sends no reminder, so no site-day becomes `reminded`; it still moves a `pending` (or `reminded`) day to `missing` at deadline + the org's missing offset (`reminder_stage` 4, audited `site_day.status_changed`), and alerts the office: the `missing_report` panel notice and the `report_missing` email, worded without any reminder (§19 Q55). The status change, its audit, the notice and the email job commit in one transaction (`mark_site_day_missing()`), so a day is never `missing` without its alert, and the alert goes out once (the guarded update is the claim; a failure commits nothing and the next tick tries again).
 
 UI chips: `filed` → **Filed** · `processing`/awaiting → **Awaiting** · `missing` → **Missing** · `weather_day` → **Weather day** · `needs_review` → **Needs review** · `signed_off` → **Signed off**; **Late** badge when filed after deadline.
 

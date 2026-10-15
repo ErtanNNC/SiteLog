@@ -1,5 +1,4 @@
-import { type Json, localDate, REMINDER_STAGE } from '@sitelog/shared';
-import { logAudit } from '../_shared/audit.ts';
+import { type Json, localDate } from '@sitelog/shared';
 import { requireEnv } from '../_shared/env.ts';
 import {
   bearerToken,
@@ -11,17 +10,14 @@ import {
 } from '../_shared/http.ts';
 import { enqueueJob } from '../_shared/jobs.ts';
 import { logError, logInfo, logWarn } from '../_shared/log.ts';
-import { notifyOrg } from '../_shared/notify.ts';
 import { adminClient, type AppClient, fetchAll } from '../_shared/supabase.ts';
 import {
-  LADDER_STATUSES,
   missingNotification,
   type OrgInput,
   orgIsBlocked,
   planMissing,
   planSiteDay,
   planTickJobs,
-  siteDayPatchForStage,
   type SiteDayInput,
   type SiteDayPlan,
   type SiteInput,
@@ -155,44 +151,14 @@ async function runTick(admin: AppClient, now: Date): Promise<TickResult> {
   });
   for (const mark of marks) {
     try {
-      if (!(await markMissing(admin, mark.siteDayId))) continue;
-      await logAudit(admin, {
-        orgId: mark.orgId,
-        actorType: 'system',
-        action: 'site_day.status_changed',
-        entity: 'site_day',
-        entityId: mark.siteDayId,
-        diff: {
-          from: mark.from,
-          to: 'missing',
-          reminder_stage: REMINDER_STAGE.missing,
-          missing_at: mark.missingAt.toISOString(),
-          by: 'scheduler-tick',
-        },
-      });
-      // The update above is the claim: only the tick that made the day missing alerts.
       const note = missingNotification(
         siteById.get(mark.siteId)?.name ?? 'A site',
         reporterNames.get(mark.siteId) ?? null,
       );
-      await notifyOrg(admin, {
-        orgId: mark.orgId,
-        kind: 'missing_report',
-        title: note.title,
-        body: note.body,
-        targetPath: '/',
-      });
-      await enqueueJob(
-        admin,
-        'send_email',
-        {
-          kind: 'report_missing',
-          siteDayId: mark.siteDayId,
-          siteId: mark.siteId,
-          orgId: mark.orgId,
-        },
-        { dedupeKey: `email:report_missing:${mark.siteDayId}` },
-      );
+      // The status change, its audit, the notice and the email job commit together; the guarded
+      // update inside is the claim, so only the call that made the day missing alerts, and a
+      // failure commits nothing and the next tick retries (spec §19 Q55, 20261015000061).
+      if (!(await markMissing(admin, mark.siteDayId, mark.missingAt, note))) continue;
       result.missing += 1;
       logInfo('scheduler.missing', {
         siteId: mark.siteId,
@@ -244,20 +210,26 @@ async function runTick(admin: AppClient, now: Date): Promise<TickResult> {
 }
 
 /**
- * §7.1 `→ missing`: reminder_stage 4 and status 'missing' (logic.ts siteDayPatchForStage), only
- * while the day is still pending or reminded below stage 4; false when a report, an office action
- * or another tick got there first.
+ * §7.1 `→ missing`: reminder_stage 4 and status 'missing', only while the day is still pending or
+ * reminded below stage 4, with its audit row, the office's `missing_report` notice and the
+ * `report_missing` email job in the same transaction (`mark_site_day_missing()`); false when a
+ * report, an office action or another tick got there first.
  */
-async function markMissing(admin: AppClient, siteDayId: string): Promise<boolean> {
+async function markMissing(
+  admin: AppClient,
+  siteDayId: string,
+  missingAt: Date,
+  note: { title: string; body: string },
+): Promise<boolean> {
   const { data } = await admin
-    .from('site_days')
-    .update(siteDayPatchForStage(REMINDER_STAGE.missing))
-    .eq('id', siteDayId)
-    .in('status', [...LADDER_STATUSES])
-    .lt('reminder_stage', REMINDER_STAGE.missing)
-    .select('id')
+    .rpc('mark_site_day_missing', {
+      p_site_day_id: siteDayId,
+      p_missing_at: missingAt.toISOString(),
+      p_title: note.title,
+      p_body: note.body,
+    })
     .throwOnError();
-  return data.length > 0;
+  return data === true;
 }
 
 /** The first name each site's missing notice names (`siteReporterFirstName`). */

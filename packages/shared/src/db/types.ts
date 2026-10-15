@@ -1360,6 +1360,15 @@ export type Database = {
         };
         Returns: undefined;
       };
+      mark_site_day_missing: {
+        Args: {
+          p_site_day_id: string;
+          p_missing_at: string;
+          p_title: string;
+          p_body: string;
+        };
+        Returns: boolean;
+      };
       notify_org: {
         Args: {
           p_org: string;
