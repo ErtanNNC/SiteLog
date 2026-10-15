@@ -318,7 +318,9 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       FIELD_APP_URL: ${{ vars.FIELD_APP_URL || 'https://pr-1--sitelog-field-staging-ertannnc.netlify.app' }}
       PANEL_URL: ${{ vars.VITE_APP_URL || 'https://pr-1--staging-sitelog.netlify.app' }}
-      SIGN_IN_AS: lena@kestrelbuild.example
+      # The demo orgs' admins: Kestrel (US, Lena) and Demir Yapı (TR, Elif); each sees only its own
+      # org's texts on the Demo phone.
+      SIGN_IN_AS: lena@kestrelbuild.example elif@demiryapi.example
     steps:
       - name: Check configuration
         run: |
@@ -351,20 +353,25 @@ jobs:
         run: |
           key="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
           echo "::add-mask::$key"
-          body="$(node -e 'console.log(JSON.stringify({type:"magiclink",email:process.env.SIGN_IN_AS,redirect_to:process.env.PANEL_URL+"/auth/callback"}))')"
-          link="$(curl -fsS "https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1/admin/generate_link" \
-            -H "apikey: $key" -H "Authorization: Bearer $key" -H 'Content-Type: application/json' \
-            -d "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.action_link||(j.properties&&j.properties.action_link)||"")})')"
-          if [ -z "$link" ]; then
-            echo "::error::generate_link returned no action link."
-            exit 1
-          fi
           {
             echo "### Phone check (preview)"
             echo
             echo "- field-api: FIELD_APP_URL = \`$FIELD_APP_URL\`; LINK_SIGNING_SECRET set."
-            echo "- One-time panel sign-in as $SIGN_IN_AS (expires in an hour, works once): [open the panel]($link)"
-            echo "- Then open **Demo phone** in the panel; the device code appears there."
+          } >> "$GITHUB_STEP_SUMMARY"
+          for email in $SIGN_IN_AS; do
+            body="$(EMAIL="$email" node -e 'console.log(JSON.stringify({type:"magiclink",email:process.env.EMAIL,redirect_to:process.env.PANEL_URL+"/auth/callback"}))')"
+            link="$(curl -fsS "https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1/admin/generate_link" \
+              -H "apikey: $key" -H "Authorization: Bearer $key" -H 'Content-Type: application/json' \
+              -d "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.action_link||(j.properties&&j.properties.action_link)||"")})')"
+            if [ -z "$link" ]; then
+              echo "::error::generate_link returned no action link for $email."
+              exit 1
+            fi
+            echo "- One-time panel sign-in as $email (expires in an hour, works once): [open the panel]($link)" >> "$GITHUB_STEP_SUMMARY"
+          done
+          {
+            echo "- Then open **Demo phone** in the panel; the device code of that org's reporters appears there."
+            echo "- Kestrel codes (Lena): 345WF5 Marco Ruiz, X7BWGH Dana Whitfield. Demir codes (Elif): Y3AXHQ Emre Yıldız, DP46EP Selin Kaya."
           } >> "$GITHUB_STEP_SUMMARY"
 
   worker:
