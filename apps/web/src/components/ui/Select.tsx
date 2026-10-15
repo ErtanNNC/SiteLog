@@ -16,7 +16,7 @@ export const SelectTrigger = forwardRef<
     ref={ref}
     className={cn(
       'flex w-full items-center justify-between gap-2 rounded-chip border border-rebar bg-chalk px-3 text-[15px] text-asphalt data-[placeholder]:text-dust focus-visible:border-asphalt disabled:cursor-not-allowed disabled:opacity-50 [&>span]:truncate',
-      dense ? 'h-10' : 'h-11',
+      dense ? 'h-target-dense' : 'h-target',
       className,
     )}
     {...props}
@@ -63,7 +63,7 @@ export const SelectItem = forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex min-h-10 w-full cursor-pointer select-none items-center rounded-chip py-2 pl-3 pr-9 text-[15px] outline-none data-[highlighted]:bg-concrete data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex min-h-target w-full cursor-pointer select-none items-center rounded-chip py-2 pl-3 pr-9 text-[15px] outline-none data-[highlighted]:bg-concrete data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
     {...props}

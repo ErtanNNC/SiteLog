@@ -124,7 +124,7 @@ export function ReportsSection({ draft, update }: SectionProps) {
           {REQUIRED_FIELD_KEYS.map((key) => (
             <label
               key={key}
-              className="flex min-h-11 cursor-pointer items-center gap-3 rounded-chip border border-rebar px-3 text-[15px] hover:bg-concrete/60"
+              className="flex min-h-target cursor-pointer items-center gap-3 rounded-chip border border-rebar px-3 text-[15px] hover:bg-concrete/60"
             >
               <Checkbox
                 checked={draft.required_fields.includes(key)}
@@ -149,7 +149,7 @@ export function ReportsSection({ draft, update }: SectionProps) {
               ['auto_15min', c.filingAuto, c.filingAutoHint],
             ] as const
           ).map(([value, label, hint]) => (
-            <label key={value} className="flex min-h-11 cursor-pointer items-start gap-3">
+            <label key={value} className="flex min-h-target cursor-pointer items-start gap-3">
               <RadioGroupItem value={value} className="mt-0.5" aria-label={label} />
               <span>
                 <span className="block text-[15px] font-medium">{label}</span>

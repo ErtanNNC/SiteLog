@@ -174,7 +174,10 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
             ) : null}
             <div className="grid gap-1 sm:grid-cols-2">
               {sites.map((s) => (
-                <label key={s.id} className="flex min-h-10 items-center gap-3 text-[15px]">
+                <label
+                  key={s.id}
+                  className="flex min-h-target-dense items-center gap-3 text-[15px]"
+                >
                   <Checkbox
                     checked={siteIds.includes(s.id)}
                     onCheckedChange={(v) => setSiteIds((prev) => toggle(prev, s.id, v === true))}
@@ -204,8 +207,8 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
                     onClick={() => setLanguages((prev) => toggle(prev, l, !on))}
                     className={
                       on
-                        ? 'h-10 rounded-chip border border-asphalt bg-asphalt px-3 text-[15px] font-medium text-chalk'
-                        : 'h-10 rounded-chip border border-rebar bg-chalk px-3 text-[15px] font-medium text-asphalt hover:bg-concrete'
+                        ? 'h-target-dense rounded-chip border border-asphalt bg-asphalt px-3 text-[15px] font-medium text-chalk'
+                        : 'h-target-dense rounded-chip border border-rebar bg-chalk px-3 text-[15px] font-medium text-asphalt hover:bg-concrete'
                     }
                   >
                     {c.languageNames[l]}

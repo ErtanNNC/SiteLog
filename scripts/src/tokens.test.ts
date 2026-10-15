@@ -83,7 +83,12 @@ describe('the @theme moved from apps/web (W1-02, D4)', () => {
   });
 
   it('keeps every name and value of the v1.0 @theme (apps/web/src/styles/tokens.css at 50b7632)', () => {
-    const theme = decls(block(SHARED_CSS, '@theme'));
+    // Added since (§14.3 targets, AUDIT_BACKLOG "41.25 px"): checked in the next test.
+    const theme = Object.fromEntries(
+      Object.entries(decls(block(SHARED_CSS, '@theme'))).filter(
+        ([k]) => !k.startsWith('--spacing-target'),
+      ),
+    );
     const lines = Object.entries(theme)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => `${k}: ${v}`)
@@ -93,5 +98,11 @@ describe('the @theme moved from apps/web (W1-02, D4)', () => {
     expect(createHash('sha256').update(lines).digest('hex')).toBe(
       '7c00eec9ac518f0de7dd01383067f5ccb35020dde7b5c9548604e3e4b37ca1fc',
     );
+  });
+
+  it('sizes touch targets in pixels (§14.3: 44 px, 40 px in dense tables), not rem', () => {
+    const theme = decls(block(SHARED_CSS, '@theme'));
+    expect(theme['--spacing-target']).toBe('44px');
+    expect(theme['--spacing-target-dense']).toBe('40px');
   });
 });

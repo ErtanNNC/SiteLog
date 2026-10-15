@@ -527,8 +527,7 @@ test.describe('no sideways scroll on narrow phones', () => {
     expect(await overflow(page)).toBeLessThanOrEqual(0);
     await page.getByRole('button', { name: 'All reporters' }).click();
     await expect(marco).toBeFocused();
-    // A two-way thread: Back, the reply box and Send are 44 px too (the shared Input's h-11 is
-    // 41.25 px on the panel's 15 px root, docs/AUDIT_BACKLOG.md).
+    // A two-way thread: Back, the reply box and Send are 44 px too.
     await page
       .getByRole('navigation', { name: 'Reporters' })
       .getByRole('button', { name: /Dana Whitfield/ })
@@ -543,6 +542,49 @@ test.describe('no sideways scroll on narrow phones', () => {
     }
     expect(await overflow(page)).toBeLessThanOrEqual(0);
   });
+
+  // The shared Button, Input and Select are 44 px at every width: their heights are the
+  // `--spacing-target` token in pixels, not `h-11` (41.25 px on the panel's 15 px root,
+  // docs/AUDIT_BACKLOG.md). Dense variants (40 px, §14.3) are left out on purpose.
+  for (const width of [390, 1440]) {
+    test(`shared buttons and inputs are 44 px targets at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const expect44 = async (target: Locator, what: string) => {
+        await expect(target, what).toBeVisible();
+        const box = (await target.boundingBox())!;
+        expect(box.height, `${what} at ${width}px`).toBeGreaterThanOrEqual(44);
+      };
+
+      await page.goto('/login');
+      await expect(h1(page, 'Sign in to the office panel')).toBeVisible();
+      await expect44(page.getByRole('textbox', { name: 'Work email' }), 'login: email');
+      await expect44(
+        page.getByRole('button', { name: 'Email me a sign-in link' }),
+        'login: submit',
+      );
+      await expect44(page.getByRole('button', { name: 'Continue with company SSO' }), 'login: SSO');
+
+      await page.evaluate(() =>
+        window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' })),
+      );
+      await page.goto('/sites');
+      await expect(h1(page, 'Sites')).toBeVisible();
+      await expect44(page.getByRole('link', { name: 'Add site' }), 'sites: Add site');
+      const search = page.getByRole('combobox', { name: 'Search' });
+      if (await search.isVisible()) await expect44(search, 'top bar: search');
+
+      await page.goto('/team');
+      await expect(h1(page, 'Team & numbers')).toBeVisible();
+      const invite = page.getByRole('button', { name: 'Invite reporter' }).first();
+      await expect44(invite, 'team: Invite reporter');
+      await invite.click();
+      const dialog = page.getByRole('dialog', { name: 'Invite reporter' });
+      await expect44(dialog.getByRole('textbox', { name: 'Name' }), 'invite: name');
+      await expect44(dialog.getByRole('textbox', { name: 'Mobile number' }), 'invite: phone');
+      await expect44(dialog.getByRole('combobox', { name: 'Country' }), 'invite: country');
+      await expect44(dialog.getByRole('button', { name: 'Send welcome text' }), 'invite: send');
+    });
+  }
 
   // W1-03: the shell itself at 390 px, in both languages: sign-in, the shell's own pages, the top
   // bar with a page's controls, the drawer and the account menu inside it.

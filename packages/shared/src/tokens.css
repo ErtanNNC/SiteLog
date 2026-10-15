@@ -82,6 +82,11 @@
   /* Layout */
   --width-sidebar: 240px;
   --width-content: 1240px;
+
+  /* Touch targets (§14.3, §11.5), in pixels so a root font size other than 16 px (the panel's is
+     15 px) cannot shrink them: `h-target`, `min-h-target`, `size-target` … */
+  --spacing-target: 44px;
+  --spacing-target-dense: 40px;
 }
 
 /* Raw custom properties for plain CSS and third-party styling (same values as §14.1). */

@@ -67,7 +67,7 @@ export function Sidebar({
     const count = item.badge ? (badges.data?.[item.badge] ?? 0) : 0;
     const itemClass = (active: boolean) =>
       cn(
-        'group flex h-11 items-center gap-3 rounded-btn px-3 text-[15px] font-medium text-dust-light transition-colors hover:bg-steel/70 hover:text-chalk',
+        'group flex h-target items-center gap-3 rounded-btn px-3 text-[15px] font-medium text-dust-light transition-colors hover:bg-steel/70 hover:text-chalk',
         active && 'bg-steel text-white',
       );
     const body = (active: boolean) => (

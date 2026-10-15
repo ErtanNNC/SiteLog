@@ -105,7 +105,7 @@ function GlobalSearch({ className }: { className?: string }) {
           if (e.key === 'Enter' && list[0]) go(list[0]);
         }}
         placeholder={t('shell.search.placeholder')}
-        className="h-11 w-full rounded-chip border border-rebar bg-concrete/60 pl-10 pr-10 text-[15px] placeholder:text-dust focus:border-asphalt focus:bg-chalk"
+        className="h-target w-full rounded-chip border border-rebar bg-concrete/60 pl-10 pr-10 text-[15px] placeholder:text-dust focus:border-asphalt focus:bg-chalk"
       />
       {q ? (
         <button
@@ -143,7 +143,7 @@ function GlobalSearch({ className }: { className?: string }) {
                     role="option"
                     aria-selected={false}
                     onClick={() => go(r)}
-                    className="flex min-h-10 w-full flex-col items-start rounded-chip px-3 py-1.5 text-left hover:bg-concrete"
+                    className="flex min-h-target-dense w-full flex-col items-start rounded-chip px-3 py-1.5 text-left hover:bg-concrete"
                   >
                     <span className="text-[15px] font-medium">{r.title}</span>
                     {r.subtitle ? (

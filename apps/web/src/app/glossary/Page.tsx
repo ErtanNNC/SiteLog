@@ -187,7 +187,7 @@ export default function GlossaryPage() {
                   onChange={(e) => setQ(e.target.value)}
                   placeholder={copy.glossary.search}
                   aria-label={copy.glossary.search}
-                  className="h-10 w-full pl-9 sm:w-[240px]"
+                  className="h-target-dense w-full pl-9 sm:w-[240px]"
                 />
               </div>
             </div>

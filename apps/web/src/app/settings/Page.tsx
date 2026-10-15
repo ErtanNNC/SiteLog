@@ -244,7 +244,7 @@ function SectionTabs({ current }: { current: Section }) {
     <div
       role="tablist"
       aria-label={copy.settings.title}
-      className="inline-flex h-11 max-w-full items-center gap-1 overflow-x-auto rounded-btn border border-rebar bg-chalk p-1 scrollbar-thin"
+      className="inline-flex h-target max-w-full items-center gap-1 overflow-x-auto rounded-btn border border-rebar bg-chalk p-1 scrollbar-thin"
     >
       {SECTIONS.map((s) => (
         <Link

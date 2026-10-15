@@ -409,7 +409,7 @@ export default function ReportsPage() {
             <Input
               id="rf-from"
               type="date"
-              className="h-10 font-mono"
+              className="h-target-dense font-mono"
               value={filters.from ?? ''}
               max={filters.to ?? undefined}
               onChange={(e) => update({ from: e.target.value || null })}
@@ -420,7 +420,7 @@ export default function ReportsPage() {
             <Input
               id="rf-to"
               type="date"
-              className="h-10 font-mono"
+              className="h-target-dense font-mono"
               value={filters.to ?? ''}
               min={filters.from ?? undefined}
               onChange={(e) => update({ to: e.target.value || null })}
@@ -475,7 +475,7 @@ export default function ReportsPage() {
                   aria-pressed={on}
                   onClick={() => update({ [toggle.key]: on ? null : '1' })}
                   className={cn(
-                    'inline-flex h-10 items-center gap-1.5 rounded-chip border px-3 text-caption font-medium transition-colors',
+                    'inline-flex h-target-dense items-center gap-1.5 rounded-chip border px-3 text-caption font-medium transition-colors',
                     on
                       ? 'border-asphalt bg-asphalt text-chalk'
                       : 'border-rebar bg-chalk text-asphalt hover:bg-concrete',
@@ -498,7 +498,7 @@ export default function ReportsPage() {
             <Input
               id="rf-q"
               type="search"
-              className="h-10 pl-10"
+              className="h-target-dense pl-10"
               placeholder={t('reports.filters.search')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}

@@ -466,7 +466,7 @@ function ReportScreen({
               </Button>
               {r.status === 'signed_off' ? (
                 <span
-                  className="inline-flex h-11 items-center gap-2 rounded-btn border border-filed px-3 text-caption font-medium text-chip-filed-fg"
+                  className="inline-flex h-target items-center gap-2 rounded-btn border border-filed px-3 text-caption font-medium text-chip-filed-fg"
                   data-testid="signed-off-state"
                 >
                   {t('report.actions.signedOffBy', { name: r.signedOffByName ?? '—' })}

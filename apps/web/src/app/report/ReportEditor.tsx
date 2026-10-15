@@ -272,7 +272,7 @@ export function ReportEditor({
                         <FormItem>
                           <FormLabel>{tr('report.editMode.newCompanyName')}</FormLabel>
                           <FormControl>
-                            <Input {...field} className="h-10" />
+                            <Input {...field} className="h-target-dense" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -286,7 +286,7 @@ export function ReportEditor({
                         <FormItem>
                           <FormLabel>{tr('report.editMode.trade')}</FormLabel>
                           <FormControl>
-                            <Input {...field} className="h-10" />
+                            <Input {...field} className="h-target-dense" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -300,7 +300,7 @@ export function ReportEditor({
                       <FormItem>
                         <FormLabel>{tr('report.editMode.area')}</FormLabel>
                         <FormControl>
-                          <Input {...field} className="h-10" />
+                          <Input {...field} className="h-target-dense" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -316,7 +316,7 @@ export function ReportEditor({
                           <Input
                             {...field}
                             inputMode="numeric"
-                            className="h-10 font-mono text-right"
+                            className="h-target-dense font-mono text-right"
                           />
                         </FormControl>
                         <FormMessage />
@@ -333,7 +333,7 @@ export function ReportEditor({
                           <Input
                             {...field}
                             inputMode="decimal"
-                            className="h-10 font-mono text-right"
+                            className="h-target-dense font-mono text-right"
                           />
                         </FormControl>
                         <FormMessage />
@@ -396,7 +396,7 @@ export function ReportEditor({
                   <FormItem>
                     <FormLabel>{tr('report.editMode.area')}</FormLabel>
                     <FormControl>
-                      <Input {...field} className="h-10" />
+                      <Input {...field} className="h-target-dense" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -409,7 +409,7 @@ export function ReportEditor({
                   <FormItem>
                     <FormLabel>{tr('report.editMode.activity')}</FormLabel>
                     <FormControl>
-                      <Input {...field} className="h-10" />
+                      <Input {...field} className="h-target-dense" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -446,7 +446,11 @@ export function ReportEditor({
                   <FormItem>
                     <FormLabel>{tr('report.editMode.percent')}</FormLabel>
                     <FormControl>
-                      <Input {...field} inputMode="numeric" className="h-10 font-mono text-right" />
+                      <Input
+                        {...field}
+                        inputMode="numeric"
+                        className="h-target-dense font-mono text-right"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -493,7 +497,7 @@ export function ReportEditor({
                       <FormItem className="flex-1">
                         <FormLabel>{tr('report.editMode.item')}</FormLabel>
                         <FormControl>
-                          <Input {...field} className="h-10" />
+                          <Input {...field} className="h-target-dense" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -512,7 +516,7 @@ export function ReportEditor({
                       <FormItem>
                         <FormLabel>{tr('report.editMode.quantity')}</FormLabel>
                         <FormControl>
-                          <Input {...field} className="h-10" />
+                          <Input {...field} className="h-target-dense" />
                         </FormControl>
                       </FormItem>
                     )}
@@ -524,7 +528,7 @@ export function ReportEditor({
                       <FormItem>
                         <FormLabel>{tr('report.editMode.supplier')}</FormLabel>
                         <FormControl>
-                          <Input {...field} className="h-10" />
+                          <Input {...field} className="h-target-dense" />
                         </FormControl>
                       </FormItem>
                     )}
@@ -536,7 +540,11 @@ export function ReportEditor({
                       <FormItem>
                         <FormLabel>{tr('report.editMode.time')}</FormLabel>
                         <FormControl>
-                          <Input {...field} className="h-10 font-mono" placeholder="13:00" />
+                          <Input
+                            {...field}
+                            className="h-target-dense font-mono"
+                            placeholder="13:00"
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -566,7 +574,7 @@ export function ReportEditor({
               <FormItem>
                 <FormLabel>{tr('report.editMode.toolboxTalk')}</FormLabel>
                 <FormControl>
-                  <Input {...field} className="h-10" />
+                  <Input {...field} className="h-target-dense" />
                 </FormControl>
               </FormItem>
             )}
@@ -595,7 +603,7 @@ export function ReportEditor({
                         <FormItem className="flex-1">
                           <FormLabel>{tr('report.editMode.description')}</FormLabel>
                           <FormControl>
-                            <Input {...field} className="h-10" />
+                            <Input {...field} className="h-target-dense" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -657,7 +665,7 @@ export function ReportEditor({
                     <FormItem className="flex-1">
                       <FormLabel className="sr-only">{tr('report.editMode.item')}</FormLabel>
                       <FormControl>
-                        <Input {...field} className="h-10" />
+                        <Input {...field} className="h-target-dense" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

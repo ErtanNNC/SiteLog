@@ -87,7 +87,7 @@ export function AddOfficeUserDialog({
             <legend className="text-caption font-medium">{c.role}</legend>
             <RadioGroup value={role} onValueChange={(v) => setRole(v as MemberRole)}>
               {MEMBER_ROLES.map((r) => (
-                <label key={r} className="flex min-h-10 items-start gap-3 text-[15px]">
+                <label key={r} className="flex min-h-target-dense items-start gap-3 text-[15px]">
                   <RadioGroupItem
                     value={r}
                     className="mt-0.5"

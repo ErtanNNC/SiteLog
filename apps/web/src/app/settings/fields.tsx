@@ -45,7 +45,7 @@ export function SwitchRow({
   className?: string;
 }) {
   return (
-    <div className={cn('flex min-h-11 items-center justify-between gap-4', className)}>
+    <div className={cn('flex min-h-target items-center justify-between gap-4', className)}>
       <label htmlFor={id} className="cursor-pointer">
         <span className="block text-[15px] font-medium">{label}</span>
         {hint ? <span className="block text-caption text-dust">{hint}</span> : null}
@@ -74,7 +74,7 @@ export function ToggleChip({
       aria-label={ariaLabel}
       onClick={() => onPressedChange(!pressed)}
       className={cn(
-        'h-11 min-w-12 rounded-chip border px-3 font-mono text-[13px] font-medium uppercase tracking-[0.08em]',
+        'h-target min-w-12 rounded-chip border px-3 font-mono text-[13px] font-medium uppercase tracking-[0.08em]',
         pressed
           ? 'border-asphalt bg-asphalt text-chalk'
           : 'border-rebar bg-chalk text-dust hover:bg-concrete',

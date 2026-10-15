@@ -38,7 +38,7 @@ export function LanguageSwitch({
             aria-pressed={pressed}
             onClick={() => setLanguage(lang)}
             className={cn(
-              'inline-flex h-11 items-center rounded-chip px-3 text-[14px] font-semibold transition-colors',
+              'inline-flex h-target items-center rounded-chip px-3 text-[14px] font-semibold transition-colors',
               dark
                 ? pressed
                   ? 'bg-chalk text-asphalt'

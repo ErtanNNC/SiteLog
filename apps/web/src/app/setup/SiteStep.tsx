@@ -317,7 +317,7 @@ export function SiteStep({
                           })
                         }
                         className={cn(
-                          'h-10 rounded-chip border px-3 text-[15px] font-medium',
+                          'h-target-dense rounded-chip border px-3 text-[15px] font-medium',
                           on
                             ? 'border-asphalt bg-asphalt text-chalk'
                             : 'border-rebar bg-chalk text-asphalt hover:bg-concrete',

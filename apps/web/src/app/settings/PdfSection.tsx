@@ -157,7 +157,7 @@ export function PdfSection({
                 <label
                   key={value}
                   className={cn(
-                    'flex min-h-11 cursor-pointer items-center gap-3 rounded-chip border px-3',
+                    'flex min-h-target cursor-pointer items-center gap-3 rounded-chip border px-3',
                     draft.pdf_paper === value ? 'border-asphalt' : 'border-rebar',
                   )}
                 >

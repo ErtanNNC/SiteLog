@@ -62,7 +62,7 @@ export function PayrollSection({ draft, update }: SectionProps) {
           {columns.map((col, i) => (
             <li
               key={col}
-              className="flex h-11 items-center gap-3 rounded-chip border border-rebar bg-chalk px-3"
+              className="flex h-target items-center gap-3 rounded-chip border border-rebar bg-chalk px-3"
             >
               <span className="w-6 font-mono text-[12px] text-dust">{i + 1}</span>
               <span className="flex-1 font-mono text-data">{col}</span>

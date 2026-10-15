@@ -222,7 +222,7 @@ export function MediaPlayer({
             : t(isCall ? 'player.playCall' : 'player.play')
         }
         aria-pressed={playing}
-        className="flex size-11 shrink-0 items-center justify-center rounded-full bg-signal text-asphalt hover:bg-signal-deep hover:text-chalk"
+        className="flex size-target shrink-0 items-center justify-center rounded-full bg-signal text-asphalt hover:bg-signal-deep hover:text-chalk"
         data-testid="player-toggle"
       >
         {playing ? (
@@ -232,7 +232,7 @@ export function MediaPlayer({
         )}
       </button>
       <div
-        className="flex h-11 min-w-0 flex-1 cursor-pointer items-end gap-px"
+        className="flex h-target min-w-0 flex-1 cursor-pointer items-end gap-px"
         role="slider"
         aria-label={t(isCall ? 'player.labelCall' : 'player.label')}
         aria-valuemin={0}
@@ -280,7 +280,7 @@ export function MediaPlayer({
         onClick={() => setRate(nextRate)}
         aria-label={`${t('player.speed')}: ${t('player.speedValue', { rate: String(rate) })}`}
         title={t('player.speed')}
-        className="inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-btn border border-rebar px-2 font-mono text-[12px] font-medium text-asphalt hover:bg-concrete"
+        className="inline-flex h-target min-w-target shrink-0 items-center justify-center rounded-btn border border-rebar px-2 font-mono text-[12px] font-medium text-asphalt hover:bg-concrete"
         data-testid="player-speed"
       >
         {t('player.speedValue', { rate: String(rate) })}

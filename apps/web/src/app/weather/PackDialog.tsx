@@ -162,7 +162,7 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
           <fieldset className="grid gap-2">
             <legend className="text-caption font-medium">{c.sections}</legend>
             {SECTIONS.map((key) => (
-              <label key={key} className="flex min-h-10 items-center gap-3 text-[15px]">
+              <label key={key} className="flex min-h-target-dense items-center gap-3 text-[15px]">
                 <Checkbox
                   checked={sections.includes(key)}
                   onCheckedChange={(v) => toggle(key, v === true)}

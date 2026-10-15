@@ -235,7 +235,7 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
               type="file"
               accept="application/pdf"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-caption text-dust file:mr-3 file:h-10 file:rounded-btn file:border file:border-rebar file:bg-chalk file:px-3 file:font-semibold file:text-asphalt"
+              className="block w-full text-caption text-dust file:mr-3 file:h-target-dense file:rounded-btn file:border file:border-rebar file:bg-chalk file:px-3 file:font-semibold file:text-asphalt"
             />
             <p className="text-caption text-dust">{c.fileHint}</p>
           </div>

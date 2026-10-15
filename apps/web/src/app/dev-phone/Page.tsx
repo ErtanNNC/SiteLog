@@ -61,14 +61,14 @@ function DemoPhone({ timezone }: { timezone: string }) {
   const [tab, setTab] = useState<'texts' | 'email'>('texts');
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as 'texts' | 'email')}>
-      {/* 44 px targets at every width (in pixels: the panel's 15 px root makes `min-h-11` 41.25 px);
-          the list grows with its triggers instead of clipping them. */}
+      {/* 44 px targets at every width (the shared triggers are compact); the list grows with its
+          triggers instead of clipping them. */}
       <TabsList aria-label={t('devPhone.tabsLabel')} className="h-auto">
-        <TabsTrigger value="texts" className="h-auto min-h-[44px]">
+        <TabsTrigger value="texts" className="h-auto min-h-target">
           <MessageSquare className="size-4" aria-hidden="true" />
           {t('devPhone.tabTexts')}
         </TabsTrigger>
-        <TabsTrigger value="email" className="h-auto min-h-[44px]">
+        <TabsTrigger value="email" className="h-auto min-h-target">
           <Mail className="size-4" aria-hidden="true" />
           {t('devPhone.tabEmail')}
         </TabsTrigger>
@@ -255,7 +255,7 @@ function Thread({
         <Button
           variant="subtle"
           size="icon"
-          className="h-[44px] w-[44px] md:hidden"
+          className="md:hidden"
           onClick={onBack}
           aria-label={t('devPhone.back')}
         >
@@ -415,10 +415,8 @@ function ReplyForm({ reporter }: { reporter: DemoPhoneReporter }) {
         <label htmlFor={inputId} className="mb-1 block text-caption font-medium text-dust">
           {t('devPhone.replyLabel', { name: reporter.name })}
         </label>
-        {/* 44 px in pixels: the shared Input's h-11 is 41.25 px on the panel's 15 px root. */}
         <Input
           id={inputId}
-          className="min-h-[44px]"
           value={body}
           onChange={(e) => setBody(e.target.value)}
           placeholder={t('devPhone.replyPlaceholder')}
@@ -426,12 +424,7 @@ function ReplyForm({ reporter }: { reporter: DemoPhoneReporter }) {
           autoComplete="off"
         />
       </div>
-      <Button
-        type="submit"
-        variant="secondary"
-        className="min-h-[44px]"
-        disabled={reply.isPending || !body.trim()}
-      >
+      <Button type="submit" variant="secondary" disabled={reply.isPending || !body.trim()}>
         <Send aria-hidden="true" />
         {t('devPhone.send')}
       </Button>

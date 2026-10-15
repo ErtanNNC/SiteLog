@@ -150,7 +150,7 @@ function SiteRecipients({
             onChange={(e) => setValue(e.target.value)}
             placeholder={c.placeholder}
             aria-invalid={!!error}
-            className="h-10"
+            className="h-target-dense"
           />
           <Button type="submit" variant="ghost" size="dense" aria-label={`${c.add} · ${siteName}`}>
             <Plus aria-hidden="true" />

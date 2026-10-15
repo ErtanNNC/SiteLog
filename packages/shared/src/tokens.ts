@@ -84,6 +84,15 @@ export const widths = {
 } as const;
 
 /**
+ * §14.3 touch targets: 44 px, 40 px allowed in dense tables. CSS: `--spacing-<name>`, so Tailwind
+ * makes `h-target`, `min-h-target`, `h-target-dense` … In pixels, not rem: the panel's root is 15 px.
+ */
+export const targets = {
+  target: '44px',
+  targetDense: '40px',
+} as const;
+
+/**
  * §12 PDF ink that is not a screen token: the header fill and the table rules. Print only, so not
  * in tokens.css.
  */
@@ -112,6 +121,7 @@ export function themeCssVars(): Record<string, string> {
   }
   for (const [k, v] of Object.entries(radius)) out[`--radius-${k}`] = v;
   for (const [k, v] of Object.entries(widths)) out[`--width-${k}`] = v;
+  for (const [k, v] of Object.entries(targets)) out[`--spacing-${tokenCssName(k)}`] = v;
   return out;
 }
 

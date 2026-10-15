@@ -207,7 +207,7 @@ export function PhotoPicker({
                       value={p.caption}
                       maxLength={PHOTO_CAPTION_MAX}
                       onChange={(e) => draft.setCaption(p.key, e.target.value)}
-                      className="h-10 px-2.5 text-[14px]"
+                      className="h-target-dense px-2.5 text-[14px]"
                       disabled={disabled}
                     />
                     {p.takenAt && timezone ? (

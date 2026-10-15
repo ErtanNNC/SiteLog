@@ -118,8 +118,9 @@ describe('Demo phone', () => {
   it('keeps 44 px tab targets at every width (the list grows with its triggers)', async () => {
     renderWithProviders(<DevPhonePage />, { as: 'admin' });
     const tab = await screen.findByRole('tab', { name: 'Texts' });
-    // In pixels: the panel's 15 px root makes `min-h-11` 41.25 px (e2e/a11y.spec.ts measures it).
-    expect(tab.className).toMatch(/\bmin-h-\[44px\]/);
+    // The 44 px token, not rem: the panel's 15 px root makes `min-h-11` 41.25 px (e2e/a11y.spec.ts
+    // measures it).
+    expect(tab.className).toMatch(/\bmin-h-target\b/);
     expect(tab.className).not.toMatch(/\bmin-h-11\b/);
     expect(tab.className).not.toMatch(/\bsm:min-h-9\b/);
     expect(tab.closest('[role="tablist"]')!.className).toMatch(/\bh-auto\b/);
