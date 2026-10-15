@@ -70,6 +70,10 @@ const AUDITED: Record<string, string> = {
     'field_answer_question (W1-12): decide_next after a web answer; per question, and a question is answered once (a retry returns already_answered)',
   "sql:'render_pdf:' || p_report_id || ':' || v_next":
     'per report version (office edits, sign-off)',
+  "sql:'render_pdf:' || p_report_id || ':' || r.current_version || ':signoff:' || (extract(epoch from now()) * 1000000)::bigint":
+    'sign_off_report (W1-14): the re-render that prints the sign-off; per sign-off event (transaction time in µs), since a report can be signed off again after an undo',
+  "sql:'render_pdf:' || p_report_id || ':' || r.current_version || ':signoff_undone:' || (extract(epoch from now()) * 1000000)::bigint":
+    'undo_sign_off (W1-14): the re-render that clears the sign-off; per undo event (transaction time in µs)',
 };
 
 function walk(dir: string, out: string[] = []): string[] {

@@ -104,6 +104,9 @@ export type PdfSelection = { reportIds: string[] } | { filters: ReportFilters };
 export interface PdfLink {
   reportId: string;
   reportNo: string;
+  /** The report's date (YYYY-MM-DD) and current version: the §12 file name (D33). */
+  date: string;
+  version: number;
   /** Signed URL (10 min) of the current version's PDF. */
   url: string;
 }
@@ -111,7 +114,7 @@ export interface PdfLink {
 export interface PdfLinkBatch {
   files: PdfLink[];
   /** Reports in the selection without a stored PDF yet (the export renders them in the browser). */
-  missing: Array<{ reportId: string; reportNo: string }>;
+  missing: Array<Omit<PdfLink, 'url'>>;
   /** Reports in the selection before the PDF_EXPORT_LIMIT cap. */
   total: number;
   /** True when `total` exceeded PDF_EXPORT_LIMIT and only the first ones were resolved. */

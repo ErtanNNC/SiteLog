@@ -1,4 +1,4 @@
-import type { DailyReportData, SiteDayWeather, VersionAuthor } from '@sitelog/shared';
+import type { DailyReportData, FieldChannel, SiteDayWeather, VersionAuthor } from '@sitelog/shared';
 
 /** Image bytes (worker) or a URL react-pdf fetches itself (browser). */
 export type PdfImage =
@@ -23,6 +23,8 @@ export interface ReportPdfInput {
     name: string;
     address: string | null;
     licenseNo: string | null;
+    /** `orgs.tax_no`: printed on the letterhead line after the address and license. */
+    taxNo: string | null;
     letterheadLines: string[];
     logo: PdfImage | null;
   };
@@ -44,7 +46,17 @@ export interface ReportPdfInput {
     signedOffByName: string | null;
     isLate: boolean;
     reviewReasons: string[];
+    /**
+     * `reports.channel` and `confirmed_via` (§6.3): the source record and the site manager's
+     * sign-off line follow them. null on reports from before v1.2 (Meta WhatsApp, D13).
+     */
+    channel: FieldChannel | null;
+    confirmedVia: FieldChannel | null;
   };
+  /**
+   * The version's data (§10.3 v2). The document prints in `data.reportLanguage` (§9.6, §12: the
+   * org's report language) and in `data.units`.
+   */
   data: DailyReportData;
   reporterName: string | null;
   /** Office user who typed the report in the panel (no WhatsApp source); absent otherwise. */
@@ -64,6 +76,11 @@ export interface ReportPdfInput {
     isSelfPerform: boolean;
   }>;
   edits: PdfEdit[];
+  /**
+   * Answered questions by id (and, for v1 data, by the reply's message id, which a v1 `reply`
+   * source carries as its questionId): when, and which field, for the manpower footnote.
+   */
+  answers?: Record<string, { answeredAt: string | null; field: string | null }>;
   settings: { paper: 'letter' | 'a4'; footerEnabled: boolean; maxPhotos: number };
   generatedAt: string;
 }

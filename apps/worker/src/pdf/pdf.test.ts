@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { loadLogo, renderEvidencePackPdf, renderReportPdf, weatherExcerpts } from './render';
-import { sampleEvidencePackInput, sampleReportInput } from '@sitelog/pdf/sample-data.ts';
+import {
+  demirReportInput,
+  sampleEvidencePackInput,
+  sampleReportInput,
+} from '@sitelog/pdf/sample-data.ts';
 import { fmtPhotoTime } from '@sitelog/pdf/components.tsx';
 
 function pageCount(pdf: Buffer): number {
@@ -25,12 +29,34 @@ describe('PDF rendering (smoke)', () => {
     expect(pdf.toString('latin1')).toMatch(/\/MediaBox \[0 0 595\.2\d* 841\.8\d*\]/);
   }, 60_000);
 
-  it('renders a report typed in the panel (prepared by the office, no WhatsApp source)', async () => {
+  it('renders the Turkish v2 sample (Demir Yapı) as a 2-page A4 PDF', async () => {
+    const pdf = await renderReportPdf(demirReportInput);
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(pageCount(pdf)).toBe(2);
+    expect(pdf.toString('latin1')).toMatch(/\/MediaBox \[0 0 595\.2\d* 841\.8\d*\]/);
+  }, 60_000);
+
+  it('renders a WhatsApp-era report (no channel) and a call report confirmed by voice', async () => {
+    for (const report of [
+      { ...sampleReportInput.report, channel: null, confirmedVia: null },
+      { ...sampleReportInput.report, channel: 'voice' as const, confirmedVia: 'voice' as const },
+    ]) {
+      const pdf = await renderReportPdf({ ...sampleReportInput, report });
+      expect(pageCount(pdf)).toBe(2);
+    }
+  }, 60_000);
+
+  it('renders a report typed in the panel (prepared by the office, no voice source)', async () => {
     const pdf = await renderReportPdf({
       ...sampleReportInput,
       reporterName: null,
       enteredBy: 'Lena Ortiz',
-      report: { ...sampleReportInput.report, confirmedAt: null },
+      report: {
+        ...sampleReportInput.report,
+        confirmedAt: null,
+        channel: 'office',
+        confirmedVia: null,
+      },
       sources: { ...sampleReportInput.sources, audioCount: 0, totalAudioSeconds: 0, textCount: 0 },
       photos: [],
     });

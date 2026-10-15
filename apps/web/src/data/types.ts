@@ -417,6 +417,8 @@ export interface QuestionItem {
   options: string[];
   askedAt: string | null;
   answeredAt: string | null;
+  /** The answering message (a v1 report's reply source names it, not the question). */
+  answeredMessageId: string | null;
   answer: string | null;
   companyName: string | null;
   manpowerIndex: number | null;
@@ -446,6 +448,9 @@ export interface ReportHeader {
   signedOffBy: string | null;
   signedOffByName: string | null;
   signedOffAt: string | null;
+  /** `reports.channel` / `confirmed_via` (null: v1.0 WhatsApp, D13): the PDF's source record. */
+  channel: FieldChannel | null;
+  confirmedVia: FieldChannel | null;
 }
 
 export interface ReportDetail {
@@ -697,6 +702,8 @@ export interface SettingsData {
     name: string;
     address: string | null;
     licenseNo: string | null;
+    /** `orgs.tax_no`: the PDF letterhead's tax line (§12). */
+    taxNo: string | null;
     timezone: string;
     logoPath: string | null;
     /** Signed URL (Supabase) or in-memory object URL (demo) of the logo, for previews. */

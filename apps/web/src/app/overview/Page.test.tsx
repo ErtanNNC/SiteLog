@@ -114,6 +114,8 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
           files: ids.map((id, i) => ({
             reportId: id,
             reportNo: `NO-${i}`,
+            date: '2026-10-09',
+            version: 1,
             url: `https://storage.test/${i}.pdf`,
           })),
           missing: [],

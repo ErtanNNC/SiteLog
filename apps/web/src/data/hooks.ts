@@ -613,7 +613,7 @@ export function usePdfZipExport() {
             const pdf = await makeReportPdf(s, qc, r.reportId, null, { invalidate: false });
             if (pdf.stored) made.push(r.reportId);
             else local.push(pdf.url);
-            files.push({ reportId: r.reportId, reportNo: r.reportNo, url: pdf.url });
+            files.push({ ...r, url: pdf.url });
           } catch {
             notMade += 1;
           }
@@ -623,7 +623,7 @@ export function usePdfZipExport() {
           toast.message(copy.pdfZip.none, { id });
           return { zipped: 0 };
         }
-        const names = pdfFileNames(files.map((f) => f.reportNo));
+        const names = pdfFileNames(files);
         const result = await zipFromUrls(
           files.map((f, i) => ({ name: names[i]!, url: f.url })),
           { onProgress: (done, total) => toast.loading(copy.pdfZip.progress(done, total), { id }) },

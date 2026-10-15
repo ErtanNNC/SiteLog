@@ -777,7 +777,14 @@ describe('SupabaseSource.getPdfUrls', () => {
     );
     // The typed report has no stored PDF yet (the export renders it in the browser); the demo
     // store gives the edited one's v2 a path, as the worker would.
-    expect(batch.missing).toEqual([{ reportId: incident.reportId, reportNo: incident.reportNo }]);
+    expect(batch.missing).toEqual([
+      expect.objectContaining({ reportId: incident.reportId, reportNo: incident.reportNo }),
+    ]);
+    // Each carries its report date and current version for the §12 file name (D33).
+    for (const f of [...batch.files, ...batch.missing]) {
+      expect(f.date).toMatch(/^2026-(09|10)-\d{2}$/);
+      expect(f.version).toBeGreaterThanOrEqual(1);
+    }
     expect(batch.files.map((f) => f.reportId)).toContain(edited.reportId);
   });
 });

@@ -222,10 +222,17 @@ export class DemoSource implements DataSource {
       }
       const files: PdfLinkBatch['files'] = [];
       const missing: PdfLinkBatch['missing'] = [];
+      const dateOf = new Map(rows.siteDays.map((d) => [d.id, d.date]));
       for (const r of reports) {
         const url = this.pdfUrls.get(`${r.id}:${r.current_version}`);
-        if (url) files.push({ reportId: r.id, reportNo: r.report_no, url });
-        else missing.push({ reportId: r.id, reportNo: r.report_no });
+        const link = {
+          reportId: r.id,
+          reportNo: r.report_no,
+          date: dateOf.get(r.site_day_id) ?? '',
+          version: r.current_version,
+        };
+        if (url) files.push({ ...link, url });
+        else missing.push(link);
       }
       return { files, missing, total, capped: total > PDF_EXPORT_LIMIT };
     });

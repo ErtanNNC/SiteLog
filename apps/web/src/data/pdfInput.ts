@@ -23,6 +23,18 @@ export function officeEntryAuthor(detail: ReportDetail): string | null {
   return first.authorName || 'Office';
 }
 
+/** Answered questions by id and by answering message, as the worker's buildReportPdfInput. */
+function answersOf(detail: ReportDetail): NonNullable<ReportPdfInput['answers']> {
+  const out: NonNullable<ReportPdfInput['answers']> = {};
+  for (const q of detail.questions) {
+    if (!q.answeredAt) continue;
+    const a = { answeredAt: q.answeredAt, field: q.field };
+    out[q.id] = a;
+    if (q.answeredMessageId) out[q.answeredMessageId] = a;
+  }
+  return out;
+}
+
 export function buildReportPdfInput(
   detail: ReportDetail,
   settings: SettingsData,
@@ -55,6 +67,7 @@ export function buildReportPdfInput(
       name: settings.org.name,
       address: settings.org.address,
       licenseNo: settings.org.licenseNo,
+      taxNo: settings.org.taxNo,
       letterheadLines: s.letterhead_lines ?? [],
       logo: opts.logo,
     },
@@ -76,6 +89,8 @@ export function buildReportPdfInput(
       signedOffByName: r.signedOffByName,
       isLate: r.isLate,
       reviewReasons: r.reviewReasons,
+      channel: r.channel,
+      confirmedVia: r.confirmedVia,
     },
     data: detail.data.languageDetected.length
       ? detail.data
@@ -102,6 +117,7 @@ export function buildReportPdfInput(
       changeNote: v.changeNote,
       createdAt: v.createdAt,
     })),
+    answers: answersOf(detail),
     settings: {
       paper: s.pdf_paper === 'a4' ? 'a4' : 'letter',
       footerEnabled: s.pdf_footer_enabled,

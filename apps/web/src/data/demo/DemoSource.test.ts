@@ -343,9 +343,16 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     const { source: s, store } = source();
     const filed = store.data.reports.filter((r) => r.status === 'filed').slice(0, 3);
     const picked = await s.getPdfUrls({ reportIds: filed.map((r) => r.id) });
+    const dateOf = new Map(store.data.siteDays.map((d) => [d.id, d.date]));
     expect(picked).toEqual({
       files: [],
-      missing: filed.map((r) => ({ reportId: r.id, reportNo: r.report_no })),
+      // The report date and current version name the file (§12, D33).
+      missing: filed.map((r) => ({
+        reportId: r.id,
+        reportNo: r.report_no,
+        date: dateOf.get(r.site_day_id),
+        version: r.current_version,
+      })),
       total: 3,
       capped: false,
     });

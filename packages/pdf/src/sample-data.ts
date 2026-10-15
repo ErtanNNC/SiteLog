@@ -205,6 +205,7 @@ export const sampleReportInput: ReportPdfInput = {
     name: 'Kestrel Build Group',
     address: '1200 Industrial Pkwy, Austin, TX 78741',
     licenseNo: 'TX-GC-20481',
+    taxNo: null,
     letterheadLines: ['office@kestrelbuild.example · (555) 014-2200'],
     logo: null,
   },
@@ -226,6 +227,9 @@ export const sampleReportInput: ReportPdfInput = {
     signedOffByName: 'Sam Kowalski',
     isLate: false,
     reviewReasons: [],
+    // v1.2 (Report-P1/P2): recorded on the web recorder, confirmed there.
+    channel: 'web',
+    confirmedVia: 'web',
   },
   data: heroReportData,
   reporterName: 'Marco Ruiz',
@@ -253,8 +257,215 @@ export const sampleReportInput: ReportPdfInput = {
       createdAt: '2026-10-10T01:10:00Z',
     },
   ],
+  // The reply that confirmed Delta's headcount (a v1 reply source carries its message id).
+  answers: { [REPLY]: { answeredAt: '2026-10-09T22:41:00Z', field: 'manpower.workers' } },
   settings: { paper: 'letter', footerEnabled: true, maxPhotos: 4 },
   generatedAt: '2026-10-10T01:12:00Z',
+};
+
+const CALL = 'b7c8d9e0-0000-4000-8000-000000000001';
+const call = (start: number, end: number) => ({ type: 'call' as const, callId: CALL, start, end });
+
+/**
+ * A Turkish sample (D34): a Demir Yapı A.Ş. report (§18.2 org, site, reporter and companies) in
+ * report data v2 as written, metric, filed from a call with the voice assistant and confirmed by
+ * voice, on A4. §18.2 gives no report, so the day's figures are sample values for checking the
+ * render only; they are not seed data. Its text carries ğ ş ı İ (the glyph test reads them back).
+ */
+export const demirReportData: DailyReportData = {
+  schemaVersion: 2,
+  reportDate: '2026-10-09',
+  reportLanguage: 'tr',
+  units: 'metric',
+  languageDetected: ['tr'],
+  summary:
+    '4. kat döşeme betonu Usta Beton tarafından tamamlandı (yaklaşık 52 m³). Sabah 07:30–10:00 arası yağmur nedeniyle dış cephe işleri 2,5 saat durdu; ekip iç mekân duvar işlerine kaydırıldı. 3. kat elektrik tesisatı yaklaşık %60 tamamlandı. İş güvenliği bilgilendirmesi yapıldı; olay bildirilmedi.',
+  workingHours: { start: '07:30', end: '17:30' },
+  weather: {
+    observed: {
+      precip: 11.2,
+      tempMin: 14,
+      tempMax: 19,
+      wind: 18,
+      gust: 34,
+      provider: 'Open-Meteo',
+    },
+    conditionsText: 'Sabah yağmurlu, öğleden sonra bulutlu',
+    periods: [
+      {
+        start: '07:30',
+        end: '10:00',
+        condition: 'Yağmur',
+        impact: 'Dış cephe işleri durdu; ekip iç mekâna kaydırıldı',
+        lostHours: 2.5,
+        source: [call(38, 46)],
+      },
+    ],
+  },
+  manpower: [
+    {
+      companyId: 'c-usta',
+      companyNameHeard: 'Usta',
+      companyName: 'Usta Beton',
+      trade: 'Beton',
+      area: '4. kat',
+      workers: 8,
+      hoursPerWorker: 8,
+      totalHours: 64,
+      hoursBasis: 'full_day_default',
+      confidence: 0.94,
+      source: [call(12, 19)],
+    },
+    {
+      companyId: 'c-volt',
+      companyNameHeard: 'Volt',
+      companyName: 'Volt Elektrik',
+      trade: 'Elektrik',
+      area: '3. kat',
+      workers: 4,
+      hoursPerWorker: 8,
+      totalHours: 32,
+      hoursBasis: 'full_day_default',
+      confidence: 0.92,
+      source: [call(21, 27)],
+    },
+    {
+      companyId: 'c-akis',
+      companyNameHeard: 'Akış',
+      companyName: 'Akış Mekanik',
+      trade: 'Mekanik',
+      area: '2. kat',
+      workers: 3,
+      hoursPerWorker: 8,
+      totalHours: 24,
+      hoursBasis: 'full_day_default',
+      confidence: 0.9,
+      source: [call(29, 33), { type: 'answer', questionId: 'q-akis' }],
+    },
+    {
+      companyId: 'c-oz',
+      companyNameHeard: 'bizim ekip',
+      companyName: 'Demir Yapı öz ekip',
+      trade: 'Genel işçilik',
+      area: 'Şantiye geneli',
+      workers: 5,
+      hoursPerWorker: 8,
+      totalHours: 40,
+      hoursBasis: 'full_day_default',
+      confidence: 0.88,
+      source: [call(50, 55)],
+    },
+  ],
+  workPerformed: [
+    {
+      area: '4. kat',
+      activity: 'Döşeme betonu dökümü',
+      status: 'complete',
+      quantity: { value: 52, unit: 'm³', heardAs: 'elli iki metreküp' },
+      source: [call(12, 19)],
+    },
+    {
+      area: '3. kat',
+      activity: 'Elektrik tesisatı',
+      status: 'in_progress',
+      percentComplete: 60,
+      source: [call(21, 27)],
+    },
+    {
+      area: 'Dış cephe',
+      activity: 'Sıva hazırlığı',
+      status: 'stopped',
+      source: [call(38, 46)],
+    },
+    {
+      area: 'Zemin kat',
+      activity: 'Kalıp sökümü yapıldı',
+      status: 'complete',
+      source: [call(57, 61)],
+    },
+  ],
+  deliveries: [
+    {
+      item: 'Hazır beton',
+      quantity: '7 mikser',
+      supplier: 'Usta Beton',
+      time: '08:15',
+      source: [call(63, 68)],
+    },
+  ],
+  equipment: [],
+  safety: {
+    toolboxTalk: 'Islak zeminde güvenli çalışma',
+    incidents: [],
+    noIncidentsStated: true,
+    visitors: [],
+    source: [call(70, 76)],
+  },
+  issues: [],
+  nextWorkday: [{ item: 'Pazartesi 07:30 5. kat kalıp montajı', source: [call(80, 86)] }],
+  photos: [
+    { uploadId: 'u-p1', caption: '4. kat döşeme betonu', takenAt: '2026-10-09T14:20:00Z' },
+    { uploadId: 'u-p2', caption: 'Yağmurda dış cephe', takenAt: '2026-10-09T05:10:00Z' },
+  ],
+  newTerms: [],
+  missingRequired: [],
+  lowConfidence: [],
+  proposedQuestions: [],
+};
+
+export const demirReportInput: ReportPdfInput = {
+  org: {
+    name: 'Demir Yapı A.Ş.',
+    address: null,
+    licenseNo: null,
+    taxNo: null,
+    letterheadLines: [],
+    logo: null,
+  },
+  site: {
+    name: 'Kartal Konutları — B Blok',
+    projectCode: 'KK-1203',
+    address: null,
+    workingHours: '07:30–17:30',
+    timezone: 'Europe/Istanbul',
+  },
+  report: {
+    reportNo: 'KK-1203-0005',
+    version: 1,
+    status: 'filed',
+    kind: 'daily',
+    filedAt: '2026-10-09T15:46:00Z',
+    confirmedAt: '2026-10-09T15:46:00Z',
+    signedOffAt: null,
+    signedOffByName: null,
+    isLate: false,
+    reviewReasons: [],
+    channel: 'voice',
+    confirmedVia: 'voice',
+  },
+  data: demirReportData,
+  reporterName: 'Emre Yıldız',
+  sources: {
+    audioCount: 1,
+    totalAudioSeconds: 252,
+    languages: ['tr'],
+    receivedAt: '2026-10-09T15:41:00Z',
+    textCount: 0,
+  },
+  photos: [
+    { ...samplePhotos[0]!, takenAt: '2026-10-09T14:20:00Z', caption: '4. kat döşeme betonu' },
+    { ...samplePhotos[1]!, takenAt: '2026-10-09T05:10:00Z', caption: 'Yağmurda dış cephe' },
+  ],
+  companies: [
+    { id: 'c-usta', name: 'Usta Beton', status: 'confirmed', isSelfPerform: false },
+    { id: 'c-volt', name: 'Volt Elektrik', status: 'confirmed', isSelfPerform: false },
+    { id: 'c-akis', name: 'Akış Mekanik', status: 'confirmed', isSelfPerform: false },
+    { id: 'c-oz', name: 'Demir Yapı öz ekip', status: 'confirmed', isSelfPerform: true },
+  ],
+  edits: [{ version: 1, author: 'agent', changeNote: null, createdAt: '2026-10-09T15:46:00Z' }],
+  answers: { 'q-akis': { answeredAt: '2026-10-09T15:44:00Z', field: 'manpower.workers' } },
+  settings: { paper: 'a4', footerEnabled: true, maxPhotos: 4 },
+  generatedAt: '2026-10-09T15:47:00Z',
 };
 
 export const sampleEvidencePackInput: EvidencePackInput = {

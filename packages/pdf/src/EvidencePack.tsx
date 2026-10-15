@@ -4,6 +4,7 @@ import {
   formatDateLong,
   formatDateShort,
   formatHours,
+  upperIn,
 } from '@sitelog/shared';
 import {
   Bullets,
@@ -70,7 +71,7 @@ export function EvidencePack({ input }: { input: EvidencePackInput }) {
             ['Generated', fmtDateTime(input.generatedAt, tz)],
           ].map(([k, v]) => (
             <View key={k} style={styles.metaCell}>
-              <Text style={styles.eyebrow}>{k}</Text>
+              <Text style={styles.eyebrow}>{upperIn('en', k!)}</Text>
               <Text style={styles.metaValue}>{v}</Text>
             </View>
           ))}

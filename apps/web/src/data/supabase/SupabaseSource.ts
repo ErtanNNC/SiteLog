@@ -1378,7 +1378,7 @@ export class SupabaseSource implements DataSource {
 
   /** Current-version PDFs of explicit reports or of every report matching archive filters. */
   async getPdfUrls(selection: PdfSelection): Promise<PdfLinkBatch> {
-    type Picked = Pick<ReportRow, 'id' | 'report_no' | 'current_version'>;
+    type Picked = Pick<ReportRow, 'id' | 'report_no' | 'current_version'> & { date: string };
     let reports: Picked[];
     let total: number;
     if ('reportIds' in selection) {
@@ -1390,18 +1390,37 @@ export class SupabaseSource implements DataSource {
           chunks(wanted, IN_CHUNK).map((part) =>
             this.sb
               .from('reports')
-              .select('id, report_no, current_version')
+              .select('id, report_no, current_version, site_day_id')
               .in('id', part)
               .then(unwrap),
           ),
         )
       ).flat();
-      const byId = new Map(found.map((r) => [r.id, r]));
+      // The report date names the file (§12, D33).
+      const days = (
+        await Promise.all(
+          chunks(uniq(found.map((r) => r.site_day_id)), IN_CHUNK).map((part) =>
+            this.sb.from('site_days').select('id, date').in('id', part).then(unwrap),
+          ),
+        )
+      ).flat();
+      const dateOf = new Map(days.map((d) => [d.id, d.date]));
+      const byId = new Map(
+        found.map((r) => [
+          r.id,
+          {
+            id: r.id,
+            report_no: r.report_no,
+            current_version: r.current_version,
+            date: dateOf.get(r.site_day_id) ?? '',
+          },
+        ]),
+      );
       reports = wanted.map((id) => byId.get(id)).filter((r): r is Picked => !!r);
     } else {
       const text = await this.archiveTextFilter(selection.filters.q);
       const res = await this.archiveOrdered(
-        this.archive('id, report_no, current_version', selection.filters, text, {
+        this.archive('id, report_no, current_version, date', selection.filters, text, {
           count: 'exact',
         }),
       ).range(0, PDF_EXPORT_LIMIT - 1);
@@ -1440,8 +1459,14 @@ export class SupabaseSource implements DataSource {
     for (const r of reports) {
       const path = pathOf(r);
       const url = path ? urlByPath.get(path) : undefined;
-      if (url) files.push({ reportId: r.id, reportNo: r.report_no, url });
-      else missing.push({ reportId: r.id, reportNo: r.report_no });
+      const link = {
+        reportId: r.id,
+        reportNo: r.report_no,
+        date: r.date,
+        version: r.current_version,
+      };
+      if (url) files.push({ ...link, url });
+      else missing.push(link);
     }
     return { files, missing, total, capped: total > PDF_EXPORT_LIMIT };
   }

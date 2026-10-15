@@ -168,15 +168,26 @@ export async function buildReportPdfInput(
     !report.reporter_id && first?.author === 'office_user'
       ? (enteredByUser?.display_name ?? enteredByUser?.email ?? 'Office')
       : null;
-  const [logo, photos] = await Promise.all([
+  const [logo, photos, questions] = await Promise.all([
     loadLogo(ctx, site.org.logo_path),
     loadPhotos(ctx, versionPhotos(data.photos, sources), site.settings.pdf_max_photos),
+    ctx.db.listQuestions(report.id),
   ]);
+  // Answered questions for the manpower footnote, by id and (v1 data: a reply source carries the
+  // reply's message id as its questionId) by the answering message.
+  const answers: NonNullable<ReportPdfInput['answers']> = {};
+  for (const q of questions) {
+    if (!q.answered_at) continue;
+    const a = { answeredAt: q.answered_at, field: q.field };
+    answers[q.id] = a;
+    if (q.answered_message_id) answers[q.answered_message_id] = a;
+  }
   return {
     org: {
       name: site.org.name,
       address: site.org.address,
       licenseNo: site.org.license_no,
+      taxNo: site.org.tax_no,
       letterheadLines: site.settings.letterhead_lines ?? [],
       logo,
     },
@@ -198,6 +209,8 @@ export async function buildReportPdfInput(
       signedOffByName: signer?.display_name ?? signer?.email ?? null,
       isLate: report.is_late,
       reviewReasons: report.review_reasons,
+      channel: report.channel,
+      confirmedVia: report.confirmed_via,
     },
     data: data.languageDetected.length ? data : { ...data, languageDetected: languages },
     reporterName: reporter?.name ?? null,
@@ -222,6 +235,7 @@ export async function buildReportPdfInput(
       changeNote: v.change_note,
       createdAt: v.created_at,
     })),
+    answers,
     settings: {
       paper: site.settings.pdf_paper === 'a4' ? 'a4' : 'letter',
       footerEnabled: site.settings.pdf_footer_enabled,

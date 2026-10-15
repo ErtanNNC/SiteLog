@@ -418,10 +418,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Daily report PDF never shows 'Signed off in SiteLog by {name}'
 
-`supabase/migrations/20261011000005_rpcs.sql:164` · pdf / §12 sign-off lines · Confirmed 3/3
+`supabase/migrations/20261011000005_rpcs.sql:164` · pdf / §12 sign-off lines · Confirmed 3/3 · Closed in W1-14
 
 - **Problem:** A PM signs off RL-2041-0187 v2 in the panel and downloads the PDF for the client. It still shows an empty project-manager signature box, so the sign-off is not on the paper record.
 - **Fix:** The suggested fix is correct, with these details: 1. In sign_off_report and undo_sign_off, call perform enqueue_job('render_pdf', jsonb_build_object('reportId', p_report_id, 'version', r.current_version, 'emailRecipients', false, 'sendToWhatsApp', false), null, 'render_pdf:' || p_report_id || ':' || r.current_version). 2. Reusing the 'render_pdf:{id}:{version}' dedupe key is safe. enqueue_job only dedupes against queued or running jobs (rpcs.sql:36-39), and the job reads the report's sign-off state when it runs. If the filing render is still pending it will already pick up the sign-off, and a later undo will queue another render once that job is done. 3. Overwriting the file in place works …
+- **Closed in W1-14:** `20261015000010_signoff_pdf_rerender.sql` makes `sign_off_report` and `undo_sign_off` enqueue `render_pdf` for the current version (no email), each event under its own dedupe key (`render_pdf:<report>:<version>:signoff:<µs>` / `…:signoff_undone:<µs>`: a key is never used twice since D16, so the point-2 reuse above no longer applies). The worker overwrites the stored PDF in place; the PDF prints "Signed off in SiteLog by {name} · {time}" on the project manager's line (`supabase/db-tests/src/signoff-pdf.test.ts`).
 
 ### EOT pack ignores the 'included sections' checklist
 
@@ -994,7 +995,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### sign_off_report / undo_sign_off never re-render the PDF, so stored PDFs never show the sign-off
 
-`supabase/migrations/20261011000005_rpcs.sql:172` · rpc-logic · Unverified
+`supabase/migrations/20261011000005_rpcs.sql:172` · rpc-logic · Unverified · Closed in W1-14 (see "Daily report PDF never shows 'Signed off in SiteLog by {name}'")
 
 - **Problem:** A PM signs off OM-1187-0133 v1 and downloads the PDF from the report page. It still shows the blank 'Project manager signature' line and no 'Signed off in SiteLog by …', so the signed-off record handed to an owner or a claim does not carry the sign-off.
 - **Fix:** In sign_off_report (and undo_sign_off), enqueue_job('render_pdf', {reportId, version: r.current_version, emailRecipients:false}, null, 'render_pdf:'||id||':'||version||':signoff:'||extract(epoch from now())).
