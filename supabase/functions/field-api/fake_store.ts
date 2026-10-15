@@ -371,6 +371,7 @@ export class FakeFieldStore implements FieldStore {
       r.status = 'processing';
     }
     u.report_id = r.id;
+    u.received_at = this.iso();
     u.bytes = bytes ?? u.bytes;
     this.sources.push({
       report_id: r.id,

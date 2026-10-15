@@ -662,10 +662,17 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     const result = await store.completeUpload(upload.id, ctx.reporter.id, bytes);
     // Spec §19 Q53: a file that reaches its report after its day's window closed (a late clip
     // `uploads` accepted, or one created just before the window closed) is flagged late to the
-    // office, once per upload (a retried complete flags nothing twice).
+    // office, once per upload (a retried complete flags nothing twice). Judged at the moment the
+    // file reached its report: a retried complete (its first answer lost) of an upload that
+    // arrived on time is not late, however much later the retry comes.
     const site = ctx.sites.find((s) => s.id === upload.site_id)!;
     const date = upload.storage_path.split('/')[2] ?? '';
-    if (!allowedReportDates(ctx.link, site, now(), ctx.org.settings?.working_days).includes(date)) {
+    const arrivedAt =
+      result.alreadyComplete && upload.report_id !== null && upload.received_at
+        ? new Date(upload.received_at)
+        : now();
+    const workingDays = ctx.org.settings?.working_days;
+    if (!allowedReportDates(ctx.link, site, arrivedAt, workingDays).includes(date)) {
       await store.flagLateUpload(upload.id, ctx.reporter.id);
     }
     const res: CompleteResponse = {

@@ -888,6 +888,27 @@ Deno.test('uploads/:id/complete: an on-time upload is not flagged late', async (
 });
 
 Deno.test(
+  'uploads/:id/complete: a retry after the window of an upload that arrived on time is not late',
+  async () => {
+    const h = setup();
+    await consented(h);
+    const u = await h.call('POST', 'uploads', {
+      body: { kind: 'audio', mime: 'audio/webm', bytes: 1, siteId: SITE_A },
+    });
+    h.store.put(`audio/${u.json.path}`);
+    // Completed Fri Oct 9 17:00 Chicago (the answer lost); the queue retries Mon Oct 12 at 13:00,
+    // after Friday's window closed (Monday noon).
+    assertEquals((await h.call('POST', `uploads/${u.json.uploadId}/complete`)).status, 200);
+    h.clock.now = new Date('2026-10-12T18:00:00Z');
+    const retry = await h.call('POST', `uploads/${u.json.uploadId}/complete`);
+    assertEquals([retry.status, retry.json.alreadyComplete], [200, true]);
+    assertEquals(h.store.calls.includes('flagLateUpload'), false);
+    const report = h.store.reports.find((r) => r.id === retry.json.reportId)!;
+    assertEquals(report.is_late, false);
+  },
+);
+
+Deno.test(
   'day-status: no work and weather day on a pending day; refused with a report',
   async () => {
     const h = setup();
