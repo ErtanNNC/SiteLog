@@ -6,7 +6,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 ## Bitti
 
-**1, 2** — M0 (W1-01 … W1-04) ve M1 (W1-05 kod tarafı, W1-06, W1-06a ülke paketleri). Her ticket PR #1'de CI yeşil (Deno, PGlite, gerçek Supabase yığını, demo e2e). W1-05'in son adımı (preview projesine `db push`) sizi bekliyor, aşağıda.
+**1, 2** — M0 (W1-01 … W1-04) ve M1 (W1-05 kod tarafı, W1-06, W1-06a ülke paketleri). Her ticket PR #1'de CI yeşil (Deno, PGlite, gerçek Supabase yığını, demo e2e). W1-05 de tamam: preview projesine migration'lar ve edge function'lar 2026-10-15'te yüklendi (Deploy run 38695343167).
 
 ## Sürüyor
 
@@ -18,9 +18,8 @@ Sürüyor: W1-10 _worker çalışma zamanı_ (M3) `w1-10-worker` dalında: NOTIF
 
 ## Onayınızı bekleyen
 
-1. Preview projesine migration push'u (`deploy.yml`, environment `preview`, target `supabase`) — token düzelince tekrar başlatacağım.
-2. Preview'a demo verisinin uygulanması (`pnpm seed:demo -- --apply`, D41) — ilk telefon kontrolünden önce.
-3. Spec §19'da sahibin kararını bekleyen sorular, önerileriyle birlikte:
+1. Preview'a demo verisinin uygulanması (`pnpm seed:demo -- --apply`, D41) — ilk telefon kontrolünden önce.
+2. Spec §19'da sahibin kararını bekleyen sorular, önerileriyle birlikte:
    - Hafta 2'yi (M6) bloke edenler: Q19 kanal sırası, Q22 kanal yedekleme, Q25 ilk temas/WhatsApp onayı, Q26 gelen WhatsApp, Q27 web push, Q39 WhatsApp göndericisi, Q40 kanal bazlı opt-out.
    - W1-09'dan önce: Q41 (_No work_ / _Weather_ düğmelerinin ne yazacağı). W1-16'dan önce: Q44 (paylaşımlı göndericide gelen SMS kimin).
    - Go-live'dan önce: Q28 yasal metin anahtarları, Q42 link kodu uzunluğu, Q47 imza sırrının döndürülmesi, Q49 İYS (hukuk).
@@ -30,13 +29,12 @@ Sürüyor: W1-10 _worker çalışma zamanı_ (M3) `w1-10-worker` dalında: NOTIF
 
 ## Sizden beklenen
 
-1. **Preview token:** `preview` Environment'taki `SUPABASE_ACCESS_TOKEN`'ın `sftfnlfbtxowotuhdwep` projesine yetkisi yok ("does not have the necessary privileges"). Projenin sahibi hesaptan yeni token ya da projeyi aynı org'a taşıma.
-2. **Preview Auth URL'leri:** `https://pr-1--staging-sitelog.netlify.app/**` eklenmeli (panel önizlemesinden giriş için).
-3. **Anahtarlar:** `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` (W1-11/W1-12'den itibaren; yoksa fake/console ile devam ederim, gerçek transkripsiyon ve çıkarım çalışmaz) · `RESEND_API_KEY` (W1-15; yoksa `EMAIL_PROVIDER=console`) · Twilio / İletimerkezi isteğe bağlı (console sürücüsü ve Demo phone yeter).
-4. **Uzun süreli kayıtlar:** Twilio toll-free doğrulaması (US) ve İletimerkezi `SITELOG` başlığı (TR); onaylanınca gönderici kimliklerini `pnpm countries:set` ile siz girersiniz (paket satırı, env değil).
-5. **Kontroller:** field preview'u telefonla açma (W1-04/W1-07 probe'u), logo kontrolü; W1-09 için iPhone (Safari) ve Android (Chrome) ile HTTPS önizlemeden: 2 dk ses + 2 fotoğraf, uçak modunda kuyruk, ekran kilidi, sessize alma ve gelen arama sırasında kayıt.
-6. **Proje dosyaları:** bu ortamda claude.ai Projesi'ne dosya yazamıyorum; `docs/SITELOG_SPEC.md`, `docs/decisions/channel-options.md` ve bu `claude/STATUS.md` repoda güncel; Projeye kopyalanması size kalıyor (Proje GitHub'dan senkronsa kendiliğinden gelir).
+1. **Preview Auth URL'leri:** `https://pr-1--staging-sitelog.netlify.app/**` eklenmeli (panel önizlemesinden giriş için).
+2. **Anahtarlar:** `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` (W1-11/W1-12'den itibaren; yoksa fake/console ile devam ederim, gerçek transkripsiyon ve çıkarım çalışmaz) · `RESEND_API_KEY` (W1-15; yoksa `EMAIL_PROVIDER=console`) · Twilio / İletimerkezi isteğe bağlı (console sürücüsü ve Demo phone yeter).
+3. **Uzun süreli kayıtlar:** Twilio toll-free doğrulaması (US) ve İletimerkezi `SITELOG` başlığı (TR); onaylanınca gönderici kimliklerini `pnpm countries:set` ile siz girersiniz (paket satırı, env değil).
+4. **Kontroller:** field preview'u telefonla açma (W1-04/W1-07 probe'u), logo kontrolü; W1-09 için iPhone (Safari) ve Android (Chrome) ile HTTPS önizlemeden: 2 dk ses + 2 fotoğraf, uçak modunda kuyruk, ekran kilidi, sessize alma ve gelen arama sırasında kayıt.
+5. **Proje dosyaları:** bu ortamda claude.ai Projesi'ne dosya yazamıyorum; `docs/SITELOG_SPEC.md`, `docs/decisions/channel-options.md` ve bu `claude/STATUS.md` repoda güncel; Projeye kopyalanması size kalıyor (Proje GitHub'dan senkronsa kendiliğinden gelir).
 
 ## Özet
 
-Hafta-1 planının M0–M1'i ve M2'nin üç ticket'ı (W1-07, W1-08, W1-09) yazıldı, W1-09 CI'da yeşil, telefon kontrolleriniz bekleniyor; W1-10 (worker) ayrı dalda yapılıyor; staging'e dokunulmadı, iş yalnızca preview token'ı ve yukarıdaki kararlar için sizi bekliyor.
+Hafta-1 planının M0–M1'i ve M2'nin üç ticket'ı (W1-07, W1-08, W1-09) yazıldı, W1-09 CI'da yeşil, telefon kontrolleriniz bekleniyor; W1-10 (worker) ayrı dalda yapılıyor; staging'e dokunulmadı, preview projesi güncel; iş yukarıdaki kararlar ve kontroller için sizi bekliyor.

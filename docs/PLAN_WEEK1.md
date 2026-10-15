@@ -144,7 +144,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-05 · Database: migrations, RLS, RPCs, storage
 
-- [ ] **W1-05 done** · today _conflicts_ (XL) · steps 8, 9, 10, 11 (at least one commit each)
+- [x] **W1-05 done** · today _conflicts_ (XL) · steps 8, 9, 10, 11 (at least one commit each) · _Done 2026-10-15: the owner-approved Deploy run 38695343167 (`preview`, target `supabase`, from `spec-v1.2` at `de21a69`) pushed every migration to the preview project and deployed the edge functions; staging untouched._
 - **Spec:** §6.2–§6.5, §2.2, §7. GAP Appendix 9.2 (tables) and 9.3 (enums).
 - **Already in the repo:** 16 applied migrations `20261011000001` … `20261013000005` (30 tables, RLS on all, `is_member`/`has_role`), `next_report_no` with a row lock, `sign_off_report`, `create_report_version`, views, private buckets, realtime on `site_days`/`reports`, the job queue (`claim_jobs`, backoff); PGlite suite in `supabase/db-tests`; `supabase start` with seed and the DB-type drift check in CI.
 - **Moved in:** the §6.2 enums (from W1-02), queue SQL (from W1-10), photos to `uploads` (from W1-14 and W1-17). The fully unique dedupe (D16) lands with W1-10.
