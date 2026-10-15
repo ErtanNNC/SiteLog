@@ -523,6 +523,32 @@ describe('deploy.yml plan step, run under bash', () => {
   });
 });
 
+describe('deploy.yml preview job, run under bash', () => {
+  const cfg = stepScript('preview', 'Read the preview project settings');
+  const jwt = (ref: string) =>
+    ['{"alg":"HS256"}', JSON.stringify({ iss: 'supabase', ref, role: 'anon' })]
+      .map((p) => Buffer.from(p).toString('base64url'))
+      .join('.') + '.sig';
+  const URL_ = 'https://previewprojectref00.supabase.co';
+
+  it("passes the project's own anon key on, base64-encoded", () => {
+    const key = jwt('previewprojectref00');
+    const run = runStep(cfg, { SUPABASE_URL_VAR: URL_, ANON_KEY: key });
+    expect(run.status, run.log).toBe(0);
+    expect(run.outputs).toEqual({
+      supabase_url: URL_,
+      anon_key_b64: Buffer.from(key).toString('base64'),
+    });
+  });
+
+  it("refuses another project's anon key (staging's copied into preview)", () => {
+    const run = runStep(cfg, { SUPABASE_URL_VAR: URL_, ANON_KEY: jwt('otherprojectref0000') });
+    expect(run.status, run.log).toBe(0);
+    expect(run.outputs).toEqual({});
+    expect(run.log).toContain('belongs to project otherprojectref0000, not previewprojectref00');
+  });
+});
+
 describe('deploy.yml web job Check configuration, run under bash', () => {
   const cfg = stepScript('web', 'Check configuration');
   const STAGING_URL = `https://${STAGING_PROJECT_REF}.supabase.co`;

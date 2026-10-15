@@ -661,6 +661,16 @@ jobs:
             echo "::warning::The preview VITE_SUPABASE_ANON_KEY is not a Supabase anon key (eyJ…) or publishable key (sb_publishable_…); the panel preview builds in demo mode."
             ANON_KEY=""
           fi
+          # A legacy anon key (a JWT) names its project; one for another project (staging's, copied
+          # into the preview Environment) cannot sign anyone in to this one.
+          if [[ "$ANON_KEY" == eyJ* ]] && [[ "$url" =~ ^https://([a-z0-9]+)\.supabase\.co/?$ ]]; then
+            ref="${BASH_REMATCH[1]}"
+            key_ref=$(node -e 'try{console.log(JSON.parse(Buffer.from(process.argv[1].split(".")[1],"base64url")).ref||"")}catch{}' "$ANON_KEY")
+            if [ -n "$key_ref" ] && [ "$key_ref" != "$ref" ]; then
+              echo "::error::The preview VITE_SUPABASE_ANON_KEY belongs to project $key_ref, not $ref. Set the preview Environment variable to $ref's anon key (Supabase dashboard, Project Settings, API keys); the panel preview builds in demo mode until then."
+              ANON_KEY=""
+            fi
+          fi
           if [ -n "$url" ] && [ -n "$ANON_KEY" ]; then
             echo "supabase_url=$url" >> "$GITHUB_OUTPUT"
             echo "anon_key_b64=$(printf '%s' "$ANON_KEY" | base64 -w0)" >> "$GITHUB_OUTPUT"
