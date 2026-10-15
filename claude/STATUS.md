@@ -23,7 +23,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 ## Sürüyor
 
-**Çalışma kuralı (sizden, 2026-10-15):** aksini söyleyene kadar development durmadan devam ediyor; sizin kararınızı ya da doğrulamanızı gerektiren her şey aşağıda bekletiliyor.
+**Çalışma kuralı (sizden, 2026-10-15, güncel):** aksini söyleyene kadar development durmadan devam ediyor. Sizin bakmanız gereken her şey bu dosyaya yazılıp bekletiliyor. Yalnızca çok önemli bir karar ya da sizin yapmanız gereken bir iş olmadan hiç ilerleyemeyeceksem durulacak; o zaman nedeni basit ve ayrıntılı açıklanacak.
 
 - W1-16 Overview (5846e2a, 4d5182a) ve W1-17 Raporlar arşivi + Rapor inceleme (81c9500; kanal filtresi, "Fotoğraf yok", her ses/arama için oynatıcı ve saniyeye atlama, saha olayları, EN/TR) bitti.
 - İnceleme düzeltmeleri bitti (1d26288 … c7b79f3): imza/geri alma PDF yarışı, e-posta 409, `missing` uyarısının tek işlemde ve kaybolmadan gitmesi, Filed ekranında 3 dk sonra "PDF yolda" mesajı.
