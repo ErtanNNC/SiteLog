@@ -40,9 +40,9 @@ on:
         options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project, owner-approved)
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; both owner-approved)
         type: choice
-        options: [all, supabase, worker, web, field, inventory, seed]
+        options: [all, supabase, worker, web, field, inventory, seed, phone-setup]
         default: all
 
 concurrency:
@@ -70,6 +70,7 @@ jobs:
       preview: ${{ steps.plan.outputs.preview }}
       inventory: ${{ steps.plan.outputs.inventory }}
       seed: ${{ steps.plan.outputs.seed }}
+      phone_setup: ${{ steps.plan.outputs.phone_setup }}
     steps:
       - name: Decide what this run may touch
         id: plan
@@ -81,9 +82,9 @@ jobs:
           TARGET: ${{ inputs.target || 'all' }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          supabase=false worker=false web=false field=false preview=false inventory=false seed=false
+          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false
           # `all` covers the four deploy targets; the inventory runs only when asked for.
-          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ]; }; }
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ]; }; }
 
           if [ "$EVENT" = pull_request ]; then
             web=true field=true preview=true
@@ -93,6 +94,13 @@ jobs:
               inventory=true
             else
               echo "::notice::Inventory skipped: it reads the staging project only. Dispatch it with environment staging."
+            fi
+          elif [ "$TARGET" = phone-setup ]; then
+            # The owner's phone check of the field app (W1-09) against the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              phone_setup=true
+            else
+              echo "::notice::phone-setup skipped: it touches the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
             fi
           elif [ "$TARGET" = seed ]; then
             # W1-06 apply mode (RUNBOOK §2 step 5): the two demo orgs into the preview project only.
@@ -129,6 +137,7 @@ jobs:
             echo "preview=$preview"
             echo "inventory=$inventory"
             echo "seed=$seed"
+            echo "phone_setup=$phone_setup"
           } >> "$GITHUB_OUTPUT"
           {
             echo "### Deploy plan"
@@ -141,7 +150,7 @@ jobs:
             echo
             echo "| Job | Runs |"
             echo "| --- | --- |"
-            for k in supabase worker web field preview inventory seed; do echo "| $k | ${!k} |"; done
+            for k in supabase worker web field preview inventory seed phone_setup; do echo "| $k | ${!k} |"; done
           } >> "$GITHUB_STEP_SUMMARY"
 
   supabase:
@@ -288,6 +297,74 @@ jobs:
             for n in LINK_SIGNING_SECRET FIELD_APP_URL; do
               if [[ " $names " == *" $n "* ]]; then echo "- $n: set"; else echo "- $n: **missing** (the field app's device check will fail until it is set)"; fi
             done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  phone-setup:
+    name: Phone check · field-api secrets and a panel sign-in link (preview)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # 1. field-api on the preview project: FIELD_APP_URL (the Origin check) and, only when missing,
+    #    a random LINK_SIGNING_SECRET (an existing one is never rotated: it signs live links).
+    # 2. A one-time magic link for Lena (admin of the demo org Kestrel) to the pr-1 panel preview, so
+    #    the Demo phone shows the device code (RUNBOOK §2 step 5). It goes to the run summary only.
+    if: >-
+      needs.plan.outputs.phone_setup == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      FIELD_APP_URL: ${{ vars.FIELD_APP_URL || 'https://pr-1--sitelog-field-staging-ertannnc.netlify.app' }}
+      PANEL_URL: ${{ vars.VITE_APP_URL || 'https://pr-1--staging-sitelog.netlify.app' }}
+      SIGN_IN_AS: lena@kestrelbuild.example
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::phone-setup needs SUPABASE_ACCESS_TOKEN (secret) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: field-api secrets
+        run: |
+          names="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(x=>x.name).join(" ")))')"
+          set_args=("FIELD_APP_URL=$FIELD_APP_URL")
+          if [[ " $names " == *" LINK_SIGNING_SECRET "* ]]; then
+            echo "LINK_SIGNING_SECRET already set: kept."
+          else
+            secret="$(openssl rand -hex 32)"
+            echo "::add-mask::$secret"
+            set_args+=("LINK_SIGNING_SECRET=$secret")
+            echo "LINK_SIGNING_SECRET was missing: set to a new random value."
+          fi
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" "${set_args[@]}" >/dev/null
+          echo "FIELD_APP_URL set to $FIELD_APP_URL."
+      - name: Panel sign-in link
+        run: |
+          key="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
+          echo "::add-mask::$key"
+          body="$(node -e 'console.log(JSON.stringify({type:"magiclink",email:process.env.SIGN_IN_AS,redirect_to:process.env.PANEL_URL+"/auth/callback"}))')"
+          link="$(curl -fsS "https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1/admin/generate_link" \
+            -H "apikey: $key" -H "Authorization: Bearer $key" -H 'Content-Type: application/json' \
+            -d "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.action_link||(j.properties&&j.properties.action_link)||"")})')"
+          if [ -z "$link" ]; then
+            echo "::error::generate_link returned no action link."
+            exit 1
+          fi
+          {
+            echo "### Phone check (preview)"
+            echo
+            echo "- field-api: FIELD_APP_URL = \`$FIELD_APP_URL\`; LINK_SIGNING_SECRET set."
+            echo "- One-time panel sign-in as $SIGN_IN_AS (expires in an hour, works once): [open the panel]($link)"
+            echo "- Then open **Demo phone** in the panel; the device code appears there."
           } >> "$GITHUB_STEP_SUMMARY"
 
   worker:

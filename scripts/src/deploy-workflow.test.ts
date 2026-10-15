@@ -78,6 +78,7 @@ describe('deploy.yml', () => {
       'plan',
       'supabase',
       'seed',
+      'phone-setup',
       'worker',
       'preview',
       'web',
@@ -110,8 +111,16 @@ describe('deploy.yml', () => {
   });
 
   it('guards every job that changes staging or production with the live branch (D40)', () => {
-    const changing = [...JOBS].filter(([, j]) => MUTATING.some((re) => re.test(commands(j.text))));
+    // phone-setup sets field-api secrets on the preview project only (its own guard, below).
+    const changing = [...JOBS].filter(
+      ([id, j]) => id !== 'phone-setup' && MUTATING.some((re) => re.test(commands(j.text))),
+    );
     expect(changing.map(([id]) => id).sort()).toEqual(['field', 'supabase', 'web', 'worker']);
+    const phone = JOBS.get('phone-setup')!;
+    expect(phone.condition).toContain("inputs.environment == 'preview'");
+    expect(phone.condition).toContain("github.ref == 'refs/heads/spec-v1.2'");
+    expect(phone.text).toContain('environment: preview');
+    expect(phone.text).toContain('"$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF"');
     for (const [id, job] of changing) {
       expect(job.condition, id).toContain(GUARD);
       expect(job.condition, id).toMatch(/needs\.plan\.outputs\.\w+ == 'true'/);
@@ -514,7 +523,9 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
     expect(field.condition).toContain("needs.plan.outputs.field == 'true'");
     expect(field.text).toContain("environment: ${{ inputs.environment || 'staging' }}");
     expect(JOBS.get('plan')!.text).toContain('field: ${{ steps.plan.outputs.field }}');
-    expect(WORKFLOW).toContain('options: [all, supabase, worker, web, field, inventory, seed]');
+    expect(WORKFLOW).toContain(
+      'options: [all, supabase, worker, web, field, inventory, seed, phone-setup]',
+    );
   });
 
   it("uses its own Netlify site key and name, never the panel's (D42)", () => {
