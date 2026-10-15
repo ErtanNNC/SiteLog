@@ -479,6 +479,12 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select field_confirm_report('${o.report}', '${o.reporter}', 1) as v`,
   },
+  // Spec §19 Q53 (20261015000003_late_uploads.sql): field-api flags a late clip.
+  field_flag_late_upload: {
+    why: '§6.5: field-api only (service role); a late clip is flagged by the server, never a client.',
+    allow: NONE,
+    call: (o) => `select field_flag_late_upload('${o.upload}', '${o.reporter}') as v`,
+  },
 };
 
 export type Scope = 'own' | 'other';

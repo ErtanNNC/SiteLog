@@ -11,9 +11,11 @@ import {
 } from '../_shared/http.ts';
 import { enqueueJob } from '../_shared/jobs.ts';
 import { logError, logInfo, logWarn } from '../_shared/log.ts';
+import { notifyOrg } from '../_shared/notify.ts';
 import { adminClient, type AppClient, fetchAll } from '../_shared/supabase.ts';
 import {
   LADDER_STATUSES,
+  missingNotification,
   type OrgInput,
   orgIsBlocked,
   planMissing,
@@ -23,12 +25,14 @@ import {
   type SiteDayInput,
   type SiteDayPlan,
   type SiteInput,
+  siteReporterFirstName,
 } from './logic.ts';
 
 /**
  * scheduler-tick (§4.2, §F9, §10.10, §13) — called every 5 minutes by pg_cron (migration 0006)
  * with `Authorization: Bearer ${SCHEDULER_SECRET}`. Creates today's site-days, marks a day past its
- * deadline plus the missing offset `missing` (§7.1), and schedules weather fetches, the weekly
+ * deadline plus the missing offset `missing` (§7.1) and alerts the office (panel notice and email,
+ * spec §19 Q55), and schedules weather fetches, the weekly
  * digest and the nightly retention job; billing-blocked orgs are skipped. The
  * v1.0 WhatsApp reminder ladder (heads-up, R1, R2, the missing alert) is stopped (W1-10) until M6
  * brings it back on SMS. Decisions live in logic.ts; this file only does I/O.
@@ -138,8 +142,18 @@ async function runTick(admin: AppClient, now: Date): Promise<TickResult> {
   // 4. No reminder ladder (W1-10): the v1.0 WhatsApp heads-up, R1, R2 and the missing alert are
   //    stopped until M6 rebuilds them on SMS through the Notifier (logic.ts REMINDER_LADDER_RUNS).
   //    The §7.1 status step still runs: a day past its deadline plus the missing offset becomes
-  //    `missing` (the panel's Overview and Reports read it), audited, with no text and no alert.
-  for (const mark of planMissing({ sites, orgs, todaysSiteDays, now })) {
+  //    `missing` (the panel's Overview and Reports read it), audited, with no text; the office
+  //    gets the `missing_report` notice and the `report_missing` email (spec §19 Q55).
+  const marks = planMissing({ sites, orgs, todaysSiteDays, now });
+  const reporterNames = await loadReporterNames(
+    admin,
+    marks.map((m) => m.siteId),
+  ).catch((err) => {
+    // The notice then says "The site manager"; the status step and the alerts still run.
+    logError('scheduler.missing.reporters_failed', err, {});
+    return new Map<string, string>();
+  });
+  for (const mark of marks) {
     try {
       if (!(await markMissing(admin, mark.siteDayId))) continue;
       await logAudit(admin, {
@@ -156,6 +170,29 @@ async function runTick(admin: AppClient, now: Date): Promise<TickResult> {
           by: 'scheduler-tick',
         },
       });
+      // The update above is the claim: only the tick that made the day missing alerts.
+      const note = missingNotification(
+        siteById.get(mark.siteId)?.name ?? 'A site',
+        reporterNames.get(mark.siteId) ?? null,
+      );
+      await notifyOrg(admin, {
+        orgId: mark.orgId,
+        kind: 'missing_report',
+        title: note.title,
+        body: note.body,
+        targetPath: '/',
+      });
+      await enqueueJob(
+        admin,
+        'send_email',
+        {
+          kind: 'report_missing',
+          siteDayId: mark.siteDayId,
+          siteId: mark.siteId,
+          orgId: mark.orgId,
+        },
+        { dedupeKey: `email:report_missing:${mark.siteDayId}` },
+      );
       result.missing += 1;
       logInfo('scheduler.missing', {
         siteId: mark.siteId,
@@ -221,6 +258,33 @@ async function markMissing(admin: AppClient, siteDayId: string): Promise<boolean
     .select('id')
     .throwOnError();
   return data.length > 0;
+}
+
+/** The first name each site's missing notice names (`siteReporterFirstName`). */
+async function loadReporterNames(
+  admin: AppClient,
+  siteIds: string[],
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  const unique = [...new Set(siteIds)];
+  if (unique.length === 0) return names;
+  const { data: links } = await admin
+    .from('site_reporters')
+    .select('site_id, reporter_id, is_primary')
+    .in('site_id', unique)
+    .throwOnError();
+  const reporterIds = [...new Set(links.map((l) => l.reporter_id))];
+  if (reporterIds.length === 0) return names;
+  const { data: reporters } = await admin
+    .from('reporters')
+    .select('id, name, status')
+    .in('id', reporterIds)
+    .throwOnError();
+  for (const siteId of unique) {
+    const name = siteReporterFirstName(siteId, links, reporters);
+    if (name) names.set(siteId, name);
+  }
+  return names;
 }
 
 async function loadOrgs(admin: AppClient): Promise<Map<string, OrgInput>> {

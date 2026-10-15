@@ -444,7 +444,7 @@ Deno.test(
     assertEquals(h.store.jobs, []);
     // A demo org: the reply goes through console and keeps its link (the Demo phone opens it).
     assertEquals(h.messaging.sent[0]!.driver, 'console');
-    assertMatch(h.messaging.rows[0]!.body, /https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{6} /);
+    assertMatch(h.messaging.rows[0]!.body, /https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{12} /);
     const link = h.store.links.links[0]!;
     const code = await deriveLinkCode(SECRET, link.id);
     assertEquals(link.code_hash, linkCodeHash(code));

@@ -253,7 +253,12 @@ describe('parseQuickAnswer', () => {
       workers: 5,
       endTime: '15:00',
     });
-    expect(parseQuickAnswer('manpower.hours', 'Half day')).toEqual({ hoursPerWorker: 4 });
+    // Spec §19 Q62: "Half day" is half of the org's default shift, resolved by applyAnswer.
+    expect(parseQuickAnswer('manpower.hours', 'Half day')).toEqual({ halfDay: true });
+    expect(parseQuickAnswer('manpower.workers', 'beş kişi, yarım gün')).toEqual({
+      workers: 5,
+      halfDay: true,
+    });
     expect(parseQuickAnswer('manpower.hours', '8')).toEqual({ hoursPerWorker: 8 });
   });
   it('parses weather, safety and company answers', () => {
@@ -301,6 +306,21 @@ describe('applyAnswer', () => {
     expect(data.manpower[1]!.source.at(-1)).toEqual({ type: 'reply', messageId: 'reply1' });
     expect(ackText).toBe('Thanks — Delta Mechanical: 5 workers × 8 h = 40 h.');
     expect(d.manpower[1]!.workers).toBeNull(); // pure
+  });
+  it('reads "Half day" as half of the default shift (spec §19 Q62)', () => {
+    const d = complete();
+    d.manpower = [
+      mp({ workers: 6, hoursPerWorker: null, totalHours: null, hoursBasis: 'unknown' }),
+    ];
+    const answer = (shift: number) =>
+      applyAnswer(
+        d,
+        { field: 'manpower.hours', target: { manpowerIndex: 0 } },
+        { halfDay: true },
+        { defaultShiftHours: shift, source: { type: 'reply', messageId: 'reply1' } },
+      ).data.manpower[0];
+    expect(answer(8)).toMatchObject({ hoursPerWorker: 4, totalHours: 24, hoursBasis: 'reply' });
+    expect(answer(10)).toMatchObject({ hoursPerWorker: 5, totalHours: 30 });
   });
   it('derives hours from an end time using site working hours', () => {
     const d = complete();
@@ -540,7 +560,7 @@ describe('W1-12: v2 data, channel-neutral options, D28, EN/ES/TR', () => {
       workers: 4,
       hoursPerWorker: 6,
     });
-    expect(parseQuickAnswer('manpower.hours', 'Yarım gün')).toEqual({ hoursPerWorker: 4 });
+    expect(parseQuickAnswer('manpower.hours', 'Yarım gün')).toEqual({ halfDay: true });
     expect(parseQuickAnswer('weather.impact', 'Duruş yok')).toEqual({ lostHours: 0 });
     expect(parseQuickAnswer('weather.impact', 'Sin paro')).toEqual({ lostHours: 0 });
     expect(parseQuickAnswer('safety', 'Olay yok')).toEqual({ noIncidentsStated: true });

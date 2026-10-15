@@ -8,6 +8,8 @@ import {
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import {
   allowedReportDates,
+  lateClipAllowed,
+  reportWindowEnd,
   clientIp,
   consentState,
   deviceVerified,
@@ -245,4 +247,68 @@ Deno.test('clientIp and retryAfterSeconds', () => {
   const now = new Date('2026-10-09T22:00:00Z');
   assertEquals(retryAfterSeconds('2026-10-09T22:00:30.200Z', now), 31);
   assertEquals(retryAfterSeconds('2026-10-09T21:00:00Z', now), 1);
+});
+
+Deno.test('reportWindowEnd and lateClipAllowed (spec §19 Q53)', () => {
+  const site = { timezone: 'America/Chicago' };
+  const weekdays = [1, 2, 3, 4, 5];
+  // Thursday's window ends Friday at noon; Friday's ends Monday at noon; Saturday's at its end.
+  assertEquals(
+    reportWindowEnd('2026-10-08', site, weekdays).toISOString(),
+    '2026-10-09T17:00:00.000Z',
+  );
+  assertEquals(reportWindowEnd('2026-10-09', site, null).toISOString(), '2026-10-12T17:00:00.000Z');
+  assertEquals(
+    reportWindowEnd('2026-10-10', site, weekdays).toISOString(),
+    '2026-10-11T05:00:00.000Z',
+  );
+  const personal = { report_date: null };
+  const fridayEvening = '2026-10-10T01:30:00Z'; // Fri Oct 9, 20:30 Chicago
+  const tuesday = new Date('2026-10-13T15:00:00Z');
+  assertEquals(
+    lateClipAllowed(personal, site, '2026-10-09', fridayEvening, tuesday, weekdays),
+    true,
+  );
+  // Past Monday noon + 48 h.
+  assertEquals(
+    lateClipAllowed(
+      personal,
+      site,
+      '2026-10-09',
+      fridayEvening,
+      new Date('2026-10-14T17:01:00Z'),
+      weekdays,
+    ),
+    false,
+  );
+  // No recording time, a bad one, a future one, a daily link.
+  assertEquals(lateClipAllowed(personal, site, '2026-10-09', null, tuesday, weekdays), false);
+  assertEquals(lateClipAllowed(personal, site, '2026-10-09', 'soon', tuesday, weekdays), false);
+  assertEquals(
+    lateClipAllowed(personal, site, '2026-10-09', '2026-10-13T16:00:00Z', tuesday, weekdays),
+    false,
+  );
+  assertEquals(
+    lateClipAllowed(
+      { report_date: '2026-10-09' },
+      site,
+      '2026-10-08',
+      fridayEvening,
+      tuesday,
+      weekdays,
+    ),
+    false,
+  );
+  // "Yesterday" picked Monday 11:00 for Friday, sent Monday 14:00.
+  assertEquals(
+    lateClipAllowed(
+      personal,
+      site,
+      '2026-10-09',
+      '2026-10-12T16:00:00Z',
+      new Date('2026-10-12T19:00:00Z'),
+      weekdays,
+    ),
+    true,
+  );
 });

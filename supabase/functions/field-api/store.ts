@@ -210,6 +210,12 @@ export interface FieldStore {
     reporterId: string,
     bytes: number | null,
   ): Promise<CompleteUploadResult>;
+  /**
+   * field_flag_late_upload() (spec §19 Q53): a completed upload that arrived after its day's
+   * window: the report and the site-day marked late, audited `upload.accepted_late`, one office
+   * notice per report. Once per upload (`flagged` false on a repeat).
+   */
+  flagLateUpload(uploadId: string, reporterId: string): Promise<{ flagged: boolean }>;
   setDayStatus(input: {
     reporterId: string;
     siteId: string;

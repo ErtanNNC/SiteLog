@@ -353,6 +353,15 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       );
     },
 
+    async flagLateUpload(uploadId, reporterId) {
+      return await rpc<{ flagged: boolean }>(
+        admin.rpc('field_flag_late_upload', {
+          p_upload_id: uploadId,
+          p_reporter_id: reporterId,
+        }),
+      );
+    },
+
     async setDayStatus(input) {
       return await rpc<DayStatusResult>(
         admin.rpc('field_set_day_status', {

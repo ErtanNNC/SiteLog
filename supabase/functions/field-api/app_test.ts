@@ -811,6 +811,83 @@ Deno.test('uploads: media type, kind, date, inactive site, closed and filed days
 });
 
 Deno.test(
+  'uploads: a late clip is filed under the day it was recorded (spec §19 Q53)',
+  async () => {
+    const h = setup();
+    await consented(h);
+    const up = (body: Record<string, unknown>) =>
+      h.call('POST', 'uploads', {
+        body: { kind: 'audio', mime: 'audio/webm', bytes: 10, siteId: SITE_A, ...body },
+      });
+    // Fri Oct 9, 17:00 Chicago. Thursday's window closed at noon today; a clip recorded Thursday
+    // 20:00 (offline) arrives now: filed under Thursday, late.
+    const recordedThu = '2026-10-09T01:00:00Z';
+    assertEquals((await up({ date: '2026-10-08' })).json.error, 'date_not_allowed');
+    const late = await up({ date: '2026-10-08', recordedAt: recordedThu });
+    assertEquals(late.status, 201);
+    assertEquals(late.json.path, `${ORG}/${SITE_A}/2026-10-08/${late.json.uploadId}.webm`);
+    const created = h.store.audits.find(
+      (a) => a.action === 'upload.created' && a.entityId === late.json.uploadId,
+    );
+    assertEquals(created?.diff, {
+      kind: 'audio',
+      site_id: SITE_A,
+      date: '2026-10-08',
+      late: true,
+      recorded_at: recordedThu,
+    });
+    h.store.put(`audio/${late.json.path}`);
+    const done = await h.call('POST', `uploads/${late.json.uploadId}/complete`);
+    assertEquals(done.status, 200);
+    const report = h.store.reports.find((r) => r.id === done.json.reportId)!;
+    assertEquals(report.is_late, true);
+    assertEquals(h.store.lateNotices, [{ reportId: report.id, uploadId: late.json.uploadId }]);
+    // A retried complete flags nothing twice.
+    await h.call('POST', `uploads/${late.json.uploadId}/complete`);
+    assertEquals(h.store.lateUploads, [late.json.uploadId]);
+    assertEquals(
+      h.store.audits.filter((a) => a.action === 'upload.accepted_late').length,
+      1,
+      'one audit row per upload',
+    );
+
+    // Refused: a recording time outside Thursday's window (Friday 14:00), one in the future, none.
+    assertEquals(
+      (await up({ date: '2026-10-08', recordedAt: '2026-10-09T19:00:00Z' })).json.error,
+      'date_not_allowed',
+    );
+    assertEquals(
+      (await up({ date: '2026-10-08', recordedAt: '2026-10-09T23:00:00Z' })).json.error,
+      'date_not_allowed',
+    );
+    // A date never allowed (Wednesday) even with a time on it.
+    assertEquals(
+      (await up({ date: '2026-10-07', recordedAt: recordedThu })).json.error,
+      'date_not_allowed',
+    );
+    // 48 h after the window: Sun Oct 11, 12:00 Chicago (17:00Z) is the last moment.
+    h.clock.now = new Date('2026-10-11T17:00:00Z');
+    assertEquals((await up({ date: '2026-10-08', recordedAt: recordedThu })).status, 201);
+    h.clock.now = new Date('2026-10-11T17:01:00Z');
+    assertEquals(
+      (await up({ date: '2026-10-08', recordedAt: recordedThu })).json.error,
+      'date_not_allowed',
+    );
+  },
+);
+
+Deno.test('uploads/:id/complete: an on-time upload is not flagged late', async () => {
+  const h = setup();
+  await consented(h);
+  const u = await h.call('POST', 'uploads', {
+    body: { kind: 'audio', mime: 'audio/webm', bytes: 1, siteId: SITE_A },
+  });
+  h.store.put(`audio/${u.json.path}`);
+  await h.call('POST', `uploads/${u.json.uploadId}/complete`);
+  assertEquals(h.store.calls.includes('flagLateUpload'), false);
+});
+
+Deno.test(
   'day-status: no work and weather day on a pending day; refused with a report',
   async () => {
     const h = setup();

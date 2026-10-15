@@ -7,7 +7,9 @@ import {
   consentSets,
   deadlineInstant,
   formatDeadline,
+  isWorkingDay,
   localDate,
+  nextWorkingDay,
   previousWorkingDay,
   type AnswerValue,
   type ConsentRow,
@@ -183,8 +185,64 @@ export function allowedReportDates(
     ).getTime()
   )
     return [today];
-  const days = workingDays?.length ? workingDays.map(Number) : [1, 2, 3, 4, 5];
-  return [today, previousWorkingDay(today, days)];
+  return [today, previousWorkingDay(today, orgWorkingDays(workingDays))];
+}
+
+function orgWorkingDays(workingDays: readonly number[] | null | undefined): number[] {
+  return workingDays?.length ? workingDays.map(Number) : [1, 2, 3, 4, 5];
+}
+
+/**
+ * The instant a personal link stops allowing `date` (`allowedReportDates`): 12:00 site time on the
+ * next working day when `date` is a working day (until then it is "yesterday" before noon), else
+ * the end of `date` itself.
+ */
+export function reportWindowEnd(
+  date: string,
+  site: Pick<SiteRow, 'timezone'>,
+  workingDays: readonly number[] | null | undefined,
+): Date {
+  const days = orgWorkingDays(workingDays);
+  if (!isWorkingDay(date, days)) return deadlineInstant(addDays(date, 1), '00:00', site.timezone);
+  return deadlineInstant(
+    nextWorkingDay(date, days),
+    `${String(YESTERDAY_UNTIL_HOUR).padStart(2, '0')}:00`,
+    site.timezone,
+  );
+}
+
+/** Spec §19 Q53: how long after a day's window a clip recorded inside it is still filed under it. */
+export const LATE_CLIP_GRACE_HOURS = 48;
+
+/** How far ahead of the server a phone's clock may be and its recording time still count. */
+export const RECORDED_AT_SKEW_MS = 5 * 60 * 1000;
+
+/**
+ * Spec §19 Q53 (owner, 2026-10-15): a clip recorded on one day that reaches field-api after that
+ * day's window has closed (recorded offline in the evening and sent the next afternoon, or
+ * "yesterday" picked before noon and sent after it) is still filed under the day it was recorded
+ * when the phone's recording time (`recordedAt`, the device clock) was inside that day's window
+ * (the day was one `allowedReportDates` allowed at that moment), that time is not in the future,
+ * and it arrives within LATE_CLIP_GRACE_HOURS of the window's end. A daily or photos link names
+ * its own date, which it always allows, so this is for personal links. field-api audits the
+ * upload as late and flags it to the office (`field_flag_late_upload()`).
+ */
+export function lateClipAllowed(
+  link: Pick<FieldLinkRow, 'report_date'>,
+  site: Pick<SiteRow, 'timezone'>,
+  date: string,
+  recordedAt: string | null | undefined,
+  now: Date,
+  workingDays: readonly number[] | null | undefined,
+): boolean {
+  if (link.report_date || !recordedAt) return false;
+  const recorded = new Date(recordedAt);
+  if (Number.isNaN(recorded.getTime())) return false;
+  if (recorded.getTime() > now.getTime() + RECORDED_AT_SKEW_MS) return false;
+  if (!allowedReportDates(link, site, recorded, workingDays).includes(date)) return false;
+  const graceEnd =
+    reportWindowEnd(date, site, workingDays).getTime() + LATE_CLIP_GRACE_HOURS * 3600 * 1000;
+  return now.getTime() <= graceEnd;
 }
 
 /** What Storage holds at an upload's path (`FieldStore.objectInfo`). */

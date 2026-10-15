@@ -1197,6 +1197,12 @@ export type Database = {
         Args: { p_upload_id: string; p_reporter_id: string; p_bytes?: number | null };
         Returns: Json;
       };
+      // Spec §19 Q53 (20261015000003_late_uploads.sql), service role only: a completed upload
+      // that arrived after its day's window → report and site-day late, audited, one notice.
+      field_flag_late_upload: {
+        Args: { p_upload_id: string; p_reporter_id: string };
+        Returns: Json;
+      };
       // day-status (F12 buttons): pending or reminded → no_work or weather_day.
       field_set_day_status: {
         Args: {

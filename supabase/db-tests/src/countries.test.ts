@@ -233,6 +233,11 @@ describe('country pack rows (§4.6)', () => {
       '23514',
     ],
     [
+      'no links in SMS even with whatsapp (spec §19 Q24, 20261015000004)',
+      `update countries set sms_links_allowed = false, message_channels = '{whatsapp,sms}' where code = 'US'`,
+      '23514',
+    ],
+    [
       'a voice number that is not E.164',
       `update countries set voice_number = '555-0142' where code = 'US'`,
       '23514',
@@ -507,7 +512,7 @@ describe('a new country is a new row (ZZ)', () => {
            default_timezone, message_channels, sms_provider, whatsapp_provider, sms_sender_type,
            sms_sender_id, two_way_sms, sms_links_allowed, voice_number, legal_keys)
          values ('ZZ', 'en-US', '{es-US}', 'metric', 'a4', 'EUR', 'UTC', '{whatsapp,sms}',
-           'twilio', 'twilio', 'alphanumeric', null, false, false, null, '{}')`,
+           'twilio', 'twilio', 'alphanumeric', null, false, true, null, '{}')`,
       );
       const orgId = await createOrg(`p_name => 'Zed Bau', p_country => 'ZZ'`);
       expect(await presets(orgId)).toEqual({
@@ -525,9 +530,8 @@ describe('a new country is a new row (ZZ)', () => {
       expect(zz.messageChannels).toEqual(['whatsapp', 'sms']);
       // Its language (Spanish) has all the one-way copy: no code change for this row.
       expect(packCopyGaps(zz)).toEqual([]);
-      // The channel layer follows its flags: WhatsApp first, but not built until week 2; this
-      // pack forbids links in SMS, so a link message has no channel yet, while the device code
-      // (no link) goes by SMS.
+      // The channel layer follows its flags: WhatsApp first, but not built until week 2, so
+      // every message goes by SMS (a pack must allow links in SMS, spec §19 Q24).
       expect(messageChannelOrder(zz, null)).toEqual(['whatsapp', 'sms']);
       const reach = (key: 'daily_link' | 'verify_code' | 'edit_applied') =>
         deliverableChannels({
@@ -538,13 +542,13 @@ describe('a new country is a new row (ZZ)', () => {
           revoked: new Set(),
           optedOut: new Set(),
         });
-      expect(reach('daily_link')).toEqual([]);
+      expect(reach('daily_link')).toEqual(['sms']);
       expect(reach('verify_code')).toEqual(['sms']);
       expect(reach('edit_applied')).toEqual(['sms']);
       expect(smsRenderOptions(zz)).toEqual({
         hasVoiceNumber: false,
         twoWay: false,
-        linksAllowed: false,
+        linksAllowed: true,
       });
       expect(smsReplyAllowed(zz, 'stop_confirm')).toBe(false); // one-way
     });

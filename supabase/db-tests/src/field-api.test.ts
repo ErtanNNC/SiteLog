@@ -423,6 +423,77 @@ describe('field_complete_upload (uploads/:id/complete)', () => {
   });
 });
 
+describe('field_flag_late_upload (spec §19 Q53: a late clip)', () => {
+  const flag = async (uploadId: string, reporter: string) =>
+    (
+      await svc<{ r: { flagged: boolean; notified?: boolean; reportId: string } }>(
+        `select field_flag_late_upload($1, $2) as r`,
+        [uploadId, reporter],
+      )
+    )[0]!.r;
+
+  it('marks the report and the day late, audits each upload once, and notifies the office once per report', async () => {
+    const day = '2026-10-26';
+    const first = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day });
+    const done = await complete(first, MARCO);
+    expect(await flag(first, MARCO)).toMatchObject({
+      flagged: true,
+      notified: true,
+      reportId: done.reportId,
+    });
+    expect(await flag(first, MARCO)).toMatchObject({ flagged: false });
+    const second = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day });
+    await complete(second, MARCO);
+    expect(await flag(second, MARCO)).toMatchObject({ flagged: true, notified: false });
+
+    const [report] = await svc<{ is_late: boolean }>(`select is_late from reports where id = $1`, [
+      done.reportId,
+    ]);
+    expect(report!.is_late).toBe(true);
+    const [sd] = await svc<{ is_late: boolean }>(
+      `select is_late from site_days where site_id = $1 and date = $2`,
+      [SITE, day],
+    );
+    expect(sd!.is_late).toBe(true);
+    const audits = await svc<{
+      entity_id: string;
+      actor_type: string;
+      diff: { notified: boolean };
+    }>(
+      `select entity_id, actor_type, diff from audit_log where action = 'upload.accepted_late'
+       and diff ->> 'report_id' = $1 order by created_at, entity_id`,
+      [done.reportId],
+    );
+    expect(audits.map((a) => [a.entity_id, a.actor_type, a.diff.notified])).toEqual(
+      expect.arrayContaining([
+        [first, 'reporter', true],
+        [second, 'reporter', false],
+      ]),
+    );
+    expect(audits).toHaveLength(2);
+    const notices = await svc<{ kind: string; title: string; body: string; target_path: string }>(
+      `select kind, title, body, target_path from notifications where kind = 'late_upload'
+       and target_path = $1`,
+      [`/reports/${done.reportId}`],
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.title).toBe('Riverside — late voice note for Mon Oct 26');
+    expect(notices[0]!.body).toContain('Marco Ruiz recorded it on that day');
+    expect(notices[0]!.body).toContain(`report ${done.reportNo}, marked late`);
+  });
+
+  it('refuses an upload that is not completed, or another reporter’s', async () => {
+    const pending = await upload({ reporter: MARCO, site: SITE, org: ORG, date: '2026-10-27' });
+    expect(await failure(`select field_flag_late_upload($1, $2)`, [pending, MARCO])).toBe(
+      'upload_not_found',
+    );
+    await complete(pending, MARCO);
+    expect(await failure(`select field_flag_late_upload($1, $2)`, [pending, DANA])).toBe(
+      'upload_not_found',
+    );
+  });
+});
+
 describe('field_set_day_status (day-status, F12 buttons)', () => {
   const call = (reporter: string, site: string, date: string, status: string, details = {}) =>
     svc<{ r: { siteDayId: string; status: string; changed: boolean } }>(
@@ -709,6 +780,7 @@ describe('the field-api functions are the service role’s only', () => {
     'field_set_day_status(uuid,uuid,date,text,jsonb)',
     'field_rate_limit(text,integer,integer)',
     'field_confirm_report(uuid,uuid,integer)',
+    'field_flag_late_upload(uuid,uuid)',
   ];
 
   it('grants execute to service_role and to no API role', async () => {

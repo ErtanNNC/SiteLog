@@ -8,8 +8,8 @@ import { smsTr } from './sms.tr.ts';
  * templates and push texts reuse these keys from week 2 (spec §4.5, `MessageKey`).
  *
  * Which variant a message gets is the country pack's business (spec §4.6), never the driver's:
- * - Two-way packs only (`two_way_sms`): the keys `unknown_number`, `help` and `stop_confirm`
- *   (EN and ES text only), and the welcome's reply clause (`SMS_REPLY_HINT`, EN and ES), which
+ * - Two-way packs only (`two_way_sms`): the keys `unknown_number`, `help`, `stop_confirm`,
+ *   `pref_call_ok` and `pref_text_ok` (EN and ES text only), and the welcome's reply clause (`SMS_REPLY_HINT`, EN and ES), which
  *   `renderSms` appends. One-way packs never get reply instructions: those keys throw and the
  *   welcome goes out without the clause. Catalogue text + hint is the §9.2 cell, byte for byte.
  * - Packs without links in SMS (`sms_links_allowed` false): the keys with a link
@@ -41,14 +41,22 @@ export const SMS_KEYS = [
   'unknown_number',
   'help',
   'stop_confirm',
+  'pref_call_ok',
+  'pref_text_ok',
 ] as const;
 export type SmsKey = (typeof SMS_KEYS)[number];
 
 /**
- * Keys sent only on packs with two-way SMS (replies to STOP and HELP, and to an unknown sender,
- * §9.5): EN and ES text only.
+ * Keys sent only on packs with two-way SMS (replies to STOP, HELP, CALL and TEXT, and to an
+ * unknown sender, §9.5; CALL and TEXT confirmed per spec §19 Q46): EN and ES text only.
  */
-export const TWO_WAY_SMS_KEYS = ['unknown_number', 'help', 'stop_confirm'] as const;
+export const TWO_WAY_SMS_KEYS = [
+  'unknown_number',
+  'help',
+  'stop_confirm',
+  'pref_call_ok',
+  'pref_text_ok',
+] as const;
 export type TwoWaySmsKey = (typeof TWO_WAY_SMS_KEYS)[number];
 /** Keys every pack can send, in every language. */
 export type SharedSmsKey = Exclude<SmsKey, TwoWaySmsKey>;
@@ -76,6 +84,8 @@ export const SMS_VARS = {
   unknown_number: [],
   help: ['company', 'link', 'number'],
   stop_confirm: [],
+  pref_call_ok: [],
+  pref_text_ok: [],
 } as const satisfies Record<SmsKey, readonly string[]>;
 
 export type SmsVarName<K extends SmsKey> = (typeof SMS_VARS)[K][number];

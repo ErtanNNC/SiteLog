@@ -91,6 +91,9 @@ export const RELINK_ERRORS = [
 /**
  * Refusals nothing can change: the reporter can only remove the item, and nothing is removed
  * without that tap. `removed` is `waitFor`'s answer for an item gone from the queue.
+ * `date_not_allowed` reaches a clip only past its grace period: field-api still files a clip
+ * recorded inside its day's window (the item's `date` and `recordedAt`) up to 48 h after that
+ * window closed, marked late (spec §19 Q53).
  */
 export const FINAL_ERRORS = [
   'report_filed',

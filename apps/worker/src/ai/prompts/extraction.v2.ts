@@ -46,7 +46,7 @@ export function extractionSystemPromptV2(): string {
   return cached;
 }
 
-/** The source bookkeeping the tool schema needs (a separate cached system block). */
+/** The source bookkeeping the tool schema needs (a separate cached system block): spec §10.4 "Source-format note (v2)" verbatim (§19 Q59). */
 export const EXTRACTION_V2_SOURCE_NOTE = `Source format: each voice note in the input carries an uploadId. A voice-note source is
 {"type":"voice_note","uploadId":"<uploadId of that voice note>","start":<segment start seconds>,"end":<segment end seconds>};
 a value from an earlier answer is {"type":"answer","questionId":"<questionId of that answer>"}.

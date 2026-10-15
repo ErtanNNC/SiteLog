@@ -51,6 +51,11 @@ export const smsEs: SmsCatalog<SmsKey> = {
       'Reportes diarios de SiteLog para {company}. Su enlace: {link} · Envíe CALL o TEXT para elegir llamada o mensaje · STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
   },
   stop_confirm: 'Ya no recibirá mensajes de SiteLog. Responda START para reactivarlos.',
+  // No accents, so GSM-7: one segment each (spec §19 Q46).
+  pref_call_ok:
+    'Listo, su reporte diario ahora es por llamada. Responda TEXT para cambiar a un enlace.',
+  pref_text_ok:
+    'Listo, su reporte diario ahora es por enlace en un mensaje. Responda CALL para cambiar a una llamada.',
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (mirrors `smsReplyHintEn`). */

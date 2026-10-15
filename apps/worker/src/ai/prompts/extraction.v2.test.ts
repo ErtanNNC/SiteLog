@@ -23,6 +23,15 @@ describe('extraction v2 prompt (W1-12, D24)', () => {
     expect(extractionSystemPromptV2()).toBe(block.trimEnd());
   });
 
+  it('sends the spec §10.4 source-format note verbatim (§19 Q59)', () => {
+    const spec = readFileSync(SPEC, 'utf8');
+    const at = spec.indexOf('**Source-format note (v2)');
+    expect(at).toBeGreaterThan(0);
+    const start = spec.indexOf('```text\n', at) + '```text\n'.length;
+    const block = spec.slice(start, spec.indexOf('```', start));
+    expect(EXTRACTION_V2_SOURCE_NOTE).toBe(block.trimEnd());
+  });
+
   it('builds the user message with the v2 variables (hero, EN report, imperial)', () => {
     const hero = loadFixture('riverside-2026-10-09');
     const msg = buildExtractionUserMessageV2(hero.input);

@@ -140,7 +140,7 @@ CLI accepts a `deno.json` wherever it accepts an `import_map.json` (it reads the
   failures only, and the fragment is never sent, so the signature and `SMS_WEBHOOK_URL` stay
   as they are): the function stores the text, its audit and the worker's `sms_inbound` job in one
   transaction (`receive_sms_inbound()`), and the retries cover a failure before it commits. Delivery callbacks need nothing: each send names
-  `{SMS_WEBHOOK_URL}/status`. Twilio's own STOP/HELP handling: spec §19 Q45.
+  `{SMS_WEBHOOK_URL}/status`. Twilio's own STOP/HELP handling: spec §19 Q45 (when Twilio sends `OptOutType`, SiteLog records the change and sends no reply of its own; RUNBOOK §2).
 - **pg_cron**: nothing to register; the Vault secrets above are enough.
 
 ## Local testing
@@ -235,7 +235,10 @@ Notes:
   The weekly digest covers the previous Mon–Sun week and is tracked per org in
   `scheduler_state['weekly_digest_runs']`; retention runs once per UTC day after 03:00
   (`scheduler_state['retention_cleanup']`); `scheduler_state['last_tick']` holds the last run and
-  its counters.
+  its counters. On this branch the ladder is stopped (W1-10); the tick still marks a day past its
+  deadline plus the missing offset `missing`, and the update that does it is the claim for the
+  office alert: one `missing_report` notice and one `report_missing` email
+  (`email:report_missing:<site-day>`), worded without any reminder (spec §19 Q55).
 - **api-invite-reporter** always enqueues `send_welcome` (also when an existing reporter is linked
   to another site). The worker should treat a welcome for an already-active reporter as
   informational and not reset the conversation. A re-send is allowed once, 48 h after `invited_at`
@@ -284,7 +287,8 @@ Notes:
   that id as its dedupe key; the answer is empty TwiML. The worker runs the keyword plan
   (`packages/shared/src/sms/inbound.ts` over `keywords.ts`, spec §9.5): reporter changes audited
   as the reporter, the phone's own opt-out in `sms_opt_outs`, the office notice of a STOP
-  (§13), at most one reply through the Notifier (`help`, `stop_confirm`, `unknown_number`), then
+  (§13), at most one reply through the Notifier (`help`, `stop_confirm`, `unknown_number`,
+  `pref_call_ok`, `pref_text_ok`; none when Twilio sent `OptOutType`, spec §19 Q45, Q46), then
   the row marked handled, so a late redelivery runs nothing. `POST /status`: Twilio's delivery
   callback moves `messages.status` forward only; a `welcome` that ends `undelivered` or `failed`
   sets the still-invited reporter's `last_invite_error` (Team: "Can't reach this number"),

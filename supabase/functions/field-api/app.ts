@@ -69,6 +69,7 @@ import {
   fieldCountryView,
   fieldSite,
   historyStart,
+  lateClipAllowed,
   nearestDeadlineSite,
   needsConsent,
   numberAnswerLabel,
@@ -298,6 +299,27 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     if (!allowed.includes(date))
       throw new FieldError(400, 'date_not_allowed', undefined, { allowed });
     return date;
+  }
+
+  /**
+   * An upload's report date: as `reportDate`, and also a day whose window has closed when the
+   * phone recorded the file inside it and it arrives within the grace period (spec §19 Q53,
+   * `lateClipAllowed`); `late` then says so.
+   */
+  function uploadDate(
+    ctx: DeviceContext,
+    site: SiteRow,
+    requested: string | undefined,
+    recordedAt: string | undefined,
+  ): { date: string; late: boolean } {
+    const workingDays = ctx.org.settings?.working_days;
+    const allowed = allowedReportDates(ctx.link, site, now(), workingDays);
+    const date = requested ?? allowed[0]!;
+    if (allowed.includes(date)) return { date, late: false };
+    if (requested && lateClipAllowed(ctx.link, site, date, recordedAt, now(), workingDays)) {
+      return { date, late: true };
+    }
+    throw new FieldError(400, 'date_not_allowed', undefined, { allowed });
   }
 
   async function reportInScope(ctx: DeviceContext, id: string) {
@@ -563,7 +585,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       throw new FieldError(400, 'kind_not_allowed', 'A photos link takes photos only (F9)');
     }
     const site = writeSite(ctx, body.siteId);
-    const date = reportDate(ctx, site, body.date);
+    const { date, late } = uploadDate(ctx, site, body.date, body.recordedAt);
     // The RPC checks again when the upload completes; this spares an upload that cannot attach.
     const day = await store.getSiteDay(site.id, date);
     const live = day ? await store.getLiveReport(day.id) : null;
@@ -587,7 +609,12 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       recorded_at: body.recordedAt ?? null,
     });
     const signed = await store.createSignedUploadUrl(bucket, path);
-    await audit(ctx, 'upload.created', 'upload', id, { kind: body.kind, site_id: site.id, date });
+    await audit(ctx, 'upload.created', 'upload', id, {
+      kind: body.kind,
+      site_id: site.id,
+      date,
+      ...(late ? { late: true, recorded_at: body.recordedAt } : {}),
+    });
     const res: UploadResponse = {
       uploadId: id,
       bucket,
@@ -633,6 +660,14 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       bytes = object!.size;
     }
     const result = await store.completeUpload(upload.id, ctx.reporter.id, bytes);
+    // Spec §19 Q53: a file that reaches its report after its day's window closed (a late clip
+    // `uploads` accepted, or one created just before the window closed) is flagged late to the
+    // office, once per upload (a retried complete flags nothing twice).
+    const site = ctx.sites.find((s) => s.id === upload.site_id)!;
+    const date = upload.storage_path.split('/')[2] ?? '';
+    if (!allowedReportDates(ctx.link, site, now(), ctx.org.settings?.working_days).includes(date)) {
+      await store.flagLateUpload(upload.id, ctx.reporter.id);
+    }
     const res: CompleteResponse = {
       reportId: result.reportId,
       reportNo: result.reportNo,

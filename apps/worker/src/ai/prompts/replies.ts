@@ -26,7 +26,7 @@ Rules:
 1. The reply may be short ("5, full day", "six guys till 3", "no stoppage", "add them", "it's Delta").
    Fill only the structured fields the reply supports; never invent values.
 2. "Full day" / "all day" → fullDay true. An end time ("till 3") → endTime "15:00" (site shifts run in the daytime).
-   "Half day" → hoursPerWorker 4.
+   "Half day" → halfDay true (code sets half of DEFAULT_SHIFT_HOURS).
 3. For company questions: "add" / "new sub" → companyAction "add"; "it's X" / "that's X" → companyAction "map"
    with companyName X (and companyId if X is in COMPANIES).
 4. confidence is how sure you are that the reply answers THIS question. A reply that is about something else

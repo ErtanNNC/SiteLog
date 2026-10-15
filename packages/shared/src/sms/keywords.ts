@@ -144,9 +144,16 @@ export function orderInboundReporters<R extends InboundReporter>(reporters: read
  *   `unknown_contacts` row, once while a pending row for the number exists (no reply loop with an
  *   automated sender), never for STOP;
  * - HELP: the `help` reply for the first reporter, also after an opt-out;
- * - CALL / TEXT: `contact_pref` → `call` / `link` for every reporter not opted out; no reply (§9.2
- *   has no text for it);
+ * - CALL / TEXT: `contact_pref` → `call` / `link` for every reporter not opted out, and the
+ *   `pref_call_ok` / `pref_text_ok` confirmation unless the first reporter is opted out (spec §19
+ *   Q46: the change decides how SiteLog reaches the person);
  * - any other text: stored for M6.
+ *
+ * Spec §19 Q45 (owner, 2026-10-15): when Twilio recognised the keyword itself (`OptOutType`
+ * present: STOP, START or HELP on a Messaging Service with Advanced Opt-Out), Twilio sends
+ * SiteLog's own `stop_confirm` / `help` texts, set as that service's opt-out replies (RUNBOOK), so
+ * SiteLog sends no reply of its own and the reporter gets one answer; the opt-out and the other
+ * changes are still recorded.
  */
 export function planInboundSms(input: {
   pack: CountryPack;
@@ -170,8 +177,9 @@ export function planInboundSms(input: {
     phoneOptOut: null,
   };
   if (!input.pack.twoWaySms) return plan;
+  const providerReplies = Boolean(input.optOutType?.trim());
   const reply = (key: TwoWaySmsKey, reporterId: string | null) =>
-    smsReplyAllowed(input.pack, key) ? { key, reporterId } : null;
+    !providerReplies && smsReplyAllowed(input.pack, key) ? { key, reporterId } : null;
   const at = input.now.toISOString();
 
   if (keyword === 'stop') {
@@ -232,6 +240,8 @@ export function planInboundSms(input: {
             patch: { contact_pref: pref },
             action: 'reporter.preferences_changed',
           });
+      if (first.status !== 'opted_out')
+        plan.reply = reply(keyword === 'call' ? 'pref_call_ok' : 'pref_text_ok', first.id);
       break;
     }
     default:

@@ -158,7 +158,8 @@ describe('Demo phone', () => {
         'CALL',
       ),
     );
-    await waitFor(() => expect(within(region).getAllByRole('listitem')).toHaveLength(before + 1));
+    // The text and SiteLog's confirmation of the switch (spec §19 Q46).
+    await waitFor(() => expect(within(region).getAllByRole('listitem')).toHaveLength(before + 2));
     await waitFor(() => expect(region.scrollTop).toBe(900));
     // The new text landed inside the live region that was mounted before it.
     expect(live.contains(within(region).getAllByRole('listitem').at(-1)!)).toBe(true);

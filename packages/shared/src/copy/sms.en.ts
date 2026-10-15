@@ -47,6 +47,9 @@ export const smsEn: SmsCatalog<SmsKey> = {
       'SiteLog daily reports for {company}. Your link: {link} · Text CALL or TEXT to switch · STOP to opt out. Msg & data rates may apply.',
   },
   stop_confirm: "You won't get more texts from SiteLog. Reply START to resume.",
+  pref_call_ok: 'OK, your daily report is now set to a call. Reply TEXT to switch to a link.',
+  pref_text_ok:
+    'OK, your daily report is now set to a link by text. Reply CALL to switch to a call.',
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (§9.2), appended by `renderSms`. */

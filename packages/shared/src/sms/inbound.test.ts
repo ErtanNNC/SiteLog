@@ -279,7 +279,7 @@ describe('processInboundSms (W1-08)', () => {
     expect(h.sent[0]!.driver).toBe('console');
   });
 
-  it('START clears the phone and the rows; CALL and TEXT switch the mode, silently', async () => {
+  it('START clears the phone and the rows, silently; CALL and TEXT switch the mode and confirm it', async () => {
     const h = harness();
     await h.run('STOP');
     await h.run('Start', { messageId: 'm-in-2' });
@@ -290,8 +290,11 @@ describe('processInboundSms (W1-08)', () => {
     expect(h.reporters[0]!.contactPref).toBe('call');
     await h.run('text', { messageId: 'm-in-4' });
     expect(h.reporters[0]!.contactPref).toBe('link');
+    // Spec §19 Q46: CALL and TEXT are confirmed; START is not (Twilio confirms it, Q45).
     expect(h.sent.map((s) => s.body)).toEqual([
       "You won't get more texts from SiteLog. Reply START to resume.",
+      'OK, your daily report is now set to a call. Reply TEXT to switch to a link.',
+      'OK, your daily report is now set to a link by text. Reply CALL to switch to a call.',
     ]);
     expect(h.audits.map((a) => a.action)).toEqual([
       'reporter.opted_out',

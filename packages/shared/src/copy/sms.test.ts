@@ -63,14 +63,20 @@ describe('SMS catalog (§9.2)', () => {
     expect(Object.keys(SMS_CATALOGS.es).sort()).toEqual([...SMS_KEYS].sort());
     const shared = SMS_KEYS.filter((k) => !isTwoWaySmsKey(k));
     expect(Object.keys(SMS_CATALOGS.tr).sort()).toEqual([...shared].sort());
-    expect([...TWO_WAY_SMS_KEYS]).toEqual(['unknown_number', 'help', 'stop_confirm']);
+    expect([...TWO_WAY_SMS_KEYS]).toEqual([
+      'unknown_number',
+      'help',
+      'stop_confirm',
+      'pref_call_ok',
+      'pref_text_ok',
+    ]);
     // The reply hint is EN and ES only: the TR pack is one-way.
     expect(Object.keys(SMS_REPLY_HINT).sort()).toEqual(['en', 'es']);
   });
 
   it('keeps reply wording out of the catalogue: only the two-way keys and the hint have it', () => {
     for (const hint of Object.values(SMS_REPLY_HINT)) expect(hint).toMatch(REPLY_WORDING);
-    for (const key of ['help', 'stop_confirm'] as const)
+    for (const key of ['help', 'stop_confirm', 'pref_call_ok', 'pref_text_ok'] as const)
       for (const locale of ['en', 'es'] as const)
         expect(smsTemplate(key, locale, TWO_WAY), `${locale}.${key}`).toMatch(REPLY_WORDING);
     for (const [locale, key, t] of entries()) {
@@ -287,7 +293,7 @@ describe('renderSms', () => {
       expect(countSmsSegments(text).default.segments, `es.${key}: "${text}"`).toBe(1);
       checked += 1;
     }
-    expect(checked).toBe(2); // unknown_number, stop_confirm
+    expect(checked).toBe(4); // unknown_number, stop_confirm, pref_call_ok, pref_text_ok
   });
 
   it('renders TR with and without a voice number (no TR number yet: §18.2)', () => {
@@ -454,6 +460,8 @@ describe('the pack variant: two-way SMS (spec §4.6, §9.2)', () => {
       'unknown_number',
       'help',
       'stop_confirm',
+      'pref_call_ok',
+      'pref_text_ok',
       'welcome.replyHint',
     ]);
     const shared = SMS_KEYS.filter((k) => !isTwoWaySmsKey(k));
@@ -524,8 +532,9 @@ describe('the pack variant: links in SMS (spec §4.6, §19 Q24)', () => {
       expect(smsTemplate(key, 'en', NO_LINKS), key).toBe(smsTemplate(key, 'en', TWO_WAY_NO_NUMBER));
       checked += 1;
     }
-    // verify_code, weather_headsup, edit_applied, site_paused, unknown_number, stop_confirm.
-    expect(checked).toBe(6);
+    // verify_code, weather_headsup, edit_applied, site_paused, unknown_number, stop_confirm,
+    // pref_call_ok, pref_text_ok.
+    expect(checked).toBe(8);
     expect(renderSms('verify_code', 'tr', { code: '482913' }, { ...NO_LINKS, twoWay: false })).toBe(
       smsTemplate('verify_code', 'tr', ONE_WAY_NO_NUMBER).replace('{code}', '482913'),
     );

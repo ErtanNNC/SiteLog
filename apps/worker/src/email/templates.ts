@@ -192,7 +192,8 @@ export interface ReportMissingInput {
 export function reportMissingEmail(i: ReportMissingInput): RenderedEmail {
   const who = i.reporterFirstName ?? 'The site manager';
   const subject = `${siteShort(i.siteName)} — no report · ${formatDateShort(i.date)}`;
-  const line = `${i.siteName} — no report. ${who} didn't answer 2 reminders.`;
+  // Spec §19 Q55: no reminder is sent until M6 brings the ladder back, so none is mentioned.
+  const line = `${i.siteName} — no report. ${who} hasn't sent the report for ${formatDateShort(i.date)}, and the deadline has passed.`;
   const call = i.reporterPhone
     ? `<p style="margin:12px 0 0 0"><a href="tel:${esc(i.reporterPhone)}" style="color:${T.level}">Call ${esc(who)}</a></p>`
     : '';

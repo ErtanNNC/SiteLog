@@ -39,7 +39,8 @@ export type MessageKey = SmsKey;
 
 /**
  * The keys the Notifier sends: every key except the two-way replies (`help`, `stop_confirm`,
- * `unknown_number`), which sms-webhook sends in answer to an inbound text (`smsReplyAllowed`).
+ * `unknown_number`, `pref_call_ok`, `pref_text_ok`), which sms-webhook sends in answer to an
+ * inbound text (`smsReplyAllowed`).
  */
 export type NotifierKey = Exclude<MessageKey, TwoWaySmsKey>;
 
@@ -219,14 +220,16 @@ export function deliverableChannels(input: {
 
 /**
  * Whether sms-webhook may answer an inbound text with a two-way key (§9.5, F13, F15): HELP →
- * `help`, STOP → `stop_confirm`, a sender who is not a reporter → `unknown_number`. These replies
+ * `help`, STOP → `stop_confirm`, CALL / TEXT → `pref_call_ok` / `pref_text_ok` (spec §19 Q46),
+ * a sender who is not a reporter → `unknown_number`. These replies
  * never go through the Notifier: they answer a text the person just sent, by SMS, to a sender
  * who may have no reporter row, so neither the person's channel order nor their consent or
  * opt-out applies (HELP is answered before any consent, as the welcome invites it; `stop_confirm`
  * is the one text after STOP). Only the pack decides: it must have two-way SMS, and allow links in
  * SMS for a key that carries one (`help`). The webhook renders with `smsRenderOptions(pack)`,
  * sends through `pickMessageTransport()` with `smsSendOptionsFor(pack)` and audits the reply
- * (`SmsNotifier.reply`). Spec §19 Q25 asks the owner to confirm this with `PRE_CONSENT_SMS_KEYS`.
+ * (`SmsNotifier.reply`). Confirmed by the owner with `PRE_CONSENT_SMS_KEYS` (spec §19 Q25,
+ * 2026-10-15).
  */
 export function smsReplyAllowed(pack: CountryPack, key: TwoWaySmsKey): boolean {
   if (!pack.twoWaySms) return false;

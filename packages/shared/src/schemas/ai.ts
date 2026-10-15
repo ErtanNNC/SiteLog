@@ -31,6 +31,10 @@ export const AnswerValueSchema = z.object({
   hoursPerWorker: z.number().min(0).max(24).nullable().optional(),
   totalHours: z.number().min(0).nullable().optional(),
   fullDay: z.boolean().optional().describe('true when the manager said "full day" / "all day"'),
+  halfDay: z
+    .boolean()
+    .optional()
+    .describe('true when the manager said "half day": half of DEFAULT_SHIFT_HOURS'),
   endTime: z.string().optional().describe('HH:MM when the manager gave an end time ("till 3")'),
   impact: z.string().optional(),
   lostHours: z.number().min(0).nullable().optional(),

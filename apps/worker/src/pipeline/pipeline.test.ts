@@ -607,7 +607,7 @@ describe('jobs: welcome, template, retention', () => {
     h.db.data.reporters.get(h.marco.id)!.status = 'invited';
     await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
     expect(h.sms[0]).toMatchObject({ driver: 'twilio', sender: '+18885550142', to: PHONE_MARCO });
-    expect(h.sms[0]!.body).toMatch(/https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{6} /);
+    expect(h.sms[0]!.body).toMatch(/https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{12} /);
     const [message] = [...h.db.data.messages.values()];
     expect(message!.provider).toBe('twilio');
     expect(message!.status).toBe('sent');
@@ -763,7 +763,7 @@ describe('jobs: welcome, template, retention', () => {
       return id;
     };
     await h.runJob('sms_inbound', {
-      messageId: inbound('00000000-0000-4000-8000-00000000f001', 'STOP', 'STOP'),
+      messageId: inbound('00000000-0000-4000-8000-00000000f001', 'STOP'),
     });
     const marco = h.db.data.reporters.get(h.marco.id)!;
     expect([marco.status, marco.opted_out_at]).toEqual(['opted_out', h.now.toISOString()]);
@@ -796,7 +796,7 @@ describe('jobs: welcome, template, retention', () => {
       messageId: inbound('00000000-0000-4000-8000-00000000f002', 'help'),
     });
     expect(h.db.data.fieldLinks).toHaveLength(1);
-    expect(h.sms[1]!.body).toMatch(/Your link: https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{6} /);
+    expect(h.sms[1]!.body).toMatch(/Your link: https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{12} /);
     expect([...h.db.data.messages.values()].find((m) => m.copy_key === 'help')!.body).toContain(
       MASKED_CODE,
     );
@@ -825,7 +825,7 @@ describe('jobs: welcome, template, retention', () => {
       wa_message_id: null,
       type: null,
       body: 'STOP',
-      payload: { to: '+18885550142', keyword: 'stop', pack: 'US', opt_out_type: 'STOP' },
+      payload: { to: '+18885550142', keyword: 'stop', pack: 'US', opt_out_type: null },
       media_id: null,
       media_mime: null,
       storage_path: null,
@@ -858,6 +858,43 @@ describe('jobs: welcome, template, retention', () => {
     expect(h.sms.map((m) => m.body)).toEqual([
       "You won't get more texts from SiteLog. Reply START to resume.",
     ]);
+  });
+
+  it('sms_inbound: a STOP Twilio handled itself (OptOutType) is recorded with no reply of ours (§19 Q45)', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    const id = '00000000-0000-4000-8000-00000000f301';
+    h.db.data.messages.set(id, {
+      ...V12_ROW_DEFAULTS.messages,
+      id,
+      conversation_id: null,
+      org_id: h.org.id,
+      direction: 'in',
+      wa_message_id: null,
+      type: null,
+      body: 'STOP',
+      payload: { to: '+18885550142', keyword: 'stop', pack: 'US', opt_out_type: 'STOP' },
+      media_id: null,
+      media_mime: null,
+      storage_path: null,
+      duration_s: null,
+      template_name: null,
+      status: 'received',
+      error: null,
+      created_at: h.now.toISOString(),
+      reporter_id: h.marco.id,
+      phone_e164: PHONE_MARCO,
+      provider: 'twilio',
+      provider_message_id: `SM${id}`,
+      copy_key: null,
+      channel: 'sms',
+    });
+    await h.runJob('sms_inbound', { messageId: id });
+    expect(h.db.data.reporters.get(h.marco.id)!.status).toBe('opted_out');
+    expect(h.db.data.smsOptOuts).toEqual([
+      expect.objectContaining({ phone_e164: PHONE_MARCO, country: 'US', method: 'sms_keyword' }),
+    ]);
+    expect(h.sms).toEqual([]);
   });
 
   it('sms_inbound: a STOP never waits for the link secret; only a HELP needs it', async () => {

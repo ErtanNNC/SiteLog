@@ -222,7 +222,7 @@ describe('planInboundSms (F13, F15)', () => {
     });
   });
 
-  it('CALL and TEXT set the report mode of reporters still opted in', () => {
+  it('CALL and TEXT set the report mode of reporters still opted in, and confirm it (§19 Q46)', () => {
     const p = plan('CALL', [reporter(), reporter({ id: 'r-out', status: 'opted_out' })]);
     expect(p.changes).toEqual([
       {
@@ -231,8 +231,21 @@ describe('planInboundSms (F13, F15)', () => {
         action: 'reporter.preferences_changed',
       },
     ]);
-    expect(p.reply).toBeNull();
-    expect(plan('TEXT', [reporter()]).changes).toEqual([]);
+    expect(p.reply).toEqual({ key: 'pref_call_ok', reporterId: 'r-marco' });
+    const text = plan('TEXT', [reporter()]);
+    expect(text.changes).toEqual([]);
+    expect(text.reply).toEqual({ key: 'pref_text_ok', reporterId: 'r-marco' });
+    // An opted-out person gets no confirmation (nothing changed for them).
+    expect(plan('CALL', [reporter({ status: 'opted_out' })]).reply).toBeNull();
+  });
+
+  it('sends no reply of its own when Twilio recognised the keyword (OptOutType, §19 Q45)', () => {
+    const stop = plan('STOP', [reporter()], { optOutType: 'STOP' });
+    expect(stop.changes).toHaveLength(1);
+    expect(stop.phoneOptOut).toBe('record');
+    expect(stop.reply).toBeNull();
+    expect(plan('INFO', [reporter()], { optOutType: 'HELP' }).reply).toBeNull();
+    expect(plan('help', [reporter()]).reply).toEqual({ key: 'help', reporterId: 'r-marco' });
   });
 
   it('any other text is stored for M6', () => {

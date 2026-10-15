@@ -164,6 +164,8 @@ describe('country pack rows (spec §4.6)', () => {
       'tr-TR.unknown_number',
       'tr-TR.help',
       'tr-TR.stop_confirm',
+      'tr-TR.pref_call_ok',
+      'tr-TR.pref_text_ok',
       'tr-TR.welcome.replyHint',
     ]);
     // The same pack with English only is complete.

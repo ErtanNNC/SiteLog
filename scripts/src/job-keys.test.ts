@@ -52,6 +52,8 @@ const AUDITED: Record<string, string> = {
   'weekly_digest:{}:{}': 'per org and week',
   'retention:{}': 'per UTC day',
   'job.dedupeKey': "scheduler-tick's planned jobs: the weather, digest and retention keys above",
+  'email:report_missing:{}':
+    'scheduler-tick (spec §19 Q55): per site-day, enqueued by the tick whose update made the day missing; a day becomes missing once (reminder_stage 4 stays)',
   'reminder:{}:{}':
     'per site-day and ladder stage (logic.ts reminderJob, unused since W1-10 until the M6 SMS ladder)',
   // SQL (the latest body of each function)
@@ -255,28 +257,30 @@ describe('scheduler-tick (W1-10): the WhatsApp reminder ladder is stopped', () =
     'utf8',
   );
 
-  it('enqueues no template, no reminder and no missing alert', () => {
+  it('enqueues no template and no reminder', () => {
     for (const banned of [
       'send_template',
       'send_message',
       'reminderJob',
       'claimStage',
       'dueStage',
-      "'missing_report'",
     ]) {
       expect(source.includes(banned), banned).toBe(false);
     }
   });
 
-  it('enqueues only the jobs planTickJobs plans (weather, digest, retention)', () => {
-    expect([...source.matchAll(/enqueueJob\(\s*admin,\s*'([a-z_]+)'/g)]).toEqual([]);
+  it('enqueues the jobs planTickJobs plans (weather, digest, retention) and the missing email', () => {
+    expect([...source.matchAll(/enqueueJob\(\s*admin,\s*'([a-z_]+)'/g)].map((m) => m[1])).toEqual([
+      'send_email',
+    ]);
+    expect(source).toContain("kind: 'report_missing'");
     expect(source).toContain('planTickJobs(');
   });
 
-  it('still marks a past-deadline day missing (§7.1), audited, without the alert', () => {
+  it('marks a past-deadline day missing (§7.1), audited, and alerts the office (spec §19 Q55)', () => {
     expect(source).toContain('planMissing(');
     expect(source).toContain("action: 'site_day.status_changed'");
-    expect(source.includes('notifyOrg'), 'notifyOrg').toBe(false);
-    expect(source.includes('report_missing'), 'report_missing').toBe(false);
+    expect(source).toContain("kind: 'missing_report'");
+    expect(source).toContain('missingNotification(');
   });
 });

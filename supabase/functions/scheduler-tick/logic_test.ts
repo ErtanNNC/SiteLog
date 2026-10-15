@@ -18,6 +18,7 @@ import {
   type SiteDayInput,
   siteDayPatchForStage,
   type SiteInput,
+  siteReporterFirstName,
   weatherJobFor,
   weeklyDigestDue,
 } from './logic.ts';
@@ -309,14 +310,33 @@ Deno.test('siteDayPatchForStage / missingNotification', () => {
   assertEquals(siteDayPatchForStage(2), { reminder_stage: 2, status: 'reminded' });
   assertEquals(siteDayPatchForStage(3), { reminder_stage: 3, status: 'reminded' });
   assertEquals(siteDayPatchForStage(4), { reminder_stage: 4, status: 'missing' });
+  // Spec §19 Q55: no reminder is sent until M6, so the notice does not mention any.
   assertEquals(missingNotification('Elm St. Townhomes', 'Priya'), {
     title: 'Elm St. Townhomes — no report',
-    body: 'Priya didn’t answer 2 reminders.',
+    body: 'Priya hasn’t sent today’s report, and the deadline has passed.',
   });
   assertEquals(
     missingNotification('Elm St. Townhomes', null).body,
-    'The site manager didn’t answer 2 reminders.',
+    'The site manager hasn’t sent today’s report, and the deadline has passed.',
   );
+  assertEquals(missingNotification('X', 'Priya').body.includes('reminder'), false);
+});
+
+Deno.test('siteReporterFirstName: the primary active reporter, else any active one', () => {
+  const links = [
+    { site_id: 's1', reporter_id: 'r1', is_primary: false },
+    { site_id: 's1', reporter_id: 'r2', is_primary: true },
+    { site_id: 's2', reporter_id: 'r3', is_primary: true },
+    { site_id: 's2', reporter_id: 'r1', is_primary: false },
+  ];
+  const reporters = [
+    { id: 'r1', name: 'Marco Ruiz', status: 'active' },
+    { id: 'r2', name: 'Priya Natarajan', status: 'active' },
+    { id: 'r3', name: 'Dana Cole', status: 'opted_out' },
+  ];
+  assertEquals(siteReporterFirstName('s1', links, reporters), 'Priya');
+  assertEquals(siteReporterFirstName('s2', links, reporters), 'Marco');
+  assertEquals(siteReporterFirstName('s3', links, reporters), null);
 });
 
 Deno.test('asSiteDayWeather rejects malformed snapshots', () => {

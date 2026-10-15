@@ -66,6 +66,9 @@ export class FakeFieldStore implements FieldStore {
   objects = new Map<string, StoredObject>();
   jobs: FakeJob[] = [];
   audits: AuditEntry[] = [];
+  /** field_flag_late_upload(): uploads flagged late, and the office notices (one per report). */
+  lateUploads: string[] = [];
+  lateNotices: { reportId: string; uploadId: string }[] = [];
   /** Store methods called, for "no write happened" checks. */
   calls: string[] = [];
   private seq = 0;
@@ -394,6 +397,32 @@ export class FakeFieldStore implements FieldStore {
       alreadyComplete: false,
       jobId,
     });
+  }
+
+  flagLateUpload(uploadId: string, reporterId: string): Promise<{ flagged: boolean }> {
+    this.calls.push('flagLateUpload');
+    const u = this.uploads.find((x) => x.id === uploadId);
+    if (!u || u.reporter_id !== reporterId || !u.report_id) {
+      return Promise.reject(new FieldDbError('upload_not_found'));
+    }
+    if (this.lateUploads.includes(uploadId)) return Promise.resolve({ flagged: false });
+    const r = this.reports.find((x) => x.id === u.report_id)!;
+    const day = this.siteDays.find((d) => d.id === r.site_day_id)!;
+    const notified = this.lateNotices.some((n) => n.reportId === r.id);
+    r.is_late = true;
+    day.is_late = true;
+    this.lateUploads.push(uploadId);
+    if (!notified) this.lateNotices.push({ reportId: r.id, uploadId });
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: reporterId,
+      action: 'upload.accepted_late',
+      entity: 'upload',
+      entityId: uploadId,
+      diff: { report_id: r.id, date: day.date, recorded_at: u.recorded_at, notified: !notified },
+    });
+    return Promise.resolve({ flagged: true });
   }
 
   setDayStatus(input: {

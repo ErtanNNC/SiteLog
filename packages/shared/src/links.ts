@@ -52,8 +52,15 @@ export function fieldLinkUrl(base: string, code: string): string {
   return `${base.replace(/\/+$/, '')}/r/${normalizeLinkCode(code)}`;
 }
 
-/** Characters of a link code (spec §19 Q42 asks for 12 before real reporters). */
-export const LINK_CODE_LENGTH = 6;
+/**
+ * Characters of a personal link's derived code: 12 of the 30-character alphabet, about 2^59
+ * (spec §19 Q42, decided by the owner 2026-10-15: "longer codes for personal links" before real
+ * reporters; 6 characters were about 7 × 10^8). A personal link derived at 6 before this change
+ * keeps working until it is revoked; the next invite, re-send or HELP finds no link whose code it
+ * can derive and issues a 12-character one (`ensurePersonalLink`). Seeded demo codes stay 6
+ * (`demoLinkCode`).
+ */
+export const LINK_CODE_LENGTH = 12;
 
 /** What `messages.body` shows instead of a code (`maskFieldLinkUrl`, `MASKED_CODE`). */
 export const MASKED_CODE = '••••••';

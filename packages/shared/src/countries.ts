@@ -128,6 +128,9 @@ export const CountryRowSchema = z
         path: ['two_way_sms'],
         message: 'an alphanumeric sender cannot receive replies',
       });
+    // The table also refuses `sms_links_allowed = false` outright until a link-free welcome
+    // exists (spec §19 Q24, 20261015000004); the schema keeps the general rule, which the channel
+    // layer's tests exercise and which applies again once that check is dropped.
     if (!row.sms_links_allowed && !row.message_channels.some((c) => c !== 'sms'))
       ctx.addIssue({
         code: 'custom',

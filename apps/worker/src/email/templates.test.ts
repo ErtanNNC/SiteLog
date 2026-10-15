@@ -123,7 +123,9 @@ describe('email templates', () => {
       expect(e.html).not.toMatch(EMOJI);
       expect(e.text).not.toMatch(EMOJI);
     }
-    expect(all[0]!.text).toContain("Priya didn't answer 2 reminders");
+    expect(all[0]!.text).toContain("Priya hasn't sent the report for");
+    expect(all[0]!.text).toContain('the deadline has passed');
+    expect(all[0]!.text).not.toContain('reminder');
     expect(all[1]!.text).toContain('Difference: +16 h');
     expect(all[3]!.subject).toContain('90% on time');
   });

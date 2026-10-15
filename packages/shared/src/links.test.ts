@@ -65,14 +65,15 @@ describe('personal link codes (W1-08)', () => {
   const SECRET = 'test-link-signing-secret';
   const ID = '6f1c2a9e-3b7d-4c51-9a0e-2d8f4b6c1e73';
 
-  it('derives the same six characters of the alphabet from the secret and the link id', async () => {
+  it('derives the same twelve characters of the alphabet from the secret and the link id (§19 Q42)', async () => {
     const code = await deriveLinkCode(SECRET, ID);
+    expect(LINK_CODE_LENGTH).toBe(12);
     expect(code).toHaveLength(LINK_CODE_LENGTH);
     expect([...code].every((c) => LINK_CODE_ALPHABET.includes(c))).toBe(true);
     expect(await deriveLinkCode(SECRET, ID)).toBe(code);
     expect(await deriveLinkCode(`${SECRET}x`, ID)).not.toBe(code);
     expect(await deriveLinkCode(SECRET, ID.replace(/3$/, '4'))).not.toBe(code);
-    expect(await deriveLinkCode(SECRET, ID, 12)).toHaveLength(12);
+    expect(await deriveLinkCode(SECRET, ID, 6)).toBe(code.slice(0, 6));
     await expect(deriveLinkCode('', ID)).rejects.toThrow(/LINK_SIGNING_SECRET/);
   });
 

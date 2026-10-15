@@ -187,7 +187,7 @@ export interface SmsNotifier extends Notifier {
     vars: SmsVars<K>,
     opts?: { channels?: readonly MessageChannel[]; dedupeKey?: string },
   ): Promise<NotifyOutcome>;
-  /** A two-way reply to an inbound text (`help`, `stop_confirm`, `unknown_number`), sms-webhook. */
+  /** A two-way reply to an inbound text (`TWO_WAY_SMS_KEYS`: HELP, STOP, CALL, TEXT, unknown), sms-webhook. */
   reply<K extends TwoWaySmsKey>(input: ReplyInput<K>): Promise<{ messageId: string }>;
 }
 

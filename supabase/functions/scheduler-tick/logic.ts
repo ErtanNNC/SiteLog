@@ -218,6 +218,12 @@ export function siteDayPatchForStage(stage: DueStage['stage']): SiteDayStagePatc
   return { reminder_stage: stage };
 }
 
+/**
+ * The office's panel notice when a day becomes `missing` (§13 "Report missing: ops + admin";
+ * spec §19 Q55, decided 2026-10-15). Worded without the ladder ("didn't answer 2 reminders" was
+ * the v1.0 text): until M6 no reminder is sent, so it says only that nothing came in by the
+ * deadline.
+ */
 export function missingNotification(
   siteName: string,
   reporterFirstName: string | null,
@@ -227,8 +233,28 @@ export function missingNotification(
 } {
   return {
     title: `${siteName} — no report`,
-    body: `${reporterFirstName ?? 'The site manager'} didn’t answer 2 reminders.`,
+    body: `${reporterFirstName ?? 'The site manager'} hasn’t sent today’s report, and the deadline has passed.`,
   };
+}
+
+/**
+ * The first name the missing notice names for a site: its primary reporter if active, else any
+ * active reporter of the site, else null ("The site manager").
+ */
+export function siteReporterFirstName(
+  siteId: string,
+  links: readonly SiteReporterLink[],
+  reporters: readonly ReporterRef[],
+): string | null {
+  const byId = new Map(reporters.map((r) => [r.id, r]));
+  const candidates = links
+    .filter((l) => l.site_id === siteId)
+    .sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
+  for (const link of candidates) {
+    const reporter = byId.get(link.reporter_id);
+    if (reporter && isActiveReporterStatus(reporter.status)) return firstName(reporter.name);
+  }
+  return null;
 }
 
 export interface SiteReporterLink {
@@ -345,9 +371,9 @@ export interface MissingMark {
  * §7.1 `pending|reminded → missing` without the ladder (W1-10): a today site-day with no report
  * whose deadline plus the org's missing offset (`missing_offset_min`, default 90) has passed, while
  * the org's missing step is on. The tick sets `reminder_stage` 4 and `status 'missing'`
- * (`siteDayPatchForStage(REMINDER_STAGE.missing)`) and audits it; it sends no text, and the office
- * alert (panel notice + `report_missing` email) waits for the owner (spec §19 Q55). Paused
- * reminders do not stop it, as before (the step is office-facing).
+ * (`siteDayPatchForStage(REMINDER_STAGE.missing)`), audits it and alerts the office (the
+ * `missing_report` panel notice, `missingNotification`, and the `report_missing` email; spec §19
+ * Q55); it sends no text. Paused reminders do not stop it, as before (the step is office-facing).
  */
 export function planMissing(input: {
   sites: readonly SiteInput[];

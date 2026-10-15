@@ -347,7 +347,8 @@ function buildQuestion(
       prompt = c.hours(name);
       options = [
         [c.fullDay, { fullDay: true }],
-        [c.halfDay, { hoursPerWorker: 4 }],
+        // Spec §19 Q62: half of the org's default shift, applied in code (applyAnswer).
+        [c.halfDay, { halfDay: true }],
       ];
       break;
     case 'company.unknown': {
@@ -566,7 +567,7 @@ export function parseQuickAnswer(field: QuestionField, text: string): AnswerValu
         value.workers = workers;
       }
       if (fullDay) value.fullDay = true;
-      else if (halfDay) value.hoursPerWorker = 4;
+      else if (halfDay) value.halfDay = true;
       else if (hoursValue !== null) value.hoursPerWorker = hoursValue;
       else if (tillMatch) {
         let h = Number(tillMatch[1]);
@@ -590,6 +591,7 @@ export function parseQuickAnswer(field: QuestionField, text: string): AnswerValu
       const has =
         value.workers !== undefined ||
         value.fullDay ||
+        value.halfDay ||
         value.hoursPerWorker !== undefined ||
         value.endTime;
       return has ? value : null;
@@ -743,11 +745,13 @@ export function applyAnswer<D extends AnyReportData>(
             workers: answer.workers,
             hoursPerWorker: answer.fullDay
               ? ctx.defaultShiftHours
-              : (answer.hoursPerWorker ?? null),
+              : answer.halfDay
+                ? ctx.defaultShiftHours / 2
+                : (answer.hoursPerWorker ?? null),
             totalHours: null,
             hoursBasis: answer.fullDay
               ? 'full_day_default'
-              : answer.hoursPerWorker != null
+              : answer.halfDay || answer.hoursPerWorker != null
                 ? answered
                 : 'unknown',
             confidence: conf,
@@ -761,6 +765,10 @@ export function applyAnswer<D extends AnyReportData>(
         if (answer.fullDay) {
           entry.hoursPerWorker = ctx.defaultShiftHours;
           entry.hoursBasis = 'full_day_default';
+        } else if (answer.halfDay) {
+          // Spec §19 Q62: "Half day" is half of the org's default shift (4 h of the default 8 h).
+          entry.hoursPerWorker = ctx.defaultShiftHours / 2;
+          entry.hoursBasis = answered;
         } else if (answer.hoursPerWorker !== undefined && answer.hoursPerWorker !== null) {
           entry.hoursPerWorker = answer.hoursPerWorker;
           entry.hoursBasis = answered;
