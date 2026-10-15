@@ -8,6 +8,7 @@ import type { Database } from '@sitelog/shared/db/types.ts';
 import { fromZonedTime } from 'date-fns-tz';
 import type {
   AuditLogRow,
+  CallRow,
   CompanyRow,
   EvidencePackRow,
   GlossaryTermRow,
@@ -57,7 +58,7 @@ import { functionsUrl } from '@/lib/env';
 import { rasterizeSvgLogo } from '@/lib/logo';
 import { randomUuid } from '@/lib/photos';
 import type { Db } from '@/lib/supabase';
-import { errorMessage, uniq } from '@/lib/utils';
+import { errorMessage, uniq, uniqBy } from '@/lib/utils';
 import {
   assembleBilling,
   assembleGlossary,
@@ -812,6 +813,9 @@ export class SupabaseSource implements DataSource {
     if (filters.late) q = q.eq('is_late', true);
     if (filters.hasWeatherDelay) q = q.or('lost_hours.gt.0,kind.eq.weather_day');
     if (filters.incident) q = q.eq('has_incident', true);
+    // P6 Channel: Link = the web recorder or SMS (field_channel web, sms), Call = voice.
+    if (filters.channel === 'link') q = q.in('channel', ['web', 'sms']);
+    else if (filters.channel === 'call') q = q.eq('channel', 'voice');
     if (text === '') q = q.in('id', []);
     else if (text) q = q.or(text);
     return q;
@@ -843,24 +847,33 @@ export class SupabaseSource implements DataSource {
   }
 
   /**
-   * The versions an archive page needs, without their data: the current one (its PDF) and
-   * version 1 (who wrote it: a typed report stays the office's after an edit, it does not become
-   * the site manager's). assembleReportItems reads only these columns.
+   * The versions an archive page needs, without their data: the current one (its PDF and its
+   * photo list, for the "No photo" flag) and version 1 (who wrote it: a typed report stays the
+   * office's after an edit, it does not become the site manager's). assembleReportItems reads
+   * only these columns; the photo lists go to RowSet.photoLists.
    */
-  private async archiveVersions(reports: ReportRow[]): Promise<ReportVersionRow[]> {
+  private async archiveVersions(
+    reports: ReportRow[],
+  ): Promise<{ versions: ReportVersionRow[]; photoLists: NonNullable<RowSet['photoLists']> }> {
     const cur = new Map(reports.map((r) => [r.id, r.current_version]));
-    const rows = await inChunks(
+    const rows = (await inChunks(
       reports.map((r) => r.id),
       (part) =>
         this.sb
           .from('report_versions')
-          .select('report_id, version, author, pdf_path')
+          .select('report_id, version, author, pdf_path, photos:data->photos')
           .in('report_id', part)
           .then(unwrap),
-    );
-    return rows.filter(
-      (v) => v.version === 1 || cur.get(v.report_id) === v.version,
-    ) as ReportVersionRow[];
+    )) as unknown as Array<
+      Pick<ReportVersionRow, 'report_id' | 'version' | 'author' | 'pdf_path'> & { photos: unknown }
+    >;
+    const kept = rows.filter((v) => v.version === 1 || cur.get(v.report_id) === v.version);
+    return {
+      versions: kept.map(({ photos: _photos, ...v }) => v as ReportVersionRow),
+      photoLists: kept
+        .filter((v) => cur.get(v.report_id) === v.version)
+        .map((v) => ({ report_id: v.report_id, version: v.version, photos: v.photos })),
+    };
   }
 
   async listReports(filters: ReportFilters) {
@@ -900,18 +913,19 @@ export class SupabaseSource implements DataSource {
     );
     const incidentIds = new Set(raw.filter((r) => r.has_incident).map((r) => r.id));
     const ids = reports.map((r) => r.id);
-    const [manpower, weatherEvents, versions] = ids.length
+    const [manpower, weatherEvents, archived] = ids.length
       ? await Promise.all([
           sb.from('current_manpower').select('*').in('report_id', ids).then(unwrap),
           sb.from('current_weather').select('*').in('report_id', ids).then(unwrap),
           this.archiveVersions(reports),
         ])
-      : [[], [], []];
+      : [[], [], { versions: [], photoLists: [] }];
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays,
       reports,
-      versions,
+      versions: archived.versions,
+      photoLists: archived.photoLists,
       manpower,
       weatherEvents,
     };
@@ -955,44 +969,101 @@ export class SupabaseSource implements DataSource {
     const { messages: srcMessages, uploads } = await this.sourceFiles(sources);
     const uploadById = new Map(uploads.map((u) => [u.id, u]));
     const msgById = new Map(srcMessages.map((m) => [m.id, m]));
-    const audioSrc = sources.find(
-      (s) => isVoiceSourceKind(s.kind) && mediaOf(s, uploadById, msgById),
+    // Every voice note of the report (W1-17: each clip plays), and its WhatsApp thread if any.
+    const voiceFiles = uniqBy(
+      sources
+        .filter((s) => isVoiceSourceKind(s.kind))
+        .flatMap((s) => {
+          const f = mediaOf(s, uploadById, msgById);
+          return f ? [f] : [];
+        }),
+      (f) => f.id,
     );
-    const audioFile = audioSrc ? mediaOf(audioSrc, uploadById, msgById) : undefined;
+    const convoId = voiceFiles.find((f) => f.conversationId)?.conversationId ?? null;
     const dayStart = fromZonedTime(`${siteDay.date}T00:00:00`, site.timezone).toISOString();
     const dayEnd = fromZonedTime(
       `${addDays(siteDay.date, 1)}T00:00:00`,
       site.timezone,
     ).toISOString();
-    const [convoMessages, transcripts, siteReports] = await Promise.all([
-      audioFile?.conversationId
+    const reporterId = report.reporter_id;
+    const callIds = uniq(sources.flatMap((s) => (s.call_id ? [s.call_id] : [])));
+    const [convoMessages, siteReports, calls, texts, linkAudit] = await Promise.all([
+      convoId
         ? sb
             .from('messages')
             .select('*')
-            .eq('conversation_id', audioFile.conversationId)
+            .eq('conversation_id', convoId)
             .gte('created_at', dayStart)
             .lt('created_at', dayEnd)
             .order('created_at')
             .then(unwrap)
         : Promise.resolve([] as MessageRow[]),
-      audioFile
-        ? sb
-            .from('transcripts')
-            .select('*')
-            .or(`upload_id.eq.${audioFile.id},message_id.eq.${audioFile.id}`)
-            .then(unwrap)
-        : Promise.resolve([] as TranscriptRow[]),
       sb
         .from('reports')
         .select('id, site_day_id, status, site_id, site_days!reports_site_day_id_fkey(date)')
         .eq('site_id', site.id)
         .in('status', ['filed', 'signed_off'])
         .then(unwrap),
+      // The report's calls, and the reporter's other calls that day (a missed reminder call).
+      sb
+        .from('calls')
+        .select('*')
+        .or(
+          [
+            `report_id.eq.${reportId}`,
+            ...(callIds.length ? [`id.in.(${callIds.join(',')})`] : []),
+            ...(reporterId
+              ? [
+                  `and(reporter_id.eq.${reporterId},created_at.gte.${dayStart},created_at.lt.${dayEnd})`,
+                ]
+              : []),
+          ].join(','),
+        )
+        .then(unwrap),
+      // The reporter's texts that day (any message channel; SMS since W1-08).
+      reporterId
+        ? sb
+            .from('messages')
+            .select('*')
+            .eq('reporter_id', reporterId)
+            .not('channel', 'is', null)
+            .gte('created_at', dayStart)
+            .lt('created_at', dayEnd)
+            .order('created_at')
+            .then(unwrap)
+        : Promise.resolve([] as MessageRow[]),
+      // The reporter's link openings that day (field-api audits them on the link, not the report).
+      reporterId
+        ? sb
+            .from('audit_log')
+            .select('*')
+            .eq('org_id', this.orgId)
+            .eq('actor_id', reporterId)
+            .eq('action', 'link.opened')
+            .gte('created_at', dayStart)
+            .lt('created_at', dayEnd)
+            .then(unwrap)
+        : Promise.resolve([] as AuditLogRow[]),
     ]);
-    const messages = [
-      ...srcMessages,
-      ...convoMessages.filter((m) => !srcMessages.some((s) => s.id === m.id)),
-    ];
+    // Transcripts of every clip: voice notes by upload (or WhatsApp message), calls by call.
+    const answered = (calls as CallRow[]).filter((c) => c.status === 'completed');
+    const transcripts = await inChunks(
+      [...voiceFiles.map((f) => `v:${f.id}`), ...answered.map((c) => `c:${c.id}`)],
+      (part) => {
+        const voice = part.filter((x) => x.startsWith('v:')).map((x) => x.slice(2));
+        const call = part.filter((x) => x.startsWith('c:')).map((x) => x.slice(2));
+        const or = [
+          ...(voice.length ? [mediaIdFilter(voice)] : []),
+          ...(call.length ? [`call_id.in.(${call.join(',')})`] : []),
+        ].join(',');
+        return sb.from('transcripts').select('*').or(or).then(unwrap);
+      },
+      MEDIA_OR_CHUNK,
+    );
+    const messages = uniqBy(
+      [...srcMessages, ...convoMessages, ...(texts as MessageRow[])],
+      (m) => m.id,
+    );
     const otherReports = (
       siteReports as unknown as Array<{
         id: string;
@@ -1027,18 +1098,36 @@ export class SupabaseSource implements DataSource {
       messages,
       uploads,
       transcripts,
+      calls: calls as CallRow[],
       questions,
-      audit: audit as AuditLogRow[],
+      audit: uniqBy([...(audit as AuditLogRow[]), ...(linkAudit as AuditLogRow[])], (a) => a.id),
       weatherEvents,
     };
     const detail = assembleReportDetail(rows, this.ctx(), reportId, version);
     const viewed = versions.find((v) => v.version === detail.version);
-    const [audioUrl, pdfUrl, photoUrls] = await Promise.all([
-      this.signedUrl('audio', detail.audio?.storagePath),
+    // Signed URLs (10 min) for every clip: voice notes in `audio`, call recordings in `calls`.
+    const [audioUrls, callUrls, pdfUrl, photoUrls] = await Promise.all([
+      this.signedUrls(
+        'audio',
+        detail.clips.flatMap((c) => (c.bucket === 'audio' && c.storagePath ? [c.storagePath] : [])),
+      ),
+      this.signedUrls(
+        'calls',
+        detail.clips.flatMap((c) => (c.bucket === 'calls' && c.storagePath ? [c.storagePath] : [])),
+      ),
       this.signedUrl('pdfs', viewed?.pdf_path),
       Promise.all(detail.photos.map((p) => this.signedUrl('photos', p.storagePath))),
     ]);
-    if (detail.audio) detail.audio.url = audioUrl;
+    detail.clips = detail.clips.map((c) => ({
+      ...c,
+      url: c.storagePath
+        ? ((c.bucket === 'calls' ? callUrls : audioUrls).get(c.storagePath) ?? null)
+        : null,
+    }));
+    if (detail.audio)
+      detail.audio.url = detail.audio.storagePath
+        ? (audioUrls.get(detail.audio.storagePath) ?? null)
+        : null;
     detail.pdfUrl = pdfUrl;
     detail.photos = detail.photos.map((p, i) => ({ ...p, url: photoUrls[i] ?? null }));
     return detail;

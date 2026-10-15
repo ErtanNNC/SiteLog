@@ -363,6 +363,13 @@ export interface SitePhoto {
 
 export type ReportStatusFilter = 'all' | 'filed' | 'needs_review' | 'signed_off' | 'weather_day';
 
+/**
+ * How a report reached SiteLog, as the panel shows it (§11.3 `ChannelIcon`, P6 Channel filter):
+ * `link` = the web recorder from a text link (`field_channel` web), `call` = a phone call (voice).
+ * Reports typed in the panel, sent by SMS or from the WhatsApp era have neither.
+ */
+export type ReportChannel = 'link' | 'call';
+
 export interface ReportFilters {
   siteId?: string | null;
   from?: string | null;
@@ -372,17 +379,25 @@ export interface ReportFilters {
   edited?: boolean;
   late?: boolean;
   incident?: boolean;
+  /** P6 Channel filter: Any (null) · Link · Call. */
+  channel?: ReportChannel | null;
   q?: string;
   page?: number;
   pageSize?: number;
 }
 
 export type ReportFlagKind =
-  'rain' | 'version' | 'unknown_sub' | 'late' | 'incident' | 'weather_day';
+  'rain' | 'version' | 'unknown_sub' | 'late' | 'incident' | 'weather_day' | 'no_photo';
 
+/**
+ * One archive flag (P6). The page words it in the panel's language (`reports.flags.*`) from its
+ * kind and values: `hours` lost (rain), `version` (v2), `time` received (late, site time).
+ */
 export interface ReportFlag {
   kind: ReportFlagKind;
-  label: string;
+  hours?: number;
+  version?: number;
+  time?: string;
 }
 
 export interface ReportListItem {
@@ -397,6 +412,8 @@ export interface ReportListItem {
   crew: number | null;
   hours: number | null;
   version: number;
+  /** The archive's channel icon (W1-16's `ChannelIcon`); null: SMS or WhatsApp era. */
+  channel: OverviewChannel | null;
   flags: ReportFlag[];
   chip: Chip;
   status: ReportStatus;
@@ -426,6 +443,8 @@ export interface ReportVersionSummary {
   createdAt: string;
   isCurrent: boolean;
   pdfPath: string | null;
+  /** Channel of a reporter edit (§6.3 report_versions.via): web, voice, sms; null otherwise. */
+  via?: FieldChannel | null;
 }
 
 export interface AudioSourceInfo {
@@ -459,6 +478,34 @@ export interface TranscriptSegment {
   start: number;
   end: number;
   text: string;
+  /** A call's speaker lane (§11.3 `TranscriptExcerpt`); absent on a voice note. */
+  speaker?: 'reporter' | 'agent';
+}
+
+/**
+ * One recording of a report (§11.3 `MediaPlayer`): a web-recorder voice note (its upload; a
+ * WhatsApp-era report's voice note is its message, the same UUID once backfilled) or a call
+ * recording. Every clip has its own player, waveform (`uploads.peaks` / `calls.peaks`),
+ * transcript and excerpts; a source's seconds seek the clip it cites.
+ */
+export interface MediaClip {
+  /** The upload (or WhatsApp message) id of a voice note; the call id of a call. */
+  id: string;
+  kind: 'voice_note' | 'call';
+  /** Storage bucket of the file: voice notes in `audio`, call recordings in `calls`. */
+  bucket: 'audio' | 'calls';
+  peaks: number[];
+  durationS: number;
+  storagePath: string | null;
+  /** Signed URL (10 min) or null (demo mode, or the file is gone). */
+  url: string | null;
+  /** When SiteLog received it (a call: when it started). */
+  receivedAt: string;
+  /** The transcript's language codes, e.g. ['es', 'en']. */
+  languages: string[];
+  transcript: { language: string | null; text: string; segments: TranscriptSegment[] } | null;
+  /** Excerpts for the values this clip is cited for (max 8, in time order). */
+  excerpts: TranscriptExcerpt[];
 }
 
 export interface TranscriptExcerpt {
@@ -468,16 +515,68 @@ export interface TranscriptExcerpt {
   /** Official English facts mapped from the quote. */
   mapped: string;
   section: 'manpower' | 'weather' | 'work' | 'delivery' | 'safety' | 'next' | 'other';
+  /** A call excerpt's speaker. */
+  speaker?: 'reporter' | 'agent';
 }
+
+/**
+ * What an Activity entry records (P7 "Activity"): field events from the audit log, the report's
+ * uploads, questions, texts and calls, and the office's actions. The page words each kind in the
+ * panel's language (`report.activity.events.*`); `other` shows the audit action as stored.
+ */
+export type ActivityKind =
+  | 'link_opened'
+  | 'clip_received'
+  | 'photos_received'
+  | 'report_started'
+  | 'extracted'
+  | 'question_asked'
+  | 'question_answered'
+  | 'question_timeout'
+  | 'draft_shown'
+  | 'draft_corrected'
+  | 'confirmed'
+  | 'filed'
+  | 'version'
+  | 'pdf_rendered'
+  | 'pdf_emailed'
+  | 'text_sent'
+  | 'text_received'
+  | 'call_in'
+  | 'call_out'
+  | 'call_missed'
+  | 'whatsapp_in'
+  | 'whatsapp_out'
+  | 'signed_off'
+  | 'signoff_undone'
+  | 'signoff_reverted'
+  | 'needs_review'
+  | 'company_resolved'
+  | 'no_work'
+  | 'missing'
+  | 'voided'
+  | 'other';
 
 export interface ActivityEntry {
   id: string;
   at: string;
   actorType: 'agent' | 'reporter' | 'user' | 'system';
-  actorName: string;
-  label: string;
+  /** The reporter or office user; null for SiteLog itself (worded by the page). */
+  actorName: string | null;
+  kind: ActivityKind;
+  /**
+   * Values the wording takes: `version`, `photos` (count), `seconds` (a clip's or call's length),
+   * `channel` (`sms` | `whatsapp` | `web` | `voice` | `push`), `message` (an SMS copy key),
+   * `status` (a message's delivery status), `type` (a WhatsApp message type), `action` (other).
+   */
+  params: Record<string, string | number>;
+  /** Data shown as is: a change note, an answer, a question, a company. */
   detail: string | null;
-  messageId: string | null;
+  /**
+   * What a source link reveals in the timeline: the question id of an answer, or the WhatsApp
+   * message id of a v1 reply.
+   */
+  anchor: string | null;
 }
 
 export interface QuestionItem {
@@ -512,15 +611,21 @@ export interface ReportHeader {
   reviewReasons: string[];
   isLate: boolean;
   kind: string;
+  /**
+   * How the report came in (§6.2 field_channel, `reports.channel`); null on WhatsApp-era reports
+   * (D13). With `confirmedVia`, the PDF's source record and the P7 provenance line.
+   */
+  channel: FieldChannel | null;
+  /** How the reporter confirmed it: web (the recorder), voice (on the call), sms. */
+  confirmedVia: FieldChannel | null;
+  /** The report's language (§9.6): the org's, what the source panel's language line maps to. */
+  language: string;
   receivedAt: string | null;
   confirmedAt: string | null;
   filedAt: string | null;
   signedOffBy: string | null;
   signedOffByName: string | null;
   signedOffAt: string | null;
-  /** `reports.channel` / `confirmed_via` (null: v1.0 WhatsApp, D13): the PDF's source record. */
-  channel: FieldChannel | null;
-  confirmedVia: FieldChannel | null;
 }
 
 export interface ReportDetail {
@@ -540,7 +645,13 @@ export interface ReportDetail {
   previousData: DailyReportData | null;
   versions: ReportVersionSummary[];
   totals: ReportTotals;
+  /**
+   * The first voice note (or WhatsApp voice note), kept for the browser PDF's evidence summary.
+   * The page plays `clips`.
+   */
   audio: AudioSourceInfo | null;
+  /** Every recording of the report in time order: voice notes and call recordings. */
+  clips: MediaClip[];
   photos: PhotoSourceInfo[];
   transcript: { language: string | null; text: string; segments: TranscriptSegment[] } | null;
   excerpts: TranscriptExcerpt[];

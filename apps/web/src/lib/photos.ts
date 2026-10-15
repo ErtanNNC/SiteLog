@@ -11,9 +11,7 @@
  *
  * The decode / encode steps are a `PhotoCodec` so tests (jsdom has no canvas) can stub them.
  */
-import { copy } from '@/copy/en';
-
-const c = copy.report.editMode.photos;
+import { translate } from '@/i18n/useCopy';
 
 /** Originals above this are refused before decoding (a phone photo is 2–12 MB). */
 export const PHOTO_MAX_BYTES = 25 * 1024 * 1024;
@@ -47,16 +45,17 @@ export class PhotoError extends Error {
 /** Checks a picked file before decoding: the error copy, or null when it can be prepared. */
 export function photoFileError(file: Pick<File, 'name' | 'type' | 'size'>): string | null {
   const isImage = file.type ? file.type.startsWith('image/') : IMAGE_EXT.test(file.name);
-  if (!isImage) return c.notImage(file.name);
-  if (file.size > PHOTO_MAX_BYTES) return c.tooLarge(file.name);
+  if (!isImage) return translate('report.editMode.photos.notImage', { name: file.name });
+  if (file.size > PHOTO_MAX_BYTES)
+    return translate('report.editMode.photos.tooLarge', { name: file.name });
   return null;
 }
 
 /** The copy for a file the browser could not decode (HEIC outside Safari, a broken file). */
 export function unreadableMessage(file: Pick<File, 'name' | 'type'>): string {
   return HEIC.test(file.name) || /^image\/hei[cf]/i.test(file.type)
-    ? c.heic(file.name)
-    : c.unreadable(file.name);
+    ? translate('report.editMode.photos.heic', { name: file.name })
+    : translate('report.editMode.photos.unreadable', { name: file.name });
 }
 
 /** Size of the uploaded image: the long edge at most `maxEdge`, never enlarged. */
@@ -382,7 +381,10 @@ export async function preparePhoto(
   const header = await readPhotoHeader(file);
   if (header.width && header.height && header.width * header.height > PHOTO_MAX_PIXELS)
     throw new PhotoError(
-      c.tooManyPixels(file.name, Math.round((header.width * header.height) / 1e6)),
+      translate('report.editMode.photos.tooManyPixels', {
+        name: file.name,
+        megapixels: Math.round((header.width * header.height) / 1e6),
+      }),
     );
   let image: DecodedImage;
   try {

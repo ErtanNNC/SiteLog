@@ -256,14 +256,14 @@ export function useSignOff() {
   const s = useDataSource();
   return useSourceMutation(
     (vars: { reportId: string; reportNo: string }) => s.signOff(vars.reportId),
-    { success: (v) => copy.toasts.signedOff(v.reportNo) },
+    { success: (v) => translate('toasts.signedOffReport', { no: v.reportNo }) },
   );
 }
 
 export function useUndoSignOff() {
   const s = useDataSource();
   return useSourceMutation((vars: { reportId: string }) => s.undoSignOff(vars.reportId), {
-    success: copy.toasts.undone,
+    success: () => translate('toasts.undone'),
   });
 }
 
@@ -277,7 +277,7 @@ export function useCreateReportVersion() {
       photos?: OfficePhotoUpload[];
     }) => s.createReportVersion(vars.reportId, vars.data, vars.changeNote, vars.photos),
     {
-      success: (_v, r) => copy.toasts.versionSaved(r.version),
+      success: (_v, r) => translate('toasts.versionSavedN', { version: r.version }),
     },
   );
 }
@@ -337,7 +337,7 @@ export function useReportPdf() {
   const qc = useQueryClient();
   const make = async (reportId: string, version: number | null): Promise<string> => {
     const { url, stored } = await makeReportPdf(s, qc, reportId, version);
-    if (!stored) toast.warning(copy.report.pdfNotSaved);
+    if (!stored) toast.warning(translate('report.pdfNotSaved'));
     return url;
   };
   const m = useMutation({
@@ -346,14 +346,14 @@ export function useReportPdf() {
       version: number | null;
       go: (url: string | null) => void;
     }) => {
-      const id = toast.loading(copy.report.pdfPreparing);
+      const id = toast.loading(translate('report.pdfPreparing'));
       try {
         const url = await make(vars.reportId, vars.version);
         toast.dismiss(id);
         vars.go(url);
       } catch (err) {
         vars.go(null);
-        toast.error(errorMessage(err, copy.report.pdfFailed), { id });
+        toast.error(errorMessage(err, translate('report.pdfFailed')), { id });
       }
     },
   });
@@ -404,7 +404,7 @@ export function useTextDailyLink() {
 export function useResolveUnknownCompany() {
   const s = useDataSource();
   return useSourceMutation((vars: ResolveUnknownCompanyInput) => s.resolveUnknownCompany(vars), {
-    success: copy.toasts.companyResolved,
+    success: () => translate('toasts.companyResolved'),
   });
 }
 
@@ -694,7 +694,7 @@ export function useOpenReportPdf() {
         const batch = await s.getPdfUrls({ reportIds: [vars.reportId] });
         const url = batch.files[0]?.url ?? null;
         vars.go(url);
-        if (!url) toast.message(copy.reports.pdfNotReady);
+        if (!url) toast.message(translate('reports.pdfNotReady'));
       } catch (err) {
         vars.go(null);
         toast.error(errorMessage(err, copy.errors.generic));

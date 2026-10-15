@@ -26,12 +26,21 @@ import {
 } from '@sitelog/shared/schemas/report.ts';
 import { round2 } from '@sitelog/shared/report/hours.ts';
 import { upgradePhotosV1 } from '@sitelog/shared/report/upgrade.ts';
-import { copy } from '@/copy/en';
 import type { CompanyOption } from '@/data/types';
+import type { CopyKey } from '@/i18n/keys';
 
 export const NEW_COMPANY = '__new__';
 
-const t = copy.report.editMode;
+/**
+ * Validation messages are copy keys (D9): `FormMessage` words them in the page's language, so
+ * the schema is one module constant for both the New report and the Report review pages.
+ */
+const t = {
+  number: 'report.editMode.number',
+  required: 'report.editMode.required',
+  companyRequired: 'report.editMode.companyRequired',
+  timeInvalid: 'report.editMode.timeInvalid',
+} as const satisfies Record<string, CopyKey>;
 const HHMM = /^\d{2}:\d{2}$/;
 const optionalNumber = (min = 0, max = Number.POSITIVE_INFINITY) =>
   z
@@ -45,7 +54,7 @@ const optionalNumber = (min = 0, max = Number.POSITIVE_INFINITY) =>
 const optionalTime = z
   .string()
   .trim()
-  .refine((v) => v === '' || HHMM.test(v), copy.siteDetail.settings.timeInvalid);
+  .refine((v) => v === '' || HHMM.test(v), t.timeInvalid);
 
 export const manpowerRowSchema = z
   .object({

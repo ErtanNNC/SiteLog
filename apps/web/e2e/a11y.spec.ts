@@ -81,7 +81,11 @@ const ROUTES: RouteCase[] = [
   },
   { name: 'reports', path: '/reports', ready: (p) => p.getByRole('table', { name: 'Reports' }) },
   { name: 'new report', path: '/reports/new', ready: (p) => p.getByTestId('report-editor') },
-  { name: 'report', path: `/reports/${HERO_REPORT}`, ready: (p) => p.getByTestId('voice-player') },
+  {
+    name: 'report',
+    path: `/reports/${HERO_REPORT}`,
+    ready: (p) => p.getByTestId('media-player').first(),
+  },
   { name: 'hours', path: '/hours', ready: (p) => p.getByTestId('hours-matrix') },
   { name: 'weather', path: '/weather', ready: (p) => p.getByTestId('delay-log') },
   { name: 'team', path: '/team', ready: (p) => p.getByTestId('unknown-sender') },
@@ -183,10 +187,39 @@ for (const width of WIDTHS) {
       await expectNoViolations(page);
     });
 
+    // W1-17: both pages speak Turkish; the report's sources, players and activity pass too.
+    test('reports archive and report review in Turkish', async ({ page }) => {
+      await chooseTurkish(page);
+      await signInFast(page);
+      await page.goto('/reports');
+      await expect(page.getByRole('table', { name: 'Raporlar' })).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+      await expectNoViolations(page);
+      await page.goto(`/reports/${HERO_REPORT}`);
+      await expect(page.getByTestId('media-player').first()).toBeVisible();
+      await expect(page.getByTestId('provenance')).toContainText('Rapor veren: Marco Ruiz');
+      await expectNoViolations(page);
+    });
+
+    test('report review after a source link played the rain stoppage', async ({ page }) => {
+      await signInFast(page);
+      await page.goto(`/reports/${HERO_REPORT}`);
+      await expect(page.getByTestId('media-player').first()).toBeVisible();
+      await page
+        .getByTestId('weather-period')
+        .first()
+        .getByRole('button', { name: /^audio 0:41/ })
+        .click();
+      await expect(
+        page.locator('[data-testid="transcript-excerpt"][data-active="true"]').first(),
+      ).toBeVisible();
+      await expectNoViolations(page);
+    });
+
     test('report in edit mode and the save dialog', async ({ page }) => {
       await signInFast(page);
       await page.goto(`/reports/${HERO_REPORT}`);
-      await expect(page.getByTestId('voice-player')).toBeVisible();
+      await expect(page.getByTestId('media-player').first()).toBeVisible();
       await page.getByRole('button', { name: 'Edit', exact: true }).click();
       await expect(page.getByTestId('save-version')).toBeVisible();
       await expectNoViolations(page);
@@ -538,7 +571,8 @@ test.describe('no sideways scroll on narrow phones', () => {
           '/no-such-page',
           (p) => p.getByRole('heading', { name: tr ? 'Sayfa bulunamadı' : 'Page not found' }),
         ],
-        [`/reports/${HERO_REPORT}`, (p) => p.getByTestId('voice-player')],
+        [`/reports/${HERO_REPORT}`, (p) => p.getByTestId('media-player').first()],
+        ['/reports', (p) => p.getByRole('table', { name: tr ? 'Raporlar' : 'Reports' })],
       ];
       for (const [path, ready] of pages) {
         await page.goto(path);

@@ -1,8 +1,18 @@
-import { Bot, FileText, HardHat, Mic, UserRound } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { formatAudioTimestamp, formatDuration, formatTimeInTz } from '@sitelog/shared/format.ts';
+import {
+  Bot,
+  FileText,
+  HardHat,
+  Link2,
+  MessageSquareText,
+  Mic,
+  Phone,
+  PhoneMissed,
+  UserRound,
+} from 'lucide-react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
+import { formatAudioTimestamp, formatTimeInTz } from '@sitelog/shared/format.ts';
+import { MediaPlayer, useClipActive, useMediaPlayer } from '@/components/sitelog/MediaPlayer';
 import { TranscriptExcerpt } from '@/components/sitelog/TranscriptExcerpt';
-import { VoicePlayer, useVoicePlayer } from '@/components/sitelog/VoicePlayer';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import {
@@ -12,36 +22,44 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/Dialog';
-import { copy } from '@/copy/en';
 import { officeEntryAuthor } from '@/data/pdfInput';
 import type {
   ActivityEntry,
-  MessageItem,
+  MediaClip,
   ReportDetail,
   TranscriptExcerpt as TranscriptExcerptItem,
+  TranscriptSegment,
 } from '@/data/types';
+import type { CopyKey } from '@/i18n/keys';
+import { useLooseCopy, type LooseT } from '@/i18n/useLooseCopy';
 import { formatWhen } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { durationPhrase } from './provenance';
 
 export interface SourcePanelProps {
   detail: ReportDetail;
-  /** Message id to reveal + highlight in the timeline (from a "reply 17:41" SourceLink). */
-  openMessageId: string | null;
-  onOpenHistory?: () => void;
+  /** An answer's question id (or a v1 reply's message id) to reveal and highlight in Activity. */
+  focusAnchor: string | null;
 }
 
-function languagesLabel(detail: ReportDetail): string | null {
-  const codes = detail.data.languageDetected.length
-    ? detail.data.languageDetected
-    : (detail.transcript?.language?.split('+') ?? []);
+/** "ES + EN → EN" (P7): the clip's languages (the report's, for an untranscribed note) → report. */
+function languagesLine(detail: ReportDetail, clip: MediaClip, t: LooseT): string | null {
+  const codes = clip.languages.length
+    ? clip.languages
+    : clip.kind === 'voice_note'
+      ? detail.data.languageDetected
+      : [];
   if (!codes.length) return null;
-  return copy.player.languages(codes.map((c) => c.toUpperCase()).join(' + '), 'EN');
+  return t('player.languages', {
+    from: codes.map((c) => c.toUpperCase()).join(' + '),
+    to: detail.report.language.toUpperCase(),
+  });
 }
 
 /** One excerpt per transcript segment: facts mapped from the same quote are joined (max 6). */
-function mergedExcerpts(detail: ReportDetail): TranscriptExcerptItem[] {
+function mergedExcerpts(excerpts: readonly TranscriptExcerptItem[]): TranscriptExcerptItem[] {
   const bySegment = new Map<number, TranscriptExcerptItem>();
-  for (const e of detail.excerpts) {
+  for (const e of excerpts) {
     const cur = bySegment.get(e.start);
     if (cur) cur.mapped = `${cur.mapped} · ${e.mapped}`;
     else bySegment.set(e.start, { ...e });
@@ -49,76 +67,60 @@ function mergedExcerpts(detail: ReportDetail): TranscriptExcerptItem[] {
   return [...bySegment.values()].slice(0, 6);
 }
 
-/** Aside: Source (voice note player, transcript excerpts, full transcript drawer) + Activity timeline. */
-export function SourcePanel({ detail, openMessageId }: SourcePanelProps) {
+/** Aside: Source (a player per clip, transcript excerpts, full transcript drawer) + Activity. */
+export function SourcePanel({ detail, focusAnchor }: SourcePanelProps) {
+  const { tx: t } = useLooseCopy();
   const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const [messagesToggle, setMessagesToggle] = useState(false);
-  // A "reply 17:41" source link reveals the messages until the person hides them again.
-  const [hiddenFor, setHiddenFor] = useState<string | null>(null);
-  const showMessages = messagesToggle || (openMessageId !== null && hiddenFor !== openMessageId);
-  const setShowMessages = (on: boolean) => {
-    setMessagesToggle(on);
-    setHiddenFor(on ? null : openMessageId);
-  };
   const tz = detail.site.timezone;
-  const player = useVoicePlayer();
   const enteredBy = officeEntryAuthor(detail);
+  const clips = detail.clips;
+  const calls = clips.filter((c) => c.kind === 'call').length;
+  const eyebrow = enteredBy
+    ? t('report.aside.typed')
+    : clips.length > 1
+      ? calls
+        ? t('report.aside.recordings', { count: clips.length })
+        : t('report.aside.voiceNotes', { count: clips.length })
+      : clips[0]?.kind === 'call'
+        ? t('report.aside.call')
+        : t('report.aside.voiceNote');
+  const transcribed = clips.filter((c) => c.transcript);
 
   return (
     <div className="space-y-4">
       <Card data-testid="source-panel">
         <CardHeader>
-          <CardTitle>{copy.report.aside.source}</CardTitle>
-          <span className="eyebrow text-dust">
-            {enteredBy ? copy.report.aside.typed : copy.report.aside.voiceNote}
-          </span>
+          <CardTitle>{t('report.aside.source')}</CardTitle>
+          <span className="eyebrow text-dust">{eyebrow}</span>
         </CardHeader>
-        <CardContent className="pt-3">
-          {detail.audio ? (
-            <>
-              <VoicePlayer
-                peaks={detail.audio.peaks}
-                durationS={detail.audio.durationS}
-                url={detail.audio.url}
-                languages={null}
+        <CardContent className="space-y-5 pt-3">
+          {clips.length ? (
+            clips.map((clip) => (
+              <ClipBlock
+                key={clip.id}
+                detail={detail}
+                clip={clip}
+                labelled={clips.length > 1}
+                t={t}
               />
-              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-dust">
-                <span>{formatTimeInTz(detail.audio.receivedAt, tz)}</span>
-                <span className="font-mono">{formatDuration(detail.audio.durationS)}</span>
-                {!detail.audio.url ? <span>{copy.player.demoAudio}</span> : null}
-                <span className="font-mono">{languagesLabel(detail)}</span>
-              </div>
-            </>
+            ))
           ) : enteredBy ? (
-            <p className="text-caption text-dust">{copy.report.aside.typedBy(enteredBy)}</p>
+            <p className="text-caption text-dust">
+              {t('report.aside.typedBy', { name: enteredBy })}
+            </p>
           ) : (
-            <p className="text-caption text-dust">{copy.player.noAudio}</p>
+            <p className="text-caption text-dust">{t('report.aside.noRecording')}</p>
           )}
 
-          {detail.excerpts.length ? (
-            <div className="mt-4 space-y-2" aria-label={copy.report.aside.excerpts}>
-              <div className="eyebrow text-dust">{copy.report.aside.excerpts}</div>
-              {mergedExcerpts(detail).map((e) => (
-                <TranscriptExcerpt
-                  key={e.start}
-                  start={e.start}
-                  end={e.end}
-                  quote={e.quote}
-                  mapped={e.mapped}
-                />
-              ))}
-            </div>
-          ) : null}
-
-          {detail.transcript ? (
+          {transcribed.length ? (
             <Button
               variant="ghost"
               size="dense"
-              className="mt-4 w-full"
+              className="w-full"
               onClick={() => setTranscriptOpen(true)}
             >
               <FileText aria-hidden="true" />
-              {copy.report.aside.fullTranscript}
+              {t('report.aside.fullTranscript')}
             </Button>
           ) : null}
         </CardContent>
@@ -126,69 +128,53 @@ export function SourcePanel({ detail, openMessageId }: SourcePanelProps) {
 
       <Card data-testid="activity-panel">
         <CardHeader>
-          <CardTitle>{copy.report.aside.activity}</CardTitle>
-          {detail.messages.length ? (
-            <Button variant="link" size="sm" onClick={() => setShowMessages(!showMessages)}>
-              {showMessages ? copy.report.activity.hideMessages : copy.report.activity.showMessages}
-            </Button>
-          ) : null}
+          <CardTitle>{t('report.aside.activity')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-3">
-          <Timeline
-            detail={detail}
-            showMessages={showMessages}
-            highlightMessageId={openMessageId}
-          />
+          <Timeline detail={detail} focusAnchor={focusAnchor} t={t} />
         </CardContent>
       </Card>
 
       <Dialog open={transcriptOpen} onOpenChange={setTranscriptOpen}>
         <DialogContent side="right" className="overflow-y-auto scrollbar-thin">
           <DialogHeader>
-            <DialogTitle>{copy.report.transcript.title}</DialogTitle>
+            <DialogTitle>{t('report.transcript.title')}</DialogTitle>
             <DialogDescription>
-              {detail.transcript?.language
-                ? copy.report.transcript.language(detail.transcript.language.toUpperCase())
-                : null}
-              {detail.transcript
-                ? ` · ${copy.report.transcript.segments(detail.transcript.segments.length)}`
-                : null}
+              {transcribed
+                .map((c) =>
+                  [
+                    c.transcript?.language
+                      ? t('report.transcript.language', {
+                          language: c.transcript.language.toUpperCase(),
+                        })
+                      : null,
+                    t('report.transcript.segments', {
+                      count: c.transcript?.segments.length ?? 0,
+                    }),
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                )
+                .join(' / ')}
             </DialogDescription>
           </DialogHeader>
-          {detail.transcript ? (
-            <ol className="mt-4 space-y-3" aria-label={copy.report.transcript.title}>
-              {detail.transcript.segments.map((s) => {
-                const active =
-                  !!player &&
-                  ((player.highlight !== null &&
-                    player.highlight >= s.start &&
-                    player.highlight < s.end) ||
-                    (player.currentTime > 0 &&
-                      player.currentTime >= s.start &&
-                      player.currentTime < s.end));
-                return (
-                  <li
-                    key={s.start}
-                    className={cn(
-                      'grid grid-cols-[52px_minmax(0,1fr)] gap-2 rounded-chip px-2 py-1',
-                      active && 'bg-signal-tint/50',
-                    )}
-                  >
-                    <button
-                      type="button"
-                      className="text-left font-mono text-[12px] font-medium text-level hover:underline"
-                      onClick={() => player?.seek(s.start)}
-                      aria-label={copy.source.seekTo(formatAudioTimestamp(s.start))}
-                    >
-                      {formatAudioTimestamp(s.start)}
-                    </button>
-                    <p className="text-[15px] leading-[22px]">{s.text}</p>
-                  </li>
-                );
-              })}
-            </ol>
+          {transcribed.length ? (
+            <div className="mt-4 space-y-6">
+              {transcribed.map((clip) => (
+                <section key={clip.id} aria-label={clipLabel(clip, tz, t)}>
+                  {transcribed.length > 1 ? (
+                    <h3 className="eyebrow mb-2 text-dust">{clipLabel(clip, tz, t)}</h3>
+                  ) : null}
+                  <ol className="space-y-3" aria-label={t('report.transcript.title')}>
+                    {clip.transcript!.segments.map((s) => (
+                      <TranscriptRow key={s.start} clip={clip} segment={s} t={t} />
+                    ))}
+                  </ol>
+                </section>
+              ))}
+            </div>
           ) : (
-            <p className="mt-4 text-caption text-dust">{copy.report.transcript.none}</p>
+            <p className="mt-4 text-caption text-dust">{t('report.transcript.none')}</p>
           )}
         </DialogContent>
       </Dialog>
@@ -196,105 +182,248 @@ export function SourcePanel({ detail, openMessageId }: SourcePanelProps) {
   );
 }
 
-type TimelineItem =
-  | { kind: 'audit'; at: string; entry: ActivityEntry }
-  | { kind: 'message'; at: string; message: MessageItem };
+function clipLabel(clip: MediaClip, tz: string, t: LooseT): string {
+  return t(clip.kind === 'call' ? 'report.aside.clipCall' : 'report.aside.clipVoiceNote', {
+    time: formatTimeInTz(clip.receivedAt, tz),
+  });
+}
+
+function ClipBlock({
+  detail,
+  clip,
+  labelled,
+  t,
+}: {
+  detail: ReportDetail;
+  clip: MediaClip;
+  labelled: boolean;
+  t: LooseT;
+}) {
+  const tz = detail.site.timezone;
+  const languages = languagesLine(detail, clip, t);
+  const d = durationPhrase(clip.durationS);
+  const excerpts = mergedExcerpts(clip.excerpts);
+  return (
+    <div data-testid="source-clip" data-clip={clip.id}>
+      {labelled ? (
+        <div className="eyebrow mb-1 flex items-center gap-1.5 text-dust">
+          {clip.kind === 'call' ? (
+            <Phone className="size-3.5" aria-hidden="true" />
+          ) : (
+            <Mic className="size-3.5" aria-hidden="true" />
+          )}
+          {clipLabel(clip, tz, t)}
+        </div>
+      ) : null}
+      <MediaPlayer
+        clipId={clip.id}
+        kind={clip.kind}
+        peaks={clip.peaks}
+        durationS={clip.durationS}
+        url={clip.url}
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-dust">
+        <span>{formatTimeInTz(clip.receivedAt, tz)}</span>
+        <span className="font-mono">{t(d.key, d.vars)}</span>
+        {languages ? (
+          <span className="font-mono" data-testid="languages-line">
+            {languages}
+          </span>
+        ) : null}
+        {!clip.url ? <span>{t('player.demoAudio')}</span> : null}
+      </div>
+      {excerpts.length ? (
+        <div className="mt-3 space-y-2">
+          <div className="eyebrow text-dust">{t('report.aside.excerpts')}</div>
+          {excerpts.map((e) => (
+            <TranscriptExcerpt
+              key={e.start}
+              clipId={clip.id}
+              kind={clip.kind}
+              start={e.start}
+              end={e.end}
+              quote={e.quote}
+              mapped={e.mapped}
+              speaker={e.speaker}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TranscriptRow({
+  clip,
+  segment: s,
+  t,
+}: {
+  clip: MediaClip;
+  segment: TranscriptSegment;
+  t: LooseT;
+}) {
+  const player = useMediaPlayer();
+  const active = useClipActive(clip.id, s.start, s.end);
+  const ts = formatAudioTimestamp(s.start);
+  return (
+    <li
+      className={cn(
+        'grid grid-cols-[52px_minmax(0,1fr)] gap-2 rounded-chip px-2 py-1',
+        active && 'bg-signal-tint/50',
+      )}
+    >
+      <button
+        type="button"
+        className="text-left font-mono text-[12px] font-medium text-level hover:underline"
+        onClick={() => player?.seek(s.start, clip.id)}
+        aria-label={`${ts} · ${t(
+          clip.kind === 'call' ? 'source.links.playCall' : 'source.links.playVoiceNote',
+          { ts },
+        )}`}
+      >
+        {ts}
+      </button>
+      <p
+        className={cn(
+          'text-[15px] leading-[22px]',
+          s.speaker === 'agent' ? 'text-dust' : 'text-asphalt',
+        )}
+      >
+        {s.speaker ? (
+          <span className="mr-1 font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
+            {t(s.speaker === 'agent' ? 'report.transcript.agent' : 'report.transcript.reporter')}
+          </span>
+        ) : null}
+        {s.text}
+      </p>
+    </li>
+  );
+}
+
+const KIND_ICON: Partial<Record<ActivityEntry['kind'], ComponentType<{ className?: string }>>> = {
+  link_opened: Link2,
+  clip_received: Mic,
+  text_sent: MessageSquareText,
+  text_received: MessageSquareText,
+  call_in: Phone,
+  call_out: Phone,
+  call_missed: PhoneMissed,
+  whatsapp_in: MessageSquareText,
+  whatsapp_out: MessageSquareText,
+};
+
+/** The words of one Activity entry, in the panel's language. */
+function activityLabel(e: ActivityEntry, t: LooseT): string {
+  const p = e.params;
+  const duration = (seconds: unknown) => {
+    const d = durationPhrase(Number(seconds ?? 0));
+    return t(d.key, d.vars);
+  };
+  switch (e.kind) {
+    case 'clip_received': {
+      const photos = Number(p.photos ?? 0);
+      return photos > 0
+        ? t('report.activity.events.clip_received_photos', { count: photos })
+        : t('report.activity.events.clip_received', { duration: duration(p.seconds) });
+    }
+    case 'photos_received':
+      return t('report.activity.events.photos_received', { count: Number(p.photos ?? 1) });
+    case 'confirmed': {
+      const via = String(p.channel ?? '');
+      return via === 'web' || via === 'voice' || via === 'sms'
+        ? t(`report.activity.events.confirmed_${via}` as CopyKey)
+        : t('report.activity.events.confirmed');
+    }
+    case 'filed':
+    case 'version':
+      return t(`report.activity.events.${e.kind}`, { version: Number(p.version ?? 1) });
+    case 'text_sent': {
+      const key = String(p.message ?? '');
+      const message = t(`report.activity.messages.${key || 'other'}` as CopyKey);
+      const status = p.status ? t(`report.activity.status.${String(p.status)}` as CopyKey) : '';
+      const label = t('report.activity.events.text_sent', {
+        message: message.startsWith('report.') ? t('report.activity.messages.other') : message,
+      });
+      return status && !status.startsWith('report.') ? `${label} · ${status}` : label;
+    }
+    case 'call_in':
+    case 'call_out':
+      return t(`report.activity.events.${e.kind}`, { duration: duration(p.seconds) });
+    case 'whatsapp_in':
+    case 'whatsapp_out':
+      return t(`report.activity.events.${e.kind}`, {
+        type: t(`report.activity.whatsappTypes.${String(p.type ?? 'unsupported')}` as CopyKey),
+      });
+    case 'other':
+      return t('report.activity.events.other', { action: String(p.action ?? '') });
+    default:
+      return t(`report.activity.events.${e.kind}` as CopyKey);
+  }
+}
+
+function actorLabel(e: ActivityEntry, t: LooseT): string {
+  if (e.actorName) return e.actorName;
+  if (e.actorType === 'user') return t('report.activity.office');
+  if (e.actorType === 'system') return t('report.activity.system');
+  return t('report.activity.agent');
+}
 
 function Timeline({
   detail,
-  showMessages,
-  highlightMessageId,
+  focusAnchor,
+  t,
 }: {
   detail: ReportDetail;
-  showMessages: boolean;
-  highlightMessageId: string | null;
+  focusAnchor: string | null;
+  t: LooseT;
 }) {
+  const { language } = useLooseCopy();
   const tz = detail.site.timezone;
-  const items: TimelineItem[] = [
-    ...detail.activity.map((entry) => ({ kind: 'audit' as const, at: entry.at, entry })),
-    ...(showMessages
-      ? detail.messages.map((message) => ({ kind: 'message' as const, at: message.at, message }))
-      : []),
-  ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.kind === 'message' ? -1 : 1));
-  const highlighted = useRef<HTMLLIElement | null>(null);
+  const focused = useRef<HTMLLIElement | null>(null);
   useEffect(() => {
-    highlighted.current?.scrollIntoView({ block: 'nearest' });
-  }, [highlightMessageId, showMessages]);
+    focused.current?.scrollIntoView({ block: 'nearest' });
+  }, [focusAnchor]);
 
-  if (!items.length) return <p className="text-caption text-dust">{copy.report.activity.empty}</p>;
+  if (!detail.activity.length)
+    return <p className="text-caption text-dust">{t('report.activity.empty')}</p>;
   return (
     <ol
       className="relative space-y-3 border-l border-rebar pl-4"
-      aria-label={copy.report.aside.activity}
+      aria-label={t('report.aside.activity')}
+      data-testid="activity"
     >
-      {items.map((it) => {
-        if (it.kind === 'audit') {
-          const e = it.entry;
-          const Icon =
-            e.actorType === 'agent' ? Bot : e.actorType === 'reporter' ? HardHat : UserRound;
-          return (
-            <li key={e.id} className="relative">
-              <span
-                aria-hidden="true"
-                className="absolute -left-[22px] top-1 flex size-3 items-center justify-center rounded-full border border-rebar bg-chalk"
-              />
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[15px] font-medium">{e.label}</span>
-                <span className="shrink-0 font-mono text-[12px] text-dust">
-                  {formatWhen(e.at, tz, detail.report.date)}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 text-caption text-dust">
-                <Icon className="size-3.5" aria-hidden="true" />
-                {e.actorName}
-                {e.detail ? <span> · {e.detail}</span> : null}
-              </div>
-            </li>
-          );
-        }
-        const m = it.message;
-        const isHighlight = m.id === highlightMessageId;
-        const body =
-          m.type === 'audio'
-            ? copy.report.activity.voiceNote(formatDuration(detail.audio?.durationS ?? 0))
-            : m.type === 'image'
-              ? `${copy.report.activity.photo}${m.body ? ` · ${m.body}` : ''}`
-              : m.type === 'document'
-                ? copy.report.activity.document(m.body ?? '')
-                : (m.body ?? '');
+      {detail.activity.map((e) => {
+        const Icon =
+          KIND_ICON[e.kind] ??
+          (e.actorType === 'reporter' ? HardHat : e.actorType === 'user' ? UserRound : Bot);
+        const isFocus = focusAnchor !== null && e.anchor === focusAnchor;
         return (
           <li
-            key={m.id}
-            ref={isHighlight ? highlighted : undefined}
-            className="relative"
-            data-message-id={m.id}
+            key={e.id}
+            ref={isFocus ? focused : undefined}
+            className={cn('relative rounded-chip', isFocus && 'bg-signal-tint/50 px-2 py-1')}
+            data-kind={e.kind}
+            data-focus={isFocus || undefined}
           >
             <span
               aria-hidden="true"
               className={cn(
-                'absolute -left-[22px] top-1.5 size-3 rounded-full',
-                m.direction === 'in' ? 'bg-signal' : 'bg-iron',
+                'absolute top-1.5 size-3 rounded-full border border-rebar bg-chalk',
+                isFocus ? '-left-[30px]' : '-left-[22px]',
               )}
             />
-            <div
-              className={cn(
-                'rounded-bubble border px-3 py-2 text-caption',
-                m.direction === 'in'
-                  ? 'rounded-tl-chip border-signal-tint bg-signal-tint/40'
-                  : 'rounded-tr-chip border-rebar bg-concrete/60',
-                isHighlight && 'border-signal',
-              )}
-            >
-              <div className="flex items-center justify-between gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
-                <span className="inline-flex items-center gap-1">
-                  {m.type === 'audio' ? <Mic className="size-3" aria-hidden="true" /> : null}
-                  {m.direction === 'in' ? copy.report.activity.in : copy.report.activity.out}
-                </span>
-                <span>{formatWhen(m.at, tz, detail.report.date)}</span>
-              </div>
-              <p className="mt-0.5 whitespace-pre-line text-[14px] leading-5 text-asphalt">
-                {body}
-              </p>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="min-w-0 text-[15px] font-medium">{activityLabel(e, t)}</span>
+              <span className="shrink-0 font-mono text-[12px] text-dust">
+                {formatWhen(e.at, tz, detail.report.date, language)}
+              </span>
+            </div>
+            <div className="flex min-w-0 items-start gap-1 text-caption text-dust">
+              <Icon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 break-words">
+                {actorLabel(e, t)}
+                {e.detail ? <span> · {e.detail}</span> : null}
+              </span>
             </div>
           </li>
         );

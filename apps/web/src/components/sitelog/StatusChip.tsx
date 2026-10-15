@@ -31,6 +31,7 @@ export interface StatusChipProps extends HTMLAttributes<HTMLSpanElement> {
 export function StatusChip({ variant, label, size = 'md', className, ...props }: StatusChipProps) {
   const { t } = useCopy();
   const s = STYLES[variant];
+  // The page's language: a page under <EnglishOnly> keeps English chips (D9).
   const text = label ?? t(`chips.${variant}`);
   return (
     <span

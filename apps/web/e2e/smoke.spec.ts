@@ -188,7 +188,8 @@ test.describe('SiteLog panel (demo mode)', () => {
     await expect(picker.getByTestId('photo-count')).toContainText('1 photo of 20');
     await page.getByTestId('file-report').click();
 
-    await expect(page).toHaveURL(/\/reports\/(?!new)[^/?]+$/);
+    // The page opens the report once the browser has rendered and stored its PDF (slow runners).
+    await expect(page).toHaveURL(/\/reports\/(?!new)[^/?]+$/, { timeout: 30_000 });
     await expect(page.getByText(/Entered by .+ in SiteLog at/)).toBeVisible();
     await expect(page.getByText('Wall framing')).toBeVisible();
     // The filed report shows the photo with its caption.
@@ -340,7 +341,8 @@ test.describe('language switch', () => {
       .click();
     await expect(page.getByRole('navigation', { name: 'Ana gezinme' })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
-    await expect(reportHeading).toBeVisible();
+    // The report review speaks Turkish too (W1-17).
+    await expect(page.getByRole('heading', { name: 'Cuma, 9 Eki — Riverside B' })).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
     await expect(page.getByRole('combobox', { name: 'Arama' })).toBeVisible();
 

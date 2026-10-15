@@ -5,6 +5,7 @@
  */
 import type {
   AuditLogRow,
+  CallRow,
   CompanyRow,
   EvidencePackRow,
   GlossaryTermRow,
@@ -46,7 +47,10 @@ import type {
   Source,
   StoredReportData,
 } from '@sitelog/shared/schemas/report.ts';
+import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
+import type { PanelCopyTree } from '@sitelog/shared/copy/ui/types.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
+import { fillCopy } from '@sitelog/shared/report/progress.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import { normalizePayrollColumns, type PayrollColumn } from '@sitelog/shared/report/payroll.ts';
 import { versionPhotos } from '@sitelog/shared/report/photos.ts';
@@ -71,6 +75,7 @@ import {
   formatAudioTimestamp,
   formatDateInTz,
   formatHours,
+  formatHoursIn,
   formatMonthDay,
   formatPhone,
   formatTimeInTz,
@@ -84,6 +89,7 @@ import { formatHoursNum } from '@/lib/format';
 import { groupBy, isRecord, sum, uniq } from '@/lib/utils';
 import type {
   ActivityEntry,
+  ActivityKind,
   AttentionItem,
   BillingData,
   CalendarCell,
@@ -100,6 +106,7 @@ import type {
   HoursRow,
   InvoiceDetail,
   InvoiceEvidence,
+  MediaClip,
   MessageItem,
   NavBadges,
   NotificationItem,
@@ -168,6 +175,8 @@ export interface RowSet {
    */
   uploads?: UploadRow[];
   transcripts: TranscriptRow[];
+  /** §6.3 calls (the report's recordings and the reporter's calls that day). Optional. */
+  calls?: CallRow[];
   unknownContacts: UnknownContactRow[];
   siteDays: SiteDayRow[];
   reports: ReportRow[];
@@ -574,13 +583,24 @@ export function observedWeatherOf(json: unknown): ObservedWeather | null {
   return null;
 }
 
+/** A call segment's speaker lane: the reporter (`reporter`, `user`) or SiteLog (`agent`…). */
+function speakerOf(value: unknown): TranscriptSegment['speaker'] | undefined {
+  if (value === 'reporter' || value === 'user' || value === 'caller') return 'reporter';
+  if (value === 'agent' || value === 'assistant') return 'agent';
+  return undefined;
+}
+
 export function segmentsOf(json: unknown): TranscriptSegment[] {
   if (!Array.isArray(json)) return [];
-  return json.filter(isRecord).map((s) => ({
-    start: Number(s.start ?? 0),
-    end: Number(s.end ?? 0),
-    text: String(s.text ?? ''),
-  }));
+  return json.filter(isRecord).map((s) => {
+    const speaker = speakerOf(s.speaker ?? s.role);
+    return {
+      start: Number(s.start ?? 0),
+      end: Number(s.end ?? 0),
+      text: String(s.text ?? ''),
+      ...(speaker ? { speaker } : {}),
+    };
+  });
 }
 
 /** A question's options: v1.2 `[{id,label}]` (§6.3), or WhatsApp's `[{id,title}]` buttons. */
@@ -682,8 +702,12 @@ export function manpowerChanges(
 
 // ───────────────────────────── Overview ─────────────────────────────
 
-/** A report's channel on the Overview (§11.3 `ChannelIcon`): web → link, voice → call. */
-function reportChannel(channel: ReportRow['channel']): OverviewChannel | null {
+/**
+ * A report's channel (§11.3 `ChannelIcon`): web and SMS → link, voice → call, office → typed;
+ * none for WhatsApp-era reports. The Overview's column and the archive's icon and Channel filter
+ * (W1-17, §19 Q73).
+ */
+export function reportChannel(channel: ReportRow['channel'] | undefined): OverviewChannel | null {
   switch (channel) {
     case 'web':
     case 'sms':
@@ -1402,22 +1426,47 @@ export function assembleSiteDetail(
 
 // ───────────────────────────── Reports list ─────────────────────────────
 
-export function reportFlags(report: ReportRow, lost: number, tz: string): ReportFlag[] {
+export function reportFlags(
+  report: ReportRow,
+  lost: number,
+  tz: string,
+  photoCount: number | null = null,
+): ReportFlag[] {
   const flags: ReportFlag[] = [];
-  if (report.kind === 'weather_day')
-    flags.push({ kind: 'weather_day', label: copy.reports.flags.weatherDay });
-  else if (lost > 0)
-    flags.push({ kind: 'rain', label: copy.reports.flags.rain(formatHours(lost)) });
-  if (report.current_version > 1)
-    flags.push({ kind: 'version', label: copy.reports.flags.version(report.current_version) });
+  if (report.kind === 'weather_day') flags.push({ kind: 'weather_day' });
+  else if (lost > 0) flags.push({ kind: 'rain', hours: lost });
+  if (report.current_version > 1) flags.push({ kind: 'version', version: report.current_version });
   if (report.review_reasons.some((r) => r.startsWith('unknown_company')))
-    flags.push({ kind: 'unknown_sub', label: copy.reports.flags.unknownSub });
+    flags.push({ kind: 'unknown_sub' });
   if (report.is_late && report.received_at)
-    flags.push({
-      kind: 'late',
-      label: copy.reports.flags.late(formatTimeInTz(report.received_at, tz)),
-    });
+    flags.push({ kind: 'late', time: formatTimeInTz(report.received_at, tz) });
+  if (hasNoPhoto(report, photoCount)) flags.push({ kind: 'no_photo' });
   return flags;
+}
+
+/**
+ * P6 "No photo" (spec §19 Q72): a report the office flagged for it (`review_reasons` no_photo,
+ * §10.5: a call report whose photos never came), or a report other than a weather day whose
+ * current version shows no photo. Unknown (`null`: the version's photo list was not loaded)
+ * flags nothing.
+ */
+export function hasNoPhoto(report: ReportRow, photoCount: number | null): boolean {
+  if (report.review_reasons.includes('no_photo')) return true;
+  return report.kind !== 'weather_day' && photoCount === 0;
+}
+
+/**
+ * The current version's photo count: the length of its stored `data.photos` (v1 and v2 keep the
+ * list; no upgrade needed to count it), or of its `data->photos` loaded alone; else null.
+ */
+function currentPhotoCount(
+  ix: Index,
+  r: ReportRow,
+  lists: ReadonlyMap<string, unknown> | null,
+): number | null {
+  const v = currentVersion(ix, r);
+  const photos = v && isRecord(v.data) ? v.data.photos : lists?.get(r.id);
+  return Array.isArray(photos) ? photos.length : null;
 }
 
 export function assembleReportItems(
@@ -1432,15 +1481,22 @@ export function assembleReportItems(
   const lostByReport = new Map<string, number>();
   for (const w of wx)
     lostByReport.set(w.report_id, (lostByReport.get(w.report_id) ?? 0) + Number(w.lost_hours));
+  const current = new Map(reports.map((r) => [r.id, r.current_version]));
+  const lists = rows.photoLists
+    ? new Map(
+        rows.photoLists
+          .filter((p) => current.get(p.report_id) === p.version)
+          .map((p) => [p.report_id, p.photos]),
+      )
+    : null;
   return reports.map((r) => {
     const site = ix.siteById.get(r.site_id);
     const tz = site?.timezone ?? rows.org.timezone;
     const reporter = reporterOf(ix, r);
     const crewRows = crewByReport.get(r.id) ?? [];
     const lost = lostByReport.get(r.id) ?? 0;
-    const flags = reportFlags(r, lost, tz);
-    if (incidentReportIds.has(r.id))
-      flags.push({ kind: 'incident', label: copy.reports.flags.incident });
+    const flags = reportFlags(r, lost, tz, currentPhotoCount(ix, r, lists));
+    if (incidentReportIds.has(r.id)) flags.push({ kind: 'incident' });
     const isWx = r.kind === 'weather_day';
     return {
       reportId: r.id,
@@ -1454,6 +1510,7 @@ export function assembleReportItems(
       crew: isWx ? null : sum(crewRows.map((m) => Number(m.workers))),
       hours: isWx ? null : sum(crewRows.map((m) => Number(m.hours))),
       version: r.current_version,
+      channel: reportChannel(r.channel),
       flags,
       chip: chipForReport(r),
       status: r.status,
@@ -1504,6 +1561,7 @@ export function filterReports(
     if (filters.hasWeatherDelay && !(lost > 0 || r.kind === 'weather_day')) return false;
     if (filters.edited && r.current_version <= 1) return false;
     if (filters.late && !r.is_late) return false;
+    if (filters.channel && reportChannel(r.channel) !== filters.channel) return false;
     const data = versionData(currentVersion(ix, r));
     const hasIncident = (data?.safety.incidents.length ?? 0) > 0;
     if (hasIncident) incidentIds.add(r.id);
@@ -1559,34 +1617,95 @@ export function paginate(
 
 // ───────────────────────────── Report detail ─────────────────────────────
 
-const ACTION_LABELS: Record<string, string> = {
-  'report.created': 'Voice note received',
-  'question.asked': 'Question asked',
-  'question.answered': 'Question answered',
-  'report.confirmed': 'Confirmed on WhatsApp',
-  'report.filed': 'Filed',
-  'report.version_created': 'New version',
-  'report.pdf_rendered': 'PDF created',
-  'report.signed_off': 'Signed off',
-  'report.signoff_undone': 'Sign-off undone',
-  'report.signoff_reverted': 'Sign-off reverted by edit',
-  'report.needs_review': 'Flagged for review',
-  'report.unknown_company_resolved': 'Unknown company resolved',
-  'site_day.marked_no_work': 'Marked no work',
-  'site_day.missing': 'Missing — office alerted',
+/**
+ * Audit actions of a report and its site-day as Activity kinds (P7). `null` hides an action the
+ * timeline shows from its own rows (or that says nothing to the office); an action not listed is
+ * shown as `other` with its name.
+ */
+const AUDIT_KINDS: Record<string, ActivityKind | null> = {
+  'link.opened': 'link_opened',
+  'report.created': 'report_started',
+  'report.extracted': 'extracted',
+  'question.asked': 'question_asked',
+  'report.question_asked': 'question_asked',
+  'question.answered': 'question_answered',
+  'report.question_answered': 'question_answered',
+  'report.question_timeout': 'question_timeout',
+  'report.question_resolved': null,
+  'report.draft_sent': 'draft_shown',
+  'report.draft_corrected': 'draft_corrected',
+  'report.confirm_requested': 'confirmed',
+  'report.confirmed': 'confirmed',
+  'report.confirm_stale': null,
+  'report.status_changed': null,
+  'report.filed': 'filed',
+  'report.version_created': 'version',
+  'report.pdf_rendered': 'pdf_rendered',
+  'report.emailed': 'pdf_emailed',
+  'report.pdf_emailed': 'pdf_emailed',
+  'email.sent': 'pdf_emailed',
+  'report.signed_off': 'signed_off',
+  'report.signoff_undone': 'signoff_undone',
+  'report.signoff_reverted': 'signoff_reverted',
+  'report.needs_review': 'needs_review',
+  'report.unknown_company_resolved': 'company_resolved',
+  'report.voided': 'voided',
+  'site_day.marked_no_work': 'no_work',
+  'site_day.no_work': 'no_work',
+  'site_day.missing': 'missing',
+  'site_day.status_changed': null,
 };
 
+const QUESTION_KINDS = new Set<ActivityKind>(['question_asked', 'question_answered']);
+
+/** The words of the excerpts' mapped facts, in the report's language (report content, §11.2). */
+interface FactWords {
+  workers: string;
+  lost: string;
+  toolboxTalk: string;
+  noIncidents: string;
+  notStated: string;
+  workStatus: Record<string, string>;
+}
+
+function factWords(language: string): FactWords {
+  const en = copy.report;
+  const tr = UI_RESOURCES.tr.panel.report as PanelCopyTree | undefined;
+  const pick = (path: string, fallback: string): string => {
+    if (language !== 'tr' || !tr) return fallback;
+    const v = path
+      .split('.')
+      .reduce<unknown>((node, k) => (isRecord(node) ? node[k] : undefined), tr);
+    return typeof v === 'string' ? v : fallback;
+  };
+  return {
+    workers: pick('facts.workers', en.facts.workers),
+    lost: pick('facts.lost', en.facts.lost),
+    toolboxTalk: pick('facts.toolboxTalk', en.facts.toolboxTalk),
+    noIncidents: pick('facts.noIncidents', en.facts.noIncidents),
+    notStated: pick('facts.notStated', en.facts.notStated),
+    workStatus: Object.fromEntries(
+      Object.entries(en.workStatus).map(([k, v]) => [k, pick(`workStatus.${k}`, v)]),
+    ),
+  };
+}
+
 /**
- * Transcript excerpts for the values the voice note `audioId` is cited for. A value cited to
- * another voice note of the report (a spoken correction, F10) has no excerpt here: its seconds
- * are of that note, not of these segments.
+ * Transcript excerpts for the values a clip is cited for (`cites`: a voice note's upload or a
+ * call's id). A value cited to another clip of the report (a spoken correction, F10) has no
+ * excerpt here: its seconds are of that clip, not of these segments. The mapped facts are in the
+ * report's language.
  */
 function excerptsFor(
   data: DailyReportData,
   segments: TranscriptSegment[],
-  audioId: string | null,
+  cites: (s: Source) => boolean,
+  language: string,
 ): TranscriptExcerpt[] {
   if (!segments.length) return [];
+  const w = factWords(language);
+  const locale = language === 'tr' ? 'tr-TR' : 'en-US';
+  const hrs = (h: number) => formatHoursIn(h, locale);
   const out: TranscriptExcerpt[] = [];
   const seen = new Set<string>();
   const push = (
@@ -1594,8 +1713,8 @@ function excerptsFor(
     mapped: string,
     section: TranscriptExcerpt['section'],
   ) => {
-    const a = src?.find((s) => s.type === 'voice_note');
-    if (!a || a.type !== 'voice_note' || a.uploadId !== audioId) return;
+    const a = src?.find(cites);
+    if (!a || (a.type !== 'voice_note' && a.type !== 'call')) return;
     const seg =
       segments.find((s) => a.start >= s.start - 0.01 && a.start < s.end) ??
       segments.find((s) => s.end > a.start);
@@ -1603,16 +1722,21 @@ function excerptsFor(
     const key = `${seg.start}:${mapped}`;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ start: seg.start, end: seg.end, quote: seg.text, mapped, section });
+    out.push({
+      start: seg.start,
+      end: seg.end,
+      quote: seg.text,
+      mapped,
+      section,
+      ...(seg.speaker ? { speaker: seg.speaker } : {}),
+    });
   };
   for (const m of data.manpower) {
-    const hrs =
-      m.totalHours !== null
-        ? ` × ${m.hoursPerWorker ?? '?'} h = ${formatHoursNum(m.totalHours)} h`
-        : '';
+    const total =
+      m.totalHours !== null ? ` × ${m.hoursPerWorker ?? '?'} = ${hrs(m.totalHours)}` : '';
     push(
       m.source,
-      `${m.companyName} · ${m.workers ?? '?'} ${copy.common.workersUnit}${hrs}${m.area ? ` · ${m.area}` : ''}`,
+      `${m.companyName} · ${fillCopy(w.workers, { count: m.workers ?? '?' })}${total}${m.area ? ` · ${m.area}` : ''}`,
       'manpower',
     );
   }
@@ -1620,19 +1744,18 @@ function excerptsFor(
     const range = p.start && p.end ? ` ${p.start}–${p.end}` : '';
     push(
       p.source,
-      `${p.condition}${range} · ${p.impact ?? ''} · ${formatHours(p.lostHours)} lost`.replace(
-        ' ·  ·',
-        ' ·',
-      ),
+      [`${p.condition}${range}`, p.impact, fillCopy(w.lost, { hours: hrs(p.lostHours) })]
+        .filter(Boolean)
+        .join(' · '),
       'weather',
     );
   }
-  for (const w of data.workPerformed) {
-    const qty = w.quantity ? ` · ${w.quantity.value} ${w.quantity.unit}` : '';
-    const pct = w.percentComplete !== undefined ? ` · ${w.percentComplete}%` : '';
+  for (const x of data.workPerformed) {
+    const qty = x.quantity ? ` · ${x.quantity.value} ${x.quantity.unit}` : '';
+    const pct = x.percentComplete !== undefined ? ` · ${x.percentComplete}%` : '';
     push(
-      w.source,
-      `${w.area} · ${w.activity} · ${copy.report.workStatus[w.status]}${qty}${pct}`,
+      x.source,
+      `${x.area} · ${x.activity} · ${w.workStatus[x.status] ?? x.status}${qty}${pct}`,
       'work',
     );
   }
@@ -1645,17 +1768,318 @@ function excerptsFor(
   push(
     data.safety.source,
     data.safety.toolboxTalk
-      ? copy.report.safety.toolboxTalk(data.safety.toolboxTalk) +
-          (data.safety.noIncidentsStated ? ` · ${copy.report.safety.noIncidents}` : '')
+      ? fillCopy(w.toolboxTalk, { topic: data.safety.toolboxTalk }) +
+          (data.safety.noIncidentsStated ? ` · ${w.noIncidents}` : '')
       : data.safety.noIncidentsStated
-        ? copy.report.safety.noIncidents
-        : copy.report.safety.notStated,
+        ? w.noIncidents
+        : w.notStated,
     'safety',
   );
   for (const n of data.nextWorkday) push(n.source, n.item, 'next');
   for (const i of data.issues) push(i.source, i.description, 'other');
   out.sort((a, b) => a.start - b.start);
   return out.slice(0, 8);
+}
+
+function byTime(a: { at: string }, b: { at: string }): number {
+  return a.at < b.at ? -1 : a.at > b.at ? 1 : 0;
+}
+
+/**
+ * Every recording of a report, in time order (§11.3 `MediaPlayer`, W1-17): its voice notes, from
+ * their uploads (a WhatsApp-era note from its message), and its answered calls' recordings, each
+ * with its transcript and the excerpts of the values it is cited for.
+ */
+export function reportClips(
+  rows: RowSet,
+  report: ReportRow,
+  data: DailyReportData,
+  sources: readonly ReportSourceRow[],
+  media: MediaIndex = mediaIndex(rows),
+): MediaClip[] {
+  const language = report.language ?? data.reportLanguage;
+  const transcriptOf = (pred: (t: TranscriptRow) => boolean) => {
+    const t = rows.transcripts.find(pred);
+    return t ? { language: t.language, text: t.text, segments: segmentsOf(t.segments) } : null;
+  };
+  const languagesOf = (lang: string | null | undefined) =>
+    (lang ?? '')
+      .split(/[+,\s]+/)
+      .map((c) => c.trim().toLowerCase())
+      .filter(Boolean);
+  const clips: MediaClip[] = [];
+  const seen = new Set<string>();
+  for (const s of sources) {
+    if (!isVoiceSourceKind(s.kind)) continue;
+    const file = sourceMedia(s, media);
+    if (!file || seen.has(file.id)) continue;
+    seen.add(file.id);
+    const transcript = transcriptOf((t) => transcriptMediaId(t) === file.id);
+    clips.push({
+      id: file.id,
+      kind: 'voice_note',
+      bucket: 'audio',
+      peaks: file.peaks ?? [],
+      durationS: Number(file.durationS ?? 0),
+      storagePath: file.storagePath,
+      url: null,
+      receivedAt: file.receivedAt,
+      languages: languagesOf(transcript?.language),
+      transcript,
+      excerpts: transcript
+        ? excerptsFor(data, transcript.segments, (x) => voiceMediaIdOf(x) === file.id, language)
+        : [],
+    });
+  }
+  const callIds = new Set(sources.flatMap((s) => (s.call_id ? [s.call_id] : [])));
+  for (const c of rows.calls ?? []) {
+    if (seen.has(c.id) || c.status !== 'completed') continue;
+    if (c.report_id !== report.id && !callIds.has(c.id)) continue;
+    seen.add(c.id);
+    const transcript = transcriptOf((t) => t.call_id === c.id);
+    clips.push({
+      id: c.id,
+      kind: 'call',
+      bucket: 'calls',
+      peaks: Array.isArray(c.peaks)
+        ? c.peaks.filter((x): x is number => typeof x === 'number')
+        : [],
+      durationS: Number(c.duration_s ?? 0),
+      storagePath: c.recording_path,
+      url: null,
+      receivedAt: c.started_at ?? c.created_at ?? '',
+      languages: languagesOf(transcript?.language),
+      transcript,
+      excerpts: transcript
+        ? excerptsFor(
+            data,
+            transcript.segments,
+            (x) => x.type === 'call' && x.callId === c.id,
+            language,
+          )
+        : [],
+    });
+  }
+  return clips.sort((a, b) => byTime({ at: a.receivedAt }, { at: b.receivedAt }));
+}
+
+/** Photos received with a voice note: within five minutes of it, in either direction. */
+const PHOTO_WITH_CLIP_MS = 5 * 60_000;
+
+/**
+ * P7 Activity: the report's field events and the office's actions, in time order. From the audit
+ * log (the report, its site-day, and the reporter's link openings that day), the report's uploads
+ * (voice notes with the photos sent along), its questions, the reporter's texts and calls that
+ * day, and a WhatsApp-era report's conversation.
+ */
+export function reportActivity(
+  rows: RowSet,
+  report: ReportRow,
+  input: {
+    date: string;
+    tz: string;
+    reporter: ReporterRow | undefined;
+    clips: readonly MediaClip[];
+    sources: readonly ReportSourceRow[];
+    whatsapp: readonly MessageRow[];
+  },
+): ActivityEntry[] {
+  const { date, tz, reporter, clips, sources, whatsapp } = input;
+  const ix = buildIndex(rows);
+  const reporterName = reporter?.name ?? null;
+  const sameDay = (at: string | null | undefined) => !!at && formatDateInTz(at, tz) === date;
+  const actorName = (a: AuditLogRow): string | null => {
+    if (a.actor_type === 'user') return memberName(rows, a.actor_id);
+    if (a.actor_type === 'reporter')
+      return (a.actor_id && ix.reporterById.get(a.actor_id)?.name) || reporterName;
+    return null;
+  };
+  const questions = rows.questions.filter((q) => q.report_id === report.id);
+  const isWhatsApp = whatsapp.length > 0;
+  const out: ActivityEntry[] = [];
+
+  for (const a of rows.audit) {
+    const ofReport =
+      a.entity_id === report.id || (a.entity === 'site_day' && a.entity_id === report.site_day_id);
+    const linkOpened =
+      a.action === 'link.opened' &&
+      !!reporter &&
+      a.actor_id === reporter.id &&
+      sameDay(a.created_at);
+    if (!ofReport && !linkOpened) continue;
+    const mapped = a.action in AUDIT_KINDS ? AUDIT_KINDS[a.action] : 'other';
+    if (!mapped) continue;
+    // The question rows and the uploads say these better.
+    if (QUESTION_KINDS.has(mapped) && questions.length) continue;
+    if (mapped === 'report_started' && clips.length) continue;
+    const diff = isRecord(a.diff) ? a.diff : {};
+    const params: Record<string, string | number> = {};
+    let detail: string | null = null;
+    if (typeof diff.version === 'number') params.version = diff.version;
+    if (mapped === 'filed' && params.version === undefined) params.version = 1;
+    const via = diff.via ?? diff.channel;
+    if (typeof via === 'string') params.channel = via;
+    if (mapped === 'version' && typeof diff.change_note === 'string') detail = diff.change_note;
+    else if (typeof diff.answer === 'string') detail = diff.answer;
+    else if (typeof diff.company === 'string')
+      detail = [typeof diff.field === 'string' ? diff.field : null, diff.company]
+        .filter(Boolean)
+        .join(' · ');
+    if (mapped === 'other') params.action = a.action;
+    out.push({
+      id: `audit:${a.id}`,
+      at: a.created_at,
+      actorType: (a.actor_type ?? 'system') as ActivityEntry['actorType'],
+      actorName: actorName(a),
+      kind: mapped,
+      params,
+      detail,
+      anchor: null,
+    });
+  }
+
+  // Voice notes with the photos sent along ("Voice note + 2 photos received"), then the rest.
+  if (!isWhatsApp) {
+    const reporterPhotos = sources
+      .filter((s) => s.kind === 'photo')
+      .flatMap((s) => {
+        const id = sourceMediaId(s);
+        const upload = id ? rows.uploads?.find((u) => u.id === id) : undefined;
+        if (upload?.uploaded_by) return []; // an office photo: its version says so
+        const at = upload?.received_at ?? upload?.recorded_at ?? s.taken_at ?? s.created_at;
+        return at ? [{ id: id ?? s.id, at }] : [];
+      })
+      .sort(byTime);
+    const used = new Set<string>();
+    for (const c of clips) {
+      if (c.kind !== 'voice_note') continue;
+      const t = new Date(c.receivedAt).getTime();
+      const along = reporterPhotos.filter(
+        (p) => !used.has(p.id) && Math.abs(new Date(p.at).getTime() - t) <= PHOTO_WITH_CLIP_MS,
+      );
+      along.forEach((p) => used.add(p.id));
+      out.push({
+        id: `clip:${c.id}`,
+        at: c.receivedAt,
+        actorType: 'reporter',
+        actorName: reporterName,
+        kind: 'clip_received',
+        params: { seconds: Math.round(c.durationS), photos: along.length },
+        detail: null,
+        anchor: null,
+      });
+    }
+    const rest = groupBy(
+      reporterPhotos.filter((p) => !used.has(p.id)),
+      (p) => p.at.slice(0, 16),
+    );
+    for (const [minute, list] of rest)
+      out.push({
+        id: `photos:${minute}`,
+        at: list[0]!.at,
+        actorType: 'reporter',
+        actorName: reporterName,
+        kind: 'photos_received',
+        params: { photos: list.length },
+        detail: null,
+        anchor: null,
+      });
+  }
+
+  for (const q of questions) {
+    const t = isRecord(q.target) ? q.target : {};
+    const about = typeof t.companyName === 'string' ? t.companyName : null;
+    const channel = q.channel ?? (isWhatsApp ? 'whatsapp' : null);
+    if (q.asked_at)
+      out.push({
+        id: `question:${q.id}:asked`,
+        at: q.asked_at,
+        actorType: 'agent',
+        actorName: null,
+        kind: 'question_asked',
+        params: channel ? { channel } : {},
+        detail: about ? `${about} · ${q.prompt}` : q.prompt,
+        anchor: null,
+      });
+    if (q.answered_at)
+      out.push({
+        id: `question:${q.id}:answered`,
+        at: q.answered_at,
+        actorType: 'reporter',
+        actorName: reporterName,
+        kind: 'question_answered',
+        params: channel ? { channel } : {},
+        detail: answerText(q.answer),
+        anchor: q.id,
+      });
+  }
+
+  // The reporter's texts that day (any channel the Notifier used). A text SiteLog sent carries a
+  // personal link, so only its kind and delivery show; a reply shows its words.
+  if (reporter)
+    for (const m of rows.messages) {
+      if (m.channel === null || m.reporter_id !== reporter.id || !sameDay(m.created_at)) continue;
+      const out_ = m.direction === 'out';
+      out.push({
+        id: `message:${m.id}`,
+        at: m.created_at,
+        actorType: out_ ? 'agent' : 'reporter',
+        actorName: out_ ? null : reporterName,
+        kind: out_ ? 'text_sent' : 'text_received',
+        params: { channel: m.channel, message: m.copy_key ?? '', status: m.status },
+        detail: out_ ? null : m.body,
+        anchor: m.id,
+      });
+    }
+
+  // Calls of the report, and the reporter's other calls that day (a missed reminder call).
+  for (const c of rows.calls ?? []) {
+    const at = c.started_at ?? c.created_at;
+    const mine =
+      c.report_id === report.id ||
+      sources.some((s) => s.call_id === c.id) ||
+      (!!reporter && c.reporter_id === reporter.id && sameDay(at));
+    if (!mine || !at) continue;
+    const answered = c.status === 'completed';
+    out.push({
+      id: `call:${c.id}`,
+      at,
+      actorType: c.direction === 'inbound' ? 'reporter' : 'agent',
+      actorName: c.direction === 'inbound' ? reporterName : null,
+      kind: !answered ? 'call_missed' : c.direction === 'inbound' ? 'call_in' : 'call_out',
+      params: answered ? { seconds: Number(c.duration_s ?? 0) } : { status: c.status },
+      detail: null,
+      anchor: c.id,
+    });
+  }
+
+  for (const m of whatsapp) {
+    if (m.type === null) continue;
+    out.push({
+      id: `whatsapp:${m.id}`,
+      at: m.created_at,
+      actorType: m.direction === 'in' ? 'reporter' : 'agent',
+      actorName: m.direction === 'in' ? reporterName : null,
+      kind: m.direction === 'in' ? 'whatsapp_in' : 'whatsapp_out',
+      params: { type: m.type },
+      detail: m.type === 'audio' ? null : m.body,
+      anchor: m.id,
+    });
+  }
+
+  out.sort(byTime);
+  // One entry per event: the audit log and the rows can both record a confirmation.
+  return out.filter(
+    (e, i) =>
+      !out
+        .slice(0, i)
+        .some(
+          (p) =>
+            p.kind === e.kind &&
+            p.kind === 'confirmed' &&
+            Math.abs(new Date(p.at).getTime() - new Date(e.at).getTime()) < 2 * 60_000,
+        ),
+  );
 }
 
 export function assembleReportDetail(
@@ -1678,22 +2102,19 @@ export function assembleReportDetail(
   if (!vRow || !data) throw new Error(copy.errors.notFound);
   const previousData = versionData(versions.find((v) => v.version === version - 1));
 
-  const sources = rows.sources.filter((s) => s.report_id === report.id);
+  const sources = rows.sources
+    .filter((s) => s.report_id === report.id)
+    .sort((a, b) => byTime({ at: a.taken_at ?? '~' }, { at: b.taken_at ?? '~' }));
   const media = mediaIndex(rows);
-  // The voice note (WhatsApp `audio` or v1.2 `voice_note`), from its upload or its message: the
-  // first one, when a spoken correction (F10) added another.
-  const audioSrc = sources
-    .filter((s) => isVoiceSourceKind(s.kind) && sourceMedia(s, media))
-    .sort((a, b) => {
-      const x = a.taken_at ?? '~';
-      const y = b.taken_at ?? '~';
-      return x < y ? -1 : x > y ? 1 : 0;
-    })[0];
-  const audioFile = audioSrc ? sourceMedia(audioSrc, media) : undefined;
-  const transcriptRow = audioFile
-    ? rows.transcripts.find((t) => transcriptMediaId(t) === audioFile.id)
+  const clips = reportClips(rows, report, data, sources, media);
+  // The first voice note (WhatsApp `audio` or v1.2 `voice_note`), for the PDF's evidence summary.
+  const firstVoice = clips.find((c) => c.kind === 'voice_note');
+  const firstFile = firstVoice
+    ? sources
+        .filter((s) => isVoiceSourceKind(s.kind))
+        .map((s) => sourceMedia(s, media))
+        .find((f) => f?.id === firstVoice.id)
     : undefined;
-  const segments = transcriptRow ? segmentsOf(transcriptRow.segments) : [];
   // The viewed version's photos: an office edit may have removed some or changed a caption.
   const photos = shownPhotos(data.photos, sources, media).map((p) => ({
     messageId: p.id,
@@ -1706,44 +2127,9 @@ export function assembleReportDetail(
 
   const reporter = reporterOf(ix, report);
   const reporterName = reporter?.name ?? copy.sites.reporter;
-  const actorName = (a: AuditLogRow): string => {
-    if (a.actor_type === 'user') return memberName(rows, a.actor_id) ?? 'Office';
-    if (a.actor_type === 'reporter')
-      return (a.actor_id && ix.reporterById.get(a.actor_id)?.name) || reporterName;
-    if (a.actor_type === 'agent') return 'SiteLog agent';
-    return 'System';
-  };
-  const activity: ActivityEntry[] = rows.audit
-    .filter(
-      (a) =>
-        a.entity_id === report.id ||
-        (a.entity === 'site_day' && a.entity_id === report.site_day_id),
-    )
-    .map((a) => {
-      const diff = isRecord(a.diff) ? a.diff : {};
-      const detail =
-        typeof diff.change_note === 'string'
-          ? `v${String(diff.version ?? '')}: ${diff.change_note}`
-          : typeof diff.answer === 'string'
-            ? diff.answer
-            : typeof diff.company === 'string'
-              ? `${String(diff.field ?? '')} · ${diff.company}`
-              : typeof diff.version === 'number'
-                ? `v${diff.version}`
-                : null;
-      return {
-        id: `audit:${a.id}`,
-        at: a.created_at,
-        actorType: (a.actor_type ?? 'system') as ActivityEntry['actorType'],
-        actorName: actorName(a),
-        label: ACTION_LABELS[a.action] ?? a.action,
-        detail,
-        messageId: null,
-      };
-    });
   const date = ix.reportDate.get(report.id) ?? data.reportDate;
   // The WhatsApp thread of the day, when the voice note came by WhatsApp.
-  const convoId = audioFile?.conversationId ?? null;
+  const convoId = firstFile?.conversationId ?? null;
   const convoMessages = rows.messages
     .filter(
       (m) =>
@@ -1758,7 +2144,14 @@ export function assembleReportDetail(
       ? []
       : [{ id: m.id, direction: m.direction, type: m.type, body: m.body, at: m.created_at }],
   );
-  activity.sort((a, b) => (a.at < b.at ? -1 : 1));
+  const activity = reportActivity(rows, report, {
+    date,
+    tz,
+    reporter,
+    clips,
+    sources,
+    whatsapp: convoMessages,
+  });
 
   const questions: QuestionItem[] = rows.questions
     .filter((q) => q.report_id === report.id)
@@ -1798,14 +2191,15 @@ export function assembleReportDetail(
       reviewReasons: report.review_reasons,
       isLate: report.is_late,
       kind: report.kind,
+      channel: report.channel ?? null,
+      confirmedVia: report.confirmed_via ?? null,
+      language: report.language ?? data.reportLanguage,
       receivedAt: report.received_at,
       confirmedAt: report.confirmed_at,
       filedAt: report.filed_at,
       signedOffBy: report.signed_off_by,
       signedOffByName: memberName(rows, report.signed_off_by),
       signedOffAt: report.signed_off_at,
-      channel: report.channel,
-      confirmedVia: report.confirmed_via,
     },
     site: toSiteInfo(site, rows.settings),
     reporter: reporter ? toReporterSummary(reporter, true) : null,
@@ -1826,24 +2220,24 @@ export function assembleReportDetail(
       createdAt: v.created_at,
       isCurrent: v.version === report.current_version,
       pdfPath: v.pdf_path,
+      via: v.via ?? null,
     })),
     totals: totalsOf(rows, data),
-    audio: audioFile
+    audio: firstVoice
       ? {
-          messageId: audioFile.id,
-          peaks: audioFile.peaks ?? [],
-          durationS: Number(audioFile.durationS ?? 0),
-          storagePath: audioFile.storagePath,
+          messageId: firstVoice.id,
+          peaks: firstVoice.peaks,
+          durationS: firstVoice.durationS,
+          storagePath: firstVoice.storagePath,
           url: null,
-          receivedAt: audioFile.receivedAt,
-          language: transcriptRow?.language ?? null,
+          receivedAt: firstVoice.receivedAt,
+          language: firstVoice.transcript?.language ?? null,
         }
       : null,
+    clips,
     photos,
-    transcript: transcriptRow
-      ? { language: transcriptRow.language, text: transcriptRow.text, segments }
-      : null,
-    excerpts: excerptsFor(data, segments, audioFile?.id ?? null),
+    transcript: firstVoice?.transcript ?? null,
+    excerpts: firstVoice?.excerpts ?? [],
     activity,
     messages,
     questions,

@@ -2,7 +2,6 @@ import { upperIn } from '@sitelog/shared/locale.ts';
 import { CircleAlert, Inbox, Lock, RefreshCw, WifiOff, type LucideIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { copy } from '@/copy/en';
 import { useCopy } from '@/i18n/useCopy';
 import { captureError } from '@/lib/sentry';
 import { cn, errorMessage } from '@/lib/utils';
@@ -168,20 +167,20 @@ export function ReviewReasonsBanner({
   actions?: ReactNode;
   className?: string;
 }) {
+  const { t } = useCopy();
   if (!reasons.length) return null;
+  const title = t('report.reasons.title', { count: reasons.length });
   return (
     <div
       className={cn('rounded-card border border-level/40 bg-chip-review-bg/40 p-4', className)}
       role="region"
-      aria-label={copy.states.reviewReasons.title(reasons.length)}
+      aria-label={title}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <CircleAlert className="mt-0.5 size-5 shrink-0 text-level" aria-hidden="true" />
           <div>
-            <p className="font-semibold text-chip-review-fg">
-              {copy.states.reviewReasons.title(reasons.length)}
-            </p>
+            <p className="font-semibold text-chip-review-fg">{title}</p>
             <ul className="mt-1 space-y-1 text-[15px]">
               {reasons.map((r) => (
                 <li key={r.key} className="flex flex-wrap items-center gap-2">

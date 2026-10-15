@@ -50,7 +50,7 @@ for (const width of WIDTHS) {
 
     await page.goto(`/reports/${HERO_REPORT}`);
     await expect(page.getByRole('heading', { name: 'Friday, Oct 9 — Riverside B' })).toBeVisible();
-    await expect(page.getByTestId('voice-player')).toBeVisible();
+    await expect(page.getByTestId('media-player').first()).toBeVisible();
     await shoot(page, 'report', width);
   });
 }

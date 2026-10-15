@@ -1,17 +1,18 @@
 import { Camera, CloudRain, Package, ShieldCheck, Sunrise } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { formatHours, MEASURE_DIGITS, UNIT_LABELS } from '@sitelog/shared/format.ts';
+import { formatHoursIn, formatMeasure } from '@sitelog/shared/format.ts';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { copy } from '@/copy/en';
 import type { ReportDetail } from '@/data/types';
+import { useCopy } from '@/i18n/useCopy';
 import { formatWhen } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { ManpowerTable, SourceLinks } from './ManpowerTable';
 
 export interface ReportViewProps {
   detail: ReportDetail;
-  onOpenMessage: (messageId: string) => void;
+  /** Reveals an answer (question id, or a v1 reply's message id) in the Activity timeline. */
+  onShowAnswer: (anchor: string) => void;
   onOpenHistory: () => void;
 }
 
@@ -40,75 +41,88 @@ function Section({
 }
 
 /** Read-only report article: Summary · Weather & impact · Manpower · Work · Deliveries/Safety/Next · Photos. */
-export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewProps) {
+export function ReportView({ detail, onShowAnswer, onOpenHistory }: ReportViewProps) {
+  const { t, language } = useCopy();
   const d = detail.data;
   const tz = detail.site.timezone;
+  const locale = language === 'tr' ? 'tr-TR' : 'en-US';
+  const hours = (h: number) => formatHoursIn(h, locale);
   const links = (sources: Parameters<typeof SourceLinks>[0]['sources']) => (
     <SourceLinks
       sources={sources}
       detail={detail}
-      onOpenMessage={onOpenMessage}
+      onShowAnswer={onShowAnswer}
       onOpenHistory={onOpenHistory}
     />
   );
   const observed = d.weather.observed;
   // Observed values are in the report's units (imperial: in, °F, mph; metric: mm, °C, km/h).
-  const unit = UNIT_LABELS[d.units];
+  const measure = (v: number, kind: 'temperature' | 'precipitation' | 'wind', digits?: number) =>
+    formatMeasure(v, kind, d.units, locale, digits);
   const weatherDay = detail.report.kind === 'weather_day';
+  const period = (start?: string, end?: string) =>
+    start && end
+      ? t('report.periodRange', { start, end })
+      : start
+        ? t('report.periodFrom', { start })
+        : end
+          ? t('report.periodUntil', { end })
+          : '';
+  const when = (at: string) => formatWhen(at, tz, detail.report.date, language);
 
   return (
     <article className="space-y-4" aria-label={detail.report.reportNo}>
-      <Section id="summary" title={copy.report.sections.summary}>
+      <Section id="summary" title={t('report.sections.summary')}>
         <p className="text-[15px] leading-[22px]" data-testid="summary">
-          {d.summary || copy.report.summaryEmpty}
+          {d.summary || t('report.summaryEmpty')}
         </p>
         {weatherDay ? (
-          <p className="mt-2 text-caption text-dust">{copy.report.weatherDayNote}</p>
+          <p className="mt-2 text-caption text-dust">{t('report.weatherDayNote')}</p>
         ) : null}
         <p className="mt-3 font-mono text-data text-dust tabular">
-          {copy.report.manpowerSummary(
-            detail.totals.crewOnSite,
-            detail.totals.companies,
-            detail.totals.hoursKnown
-              ? formatHours(detail.totals.totalHours)
-              : copy.report.hoursUnknown,
-          )}
+          {t('report.manpowerSummary', {
+            workers: t('report.workers', { count: detail.totals.crewOnSite }),
+            companies: t('report.companies', { count: detail.totals.companies }),
+            hours: detail.totals.hoursKnown
+              ? hours(detail.totals.totalHours)
+              : t('report.hoursUnknown'),
+          })}
         </p>
       </Section>
 
       <Section
         id="weather"
-        title={copy.report.sections.weather}
+        title={t('report.sections.weather')}
         aside={
           detail.delayLogHours > 0 ? (
             <Badge variant="tint" data-testid="delay-log-chip">
-              {copy.chips.inDelayLog(formatHours(detail.delayLogHours))}
+              {t('report.inDelayLog', { hours: hours(detail.delayLogHours) })}
             </Badge>
           ) : null
         }
       >
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
           <div>
-            <div className="eyebrow text-dust">{copy.report.weather.observed}</div>
+            <div className="eyebrow text-dust">{t('report.weather.observed')}</div>
             <p className="mt-1 text-[15px]">{d.weather.conditionsText || '—'}</p>
             {observed ? (
               <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-caption">
                 <Obs
-                  label={copy.report.weather.precip}
-                  value={`${observed.precip.toFixed(MEASURE_DIGITS[d.units].precipitation)} ${unit.precipitation}`}
+                  label={t('report.weather.precip')}
+                  value={measure(observed.precip, 'precipitation')}
                 />
                 <Obs
-                  label={copy.report.weather.temp}
-                  value={`${Math.round(observed.tempMin)}–${Math.round(observed.tempMax)} ${unit.temperature}`}
+                  label={t('report.weather.temp')}
+                  value={`${Math.round(observed.tempMin)}–${measure(Math.round(observed.tempMax), 'temperature')}`}
                 />
                 <Obs
-                  label={copy.report.weather.wind}
-                  value={`${Math.round(observed.wind)} ${unit.wind}`}
+                  label={t('report.weather.wind')}
+                  value={measure(Math.round(observed.wind), 'wind')}
                 />
                 {observed.gust !== undefined ? (
                   <Obs
-                    label={copy.report.weather.gusts}
-                    value={`${Math.round(observed.gust)} ${unit.wind}`}
+                    label={t('report.weather.gusts')}
+                    value={measure(Math.round(observed.gust), 'wind')}
                   />
                 ) : null}
               </dl>
@@ -116,14 +130,14 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
             {/* Credit Open-Meteo only for its observations, as the PDF does. */}
             {observed ? (
               <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
-                {copy.report.weather.attribution}
+                {t('report.weather.attribution')}
               </p>
             ) : null}
           </div>
           <div>
-            <div className="eyebrow text-dust">{copy.report.weather.impact}</div>
+            <div className="eyebrow text-dust">{t('report.weather.impact')}</div>
             {d.weather.periods.length === 0 ? (
-              <p className="mt-1 text-caption text-dust">{copy.report.weather.none}</p>
+              <p className="mt-1 text-caption text-dust">{t('report.weather.none')}</p>
             ) : (
               <ul className="mt-1 space-y-2">
                 {d.weather.periods.map((p, i) => (
@@ -140,13 +154,13 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
                         />
                         {p.condition}
                         {p.fullDay
-                          ? ` · ${copy.weather.fullDay}`
-                          : copy.report.period(p.start, p.end)
-                            ? ` ${copy.report.period(p.start, p.end)}`
+                          ? ` · ${t('report.weather.fullDay')}`
+                          : period(p.start, p.end)
+                            ? ` ${period(p.start, p.end)}`
                             : ''}
                       </span>
                       <span className="font-mono text-data font-semibold text-signal-deep">
-                        {copy.report.lostHours(formatHours(p.lostHours))}
+                        {t('report.lostHours', { hours: hours(p.lostHours) })}
                       </span>
                     </div>
                     {p.impact ? <p className="mt-1 text-[15px]">{p.impact}</p> : null}
@@ -159,25 +173,25 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
         </div>
       </Section>
 
-      <Section id="manpower" title={copy.report.sections.manpower} flush>
+      <Section id="manpower" title={t('report.sections.manpower')} flush>
         {d.manpower.length === 0 ? (
           <p className="px-5 pb-3 text-caption text-dust">
-            {weatherDay ? copy.report.weatherDayNote : copy.report.manpowerEmpty}
+            {weatherDay ? t('report.weatherDayNote') : t('report.manpowerEmpty')}
           </p>
         ) : (
           <ManpowerTable
             detail={detail}
-            onOpenMessage={onOpenMessage}
+            onShowAnswer={onShowAnswer}
             onOpenHistory={onOpenHistory}
           />
         )}
       </Section>
 
-      <Section id="work" title={copy.report.sections.work}>
+      <Section id="work" title={t('report.sections.work')}>
         {d.workPerformed.length === 0 ? (
-          <p className="text-caption text-dust">{copy.report.workEmpty}</p>
+          <p className="text-caption text-dust">{t('report.workEmpty')}</p>
         ) : (
-          <ul className="divide-y divide-rebar" aria-label={copy.report.sections.work}>
+          <ul className="divide-y divide-rebar" aria-label={t('report.sections.work')}>
             {d.workPerformed.map((w, i) => (
               <li
                 key={i}
@@ -190,19 +204,24 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
                   <span className="font-medium">{w.activity}</span>
                   <span className="ml-2 inline-flex flex-wrap items-center gap-1 align-middle">
                     <Badge variant={w.status === 'complete' ? 'filed' : 'outline'}>
-                      {copy.report.workStatus[w.status]}
+                      {t(`report.workStatus.${w.status}`)}
                     </Badge>
                     {w.percentComplete !== undefined ? (
-                      <Badge variant="outline">{copy.report.percent(w.percentComplete)}</Badge>
+                      <Badge variant="outline">
+                        {t('report.percent', { value: w.percentComplete })}
+                      </Badge>
                     ) : null}
                     {w.quantity ? (
                       <Badge variant="outline">
-                        {copy.report.quantity(String(w.quantity.value), w.quantity.unit)}
+                        {t('report.quantity', {
+                          value: String(w.quantity.value),
+                          unit: w.quantity.unit,
+                        })}
                       </Badge>
                     ) : null}
                     {w.quantity?.heardAs ? (
                       <Badge variant="neutral" className="normal-case tracking-normal">
-                        {copy.report.work.heardAs(w.quantity.heardAs)}
+                        {t('report.work.heardAs', { words: w.quantity.heardAs })}
                       </Badge>
                     ) : null}
                   </span>
@@ -215,9 +234,9 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
       </Section>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Section id="deliveries" title={copy.report.sections.deliveries}>
+        <Section id="deliveries" title={t('report.sections.deliveries')}>
           {d.deliveries.length === 0 ? (
-            <p className="text-caption text-dust">{copy.report.deliveriesEmpty}</p>
+            <p className="text-caption text-dust">{t('report.deliveriesEmpty')}</p>
           ) : (
             <ul className="space-y-3">
               {d.deliveries.map((x, i) => (
@@ -238,7 +257,7 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
             </ul>
           )}
         </Section>
-        <Section id="safety" title={copy.report.sections.safety}>
+        <Section id="safety" title={t('report.sections.safety')}>
           <ul className="space-y-2">
             <li className="flex gap-2">
               <ShieldCheck
@@ -251,19 +270,19 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
               <div>
                 <div className="font-medium">
                   {d.safety.incidents.length
-                    ? copy.report.safety.incidents(d.safety.incidents.length)
+                    ? t('report.safety.incidents', { count: d.safety.incidents.length })
                     : d.safety.noIncidentsStated
-                      ? copy.report.safety.noIncidents
-                      : copy.report.safety.notStated}
+                      ? t('report.safety.noIncidents')
+                      : t('report.safety.notStated')}
                 </div>
                 {d.safety.toolboxTalk ? (
                   <div className="text-caption text-dust">
-                    {copy.report.safety.toolboxTalk(d.safety.toolboxTalk)}
+                    {t('report.safety.toolboxTalk', { topic: d.safety.toolboxTalk })}
                   </div>
                 ) : null}
                 {d.safety.visitors.length ? (
                   <div className="text-caption text-dust">
-                    {copy.report.safety.visitors(d.safety.visitors.join(', '))}
+                    {t('report.safety.visitors', { names: d.safety.visitors.join(', ') })}
                   </div>
                 ) : null}
                 {links(d.safety.source)}
@@ -271,16 +290,16 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
             </li>
             {d.safety.incidents.map((x, i) => (
               <li key={i} className="rounded-card border border-missing/40 bg-chip-miss-bg/30 p-3">
-                <Badge variant="missing">{copy.report.editMode.severities[x.severity]}</Badge>
+                <Badge variant="missing">{t(`report.editMode.severities.${x.severity}`)}</Badge>
                 <p className="mt-1 text-[15px]">{x.description}</p>
                 {links(x.source)}
               </li>
             ))}
           </ul>
         </Section>
-        <Section id="next" title={copy.report.sections.nextWorkday}>
+        <Section id="next" title={t('report.sections.nextWorkday')}>
           {d.nextWorkday.length === 0 ? (
-            <p className="text-caption text-dust">{copy.report.nextEmpty}</p>
+            <p className="text-caption text-dust">{t('report.nextEmpty')}</p>
           ) : (
             <ul className="space-y-3">
               {d.nextWorkday.map((n, i) => (
@@ -296,7 +315,7 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
           )}
           {d.issues.length ? (
             <div className="mt-4 border-t border-rebar pt-3">
-              <div className="eyebrow text-dust">{copy.report.sections.issues}</div>
+              <div className="eyebrow text-dust">{t('report.sections.issues')}</div>
               <ul className="mt-1 space-y-2">
                 {d.issues.map((x, i) => (
                   <li key={i}>
@@ -311,9 +330,9 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
         </Section>
       </div>
 
-      <Section id="photos" title={copy.report.sections.photos}>
+      <Section id="photos" title={t('report.sections.photos')}>
         {detail.photos.length === 0 ? (
-          <p className="text-caption text-dust">{copy.report.photosEmpty}</p>
+          <p className="text-caption text-dust">{t('report.photosEmpty')}</p>
         ) : (
           <ul className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(180px,1fr))]">
             {detail.photos.map((p) => (
@@ -327,9 +346,9 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
                     src={p.url}
                     alt={
                       p.caption ??
-                      copy.report.photoAlt(
-                        p.takenAt ? formatWhen(p.takenAt, tz, detail.report.date) : null,
-                      )
+                      (p.takenAt
+                        ? t('report.photoAlt', { when: when(p.takenAt) })
+                        : t('report.photoAltNoTime'))
                     }
                     className="aspect-[4/3] w-full object-cover"
                   />
@@ -337,8 +356,8 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
                   <div
                     className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-1 bg-concrete text-dust"
                     role="img"
-                    aria-label={p.caption ?? copy.report.photoPreview}
-                    title={copy.report.photoPreview}
+                    aria-label={p.caption ?? t('report.photoPreview')}
+                    title={t('report.photoPreview')}
                   >
                     <Camera className="size-6 stroke-2" aria-hidden="true" />
                   </div>
@@ -348,7 +367,7 @@ export function ReportView({ detail, onOpenMessage, onOpenHistory }: ReportViewP
                   {p.takenAt ? (
                     <div className="font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
                       {/* A photo taken another day than the report's shows that date too. */}
-                      {copy.report.photoCaption(formatWhen(p.takenAt, tz, detail.report.date))}
+                      {t('report.photoTaken', { when: when(p.takenAt) })}
                     </div>
                   ) : null}
                 </div>

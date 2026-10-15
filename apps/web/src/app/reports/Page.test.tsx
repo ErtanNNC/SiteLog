@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,8 @@ import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { DemoSource } from '@/data/demo/DemoSource';
 import { DemoStore, demoUserFor } from '@/data/demo/store';
 import type { PdfLinkBatch, PdfSelection } from '@/data/source';
+import { i18n } from '@/i18n/i18n';
+import { rememberLanguage } from '@/i18n/language';
 import { renderWithProviders } from '@/test/render';
 import ReportsPage from './Page';
 
@@ -111,7 +113,7 @@ describe('ReportsPage (demo archive)', () => {
     const table = await screen.findByRole('table', { name: 'Reports' });
     const rows = rowsOf(table);
     expect(rows).toHaveLength(50);
-    expect(rows[0]).toHaveTextContent('Fri Oct 9');
+    expect(rows[0]).toHaveTextContent('Oct 9');
     expect(screen.getByTestId('result-count')).toHaveTextContent(/^\d+ reports$/);
     expect(screen.getByText(/Page 1 of \d+/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Download PDF RL-2041-0187' })).toBeInTheDocument();
@@ -121,7 +123,11 @@ describe('ReportsPage (demo archive)', () => {
     renderReports();
     await screen.findByRole('table', { name: 'Reports' });
     await userEvent.click(screen.getByRole('button', { name: 'Has weather delay' }));
-    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('10 reports'));
+    await waitFor(
+      () => expect(screen.getByTestId('result-count')).toHaveTextContent('10 reports'),
+      // The 50-row page re-renders (chips, channel icons) on slow runners.
+      { timeout: 5000 },
+    );
     expect(screen.getByRole('button', { name: 'Has weather delay' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -136,7 +142,10 @@ describe('ReportsPage (demo archive)', () => {
     renderReports();
     await screen.findByRole('table', { name: 'Reports' });
     await userEvent.type(screen.getByLabelText('Search report text and transcripts'), 'llovió');
-    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('1 report'));
+    // A 250 ms debounce, then the 50-row page re-renders (chips, channel icons) on slow runners.
+    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('1 report'), {
+      timeout: 5000,
+    });
     const row = rowsOf(screen.getByRole('table', { name: 'Reports' }))[0]!;
     expect(within(row).getByRole('link', { name: 'RL-2041-0187' })).toHaveAttribute(
       'href',
@@ -148,10 +157,43 @@ describe('ReportsPage (demo archive)', () => {
     expect(within(row).getByText('Filed')).toBeInTheDocument();
   });
 
+  it('filters by channel (P6: Any · Link · Call) and shows the channel icon with the flags', async () => {
+    renderReports('/reports?channel=call');
+    const table = await screen.findByRole('table', { name: 'Reports' });
+    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('2 reports'), {
+      timeout: 5000,
+    });
+    expect(screen.getByTestId('channel-filter')).toHaveTextContent('Call');
+    for (const row of rowsOf(table)) {
+      expect(row.querySelector('[data-channel="call"]')).toHaveTextContent('Reported by call');
+      // No photos on a call (§10.5): flagged, except on a weather day (Hillcrest, rained out).
+      const weatherDay = row.querySelector('[data-flag="weather_day"]') !== null;
+      expect(row.querySelector('[data-flag="no_photo"]') !== null).toBe(!weatherDay);
+    }
+  });
+
+  it('speaks Turkish when the panel does', async () => {
+    rememberLanguage('tr');
+    await act(() => i18n.changeLanguage('tr'));
+    renderReports('/reports?edited=1');
+    const table = await screen.findByRole('table', { name: 'Raporlar' });
+    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('1 rapor'), {
+      timeout: 5000,
+    });
+    const row = rowsOf(table)[0]!;
+    expect(within(row).getByText('Yağmur 3,5 sa')).toBeInTheDocument();
+    expect(within(row).getByText('Geç 17:38')).toBeInTheDocument();
+    expect(within(row).getByText('Dosyalandı')).toBeInTheDocument();
+    expect(within(row).getByText('9 Eki')).toBeInTheDocument();
+    expect(screen.getByLabelText('Kanal')).toBeInTheDocument();
+  });
+
   it('reads filters from the URL and selects rows for export', async () => {
     renderReports('/reports?status=needs_review&edited=0');
     await screen.findByRole('table', { name: 'Reports' });
-    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('1 report'));
+    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('1 report'), {
+      timeout: 5000,
+    });
     const row = rowsOf(screen.getByRole('table', { name: 'Reports' }))[0]!;
     expect(within(row).getByText('Unknown sub')).toBeInTheDocument();
     expect(within(row).getByText('Needs review')).toBeInTheDocument();
@@ -254,7 +296,10 @@ describe('ReportsPage PDF export (signed URLs)', () => {
       .mockImplementation(() => undefined);
     const success = vi.spyOn(toast, 'success');
     const source = renderLive('/reports?status=needs_review');
-    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('1 report'));
+    // A 250 ms debounce, then the 50-row page re-renders (chips, channel icons) on slow runners.
+    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('1 report'), {
+      timeout: 5000,
+    });
     const row = rowsOf(screen.getByRole('table', { name: 'Reports' }))[0]!;
     await userEvent.click(within(row).getByRole('checkbox', { name: /Select OM-1187-/ }));
     await userEvent.click(screen.getByTestId('export-zip'));
@@ -281,7 +326,11 @@ describe('ReportsPage PDF export (signed URLs)', () => {
     const loading = vi.spyOn(toast, 'loading');
     const success = vi.spyOn(toast, 'success');
     const source = renderLive('/reports?wx=1');
-    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('10 reports'));
+    await waitFor(
+      () => expect(screen.getByTestId('result-count')).toHaveTextContent('10 reports'),
+      // The 50-row page re-renders (chips, channel icons) on slow runners.
+      { timeout: 5000 },
+    );
     await userEvent.click(screen.getByTestId('export-zip'));
     await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     expect(source.calls[0]).toMatchObject({ filters: { hasWeatherDelay: true, page: 1 } });
@@ -301,7 +350,10 @@ describe('ReportsPage PDF export (signed URLs)', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(tab as unknown as Window);
     const { store, typed } = withTypedReport();
     const source = renderLive('/reports?q=Typed%20in%20the%20office', store);
-    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('1 report'));
+    // A 250 ms debounce, then the 50-row page re-renders (chips, channel icons) on slow runners.
+    await waitFor(() => expect(screen.getByTestId('result-count')).toHaveTextContent('1 report'), {
+      timeout: 5000,
+    });
     const button = screen.getByRole('button', { name: `Download PDF ${typed.reportNo}` });
     expect(button).toHaveAttribute('title', 'No PDF stored yet. It is made when you open it.');
     await userEvent.click(button);

@@ -271,11 +271,38 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(d.excerpts.length).toBeGreaterThanOrEqual(4);
     expect(d.excerpts.some((e) => e.quote.startsWith('Llovió'))).toBe(true);
     expect(d.questions[0]!.answer).toBe('5 · full day');
-    expect(d.activity.map((a) => a.label)).toContain('Question answered');
+    expect(d.activity.map((a) => a.kind)).toContain('question_answered');
+    // Every clip plays (W1-17): the 17:38 voice note and the 20:09 spoken correction (F10).
+    expect(d.clips.map((c) => [c.kind, c.durationS, c.peaks.length > 0])).toEqual([
+      ['voice_note', 168, true],
+      ['voice_note', expect.any(Number), true],
+    ]);
+    expect(d.clips[0]!.excerpts.some((e) => e.quote.startsWith('Llovió'))).toBe(true);
+    expect(d.clips[1]!.transcript?.text).toBe('Apex was 7, not 6.');
+    expect(d.report).toMatchObject({ channel: 'web', confirmedVia: 'web', language: 'en' });
     expect(d.photos).toHaveLength(2);
     expect(d.delayLogHours).toBe(3.5);
     const v1 = await s.getReportDetail(hero.id, 1);
     expect(v1.totals.crewOnSite).toBe(23);
+  });
+
+  it('report detail: a call report plays its recording and logs the calls of the day', async () => {
+    const { source: s, store } = source();
+    const hillcrest = store.data.sites.find((x) => x.name.startsWith('Hillcrest'))!;
+    const report = store.data.reports.find(
+      (r) => r.site_id === hillcrest.id && r.channel === 'voice',
+    )!;
+    const d = await s.getReportDetail(report.id);
+    expect(d.clips).toHaveLength(1);
+    expect(d.clips[0]).toMatchObject({ kind: 'call', bucket: 'calls' });
+    expect(d.clips[0]!.peaks.length).toBeGreaterThan(0);
+    expect(d.audio).toBeNull();
+    const kinds = d.activity.map((a) => a.kind);
+    // §18.1: the 17:45 reminder call is not answered, Aisha calls back at 18:41.
+    expect(kinds).toContain('call_missed');
+    expect(kinds).toContain('call_in');
+    expect(kinds).toContain('text_sent');
+    expect(kinds.indexOf('call_missed')).toBeLessThan(kinds.indexOf('call_in'));
   });
 
   it('reports list: filters, flags and pagination', async () => {
@@ -290,7 +317,18 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(rain.weatherHours).toBe(36.5);
     const edited = await s.listReports({ edited: true });
     expect(edited.items.map((i) => i.reportNo)).toEqual(['RL-2041-0187']);
-    expect(edited.items[0]!.flags.map((f) => f.label)).toEqual(['Rain 3.5 h', 'v2', 'Late 17:38']);
+    expect(edited.items[0]!.flags).toEqual([
+      { kind: 'rain', hours: 3.5 },
+      { kind: 'version', version: 2 },
+      { kind: 'late', time: '17:38' },
+    ]);
+    expect(edited.items[0]!.channel).toBe('link');
+    // P6 Channel filter: Oct 9's two calls (Northgate, Hillcrest) are the only call reports.
+    const calls = await s.listReports({ channel: 'call' });
+    expect(calls.total).toBe(2);
+    expect(calls.items.every((i) => i.channel === 'call')).toBe(true);
+    const links = await s.listReports({ channel: 'link' });
+    expect(links.total).toBe(all.total - 2);
     const review = await s.listReports({ status: 'needs_review' });
     expect(review.items[0]!.flags.some((f) => f.kind === 'unknown_sub')).toBe(true);
     const text = await s.listReports({ q: 'llovió' });
@@ -533,7 +571,7 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(picked.files.map((f) => f.reportNo)).toEqual([r.report_no]);
     const detail = await s.getReportDetail(r.id);
     expect(detail.activity).toContainEqual(
-      expect.objectContaining({ label: 'PDF created', detail: `v${r.current_version}` }),
+      expect.objectContaining({ kind: 'pdf_rendered', params: { version: r.current_version } }),
     );
   });
 

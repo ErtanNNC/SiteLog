@@ -112,6 +112,19 @@ const TRANSLATED = [
   'a11y.lateBadge',
   'a11y.kpiBreakdown',
   'a11y.closeDialog',
+  // W1-17: the Reports archive and Report review, with the shared pieces they render.
+  'reports',
+  'report',
+  'source.links',
+  'player',
+  'channel',
+  'chips',
+  'errors.generic',
+  'common.hoursUnit',
+  'toasts.signedOffReport',
+  'toasts.undone',
+  'toasts.versionSavedN',
+  'toasts.companyResolved',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

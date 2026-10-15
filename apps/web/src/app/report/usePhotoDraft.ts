@@ -12,7 +12,7 @@ import {
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
 import type { PhotoV1 } from '@sitelog/shared/schemas/report.ts';
-import { copy } from '@/copy/en';
+import { translate } from '@/i18n/useCopy';
 import type { DataSource, UploadedPhoto } from '@/data/source';
 import type { PhotoSourceInfo } from '@/data/types';
 import {
@@ -24,8 +24,6 @@ import {
   type PreparedPhoto,
 } from '@/lib/photos';
 import { localId } from '@/lib/utils';
-
-const c = copy.report.editMode.photos;
 
 export interface DraftPhoto {
   key: string;
@@ -223,7 +221,10 @@ export function usePhotoDraft(
           status: 'preparing',
         });
       }
-      if (skipped) errs.push(c.limit(OFFICE_PHOTO_MAX, skipped));
+      if (skipped)
+        errs.push(
+          translate('report.editMode.photos.limit', { count: skipped, max: OFFICE_PHOTO_MAX }),
+        );
       setErrors(errs);
       if (!fresh.length) return;
       setItems((xs) => [...xs, ...fresh]);

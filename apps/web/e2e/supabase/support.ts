@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { demoId } from '@sitelog/shared/demo/ids.ts';
 
 /**
  * Local Supabase stack for the E2E specs (`supabase start` applies migrations + seed.sql).
@@ -31,6 +32,8 @@ export const SEED = {
   /** Filed v1 reports on Fri Oct 9. */
   northgateReport: { id: '2cfeeeb5-d40a-4a67-8d3f-8bf197c2c605', no: 'NG-2210-0069' },
   pier9Report: { id: '9c575e00-00fb-45e6-85da-5994455633d0', no: 'P9-0932-0094' },
+  /** §18.1 hero, Riverside Lofts Fri Oct 9: v2, voice note 17:38 + correction 20:09. */
+  heroReport: { id: demoId('report:riverside:2026-10-09'), no: 'RL-2041-0187' },
   /** The demo's "now": Fri Oct 9, 2026 · 19:05 in Chicago (CDT, UTC−5). */
   now: new Date('2026-10-10T00:05:00Z'),
 } as const;

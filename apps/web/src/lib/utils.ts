@@ -61,6 +61,19 @@ export function uniq<T>(items: Iterable<T>): T[] {
   return [...new Set(items)];
 }
 
+/** The first item of each key, in order. */
+export function uniqBy<T>(items: Iterable<T>, key: (item: T) => unknown): T[] {
+  const seen = new Set<unknown>();
+  const out: T[] = [];
+  for (const item of items) {
+    const k = key(item);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
+}
+
 export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }

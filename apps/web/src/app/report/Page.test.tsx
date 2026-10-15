@@ -1,9 +1,11 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
 import { emptyReportDataV1, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore, demoUserFor, type DemoLoginKey } from '@/data/demo/store';
+import { i18n } from '@/i18n/i18n';
+import { rememberLanguage } from '@/i18n/language';
 import type * as PhotosModule from '@/lib/photos';
 import { makeSource, renderWithProviders } from '@/test/render';
 import { storeHeroAs } from '@/test/heroData';
@@ -45,8 +47,9 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
       await screen.findByRole('heading', { name: 'Friday, Oct 9 — Riverside B' }),
     ).toBeInTheDocument();
     expect(screen.getByTestId('version-switcher')).toHaveTextContent('v2 · current');
+    // P7, verbatim from the artboard.
     expect(screen.getByTestId('provenance')).toHaveTextContent(
-      'Reported by Marco Ruiz by WhatsApp voice at 17:38 · confirmed 17:43 · edited by reply 20:10',
+      'Reported by Marco Ruiz · voice note via text link at 17:38 · confirmed on the recorder 17:43 · edited 20:10',
     );
     const manpower = screen.getByRole('table', { name: 'Manpower' });
     const apex = within(manpower).getByText('Apex Concrete').closest('tr')!;
@@ -54,31 +57,121 @@ describe('ReportDetailPage (hero report RL-2041-0187)', () => {
     expect(within(apex).getByText('7')).toBeInTheDocument();
     expect(within(apex).getByText('6')).toBeInTheDocument(); // struck-through previous value
     const delta = within(manpower).getByText('Delta Mechanical').closest('tr')!;
-    expect(within(delta).getByText('Confirmed by reply')).toBeInTheDocument();
+    expect(within(delta).getByText('Confirmed by answer')).toBeInTheDocument();
     expect(screen.getByTestId('manpower-total-crew')).toHaveTextContent('24');
     expect(screen.getByTestId('manpower-total-hours')).toHaveTextContent('192');
     expect(screen.getByTestId('delay-log-chip')).toHaveTextContent('In delay log · 3.5 h');
     expect(screen.getByText('Weather data: Open-Meteo')).toBeInTheDocument();
     expect(screen.getByText('heard “sixty-eight yards”')).toBeInTheDocument();
-    expect(screen.getByTestId('voice-player')).toBeInTheDocument();
-    expect(screen.getAllByText('ES + EN → EN').length).toBeGreaterThan(0);
+    // Every clip has its player: the 17:38 note and the 20:09 spoken correction (F10).
+    expect(screen.getAllByTestId('media-player')).toHaveLength(2);
+    expect(screen.getAllByTestId('languages-line')[0]).toHaveTextContent('ES + EN → EN');
     expect(screen.getAllByRole('button', { name: /Play voice note from/ }).length).toBeGreaterThan(
       4,
     );
-    expect(screen.getByText('Question answered')).toBeInTheDocument();
+    const activity = screen.getByTestId('activity');
+    expect(within(activity).getByText('Voice note + 2 photos received')).toBeInTheDocument();
+    expect(within(activity).getByText('Question answered')).toBeInTheDocument();
+    expect(within(activity).getByText('Confirmed on the recorder')).toBeInTheDocument();
+    expect(within(activity).getByText('v2 saved')).toBeInTheDocument();
   });
 
-  it('cites the spoken correction for Apex in v2 without seeking the 17:38 note (F10)', async () => {
+  it('cites the spoken correction for Apex in v2: its link seeks the 20:09 clip, not the 17:38 note (F10)', async () => {
     renderReport('RL-2041-0187');
     const manpower = await screen.findByRole('table', { name: 'Manpower' });
     const row = (name: string) => within(manpower).getByText(name).closest('tr')!;
-    const apex = row('Apex Concrete').querySelector('[data-source="voice_note"]')!;
-    expect(apex.tagName).toBe('SPAN'); // the 20:09 note: not the one in the player
+    const apex = row('Apex Concrete').querySelector<HTMLElement>('[data-source="voice_note"]')!;
+    expect(apex.tagName).toBe('BUTTON');
     expect(apex).toHaveTextContent('audio 0:00');
-    const delta = row('Delta Mechanical').querySelector('[data-source="voice_note"]')!;
-    expect(delta.tagName).toBe('BUTTON');
-    // The 17:38 note's excerpts quote no line for Apex ("Apex had six guys" is v1's source).
-    expect(screen.queryByText(/Apex Concrete · 7 workers/)).not.toBeInTheDocument();
+    const [note, fix] = screen.getAllByTestId('media-player');
+    await userEvent.click(apex);
+    expect(within(fix!).getByTestId('player-toggle')).toHaveAttribute('aria-pressed', 'true');
+    expect(within(note!).getByTestId('player-toggle')).toHaveAttribute('aria-pressed', 'false');
+    // The 20:09 clip's own excerpt quotes the correction with its mapped facts; the 17:38
+    // note's excerpts quote no line for Apex ("Apex had six guys" is v1's source).
+    const [noteBlock, fixBlock] = screen.getAllByTestId('source-clip');
+    expect(within(fixBlock!).getByText(/Apex was 7, not 6/)).toBeInTheDocument();
+    expect(within(fixBlock!).getByText(/Apex Concrete · 7 workers/)).toBeInTheDocument();
+    expect(within(noteBlock!).queryByText(/Apex Concrete · 7 workers/)).not.toBeInTheDocument();
+  });
+
+  it('plays the rain stoppage from its timestamp (demo step 6)', async () => {
+    renderReport('RL-2041-0187');
+    const period = (await screen.findAllByTestId('weather-period'))[0]!;
+    const link = within(period).getByRole('button', { name: /^audio 0:41/ });
+    await userEvent.click(link);
+    const [note] = screen.getAllByTestId('media-player');
+    expect(within(note!).getByTestId('player-position')).toHaveAttribute(
+      'aria-valuetext',
+      expect.stringMatching(/^0:4[1-9]$/),
+    );
+    expect(within(note!).getByTestId('player-toggle')).toHaveAttribute('aria-pressed', 'true');
+    // The excerpt with the quote is highlighted.
+    const excerpt = screen
+      .getAllByTestId('transcript-excerpt')
+      .find((e) => e.textContent?.includes('Llovió'))!;
+    expect(excerpt).toHaveAttribute('data-active', 'true');
+  });
+
+  it('plays at 1× or 1.5×', async () => {
+    renderReport('RL-2041-0187');
+    const [note] = await screen.findAllByTestId('media-player');
+    const speed = within(note!).getByTestId('player-speed');
+    expect(speed).toHaveTextContent('1×');
+    await userEvent.click(speed);
+    expect(speed).toHaveTextContent('1.5×');
+    expect(speed).toHaveAccessibleName('Playback speed: 1.5×');
+    await userEvent.click(speed);
+    expect(speed).toHaveTextContent('1×');
+  });
+
+  it('reveals the answer a value came from in Activity', async () => {
+    renderReport('RL-2041-0187');
+    const manpower = await screen.findByRole('table', { name: 'Manpower' });
+    const delta = within(manpower).getByText('Delta Mechanical').closest('tr')!;
+    await userEvent.click(within(delta).getByRole('button', { name: /^answer 17:41/ }));
+    const focused = screen.getByTestId('activity').querySelector('[data-focus]')!;
+    expect(focused).toHaveAttribute('data-kind', 'question_answered');
+    expect(focused).toHaveTextContent('5 · full day');
+  });
+
+  it('shows a call report with its recording and a provenance line for the call', async () => {
+    const store = new DemoStore();
+    const report = store.data.reports.find(
+      (r) => r.channel === 'voice' && r.report_no.startsWith('HS-'),
+    )!;
+    renderWithProviders(<ReportDetailPage />, {
+      store,
+      route: `/reports/${report.id}`,
+      path: '/reports/:reportId',
+    });
+    const player = await screen.findByTestId('media-player');
+    expect(player).toHaveAttribute('data-kind', 'call');
+    expect(within(player).getByRole('button', { name: 'Play call recording' })).toBeInTheDocument();
+    expect(screen.getByTestId('provenance')).toHaveTextContent(
+      /^Reported by Aisha Bello · phone call 18:41 \(\d+ min \d{2} s\) · confirmed by voice$/,
+    );
+    const activity = screen.getByTestId('activity');
+    expect(within(activity).getByText('Call not answered')).toBeInTheDocument();
+    expect(within(activity).getByText(/^Call received · /)).toBeInTheDocument();
+    expect(within(activity).getByText(/^Text sent · Missed call/)).toBeInTheDocument();
+  });
+
+  it('speaks Turkish when the panel does, report content as written', async () => {
+    rememberLanguage('tr');
+    await act(() => i18n.changeLanguage('tr'));
+    renderReport('RL-2041-0187');
+    expect(
+      await screen.findByRole('heading', { name: 'Cuma, 9 Eki — Riverside B' }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('provenance')).toHaveTextContent(
+      'Rapor veren: Marco Ruiz · mesajdaki linkle sesli not, 17:38 · kayıt ekranında onaylandı 17:43 · düzenlendi 20:10',
+    );
+    expect(screen.getByRole('table', { name: 'İşçilik' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Özet' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Onayla' })).toBeInTheDocument();
+    // The summary is the report's (English for this en-US org).
+    expect(screen.getByTestId('summary')).toHaveTextContent(/Level 4 slab pour/);
   });
 
   it('switches to v1 and shows the original 23 crew / 184 h', async () => {

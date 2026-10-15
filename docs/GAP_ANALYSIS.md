@@ -601,6 +601,8 @@ The ticket is three screens and their routes; none exist. What exists is shared 
 - _Sources and audio origin._ WhatsApp message sources; audio and peaks from `messages.payload` (`apps/web/src/data/assemble.ts:1530-1540`). Recommend: move loaders to uploads/questions/calls; keep the UI components.
 - _WhatsApp wording in provenance and activity_ (`apps/web/src/copy/en.ts:630-631`, `:762-768`; timeline by `conversation_id`, `apps/web/src/data/assemble.ts:1450-1456`). Recommend: rewrite around audit + SMS + calls.
 
+**Built (W1-17, 2026-10-15):** the missing items and both conflicts, as recommended: loaders on uploads, questions and calls with the message fallback (`reportClips`, `reportActivity` in `apps/web/src/data/assemble.ts`), `MediaPlayer` per clip at 1× / 1.5×, the P7 provenance (`apps/web/src/app/report/provenance.ts`), Activity from the audit log, uploads, questions, texts and calls, the Channel filter and icon and _No photo_ (§19 Q72–Q75), EN and TR for both pages. The call's speaker lanes wait for call recordings (M7). Status and checks: `docs/PLAN_WEEK1.md` W1-17.
+
 ### W1-18 · Sites and Site detail — partial · effort M
 
 **Done:** site cards with chip, 14-day streak, reporter with `tel:` phone, crew today, weather days (`apps/web/src/app/sites/Page.tsx:139-206`); dashed "Connect another site" card with "$399 / month · no setup fee", matching the US artboard (`:114-130`, `apps/web/src/copy/en.ts:422-423`); Site detail calendar, latest report, "This month so far", crew-by-company table with badges (`apps/web/src/app/site/Page.tsx:233-327`); Crew, Weather and Photos tabs implemented (`:138-166`).

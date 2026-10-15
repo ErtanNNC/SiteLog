@@ -257,8 +257,35 @@ test('editing a report saves a new version with the change note', async ({ page 
   expect(after.current_version).toBe(next);
 });
 
+test('demo step 6: clicking the rain stoppage plays the voice note from its timestamp', async ({
+  page,
+}) => {
+  const { id } = SEED.heroReport;
+  await page.goto(`/reports/${id}`);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Riverside');
+  await expect(page.getByTestId('provenance')).toContainText(
+    'Reported by Marco Ruiz · voice note via text link at 17:38',
+  );
+  // Every clip of the report has its player: the 17:38 note and the 20:09 correction (F10).
+  const players = page.getByTestId('media-player');
+  await expect(players).toHaveCount(2);
+  const note = players.first();
+  await page
+    .getByTestId('weather-period')
+    .first()
+    .getByRole('button', { name: /^audio 0:41/ })
+    .click();
+  // No audio file is seeded in Storage: the player still jumps to 0:41 and runs from there.
+  await expect(note.getByTestId('player-position')).toHaveAttribute('aria-valuetext', /^0:4\d$/);
+  await expect(note.getByTestId('player-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.locator('[data-testid="transcript-excerpt"][data-active="true"]').first(),
+  ).toContainText('Llovió');
+});
+
 test('signing off a filed report records who signed it', async ({ page }) => {
   const { id, no } = SEED.pier9Report;
+  const startedAt = new Date(Date.now() - 1000).toISOString();
   // Re-runnable against the same stack: start from the seeded `filed` state.
   await admin()
     .from('reports')
@@ -282,6 +309,25 @@ test('signing off a filed report records who signed it', async ({ page }) => {
     .throwOnError();
   expect(report).toMatchObject({ status: 'signed_off', signed_off_by: SEED.admin.id });
   expect(report.signed_off_at).not.toBeNull();
+  // Demo step 7: the sign-off is in the audit log, by the signed-in admin, for this version.
+  const { data: audit } = await admin()
+    .from('audit_log')
+    .select('actor_type, actor_id, action, entity, diff, created_at')
+    .eq('entity_id', id)
+    .eq('action', 'report.signed_off')
+    .gte('created_at', startedAt)
+    .throwOnError();
+  expect(audit).toHaveLength(1);
+  expect(audit[0]).toMatchObject({
+    actor_type: 'user',
+    actor_id: SEED.admin.id,
+    entity: 'report',
+    diff: { version: 1 },
+  });
+  // The report's Activity shows it.
+  await expect(
+    page.getByTestId('activity').locator('[data-kind="signed_off"]').last(),
+  ).toBeVisible();
 });
 
 test('crew hours: Payroll CSV downloads from the export edge function', async ({ page }) => {

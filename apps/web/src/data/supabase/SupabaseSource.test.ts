@@ -82,6 +82,8 @@ function tablesFrom(rows: RowSet): Record<string, Row[]> {
       return r ? [{ ...w, org_id: r.org_id, report_no: r.report_no }] : [];
     }),
     transcripts: copyOf(rows.transcripts),
+    calls: copyOf(rows.calls ?? []),
+    audit_log: copyOf(rows.audit),
     // report_archive: a filed / signed-off report with its current version's flags.
     report_archive: rows.reports.flatMap((r) => {
       if (!FILED.has(r.status)) return [];
@@ -128,6 +130,11 @@ const likeMatch = (v: unknown, pattern: string) =>
 
 /** `column.op.value` as PostgREST reads it inside `or=(…)`. */
 function orTerm(term: string): (r: Row) => boolean {
+  // `and(a.eq.1,b.gte.2)`: every term inside.
+  if (term.startsWith('and(') && term.endsWith(')')) {
+    const inner = orTerms(term.slice(4, -1)).map(orTerm);
+    return (r) => inner.every((t) => t(r));
+  }
   const [column, op] = term.split('.', 2) as [string, string];
   const value = term.slice(column.length + op.length + 2);
   switch (op) {
@@ -137,6 +144,10 @@ function orTerm(term: string): (r: Row) => boolean {
       return (r) => String(r[column]) === value;
     case 'gt':
       return (r) => Number(r[column]) > Number(value);
+    case 'gte':
+      return (r) => r[column] != null && String(r[column]) >= value;
+    case 'lt':
+      return (r) => r[column] != null && String(r[column]) < value;
     case 'in': {
       const list = value.replace(/^\(|\)$/g, '').split(',');
       return (r) => list.includes(String(r[column]));
@@ -761,6 +772,61 @@ describe('SupabaseSource.listReports', () => {
   });
 });
 
+describe('SupabaseSource: Reports archive and Report review (W1-17)', () => {
+  it('filters by channel server-side and flags reports without a photo, as the demo does', async () => {
+    const { db, live, demo } = sources();
+    for (const channel of ['link', 'call'] as const) {
+      db.calls = [];
+      const got = await live.listReports({ channel });
+      expect(got).toEqual(await demo.listReports({ channel }));
+      expect(db.calls).toContainEqual({
+        table: 'report_archive',
+        method: channel === 'link' ? 'in' : 'eq',
+        column: 'channel',
+        value: channel === 'link' ? ['web', 'sms'] : 'voice',
+      });
+    }
+    // The current version's photo list comes as its own JSON field, not the whole data column.
+    expect(db.calls).toContainEqual(
+      expect.objectContaining({
+        table: 'report_versions',
+        method: 'select',
+        value: expect.stringContaining('photos:data->photos'),
+      }),
+    );
+    const all = await live.listReports({ pageSize: 500 });
+    expect(all.items.some((i) => i.flags.some((f) => f.kind === 'no_photo'))).toBe(true);
+    expect(all).toEqual(await demo.listReports({ pageSize: 500 }));
+  });
+
+  it('loads a call report with its recording (calls bucket), calls and texts of the day', async () => {
+    const { store, db, live, demo } = sources();
+    const report = store.data.reports.find(
+      (r) => r.channel === 'voice' && r.report_no.startsWith('HS-'),
+    )!;
+    const got = await live.getReportDetail(report.id);
+    expect(got.clips).toHaveLength(1);
+    expect(got.clips[0]!.url).toBe(`https://storage.test/calls/${got.clips[0]!.storagePath}`);
+    const want = await demo.getReportDetail(report.id);
+    expect({ ...got, clips: got.clips.map((c) => ({ ...c, url: null })), pdfUrl: null }).toEqual({
+      ...want,
+      pdfUrl: null,
+    });
+    expect(got.activity.map((a) => a.kind)).toEqual(
+      expect.arrayContaining(['call_missed', 'call_in', 'text_sent']),
+    );
+    expect(db.calls).toContainEqual(expect.objectContaining({ table: 'calls', method: 'or' }));
+  });
+
+  it('signs every voice note of the hero report from the audio bucket', async () => {
+    const { store, live } = sources();
+    const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
+    const d = await live.getReportDetail(hero.id);
+    expect(d.clips).toHaveLength(2);
+    for (const c of d.clips) expect(c.url).toBe(`https://storage.test/audio/${c.storagePath}`);
+  });
+});
+
 describe('SupabaseSource.getPdfUrls', () => {
   it('exports the filtered archive in archive order and names the reports without a PDF', async () => {
     const { store, edited, incident } = archiveStore();
@@ -1048,6 +1114,7 @@ describe('SupabaseSource: report files in uploads (W1-05 step 10)', () => {
   }
 
   const view = (d: Awaited<ReturnType<SupabaseSource['getReportDetail']>>) => ({
+    clips: d.clips,
     audio: d.audio,
     transcript: d.transcript,
     excerpts: d.excerpts,
@@ -1070,11 +1137,13 @@ describe('SupabaseSource: report files in uploads (W1-05 step 10)', () => {
     db.calls = [];
     expect(view(await live.getReportDetail(hero.id))).toEqual(before);
     expect(db.calls).toContainEqual(expect.objectContaining({ table: 'uploads', method: 'in' }));
-    // The transcript is found by the voice note's upload or message id.
+    // The transcripts are found by each voice note's upload or message id.
+    const ids = before.clips.map((c) => c.id);
+    expect(ids).toContain(before.audio!.messageId);
     expect(db.calls).toContainEqual({
       table: 'transcripts',
       method: 'or',
-      value: `upload_id.eq.${before.audio!.messageId},message_id.eq.${before.audio!.messageId}`,
+      value: `upload_id.in.(${ids.join(',')}),message_id.in.(${ids.join(',')})`,
     });
   });
 

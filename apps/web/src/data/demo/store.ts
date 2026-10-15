@@ -190,6 +190,7 @@ export class DemoStore {
       glossary: d.glossary,
       messages: d.messages,
       transcripts: d.transcripts,
+      calls: d.calls,
       unknownContacts: d.unknownContacts,
       siteDays: d.siteDays,
       reports: d.reports,

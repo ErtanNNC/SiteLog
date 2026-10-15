@@ -1,5 +1,5 @@
 /**
- * The VoicePlayer draws at most this many bars: a 1 px bar and a 1 px gap each, so they fit the
+ * The MediaPlayer draws at most this many bars: a 1 px bar and a 1 px gap each, so they fit the
  * waveform at 390 px. WhatsApp voice notes carry 64 peaks; a web recorder upload about 600
  * (W1-11, `uploads.peaks`).
  */

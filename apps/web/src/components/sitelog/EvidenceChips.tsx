@@ -3,7 +3,7 @@ import { formatAudioTimestamp } from '@sitelog/shared/format.ts';
 import { copy } from '@/copy/en';
 import type { DelayEvidence } from '@/data/types';
 import { cn } from '@/lib/utils';
-import { useVoicePlayer } from './VoicePlayer';
+import { useMediaPlayer } from './MediaPlayer';
 
 /**
  * Audio ts · Photos n · Weather data (green) and missing evidence as dashed red ("Photo requested"
@@ -16,7 +16,7 @@ export function EvidenceChips({
   evidence: DelayEvidence;
   className?: string;
 }) {
-  const player = useVoicePlayer();
+  const player = useMediaPlayer();
   const chip =
     'inline-flex h-7 items-center gap-1 rounded-chip border px-2 font-mono text-[12px] font-medium [&_svg]:size-4';
   return (

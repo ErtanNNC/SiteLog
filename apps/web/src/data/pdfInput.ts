@@ -42,6 +42,7 @@ export function buildReportPdfInput(
 ): ReportPdfInput {
   const s = settings.settings;
   const r = detail.report;
+  const voiceNotes = detail.clips.filter((c) => c.kind === 'voice_note');
   const maxPhotos = s.pdf_max_photos;
   const photos: PdfPhoto[] = [];
   // The version's photos in its order, as the worker's loadPhotos: react-pdf embeds JPEG and PNG
@@ -98,8 +99,9 @@ export function buildReportPdfInput(
     reporterName: detail.reporter?.name ?? null,
     enteredBy: officeEntryAuthor(detail),
     sources: {
-      audioCount: detail.audio ? 1 : 0,
-      totalAudioSeconds: detail.audio?.durationS ?? 0,
+      // Every voice note of the report (W1-17 loads them all), as the worker counts its sources.
+      audioCount: voiceNotes.length,
+      totalAudioSeconds: voiceNotes.reduce((a, c) => a + c.durationS, 0),
       languages,
       receivedAt: r.receivedAt,
       textCount: detail.messages.filter((m) => m.direction === 'in' && m.type === 'text').length,
