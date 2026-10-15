@@ -35,9 +35,11 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 1. Spec §19: "önerilerinle devam" kararınız işlendi (commit 25c1ead, c3b1cd4). Q10, Q19, Q20, Q22–Q28, Q30, Q33, Q35, Q37–Q48, Q50–Q62, Q64, Q65 karara bağlandı; davranışı değiştirenler kodlandı (Q53 geç kayıt 48 saat, Q55 `missing` uyarısı, Q46 CALL/TEXT onayı, Q45, Q42 12 karakterli link kodu, Q24, Q62 yarım gün = vardiyanın yarısı, Q59).
    **Sizde bekleyenler (öneri yok ya da yalnızca sizde olan bilgi):** Q15 SMS'te GSM-7 dışı karakterler (metinler olduğu gibi mi kalsın, yoksa "-" gibi GSM-7 noktalaması mı; İletimerkezi'nin cevabı da gerekli) · Q16 eski v1 rapor verisinin v2 görünümü (şimdilik yapıldığı gibi) · Q17 bağlı satırları olan kaydın silinmesi (şimdilik yapıldığı gibi) · Q2 TR SIP sağlayıcısı ve numara · Q8/Q9 TR fatura kurumu ve fiyatı · Q49 İYS (hukuk) · Q63 ES/TR metinlerinin ana dili konuşan biri tarafından incelenmesi · Q28/Q40/Q50 avukat metinleri (go-live'dan önce) · Q30 fatura kurumu ve fiyatlar · Q66 PDF'in Türkçe metinleri ve Q68 rapor e-postasının Türkçe metni (ana dili Türkçe biri gözden geçirmeli; örnek PDF'ler sohbette).
-2. Preview'a yeni migration'lar (`20261015000001` W1-10, `…02` W1-12, `…03` Q53, `…04` Q24, `…10` W1-14 imza sonrası PDF, `…30` W1-15 dosyalama, `…40` W1-16 sahipsiz bilinmeyen numaralar, `…60` PDF kilidi, `…61` `missing` uyarısı tek işlemde): `preview` / `supabase` Deploy işi için onayınız (Actions çalışmaya başlayınca).
+2. ~~Preview migration'ları~~ — onaylandı (2026-10-15 19:45 UTC), Deploy run 38796512732 (`preview` / `supabase`: 9 migration + edge fonksiyonları).
 
-## Cut-over sırası (W1-19, her adım sizin onayınızla; ayrıntı RUNBOOK §2)
+## Cut-over sırası (W1-19; 2026-10-15'te "önerilerinle devam" dediniz; ayrıntı RUNBOOK §2)
+
+Durum: adım 0 (yerel ön kontrol) çalışıyor; adım 1'in salt okunur envanteri çalışıyor (Deploy run 38796568727). Önerim: adım 2–8, preview'daki telefon testi geçtikten ve anahtarlar eklendikten sonra; adım 5 Chicago 17:00 (UTC 22:00) sonrası.
 
 0. Yerelde `pnpm check && pnpm cutover:preflight -- --full-db`; ön koşullar: Anthropic ve Deepgram anahtarları, yedek için bir yer, bir zaman dilimi.
 1. Deploy `staging` / `inventory` (salt okuma); demo dışı `verified` sorumlu olmadığını doğrula; `pg_dump` ve storage yedeği.
