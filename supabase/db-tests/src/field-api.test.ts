@@ -771,6 +771,36 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
     expect(await draftRev(report, 2)).toBe(1);
   });
 
+  it('keeps the revision when a version that is no longer a draft is written (20261015000090)', async () => {
+    const report = await draft('2026-11-19');
+    // Filing sets the report filed, then freezes the version in the same transaction: a field
+    // poll reading the report and then its version never sees the frozen data as a newer draft.
+    await svc(`update reports set status = 'filed', filed_at = now() where id = $1`, [report]);
+    await svc(
+      `update report_versions set data = data || '{"missingRequired": []}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report)).toBe(1);
+    for (const status of ['signed_off', 'void'])
+      await svc(`update reports set status = $2::report_status where id = $1`, [
+        report,
+        status,
+      ]).then(() =>
+        svc(
+          `update report_versions set data = data || jsonb_build_object('n', $2::text) where report_id = $1 and version = 1`,
+          [report, status],
+        ),
+      );
+    expect(await draftRev(report)).toBe(1);
+    // A draft again (only a test does that): its data changes count.
+    await svc(`update reports set status = 'awaiting_confirmation' where id = $1`, [report]);
+    await svc(
+      `update report_versions set data = data || '{"summary": "x"}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report)).toBe(2);
+  });
+
   it('refuses a confirm of a draft that was re-extracted in place (draft_changed), and files the new one', async () => {
     const report = await draft('2026-11-17');
     const seen = await draftRev(report);

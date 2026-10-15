@@ -905,7 +905,7 @@ create table report_versions (
   author_user_id uuid,
   via field_channel,                             -- for reporter edits
   change_note text,
-  draft_rev int not null default 1,              -- bumped on every change of data (a trigger); a confirm names it
+  draft_rev int not null default 1,              -- bumped on every change of a draft's data (a trigger; not the filing write); a confirm names it
   created_at timestamptz default now(),
   primary key (report_id, version)
 );

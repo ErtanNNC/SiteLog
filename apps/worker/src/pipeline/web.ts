@@ -60,13 +60,17 @@ export async function currentDraftV2(ctx: Ctx, report: ReportRow): Promise<Daily
   return v?.data ? readReportData(v.data as StoredReportData) : null;
 }
 
-/** Drafts are overwritten in place until filing (as the WhatsApp drafts). */
+/**
+ * Drafts are overwritten in place until filing (as the WhatsApp drafts). False, and nothing
+ * written, when the report is no longer a draft (filed, signed off, void; a filing in progress
+ * commits first): a filed version is never overwritten.
+ */
 export async function storeWebDraft(
   ctx: Ctx,
   report: ReportRow,
   data: DailyReportData,
-): Promise<void> {
-  await ctx.db.insertVersion({
+): Promise<boolean> {
+  const stored = await ctx.db.storeDraftVersion({
     report_id: report.id,
     version: report.current_version || 1,
     data,
@@ -75,6 +79,9 @@ export async function storeWebDraft(
     author_message_id: null,
     change_note: null,
   });
+  if (!stored)
+    ctx.log.info('draft not stored: the report is no longer a draft', { report_id: report.id });
+  return stored !== null;
 }
 
 /**
@@ -221,7 +228,7 @@ export async function decideNextWeb(ctx: Ctx, report: ReportRow, job: JobRow): P
   const withPhotos = withReportPhotos(data, sources, ctx.now());
   if (withPhotos) {
     data = withPhotos;
-    await storeWebDraft(ctx, report, data);
+    if (!(await storeWebDraft(ctx, report, data))) return;
   }
   const photoCount = sources.filter((s) => s.kind === 'photo').length;
   const validation = validateDraft(data, site.settings, photoCount);

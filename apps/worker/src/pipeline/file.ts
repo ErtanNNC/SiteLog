@@ -11,7 +11,6 @@ import {
 import type { Ctx } from '../context';
 import { recordReportCostSafely } from '../cost';
 import type { SiteContext } from '../db';
-import { currentData } from './draft';
 import { reviewReasons, validateDraft } from './validate';
 import { personalLinkCode } from './web';
 import { contextOf } from '../router/context';
@@ -32,7 +31,11 @@ import { contextOf } from '../router/context';
  * (`opts.version`, `opts.draftRev`, field_confirm_report()): if the report has left
  * awaiting_confirmation, moved to another version, or its draft was rewritten in place since (a
  * late photo's re-extraction: another `draft_rev`), nothing is filed (`report.confirm_stale`); the
- * reporter confirms the new draft, or the timeouts file it.
+ * reporter confirms the new draft, or the timeouts file it. The check, the read of the draft and
+ * the filing write are one: `fileVersion` files only while the report and its draft are still
+ * what this filing read (else it reads them again, `FILE_ATTEMPTS`), in one transaction that
+ * sets the status with the frozen data, and a draft write waits for it and then refuses
+ * (`storeDraftVersion`).
  * Last step: the AI + WhatsApp cost estimate (§15 cost guardrail, src/cost.ts); it never fails filing.
  */
 
@@ -74,11 +77,31 @@ export interface FileResult {
   stale?: boolean;
 }
 
+/** How often fileReport computes the filing again when the report changed while it did. */
+export const FILE_ATTEMPTS = 3;
+
 export async function fileReport(
   ctx: Ctx,
   reportId: string,
   opts: FileOptions,
 ): Promise<FileResult> {
+  for (let attempt = 1; ; attempt++) {
+    const result = await fileOnce(ctx, reportId, opts);
+    if (result) return result;
+    // The draft or the report changed between reading and filing (a re-extraction, an answer, a
+    // status change): nothing was written. Read it again: a confirm of the old draft is now
+    // stale, a filing that is not a confirm files the new draft.
+    ctx.log.info('filing: the report changed meanwhile, reading it again', {
+      report_id: reportId,
+      attempt,
+    });
+    if (attempt >= FILE_ATTEMPTS)
+      throw new Error(`report ${reportId} changed during ${attempt} filing attempts`);
+  }
+}
+
+/** One filing attempt; null when the report changed since it was read (nothing written). */
+async function fileOnce(ctx: Ctx, reportId: string, opts: FileOptions): Promise<FileResult | null> {
   const report = await ctx.db.getReport(reportId);
   if (!report) throw new Error(`report ${reportId} not found`);
   const versionNo = report.current_version || 1;
@@ -130,7 +153,9 @@ export async function fileReport(
   if (!site) throw new Error(`site ${report.site_id} not found`);
   const siteDay = await ctx.db.getSiteDay(report.site_day_id);
   if (!siteDay) throw new Error(`site_day ${report.site_day_id} not found`);
-  const data = (await currentData(ctx, report)) as DailyReportDataV1;
+  // The version read above, at its revision: fileVersion writes only while it is still that one.
+  const data = existing.data as DailyReportDataV1;
+  const draftRev = existing.draft_rev ?? 1;
   const sources = await ctx.db.listReportSources(report.id);
   const questions = await ctx.db.listQuestions(report.id);
   const now = ctx.now();
@@ -161,50 +186,53 @@ export async function fileReport(
             takenAt: s.taken_at ?? s.message_created_at,
           })),
   };
-  await ctx.db.updateVersion(report.id, versionNo, {
-    data: frozen,
-    summary: frozen.summary || null,
-  });
-  await ctx.db.denormalizeVersion(report.id, versionNo);
-
   const deadline = new Date(siteDay.deadline_at);
   const isLate = now.getTime() > deadline.getTime();
   const confirmed = opts.trigger === 'confirm' || opts.trigger === 'office';
-  const updated = await ctx.db.updateReport(report.id, {
-    status: 'filed',
-    current_version: versionNo,
-    filed_at: now,
-    confirmed_at: confirmed ? now : null,
-    confirmed_via: opts.trigger === 'confirm' ? (opts.via ?? null) : null,
-    is_late: isLate,
-    needs_review: reasons.length > 0,
-    review_reasons: reasons,
-  });
   const dayStatus: SiteDayStatus =
     report.kind === 'weather_day' ? 'weather_day' : report.kind === 'no_work' ? 'no_work' : 'filed';
-  await ctx.db.updateSiteDay(siteDay.id, {
-    status: dayStatus,
-    report_id: report.id,
-    is_late: isLate,
-  });
-
-  await ctx.db.logAudit({
-    org_id: report.org_id,
-    actor_type:
-      opts.trigger === 'office' ? 'user' : opts.trigger === 'confirm' ? 'reporter' : 'agent',
-    actor_id: opts.trigger === 'confirm' ? (report.reporter_id ?? null) : null,
-    action: 'report.filed',
-    entity: 'report',
-    entity_id: report.id,
-    diff: {
-      trigger: opts.trigger,
-      version: versionNo,
+  // One transaction: the status, version and revision this filing was computed from are checked
+  // under the row locks, then the report is filed and the version frozen together, so a
+  // concurrent re-extraction either lands before (and this attempt is redone) or is refused
+  // (storeDraftVersion), and a field poll never sees the frozen data as a newer draft.
+  const outcome = await ctx.db.fileVersion({
+    reportId: report.id,
+    siteDayId: siteDay.id,
+    version: versionNo,
+    expect: { status: report.status, draftRev },
+    data: frozen,
+    summary: frozen.summary || null,
+    report: {
+      status: 'filed',
+      current_version: versionNo,
+      filed_at: now,
+      confirmed_at: confirmed ? now : null,
+      confirmed_via: opts.trigger === 'confirm' ? (opts.via ?? null) : null,
       is_late: isLate,
+      needs_review: reasons.length > 0,
       review_reasons: reasons,
-      confirm_message_id: opts.confirmMessageId ?? null,
-      via: opts.trigger === 'confirm' ? (opts.via ?? null) : null,
+    },
+    siteDay: { status: dayStatus, report_id: report.id, is_late: isLate },
+    audit: {
+      org_id: report.org_id,
+      actor_type:
+        opts.trigger === 'office' ? 'user' : opts.trigger === 'confirm' ? 'reporter' : 'agent',
+      actor_id: opts.trigger === 'confirm' ? (report.reporter_id ?? null) : null,
+      action: 'report.filed',
+      entity: 'report',
+      entity_id: report.id,
+      diff: {
+        trigger: opts.trigger,
+        version: versionNo,
+        is_late: isLate,
+        review_reasons: reasons,
+        confirm_message_id: opts.confirmMessageId ?? null,
+        via: opts.trigger === 'confirm' ? (opts.via ?? null) : null,
+      },
     },
   });
+  if (!outcome.filed) return null;
+  const updated = outcome.report;
   if (reasons.length > 0) {
     await ctx.db.notifyOrg(
       report.org_id,

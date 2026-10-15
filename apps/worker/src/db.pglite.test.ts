@@ -1097,6 +1097,100 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
     expect(rows[0]).toEqual({ company_id: null, company_name: 'Apex Concrete' });
   });
 
+  // The filing race (20261015000090): the check of the draft, the filing write and the status
+  // are one transaction, the filing write is no new draft revision, and a draft write after
+  // filing is refused.
+  it('fileVersion files only the draft it was computed from, and nothing overwrites it', async () => {
+    const day = await db.getOrCreateSiteDay(
+      OAKMONT,
+      '2026-11-02',
+      new Date('2026-11-02T23:30:00Z'),
+    );
+    const report = await db.insertReport({
+      org_id: ORG,
+      site_id: OAKMONT,
+      site_day_id: day.id,
+      report_no: await db.nextReportNo(OAKMONT),
+      reporter_id: null,
+      received_at: '2026-11-02T21:30:00Z',
+      kind: 'daily',
+      status: 'awaiting_confirmation',
+    });
+    const data = draftFor('2026-11-02', audioId, photoId);
+    const draft = (summary: string) => ({
+      report_id: report.id,
+      version: 1,
+      data: { ...data, summary },
+      summary,
+      author: 'agent' as const,
+    });
+    expect((await db.storeDraftVersion(draft('Extracted')))!.draft_rev).toBe(1);
+    // A re-extraction after the filing read revision 1.
+    expect((await db.storeDraftVersion(draft('Re-extracted')))!.draft_rev).toBe(2);
+    const file = (draftRev: number, status: 'awaiting_confirmation' | 'processing') =>
+      db.fileVersion({
+        reportId: report.id,
+        siteDayId: day.id,
+        version: 1,
+        expect: { status, draftRev },
+        data: { ...data, summary: 'Frozen' },
+        summary: 'Frozen',
+        report: { status: 'filed', filed_at: new Date('2026-11-02T21:40:00Z') },
+        siteDay: { status: 'filed', report_id: report.id },
+        audit: {
+          org_id: ORG,
+          actor_type: 'agent',
+          action: 'report.filed',
+          entity: 'report',
+          entity_id: report.id,
+          diff: { version: 1 },
+        },
+      });
+    const state = async () => ({
+      status: (await db.getReport(report.id))!.status,
+      day: (await db.getSiteDay(day.id))!.status,
+      summary: (await db.getVersion(report.id, 1))!.summary,
+      rev: (await db.getVersion(report.id, 1))!.draft_rev,
+      manpower: (
+        await one<{ n: number }>(
+          `select count(*)::int as n from manpower_entries where report_id = $1`,
+          [report.id],
+        )
+      ).n,
+      filed: (
+        await one<{ n: number }>(
+          `select count(*)::int as n from audit_log where entity_id = $1 and action = 'report.filed'`,
+          [report.id],
+        )
+      ).n,
+    });
+    const untouched = await state();
+    expect(untouched).toMatchObject({ status: 'awaiting_confirmation', summary: 'Re-extracted' });
+    expect(await file(1, 'awaiting_confirmation')).toEqual({ filed: false });
+    expect(await file(2, 'processing')).toEqual({ filed: false });
+    expect(await state()).toEqual(untouched);
+
+    const res = await file(2, 'awaiting_confirmation');
+    expect(res.filed && res.report.status).toBe('filed');
+    const filed = await state();
+    // The frozen data keeps the draft's revision: a field poll never sees it as a newer draft.
+    expect(filed).toMatchObject({
+      status: 'filed',
+      day: 'filed',
+      summary: 'Frozen',
+      rev: 2,
+      filed: 1,
+    });
+    expect(filed.manpower).toBeGreaterThan(0);
+
+    // A re-extraction that read the report before filing: refused, the filed version stands.
+    expect(await db.storeDraftVersion(draft('Late re-extraction'))).toBeNull();
+    await expect(db.insertVersion(draft('Late WhatsApp draft'))).rejects.toThrow(
+      'already exists and is immutable',
+    );
+    expect(await state()).toEqual(filed);
+  });
+
   it('report numbers keep growing past 9999 instead of truncating', async () => {
     const { report_seq: before } = await one<{ report_seq: number }>(
       `select report_seq from sites where id = $1`,

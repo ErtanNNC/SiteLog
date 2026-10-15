@@ -29,7 +29,8 @@ import {
 import { legacyExpected, legacyInput, legacyRecorded } from '../test/legacy-fixtures';
 import { composeExtractionInput } from './compose';
 import { currentData, draftCardFor, storeDraft } from './draft';
-import { fileReport } from './file';
+import { FILE_ATTEMPTS, fileReport } from './file';
+import { storeWebDraft } from './web';
 import { learnTerms } from './glossary';
 import { selectNextQuestion, validateDraft } from './validate';
 
@@ -485,6 +486,107 @@ describe('pipeline: compose + extract job + filing', () => {
       draftRev: 2,
     });
     expect([filed.stale, filed.report.status]).toEqual([undefined, 'filed']);
+  });
+
+  describe('fileReport against a concurrent re-extraction', () => {
+    async function draftReport(no: string) {
+      const h = createHarness();
+      const siteDay = await h.db.getOrCreateSiteDay(
+        SITE_OAKMONT,
+        '2026-10-09',
+        deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+      );
+      const report = await h.db.insertReport({
+        org_id: h.org.id,
+        site_id: SITE_OAKMONT,
+        site_day_id: siteDay.id,
+        report_no: no,
+        reporter_id: h.jorge.id,
+        received_at: '2026-10-09T22:00:00Z',
+        kind: 'daily',
+        status: 'awaiting_confirmation',
+      });
+      const input = legacyInput('oakmont-unknown-sub');
+      const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
+      await storeDraft(h.ctx, report, data);
+      h.setNow(new Date('2026-10-09T22:21:00Z'));
+      const reExtracted: DailyReportDataV1 = { ...data, summary: 'Re-extracted with the photo' };
+      /** The re-extraction's draft write, once, just before the filing's commit. */
+      const raceOnce = (times = 1) => {
+        const commit = h.db.fileVersion.bind(h.db);
+        let left = times;
+        h.db.fileVersion = async (input) => {
+          if (left-- > 0) {
+            const current = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
+            await h.db.storeDraftVersion({
+              report_id: report.id,
+              version: 1,
+              data: { ...reExtracted, summary: `${current.summary}+` },
+              summary: null,
+              author: 'agent',
+            });
+          }
+          return commit(input);
+        };
+      };
+      return { h, report, raceOnce };
+    }
+
+    it('a confirm of the draft the re-extraction replaced files nothing', async () => {
+      const { h, report, raceOnce } = await draftReport('OM-1187-0130');
+      raceOnce();
+      const res = await fileReport(h.ctx, report.id, {
+        trigger: 'confirm',
+        version: 1,
+        draftRev: 1,
+        via: 'web',
+      });
+      expect(res.stale).toBe(true);
+      const v = (await h.db.getVersion(report.id, 1))!;
+      // The re-extracted draft stands, unfrozen and not overwritten.
+      expect(v.draft_rev).toBe(2);
+      expect((v.data as DailyReportDataV1).summary).toMatch(/\+$/);
+      expect((await h.db.getReport(report.id))!.status).toBe('awaiting_confirmation');
+      expect(h.db.data.audit.filter((a) => a.action === 'report.filed')).toHaveLength(0);
+      expect(h.db.data.denormalized).toHaveLength(0);
+      expect(h.db.jobsOfType('render_pdf')).toHaveLength(0);
+    });
+
+    it('a timeout files the new draft, and filing writes no new draft revision', async () => {
+      const { h, report, raceOnce } = await draftReport('OM-1187-0131');
+      raceOnce();
+      const res = await fileReport(h.ctx, report.id, { trigger: 'timeout' });
+      expect(res.report.status).toBe('filed');
+      const v = (await h.db.getVersion(report.id, 1))!;
+      expect((v.data as DailyReportDataV1).summary).toMatch(/\+$/);
+      expect(v.draft_rev).toBe(2);
+      expect(h.db.data.audit.filter((a) => a.action === 'report.filed')).toHaveLength(1);
+      expect(h.db.data.denormalized).toEqual([{ report_id: report.id, version: 1 }]);
+    });
+
+    it('gives up (the job retries) when the draft keeps changing', async () => {
+      const { h, report, raceOnce } = await draftReport('OM-1187-0132');
+      raceOnce(FILE_ATTEMPTS);
+      await expect(fileReport(h.ctx, report.id, { trigger: 'timeout' })).rejects.toThrow(
+        /changed during 3 filing attempts/,
+      );
+      expect((await h.db.getReport(report.id))!.status).toBe('awaiting_confirmation');
+      expect(h.db.data.audit.filter((a) => a.action === 'report.filed')).toHaveLength(0);
+    });
+
+    it('storeWebDraft never overwrites a filed report', async () => {
+      const { h, report } = await draftReport('OM-1187-0133');
+      await fileReport(h.ctx, report.id, { trigger: 'timeout' });
+      const before = (await h.db.getVersion(report.id, 1))!;
+      const stale = (await h.db.getReport(report.id))!;
+      const stored = await storeWebDraft(
+        h.ctx,
+        { ...stale, status: 'awaiting_confirmation' },
+        upgradeV1toV2(before.data as DailyReportDataV1),
+      );
+      expect(stored).toBe(false);
+      expect(await h.db.getVersion(report.id, 1)).toEqual(before);
+    });
   });
 
   it('render_pdf stores the PDF and enqueues the email, and sends nothing on WhatsApp (W1-15)', async () => {

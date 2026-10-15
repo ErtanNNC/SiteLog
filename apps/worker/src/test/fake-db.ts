@@ -691,7 +691,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         change_note: input.change_note ?? null,
         created_at: existing?.created_at ?? iso(),
         // As the trigger of 20261015000070: a new version starts at 1, a change of data bumps it.
-        draft_rev: existing ? nextDraftRev(existing, input.data) : 1,
+        draft_rev: existing ? nextDraftRev(existing, input.data, report) : 1,
       };
       d.versions.set(vkey(input.report_id, input.version), row);
       return row;
@@ -703,8 +703,43 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       d.versions.set(vkey(reportId, version), {
         ...row,
         ...rest,
-        draft_rev: 'data' in rest ? nextDraftRev(row, rest.data) : (row.draft_rev ?? 1),
+        draft_rev:
+          'data' in rest
+            ? nextDraftRev(row, rest.data, d.reports.get(reportId))
+            : (row.draft_rev ?? 1),
       });
+    },
+    async storeDraftVersion(input) {
+      const report = d.reports.get(input.report_id);
+      if (
+        !report ||
+        !FAKE_DRAFT_STATUSES.includes(report.status) ||
+        (report.current_version || 1) !== input.version
+      )
+        return null;
+      return db.insertVersion(input);
+    },
+    async fileVersion(input) {
+      // As the SQL: everything or nothing, after checking what the filing was computed from.
+      const report = d.reports.get(input.reportId);
+      const version = d.versions.get(vkey(input.reportId, input.version));
+      if (
+        !report ||
+        !version ||
+        report.status !== input.expect.status ||
+        (report.current_version || 1) !== input.version ||
+        (version.draft_rev ?? 1) !== input.expect.draftRev
+      )
+        return { filed: false };
+      const updated = await db.updateReport(input.reportId, input.report);
+      await db.updateVersion(input.reportId, input.version, {
+        data: input.data,
+        summary: input.summary,
+      });
+      await db.denormalizeVersion(input.reportId, input.version);
+      await db.updateSiteDay(input.siteDayId, input.siteDay);
+      await db.logAudit(input.audit);
+      return { filed: true, report: updated };
     },
     async denormalizeVersion(reportId, version) {
       d.denormalized.push({ report_id: reportId, version });
@@ -1246,8 +1281,23 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
   return db;
 }
 
-/** report_versions_draft_rev() (20261015000070): the revision after a write of `data`. */
-function nextDraftRev(row: ReportVersionRow, data: unknown): number {
+const FAKE_DRAFT_STATUSES: readonly ReportRow['status'][] = [
+  'collecting',
+  'processing',
+  'awaiting_answer',
+  'awaiting_confirmation',
+];
+
+/**
+ * report_versions_draft_rev() (20261015000070, 20261015000090): the revision after a write of
+ * `data`; a version whose report is no longer a draft keeps its revision.
+ */
+function nextDraftRev(
+  row: ReportVersionRow,
+  data: unknown,
+  report: Pick<ReportRow, 'status'> | undefined,
+): number {
   const rev = row.draft_rev ?? 1;
+  if (!report || !FAKE_DRAFT_STATUSES.includes(report.status)) return rev;
   return JSON.stringify(row.data) === JSON.stringify(data) ? rev : rev + 1;
 }

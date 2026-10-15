@@ -177,7 +177,7 @@ async function extractWebReport(ctx: Ctx, report: ReportRow, job: JobRow): Promi
       workingHours: site.site.working_hours,
     },
   );
-  await storeWebDraft(ctx, latest, data);
+  if (!(await storeWebDraft(ctx, latest, data))) return; // filed meanwhile: nothing to write
   await ctx.db.logAudit({
     org_id: report.org_id,
     actor_type: 'agent',

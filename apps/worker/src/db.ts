@@ -1,4 +1,4 @@
-import postgres, { type Sql } from 'postgres';
+import postgres, { type Sql, type TransactionSql } from 'postgres';
 import type {
   CompanyRow,
   ConsentRow,
@@ -152,6 +152,24 @@ export interface VersionInput {
   author_message_id?: string | null;
   change_note?: string | null;
 }
+
+export interface FileVersionInput {
+  reportId: string;
+  siteDayId: string;
+  version: number;
+  /** What fileReport read: the filing is computed from this state. */
+  expect: { status: ReportRow['status']; draftRev: number };
+  data: Json;
+  summary: string | null;
+  report: ReportPatch;
+  siteDay: SiteDayPatch;
+  audit: AuditInput;
+}
+
+export type FileVersionOutcome =
+  | { filed: true; report: ReportRow }
+  /** The report or its draft changed since it was read: nothing written. */
+  | { filed: false };
 
 export interface SiteDayPatch {
   status?: SiteDayRow['status'];
@@ -456,6 +474,21 @@ export interface Db {
   getVersion(reportId: string, version: number): Promise<ReportVersionRow | null>;
   listVersions(reportId: string): Promise<ReportVersionRow[]>;
   insertVersion(input: VersionInput): Promise<ReportVersionRow>;
+  /**
+   * A draft write (storeWebDraft): under the report's row lock, so a filing in progress commits
+   * first. Null (nothing written) unless the report is still a draft (collecting, processing,
+   * awaiting_answer, awaiting_confirmation) at `input.version`.
+   */
+  storeDraftVersion(input: VersionInput): Promise<ReportVersionRow | null>;
+  /**
+   * fileReport's commit, in one transaction under the site-day and report row locks (the order
+   * field_confirm_report() and field_answer_question() take them): the report must still be at
+   * `expect` (status, version) and the version at `expect.draftRev`, the revision the frozen data
+   * was computed from, else nothing is written. Then the report patch (status filed first, so the
+   * version write is no new draft revision, 20261015000090), the version's data, its denormalised
+   * rows, the site-day and the audit row.
+   */
+  fileVersion(input: FileVersionInput): Promise<FileVersionOutcome>;
   updateVersion(
     reportId: string,
     version: number,
@@ -677,6 +710,14 @@ const JSON_COLUMNS = new Set([
   'audio_source',
 ]);
 
+/** Report statuses whose current version is a draft (overwritten in place until filing). */
+const DRAFT_STATUSES: readonly ReportRow['status'][] = [
+  'collecting',
+  'processing',
+  'awaiting_answer',
+  'awaiting_confirmation',
+];
+
 export function connectSql(url: string, opts: { max?: number } = {}): Sql {
   return postgres(url, {
     max: opts.max ?? 8,
@@ -742,11 +783,26 @@ export function createDb(sql: Sql): Db {
   };
 
   /** `set "a" = $1, "b" = $2` from a patch object; undefined values are skipped. */
-  const setClause = (patch: Record<string, unknown>) => {
+  const setClause = (patch: Record<string, unknown>, within: Sql | TransactionSql = sql) => {
+    const s = within as Sql;
     const entries = Object.entries(patch).filter(([, v]) => v !== undefined);
     if (entries.length === 0) throw new Error('empty patch');
-    const frags = entries.map(([k, v]) => sql`${sql(k)} = ${toParam(k, v) as never}`);
-    return frags.reduce((acc, f) => sql`${acc}, ${f}`);
+    const frags = entries.map(([k, v]) => s`${s(k)} = ${toParam(k, v) as never}`);
+    return frags.reduce((acc, f) => s`${acc}, ${f}`);
+  };
+
+  const reportPatchParams = (patch: ReportPatch): Record<string, unknown> => {
+    const p: Record<string, unknown> = { ...patch };
+    for (const k of ['confirmed_at', 'filed_at', 'signed_off_at', 'received_at'] as const) {
+      if (patch[k] !== undefined) p[k] = iso(patch[k]);
+    }
+    return p;
+  };
+
+  const siteDayPatchParams = (patch: SiteDayPatch): Record<string, unknown> => {
+    const p: Record<string, unknown> = { ...patch };
+    if (patch.deadline_at !== undefined) p.deadline_at = iso(patch.deadline_at);
+    return p;
   };
 
   const db: Db = {
@@ -1073,8 +1129,7 @@ export function createDb(sql: Sql): Db {
       return rows[0]!;
     },
     async updateSiteDay(id, patch) {
-      const p: Record<string, unknown> = { ...patch };
-      if (patch.deadline_at !== undefined) p.deadline_at = iso(patch.deadline_at);
+      const p = siteDayPatchParams(patch);
       const rows = await sql<
         SiteDayRow[]
       >`update site_days set ${setClause(p)} where id = ${id} returning *`;
@@ -1096,10 +1151,7 @@ export function createDb(sql: Sql): Db {
       return rows[0]!;
     },
     async updateReport(id, patch) {
-      const p: Record<string, unknown> = { ...patch };
-      for (const k of ['confirmed_at', 'filed_at', 'signed_off_at', 'received_at'] as const) {
-        if (patch[k] !== undefined) p[k] = iso(patch[k]);
-      }
+      const p = reportPatchParams(patch);
       const rows = await sql<
         ReportRow[]
       >`update reports set ${setClause(p)} where id = ${id} returning *`;
@@ -1153,19 +1205,68 @@ export function createDb(sql: Sql): Db {
       // above current_version by a failed attempt (retry stays idempotent). A version that is
       // already current on a filed report is immutable: e.g. an office edit (create_report_version)
       // committed v3 while a WhatsApp edit was computing its own v3 — never overwrite it.
-      const rows = await sql<ReportVersionRow[]>`
-        insert into report_versions (report_id, version, data, summary, author, author_user_id, author_message_id, change_note)
-        values (${input.report_id}, ${input.version}, ${sql.json(input.data as never)}, ${input.summary}, ${input.author}, ${input.author_user_id ?? null}, ${input.author_message_id ?? null}, ${input.change_note ?? null})
-        on conflict (report_id, version) do update set data = excluded.data, summary = excluded.summary, change_note = excluded.change_note, author_message_id = excluded.author_message_id
-          where exists (select 1 from reports r where r.id = excluded.report_id
-                          and (r.status in ('collecting','processing','awaiting_answer','awaiting_confirmation') or excluded.version > r.current_version))
-        returning *`;
-      const row = rows[0];
+      //
+      // The report's row lock comes first: the ON CONFLICT condition reads reports with the
+      // statement's snapshot, so without it a draft write waiting on the version row a filing
+      // holds would still see the report as a draft after the filing committed, and overwrite
+      // the filed version.
+      const row = await sql.begin(async (tx) => {
+        await tx`select 1 from reports where id = ${input.report_id} for update`;
+        const rows = await tx<ReportVersionRow[]>`
+          insert into report_versions (report_id, version, data, summary, author, author_user_id, author_message_id, change_note)
+          values (${input.report_id}, ${input.version}, ${tx.json(input.data as never)}, ${input.summary}, ${input.author}, ${input.author_user_id ?? null}, ${input.author_message_id ?? null}, ${input.change_note ?? null})
+          on conflict (report_id, version) do update set data = excluded.data, summary = excluded.summary, change_note = excluded.change_note, author_message_id = excluded.author_message_id
+            where exists (select 1 from reports r where r.id = excluded.report_id
+                            and (r.status in ('collecting','processing','awaiting_answer','awaiting_confirmation') or excluded.version > r.current_version))
+          returning *`;
+        return rows[0];
+      });
       if (!row)
         throw new Error(
           `report ${input.report_id} version ${input.version} already exists and is immutable`,
         );
       return row;
+    },
+    async storeDraftVersion(input) {
+      return sql.begin(async (tx) => {
+        const [r] = await tx<Array<Pick<ReportRow, 'status' | 'current_version'>>>`
+          select status, current_version from reports where id = ${input.report_id} for update`;
+        if (!r || !DRAFT_STATUSES.includes(r.status) || (r.current_version || 1) !== input.version)
+          return null;
+        const rows = await tx<ReportVersionRow[]>`
+          insert into report_versions (report_id, version, data, summary, author, author_user_id, author_message_id, change_note)
+          values (${input.report_id}, ${input.version}, ${tx.json(input.data as never)}, ${input.summary}, ${input.author}, ${input.author_user_id ?? null}, ${input.author_message_id ?? null}, ${input.change_note ?? null})
+          on conflict (report_id, version) do update set data = excluded.data, summary = excluded.summary, change_note = excluded.change_note, author_message_id = excluded.author_message_id
+          returning *`;
+        return rows[0] ?? null;
+      });
+    },
+    async fileVersion(input) {
+      return sql.begin(async (tx): Promise<FileVersionOutcome> => {
+        await tx`select 1 from site_days where id = ${input.siteDayId} for update`;
+        const [r] = await tx<
+          Array<Pick<ReportRow, 'status' | 'current_version'>>
+        >`select status, current_version from reports where id = ${input.reportId} for update`;
+        if (!r || r.status !== input.expect.status || (r.current_version || 1) !== input.version)
+          return { filed: false };
+        const [v] = await tx<Array<{ draft_rev: number }>>`
+          select draft_rev from report_versions
+          where report_id = ${input.reportId} and version = ${input.version} for update`;
+        if (!v || v.draft_rev !== input.expect.draftRev) return { filed: false };
+        // The report first: the version write below is then no new draft revision (20261015000090).
+        const [report] = await tx<ReportRow[]>`
+          update reports set ${setClause(reportPatchParams(input.report), tx)}
+          where id = ${input.reportId} returning *`;
+        await tx`update report_versions set data = ${tx.json(input.data as never)}, summary = ${input.summary}
+          where report_id = ${input.reportId} and version = ${input.version}`;
+        await tx`select denormalize_report_version(${input.reportId}, ${input.version})`;
+        await tx`update site_days set ${setClause(siteDayPatchParams(input.siteDay), tx)}
+          where id = ${input.siteDayId}`;
+        const a = input.audit;
+        await tx`select log_audit(${a.org_id}, ${a.actor_type}, ${a.actor_id ?? null}, ${a.action},
+          ${a.entity ?? null}, ${a.entity_id ?? null}, ${tx.json((a.diff ?? null) as never)})`;
+        return { filed: true, report: report! };
+      });
     },
     async updateVersion(reportId, version, patch) {
       await sql`update report_versions set ${setClause(patch as Record<string, unknown>)} where report_id = ${reportId} and version = ${version}`;
