@@ -268,7 +268,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-10 · Worker runtime
 
-- [ ] **W1-10 done** · today _partial_ (M) · step 15
+- [x] **W1-10 done** · today _partial_ (M) · step 15 · _Done 2026-10-15: commits `b15eb6b`, `d239976` and the stack-test key fixes `d2b0813`, `d7a3f35`; CI run 38703025408 is green, including `test:stack` (100 jobs exactly once with two workers and LISTEN, the poll fallback), the migration on the CLI's Postgres and the W1-08 invite test with the CI worker on a 120 s poll, so only NOTIFY could wake it. By hand on a local stack: not done here (no Docker); the CI run stands in for it._
 - **Spec:** §10.1, §15.1.
 - **Already in the repo:** `apps/worker` on Node 22 with `tsx watch`, direct Postgres, `claim_jobs()` with `FOR UPDATE SKIP LOCKED`, a handler registry with Zod payloads and timeouts, backoff, dead + Sentry, stale-lock reclaim, `/health`, graceful shutdown, `WORKER_CONCURRENCY` (`apps/worker/src/runner.ts`, `apps/worker/src/index.ts:91-134`). `pg_notify`, the lock key, priorities and the 10-minute stale lock land in W1-05; `send_welcome` by SMS and the worker in the `e2e-supabase` CI job in W1-08.
 - **Moved in from W1-19:** stopping the WhatsApp reminder ladder.
