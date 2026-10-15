@@ -1,6 +1,6 @@
 # SiteLog · Durum
 
-Güncelleme: 2026-10-15 18:58 UTC · dal `spec-v1.2` · PR #1 · son CI yeşil: a9cc55f (run 38740645053); GitHub Actions 13:54–19:04 UTC arası kapalıydı; o arada gelen commit'lerin CI'ı run 38790544024'te
+Güncelleme: 2026-10-15 18:58 UTC · dal `spec-v1.2` · PR #1 · son CI yeşil: a9cc55f (run 38740645053); **tüm hafta-1 işi CI'da yeşil: run 38796723632 (f1d46c4), e2e:supabase ve worker akışları dahil**
 
 Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün aralıklarını kullanıyorum (M0 gün 1 · M1 gün 1–2 · M2 gün 2–3 · M3 gün 3–4 · M4 gün 4–5 · M5 gün 5–7 → demo). Planın farklı bir eşlemesi varsa söyleyin, buna göre düzeltirim.
 
