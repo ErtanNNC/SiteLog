@@ -40,9 +40,9 @@ on:
         options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy (inventory = read-only staging inventory, deploys nothing)
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project, owner-approved)
         type: choice
-        options: [all, supabase, worker, web, field, inventory]
+        options: [all, supabase, worker, web, field, inventory, seed]
         default: all
 
 concurrency:
@@ -69,6 +69,7 @@ jobs:
       field: ${{ steps.plan.outputs.field }}
       preview: ${{ steps.plan.outputs.preview }}
       inventory: ${{ steps.plan.outputs.inventory }}
+      seed: ${{ steps.plan.outputs.seed }}
     steps:
       - name: Decide what this run may touch
         id: plan
@@ -80,9 +81,9 @@ jobs:
           TARGET: ${{ inputs.target || 'all' }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          supabase=false worker=false web=false field=false preview=false inventory=false
+          supabase=false worker=false web=false field=false preview=false inventory=false seed=false
           # `all` covers the four deploy targets; the inventory runs only when asked for.
-          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ]; }; }
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ]; }; }
 
           if [ "$EVENT" = pull_request ]; then
             web=true field=true preview=true
@@ -92,6 +93,13 @@ jobs:
               inventory=true
             else
               echo "::notice::Inventory skipped: it reads the staging project only. Dispatch it with environment staging."
+            fi
+          elif [ "$TARGET" = seed ]; then
+            # W1-06 apply mode (RUNBOOK §2 step 5): the two demo orgs into the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              seed=true
+            else
+              echo "::notice::Seed skipped: it writes the demo orgs into the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
             fi
           elif [ "$ENVIRONMENT" = preview ]; then
             if [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ] || [ "$REF" = "refs/heads/$LIVE_BRANCH" ]; then
@@ -120,6 +128,7 @@ jobs:
             echo "field=$field"
             echo "preview=$preview"
             echo "inventory=$inventory"
+            echo "seed=$seed"
           } >> "$GITHUB_OUTPUT"
           {
             echo "### Deploy plan"
@@ -132,7 +141,7 @@ jobs:
             echo
             echo "| Job | Runs |"
             echo "| --- | --- |"
-            for k in supabase worker web field preview inventory; do echo "| $k | ${!k} |"; done
+            for k in supabase worker web field preview inventory seed; do echo "| $k | ${!k} |"; done
           } >> "$GITHUB_STEP_SUMMARY"
 
   supabase:
@@ -193,6 +202,93 @@ jobs:
         if: steps.cfg.outputs.ready == 'true'
         # verify_jwt, entrypoints and the import map come from supabase/config.toml.
         run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+
+  seed:
+    name: Seed · demo orgs into the preview project
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # Writes only the is_demo orgs (Kestrel, Demir Yapı) in one transaction; refuses staging.
+    if: >-
+      needs.plan.outputs.seed == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      DEMO_OFFICE_PASSWORD_SECRET: ${{ secrets.DEMO_OFFICE_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # The pr-1 field preview (its /api reaches the preview project): the links in the seeded texts.
+      FIELD_APP_URL: ${{ vars.FIELD_APP_URL || 'https://pr-1--sitelog-field-staging-ertannnc.netlify.app' }}
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD_SECRET" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::Seed needs SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing to seed."
+            exit 1
+          fi
+          pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$pw"
+          { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+          # The demo office users' password: the Environment's secret, else a random one (the panel
+          # signs in by magic link only, so nobody needs to know it; RUNBOOK §2 step 5).
+          office="$DEMO_OFFICE_PASSWORD_SECRET"
+          if [ "${#office}" -lt 16 ]; then
+            office="$(openssl rand -base64 30 | tr -d '\n')"
+            echo "::notice::DEMO_OFFICE_PASSWORD is not set (or shorter than 16): using a random one for the demo office users."
+          fi
+          echo "::add-mask::$office"
+          { echo "DEMO_OFFICE_PASSWORD<<__PW__"; printf '%s\n' "$office"; echo "__PW__"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Connection string
+        # The CLI saves the project's pooler address on link; the seed connects in session mode (5432),
+        # with the password URL-encoded. Never printed.
+        run: |
+          f=supabase/.temp/pooler-url
+          if [ ! -s "$f" ]; then
+            echo "::error::supabase link saved no pooler address ($f)."
+            exit 1
+          fi
+          url="$(node -e '
+            const u = new URL(require("fs").readFileSync(process.argv[1], "utf8").trim());
+            u.password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
+            u.port = "5432";
+            if (!u.username.includes(process.env.SUPABASE_PROJECT_REF)) { console.error("pooler user is not the preview project"); process.exit(1); }
+            console.log(u.toString());
+          ' "$f")"
+          echo "::add-mask::$url"
+          { echo "SUPABASE_DB_URL<<__URL__"; printf '%s\n' "$url"; echo "__URL__"; } >> "$GITHUB_ENV"
+      - name: Apply the demo seed (today)
+        run: pnpm seed:demo -- --date today --apply
+      - name: Field-api secrets on the preview project (names only)
+        # Read-only: the device check needs LINK_SIGNING_SECRET and the Origin check FIELD_APP_URL.
+        run: |
+          names="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(x=>x.name).join(" ")))')"
+          {
+            echo "### Demo seed applied to the preview project"
+            echo
+            echo "Field links point at \`$FIELD_APP_URL\`."
+            echo
+            for n in LINK_SIGNING_SECRET FIELD_APP_URL; do
+              if [[ " $names " == *" $n "* ]]; then echo "- $n: set"; else echo "- $n: **missing** (the field app's device check will fail until it is set)"; fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
   worker:
     name: Worker · Fly.io

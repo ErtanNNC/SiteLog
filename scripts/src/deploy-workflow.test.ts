@@ -77,12 +77,26 @@ describe('deploy.yml', () => {
     expect([...JOBS.keys()]).toEqual([
       'plan',
       'supabase',
+      'seed',
       'worker',
       'preview',
       'web',
       'field',
       'inventory',
     ]);
+  });
+
+  it('seeds only the preview project, from spec-v1.2, and only when asked (W1-06 apply mode)', () => {
+    const seed = JOBS.get('seed')!;
+    expect(seed.condition).toContain("needs.plan.outputs.seed == 'true'");
+    expect(seed.condition).toContain("inputs.environment == 'preview'");
+    expect(seed.condition).toContain("github.ref == 'refs/heads/spec-v1.2'");
+    expect(seed.text).toContain('environment: preview');
+    expect(seed.text).toContain('pnpm seed:demo -- --date today --apply');
+    expect(seed.text).not.toContain('--allow-staging');
+    const plan = JOBS.get('plan')!.text;
+    // `all` never includes the seed.
+    expect(plan).toContain('[ "$1" != seed ]');
   });
 
   it('compares full refs, so a tag named like a branch passes no guard', () => {
@@ -500,7 +514,7 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
     expect(field.condition).toContain("needs.plan.outputs.field == 'true'");
     expect(field.text).toContain("environment: ${{ inputs.environment || 'staging' }}");
     expect(JOBS.get('plan')!.text).toContain('field: ${{ steps.plan.outputs.field }}');
-    expect(WORKFLOW).toContain('options: [all, supabase, worker, web, field, inventory]');
+    expect(WORKFLOW).toContain('options: [all, supabase, worker, web, field, inventory, seed]');
   });
 
   it("uses its own Netlify site key and name, never the panel's (D42)", () => {
