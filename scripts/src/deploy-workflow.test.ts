@@ -547,6 +547,18 @@ describe('deploy.yml web job Check configuration, run under bash', () => {
     expect(run.outputs).toMatchObject({ mode: 'preview Supabase project', ready: 'true' });
   });
 
+  it('pull requests: decodes the base64 anon key the preview job passes (a secret-valued output is dropped)', () => {
+    const run = runStep(cfg, {
+      EVENT: 'pull_request',
+      ENVIRONMENT: 'staging',
+      HAS_NETLIFY_TOKEN: 'true',
+      PREVIEW_SUPABASE_URL: 'https://previewprojectref00.supabase.co',
+      PREVIEW_ANON_KEY_B64: Buffer.from(KEY).toString('base64'),
+    });
+    expect(run.status, run.log).toBe(0);
+    expect(run.envFile).toMatchObject({ VITE_DEMO: 'false', VITE_SUPABASE_ANON_KEY: KEY });
+  });
+
   it('pull requests: demo mode for staging however it is spelled (D41)', () => {
     for (const env of [
       { PREVIEW_SUPABASE_URL: STAGING_URL },

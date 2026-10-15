@@ -640,7 +640,10 @@ jobs:
     environment: preview
     outputs:
       supabase_url: ${{ steps.cfg.outputs.supabase_url }}
-      anon_key: ${{ steps.cfg.outputs.anon_key }}
+      # Base64: the anon key is public (it ships in the panel bundle), but when the Environment also
+      # holds it as a secret, GitHub drops a job output that contains a secret's value ("Skip output
+      # since it may contain secret") and the panel preview fell back to demo mode.
+      anon_key_b64: ${{ steps.cfg.outputs.anon_key_b64 }}
     steps:
       - name: Read the preview project settings
         id: cfg
@@ -660,7 +663,7 @@ jobs:
           fi
           if [ -n "$url" ] && [ -n "$ANON_KEY" ]; then
             echo "supabase_url=$url" >> "$GITHUB_OUTPUT"
-            echo "anon_key=$ANON_KEY" >> "$GITHUB_OUTPUT"
+            echo "anon_key_b64=$(printf '%s' "$ANON_KEY" | base64 -w0)" >> "$GITHUB_OUTPUT"
             echo "Panel preview Supabase project: $url"
           else
             echo "::notice::The preview Environment has no Supabase project yet (variables SUPABASE_PROJECT_REF or VITE_SUPABASE_URL, and VITE_SUPABASE_ANON_KEY); the panel preview builds in demo mode and the field preview without /api."
@@ -695,7 +698,7 @@ jobs:
       VITE_APP_URL: ${{ github.event_name != 'pull_request' && vars.VITE_APP_URL || '' }}
       # Pull requests: the preview project (both empty → demo mode).
       PREVIEW_SUPABASE_URL: ${{ needs.preview.outputs.supabase_url }}
-      PREVIEW_ANON_KEY: ${{ needs.preview.outputs.anon_key }}
+      PREVIEW_ANON_KEY_B64: ${{ needs.preview.outputs.anon_key_b64 }}
       # Only compared with the preview settings, so a preview can never point at this project.
       LIVE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       LIVE_PROJECT_URL: ${{ vars.VITE_SUPABASE_URL }}
@@ -713,7 +716,9 @@ jobs:
           HAS_NETLIFY_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
         run: |
           if [ "$EVENT" = pull_request ]; then
-            url="$PREVIEW_SUPABASE_URL" key="$PREVIEW_ANON_KEY"
+            # The preview job passes the (public) anon key base64-encoded; see its outputs.
+            key="${PREVIEW_ANON_KEY:-$(printf '%s' "${PREVIEW_ANON_KEY_B64:-}" | base64 -d 2>/dev/null || true)}"
+            url="$PREVIEW_SUPABASE_URL"
             # Compared as the browser will read it. The host must be plain ASCII (letters, digits, dots,
             # hyphens) with an optional port, so no %-escape, credentials or Unicode can spell staging's
             # host another way; refs and hosts are compared without case, trailing dot or port.
