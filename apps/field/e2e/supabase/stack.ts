@@ -229,6 +229,8 @@ export async function seedOpenQuestion(f: FieldFixture): Promise<OpenQuestion> {
     current_version: 1,
     reporter_id: f.reporter.id,
     channel: 'web',
+    // NOT NULL since 20261014000002 (no default): field_complete_upload() stamps the org's.
+    language: 'en',
     received_at: new Date().toISOString(),
   });
   const reportId = report!.id;
