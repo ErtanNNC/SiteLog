@@ -102,6 +102,11 @@ Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahta
 - **Q85:** WhatsApp'tan gelen sesli not ve fotoğraflar? Öneri: saklansın, yazıya dökülmesin; günde bir kez "linki kullanın" cevabı gitsin (yeni metin `whatsapp_use_link`).
 - **W2-04 için okuma:** web'den dosyalanan rapora ertesi gün 23:59'a kadar fotoğraf eklenebilsin mi? Spec bu süreyi yalnızca aramadan sonraki fotoğraflar için veriyor. Öneri: evet.
 
+**W2-01 bitti (2e4efc5):** bir kanal gönderemezse mesaj sıradaki kanaldan bir kez gidiyor. Her deneme ayrı kaydediliyor; tüm kanallar başarısız olursa ofise bildirim gidiyor (EN/TR).
+
+- **Onayınız (öneri: kabul):** gönderildikten sonra gelen "teslim edilemedi" bilgisiyle sonradan yedeğe geçiş şimdilik yalnızca `notify` işiyle giden mesajlarda çalışıyor (bugün "dosyalandı" mesajı). Hoş geldin, cihaz kodu ve "bugünün linki" yalnızca gönderim anında yedeğe geçiyor. Bu mesajlar W2-06/W2-07'de `notify` işine taşınacak.
+- Yeni Türkçe bildirim metni Q63 Türkçe okumasına eklendi.
+
 **Sizin yapmanız gerekenler (hafta 2, acele değil ama uzun sürüyor):**
 
 - Twilio WhatsApp göndericisi + Meta doğrulaması + EN/ES/TR şablonlar (en uzun bekleme süresi bu).
