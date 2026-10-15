@@ -302,7 +302,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-12 · Extraction, validation, questions, weather
 
-- [ ] **W1-12 done** · today _conflicts_ (L) · step 17
+- [x] **W1-12 done** · today _conflicts_ (L) · step 17 · _Done 2026-10-15: commits `8ea3ca1`, `b76b48b`; CI run 38719172765 is green: the golden set on recorded outputs (generated from the expected extractions, since no `ANTHROPIC_API_KEY` exists yet), and the ES + EN fixture through the fake transcriber to a v2 draft with exactly one question (Delta headcount, D27) and no text while the device was seen in the last 30 s (`web.integration.test.ts`). By hand with keys (`pnpm eval` live, the ≤ 60 s p50 timing): not done._
 - **Spec:** §10.3–§10.5, §10.10–§10.12.
 - **Already in the repo:** the `submit_daily_report` tool from Zod, prompt caching, one retry with Zod issues (`apps/worker/src/ai/extract.ts:47-62`, `apps/worker/src/ai/claude.ts:224-245`); totals recomputed, required fields, confidence < 0.7, question priority and max (`packages/shared/src/report/validate.ts`); agent versions and one open question at a time; `fetch_weather` from Open-Meteo; `pnpm eval` with 26 golden cases and `--recorded`.
 - **Moved in:** channel-neutral options and `applyAnswer(Source)` (from W1-13); the `field-api` `reports/:id/answer` route (from W1-07).
