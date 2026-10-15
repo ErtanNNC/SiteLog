@@ -286,7 +286,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-11 · Transcription (Deepgram)
 
-- [ ] **W1-11 done** · today _conflicts_ (M) · step 16
+- [x] **W1-11 done** · today _conflicts_ (M) · step 16 · _Done 2026-10-15: commit `f6421d2`; CI run 38707702246 is green, including the PGlite integration test (a fixture upload through the fake transcriber: transcript with segments, 600 peaks, duration, audit, `extract_report`, latency and audio seconds in the job metrics). By hand with `DEEPGRAM_API_KEY`: not done (no key, no recordings yet: `fixtures/voice/README.md`)._
 - **Spec:** §10.2, §5.2.
 - **Already in the repo:** a result shape with segments (`apps/worker/src/ai/transcribe.ts:26-34`), a tested OpenAI implementation (it becomes the fallback), vocabulary hints from site, companies, aliases and the top-50 glossary (`:58-79`), splitting above 15 min, latency and audio-seconds metrics (`apps/worker/src/runner.ts:62`, `:78-95`), a signed-URL helper (`apps/worker/src/storage.ts:57`), ffmpeg peaks (`apps/worker/src/media/ffmpeg.ts`).
 - **Build (this repo):**
