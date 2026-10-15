@@ -25,17 +25,17 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 **Çalışma kuralı (sizden, 2026-10-15):** aksini söyleyene kadar development durmadan devam ediyor; sizin kararınızı ya da doğrulamanızı gerektiren her şey aşağıda bekletiliyor.
 
-- 16:00 civarında oturum kullanım limiti doldu; üç iş yarıda kaldı ve şimdi kaldıkları yerden sürdürülüyor:
-  - W1-16 Overview: bitti ve push edildi (5846e2a, 4d5182a; kanal sütunu, "Bugünün linkini gönder", yeni dikkat maddeleri, EN/TR, Şantiye detayındaki düğme dahil).
-  - W1-17 Raporlar arşivi ve Rapor inceleme (yüklemeler, aramalar, saha olayları, EN/TR): yerel commit hazır, son test ve push.
-  - İnceleme düzeltmeleri: imza/geri alma PDF yarışı, e-posta tekrar denemesi (409), `missing` uyarısının kaybolmaması, Filed ekranının sonsuz beklemesi, panel e2e port/zaman aşımı.
+- W1-16 Overview (5846e2a, 4d5182a) ve W1-17 Raporlar arşivi + Rapor inceleme (81c9500; kanal filtresi, "Fotoğraf yok", her ses/arama için oynatıcı ve saniyeye atlama, saha olayları, EN/TR) bitti.
+- İnceleme düzeltmeleri bitti (1d26288 … c7b79f3): imza/geri alma PDF yarışı, e-posta 409, `missing` uyarısının tek işlemde ve kaybolmadan gitmesi, Filed ekranında 3 dk sonra "PDF yolda" mesajı.
+- Actions döndükten sonraki CI'da iki eski test güncellendi (9278b0e, a41cdec); kod hatası değildi. Tüm işin birlikte CI sonucu bekleniyor.
+- W1-19 (cut-over ve prova) için yerel hazırlık sürüyor.
 - Sonra: W1-19 (cut-over ve prova) için yerelde yapılabilen hazırlık; uzak adımların her biri sizin onayınızla.
 
 ## Onayınızı bekleyen
 
 1. Spec §19: "önerilerinle devam" kararınız işlendi (commit 25c1ead, c3b1cd4). Q10, Q19, Q20, Q22–Q28, Q30, Q33, Q35, Q37–Q48, Q50–Q62, Q64, Q65 karara bağlandı; davranışı değiştirenler kodlandı (Q53 geç kayıt 48 saat, Q55 `missing` uyarısı, Q46 CALL/TEXT onayı, Q45, Q42 12 karakterli link kodu, Q24, Q62 yarım gün = vardiyanın yarısı, Q59).
    **Sizde bekleyenler (öneri yok ya da yalnızca sizde olan bilgi):** Q15 SMS'te GSM-7 dışı karakterler (metinler olduğu gibi mi kalsın, yoksa "-" gibi GSM-7 noktalaması mı; İletimerkezi'nin cevabı da gerekli) · Q16 eski v1 rapor verisinin v2 görünümü (şimdilik yapıldığı gibi) · Q17 bağlı satırları olan kaydın silinmesi (şimdilik yapıldığı gibi) · Q2 TR SIP sağlayıcısı ve numara · Q8/Q9 TR fatura kurumu ve fiyatı · Q49 İYS (hukuk) · Q63 ES/TR metinlerinin ana dili konuşan biri tarafından incelenmesi · Q28/Q40/Q50 avukat metinleri (go-live'dan önce) · Q30 fatura kurumu ve fiyatlar · Q66 PDF'in Türkçe metinleri ve Q68 rapor e-postasının Türkçe metni (ana dili Türkçe biri gözden geçirmeli; örnek PDF'ler sohbette).
-2. Preview'a yeni migration'lar (`20261015000001` W1-10, `…02` W1-12, `…03` Q53, `…04` Q24, `…10` W1-14 imza sonrası PDF, `…30` W1-15 dosyalama, `…40` W1-16 sahipsiz bilinmeyen numaralar): `preview` / `supabase` Deploy işi için onayınız (Actions çalışmaya başlayınca).
+2. Preview'a yeni migration'lar (`20261015000001` W1-10, `…02` W1-12, `…03` Q53, `…04` Q24, `…10` W1-14 imza sonrası PDF, `…30` W1-15 dosyalama, `…40` W1-16 sahipsiz bilinmeyen numaralar, `…60` PDF kilidi, `…61` `missing` uyarısı tek işlemde): `preview` / `supabase` Deploy işi için onayınız (Actions çalışmaya başlayınca).
 
 ## Sizden beklenen
 
