@@ -6,7 +6,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 ## Bitti
 
-**1, 2** — M0 (W1-01 … W1-04) ve M1 (W1-05 kod tarafı, W1-06, W1-06a ülke paketleri). Her ticket PR #1'de CI yeşil (Deno, PGlite, gerçek Supabase yığını, demo e2e). W1-05 de tamam: preview projesine migration'lar ve edge function'lar 2026-10-15'te yüklendi (Deploy run 38695343167).
+**1, 2** — M0 (W1-01 … W1-04) ve M1 (W1-05 kod tarafı, W1-06, W1-06a ülke paketleri). Her ticket PR #1'de CI yeşil (Deno, PGlite, gerçek Supabase yığını, demo e2e). W1-05 de tamam: preview projesine migration'lar ve edge function'lar 2026-10-15'te yüklendi (Deploy run 38695343167); demo verisi (Kestrel, Demir Yapı) onayınızla aynı gün uygulandı (Deploy run 38699886514, hedef `seed`).
 
 ## Sürüyor
 
@@ -18,8 +18,7 @@ Sürüyor: W1-10 _worker çalışma zamanı_ (M3) `w1-10-worker` dalında: NOTIF
 
 ## Onayınızı bekleyen
 
-1. Preview'a demo verisinin uygulanması (`pnpm seed:demo -- --apply`, D41) — ilk telefon kontrolünden önce.
-2. Spec §19'da sahibin kararını bekleyen sorular, önerileriyle birlikte:
+1. Spec §19'da sahibin kararını bekleyen sorular, önerileriyle birlikte:
    - Hafta 2'yi (M6) bloke edenler: Q19 kanal sırası, Q22 kanal yedekleme, Q25 ilk temas/WhatsApp onayı, Q26 gelen WhatsApp, Q27 web push, Q39 WhatsApp göndericisi, Q40 kanal bazlı opt-out.
    - W1-09'dan önce: Q41 (_No work_ / _Weather_ düğmelerinin ne yazacağı). W1-16'dan önce: Q44 (paylaşımlı göndericide gelen SMS kimin).
    - Go-live'dan önce: Q28 yasal metin anahtarları, Q42 link kodu uzunluğu, Q47 imza sırrının döndürülmesi, Q49 İYS (hukuk).
