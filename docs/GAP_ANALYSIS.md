@@ -877,6 +877,7 @@ Every step is one PR-sized change on `spec-v1.2`, pushed while PR #1 is open so 
 
 - Change: device check, consent, Today, Recording with the offline queue, Processing, Question, Draft, Confirm & send.
 - Verify: on a real iPhone and Android phone via the HTTPS preview: 2 minutes + 2 photos uploaded, airplane-mode queue, "5 · full day" → 40 h → filing.
+- Built (W1-09, first half): `apps/field` link check (resolve → device check → welcome and consent), Today, Recording (`recorder/`), Processing (polls every 2 s, then less often) and the IndexedDB upload queue (`queue/`) with the offline banner; the `field` copy in EN/ES/TR; `resolve` returns the org's name; `STORAGE_PUBLIC_URL` for local stacks; `e2e/screens.spec.ts` on a fake field-api and `e2e/supabase/record.spec.ts` on the stack (CI). Open: spec §19 Q50–Q52 (privacy notice page, automated-call consent, test recording); the real-phone checks.
 
 **Step 19 · Filing, PDF, email** — W1-14, W1-15
 

@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:supabase": "playwright test --config playwright.supabase.config.ts",
     "brand": "node scripts/build-brand.mjs"
   },
   "dependencies": {

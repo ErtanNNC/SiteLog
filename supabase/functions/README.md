@@ -173,8 +173,12 @@ SUPABASE_DB_URL=... FIELD_API_URL=http://127.0.0.1:54321/functions/v1/field-api 
 ```
 
 Inside the local Edge Runtime `SUPABASE_URL` is the gateway's internal address (`http://kong:8000`),
-so the signed upload URLs field-api returns name that host: replace the origin with the stack's API
-URL to use one from the host machine (the stack test does).
+so the signed upload URLs field-api returns name that host, which no browser reaches. Set
+`STORAGE_PUBLIC_URL` in `supabase/functions/.env` to the API URL as the browser reaches it
+(`http://127.0.0.1:54321` on the same machine, which CI sets for the field app's `e2e:supabase`; a
+second HTTPS tunnel to port 54321 for a phone) and field-api re-bases the signed URLs on it (W1-09).
+Leave it unset on hosted projects, whose `SUPABASE_URL` is public. Not `SUPABASE_*`: the CLI skips
+env names with that prefix. The stack test replaces the origin itself.
 
 Testing the field app on a phone against the local stack: use an HTTPS tunnel to the field app's
 dev or preview server, not a LAN address. The device cookie is `Secure`, so a plain-http

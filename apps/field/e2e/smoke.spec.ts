@@ -1,16 +1,15 @@
-import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
-import { FIELD_ROUTES } from '../src/routes/paths.ts';
+import { PLACEHOLDER_ROUTES } from '../src/routes/paths.ts';
+import { expectFieldScreen } from './support/checks.ts';
 
 /**
- * W1-04 smoke test of the field app shell (production build, 390 px phone): every §9.3 route renders
- * its placeholder in EN, ES and TR with the Field-03 header, `<html lang>` follows the phone's
- * language, axe finds no WCAG 2.2 AA violation and nothing scrolls sideways. Then the PWA basics:
- * manifest, icons and the service worker.
+ * Smoke test of the field app shell (production build, 390 px phone): the §9.3 routes still built
+ * as placeholders (M6) render in EN, ES and TR with the Field-03 header, `<html lang>` follows the
+ * phone's language, Today without a stored link asks for the SMS link, axe finds no WCAG 2.2 AA
+ * violation and nothing scrolls sideways. Then the PWA basics: manifest, icons and the service
+ * worker. The W1-09 screens themselves are `screens.spec.ts`.
  */
-
-const WCAG_22_AA = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'];
 
 /** Friday 9 October 2026, mid-afternoon in both markets (the artboards' day). */
 const NOW = new Date('2026-10-09T15:00:00Z');
@@ -21,40 +20,11 @@ const LANGUAGES = [
   { lang: 'tr', locale: 'tr-TR', timezoneId: 'Europe/Istanbul', date: 'CUMA, 9 EKİM' },
 ] as const;
 
-async function expectNoAxeViolations(page: Page) {
-  await page.evaluate(() => document.fonts.ready);
-  const { violations } = await new AxeBuilder({ page }).withTags(WCAG_22_AA).analyze();
-  const report = violations
-    .map(
-      (v) =>
-        `${v.id} (${v.impact ?? 'n/a'}): ${v.help} → ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`,
-    )
-    .join('\n');
-  expect(report).toBe('');
-}
-
-async function expectNoSidewaysScroll(page: Page) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow, 'horizontal overflow in px').toBeLessThanOrEqual(0);
-}
-
-/** §14.6: field targets are at least 56 px both ways. */
-async function expectFieldTargets(page: Page) {
-  for (const target of await page.locator('a[href], button').all()) {
-    const box = await target.boundingBox();
-    expect(box, await target.evaluate((el) => el.outerHTML)).not.toBeNull();
-    expect(Math.round(box!.height)).toBeGreaterThanOrEqual(56);
-    expect(Math.round(box!.width)).toBeGreaterThanOrEqual(56);
-  }
-}
-
 for (const { lang, locale, timezoneId, date } of LANGUAGES) {
   test.describe(`placeholders in ${lang} (${locale})`, () => {
     test.use({ locale, timezoneId });
 
-    for (const route of FIELD_ROUTES) {
+    for (const route of PLACEHOLDER_ROUTES) {
       test(`${route.path} renders at 390 px`, async ({ page }) => {
         const copy = UI_RESOURCES[lang];
         const title = copy.field.routes[route.screen];
@@ -72,14 +42,22 @@ for (const { lang, locale, timezoneId, date } of LANGUAGES) {
         await expect(header.locator('img[src="/brand/logo-mark.svg"]')).toBeVisible();
         await expect(page.locator('time')).toHaveText(date);
         await expect(page.locator('time')).toHaveAttribute('datetime', '2026-10-09');
-        const gear = page.getByRole('link', { name: copy.field.routes.settings });
-        await expect(gear).toHaveCount(route.screen === 'today' ? 1 : 0);
+        await expect(page.getByRole('link', { name: copy.field.routes.settings })).toHaveCount(0);
 
-        await expectNoSidewaysScroll(page);
-        await expectFieldTargets(page);
-        await expectNoAxeViolations(page);
+        await expectFieldScreen(page);
       });
     }
+
+    test('Today without a stored link asks for the one in the text message', async ({ page }) => {
+      const copy = UI_RESOURCES[lang].field;
+      await page.goto('/today');
+      await expect(
+        page.getByRole('heading', { level: 1, name: copy.link.none.title }),
+      ).toBeVisible();
+      await expect(page.getByText(copy.link.none.body)).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('lang', lang);
+      await expectFieldScreen(page);
+    });
 
     test('an unknown path shows the not-found screen, with a way to Today', async ({ page }) => {
       const copy = UI_RESOURCES[lang].field;
@@ -91,12 +69,12 @@ for (const { lang, locale, timezoneId, date } of LANGUAGES) {
       // The installed app (display: standalone) has no URL bar or back button.
       const action = page.getByRole('link', { name: copy.notFound.action });
       await expect(action).toBeVisible();
-      await expectNoSidewaysScroll(page);
-      await expectFieldTargets(page);
-      await expectNoAxeViolations(page);
+      await expectFieldScreen(page);
       await action.click();
       await expect(page).toHaveURL(/\/today$/);
-      await expect(page.getByRole('heading', { level: 1, name: copy.routes.today })).toBeVisible();
+      await expect(
+        page.getByRole('heading', { level: 1, name: copy.link.none.title }),
+      ).toBeVisible();
     });
   });
 }
@@ -107,17 +85,15 @@ test.describe('language fallback', () => {
   test('a phone in a language the app does not speak gets English', async ({ page }) => {
     await page.goto('/today');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Open your link' })).toBeVisible();
   });
 });
 
 test.describe('PWA', () => {
-  test('/ opens Today, and the gear opens Settings', async ({ page }) => {
+  test('/ (the manifest start_url) opens Today', async ({ page }) => {
     await page.goto('/');
     await expect(page).toHaveURL(/\/today$/);
-    await page.getByRole('link', { name: 'Settings' }).click();
-    await expect(page).toHaveURL(/\/settings$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Open your link' })).toBeVisible();
   });
 
   test('the installed shell paints at once on a stalled connection, with its own fonts', async ({
@@ -136,7 +112,7 @@ test.describe('PWA', () => {
       },
     );
     await page.goto('/today', { waitUntil: 'commit' });
-    await expect(page.getByRole('heading', { level: 1, name: 'Today' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Open your link' })).toBeVisible();
     await page.waitForFunction(async () => {
       await navigator.serviceWorker.ready;
       return !!navigator.serviceWorker.controller;

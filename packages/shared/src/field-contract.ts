@@ -151,6 +151,40 @@ export const REQUIRED_CONSENTS = [
   'data_processing',
 ] as const satisfies readonly ConsentType[];
 
+/**
+ * The version of the field app's own consent wording (`field.welcome.*`, W1-09), stored as
+ * `consents.text_version` while the pack names no consent key (spec §19 Q28, Appendix B); when
+ * `legalKeys.consent` is set the app sends that key instead. Bump it when the wording changes.
+ */
+export const FIELD_CONSENT_TEXT_VERSION = 'field.consent.v1';
+
+/** The recorder's cap per clip (§9.3, F5): 15 minutes, then the clip is sent and another may start. */
+export const MAX_CLIP_SECONDS = 15 * 60;
+
+/** Shorter clips are not sent (F5 edge case "recording < 5 s or silent → I couldn't hear anything"). */
+export const MIN_CLIP_SECONDS = 5;
+
+/**
+ * How often the Processing screen polls `GET reports/:id` (F5 step 4, W1-09): every 2 s for the
+ * first 20 s, every 5 s until a minute has passed, then every 10 s. A draft typically takes 20–60 s,
+ * and every route counts against the device's limit (`FIELD_RATE_LIMITS.device`, 30 a minute,
+ * refused hits included), which the clip's own upload and the photos behind it share.
+ */
+export const REPORT_POLL = {
+  fastMs: 2_000,
+  fastForMs: 20_000,
+  slowMs: 5_000,
+  slowForMs: 60_000,
+  maxMs: 10_000,
+} as const;
+
+/** The wait before the next poll, `elapsedMs` after the screen started polling. */
+export function reportPollDelay(elapsedMs: number): number {
+  if (elapsedMs < REPORT_POLL.fastForMs) return REPORT_POLL.fastMs;
+  if (elapsedMs < REPORT_POLL.slowForMs) return REPORT_POLL.slowMs;
+  return REPORT_POLL.maxMs;
+}
+
 // ───────────────────────────── Responses ─────────────────────────────
 
 export interface FieldSite {
@@ -169,6 +203,8 @@ export interface ResolveResponse {
     contactPref: ContactPref;
     status: ReporterStatus;
   };
+  /** The org the reporter reports for: its name is in the consent notice (F4 "for {company}"). */
+  org: { name: string };
   link: {
     kind: LinkKind;
     siteId: string | null;

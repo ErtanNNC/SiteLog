@@ -24,13 +24,41 @@ function SettingsIcon() {
   );
 }
 
+function ChevronIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+      className="flex-none"
+    >
+      <path d="M7 10l5 5 5-5" />
+    </svg>
+  );
+}
+
 /**
  * The field app's top bar (Field-03-Today, Field-10-Today-TR): the mark, the site's name and, on
- * Today, the settings gear. Before a link tells us the site (W1-07), it shows "SiteLog" as on
- * Field-02-Welcome. The site switcher ("Change site", §9.3: more than one site) comes with the
- * Today screen (W1-09). The gear is 56 px, the field target size (§14.6).
+ * Today, the settings gear. Before a link tells us the site it shows "SiteLog" as on
+ * Field-02-Welcome. With `onChangeSite` the name is the site switcher (named "{site}, Change
+ * site", §9.3: more than one site). The gear is 56 px, the field target size (§14.6).
  */
-export function Header({ siteName, settings = false }: { siteName?: string; settings?: boolean }) {
+export function Header({
+  siteName,
+  onChangeSite,
+  settings = false,
+}: {
+  siteName?: string;
+  onChangeSite?: () => void;
+  settings?: boolean;
+}) {
   const { t, tc } = useFieldCopy();
   return (
     <header
@@ -38,7 +66,19 @@ export function Header({ siteName, settings = false }: { siteName?: string; sett
       className={`flex h-header flex-none items-center gap-2 bg-asphalt pl-4 text-chalk ${settings ? '' : 'pr-4'}`}
     >
       <img src="/brand/logo-mark.svg" alt="" width={28} height={28} className="size-7 flex-none" />
-      {siteName ? (
+      {siteName && onChangeSite ? (
+        <button
+          type="button"
+          onClick={onChangeSite}
+          // The name shown starts the accessible name (WCAG 2.5.3 label in name): a voice-control
+          // user says the site's name.
+          aria-label={`${siteName}, ${t('today.changeSite')}`}
+          className="flex h-target min-w-0 flex-1 items-center gap-1.5 border-0 bg-transparent p-0 text-left text-[16px] leading-6 font-bold text-chalk"
+        >
+          <span className="truncate">{siteName}</span>
+          <ChevronIcon />
+        </button>
+      ) : siteName ? (
         <span className="min-w-0 flex-1 truncate text-[16px] leading-6 font-bold">{siteName}</span>
       ) : (
         <span className="min-w-0 flex-1 truncate text-[19px] leading-6 font-extrabold tracking-[-0.03em] [font-stretch:125%]">

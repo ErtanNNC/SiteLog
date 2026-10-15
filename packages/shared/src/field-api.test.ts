@@ -17,6 +17,7 @@ import { JOB_TYPES } from './enums.ts';
 import { parseJobPayload } from './schemas/jobs.ts';
 import { sha256Hex } from './links.ts';
 import { uploadStoragePath } from './report/numbering.ts';
+import { REPORT_POLL, reportPollDelay } from './field-contract.ts';
 
 /** The field-api contract (W1-07): what the field app sends and field-api accepts. */
 
@@ -28,6 +29,25 @@ describe('field-api contract', () => {
       codeSend: { limit: 5, windowSeconds: 3600 },
       codeVerify: { limit: 5, windowSeconds: 3600 },
     });
+  });
+
+  it('polls Processing every 2 s at first, then slower, well under the device limit', () => {
+    expect(reportPollDelay(0)).toBe(REPORT_POLL.fastMs);
+    expect(reportPollDelay(19_999)).toBe(2_000);
+    expect(reportPollDelay(20_000)).toBe(5_000);
+    expect(reportPollDelay(59_999)).toBe(5_000);
+    expect(reportPollDelay(60_000)).toBe(10_000);
+    expect(reportPollDelay(3_600_000)).toBe(REPORT_POLL.maxMs);
+    // The first minute: the first poll and those after it leave room for the clip's own calls.
+    let at = 0;
+    let polls = 1;
+    while (at + reportPollDelay(at) < 60_000) {
+      at += reportPollDelay(at);
+      polls++;
+    }
+    expect(polls).toBeLessThanOrEqual(FIELD_RATE_LIMITS.device.limit - 10);
+    // Then six a minute.
+    expect(60_000 / reportPollDelay(60_000)).toBe(6);
   });
 
   it('maps the recorder media types to a kind and extension, parameters and case ignored', () => {

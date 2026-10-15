@@ -76,8 +76,10 @@ jobs:
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
       # Smoke flows + §15/M9 axe WCAG 2.2 AA scan of every route at 1440/375 px + keyboard checks.
       - run: pnpm --filter @sitelog/web e2e
-      # Field app (W1-04): every route in EN/ES/TR at 390 px, axe, no sideways scroll, PWA basics.
-      # Built with no env set: no Supabase URL, so no /api proxy.
+      # Field app: the placeholder routes and the W1-09 screens (device check, welcome, Today,
+      # Recording with Chromium's fake microphone, Processing, the offline queue, the No work and
+      # Weather sheets) in EN/ES/TR at 390 px on a fake field-api (Playwright routes), axe, no
+      # sideways scroll, PWA basics. Built with no env set: no Supabase URL, so no /api proxy.
       - name: Field app smoke test
         if: success() || failure()
         run: pnpm --filter @sitelog/field e2e
@@ -110,7 +112,9 @@ jobs:
       # `supabase start` loads supabase/functions/.env into the Edge Runtime. APP_URL is the CORS
       # origin of the panel under test; field-api signs device codes and derives personal link
       # codes with LINK_SIGNING_SECRET (the worker below uses the same one) and accepts browser
-      # origins FIELD_APP_URL and CORS_EXTRA_ORIGINS (the field app's dev and preview servers).
+      # origins FIELD_APP_URL and CORS_EXTRA_ORIGINS (the field app's dev and preview servers, and
+      # :4176, its e2e:supabase preview). STORAGE_PUBLIC_URL re-bases the signed upload URLs from
+      # the Edge Runtime's internal http://kong:8000 to the API URL the browser reaches (W1-09).
       # sms-webhook checks X-Twilio-Signature with TWILIO_AUTH_TOKEN against SMS_WEBHOOK_URL. The
       # rest are dummies so no function boots half-configured. No pack has a sender id here, so
       # every text goes to the console driver: nothing reaches Meta, Stripe, Twilio or Anthropic.
@@ -120,7 +124,8 @@ jobs:
           APP_URL=http://localhost:5173
           LINK_SIGNING_SECRET=e2e-link-signing-secret-not-for-production
           FIELD_APP_URL=http://localhost:5174
-          CORS_EXTRA_ORIGINS=http://localhost:4174
+          CORS_EXTRA_ORIGINS=http://localhost:4174,http://localhost:4176
+          STORAGE_PUBLIC_URL=http://127.0.0.1:54321
           TWILIO_AUTH_TOKEN=e2e-twilio-auth-token
           SMS_WEBHOOK_URL=http://127.0.0.1:54321/functions/v1/sms-webhook
           WA_VERIFY_TOKEN=e2e-verify-token
@@ -199,6 +204,13 @@ jobs:
           pnpm --filter @sitelog/db exec vitest run --config vitest.stack.config.ts stack/field-api.test.ts stack/api-invite-reporter.test.ts -t "on the local stack"
       - name: Install Chromium
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
+      # The field app (W1-09) on the stack, at 390 px with Chromium's fake microphone: a reporter
+      # of its own demo org opens the personal link → device check (the code from the console
+      # messages row) → consent → Today → record → the clip by signed URL → complete creates the
+      # report (processing, channel web) and the transcribe_upload job → Processing; axe on every
+      # screen. Before the worker starts, so the job is still queued (apps/field/e2e/supabase/).
+      - name: Field app · link → device check → consent → record → upload
+        run: pnpm --filter @sitelog/field e2e:supabase
       # The `supabase` project: no worker runs, so the jobs these specs enqueue stay queued.
       - name: Login · realtime · edit → v2 · sign-off · payroll CSV · EOT pack
         run: pnpm --filter @sitelog/web e2e:supabase --project=supabase
@@ -247,6 +259,8 @@ jobs:
           path: |
             apps/web/playwright-report
             apps/web/test-results
+            apps/field/playwright-report
+            apps/field/test-results
           retention-days: 7
 
   eval:

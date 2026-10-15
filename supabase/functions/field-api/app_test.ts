@@ -14,7 +14,7 @@ import {
 } from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { EnvError } from '../_shared/env.ts';
-import { createFieldApp, type VerifyCodeMessage } from './app.ts';
+import { createFieldApp, publicSignedUrl, type VerifyCodeMessage } from './app.ts';
 import { fakeMessaging } from '../_shared/fake_messaging.ts';
 import { notifierCodeSender } from './code_sender.ts';
 import { FakeFieldStore } from './fake_store.ts';
@@ -275,6 +275,8 @@ Deno.test(
     assertEquals(r1.json.needsConsent, true);
     assertEquals(r1.json.sites, []);
     assertEquals((r1.json.reporter as Record<string, unknown>).firstName, 'Marco');
+    // The consent notice names the company (F4 "for {company}").
+    assertEquals(r1.json.org, { name: 'Kestrel Build Group' });
     assertEquals(Object.keys(r1.json.country as object).sort(), [
       'code',
       'fieldLocales',
@@ -1090,3 +1092,57 @@ Deno.test('a missing LINK_SIGNING_SECRET is a 500 that says nothing more', async
   assertEquals(((await res.json()) as { error: string }).error, 'internal');
   assertEquals(res.headers.get('cache-control'), 'no-store');
 });
+
+Deno.test(
+  'a signed upload URL is re-based on STORAGE_PUBLIC_URL for local stacks (W1-09)',
+  async () => {
+    // Inside `supabase start` the functions see the gateway as http://kong:8000, which no phone can
+    // reach; the public URL replaces the origin and keeps the signed path and token.
+    const signed =
+      'http://kong:8000/storage/v1/object/upload/sign/audio/o/s/2026-10-09/u.webm?token=abc';
+    assertEquals(
+      publicSignedUrl(signed, 'http://127.0.0.1:54321'),
+      'http://127.0.0.1:54321/storage/v1/object/upload/sign/audio/o/s/2026-10-09/u.webm?token=abc',
+    );
+    // A self-hosted gateway under a path keeps the prefix; a trailing slash is dropped.
+    assertEquals(
+      publicSignedUrl(signed, 'https://api.example.com/supabase/'),
+      'https://api.example.com/supabase/storage/v1/object/upload/sign/audio/o/s/2026-10-09/u.webm?token=abc',
+    );
+    // Unset, unparsable or not http(s): as Storage built it.
+    assertEquals(publicSignedUrl(signed, undefined), signed);
+    assertEquals(publicSignedUrl(signed, 'not a url'), signed);
+    assertEquals(publicSignedUrl(signed, 'ftp://x'), signed);
+    assertEquals(
+      publicSignedUrl('https://p.supabase.co/other/path', 'http://127.0.0.1:54321'),
+      'https://p.supabase.co/other/path',
+    );
+
+    // Through the app: `uploads` answers the public one; without the dep, the store's.
+    const h = setup();
+    await consented(h);
+    const app = createFieldApp({
+      store: h.store,
+      sendVerifyCode: () => Promise.resolve({ channel: 'sms', messageId: 'x' }),
+      linkSigningSecret: () => 'test-link-signing-secret',
+      allowedOrigins: () => [],
+      now: () => T0,
+      publicUrl: () => 'http://localhost:4174',
+    });
+    const res = await app.request('/field-api/uploads', {
+      method: 'POST',
+      headers: {
+        'x-link-code': CODES.marco,
+        'content-type': 'application/json',
+        cookie: [...h.jar].map(([k, v]) => `${k}=${v}`).join('; '),
+      },
+      body: JSON.stringify({ kind: 'audio', mime: 'audio/webm', bytes: 1000, siteId: SITE_A }),
+    });
+    assertEquals(res.status, 201);
+    const body = (await res.json()) as { signedUrl: string; path: string };
+    assertEquals(
+      body.signedUrl,
+      `http://localhost:4174/storage/v1/object/upload/sign/audio/${body.path}?token=t`,
+    );
+  },
+);

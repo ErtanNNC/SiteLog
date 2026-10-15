@@ -101,6 +101,14 @@ export interface FieldApiDeps {
   linkSigningSecret: () => string;
   /** FIELD_APP_URL and CORS_EXTRA_ORIGINS (`fieldOrigins`). */
   allowedOrigins: () => readonly string[];
+  /**
+   * STORAGE_PUBLIC_URL: the project URL as the phone reaches it, when it differs from the
+   * functions' SUPABASE_URL (a local stack, where that is the gateway's internal `http://kong:8000`).
+   * A signed upload URL is re-based on it, so the browser can PUT the clip (W1-09). Unset on hosted
+   * projects, whose SUPABASE_URL is already public. Not `SUPABASE_*`: the Supabase CLI skips env
+   * names with that prefix in `supabase/functions/.env` and refuses them in `secrets set`.
+   */
+  publicUrl?: () => string | undefined;
   now?: () => Date;
   randomBytes?: (n: number) => Uint8Array;
   randomUUID?: () => string;
@@ -310,6 +318,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
         contactPref: ctx.reporter.contact_pref,
         status: ctx.reporter.status,
       },
+      org: { name: ctx.org.org.name },
       link: {
         kind: ctx.link.kind,
         siteId: ctx.link.site_id,
@@ -566,7 +575,13 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     });
     const signed = await store.createSignedUploadUrl(bucket, path);
     await audit(ctx, 'upload.created', 'upload', id, { kind: body.kind, site_id: site.id, date });
-    const res: UploadResponse = { uploadId: id, bucket, path, ...signed };
+    const res: UploadResponse = {
+      uploadId: id,
+      bucket,
+      path,
+      ...signed,
+      signedUrl: publicSignedUrl(signed.signedUrl, deps.publicUrl?.()),
+    };
     return c.json(res, 201);
   });
 
@@ -771,6 +786,29 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
 }
 
 // ── Request and error helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * A signed upload URL as the phone can reach it: its origin (and any path prefix of a self-hosted
+ * gateway) replaced by STORAGE_PUBLIC_URL when that is set and parses; otherwise as Storage
+ * built it. The `/storage/v1/object/upload/sign/...` path and the token are kept as they are.
+ */
+export function publicSignedUrl(signedUrl: string, publicUrl: string | undefined): string {
+  if (!publicUrl) return signedUrl;
+  let base: URL;
+  let signed: URL;
+  try {
+    base = new URL(publicUrl);
+    signed = new URL(signedUrl);
+  } catch {
+    return signedUrl;
+  }
+  if (base.protocol !== 'http:' && base.protocol !== 'https:') return signedUrl;
+  const marker = '/storage/v1/';
+  const at = signed.pathname.indexOf(marker);
+  if (at < 0) return signedUrl;
+  const prefix = base.pathname.replace(/\/+$/, '');
+  return `${base.origin}${prefix}${signed.pathname.slice(at)}${signed.search}`;
+}
 
 async function parseBody<S extends z.ZodType>(c: Ctx, schema: S): Promise<z.output<S>> {
   const text = await c.req.text();

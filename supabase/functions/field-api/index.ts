@@ -25,6 +25,8 @@ function fieldApp() {
       linkSigningSecret: () => requireEnv('LINK_SIGNING_SECRET'),
       allowedOrigins: () =>
         fieldOrigins(optionalEnv('FIELD_APP_URL'), optionalEnv('CORS_EXTRA_ORIGINS')),
+      // Local stacks only: the gateway as the browser reaches it (.env.example, STORAGE_PUBLIC_URL).
+      publicUrl: () => optionalEnv('STORAGE_PUBLIC_URL'),
     });
   }
   return app;
