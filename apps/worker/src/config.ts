@@ -82,6 +82,13 @@ export const ConfigSchema = z.object({
   DEEPGRAM_API_KEY: z.string().default(''),
   /** The provider's model; empty: nova-3 for Deepgram, whisper-1 for OpenAI. */
   TRANSCRIBE_MODEL: z.string().default(''),
+  /**
+   * The model calls (`ctx.ai.claude`: extraction, answers, corrections, day-off, site guess):
+   * Claude by default, `fake` the recorded tool outputs of fixtures/tool-outputs
+   * (src/ai/fake-claude.ts). Outside production Claude without ANTHROPIC_API_KEY becomes the
+   * fake; in production `fake` is ignored and a missing key fails the jobs.
+   */
+  EXTRACT_PROVIDER: z.enum(['claude', 'fake']).default('claude'),
   ANTHROPIC_API_KEY: z.string().default(''),
   CLAUDE_MODEL: z.string().default('claude-sonnet-5-5'),
   CLAUDE_MODEL_FAST: z.string().default(''),

@@ -450,6 +450,7 @@ TRANSCRIBE_PROVIDER=deepgram     # deepgram | openai (fallback) | fake (fixtures
 TRANSCRIBE_MODEL=nova-3          # batch, with word/segment timestamps
 OPENAI_API_KEY=                  # only if TRANSCRIBE_PROVIDER=openai (as built: also the v1.0 WhatsApp notes until step 22)
 ANTHROPIC_API_KEY=
+EXTRACT_PROVIDER=claude          # claude | fake (fixtures/tool-outputs; never in production; dev without a key)
 CLAUDE_MODEL=                    # extraction + writing
 CLAUDE_MODEL_FAST=               # live dialog turns, intent classification
 
@@ -1755,6 +1756,8 @@ Do not output photos, schemaVersion, reportDate, reportLanguage, units or weathe
 **User message template:** as v1 plus `REPORT_LANGUAGE`, `UNITS`, `REPORTER_LOCALE`, `CHANNEL` (web | call), `WORKING_HOURS`.
 
 *As built (W1-12):* the system prompt above is `apps/worker/src/ai/prompts/extract.v2.md`, verbatim (a test compares it with this section). Two more system blocks follow it, both cached: the source-format note above, verbatim (`EXTRACTION_V2_SOURCE_NOTE` in `apps/worker/src/ai/prompts/extraction.v2.ts`; a test compares it with this section; §19 Q59) and the org block (COMPANIES, GLOSSARY, REJECTED). The user message adds the variables above to the v1 template, with `OBSERVED_WEATHER` in the org's units (mm, °C, km/h for a metric org; `fetch_weather` keeps storing imperial, §10.11) and the voice notes keyed by upload id. Every text block of every call, retry turns included, has phone numbers replaced by `[phone]` before it is sent (`redactPhones`, §10.12). The model is `CLAUDE_MODEL` (default `claude-sonnet-5-5`, GAP D23): the 5.5 generation refuses a forced `tool_choice` and temperature 0, so for it the call uses `tool_choice: auto` with an instruction to call the tool, verifies that it did and re-prompts once (§19 Q58); a model that accepts them gets both. Code then sets `schemaVersion` 2, `reportDate`, `reportLanguage` and `units` (the org's), `photos` (the report's) and `weather.observed` (in the org's units), recomputes the totals and drops any source that points at no input. The WhatsApp worker keeps prompt v1 and report data v1 until step 22.
+
+*As built (keyless phone check):* `EXTRACT_PROVIDER=fake` (`apps/worker/src/ai/fake-claude.ts`), and outside production `EXTRACT_PROVIDER=claude` without `ANTHROPIC_API_KEY`, replaces only the model's answer with the recorded tool output (`fixtures/tool-outputs`) of the golden case whose transcript is in the request (else the hero case `riverside-2026-10-09`, which leaves the Delta headcount open), and code then validates and post-processes it exactly as Claude's; in production the fake is never used.
 
 ### 10.5 Validation, hours and question selection (code)
 

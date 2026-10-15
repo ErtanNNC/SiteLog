@@ -1,7 +1,7 @@
 import { NEVER_ABORTED, abortableFetch } from './abort';
 import { createServer } from 'node:http';
 import * as Sentry from '@sentry/node';
-import { createAnthropicClient } from './ai/claude';
+import { createExtractionClient } from './ai/fake-claude';
 import { createOpenAiClient } from './ai/transcribe';
 import { createTranscriber } from './ai/transcriber';
 import { loadConfig, type Config } from './config';
@@ -56,7 +56,7 @@ export function buildContext(config: Config): Ctx {
     wa,
     storage,
     ai: {
-      claude: createAnthropicClient(config.ANTHROPIC_API_KEY),
+      claude: createExtractionClient(config, log),
       openai,
       transcriber: createTranscriber(config, { openai, ffmpeg, log }),
     },
