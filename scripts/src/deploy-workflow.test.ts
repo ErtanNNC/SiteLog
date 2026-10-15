@@ -79,6 +79,7 @@ describe('deploy.yml', () => {
       'supabase',
       'seed',
       'phone-setup',
+      'preview-worker',
       'worker',
       'preview',
       'web',
@@ -98,6 +99,42 @@ describe('deploy.yml', () => {
     const plan = JOBS.get('plan')!.text;
     // `all` never includes the seed.
     expect(plan).toContain('[ "$1" != seed ]');
+  });
+
+  it('runs the worker against the preview project only, from spec-v1.2, for 60 minutes', () => {
+    const job = JOBS.get('preview-worker')!;
+    expect(job.condition).toContain("needs.plan.outputs.preview_worker == 'true'");
+    expect(job.condition).toContain("inputs.environment == 'preview'");
+    expect(job.condition).toContain("github.ref == 'refs/heads/spec-v1.2'");
+    expect(job.text).toContain('environment: preview');
+    expect(job.text).toMatch(/^ {4}timeout-minutes: 75$/m);
+    expect(job.text).toContain("RUN_MINUTES: '60'");
+    expect(job.text).toContain('"$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF"');
+    // It never sets or changes a Supabase secret (not even in a comment's example).
+    expect(job.text).not.toMatch(/secrets set/);
+    expect(job.text).not.toMatch(/secrets (unset|list)/);
+    // Fakes and console only; never production.
+    for (const line of [
+      'NODE_ENV: development',
+      'EMAIL_PROVIDER: console',
+      'TRANSCRIBE_PROVIDER: fake',
+      'EXTRACT_PROVIDER: fake',
+      'WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast',
+    ])
+      expect(job.text).toContain(line);
+    expect(job.text).not.toMatch(
+      /ANTHROPIC_API_KEY|DEEPGRAM_API_KEY|TWILIO_|ILETIMERKEZI_|RESEND_/,
+    );
+    expect(job.text).toContain('pnpm --filter @sitelog/worker exec tsx src/index.ts');
+    // The link secret is made in the job, masked, and handed to the worker process only.
+    const start = stepScript('preview-worker', 'Start the worker');
+    expect(start).toContain('link_secret="$(openssl rand -hex 32)"');
+    expect(start).toContain('echo "::add-mask::$link_secret"');
+    expect(start).toContain('LINK_SIGNING_SECRET="$link_secret"');
+    expect(start).not.toMatch(/LINK_SIGNING_SECRET.*GITHUB_ENV|link_secret.*GITHUB_ENV/);
+    expect(start).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY.*GITHUB_ENV|\$key.*GITHUB_ENV/);
+    // `all` never includes it.
+    expect(JOBS.get('plan')!.text).toContain('[ "$1" != preview-worker ]');
   });
 
   it('compares full refs, so a tag named like a branch passes no guard', () => {
@@ -448,6 +485,38 @@ describe('deploy.yml plan step, run under bash', () => {
     expect(decide('workflow_dispatch', 'refs/heads/other', 'preview').on).toEqual([]);
   });
 
+  it('preview-worker: only for the preview Environment from spec-v1.2, and never in `all`', () => {
+    const run = (ref: string, environment: string, target: string) =>
+      runStep(plan, {
+        EVENT: 'workflow_dispatch',
+        REF: ref,
+        REF_NAME: ref.replace(/^refs\/(heads|tags)\//, ''),
+        TARGET: target,
+        ENVIRONMENT: environment,
+        PR_NUMBER: '',
+      });
+    const ok = run(PREVIEW, 'preview', 'preview-worker');
+    expect(ok.status, ok.log).toBe(0);
+    expect(ok.outputs.preview_worker).toBe('true');
+    expect(PLAN_TARGETS.filter((t) => ok.outputs[t] === 'true')).toEqual([]);
+    expect(ok.summary).toContain('| preview_worker | true |');
+    for (const [ref, environment] of [
+      [PREVIEW, 'staging'],
+      [PREVIEW, 'production'],
+      [LIVE, 'preview'],
+      [LIVE, 'staging'],
+      [`refs/tags/spec-v1.2`, 'preview'],
+    ] as const) {
+      const r = run(ref, environment, 'preview-worker');
+      expect(r.outputs.preview_worker, `${ref} ${environment}`).toBe('false');
+      expect(r.log).toContain('preview-worker skipped');
+    }
+    for (const environment of ['preview', 'staging']) {
+      const all = run(environment === 'preview' ? PREVIEW : LIVE, environment, 'all');
+      expect(all.outputs.preview_worker, environment).toBe('false');
+    }
+  });
+
   it('the inventory runs alone, from staging only', () => {
     expect(decide('workflow_dispatch', PREVIEW, 'staging', 'inventory').on).toEqual(['inventory']);
     expect(decide('workflow_dispatch', LIVE, 'production', 'inventory').on).toEqual([]);
@@ -524,7 +593,7 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
     expect(field.text).toContain("environment: ${{ inputs.environment || 'staging' }}");
     expect(JOBS.get('plan')!.text).toContain('field: ${{ steps.plan.outputs.field }}');
     expect(WORKFLOW).toContain(
-      'options: [all, supabase, worker, web, field, inventory, seed, phone-setup]',
+      'options: [all, supabase, worker, web, field, inventory, seed, phone-setup, preview-worker]',
     );
   });
 
@@ -961,5 +1030,86 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
       expect(args).not.toContain('--alias');
       expect(prod.summary).toContain('### Field app (staging, m)');
     });
+  });
+});
+
+describe('deploy.yml preview-worker steps, run under bash', () => {
+  it('Check configuration refuses the staging project and missing settings', () => {
+    const check = stepScript('preview-worker', 'Check configuration');
+    const base = {
+      SUPABASE_ACCESS_TOKEN: 'token',
+      SUPABASE_DB_PASSWORD_SECRET: ' pw ',
+      SUPABASE_PROJECT_REF: 'previewref0000000000',
+    };
+    const ok = runStep(check, base);
+    expect(ok.status, ok.log).toBe(0);
+    const staging = runStep(check, { ...base, SUPABASE_PROJECT_REF: STAGING_PROJECT_REF });
+    expect(staging.status).toBe(1);
+    expect(staging.log).toContain('refusing to run the worker');
+    const missing = runStep(check, { ...base, SUPABASE_DB_PASSWORD_SECRET: '' });
+    expect(missing.status).toBe(1);
+  });
+
+  const heartbeat = stepScript(
+    'preview-worker',
+    'Keep the worker running (heartbeat every 5 minutes)',
+  );
+  const redact = stepScript('preview-worker', 'Start the worker')
+    .split('\n')
+    .reduce<{ on: boolean; lines: string[] }>(
+      (acc, l) => {
+        if (/<<'JS'$/.test(l)) return { on: true, lines: acc.lines };
+        if (acc.on && l === 'JS') return { on: false, lines: acc.lines };
+        if (acc.on) acc.lines.push(l);
+        return acc;
+      },
+      { on: false, lines: [] },
+    )
+    .lines.join('\n');
+
+  function beat(curl: string) {
+    return runStep(
+      heartbeat,
+      {
+        RUN_MINUTES: '60',
+        // The step's cwd is the scratch directory, where redact.mjs and worker.log are.
+        RUNNER_TEMP: '.',
+        WORKER_UNTIL: String(Math.floor(Date.now() / 1000) + 1),
+      },
+      (dir) => {
+        writeFileSync(join(dir, 'redact.mjs'), redact);
+        writeFileSync(
+          join(dir, 'worker.log'),
+          [
+            JSON.stringify({ msg: 'question ready', report_id: 'r1' }),
+            JSON.stringify({
+              msg: 'email (console provider)',
+              to: ['lena@kestrelbuild.example'],
+              text_preview: 'call +1 312 555 0142',
+            }),
+            'Error: duplicate key (phone_e164)=(+13125550142) at https://x.netlify.app/r/K7Q2MXABCD23',
+          ].join('\n'),
+        );
+      },
+      { curl },
+    );
+  }
+
+  it('runs until the limit, printing the health and a redacted log tail', () => {
+    const r = beat('echo \'{"ok":true,"listening":true}\'');
+    expect(r.status, r.log).toBe(0);
+    expect(r.log).toContain('Time limit reached (60 minutes)');
+    expect(r.log).toContain('"listening":true');
+    expect(r.log).toContain('question ready');
+    expect(r.log).toContain('1 recipient(s)');
+    expect(r.log).toContain('(phone_e164)=([phone])');
+    expect(r.log).toContain('/r/[code]');
+    expect(r.log).not.toMatch(/555|kestrelbuild|K7Q2MX|text_preview/);
+  });
+
+  it('fails when the worker stops answering /health', () => {
+    const r = beat('exit 7');
+    expect(r.status).toBe(1);
+    expect(r.log).toContain('stopped answering /health');
   });
 });

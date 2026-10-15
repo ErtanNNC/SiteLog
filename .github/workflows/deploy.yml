@@ -22,6 +22,9 @@ name: Deploy
 #                                           preview project), from spec-v1.2 or the live branch (D41)
 #   workflow_dispatch, target inventory   → read-only staging inventory (W1-01 step 0), from any ref
 #                                           whose deploy.yml has it
+#   workflow_dispatch preview, target     → the worker in the runner against the preview project for
+#     preview-worker                        60 minutes (fake transcription and extraction, console
+#                                           texts and email), from spec-v1.2 only: the phone check
 #   push to main                          → skipped by the guard (there is no main yet, D40)
 #
 # Until the cut-over (W1-19) the live branch runs its own pre-W1-01 deploy.yml (no guard, no
@@ -40,13 +43,15 @@ on:
         options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; both owner-approved)
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; all three owner-approved)
         type: choice
-        options: [all, supabase, worker, web, field, inventory, seed, phone-setup]
+        options: [all, supabase, worker, web, field, inventory, seed, phone-setup, preview-worker]
         default: all
 
 concurrency:
-  group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || inputs.environment || 'staging' }}
+  # preview-worker runs for an hour: its own group, so seed, phone-setup and supabase dispatches to the
+  # preview project are not held behind it.
+  group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || inputs.target == 'preview-worker' && 'preview-worker' || inputs.environment || 'staging' }}
   cancel-in-progress: false
 
 env:
@@ -71,6 +76,7 @@ jobs:
       inventory: ${{ steps.plan.outputs.inventory }}
       seed: ${{ steps.plan.outputs.seed }}
       phone_setup: ${{ steps.plan.outputs.phone_setup }}
+      preview_worker: ${{ steps.plan.outputs.preview_worker }}
     steps:
       - name: Decide what this run may touch
         id: plan
@@ -82,9 +88,9 @@ jobs:
           TARGET: ${{ inputs.target || 'all' }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false
+          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false
           # `all` covers the four deploy targets; the inventory runs only when asked for.
-          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ]; }; }
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ]; }; }
 
           if [ "$EVENT" = pull_request ]; then
             web=true field=true preview=true
@@ -101,6 +107,13 @@ jobs:
               phone_setup=true
             else
               echo "::notice::phone-setup skipped: it touches the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = preview-worker ]; then
+            # The owner's phone check of the whole field flow (W1-13, W1-15) against the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              preview_worker=true
+            else
+              echo "::notice::preview-worker skipped: it runs the worker against the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
             fi
           elif [ "$TARGET" = seed ]; then
             # W1-06 apply mode (RUNBOOK §2 step 5): the two demo orgs into the preview project only.
@@ -138,6 +151,7 @@ jobs:
             echo "inventory=$inventory"
             echo "seed=$seed"
             echo "phone_setup=$phone_setup"
+            echo "preview_worker=$preview_worker"
           } >> "$GITHUB_OUTPUT"
           {
             echo "### Deploy plan"
@@ -150,7 +164,7 @@ jobs:
             echo
             echo "| Job | Runs |"
             echo "| --- | --- |"
-            for k in supabase worker web field preview inventory seed phone_setup; do echo "| $k | ${!k} |"; done
+            for k in supabase worker web field preview inventory seed phone_setup preview_worker; do echo "| $k | ${!k} |"; done
           } >> "$GITHUB_STEP_SUMMARY"
 
   supabase:
@@ -385,6 +399,189 @@ jobs:
             echo "- Then open **Demo phone** in the panel; the device code of that org's reporters appears there."
             echo "- Kestrel codes (Lena): 345WF5 Marco Ruiz, X7BWGH Dana Whitfield. Demir codes (Elif): Y3AXHQ Emre Yıldız, DP46EP Selin Kaya."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  preview-worker:
+    name: Phone check · the worker against the preview project (60 min)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # Runs the worker in this runner against the preview project for 60 minutes, then exits 0, so the
+    # owner can test the whole field flow from a phone with no Anthropic or Deepgram key and no
+    # developer machine: record → fake transcript (fixtures/voice) → fake extraction
+    # (fixtures/tool-outputs) → question → answer → draft → Confirm & send → filed → PDF, the `filed`
+    # text and the email, both console (the panel's Demo phone). No real text or email can leave:
+    # no SMS provider credentials and EMAIL_PROVIDER=console.
+    #
+    # It sets or changes no Supabase secret. The worker's LINK_SIGNING_SECRET is a random value made
+    # in this job and handed to the worker process only. That is safe on the preview project: a
+    # personal link's code is stored only as its sha256 (`field_links.code_hash`) and field-api
+    # resolves `/r/:code` by that hash (`linkCodeHash`), never by the secret. The worker uses the
+    # secret only in `ensurePersonalLink` (packages/shared/src/links.ts; the links of the
+    # question_ready, draft_ready and filed texts, the welcome and the HELP reply): it cannot derive
+    # the existing links' codes under another secret, so it inserts one new personal link per
+    # reporter it texts in this run (audited `field_link.created`). Existing links, and devices (they
+    # belong to the reporter, not to a link), keep working; device codes are field-api's, not the
+    # worker's.
+    if: >-
+      needs.plan.outputs.preview_worker == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # The pr-1 previews (their /api reaches the preview project): the links in the texts and emails.
+      FIELD_APP_URL: ${{ vars.FIELD_APP_URL || 'https://pr-1--sitelog-field-staging-ertannnc.netlify.app' }}
+      PANEL_URL: ${{ vars.VITE_APP_URL || 'https://pr-1--staging-sitelog.netlify.app' }}
+      RUN_MINUTES: '60'
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD_SECRET" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::preview-worker needs SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD (secrets) and SUPABASE_PROJECT_REF (variable) in the preview Environment."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing to run the worker against it."
+            exit 1
+          fi
+          pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$pw"
+          { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Connection string
+        # As the seed job: the pooler address `supabase link` saved, in session mode (5432, which also
+        # delivers the worker's LISTEN), with the password URL-encoded. Never printed.
+        run: |
+          f=supabase/.temp/pooler-url
+          if [ ! -s "$f" ]; then
+            echo "::error::supabase link saved no pooler address ($f)."
+            exit 1
+          fi
+          url="$(node -e '
+            const u = new URL(require("fs").readFileSync(process.argv[1], "utf8").trim());
+            u.password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
+            u.port = "5432";
+            if (!u.username.includes(process.env.SUPABASE_PROJECT_REF)) { console.error("pooler user is not the preview project"); process.exit(1); }
+            console.log(u.toString());
+          ' "$f")"
+          echo "::add-mask::$url"
+          { echo "SUPABASE_DB_URL<<__URL__"; printf '%s\n' "$url"; echo "__URL__"; } >> "$GITHUB_ENV"
+      - name: Start the worker
+        env:
+          NODE_ENV: development
+          EMAIL_PROVIDER: console
+          TRANSCRIBE_PROVIDER: fake
+          EXTRACT_PROVIDER: fake
+          # Open-Meteo's free endpoint (no key; the worker's default is the commercial one).
+          WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast
+          WORKER_PORT: '8080'
+          WORKER_ID: preview-worker-${{ github.run_id }}
+        run: |
+          # The service-role key (Storage: audio in, PDFs out) and a random LINK_SIGNING_SECRET (see
+          # the job's comment), masked and passed to the worker process only, not to later steps.
+          key="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
+          if [ -z "$key" ]; then
+            echo "::error::no service_role key for the preview project."
+            exit 1
+          fi
+          echo "::add-mask::$key"
+          link_secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$link_secret"
+          # What the log steps print: phone numbers, email addresses, link codes and email previews
+          # hidden (the worker logs ids, not phone numbers; the console email provider logs its
+          # recipients and a preview, and an error message can quote a value).
+          cat > "$RUNNER_TEMP/redact.mjs" <<'JS'
+          import { createInterface } from 'node:readline';
+          createInterface({ input: process.stdin }).on('line', (line) => {
+            let out = line;
+            try {
+              const rec = JSON.parse(line);
+              delete rec.text_preview;
+              if (Array.isArray(rec.to)) rec.to = `${rec.to.length} recipient(s)`;
+              out = JSON.stringify(rec);
+            } catch {}
+            console.log(
+              out
+                .replace(/\+\d[\d\s().-]{6,}\d/g, '[phone]')
+                .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '[email]')
+                .replace(/\/r\/[A-Za-z0-9]{6,}/g, '/r/[code]'),
+            );
+          });
+          JS
+          SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co" \
+          SUPABASE_SERVICE_ROLE_KEY="$key" LINK_SIGNING_SECRET="$link_secret" APP_URL="$PANEL_URL" \
+            setsid nohup pnpm --filter @sitelog/worker exec tsx src/index.ts > "$RUNNER_TEMP/worker.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/worker.pid"
+          for attempt in $(seq 1 120); do
+            body=$(curl -sS -m 5 http://127.0.0.1:8080/health || true)
+            case "$body" in *'"listening":true'*) echo "worker healthy and listening after ${attempt}s"; break ;; esac
+            if [ "$attempt" = 120 ]; then
+              echo "::error::the worker did not answer /health with listening: true"
+              node "$RUNNER_TEMP/redact.mjs" < "$RUNNER_TEMP/worker.log" | tail -n 200
+              exit 1
+            fi
+            sleep 1
+          done
+          until=$(( $(date +%s) + RUN_MINUTES * 60 ))
+          echo "WORKER_UNTIL=$until" >> "$GITHUB_ENV"
+          {
+            echo "### Worker on the preview project"
+            echo
+            echo "The worker runs in this job against \`$SUPABASE_PROJECT_REF\` until **$(date -u -d "@$until" '+%Y-%m-%d %H:%M UTC')** ($RUN_MINUTES minutes), then stops."
+            echo
+            echo "- Transcription and extraction are fakes (no Anthropic or Deepgram key): a recording gets the fixtures/voice transcript of its reporter's language, and the extraction is that golden case's recorded tool output. An EN or ES reporter (Marco Ruiz, Dana Whitfield) gets the Riverside hero report, which asks one question: the Delta crew's headcount."
+            echo "- Texts and email are console only: they appear in the panel's **Demo phone** ([$PANEL_URL]($PANEL_URL)); nothing reaches a real phone or inbox."
+            echo "- Field links in the texts point at \`$FIELD_APP_URL\`. The first text to a reporter in this run carries a new personal link (this run's own signing secret); the existing links keep working."
+            echo "- No Supabase secret was set or changed."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the worker running (heartbeat every 5 minutes)
+        run: |
+          while :; do
+            left=$(( WORKER_UNTIL - $(date +%s) ))
+            if [ "$left" -le 0 ]; then break; fi
+            sleep $(( left < 300 ? left : 300 ))
+            # Alive = /health answers (200, or 503 while a job is stuck; the worker then exits).
+            health=$(curl -sS -m 10 http://127.0.0.1:8080/health || true)
+            if [ -z "$health" ]; then
+              echo "::error::the worker stopped answering /health before the time limit (its log is in the next step)."
+              exit 1
+            fi
+            echo "── $(date -u '+%H:%M:%S UTC') · $(( (WORKER_UNTIL - $(date +%s) + 59) / 60 )) min left"
+            echo "$health"
+            tail -n 20 "$RUNNER_TEMP/worker.log" | node "$RUNNER_TEMP/redact.mjs"
+          done
+          echo "Time limit reached ($RUN_MINUTES minutes): stopping the worker."
+      - name: Stop the worker and print its log
+        if: always()
+        run: |
+          # SIGTERM lets the worker finish its jobs' current step and close its connections; a job
+          # it leaves running is taken back by claim_jobs() after the stale lock (10 min).
+          if [ -f "$RUNNER_TEMP/worker.pid" ]; then
+            pid="$(cat "$RUNNER_TEMP/worker.pid")"
+            kill -TERM -- "-$pid" 2>/dev/null || true
+          fi
+          pkill -TERM -f 'tsx src/index.ts' 2>/dev/null || true
+          for _ in $(seq 1 30); do pgrep -f 'tsx src/index.ts' >/dev/null || break; sleep 1; done
+          pkill -KILL -f 'tsx src/index.ts' 2>/dev/null || true
+          if [ -f "$RUNNER_TEMP/worker.log" ]; then
+            echo "Last 200 lines of the worker log (phone numbers, email addresses, link codes and email previews hidden):"
+            tail -n 200 "$RUNNER_TEMP/worker.log" | node "$RUNNER_TEMP/redact.mjs"
+            phones=$(grep -cE '\+[0-9][0-9 ().-]{6,}[0-9]' "$RUNNER_TEMP/worker.log" || true)
+            echo "Phone-like strings in the whole log (hidden above): ${phones:-0}"
+          fi
 
   worker:
     name: Worker · Fly.io
