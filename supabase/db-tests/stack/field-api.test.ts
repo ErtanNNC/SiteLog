@@ -279,7 +279,7 @@ describeField('field-api on the local stack', () => {
     const late = await call('POST', `uploads/${more.json.uploadId}/complete`);
     expect([late.status, late.json.error]).toEqual([409, 'report_filing']);
     const [still] = await sql<{ status: string; n: number }[]>`
-      select r.status, (select count(*)::int from jobs where dedupe_key = ${`file:${done.json.reportId}`}) as n
+      select r.status, (select count(*)::int from jobs where dedupe_key = ${`file:${done.json.reportId}:v1`}) as n
       from reports r where r.id = ${done.json.reportId as string}`;
     expect(still).toEqual({ status: 'awaiting_confirmation', n: 1 });
 
@@ -433,7 +433,7 @@ describeRace('field_complete_upload on real Postgres', () => {
     ]);
     const [state] = await sql<{ status: string; jobs: number; attached: boolean }[]>`
       select r.status,
-             (select count(*)::int from jobs where dedupe_key = ${`file:${reportId}`}) as jobs,
+             (select count(*)::int from jobs where dedupe_key = ${`file:${reportId}:v1`}) as jobs,
              (select report_id is not null from uploads where id = ${voice}) as attached
       from reports r where r.id = ${reportId}`;
     if (confirm === 'ok') {
