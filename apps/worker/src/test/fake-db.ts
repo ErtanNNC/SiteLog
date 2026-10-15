@@ -25,7 +25,7 @@ import type {
   UnknownContactRow,
   WeatherEventRow,
 } from '@sitelog/shared';
-import { formatReportNo, reportLanguageFor } from '@sitelog/shared';
+import { backoffSeconds, formatReportNo, reportLanguageFor } from '@sitelog/shared';
 import { V12_ROW_DEFAULTS } from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { median } from '../cost';
@@ -93,6 +93,11 @@ export interface FakeDbData {
     created_at: string;
   }>;
   consoleEmails: ConsoleEmailRow[];
+  /** uploads (only whose they are: the dead-job notice, W1-10). */
+  uploads: Map<
+    string,
+    { id: string; report_id: string | null; reporter_id: string | null; site_id: string }
+  >;
 }
 
 export interface FakeDb extends Db {
@@ -137,6 +142,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     smsOptOuts: [],
     fieldLinks: [],
     consoleEmails: [],
+    uploads: new Map(),
   };
   let jobSeq = 0;
   let taken = 0;
@@ -895,24 +901,41 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async failJob(id, error) {
       const j = d.jobs.get(id);
       if (!j) return;
-      if (j.attempts >= 5)
-        Object.assign(j, { status: 'dead', last_error: error, finished_at: iso() });
+      // fail_job() (20261015000001, GAP D17): 30 s · 2 min · 10 min · 30 min · 2 h, dead after the 6th.
+      const wait = backoffSeconds(j.attempts);
+      if (wait === null)
+        Object.assign(j, {
+          status: 'dead',
+          last_error: error,
+          finished_at: iso(),
+          locked_at: null,
+          locked_by: null,
+        });
       else
         Object.assign(j, {
           status: 'queued',
           last_error: error,
-          run_after: new Date(now().getTime() + 30_000).toISOString(),
+          run_after: new Date(now().getTime() + wait * 1000).toISOString(),
+          locked_at: null,
+          locked_by: null,
         });
+    },
+    async heartbeatJob(id, worker) {
+      const j = d.jobs.get(id);
+      if (!j || j.status !== 'running' || j.locked_by !== worker) return false;
+      j.locked_at = iso();
+      return true;
     },
     async getJob(id) {
       return d.jobs.get(id) ?? null;
     },
+    async getUploadOwner(id) {
+      return d.uploads.get(id) ?? null;
+    },
     async enqueueJob(type, payload, opts = {}) {
       if (opts.dedupeKey) {
-        const existing = Array.from(d.jobs.values()).find(
-          (j) =>
-            j.dedupe_key === opts.dedupeKey && (j.status === 'queued' || j.status === 'running'),
-        );
+        // D16 (20261015000001): a key names one job for good, whatever its status.
+        const existing = Array.from(d.jobs.values()).find((j) => j.dedupe_key === opts.dedupeKey);
         if (existing) return existing.id;
       }
       const id = ++jobSeq;

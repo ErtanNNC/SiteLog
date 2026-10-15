@@ -4,6 +4,7 @@ import {
   REPORTER_LOCALES,
   REPORTER_ROLES,
   ensurePersonalLink,
+  jobKeys,
 } from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
 import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
@@ -185,12 +186,7 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     });
   }
 
-  const jobId = await enqueueJob(
-    admin,
-    'send_welcome',
-    { reporterId: reporter.id, siteId: firstSiteId },
-    { dedupeKey: `welcome:${reporter.id}:${firstSiteId}` },
-  );
+  const jobId = await welcomeJob(admin, reporter.id, firstSiteId);
   await logAudit(admin, {
     orgId: body.orgId,
     actorType: 'user',
@@ -247,11 +243,12 @@ async function resend(admin: AppClient, user: AuthedUser, reporterId: string) {
     .limit(1)
     .throwOnError();
   const siteId = links[0]?.site_id;
+  // D16: the nth re-send's own key; two taps at once read the same count and enqueue once.
   const jobId = await enqueueJob(
     admin,
     'send_welcome',
     { reporterId: reporter.id, siteId, reinvite: true },
-    { dedupeKey: `welcome:${reporter.id}:reinvite` },
+    { dedupeKey: jobKeys.welcomeResend(reporter.id, (count ?? 0) + 1) },
   );
   await logAudit(admin, {
     orgId: reporter.org_id,
@@ -263,6 +260,40 @@ async function resend(admin: AppClient, user: AuthedUser, reporterId: string) {
     diff: { siteId: siteId ?? null, jobId },
   });
   return { ok: true, reporterId: reporter.id, welcomeJobId: jobId };
+}
+
+/**
+ * The invite's welcome job (GAP D16, W1-10). A welcome for the same reporter and site still queued
+ * or running (a double submit, the same invite repeated before it went) is that one, as the old
+ * key did while its job was active; otherwise a new job under the key of the office's nth invite of
+ * the reporter, so an invite after the welcome went (a disabled reporter invited again) texts again.
+ */
+async function welcomeJob(admin: AppClient, reporterId: string, siteId: string): Promise<number> {
+  const { data: pending } = await admin
+    .from('jobs')
+    .select('id')
+    .eq('type', 'send_welcome')
+    .eq('payload->>reporterId', reporterId)
+    .eq('payload->>siteId', siteId)
+    .eq('payload->>reinvite', 'false')
+    .in('status', ['queued', 'running'])
+    .order('id')
+    .limit(1)
+    .throwOnError();
+  if (pending[0]) return pending[0].id;
+  const { count } = await admin
+    .from('audit_log')
+    .select('id', { count: 'exact', head: true })
+    .eq('action', 'reporter.invited')
+    .eq('actor_type', 'user') // the office's invites, not the worker's "welcome sent" rows
+    .eq('entity_id', reporterId)
+    .throwOnError();
+  return enqueueJob(
+    admin,
+    'send_welcome',
+    { reporterId, siteId },
+    { dedupeKey: jobKeys.welcomeInvite(reporterId, (count ?? 0) + 1) },
+  );
 }
 
 async function disable(admin: AppClient, user: AuthedUser, reporterId: string) {

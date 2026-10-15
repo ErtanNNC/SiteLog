@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { z } from 'zod';
 import type { Logger } from '../log';
 import { estimateClaudeCostUsd, type TokenUsage } from './cost';
+import { abortableFetch, currentSignal } from '../abort';
 
 /**
  * Single forced-tool calls against Claude (§10.4): prompt caching on the system blocks,
@@ -16,7 +17,10 @@ import { estimateClaudeCostUsd, type TokenUsage } from './cost';
 
 export type MessagesClient = {
   messages: {
-    create(params: Anthropic.MessageCreateParamsNonStreaming): Promise<Anthropic.Message>;
+    create(
+      params: Anthropic.MessageCreateParamsNonStreaming,
+      options?: { signal?: AbortSignal },
+    ): Promise<Anthropic.Message>;
   };
 };
 
@@ -180,7 +184,9 @@ export async function callTool<T>(
 
   for (;;) {
     const params = buildParams(req, messages);
-    const msg = await client.messages.create(params);
+    // The running job's signal (W1-10): a timed-out job's model call stops.
+    const signal = currentSignal();
+    const msg = await client.messages.create(params, signal ? { signal } : undefined);
     apiCalls++;
     usage = addUsage(usage, usageOf(msg));
 
@@ -272,5 +278,5 @@ function withInstruction(
 
 export function createAnthropicClient(apiKey: string): MessagesClient | null {
   if (!apiKey) return null;
-  return new Anthropic({ apiKey, maxRetries: 2, timeout: 120_000 });
+  return new Anthropic({ apiKey, maxRetries: 2, timeout: 120_000, fetch: abortableFetch() });
 }

@@ -12,6 +12,7 @@ import {
   type SmsNotifier,
   type SmsTransport,
 } from '@sitelog/shared';
+import { abortableFetch } from './abort';
 import type { Config } from './config';
 import type { Db } from './db';
 
@@ -120,7 +121,7 @@ export function workerTransports(
     Config,
     'TWILIO_ACCOUNT_SID' | 'TWILIO_AUTH_TOKEN' | 'ILETIMERKEZI_API_KEY' | 'ILETIMERKEZI_API_HASH'
   >,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = abortableFetch(),
 ): (driver: SmsDriver) => SmsTransport {
   return createSmsTransports({
     fetch: (url, init) => fetchImpl(url, init),

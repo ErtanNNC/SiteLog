@@ -547,6 +547,10 @@ export type JobRow = {
   locked_at: string | null;
   locked_by: string | null;
   last_error: string | null;
+  /**
+   * Unique (constraint `jobs_dedupe_key_key`, GAP D16, 20261015000001): a key names one job for
+   * good, whatever its status; `enqueue_job()` answers a taken key with that job's id.
+   */
   dedupe_key: string | null;
   /** `convo:<id>`: jobs of one conversation run one at a time (20261012000004_queue_fairness.sql). */
   lock_key: string | null;
@@ -1249,6 +1253,8 @@ export type Database = {
         };
         Returns: Json;
       };
+      // D16 (20261015000001): `insert … on conflict (dedupe_key) do nothing`; a taken key returns its
+      // job's id, whatever its status.
       enqueue_job: {
         Args: {
           p_type: string;
@@ -1276,6 +1282,8 @@ export type Database = {
       claim_jobs: { Args: { p_worker: string; p_limit: number }; Returns: JobRow[] };
       complete_job: { Args: { p_job_id: number }; Returns: undefined };
       fail_job: { Args: { p_job_id: number; p_error: string }; Returns: undefined };
+      // A dead job back to queued with a fresh budget (D16, 20261015000001; service role only).
+      requeue_dead_job: { Args: { p_job_id: number }; Returns: boolean };
       mark_notifications_read: { Args: { p_ids: string[] }; Returns: undefined };
       // §13 roles that see an org-wide notification of a kind (20261014000001), used by RLS.
       notification_audience: { Args: { p_kind: string }; Returns: MemberRole[] };

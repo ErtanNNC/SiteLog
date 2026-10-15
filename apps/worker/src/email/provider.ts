@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import { raceJobSignal } from '../abort';
 import type { Logger } from '../log';
 
 /**
@@ -48,22 +49,25 @@ export function createResendProvider(apiKey: string, from: string): EmailProvide
   return {
     name: 'resend',
     async send(msg) {
-      const { data, error } = await resend.emails.send({
-        from,
-        to: msg.to,
-        subject: msg.subject,
-        html: msg.html,
-        text: msg.text,
-        replyTo: msg.replyTo,
-        attachments: msg.attachments?.map((a) => ({
-          filename: a.filename,
-          content: a.content,
-          contentType: a.contentType,
-        })),
-        tags: msg.tags
-          ? Object.entries(msg.tags).map(([name, value]) => ({ name, value }))
-          : undefined,
-      });
+      // Resend takes no fetch or signal: a timed-out job stops waiting for it (W1-10).
+      const { data, error } = await raceJobSignal(
+        resend.emails.send({
+          from,
+          to: msg.to,
+          subject: msg.subject,
+          html: msg.html,
+          text: msg.text,
+          replyTo: msg.replyTo,
+          attachments: msg.attachments?.map((a) => ({
+            filename: a.filename,
+            content: a.content,
+            contentType: a.contentType,
+          })),
+          tags: msg.tags
+            ? Object.entries(msg.tags).map(([name, value]) => ({ name, value }))
+            : undefined,
+        }),
+      );
       if (error) throw new Error(`Resend: ${error.name ?? 'error'} ${error.message}`);
       return { id: data?.id ?? null };
     },

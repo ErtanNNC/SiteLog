@@ -5,6 +5,8 @@ import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import type { Sql } from 'postgres';
 import {
   emptyReportDataV1,
+  JOB_BACKOFF_SECONDS,
+  JOB_MAX_ATTEMPTS,
   officePhotoStoragePath,
   readReportData,
   type DailyReportDataV1,
@@ -1200,21 +1202,32 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
       reportId: 'r1',
       metrics: { tokens: { input: 1200, output: 300 }, estCostUsd: 0.0123, latencyMs: 4100 },
     });
-    // Once done, the key is free again.
+    // D16 (W1-10): a key names one job for good. Done, it still answers with that job and
+    // enqueues nothing; dead or failed, the same.
+    expect(
+      await db.enqueueJob('extract_report', { reportId: 'r1' }, { dedupeKey: 'extract:r1:2' }),
+    ).toBe(a);
+    expect(await db.queueStats()).toEqual({ queued: 1, running: 1, dead: 0 });
+    await q(`update jobs set status = 'dead' where id = $1`, [a]);
+    expect(
+      await db.enqueueJob('extract_report', { reportId: 'r1' }, { dedupeKey: 'extract:r1:2' }),
+    ).toBe(a);
+    // A key of another occurrence (the next source count) is a new job.
     const b = await db.enqueueJob(
       'extract_report',
       { reportId: 'r1' },
-      { dedupeKey: 'extract:r1:2' },
+      { dedupeKey: 'extract:r1:3' },
     );
     expect(b).not.toBe(a);
     expect(await db.getJob(999_999)).toBeNull();
     await q(`delete from jobs where id <> $1`, [later]);
   });
 
-  it('fails with the §10.1 backoff and goes dead after the 5th attempt', async () => {
+  it('fails with the §10.1 backoff (30 s · 2 min · 10 min · 30 min · 2 h) and goes dead after the 6th attempt (D17)', async () => {
     const id = await db.enqueueJob('transcribe_audio', { messageId: 'm1' });
-    const expected = [30, 120, 600, 1800];
-    for (let attempt = 1; attempt <= 5; attempt++) {
+    const expected = [...JOB_BACKOFF_SECONDS];
+    expect(expected).toEqual([30, 120, 600, 1800, 7200]);
+    for (let attempt = 1; attempt <= JOB_MAX_ATTEMPTS; attempt++) {
       const [job] = await db.claimJobs('worker-a', 1);
       expect(job).toMatchObject({ id, attempts: attempt });
       await db.failJob(id, `boom ${attempt} ` + 'x'.repeat(5000));
@@ -1230,7 +1243,7 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
       expect(row.last_error.length).toBe(4000);
       expect(row.last_error.startsWith(`boom ${attempt}`)).toBe(true);
       expect(row.locked_by).toBeNull();
-      if (attempt < 5) {
+      if (attempt < JOB_MAX_ATTEMPTS) {
         expect(row.status).toBe('queued');
         expect(row.delay).toBeGreaterThan(expected[attempt - 1]! - 5);
         expect(row.delay).toBeLessThanOrEqual(expected[attempt - 1]!);
@@ -1245,9 +1258,11 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
     await db.failJob(424242, 'unknown job is a no-op');
   });
 
-  it('returns the winning job when a concurrent enqueue of the same dedupe key races it', async () => {
+  it('returns the winning job when a concurrent enqueue of the same dedupe key races it (pre-W1-10 database)', async () => {
     // Simulate the race inside one session: the first insert of key 'race:1' fails exactly the way
-    // the loser of two concurrent enqueue_job calls does (unique_violation on the partial index).
+    // the loser of two concurrent enqueue_job calls did before W1-10 (unique_violation on the
+    // partial index). Since 20261015000001 enqueue_job() inserts `on conflict do nothing`, so this
+    // only matters to a worker deployed ahead of the migration.
     await pg.exec(`
       create sequence race_once;
       create function simulate_race() returns trigger language plpgsql as $f$
@@ -1272,6 +1287,24 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
         `drop trigger simulate_race on jobs; drop function simulate_race(); drop sequence race_once;`,
       );
     }
+  });
+
+  it('refreshes locked_at of a job this worker still holds (the W1-10 heartbeat)', async () => {
+    await q(`delete from jobs`);
+    const id = await db.enqueueJob('render_pdf', { reportId: 'r', version: 1 });
+    await db.claimJobs('worker-a', 1);
+    await q(`update jobs set locked_at = now() - interval '9 minutes' where id = $1`, [id]);
+    expect(await db.heartbeatJob(id, 'worker-b')).toBe(false);
+    expect(await db.heartbeatJob(id, 'worker-a')).toBe(true);
+    const { age } = await one<{ age: number }>(
+      `select extract(epoch from now() - locked_at)::float8 as age from jobs where id = $1`,
+      [id],
+    );
+    expect(age).toBeLessThan(5);
+    // Kept fresh, the job is not reclaimed after the stale lock.
+    expect(await db.claimJobs('worker-b', 1)).toEqual([]);
+    await db.completeJob(id);
+    expect(await db.heartbeatJob(id, 'worker-a')).toBe(false);
   });
 
   it('reclaims jobs stuck in running for more than 10 minutes (GAP D18)', async () => {

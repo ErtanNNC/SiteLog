@@ -384,11 +384,30 @@ describe('field_complete_upload (uploads/:id/complete)', () => {
       await svc(`select count(*)::int as n from uploads where report_id = $1`, [first.reportId]),
     ).toEqual([{ n: 1 }]);
     // The job ran and found nothing to file (a stale confirm): the draft takes audio again.
-    await svc(`update jobs set status = 'done' where dedupe_key = $1`, [`file:${first.reportId}`]);
+    await svc(`update jobs set status = 'done' where dedupe_key = $1`, [
+      `file:${first.reportId}:v1`,
+    ]);
     expect(await complete(voice, DANA)).toMatchObject({
       reportId: first.reportId,
       reportStatus: 'processing',
     });
+  });
+
+  it('counts a filing job queued before W1-10 (key file:<report>) as being filed', async () => {
+    const day = '2026-10-27';
+    const first = await complete(
+      await upload({ reporter: MARCO, site: SITE, org: ORG, date: day }),
+      MARCO,
+    );
+    await svc(
+      `select enqueue_job('file_report', jsonb_build_object('reportId', $1::text, 'trigger', 'timeout'), null, $2)`,
+      [first.reportId, `file:${first.reportId}`],
+    );
+    const voice = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day });
+    expect(await failure(`select field_complete_upload($1, $2)`, [voice, MARCO])).toBe(
+      'report_filing',
+    );
+    await svc(`delete from jobs where dedupe_key = $1`, [`file:${first.reportId}`]);
   });
 
   it('moves a missing day to processing on a late voice note', async () => {
@@ -501,7 +520,7 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
       {
         id: first.jobId,
         payload: { reportId: report, trigger: 'confirm', version: 1 },
-        dedupe_key: `file:${report}`,
+        dedupe_key: `file:${report}:v1`,
         status: 'queued',
       },
     ]);
@@ -524,9 +543,99 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
     const report = await draft('2026-11-10');
     const [{ id }] = (await svc<{ id: number }>(
       `select enqueue_job('file_report', jsonb_build_object('reportId', $1::text, 'trigger', 'timeout'), null, $2) as id`,
-      [report, `file:${report}`],
+      [report, `file:${report}:v1`],
     )) as [{ id: number }];
     expect(await confirm(report, MARCO, 1)).toEqual({ status: 'queued', jobId: id, version: 1 });
+    // One queued before W1-10 under the old key counts too.
+    await svc(`delete from jobs where id = $1`, [id]);
+    const [{ id: old }] = (await svc<{ id: number }>(
+      `select enqueue_job('file_report', jsonb_build_object('reportId', $1::text, 'trigger', 'timeout'), null, $2) as id`,
+      [report, `file:${report}`],
+    )) as [{ id: number }];
+    expect(await confirm(report, MARCO, 1)).toEqual({ status: 'queued', jobId: old, version: 1 });
+  });
+
+  it('files each draft version once (D16): a later draft gets its own job, a dead one runs again', async () => {
+    const report = await draft('2026-11-12');
+    const v1 = await confirm(report, MARCO, 1);
+    // The job ran but filed nothing (the draft moved on meanwhile), and version 2 is confirmed.
+    await svc(`update jobs set status = 'done' where id = $1`, [v1.jobId]);
+    await svc(`update reports set current_version = 2 where id = $1`, [report]);
+    const v2 = await confirm(report, MARCO, 2);
+    expect(v2.jobId).not.toBe(v1.jobId);
+    expect(
+      await svc(`select dedupe_key, status::text from jobs where id = $1`, [v2.jobId]),
+    ).toEqual([{ dedupe_key: `file:${report}:v2`, status: 'queued' }]);
+    // Version 2's job dies after six attempts; the reporter taps Confirm again: the same job runs.
+    await svc(`update jobs set status = 'dead', attempts = 6, finished_at = now() where id = $1`, [
+      v2.jobId,
+    ]);
+    expect(await confirm(report, MARCO, 2)).toEqual({
+      status: 'queued',
+      jobId: v2.jobId,
+      version: 2,
+    });
+    expect(
+      await svc(`select status::text, attempts, finished_at from jobs where id = $1`, [v2.jobId]),
+    ).toEqual([{ status: 'queued', attempts: 0, finished_at: null }]);
+    const audits = await svc<{ diff: Record<string, unknown> }>(
+      `select diff from audit_log where action = 'report.confirm_requested' and entity_id = $1 order by created_at, id`,
+      [report],
+    );
+    expect(audits.map((a) => a.diff.requeued ?? false)).toEqual([false, false, true]);
+  });
+
+  it('files a later confirm of the same version after a filing that finished without filing (D16 occurrence key)', async () => {
+    const report = await draft('2026-11-13');
+    const first = await confirm(report, MARCO, 1);
+    // The filing completed stale (`report.confirm_stale`: a WhatsApp voice note moved the report
+    // to processing meanwhile); the new draft overwrote v1 in place, so it is v1 again.
+    await svc(`update jobs set status = 'done', finished_at = now() where id = $1`, [first.jobId]);
+    const second = await confirm(report, MARCO, 1);
+    expect(second).toMatchObject({ status: 'queued', version: 1 });
+    expect(second.jobId).not.toBe(first.jobId);
+    // ops discards that one (`failed`): the next confirm is another occurrence again.
+    await svc(`update jobs set status = 'failed', finished_at = now() where id = $1`, [
+      second.jobId,
+    ]);
+    const third = await confirm(report, MARCO, 1);
+    expect([third.jobId === first.jobId, third.jobId === second.jobId]).toEqual([false, false]);
+    expect(
+      await svc(
+        `select dedupe_key, status::text, payload from jobs
+         where type = 'file_report' and payload->>'reportId' = $1 order by id`,
+        [report],
+      ),
+    ).toEqual([
+      {
+        dedupe_key: `file:${report}:v1`,
+        status: 'done',
+        payload: { reportId: report, trigger: 'confirm', version: 1 },
+      },
+      {
+        dedupe_key: `file:${report}:v1:c2`,
+        status: 'failed',
+        payload: { reportId: report, trigger: 'confirm', version: 1 },
+      },
+      {
+        dedupe_key: `file:${report}:v1:c3`,
+        status: 'queued',
+        payload: { reportId: report, trigger: 'confirm', version: 1 },
+      },
+    ]);
+    // A third tap while it is queued reuses it.
+    expect(await confirm(report, MARCO, 1)).toEqual(third);
+    // A taken occurrence key (a WhatsApp or timeout job, or an audit row purged) moves on.
+    await svc(`update jobs set status = 'done', finished_at = now() where id = $1`, [third.jobId]);
+    await svc(
+      `select enqueue_job('file_report', jsonb_build_object('reportId', $1::text), null, $2)`,
+      [report, `file:${report}:v1:c4`],
+    );
+    await svc(`update jobs set status = 'done' where dedupe_key = $1`, [`file:${report}:v1:c4`]);
+    const fourth = await confirm(report, MARCO, 1);
+    expect(
+      await svc(`select dedupe_key, status::text from jobs where id = $1`, [fourth.jobId]),
+    ).toEqual([{ dedupe_key: `file:${report}:v1:c5`, status: 'queued' }]);
   });
 
   it('refuses another state, a newer draft, another reporter and a void report; answers filed once filed', async () => {
@@ -541,7 +650,10 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
     await svc(`update reports set status = 'processing' where id = $1`, [report]);
     expect(await fail(MARCO, 1)).toBe('wrong_state');
     expect(
-      await svc(`select count(*)::int as n from jobs where dedupe_key = $1`, [`file:${report}`]),
+      await svc(
+        `select count(*)::int as n from jobs where type = 'file_report' and payload->>'reportId' = $1`,
+        [report],
+      ),
     ).toEqual([{ n: 0 }]);
     await svc(`update reports set status = 'filed', filed_at = now() where id = $1`, [report]);
     expect(await confirm(report, MARCO, 1)).toEqual({ status: 'filed', jobId: null, version: 1 });

@@ -1,25 +1,26 @@
 import {
   addDays,
   deadlineInstant,
+  type DueStage,
   firstName,
   isActiveReporterStatus,
   isoWeekday,
   isWeatherObserved,
   isWorkingDay,
+  type JobPayloads,
+  type LadderSettings,
   ladderTimes,
   localDate,
   nextDueStage,
   REMINDER_STAGE,
   reminderVars,
   renderTemplateText,
-  templateButtons,
-  weatherPhrase,
-  type DueStage,
-  type JobPayloads,
-  type LadderSettings,
   type SiteDayStatus,
   type SiteDayWeather,
+  templateButtons,
   type TemplateName,
+  weatherPhrase,
+  weatherSlotDue,
 } from '@sitelog/shared';
 import { isBillingBlocked } from '../_shared/billing.ts';
 
@@ -319,4 +320,132 @@ export function retentionDue(lastRunDate: string | null, now: Date): string | nu
   if (lastRunDate === today) return null;
   if (now.getUTCHours() < 3) return null;
   return today;
+}
+
+/**
+ * W1-10 (docs/PLAN_WEEK1.md, GAP §4.1 stage 5): the v1.0 reminder ladder (heads-up, R1 and R2 as
+ * WhatsApp templates, and the missing alert that counts them) is stopped on this branch; it returns
+ * on SMS through the Notifier in M6. `dueStage`, `reminderJob` and the stage helpers above stay for
+ * that rebuild; the tick calls none of them. The §7.1 status step `→ missing` is not part of the
+ * ladder and still runs (`planMissing`).
+ */
+export const REMINDER_LADDER_RUNS = false;
+
+/** A today site-day the tick marks `missing` (§7.1), with what its audit row needs. */
+export interface MissingMark {
+  siteDayId: string;
+  siteId: string;
+  orgId: string;
+  from: SiteDayStatus;
+  /** When the day became missing: the deadline plus the org's missing offset. */
+  missingAt: Date;
+}
+
+/**
+ * §7.1 `pending|reminded → missing` without the ladder (W1-10): a today site-day with no report
+ * whose deadline plus the org's missing offset (`missing_offset_min`, default 90) has passed, while
+ * the org's missing step is on. The tick sets `reminder_stage` 4 and `status 'missing'`
+ * (`siteDayPatchForStage(REMINDER_STAGE.missing)`) and audits it; it sends no text, and the office
+ * alert (panel notice + `report_missing` email) waits for the owner (spec §19 Q55). Paused
+ * reminders do not stop it, as before (the step is office-facing).
+ */
+export function planMissing(input: {
+  sites: readonly SiteInput[];
+  orgs: ReadonlyMap<string, OrgInput>;
+  todaysSiteDays: readonly SiteDayInput[];
+  now: Date;
+}): MissingMark[] {
+  const siteById = new Map(input.sites.map((s) => [s.id, s]));
+  const marks: MissingMark[] = [];
+  for (const sd of input.todaysSiteDays) {
+    if (!LADDER_STATUSES.includes(sd.status)) continue;
+    if (sd.reminder_stage >= REMINDER_STAGE.missing) continue;
+    const site = siteById.get(sd.site_id);
+    const org = site ? input.orgs.get(site.org_id) : undefined;
+    if (!site || !org) continue;
+    const ladder = ladderFromSettings(org.settings);
+    if (ladder.missingEnabled === false) continue;
+    const deadlineAt = new Date(sd.deadline_at);
+    if (Number.isNaN(deadlineAt.getTime())) continue;
+    const { missingAt } = ladderTimes(deadlineAt, ladder);
+    if (input.now.getTime() < missingAt.getTime()) continue;
+    marks.push({ siteDayId: sd.id, siteId: site.id, orgId: org.id, from: sd.status, missingAt });
+  }
+  return marks;
+}
+
+/** A job scheduler-tick queues (`planTickJobs`). The ladder's `send_template` is not one of them. */
+export type PlannedJob =
+  | {
+      type: 'fetch_weather';
+      payload: JobPayloads['fetch_weather'];
+      dedupeKey: string;
+      siteId: string;
+      slot: string;
+    }
+  | {
+      type: 'weekly_digest';
+      payload: JobPayloads['weekly_digest'];
+      dedupeKey: string;
+      orgId: string;
+      runKey: string;
+    }
+  | {
+      type: 'retention_cleanup';
+      payload: JobPayloads['retention_cleanup'];
+      dedupeKey: string;
+      day: string;
+    };
+
+export interface TickPlanInput {
+  /** Active sites of orgs billing does not block. */
+  sites: readonly SiteInput[];
+  orgs: ReadonlyMap<string, OrgInput>;
+  /** Today's site-days (site time) of those sites. */
+  todaysSiteDays: readonly SiteDayInput[];
+  now: Date;
+  prevTick: Date | null;
+  /** scheduler_state `weekly_digest_runs`: org id → the Monday its digest last ran for. */
+  digestRuns: Readonly<Record<string, string>>;
+  /** scheduler_state `retention_cleanup.lastRunDate`. */
+  retentionLastRun: string | null;
+}
+
+/**
+ * The jobs one tick queues after creating today's site-days (§4.2): the §10.10 weather snapshots
+ * (12:00, 16:30, 23:30 site time) for sites with a site-day today, the §13 weekly digest per org,
+ * and the nightly retention job. No reminder (`REMINDER_LADDER_RUNS`).
+ */
+export function planTickJobs(input: TickPlanInput): PlannedJob[] {
+  const jobs: PlannedJob[] = [];
+  const sitesWithToday = new Set(input.todaysSiteDays.map((sd) => sd.site_id));
+  for (const site of input.sites) {
+    if (!sitesWithToday.has(site.id)) continue;
+    const slot = weatherSlotDue(input.prevTick, input.now, site.timezone);
+    if (!slot) continue;
+    const job = weatherJobFor(site, localDate(input.now, site.timezone), slot);
+    if (job) jobs.push({ type: 'fetch_weather', ...job, siteId: site.id, slot });
+  }
+  for (const org of input.orgs.values()) {
+    if (orgIsBlocked(org, input.now)) continue;
+    const digest = weeklyDigestDue(org, input.digestRuns[org.id] ?? null, input.now);
+    if (!digest) continue;
+    jobs.push({
+      type: 'weekly_digest',
+      payload: { orgId: org.id, weekStart: digest.weekStart },
+      dedupeKey: `weekly_digest:${org.id}:${digest.weekStart}`,
+      orgId: org.id,
+      runKey: digest.runKey,
+    });
+  }
+  const retentionDay = retentionDue(input.retentionLastRun, input.now);
+  if (retentionDay) {
+    jobs.push({
+      type: 'retention_cleanup',
+      payload: {},
+      dedupeKey: `retention:${retentionDay}`,
+      day: retentionDay,
+    });
+  }
+  return jobs;
 }

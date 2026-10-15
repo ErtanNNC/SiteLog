@@ -196,6 +196,11 @@ export interface InboundChangeInput {
 
 export interface EnqueueOptions {
   runAfter?: Date | string | null;
+  /**
+   * A key names one job for good (GAP D16, 20261015000001): enqueueing a taken key returns that
+   * job's id whatever its status (done and dead included) and runs nothing. Use a per-occurrence
+   * key (`jobKeys`) for work that must run again.
+   */
   dedupeKey?: string | null;
 }
 
@@ -523,7 +528,20 @@ export interface Db {
   claimJobs(worker: string, limit: number): Promise<JobRow[]>;
   completeJob(id: number): Promise<void>;
   failJob(id: number, error: string): Promise<void>;
+  /**
+   * The runner's heartbeat (W1-10): refreshes `locked_at` of a job this worker still holds
+   * (`running`, `locked_by` = worker), so claim_jobs() does not take it back while its handler
+   * runs, a timed-out one included. False when the job is no longer this worker's.
+   */
+  heartbeatJob(id: number, worker: string): Promise<boolean>;
   getJob(id: number): Promise<JobRow | null>;
+  /** Whose an upload is (a dead `transcribe_upload` job's office notice, W1-10). */
+  getUploadOwner(id: string): Promise<{
+    id: string;
+    report_id: string | null;
+    reporter_id: string | null;
+    site_id: string;
+  } | null>;
   enqueueJob(type: JobType, payload: Json, opts?: EnqueueOptions): Promise<number>;
   updateJobMetrics(id: number, metrics: JobMetrics): Promise<void>;
   queueStats(): Promise<QueueStats>;
@@ -626,6 +644,12 @@ export function connectSql(url: string, opts: { max?: number } = {}): Sql {
 function one<T>(rows: readonly T[]): T | null {
   return rows[0] ?? null;
 }
+
+/**
+ * The unique indexes over jobs.dedupe_key an enqueue may still race on: the pre-W1-10 partial index
+ * (20261011000003). The W1-10 constraint `jobs_dedupe_key_key` never raises from enqueue_job().
+ */
+export const LEGACY_DEDUPE_INDEXES = ['jobs_dedupe_key_active'] as const;
 
 /** A Postgres unique_violation (23505) on the given constraint, as postgres.js reports it. */
 export function isUniqueViolation(err: unknown, constraint: string): boolean {
@@ -1235,8 +1259,27 @@ export function createDb(sql: Sql): Db {
     async failJob(id, error) {
       await sql`select fail_job(${id}, ${error.slice(0, 4000)})`;
     },
+    async heartbeatJob(id, worker) {
+      const rows = await sql`
+        update jobs set locked_at = now()
+        where id = ${id} and status = 'running' and locked_by = ${worker}
+        returning id`;
+      return rows.length > 0;
+    },
     async getJob(id) {
       return one(await sql<JobRow[]>`select * from jobs where id = ${id}`);
+    },
+    async getUploadOwner(id) {
+      return one(
+        await sql<
+          Array<{
+            id: string;
+            report_id: string | null;
+            reporter_id: string | null;
+            site_id: string;
+          }>
+        >`select id, report_id, reporter_id, site_id from uploads where id = ${id}`,
+      );
     },
     async enqueueJob(type, payload, opts = {}) {
       const enqueue = async () => {
@@ -1248,9 +1291,12 @@ export function createDb(sql: Sql): Db {
       try {
         return await enqueue();
       } catch (err) {
-        // Two concurrent enqueues of one dedupe key both miss enqueue_job's lookup; the loser hits
-        // the partial unique index once the winner commits. The winner's job is the answer.
-        if (opts.dedupeKey && isUniqueViolation(err, 'jobs_dedupe_key_active')) return enqueue();
+        // Since W1-10 (GAP D16) enqueue_job() inserts `on conflict (dedupe_key) do nothing` and
+        // answers a taken key with its job, so a concurrent enqueue of one key no longer raises.
+        // Before that migration (a worker deployed ahead of it) the loser of two concurrent
+        // enqueues hit the partial index jobs_dedupe_key_active; the winner's job is the answer.
+        if (opts.dedupeKey && LEGACY_DEDUPE_INDEXES.some((c) => isUniqueViolation(err, c)))
+          return enqueue();
         throw err;
       }
     },

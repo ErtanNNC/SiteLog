@@ -296,24 +296,32 @@ describe('ops: queue and dead jobs', () => {
     await svc(`delete from jobs`);
   });
 
-  it('refuses a retry when the same dedupe key is already queued again', async () => {
+  it('retries the one job of a dedupe key: no second job can hold it (D16)', async () => {
     const dead = await job(
       'render_pdf',
       { reportId: UUID_A, version: 2 },
       {
         status: 'dead',
-        attempts: 5,
+        attempts: 6,
         dedupe_key: 'render_pdf:x:2',
       },
     );
-    const again = await job(
-      'render_pdf',
-      { reportId: UUID_A, version: 2 },
-      { dedupe_key: 'render_pdf:x:2' },
-    );
+    // Before D16 the key was free again once the job died; now it stays the dead job's.
     await expect(
-      asUser(db, OPERATOR, (q: Q) => q(`select ops_retry_job($1)`, [dead])),
-    ).rejects.toThrow(new RegExp(`already queued again as job ${again}`));
+      job('render_pdf', { reportId: UUID_A, version: 2 }, { dedupe_key: 'render_pdf:x:2' }),
+    ).rejects.toThrow(/jobs_dedupe_key_key/);
+    expect(
+      await svc<{ id: number }>(
+        `select enqueue_job('render_pdf', '{}'::jsonb, null, 'render_pdf:x:2')::int as id`,
+      ),
+    ).toEqual([{ id: dead }]);
+    await asUser(db, OPERATOR, (q: Q) => q(`select ops_retry_job($1)`, [dead]));
+    expect(
+      await svc<{ status: string; attempts: number; dedupe_key: string }>(
+        `select status::text, attempts, dedupe_key from jobs where id = $1`,
+        [dead],
+      ),
+    ).toEqual([{ status: 'queued', attempts: 0, dedupe_key: 'render_pdf:x:2' }]);
     await svc(`delete from jobs`);
   });
 

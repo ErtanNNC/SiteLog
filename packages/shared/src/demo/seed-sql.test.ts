@@ -61,13 +61,14 @@ describe('buildSeedSql (supabase/seed.sql and --apply)', () => {
     expect(kestrelBlock).not.toContain(demir.users[0]!.id);
   });
 
-  it('writes one scoped delete per prune entry, queued and running jobs first', () => {
+  it('writes one scoped delete per prune entry, jobs first (any status: D16 keys)', () => {
     const lines = pruneSql(DEMO_ORG_ID).trimEnd().split('\n');
     expect(lines.map((l) => /^delete from (\w+) where /.exec(l)?.[1])).toEqual(
       PRUNE.map(([t]) => t),
     );
     expect(PRUNED_TABLES).toEqual(PRUNE.map(([t]) => t));
-    expect(lines[0]).toMatch(/^delete from jobs where status in \('queued', 'running'\) and \(/);
+    expect(lines[0]).toMatch(/^delete from jobs where \(payload->>'orgId' = /);
+    expect(lines[0]).not.toContain('status');
     for (const key of ['orgId', 'siteId', 'reporterId', 'reportId', 'siteDayId', 'uploadId'])
       expect(lines[0]).toContain(`payload->>'${key}'`);
     for (const l of lines) expect(l).toContain(`'${DEMO_ORG_ID}'`);

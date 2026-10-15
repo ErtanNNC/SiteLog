@@ -266,14 +266,6 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
     diffs: ['column extra: uploads.purged_at (timestamp with time zone)'],
   },
   {
-    id: 'w1-10-dedupe',
-    reason:
-      'jobs.dedupe_key is unique only among queued and running jobs (index jobs_dedupe_key_active); §6.3 makes it fully unique with insert … on conflict do nothing (D16).',
-    closes: 'W1-10',
-    decision: 'D16',
-    diffs: ['constraint missing: jobs UNIQUE (dedupe_key)'],
-  },
-  {
     id: 'step23-stripe',
     reason:
       'stripe_* → billing_* by expand/contract (GAP 9.1): since step 11 (20261014000003) every reader and writer uses billing_*, and the orgs_billing_ids trigger keeps the legacy stripe_* columns equal to them for the functions deployed before the cut-over; the contract drops them. The trigger is declared UPDATE OF both stripe_* columns, so they depend on it: the contract runs `drop trigger orgs_billing_ids on orgs; drop function sync_org_billing_ids();` before `alter table orgs drop column stripe_customer_id, drop column stripe_subscription_id` (without CASCADE, which would drop the trigger and leave the function behind).',

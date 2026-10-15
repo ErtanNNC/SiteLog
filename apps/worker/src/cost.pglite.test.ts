@@ -1,3 +1,4 @@
+import { NEVER_ABORTED } from './abort';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
@@ -117,6 +118,7 @@ describe('cost per report on PGlite', () => {
       log: silentLogger,
       now: () => new Date('2026-10-09T22:40:00Z'),
       metrics: createMetrics(),
+      signal: NEVER_ABORTED,
     } as unknown as Ctx;
     const res = (await recordReportCost(ctx, report.id))!;
     expect(res).toMatchObject({ alerted: true, changed: true });

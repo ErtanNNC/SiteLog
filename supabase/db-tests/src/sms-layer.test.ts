@@ -240,13 +240,25 @@ describe('receive_sms_inbound (sms-webhook, 20261014000008)', () => {
     });
   });
 
-  it('a redelivery of a text whose job died enqueues it again; a console row gets no job', async () => {
+  it('a redelivery of a text whose job died runs that job again; a console row gets no job', async () => {
     await inService(async (q) => {
       const first = await receive(q);
-      await q(`update jobs set status = 'dead' where id = $1`, [first.jobId]);
+      await q(`update jobs set status = 'dead', attempts = 6, finished_at = now() where id = $1`, [
+        first.jobId,
+      ]);
       const again = await receive(q);
-      expect(again.jobId).not.toBe(first.jobId);
-      expect(again.jobId).toEqual(expect.any(Number));
+      // D16: the text keeps its one job, back in the queue with a fresh budget.
+      expect(again.jobId).toBe(first.jobId);
+      const [job] = await q<{ status: string; attempts: number }>(
+        `select status::text, attempts from jobs where id = $1`,
+        [first.jobId],
+      );
+      expect(job).toEqual({ status: 'queued', attempts: 0 });
+      const [requeued] = await q<{ diff: Record<string, unknown> }>(
+        `select diff from audit_log where action = 'job.requeued' and entity_id = $1`,
+        [first.id],
+      );
+      expect(requeued!.diff).toMatchObject({ job_id: first.jobId, type: 'sms_inbound' });
       const demo = await receive(q, {
         id: 'dddddddd-0000-4000-8000-000000000003',
         sid: 'console:abc',

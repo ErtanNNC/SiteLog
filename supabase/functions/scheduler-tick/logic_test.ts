@@ -1,4 +1,4 @@
-import { assertEquals } from '@std/assert';
+import { assert, assertEquals } from '@std/assert';
 import type { SiteDayWeather } from '@sitelog/shared';
 import {
   asSiteDayWeather,
@@ -7,16 +7,19 @@ import {
   missingNotification,
   mondayOf,
   orgIsBlocked,
+  type OrgSettingsInput,
   pickReminderTarget,
+  planMissing,
   planSiteDay,
+  planTickJobs,
+  REMINDER_LADDER_RUNS,
   reminderJob,
   retentionDue,
+  type SiteDayInput,
   siteDayPatchForStage,
+  type SiteInput,
   weatherJobFor,
   weeklyDigestDue,
-  type OrgSettingsInput,
-  type SiteDayInput,
-  type SiteInput,
 } from './logic.ts';
 
 const settings: OrgSettingsInput = {
@@ -412,3 +415,125 @@ Deno.test('retentionDue: from 03:00 UTC, once per UTC day', () => {
   assertEquals(retentionDue('2026-10-12', new Date('2026-10-12T23:00:00Z')), null);
   assertEquals(retentionDue('2026-10-12', new Date('2026-10-13T03:05:00Z')), '2026-10-13');
 });
+
+Deno.test(
+  'planTickJobs (W1-10): no WhatsApp reminder at any tick of the day; weather, digest and retention still run',
+  () => {
+    assertEquals(REMINDER_LADDER_RUNS, false);
+    const org = {
+      id: 'org-1',
+      timezone: 'America/Chicago',
+      billing_status: 'active',
+      past_due_since: null,
+      settings,
+    };
+    // Monday Oct 12 2026: the deadline is 17:30 Chicago (22:30Z); nobody reports all day.
+    const sd: SiteDayInput = {
+      id: 'sd-1',
+      site_id: 'site-1',
+      date: '2026-10-12',
+      status: 'pending',
+      deadline_at: '2026-10-12T22:30:00.000Z',
+      reminder_stage: 0,
+      reminders_paused: false,
+      weather: rainy,
+    };
+    const ladder = ladderFromSettings(settings);
+    const types = new Set<string>();
+    const missingAt: string[] = [];
+    // The tick's own site-day: only planMissing changes it (stage 4, status missing).
+    const live: SiteDayInput = { ...sd };
+    let ladderWouldFire = 0;
+    let digestRuns: Record<string, string> = {};
+    let retentionLastRun: string | null = null;
+    let prev: Date | null = null;
+    // Every 5-minute tick from 06:00 to 23:55 Chicago (11:00Z to 04:55Z next day).
+    for (
+      let t = Date.parse('2026-10-12T11:00:00Z');
+      t <= Date.parse('2026-10-13T04:55:00Z');
+      t += 300_000
+    ) {
+      const now = new Date(t);
+      if (dueStage(sd, ladder, now)) {
+        ladderWouldFire += 1;
+        Object.assign(sd, siteDayPatchForStage(dueStage(sd, ladder, now)!.stage));
+        sd.status = 'pending';
+      }
+      for (const mark of planMissing({
+        sites: [site],
+        orgs: new Map([[org.id, org]]),
+        todaysSiteDays: [live],
+        now,
+      })) {
+        assertEquals([mark.siteDayId, mark.from], ['sd-1', 'pending']);
+        Object.assign(live, siteDayPatchForStage(4));
+        missingAt.push(now.toISOString());
+      }
+      const jobs = planTickJobs({
+        sites: [site],
+        orgs: new Map([[org.id, org]]),
+        todaysSiteDays: [{ ...sd, status: 'pending' }],
+        now,
+        prevTick: prev,
+        digestRuns,
+        retentionLastRun,
+      });
+      for (const j of jobs) {
+        types.add(j.type);
+        if (j.type === 'weekly_digest') digestRuns = { ...digestRuns, [j.orgId]: j.runKey };
+        if (j.type === 'retention_cleanup') retentionLastRun = j.day;
+      }
+      prev = now;
+    }
+    // The v1.0 ladder would have fired (heads-up, R1, R2, missing); the tick queues none of it.
+    assert(ladderWouldFire >= 3);
+    assertEquals([...types].sort(), ['fetch_weather', 'retention_cleanup', 'weekly_digest']);
+    assert(![...types].some((t) => t === 'send_template' || t === 'send_email'));
+    // The §7.1 status step still runs once, at the first tick from deadline + 90 min (19:00 Chicago).
+    assertEquals(missingAt, ['2026-10-13T00:00:00.000Z']);
+    assertEquals([live.status, live.reminder_stage], ['missing', 4]);
+  },
+);
+
+Deno.test(
+  'planMissing (W1-10): past deadline + offset only, pending or reminded, missing step on',
+  () => {
+    const org = {
+      id: 'org-1',
+      timezone: 'America/Chicago',
+      billing_status: 'active',
+      past_due_since: null,
+      settings,
+    };
+    const base: SiteDayInput = {
+      id: 'sd-1',
+      site_id: 'site-1',
+      date: '2026-10-12',
+      status: 'pending',
+      deadline_at: '2026-10-12T22:30:00.000Z',
+      reminder_stage: 0,
+      reminders_paused: true,
+      weather: null,
+    };
+    const plan = (sd: SiteDayInput, now: string, s = settings) =>
+      planMissing({
+        sites: [site],
+        orgs: new Map([[org.id, { ...org, settings: s }]]),
+        todaysSiteDays: [sd],
+        now: new Date(now),
+      }).map((m) => m.siteDayId);
+    assertEquals(plan(base, '2026-10-12T23:59:00Z'), []);
+    // Paused reminders do not stop the office-facing step.
+    assertEquals(plan(base, '2026-10-13T00:00:00Z'), ['sd-1']);
+    assertEquals(plan({ ...base, status: 'reminded', reminder_stage: 3 }, '2026-10-13T00:05:00Z'), [
+      'sd-1',
+    ]);
+    for (const status of ['processing', 'filed', 'missing', 'no_work', 'weather_day'] as const) {
+      assertEquals(plan({ ...base, status }, '2026-10-13T01:00:00Z'), [], status);
+    }
+    assertEquals(plan({ ...base, reminder_stage: 4 }, '2026-10-13T01:00:00Z'), []);
+    assertEquals(plan(base, '2026-10-13T01:00:00Z', { ...settings, missing_enabled: false }), []);
+    // An unknown site (another org's, or inactive) is skipped.
+    assertEquals(plan({ ...base, site_id: 'site-x' }, '2026-10-13T01:00:00Z'), []);
+  },
+);

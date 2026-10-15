@@ -234,7 +234,8 @@ describeInvite('api-invite-reporter on the local stack', () => {
       type: 'send_welcome',
       status: 'queued',
       payload: { reporterId: id, siteId: f.siteId, reinvite: false },
-      dedupe_key: `welcome:${id}:${f.siteId}`,
+      // D16: the welcome of the office's first invite of this reporter (W1-10).
+      dedupe_key: `welcome:${id}:invite:1`,
     });
     // No WhatsApp conversation any more (W1-08).
     expect(

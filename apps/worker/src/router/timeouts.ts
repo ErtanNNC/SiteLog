@@ -1,4 +1,4 @@
-import { waCopy, type ConversationRow } from '@sitelog/shared';
+import { jobKeys, waCopy, type ConversationRow } from '@sitelog/shared';
 import type { Ctx } from '../context';
 import { sendFreeForm } from '../wa/send';
 import { contextOf } from './context';
@@ -80,7 +80,8 @@ async function answerTimedOut(ctx: Ctx, convo: ConversationRow): Promise<boolean
   await ctx.db.enqueueJob(
     'decide_next',
     { reportId: c.active_report_id },
-    { dedupeKey: `decide:${c.active_report_id}:timeout:${q?.id ?? 'none'}` },
+    // D16: one per pending question (a later question's timeout is a new occurrence).
+    { dedupeKey: `decide:${c.active_report_id}:timeout:${c.pending_question_id}` },
   );
   return true;
 }
@@ -104,7 +105,8 @@ async function confirmationTimedOut(
     await ctx.db.enqueueJob(
       'file_report',
       { reportId: report.id, trigger: 'auto' },
-      { dedupeKey: `file:${report.id}` },
+      // D16: one filing per draft sent (a later draft's timeout is a new occurrence).
+      { dedupeKey: jobKeys.fileReportOn(report.id, report.current_version, `t${sentAt}`) },
     );
     await ctx.db.updateConversation(convo.id, { state: 'processing', context: c });
     return 'filed';
@@ -113,7 +115,7 @@ async function confirmationTimedOut(
     await ctx.db.enqueueJob(
       'file_report',
       { reportId: report.id, trigger: 'timeout' },
-      { dedupeKey: `file:${report.id}` },
+      { dedupeKey: jobKeys.fileReportOn(report.id, report.current_version, `t${sentAt}`) },
     );
     await ctx.db.updateConversation(convo.id, { state: 'processing', context: c });
     return 'filed';

@@ -63,6 +63,13 @@ export interface Ctx {
   log: Logger;
   now: () => Date;
   metrics: MetricsSink;
+  /**
+   * The job's AbortSignal (W1-10): aborted when the job outlives JOB_TIMEOUT_MS. The runner also
+   * runs the handler inside `runWithSignal` (src/abort.ts), so the boot-time clients' HTTP calls
+   * abort with it; a handler checks it (`signal.throwIfAborted()`) between long steps. Outside a
+   * job (the base Ctx, the timeout sweep) it never aborts.
+   */
+  signal: AbortSignal;
 }
 
 export function childCtx(ctx: Ctx, fields: Record<string, unknown>): Ctx {

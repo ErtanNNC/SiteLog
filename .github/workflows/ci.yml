@@ -227,15 +227,20 @@ jobs:
           LINK_SIGNING_SECRET: e2e-link-signing-secret-not-for-production
           FIELD_APP_URL: http://localhost:5174
           WORKER_PORT: '8080'
+          # W1-10: the worker wakes on NOTIFY jobs (LISTEN on DB_URL, a direct session connection).
+          # The poll is set past the specs' 60 s waits, so the invite's welcome cannot wait for the
+          # poll: NOTIFY (or the wake after another job finishes) claims it. The HELP reply is
+          # answered inline by sms-webhook's /demo-reply, not by the worker.
+          POLL_INTERVAL_MS: '120000'
         run: |
           nohup pnpm --filter @sitelog/worker exec tsx src/index.ts > "$RUNNER_TEMP/worker.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/worker.pid"
           for attempt in $(seq 1 60); do
-            code=$(curl -sS -o /dev/null -m 5 -w '%{http_code}' http://127.0.0.1:8080/health || echo 000)
-            [ "$code" = 200 ] && { echo "worker healthy after ${attempt}s"; exit 0; }
+            body=$(curl -sS -m 5 http://127.0.0.1:8080/health || true)
+            case "$body" in *'"listening":true'*) echo "worker healthy and listening after ${attempt}s"; exit 0 ;; esac
             sleep 1
           done
-          echo "::error::the worker did not answer /health with 200 (last HTTP $code)"
+          echo "::error::the worker did not answer /health with listening: true (last: $body)"
           cat "$RUNNER_TEMP/worker.log" || true
           exit 1
       # The `worker` project: invite → the worker's welcome text in the Demo phone → the personal

@@ -15,10 +15,11 @@ const AUDIENCE: Readonly<Record<string, readonly MemberRole[]>> = {
   unknown_sender: ['admin', 'ops'], // the same, written before step 11 (legacy rows)
   reporter_invite_failed: ['admin', 'ops'], // §13 "Message undeliverable / opted out"
   reporter_opted_out: ['admin', 'ops'], // the same row of §13 (a STOP, W1-08)
+  message_failed: ['admin', 'ops'], // the same row of §13: a message job that died (W1-10)
   reporter_wrong_site: ['admin', 'ops'], // §2.2 "Manage reporters": admin, ops
 };
 
-/** A kind §13 does not list (needs_review, glossary_review, processing_delayed, …). */
+/** A kind §13 does not list (needs_review, glossary_review, processing_delayed, processing_failed, …). */
 const OFFICE: readonly MemberRole[] = ['admin', 'pm', 'ops'];
 
 /** The kinds with their own audience, for tests that compare this table with the SQL one. */

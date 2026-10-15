@@ -13,7 +13,7 @@ import type {
   SiteRow,
   UploadRow,
 } from '@sitelog/shared';
-import { deadlineInstant } from '@sitelog/shared';
+import { deadlineInstant, jobKeys } from '@sitelog/shared';
 import type { AuditEntry } from '../_shared/audit.ts';
 import type { StoredObject } from './logic.ts';
 import {
@@ -32,6 +32,16 @@ import {
  * follow the SQL of 20261014000006_field_api.sql, which supabase/db-tests tests on PGlite; this
  * fake only has to agree with it on the cases the route tests use.
  */
+/** A `jobs` row as the fake keeps it. */
+export interface FakeJob {
+  id: number;
+  type: string;
+  payload: Record<string, unknown>;
+  dedupe_key: string;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'dead';
+  attempts?: number;
+}
+
 export class FakeFieldStore implements FieldStore {
   links: FieldLinkRow[] = [];
   reporters: ReporterRow[] = [];
@@ -52,13 +62,7 @@ export class FakeFieldStore implements FieldStore {
   sources: { report_id: string; kind: string; upload_id: string }[] = [];
   /** Storage: `{bucket}/{path}` → what Storage reports for the object. */
   objects = new Map<string, StoredObject>();
-  jobs: {
-    id: number;
-    type: string;
-    payload: Record<string, unknown>;
-    dedupe_key: string;
-    status: 'queued' | 'running' | 'done';
-  }[] = [];
+  jobs: FakeJob[] = [];
   audits: AuditEntry[] = [];
   /** Store methods called, for "no write happened" checks. */
   calls: string[] = [];
@@ -322,7 +326,7 @@ export class FakeFieldStore implements FieldStore {
     if (!r && ['filed', 'weather_day', 'no_work'].includes(day.status)) {
       return Promise.reject(new FieldDbError('day_closed'));
     }
-    if (r && this.activeJob(`file:${r.id}`)) {
+    if (r && this.filingJob(r.id)) {
       return Promise.reject(new FieldDbError('report_filing'));
     }
     let created = false;
@@ -415,9 +419,13 @@ export class FakeFieldStore implements FieldStore {
     return Promise.resolve({ siteDayId: day.id, status: input.status, changed: true });
   }
 
-  private activeJob(dedupeKey: string) {
+  /** A queued or running file_report job of the report, whatever its key (20261015000001). */
+  private filingJob(reportId: string) {
     return this.jobs.find(
-      (j) => j.dedupe_key === dedupeKey && (j.status === 'queued' || j.status === 'running'),
+      (j) =>
+        j.type === 'file_report' &&
+        j.payload.reportId === reportId &&
+        (j.status === 'queued' || j.status === 'running'),
     );
   }
 
@@ -433,17 +441,39 @@ export class FakeFieldStore implements FieldStore {
     if (r.status !== 'awaiting_confirmation')
       return Promise.reject(new FieldDbError('wrong_state'));
     if (r.current_version !== version) return Promise.reject(new FieldDbError('draft_changed'));
-    const key = `file:${reportId}`;
-    const existing = this.activeJob(key);
+    const existing = this.filingJob(reportId);
     if (existing) return Promise.resolve({ status: 'queued', jobId: existing.id, version });
-    const id = this.jobs.length + 1;
-    this.jobs.push({
-      id,
-      type: 'file_report',
-      payload: { reportId, trigger: 'confirm', version },
-      dedupe_key: key,
-      status: 'queued',
-    });
+    // D16: the version's first confirm, then one key per occurrence after a finished job; a dead
+    // one runs again (requeue_dead_job()).
+    const confirms = this.audits.filter(
+      (a) => a.action === 'report.confirm_requested' && a.entityId === reportId,
+    ).length;
+    let job: FakeJob | undefined;
+    let requeued = false;
+    for (let n = confirms; ; n++) {
+      const key =
+        n === confirms
+          ? jobKeys.fileReport(reportId, version)
+          : jobKeys.fileReportOn(reportId, version, `c${n}`);
+      job = this.jobs.find((j) => j.dedupe_key === key);
+      if (!job) {
+        job = {
+          id: this.jobs.length + 1,
+          type: 'file_report',
+          payload: { reportId, trigger: 'confirm', version },
+          dedupe_key: key,
+          status: 'queued',
+        };
+        this.jobs.push(job);
+        break;
+      }
+      if (job.status === 'dead') {
+        Object.assign(job, { status: 'queued', attempts: 0 });
+        requeued = true;
+        break;
+      }
+      if (job.status === 'queued' || job.status === 'running') break;
+    }
     this.audits.push({
       orgId: r.org_id,
       actorType: 'reporter',
@@ -451,9 +481,9 @@ export class FakeFieldStore implements FieldStore {
       action: 'report.confirm_requested',
       entity: 'report',
       entityId: reportId,
-      diff: { job_id: id, version, channel: 'web' },
+      diff: { job_id: job.id, version, channel: 'web', ...(requeued ? { requeued: true } : {}) },
     });
-    return Promise.resolve({ status: 'queued', jobId: id, version });
+    return Promise.resolve({ status: 'queued', jobId: job.id, version });
   }
 
   audit(entry: AuditEntry) {

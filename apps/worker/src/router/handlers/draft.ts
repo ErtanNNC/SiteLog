@@ -1,6 +1,7 @@
 import {
   applyPatch,
   DailyReportDataV1Schema,
+  jobKeys,
   recomputeManpowerTotals,
   waCopy,
   type ReportRow,
@@ -25,7 +26,11 @@ export async function confirmReport(s: Session, reportId: string): Promise<void>
   await ctx.db.enqueueJob(
     'file_report',
     { reportId: report.id, trigger: 'confirm', confirmMessageId: s.message.id },
-    { dedupeKey: `file:${report.id}` },
+    // D16: one filing per confirm message (a redelivery of the same message enqueues nothing; a
+    // later confirm is a new occurrence, even of the same draft version).
+    {
+      dedupeKey: jobKeys.fileReportOn(report.id, report.current_version, `m${s.message.id}`),
+    },
   );
   await s.setState('processing', { active_report_id: report.id, fix_requested_for: null });
 }

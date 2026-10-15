@@ -1,3 +1,4 @@
+import { NEVER_ABORTED } from '../abort';
 import { randomUUID } from 'node:crypto';
 import type OpenAI from 'openai';
 import type { Sql } from 'postgres';
@@ -102,6 +103,7 @@ export function createWorld(opts: WorldOptions): World {
     log: opts.log ?? silentLogger,
     now: () => clock.now(),
     metrics: createMetrics(),
+    signal: NEVER_ABORTED,
   };
   return {
     ctx,

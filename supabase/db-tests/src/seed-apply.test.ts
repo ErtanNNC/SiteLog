@@ -169,7 +169,8 @@ describe('seed:demo --apply (D8)', () => {
       insert into notifications (org_id, kind, title) values ('${DEMO_ORG_ID}', 'test', 'Extra');
       insert into audit_log (org_id, actor_type, action) values ('${DEMO_ORG_ID}', 'system', 'demo.extra');
       update site_days set status = 'no_work' where site_id = '${site}' and date = '2026-10-09';
-      -- Jobs of the last rehearsal: queued and running ones go with the rows they name.
+      -- Jobs of the last rehearsal go with the rows they name, finished ones too: since W1-10 (D16)
+      -- a dedupe key is never reused, so a done job would keep the next rehearsal's from running.
       insert into jobs (type, payload, status, dedupe_key) values
         ('render_pdf', '{"reportId":"${hero}","version":2}', 'queued', 'render_pdf:${hero}:2'),
         ('fetch_weather', '{"siteId":"${site}","date":"2026-10-09"}', 'running', null),
@@ -180,11 +181,8 @@ describe('seed:demo --apply (D8)', () => {
     const after = await snapshot();
     const isVisitor = (row: string) => row.includes('0b000000-0000-4000-8000-000000000001');
     expect(after.org_members!.filter(isVisitor)).toHaveLength(1);
-    const isDone = (row: string) => row.includes('"status":"done"');
-    expect(after.jobs!.filter(isDone)).toHaveLength(1);
     expect({
       ...after,
-      jobs: after.jobs!.filter((j) => !isDone(j)),
       org_members: after.org_members!.filter((m) => !isVisitor(m)),
       'auth.users': after['auth.users']!.filter((u) => !isVisitor(u)),
     }).toEqual(seeded);

@@ -1,3 +1,4 @@
+import { NEVER_ABORTED, abortableFetch } from './abort';
 import { createServer } from 'node:http';
 import * as Sentry from '@sentry/node';
 import { createAnthropicClient } from './ai/claude';
@@ -10,7 +11,13 @@ import { createEmailProvider } from './email/provider';
 import { createLogger } from './log';
 import { createWorkerNotifier, describePackTransports } from './messaging';
 import { createFfmpegRunner, resolveFfmpegPath } from './media/ffmpeg';
-import { createRunner } from './runner';
+import {
+  createJobListener,
+  looksLikeTransactionPooler,
+  postgresListenConnect,
+  type JobListener,
+} from './listener';
+import { createRunner, type Runner } from './runner';
 import { createMemoryStorage, createStorage } from './storage';
 import { createWaClient } from './wa/client';
 
@@ -33,6 +40,7 @@ export function buildContext(config: Config): Ctx {
       accessToken: config.WA_ACCESS_TOKEN,
     },
     log,
+    abortableFetch(),
   );
   return {
     config,
@@ -58,7 +66,31 @@ export function buildContext(config: Config): Ctx {
     log,
     now: () => new Date(),
     metrics: createMetrics(),
+    signal: NEVER_ABORTED,
   };
+}
+
+/**
+ * LISTEN jobs on its own session connection (W1-10, src/listener.ts): a `NOTIFY jobs` wakes the
+ * runner, and so does every (re)connect (jobs enqueued while nobody listened). The 5 s poll covers
+ * the rest.
+ */
+export function startJobListener(config: Config, ctx: Ctx, runner: Runner): JobListener {
+  const url = config.SUPABASE_DB_LISTEN_URL || config.SUPABASE_DB_URL;
+  if (looksLikeTransactionPooler(url)) {
+    ctx.log.warn(
+      'the LISTEN connection is a transaction pooler (port 6543), which delivers no NOTIFY: set SUPABASE_DB_LISTEN_URL to a session-mode connection; polling every POLL_INTERVAL_MS meanwhile',
+      { poll_ms: config.POLL_INTERVAL_MS },
+    );
+  }
+  const listener = createJobListener({
+    connect: postgresListenConnect(url),
+    onNotify: () => runner.wake(),
+    onConnected: () => runner.wake(),
+    log: ctx.log,
+  });
+  listener.start();
+  return listener;
 }
 
 export async function main(): Promise<void> {
@@ -74,26 +106,39 @@ export async function main(): Promise<void> {
   }
   const ctx = buildContext(config);
   const startedAt = Date.now();
+  let exitForStuckJob: (() => void) | null = null;
   const runner = createRunner(ctx, {
     concurrency: config.WORKER_CONCURRENCY,
     pollIntervalMs: config.POLL_INTERVAL_MS,
     sweepIntervalMs: config.SWEEP_INTERVAL_MS,
     jobTimeoutMs: config.JOB_TIMEOUT_MS,
     workerId: config.WORKER_ID,
+    // A handler that ignores its abort for STUCK_JOB_MS: exit, so the platform restarts the
+    // worker and claim_jobs() re-runs the job after the stale lock (the handler dies with us).
+    onStuck: (job) => {
+      ctx.log.error('exiting: a job handler is stuck', { job_id: job.id, job_type: job.type });
+      exitForStuckJob?.();
+    },
   });
 
+  let listener: JobListener | null = null;
   const server = createServer(async (req, res) => {
     if (req.method === 'GET' && (req.url === '/health' || req.url === '/')) {
       try {
         const queue = await ctx.db.queueStats();
+        // A stuck handler (runner.ts STUCK_JOB_MS) makes the worker unhealthy until it restarts.
+        const healthy = runner.stuck === 0;
         const body = {
-          ok: true,
+          ok: healthy,
           version: VERSION,
           uptimeS: Math.round((Date.now() - startedAt) / 1000),
           queue,
           active: runner.active,
+          // LISTEN jobs is connected (W1-10); false: polling every POLL_INTERVAL_MS only.
+          listening: listener?.connected ?? false,
+          stuckJobs: runner.stuck,
         };
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.writeHead(healthy ? 200 : 503, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(body));
       } catch (err) {
         ctx.log.error('health check failed', { err });
@@ -123,6 +168,7 @@ export async function main(): Promise<void> {
     )
     .catch((err: unknown) => ctx.log.warn('could not read the country packs', { err }));
   runner.start();
+  listener = startJobListener(config, ctx, runner);
 
   let stopping = false;
   const shutdown = async (signal: string) => {
@@ -130,10 +176,18 @@ export async function main(): Promise<void> {
     stopping = true;
     ctx.log.info('shutting down', { signal });
     server.close();
+    await listener?.stop();
     await runner.stop();
     await ctx.db.close();
     await Sentry.flush(2000).catch(() => undefined);
     process.exit(0);
+  };
+  exitForStuckJob = () => {
+    if (stopping) return;
+    stopping = true;
+    // No graceful stop: runner.stop() would wait for the stuck handler.
+    server.close();
+    void Promise.allSettled([listener?.stop(), Sentry.flush(2000)]).finally(() => process.exit(1));
   };
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));

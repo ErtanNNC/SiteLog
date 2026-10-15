@@ -1,3 +1,4 @@
+import { NEVER_ABORTED } from '../abort';
 import { randomUUID } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
 import { PAYROLL_COLUMNS } from '@sitelog/shared';
@@ -143,6 +144,8 @@ export interface Harness {
   sentTexts(): string[];
   /** What the SMS drivers were asked to send (no HTTP). */
   sms: Array<{ driver: SmsDriver; to: string; body: string; sender?: string }>;
+  /** Make every SMS driver throw this (a provider refusal or outage) until called with null. */
+  failSms(err: Error | null): void;
 }
 
 /** Fri Oct 9 2026 17:31 America/Chicago (CDT, UTC-5). */
@@ -166,9 +169,11 @@ export function createHarness(
     FIELD_APP_URL: 'https://go.sitelog.app',
   });
   const sms: Harness['sms'] = [];
+  let smsFailure: Error | null = null;
   const transport = (driver: SmsDriver): SmsTransport => ({
     driver,
     async send(to, body, o) {
+      if (smsFailure) throw smsFailure;
       sms.push({ driver, to, body, sender: o.sender });
       return { providerId: `${driver}:${sms.length}` };
     },
@@ -185,6 +190,7 @@ export function createHarness(
     log: silentLogger,
     now: () => now,
     metrics: createMetrics(),
+    signal: NEVER_ABORTED,
   };
 
   const org: OrgRow = {
@@ -430,6 +436,9 @@ export function createHarness(
       return wa.sent.map((s) => s.body ?? '').filter(Boolean);
     },
     sms,
+    failSms(err) {
+      smsFailure = err;
+    },
   };
   return h;
 }

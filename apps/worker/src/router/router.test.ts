@@ -404,6 +404,10 @@ describe('router: draft confirmation and filing (F7)', () => {
     const fileJobs = h.db.jobsOfType('file_report');
     expect(fileJobs).toHaveLength(1);
     expect(fileJobs[0]!.payload).toMatchObject({ reportId: report.id, trigger: 'confirm' });
+    // D16: one filing per confirm message (drafts keep version 1 until filed).
+    expect(fileJobs[0]!.dedupe_key).toBe(
+      `file:${report.id}:v1:m${(fileJobs[0]!.payload as { confirmMessageId: string }).confirmMessageId}`,
+    );
     await h.drain(['file_report']);
     const filed = (await h.db.getReport(report.id))!;
     expect(filed.status).toBe('filed');
@@ -431,6 +435,27 @@ describe('router: draft confirmation and filing (F7)', () => {
     expect((await h.db.getConversation(convo.id))!.state).toBe('idle');
     expect(h.db.data.audit.map((a) => a.action)).toContain('report.filed');
     expect(h.db.data.notifications.some((n) => n.kind === 'needs_review')).toBe(true);
+  });
+
+  it('a later confirm of the same draft version files after a filing that finished without filing (D16)', async () => {
+    const h = createHarness();
+    const { report, convo } = await seedReport(h, 'awaiting_confirmation');
+    const ctx = { active_report_id: report.id, draft_wa_message_id: 'wamid.draft' };
+    await h.db.updateConversation(convo.id, { state: 'awaiting_confirmation', context: ctx });
+    await h.send(convo, { type: 'text', body: 'ok' });
+    const [first] = h.db.jobsOfType('file_report');
+    // That filing finished without filing (a stale confirm), and the draft is back at v1.
+    first!.status = 'done';
+    await h.db.updateConversation(convo.id, { state: 'awaiting_confirmation', context: ctx });
+    await h.send(convo, { type: 'text', body: 'ok' });
+    const jobs = h.db.jobsOfType('file_report');
+    expect(jobs).toHaveLength(2);
+    expect(jobs[1]!.status).toBe('queued');
+    expect(jobs[1]!.dedupe_key).not.toBe(first!.dedupe_key);
+    expect(jobs.map((j) => j.dedupe_key!.startsWith(`file:${report.id}:v1:m`))).toEqual([
+      true,
+      true,
+    ]);
   });
 
   it('"ok" text and a thumbs-up reaction on the draft also file', async () => {

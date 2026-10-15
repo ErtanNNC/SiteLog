@@ -226,6 +226,8 @@ export const JOB_TYPES = [
   'send_message',
   'retention_cleanup',
   'weekly_digest',
+  /** A message to a field reporter through the Notifier (§10.1, D48; W1-10). */
+  'notify',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

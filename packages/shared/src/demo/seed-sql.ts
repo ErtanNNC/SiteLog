@@ -14,8 +14,8 @@
  *    script when `log_statement` is `ddl` or more (the script disables a trigger).
  * 3. For each demo org (§18.1 Kestrel Build Group, §18.2 Demir Yapı A.Ş.): upserts the org row by
  *    its deterministic id, deletes the org's rows (reports, texts, links, calls, …: everything
- *    that hangs off the org, its sites, reporters and reports, and the queued or running jobs that
- *    name them: `PRUNE`), then inserts the generated rows with their deterministic ids, audit rows
+ *    that hangs off the org, its sites, reporters and reports, and the jobs that name them:
+ *    `PRUNE`), then inserts the generated rows with their deterministic ids, audit rows
  *    included. Seeded members are upserted; other members of a demo org (someone who joined it
  *    later) are kept.
  *
@@ -148,11 +148,11 @@ function pruneScope(orgId: string): PruneScope {
   return { o, S, R, P, C, V, M, U };
 }
 
-/** A queued or running job whose payload names one of the org's rows (schemas/jobs.ts keys). */
+/** A job whose payload names one of the org's rows (schemas/jobs.ts keys), whatever its status. */
 function jobsWhere(k: PruneScope): string {
   const ids = (key: string, sub: string) =>
     `payload->>'${key}' in (select x.id::text from ${sub} x)`;
-  return `status in ('queued', 'running') and (${[
+  return `(${[
     `payload->>'orgId' = ${k.o}::text`,
     ids('siteId', k.S),
     ids('reporterId', k.R),
@@ -171,8 +171,11 @@ function jobsWhere(k: PruneScope): string {
 /**
  * What the prune deletes for a demo org, table → where clause, in order (children first): every
  * row of the org except the org itself and its members, scoped by the org id, its sites,
- * reporters and reports. Jobs first: a job still queued or running from an earlier rehearsal
- * would run against rows the reset replaced (and hold its dedupe key). seed-apply.test.ts checks
+ * reporters and reports. Jobs first, finished ones too: a job still queued or running from an
+ * earlier rehearsal would run against rows the reset replaced, and since W1-10 (GAP D16) a dedupe
+ * key is never used twice, so a finished job of the last rehearsal would keep the next one's
+ * PDF, filing or welcome from being enqueued (the reset brings back the same ids and versions).
+ * seed-apply.test.ts checks
  * the tables against the catalog and the SQL `pruneSql()` writes from this list.
  */
 export const PRUNE: ReadonlyArray<readonly [table: string, where: (k: PruneScope) => string]> = [

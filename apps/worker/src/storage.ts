@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { abortableFetch } from './abort';
 
 /**
  * Supabase Storage via the service role (§4.2, §6.5): private buckets, signed URLs only.
@@ -35,6 +36,8 @@ export function createStorage(url: string, serviceRoleKey: string): Storage {
   }
   const client: SupabaseClient = createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // A timed-out job's uploads and downloads stop with it (W1-10, src/abort.ts).
+    global: { fetch: abortableFetch() },
   });
   return createStorageFromClient(client);
 }

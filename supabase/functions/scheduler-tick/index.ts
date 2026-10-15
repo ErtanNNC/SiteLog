@@ -1,4 +1,5 @@
-import { localDate, REMINDER_STAGE, weatherSlotDue, type Json } from '@sitelog/shared';
+import { type Json, localDate, REMINDER_STAGE } from '@sitelog/shared';
+import { logAudit } from '../_shared/audit.ts';
 import { requireEnv } from '../_shared/env.ts';
 import {
   bearerToken,
@@ -10,24 +11,15 @@ import {
 } from '../_shared/http.ts';
 import { enqueueJob } from '../_shared/jobs.ts';
 import { logError, logInfo, logWarn } from '../_shared/log.ts';
-import { notifyOrg } from '../_shared/notify.ts';
-import { adminClient, fetchAll, type AppClient } from '../_shared/supabase.ts';
+import { adminClient, type AppClient, fetchAll } from '../_shared/supabase.ts';
 import {
-  asSiteDayWeather,
-  dueStage,
   LADDER_STATUSES,
-  ladderFromSettings,
-  missingNotification,
-  orgIsBlocked,
-  pickReminderTarget,
-  planSiteDay,
-  reminderJob,
-  retentionDue,
-  siteDayPatchForStage,
-  weatherJobFor,
-  weeklyDigestDue,
   type OrgInput,
-  type ReminderTarget,
+  orgIsBlocked,
+  planMissing,
+  planSiteDay,
+  planTickJobs,
+  siteDayPatchForStage,
   type SiteDayInput,
   type SiteDayPlan,
   type SiteInput,
@@ -35,16 +27,18 @@ import {
 
 /**
  * scheduler-tick (§4.2, §F9, §10.10, §13) — called every 5 minutes by pg_cron (migration 0006)
- * with `Authorization: Bearer ${SCHEDULER_SECRET}`. Creates today's site-days, runs the reminder
- * ladder, marks missing reports, schedules weather fetches, the weekly digest and the nightly
- * retention job. Decisions live in logic.ts; this file only does I/O.
+ * with `Authorization: Bearer ${SCHEDULER_SECRET}`. Creates today's site-days, marks a day past its
+ * deadline plus the missing offset `missing` (§7.1), and schedules weather fetches, the weekly
+ * digest and the nightly retention job; billing-blocked orgs are skipped. The
+ * v1.0 WhatsApp reminder ladder (heads-up, R1, R2, the missing alert) is stopped (W1-10) until M6
+ * brings it back on SMS. Decisions live in logic.ts; this file only does I/O.
  */
 
 export interface TickResult {
   ok: boolean;
   sitesChecked: number;
   siteDaysCreated: number;
-  remindersQueued: number;
+  /** Site-days marked `missing` (§7.1) by this tick. */
   missing: number;
   weatherJobs: number;
   digests: number;
@@ -75,7 +69,6 @@ async function runTick(admin: AppClient, now: Date): Promise<TickResult> {
     ok: true,
     sitesChecked: 0,
     siteDaysCreated: 0,
-    remindersQueued: 0,
     missing: 0,
     weatherJobs: 0,
     digests: 0,
@@ -142,127 +135,70 @@ async function runTick(admin: AppClient, now: Date): Promise<TickResult> {
     return site !== undefined && sd.date === localDate(now, site.timezone);
   });
 
-  // 4. Reminder ladder.
-  const due: Array<{ sd: SiteDayInput; stage: 1 | 2 | 3 | 4 }> = [];
-  for (const sd of todaysSiteDays) {
-    if (!LADDER_STATUSES.includes(sd.status)) continue;
-    const site = siteById.get(sd.site_id);
-    const org = site ? orgs.get(site.org_id) : undefined;
-    if (!site || !org) continue;
-    const stage = dueStage(sd, ladderFromSettings(org.settings), now);
-    if (stage) due.push({ sd, stage: stage.stage });
-  }
-  const targets = await loadReminderTargets(
-    admin,
-    due.map((d) => d.sd.site_id),
-  );
-  for (const { sd, stage } of due) {
-    const site = siteById.get(sd.site_id);
-    const org = site ? orgs.get(site.org_id) : undefined;
-    if (!site || !org) continue;
-    const target = targets.get(site.id) ?? null;
+  // 4. No reminder ladder (W1-10): the v1.0 WhatsApp heads-up, R1, R2 and the missing alert are
+  //    stopped until M6 rebuilds them on SMS through the Notifier (logic.ts REMINDER_LADDER_RUNS).
+  //    The §7.1 status step still runs: a day past its deadline plus the missing offset becomes
+  //    `missing` (the panel's Overview and Reports read it), audited, with no text and no alert.
+  for (const mark of planMissing({ sites, orgs, todaysSiteDays, now })) {
     try {
-      if (stage === REMINDER_STAGE.missing) {
-        if (!(await claimStage(admin, sd.id, stage))) continue;
-        const note = missingNotification(site.name, target?.firstName ?? null);
-        await notifyOrg(admin, {
-          orgId: org.id,
-          kind: 'missing_report',
-          title: note.title,
-          body: note.body,
-          targetPath: '/',
-        });
-        await enqueueJob(
-          admin,
-          'send_email',
-          { kind: 'report_missing', siteDayId: sd.id, siteId: site.id, orgId: org.id },
-          { dedupeKey: `email:report_missing:${sd.id}` },
-        );
-        result.missing += 1;
-        logInfo('scheduler.missing', { siteId: site.id, siteDayId: sd.id, orgId: org.id });
-        continue;
-      }
-      if (!target) {
-        // Nobody active to remind: leave the stage untouched; the office alert still fires later.
-        logWarn('scheduler.reminder.no_reporter', { siteId: site.id, siteDayId: sd.id, stage });
-        continue;
-      }
-      if (!(await claimStage(admin, sd.id, stage))) continue;
-      const job = reminderJob(stage, {
-        siteDayId: sd.id,
-        conversationId: target.conversationId,
-        firstName: target.firstName,
-        siteName: site.name,
-        deadlineAt: new Date(sd.deadline_at),
-        tz: site.timezone,
-        ladder: ladderFromSettings(org.settings),
-        weather: asSiteDayWeather(sd.weather),
+      if (!(await markMissing(admin, mark.siteDayId))) continue;
+      await logAudit(admin, {
+        orgId: mark.orgId,
+        actorType: 'system',
+        action: 'site_day.status_changed',
+        entity: 'site_day',
+        entityId: mark.siteDayId,
+        diff: {
+          from: mark.from,
+          to: 'missing',
+          reminder_stage: REMINDER_STAGE.missing,
+          missing_at: mark.missingAt.toISOString(),
+          by: 'scheduler-tick',
+        },
       });
-      await enqueueJob(admin, 'send_template', job.payload, { dedupeKey: job.dedupeKey });
-      result.remindersQueued += 1;
-      logInfo('scheduler.reminder', {
-        siteId: site.id,
-        siteDayId: sd.id,
-        stage,
-        template: job.payload.template,
+      result.missing += 1;
+      logInfo('scheduler.missing', {
+        siteId: mark.siteId,
+        siteDayId: mark.siteDayId,
+        orgId: mark.orgId,
       });
     } catch (err) {
       result.errors += 1;
-      logError('scheduler.reminder.failed', err, { siteId: site.id, siteDayId: sd.id, stage });
+      logError('scheduler.missing.failed', err, { siteId: mark.siteId, siteDayId: mark.siteDayId });
     }
   }
-
-  // 5. Weather snapshots (12:00, 16:30, 23:30 site time) for sites with a site-day today.
-  const sitesWithToday = new Set(todaysSiteDays.map((sd) => sd.site_id));
-  for (const site of sites) {
-    if (!sitesWithToday.has(site.id)) continue;
-    const slot = weatherSlotDue(prevTick, now, site.timezone);
-    if (!slot) continue;
-    const job = weatherJobFor(site, localDate(now, site.timezone), slot);
-    if (!job) continue;
-    try {
-      await enqueueJob(admin, 'fetch_weather', job.payload, { dedupeKey: job.dedupeKey });
-      result.weatherJobs += 1;
-    } catch (err) {
-      result.errors += 1;
-      logError('scheduler.weather.failed', err, { siteId: site.id, slot });
-    }
-  }
-
-  // 6. Weekly digest (Monday 07:00 org time) — tracked per org in scheduler_state.
+  // 5–7. Weather snapshots, the weekly digest and the nightly retention job (logic.ts planTickJobs).
   const digestRuns = stringRecord(state.get(STATE.digests));
-  for (const org of orgs.values()) {
-    if (orgIsBlocked(org, now)) continue;
-    const digest = weeklyDigestDue(org, digestRuns[org.id] ?? null, now);
-    if (!digest) continue;
+  const planned = planTickJobs({
+    sites,
+    orgs,
+    todaysSiteDays,
+    now,
+    prevTick,
+    digestRuns,
+    retentionLastRun: stringField(state.get(STATE.retention), 'lastRunDate'),
+  });
+  for (const job of planned) {
     try {
-      await enqueueJob(
-        admin,
-        'weekly_digest',
-        { orgId: org.id, weekStart: digest.weekStart },
-        { dedupeKey: `weekly_digest:${org.id}:${digest.weekStart}` },
-      );
-      digestRuns[org.id] = digest.runKey;
-      result.digests += 1;
+      await enqueueJob(admin, job.type, job.payload, { dedupeKey: job.dedupeKey });
+      if (job.type === 'fetch_weather') result.weatherJobs += 1;
+      if (job.type === 'weekly_digest') {
+        digestRuns[job.orgId] = job.runKey;
+        result.digests += 1;
+      }
+      if (job.type === 'retention_cleanup') {
+        await saveState(admin, STATE.retention, { lastRunDate: job.day }, now);
+        result.retention = true;
+      }
     } catch (err) {
       result.errors += 1;
-      logError('scheduler.digest.failed', err, { orgId: org.id });
+      logError(`scheduler.${job.type}.failed`, err, {
+        ...(job.type === 'fetch_weather' ? { siteId: job.siteId, slot: job.slot } : {}),
+        ...(job.type === 'weekly_digest' ? { orgId: job.orgId } : {}),
+      });
     }
   }
   if (result.digests > 0) await saveState(admin, STATE.digests, digestRuns, now);
-
-  // 7. Nightly retention cleanup (03:00 UTC, once per day).
-  const retentionDay = retentionDue(stringField(state.get(STATE.retention), 'lastRunDate'), now);
-  if (retentionDay) {
-    try {
-      await enqueueJob(admin, 'retention_cleanup', {}, { dedupeKey: `retention:${retentionDay}` });
-      await saveState(admin, STATE.retention, { lastRunDate: retentionDay }, now);
-      result.retention = true;
-    } catch (err) {
-      result.errors += 1;
-      logError('scheduler.retention.failed', err);
-    }
-  }
 
   await saveState(admin, STATE.lastTick, { at: now.toISOString(), ...result }, now);
   result.ok = result.errors === 0;
@@ -270,17 +206,18 @@ async function runTick(admin: AppClient, now: Date): Promise<TickResult> {
   return result;
 }
 
-/** Marks a ladder stage as taken; false when another tick got there first (stage only moves up). */
-async function claimStage(
-  admin: AppClient,
-  siteDayId: string,
-  stage: 1 | 2 | 3 | 4,
-): Promise<boolean> {
+/**
+ * §7.1 `→ missing`: reminder_stage 4 and status 'missing' (logic.ts siteDayPatchForStage), only
+ * while the day is still pending or reminded below stage 4; false when a report, an office action
+ * or another tick got there first.
+ */
+async function markMissing(admin: AppClient, siteDayId: string): Promise<boolean> {
   const { data } = await admin
     .from('site_days')
-    .update(siteDayPatchForStage(stage))
+    .update(siteDayPatchForStage(REMINDER_STAGE.missing))
     .eq('id', siteDayId)
-    .lt('reminder_stage', stage)
+    .in('status', [...LADDER_STATUSES])
+    .lt('reminder_stage', REMINDER_STAGE.missing)
     .select('id')
     .throwOnError();
   return data.length > 0;
@@ -337,37 +274,6 @@ async function loadPastDueSince(admin: AppClient, orgIds: string[]): Promise<Map
     if (row.org_id && !since.has(row.org_id)) since.set(row.org_id, row.created_at);
   }
   return since;
-}
-
-async function loadReminderTargets(
-  admin: AppClient,
-  siteIds: string[],
-): Promise<Map<string, ReminderTarget>> {
-  const targets = new Map<string, ReminderTarget>();
-  const unique = [...new Set(siteIds)];
-  if (unique.length === 0) return targets;
-  const { data: links } = await admin
-    .from('site_reporters')
-    .select('site_id, reporter_id, is_primary')
-    .in('site_id', unique)
-    .throwOnError();
-  const reporterIds = [...new Set(links.map((l) => l.reporter_id))];
-  if (reporterIds.length === 0) return targets;
-  const { data: reporters } = await admin
-    .from('reporters')
-    .select('id, name, status')
-    .in('id', reporterIds)
-    .throwOnError();
-  const { data: conversations } = await admin
-    .from('conversations')
-    .select('id, reporter_id')
-    .in('reporter_id', reporterIds)
-    .throwOnError();
-  for (const siteId of unique) {
-    const target = pickReminderTarget(siteId, links, reporters, conversations);
-    if (target) targets.set(siteId, target);
-  }
-  return targets;
 }
 
 async function loadState(admin: AppClient): Promise<Map<string, Json>> {

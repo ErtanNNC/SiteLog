@@ -22,13 +22,33 @@ const intFrom = (def: number) =>
 
 /**
  * claim_jobs() takes a running job back after this long (GAP D18; the interval in
- * supabase/migrations/20261014000001_queue_rls_fixes.sql). JOB_TIMEOUT_MS ends a minute before
- * it, so a live worker fails (and re-queues) its own job before anyone reclaims it, and a reclaim
- * only picks up the job of a worker that died mid-job. It does not stop a handler that timed out:
- * withTimeout() (runner.ts) only races it, so the handler may keep running while fail_job's
- * re-queued copy runs on another slot (docs/AUDIT_BACKLOG.md; W1-10 adds an AbortSignal to Ctx).
+ * supabase/migrations/20261014000001_queue_rls_fixes.sql), so a worker that died mid-job loses its
+ * jobs after 10 minutes. A live worker never lets its running job go stale: it refreshes the job's
+ * `locked_at` every JOB_HEARTBEAT_MS until the handler settles, including after a timeout, when the
+ * handler's AbortSignal is aborted and the job is failed (re-queued) only once the handler has
+ * stopped (runner.ts, W1-10). So a timed-out job never runs twice at once.
  */
 export const STALE_LOCK_MS = 10 * 60_000;
+
+/** How often a running job's `locked_at` is refreshed (well inside STALE_LOCK_MS). */
+export const JOB_HEARTBEAT_MS = 60_000;
+
+/**
+ * After a timeout aborts a job's signal, how long the runner waits for the handler to settle before
+ * it alerts Sentry that the handler ignores its signal. It keeps waiting (and heartbeating): the
+ * job is never handed to another slot while its handler may still run.
+ */
+export const ABORT_GRACE_MS = 30_000;
+
+/**
+ * The hard cap after a timeout's abort (W1-10): a handler that still has not settled this long
+ * after its signal was aborted is stuck. The runner stops heartbeating its row and reports it
+ * (`onStuck`); the worker process then exits (src/index.ts), Fly restarts it, and claim_jobs()
+ * takes the row back after STALE_LOCK_MS, which is safe because the stuck handler died with the
+ * process. Without the cap a hung handler would hold its lock key (`report:<id>`, `sms:<phone>`,
+ * `convo:<id>`) and its slot until the next deploy. `/health` answers 503 while a job is stuck.
+ */
+export const STUCK_JOB_MS = 5 * 60_000;
 
 export const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -37,6 +57,13 @@ export const ConfigSchema = z.object({
   SUPABASE_URL: z.string().default(''),
   SUPABASE_SERVICE_ROLE_KEY: z.string().default(''),
   SUPABASE_DB_URL: z.string().min(1, 'SUPABASE_DB_URL is required'),
+  /**
+   * W1-10: the connection the worker LISTENs on for `NOTIFY jobs` (enqueue_job). It must be a
+   * session-mode connection (direct, or Supavisor's session pooler on port 5432): a transaction
+   * pooler (port 6543) does not deliver notifications. Empty: SUPABASE_DB_URL. Without
+   * notifications the worker still finds every job by polling (POLL_INTERVAL_MS).
+   */
+  SUPABASE_DB_LISTEN_URL: z.string().default(''),
 
   WA_PHONE_NUMBER_ID: z.string().default(''),
   WA_BUSINESS_ACCOUNT_ID: z.string().default(''),
@@ -78,7 +105,12 @@ export const ConfigSchema = z.object({
   JOB_TIMEOUT_MS: intFrom(5 * 60_000).pipe(
     z.number().max(STALE_LOCK_MS - 60_000, 'must end a minute before claim_jobs reclaims (10 min)'),
   ),
-  POLL_INTERVAL_MS: intFrom(1000),
+  /**
+   * The poll fallback (W1-10): NOTIFY wakes the worker for a job due now; the poll finds jobs that
+   * come due later (run_after, backoff), notifications missed while LISTEN reconnects, and a
+   * transaction pooler that delivers none.
+   */
+  POLL_INTERVAL_MS: intFrom(5000),
   SWEEP_INTERVAL_MS: intFrom(60_000),
   AUDIO_RETENTION_DAYS: intFrom(730),
   SENTRY_DSN: z.string().default(''),

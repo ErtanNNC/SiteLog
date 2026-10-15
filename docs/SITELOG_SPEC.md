@@ -393,6 +393,8 @@ SUPABASE_URL=
 SUPABASE_ANON_KEY=              # panel + field app (field app uses field-api, never direct table access)
 SUPABASE_SERVICE_ROLE_KEY=      # functions, worker, voice agent only
 SUPABASE_DB_URL=                # worker job queue (direct Postgres: FOR UPDATE SKIP LOCKED, LISTEN/NOTIFY)
+SUPABASE_DB_LISTEN_URL=         # worker (W1-10): the session-mode connection it LISTENs on; empty = SUPABASE_DB_URL (a
+                                # transaction pooler, port 6543, delivers no NOTIFY)
 STORAGE_PUBLIC_URL=             # field-api, local stacks only: the API URL as the browser reaches it, for the signed upload
                                 # URLs (inside `supabase start` the functions see http://kong:8000); unset on hosted projects (W1-09)
 # Browser bundles get only these (apps/*/.env.local):
@@ -472,6 +474,7 @@ TR_BILLING_PROVIDER=             # §19
 
 # Ops
 WORKER_CONCURRENCY=4
+POLL_INTERVAL_MS=5000           # worker poll fallback; NOTIFY jobs wakes it for a job due now (W1-10)
 AUDIO_RETENTION_DAYS=730
 SENTRY_DSN=
 ```
@@ -1008,7 +1011,7 @@ create table jobs (
   id bigserial primary key,
   type text not null,
   payload jsonb not null,
-  dedupe_key text unique,                        -- e.g. 'file_report:<report_id>:v2' — insert … on conflict do nothing
+  dedupe_key text unique,                        -- e.g. 'file:<report_id>:v2' (a filing of draft version 2, W1-10; later occurrences add ':c<n>', §10.1) — insert … on conflict do nothing
   status job_status not null default 'queued',
   attempts int not null default 0,
   run_after timestamptz default now(),
@@ -1091,6 +1094,8 @@ stateDiagram-v2
   missing --> filed: late report still accepted (is_late = true)
   missing --> no_work: office marks no work
 ```
+
+*As built (W1-10):* until the reminder ladder returns on SMS (M6), `scheduler-tick` sends no reminder, so no site-day becomes `reminded`; it still moves a `pending` (or `reminded`) day to `missing` at deadline + the org's missing offset (`reminder_stage` 4, audited `site_day.status_changed`), with no office alert yet (§19 Q55).
 
 UI chips: `filed` → **Filed** · `processing`/awaiting → **Awaiting** · `missing` → **Missing** · `weather_day` → **Weather day** · `needs_review` → **Needs review** · `signed_off` → **Signed off**; **Late** badge when filed after deadline.
 
@@ -1631,7 +1636,7 @@ Reporters may speak any supported language; the report is written in the org's r
 | `send_welcome` | reporter_id | `welcome` message (SMS) + personal link |
 | `build_evidence_pack` | pack_id | PDF, email |
 
-Retries: backoff 30 s · 2 min · 10 min · 30 min · 2 h; after 5 → `dead`, Sentry alert, office notified for reporter-facing failures.
+Retries: backoff 30 s · 2 min · 10 min · 30 min · 2 h; after 5 → `dead`, Sentry alert, office notified for reporter-facing failures. *Clarified (W1-10, GAP D17):* the five delays follow failed attempts 1 to 5, so a job runs at most six times and its sixth failure makes it `dead` (`fail_job()`, `JOB_MAX_ATTEMPTS` 6). *As built (W1-10):* a job's `dedupe_key` names it for good (`jobs.dedupe_key unique`, `enqueue_job … on conflict do nothing`: a taken key returns that job, whatever its status, D16), so repeatable work carries a key per occurrence (`welcome:<reporter>:invite:<n>`; a filing per confirm occurrence, because a draft keeps its version until it is filed: `file:<report>:v<version>` for the first web confirm of a version and `…:c<n>` after a filing that finished without filing, `…:m<message>` for a WhatsApp confirm, `…:t<draft sent at>` for the timeouts). The worker wakes on `NOTIFY jobs` (LISTEN on a session connection, reconnecting with backoff) and polls every 5 s as the fallback. A job that outlives its timeout has its AbortSignal aborted and is failed only once its handler settles; until then its row stays `running` with a `locked_at` heartbeat, so it never runs twice at once. A handler still running 5 minutes after the abort is stuck: its heartbeat stops, `/health` answers 503, and the worker exits so the platform restarts it and the stale lock hands the job to a new run. A dead job is audited `job.dead`; a dead message job to or from a reporter (`notify`, `send_welcome`, `sms_inbound`, the v1.0 WhatsApp jobs) tells the office `message_failed` (ops, admin; §13 *Message undeliverable*), a dead report step (`transcribe_upload`, `extract_report`, `decide_next`, `file_report`, the v1.0 ones) `processing_failed` (admin, pm, ops), and other jobs go to Sentry and `/ops` only (§19 Q54). No WhatsApp `error_retry` any more.
 
 ### 10.2 Transcription
 
@@ -2272,6 +2277,8 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 51 | How the field app learns that the reporter's pack places automated calls (Field-02's *Call me at report time (automated)*, the `auto_call` consent; Q33: no `auto_call` consent while the pack has no outbound trunk; trunks are env, Q38) | `resolve` adds a boolean from the outbound trunk list (`LIVEKIT_SIP_OUTBOUND_TRUNKS`) · The pack's voice number stands for it · Always show the box (consent ahead of the feature) | **Open (owner, before M8).** Recommendation: the first, with M8's outbound calls (a voice number alone is inbound: *Call {number}* and Talk now). **As built (W1-09):** the box is never shown (`placesAutomatedCalls()` in `apps/field/src/lib/features.ts` answers false; no pack places automated calls before M8), so the recorder stores no `auto_call` consent; the preference *Phone call* stays (Q33). The artboard shows the box; the spec wins. |
 | 52 | F4's optional 20-second test recording ("Say anything — nothing gets filed" → "Heard you clearly: '…'") | Build it after transcription (W1-11) with a `field-api` route that transcribes a clip outside any report and deletes it (e.g. `POST /field/test-clip` → the snippet) · Drop it from the MVP | **Open (owner).** Recommendation: the first, in M6; Appendix B gains the route then. Not in W1-09: its Build list does not name it, and the snippet needs transcription, which does not exist yet. |
 | 53 | A clip recorded on one day that reaches `field-api` only after that day's window has closed (recorded offline in the evening and sent the next afternoon, or "yesterday" picked before noon and sent after it) | File it under the day it was recorded when the device's recording time falls inside that day's window and it arrives within a grace period (e.g. 48 h), audited as late and flagged to the office · File it under the day it arrives · Refuse it, keep the clip on the phone, and tell the office so they can attach it to that day's report | **Open (owner, before the field pilot).** As built (W1-09): `create-upload` checks the report date against `allowedReportDates()` at upload time (Q43), so such a clip gets `date_not_allowed`, which the field app treats as final: it stays on the phone in the _Not sent_ list with _Remove_ only. Recommendation: the first, with the grace period and the late flag, since a site manager with no signal should not lose the day's report; the recording time comes from the device clock, so the server accepts it only between the day's window and the upload time plus the grace period. |
+| 54 | Which dead jobs tell the office, and how (§10.1 "office notified for reporter-facing failures"; W1-10 removed the reporter's WhatsApp `error_retry`) | Message jobs to or from a reporter and report-processing steps, as panel notices (`message_failed` to ops and admin under §13 *Message undeliverable*; `processing_failed` to admin, pm and ops), other jobs Sentry and `/ops` only · Every dead job as a panel notice to admin · Panel notices plus a message to the reporter on the Notifier (an `error_retry` text) | **Open (owner).** Recommendation: the first, as built in W1-10 (`apps/worker/src/dead-jobs.ts`: one notice per dead job, English titles like the worker's other notices, every dead job audited `job.dead`); an `error_retry` text to the reporter needs its §9.2 key and consent rules first. The `notify` job also tells the office (`message_failed`) when a text is refused for good or reaches no phone (a real org's pack with no sender id here), and stays silent when the Notifier skips for no consent or an opt-out (already audited). |
+| 55 | Whether the office is alerted when a site-day becomes `missing` while the reminder ladder is stopped (W1-10 until M6; §7.1, §F9 "Missing: office email + panel alert") | Keep the status step only: the day shows as Missing on the Overview and in Reports, no notice or email (as built in W1-10) · Also the panel notice (`missing_report`, ops + admin) and the `report_missing` email, reworded without "didn't answer 2 reminders" · Nothing until M6 (days stay `pending`) | **Open (owner).** Recommendation: the second once its copy exists (the v1.0 notice says the reporter ignored two reminders, which is untrue without the ladder); meanwhile the first, as built (`scheduler-tick/logic.ts` `planMissing`). |
 
 ---
 

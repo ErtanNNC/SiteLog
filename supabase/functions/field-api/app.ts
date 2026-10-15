@@ -691,9 +691,10 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       });
     }
     // field_confirm_report() checks both again under the site-day lock that completing an upload
-    // takes, enqueues file_report for this version (the dedupe key of the WhatsApp confirm and
-    // the timeouts, so one filing wins) and audits report.confirm_requested; the worker files
-    // only that version (apps/worker/src/pipeline/file.ts).
+    // takes, returns a filing already queued or running, else enqueues file_report for this
+    // version under a key per confirm occurrence (GAP D16, `jobKeys.fileReport`) and audits
+    // report.confirm_requested; the worker files only that version
+    // (apps/worker/src/pipeline/file.ts).
     const res = await store.confirmReport(report.id, ctx.reporter.id, version);
     return res.status === 'filed'
       ? c.json({ status: 'filed' } satisfies ConfirmResponse)

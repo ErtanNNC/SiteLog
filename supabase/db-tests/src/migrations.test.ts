@@ -149,14 +149,34 @@ describe('job queue', () => {
     );
     expect(after.rows[0]).toMatchObject({ status: 'queued', last_error: 'boom' });
     expect(new Date(after.rows[0]!.run_after).getTime()).toBeGreaterThan(Date.now() + 20_000);
+    // D17: the fifth failure still waits 2 h; the sixth is dead.
     await asService(db, (q) =>
       q(`update jobs set attempts = 5 where id = $1`, [claimed.rows[0]!.id]),
+    );
+    await asService(db, (q) => q(`select fail_job($1, 'boom 5')`, [claimed.rows[0]!.id]));
+    const fifth = await asService(db, (q) =>
+      q<{ status: string; wait: number }>(
+        `select status, extract(epoch from run_after - now())::float8 as wait from jobs where id = $1`,
+        [claimed.rows[0]!.id],
+      ),
+    );
+    expect(fifth.rows[0]!.status).toBe('queued');
+    expect(fifth.rows[0]!.wait).toBeGreaterThan(7200 - 10);
+    await asService(db, (q) =>
+      q(`update jobs set attempts = 6 where id = $1`, [claimed.rows[0]!.id]),
     );
     await asService(db, (q) => q(`select fail_job($1, 'boom again')`, [claimed.rows[0]!.id]));
     const dead = await asService(db, (q) =>
       q<{ status: string }>(`select status from jobs where id = $1`, [claimed.rows[0]!.id]),
     );
     expect(dead.rows[0]!.status).toBe('dead');
+    // D16: the key stays the dead job's; enqueueing it again returns that job.
+    const id3 = await asService(db, (q) =>
+      q<{ id: string }>(
+        `select enqueue_job('inbound_message', '{"messageId":"m1"}', null, 'inbound:m1') as id`,
+      ),
+    );
+    expect(id3.rows[0]!.id).toBe(id1.rows[0]!.id);
     await expect(asUser(db, LENA, (q) => q(`select * from jobs`))).resolves.toMatchObject({
       rows: [],
     });

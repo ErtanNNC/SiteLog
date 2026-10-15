@@ -91,4 +91,20 @@ describe('migration files as the Supabase CLI runs them', () => {
       'do $$ begin lock table reports in access exclusive mode; end $$',
     ]);
   });
+
+  it('takes the W1-10 jobs lock inside a DO block, before the D16 clean-up and constraint', () => {
+    const statements = topLevelStatements(
+      readFileSync(join(MIGRATIONS_DIR, '20261015000001_worker_runtime.sql'), 'utf8'),
+    );
+    expect(statements.slice(0, 2)).toEqual([
+      "set local lock_timeout = '5s'",
+      'do $$ begin lock table jobs in access exclusive mode; end $$',
+    ]);
+    const cleanUp = statements.findIndex((s) => s.startsWith('with ranked as'));
+    const constraint = statements.findIndex((s) =>
+      s.startsWith('alter table jobs add constraint jobs_dedupe_key_key unique (dedupe_key)'),
+    );
+    expect(cleanUp).toBeGreaterThan(1);
+    expect(constraint).toBeGreaterThan(cleanUp);
+  });
 });

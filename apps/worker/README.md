@@ -10,7 +10,7 @@ drives the WhatsApp conversation state machine (§7.2), renders PDFs, sends emai
 cp .env.example .env            # repo root; fill in SUPABASE_DB_URL at least
 pnpm install
 pnpm dev:worker                            # = pnpm --filter @sitelog/worker dev (tsx watch src/index.ts)
-curl localhost:8080/health                 # { ok, version, uptimeS, queue: { queued, running, dead } }
+curl localhost:8080/health                 # { ok, version, uptimeS, queue: { queued, running, dead }, active, listening }
 ```
 
 Outside production (`NODE_ENV` other than `production`) the worker loads `apps/worker/.env` and then
@@ -46,7 +46,8 @@ The Dockerfile installs the Debian package and sets `FFMPEG_PATH`.
 | `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM`            | `resend`, '', `SiteLog <reports@sitelog.app>` | email (falls back to the `console` provider without a key)    |
 | `APP_URL`                                                   | `https://app.sitelog.app`                     | links in emails                                               |
 | `WORKER_CONCURRENCY`, `WORKER_PORT`, `WORKER_ID`            | 4, 8080, hostname-pid                         | runner + health server                                        |
-| `JOB_TIMEOUT_MS`, `POLL_INTERVAL_MS`, `SWEEP_INTERVAL_MS`   | 300000, 1000, 60000                           | per-job timeout (at most 9 min), claim polling, timeout sweep |
+| `JOB_TIMEOUT_MS`, `POLL_INTERVAL_MS`, `SWEEP_INTERVAL_MS`   | 300000, 5000, 60000                           | per-job timeout (at most 9 min), poll fallback, timeout sweep |
+| `SUPABASE_DB_LISTEN_URL`                                    | = `SUPABASE_DB_URL`                           | session-mode connection for LISTEN jobs (not port 6543)       |
 | `AUDIO_RETENTION_DAYS`                                      | 730                                           | `retention_cleanup`                                           |
 | `SENTRY_DSN`, `LOG_LEVEL`, `NODE_ENV`                       | '', `info`, `development`                     | monitoring, JSON logs                                         |
 | `FFMPEG_PATH`                                               | ''                                            | ffmpeg binary override                                        |
@@ -73,22 +74,29 @@ environment; the job that needs a missing secret fails with a clear message (and
 | `build_evidence_pack`            | `{ packId }`                                                                           | §F16 PDF → `exports` bucket → pack `ready` + email + notification.                                                                                                                                                                                                                                                      |
 | `retention_cleanup`              | `{ before? }`                                                                          | Deletes audio + photos (and their transcripts) older than `AUDIO_RETENTION_DAYS`; reports and PDFs are kept.                                                                                                                                                                                                            |
 | `weekly_digest`                  | `{ orgId, weekStart }`                                                                 | §13 digest to admin + pm.                                                                                                                                                                                                                                                                                               |
+| `notify`                         | `{ reporterId, key, vars, dedupeKey }`                                                 | One message to a field reporter through the Notifier (§10.1, D48; W1-10): the channel from the pack, the §9.2 text, the `messages` row; `dedupeKey` keeps a retry from texting twice. A refusal for good or a real org with no sender here tells the office (`message_failed`).                                         |
 
 ## Retries, timeouts, idempotency
 
 - Jobs are claimed with `claim_jobs(worker, limit)` (`FOR UPDATE SKIP LOCKED`; stuck `running` jobs
-  are reclaimed after 10 min, `STALE_LOCK_MS` in `src/config.ts`; `JOB_TIMEOUT_MS` stays a minute
-  below it, so the reclaim covers a worker that died mid-job) and finished with `complete_job` /
-  `fail_job`. A timeout does not stop the handler: `withTimeout` only races it, so a hung handler
-  can still be running when `fail_job` re-queues its job for another slot, until W1-10 passes an
-  `AbortSignal` through `Ctx` (`docs/AUDIT_BACKLOG.md`). `fail_job` applies the
-  §10.1 backoff (30 s, 2 min, 10 min, 30 min, 2 h) and marks the job `dead` after 5 attempts. A dead
-  job is reported to Sentry and the reporter gets `error_retry` once per report (flag
-  `conversations.context.error_notified_for`).
+  are reclaimed after 10 min, `STALE_LOCK_MS` in `src/config.ts`) and finished with `complete_job` /
+  `fail_job`. The loop wakes on `NOTIFY jobs` (`src/listener.ts`: LISTEN on its own session
+  connection, `SUPABASE_DB_LISTEN_URL` or `SUPABASE_DB_URL`, reconnecting with backoff) and polls every
+  `POLL_INTERVAL_MS` (5 s) as the fallback (W1-10).
+- A job that outlives `JOB_TIMEOUT_MS` has its AbortSignal aborted (`Ctx.signal`; the boot-time
+  clients' HTTP calls abort with it through `src/abort.ts`) and is failed only once its handler has
+  settled; meanwhile its `locked_at` is refreshed every minute, so it never runs twice at once.
+  `fail_job` applies the §10.1 backoff (30 s, 2 min, 10 min, 30 min, 2 h) and marks the job `dead`
+  after the sixth failure (D17). A dead job goes to Sentry, is audited `job.dead`, and a
+  reporter-facing one becomes a panel notice for the office (`src/dead-jobs.ts`, spec §19 Q54).
 - Every job has a 5-minute timeout (`JOB_TIMEOUT_MS`). Metrics (`tokens`, `audioSeconds`,
   `latencyMs`, `estCostUsd`) are written to `jobs.payload.metrics`.
-- Enqueues use dedupe keys: `transcribe:<message>`, `extract:<report>:<sourceCount>`,
-  `decide:<report>:<cause>`, `file:<report>`, `render_pdf:<report>:<version>`, `email:<kind>:<report>:<version>`.
+- Enqueues use dedupe keys, each naming one job for good (D16: a taken key returns that job, done
+  or dead included): `transcribe:<message>`, `extract:<report>:<sourceCount>`,
+  `decide:<report>:<cause>`, `file:<report>:v<version>:<occurrence>` (a WhatsApp confirm
+  `m<message>`, a timeout `t<draft sent at>`; the web confirm `file:<report>:v<version>` then
+  `…:c<n>`), `render_pdf:<report>:<version>`,
+  `email:<kind>:<report>:<version>` (`scripts/src/job-keys.test.ts` audits every key).
   Inbound messages are routed once (`messages.status` becomes `read`); filing and rendering are
   no-ops when already done.
 - The 60-second sweep (`src/router/timeouts.ts`) implements §7.2 timeouts: `awaiting_answer` > 60 min

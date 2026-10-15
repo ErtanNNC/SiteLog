@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { REPORTER_ROLES } from '@sitelog/shared';
+import { REPORTER_ROLES, jobKeys } from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
 import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
 import { attachConversation } from '../_shared/conversations.ts';
@@ -159,7 +159,8 @@ async function link(admin: AppClient, user: AuthedUser, body: z.output<typeof Li
     admin,
     'send_welcome',
     { reporterId, siteId: site.id },
-    { dedupeKey: `welcome:${reporterId}:${site.id}` },
+    // D16: one welcome per linked sender (an invite of the same reporter has its own key).
+    { dedupeKey: jobKeys.welcomeLinked(reporterId, sender.id) },
   );
 
   await logAudit(admin, {

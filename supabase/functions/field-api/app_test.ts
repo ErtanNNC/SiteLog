@@ -418,7 +418,7 @@ Deno.test(
     const fileJobs = h.store.jobs.filter((j) => j.type === 'file_report');
     assertEquals(
       fileJobs.map((j) => [j.payload, j.dedupe_key]),
-      [[{ reportId, trigger: 'confirm', version: 1 }, `file:${reportId}`]],
+      [[{ reportId, trigger: 'confirm', version: 1 }, `file:${reportId}:v1`]],
     );
     // Being filed: no voice note or photo joins the confirmed draft.
     const late = await h.call('POST', 'uploads', {
@@ -1055,6 +1055,19 @@ Deno.test(
     const ok = await h.call('POST', `reports/${reportId}/confirm`, { body: { version: 2 } });
     assertEquals([ok.status, ok.json.status], [202, 'queued']);
     assertEquals(h.store.jobs.find((j) => j.type === 'file_report')!.payload.version, 2);
+
+    // D16: that filing completed stale (the report left and came back to awaiting_confirmation
+    // at v2); the next confirm is a new occurrence, not the finished job.
+    h.store.jobs.find((j) => j.type === 'file_report')!.status = 'done';
+    const again = await h.call('POST', `reports/${reportId}/confirm`, { body: { version: 2 } });
+    assertEquals([again.status, again.json.status], [202, 'queued']);
+    assertEquals(
+      h.store.jobs.filter((j) => j.type === 'file_report').map((j) => [j.dedupe_key, j.status]),
+      [
+        [`file:${reportId}:v2`, 'done'],
+        [`file:${reportId}:v2:c2`, 'queued'],
+      ],
+    );
   },
 );
 
