@@ -1,6 +1,6 @@
 # SiteLog · Durum
 
-Güncelleme: 2026-10-15 (UTC) · dal `spec-v1.2` · PR #1 · W1-08 ve inceleme düzeltmeleri CI'da yeşil (run 38659474311) · W1-09 CI'da yeşil (run 38666565445), telefon kontrolleriniz bekleniyor
+Güncelleme: 2026-10-15 18:58 UTC · dal `spec-v1.2` · PR #1 · son CI yeşil: a9cc55f (run 38740645053); 13:54 UTC'den beri GitHub Actions runner vermiyor, sonraki commit'ler yalnızca yerel testlerle doğrulandı
 
 Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün aralıklarını kullanıyorum (M0 gün 1 · M1 gün 1–2 · M2 gün 2–3 · M3 gün 3–4 · M4 gün 4–5 · M5 gün 5–7 → demo). Planın farklı bir eşlemesi varsa söyleyin, buna göre düzeltirim.
 
@@ -12,13 +12,23 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 **3–4** — M3 _pipeline v1_ (W1-10 worker çalışma zamanı, W1-11 Deepgram transkripsiyonu, W1-12 çıkarım v2, sorular ve sahadan cevap), hepsi CI'da yeşil (son run 38719172765). Anahtarlı kontroller (`ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`) yapılmadı.
 
+**4–5** — M4:
+- W1-13 sahada soru → taslak → onayla gönder: CI'da yeşil (run 38740645053); kutusu yalnızca telefon kontrolünüzü bekliyor.
+- W1-14 PDF günlük rapor EN/TR, Türkçe örnek, imza sonrası yeniden PDF (bcd7b8c, e28184b): yerel testler yeşil. Örnek PDF'ler sohbette.
+- W1-15 web'den dosyalama, "dosyalandı" SMS'i, PDF'li e-posta (tekrar denemede iki kez gitmez), Filed ekranı (a5da973): yerel testler yeşil.
+- W1-18 Şantiyeler ve Şantiye detayı EN/TR (3392785): yerel testler yeşil; "Bugünün linkini gönder" düğmesi W1-16 ile bağlanacak.
+- §19 kararları işlendi ve kodlandı (25c1ead, c3b1cd4).
+- Bugünkü commit'lerin bağımsız incelemesi: 1 gerçek hata bulundu ve düzeltildi (0d6007e: zamanında gelen bir kaydın tekrar denemesi raporu yanlışlıkla "geç" işaretliyordu).
+
 ## Sürüyor
 
-**Çalışma kuralı (sizden, 2026-10-15):** aksini söyleyene kadar development durmadan devam ediyor; sizin kararınızı ya da doğrulamanızı gerektiren her şey aşağıda "Onayınızı bekleyen" / "Sizden beklenen" altında bekletiliyor, milestone sonlarında artık durmuyorum.
+**Çalışma kuralı (sizden, 2026-10-15):** aksini söyleyene kadar development durmadan devam ediyor; sizin kararınızı ya da doğrulamanızı gerektiren her şey aşağıda bekletiliyor.
 
-- **Telefon testi (W1-09):** cihaz kodları veritabanına doğru yazılıyordu (teşhis: Deploy run 38731254343), ama açık Demo phone yalnızca realtime olayıyla yenileniyordu ve preview'da olay gelmedi. Düzeltme f021c27: Demo phone açıkken 5 sn'de bir de yenileniyor. Giriş linkleri `phone-setup` özetinde (Lena: Kestrel, Elif: Demir Yapı). Telefon kontrolünüz bekleniyor.
-- **§19 kararları:** "önerilerinle devam" spec'e işleniyor; yapılmış davranışı değiştirenler (Q53 geç gelen kayıt, Q55 `missing` uyarısı vb.) testleriyle kodlanıyor.
-- **M4–M5:** W1-13 (CI yeşil, telefon kontrolünüz bekliyor), W1-14 PDF (a5da973 öncesi: bcd7b8c, e28184b) ve W1-15 dosyalama + SMS + e-posta (a5da973) bitti, yerel testler yeşil, CI Actions açılınca. W1-16 Overview, W1-17 Raporlar, W1-18 Şantiyeler paralel geliştiriliyor. W1-19 (cut-over) her adımı sizin onayınızla.
+- 16:00 civarında oturum kullanım limiti doldu; üç iş yarıda kaldı ve şimdi kaldıkları yerden sürdürülüyor:
+  - W1-16 Overview (kanal sütunu, "Bugünün linkini gönder", yeni dikkat maddeleri, EN/TR): yerel commit hazır, kalan kısım ve push.
+  - W1-17 Raporlar arşivi ve Rapor inceleme (yüklemeler, aramalar, saha olayları, EN/TR): yerel commit hazır, son test ve push.
+  - İnceleme düzeltmeleri: imza/geri alma PDF yarışı, e-posta tekrar denemesi (409), `missing` uyarısının kaybolmaması, Filed ekranının sonsuz beklemesi, panel e2e port/zaman aşımı.
+- Sonra: W1-19 (cut-over ve prova) için yerelde yapılabilen hazırlık; uzak adımların her biri sizin onayınızla.
 
 ## Onayınızı bekleyen
 
