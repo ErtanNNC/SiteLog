@@ -1,4 +1,4 @@
-import { Link2, Phone, Plus, Settings2 } from 'lucide-react';
+import { Link2, MessageSquareText, Phone, Plus, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { formatDate, formatDateInTz, formatDeadline, formatPhone } from '@sitelog/shared/format.ts';
@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { TableCell, TableRow } from '@/components/ui/Table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useDataSource } from '@/data/DataProvider';
-import { useSiteDetail } from '@/data/hooks';
+import { useSiteDetail, useTextDailyLink } from '@/data/hooks';
 import type { CrewBadge, CrewRow, SiteDetail } from '@/data/types';
 import { useCopy, type CopyT } from '@/i18n/useCopy';
 import { formatNumberIn, joinLanguageCodes, zoneShortName } from '@/lib/localeFormat';
@@ -60,6 +60,7 @@ export default function SiteDetailPage() {
   const source = useDataSource();
   const { currentOrg } = useAuth();
   const navigate = useNavigate();
+  const textLink = useTextDailyLink();
   const [params, setParams] = useSearchParams();
   const tabParam = params.get('tab');
   const tab: Tab = TABS.includes(tabParam as Tab) ? (tabParam as Tab) : 'reports';
@@ -145,6 +146,18 @@ export default function SiteDetailPage() {
                 {t('siteDetail.newReport')}
               </Link>
             </Button>
+            {/* P5 (W1-16's action, api-text-daily-link): today's link to the site manager. */}
+            {primary && site.status === 'active' ? (
+              <Button
+                variant="secondary"
+                loading={textLink.isPending}
+                data-testid="text-link"
+                onClick={() => textLink.mutate({ siteId: site.id, first: primary.firstName })}
+              >
+                <MessageSquareText aria-hidden="true" />
+                {t('siteDetail.textLink')}
+              </Button>
+            ) : null}
             {primary ? (
               <Button
                 variant="secondary"

@@ -125,18 +125,7 @@ export default function OverviewPage() {
 
   const onTextLink = (siteId: string, first: string) => {
     setTexting(siteId);
-    textLink.mutate(
-      { siteId, first },
-      {
-        onSuccess: (result) => {
-          if (result.sent) toast.success(t('overview.textLink.sent', { first }));
-          else if (result.detail === 'console_real_org')
-            toast.message(t('overview.textLink.notSent.console_real_org', { first }));
-          else toast.message(t(`overview.textLink.notSent.${result.reason}`, { first }));
-        },
-        onSettled: () => setTexting(null),
-      },
-    );
+    textLink.mutate({ siteId, first }, { onSettled: () => setTexting(null) });
   };
 
   const act = (a: AttentionAction) => {
@@ -511,7 +500,13 @@ export default function OverviewPage() {
                             </span>
                             <p className="font-semibold leading-5">{text(item.title)}</p>
                             <p className="text-[14px] leading-5 text-steel">
-                              {item.body.map(text).join(' · ')}
+                              {item.body.map(text).reduce(
+                                (all, line) =>
+                                  // Sentences follow on ("… 2 reminders. Office alerted at
+                                  // 19:00."), other lines are separated by a dot.
+                                  !all ? line : `${all}${/[.!?]$/.test(all) ? ' ' : ' · '}${line}`,
+                                '',
+                              )}
                             </p>
                             {actions.length ? (
                               <div className="mt-1 flex flex-wrap gap-2">

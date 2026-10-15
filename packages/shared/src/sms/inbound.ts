@@ -83,12 +83,21 @@ export interface InboundSmsStore {
    * text `excludeMessageId` created (a retry of that text still sends its F13 auto-reply).
    */
   hasPendingUnknown(phone: E164, opts?: { excludeMessageId?: string }): Promise<boolean>;
-  /** The F13 row of this text: inserted once per `message_id`; a retry gets the existing row back. */
+  /**
+   * The F13 row of this text: inserted once per `message_id`; a retry gets the existing row back.
+   * `org_id` is the guessed org (spec §19 Q44, `guessContactOrg`), else null.
+   */
   insertUnknownContact(row: {
     phone_e164: E164;
     message_id: string;
     snippet: string;
+    org_id: string | null;
   }): Promise<{ id: string; created: boolean }>;
+  /**
+   * Orgs in scope of this pack that linked an earlier contact of this phone (spec §19 Q44: the
+   * number has history there). Optional: without it only disabled reporters count.
+   */
+  linkedContactOrgs?(phone: E164, country: string, scope: InboundScope): Promise<string[]>;
   /** `sms_opt_outs` for the phone on the pack, method `sms_keyword`; a row already there stays. */
   recordPhoneOptOut(phone: E164, country: string): Promise<void>;
   clearPhoneOptOut(phone: E164, country: string): Promise<void>;
@@ -166,6 +175,21 @@ export function optOutNotification(reporter: {
   };
 }
 
+/**
+ * Spec §19 Q44 (decided 2026-10-15): the org an unknown number's text is filed under. Its
+ * history: the orgs of its reporters (here only disabled ones, or the text would not be unknown)
+ * and the orgs that linked an earlier contact of it, all within the scope (real orgs of the pack
+ * on the Twilio route). Exactly one → that org; none or several → null, and SiteLog support sees
+ * it on /ops, never every org of the pack.
+ */
+export function guessContactOrg(
+  reporterOrgIds: readonly string[],
+  linkedOrgIds: readonly string[],
+): string | null {
+  const orgs = new Set([...reporterOrgIds, ...linkedOrgIds]);
+  return orgs.size === 1 ? [...orgs][0]! : null;
+}
+
 export async function processInboundSms(
   deps: InboundSmsDeps,
   input: InboundSmsInput,
@@ -222,19 +246,31 @@ export async function processInboundSms(
     }
   }
   if (plan.unknownContact) {
+    // Spec §19 Q44: the org of the number's history (a disabled reporter here, an earlier
+    // contact that org linked) when there is exactly one; else org-less, for SiteLog support.
+    const orgId = guessContactOrg(
+      reporters.map((r) => r.orgId),
+      (await store.linkedContactOrgs?.(text.from, pack.code, input.scope)) ?? [],
+    );
     const contact = await store.insertUnknownContact({
       phone_e164: text.from,
       message_id: text.messageId,
       snippet: text.body.slice(0, 200),
+      org_id: orgId,
     });
     if (contact.created) {
       await store.audit({
-        orgId: null,
+        orgId,
         actorType: 'system',
         action: 'unknown_contact.created',
         entity: 'unknown_contact',
         entityId: contact.id,
-        diff: { channel: 'sms', pack: pack.code, message_id: text.messageId },
+        diff: {
+          channel: 'sms',
+          pack: pack.code,
+          message_id: text.messageId,
+          org_guessed: orgId !== null,
+        },
       });
     }
   }

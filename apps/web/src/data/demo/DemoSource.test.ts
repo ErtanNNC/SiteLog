@@ -55,7 +55,14 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     // The Web-Overview artboard's cards, as copy keys with their values.
     expect(o.needsAttention[0]!.body).toEqual([
       { key: 'overview.attention.missing.body', vars: { first: 'Priya', count: 2 } },
+      {
+        key: 'overview.attention.missing.alerted',
+        vars: { time: { time: expect.any(String), tz: 'America/Chicago' } },
+      },
     ]);
+    // A project manager gets no missing notice (§13 audiences), so no alert line.
+    const pm = await source('pm').source.getOverview();
+    expect(pm.needsAttention[0]!.body).toHaveLength(1);
     expect(o.needsAttention[1]!.title).toEqual({
       key: 'overview.attention.needs_review.titleUnknownCompany',
       vars: { site: 'Oakmont', name: 'Ridgeway' },

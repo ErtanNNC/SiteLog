@@ -43,4 +43,5 @@ export const qk = {
   /** /ops is platform-wide (not org data): keyed by the signed-in user, invalidated by ['ops']. */
   opsAccess: (userId: string) => ['ops', userId, 'access'] as const,
   ops: (userId: string) => ['ops', userId, 'dashboard'] as const,
+  orglessContacts: (userId: string) => ['ops', userId, 'orgless-contacts'] as const,
 };

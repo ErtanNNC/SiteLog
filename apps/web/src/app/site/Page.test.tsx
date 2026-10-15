@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { toast } from 'sonner';
+import { describe, expect, it, vi } from 'vitest';
 import { DemoStore, type DemoLoginKey } from '@/data/demo/store';
 import { i18n } from '@/i18n/i18n';
 import { renderWithProviders } from '@/test/render';
@@ -97,6 +98,22 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
       'reports@kestrelbuild.example',
       'lena@kestrelbuild.example',
     ]);
+  });
+
+  it('texts Marco today’s link from the header (P5, W1-16’s action)', async () => {
+    const success = vi.spyOn(toast, 'success');
+    const { store } = renderRiverside(new DemoStore(), 'ops');
+    await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
+    const marco = store.data.reporters.find((r) => r.name === 'Marco Ruiz')!;
+    const before = store.data.messages.length;
+    await userEvent.click(screen.getByRole('button', { name: 'Text today’s link' }));
+    await waitFor(() => expect(success).toHaveBeenCalledWith('Today’s link texted to Marco.'));
+    expect(store.data.messages.length).toBe(before + 1);
+    expect(store.data.messages.at(-1)).toMatchObject({
+      reporter_id: marco.id,
+      copy_key: 'daily_link',
+    });
+    expect(store.data.audit.at(-1)).toMatchObject({ action: 'daily_link.texted' });
   });
 
   it('offers Pause site to admins only (RLS lets only admins update a site)', async () => {

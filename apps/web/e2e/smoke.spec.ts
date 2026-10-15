@@ -130,7 +130,9 @@ test.describe('SiteLog panel (demo mode)', () => {
       const northgate = table.getByRole('row').filter({ hasText: 'Northgate Parking Structure' });
       await expect(northgate.getByText('Reported by call')).toBeAttached();
       const missing = page.getByTestId('needs-attention').locator('[data-kind="missing"]');
-      await expect(missing).toContainText('Priya didn’t answer 2 reminders.');
+      await expect(missing).toContainText(
+        'Priya didn’t answer 2 reminders. Office alerted at 19:00.',
+      );
       await expect(
         page.getByTestId('needs-attention').locator('[data-kind="invoice_gap"]').first(),
       ).toContainText('BrightLine Electric: 212 h billed');
@@ -318,7 +320,7 @@ test.describe('language switch', () => {
     await expect(page.getByText('Asistan hazır · mesaj ve arama')).toBeVisible();
     await expect(page.locator('main#main [lang="en"]')).toHaveCount(0);
     // A page not translated yet stays English inside the Turkish shell.
-    await nav.getByRole('link', { name: /^Şantiyeler/ }).click();
+    await nav.getByRole('link', { name: /^Puantaj/ }).click();
     await expect(page.locator('main#main [lang="en"]').first()).toBeAttached();
   });
 

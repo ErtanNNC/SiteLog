@@ -101,3 +101,39 @@ describe('OpsPage (demo data)', () => {
     await expect(source.retryDeadJob(48213)).rejects.toThrow('Not found.');
   });
 });
+
+describe('OpsPage: unknown contacts with no organisation (spec §19 Q44, W1-16)', () => {
+  it('lists them for SiteLog staff and ignores one, audited', async () => {
+    const store = new DemoStore();
+    const luis = store.data.unknownContacts[0]!;
+    store.data.unknownContacts.push({
+      ...luis,
+      id: 'unknown:orgless',
+      org_id: null,
+      phone_e164: '+15550100999',
+      channel: 'sms',
+      call_id: null,
+      snippet: 'Hi, this is Sam from the Elm St. crew',
+      status: 'pending',
+    });
+    renderWithProviders(<OpsPage />, { route: '/ops', store });
+    const card = await screen.findByTestId('orgless-contacts');
+    const table = await within(card).findByRole('table', {
+      name: 'Unknown contacts with no organisation',
+    });
+    // Only the org-less one: the caller of Kestrel's §18.1 story belongs to Kestrel.
+    expect(within(table).getAllByRole('row')).toHaveLength(2);
+    expect(table).toHaveTextContent('Hi, this is Sam from the Elm St. crew');
+    // A demo org cannot take a real contact: nothing to assign to here.
+    expect(within(table).getByRole('button', { name: 'Assign' })).toBeDisabled();
+    await userEvent.click(within(table).getByRole('button', { name: 'Ignore' }));
+    await waitFor(() =>
+      expect(within(card).getByText('No unknown contacts without an organisation.')).toBeVisible(),
+    );
+    expect(store.data.unknownContacts.at(-1)!.status).toBe('ignored');
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'ops.unknown_contact_ignored',
+      entity_id: 'unknown:orgless',
+    });
+  });
+});

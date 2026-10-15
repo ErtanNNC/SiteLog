@@ -17,6 +17,7 @@ import type { OpsCostOutlier, OpsDeadJob, OpsQueueRow } from '@/data/types';
 import { formatDateTimeShort } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import NotFoundPage from '../not-found/Page';
+import { OrglessContacts } from './OrglessContacts';
 
 /**
  * /ops — SiteLog staff only (§15 reliability "dead-letter visible in an internal /ops page",
@@ -344,6 +345,8 @@ function OpsDashboard() {
           />
         </CardContent>
       </Card>
+
+      <OrglessContacts />
 
       <Card>
         <CardHeader>

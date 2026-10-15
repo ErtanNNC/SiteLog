@@ -33,6 +33,7 @@ import type {
   CurrentManpowerRow,
   CurrentWeatherRow,
   OpsCostOutlierRow,
+  OpsUnknownContactRow,
   OpsDeadJobRow,
   OpsQueueStatRow,
 } from '@sitelog/shared/db/types.ts';
@@ -111,6 +112,7 @@ import type {
   OpsData,
   OrgSettingsPatch,
   OrgSummary,
+  OrglessContacts,
   ReportFilters,
   SearchResult,
   TextDailyLinkResult,
@@ -471,38 +473,47 @@ export class SupabaseSource implements DataSource {
     // Today's texts to reporters: the reminders (Elm St.'s "2 reminders sent") and the ones that
     // did not arrive (F17 `undeliverable_sms`), from the day before the earliest site day (W1-16).
     const since = fromZonedTime(`${addDays(dates[0]!, -1)}T00:00:00`, core.org.timezone);
-    const [versions, unknownContacts, glossary, invoices, manpower, messages] = await Promise.all([
-      this.currentVersions(reports),
-      this.sb
-        .from('unknown_contacts')
-        .select('*')
-        .eq('org_id', this.orgId)
-        .eq('status', 'pending')
-        .then(unwrap),
-      this.sb
-        .from('glossary_terms')
-        .select('*')
-        .eq('org_id', this.orgId)
-        .eq('status', 'needs_review')
-        .then(unwrap),
-      this.sb
-        .from('sub_invoices')
-        .select('*')
-        .eq('org_id', this.orgId)
-        .lte('period_start', sunday)
-        .gte('period_end', start)
-        .then(unwrap),
-      this.manpowerBetween(addDays(start, -7), addDays(sunday, 7)),
-      this.sb
-        .from('messages')
-        .select('*')
-        .eq('org_id', this.orgId)
-        .eq('direction', 'out')
-        .gte('created_at', since.toISOString())
-        .order('created_at', { ascending: true })
-        .limit(1000)
-        .then(unwrap),
-    ]);
+    const [versions, unknownContacts, glossary, invoices, manpower, messages, notifications] =
+      await Promise.all([
+        this.currentVersions(reports),
+        this.sb
+          .from('unknown_contacts')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .eq('status', 'pending')
+          .then(unwrap),
+        this.sb
+          .from('glossary_terms')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .eq('status', 'needs_review')
+          .then(unwrap),
+        this.sb
+          .from('sub_invoices')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .lte('period_start', sunday)
+          .gte('period_end', start)
+          .then(unwrap),
+        this.manpowerBetween(addDays(start, -7), addDays(sunday, 7)),
+        this.sb
+          .from('messages')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .eq('direction', 'out')
+          .gte('created_at', since.toISOString())
+          .order('created_at', { ascending: true })
+          .limit(1000)
+          .then(unwrap),
+        // Today's missing notices (spec §19 Q55), for "Office alerted at …" (RLS: admin and ops).
+        this.sb
+          .from('notifications')
+          .select('*')
+          .eq('org_id', this.orgId)
+          .eq('kind', 'missing_report')
+          .gte('created_at', since.toISOString())
+          .then(unwrap),
+      ]);
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays,
@@ -513,6 +524,7 @@ export class SupabaseSource implements DataSource {
       invoices,
       manpower,
       messages,
+      notifications: notifications as NotificationRow[],
     };
     return assembleOverview(rows, this.ctx());
   }
@@ -1872,6 +1884,28 @@ export class SupabaseSource implements DataSource {
   }
   async discardDeadJob(jobId: number) {
     await this.rpc('ops_discard_job', { p_job_id: jobId });
+  }
+  async getOrglessContacts(): Promise<OrglessContacts> {
+    const [contacts, orgs] = await Promise.all([
+      this.rpc('ops_unknown_contacts', { p_limit: 200 }),
+      this.rpc('ops_real_orgs', {}),
+    ]);
+    return {
+      contacts: ((contacts ?? []) as OpsUnknownContactRow[]).map((c) => ({
+        id: c.id,
+        phone: c.phone_e164,
+        channel: c.channel,
+        snippet: c.snippet,
+        createdAt: c.created_at,
+      })),
+      orgs: (orgs ?? []) as OrglessContacts['orgs'],
+    };
+  }
+  async assignUnknownContact(contactId: string, orgId: string) {
+    await this.rpc('ops_assign_unknown_contact', { p_id: contactId, p_org_id: orgId });
+  }
+  async ignoreOrglessContact(contactId: string) {
+    await this.rpc('ops_ignore_unknown_contact', { p_id: contactId });
   }
 
   // ─── Realtime ───

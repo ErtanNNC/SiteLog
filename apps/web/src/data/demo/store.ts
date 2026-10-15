@@ -85,6 +85,7 @@ import type {
   DemoPhoneEmail,
   DemoPhoneMessage,
   OrgSettingsPatch,
+  OrglessContacts,
   TextDailyLinkResult,
 } from '../types';
 
@@ -1336,6 +1337,69 @@ export class DemoStore {
         channel: u.channel,
         consent: u.channel === null ? 'whatsapp' : 'pending',
       },
+    });
+    this.emit({ table: 'unknown_contacts', id: u.id });
+  }
+
+  // ─── /ops: org-less unknown contacts (spec §19 Q44, W1-16) ───
+
+  /** As ops_unknown_contacts() and ops_real_orgs(): the demo has no real org to give one to. */
+  orglessContacts(): OrglessContacts {
+    return {
+      contacts: this.data.unknownContacts
+        .filter((u) => u.org_id === null && u.status === 'pending')
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .map((u) => ({
+          id: u.id,
+          phone: u.phone_e164,
+          channel: u.channel,
+          snippet: u.snippet,
+          createdAt: u.created_at,
+        })),
+      orgs: this.data.org.is_demo
+        ? []
+        : [{ id: this.data.org.id, name: this.data.org.name, country: this.data.org.country }],
+    };
+  }
+
+  private orgless(contactId: string) {
+    const u = this.data.unknownContacts.find((x) => x.id === contactId);
+    if (!u) throw new Error(copy.errors.notFound);
+    if (u.org_id !== null || u.status !== 'pending') {
+      throw new Error('only a pending contact with no organisation can be changed here');
+    }
+    return u;
+  }
+
+  assignUnknownContact(contactId: string, orgId: string, userId: string): void {
+    const u = this.orgless(contactId);
+    if (orgId !== this.data.org.id || this.data.org.is_demo) {
+      throw new Error('a demo organisation cannot take a real contact');
+    }
+    u.org_id = orgId;
+    this.audit({
+      org_id: orgId,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'ops.unknown_contact_assigned',
+      entity: 'unknown_contact',
+      entity_id: u.id,
+      diff: { channel: u.channel },
+    });
+    this.emit({ table: 'unknown_contacts', id: u.id });
+  }
+
+  ignoreOrglessContact(contactId: string, userId: string): void {
+    const u = this.orgless(contactId);
+    u.status = 'ignored';
+    this.audit({
+      org_id: null,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'ops.unknown_contact_ignored',
+      entity: 'unknown_contact',
+      entity_id: u.id,
+      diff: { channel: u.channel },
     });
     this.emit({ table: 'unknown_contacts', id: u.id });
   }

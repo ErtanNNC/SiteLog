@@ -813,6 +813,14 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
 
     if (status === 'missing' && sd) {
       const first = reporter ? firstName(reporter.name) : copy.sites.reporter;
+      // The office's missing notice of this day (spec §19 Q55: `missing_report`, "{site} — no
+      // report"), for the artboard's "Office alerted at 19:00." Roles it does not reach see none.
+      const alert = rows.notifications.find(
+        (n) =>
+          n.kind === 'missing_report' &&
+          n.title.startsWith(`${site.name} — `) &&
+          formatDateInTz(n.created_at, site.timezone) === siteToday,
+      );
       attention.push({
         id: `missing:${sd.id}`,
         kind: 'missing',
@@ -821,6 +829,13 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
           remindersSent > 0
             ? copyRef('overview.attention.missing.body', { first, count: remindersSent })
             : copyRef('overview.attention.missing.bodyNoReminders', { first }),
+          ...(alert
+            ? [
+                copyRef('overview.attention.missing.alerted', {
+                  time: { time: alert.created_at, tz: site.timezone },
+                }),
+              ]
+            : []),
         ],
         siteId: site.id,
         actions: [

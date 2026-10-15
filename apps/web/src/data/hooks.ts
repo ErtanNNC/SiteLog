@@ -380,18 +380,25 @@ export function useMarkNoWork() {
 }
 
 /**
- * F17 "Text today's link" (W1-16): one request id per tap, so a retry never texts twice. The toast
- * says whether the text went, or why not (consent, opt-out, no sender for the country here).
+ * F17 "Text today's link" (W1-16; the Overview and Site detail, W1-18): one request id per tap, so
+ * a retry never texts twice. The toast says whether the text went, or why not (consent, opt-out,
+ * no sender for the country here), in the panel's language.
  */
 export function useTextDailyLink() {
   const s = useDataSource();
-  return useSourceMutation(
-    (vars: { siteId: string; first: string }) => s.textDailyLink(vars.siteId, uuid()),
-    {
-      silent: true,
-      invalidate: true,
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { siteId: string; first: string }) => s.textDailyLink(vars.siteId, uuid()),
+    onSuccess: (result, vars) => {
+      void qc.invalidateQueries({ queryKey: [s.orgId] });
+      const first = vars.first;
+      if (result.sent) toast.success(translate('overview.textLink.sent', { first }));
+      else if (result.detail === 'console_real_org')
+        toast.message(translate('overview.textLink.notSent.console_real_org', { first }));
+      else toast.message(translate(`overview.textLink.notSent.${result.reason}`, { first }));
     },
-  );
+    onError: (err) => toast.error(errorMessage(err, copy.errors.generic)),
+  });
 }
 
 export function useResolveUnknownCompany() {
@@ -764,6 +771,48 @@ function useOpsMutation(fn: (jobId: number) => Promise<void>, success: (jobId: n
       toast.error(errorMessage(err, copy.errors.generic));
     },
   });
+}
+
+/** /ops: org-less unknown contacts and the real orgs (spec §19 Q44, W1-16). */
+export function useOrglessContacts() {
+  const s = useDataSource();
+  return useQuery({
+    queryKey: qk.orglessContacts(s.user.id),
+    queryFn: () => s.getOrglessContacts(),
+    refetchInterval: 30_000,
+  });
+}
+
+function useOrglessMutation<V>(fn: (vars: V) => Promise<void>, success: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['ops'] });
+      toast.success(success);
+    },
+    onError: (err) => {
+      void qc.invalidateQueries({ queryKey: ['ops'] });
+      toast.error(errorMessage(err, copy.errors.generic));
+    },
+  });
+}
+
+export function useAssignUnknownContact() {
+  const s = useDataSource();
+  return useOrglessMutation(
+    (vars: { contactId: string; orgId: string }) =>
+      s.assignUnknownContact(vars.contactId, vars.orgId),
+    copy.ops.orgless.assigned,
+  );
+}
+
+export function useIgnoreOrglessContact() {
+  const s = useDataSource();
+  return useOrglessMutation(
+    (vars: { contactId: string }) => s.ignoreOrglessContact(vars.contactId),
+    copy.ops.orgless.ignored,
+  );
 }
 
 export function useRetryDeadJob() {

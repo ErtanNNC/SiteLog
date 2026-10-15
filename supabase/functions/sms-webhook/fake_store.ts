@@ -35,6 +35,7 @@ export class FakeSmsStore implements SmsWebhookStore {
     phone_e164: string;
     message_id: string;
     snippet: string;
+    org_id: string | null;
     status: 'pending';
   }> = [];
   /** `sms_opt_outs` as `phone:country`. */
@@ -124,7 +125,12 @@ export class FakeSmsStore implements SmsWebhookStore {
     );
   }
 
-  insertUnknownContact(row: { phone_e164: string; message_id: string; snippet: string }) {
+  insertUnknownContact(row: {
+    phone_e164: string;
+    message_id: string;
+    snippet: string;
+    org_id: string | null;
+  }) {
     const existing = this.unknown.find((u) => u.message_id === row.message_id);
     if (existing) return Promise.resolve({ id: existing.id, created: false });
     const id = `uc-${this.unknown.length + 1}`;

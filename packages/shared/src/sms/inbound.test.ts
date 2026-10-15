@@ -13,6 +13,7 @@ import {
 } from '../notify/notifier.ts';
 import {
   optOutNotification,
+  guessContactOrg,
   processInboundSms,
   type InboundReporterRow,
   type InboundSmsAudit,
@@ -67,6 +68,8 @@ function harness(
     fail?: Error;
     /** A store with `applyChange` (the worker's: one transaction per change). */
     atomic?: boolean;
+    /** Orgs that linked an earlier contact of the phone (spec §19 Q44). */
+    linked?: string[];
   } = {},
 ) {
   const reporters = opts.reporters ?? [{ ...reporter(), orgCountry: 'US' }];
@@ -78,8 +81,13 @@ function harness(
   const audits: InboundSmsAudit[] = [];
   const notifications: InboundSmsNotification[] = [];
   const optOuts = new Set<string>();
-  const unknown: Array<{ id: string; phone_e164: string; message_id: string; snippet: string }> =
-    [];
+  const unknown: Array<{
+    id: string;
+    phone_e164: string;
+    message_id: string;
+    snippet: string;
+    org_id: string | null;
+  }> = [];
   const handled: Array<{ messageId: string; at: string }> = [];
   const links: Array<{ id: string; code_hash: string; reporter_id: string }> = [];
   const rows = new Map<string, OutboundMessageRow>();
@@ -113,6 +121,7 @@ function harness(
       unknown.push({ id, ...row });
       return { id, created: true };
     },
+    linkedContactOrgs: async () => opts.linked ?? [],
     recordPhoneOptOut: async (phone, country) => void optOuts.add(`${phone}:${country}`),
     clearPhoneOptOut: async (phone, country) => void optOuts.delete(`${phone}:${country}`),
     markHandled: async (messageId, at) => void handled.push({ messageId, at }),
@@ -337,6 +346,7 @@ describe('processInboundSms (W1-08)', () => {
         phone_e164: UNKNOWN,
         message_id: 'm-in-1',
         snippet: 'Hi, this is Carlos from Apex',
+        org_id: null,
       },
     ]);
     expect(h.audits[0]).toMatchObject({
@@ -354,6 +364,47 @@ describe('processInboundSms (W1-08)', () => {
     expect([stop.keyword, stop.replyId, stop.unknownContact]).toEqual(['stop', null, false]);
     expect(h.optOuts.has('+15550194411:US')).toBe(true);
     expect(h.handled).toHaveLength(3);
+  });
+
+  it('spec §19 Q44: an unknown number is filed under the one org of its history, else none', async () => {
+    // A disabled reporter of one real org: that org.
+    const disabled = harness({
+      reporters: [
+        { ...reporter({ phone: UNKNOWN, status: 'disabled', orgId: 'org-a' }), orgCountry: 'US' },
+      ],
+    });
+    await disabled.run('Hi, back on site', { from: UNKNOWN });
+    expect(disabled.unknown[0]!.org_id).toBe('org-a');
+    expect(disabled.audits.find((a) => a.action === 'unknown_contact.created')).toMatchObject({
+      orgId: 'org-a',
+      diff: expect.objectContaining({ org_guessed: true }),
+    });
+    // An earlier contact that one org linked: that org.
+    const linked = harness({ linked: ['org-b'] });
+    await linked.run('Hi', { from: UNKNOWN });
+    expect(linked.unknown[0]!.org_id).toBe('org-b');
+    // Two orgs (a disabled reporter here, a link there): nobody's; support sees it.
+    const two = harness({
+      linked: ['org-b'],
+      reporters: [
+        { ...reporter({ phone: UNKNOWN, status: 'disabled', orgId: 'org-a' }), orgCountry: 'US' },
+      ],
+    });
+    await two.run('Hi', { from: UNKNOWN });
+    expect(two.unknown[0]!.org_id).toBeNull();
+    // A demo org's disabled reporter is out of a real sender's scope.
+    const demo = harness({
+      reporters: [
+        {
+          ...reporter({ phone: UNKNOWN, status: 'disabled', orgId: 'org-demo', orgIsDemo: true }),
+          orgCountry: 'US',
+        },
+      ],
+    });
+    await demo.run('Hi', { from: UNKNOWN });
+    expect(demo.unknown[0]!.org_id).toBeNull();
+    expect(guessContactOrg(['a', 'a'], ['a'])).toBe('a');
+    expect(guessContactOrg([], [])).toBeNull();
   });
 
   it('the scope keeps a real sender away from demo orgs and the Demo phone inside its org', async () => {

@@ -507,3 +507,92 @@ describe('cost per report', () => {
     expect(hidden.rows).toEqual([]);
   });
 });
+
+// 20261015000040_unknown_contacts_support.sql (spec §19 Q44, W1-16): org-less unknown contacts
+// are SiteLog support's, never every org's.
+describe('org-less unknown contacts for SiteLog support', () => {
+  async function contact(orgId: string | null = null): Promise<string> {
+    const rows = await svc<{ id: string }>(
+      `insert into unknown_contacts (org_id, phone_e164, snippet, channel, status)
+       values ($1, '+15550100999', 'Hi, this is Sam from the Elm St. crew', 'sms', 'pending')
+       returning id`,
+      [orgId],
+    );
+    return rows[0]!.id;
+  }
+  const asOperator = <T>(sql: string, params: unknown[] = []) =>
+    asUser(db, OPERATOR, (q: Q) => q<T>(sql, params));
+
+  it('lists the pending ones with no org to operators only', async () => {
+    const orphan = await contact();
+    const owned = await contact(orgId);
+    const list = await asOperator<{ id: string; channel: string; snippet: string }>(
+      `select * from ops_unknown_contacts()`,
+    );
+    const ids = list.rows.map((r) => r.id);
+    expect(ids).toContain(orphan);
+    expect(ids).not.toContain(owned);
+    expect(list.rows.find((r) => r.id === orphan)).toMatchObject({ channel: 'sms' });
+    await expect(
+      asUser(db, ORG_ADMIN, (q: Q) => q(`select * from ops_unknown_contacts()`)),
+    ).rejects.toThrow(/not allowed/);
+    // RLS: the org admin cannot read the org-less row either.
+    const seen = await asUser(db, ORG_ADMIN, (q: Q) =>
+      q(`select id from unknown_contacts where id = $1`, [orphan]),
+    );
+    expect(seen.rows).toEqual([]);
+  });
+
+  it('assigns one to a real org, which then sees it; audited', async () => {
+    const id = await contact();
+    await expect(
+      asUser(db, ORG_ADMIN, (q: Q) => q(`select ops_assign_unknown_contact($1, $2)`, [id, orgId])),
+    ).rejects.toThrow(/not allowed/);
+    await asOperator(`select ops_assign_unknown_contact($1, $2)`, [id, orgId]);
+    const seen = await asUser(db, ORG_ADMIN, (q: Q) =>
+      q<{ id: string }>(`select id from unknown_contacts where id = $1`, [id]),
+    );
+    expect(seen.rows).toEqual([{ id }]);
+    const audit = await svc<{ actor_id: string; org_id: string }>(
+      `select actor_id, org_id from audit_log
+       where action = 'ops.unknown_contact_assigned' and entity_id = $1`,
+      [id],
+    );
+    expect(audit).toEqual([{ actor_id: OPERATOR, org_id: orgId }]);
+    // Once it has an org it is the org's: support neither reassigns nor ignores it.
+    await expect(
+      asOperator(`select ops_assign_unknown_contact($1, $2)`, [id, orgId]),
+    ).rejects.toThrow(/only a pending contact with no organisation/);
+    await expect(asOperator(`select ops_ignore_unknown_contact($1)`, [id])).rejects.toThrow(
+      /only a pending contact with no organisation/,
+    );
+  });
+
+  it('never assigns to a demo org, and ignores one with an audit row', async () => {
+    const demo = (
+      await svc<{ id: string }>(
+        `insert into orgs (name, is_demo) values ('Demo Org', true) returning id`,
+      )
+    )[0]!.id;
+    const id = await contact();
+    await expect(
+      asOperator(`select ops_assign_unknown_contact($1, $2)`, [id, demo]),
+    ).rejects.toThrow(/demo organisation/);
+    const orgs = await asOperator<{ id: string; name: string }>(`select * from ops_real_orgs()`);
+    expect(orgs.rows.map((o) => o.id)).toContain(orgId);
+    expect(orgs.rows.map((o) => o.id)).not.toContain(demo);
+    await expect(
+      asUser(db, ORG_ADMIN, (q: Q) => q(`select * from ops_real_orgs()`)),
+    ).rejects.toThrow(/not allowed/);
+    await asOperator(`select ops_ignore_unknown_contact($1)`, [id]);
+    const row = await svc<{ status: string }>(`select status from unknown_contacts where id = $1`, [
+      id,
+    ]);
+    expect(row[0]!.status).toBe('ignored');
+    const audit = await svc(
+      `select 1 from audit_log where action = 'ops.unknown_contact_ignored' and entity_id = $1`,
+      [id],
+    );
+    expect(audit).toHaveLength(1);
+  });
+});

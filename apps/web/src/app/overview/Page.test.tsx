@@ -63,10 +63,12 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
       'unknown_contact',
       'glossary_review',
     ]);
-    // The Web-Overview artboard's cards, verbatim (the 19:00 office alert waits for spec §19 Q55).
+    // The Web-Overview artboard's cards, verbatim (the 19:00 alert is the §19 Q55 notice).
     const missing = within(list).getByText('Elm St. Townhomes — no report').closest('li')!;
     expect(within(missing).getByText('Missing')).toBeInTheDocument();
-    expect(within(missing).getByText('Priya didn’t answer 2 reminders.')).toBeInTheDocument();
+    expect(
+      within(missing).getByText('Priya didn’t answer 2 reminders. Office alerted at 19:00.'),
+    ).toBeInTheDocument();
     expect(within(missing).getByRole('link', { name: 'Call Priya' })).toHaveAttribute(
       'href',
       'tel:+15550147719',
@@ -150,7 +152,9 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
     expect(within(table).getByText('3,5 sa kayıp')).toBeInTheDocument();
     const list = screen.getByTestId('needs-attention');
     expect(within(list).getByText('Elm St. Townhomes: rapor yok')).toBeInTheDocument();
-    expect(within(list).getByText('Priya 2 hatırlatmaya yanıt vermedi.')).toBeInTheDocument();
+    expect(
+      within(list).getByText('Priya 2 hatırlatmaya yanıt vermedi. Ofise bildirildi: 19:00.'),
+    ).toBeInTheDocument();
     expect(within(list).getByText('BrightLine Electric: 212 sa faturalandı')).toBeInTheDocument();
     expect(within(list).getByRole('button', { name: 'Günün linkini gönder' })).toBeVisible();
     expect(screen.getByText('Kaydedilen işçilik saati').parentElement).toHaveTextContent('580');

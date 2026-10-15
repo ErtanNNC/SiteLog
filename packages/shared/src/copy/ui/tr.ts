@@ -218,6 +218,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           title: '{{site}}: rapor yok',
           body: '{{first}} {{count}} hatırlatmaya yanıt vermedi.',
           bodyNoReminders: '{{first}} son saate kadar rapor göndermedi.',
+          alerted: 'Ofise bildirildi: {{time}}.',
           call: 'Ara: {{first}}',
           textLink: 'Günün linkini gönder',
           markNoWork: 'İş yok olarak işaretle',

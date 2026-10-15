@@ -899,11 +899,20 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
           (excludeMessageId === null || u.message_id !== excludeMessageId),
       );
     },
+    async linkedContactOrgs(phone, country) {
+      const orgs = new Set<string>();
+      for (const u of d.unknownContacts.values()) {
+        if (u.phone_e164 !== phone || u.status !== 'linked' || !u.org_id) continue;
+        const org = d.orgs.get(u.org_id);
+        if (org && org.country === country && !org.is_demo) orgs.add(u.org_id);
+      }
+      return [...orgs];
+    },
     async insertSmsUnknownContact(row) {
       const existing = [...d.unknownContacts.values()].find((u) => u.message_id === row.message_id);
       if (existing) return { id: existing.id, created: false };
       const contact = await db.insertUnknownContact({
-        org_id: null,
+        org_id: row.org_id,
         phone_e164: row.phone_e164,
         channel: 'sms',
         message_id: row.message_id,

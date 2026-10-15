@@ -952,6 +952,21 @@ export interface OpsCostOutlier {
   waTemplates: number | null;
 }
 
+/**
+ * /ops (spec §19 Q44, W1-16): unknown contacts no org may see (an SMS on a shared sender with no
+ * history, or with history in several orgs), and the real orgs support can give one to.
+ */
+export interface OrglessContacts {
+  contacts: Array<{
+    id: string;
+    phone: string;
+    channel: FieldChannel | null;
+    snippet: string | null;
+    createdAt: string;
+  }>;
+  orgs: Array<{ id: string; name: string; country: string }>;
+}
+
 export interface OpsData {
   queue: OpsQueueRow[];
   deadJobs: OpsDeadJob[];

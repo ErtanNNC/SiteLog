@@ -71,6 +71,8 @@ export function workerInboundStore(db: Db): InboundSmsStore {
     hasPendingUnknown: (phone, opts) =>
       db.hasPendingUnknownContact(phone, 'sms', opts?.excludeMessageId ?? null),
     insertUnknownContact: (row) => db.insertSmsUnknownContact(row),
+    // The worker handles Twilio texts only (realOnly): real orgs of the pack.
+    linkedContactOrgs: (phone, country) => db.linkedContactOrgs(phone, country),
     recordPhoneOptOut: (phone, country) =>
       db.recordSmsOptOut({ phone_e164: phone, country, method: 'sms_keyword' }),
     clearPhoneOptOut: (phone, country) => db.clearSmsOptOut(phone, country),

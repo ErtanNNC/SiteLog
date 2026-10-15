@@ -25,6 +25,7 @@ import type {
   OpsData,
   OrgSettingsPatch,
   OrgSummary,
+  OrglessContacts,
   OverviewData,
   ReportDetail,
   ReportFilters,
@@ -359,6 +360,12 @@ export interface DataSource {
   retryDeadJob(jobId: number): Promise<void>;
   /** Dead job → discarded, kept for forensics (audited). */
   discardDeadJob(jobId: number): Promise<void>;
+  /** Org-less unknown contacts and the real orgs (spec §19 Q44; ops_* RPCs refuse non-operators). */
+  getOrglessContacts(): Promise<OrglessContacts>;
+  /** Gives an org-less contact to a real org, which then links or ignores it (audited). */
+  assignUnknownContact(contactId: string, orgId: string): Promise<void>;
+  /** Ignores an org-less contact (audited). */
+  ignoreOrglessContact(contactId: string): Promise<void>;
 
   // ─── Realtime ───
   subscribe(onChange: (event: ChangeEvent) => void): () => void;

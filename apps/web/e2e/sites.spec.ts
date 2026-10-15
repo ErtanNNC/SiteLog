@@ -37,6 +37,8 @@ const COPY = {
     prefersLink: 'Prefers text link',
     connect: 'Connect another site',
     call: 'Call Marco',
+    textLink: 'Text today’s link',
+    texted: 'Today’s link texted to Marco.',
     settings: 'Site settings',
     calendar: 'October 2026',
     confirmed: 'Confirmed by answer',
@@ -46,6 +48,8 @@ const COPY = {
     prefersLink: 'Tercih: mesajla link',
     connect: 'Başka bir şantiye bağlayın',
     call: 'Ara: Marco',
+    textLink: 'Günün linkini gönder',
+    texted: 'Günün linki gönderildi: Marco.',
     settings: 'Şantiye ayarları',
     calendar: 'Ekim 2026',
     confirmed: 'Yanıtla onaylandı',
@@ -76,6 +80,11 @@ for (const lang of ['en', 'tr'] as const) {
         'tel:+15550143378',
       );
       await expect(page.getByRole('button', { name: c.settings })).toBeVisible();
+      // P5: Text today's link (W1-16's action) texts Marco; the toast says so.
+      const textLink = page.getByRole('button', { name: c.textLink });
+      expect((await textLink.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+      await textLink.click();
+      await expect(page.getByText(c.texted)).toBeVisible();
       await expect(page.locator('a[href*="wa.me"]')).toHaveCount(0);
       await expect(page.getByRole('grid', { name: c.calendar })).toBeVisible();
       await expect(page.locator('[data-date="2026-10-09"] [data-channel="link"]')).toHaveCount(1);

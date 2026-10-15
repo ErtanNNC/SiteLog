@@ -520,6 +520,8 @@ export const copy = {
         body_one: '{{first}} didn’t answer {{count}} reminder.',
         body_other: '{{first}} didn’t answer {{count}} reminders.',
         bodyNoReminders: 'No report from {{first}} by the deadline.',
+        /** Web-Overview: the §19 Q55 `missing_report` notice of that day. */
+        alerted: 'Office alerted at {{time}}.',
         call: 'Call {{first}}',
         textLink: 'Text today’s link',
         markNoWork: 'Mark no work',
@@ -1808,6 +1810,25 @@ export const copy = {
         body: 'It leaves this list and never runs again. The row is kept for the record and the discard is audited.',
         confirm: 'Discard job',
       },
+    },
+    /** Spec §19 Q44 (W1-16): unknown contacts no org sees. */
+    orgless: {
+      title: 'Unknown contacts with no organisation',
+      hint: 'Texts from numbers with no history in exactly one organisation of their country. No customer sees them; give one to the organisation it belongs to, or ignore it.',
+      columns: {
+        contact: 'Number',
+        message: 'Message',
+        received: 'Received',
+        org: 'Organisation',
+      },
+      orgLabel: (phone: string) => `Organisation for ${phone}`,
+      orgPlaceholder: 'Choose an organisation',
+      assign: 'Assign',
+      ignore: 'Ignore',
+      assigned: 'Contact assigned. The organisation sees it on its Overview and Team page.',
+      ignored: 'Contact ignored.',
+      empty: 'No unknown contacts without an organisation.',
+      thing: 'unknown contacts',
     },
     cost: {
       title: 'Cost outliers',

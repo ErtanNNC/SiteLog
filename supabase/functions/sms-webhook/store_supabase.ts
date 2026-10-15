@@ -114,7 +114,7 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
       if (existing[0]) return { id: existing[0].id, created: false };
       const { data } = await admin
         .from('unknown_contacts')
-        .insert({ ...row, org_id: null, channel: 'sms', status: 'pending' })
+        .insert({ ...row, channel: 'sms', status: 'pending' })
         .select('id')
         .single()
         .throwOnError();

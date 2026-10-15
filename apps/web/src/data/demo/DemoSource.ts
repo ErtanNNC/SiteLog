@@ -123,7 +123,7 @@ export class DemoSource implements DataSource {
     ]);
   }
   getOverview() {
-    return this.run(() => assembleOverview(this.store.rows(), this.ctx()));
+    return this.run(() => assembleOverview(this.rowsSeenByUser(), this.ctx()));
   }
   getSites() {
     return this.run(() => assembleSiteCards(this.store.rows(), this.ctx()));
@@ -411,6 +411,24 @@ export class DemoSource implements DataSource {
   }
   discardDeadJob(jobId: number) {
     return this.run(() => this.ops().discard(jobId, this.user.id));
+  }
+  getOrglessContacts() {
+    return this.run(() => {
+      this.ops();
+      return this.store.orglessContacts();
+    });
+  }
+  assignUnknownContact(contactId: string, orgId: string) {
+    return this.run(() => {
+      this.ops();
+      this.store.assignUnknownContact(contactId, orgId, this.user.id);
+    });
+  }
+  ignoreOrglessContact(contactId: string) {
+    return this.run(() => {
+      this.ops();
+      this.store.ignoreOrglessContact(contactId, this.user.id);
+    });
   }
   /** Mirrors the ops_* RPCs: refused unless the user is a platform admin. */
   private ops() {

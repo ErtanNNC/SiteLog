@@ -554,7 +554,11 @@ export interface Db {
     phone_e164: string;
     message_id: string;
     snippet: string;
+    /** The guessed org (spec §19 Q44), else null. */
+    org_id: string | null;
   }): Promise<{ id: string; created: boolean }>;
+  /** Real (non-demo) orgs of the pack that linked an earlier contact of this phone (§19 Q44). */
+  linkedContactOrgs(phone: string, country: string): Promise<string[]>;
   /**
    * One reporter change of an inbound keyword, its audit row and its office notice in one
    * transaction, so a failure leaves none of them and the job's retry writes all three.
@@ -1309,7 +1313,7 @@ export function createDb(sql: Sql): Db {
           select id from unknown_contacts where message_id = ${row.message_id} limit 1
         ), inserted as (
           insert into unknown_contacts (org_id, phone_e164, channel, message_id, snippet)
-          select null, ${row.phone_e164}, 'sms', ${row.message_id}, ${row.snippet}
+          select ${row.org_id}, ${row.phone_e164}, 'sms', ${row.message_id}, ${row.snippet}
           where not exists (select 1 from existing)
           returning id
         )
@@ -1317,6 +1321,14 @@ export function createDb(sql: Sql): Db {
         union all
         select id, false as created from existing`;
       return rows[0]!;
+    },
+    async linkedContactOrgs(phone, country) {
+      const rows = await sql<Array<{ org_id: string }>>`
+        select distinct u.org_id from unknown_contacts u
+        join orgs o on o.id = u.org_id
+        where u.phone_e164 = ${phone} and u.status = 'linked'
+          and o.country = ${country} and not o.is_demo`;
+      return rows.map((r) => r.org_id);
     },
     async applyInboundChange(input) {
       const patch = Object.fromEntries(

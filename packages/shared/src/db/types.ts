@@ -760,6 +760,15 @@ export type OpsDeadJobRow = {
   payload: Json;
 };
 
+/** ops_unknown_contacts() row (20261015000040, spec §19 Q44): a pending contact with no org. */
+export type OpsUnknownContactRow = {
+  id: string;
+  phone_e164: string;
+  channel: FieldChannel | null;
+  snippet: string | null;
+  created_at: string;
+};
+
 /** ops_cost_outliers() row. */
 export type OpsCostOutlierRow = {
   report_id: string;
@@ -1381,6 +1390,14 @@ export type Database = {
       ops_retry_job: { Args: { p_job_id: number }; Returns: Json };
       ops_discard_job: { Args: { p_job_id: number }; Returns: Json };
       ops_cost_outliers: { Args: { p_days?: number }; Returns: OpsCostOutlierRow[] };
+      // Org-less unknown contacts (20261015000040_unknown_contacts_support.sql, spec §19 Q44).
+      ops_unknown_contacts: { Args: { p_limit?: number }; Returns: OpsUnknownContactRow[] };
+      ops_assign_unknown_contact: { Args: { p_id: string; p_org_id: string }; Returns: Json };
+      ops_ignore_unknown_contact: { Args: { p_id: string }; Returns: Json };
+      ops_real_orgs: {
+        Args: Record<string, never>;
+        Returns: Array<{ id: string; name: string; country: string }>;
+      };
       // Worker (service role) only.
       report_cost_inputs: {
         Args: { p_report_id: string };

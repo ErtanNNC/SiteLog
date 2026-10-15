@@ -1892,10 +1892,16 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
       phone_e164: phone,
       message_id: text,
       snippet: 'who is this',
+      org_id: null,
     });
     expect(first.created).toBe(true);
     expect(
-      await db.insertSmsUnknownContact({ phone_e164: phone, message_id: text, snippet: 'x' }),
+      await db.insertSmsUnknownContact({
+        phone_e164: phone,
+        message_id: text,
+        snippet: 'x',
+        org_id: null,
+      }),
     ).toEqual({ id: first.id, created: false });
     expect(
       await one(`select org_id, channel, status, snippet from unknown_contacts where id = $1`, [
@@ -1905,6 +1911,18 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
     expect(await db.hasPendingUnknownContact(phone, 'sms')).toBe(true);
     expect(await db.hasPendingUnknownContact(phone, 'sms', text)).toBe(false);
     expect(await db.hasPendingUnknownContact(phone, 'sms', randomUUID())).toBe(true);
+    // Spec §19 Q44: once an org links the number, its next unknown text is that org's history.
+    const org = await one<{ country: string; is_demo: boolean }>(
+      `select country, is_demo from orgs where id = $1`,
+      [ORG],
+    );
+    expect(await db.linkedContactOrgs(phone, org.country)).toEqual([]);
+    await q(`update unknown_contacts set status = 'linked', org_id = $2 where id = $1`, [
+      first.id,
+      ORG,
+    ]);
+    expect(await db.linkedContactOrgs(phone, org.country)).toEqual(org.is_demo ? [] : [ORG]);
+    expect(await db.linkedContactOrgs(phone, 'XX')).toEqual([]);
   });
 
   it('keeps the provider code of a refused send with its dedupe key', async () => {
