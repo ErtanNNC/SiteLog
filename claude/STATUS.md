@@ -14,9 +14,11 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 ## Sürüyor
 
-- **Telefon testi (W1-09):** panelde kod görünmemesinin nedeni büyük olasılıkla panelin başka bir hesapla açılmasıydı: Demo phone yalnızca açık org'un mesajlarını gösterir, demo kodları Kestrel ve Demir Yapı'ya gider. `phone-setup` artık iki demo admin için tek kullanımlık giriş linki üretiyor (Lena: Kestrel, Elif: Demir Yapı); yeni linkler Deploy run 38728123836'nın özetinde (1 saat geçerli, tek kullanımlık).
-- **§19 kararları:** "önerilerinle devam" kararınız spec'e işleniyor; önerisi zaten yapılmış davranışı değiştirenler (Q53 geç gelen kayıt, Q55 `missing` uyarısı vb.) testleriyle birlikte kodlanıyor.
-- **M4 başladı:** W1-13 (sahada soru → taslak → onayla gönder ekranları) geliştiriliyor.
+**Çalışma kuralı (sizden, 2026-10-15):** aksini söyleyene kadar development durmadan devam ediyor; sizin kararınızı ya da doğrulamanızı gerektiren her şey aşağıda "Onayınızı bekleyen" / "Sizden beklenen" altında bekletiliyor, milestone sonlarında artık durmuyorum.
+
+- **Telefon testi (W1-09):** cihaz kodları veritabanına doğru yazılıyordu (teşhis: Deploy run 38731254343), ama açık Demo phone yalnızca realtime olayıyla yenileniyordu ve preview'da olay gelmedi. Düzeltme f021c27: Demo phone açıkken 5 sn'de bir de yenileniyor. Giriş linkleri `phone-setup` özetinde (Lena: Kestrel, Elif: Demir Yapı). Telefon kontrolünüz bekleniyor.
+- **§19 kararları:** "önerilerinle devam" spec'e işleniyor; yapılmış davranışı değiştirenler (Q53 geç gelen kayıt, Q55 `missing` uyarısı vb.) testleriyle kodlanıyor.
+- **M4:** W1-13 (sahada soru → taslak → onayla gönder) ve W1-14 (PDF günlük rapor) paralel geliştiriliyor.
 
 ## Onayınızı bekleyen
 
