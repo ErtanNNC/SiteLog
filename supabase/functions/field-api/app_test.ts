@@ -894,7 +894,15 @@ Deno.test('reports/:id view, history and preferences', async () => {
       { id: 'a', label: '4 · full day' },
       { id: 'b', label: '5 · full day' },
     ],
+    manpowerIndex: null,
   });
+  // The crew the question is about, for "Heard at 1:20 in your note" (W1-13).
+  h.store.questions[0]!.target = { manpowerIndex: 0, path: 'manpower.workers:Delta' };
+  assertEquals(
+    ((await h.call('GET', `reports/${reportId}`)).json.question as { manpowerIndex: number })
+      .manpowerIndex,
+    0,
+  );
   assertEquals((v.json.data as { schemaVersion: number }).schemaVersion, 2); // v1 read as v2
   assertEquals(v.json.pdfUrl, null); // not filed yet
   report.status = 'filed';
@@ -1247,6 +1255,14 @@ Deno.test(
         {
           status: 'processing',
           reportStatus: 'processing',
+          // F7's confirmation line (W1-13): the numbers of the draft the answer made.
+          confirmation: {
+            kind: 'crew',
+            company: 'Delta Mechanical',
+            workers: 5,
+            hoursPerWorker: 8,
+            totalHours: 40,
+          },
         },
       ],
     );
@@ -1278,6 +1294,7 @@ Deno.test(
       body: { questionId, optionId: 'o2' },
     });
     assertEquals([again.status, again.json.status], [200, 'already_answered']);
+    assertEquals((again.json.confirmation as { totalHours: number }).totalHours, 40);
     assertEquals(h.store.jobs.filter((j) => j.type === 'decide_next').length, 1);
     // Another answer to the answered question is refused.
     const other = await h.call('POST', `reports/${reportId}/answer`, {
@@ -1315,6 +1332,13 @@ Deno.test('answer (W1-12, D28): a typed headcount with the hours the reporter se
   const m = (h.store.versions[0]!.data as unknown as DailyReportData).manpower[0]!;
   assertEquals([m.workers, m.hoursPerWorker, m.totalHours, m.hoursBasis], [4, 6, 24, 'answer']);
   assertEquals((h.store.questions[0]!.answer as { text: string }).text, '4 · 6 h');
+  assertEquals(res.json.confirmation, {
+    kind: 'crew',
+    company: 'Delta Mechanical',
+    workers: 4,
+    hoursPerWorker: 6,
+    totalHours: 24,
+  });
 });
 
 Deno.test(

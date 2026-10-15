@@ -271,6 +271,13 @@ export function questionOptions(options: unknown): { id: string; label: string }
   return out.length ? out : null;
 }
 
+/** The crew a question is about (`questions.target.manpowerIndex`), else null (W1-13). */
+export function questionManpowerIndex(target: unknown): number | null {
+  if (!target || typeof target !== 'object' || Array.isArray(target)) return null;
+  const index = (target as { manpowerIndex?: unknown }).manpowerIndex;
+  return typeof index === 'number' && Number.isInteger(index) && index >= 0 ? index : null;
+}
+
 /**
  * A question's options as stored (W1-12, `QuestionOption`): `[{id, label, value?}]`, where `value`
  * is what code applies for a fallback option. Anything else in the column (the WhatsApp worker's

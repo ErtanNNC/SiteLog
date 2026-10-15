@@ -311,7 +311,16 @@ export interface ReportView {
     id: string;
     field: string;
     prompt: string;
+    /**
+     * ≤ 2 answers to tap; null for a question with none (D28: the app asks for the number, with
+     * "full day" as the default hours for a headcount). _Other…_ is not an option (M6).
+     */
     options: { id: string; label: string }[] | null;
+    /**
+     * The crew the question is about (`data.manpower[i]`), for "Heard at 1:20 in your note"
+     * (Field-05: the crew's voice-note source); null when it names no crew.
+     */
+    manpowerIndex: number | null;
   } | null;
   /** The current version's data in §10.3 v2 terms; null before the first draft. */
   data: DailyReportData | null;
@@ -340,7 +349,29 @@ export interface ConfirmResponse {
 export interface AnswerResponse {
   status: 'processing' | 'already_answered';
   reportStatus: ReportStatus;
+  /** F7's confirmation line, in numbers code read from the draft the answer made (W1-13). */
+  confirmation: AnswerConfirmation;
 }
+
+/**
+ * What an answer changed, for F7's confirmation line ("Delta Mechanical: 5 workers, 8 hours each
+ * — 40 hours."): the app words it in the reporter's language (`field.confirmation.*`). The numbers
+ * are the draft's after `applyAnswer` (totals computed in code; `answerConfirmation()`), null
+ * where the draft still has none.
+ */
+export type AnswerConfirmation =
+  | {
+      kind: 'crew';
+      company: string;
+      workers: number | null;
+      hoursPerWorker: number | null;
+      totalHours: number | null;
+    }
+  | { kind: 'company_added'; company: string }
+  | { kind: 'company_mapped'; company: string }
+  | { kind: 'weather'; lostHours: number }
+  /** Safety, a photo, anything without a number to repeat: "Got it." */
+  | { kind: 'noted' };
 
 /** `POST day-status`. */
 export interface DayStatusResponse {

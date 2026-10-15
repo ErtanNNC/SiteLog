@@ -38,6 +38,11 @@ export function SteelButton(props: Props) {
   return <Base variant="steel" {...props} />;
 }
 
+/** An answer to tap on the Question screen (Field-05). */
+export function ChoiceButton(props: Props) {
+  return <Base variant="choice" {...props} />;
+}
+
 /** A text-only action that still fills a 56 px row (a resend link). */
 export function TextButton(props: Props) {
   return <Base variant="text" {...props} />;

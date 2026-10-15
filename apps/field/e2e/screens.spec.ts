@@ -6,22 +6,23 @@ import {
   installFakeFieldApi,
   kestrel,
   OTP,
+  QUESTION_ID,
   REPORT_ID,
   REPORT_NO,
   type Market,
 } from './support/fakeFieldApi.ts';
 
 /**
- * W1-09 screens on the production build at 390 px, against a fake field-api (Playwright routes;
- * `support/fakeFieldApi.ts`) and Chromium's fake microphone, with axe, the 56 px targets and no
- * sideways scroll (`expectFieldScreen`) on each screen:
+ * W1-09 and W1-13 screens on the production build at 390 px, against a fake field-api (Playwright
+ * routes; `support/fakeFieldApi.ts`) and Chromium's fake microphone, with axe, the 56 px targets
+ * and no sideways scroll (`expectFieldScreen`) on each screen:
  * - in EN, ES and TR: the first open (device check, welcome and consent) → Today → Recording →
- *   upload → Processing, focus on each new screen's heading; the microphone refused, no
- *   MediaRecorder, the microphone failing, a clip too short; a clip field-api refuses, Today's
- *   "Not sent" list; Today failing to load; the link errors (not found, expired, revoked, paused,
- *   failed); the site switcher;
- * - in EN: the offline queue through a reload, sent in the background with Today updating by
- *   itself; the No work and Weather sheets.
+ *   upload → Processing → the question → the draft → Confirm & send → filed (W1-13), focus on
+ *   each new screen's heading; the microphone refused, no MediaRecorder, the microphone failing, a
+ *   clip too short; a clip field-api refuses, Today's "Not sent" list; Today failing to load; the
+ *   link errors (not found, expired, revoked, paused, failed); the site switcher;
+ * - in EN: a question without answers to tap (D28) at 390 and 1440 px; the offline queue through
+ *   a reload, sent in the background with Today updating by itself; the No work and Weather sheets.
  * The same flow against the real field-api is `e2e/supabase/`.
  */
 
@@ -125,9 +126,44 @@ for (const run of RUNS) {
       ).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
       await expectFieldScreen(page);
+
+      // The question (F7, Field-05; W1-13): one per screen, two answers, no Other… until M6.
+      const question = page.getByRole('heading', { level: 1, name: market.question.prompt });
+      await expect(question).toBeVisible({ timeout: 10_000 });
+      await expect(question).toBeFocused();
+      await expect(page.getByText(field.question.badge, { exact: true })).toBeVisible();
+      const answers = page.getByRole('main').getByRole('button');
+      await expect(answers).toHaveText([...market.question.options]);
+      await expectFieldScreen(page);
+      await page.getByRole('button', { name: market.question.options[1] }).click();
+
+      // F7's confirmation line, then the draft (F8, Field-06) once decide_next has run.
+      const asked = market.draft.manpower[market.askedCrew]!;
+      await expect(page.getByRole('status').filter({ hasText: asked.companyName })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: field.draft.title })).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
       await expect(
-        page.getByRole('heading', { level: 1, name: field.processing.readyTitle }),
+        page.getByText(`5 × ${run.lang === 'tr' ? '8 sa' : '8 h'}`).first(),
+      ).toBeVisible();
+      await expectFieldScreen(page);
+      // The sticky bar keeps Confirm & send on screen at 390 px.
+      const send = page.getByRole('button', { name: field.draft.confirm });
+      await expect(send).toBeInViewport();
+      await send.click();
+
+      // Filing, then filed (the Filed screen is W1-15).
+      await expect(
+        page.getByRole('heading', { level: 1, name: field.processing.filedTitle }),
       ).toBeVisible({ timeout: 10_000 });
+      expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/answer`)?.body).toEqual({
+        questionId: QUESTION_ID,
+        optionId: 'o2',
+      });
+      expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/confirm`)?.body).toEqual({
+        version: 1,
+      });
 
       // What the app sent: the consent with the wording's version, the clip by signed URL.
       expect(api.consent).toEqual({
@@ -151,6 +187,48 @@ for (const run of RUNS) {
     });
   });
 }
+
+test.describe('question and draft (W1-13)', () => {
+  test.use({ locale: 'en-US' });
+
+  test('a question without answers to tap takes the number, full day by default (D28); 1440 px', async ({
+    page,
+  }) => {
+    const field = UI_RESOURCES.en.field;
+    const market = kestrel('en-US');
+    const api = await installFakeFieldApi(page, market, {
+      verified: true,
+      consented: true,
+      noOptions: true,
+    });
+    await page.goto(`/r/${CODE}`);
+    await page.getByRole('link', { name: field.today.record }).click();
+    await recordAndSend(page, 'en');
+    await page.getByRole('button', { name: field.recording.stopSend }).click();
+    await expect(page.getByRole('heading', { level: 1, name: market.question.prompt })).toBeVisible(
+      { timeout: 15_000 },
+    );
+    await expect(page.getByRole('radio', { name: field.question.fullDay })).toBeChecked();
+    await expectFieldScreen(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expectFieldScreen(page);
+    await page.getByLabel(field.question.workers).fill('5');
+    await page.getByRole('button', { name: field.question.send }).click();
+    await expect(
+      page.getByText('Delta Mechanical: 5 workers, 8 hours each — 40 hours.').first(),
+    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: field.draft.title })).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByRole('region', { name: 'CREW' })).toContainText('23 · 184 h');
+    await expectFieldScreen(page);
+    expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/answer`)?.body).toEqual({
+      questionId: QUESTION_ID,
+      value: 5,
+      hours: 'full_day',
+    });
+  });
+});
 
 test.describe('offline (F5 step 3)', () => {
   test.use({ locale: 'en-US' });

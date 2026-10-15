@@ -91,9 +91,11 @@ export function fakeRoutes(overrides: Partial<FieldRoutes> = {}): FieldRoutes {
     createUpload: vi.fn(refuse),
     completeUpload: vi.fn(refuse),
     report: vi.fn(refuse),
+    answer: vi.fn(refuse),
+    confirm: vi.fn(refuse),
     dayStatus: vi.fn(refuse),
     ...overrides,
-  } as FieldRoutes;
+  };
 }
 
 /** A queue on a memory store whose uploader is scripted (default: everything succeeds). */

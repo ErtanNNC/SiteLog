@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router';
 import { LinkScreen } from '@/screens/link/LinkScreen';
-import { Processing } from '@/screens/report/Processing';
+import { ReportScreen } from '@/screens/report/ReportScreen';
 import { Record } from '@/screens/record/Record';
 import { Today } from '@/screens/today/Today';
 import { NotFound } from './NotFound';
@@ -15,7 +15,7 @@ export function FieldRoutes() {
       <Route path="/r/:code" element={<LinkScreen />} />
       <Route path="/today" element={<Today />} />
       <Route path="/record" element={<Record />} />
-      <Route path="/report/:id" element={<Processing />} />
+      <Route path="/report/:id" element={<ReportScreen />} />
       {PLACEHOLDER_ROUTES.map((route) => (
         <Route key={route.path} path={route.path} element={<Placeholder screen={route.screen} />} />
       ))}

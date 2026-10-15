@@ -18,6 +18,7 @@ export * from './report/patch.ts';
 export * from './report/numbering.ts';
 export * from './report/payroll.ts';
 export * from './report/validate.ts';
+export * from './report/confirmation.ts';
 export * from './report/draft-card.ts';
 export * from './report/day-off.ts';
 export * from './report/progress.ts';

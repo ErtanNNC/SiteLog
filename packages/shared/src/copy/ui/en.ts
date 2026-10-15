@@ -268,6 +268,91 @@ export const uiEn = {
       /** field-api no longer finds the report for this phone. */
       notFound: 'This report isn’t available here any more.',
     },
+    /** The open question (F7, Field-05; W1-13): one per screen. */
+    question: {
+      progress: 'Writing your report',
+      badge: 'Quick check',
+      /** The crew's voice-note second the question is about (m:ss). */
+      heardAt: 'Heard at {{time}} in your note',
+      close: 'You can close this — I’ll text you when the draft is ready.',
+      sending: 'Sending your answer…',
+      /** D28: a question with no answers to tap; the reporter types the number. */
+      workers: 'Workers',
+      hoursEach: 'Hours each',
+      hoursLost: 'Hours lost',
+      hoursLegend: 'For how long?',
+      fullDay: 'Full day',
+      setHours: 'Other hours',
+      send: 'Send answer',
+      invalidNumber: 'Enter a number.',
+      /** A question with no answers to tap and no number to type (not asked by the worker today). */
+      cannotAnswer: 'This one can’t be answered here yet. The office will check it.',
+      errors: {
+        question_closed: 'That question was already answered. Here is the latest.',
+        wrong_state: 'Your report changed. Here is the latest.',
+        answer_not_accepted: 'That answer didn’t work. Try again.',
+        offline: 'No connection. Check your signal and try again.',
+        generic: 'Couldn’t send your answer. Try again.',
+      },
+    },
+    /** F7's confirmation line after an answer (numbers from code, never the model). */
+    confirmation: {
+      crew: '{{company}}: {{workers}} workers, {{hours}} hours each — {{total}} hours.',
+      crewOne: '{{company}}: 1 worker, {{hours}} hours.',
+      workers: '{{company}}: {{workers}} workers.',
+      workersOne: '{{company}}: 1 worker.',
+      hours: '{{company}}: {{hours}} hours each.',
+      companyAdded: '{{company}} added for the office to confirm.',
+      companyMapped: 'Logged as {{company}}.',
+      weather: 'Weather: {{hours}} hours lost.',
+      weatherNone: 'Weather: no time lost.',
+      noted: 'Got it.',
+    },
+    /** The draft (F8, Field-06; W1-13): numbers read-only until M6 (Fix by voice, steppers). */
+    draft: {
+      eyebrow: 'Draft · {{date}}',
+      title: 'Check today’s report',
+      crew: 'Crew',
+      answered: 'Answered',
+      /** The crew line's numbers, read out (the screen shows "5 × 8 h"). */
+      crewValue: '{{workers}} workers, {{hours}} hours each',
+      crewValueOne: '1 worker, {{hours}} hours',
+      notStated: 'Not stated',
+      noCrew: 'No crew stated',
+      weather: 'Weather',
+      done: 'Done',
+      delivered: 'Delivered',
+      safety: 'Safety',
+      next: 'Next workday',
+      photos: 'Photos',
+      photosCount: '{{count}} attached',
+      none: 'None',
+      fullDayLost: 'full day lost',
+      status: {
+        complete: 'complete',
+        in_progress: 'in progress',
+        started: 'started',
+        stopped: 'stopped',
+        planned: 'planned',
+      },
+      percent: '~{{percent}}%',
+      toolboxTalk: 'Toolbox talk',
+      noIncidents: 'no incidents',
+      incidents: '{{count}} incident(s)',
+      confirm: 'Confirm & send',
+      confirming: 'Sending…',
+      errors: {
+        draft_changed: 'Your report changed. Check it again, then send.',
+        wrong_state: 'Your report changed. Here is the latest.',
+        offline: 'No connection. Check your signal and try again.',
+        generic: 'Couldn’t send your report. Try again.',
+      },
+    },
+    /** After Confirm & send, until the worker has filed it (the Filed screen is W1-15). */
+    filing: {
+      title: 'Filing your report…',
+      body: 'You’ll get a text with the PDF in a minute.',
+    },
     /** The offline banner and the upload queue (F5 step 3). */
     offline: {
       banner: 'No signal — recordings are saved on your phone',

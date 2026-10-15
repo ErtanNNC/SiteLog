@@ -17,6 +17,7 @@ import {
   UploadRequestSchema,
   VERIFY_CODE_TTL_S,
   VerifyRequestSchema,
+  answerConfirmation,
   applyAnswer,
   deviceCookieName,
   firstName,
@@ -74,6 +75,7 @@ import {
   newDeviceToken,
   newVerifyCode,
   originAllowed,
+  questionManpowerIndex,
   questionOptions,
   retryAfterSeconds,
   scopeSites,
@@ -675,6 +677,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
             field: question.field,
             prompt: question.prompt,
             options: questionOptions(question.options),
+            manpowerIndex: questionManpowerIndex(question.target),
           }
         : null,
       data: version ? readReportData(version.data as Parameters<typeof readReportData>[0]) : null,
@@ -790,7 +793,12 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       answerSource: { type: 'answer', questionId: question.id },
       newCompany,
     });
-    const out: AnswerResponse = { status: res.status, reportStatus: res.reportStatus };
+    const out: AnswerResponse = {
+      status: res.status,
+      reportStatus: res.reportStatus,
+      // F7's confirmation line from the draft the answer made (W1-13): code's numbers.
+      confirmation: answerConfirmation(field, target, applied.data, value),
+    };
     return c.json(out, res.status === 'processing' ? 202 : 200);
   });
 

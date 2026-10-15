@@ -1,6 +1,7 @@
 import type {
   AnswerResponse,
   CompleteResponse,
+  ConfirmResponse,
   ConsentResponse,
   DayStatusResponse,
   FieldApiErrorBody,
@@ -14,6 +15,7 @@ import type {
 } from '@sitelog/shared/field-contract.ts';
 import type {
   AnswerRequest,
+  ConfirmRequest,
   ConsentRequest,
   DayStatusRequest,
   UploadRequest,
@@ -58,9 +60,15 @@ export function createFieldRoutes(api: FieldApiClient = fieldApi) {
         linkCode: code,
         signal,
       }),
-    /** The open question's answer (W1-12; the Question screen is W1-13). */
+    /** The open question's answer (W1-12; the Question screen, W1-13). */
     answer: (code: string, reportId: string, body: AnswerRequest) =>
       api.request<AnswerResponse>(`reports/${encodeURIComponent(reportId)}/answer`, {
+        body,
+        linkCode: code,
+      }),
+    /** Confirm & send (F8, W1-07; the Draft screen, W1-13): the draft version the reporter saw. */
+    confirm: (code: string, reportId: string, body: ConfirmRequest) =>
+      api.request<ConfirmResponse>(`reports/${encodeURIComponent(reportId)}/confirm`, {
         body,
         linkCode: code,
       }),

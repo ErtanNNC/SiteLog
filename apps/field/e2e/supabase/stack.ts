@@ -1,4 +1,7 @@
-import { LINK_CODE_ALPHABET, linkCodeHash } from '@sitelog/shared/links.ts';
+import { deviceCookieName, FIELD_CONSENT_TEXT_VERSION } from '@sitelog/shared/field-api.ts';
+import { formatDateInTz } from '@sitelog/shared/format.ts';
+import { LINK_CODE_ALPHABET, linkCodeHash, sha256Hex } from '@sitelog/shared/links.ts';
+import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { FIELD_PREVIEW_PORT } from '../../config/server.ts';
 
 /**
@@ -58,6 +61,8 @@ function randomCode(length = 8): string {
 
 export interface FieldFixture {
   orgId: string;
+  /** Reports the spec seeded itself (no upload names them): their jobs are removed too. */
+  reportIds?: string[];
   site: { id: string; name: string; projectCode: string };
   reporter: { id: string; name: string; firstName: string; phone: string };
   /** The personal link's code (`/r/{code}`); only its hash is stored, as for real links. */
@@ -130,6 +135,7 @@ export async function dropFieldFixture(f: FieldFixture | undefined): Promise<voi
   const steps: (() => Promise<unknown>)[] = [];
   if (uploadIds.length)
     steps.push(() => rest('DELETE', `jobs?payload->>uploadId=${inList(uploadIds)}`));
+  for (const id of f.reportIds ?? []) if (!reportIds.includes(id)) reportIds.push(id);
   if (reportIds.length)
     steps.push(() => rest('DELETE', `jobs?payload->>reportId=${inList(reportIds)}`));
   steps.push(() =>
@@ -157,4 +163,134 @@ export async function dropFieldFixture(f: FieldFixture | undefined): Promise<voi
     }
   }
   if (first) throw first;
+}
+
+/**
+ * A phone this reporter already verified, with the consents given (W1-13: the question flow
+ * starts after the link flow W1-09's spec covers): a `field_devices` row verified now, whose
+ * token the spec sets as the httpOnly device cookie, and the two required consents plus SMS.
+ */
+export async function verifiedDevice(
+  f: FieldFixture,
+): Promise<{ name: string; value: string; deviceId: string }> {
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
+  const [device] = await rest<{ id: string }[]>('POST', 'field_devices', {
+    reporter_id: f.reporter.id,
+    device_token_hash: sha256Hex(token),
+    user_agent: 'e2e:field',
+    verified_at: new Date().toISOString(),
+  });
+  await rest(
+    'POST',
+    'consents',
+    ['recording', 'data_processing', 'sms'].map((type) => ({
+      reporter_id: f.reporter.id,
+      type,
+      method: 'web_checkbox',
+      text_version: FIELD_CONSENT_TEXT_VERSION,
+    })),
+  );
+  await rest('PATCH', `reporters?id=eq.${f.reporter.id}`, { status: 'active' });
+  return { name: deviceCookieName(f.reporter.id), value: token, deviceId: device!.id };
+}
+
+export interface OpenQuestion {
+  reportId: string;
+  reportNo: string;
+  questionId: string;
+  prompt: string;
+}
+
+/**
+ * Today's web report awaiting an answer, as the worker leaves it after extraction (W1-12): a v2
+ * draft whose Delta crew has no headcount (heard at 1:20 of the voice note) and the open `web`
+ * question with the model's two answers. The org asks one question per report here, so once the
+ * answer is in, the CI worker's decide_next has nothing left to ask and shows the draft.
+ */
+export async function seedOpenQuestion(f: FieldFixture): Promise<OpenQuestion> {
+  await rest('PATCH', `org_settings?org_id=eq.${f.orgId}`, { max_questions_per_report: 1 });
+  const timezone = 'America/Chicago';
+  const date = formatDateInTz(new Date(), timezone);
+  const [day] = await rest<{ id: string }[]>('POST', 'site_days', {
+    site_id: f.site.id,
+    date,
+    status: 'processing',
+    deadline_at: new Date(Date.now() + 6 * 3600_000).toISOString(),
+  });
+  const reportNo = `${f.site.projectCode}-0001`;
+  const [report] = await rest<{ id: string }[]>('POST', 'reports', {
+    org_id: f.orgId,
+    site_id: f.site.id,
+    site_day_id: day!.id,
+    report_no: reportNo,
+    status: 'awaiting_answer',
+    current_version: 1,
+    reporter_id: f.reporter.id,
+    channel: 'web',
+    received_at: new Date().toISOString(),
+  });
+  const reportId = report!.id;
+  (f.reportIds ??= []).push(reportId);
+  await rest('PATCH', `site_days?id=eq.${day!.id}`, { report_id: reportId });
+  const voice = { type: 'voice_note', uploadId: '00000000-0000-4000-8000-0000000000e2', start: 12 };
+  const draft: DailyReportData = {
+    ...emptyReportData(date, { reportLanguage: 'en', units: 'imperial' }),
+    summary: 'Slab pour on Level 4; ductwork on Level 2.',
+    weather: { conditionsText: 'Dry', periods: [] },
+    manpower: [
+      {
+        companyId: null,
+        companyNameHeard: 'Apex',
+        companyName: 'Apex Concrete',
+        workers: 6,
+        hoursPerWorker: 8,
+        totalHours: 48,
+        hoursBasis: 'stated',
+        confidence: 0.95,
+        source: [voice as DailyReportData['manpower'][number]['source'][number]],
+      },
+      {
+        companyId: null,
+        companyNameHeard: 'the Delta guys',
+        companyName: 'Delta Mechanical',
+        area: 'Level 2',
+        workers: null,
+        hoursPerWorker: 8,
+        totalHours: null,
+        hoursBasis: 'full_day_default',
+        confidence: 0.85,
+        source: [{ ...voice, start: 80 } as DailyReportData['manpower'][number]['source'][number]],
+      },
+    ],
+    workPerformed: [{ area: 'Level 4', activity: 'slab pour', status: 'complete', source: [] }],
+    safety: { incidents: [], noIncidentsStated: true, visitors: [], source: [] },
+    missingRequired: ['manpower.workers:Delta Mechanical'],
+  };
+  await rest('POST', 'report_versions', {
+    report_id: reportId,
+    version: 1,
+    data: draft,
+    summary: draft.summary,
+    author: 'agent',
+  });
+  const prompt = 'You said “the Delta guys” were on Level 2. How many, and for how long?';
+  const [question] = await rest<{ id: string }[]>('POST', 'questions', {
+    report_id: reportId,
+    channel: 'web',
+    field: 'manpower.workers',
+    target: {
+      manpowerIndex: 1,
+      companyName: 'Delta Mechanical',
+      path: 'manpower.workers:Delta Mechanical',
+    },
+    prompt,
+    options: [
+      { id: 'o1', label: '4 · full day' },
+      { id: 'o2', label: '5 · full day' },
+    ],
+    asked_at: new Date().toISOString(),
+  });
+  return { reportId, reportNo, questionId: question!.id, prompt };
 }

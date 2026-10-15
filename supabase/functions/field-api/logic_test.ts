@@ -19,6 +19,7 @@ import {
   newDeviceToken,
   newVerifyCode,
   originAllowed,
+  questionManpowerIndex,
   questionOptions,
   retryAfterSeconds,
   scopeSites,
@@ -217,6 +218,16 @@ Deno.test('questionOptions keeps {id,label} entries only', () => {
   ]);
   assertEquals(questionOptions(['4', '5']), null);
   assertEquals(questionOptions(null), null);
+});
+
+Deno.test('questionManpowerIndex: the crew a question names, else null (W1-13)', () => {
+  assertEquals(questionManpowerIndex({ manpowerIndex: 2, path: 'manpower.workers:Apex' }), 2);
+  assertEquals(questionManpowerIndex({ manpowerIndex: 0 }), 0);
+  assertEquals(questionManpowerIndex({ manpowerIndex: -1 }), null);
+  assertEquals(questionManpowerIndex({ manpowerIndex: '1' }), null);
+  assertEquals(questionManpowerIndex({ path: 'safety' }), null);
+  assertEquals(questionManpowerIndex(null), null);
+  assertEquals(questionManpowerIndex([1]), null);
 });
 
 Deno.test('clientIp and retryAfterSeconds', () => {

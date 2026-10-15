@@ -1,7 +1,8 @@
 /**
  * The field app's routes (spec §9.3). W1-09 builds the link check (`/r/:code`: resolve, device
- * check, welcome), Today, Record and the report's Processing state; the question, draft and filed
- * states of `/report/:id` are W1-13; history, settings and expired are M6 and stay placeholders.
+ * check, welcome), Today, Record and the report's Processing state; W1-13 the question and draft
+ * states of `/report/:id` (filing until filed); the Filed screen is W1-15; history, settings and
+ * expired are M6 and stay placeholders.
  * `screen` is the route's key in the `field.routes` copy.
  *
  * Plain data (no React), so the Playwright smoke test reads the same list.

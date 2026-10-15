@@ -23,6 +23,8 @@ export const BUTTON_VARIANTS = {
   quiet: 'border border-rebar bg-concrete text-steel text-[14px] font-semibold',
   /** Steel with an Iron border on the dark Recording screen: a secondary action there. */
   steel: 'border border-iron bg-steel text-chalk text-[16px] font-bold',
+  /** Chalk with a Rebar border: an answer to tap (Field-05, 18 px bold). */
+  choice: 'border border-rebar bg-chalk text-asphalt text-[18px] font-bold',
   /** A text-only action that still fills a 56 px row (a resend link). */
   text: 'border-0 bg-transparent text-level text-[15px] font-semibold underline',
 } as const;

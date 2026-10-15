@@ -208,9 +208,10 @@ jobs:
       # of its own demo org opens the personal link → device check (the code from the console
       # messages row) → consent → Today → record → the clip by signed URL → complete creates the
       # report (processing, channel web) and the transcribe_upload job → Processing; axe on every
-      # screen. Before the worker starts, so the job is still queued (apps/field/e2e/supabase/).
+      # screen. Before the worker starts, so the job is still queued (apps/field/e2e/supabase/, the
+      # `stack` project).
       - name: Field app · link → device check → consent → record → upload
-        run: pnpm --filter @sitelog/field e2e:supabase
+        run: pnpm --filter @sitelog/field e2e:supabase --project=stack
       # The `supabase` project: no worker runs, so the jobs these specs enqueue stay queued.
       - name: Login · realtime · edit → v2 · sign-off · payroll CSV · EOT pack
         run: pnpm --filter @sitelog/web e2e:supabase --project=supabase
@@ -251,6 +252,14 @@ jobs:
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
         run: pnpm --filter @sitelog/web e2e:supabase --project=worker
+      # The field app's `worker` project (W1-13): a seeded open question on a verified phone →
+      # "5 · full day" (field-api maps it, queues decide_next) → the worker's decide_next shows the
+      # draft (Delta 5 × 8 h = 40 h) → Confirm & send queues file_report for the version shown
+      # (apps/field/e2e/supabase/worker/).
+      - name: Field app · question → draft → Confirm & send (worker)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+        run: pnpm --filter @sitelog/field e2e:supabase --project=worker
       - name: Supabase logs
         if: failure()
         run: |
