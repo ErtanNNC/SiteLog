@@ -1,0 +1,364 @@
+# SiteLog — Week 2 build plan (M6: questions, corrections, edits, reminders — messages)
+
+Goal: by the end of M6, the **web loop is complete, including the late path**: the reminder ladder texts (or pushes, or WhatsApps) each link reporter on their channel order, a reporter who never opens the link is escalated to the office, questions take any answer (_Other…_ by voice or number), the draft can be fixed by voice, a filed report can be changed from _Past reports_, and _No work_, _Weather_, Settings, the expired link and a new phone all work on the recorder. Acceptance is spec §16.2 M6: scripted e2e tests for F4–F5, F7–F8, F10–F12 and F14–F16 pass on real phones (iOS and Android).
+
+Rules: `CLAUDE.md`. Spec: `docs/SITELOG_SPEC.md` (v1.2), §16.2 M6. Designs: `docs/design/`. Audit: `docs/GAP_ANALYSIS.md` ("GAP"). Week 1: `docs/PLAN_WEEK1.md` ("W1-xx"). "Q41" is question 41 of spec §19. **Proposed questions** (Q76 … Q85 below) are not in the spec yet: each is written into spec §19 when the owner answers it or when the first ticket that needs it starts (CLAUDE.md "How to work", rule 4), with the number given here.
+
+**Voice (M7, `apps/voice-agent`, Talk now, `voice-events`, the `field-api` voice routes) is a separate plan**, written before M7 starts; nothing below builds or waits for it.
+
+## Where week 1 leaves us
+
+- Every week-1 ticket is coded and green in CI (last full run 38796723632). Open boxes wait only for the owner: the real-phone checks (W1-04, W1-07, W1-09, W1-13, W1-15, W1-16), the GAP §8 answers and logo review (W1-01), and every remote step of the cut-over (W1-19, `docs/RUNBOOK.md` §2). Week 2 does not wait for the cut-over: it is built on `spec-v1.2` and PR #1 exactly as week 1 was, and phone checks run on the preview project (D41) or a tunnel to a local stack.
+- **Already built that M6 extends:** the Notifier with the `console`, `twilio` and `iletimerkezi` SMS drivers (`packages/shared/src/notify/notifier.ts`, `sms/transports.ts`; W1-08); `sms-webhook` with STOP, START, HELP, CALL, TEXT (`supabase/functions/sms-webhook/`, `packages/shared/src/sms/keywords.ts`, `inbound.ts`); the `notify` job (`apps/worker/src/jobs/notify.ts`; W1-10); `scheduler-tick` creating site-days, the weather slots, the digest, retention and the `missing` status with its office alert, but **no reminder** (`supabase/functions/scheduler-tick/logic.ts:363` `REMINDER_LADDER_RUNS = false`, `planMissing`, `missingNotification` worded per Q55); the panel's _Text today's link_ (`supabase/functions/api-text-daily-link/`, `ensureDailyLink` in `packages/shared/src/links.ts`; W1-16); `field-api` with every week-1 route (`supabase/functions/field-api/app.ts`); the field app's Today (site switcher `SiteSheet.tsx`, No work / Weather `DaySheet.tsx`), Record, Processing, Question (_Other…_ hidden, `apps/field/src/screens/report/Question.tsx:24`), Draft (steppers read-only, no _Fix by voice_, `Draft.tsx:34`) and Filed (no _Add more photos_ or _Past reports_, `Filed.tsx:46`); `/history`, `/settings` and `/expired` as placeholders (`apps/field/src/routes/paths.ts`).
+- **v1.0 WhatsApp code that M6 mines, never runs:** the AI tools `apps/worker/src/ai/answer.ts` (`parse_answer`), `correction.ts` (`apply_correction`), `classify.ts` (`classify_reply`) and `dayoff.ts`, all on v1 data with the WhatsApp prompts in `ai/prompts/replies`; the handlers `router/handlers/edit.ts` and `dayoff.ts`; the §7.2 sweep `router/timeouts.ts` (conversation-based, still wired in `apps/worker/src/runner.ts:287`); the 24 h window `packages/shared/src/wa/window.ts`; the reply grammar `wa/replies.ts`; `report/patch.ts` (`applyPatch`) and `report/day-off.ts`. GAP §4 and §5 list them as "extract first": each M6 ticket moves what it needs into a channel-neutral module, with its tests, and leaves the WhatsApp caller pointing at the new module until step 22 deletes it.
+
+## How each ticket runs in this repo
+
+As in week 1 (`docs/PLAN_WEEK1.md`, "How each ticket runs"), with `W2-xx` as the commit prefix:
+
+1. One ticket at a time, in the order below: take the next unticked ticket, read its spec sections and artboards, and check its **Blocked by** list. A ticket whose questions are open builds everything its **Without the answer** line names, behind a parameter or a flag whose default is the recommended answer, and leaves the blocked boxes unticked.
+2. Build with tests. SQL in a new timestamped migration after the last applied one (`20261015000090` today), `packages/shared/src/db/types.ts` in the same commit (D7), the D11 allowlist and role matrix updated; a new table gets RLS and its row in the role matrix.
+3. Run `pnpm check` and `pnpm format:check`; `pnpm test:db` when SQL changed; `pnpm e2e` when UI changed; `pnpm e2e:supabase` and `pnpm test:stack` when a Supabase data path changed (CI runs both); `pnpm eval -- --recorded` when a prompt changed. Deno checks run in CI.
+4. Tick the boxes, commit `W2-xx: <summary>`, push to `spec-v1.2`; PR #1 must be green before the next ticket. Report in three lines against **Done when**. _(owner)_ checks need a real phone or an owner action; _(by hand)_ checks are the developer's, with screenshots on PR #1.
+5. Every new user-facing string exists in every language of its surface (field EN/ES/TR, panel EN/TR, SMS EN/ES/TR); the ES and TR texts are listed for the native-speaker review (Q63). Spec, README deviations and GAP are updated in the ticket that changes behaviour.
+
+**Never without the owner's approval** (unchanged from week 1): any remote action on a hosted project (`db push`, `functions deploy`, `secrets set`, the worker, a seed, `pnpm countries:set`, SQL), Netlify settings, merging into the live branch.
+
+**Keys and accounts.** CLAUDE.md rule 5 applies to every one of them: the ticket builds behind the interface with a `console` or fake implementation and tests, names the key, and moves on.
+
+| Key / account                                                                                        | Tickets              | Without it                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`                                                                                  | W2-09 … W2-12, W2-16 | `EXTRACT_PROVIDER=fake` and recorded tool outputs (`fixtures/`); the live `pnpm eval` waits                                                         |
+| `DEEPGRAM_API_KEY`                                                                                   | W2-09, W2-10, W2-13  | `TRANSCRIBE_PROVIDER=fake` with the `fixtures/voice` transcripts                                                                                    |
+| VAPID key pair (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`)                            | W2-14                | The developer generates a local pair (`npx web-push generate-vapid-keys`); hosted values are `secrets set` by the owner. No pair: push is `console` |
+| Twilio WhatsApp sender, Meta business verification, approved templates per language (Q39), long lead | W2-15, W2-16         | `console` (demo orgs and a pack with no WhatsApp sender, §4.5); the Twilio WhatsApp Sandbox for a developer's own phone                             |
+| Twilio SMS sender (toll-free verification) / İletimerkezi `SITELOG`                                  | W2-06, W2-12         | `console` and the Demo phone, as in week 1                                                                                                          |
+
+## Tickets
+
+Ordered so that the tickets needing **no owner answer and no key** come first (W2-01 … W2-04), then the ones whose open questions are only parameters (W2-05 … W2-08), then the ones that need AI keys for their live checks (W2-09 … W2-13), then the ones that need provider accounts (W2-14 … W2-16), and the acceptance run last.
+
+| Ticket | Title                                                       | Size | Blocked by (§19)             | Keys (fake without)        |
+| ------ | ----------------------------------------------------------- | ---- | ---------------------------- | -------------------------- |
+| W2-01  | Notifier: fallback between channels, attempts per channel   | M    | none                         | none                       |
+| W2-02  | Field Settings: preferences, consents, this device (F15)    | M    | none                         | none                       |
+| W2-03  | Past reports, expired link, new phone (F14, F16)            | M    | none                         | none                       |
+| W2-04  | Filed screen extras, photos after filing (F9, Q67)          | M    | none                         | none                       |
+| W2-05  | Reminder decisions: `remind()` and the ladder plan          | S    | Q76, Q77 (parameters)        | none                       |
+| W2-06  | Reminder ladder in `scheduler-tick` through the Notifier    | L    | Q76, Q77 (parameters)        | none                       |
+| W2-07  | Web timeouts and the 30 s re-check (§7.2, Q61)              | M    | Q78 (copy key)               | none                       |
+| W2-08  | _No work_ and _Weather_ as reports (F12, Q41)               | M    | Q79                          | none                       |
+| W2-09  | _Other…_ answers: say it or type it (F7, §10.7)             | M    | none                         | Anthropic, Deepgram        |
+| W2-10  | _Fix by voice_ and steppers on the draft (F8, §10.6)        | L    | Q80 (steppers, typed fixes)  | Anthropic, Deepgram        |
+| W2-11  | Edit after filing on the web (F10)                          | L    | Q80, Q81                     | Anthropic, Deepgram        |
+| W2-12  | SMS keywords NO WORK, WEATHER, EDIT, OK (two-way packs)     | M    | Q82, Q83; Q80 for EDIT       | Anthropic                  |
+| W2-13  | Test recording on first open (F4, Q52)                      | S    | none                         | Deepgram                   |
+| W2-14  | Web push channel (Q27)                                      | L    | Q40 (counsel, opt-out scope) | VAPID                      |
+| W2-15  | WhatsApp (Twilio) outbound: pack sender, consent, templates | L    | Q40, Q84                     | Twilio WhatsApp, Meta      |
+| W2-16  | WhatsApp inbound and the real channel orders (Q19, Q26)     | M    | Q82, Q83, Q84, Q85           | Twilio WhatsApp, Anthropic |
+| W2-17  | M6 acceptance: scripted e2e and real phones                 | M    | every open question above    | all live keys (owner)      |
+
+## Not in week 2
+
+- **M7 voice assistant v1:** a separate plan (see above). M6 leaves every voice hook as it is: `Notifier.call()` refuses, `PATCH preferences` refuses `noCallsToday`, `placesAutomatedCalls()` answers false (Q51), and _Call {number}_ shows only when the pack has a voice number.
+- **M8:** outbound reminder calls, `missed_call` from a call, `call_coming`, "Don't call me today" (shown in Settings only from M8), the call side of F6–F8, F10, F12, F15 and F13 calls.
+- **M10:** the office's side of F15 and F16 on Team (message channel, preference with `office_attested`, device revocation for a lost phone), the Settings _Field channels_ tab (the pack read-only), Setup's preferred channel.
+- **GAP step 22 (retire the v1.0 Meta integration)** and **step 23 (contract):** after the cut-over (W1-19), as `docs/PLAN_WEEK1.md` "After the demo" says. M6 does D49 (1) itself in W2-15 (the 24 h window moved to a channel-neutral module) and never names a Twilio endpoint `whatsapp-webhook` (D49 (2)).
+- **Before real reporters** (unchanged from week 1): the per-address `field-api` limit behind the signed proxy (Q42), the `LINK_SIGNING_SECRET` rotation script (Q47), Advanced Opt-Out texts (Q45), counsel's legal texts and `/legal/<key>` (Q28, Q50), İYS (Q49).
+
+---
+
+## Part 1 · Buildable now (no owner answer, no key)
+
+### W2-01 · Notifier: fallback between channels, attempts per channel
+
+- [ ] **W2-01 done** · today _partial_ (M)
+- **Spec:** §4.5 (channel order, "Falling back to the next channel after a failure waits for §19 Q22"), §6.3 `messages`, §13 _Message undeliverable_, §19 Q22 (decided: the second option), Q24, Q29.
+- **Already in the repo:** one channel. `messageChannelOrder`, `deliverableChannels`, `pickMessageTransport` (throws for `whatsapp` and `push`), `IMPLEMENTED_MESSAGE_CHANNELS = ['sms']`, `CONSENT_FOR_CHANNEL` with `null` for WhatsApp and push (`packages/shared/src/channels.ts:51-61`, `:163-251`); `createNotifier` writes one `messages` row per send with `payload.dedupe_key`, retries through the job, marks `undeliverable` for good on the listed Twilio codes, and audits `notify.skipped` (`packages/shared/src/notify/notifier.ts`); Twilio status callbacks move a row forward (`sms/twilio.ts` `nextMessageStatus`).
+- **Build:**
+  - [ ] A transport registry per channel (`MessageTransport` with `channel`, `driver`, `send`), so `pickMessageTransport` returns a transport for any built channel and W2-14 / W2-15 only register theirs. SMS keeps its drivers; `console` per channel for demo orgs and for a pack with no sender of that channel in this environment (§4.5), with the real-org rule of W1-08 (`console_real_org`) unchanged until Q84 is answered (W2-15).
+  - [ ] Fallback per Q22: one logical message (one dedupe key) walks the deliverable channels in order; the next channel is tried on a send error that is final for that channel (an `undeliverable` refusal, a missing consent found at send time) and on a later `failed` or `undeliverable` status callback; never two channels for one message unless one has failed. A retryable error (429, 5xx, network) retries the same channel through the job's backoff first.
+  - [ ] Attempts logged per channel: each attempt is its own `messages` row (`channel`, `copy_key`, `payload.dedupe_key`, `payload.attempt`), audited `notify.attempt_failed` with the reason before the next; a dedupe hit returns the outcome of the attempt that was sent, so a retry never sends twice on any channel.
+  - [ ] A late `failed` / `undeliverable` callback on a reporter-facing key enqueues the fallback as a `notify` job keyed `<dedupe key>:after:<message id>`, only while the message is still useful (its key's guard, e.g. W2-06's site-day check, runs again).
+  - [ ] `message_failed` (§13) only when every channel of the order has failed.
+- **Tests:** pure tests of the walk (order, consent, opt-out, links, a failing first channel, a late callback) with two fake channels; notifier tests for one dedupe key across channels and retries; the existing SMS-only tests unchanged; a worker PGlite test of a callback-driven fallback job.
+- **Done when:** with a fake second channel registered in tests, a message whose first channel fails (at send or by callback) goes out once on the next channel, every attempt is a `messages` row with its audit, and SMS-only behaviour is unchanged in `e2e:supabase` (the W1-08 invite test, the W1-15 filed text).
+- **Needs:** nothing.
+- **Blocked by:** none. (Q84, which channel a real org skips when it has no sender, is W2-15's; the default here is W1-08's rule.)
+
+### W2-02 · Field Settings: preferences, consents, this device (F15)
+
+- [ ] **W2-02 done** · today _missing_ (M)
+- **Spec:** F15, §9.3 _Settings_, §4.5, §6.3 `consents`, `reporters.message_channel`, Appendix B `PATCH /field/preferences`, §19 Q21, Q25, Q40 (first option), Q51. **Design:** none in `docs/design/` (the canvas's Settings artboard is not exported; build from §9.3 and the Field-02 / Field-03 components, and note it in the report).
+- **Already in the repo:** `/settings` is a placeholder; the gear on Today opens it (`apps/field/src/routes/`); `PATCH /preferences` takes `contactPref` and `locale` and refuses `messageChannel` and `noCallsToday` with 400 (`supabase/functions/field-api/app.ts:903`); `consent` only adds consents; Q25's rules (`PRE_CONSENT_SMS_KEYS`) and the `opted_out` status (SMS STOP) exist.
+- **Build:**
+  - [ ] `field-api`: `PATCH /preferences` accepts `messageChannel` (Q21: one of the pack's `message_channels` that is built, else 400; null = the pack's order), audited `reporter.preferences_changed`; `noCallsToday` stays refused until M8.
+  - [ ] `field-api`: `POST /consent/revoke {type}` (Appendix B gains it): sets `revoked_at`, audited `consent.revoked`. Revoking `recording` or `data_processing` stops every route but `resolve`, `device/*`, `consent` (the existing 403 `consent_required`) and tells the office (F15 "office notified": a panel notice, ops + admin, kind `reporter_consent_revoked`, EN/TR copy, §13 row added). Revoking `sms` blocks every SMS but `verify_code` (Q25). Per Q40's first option this is the per-channel opt-out; `reporters.status 'opted_out'` stays SMS STOP only.
+  - [ ] `field-api`: `POST /device/sign-out`: revokes this device (`field_devices.revoked_at`), clears the cookie, audited `device.signed_out`.
+  - [ ] Settings screen: preference _Text link / Phone call_ (Q33 allows call without a voice number), message channel (shown only when the pack lists more than one built channel, so hidden until W2-14 / W2-15), language (the pack's field locales), consents with their state and _Turn off_ (recording revoke behind a confirm sheet that says reports stop), _Sign out this device_; "Don't call me today" not shown before M8. 56 px targets, 390 px, EN/ES/TR.
+- **Tests:** Deno tests for each route (pack allow-list, revoke effects on the other routes, sign-out); a PGlite test that a revoked `sms` consent makes the Notifier skip SMS; field unit and Playwright tests of the screen in EN/ES/TR with axe and no sideways scroll.
+- **Done when:** in CI, a reporter changes preference and language and turns off SMS texts, the next `daily_link` from the panel is skipped (`notify.skipped`, `no_consent`), revoking recording blocks Record and posts the office notice, and sign-out sends the phone back through the device check; _(owner)_ the same on a phone.
+- **Needs:** nothing.
+- **Blocked by:** none. Q40's open counsel point (whether an SMS STOP must also stop WhatsApp and push) changes W2-14 / W2-15, not this ticket.
+
+### W2-03 · Past reports, expired link, new phone (F14, F16)
+
+- [ ] **W2-03 done** · today _partial_ (M)
+- **Spec:** F14, F16, §9.3 _Past reports_ and _Expired / offline_, §6.5 rate limits, Appendix B `GET /field/history`. **Design:** none in `docs/design/` for Past reports or Expired (build from §9.3; note it).
+- **Already in the repo:** F14's site switcher on Today (`apps/field/src/screens/today/SiteSheet.tsx`, the nearest-deadline default in `field-api today`); `GET /history` (non-void reports of the last 14 days of the reporter's sites, `app.ts:870`); `field-api` answers an expired daily link 410 `link_expired` with the locale and pack subset; the 5-per-hour code check and its `device.verify_locked` audit (`app.ts:447`); `/history` and `/expired` placeholders.
+- **Build:**
+  - [ ] `/history`: the 14-day list per site (date, report number, status chip with text, late badge), and a read-only report view reusing the Draft sections (W1-13) with the PDF card (W1-15). _Change something_ is W2-11; until then the view has no edit action.
+  - [ ] `/expired`: "This link has expired", **Send me today's link**, and _Call {number}_ only with a voice number. `field-api` `POST /expired/daily-link {code}`: for an expired daily link only, finds today's link of the same site (`ensureDailyLink`) and sends `daily_link` to the reporter's phone on file through the Notifier (dedupe `expired_daily_link:<link>:<date>`); never reveals whether a code exists beyond the 410 already given; its own limit (3 per link per day, and the per-device limit when a cookie is present); audited `daily_link.requested`. A non-working day or a paused site answers with the reason instead (`site_paused` copy exists).
+  - [ ] F16 office notice: the verification lock (5 failed codes) posts a panel notice to ops + admin (`device_verify_locked`, EN/TR, §13 row) once per lock window.
+  - [ ] F14 acceptance: an e2e for a two-site reporter (switcher, nearest deadline first, daily link of the other site opening that site).
+- **Tests:** Deno tests for the expired route (expired, revoked, personal, limits, paused, non-working day) and the lock notice; field unit and Playwright tests for both screens in EN/ES/TR at 390 px with axe.
+- **Done when:** in CI, an expired daily link sends today's link to the Demo phone, the lock posts one notice, and a two-site reporter switches sites; _(owner)_ the expired-link and new-phone paths on a phone.
+- **Needs:** nothing. Lost-phone device revocation is the office's, on Team (M10).
+- **Blocked by:** none.
+
+### W2-04 · Filed screen extras and photos after filing (F9, Q67)
+
+- [ ] **W2-04 done** · today _partial_ (M)
+- **Spec:** F9, F8 _Filed_, §9.3 _Filed_ (Field-07), §7.2 (`filed → filed` new version), §12 (`_v{n}` PDF), §13 _Report updated_, §19 Q67 (decided: add them in M6 as the artboard draws them). **Design:** `Field-07-Filed`.
+- **Already in the repo:** the Filed screen with the PDF card (`apps/field/src/screens/report/Filed.tsx`); the photos link kind and `photosLinkExpiresAt` (`packages/shared/src/links.ts`), `field-api` taking only photos on it (`app.ts:584`); `field_complete_upload()` refusing a filed report (`report_filed`); office photo attach → new version (`attach_office_photos`, `create_report_version`); the sign-off PDF re-render (`20261015000010`).
+- **Build:**
+  - [ ] A service-only RPC that attaches reporter photos to a filed (or signed-off) report as a new version: `author 'reporter'`, `via 'web'`, change note "{n} photos added" in the report language, `photos[]` with `uploadId`, at most 4 per F9 window, `weather_events.photo_count` updated, signed-off → `filed` with the signer notified (F10 rule), audited; then `render_pdf` for the new version and the "Updated" email (§13).
+  - [ ] `field-api`: a photo upload on a filed report through a photos link or the reporter's personal link within F9's window (until 23:59 the next day, site time); `complete` calls the RPC instead of refusing. The spec gives a window only for photos links after calls; using the same one for a web-filed report is this plan's reading, to confirm with the owner in the W2-04 report.
+  - [ ] Filed screen: _Add more photos_ (opens the photo picker for this report), _Past reports_ (W2-03), the edit hint ("Need a change? Open Past reports"); optional page count on the PDF card is not added (Q67 note).
+  - [ ] F9's optional voice caption: a short voice clip after the photos, transcribed (`transcribe_upload` with a `caption` purpose) into `photos[].caption`; no report re-extraction.
+- **Tests:** PGlite tests of the RPC (version, limit, window, signed-off → filed, photo count, audit); Deno tests of the upload paths; worker test of the re-render and email; field Playwright for Filed → Add photos → new version visible.
+- **Done when:** in CI, two photos added from the Filed screen make version 2 with "2 photos added", a `_v2` PDF and the "Updated" email, and the Overview row stays _Filed_; _(owner)_ on a phone.
+- **Needs:** nothing (`DEEPGRAM_API_KEY` only for a live caption; fake otherwise).
+- **Blocked by:** none.
+
+## Part 2 · Buildable now, open questions as parameters
+
+### W2-05 · Reminder decisions: `remind()` and the ladder plan
+
+- [ ] **W2-05 done** · today _partial_ (S)
+- **Spec:** §7.4, F11, §4.5 (`remind(reporter, pack, stage)`, "pure decision function (M6), unit-tested"), §9.2 keys, §19 Q30 (quiet hours reuse `call_window_*`), Q33, Q38, Q51.
+- **Already in the repo:** stage maths and DST-safe instants (`packages/shared/src/schedule/reminders.ts`: `REMINDER_STAGE`, `ladderTimes`, `nextDueStage`, `reminderVars`, `weatherSlotDue`), `isWeatherObserved`, `org_settings` columns (`daily_link_time`, `heads_up_*`, `reminder1/2_*`, `missing_*`, `second_call_enabled`, `call_window_start/end`); no `remind()`.
+- **Build:**
+  - [ ] `remind(reporter, pack, stage, ctx)` in `packages/shared/src/schedule/`: returns `{ kind: 'message', key, channels? } | { kind: 'call', purpose } | { kind: 'none', reason }` for the stages daily link, heads-up, R1, R2 (missing is the office's), from `contact_pref`, the pack's capabilities (outbound trunk: none before M8, so never `call`), consent and the stage's enabled flag. Link reporters: `daily_link`, `weather_headsup` (only if weather observed), `reminder_1`, `reminder_2` (with the call clause only when the pack has a voice number, as `renderSms` already does). Call reporters with no outbound trunk: R1 and R2 as messages (§7.4 "else a message"), heads-up as for link reporters, daily link per Q76's parameter, never `call_coming` before M8 (it promises a call nobody places).
+  - [ ] Quiet hours per Q77's parameter, the window being the org's `call_window_*` (Q30).
+  - [ ] The daily link is not a `reminder_stage` value (§6.3 numbers 1–4 only): it is tracked by its Notifier dedupe key `notify:daily_link:<site_day>:<reporter>`.
+- **Tests:** a table test per pack capability (two-way or not, voice number or not, links allowed, trunk or not), per preference, per stage, DST days for both packs' time zones, quiet hours both ways.
+- **Done when:** the table test covers every combination and passes; nothing calls `remind()` yet.
+- **Needs:** nothing.
+- **Blocked by:** **Q76** (daily link for call-preferring reporters while no call is placed) and **Q77** (messages that fall outside the quiet-hours window). _Without the answers:_ both are parameters with the recommended defaults (Q76: send `daily_link`; Q77: skip ladder messages outside the window, audited, and always send replies to the reporter's own action); link reporters inside the window need neither.
+
+### W2-06 · Reminder ladder in `scheduler-tick` through the Notifier
+
+- [ ] **W2-06 done** · today _partial_ (L)
+- **Spec:** §7.1, §7.4, F11, §13 _Report missing_ (with the reminder count again), §10.1 `notify`, §15.1, §19 Q54, Q55.
+- **Already in the repo:** `scheduler-tick` (every 5 min) with `planSiteDay`, `dueStage`, `siteDayPatchForStage`, `planMissing` and `mark_site_day_missing()` (one transaction, `20261015000061`), the WhatsApp-only `reminderJob` and `pickReminderTarget` (by `conversations.reporter_id`, `logic.ts:289`), `REMINDER_LADDER_RUNS = false` (`logic.ts:363`); `ensureDailyLink` and `dailyLinkExpiresAt` (W1-16); the `notify` job and Notifier. Open audit findings this ticket closes: `docs/AUDIT_BACKLOG.md` "Reminder-ladder claim overwrites a site-day…" (`:216`), "Reminders never reach a reporter whose phone is in two orgs" (`:386`), "Ladder claim and reminder send are not guarded by the site-day status" (`:400`), "Site-days created on non-working days…" (`:576`), "Reminder templates are sent without re-checking the site-day…" (`:618`), "Reminder targets are looked up by conversations.reporter_id…" (`:674`).
+- **Build:**
+  - [ ] Targets by `site_reporters` and `reporters` (primary first, then active backups; per reporter, so a phone in two orgs gets each org's reminders), never by `conversations`; one message per site for a multi-site reporter (daily links are site-specific, F14).
+  - [ ] Each stage claimed in SQL in one statement that checks `reminder_stage` **and** status in (`pending`, `reminded`) and that the date is a working day with no live report (the audit findings), committing the stage, its audit and its `notify` jobs together (like `mark_site_day_missing()`); `reminded` set at R1.
+  - [ ] Daily link at `daily_link_time` for link reporters (Q76 for call reporters): `ensureDailyLink` (72 h) and `notify(daily_link)`; heads-up at deadline + `heads_up_offset_min` only when the 12:00 or 16:30 snapshot observed weather (`weather_phrase`); R1, R2 with the personal or daily link; missing as today, its copy back to §13's "{first} didn't answer {n} reminders" when reminders were sent (Q55's wording when none was).
+  - [ ] The `notify` job re-checks before sending (a `guard: {siteDayId, statuses}` in the payload): a site-day that was filed, became `processing`, `no_work` or `weather_day` after the claim sends nothing (`notify.skipped`, `stale_stage`).
+  - [ ] `reminders_paused`, the org's billing block and `missing_enabled` respected as today; `REMINDER_LADDER_RUNS` removed; the WhatsApp `reminderJob` left for step 22.
+- **Tests:** Deno tests of the plan (each stage once, guards, two orgs, multi-site, non-working day, paused, billing-blocked), DST tests for America/Chicago and Europe/Istanbul around both DST changes (Istanbul has none: the test proves the fixed offset), PGlite tests of the claim RPC (status races), a stack test of a claim racing a filing (one wins), a worker test of the stale guard; an `e2e:supabase` test: with the clock at 17:46 a seeded Elm St. site-day gets the daily link and R1 in the Demo phone, and filing stops R2.
+- **Done when:** the tests pass in CI; on a local stack (or the preview project, owner-approved) the Kestrel `--date today` seed shows the 17:00 daily links, R1 at 17:45 and R2 at 18:30 in the Demo phone for the unfiled sites, the missing alert at 19:00 names the reminders, and a site filed at 17:50 gets no R2.
+- **Needs:** nothing (console and the Demo phone).
+- **Blocked by:** **Q76**, **Q77** (through W2-05). _Without the answers:_ the defaults; the ladder ships for link reporters in every case.
+
+### W2-07 · Web timeouts and the 30 s re-check (§7.2, Q61)
+
+- [ ] **W2-07 done** · today _partial_ (M)
+- **Spec:** §7.2 web rules, F7 ("Unanswered … → draft with `needs_review`"), §10.5 step 6, `org_settings.filing_mode`, §10.1 `decide_next` (GAP D25), §19 Q11 (reporter confirms by default), Q61 (decided: the second).
+- **Already in the repo:** the WhatsApp sweep with the same constants (`apps/worker/src/router/timeouts.ts`: 60 min, 30 min, 2 h, 15 min; run every `SWEEP_INTERVAL_MS` by `runner.ts:287`), conversation-based so it never sees a web report; `unanswered:<field>` review reasons (`pipeline/validate.ts:75`); `decide_next` skipping the text while a device was seen in the last 30 s (`pipeline/web.ts`, audited `device_active`); `file_report` with triggers.
+- **Build:**
+  - [ ] Extract the sweep's decisions into a channel-neutral pure module (GAP §4 "extract first: the timeout sweep") and run it for web reports: `awaiting_answer` > 60 min → the open question marked unanswered, `decide_next` builds the draft with `needs_review` (`unanswered:<field>`), no text (F7: the reporter sees it next time); `awaiting_confirmation` → one nudge at +30 min, `file_report` at +2 h with trigger `timeout` and reason `unconfirmed` (with `filing_mode = 'auto_15min'`: at +15 min); each step keyed per draft revision (`draft_rev`), so a newer draft restarts the clock and a retry never nudges or files twice. The WhatsApp caller keeps calling the module until step 22.
+  - [ ] Q61: when `decide_next` skips the text because the device was active, it enqueues a delayed `notify` 30 s later under the same Notifier key with a guard (question still open or draft unconfirmed at that revision, and the device not seen since); it can never text twice.
+  - [ ] Nudge copy per Q78's parameter.
+- **Tests:** pure tests of the module (every timeout, revisions, auto-file); worker PGlite tests (one nudge, one filing, a confirm racing the timeout filing: `file:<report>` key wins once); the Q61 delayed check both ways (device seen again → no text).
+- **Done when:** in CI, an unanswered web question becomes a flagged draft after 60 min, an unconfirmed draft gets one nudge and is filed `unconfirmed` at 2 h, and a reporter who leaves the recorder right after the draft gets `draft_ready` 30 s later.
+- **Needs:** nothing.
+- **Blocked by:** **Q78** (the nudge's copy key). _Without the answer:_ the nudge re-sends `draft_ready` (no new copy); a new key, if chosen, is a copy-only change.
+
+### W2-08 · _No work_ and _Weather_ as reports (F12, Q41)
+
+- [ ] **W2-08 done** · today _partial_ (M)
+- **Spec:** F12, §7.1, §19 Q41 (decided: the second, the details as answered `questions`), `org_settings.no_work_pdf`, §12, `weather_events`. **Design:** `Field-03-Today` (buttons).
+- **Already in the repo:** `POST /day-status` writing only the site-day and the audit details (`field_set_day_status()`; 409 while a report is live); the Today sheets (`DaySheet.tsx`: since when, how many before); the WhatsApp day-off path (`apps/worker/src/router/handlers/dayoff.ts`, `report/day-off.ts`, `ai/dayoff.ts`) that numbers a report and files it with trigger `weather_day` / `no_work`; `mark_no_work` for the office.
+- **Build:**
+  - [ ] Extract the day-off report builder from `router/handlers/dayoff.ts` into a channel-neutral module on v2 data.
+  - [ ] `day-status` creates the report in one transaction under the site-day lock (numbered, `channel 'web'`, the org's language), writes the details as answered web `questions` (since when, workers before; source `{type:'answer', questionId}`), builds the version (weather: `weather_events` start or `full_day`, lost hours = workers before × hours lost, computed in code; no work: no manpower) and enqueues `file_report` with trigger `weather_day` / `no_work`; the PDF for weather days always, for no work only when `no_work_pdf`; the ladder stops (site-day status).
+  - [ ] "Add a photo of the conditions" after a weather day: the Filed screen's _Add more photos_ (W2-04), which makes the event claim-ready (`photo_count`).
+- **Tests:** PGlite tests of the RPC (numbering, questions, sources, lost hours in code, no-work PDF setting); worker test of the filing; Deno and field Playwright tests for both buttons in EN/ES/TR.
+- **Done when:** in CI, _Weather_ from 09:00 with 12 on site files a weather-day report whose lost hours are computed in code and whose sources are the two answers, the panel shows it on Weather & delays, and _No work_ stops the ladder with or without a PDF per the setting.
+- **Needs:** nothing.
+- **Blocked by:** **Q79** (the buttons while the day already has a live report). _Without the answer:_ keep W1-07's refusal (409 `report_in_progress`, the sheet says to mention it in the report), which is today's behaviour.
+
+## Part 3 · AI keys for live checks (fake or recorded without)
+
+### W2-09 · _Other…_ answers: say it or type it (F7, §10.7)
+
+- [ ] **W2-09 done** · today _partial_ (M)
+- **Spec:** F7, §9.3 _Question_, §10.5 step 5, §10.7, Appendix B `answer` `{questionId, uploadId}`. **Design:** `Field-05-Question`.
+- **Already in the repo:** web questions with `[{id, label, value?}]` options and the number input for option-less headcounts (GAP D28); `POST /reports/:id/answer` for `optionId` or `value`, refusing `uploadId` (`app.ts:767`); `applyAnswer` with `{type:'answer', questionId}`; the unknown-company buttons (`validate.ts:354`); `parse_answer` on v1 with the WhatsApp prompt (`apps/worker/src/ai/answer.ts`).
+- **Build:**
+  - [ ] Field: _Other…_ on every question, opening a sheet with _Say it_ (a mini recorder reusing `recorder/`, max 30 s, queued like any clip) and, for number fields, the number input.
+  - [ ] `field-api`: `answer` with `uploadId` (an `audio` upload of this report, completed): stores the answer as pending and enqueues `parse_answer` (new job, `answer:<question>:<upload>`); the report stays `awaiting_answer` with "Listening to your answer…".
+  - [ ] Worker: `parse_answer` v2 (port of `ai/answer.ts`, channel-neutral prompt in the spec's words, phone numbers never sent, transcript as data): transcribe the clip, parse `{field, value, confidence}`; ≥ 0.7 → `applyAnswer` (source the answer, plus the clip as a `voice_note` source of the value) and `decide_next`; < 0.7 → ask once more with the choices ("I didn't catch that"); unclear twice → move on and flag `unanswered:<field>` (F7 "then move on and flag").
+  - [ ] F7's confirmation line from the parsed value, as for buttons.
+- **Tests:** recorded `parse_answer` outputs (EN, ES, TR, a low-confidence one); worker PGlite tests of both paths; Deno tests of the route; field Playwright with the fake microphone and the fake transcriber.
+- **Done when:** in CI, answering "Delta" by voice with "five, all day" applies 5 × full day with the answer and voice-note sources, and an unclear answer is asked once more, then flagged; _(by hand, keys)_ the same with Deepgram and Claude.
+- **Needs:** `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY` for the live check.
+- **Blocked by:** none.
+
+### W2-10 · _Fix by voice_ and steppers on the draft (F8, §10.6)
+
+- [ ] **W2-10 done** · today _partial_ (L)
+- **Spec:** F8, §9.3 _Draft_, §10.6, §7.2 (`awaiting_confirmation → processing` on a fix), Appendix B `POST /field/reports/:id/correction {text or uploadId}` → preview, `…/correction/:cid/apply`, §10.3 sources. **Design:** `Field-06-Draft`.
+- **Already in the repo:** the Draft screen with read-only steppers and no _Fix by voice_ (`Draft.tsx:34`, `:184`); `draft_rev` and the confirm by revision (`20261015000070`, `…090`); `apply_correction` on v1 (`ai/correction.ts`) and `applyPatch` (`packages/shared/src/report/patch.ts`); totals in code (`computeTotals`).
+- **Build:**
+  - [ ] `field-api`: `POST /reports/:id/correction {uploadId}` (a short voice clip) → enqueues `apply_correction` and returns a correction id; `GET` it until the preview is ready (the changed lines, e.g. "Apex Concrete 6 → 7 workers, 48 → 56 h"); `POST …/correction/:cid/apply` applies it to the draft at the revision the preview was made from (409 `draft_changed` otherwise), audited.
+  - [ ] Worker: `apply_correction` v2 (port; JSON-patch ops + `changeNote` + `needsClarification`), code applies the patch, recomputes totals, never accepts a model total; a value changed by voice cites the clip (`voice_note` source with its seconds).
+  - [ ] Field: _Fix by voice_ on the draft (record, preview card, _Save change_ / _Try again_); after saving, the draft shows again with the new revision.
+  - [ ] Steppers on workers and hours, and typed corrections, **only once Q80 is answered** (their values need a source kind).
+- **Tests:** recorded `apply_correction` outputs (EN, ES, TR; a needs-clarification one; one that tries to set a total); PGlite and worker tests (patch, totals, revision race with a late photo); field Playwright for the voice fix.
+- **Done when:** in CI, saying "Apex had seven, not six" on the draft shows the preview, saving it updates the draft to 7 × 8 = 56 h with the clip as the source, and Confirm & send files that revision.
+- **Needs:** `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY` for the live check.
+- **Blocked by:** **Q80** (the source of a tapped or typed value). _Without the answer:_ voice fixes only; the steppers stay read-only and the typed field is not shown.
+
+### W2-11 · Edit after filing on the web (F10)
+
+- [ ] **W2-11 done** · today _partial_ (L)
+- **Spec:** F10 (web), §7.2, §9.2 `edit_applied`, §12 `_v{n}`, §13 _Report updated_, §2.2. **Design:** none in `docs/design/` for the edit preview (Field-07 shows the hint).
+- **Already in the repo:** Past reports and the report view (W2-03), correction routes and job (W2-10), `create_report_version` (office), the signed-off → filed rule in the office path, `edit_applied` copy, the "Updated" email subject (W1-15), the WhatsApp edit handler (`router/handlers/edit.ts`) to mine.
+- **Build:**
+  - [ ] _Change something_ on a report of the last 14 days (site time) → speak (W2-10's flow) → preview → **Save change** → a service-only RPC writes version n+1 (`author 'reporter'`, `via 'web'`, `change_note`), re-denormalises, signed-off → `filed` with the signer notified (panel notice), audited; then `render_pdf` (`_v{n+1}`), the "Updated" email to recipients and signer, and `edit_applied` to the reporter ("Updated {weekday}: {change}. Version {v} sent to the office.").
+  - [ ] Older than 14 days: "That report is locked. Ask the office to change it."
+  - [ ] Which reports a reporter may change per Q81's parameter.
+  - [ ] Typed corrections once Q80 is answered.
+- **Tests:** PGlite tests of the RPC (version chain, lock, signed-off, scope per Q81); worker tests of PDF, email and text once each under retries; field Playwright from Past reports to the new version.
+- **Done when:** in CI, Marco changes Friday's Apex count from 6 to 7 on his phone, the panel shows version 2 with his change note, the `_v2` PDF and the "Updated" email go out once, and the Demo phone shows `edit_applied`; _(owner)_ on a phone.
+- **Needs:** the W2-10 keys for the live check.
+- **Blocked by:** **Q80**, **Q81**. _Without the answers:_ voice edits only, on reports of the reporter's own sites (Q81's recommended default, which is what `history` already lists).
+
+### W2-12 · SMS keywords NO WORK, WEATHER, EDIT, OK (two-way packs)
+
+- [ ] **W2-12 done** · today _partial_ (M)
+- **Spec:** §9.5, F10 (SMS), F12 (SMS), §10.8 `classify_utterance`, §9.2, §19 Q45, Q46. Two-way packs only (US today).
+- **Already in the repo:** `sms-webhook` and the `sms_inbound` job with STOP, START, HELP, CALL, TEXT; OK, NO WORK, WEATHER and EDIT stored only (`packages/shared/src/sms/keywords.ts:12`, `:150`); `classify_reply` on the WhatsApp prompt (`ai/classify.ts`) and the deterministic pre-pass (`wa/replies.ts` `quickClassify`, `quickDayOff`; GAP §4 "move the reply grammar to an SMS-keyword module first").
+- **Build:**
+  - [ ] Move the reply grammar into `packages/shared/src/sms/` (EN, ES, TR words; WhatsApp keeps importing it until step 22).
+  - [ ] **NO WORK** / **WEATHER**: reply with a link to Today's day sheet for that site (F12 "a link to add details"); the site-day changes only when the details are saved (W2-08). Copy per Q83.
+  - [ ] **EDIT FRI …**: `classify_utterance` (fast model, `CLAUDE_MODEL_FAST`) for the day and the correction, `apply_correction` (W2-10) for the preview, reply with the change and a link to confirm; never applied without the confirm on the recorder (F10). Copy per Q83; the typed value's source per Q80.
+  - [ ] **OK** per Q82.
+  - [ ] Unknown text: stored, no reply (as built).
+- **Tests:** keyword unit tests in three languages; `sms_inbound` tests per keyword with recorded `classify_utterance` outputs; a two-orgs phone; a one-way pack ignoring all of them.
+- **Done when:** in CI (Demo phone replies on a two-way demo org), WEATHER after R1 answers with the day-sheet link, and "EDIT FRI Apex was 7 not 6" answers with the change and a confirm link that, once confirmed, makes version 2 (W2-11).
+- **Needs:** `ANTHROPIC_API_KEY` for the live check; a real US sender (owner) only for a real-phone run.
+- **Blocked by:** **Q82** (what OK does before calls), **Q83** (the reply copy), **Q80** (EDIT's typed value). _Without the answers:_ the grammar and routing are built and tested; each keyword whose answer is open keeps today's behaviour (stored only).
+
+### W2-13 · Test recording on first open (F4, Q52)
+
+- [ ] **W2-13 done** · today _missing_ (S)
+- **Spec:** F4 step 3 ("Optional 20-second test recording"), §9.3 _Welcome & consent_, §19 Q52 (decided: the first, in M6; Appendix B gains the route). **Design:** `Field-02-Welcome`.
+- **Already in the repo:** the Welcome screen without the test (`apps/field/src/screens/link/Welcome.tsx`); the recorder engine; the `Transcriber` interface with the fake (`apps/worker/src/ai/transcriber.ts`).
+- **Build:**
+  - [ ] `field-api` `POST /test-clip` (after the recording consent is stored, so the clip is covered by it) → a signed upload to a `test/` prefix, then `complete` enqueues `transcribe_test_clip`; `GET /test-clip/:id` returns the snippet. The clip is outside any report, never a source, and deleted with its transcript as soon as the snippet is read or after 10 minutes (retention job backstop); audited `test_clip.created` / `deleted`, rate-limited (3 per device per hour).
+  - [ ] Welcome: _Try a 20-second test_ → "Say anything — nothing gets filed." → "Heard you clearly: '…'" or "I couldn't hear anything".
+- **Tests:** Deno tests (consent required, limits, deletion), worker test with the fake transcriber, field Playwright in EN/ES/TR.
+- **Done when:** in CI the test shows the fake transcript and leaves no upload, transcript or report behind; _(by hand, key)_ the same with Deepgram.
+- **Needs:** `DEEPGRAM_API_KEY` for the live check.
+- **Blocked by:** none.
+
+## Part 4 · Provider accounts (console without)
+
+### W2-14 · Web push channel (Q27)
+
+- [ ] **W2-14 done** · today _missing_ (L)
+- **Spec:** §4.4 (web push row), §4.5, §5.1 `VAPID_*`, §9.3 (PWA: push for installed apps only, never a person's only channel), F15 (Settings: notifications), §19 Q27 (decided), Q40 (first option), §6.3 (`messages` without a phone for push).
+- **Already in the repo:** `message_channel 'push'`; `VAPID_*` in `.env.example`; the field PWA with a `generateSW` shell-only service worker (`apps/field/config/pwa.ts`); `CONSENT_FOR_CHANNEL.push = null`.
+- **Build:**
+  - [ ] Migration: `consent_type` `ADD VALUE 'push'` (alone in its file); `push_subscriptions` (reporter, device, endpoint, keys, user agent, created, revoked; RLS on, no client policy; service writes only); a check that only `channel 'push'` rows may lack `messages.phone_e164` (the repo's column is already nullable from v1.0, §6.3's is `not null`: spec §6.3 updated per Q27); role matrix, allowlist, `db/types.ts`.
+  - [ ] `field-api`: `GET /push/key` (the public VAPID key), `POST /push/subscribe` (stores the subscription and the `push` consent, `web_checkbox`), `POST /push/unsubscribe` (revokes both: the per-channel opt-out of Q40).
+  - [ ] Field: switch the service worker to `injectManifest` keeping today's precache rules, add `push` and `notificationclick` handlers (open the message's link in the app); Settings _Notifications_ toggle shown only when installed (`display-mode: standalone`) and `PushManager` exists; permission asked only on the toggle.
+  - [ ] Worker: a `push` transport (`web-push`, VAPID from env) registered with W2-01; keys limited to `question_ready`, `draft_ready`, `filed` and the ladder keys (Q27); body from the §9.2 key in the reporter's language; a `410 Gone` endpoint revokes the subscription and falls back (W2-01); `console` for demo orgs and when no key pair is set; `messages` row with `channel 'push'`, no phone. Push is never a person's only channel: the pack's order must keep another channel after it (enforced in `messageChannelOrder`).
+  - [ ] Demo phone shows push rows with a channel label (EN/TR).
+- **Tests:** PGlite (table, check, grants), Deno routes, worker transport with a mocked endpoint (send, 410, fallback), a service-worker unit test of the handlers, Playwright for the toggle in a standalone context.
+- **Done when:** in CI, a subscribed demo reporter's `draft_ready` is a `push` row in the Demo phone and a revoked subscription falls back to SMS; _(owner)_ on an installed iPhone (iOS 16.4+) and Android phone, `question_ready` arrives as a notification and opens the question.
+- **Needs:** a VAPID key pair (developer-generated for local; the owner sets the hosted secrets).
+- **Blocked by:** **Q40**, counsel's half (whether an SMS STOP must also stop push). _Without the answer:_ Q40's first option as decided (STOP stops SMS only; push stops by its own toggle); the third option, if counsel requires it, is one rule in `deliverableChannels`.
+
+### W2-15 · WhatsApp (Twilio) outbound: pack sender, consent, templates
+
+- [ ] **W2-15 done** · today _missing_ (L)
+- **Spec:** §4.5, §4.6 (`whatsapp_provider`, "no WhatsApp transport is built before Q39's answer"), §5.2, §9.1 (week 2 setup), §9.2 ("WhatsApp templates … reuse these keys"), §19 Q3, Q25 (WhatsApp only after an opt-in on Field-02, `consent_type 'whatsapp'`), Q29, Q39 (decided: a pack column), Q40, GAP D48, D49.
+- **Already in the repo:** `countries.whatsapp_provider` (default `twilio`); `set_country_endpoints()` and `pnpm countries:set` for the SMS sender and voice number; the Twilio client and signature check (`packages/shared/src/sms/transports.ts`, `sms/twilio.ts`); the v1.0 24 h window logic (`packages/shared/src/wa/window.ts`); `msg_status 'read'` kept (D49).
+- **Build:**
+  - [ ] Migration: `consent_type` `ADD VALUE 'whatsapp'` (its own file); `countries.whatsapp_sender_id` (E.164, null in every migration) and `whatsapp_templates jsonb` (`{<key>: {<locale>: <content sid>}}`, null = none), both per environment, with `set_country_endpoints()` extended and `pnpm countries:set -- --whatsapp-sender … --whatsapp-templates <file>` (owner-approved on hosted databases); spec §4.6 and §6.3 updated.
+  - [ ] D49 (1): move the 24 h window logic out of `wa/window.ts` into `packages/shared/src/messaging/window.ts`; the WhatsApp v1.0 code imports it from there.
+  - [ ] A `whatsapp` transport (Twilio Messages API with `whatsapp:` addresses): a template (`ContentSid` + variables) for every business-initiated key, free-form only inside the 24 h window opened by the person's last inbound WhatsApp; a key with no approved template for the reporter's language is not deliverable on WhatsApp (falls back, W2-01); status callbacks including `read`; `console` for demo orgs and a pack with no WhatsApp sender.
+  - [ ] Field-02 and Settings: _Message me on WhatsApp_ (only when the pack lists WhatsApp), stored as the `whatsapp` consent (`web_checkbox`); unticking revokes it (Q40).
+  - [ ] The Demo phone shows WhatsApp rows with a channel label.
+  - [ ] A per-channel messaging cost in `report_cost_inputs` (D45 amended by D49).
+- **Tests:** PGlite (columns, function, audit), `countries:set` tests, transport tests with mocked Twilio (template vs free-form by window, missing template, statuses), window module tests (moved), Playwright for the opt-in.
+- **Done when:** in CI, a demo reporter who opted in gets `daily_link` as a WhatsApp row in the Demo phone, one without the opt-in gets SMS, and a mocked template failure falls back to SMS; _(owner)_ with the Twilio sandbox or the approved sender, a real WhatsApp message arrives.
+- **Needs:** owner: a Twilio WhatsApp sender, Meta business verification, templates for the keys above in EN, ES and TR submitted and approved, and the sender and template ids set per environment with `pnpm countries:set`. Without them: `console`.
+- **Blocked by:** **Q40** (counsel: STOP and WhatsApp), **Q84** (a channel with no sender here, for a real org). _Without the answers:_ Q40's first option; for Q84 the recommended default (skip the channel for real orgs) behind a flag, and the channel-order migration waits (W2-16).
+
+### W2-16 · WhatsApp inbound and the real channel orders (Q19, Q26)
+
+- [ ] **W2-16 done** · today _missing_ (M)
+- **Spec:** §9.5, §19 Q19 (decided: US `{sms, whatsapp}`, TR `{whatsapp, sms}` by data migration), Q26 (decided: keywords and answers, no voice notes; adds `field_channel 'whatsapp'`), Q45, GAP D49 (2).
+- **Already in the repo:** `sms-webhook` (`receive_sms_inbound()`, the `sms_inbound` job, per-phone lock key), the keyword handling (W1-08, W2-12).
+- **Build:**
+  - [ ] Migration: `field_channel` `ADD VALUE 'whatsapp'` (its own file).
+  - [ ] Inbound WhatsApp through `sms-webhook` (Twilio posts the same form with `whatsapp:` addresses; the function is never named `whatsapp-webhook`): stored with `channel 'whatsapp'`, opens the 24 h window, runs the same keywords on every pack (WhatsApp is two-way even where SMS is not, so TR reporters get STOP, HELP, CALL, TEXT and the W2-12 keywords there); STOP on WhatsApp revokes the `whatsapp` consent (Q40).
+  - [ ] Answers over WhatsApp (Q26): a text reply to an open question is parsed with `parse_answer` (W2-09) and applied with `field_channel 'whatsapp'` on the answer.
+  - [ ] Media (voice notes, photos) per Q85.
+  - [ ] The data migration setting Q19's orders, shipped only after Q84 is answered and W2-15's rule is in place, so a real org on an environment without a WhatsApp sender keeps getting SMS.
+- **Tests:** webhook tests with WhatsApp forms (signature, dedupe, window), keyword and answer tests per pack, the migration test (orders, the pack check), an `e2e:supabase` reply in the Demo phone's WhatsApp thread.
+- **Done when:** in CI, a TR demo reporter who opted in receives `daily_link` on WhatsApp, replies HELP and gets the help text there, answers a question with "5" and sees it applied; US reporters still get SMS first.
+- **Needs:** the W2-15 owner setup for a real run.
+- **Blocked by:** **Q82**, **Q83** (as W2-12), **Q84** (before the order migration), **Q85** (media). _Without the answers:_ inbound text keywords and answers are built; media are stored without a reply; the order migration waits.
+
+## Part 5 · Acceptance
+
+### W2-17 · M6 acceptance: scripted e2e and real phones
+
+- [ ] **W2-17 done** · today _new_ (M)
+- **Spec:** §16.2 M6 **Done when**, §17.
+- **Build:**
+  - [ ] One scripted Playwright suite on the local stack with the worker, one spec per flow: F4 (new device, consent, preference, test clip), F5 (record, upload, offline), F7 (buttons, _Other…_ by voice and number), F8 (fix by voice, confirm), F10 (Past reports → change → v2), F11 (daily link → R1 → R2 → missing with a moved clock), F12 (weather and no work), F14 (two sites), F15 (preferences, consent off, sign out, STOP), F16 (expired link, new phone, the lock).
+  - [ ] `docs/DEMO_NOTES.md`: a week-2 script for the phones.
+  - [ ] Spec, README deviations, GAP and this plan updated for what M6 built; the answered §19 questions written in.
+- **Done when:** the suite passes in CI; _(owner)_ the same flows pass on a real iPhone (Safari, installed for push) and Android phone (Chrome) against the preview project with the worker running, with the keys the owner has provided; every question still open is listed in the report with the default that shipped.
+- **Needs:** owner: the phones, the preview project with the worker (owner-approved), and whatever keys and senders exist by then.
+- **Blocked by:** every open question above; each one that is still open ships its recommended default and is named in the report.
+
+---
+
+## Owner decisions needed for week 2
+
+Each item says what is undecided, what we recommend and why. Nothing blocks the start of week 2: every ticket builds the recommended default behind a parameter and stops only at the boxes that need the answer. Proposed questions get the §19 number shown here.
+
+**New questions (not in spec §19 yet)**
+
+- **Q76 · Daily link for reporters who prefer a call, while SiteLog places no calls.** §7.4 sends call-preferring reporters no daily link (they get a call at R1), but no pack places outbound calls before M8, so they would hear nothing until the 17:45 reminder text. _Recommended:_ send them the 17:00 `daily_link` like link reporters until their pack places calls, and never send `call_coming` (it promises a call that will not come). _Why:_ it gives them the same chance to report on time, with copy that already exists.
+- **Q77 · Messages that would go out during quiet hours.** §4.5 says the Notifier respects quiet hours and Q30 made them the org's call window (07:00–20:00), but nothing says whether a message is held or dropped. _Recommended:_ skip ladder messages and nudges that fall outside the window (audited), and always send messages that answer the reporter's own action (device code, filed, edit applied, a reply to their text). _Why:_ a 22:00 reminder held until 07:00 is useless, while a code or a filed receipt is expected the moment the person acts.
+- **Q78 · The text for the 30-minute nudge on an unconfirmed draft (§7.2).** §9.2 has no nudge key. _Recommended:_ send `draft_ready` again ("Your report is ready to check: {link}"). _Why:_ no new copy or translation, one SMS segment, and it says exactly what to do.
+- **Q79 · _No work_ or _Weather_ tapped when today's report has already started.** The §7.1 diagram allows `processing → weather_day`, while the recorder refuses the buttons while a report is live. _Recommended:_ keep refusing and ask the reporter to say it in the report. _Why:_ the voice note already records the stoppage and lost hours with its sources; replacing a live report with a button would throw away what was said.
+- **Q80 · Where a number comes from when the reporter taps a stepper or types a correction.** Every value must carry a source (§10.3), and there is no source kind for "the reporter changed it on the phone" (a spoken fix cites its clip). _Recommended:_ add a source kind `{type: 'reporter_edit', reporterId, at, via}`, the reporter's twin of `office_edit`. _Why:_ the office sees honestly who changed what and when; pretending it was an answered question would invent a question nobody asked. Affects the draft steppers, typed edits and SMS EDIT.
+- **Q81 · Which filed reports a reporter may change (F10).** _Recommended:_ any report of a site they currently cover, within 14 days, with each version naming its author. _Why:_ Past reports already lists the site's reports, and a backup who covered a day must be able to fix it; the version history and the office notice keep it accountable.
+- **Q82 · What an SMS `OK` does in week 2.** §9.5 lists OK "for call follow-ups", and calls come in M7, so the only drafts now are web drafts the reporter may not have read. _Recommended:_ in M6, OK confirms nothing and answers with the draft link; OK as a confirmation comes with M7, for a draft the assistant read back. _Why:_ code files only after an explicit confirmation of what the reporter saw.
+- **Q83 · Copy for the new keyword replies.** §9.2 has no text for the NO WORK / WEATHER reply ("a link to add details") or for the EDIT preview ("the change and a link to confirm"). _Recommended:_ two new keys, `day_off_link` ("Add the details for {site} today: {link}") and `edit_preview` ("{weekday}: {change}? Confirm here: {link}"), EN/ES/TR, one segment, two-way packs and WhatsApp only. _Why:_ short, in the existing tone, and they never apply anything without the confirm.
+- **Q84 · A message channel with no sender in this environment, for a real org.** With Q19's TR order `{whatsapp, sms}`, a real TR org on a database with no WhatsApp sender would have its WhatsApp step written as `failed` and, under today's rule, nothing sent. _Recommended:_ for real orgs, leave a channel with no sender out of the order, so the next one (SMS) carries the message; demo orgs keep `console` on every channel. _Why:_ the channel orders can then ship in one migration to every environment without silencing anyone.
+- **Q85 · Voice notes and photos sent on WhatsApp.** Q26 decided "no voice notes" but not what SiteLog does when one arrives. _Recommended:_ store it, never transcribe it, and reply once a day with a new key `whatsapp_use_link` ("Voice notes go through your link: {link}"). _Why:_ the reporter learns the right way at once, and nothing they sent is lost if the office needs it.
+
+**Already in spec §19, still open, touching week 2**
+
+- **Q40 (counsel's half) · Does an SMS STOP also stop WhatsApp and push?** Decided: the first option (STOP stops SMS; WhatsApp and push stop by their own consent). _Recommended:_ ship that, and switch to "STOP stops every message channel" only if counsel says US law requires it. _Why:_ the switch is one rule in `deliverableChannels`, so waiting costs nothing.
+- **Q63 · Native-speaker review of the ES and TR texts.** Week 2 adds field, SMS, push and WhatsApp copy in Spanish and Turkish. _Recommended:_ one review pass at the end of M6 covering every new key. _Why:_ one reviewer session instead of one per ticket.
+
+**Owner actions (not decisions)**
+
+- Start now (long lead): the Twilio WhatsApp sender with Meta business verification, and templates for `daily_link`, `weather_headsup`, `reminder_1`, `reminder_2`, `question_ready`, `draft_ready`, `filed`, `photos_link`, `edit_applied` in EN, ES and TR (§9.1, Q39); then set the sender and template ids per environment with `pnpm countries:set`.
+- The VAPID key pair as secrets on the preview project (the developer can generate it), with approval for each `secrets set`.
+- Export the canvas artboards that week 2 builds but `docs/design/` does not have (Past reports, Settings, Expired link, the edit preview, and Field-08 / Field-09 if they cover messages), or confirm that §9.3 alone is the reference.
+- Week-1 items still waiting: the phone checks and the cut-over (W1-19), and the Anthropic and Deepgram keys for the live checks.
