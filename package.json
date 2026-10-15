@@ -28,6 +28,7 @@
     "replay-webhook": "pnpm --filter @sitelog/scripts replay-webhook",
     "seed:demo": "pnpm --filter @sitelog/scripts seed-demo",
     "countries:set": "pnpm --filter @sitelog/scripts countries-set",
+    "cutover:preflight": "pnpm --filter @sitelog/scripts cutover-preflight",
     "brand": "pnpm --filter @sitelog/web brand && pnpm --filter @sitelog/field brand",
     "check": "pnpm typecheck && pnpm lint && pnpm test"
   },

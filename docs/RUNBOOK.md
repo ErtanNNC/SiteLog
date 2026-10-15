@@ -78,7 +78,7 @@ The field web recorder is its own Netlify site: its routes (`/settings` among th
 - **Check a preview's `/api`** (needs D41): `curl -i https://pr-<n>--sitelog-field-staging-<owner>.netlify.app/api/resolve` answers from Supabase (a JSON 404 until `field-api` is deployed to the preview project, W1-07); an HTML page means the build had no `/api` rule (see the run summary of the Build step).
 - **Owner check on a phone** (W1-04 Done when). Open the preview's `/today` link from the run summary on iOS Safari and on Android Chrome: it loads over HTTPS in the phone's language (EN, ES or TR, else English). Add it to the home screen (iOS: Share → Add to Home Screen; Android: menu → Add to Home screen or Install app), then open it from the icon: it starts full screen on Today with the SiteLog icon. Record the result in PR #1. Without the token (no preview), use a tunnel to `pnpm --filter @sitelog/field preview` (port 4174, with the tunnel's URL in `FIELD_APP_URL`): a plain-http LAN address is not a secure context.
 - **Demo phone.** On `*.netlify.app` the panel's Demo phone cannot frame the field app with its cookie (two registrable domains), so open its links in a new tab until both apps have custom domains under one domain (GAP D42, §8 Q7).
-- **Cut-over (W1-19).** The W1-05 step 11 migration (`20261014000003_renames_billing.sql`) renames `unknown_senders` → `unknown_contacts` and the labels `verified` → `active`, `reporter_reply` → `reporter`, which the deployed pre-v1.2 panel and functions read: push it only in the same Deploy run as this branch's functions and panel (db push → functions → web and field), never alone. Its billing columns need no ordering (the `orgs_billing_ids` trigger keeps `stripe_*` and `billing_*` equal for either generation of writer). The staging field site gets `--prod` from the live branch with `/api` to the staging project. Then set `FIELD_APP_URL` (and `LINK_SHORT_DOMAIN` until `sl.link` exists) on the staging project to the field site's URL, with the owner's approval. The country-pack migration (`20261014000004_country_packs.sql`) stops the push with "orgs outside the country packs" if an org has a country with no pack; on staging this is only a backstop, since staging's v1.0 schema has no `orgs.country` and `20261013000007` gives every existing org 'US' in the same push. After the push, `select code, sms_provider, sms_sender_id, voice_number from countries;` must show every `sms_sender_id` and `voice_number` null (every message goes to `console` until a sender is set, below). That the old panel's `create_org` call still creates a US org is proven in CI (`supabase/db-tests/src/countries.test.ts`, `apps/web/e2e/supabase/fresh-org.spec.ts`), not checked after the push: the same Deploy dispatch replaces that panel.
+- **Cut-over (W1-19).** The ordered steps are in "Cut-over (W1-19), step by step" below. The W1-05 step 11 migration (`20261014000003_renames_billing.sql`) renames `unknown_senders` → `unknown_contacts` and the labels `verified` → `active`, `reporter_reply` → `reporter`, which the deployed pre-v1.2 panel and functions read: push it only in the same Deploy run as this branch's functions and panel (db push → functions → web and field), never alone. Its billing columns need no ordering (the `orgs_billing_ids` trigger keeps `stripe_*` and `billing_*` equal for either generation of writer). The staging field site gets `--prod` from the live branch with `/api` to the staging project. Then set `FIELD_APP_URL` (and `LINK_SHORT_DOMAIN` until `sl.link` exists) on the staging project to the field site's URL, with the owner's approval. The country-pack migration (`20261014000004_country_packs.sql`) stops the push with "orgs outside the country packs" if an org has a country with no pack; on staging this is only a backstop, since staging's v1.0 schema has no `orgs.country` and `20261013000007` gives every existing org 'US' in the same push. After the push, `select code, sms_provider, sms_sender_id, voice_number from countries;` must show every `sms_sender_id` and `voice_number` null (every message goes to `console` until a sender is set, below). That the old panel's `create_org` call still creates a US org is proven in CI (`supabase/db-tests/src/countries.test.ts`, `apps/web/e2e/supabase/fresh-org.spec.ts`), not checked after the push: the same Deploy dispatch replaces that panel.
 
 #### The `preview` project (GAP D41, owner setup)
 
@@ -102,6 +102,118 @@ Actions → Deploy → Run workflow → branch `spec-v1.2`, environment `staging
 
 It never runs `db push`, `functions deploy` or `secrets set`. Copy the summary into PR #1. At the W1-19 re-run, "Reporters by status" must show no `verified` reporter outside the demo orgs (D19: step 11 renames the label to `active` as it is); otherwise stop and set those reporters to `invited` first. The backup (a `pg_dump` and a copy of the `audio`/`photos` buckets) is taken at the cut-over, right before the first `db push` to staging (W1-19), to a place the owner chooses: it holds personal data, and a dump taken now would be stale by then.
 
+### Cut-over (W1-19), step by step
+
+The v1.2 deploy to staging (`abuanbyzttuqksdctqcp`), in this order. Step 0 is local; **every other step changes or reads a hosted system and needs the owner's approval first, one step at a time.** Each step lists its preconditions, the exact command, how to verify it and how to back out. After step 4 there is no partial rollback: the schema is v1.2 and only this branch's panel and functions read it, so the way back is forward (fix and re-dispatch) or, as the last resort, the step 1 backup restored into a fresh project. `docs/DEMO_NOTES.md` has the URLs, logins and the rehearsal checklist that follows step 7.
+
+Names used below: panel `https://staging-sitelog.netlify.app` (Netlify key `staging`), field site `https://sitelog-field-staging-ertannnc.netlify.app` (key `field-staging`; take the exact URL from the field job's run summary if it differs), the staging session-pooler connection string from Dashboard → Connect → Session pooler (port 5432) as `$STAGING_DB_URL`, kept in the shell only.
+
+**0. Local pre-flight** (no approval needed). On a clean checkout of `spec-v1.2`:
+
+```sh
+git fetch origin && git switch spec-v1.2 && git pull --ff-only && pnpm install --frozen-lockfile
+pnpm check && pnpm cutover:preflight -- --full-db
+```
+
+`cutover:preflight` (`scripts/src/cutover-preflight.ts`) touches nothing remote. It checks the env inventory (every variable the functions, the worker and the bundles read is in `.env.example`; the browser bundles read only public `VITE_*` names; each cut-over setting below is read where it is set), runs `pnpm test:db` including `supabase/db-tests/src/cutover.test.ts` (this whole sequence on a staging-shaped PGlite database: the 16 v1.0 migrations with staging's inventory rows, the D19 check, `supabase/ops/discard-backlog.sql`, every v1.2 migration in one push, the post-push checks, today's demo seed next to the customer org), prints what today's seed would be, builds the panel and the field app with a sentinel in every secret-bearing variable and scans both `dist` folders for the sentinels, the secret values of your local `.env` files, service-role JWTs, key shapes and server-only variable names. All lines `PASS`, else stop. Also needed before step 1: GitHub Actions runners (the Deploy workflow; on 2026-10-15 jobs got no runner), the Anthropic and Deepgram keys, a place for the backup, and a time slot (steps 5–8 after 17:00 Chicago, below).
+
+**1. Inventory re-run and backup** (owner-approved; reads only).
+
+- Run: Actions → Deploy → Run workflow → branch `spec-v1.2`, environment `staging`, target `inventory` (`gh workflow run deploy.yml --ref spec-v1.2 -f environment=staging -f target=inventory`).
+- Verify in the run summary: the 16 v1.0 migrations applied and the v1.2 ones pending; "Reporters by status" shows no `verified` reporter outside the demo orgs (D19). If one exists, stop: set those reporters to `invited` (`update reporters set status = 'invited' where status = 'verified' and org_id <> '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d';`, owner-approved) and re-run the inventory. Note the queued jobs (2026-10-13: `send_welcome`, `build_evidence_pack`): step 2 discards them.
+- Backup, right after the inventory and before step 2 (from here to the push only steps 2 and 3 write, and step 2 only marks jobs), to the place the owner chose (it holds personal data; the free tier has no point-in-time recovery):
+
+  ```sh
+  pg_dump "$STAGING_DB_URL" -Fc --no-owner -n public -n storage -t auth.users -f "sitelog-staging-pre-v1.2-$(date -u +%Y%m%dT%H%MZ).dump"   # pg_dump 17
+  supabase link --project-ref abuanbyzttuqksdctqcp
+  for b in audio photos logos pdfs exports invoices; do supabase storage cp -r "ss:///$b" "./storage-backup/$b" --experimental; done
+  ```
+
+  Verify: `pg_restore -l <file> | grep -c 'TABLE DATA'` lists the tables; the copied object count matches the inventory's "storage objects per bucket" (2026-10-13: one logo). A bucket that does not exist yet is skipped with an error; that is fine.
+
+- Back out: nothing changed.
+
+**2. Discard the WhatsApp-era backlog** (owner-approved). Precondition: no worker runs against staging (none exists: no Fly app). Run `supabase/ops/discard-backlog.sql` in the staging SQL editor (or `psql "$STAGING_DB_URL" -f supabase/ops/discard-backlog.sql`). It marks every job queued for more than an hour (and any stale `running` one) `failed` with `last_error = 'discarded: queued before the v1.2 cut-over (W1-19)'` and writes one `ops.backlog_discarded` audit row with the counts per type. Verify: its last select shows the counts the inventory listed. Back out (only if the cut-over is abandoned, and never with a worker running: `send_welcome` would send a WhatsApp template): `update jobs set status = 'queued', last_error = null, finished_at = null where last_error = 'discarded: queued before the v1.2 cut-over (W1-19)';`.
+
+**3. Secrets and settings** (owner-approved). Set them before the deploy, so `field-api` and `sms-webhook` start with them. Generate `LINK_SIGNING_SECRET` once and keep it in the password manager: the worker needs the same value (step 7), and changing it later invalidates every device code in flight.
+
+```sh
+supabase secrets list --project-ref abuanbyzttuqksdctqcp          # names only; keep an existing LINK_SIGNING_SECRET
+supabase secrets set --project-ref abuanbyzttuqksdctqcp \
+  LINK_SIGNING_SECRET="$LINK_SIGNING_SECRET" \
+  FIELD_APP_URL=https://sitelog-field-staging-ertannnc.netlify.app \
+  APP_URL=https://staging-sitelog.netlify.app
+```
+
+- `CORS_EXTRA_ORIGINS`: not needed for the demo (`field-api` takes `FIELD_APP_URL`, the `api-*` functions `APP_URL`); set it only for another origin that must call staging's functions.
+- `STRIPE_PRICE_ID_SITE_US`: only together with Stripe on staging (the inventory found no `STRIPE_*` secret, so billing is off there); then set it, deploy, and unset the old `STRIPE_PRICE_ID_SITE` (GAP 9.1).
+- `DEEPGRAM_API_KEY` and `ANTHROPIC_API_KEY` are the worker's, not the functions': they go in its `.env` in step 7.
+- No pack sender id or voice number (`pnpm countries:set`) before the demo unless the owner approves one: every text stays on `console`.
+- Supabase Dashboard → Authentication → URL Configuration: Site URL `https://staging-sitelog.netlify.app`, Redirect URLs include `https://staging-sitelog.netlify.app/**`.
+- The `staging` GitHub Environment already holds what the panel and field jobs read (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `NETLIFY_AUTH_TOKEN`, `SUPABASE_PROJECT_REF`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_URL`); check them, since the web job stops on a missing or malformed anon key. `VITE_DEMO_PHONE_ALL_ORGS` is optional (the demo org's admin sees the Demo phone without it).
+- Verify: `supabase secrets list` shows the three names. Back out: `supabase secrets unset NAME`.
+
+**4. Merge and deploy, back to back** (owner-approved; one window). The renames in `20261014000003_renames_billing.sql` break the deployed v1.0 panel and functions, so the push ships only with this branch's functions and panel, in one dispatch.
+
+- Precondition: `pnpm check` and `pnpm test:db` green on the commit to merge (CI, or locally while Actions has no runners); steps 1–3 done.
+- Merge PR #1 (`spec-v1.2` → `claude/focused-newton-5v0u2q`; a fast-forward on 2026-10-15). From then on the live branch runs this branch's `deploy.yml` (guard, field job).
+- Run: Actions → Deploy → Run workflow → branch `claude/focused-newton-5v0u2q`, environment `staging`, target `all` (`gh workflow run deploy.yml --ref claude/focused-newton-5v0u2q -f environment=staging -f target=all`). Expected: "Pending migrations" lists `20261013000006_enums_v1_2.sql` onwards; db push; functions deploy (every function in `supabase/config.toml`, `field-api` and `sms-webhook` among them; `whatsapp-webhook` stays deployed until step 22); the worker job skips with a notice (no `FLY_*`); panel and field app `--prod`, the field `_redirects` with `/api/*` to `https://abuanbyzttuqksdctqcp.supabase.co/functions/v1/field-api/:splat`.
+- Verify (the ticket's smoke checks):
+  - SQL editor: `select code, sms_provider, sms_sender_id, voice_number from countries;` → every `sms_sender_id` and `voice_number` null. `select name, country, is_demo from orgs;` → the customer org `US`, not a demo org.
+  - `curl -si -X POST https://sitelog-field-staging-ertannnc.netlify.app/api/resolve -H 'Origin: https://sitelog-field-staging-ertannnc.netlify.app' -H 'Content-Type: application/json' -d '{"code":"ZZZZZZ"}'` → a JSON answer from `field-api` (an unknown code) with `cache-control: no-store`; an HTML page means the field build had no `/api` rule.
+  - The panel signs in (your own account's magic link) and shows the customer org.
+  - The W1-07 cookie probe is the device check of step 8: Today loads after the code is accepted only if `Set-Cookie` and `Cookie` pass the Netlify proxy.
+- Back out: if the Supabase job fails before `20261014000003` applies, the old panel still works; fix and re-dispatch. After it, fix forward (re-dispatch with the fix; Netlify's "Publish deploy" of an older deploy only brings back a panel that cannot read the schema). Last resort: restore the step 1 dump into a new project.
+
+**5. Demo seed** (owner-approved; after 17:00 Chicago for §18.1's view with Pier 9 filed and five sites awaiting, that is 01:00 Istanbul while Chicago is on daylight time, 02:00 from Nov 1; earlier, the day stops at the clock and all six sites are awaiting). It writes only the `is_demo` orgs (Kestrel, Demir Yapı) in one transaction and never touches the customer org (`cutover.test.ts` proves it):
+
+```sh
+SUPABASE_DB_URL="$STAGING_DB_URL" FIELD_APP_URL=https://sitelog-field-staging-ertannnc.netlify.app \
+  DEMO_OFFICE_PASSWORD='<16+ characters, not kept>' pnpm seed:demo -- --date today --apply --allow-staging
+```
+
+Verify: it prints the staging target and `applied: Kestrel Build Group, Demir Yapı A.Ş.`; `select name, is_demo from orgs;` → three orgs, two demo. Run it again to reset between rehearsals. Back out: `delete from orgs where is_demo;` (cascades to their rows only; owner-approved).
+
+**6. Sign-in links for the demo office users** (owner-approved; uses the staging service-role key from Dashboard → Settings → API, kept in the shell). The panel signs in by magic link only and `.example` addresses get no mail, so mint a one-time link per user, as the `phone-setup` job does on the preview:
+
+```sh
+for email in lena@kestrelbuild.example elif@demiryapi.example; do
+  curl -fsS "https://abuanbyzttuqksdctqcp.supabase.co/auth/v1/admin/generate_link" \
+    -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" -H 'Content-Type: application/json' \
+    -d "{\"type\":\"magiclink\",\"email\":\"$email\",\"redirect_to\":\"https://staging-sitelog.netlify.app/auth/callback\"}" \
+    | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.action_link||j.properties?.action_link)})'
+done
+```
+
+Each link works once, for an hour; open it in the browser that runs the demo. Verify: the panel opens as Lena on Kestrel's Overview (as Elif, in Turkish on Demir Yapı).
+
+**7. The worker on the developer machine** (owner-approved; GAP §8 Q9). In `apps/worker/.env` (its values win over the root `.env`; never commit it):
+
+```sh
+SUPABASE_URL=https://abuanbyzttuqksdctqcp.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<staging service role>
+SUPABASE_DB_URL=<$STAGING_DB_URL, the session pooler, port 5432: LISTEN needs session mode>
+APP_URL=https://staging-sitelog.netlify.app
+FIELD_APP_URL=https://sitelog-field-staging-ertannnc.netlify.app
+LINK_SIGNING_SECRET=<the value of step 3>
+TRANSCRIBE_PROVIDER=deepgram
+TRANSCRIBE_MODEL=nova-3
+DEEPGRAM_API_KEY=<key>
+ANTHROPIC_API_KEY=<key>
+CLAUDE_MODEL=<the owner's choice, GAP §8 Q8>
+CLAUDE_MODEL_FAST=<the owner's choice>
+WEATHER_API_BASE=https://api.open-meteo.com/v1/forecast   # the free endpoint; the default customer-api needs WEATHER_API_KEY
+EMAIL_PROVIDER=console                                     # or resend + RESEND_API_KEY + EMAIL_FROM (the demo recipients are .example)
+```
+
+- Precondition: `select type, status, count(*) from jobs where status in ('queued', 'running') group by 1, 2;` shows nothing older than the seed (else run step 2's file again).
+- Run: `pnpm dev:worker` (no Twilio or İletimerkezi credentials: every pack has no sender, so every text goes to `console`).
+- Verify: `curl -s localhost:8080/health` → `ok: true, listening: true`; the log line `sms transport per country pack` shows `console` for every pack; no `transcription provider` line saying "the fake transcriber (fixtures/voice) answers" (outside production a missing `DEEPGRAM_API_KEY` falls back to the fixtures with only that line). Back out: stop the process; queued jobs wait.
+
+**8. Dress rehearsal** (owner, on a real phone): `docs/DEMO_NOTES.md` "Rehearsal checklist", twice in a row. Reset between runs with step 5. That is the ticket's Done when.
+
+Afterwards (not part of the demo): step 22 removes `whatsapp-webhook`, the `WA_*` secrets and `VITE_WA_DISPLAY_NUMBER`, each owner-approved.
+
 ### Country packs per environment (GAP D47, W1-06a)
 
 Everything country-specific is a row of `countries` (spec §4.6): languages, units, paper, currency, default time zone, message channel order, SMS and WhatsApp provider, SMS sender type, two-way SMS, links in SMS, legal keys. Two kinds of value:
@@ -124,7 +236,7 @@ A local stack needs no more flags; a hosted database needs the owner's approval 
 
 ### Before the worker runs (typed reports)
 
-Until WhatsApp and the AI keys are live, offices type reports in the panel (Reports → **New report**). `create_office_report()` files them and the panel renders each version's PDF in the browser (`@sitelog/pdf`, the same document as the worker), uploads it to `pdfs/` and records it with `attach_version_pdf()`; nothing is emailed. Office edits still enqueue `render_pdf` jobs (with the report-updated email). Before starting the worker for the first time, discard the backlog so customers do not get weeks-old update emails:
+Until WhatsApp and the AI keys are live, offices type reports in the panel (Reports → **New report**). `create_office_report()` files them and the panel renders each version's PDF in the browser (`@sitelog/pdf`, the same document as the worker), uploads it to `pdfs/` and records it with `attach_version_pdf()`; nothing is emailed. Office edits still enqueue `render_pdf` jobs (with the report-updated email). Before starting the worker for the first time, discard the backlog so customers do not get weeks-old update emails (at the W1-19 cut-over with `supabase/ops/discard-backlog.sql`, which does the same with an audit row, step 2 above):
 
 ```sql
 update jobs set status = 'failed', last_error = 'discarded: queued before the worker existed'

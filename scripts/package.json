@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Dev scripts: webhook replay, demo seed generation, country pack endpoints.",
+  "description": "Dev scripts: webhook replay, demo seed generation, country pack endpoints, the cut-over pre-flight.",
   "scripts": {
     "replay-webhook": "tsx src/replay-webhook.ts",
     "seed-demo": "tsx src/seed-demo.ts",
     "countries-set": "tsx src/countries-set.ts",
+    "cutover-preflight": "tsx src/cutover-preflight.ts",
     "db-types-drift": "tsx src/db-types-drift.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
