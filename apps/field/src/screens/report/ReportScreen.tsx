@@ -1,11 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import type { AnswerConfirmation, ReportView } from '@sitelog/shared/field-contract.ts';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { NoLink } from '@/screens/NoLink';
 import { useSession } from '@/session/useSession';
 import { Draft } from './Draft';
-import { Filed } from './Filed';
+import { Filed, PDF_WAIT_MS } from './Filed';
 import { confirmationLine } from './lines';
 import { pollsIn, reportPhase } from './phase';
 import { ProcessingView } from './Processing';
@@ -42,11 +42,20 @@ function ReportLoaded({
   const [confirmation, setConfirmation] = useState<AnswerConfirmation | null>(null);
   // A refusal that sent the screen back to the latest view ("That question was already answered").
   const [notice, setNotice] = useState<string | null>(null);
+  // Filed without a PDF: when the screen first saw it, and whether it has stopped waiting.
+  const pdfWaitFrom = useRef<number | null>(null);
+  const [pdfLate, setPdfLate] = useState(false);
   const keepPolling = useCallback(
     (view: ReportView) => {
       const next = reportPhase(view, { answered, filing });
-      // Filed before render_pdf stored the file: check again until the PDF is there.
-      return pollsIn(next) || (next === 'filed' && !view.pdfUrl);
+      if (pollsIn(next)) return true;
+      if (next !== 'filed' || view.pdfUrl) return false;
+      // Filed before render_pdf stored the file: check again until the PDF is there, for
+      // PDF_WAIT_MS at most (a render that died must not poll forever).
+      pdfWaitFrom.current ??= Date.now();
+      if (Date.now() - pdfWaitFrom.current < PDF_WAIT_MS) return true;
+      setPdfLate(true);
+      return false;
     },
     [answered, filing],
   );
@@ -131,6 +140,7 @@ function ReportLoaded({
         reporterName={reporterName}
         onRefresh={restart}
         notice={notices}
+        pdfLate={pdfLate && !view.pdfUrl}
       />
     );
   }

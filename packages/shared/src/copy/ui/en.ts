@@ -361,6 +361,8 @@ export const uiEn = {
       pdfBadge: 'PDF',
       /** render_pdf has not stored the file yet: the screen checks again. */
       pdfPreparing: 'Preparing the PDF…',
+      /** The PDF is still not there after `PDF_WAIT_MS`: the screen stops checking. */
+      pdfLate: 'The PDF is on its way. The office already has your report.',
       /** Read by screen readers after "Open the PDF". */
       opensNewTab: '(opens in a new tab)',
     },

@@ -2,7 +2,7 @@ import { act, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { i18n } from '@/i18n/i18n';
 import { demoSession, fakeRoutes, renderApp, SITE, US_COUNTRY } from '@/test/render';
-import { PDF_URL_REFRESH_MS } from './Filed';
+import { PDF_URL_REFRESH_MS, PDF_WAIT_MS } from './Filed';
 import { reportView } from './test-views';
 
 const PDF = 'https://storage.example/pdfs/RL-2041-0188_v1.pdf?token=a';
@@ -73,6 +73,36 @@ describe('Filed (F8, Field-07)', () => {
     const calls = vi.mocked(routes.report).mock.calls.length;
     await act(() => vi.advanceTimersByTimeAsync(10_000));
     expect(routes.report).toHaveBeenCalledTimes(calls);
+  });
+
+  it('stops checking when the PDF never comes and says it is on its way', async () => {
+    const routes = fakeRoutes({ report: vi.fn().mockResolvedValue(filedView({ pdfUrl: null })) });
+    renderApp('/report/r1', { routes });
+    await screen.findByRole('heading', { level: 1, name: 'Filed.' });
+    expect(screen.getByRole('status')).toHaveTextContent('Preparing the PDF…');
+    await act(() => vi.advanceTimersByTimeAsync(PDF_WAIT_MS + 10_000));
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'The PDF is on its way. The office already has your report.',
+    );
+    expect(screen.queryByRole('link', { name: /Open the PDF/ })).toBeNull();
+    const calls = vi.mocked(routes.report).mock.calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(10 * 60_000));
+    expect(routes.report).toHaveBeenCalledTimes(calls);
+  });
+
+  it.each([
+    ['es', 'es-US', 'El PDF está en camino. La oficina ya tiene su reporte.'],
+    ['tr', 'tr-TR', 'PDF yolda. Raporunuz ofise ulaştı.'],
+  ] as const)('says the PDF is on its way in %s', async (language, locale, text) => {
+    await act(() => i18n.changeLanguage(language));
+    const routes = fakeRoutes({ report: vi.fn().mockResolvedValue(filedView({ pdfUrl: null })) });
+    renderApp('/report/r1', {
+      routes,
+      session: demoSession({ reporter: { ...demoSession().reporter, locale } }),
+    });
+    await screen.findByRole('heading', { level: 1 });
+    await act(() => vi.advanceTimersByTimeAsync(PDF_WAIT_MS + 10_000));
+    expect(screen.getByRole('status')).toHaveTextContent(text);
   });
 
   it('speaks Spanish', async () => {

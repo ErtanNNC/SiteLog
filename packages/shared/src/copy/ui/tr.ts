@@ -1423,6 +1423,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       pdf: 'PDF’i aç',
       pdfBadge: 'PDF',
       pdfPreparing: 'PDF hazırlanıyor…',
+      pdfLate: 'PDF yolda. Raporunuz ofise ulaştı.',
       opensNewTab: '(yeni sekmede açılır)',
     },
     offline: {

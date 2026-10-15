@@ -318,6 +318,7 @@ export const uiEs: UiResources = {
       pdf: 'Abrir el PDF',
       pdfBadge: 'PDF',
       pdfPreparing: 'Preparando el PDF…',
+      pdfLate: 'El PDF está en camino. La oficina ya tiene su reporte.',
       opensNewTab: '(se abre en una pestaña nueva)',
     },
     offline: {

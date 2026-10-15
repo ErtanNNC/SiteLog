@@ -15,6 +15,12 @@ import { useFieldCopy } from '@/i18n/useFieldCopy';
  */
 export const PDF_URL_REFRESH_MS = 9 * 60_000;
 
+/**
+ * How long the screen checks for a PDF render_pdf has not stored: then it stops and says the PDF
+ * is on its way (a render that died must not keep the phone polling forever).
+ */
+export const PDF_WAIT_MS = 3 * 60_000;
+
 /** A placeholder no copy contains: where a bold value goes in a translated sentence. */
 const SLOT = '\u0001';
 
@@ -32,7 +38,8 @@ function withNodes(text: string, nodes: ReactNode[]): ReactNode[] {
  * Filed (F8, Field-07; W1-15): the check, "Filed.", one line of thanks with the report number,
  * and the PDF, which opens through the view's freshly signed URL (also the target of the `filed`
  * text's link, `/r/{code}/report/{id}`). Confetti-free. While render_pdf has not stored the file
- * the card says so and `ReportScreen` keeps checking; `onRefresh` renews the signed URL before it
+ * the card says so and `ReportScreen` keeps checking, for `PDF_WAIT_MS` at most (then the card says
+ * the PDF is on its way and the office has the report); `onRefresh` renews the signed URL before it
  * expires.
  *
  * Week 1 (spec §19 Q67): no *Add photos* and no *Past reports* with the edit hint. A filed report
@@ -46,11 +53,14 @@ export function Filed({
   reporterName,
   onRefresh,
   notice,
+  pdfLate = false,
 }: {
   view: ReportView;
   reporterName: string;
   onRefresh: () => void;
   notice?: ReactNode;
+  /** No PDF after `PDF_WAIT_MS`: the screen stopped checking. */
+  pdfLate?: boolean;
 }) {
   const { t } = useFieldCopy();
 
@@ -77,7 +87,7 @@ export function Filed({
       <span className="flex min-w-0 flex-col gap-0.5">
         <b className="text-[15px]">{t('filed.pdf')}</b>{' '}
         <span className="font-mono text-[13px] text-dust [overflow-wrap:anywhere]">
-          {view.pdfUrl ? fileName : t('filed.pdfPreparing')}
+          {view.pdfUrl ? fileName : t(pdfLate ? 'filed.pdfLate' : 'filed.pdfPreparing')}
         </span>
       </span>
     </>
