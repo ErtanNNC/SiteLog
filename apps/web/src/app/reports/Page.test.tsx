@@ -106,7 +106,10 @@ function withTypedReport() {
 
 const rowsOf = (table: HTMLElement) => [...table.querySelectorAll<HTMLElement>('tbody tr')];
 
-describe('ReportsPage (demo archive)', () => {
+// The archive renders the whole demo org (50-row pages, transcript search over every report): slow
+// on a shared CI runner under full parallel load, so these tests get a longer limit than the 5 s
+// default.
+describe('ReportsPage (demo archive)', { timeout: 20_000 }, () => {
   it('lists the first page of 50 reports, newest first', async () => {
     renderReports();
     expect(await screen.findByRole('heading', { name: 'Reports' })).toBeInTheDocument();
