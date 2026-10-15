@@ -103,8 +103,8 @@ describe('Recording (F5 step 2, Field-04)', () => {
       level: 1,
       name: 'I couldn’t hear anything — try again',
     });
-    // Focus moves to the new phase's heading (Stop & send is gone).
-    expect(heading).toHaveFocus();
+    // Focus moves to the new phase's heading (Stop & send is gone), in an effect after render.
+    await waitFor(() => expect(heading).toHaveFocus());
     expect(q.calls).toHaveLength(0);
     await waitFor(() => expect(q.store.drafts.size).toBe(0));
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
