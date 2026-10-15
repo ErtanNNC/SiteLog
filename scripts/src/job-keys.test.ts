@@ -59,12 +59,12 @@ const AUDITED: Record<string, string> = {
   'weekly_digest:{}:{}': 'per org and week',
   'retention:{}': 'per UTC day',
   'job.dedupeKey': "scheduler-tick's planned jobs: the weather, digest and retention keys above",
-  'email:report_missing:{}':
-    'scheduler-tick (spec §19 Q55): per site-day, enqueued by the tick whose update made the day missing; a day becomes missing once (reminder_stage 4 stays)',
   'reminder:{}:{}':
     'per site-day and ladder stage (logic.ts reminderJob, unused since W1-10 until the M6 SMS ladder)',
   // SQL (the latest body of each function)
   "sql:'transcribe_upload:' || u.id": 'field_complete_upload: one transcription per upload',
+  "sql:'email:report_missing:' || p_site_day_id":
+    'mark_site_day_missing (spec §19 Q55): per site-day, enqueued in the transaction whose guarded update made the day missing; a day becomes missing once (reminder_stage 4 stays)',
   "sql:'file:' || r.id || ':v' || p_version":
     'field_confirm_report: the first web confirm of a draft version (a dead job is re-queued)',
   "sql:'file:' || r.id || ':v' || p_version || ':c' || v_n":
@@ -280,18 +280,21 @@ describe('scheduler-tick (W1-10): the WhatsApp reminder ladder is stopped', () =
     }
   });
 
-  it('enqueues the jobs planTickJobs plans (weather, digest, retention) and the missing email', () => {
-    expect([...source.matchAll(/enqueueJob\(\s*admin,\s*'([a-z_]+)'/g)].map((m) => m[1])).toEqual([
-      'send_email',
-    ]);
-    expect(source).toContain("kind: 'report_missing'");
+  it('enqueues only the jobs planTickJobs plans (weather, digest, retention)', () => {
+    expect([...source.matchAll(/enqueueJob\(\s*admin,\s*'([a-z_]+)'/g)]).toEqual([]);
     expect(source).toContain('planTickJobs(');
   });
 
-  it('marks a past-deadline day missing (§7.1), audited, and alerts the office (spec §19 Q55)', () => {
+  it('marks a past-deadline day missing (§7.1) and alerts the office in one transaction (spec §19 Q55)', () => {
     expect(source).toContain('planMissing(');
-    expect(source).toContain("action: 'site_day.status_changed'");
-    expect(source).toContain("kind: 'missing_report'");
+    expect(source).toContain("rpc('mark_site_day_missing'");
     expect(source).toContain('missingNotification(');
+    const sql = readFileSync(
+      join(ROOT, 'supabase', 'migrations', '20261015000061_mark_site_day_missing.sql'),
+      'utf8',
+    );
+    expect(sql).toContain("'site_day.status_changed'");
+    expect(sql).toContain("'missing_report'");
+    expect(sql).toContain("'report_missing'");
   });
 });
