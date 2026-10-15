@@ -52,6 +52,7 @@ import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import { sourceMediaId } from '@sitelog/shared/report/media.ts';
 import { reportLanguageFor } from '@sitelog/shared/locale.ts';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
+import { noticeData } from '@sitelog/shared/notifications.ts';
 import { deadlineInstant } from '@sitelog/shared/schedule/reminders.ts';
 import { fromZonedTime } from 'date-fns-tz';
 import { copy } from '@/copy/en';
@@ -390,6 +391,7 @@ export class DemoStore {
         title: `${report.report_no} was edited after sign-off`,
         body: changeNote,
         target_path: `/reports/${report.id}`,
+        data: noticeData('report_edited', { reportNo: report.report_no }),
       });
     }
     return next;
@@ -1757,6 +1759,11 @@ export class DemoStore {
         title: `EOT evidence pack ready — ${site?.name ?? copy.hours.allSites}`,
         body: null,
         target_path: '/weather',
+        data: noticeData('pack_ready', {
+          site: site?.name ?? null,
+          from: input.periodStart,
+          to: input.periodEnd,
+        }),
       });
       this.emit({ table: 'evidence_packs', id });
     }, 1500);
@@ -1954,6 +1961,12 @@ export class DemoStore {
       title: `${site.name} — late report in`,
       body: `${reportNo} · ${totals.crewOnSite} on site · ${totals.totalHours} h`,
       target_path: `/reports/${reportId}`,
+      data: noticeData('late_report', {
+        site: site.name,
+        reportNo,
+        crew: totals.crewOnSite,
+        hours: totals.totalHours,
+      }),
     });
     const missingNotif = d.notifications.find(
       (n) => n.kind === 'missing_report' && !n.read_at && n.title.startsWith(site.name),
@@ -2407,6 +2420,7 @@ export class DemoStore {
         title: `${r.report_no} needs review`,
         body: input.reasons.join(', '),
         target_path: `/reports/${r.id}`,
+        data: noticeData('needs_review', { reportNo: r.report_no, reasons: input.reasons }),
       });
     }
     if (input.kind !== 'no_work' || d.settings.no_work_pdf) this.pdfRendered(r, 1, input.at);

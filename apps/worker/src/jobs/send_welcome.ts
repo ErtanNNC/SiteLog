@@ -7,6 +7,8 @@ import {
   formatDeadline,
   formatPhone,
   isActiveReporterStatus,
+  noticeData,
+  type NoticeData,
   type NotifyOutcome,
 } from '@sitelog/shared';
 import { loadOrgPack, workerLinkStore } from '../messaging';
@@ -88,8 +90,16 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
     });
   }
 
-  const notify = (title: string, body: string, kind = 'reporter_invite_failed') =>
-    ctx.db.notifyOrg(reporter.org_id, kind, `${reporter.name}: ${title}`, body, '/team');
+  const notify = (title: string, body: string, data: NoticeData) =>
+    ctx.db.notifyOrg(
+      reporter.org_id,
+      'reporter_invite_failed',
+      `${reporter.name}: ${title}`,
+      body,
+      '/team',
+      null,
+      data,
+    );
 
   let outcome: NotifyOutcome;
   try {
@@ -117,6 +127,11 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
         `${reporter.name} opted out of texts`,
         `${formatPhone(reporter.phone_e164)} is on the SMS provider's opt-out list (they replied STOP to this sender before), so SiteLog texts them nothing until they reply START. Call them if you need their reports.`,
         '/team',
+        null,
+        noticeData('reporter_opted_out', {
+          name: reporter.name,
+          phone: formatPhone(reporter.phone_e164),
+        }),
       );
       await ctx.db.logAudit({
         org_id: reporter.org_id,
@@ -131,7 +146,11 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
     if (err.undeliverable) {
       // The provider refuses this number for good (invalid, landline, unroutable): no retry.
       await ctx.db.updateReporter(reporter.id, { last_invite_error: error });
-      await notify('the welcome text could not be delivered', error);
+      await notify(
+        'the welcome text could not be delivered',
+        error,
+        noticeData('welcome_undeliverable', { name: reporter.name }),
+      );
       await ctx.db.logAudit({
         org_id: reporter.org_id,
         actor_type: 'system',
@@ -150,6 +169,7 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
       await notify(
         'the welcome text failed at the SMS provider',
         `Texts are failing for this account (${error}). SiteLog has been alerted; the reporter was not marked as invited. Re-send the welcome from Team & numbers once the provider is back.`,
+        noticeData('welcome_provider_fault', { name: reporter.name, error }),
       );
     }
     await ctx.db.logAudit({
@@ -176,9 +196,14 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
       detail: outcome.detail ?? null,
     });
     if (outcome.detail === 'disabled') return;
+    const consoleRealOrg = outcome.detail === 'console_real_org';
     await notify(
       'the welcome text was not sent',
-      outcome.detail === 'console_real_org' ? CONSOLE_REAL_ORG : WELCOME_SKIPPED[outcome.reason],
+      consoleRealOrg ? CONSOLE_REAL_ORG : WELCOME_SKIPPED[outcome.reason],
+      noticeData('welcome_not_sent', {
+        name: reporter.name,
+        reason: consoleRealOrg ? 'console_real_org' : outcome.reason,
+      }),
     );
     return;
   }

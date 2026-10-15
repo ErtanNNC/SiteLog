@@ -12,6 +12,8 @@ import {
   ladderTimes,
   localDate,
   nextDueStage,
+  noticeData,
+  type NoticeData,
   REMINDER_STAGE,
   reminderVars,
   renderTemplateText,
@@ -230,10 +232,13 @@ export function missingNotification(
 ): {
   title: string;
   body: string;
+  /** What the panel renders in the reader's language; title and body are the English fallback. */
+  data: NoticeData;
 } {
   return {
     title: `${siteName} — no report`,
     body: `${reporterFirstName ?? 'The site manager'} hasn’t sent today’s report, and the deadline has passed.`,
+    data: noticeData('missing_report', { site: siteName, first: reporterFirstName }),
   };
 }
 

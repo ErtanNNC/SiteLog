@@ -1,5 +1,5 @@
 import { openAiTranscribeModel } from '../../config';
-import { waCopy, type ConversationRow, type MessageRow } from '@sitelog/shared';
+import { noticeData, waCopy, type ConversationRow, type MessageRow } from '@sitelog/shared';
 import { guessSite } from '../../ai/site-guess';
 import { buildTranscriptionPrompt, transcribeAudio } from '../../ai/transcribe';
 import type { Ctx } from '../../context';
@@ -113,6 +113,8 @@ export async function handleUnknownSender(
       'Unknown number tried to report',
       snippet,
       '/team',
+      null,
+      noticeData('unknown_contact', {}),
     );
     await ctx.db.logAudit({
       org_id: guessedOrgId,

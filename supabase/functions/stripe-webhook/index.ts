@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { noticeData } from '@sitelog/shared/notifications.ts';
 import { logAudit } from '../_shared/audit.ts';
 import { idOf, statusAfterInvoicePaid } from '../_shared/billing.ts';
 import { requireEnv } from '../_shared/env.ts';
@@ -121,6 +122,7 @@ async function handleEvent(stripe: Stripe, admin: AppClient, event: Stripe.Event
         title: 'Payment failed',
         body: 'Stripe could not charge your card. Update the payment method in Billing to keep reports and reminders flowing.',
         targetPath: '/billing',
+        data: noticeData('payment_failed', {}),
       });
       return;
     }
@@ -199,6 +201,7 @@ async function applyBillingChange(
       title: 'Subscription canceled',
       body: 'Reminders and new site-days stop until the subscription is restarted from Billing.',
       targetPath: '/billing',
+      data: noticeData('subscription_canceled', {}),
     });
   }
   org.billing_status = to;

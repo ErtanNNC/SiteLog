@@ -1,5 +1,11 @@
 import * as Sentry from '@sentry/node';
-import { JOB_MAX_ATTEMPTS, type JobRow, type JobTypeKey } from '@sitelog/shared';
+import {
+  JOB_MAX_ATTEMPTS,
+  noticeData,
+  type JobRow,
+  type JobTypeKey,
+  type NoticeData,
+} from '@sitelog/shared';
 import type { Ctx } from './context';
 import { rawPayload } from './jobs/types';
 
@@ -49,6 +55,8 @@ export interface DeadJobNotice {
   title: string;
   body: string;
   targetPath: string;
+  /** What the panel renders in the reader's language; title and body are the English fallback. */
+  data: NoticeData;
 }
 
 /** What the dead job was about: its org, reporter, report or message, from its payload. */
@@ -112,6 +120,11 @@ export function deadJobNotice(job: JobRow, s: DeadJobSubject): DeadJobNotice | n
         : `${s.reporter.name}: a message to them was not sent`,
       body: `${tries} (${type}). They may be waiting for an answer; contact them directly if it matters today. SiteLog has been alerted.`,
       targetPath: '/team',
+      data: noticeData(inbound ? 'message_not_handled' : 'message_not_sent', {
+        name: s.reporter.name,
+        job: type,
+        tries: JOB_MAX_ATTEMPTS,
+      }),
     };
   }
   if (REPORT_JOB_TYPES.includes(type) && s.report) {
@@ -120,6 +133,11 @@ export function deadJobNotice(job: JobRow, s: DeadJobSubject): DeadJobNotice | n
       title: `${s.report.reportNo}: processing stopped`,
       body: `${tries} (${type}). The reporter may be waiting for their draft. SiteLog has been alerted; open the report to check its sources.`,
       targetPath: `/reports/${s.report.id}`,
+      data: noticeData('processing_failed', {
+        reportNo: s.report.reportNo,
+        job: type,
+        tries: JOB_MAX_ATTEMPTS,
+      }),
     };
   }
   return null;
@@ -142,6 +160,8 @@ export async function onDeadJob(ctx: Ctx, job: JobRow, err: unknown): Promise<vo
         notice.title,
         notice.body,
         notice.targetPath,
+        null,
+        notice.data,
       );
     }
     const entity = subject.report

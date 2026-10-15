@@ -1,6 +1,7 @@
 import {
   fieldReportLinkUrl,
   jobKeys,
+  noticeData,
   type DailyReportDataV1,
   type FieldChannel,
   type ReportRow,
@@ -211,6 +212,8 @@ export async function fileReport(
       `${report.report_no} needs review`,
       reasons.join(', '),
       `/reports/${report.id}`,
+      null,
+      noticeData('needs_review', { reportNo: report.report_no, reasons }),
     );
   }
 

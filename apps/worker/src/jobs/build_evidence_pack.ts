@@ -1,4 +1,4 @@
-import { evidencePackStoragePath } from '@sitelog/shared';
+import { evidencePackStoragePath, noticeData } from '@sitelog/shared';
 import { buildEvidencePackInput, renderEvidencePackPdf } from '../pdf/render';
 import { PermanentJobError, type JobHandler } from './types';
 
@@ -41,6 +41,11 @@ export const buildEvidencePack: JobHandler<'build_evidence_pack'> = async (ctx, 
       `${pack.period_start} – ${pack.period_end}`,
       '/weather',
       pack.created_by,
+      noticeData('pack_ready', {
+        site: site.site.name,
+        from: pack.period_start,
+        to: pack.period_end,
+      }),
     );
     await ctx.db.enqueueJob(
       'send_email',

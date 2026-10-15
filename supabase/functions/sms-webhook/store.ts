@@ -4,6 +4,7 @@ import type {
   InboundSmsStore,
   MemberRole,
   MsgStatus,
+  NoticeData,
   ReporterRow,
   SmsKeyword,
 } from '@sitelog/shared';
@@ -43,6 +44,8 @@ export interface OfficeNotification {
   title: string;
   body: string;
   targetPath: string;
+  /** What the panel renders in the reader's language; title and body are the English fallback. */
+  data?: NoticeData | null;
 }
 
 export interface SmsWebhookStore extends InboundSmsStore {

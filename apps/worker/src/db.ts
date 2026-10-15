@@ -22,6 +22,7 @@ import type {
   QuestionRow,
   ReportCostRow,
   ReportRow,
+  NoticeData,
   ReportSourceRow,
   ReportStatus,
   ReportVersionRow,
@@ -220,6 +221,7 @@ export interface InboundChangeInput {
     title: string;
     body: string;
     targetPath: string;
+    data?: NoticeData | null;
   } | null;
 }
 
@@ -586,6 +588,8 @@ export interface Db {
     body?: string | null,
     targetPath?: string | null,
     userId?: string | null,
+    /** What the panel renders in the reader's language (title and body: the English fallback). */
+    data?: NoticeData | null,
   ): Promise<string>;
   logAudit(input: AuditInput): Promise<void>;
 
@@ -1341,7 +1345,8 @@ export function createDb(sql: Sql): Db {
         await tx`select log_audit(${a.org_id}, ${a.actor_type}, ${a.actor_id ?? null}, ${a.action},
           ${a.entity ?? null}, ${a.entity_id ?? null}, ${tx.json((a.diff ?? null) as never)})`;
         if (n) {
-          await tx`select notify_org(${n.orgId}, ${n.kind}, ${n.title}, ${n.body}, ${n.targetPath}, null)`;
+          await tx`select notify_org(${n.orgId}, ${n.kind}, ${n.title}, ${n.body}, ${n.targetPath}, null,
+            ${n.data ? tx.json(n.data as never) : null}::jsonb)`;
         }
       });
     },
@@ -1387,10 +1392,18 @@ export function createDb(sql: Sql): Db {
     },
 
     // notifications & audit ---------------------------------------------------------------
-    async notifyOrg(orgId, kind, title, body = null, targetPath = null, userId = null) {
-      const rows = await sql<
-        Array<{ notify_org: string }>
-      >`select notify_org(${orgId}, ${kind}, ${title}, ${body}, ${targetPath}, ${userId}) as notify_org`;
+    async notifyOrg(
+      orgId,
+      kind,
+      title,
+      body = null,
+      targetPath = null,
+      userId = null,
+      data = null,
+    ) {
+      const rows = await sql<Array<{ notify_org: string }>>`select notify_org(${orgId}, ${kind},
+        ${title}, ${body}, ${targetPath}, ${userId},
+        ${data ? sql.json(data as never) : null}::jsonb) as notify_org`;
       return rows[0]!.notify_org;
     },
     async logAudit(input) {

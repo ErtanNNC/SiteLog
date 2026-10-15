@@ -222,6 +222,7 @@ export function demoReply(data: DemoDataset, reporterId: string, body: string, a
         target_path: n.targetPath,
         read_at: null,
         created_at: at,
+        data: n.data,
       });
     }
   }

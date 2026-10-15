@@ -435,7 +435,11 @@ describe('router: draft confirmation and filing (F7)', () => {
     );
     expect((await h.db.getConversation(convo.id))!.state).toBe('idle');
     expect(h.db.data.audit.map((a) => a.action)).toContain('report.filed');
-    expect(h.db.data.notifications.some((n) => n.kind === 'needs_review')).toBe(true);
+    const review = h.db.data.notifications.find((n) => n.kind === 'needs_review')!;
+    expect(review.data).toEqual({
+      key: 'needs_review',
+      params: { reportNo: report.report_no, reasons: expect.any(Array) },
+    });
   });
 
   it('a later confirm of the same draft version files after a filing that finished without filing (D16)', async () => {

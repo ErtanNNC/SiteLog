@@ -78,7 +78,7 @@ export function workerInboundStore(db: Db): InboundSmsStore {
     clearPhoneOptOut: (phone, country) => db.clearSmsOptOut(phone, country),
     markHandled: (messageId, at) => db.markSmsHandled(messageId, at),
     async notifyOrg(n) {
-      await db.notifyOrg(n.orgId, n.kind, n.title, n.body, n.targetPath);
+      await db.notifyOrg(n.orgId, n.kind, n.title, n.body, n.targetPath, null, n.data);
     },
     audit: (entry) =>
       db.logAudit({

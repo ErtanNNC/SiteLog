@@ -6,6 +6,7 @@ import {
   keywordOf,
   msgStatusFromTwilio,
   nextMessageStatus,
+  noticeData,
   orderInboundReporters,
   parseTwilioInbound,
   parseTwilioStatus,
@@ -14,6 +15,7 @@ import {
   verifyTwilioSignature,
   type CountryPack,
   type E164,
+  type NoticeData,
   type SmsNotifier,
 } from '@sitelog/shared';
 import { HttpError, json, parseWith, readJson, withHandler } from '../_shared/http.ts';
@@ -114,6 +116,8 @@ export interface InviteNotice {
   title: string;
   body: string;
   targetPath: string;
+  /** What the panel renders in the reader's language; title and body are the English fallback. */
+  data: NoticeData;
 }
 
 /** The office's notice of a welcome text the carrier could not deliver to the number. */
@@ -127,6 +131,7 @@ export function inviteFailedNotification(
     title: `${reporter.name}: the welcome text could not be delivered`,
     body: `The carrier could not deliver the welcome text (${error}): the number may be a landline, blocked or out of service. Check it on Team & numbers, or contact them another way.`,
     targetPath: '/team',
+    data: noticeData('welcome_carrier_undelivered', { name: reporter.name, error }),
   };
 }
 
@@ -149,6 +154,7 @@ export function providerFaultNotification(
       : 'A welcome text failed at the SMS provider',
     body: `Texts are failing for this account (${error}). The SMS provider accepted the welcome text and then refused it for the account or the sender, not for the reporter's number. Re-send the welcome from Team & numbers once the provider account is fixed. Other texts that fail this way in the next hour are not notified again.`,
     targetPath: '/team',
+    data: noticeData('welcome_account_fault', { name: reporterName, error }),
   };
 }
 

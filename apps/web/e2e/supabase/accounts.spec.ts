@@ -45,7 +45,7 @@ test('accounts: the bell shows invoice gaps, not the office alerts', async ({ pa
   await expect(list).toContainText('Invoice gap: BrightLine Electric +16 h');
   for (const title of [
     'Elm St. Townhomes — no report',
-    'Oakmont Medical Center needs review',
+    'needs review',
     'Unknown number tried to report',
   ])
     await expect(list).not.toContainText(title);

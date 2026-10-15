@@ -314,6 +314,12 @@ Deno.test('siteDayPatchForStage / missingNotification', () => {
   assertEquals(missingNotification('Elm St. Townhomes', 'Priya'), {
     title: 'Elm St. Townhomes — no report',
     body: 'Priya hasn’t sent today’s report, and the deadline has passed.',
+    // The panel renders this in the reader's language (EN/TR).
+    data: { key: 'missing_report', params: { site: 'Elm St. Townhomes', first: 'Priya' } },
+  });
+  assertEquals(missingNotification('Elm St. Townhomes', null).data, {
+    key: 'missing_report',
+    params: { site: 'Elm St. Townhomes', first: null },
   });
   assertEquals(
     missingNotification('Elm St. Townhomes', null).body,

@@ -1,4 +1,4 @@
-import { jobKeys, waCopy, type ConversationRow } from '@sitelog/shared';
+import { jobKeys, noticeData, waCopy, type ConversationRow } from '@sitelog/shared';
 import type { Ctx } from '../context';
 import { sendFreeForm } from '../wa/send';
 import { contextOf } from './context';
@@ -164,6 +164,8 @@ async function processingDelayed(ctx: Ctx, convo: ConversationRow): Promise<bool
     `${report.report_no} is taking longer than usual`,
     null,
     `/reports/${report.id}`,
+    null,
+    noticeData('processing_delayed', { reportNo: report.report_no }),
   );
   return true;
 }

@@ -1,4 +1,10 @@
-import { SmsSendError, type NotifierKey, type SmsVars } from '@sitelog/shared';
+import {
+  SmsSendError,
+  noticeData,
+  type NoticeData,
+  type NotifierKey,
+  type SmsVars,
+} from '@sitelog/shared';
 import type { JobHandler } from './types';
 
 /**
@@ -23,13 +29,15 @@ export const notifyJob: JobHandler<'notify'> = async (ctx, payload) => {
     ctx.log.warn('notify: reporter not found', { reporter_id: payload.reporterId });
     return;
   }
-  const officeNotice = async (body: string) => {
+  const officeNotice = async (body: string, data: NoticeData) => {
     await ctx.db.notifyOrg(
       reporter.org_id,
       'message_failed',
       `${reporter.name}: a message to them was not sent`,
       body,
       '/team',
+      null,
+      data,
     );
     await ctx.db.logAudit({
       org_id: reporter.org_id,
@@ -51,10 +59,14 @@ export const notifyJob: JobHandler<'notify'> = async (ctx, payload) => {
     );
   } catch (err) {
     if (err instanceof SmsSendError && !err.retryable && (err.undeliverable || err.optedOut)) {
+      const error = err.message.slice(0, 200);
       await officeNotice(
         err.optedOut
           ? 'Their number is on the SMS provider’s opt-out list, so SiteLog texts them nothing until they reply START.'
-          : `The SMS provider refused their number (${err.message.slice(0, 200)}). Check the number in Team & numbers.`,
+          : `The SMS provider refused their number (${error}). Check the number in Team & numbers.`,
+        err.optedOut
+          ? noticeData('message_opted_out', { name: reporter.name })
+          : noticeData('message_refused', { name: reporter.name, error }),
       );
       return;
     }
@@ -69,6 +81,7 @@ export const notifyJob: JobHandler<'notify'> = async (ctx, payload) => {
     if (outcome.detail === 'console_real_org') {
       await officeNotice(
         'No SMS sender is set for this organisation’s country in this environment, so the text reached no phone.',
+        noticeData('message_no_sender', { name: reporter.name }),
       );
     }
   }

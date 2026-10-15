@@ -785,6 +785,8 @@ describe('jobs: welcome, template, retention', () => {
         title: 'Marco Ruiz: the welcome text was not sent',
         body: expect.stringMatching(/opted out of texts/),
         target_path: '/team',
+        // The panel renders this in the reader's language (20261015000080).
+        data: { key: 'welcome_not_sent', params: { name: 'Marco Ruiz', reason: 'opted_out' } },
       }),
     ]);
   });

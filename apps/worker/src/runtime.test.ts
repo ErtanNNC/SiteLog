@@ -1,4 +1,4 @@
-import { SmsSendError } from '@sitelog/shared';
+import { JOB_MAX_ATTEMPTS, SmsSendError } from '@sitelog/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { abortableFetch, currentSignal, runWithSignal } from './abort';
 import { registry } from './jobs/registry';
@@ -363,7 +363,11 @@ describe('notify job (§10.1, D48)', () => {
     });
     expect(h.sms).toEqual([]);
     expect(h.db.data.notifications).toEqual([
-      expect.objectContaining({ kind: 'message_failed', target_path: '/team' }),
+      expect.objectContaining({
+        kind: 'message_failed',
+        target_path: '/team',
+        data: { key: 'message_no_sender', params: { name: 'Marco Ruiz' } },
+      }),
     ]);
     expect(h.db.data.audit.map((a) => a.action)).toContain('notify.failed');
   });
@@ -456,6 +460,10 @@ describe('dead jobs (§10.1): the office is told, no WhatsApp error_retry', () =
           kind: 'message_failed',
           title: `${h.marco.name}: a message to them was not sent`,
           target_path: '/team',
+          data: {
+            key: 'message_not_sent',
+            params: { name: h.marco.name, job: 'send_welcome', tries: JOB_MAX_ATTEMPTS },
+          },
         }),
       ]);
       expect(h.db.data.audit.find((a) => a.action === 'job.dead')).toMatchObject({
@@ -509,6 +517,10 @@ describe('dead jobs (§10.1): the office is told, no WhatsApp error_retry', () =
           kind: 'processing_failed',
           title: `${report.report_no}: processing stopped`,
           target_path: `/reports/${report.id}`,
+          data: {
+            key: 'processing_failed',
+            params: { reportNo: 'RL-2041-0187', job: 'extract_report', tries: JOB_MAX_ATTEMPTS },
+          },
         }),
       ]);
       expect(h.db.data.audit.filter((a) => a.action === 'job.dead').map((a) => a.diff)).toEqual([

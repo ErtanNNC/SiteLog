@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  NoticeData,
   CompanyRow,
   ConsentRow,
   ConsoleEmailRow,
@@ -73,6 +74,7 @@ export interface FakeDbData {
     body: string | null;
     target_path: string | null;
     user_id: string | null;
+    data: NoticeData | null;
   }>;
   packs: Map<string, EvidencePackRow>;
   weatherEvents: WeatherEventRow[];
@@ -937,7 +939,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         await db.updateReporter(input.reporterId, input.patch);
         await db.logAudit(input.audit);
         const n = input.notification;
-        if (n) await db.notifyOrg(n.orgId, n.kind, n.title, n.body, n.targetPath);
+        if (n) await db.notifyOrg(n.orgId, n.kind, n.title, n.body, n.targetPath, null, n.data);
       } catch (err) {
         if (before) d.reporters.set(input.reporterId, before);
         d.audit.length = audited;
@@ -976,7 +978,15 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return id;
     },
 
-    async notifyOrg(orgId, kind, title, body = null, targetPath = null, userId = null) {
+    async notifyOrg(
+      orgId,
+      kind,
+      title,
+      body = null,
+      targetPath = null,
+      userId = null,
+      data = null,
+    ) {
       d.notifications.push({
         org_id: orgId,
         kind,
@@ -984,6 +994,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         body,
         target_path: targetPath,
         user_id: userId,
+        data,
       });
       return randomUUID();
     },

@@ -75,6 +75,110 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         title: 'Bildirimler',
         empty: 'Yeni bir şey yok. Raporlar ve uyarılar burada görünecek.',
         markAllRead: 'Tümünü okundu işaretle',
+        notices: {
+          late_upload: {
+            titleAudio: '{{site}}: {{date}} için geç gelen sesli not',
+            titlePhoto: '{{site}}: {{date}} için geç gelen fotoğraf',
+            body: '{{reporter}} bunu o gün kaydetti; günün rapor süresi kapandıktan sonra geldi. {{reportNo}} numaralı raporda, geç olarak işaretli.',
+            bodyUnnamed:
+              'Şantiye şefi bunu o gün kaydetti; günün rapor süresi kapandıktan sonra geldi. {{reportNo}} numaralı raporda, geç olarak işaretli.',
+          },
+          missing_report: {
+            title: '{{site}}: rapor yok',
+            body: '{{first}} bugünün raporunu göndermedi ve son saat geçti.',
+            bodyUnnamed: 'Şantiye şefi bugünün raporunu göndermedi ve son saat geçti.',
+            bodyReminders: '{{first}} {{count}} hatırlatmaya yanıt vermedi.',
+          },
+          report_edited: { title: '{{reportNo}} onaydan sonra düzenlendi' },
+          needs_review: { title: '{{reportNo}} inceleme bekliyor' },
+          glossary_review: { title: 'İncelenecek {{count}} yeni terim' },
+          pack_ready: {
+            title: 'EOT kanıt dosyası hazır: {{site}}',
+            titleAllSites: 'EOT kanıt dosyası hazır: tüm şantiyeler',
+            body: '{{from}} – {{to}}',
+          },
+          processing_delayed: { title: '{{reportNo}} her zamankinden uzun sürüyor' },
+          processing_failed: {
+            title: '{{reportNo}}: işleme durdu',
+            body: 'SiteLog yaklaşık üç saat içinde {{tries}} kez denedi ve durdu ({{job}}). Rapor veren taslağını bekliyor olabilir. SiteLog ekibi uyarıldı; kaynaklarını kontrol etmek için raporu açın.',
+          },
+          message_not_sent: {
+            title: '{{name}}: ona giden bir mesaj gönderilemedi',
+            body: 'SiteLog yaklaşık üç saat içinde {{tries}} kez denedi ve durdu ({{job}}). Bir yanıt bekliyor olabilir; bugün önemliyse kendisiyle doğrudan iletişime geçin. SiteLog ekibi uyarıldı.',
+          },
+          message_not_handled: {
+            title: '{{name}}: ondan gelen bir mesaj işlenemedi',
+            body: 'SiteLog yaklaşık üç saat içinde {{tries}} kez denedi ve durdu ({{job}}). Bir yanıt bekliyor olabilir; bugün önemliyse kendisiyle doğrudan iletişime geçin. SiteLog ekibi uyarıldı.',
+          },
+          message_opted_out: {
+            title: '{{name}}: ona giden bir mesaj gönderilemedi',
+            body: 'Numarası SMS sağlayıcısının çıkış listesinde; START yazana kadar SiteLog ona mesaj göndermez.',
+          },
+          message_refused: {
+            title: '{{name}}: ona giden bir mesaj gönderilemedi',
+            body: 'SMS sağlayıcısı numarasını reddetti ({{error}}). Numarayı Ekip ve numaralar sayfasında kontrol edin.',
+          },
+          message_no_sender: {
+            title: '{{name}}: ona giden bir mesaj gönderilemedi',
+            body: 'Bu ortamda şirketin ülkesi için SMS göndericisi tanımlı değil, bu yüzden mesaj hiçbir telefona ulaşmadı.',
+          },
+          welcome_undeliverable: { title: '{{name}}: karşılama mesajı iletilemedi' },
+          welcome_provider_fault: {
+            title: '{{name}}: karşılama mesajı SMS sağlayıcısında başarısız oldu',
+            body: 'Bu hesap için mesajlar başarısız oluyor ({{error}}). SiteLog ekibi uyarıldı; rapor veren davet edildi olarak işaretlenmedi. Sağlayıcı düzelince karşılama mesajını Ekip ve numaralar sayfasından yeniden gönderin.',
+          },
+          welcome_not_sent: {
+            title: '{{name}}: karşılama mesajı gönderilmedi',
+            bodies: {
+              opted_out:
+                'Mesajlardan çıktı; yeniden kabul edene kadar (yanıt alan paketlerde START) SiteLog ona mesaj göndermez.',
+              no_consent:
+                'Onay sorulduğunda mesajları reddetti, bu yüzden SiteLog ona mesaj göndermez.',
+              no_channel:
+                'Ülkesinin hiçbir mesaj kanalı karşılama mesajını ve linkini taşıyamıyor. Kendisine başka bir yoldan ulaşın.',
+              console_real_org:
+                'Bu ülkeye mesajlar bu ortamda henüz canlı değil: ülke paketi için SMS göndericisi tanımlı değil, bu yüzden rapor verene bir şey ulaşmadı. Gönderici tanımlanınca karşılama mesajını Ekip ve numaralar sayfasından yeniden gönderin.',
+            },
+          },
+          welcome_carrier_undelivered: {
+            title: '{{name}}: karşılama mesajı iletilemedi',
+            body: 'Operatör karşılama mesajını iletemedi ({{error}}): numara sabit hat, engelli ya da kullanım dışı olabilir. Ekip ve numaralar sayfasında kontrol edin ya da kendisine başka bir yoldan ulaşın.',
+          },
+          welcome_account_fault: {
+            title: '{{name}}: karşılama mesajı SMS sağlayıcısında başarısız oldu',
+            titleUnnamed: 'Bir karşılama mesajı SMS sağlayıcısında başarısız oldu',
+            body: 'Bu hesap için mesajlar başarısız oluyor ({{error}}). SMS sağlayıcısı karşılama mesajını kabul etti, sonra rapor verenin numarası yüzünden değil, hesap ya da gönderici yüzünden reddetti. Sağlayıcı hesabı düzelince karşılama mesajını Ekip ve numaralar sayfasından yeniden gönderin. Önümüzdeki bir saat içinde aynı şekilde başarısız olan mesajlar için yeniden bildirim gelmez.',
+          },
+          reporter_opted_out: {
+            title: '{{name}} mesajlardan çıktı',
+            body: '{{phone}} SMS sağlayıcısının çıkış listesinde (bu göndericiye daha önce STOP yazdı); START yazana kadar SiteLog ona mesaj göndermez. Raporlarına ihtiyacınız varsa kendisini arayın.',
+          },
+          reporter_stop: {
+            title: '{{name}} mesajlardan çıktı (STOP)',
+            body: '{{phone}} STOP yazdı; START yazana kadar SiteLog ona mesaj göndermez. Raporlarına ihtiyacınız varsa kendisini arayın.',
+          },
+          unknown_contact: { title: 'Bilinmeyen bir numara rapor göndermeye çalıştı' },
+          reporter_wrong_site: {
+            title: '{{name}} şantiyenin yanlış olduğunu söylüyor',
+            body: 'Ekip sayfasında şantiye atamasını kontrol edin.',
+          },
+          payment_failed: {
+            title: 'Ödeme başarısız',
+            body: 'Stripe kartınızdan ödeme alamadı. Raporların ve hatırlatmaların sürmesi için Faturalandırma sayfasında ödeme yöntemini güncelleyin.',
+          },
+          subscription_canceled: {
+            title: 'Abonelik iptal edildi',
+            body: 'Abonelik Faturalandırma sayfasından yeniden başlatılana kadar hatırlatmalar ve yeni şantiye günleri durur.',
+          },
+          late_report: {
+            title: '{{site}}: geç rapor geldi',
+            body: '{{reportNo}} · sahada {{crew}} kişi · {{hours}}',
+          },
+          invoice_gap: {
+            title: 'Fatura farkı: {{company}} +{{gap}}',
+            body: '{{invoiceNo}} faturası {{invoiced}} · raporlar {{reported}} gösteriyor',
+          },
+        },
       },
       footer: {
         agentReady: 'Asistan hazır · mesaj ve arama',

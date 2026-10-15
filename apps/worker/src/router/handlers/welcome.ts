@@ -1,4 +1,4 @@
-import { waCopy } from '@sitelog/shared';
+import { noticeData, waCopy } from '@sitelog/shared';
 import type { Session } from '../session';
 import { handleTestContent } from './test';
 
@@ -57,6 +57,8 @@ export async function handleFirstReply(s: Session): Promise<void> {
         `${r.name} says the site is wrong`,
         'Check the site assignment on the Team page.',
         '/team',
+        null,
+        noticeData('reporter_wrong_site', { name: r.name }),
       );
     }
     return;

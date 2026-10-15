@@ -1,3 +1,4 @@
+import { noticeData } from '@sitelog/shared';
 import type { CompanyRow, GlossaryTermRow, NewTerm, NewTermV1 } from '@sitelog/shared';
 
 type AnyNewTerm = NewTerm | NewTermV1;
@@ -66,6 +67,8 @@ export async function learnTerms(
       `${n} new term${n === 1 ? '' : 's'} to review`,
       out.map((t) => t.heard).join(', '),
       '/glossary',
+      null,
+      noticeData('glossary_review', { count: n }),
     );
   }
   return out;

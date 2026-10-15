@@ -79,6 +79,120 @@ export const copy = {
       title: 'Notifications',
       empty: 'Nothing new. Reports and alerts will show up here.',
       markAllRead: 'Mark all read',
+      /**
+       * A notice's wording by its data key (`notifications.data`, packages/shared notifications.ts
+       * `noticeDataSchema`), in the reader's language. A key without `body` shows the stored body
+       * (a change note, a heard snippet, terms, a provider's error). Rows without data show their
+       * stored English title and body.
+       */
+      notices: {
+        late_upload: {
+          titleAudio: '{{site}} — late voice note for {{date}}',
+          titlePhoto: '{{site}} — late photo for {{date}}',
+          body: '{{reporter}} recorded it on that day, and it arrived after the day’s reporting window had closed. It is on report {{reportNo}}, marked late.',
+          bodyUnnamed:
+            'The site manager recorded it on that day, and it arrived after the day’s reporting window had closed. It is on report {{reportNo}}, marked late.',
+        },
+        missing_report: {
+          title: '{{site}} — no report',
+          body: '{{first}} hasn’t sent today’s report, and the deadline has passed.',
+          bodyUnnamed: 'The site manager hasn’t sent today’s report, and the deadline has passed.',
+          bodyReminders_one: '{{first}} didn’t answer {{count}} reminder.',
+          bodyReminders_other: '{{first}} didn’t answer {{count}} reminders.',
+        },
+        report_edited: { title: '{{reportNo}} was edited after sign-off' },
+        needs_review: { title: '{{reportNo}} needs review' },
+        glossary_review: {
+          title_one: '{{count}} new term to review',
+          title_other: '{{count}} new terms to review',
+        },
+        pack_ready: {
+          title: 'EOT evidence pack ready: {{site}}',
+          titleAllSites: 'EOT evidence pack ready: all sites',
+          body: '{{from}} – {{to}}',
+        },
+        processing_delayed: { title: '{{reportNo}} is taking longer than usual' },
+        processing_failed: {
+          title: '{{reportNo}}: processing stopped',
+          body: 'SiteLog tried {{tries}} times over about three hours and has stopped ({{job}}). The reporter may be waiting for their draft. SiteLog has been alerted; open the report to check its sources.',
+        },
+        message_not_sent: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'SiteLog tried {{tries}} times over about three hours and has stopped ({{job}}). They may be waiting for an answer; contact them directly if it matters today. SiteLog has been alerted.',
+        },
+        message_not_handled: {
+          title: '{{name}}: a message from them was not handled',
+          body: 'SiteLog tried {{tries}} times over about three hours and has stopped ({{job}}). They may be waiting for an answer; contact them directly if it matters today. SiteLog has been alerted.',
+        },
+        message_opted_out: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'Their number is on the SMS provider’s opt-out list, so SiteLog texts them nothing until they reply START.',
+        },
+        message_refused: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'The SMS provider refused their number ({{error}}). Check the number in Team & numbers.',
+        },
+        message_no_sender: {
+          title: '{{name}}: a message to them was not sent',
+          body: 'No SMS sender is set for this organisation’s country in this environment, so the text reached no phone.',
+        },
+        welcome_undeliverable: { title: '{{name}}: the welcome text could not be delivered' },
+        welcome_provider_fault: {
+          title: '{{name}}: the welcome text failed at the SMS provider',
+          body: 'Texts are failing for this account ({{error}}). SiteLog has been alerted; the reporter was not marked as invited. Re-send the welcome from Team & numbers once the provider is back.',
+        },
+        welcome_not_sent: {
+          title: '{{name}}: the welcome text was not sent',
+          bodies: {
+            opted_out:
+              'They opted out of texts, so SiteLog texts them nothing until they opt in again (START, on packs that take replies).',
+            no_consent:
+              'They declined texts when asked for consent, so SiteLog texts them nothing.',
+            no_channel:
+              'No message channel of their country can carry the welcome and its link. Contact them another way.',
+            console_real_org:
+              'Texts to this country are not live in this environment yet: no SMS sender is set for its country pack, so the reporter got nothing. Once the sender is set, re-send the welcome from Team & numbers.',
+          },
+        },
+        welcome_carrier_undelivered: {
+          title: '{{name}}: the welcome text could not be delivered',
+          body: 'The carrier could not deliver the welcome text ({{error}}): the number may be a landline, blocked or out of service. Check it on Team & numbers, or contact them another way.',
+        },
+        welcome_account_fault: {
+          title: '{{name}}: the welcome text failed at the SMS provider',
+          titleUnnamed: 'A welcome text failed at the SMS provider',
+          body: 'Texts are failing for this account ({{error}}). The SMS provider accepted the welcome text and then refused it for the account or the sender, not for the reporter’s number. Re-send the welcome from Team & numbers once the provider account is fixed. Other texts that fail this way in the next hour are not notified again.',
+        },
+        reporter_opted_out: {
+          title: '{{name}} opted out of texts',
+          body: '{{phone}} is on the SMS provider’s opt-out list (they replied STOP to this sender before), so SiteLog texts them nothing until they reply START. Call them if you need their reports.',
+        },
+        reporter_stop: {
+          title: '{{name}} opted out of texts (STOP)',
+          body: '{{phone}} replied STOP, so SiteLog texts them nothing until they reply START. Call them if you need their reports.',
+        },
+        unknown_contact: { title: 'Unknown number tried to report' },
+        reporter_wrong_site: {
+          title: '{{name}} says the site is wrong',
+          body: 'Check the site assignment on the Team page.',
+        },
+        payment_failed: {
+          title: 'Payment failed',
+          body: 'Stripe could not charge your card. Update the payment method in Billing to keep reports and reminders flowing.',
+        },
+        subscription_canceled: {
+          title: 'Subscription canceled',
+          body: 'Reminders and new site-days stop until the subscription is restarted from Billing.',
+        },
+        late_report: {
+          title: '{{site}} — late report in',
+          body: '{{reportNo}} · {{crew}} on site · {{hours}}',
+        },
+        invoice_gap: {
+          title: 'Invoice gap: {{company}} +{{gap}}',
+          body: '{{invoiceNo}} invoices {{invoiced}} · reports show {{reported}}',
+        },
+      },
     },
     footer: {
       /** §11.2: the status line, then the org's SiteLog number(s) when it has one. */

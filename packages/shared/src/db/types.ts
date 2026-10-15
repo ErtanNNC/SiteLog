@@ -707,6 +707,11 @@ export type NotificationRow = {
   target_path: string | null;
   read_at: string | null;
   created_at: string;
+  /**
+   * What the notice says as data (20261015000080): `{ key, params }`, rendered by the panel in the
+   * reader's language (`parseNoticeData`); null on rows without it (their English title / body).
+   */
+  data: Json | null;
 };
 
 export type SchedulerStateRow = {
@@ -1175,7 +1180,7 @@ export type Database = {
       >;
       notifications: Table<
         NotificationRow,
-        'id' | 'user_id' | 'body' | 'target_path' | 'read_at' | 'created_at'
+        'id' | 'user_id' | 'body' | 'target_path' | 'read_at' | 'created_at' | 'data'
       >;
       platform_admins: Table<PlatformAdminRow, 'note' | 'created_at'>;
       report_costs: Table<
@@ -1379,6 +1384,7 @@ export type Database = {
           p_missing_at: string;
           p_title: string;
           p_body: string;
+          p_data?: Json | null;
         };
         Returns: boolean;
       };
@@ -1390,6 +1396,7 @@ export type Database = {
           p_body?: string | null;
           p_target_path?: string | null;
           p_user_id?: string | null;
+          p_data?: Json | null;
         };
         Returns: string;
       };

@@ -55,6 +55,7 @@ import type {
 } from '../schemas/report.ts';
 import { emptyReportDataV1 } from '../schemas/report.ts';
 import { deriveTotals } from '../report/hours.ts';
+import { noticeData } from '../notifications.ts';
 import { formatReportNo } from '../report/numbering.ts';
 import { PAYROLL_COLUMNS } from '../report/payroll.ts';
 import { upgradeV1toV2 } from '../report/upgrade.ts';
@@ -1931,6 +1932,9 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
     },
   ];
 
+  // Each notice carries its data as the producers write it (20261015000080), so the panel shows
+  // it in the reader's language; the English title / body are the stored fallback.
+  const oakmontToday = reports.find((r) => r.id === demoId(`report:oakmont:${DEMO_TODAY}`));
   const notifications: NotificationRow[] = [
     {
       id: demoId('notif:missing:elm'),
@@ -1940,6 +1944,11 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       title: 'Elm St. Townhomes — no report',
       body: "Priya didn't answer 2 reminders.",
       target_path: '/',
+      data: noticeData('missing_report', {
+        site: 'Elm St. Townhomes',
+        first: 'Priya',
+        reminders: 2,
+      }),
       read_at: null,
       created_at: t(DEMO_TODAY, MISSING_AT),
     },
@@ -1950,6 +1959,12 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       kind: 'needs_review',
       title: 'Oakmont Medical Center needs review',
       body: 'Unknown subcontractor "Ridgeway" · 6 workers',
+      data: oakmontToday
+        ? noticeData('needs_review', {
+            reportNo: oakmontToday.report_no,
+            reasons: oakmontToday.review_reasons,
+          })
+        : null,
       target_path: `/reports/${demoId(`report:oakmont:${DEMO_TODAY}`)}`,
       read_at: null,
       created_at: t(DEMO_TODAY, '17:21'),
@@ -1961,6 +1976,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       kind: 'unknown_contact',
       title: 'Unknown number tried to report',
       body: '+1 555 019 4410 · "this is Luis, covering Elm St. today…"',
+      data: noticeData('unknown_contact', {}),
       target_path: '/team',
       read_at: null,
       created_at: t(DEMO_TODAY, '17:52'),
@@ -1972,6 +1988,13 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       kind: 'invoice_gap',
       title: 'Invoice gap: BrightLine Electric +16 h',
       body: 'BL-3381 invoices 212 h · reports show 196 h',
+      data: noticeData('invoice_gap', {
+        company: 'BrightLine Electric',
+        invoiceNo: 'BL-3381',
+        invoiced: 212,
+        reported: 196,
+        gap: 16,
+      }),
       target_path: '/hours?week=2026-W41',
       read_at: null,
       created_at: t(DEMO_TODAY, '15:31'),
@@ -1983,6 +2006,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       kind: 'glossary_review',
       title: '3 glossary terms to review',
       body: '"mud", "colado", "the Ridgeway crew"',
+      data: noticeData('glossary_review', { count: 3 }),
       target_path: '/glossary',
       read_at: t(DEMO_TODAY, '16:00'),
       created_at: t(DEMO_TODAY, '12:00'),
@@ -1994,6 +2018,11 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       kind: 'pack_ready',
       title: `EOT evidence pack ready — Riverside Lofts, ${packName}`,
       body: null,
+      data: noticeData('pack_ready', {
+        site: 'Riverside Lofts — Block B',
+        from: packPeriod.start,
+        to: packPeriod.end,
+      }),
       target_path: '/weather',
       read_at: tp('2026-10-02', '10:00'),
       created_at: tp('2026-10-02', '09:14'),

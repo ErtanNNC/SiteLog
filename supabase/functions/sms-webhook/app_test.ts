@@ -375,6 +375,11 @@ Deno.test(
       title: 'Dana Whitfield: the welcome text could not be delivered',
       body: h.store.notifications[0]!.body,
       targetPath: '/team',
+      // The panel renders it in the reader's language from this (20261015000080).
+      data: {
+        key: 'welcome_carrier_undelivered',
+        params: { name: 'Dana Whitfield', error: 'twilio 30006' },
+      },
     });
     assertMatch(h.store.notifications[0]!.body, /twilio 30006/);
     assertMatch(h.store.notifications[0]!.body, /landline/);
@@ -408,6 +413,10 @@ Deno.test(
       h.store.notifications[1]!.body,
       /^Texts are failing for this account \(twilio failed\)/,
     );
+    assertEquals(h.store.notifications[1]!.data, {
+      key: 'welcome_account_fault',
+      params: { name: 'Dana Whitfield', error: 'twilio failed' },
+    });
     assertEquals(h.store.audits.filter((a) => a.action === 'reporter.invite_failed').length, 1);
     dana.status = 'active';
     h.store.outbound.push({

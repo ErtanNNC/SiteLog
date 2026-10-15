@@ -1127,6 +1127,23 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
       body: null,
       user_id: null,
     });
+    expect(
+      (await one<{ data: unknown }>(`select data from notifications where id = $1`, [id])).data,
+    ).toBeNull();
+    // The notice's data (20261015000080): stored as jsonb for the panel to render.
+    const withData = await db.notifyOrg(
+      ORG,
+      'needs_review',
+      'RL-2041-0187 needs review',
+      'no_photo',
+      '/reports/x',
+      null,
+      { key: 'needs_review', params: { reportNo: 'RL-2041-0187', reasons: ['no_photo'] } },
+    );
+    expect(
+      (await one<{ data: unknown }>(`select data from notifications where id = $1`, [withData]))
+        .data,
+    ).toEqual({ key: 'needs_review', params: { reportNo: 'RL-2041-0187', reasons: ['no_photo'] } });
     const forLena = await db.notifyOrg(
       ORG,
       'pack_ready',

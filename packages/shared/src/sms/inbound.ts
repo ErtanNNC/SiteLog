@@ -4,6 +4,7 @@ import type { CountryPack } from '../countries.ts';
 import type { ContactPref, ReporterStatus } from '../enums.ts';
 import { formatPhone, type E164 } from '../format.ts';
 import { ensurePersonalLink, fieldLinkUrl, type PersonalLinkStore } from '../links.ts';
+import { noticeData, type NoticeData } from '../notifications.ts';
 import type { SmsNotifier } from '../notify/notifier.ts';
 import {
   orderInboundReporters,
@@ -60,6 +61,8 @@ export interface InboundSmsNotification {
   title: string;
   body: string;
   targetPath: string;
+  /** What the panel renders in the reader's language; title and body are the English fallback. */
+  data: NoticeData;
 }
 
 /** The rows the handling reads and writes; the worker (Postgres) and the edge function (supabase-js) each implement it. */
@@ -172,6 +175,7 @@ export function optOutNotification(reporter: {
     title: `${reporter.name} opted out of texts (STOP)`,
     body: `${formatPhone(reporter.phone)} replied STOP, so SiteLog texts them nothing until they reply START. Call them if you need their reports.`,
     targetPath: '/team',
+    data: noticeData('reporter_stop', { name: reporter.name, phone: formatPhone(reporter.phone) }),
   };
 }
 

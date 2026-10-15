@@ -340,6 +340,20 @@ describe('report lifecycle RPCs', () => {
       ),
     );
     expect(rep.rows[0]).toEqual({ status: 'filed', current_version: 2, signed_off_by: null });
+    // The signer's notice carries its data for the panel (20261015000080); the note stays as body.
+    const edited = await asService(db, (q) =>
+      q<{ title: string; body: string; data: unknown; report_no: string }>(
+        `select n.title, n.body, n.data, r.report_no from notifications n
+           join reports r on n.target_path = '/reports/' || r.id
+          where n.kind = 'report_edited' and r.id = $1`,
+        [reportId],
+      ),
+    );
+    expect(edited.rows).toHaveLength(1);
+    const notice = edited.rows[0]!;
+    expect(notice.title).toBe(`${notice.report_no} was edited after sign-off`);
+    expect(notice.body).toBe('Apex Concrete 6 → 7 workers');
+    expect(notice.data).toEqual({ key: 'report_edited', params: { reportNo: notice.report_no } });
     const jobs = await asService(db, (q) =>
       q<{ type: string; payload: { version: number } }>(
         `select type, payload from jobs where type = 'render_pdf'`,

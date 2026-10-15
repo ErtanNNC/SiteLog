@@ -1,3 +1,4 @@
+import type { NoticeData } from '@sitelog/shared/notifications.ts';
 import type { AppClient } from './supabase.ts';
 
 /** `notify_org(...)` RPC wrapper → in-app notification center (§13). Returns the notification id. */
@@ -23,6 +24,11 @@ export interface Notification {
   targetPath?: string | null;
   /** null = every member of the org sees it. */
   userId?: string | null;
+  /**
+   * What it says as data, rendered by the panel in the reader's language (migration
+   * 20261015000080); `title` / `body` stay the English fallback.
+   */
+  data?: NoticeData | null;
 }
 
 export async function notifyOrg(admin: AppClient, n: Notification): Promise<string> {
@@ -34,6 +40,7 @@ export async function notifyOrg(admin: AppClient, n: Notification): Promise<stri
       p_body: n.body ?? null,
       p_target_path: n.targetPath ?? null,
       p_user_id: n.userId ?? null,
+      ...(n.data ? { p_data: n.data } : {}),
     })
     .throwOnError();
   return data;

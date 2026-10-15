@@ -484,6 +484,21 @@ describe('field_flag_late_upload (spec §19 Q53: a late clip)', () => {
     expect(notices[0]!.title).toBe('Riverside — late voice note for Mon Oct 26');
     expect(notices[0]!.body).toContain('Marco Ruiz recorded it on that day');
     expect(notices[0]!.body).toContain(`report ${done.reportNo}, marked late`);
+    // 20261015000080: what the panel renders in the reader's language.
+    const [late] = await svc<{ data: unknown }>(
+      `select data from notifications where kind = 'late_upload' and target_path = $1`,
+      [`/reports/${done.reportId}`],
+    );
+    expect(late!.data).toEqual({
+      key: 'late_upload',
+      params: {
+        site: 'Riverside',
+        media: 'audio',
+        date: '2026-10-26',
+        reporter: 'Marco Ruiz',
+        reportNo: done.reportNo,
+      },
+    });
   });
 
   it('refuses an upload that is not completed, or another reporter’s', async () => {

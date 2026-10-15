@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { MemberRole } from './enums.ts';
 
 /**
@@ -37,4 +38,119 @@ export function seesNotification(
   return n.user_id === null
     ? notificationAudience(n.kind).includes(user.role)
     : n.user_id === user.id;
+}
+
+/*
+ * What a panel notice says, as data (`notifications.data`, migration 20261015000080): the copy key
+ * of its wording and the values it names. The panel renders it through its copy in the reader's
+ * language (EN/TR, `shell.notifications.notices.<key>`); the row's English `title` / `body` stay
+ * the fallback for rows without data (written before the column, or by a deployed producer that
+ * does not send it yet) and for a key this panel does not know. A body the office or a reporter
+ * wrote (a change note, a heard snippet, glossary terms, a provider's error) is not translated:
+ * keys without a body copy show the stored `body`.
+ *
+ * Values are what the producer knows, never pre-formatted text in a language: dates are ISO
+ * (`YYYY-MM-DD`), hours numbers, review reasons their §10.5 codes; names, report numbers and
+ * phone numbers (already formatted) as they are.
+ */
+
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const name = z.string().min(1);
+const nameOrNull = z.string().min(1).nullable();
+const notice = <K extends string, P extends z.ZodRawShape>(key: K, params: P) =>
+  z.object({ key: z.literal(key), params: z.object(params) });
+
+/** Why the welcome text was not sent (the Notifier's refusal, or no sender for the country here). */
+export const WELCOME_NOT_SENT_REASONS = [
+  'opted_out',
+  'no_consent',
+  'no_channel',
+  'console_real_org',
+] as const;
+
+export const noticeDataSchema = z.discriminatedUnion('key', [
+  // late_upload (field_flag_late_upload)
+  notice('late_upload', {
+    site: name,
+    media: z.enum(['audio', 'photo']),
+    date: isoDate,
+    reporter: nameOrNull,
+    reportNo: name,
+  }),
+  // missing_report (scheduler-tick → mark_site_day_missing): `reminders` once the ladder runs (M6)
+  notice('missing_report', {
+    site: name,
+    first: nameOrNull,
+    reminders: z.number().int().positive().optional(),
+  }),
+  // report_edited (create_report_version, the worker's versions.ts); body: the change note
+  notice('report_edited', { reportNo: name }),
+  // needs_review (pipeline/file.ts): the §10.5 / §10.9 reason codes
+  notice('needs_review', { reportNo: name, reasons: z.array(z.string()) }),
+  // glossary_review (pipeline/glossary.ts); body: the terms heard
+  notice('glossary_review', { count: z.number().int().positive() }),
+  // pack_ready (build_evidence_pack; the demo's packs may cover every site: site null)
+  notice('pack_ready', { site: nameOrNull, from: isoDate, to: isoDate }),
+  // processing_delayed (router/timeouts.ts)
+  notice('processing_delayed', { reportNo: name }),
+  // processing_failed / message_failed for a dead job (dead-jobs.ts): `job` is the job type
+  notice('processing_failed', { reportNo: name, job: name, tries: z.number().int().positive() }),
+  notice('message_not_sent', { name, job: name, tries: z.number().int().positive() }),
+  notice('message_not_handled', { name, job: name, tries: z.number().int().positive() }),
+  // message_failed of a `notify` job (jobs/notify.ts)
+  notice('message_opted_out', { name }),
+  notice('message_refused', { name, error: z.string() }),
+  notice('message_no_sender', { name }),
+  // reporter_invite_failed (jobs/send_welcome.ts; sms-webhook's status route)
+  notice('welcome_undeliverable', { name }), // body: the provider's error
+  notice('welcome_provider_fault', { name, error: z.string() }),
+  notice('welcome_not_sent', { name, reason: z.enum(WELCOME_NOT_SENT_REASONS) }),
+  notice('welcome_carrier_undelivered', { name, error: z.string() }),
+  notice('welcome_account_fault', { name: nameOrNull, error: z.string() }),
+  // reporter_opted_out: the provider's opt-out list (send_welcome), or a STOP reply (sms inbound)
+  notice('reporter_opted_out', { name, phone: name }),
+  notice('reporter_stop', { name, phone: name }),
+  // unknown_contact (router/handlers/unknown.ts); body: what they said
+  notice('unknown_contact', {}),
+  // reporter_wrong_site (router/handlers/welcome.ts)
+  notice('reporter_wrong_site', { name }),
+  // billing (stripe-webhook)
+  notice('payment_failed', {}),
+  notice('subscription_canceled', {}),
+  // report_filed: the demo's simulated late report (§13 "Report filed" is email-only otherwise)
+  notice('late_report', {
+    site: name,
+    reportNo: name,
+    crew: z.number().int().nonnegative(),
+    hours: z.number().nonnegative(),
+  }),
+  // invoice_gap: hours as numbers
+  notice('invoice_gap', {
+    company: name,
+    invoiceNo: name,
+    invoiced: z.number(),
+    reported: z.number(),
+    gap: z.number(),
+  }),
+]);
+
+export type NoticeData = z.infer<typeof noticeDataSchema>;
+export type NoticeKey = NoticeData['key'];
+export type NoticeParams<K extends NoticeKey> = Extract<NoticeData, { key: K }>['params'];
+
+/** Every notice key, for tests that check each has its copy. */
+export const NOTICE_KEYS = noticeDataSchema.options.map(
+  (o) => o.shape.key.value,
+) as readonly NoticeKey[];
+
+/** A typed notice: `noticeData('late_upload', { … })`. */
+export function noticeData<K extends NoticeKey>(key: K, params: NoticeParams<K>): NoticeData {
+  return { key, params } as NoticeData;
+}
+
+/** A stored `notifications.data` as a notice, or null (no data, an unknown key, bad values). */
+export function parseNoticeData(value: unknown): NoticeData | null {
+  if (value === null || value === undefined) return null;
+  const parsed = noticeDataSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }

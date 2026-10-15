@@ -27,6 +27,7 @@ import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import type { OrgSettingsRow } from '@sitelog/shared/db/types.ts';
 import type { OrgLocale } from '@sitelog/shared/locale.ts';
 import type { CopyKey } from '@/i18n/keys';
+import type { NoticeText } from './notices';
 
 export interface Chip {
   variant: ChipVariant;
@@ -955,8 +956,11 @@ export interface SetupState {
 export interface NotificationItem {
   id: string;
   kind: string;
+  /** The stored English title and body: shown when `notice` is null. */
   title: string;
   body: string | null;
+  /** The notice's wording in the reader's language (`notifications.data`, data/notices.ts). */
+  notice: NoticeText | null;
   targetPath: string | null;
   readAt: string | null;
   createdAt: string;

@@ -127,4 +127,37 @@ describe('mark_site_day_missing', () => {
       ),
     ).rejects.toThrow(/permission denied/);
   });
+
+  // 20261015000080: the notice's data for the panel, or none from the deployed caller.
+  it('stores the notice data scheduler-tick passes, and none when it passes four arguments', async () => {
+    const data = { key: 'missing_report', params: { site: 'Site', first: 'Priya' } };
+    const withData = await pendingDay('2030-03-05');
+    expect(
+      (
+        await svc<{ ok: boolean }>(
+          `select mark_site_day_missing(p_site_day_id => $1, p_missing_at => now(),
+             p_title => 'Site — data', p_body => 'b', p_data => $2::jsonb) as ok`,
+          [withData, JSON.stringify(data)],
+        )
+      )[0]!.ok,
+    ).toBe(true);
+    const without = await pendingDay('2030-03-06');
+    expect(
+      (
+        await svc<{ ok: boolean }>(
+          `select mark_site_day_missing(p_site_day_id => $1, p_missing_at => now(),
+             p_title => 'Site — no data', p_body => 'b') as ok`,
+          [without],
+        )
+      )[0]!.ok,
+    ).toBe(true);
+    const rows = await svc<{ title: string; data: unknown }>(
+      `select title, data from notifications where title in ('Site — data', 'Site — no data')
+        order by title`,
+    );
+    expect(rows).toEqual([
+      { title: 'Site — data', data },
+      { title: 'Site — no data', data: null },
+    ]);
+  });
 });

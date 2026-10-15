@@ -1,3 +1,4 @@
+import { noticeData } from '@sitelog/shared';
 import type { DailyReportDataV1, ReportRow, ReportVersionRow } from '@sitelog/shared';
 import type { Ctx } from '../context';
 
@@ -73,6 +74,7 @@ export async function createReportVersion(
       opts.changeNote,
       `/reports/${report.id}`,
       signer,
+      noticeData('report_edited', { reportNo: report.report_no }),
     );
     if (signer) {
       await ctx.db.enqueueJob(

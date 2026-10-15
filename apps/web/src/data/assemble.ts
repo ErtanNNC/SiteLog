@@ -36,6 +36,7 @@ import {
   type InvoiceStatus,
 } from '@sitelog/shared/enums.ts';
 import { reportChip, siteDayChip } from '@sitelog/shared/status.ts';
+import { noticeText, reviewReasonRef } from './notices';
 import type { ChipVariant } from '@sitelog/shared/status.ts';
 import type {
   DailyReportData,
@@ -96,7 +97,6 @@ import type {
   CalendarChannel,
   Chip,
   CompanyOption,
-  CopyRef,
   CrewRow,
   DelayEntry,
   GlossaryData,
@@ -718,30 +718,6 @@ export function reportChannel(channel: ReportRow['channel'] | undefined): Overvi
       return 'office';
     default:
       return null;
-  }
-}
-
-/** A review reason (§10.5, §10.9) as an Overview line. */
-function reviewReasonRef(reason: string): CopyRef {
-  const [kind, ...rest] = reason.split(':');
-  const arg = rest.join(':');
-  switch (kind) {
-    case 'unknown_company':
-      return copyRef('overview.attention.reasons.unknown_company', { name: arg });
-    case 'low_confidence':
-      return copyRef('overview.attention.reasons.low_confidence', { field: arg });
-    case 'unanswered':
-      return copyRef('overview.attention.reasons.unanswered', { field: arg });
-    case 'unconfirmed':
-      return copyRef('overview.attention.reasons.unconfirmed');
-    case 'missing':
-      return copyRef('overview.attention.reasons.missing', { field: arg });
-    case 'no_photo':
-      return copyRef('overview.attention.reasons.no_photo');
-    case 'call_mismatch':
-      return copyRef('overview.attention.reasons.call_mismatch', { field: arg });
-    default:
-      return copyRef('overview.attention.reasons.other', { reason });
   }
 }
 
@@ -2855,6 +2831,7 @@ export function assembleNotifications(rows: RowSet, ctx: AssembleCtx): Notificat
       targetPath: n.target_path,
       readAt: n.read_at,
       createdAt: n.created_at,
+      notice: noticeText(n.data),
     }));
 }
 

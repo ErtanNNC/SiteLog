@@ -16,6 +16,7 @@ import type { NotificationItem, SearchResult } from '@/data/types';
 import { formatWhen } from '@/lib/format';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
 import { PinnedLanguage } from '@/i18n/context';
+import { renderCopyRef } from '@/i18n/copyRef';
 import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/Button';
@@ -172,6 +173,11 @@ function NotificationsBell() {
   const unread = items.filter((n) => !n.readAt).length;
   const tz = currentOrg?.timezone ?? 'UTC';
   const today = formatDateInTz(new Date(), tz);
+  // The notice's wording in the panel's language; rows without data keep their stored text.
+  const noticeTitle = (n: NotificationItem) =>
+    n.notice ? renderCopyRef(t, language, n.notice.title) : n.title;
+  const noticeBody = (n: NotificationItem) =>
+    n.notice?.body ? n.notice.body.map((r) => renderCopyRef(t, language, r)).join(', ') : n.body;
   const openItem = (n: NotificationItem) => {
     if (!n.readAt) markRead.mutate({ ids: [n.id] });
     setOpen(false);
@@ -242,9 +248,11 @@ function NotificationsBell() {
                     )}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-medium leading-5">{n.title}</span>
-                    {n.body ? (
-                      <span className="block truncate text-caption text-dust">{n.body}</span>
+                    <span className="block text-[15px] font-medium leading-5">
+                      {noticeTitle(n)}
+                    </span>
+                    {noticeBody(n) ? (
+                      <span className="block truncate text-caption text-dust">{noticeBody(n)}</span>
                     ) : null}
                     <span className="block font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
                       {formatWhen(n.createdAt, tz, today, language)}

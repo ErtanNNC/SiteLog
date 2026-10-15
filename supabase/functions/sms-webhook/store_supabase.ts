@@ -192,6 +192,7 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
         title: n.title,
         body: n.body,
         targetPath: n.targetPath,
+        data: n.data ?? null,
       });
     },
 

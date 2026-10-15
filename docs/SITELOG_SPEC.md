@@ -1960,6 +1960,8 @@ Loading skeletons · inline errors with retry · no-access page · offline banne
 | Magic link | Email | Office user | Sign-in button (EN/TR) |
 | Billing | Provider emails + banner | admin | Payment failed / receipt |
 
+*As built (review 2026-10-15):* a panel notice is shown in the **reader's** panel language (EN/TR, §6.3), not the org's or the producer's. Each `notifications` row stores its English `title` / `body` plus `data` = `{key, params}` (migration 20261015000080; keys and values in `packages/shared/src/notifications.ts` `noticeDataSchema`): the producer's values (names, report numbers, ISO dates, hours as numbers, review-reason codes), never text in a language. The panel renders `data` through its copy (`shell.notifications.notices.<key>`); a row without data or with a key it does not know shows the stored English. Text someone wrote (a change note, a heard snippet, glossary terms, a provider's error) is shown as stored.
+
 ---
 
 ## 14. Design system

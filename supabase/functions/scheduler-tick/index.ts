@@ -1,4 +1,4 @@
-import { type Json, localDate } from '@sitelog/shared';
+import { type Json, localDate, type NoticeData } from '@sitelog/shared';
 import { requireEnv } from '../_shared/env.ts';
 import {
   bearerToken,
@@ -219,7 +219,7 @@ async function markMissing(
   admin: AppClient,
   siteDayId: string,
   missingAt: Date,
-  note: { title: string; body: string },
+  note: { title: string; body: string; data: NoticeData },
 ): Promise<boolean> {
   const { data } = await admin
     .rpc('mark_site_day_missing', {
@@ -227,6 +227,7 @@ async function markMissing(
       p_missing_at: missingAt.toISOString(),
       p_title: note.title,
       p_body: note.body,
+      p_data: note.data,
     })
     .throwOnError();
   return data === true;
