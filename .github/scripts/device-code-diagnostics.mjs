@@ -11,7 +11,7 @@ const start = new Date(Date.now() - 24 * 3600e3).toISOString();
 const end = new Date().toISOString();
 
 async function logs(sql) {
-  const u = new URL(`https://api.supabase.com/v1/projects/${ref}/analytics/endpoints/logs.all`);
+  const u = new URL(`https://api.supabase.com/v1/projects/${ref}/analytics/endpoints/logs`);
   u.searchParams.set('sql', sql);
   u.searchParams.set('iso_timestamp_start', start);
   u.searchParams.set('iso_timestamp_end', end);
@@ -58,7 +58,7 @@ show(
 show(
   'field devices',
   await get(
-    'field_devices?select=created_at,reporter_id,verified_at,code_expires_at&order=created_at.desc&limit=10',
+    'field_devices?select=reporter_id,verified_at,last_seen_at,code_expires_at&order=last_seen_at.desc.nullslast&limit=10',
   ),
 );
 show(

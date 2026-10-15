@@ -136,6 +136,13 @@ export function useSetupState() {
   return useQuery({ queryKey: qk.setup(s.orgId), queryFn: () => s.getSetupState() });
 }
 
+/**
+ * The Demo phone also polls while it is open: realtime is the fast path, but a device code must
+ * show even when the realtime channel never delivers (a hosted project's realtime settings, a
+ * dropped socket). Never in a hidden tab.
+ */
+const DEMO_PHONE_POLL = { staleTime: 0, refetchInterval: 5_000 } as const;
+
 /** /dev/phone (§11.1): the reporter list; `enabled` false keeps it closed for other orgs. */
 export function useDemoPhone(opts: Opts = {}) {
   const s = useDataSource();
@@ -143,6 +150,7 @@ export function useDemoPhone(opts: Opts = {}) {
     queryKey: qk.demoPhone(s.orgId),
     queryFn: () => s.getDemoPhone(),
     enabled: opts.enabled ?? true,
+    ...DEMO_PHONE_POLL,
   });
 }
 
@@ -152,6 +160,7 @@ export function useDemoPhoneThread(reporterId: string | null) {
     queryKey: qk.demoPhoneThread(s.orgId, reporterId ?? ''),
     queryFn: () => s.getDemoPhoneThread(reporterId!),
     enabled: reporterId !== null,
+    ...DEMO_PHONE_POLL,
   });
 }
 
@@ -161,6 +170,7 @@ export function useDemoPhoneEmails(opts: Opts = {}) {
     queryKey: qk.demoPhoneEmails(s.orgId),
     queryFn: () => s.getDemoPhoneEmails(),
     enabled: opts.enabled ?? true,
+    ...DEMO_PHONE_POLL,
   });
 }
 
