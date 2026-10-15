@@ -211,8 +211,11 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
     .eq('version', 1)
     .single();
   if (v1Error) throw v1Error;
-  expect((v1 as { data: { photos: unknown[] } }).data.photos).toEqual([
-    { messageId: source.upload_id, caption: 'Level 2 deck', takenAt: expect.any(String) },
+  // W1-12: the panel files schemaVersion 2, whose photos name their upload.
+  const typed = (v1 as { data: { schemaVersion: number; photos: unknown[] } }).data;
+  expect(typed.schemaVersion).toBe(2);
+  expect(typed.photos).toEqual([
+    { uploadId: source.upload_id, caption: 'Level 2 deck', takenAt: expect.any(String) },
   ]);
   const shown = page.getByTestId('section-photos').getByRole('img', { name: 'Level 2 deck' });
   await expect(shown).toBeVisible();
