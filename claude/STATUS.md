@@ -14,22 +14,14 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 ## Sürüyor
 
-**M3 sonu: incelemeniz için durdum** (kickoff kuralı). Sıradaki: M4 (W1-13 soru ve taslak ekranları, W1-14 …). Onay verirseniz devam ederim.
+- **Telefon testi (W1-09):** panelde kod görünmemesinin nedeni büyük olasılıkla panelin başka bir hesapla açılmasıydı: Demo phone yalnızca açık org'un mesajlarını gösterir, demo kodları Kestrel ve Demir Yapı'ya gider. `phone-setup` artık iki demo admin için tek kullanımlık giriş linki üretiyor (Lena: Kestrel, Elif: Demir Yapı); yeni linkler Deploy run 38728123836'nın özetinde (1 saat geçerli, tek kullanımlık).
+- **§19 kararları:** "önerilerinle devam" kararınız spec'e işleniyor; önerisi zaten yapılmış davranışı değiştirenler (Q53 geç gelen kayıt, Q55 `missing` uyarısı vb.) testleriyle birlikte kodlanıyor.
+- **M4 başladı:** W1-13 (sahada soru → taslak → onayla gönder ekranları) geliştiriliyor.
 
 ## Onayınızı bekleyen
 
 1. Preview'a yeni migration'ların yüklenmesi (W1-10 `20261015000001`, W1-12 `20261015000002`; aynı Deploy işi: `preview` / `supabase`).
-2. Spec §19'da sahibin kararını bekleyen sorular, önerileriyle birlikte:
-   - Hafta 2'yi (M6) bloke edenler: Q19 kanal sırası, Q22 kanal yedekleme, Q25 ilk temas/WhatsApp onayı, Q26 gelen WhatsApp, Q27 web push, Q39 WhatsApp göndericisi, Q40 kanal bazlı opt-out.
-   - W1-09'dan önce: Q41 (_No work_ / _Weather_ düğmelerinin ne yazacağı). W1-16'dan önce: Q44 (paylaşımlı göndericide gelen SMS kimin).
-   - Go-live'dan önce: Q28 yasal metin anahtarları, Q42 link kodu uzunluğu, Q47 imza sırrının döndürülmesi, Q49 İYS (hukuk).
-   - M10'dan önce: Q30 fatura ülkesi. Hafta 1 içinde: Q15 (GSM-7 noktalama), Q16 (v1 veri görünümü).
-   - W1-09'dan çıkanlar: Q50 gizlilik metninin açıldığı sayfa (go-live'dan önce, avukatla), Q51 otomatik arama onay kutusu (M8'den önce), Q52 20 sn'lik deneme kaydı (M6), Q53 gününün süresi geçtikten sonra ulaşan kayıt (saha pilotundan önce; şu an telefonda kalıyor ve yalnızca silinebiliyor, önerim: kaydedildiği güne, 48 saatlik süre ve "geç geldi" işaretiyle).
-   - W1-10'dan çıkan: Q54 hangi ölen job'ların ofise bildirileceği ve kime (önerim yapıldığı gibi: sahaya giden/gelen mesaj job'ları `message_failed` ile ops ve admin'e, rapor adımları `processing_failed` ile admin, pm ve ops'a, diğerleri yalnızca Sentry ve `/ops`).
-   - Q55: hatırlatmalar M6'ya kadar kapalıyken bir gün `missing` olunca ofise uyarı gitsin mi (şu an gitmiyor; yalnızca durum değişiyor ve denetim kaydı yazılıyor).
-   - W1-12'den çıkanlar: Q58 çıkarım modeli ve zorunlu tool_choice (önerim: yapıldığı gibi, ilk anahtarlı `pnpm eval` ile yeniden bakılır), Q59 kaynak biçimi notunun spec'e yazılması, Q60 yeniden çıkarımda cevapların kodla korunması (önerim: yapıldığı gibi), Q61 30 sn kuralında sorumlu hemen çıkarsa (önerim: M6'da 30 sn sonra yeniden kontrol), Q62 "Yarım gün"ün anlamı (önerim: vardiya saatinin yarısı), Q63 ES/TR yedek soru metinlerinin ana dili konuşan biri tarafından gözden geçirilmesi.
-   - W1-11'den çıkanlar: Q56 Deepgram dili (yalnızca İngilizce konuşan sorumluya da `multi`, PL · EN ya da EN · HI konuşana `en`; önerim yapıldığı gibi), Q57 birden fazla ses kaydından biri yazıya dökülemezse (önerim pilot için: hepsi bitmeden taslak yok, ölen job ofise bildiriliyor ve `/ops`'tan yeniden çalıştırılabiliyor).
-   - "Yapıldığı gibi" onayı istenenler: Q43 (öğleden önce başlayan rapor hangi güne), Q45/Q46 (Twilio'nun STOP/HELP'i kendisinin yanıtlaması; START/CALL/TEXT'e onay metni yok), Q48 (gerçek org'da gönderici yokken cihaz kodu gitmez; incelemeden sonra karşılama mesajı da gitmez, sorumlu davet edilmiş sayılmaz ve ofis bilgilendirilir).
+2. Spec §19 soruları: hepsi için "önerilerinle devam" dediniz (2026-10-15); yalnızca sizde olan bir bilgiyi gerektirenler (sağlayıcı sözleşmesi, gönderici kaydı, yasal metin, ana dil incelemesi) açık kalır.
 
 ## Sizden beklenen
 
