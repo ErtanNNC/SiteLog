@@ -158,7 +158,8 @@ jobs:
       # First request per function downloads its npm/jsr imports; do it before the browser waits.
       - name: Warm up Edge Functions
         # Each function must boot and refuse: the api-* functions the anon key (401; the
-        # api-invite-reporter probe is a POST, its only method, for the stack test below), field-api
+        # api-invite-reporter probe is a POST, its only method, for the stack test below, as are
+        # W1-16's api-link-unknown-contact and api-text-daily-link for the panel specs), field-api
         # (no gateway JWT check) a request without a link code (401), sms-webhook (no gateway JWT
         # check either) a POST without X-Twilio-Signature (403, so TWILIO_AUTH_TOKEN is loaded).
         # The Edge Runtime container has no restart policy, so if it exits while booting the first
@@ -166,7 +167,7 @@ jobs:
         # EOT specs).
         run: |
           container=supabase_edge_runtime_sitelog
-          for probe in GET:api-export-payroll:401 GET:api-evidence-pack:401 POST:api-invite-reporter:401 GET:field-api/today:401 POST:sms-webhook:403; do
+          for probe in GET:api-export-payroll:401 GET:api-evidence-pack:401 POST:api-invite-reporter:401 POST:api-link-unknown-contact:401 POST:api-text-daily-link:401 GET:field-api/today:401 POST:sms-webhook:403; do
             IFS=: read -r method fn want <<< "$probe"
             code=000
             for attempt in 1 2 3 4 5 6; do

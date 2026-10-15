@@ -7,9 +7,9 @@ import { demoLinkCode } from '@sitelog/shared/demo/ids.ts';
 import type { DemoDataset } from '@sitelog/shared/demo/types.ts';
 import { toCountryPack, type CountryPack } from '@sitelog/shared/countries.ts';
 import { V12_ROW_DEFAULTS } from '@sitelog/shared/db/defaults.ts';
-import type { MessageRow, ReporterRow } from '@sitelog/shared/db/types.ts';
+import type { MessageRow, ReporterRow, SiteRow } from '@sitelog/shared/db/types.ts';
 import { firstName, formatDeadline, formatPhone } from '@sitelog/shared/format.ts';
-import { fieldLinkUrl, linkCodeHash } from '@sitelog/shared/links.ts';
+import { dailyLinkExpiresAt, fieldLinkUrl, linkCodeHash } from '@sitelog/shared/links.ts';
 import { languageOf } from '@sitelog/shared/locale.ts';
 import { optOutNotification } from '@sitelog/shared/sms/inbound.ts';
 import { planInboundSms } from '@sitelog/shared/sms/keywords.ts';
@@ -123,6 +123,49 @@ export function demoWelcome(
     renderOptions(data),
   );
   const row = smsRow(data, reporter, 'out', body, 'welcome', at);
+  data.messages.push(row);
+  return row;
+}
+
+/**
+ * "Text today's link" (F17, W1-16) as api-text-daily-link does it for a demo org: the reporter's
+ * daily link for the site and date (the seeded one when it exists: same key, same code), and the
+ * `daily_link` text on the console driver.
+ */
+export function demoDailyLink(
+  data: DemoDataset,
+  reporter: ReporterRow,
+  site: SiteRow,
+  date: string,
+  at: string,
+): MessageRow {
+  const code = demoLinkCode(`daily:${reporter.id}:${date}`);
+  const hash = linkCodeHash(code);
+  if (!data.fieldLinks.some((l) => l.code_hash === hash)) {
+    data.fieldLinks.push({
+      id: localId('link'),
+      code_hash: hash,
+      reporter_id: reporter.id,
+      site_id: site.id,
+      kind: 'daily',
+      report_date: date,
+      expires_at: dailyLinkExpiresAt(new Date(at)),
+      revoked_at: null,
+      last_opened_at: null,
+      created_at: at,
+    });
+  }
+  const body = renderSms(
+    'daily_link',
+    languageOf(reporter.locale),
+    {
+      site: site.name,
+      link: fieldLinkUrl(DEMO_LINK_BASE, code),
+      ...(sitelogNumber(data) ? { number: sitelogNumber(data)! } : {}),
+    },
+    renderOptions(data),
+  );
+  const row = smsRow(data, reporter, 'out', body, 'daily_link', at);
   data.messages.push(row);
   return row;
 }

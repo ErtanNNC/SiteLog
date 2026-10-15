@@ -5,18 +5,20 @@ config and import map, `deno.json`, which maps `@sitelog/shared` to `../../packa
 so the webhook normaliser, reminder ladder, templates and `Database` type are the same code the
 worker and the web panel use.
 
-| Function                  | Auth                                              | Purpose                                                                                       |
-| ------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `whatsapp-webhook`        | Meta `X-Hub-Signature-256` (HMAC with app secret) | GET handshake; POST stores inbound messages + delivery statuses, enqueues `inbound_message`   |
-| `scheduler-tick`          | `Authorization: Bearer $SCHEDULER_SECRET`         | Every 5 min via pg_cron: site-days, reminder ladder, missing alerts, weather, digest, cleanup |
-| `stripe-webhook`          | `Stripe-Signature`                                | Mirrors Stripe into `orgs.billing_*`, idempotent per event (`stripe_events`)                  |
-| `api-invite-reporter`     | Supabase JWT, org role admin/ops                  | Invite / re-send welcome / disable a reporter                                                 |
-| `api-link-unknown-sender` | Supabase JWT, admin/ops of the site's org         | Link or ignore an unknown number, re-process the held message                                 |
-| `api-export-payroll`      | Supabase JWT, any member role                     | `GET ?org&week&site` → payroll CSV                                                            |
-| `api-evidence-pack`       | Supabase JWT, admin/pm/ops                        | Request an EOT evidence pack; fetch a 7-day signed download URL                               |
-| `api-billing`             | Supabase JWT, admin                               | Stripe checkout / portal / quantity sync / pause & resume site / invoices / status            |
-| `field-api`               | link code + `sl_dev_*` device cookie (no JWT)     | The field app's only backend (W1-07, spec §6.5, Appendix B): link, device, consent, uploads   |
-| `sms-webhook`             | `X-Twilio-Signature`; `/demo-reply`: JWT, admin   | Twilio inbound texts (§9.5 keywords, F13) and delivery status; the Demo phone's typed replies |
+| Function                   | Auth                                              | Purpose                                                                                       |
+| -------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `whatsapp-webhook`         | Meta `X-Hub-Signature-256` (HMAC with app secret) | GET handshake; POST stores inbound messages + delivery statuses, enqueues `inbound_message`   |
+| `scheduler-tick`           | `Authorization: Bearer $SCHEDULER_SECRET`         | Every 5 min via pg_cron: site-days, reminder ladder, missing alerts, weather, digest, cleanup |
+| `stripe-webhook`           | `Stripe-Signature`                                | Mirrors Stripe into `orgs.billing_*`, idempotent per event (`stripe_events`)                  |
+| `api-invite-reporter`      | Supabase JWT, org role admin/ops                  | Invite / re-send welcome / disable a reporter                                                 |
+| `api-link-unknown-sender`  | Supabase JWT, admin/ops of the site's org         | Link or ignore an unknown number, re-process the held message                                 |
+| `api-link-unknown-contact` | Supabase JWT, admin/ops of the site's org         | W1-16 (D38): link a caller or texter with F3 consent pending, or ignore; replaces the above   |
+| `api-text-daily-link`      | Supabase JWT, admin/pm/ops of the site's org      | W1-16: "Text today's link": today's daily link to the site's reporter through the Notifier    |
+| `api-export-payroll`       | Supabase JWT, any member role                     | `GET ?org&week&site` → payroll CSV                                                            |
+| `api-evidence-pack`        | Supabase JWT, admin/pm/ops                        | Request an EOT evidence pack; fetch a 7-day signed download URL                               |
+| `api-billing`              | Supabase JWT, admin                               | Stripe checkout / portal / quantity sync / pause & resume site / invoices / status            |
+| `field-api`                | link code + `sl_dev_*` device cookie (no JWT)     | The field app's only backend (W1-07, spec §6.5, Appendix B): link, device, consent, uploads   |
+| `sms-webhook`              | `X-Twilio-Signature`; `/demo-reply`: JWT, admin   | Twilio inbound texts (§9.5 keywords, F13) and delivery status; the Demo phone's typed replies |
 
 Every function but `field-api` is `Deno.serve(withHandler(...))`: CORS preflight for the panel origin
 (`APP_URL`), Zod-validated input, typed `createClient<AppDatabase>` (service role), JSON logs via
@@ -107,7 +109,9 @@ supabase functions deploy sms-webhook      --no-verify-jwt   # Twilio signature;
 
 # panel API: gateway JWT check stays on; each function also resolves the user + org role
 supabase functions deploy api-invite-reporter
-supabase functions deploy api-link-unknown-sender
+supabase functions deploy api-link-unknown-sender   # until the demo, then deleted (D38)
+supabase functions deploy api-link-unknown-contact
+supabase functions deploy api-text-daily-link
 supabase functions deploy api-export-payroll
 supabase functions deploy api-evidence-pack
 supabase functions deploy api-billing
@@ -251,6 +255,26 @@ Notes:
   text or a call (`channel 'sms'`/`'voice'`) gets 409, because it becomes active only after F3
   consent (W1-16), and so does a number whose reporter opted out (STOP; only START reactivates
   it). The rules are `checkLink` in `logic.ts`. Ignore works for every channel.
+- **api-link-unknown-contact** (W1-16, D38) replaces api-link-unknown-sender: the panel calls it
+  from W1-16 on, and the old function is deleted after the demo. A caller or texter (`channel`
+  `'sms'`/`'voice'`) becomes a reporter `invited` until F3 consent (`opted_out` when the phone sent
+  STOP on the pack's sender), with the pack's locale from "Speaks", their personal link
+  (`field_link.created`) and `send_welcome`; an existing invited or active reporter of the org keeps
+  their status. A WhatsApp-era sender (`channel` null) keeps the old function's rule (active, the
+  held message re-processed). Refused: a contact no longer pending (409), of another org (404) or
+  of no org (409, an SMS from an unknown number, spec §19 Q44), and a number whose reporter opted
+  out or is disabled (409). A held call recording is not re-processed until calls exist (week 2).
+  The rules are `checkContactLink` in `logic.ts`. Ignore works for every channel.
+- **api-text-daily-link** (W1-16, F17) texts a site's reporter (the primary one, else the first
+  active one) today's daily link: `{ siteId, requestId }` from admin, pm or ops (spec §19 Q69). The
+  link is the reporter's live daily `field_links` row for the site and today's date in the site's
+  time zone, else a new one expiring after `DAILY_LINK_TTL_HOURS` (default 72), its code derived
+  under `LINK_SIGNING_SECRET` (`ensureDailyLink`), so a second tap texts the same link. The text is
+  §9.2 `daily_link` through the Notifier (consent, opt-out, the pack's channels and sender; the
+  `console` driver for demo orgs), with `office_daily_link:<requestId>` as its dedupe key, so a
+  retried request texts once. Audited `field_link.created` and `daily_link.texted` (with the
+  outcome). The answer is `{ sent, channel | reason, detail }` and never holds the code. The flow
+  is `textDailyLink` in `app.ts`, on an injected store (`store_supabase.ts`).
 - **api-export-payroll** exports the whole ISO week (Mon–Sun) from `current_manpower`; with
   `include_unconfirmed_in_payroll = false` rows of unconfirmed or unknown companies are dropped.
   Column order is exactly `date,site,project_code,company,trade,workers,hours,report_no,version`.

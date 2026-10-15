@@ -35,6 +35,7 @@ import type {
   SiteCard,
   SiteDetail,
   TeamData,
+  TextDailyLinkResult,
   WeatherLog,
 } from './types';
 
@@ -286,6 +287,12 @@ export interface DataSource {
    */
   saveReportPdf(input: SaveReportPdfInput): Promise<string>;
   markNoWork(siteDayId: string): Promise<void>;
+  /**
+   * F17 "Text today's link" (W1-16): today's daily link to the site's reporter through the
+   * Notifier (api-text-daily-link; the demo writes the console text). `requestId` makes one tap
+   * one text, however often the request is retried.
+   */
+  textDailyLink(siteId: string, requestId: string): Promise<TextDailyLinkResult>;
   resolveUnknownCompany(input: ResolveUnknownCompanyInput): Promise<void>;
   reviewGlossaryTerm(input: ReviewGlossaryTermInput): Promise<void>;
   addGlossaryTerm(input: AddGlossaryTermInput): Promise<void>;

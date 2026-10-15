@@ -170,6 +170,26 @@ export const copy = {
     demoOnly: 'Demo mode: simulated in memory.',
   },
 
+  /**
+   * §11.3 `ChannelIcon` (W1-16): how a site reports. The visible label is short; the screen reader
+   * hears what it means (spec: "Reported by text link" / "Reported by call").
+   */
+  channel: {
+    link: 'Link',
+    call: 'Call',
+    office: 'Typed',
+    reported: {
+      link: 'Reported by text link',
+      call: 'Reported by call',
+      office: 'Typed in the panel',
+    },
+    prefers: {
+      link: 'Reports by text link',
+      call: 'Reports by call',
+      office: 'Typed in the panel',
+    },
+  },
+
   chips: {
     filed: 'Filed',
     awaiting: 'Awaiting',
@@ -181,6 +201,7 @@ export const copy = {
     pending: 'Awaiting',
     late: 'Late',
     lateAt: (time: string) => `Late ${time}`,
+    lateAtTime: 'Late {{time}}',
     paused: 'Paused',
     active: 'Active',
     archived: 'Archived',
@@ -415,17 +436,23 @@ export const copy = {
     emailThing: 'the emails',
   },
 
+  /**
+   * P3 Overview and the Web-Overview artboard (W1-16): plain strings for `t()` (EN and TR), so the
+   * page speaks the panel's language. `noSites`, `noSitesAskAdmin` and `connectFirstSite` are also
+   * read by Sites, Reports and Settings.
+   */
   overview: {
-    title: (n: number) => `Today across ${plural(n, 'site')}`,
+    title_one: 'Today across {{count}} site',
+    title_other: 'Today across {{count}} sites',
     pdfs: 'Today’s PDFs',
     pdfsDemo: 'Demo mode: PDFs are rendered by the worker from each filed report.',
     pdfsNone: 'No PDFs yet today.',
+    kpisLabel: 'Today in numbers',
     kpis: {
       reportsIn: 'Reports in',
       crew: 'Crew on site',
       crewUnit: 'workers',
       hours: 'Labor hours logged',
-      hoursUnit: 'h',
       weather: 'Weather-affected sites',
       weatherLink: 'Added to delay log',
       segments: {
@@ -436,28 +463,32 @@ export const copy = {
       },
     },
     sitesToday: 'Sites today',
+    allSites: 'All sites',
     columns: {
       site: 'Site',
       status: 'Status',
+      channel: 'Channel',
       inAt: 'In at',
       crew: 'Crew',
       hours: 'Hours',
       weather: 'Weather',
     },
     weatherNone: 'Dry, no impact',
-    lostHours: (h: string) => `${h} lost`,
+    weatherFrom: 'from {{time}}',
+    lostHours: '{{hours}} lost',
+    remindersSent_one: '{{count}} reminder sent',
+    remindersSent_other: '{{count}} reminders sent',
     needsAttention: 'Needs attention',
     allClear: 'All clear',
     allClearBody: 'Every site has reported and nothing is waiting on you.',
     nothingYet: 'Nothing needs you yet',
-    nothingYetBody: (awaiting: number) => `${plural(awaiting, 'site')} still to report today.`,
-    emptyBeforeReports: (deadline: string, r1: string) =>
-      `Reports usually arrive after ${deadline}. Reminders go out at ${r1}.`,
-    emptyBeforeReportsNoReminders: (deadline: string) =>
-      `Reports usually arrive after ${deadline}.`,
-    emptyNoReporter: 'No site manager reports by WhatsApp yet',
+    nothingYetBody_one: '{{count}} site still to report today.',
+    nothingYetBody_other: '{{count}} sites still to report today.',
+    emptyBeforeReports: 'Reports usually arrive after {{deadline}}. Reminders go out at {{r1}}.',
+    emptyBeforeReportsNoReminders: 'Reports usually arrive after {{deadline}}.',
+    emptyNoReporter: 'No site manager reports yet',
     emptyNoReporterBody:
-      'Type today’s report in the panel until a site manager is linked to report by WhatsApp.',
+      'Type today’s report in the panel until a site manager is invited to report by text link or call.',
     noSitesTitle: 'No sites yet',
     noSites: 'Connect your first site, then file its daily reports from Reports → New report.',
     noSitesAskAdmin: 'An admin connects sites. Ask an admin to connect the first one.',
@@ -467,43 +498,92 @@ export const copy = {
     allPausedAskAdmin:
       'An admin resumes sites. Ask an admin to resume one and daily reports start again.',
     openSites: 'Open sites',
+    /** D29: a demo organisation's texts all land on the Demo phone (§4.5, §11.1). */
+    demoPhoneCard: {
+      eyebrow: 'Demo',
+      title: 'Every text lands on the Demo phone',
+      body: 'This is a demo organisation: welcome texts, today’s links and reminders go to the Demo phone, not to real phones. Open a link there to report as a site manager, then come back and watch this page update.',
+      cta: 'Open the Demo phone',
+    },
     attention: {
+      /** The kind tag on each card (Web-Overview: MISSING · NEEDS REVIEW · INVOICE CHECK). */
+      labels: {
+        missing: 'Missing',
+        needs_review: 'Needs review',
+        invoice_gap: 'Invoice check',
+        unknown_contact: 'Unknown contact',
+        glossary_review: 'Glossary',
+        undeliverable: 'Not delivered',
+      },
       missing: {
-        title: (site: string) => `${site} — no report`,
-        body: (first: string, reminders: number) =>
-          `${first} didn’t answer ${plural(reminders, 'reminder')}.`,
-        call: (first: string) => `Call ${first}`,
+        title: '{{site}} — no report',
+        body_one: '{{first}} didn’t answer {{count}} reminder.',
+        body_other: '{{first}} didn’t answer {{count}} reminders.',
+        bodyNoReminders: 'No report from {{first}} by the deadline.',
+        call: 'Call {{first}}',
+        textLink: 'Text today’s link',
         markNoWork: 'Mark no work',
       },
       needs_review: {
-        title: (site: string) => `${site} needs review`,
-        unknownCompany: (name: string, workers: number) =>
-          `Unknown subcontractor “${name}” · ${plural(workers, 'worker')}`,
+        title: '{{site}} needs review',
+        titleUnknownCompany: '{{site}} — unknown sub “{{name}}”',
+        unknownCompany_one: '{{count}} worker mentioned, not in your subcontractor list.',
+        unknownCompany_other: '{{count}} workers mentioned, not in your subcontractor list.',
         review: 'Review report',
       },
+      /** reports.review_reasons (§10.5, §10.9) as the Overview lists them. */
+      reasons: {
+        unknown_company: 'Unknown subcontractor “{{name}}”',
+        low_confidence: 'Low confidence: {{field}}',
+        unanswered: 'Unanswered question: {{field}}',
+        unconfirmed: 'Filed without confirmation from the site manager',
+        missing: 'Missing: {{field}}',
+        no_photo: 'No photo arrived after the call',
+        call_mismatch: 'The call recording differs from the confirmed report: {{field}}',
+        other: '{{reason}}',
+      },
       invoice_gap: {
-        title: (company: string, gap: string) => `Invoice gap: ${company} ${gap}`,
-        body: (no: string, invoiced: string, reported: string) =>
-          `${no} invoices ${invoiced} · reports show ${reported}`,
+        title: '{{company}}: {{invoiced}} billed',
+        bodyOver: 'Daily reports this week show {{reported}} — {{gap}} gap.',
+        bodyUnder: 'Daily reports this week show {{reported}} — {{gap}} more than billed.',
         compare: 'Compare hours',
       },
-      unknown_sender: {
-        title: 'Unknown number tried to report',
-        body: (phone: string, snippet: string) => `${phone} · “${snippet}”`,
+      unknown_contact: {
+        titleCall: 'Unknown caller',
+        titleText: 'Unknown number texted',
+        titleWhatsapp: 'Unknown number tried to report',
+        body: '{{phone}} · “{{snippet}}”',
+        bodyNoSnippet: '{{phone}}',
         link: 'Link number',
       },
       glossary_review: {
-        title: (n: number) => `${plural(n, 'glossary term')} to review`,
-        body: (terms: string[]) => terms.map((t) => `“${t}”`).join(', '),
+        title_one: '{{count}} glossary term to review',
+        title_other: '{{count}} glossary terms to review',
+        body: '{{terms}}',
         review: 'Review terms',
+      },
+      undeliverable: {
+        title: 'Text to {{name}} not delivered',
+        body: 'The text sent at {{time}} did not reach their phone.',
+        call: 'Call {{first}}',
+        checkNumber: 'Check the number',
+      },
+    },
+    textLink: {
+      sent: 'Today’s link texted to {{first}}.',
+      notSent: {
+        no_consent: '{{first}} has not agreed to texts, so nothing was sent.',
+        opted_out: '{{first}} opted out of texts, so nothing was sent.',
+        no_channel: 'No message channel can reach {{first}}, so nothing was sent.',
+        console_real_org:
+          'Texts are not live for this organisation’s country yet, so nothing reached {{first}}.',
       },
     },
     markNoWorkDialog: {
-      title: (site: string) => `Mark no work at ${site}?`,
-      body: (date: string) =>
-        `${date} will be recorded as a day with no work. The site manager can still send a late report, which replaces this.`,
+      title: 'Mark no work at {{site}}?',
+      body: '{{date}} will be recorded as a day with no work. The site manager can still send a late report, which replaces this.',
       confirm: 'Mark no work',
-      done: (site: string) => `${site} marked as no work.`,
+      done: '{{site}} marked as no work.',
     },
     liveUpdates: 'Live updates on',
   },
@@ -1191,6 +1271,9 @@ export const copy = {
     link: {
       title: (phone: string) => `Link ${phone} to a site`,
       description: 'The held message is processed as soon as the number is linked.',
+      /** A caller or texter (W1-16): invited until they consent (F3, F13 step 4). */
+      descriptionConsent:
+        'SiteLog texts them a welcome with their link. They can report once they agree to texts and recording.',
       name: 'Name',
       namePlaceholder: 'Who is this?',
       role: 'Role',
@@ -2009,18 +2092,15 @@ export const copy = {
       },
     },
     filedCallout: (no: string) => `Filed as ${no}. The office has it now.`,
-    overviewCard: {
-      eyebrow: 'Demo',
-      title: 'Try it on WhatsApp',
-      body: 'Be Marco on site: send his voice note, answer one question, file the report — then come back and watch this page update.',
-      cta: 'Open the field simulator',
-    },
   },
 
   a11y: {
     statusChip: (label: string) => `Status: ${label}`,
+    /** `t()` forms of the shared components (StatusChip, KpiTile), W1-16. */
+    statusChipLabel: 'Status: {{label}}',
     lateBadge: 'Filed after the deadline',
     kpiBar: (parts: string) => `Breakdown: ${parts}`,
+    kpiBreakdown: 'Breakdown: {{parts}}',
     siteCard: (name: string) => `Site card: ${name}`,
     menuFor: (name: string) => `Menu for ${name}`,
     required: 'required',

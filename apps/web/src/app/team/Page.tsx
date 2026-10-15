@@ -278,16 +278,14 @@ export default function TeamPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  {/* A caller or texter is linked once they consent (api-link-unknown-contact,
-                      W1-16); until then only WhatsApp senders can be linked here. */}
-                  {u.channel === null ? (
-                    <Button variant="secondary" size="dense" onClick={() => setLinking(u)}>
-                      <Link2 aria-hidden="true" />
-                      {u.guessedSiteName
-                        ? copy.team.unknown.link(u.guessedSiteName)
-                        : copy.team.unknown.linkOther}
-                    </Button>
-                  ) : null}
+                  {/* W1-16: a caller or texter is linked too (api-link-unknown-contact), as a
+                      reporter invited until they consent (F3). */}
+                  <Button variant="secondary" size="dense" onClick={() => setLinking(u)}>
+                    <Link2 aria-hidden="true" />
+                    {u.guessedSiteName
+                      ? copy.team.unknown.link(u.guessedSiteName)
+                      : copy.team.unknown.linkOther}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="dense"

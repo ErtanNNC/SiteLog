@@ -26,6 +26,7 @@ import type {
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import type { OrgSettingsRow } from '@sitelog/shared/db/types.ts';
 import type { OrgLocale } from '@sitelog/shared/locale.ts';
+import type { CopyKey } from '@/i18n/keys';
 
 export interface Chip {
   variant: ChipVariant;
@@ -120,6 +121,35 @@ export interface OverviewKpis {
   weatherLostHours: number;
 }
 
+/**
+ * A panel string by its `copy/en.ts` key (D9), for view models built outside React: the page
+ * renders it with `t()`, so the panel's language applies (W1-16). Numbers that read differently per
+ * language travel as values: `{ hours }` (184 h · 184 sa), `{ time, tz }` (an instant shown in that
+ * time zone), `{ date }` (a `YYYY-MM-DD` day).
+ */
+export type CopyVarValue =
+  string | number | { hours: number } | { time: string; tz: string } | { date: string };
+
+export interface CopyRef {
+  key: CopyKey;
+  vars?: Record<string, CopyVarValue>;
+}
+
+/**
+ * How a site reports (§11.3 `ChannelIcon`, F17 "channel icon: link or call"; W1-16): its report's
+ * channel when one came in (`web` → link, `voice` → call, `office` → typed in the panel), else
+ * the primary reporter's preference (`contact_pref`).
+ */
+export type OverviewChannel = 'link' | 'call' | 'office';
+
+/** The weather cell: the report's first stoppage (or first period), as the reporter said it. */
+export interface OverviewWeather {
+  condition: string;
+  start: string | null;
+  end: string | null;
+  impact: string | null;
+}
+
 export interface OverviewSiteRow {
   siteId: string;
   siteName: string;
@@ -132,11 +162,15 @@ export interface OverviewSiteRow {
   siteDayId: string | null;
   siteDayStatus: SiteDayStatus | null;
   chip: Chip;
+  /** The channel of today's report, else the reporter's preference; null: nobody reports here. */
+  channel: OverviewChannel | null;
+  /** true: `channel` is how today's report came in; false: how the reporter prefers to report. */
+  channelReported: boolean;
   /** ISO instant the voice note was received (shown in the site tz). */
   inAt: string | null;
   crew: number | null;
   hours: number | null;
-  weatherImpact: string | null;
+  weather: OverviewWeather | null;
   lostHours: number;
   weatherDay: boolean;
   reportId: string | null;
@@ -144,28 +178,48 @@ export interface OverviewSiteRow {
   isLate: boolean;
   needsReview: boolean;
   reminderStage: number;
+  /** Reminder texts (`reminder_1`, `reminder_2`) sent to the reporter today (Web-Overview). */
+  remindersSent: number;
 }
 
+/** F17 step 2, in priority order. */
 export type AttentionKind =
-  'missing' | 'needs_review' | 'invoice_gap' | 'unknown_sender' | 'glossary_review';
+  | 'missing'
+  | 'needs_review'
+  | 'invoice_gap'
+  | 'unknown_contact'
+  | 'glossary_review'
+  | 'undeliverable';
 
 export type AttentionAction =
-  | { kind: 'call'; label: string; tel: string }
-  | { kind: 'mark_no_work'; label: string; siteDayId: string; siteName: string; date: string }
-  | { kind: 'review_report'; label: string; reportId: string }
-  | { kind: 'compare_hours'; label: string; week: string }
-  | { kind: 'link_number'; label: string }
-  | { kind: 'review_terms'; label: string };
+  | { kind: 'call'; label: CopyRef; tel: string }
+  | { kind: 'text_link'; label: CopyRef; siteId: string; first: string }
+  | { kind: 'mark_no_work'; label: CopyRef; siteDayId: string; siteName: string; date: string }
+  | { kind: 'review_report'; label: CopyRef; reportId: string }
+  | { kind: 'compare_hours'; label: CopyRef; week: string }
+  | { kind: 'link_number'; label: CopyRef }
+  | { kind: 'open_team'; label: CopyRef }
+  | { kind: 'review_terms'; label: CopyRef };
 
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
-  title: string;
-  body: string;
+  title: CopyRef;
+  /** One or more lines, joined with " · ". */
+  body: CopyRef[];
   actions: AttentionAction[];
   siteId?: string;
   reportId?: string;
 }
+
+/** "Text today's link" (F17, W1-16): what the Notifier did. */
+export type TextDailyLinkResult =
+  | { sent: true; channel: string }
+  | {
+      sent: false;
+      reason: 'no_consent' | 'opted_out' | 'no_channel';
+      detail: string | null;
+    };
 
 export interface OverviewData {
   /** Org-local date "YYYY-MM-DD". */

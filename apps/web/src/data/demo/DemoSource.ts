@@ -290,6 +290,13 @@ export class DemoSource implements DataSource {
   markNoWork(siteDayId: string) {
     return this.run(() => this.store.markNoWork(siteDayId, this.user.id));
   }
+  textDailyLink(siteId: string, requestId: string) {
+    return this.run(() => {
+      // api-text-daily-link's roles: everyone who sees the Overview (spec §19 Q69).
+      if (!['admin', 'pm', 'ops'].includes(this.user.role)) throw new Error(copy.errors.notAllowed);
+      return this.store.textDailyLink(siteId, requestId, this.user.id);
+    });
+  }
   resolveUnknownCompany(input: ResolveUnknownCompanyInput) {
     return this.run(() => this.store.resolveUnknownCompany(input, this.user.id));
   }

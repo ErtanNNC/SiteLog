@@ -79,7 +79,8 @@ import {
   parseIsoDate,
 } from '@sitelog/shared/format.ts';
 import { copy } from '@/copy/en';
-import { formatGap, formatHoursNum } from '@/lib/format';
+import { copyRef } from '@/i18n/copyRef';
+import { formatHoursNum } from '@/lib/format';
 import { groupBy, isRecord, sum, uniq } from '@/lib/utils';
 import type {
   ActivityEntry,
@@ -89,6 +90,7 @@ import type {
   CalendarChannel,
   Chip,
   CompanyOption,
+  CopyRef,
   CrewRow,
   DelayEntry,
   GlossaryData,
@@ -102,8 +104,10 @@ import type {
   NavBadges,
   NotificationItem,
   OfficeUser,
+  OverviewChannel,
   OverviewData,
   OverviewSiteRow,
+  OverviewWeather,
   PackItem,
   QuestionItem,
   ReportDetail,
@@ -544,14 +548,17 @@ export function currentWeather(rows: RowSet, ix: Index): WeatherLike[] {
   });
 }
 
-function weatherImpactText(data: DailyReportData | null): string | null {
+function overviewWeather(data: DailyReportData | null): OverviewWeather | null {
   if (!data) return null;
   const p =
     data.weather.periods.find((x) => x.lostHours > 0 || x.fullDay) ?? data.weather.periods[0];
   if (!p) return null;
-  const range = p.start && p.end ? `${p.start}–${p.end}` : p.start ? `from ${p.start}` : '';
-  const head = [p.condition, range].filter(Boolean).join(' ');
-  return p.impact ? `${head} · ${p.impact}` : head;
+  return {
+    condition: p.condition,
+    start: p.start ?? null,
+    end: p.end ?? null,
+    impact: p.impact ?? null,
+  };
 }
 
 /**
@@ -675,6 +682,48 @@ export function manpowerChanges(
 
 // ───────────────────────────── Overview ─────────────────────────────
 
+/** A report's channel on the Overview (§11.3 `ChannelIcon`): web → link, voice → call. */
+function reportChannel(channel: ReportRow['channel']): OverviewChannel | null {
+  switch (channel) {
+    case 'web':
+    case 'sms':
+      return 'link';
+    case 'voice':
+      return 'call';
+    case 'office':
+      return 'office';
+    default:
+      return null;
+  }
+}
+
+/** A review reason (§10.5, §10.9) as an Overview line. */
+function reviewReasonRef(reason: string): CopyRef {
+  const [kind, ...rest] = reason.split(':');
+  const arg = rest.join(':');
+  switch (kind) {
+    case 'unknown_company':
+      return copyRef('overview.attention.reasons.unknown_company', { name: arg });
+    case 'low_confidence':
+      return copyRef('overview.attention.reasons.low_confidence', { field: arg });
+    case 'unanswered':
+      return copyRef('overview.attention.reasons.unanswered', { field: arg });
+    case 'unconfirmed':
+      return copyRef('overview.attention.reasons.unconfirmed');
+    case 'missing':
+      return copyRef('overview.attention.reasons.missing', { field: arg });
+    case 'no_photo':
+      return copyRef('overview.attention.reasons.no_photo');
+    case 'call_mismatch':
+      return copyRef('overview.attention.reasons.call_mismatch', { field: arg });
+    default:
+      return copyRef('overview.attention.reasons.other', { reason });
+  }
+}
+
+const REMINDER_KEYS = new Set(['reminder_1', 'reminder_2']);
+const UNDELIVERED = new Set(['failed', 'undeliverable']);
+
 export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
   const ix = buildIndex(rows);
   const orgTz = rows.org.timezone;
@@ -688,6 +737,7 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
   const pdfReportIds: string[] = [];
   const sitesToday: OverviewSiteRow[] = [];
   const attention: AttentionItem[] = [];
+  const outbound = rows.messages.filter((m) => m.direction === 'out' && m.reporter_id);
 
   for (const site of active) {
     const siteToday = formatDateInTz(ctx.now, site.timezone);
@@ -721,6 +771,17 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       lost += lostHours;
     }
 
+    // The reminder texts this reporter got today (the ladder's, from M6; §18.1's two at Elm St.).
+    const remindersSent = reporter
+      ? outbound.filter(
+          (m) =>
+            m.reporter_id === reporter.id &&
+            REMINDER_KEYS.has(m.copy_key ?? '') &&
+            formatDateInTz(m.created_at, site.timezone) === siteToday,
+        ).length
+      : 0;
+    const reported = report ? reportChannel(report.channel) : null;
+
     sitesToday.push({
       siteId: site.id,
       siteName: site.name,
@@ -733,10 +794,12 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       siteDayId: sd?.id ?? null,
       siteDayStatus: status,
       chip,
+      channel: reported ?? reporter?.contact_pref ?? null,
+      channelReported: reported !== null,
       inAt: report?.received_at ?? null,
       crew: filedData ? filedData.crewOnSite : null,
       hours: filedData ? filedData.totalHours : null,
-      weatherImpact: weatherImpactText(data),
+      weather: overviewWeather(data),
       lostHours,
       weatherDay: isWeatherDay,
       // Only a filed report can be opened; a draft or a voided one has no page yet.
@@ -745,30 +808,40 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       isLate: !!(sd?.is_late || report?.is_late),
       needsReview: !!report?.needs_review && report.status === 'filed',
       reminderStage: sd?.reminder_stage ?? 0,
+      remindersSent,
     });
 
     if (status === 'missing' && sd) {
       const first = reporter ? firstName(reporter.name) : copy.sites.reporter;
-      const reminders = sd.reminder_stage >= 3 ? 2 : sd.reminder_stage >= 2 ? 1 : 0;
       attention.push({
         id: `missing:${sd.id}`,
         kind: 'missing',
-        title: copy.overview.attention.missing.title(site.name),
-        body: copy.overview.attention.missing.body(first, reminders),
+        title: copyRef('overview.attention.missing.title', { site: site.name }),
+        body: [
+          remindersSent > 0
+            ? copyRef('overview.attention.missing.body', { first, count: remindersSent })
+            : copyRef('overview.attention.missing.bodyNoReminders', { first }),
+        ],
         siteId: site.id,
         actions: [
           ...(reporter
             ? [
                 {
                   kind: 'call' as const,
-                  label: copy.overview.attention.missing.call(first),
+                  label: copyRef('overview.attention.missing.call', { first }),
                   tel: reporter.phone_e164,
+                },
+                {
+                  kind: 'text_link' as const,
+                  label: copyRef('overview.attention.missing.textLink'),
+                  siteId: site.id,
+                  first,
                 },
               ]
             : []),
           {
             kind: 'mark_no_work',
-            label: copy.overview.attention.missing.markNoWork,
+            label: copyRef('overview.attention.missing.markNoWork'),
             siteDayId: sd.id,
             siteName: site.name,
             date: sd.date,
@@ -777,32 +850,44 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       });
     }
     if (report && report.status === 'filed' && report.needs_review) {
-      const reasons = report.review_reasons.map((r) => {
-        const [kind, name] = r.split(':');
-        if (kind === 'unknown_company' && data) {
-          const entry = data.manpower.find(
-            (m) =>
-              m.companyName.toLowerCase() === (name ?? '').toLowerCase() ||
-              m.companyNameHeard.toLowerCase() === (name ?? '').toLowerCase(),
-          );
-          return copy.overview.attention.needs_review.unknownCompany(
-            name ?? '',
-            entry?.workers ?? 0,
-          );
-        }
-        return reviewReasonText(r);
-      });
+      const reasons = report.review_reasons;
+      const [only] = reasons;
+      const [onlyKind, ...onlyName] = (only ?? '').split(':');
+      // One unknown subcontractor: the artboard's "Oakmont — unknown sub “Ridgeway”".
+      const single =
+        reasons.length === 1 && onlyKind === 'unknown_company' ? onlyName.join(':') : null;
+      const entry =
+        single !== null && data
+          ? data.manpower.find(
+              (m) =>
+                m.companyName.toLowerCase() === single.toLowerCase() ||
+                m.companyNameHeard.toLowerCase() === single.toLowerCase(),
+            )
+          : undefined;
       attention.push({
         id: `review:${report.id}`,
         kind: 'needs_review',
-        title: copy.overview.attention.needs_review.title(site.name),
-        body: reasons.join(' · '),
+        title:
+          single !== null
+            ? copyRef('overview.attention.needs_review.titleUnknownCompany', {
+                site: shortSiteName(site.name),
+                name: single,
+              })
+            : copyRef('overview.attention.needs_review.title', { site: site.name }),
+        body:
+          single !== null
+            ? [
+                copyRef('overview.attention.needs_review.unknownCompany', {
+                  count: entry?.workers ?? 0,
+                }),
+              ]
+            : reasons.map(reviewReasonRef),
         siteId: site.id,
         reportId: report.id,
         actions: [
           {
             kind: 'review_report',
-            label: copy.overview.attention.needs_review.review,
+            label: copyRef('overview.attention.needs_review.review'),
             reportId: report.id,
           },
         ],
@@ -837,14 +922,24 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
       id: `gap:${inv.id}`,
       kind: 'invoice_gap',
       gap,
-      title: copy.overview.attention.invoice_gap.title(company.name, formatGap(gap)),
-      body: copy.overview.attention.invoice_gap.body(
-        inv.invoice_no ?? '',
-        formatHours(invoiced),
-        formatHours(reported),
-      ),
+      title: copyRef('overview.attention.invoice_gap.title', {
+        company: company.name,
+        invoiced: { hours: invoiced },
+      }),
+      body: [
+        copyRef(
+          gap > 0
+            ? 'overview.attention.invoice_gap.bodyOver'
+            : 'overview.attention.invoice_gap.bodyUnder',
+          { reported: { hours: reported }, gap: { hours: Math.abs(gap) } },
+        ),
+      ],
       actions: [
-        { kind: 'compare_hours', label: copy.overview.attention.invoice_gap.compare, week },
+        {
+          kind: 'compare_hours',
+          label: copyRef('overview.attention.invoice_gap.compare'),
+          week,
+        },
       ],
     });
   }
@@ -852,14 +947,25 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
   attention.push(...gapItems.map(({ gap: _g, ...item }) => item));
 
   for (const u of rows.unknownContacts.filter((x) => x.status === 'pending')) {
-    const snippet = (u.snippet ?? '').replace(/…$/, '');
+    const snippet = (u.snippet ?? '').replace(/…$/, '').trim();
     const short = snippet.length > 42 ? `${snippet.slice(0, 41).trimEnd()}…` : snippet;
+    const phone = formatPhone(u.phone_e164);
     attention.push({
       id: `unknown:${u.id}`,
-      kind: 'unknown_sender',
-      title: copy.overview.attention.unknown_sender.title,
-      body: copy.overview.attention.unknown_sender.body(formatPhone(u.phone_e164), short),
-      actions: [{ kind: 'link_number', label: copy.overview.attention.unknown_sender.link }],
+      kind: 'unknown_contact',
+      title: copyRef(
+        u.channel === 'voice'
+          ? 'overview.attention.unknown_contact.titleCall'
+          : u.channel === null
+            ? 'overview.attention.unknown_contact.titleWhatsapp'
+            : 'overview.attention.unknown_contact.titleText',
+      ),
+      body: [
+        short
+          ? copyRef('overview.attention.unknown_contact.body', { phone, snippet: short })
+          : copyRef('overview.attention.unknown_contact.bodyNoSnippet', { phone }),
+      ],
+      actions: [{ kind: 'link_number', label: copyRef('overview.attention.unknown_contact.link') }],
     });
   }
 
@@ -868,9 +974,50 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
     attention.push({
       id: 'glossary:review',
       kind: 'glossary_review',
-      title: copy.overview.attention.glossary_review.title(review.length),
-      body: copy.overview.attention.glossary_review.body(review.map((t) => t.heard)),
-      actions: [{ kind: 'review_terms', label: copy.overview.attention.glossary_review.review }],
+      title: copyRef('overview.attention.glossary_review.title', { count: review.length }),
+      body: [
+        copyRef('overview.attention.glossary_review.body', {
+          terms: review.map((t) => `“${t.heard}”`).join(', '),
+        }),
+      ],
+      actions: [
+        { kind: 'review_terms', label: copyRef('overview.attention.glossary_review.review') },
+      ],
+    });
+  }
+
+  // F17 `undeliverable_sms`: today's texts (org day) that ended failed or undeliverable, one
+  // item per reporter (their latest), until a later text to them is delivered.
+  const latestByReporter = new Map<string, MessageRow>();
+  for (const m of outbound) {
+    if (formatDateInTz(m.created_at, orgTz) !== today) continue;
+    const prior = latestByReporter.get(m.reporter_id!);
+    if (!prior || prior.created_at <= m.created_at) latestByReporter.set(m.reporter_id!, m);
+  }
+  for (const m of [...latestByReporter.values()].sort((a, b) =>
+    a.created_at.localeCompare(b.created_at),
+  )) {
+    if (!UNDELIVERED.has(m.status)) continue;
+    const reporter = ix.reporterById.get(m.reporter_id!);
+    if (!reporter) continue;
+    const first = firstName(reporter.name);
+    attention.push({
+      id: `undeliverable:${m.id}`,
+      kind: 'undeliverable',
+      title: copyRef('overview.attention.undeliverable.title', { name: reporter.name }),
+      body: [
+        copyRef('overview.attention.undeliverable.body', {
+          time: { time: m.created_at, tz: orgTz },
+        }),
+      ],
+      actions: [
+        {
+          kind: 'call',
+          label: copyRef('overview.attention.undeliverable.call', { first }),
+          tel: reporter.phone_e164,
+        },
+        { kind: 'open_team', label: copyRef('overview.attention.undeliverable.checkNumber') },
+      ],
     });
   }
 
@@ -878,8 +1025,9 @@ export function assembleOverview(rows: RowSet, ctx: AssembleCtx): OverviewData {
     missing: 0,
     needs_review: 1,
     invoice_gap: 2,
-    unknown_sender: 3,
+    unknown_contact: 3,
     glossary_review: 4,
+    undeliverable: 5,
   };
   attention.sort((a, b) => order[a.kind] - order[b.kind]);
 

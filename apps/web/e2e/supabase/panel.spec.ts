@@ -86,6 +86,128 @@ test('realtime: a site-day change on the server flips the Overview row without a
   }
 });
 
+// W1-16: a report filed on the server (as the worker's file_report leaves it: a filed report on
+// the web channel and its site-day `filed`) flips the Overview row without a reload. Realtime is
+// the fast path; the page's 10 s poll (OVERVIEW_POLL_MS) would also get there within the timeout.
+test('realtime: server-side filing flips the Overview row to Filed with its channel', async ({
+  page,
+}) => {
+  const ready = realtimeReady(page);
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: 'Today across 6 sites' })).toBeVisible();
+  const row = page
+    .getByRole('table', { name: 'Sites today' })
+    .getByRole('row')
+    .filter({ hasText: 'Elm St. Townhomes' });
+  await expect(row).toContainText('Missing');
+  await expect(row.getByText('Reports by text link')).toBeAttached();
+  await ready;
+  await page.evaluate(() => {
+    (window as unknown as { __noReload: boolean }).__noReload = true;
+  });
+
+  const { data: priya } = await admin()
+    .from('reporters')
+    .select('id')
+    .eq('org_id', SEED.orgId)
+    .eq('name', 'Priya Raman')
+    .single()
+    .throwOnError();
+  const { data: report } = await admin()
+    .from('reports')
+    .insert({
+      org_id: SEED.orgId,
+      site_id: SEED.sites.elm,
+      site_day_id: SEED.elmSiteDay,
+      report_no: 'ES-0377-E2E-W116',
+      status: 'filed',
+      reporter_id: priya.id,
+      received_at: '2026-10-09T23:58:00Z',
+      confirmed_at: '2026-10-10T00:01:00Z',
+      filed_at: '2026-10-10T00:01:00Z',
+      is_late: true,
+      channel: 'web',
+      language: 'en',
+    })
+    .select('id')
+    .single()
+    .throwOnError();
+  try {
+    await admin()
+      .from('site_days')
+      .update({ status: 'filed', report_id: report.id, is_late: true })
+      .eq('id', SEED.elmSiteDay)
+      .throwOnError();
+    await expect(row).toContainText('Filed', { timeout: 15_000 });
+    await expect(row).toContainText('18:58');
+    await expect(row.getByText('Reported by text link')).toBeAttached();
+    await expect(page.getByTestId('needs-attention').locator('[data-kind="missing"]')).toHaveCount(
+      0,
+    );
+    expect(
+      await page.evaluate(() => (window as unknown as { __noReload?: boolean }).__noReload),
+    ).toBe(true);
+  } finally {
+    await admin()
+      .from('site_days')
+      .update({ status: 'missing', report_id: null, is_late: false })
+      .eq('id', SEED.elmSiteDay)
+      .throwOnError();
+    await admin().from('reports').delete().eq('id', report.id).throwOnError();
+  }
+});
+
+// W1-16: "Text today's link" through api-text-daily-link. Kestrel is a demo org, so the text goes
+// through the console driver and lands in `messages` (and the Demo phone); the link row is today's
+// (the function's clock, not the page's pinned one) and its code is never in the answer.
+test('Text today’s link texts Priya her daily link through the Notifier', async ({ page }) => {
+  const since = new Date().toISOString();
+  const { data: priya } = await admin()
+    .from('reporters')
+    .select('id')
+    .eq('org_id', SEED.orgId)
+    .eq('name', 'Priya Raman')
+    .single()
+    .throwOnError();
+  const missing = page.getByTestId('needs-attention').locator('[data-kind="missing"]');
+  const answer = page.waitForResponse((r) => r.url().endsWith('/functions/v1/api-text-daily-link'));
+  await missing.getByRole('button', { name: 'Text today’s link' }).click();
+  const res = await answer;
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as Record<string, unknown>;
+  expect(body).toMatchObject({ sent: true, channel: 'sms', reporterId: priya.id });
+  expect(JSON.stringify(body)).not.toMatch(/\/r\//);
+  await expect(page.getByText('Today’s link texted to Priya.')).toBeVisible();
+
+  const { data: texts } = await admin()
+    .from('messages')
+    .select('copy_key, provider, status, body, channel')
+    .eq('reporter_id', priya.id)
+    .eq('copy_key', 'daily_link')
+    .gte('created_at', since)
+    .throwOnError();
+  expect(texts).toEqual([
+    expect.objectContaining({ provider: 'console', status: 'delivered', channel: 'sms' }),
+  ]);
+  expect(texts[0]!.body).toMatch(/^Today's report for Elm St\. Townhomes: \S+\/r\/[A-Z0-9]{6}/);
+  const { data: links } = await admin()
+    .from('field_links')
+    .select('kind, site_id, expires_at')
+    .eq('reporter_id', priya.id)
+    .eq('kind', 'daily')
+    .gte('created_at', since)
+    .throwOnError();
+  expect(links).toEqual([expect.objectContaining({ kind: 'daily', site_id: SEED.sites.elm })]);
+  const { data: audit } = await admin()
+    .from('audit_log')
+    .select('action, actor_id')
+    .eq('org_id', SEED.orgId)
+    .eq('action', 'daily_link.texted')
+    .gte('created_at', since)
+    .throwOnError();
+  expect(audit).toEqual([{ action: 'daily_link.texted', actor_id: SEED.admin.id }]);
+});
+
 test('editing a report saves a new version with the change note', async ({ page }) => {
   const { id, no } = SEED.northgateReport;
   const { data: before } = await admin()

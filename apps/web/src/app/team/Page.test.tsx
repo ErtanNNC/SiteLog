@@ -73,7 +73,7 @@ describe('TeamPage (demo data)', () => {
     expect(success).not.toHaveBeenCalledWith('Welcome text queued for Nora Haddad.');
   });
 
-  it('shows the unknown caller without a link action until W1-16', async () => {
+  it('links the unknown caller to the guessed site, invited until they consent (W1-16)', async () => {
     const store = new DemoStore();
     renderWithProviders(<TeamPage />, { route: '/team', store });
     const alert = await screen.findByTestId('unknown-sender');
@@ -81,8 +81,15 @@ describe('TeamPage (demo data)', () => {
     expect(alert).toHaveTextContent('Unknown number tried to report');
     expect(alert).toHaveTextContent('+1 555 019 4410 · 17:52');
     expect(alert).toHaveTextContent('this is Luis');
-    expect(within(alert).queryByRole('button', { name: /^Link/ })).not.toBeInTheDocument();
     expect(within(alert).getByRole('button', { name: 'Ignore' })).toBeInTheDocument();
+    await userEvent.click(within(alert).getByRole('button', { name: 'Link to Elm St. Townhomes' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('They can report once they agree to texts and recording.');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Link number' }));
+    await waitFor(() => expect(screen.queryByTestId('unknown-sender')).not.toBeInTheDocument());
+    const luis = store.data.reporters.find((r) => r.phone_e164 === '+15550194410')!;
+    expect(luis).toMatchObject({ name: 'Luis', status: 'invited' });
+    expect(store.data.unknownContacts[0]!.status).toBe('linked');
   });
 
   it('links a WhatsApp sender to the guessed site through the dialog', async () => {

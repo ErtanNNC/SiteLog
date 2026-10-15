@@ -104,6 +104,184 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     },
     common: {
       loading: 'Yükleniyor…',
+      cancel: 'Vazgeç',
+      confirm: 'Onayla',
+    },
+    table: {
+      empty: 'Henüz gösterilecek bir şey yok.',
+    },
+    /** §11.3 ChannelIcon (W1-16). */
+    channel: {
+      link: 'Link',
+      call: 'Arama',
+      office: 'Yazılı',
+      reported: {
+        link: 'Mesajdaki linkle raporlandı',
+        call: 'Telefonla raporlandı',
+        office: 'Panelde yazıldı',
+      },
+      prefers: {
+        link: 'Mesajdaki linkle rapor verir',
+        call: 'Telefonla rapor verir',
+        office: 'Panelde yazıldı',
+      },
+    },
+    chips: {
+      filed: 'Dosyalandı',
+      awaiting: 'Bekleniyor',
+      missing: 'Eksik',
+      needs_review: 'İnceleme gerekli',
+      weather_day: 'Hava engeli',
+      no_work: 'İş yok',
+      signed_off: 'Onaylandı',
+      pending: 'Bekleniyor',
+      late: 'Geç',
+      lateAtTime: 'Geç {{time}}',
+    },
+    reports: {
+      newReport: 'Yeni rapor',
+    },
+    /** P3 Overview (W1-16). */
+    overview: {
+      title: 'Bugün {{count}} şantiyede',
+      pdfs: 'Bugünün PDF’leri',
+      pdfsDemo: 'Demo modu: PDF’ler her dosyalanan rapordan arka planda oluşturulur.',
+      pdfsNone: 'Bugün henüz PDF yok.',
+      kpisLabel: 'Rakamlarla bugün',
+      kpis: {
+        reportsIn: 'Gelen raporlar',
+        crew: 'Sahadaki ekip',
+        crewUnit: 'çalışan',
+        hours: 'Kaydedilen işçilik saati',
+        weather: 'Hava etkisindeki şantiyeler',
+        weatherLink: 'Gecikme kaydına eklendi',
+        segments: {
+          filed: 'Dosyalandı',
+          weather: 'Hava engeli',
+          missing: 'Eksik',
+          awaiting: 'Bekleniyor',
+        },
+      },
+      sitesToday: 'Bugün şantiyeler',
+      allSites: 'Tüm şantiyeler',
+      columns: {
+        site: 'Şantiye',
+        status: 'Durum',
+        channel: 'Kanal',
+        inAt: 'Geliş',
+        crew: 'Ekip',
+        hours: 'Saat',
+        weather: 'Hava',
+      },
+      weatherNone: 'Kuru, etkisi yok',
+      weatherFrom: '{{time}} itibarıyla',
+      lostHours: '{{hours}} kayıp',
+      remindersSent: '{{count}} hatırlatma gönderildi',
+      needsAttention: 'İlgilenmeniz gerekenler',
+      allClear: 'Her şey yolunda',
+      allClearBody: 'Tüm şantiyeler raporladı, sizi bekleyen bir şey yok.',
+      nothingYet: 'Şimdilik sizi bekleyen bir şey yok',
+      nothingYetBody: 'Bugün {{count}} şantiyenin raporu bekleniyor.',
+      emptyBeforeReports:
+        'Raporlar genellikle {{deadline}} sonrasında gelir. Hatırlatma saati: {{r1}}.',
+      emptyBeforeReportsNoReminders: 'Raporlar genellikle {{deadline}} sonrasında gelir.',
+      emptyNoReporter: 'Henüz rapor veren şantiye şefi yok',
+      emptyNoReporterBody:
+        'Bir şantiye şefi mesajla link ya da telefonla rapor vermeye davet edilene kadar günün raporunu panelden yazın.',
+      noSitesTitle: 'Henüz şantiye yok',
+      noSites:
+        'İlk şantiyenizi bağlayın, ardından günlük raporlarını Raporlar → Yeni rapor üzerinden dosyalayın.',
+      noSitesAskAdmin:
+        'Şantiyeleri yöneticiler bağlar. İlk şantiyeyi bağlaması için bir yöneticiye danışın.',
+      connectFirstSite: 'İlk şantiyenizi bağlayın',
+      allPausedTitle: 'Tüm şantiyeler duraklatıldı',
+      allPaused: 'Bir şantiyeyi ayarlarından sürdürün; günlük raporlar yeniden başlar.',
+      allPausedAskAdmin:
+        'Şantiyeleri yöneticiler sürdürür. Birini sürdürmesi için bir yöneticiye danışın; günlük raporlar yeniden başlar.',
+      openSites: 'Şantiyeleri aç',
+      demoPhoneCard: {
+        eyebrow: 'Demo',
+        title: 'Tüm mesajlar Demo telefona düşer',
+        body: 'Bu bir demo şirket: karşılama mesajları, günün linkleri ve hatırlatmalar gerçek telefonlara değil Demo telefona gider. Oradaki bir linki açıp şantiye şefi olarak rapor verin, sonra bu sayfaya dönüp güncellenmesini izleyin.',
+        cta: 'Demo telefonu aç',
+      },
+      attention: {
+        labels: {
+          missing: 'Eksik',
+          needs_review: 'İnceleme gerekli',
+          invoice_gap: 'Fatura kontrolü',
+          unknown_contact: 'Bilinmeyen kişi',
+          glossary_review: 'Sözlük',
+          undeliverable: 'İletilemedi',
+        },
+        missing: {
+          title: '{{site}}: rapor yok',
+          body: '{{first}} {{count}} hatırlatmaya yanıt vermedi.',
+          bodyNoReminders: '{{first}} son saate kadar rapor göndermedi.',
+          call: 'Ara: {{first}}',
+          textLink: 'Günün linkini gönder',
+          markNoWork: 'İş yok olarak işaretle',
+        },
+        needs_review: {
+          title: '{{site}} inceleme bekliyor',
+          titleUnknownCompany: '{{site}}: bilinmeyen taşeron “{{name}}”',
+          unknownCompany: '{{count}} çalışan anıldı, taşeron listenizde yok.',
+          review: 'Raporu incele',
+        },
+        reasons: {
+          unknown_company: 'Bilinmeyen taşeron “{{name}}”',
+          low_confidence: 'Düşük güven: {{field}}',
+          unanswered: 'Yanıtlanmamış soru: {{field}}',
+          unconfirmed: 'Şantiye şefi onaylamadan dosyalandı',
+          missing: 'Eksik: {{field}}',
+          no_photo: 'Aramadan sonra fotoğraf gelmedi',
+          call_mismatch: 'Arama kaydı onaylanan rapordan farklı: {{field}}',
+          other: '{{reason}}',
+        },
+        invoice_gap: {
+          title: '{{company}}: {{invoiced}} faturalandı',
+          bodyOver: 'Bu haftanın günlük raporları {{reported}} gösteriyor; fark {{gap}}.',
+          bodyUnder:
+            'Bu haftanın günlük raporları {{reported}} gösteriyor; faturadan {{gap}} fazla.',
+          compare: 'Saatleri karşılaştır',
+        },
+        unknown_contact: {
+          titleCall: 'Bilinmeyen arayan',
+          titleText: 'Bilinmeyen numaradan mesaj',
+          titleWhatsapp: 'Bilinmeyen numara rapor göndermeye çalıştı',
+          body: '{{phone}} · “{{snippet}}”',
+          bodyNoSnippet: '{{phone}}',
+          link: 'Numarayı bağla',
+        },
+        glossary_review: {
+          title: '{{count}} sözlük terimi inceleme bekliyor',
+          body: '{{terms}}',
+          review: 'Terimleri incele',
+        },
+        undeliverable: {
+          title: '{{name}}: mesaj iletilemedi',
+          body: 'Gönderilen mesaj (saat {{time}}) telefonuna ulaşmadı.',
+          call: 'Ara: {{first}}',
+          checkNumber: 'Numarayı kontrol et',
+        },
+      },
+      textLink: {
+        sent: 'Günün linki gönderildi: {{first}}.',
+        notSent: {
+          no_consent: '{{first}} mesaj almayı kabul etmedi, bu yüzden bir şey gönderilmedi.',
+          opted_out: '{{first}} mesajlardan çıktı, bu yüzden bir şey gönderilmedi.',
+          no_channel: '{{first}} için uygun bir mesaj kanalı yok, bu yüzden bir şey gönderilmedi.',
+          console_real_org:
+            'Bu şirketin ülkesi için mesajlar henüz canlı değil, bu yüzden {{first}} bir şey almadı.',
+        },
+      },
+      markNoWorkDialog: {
+        title: '{{site}} için iş yok olarak işaretlensin mi?',
+        body: '{{date}} iş yapılmayan gün olarak kaydedilecek. Şantiye şefi yine de geç rapor gönderebilir; o zaman bu kaydın yerini alır.',
+        confirm: 'İş yok olarak işaretle',
+        done: '{{site}} iş yok olarak işaretlendi.',
+      },
+      liveUpdates: 'Canlı güncellemeler açık',
     },
     team: {
       officeRoles: {
@@ -138,6 +316,10 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     a11y: {
       searchResults: 'Arama sonuçları',
       loadingPage: 'Sayfa yükleniyor',
+      statusChipLabel: 'Durum: {{label}}',
+      lateBadge: 'Son saatten sonra dosyalandı',
+      kpiBreakdown: 'Dağılım: {{parts}}',
+      closeDialog: 'Pencereyi kapat',
     },
     login: {
       headline: 'Gün sonu raporları, üç dakikada anlatılır.',

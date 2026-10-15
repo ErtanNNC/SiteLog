@@ -61,7 +61,8 @@ const vars = (s: string) => [...s.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((m) => m
 /**
  * What speaks Turkish (W1-03): the shell (sidebar, top bar, drawer, user menu, footer), sign-in and
  * `/auth/callback`, the global states the shell renders, the error boundary and the Demo phone
- * placeholder. Pages that are not converted yet render in English under `<EnglishOnly>`.
+ * placeholder; W1-16: the Overview with the shared parts it renders (status chips, channel icon,
+ * KPI tile, table, confirm dialog). Pages that are not converted yet render in English under `<EnglishOnly>`.
  */
 const TRANSLATED = [
   'app',
@@ -75,8 +76,25 @@ const TRANSLATED = [
   'siteDetail',
   'streak',
   'calendar',
+  // W1-16: the Overview and the shared parts it renders.
+  'overview',
+  'channel',
+  'chips.filed',
+  'chips.awaiting',
+  'chips.missing',
+  'chips.needs_review',
+  'chips.weather_day',
+  'chips.no_work',
+  'chips.signed_off',
+  'chips.pending',
+  'chips.late',
+  'chips.lateAtTime',
+  'reports.newReport',
+  'table.empty',
   'team.officeRoles',
   'common.loading',
+  'common.cancel',
+  'common.confirm',
   'states.error',
   'states.errorId',
   'states.retry',
@@ -90,6 +108,10 @@ const TRANSLATED = [
   'states.comingNext',
   'a11y.searchResults',
   'a11y.loadingPage',
+  'a11y.statusChipLabel',
+  'a11y.lateBadge',
+  'a11y.kpiBreakdown',
+  'a11y.closeDialog',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

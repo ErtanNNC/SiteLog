@@ -14,7 +14,7 @@ import { translate } from '@/i18n/useCopy';
 import { pdfFileNames, saveBlob, zipFromUrls } from '@/lib/pdfZip';
 import { qk } from '@/lib/query';
 import { pendingTab } from '@/lib/tab';
-import { errorMessage } from '@/lib/utils';
+import { errorMessage, uuid } from '@/lib/utils';
 import { useDataSource } from './DataProvider';
 import {
   PDF_EXPORT_LIMIT,
@@ -40,9 +40,22 @@ interface Opts {
   refetchInterval?: number | false;
 }
 
+/**
+ * Realtime is the Overview's fast path (F17 step 4: the org channel invalidates it, so a filed
+ * report flips its row in about 2 s). Against a database it also polls every 10 s while the tab is
+ * visible, so the page still updates when the realtime channel never delivers (the hosted preview
+ * project did not deliver postgres_changes to the Demo phone, DEMO_PHONE_POLL) or the socket
+ * dropped. The in-memory demo emits its own changes and never polls.
+ */
+export const OVERVIEW_POLL_MS = 10_000;
+
 export function useOverview() {
   const s = useDataSource();
-  return useQuery({ queryKey: qk.overview(s.orgId), queryFn: () => s.getOverview() });
+  return useQuery({
+    queryKey: qk.overview(s.orgId),
+    queryFn: () => s.getOverview(),
+    refetchInterval: s.mode === 'supabase' ? OVERVIEW_POLL_MS : false,
+  });
 }
 
 export function useSites() {
@@ -362,7 +375,22 @@ export function useMarkNoWork() {
   const s = useDataSource();
   return useSourceMutation(
     (vars: { siteDayId: string; siteName: string }) => s.markNoWork(vars.siteDayId),
-    { success: (v) => copy.toasts.noWork(v.siteName) },
+    { success: (v) => translate('overview.markNoWorkDialog.done', { site: v.siteName }) },
+  );
+}
+
+/**
+ * F17 "Text today's link" (W1-16): one request id per tap, so a retry never texts twice. The toast
+ * says whether the text went, or why not (consent, opt-out, no sender for the country here).
+ */
+export function useTextDailyLink() {
+  const s = useDataSource();
+  return useSourceMutation(
+    (vars: { siteId: string; first: string }) => s.textDailyLink(vars.siteId, uuid()),
+    {
+      silent: true,
+      invalidate: true,
+    },
   );
 }
 

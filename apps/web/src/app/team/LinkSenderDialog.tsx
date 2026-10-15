@@ -66,7 +66,9 @@ export function LinkSenderDialog({ sender, onOpenChange, sites }: Props) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{c.title(sender ? formatPhone(sender.phone) : '')}</DialogTitle>
-          <DialogDescription>{c.description}</DialogDescription>
+          <DialogDescription>
+            {sender?.channel ? c.descriptionConsent : c.description}
+          </DialogDescription>
         </DialogHeader>
         {sender?.snippet ? (
           <blockquote className="mt-3 rounded-card border border-rebar bg-concrete/60 px-4 py-3 text-[15px] leading-[22px]">

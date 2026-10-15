@@ -3,7 +3,9 @@ import {
   LINK_CODE_ALPHABET,
   LINK_CODE_LENGTH,
   MASKED_CODE,
+  dailyLinkExpiresAt,
   deriveLinkCode,
+  ensureDailyLink,
   ensurePersonalLink,
   fieldLinkUrl,
   fieldReportLinkUrl,
@@ -11,6 +13,8 @@ import {
   maskFieldLinkUrl,
   photosLinkExpiresAt,
   sha256Hex,
+  type DailyLinkRow,
+  type DailyLinkStore,
   type PersonalLinkStore,
 } from './links.ts';
 import { demoLinkCode } from './demo/ids.ts';
@@ -146,5 +150,117 @@ describe('personal link codes (W1-08)', () => {
     await expect(ensurePersonalLink(never, SECRET, 'r1', () => 'x')).rejects.toThrow(
       /personal link/,
     );
+  });
+});
+
+describe('daily links (W1-16, "Text today\'s link")', () => {
+  const SECRET = 'test-link-signing-secret';
+  const NOW = new Date('2026-10-10T00:05:00Z');
+
+  it('expires DAILY_LINK_TTL_HOURS after it is made (72 by default)', () => {
+    expect(dailyLinkExpiresAt(NOW)).toBe('2026-10-13T00:05:00.000Z');
+    expect(dailyLinkExpiresAt(NOW, 24)).toBe('2026-10-11T00:05:00.000Z');
+    expect(dailyLinkExpiresAt(NOW, Number.NaN)).toBe('2026-10-13T00:05:00.000Z');
+    expect(dailyLinkExpiresAt(NOW, 0)).toBe('2026-10-13T00:05:00.000Z');
+  });
+
+  function memoryStore() {
+    const rows: Array<
+      DailyLinkRow & { reporter_id: string; site_id: string; report_date: string }
+    > = [];
+    const store: DailyLinkStore = {
+      listDailyLinks: async (reporterId, siteId, date) =>
+        rows
+          .filter(
+            (r) => r.reporter_id === reporterId && r.site_id === siteId && r.report_date === date,
+          )
+          .reverse(),
+      insertDailyLink: async (row) => {
+        if (rows.some((r) => r.code_hash === row.code_hash)) return false;
+        rows.push(row);
+        return true;
+      },
+    };
+    return { rows, store };
+  }
+
+  it('reuses the live link of the reporter, site and date, else issues one', async () => {
+    const { rows, store } = memoryStore();
+    let n = 0;
+    const newId = () => `daily-${++n}`;
+    const input = {
+      reporterId: 'r1',
+      siteId: 's1',
+      reportDate: '2026-10-09',
+      expiresAt: dailyLinkExpiresAt(NOW),
+      now: NOW,
+    };
+    const first = await ensureDailyLink(store, SECRET, input, newId);
+    expect(first).toMatchObject({ id: 'daily-1', created: true, expiresAt: input.expiresAt });
+    expect(first.code).toBe(await deriveLinkCode(SECRET, 'daily-1'));
+    expect(rows[0]).toMatchObject({
+      reporter_id: 'r1',
+      site_id: 's1',
+      report_date: '2026-10-09',
+      code_hash: linkCodeHash(first.code),
+    });
+    expect(await ensureDailyLink(store, SECRET, input, newId)).toEqual({
+      ...first,
+      created: false,
+    });
+    // Another site or another day is another link.
+    expect((await ensureDailyLink(store, SECRET, { ...input, siteId: 's2' }, newId)).id).toBe(
+      'daily-2',
+    );
+    expect(
+      (await ensureDailyLink(store, SECRET, { ...input, reportDate: '2026-10-10' }, newId)).id,
+    ).toBe('daily-3');
+    expect(rows).toHaveLength(3);
+  });
+
+  it('never re-sends an expired or a seeded link', async () => {
+    const { rows, store } = memoryStore();
+    rows.push({
+      id: 'seeded',
+      code_hash: linkCodeHash('K7Q2MX'),
+      expires_at: '2026-10-12T22:00:00Z',
+      reporter_id: 'r1',
+      site_id: 's1',
+      report_date: '2026-10-09',
+    });
+    const expiredId = 'expired';
+    rows.push({
+      id: expiredId,
+      code_hash: linkCodeHash(await deriveLinkCode(SECRET, expiredId)),
+      expires_at: '2026-10-09T23:00:00Z',
+      reporter_id: 'r1',
+      site_id: 's1',
+      report_date: '2026-10-09',
+    });
+    const link = await ensureDailyLink(
+      store,
+      SECRET,
+      {
+        reporterId: 'r1',
+        siteId: 's1',
+        reportDate: '2026-10-09',
+        expiresAt: dailyLinkExpiresAt(NOW),
+        now: NOW,
+      },
+      () => 'fresh',
+    );
+    expect(link).toMatchObject({ id: 'fresh', created: true });
+    const never: DailyLinkStore = {
+      listDailyLinks: async () => [],
+      insertDailyLink: async () => false,
+    };
+    await expect(
+      ensureDailyLink(
+        never,
+        SECRET,
+        { reporterId: 'r1', siteId: 's1', reportDate: '2026-10-09', expiresAt: '', now: NOW },
+        () => 'x',
+      ),
+    ).rejects.toThrow(/daily link/);
   });
 });

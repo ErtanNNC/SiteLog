@@ -2,14 +2,15 @@ import { expect, test, type Page } from '@playwright/test';
 import { demoId } from '@sitelog/shared/demo/ids.ts';
 
 const OUT = 'e2e/__screenshots__';
-const WIDTHS = [1440, 375] as const;
+// W1-16: phone screenshots at 390 px (CLAUDE.md: every screen works at 390 and 1440 px).
+const WIDTHS = [1440, 390] as const;
 
 // §18 demo ids are deterministic (packages/shared/src/demo/ids.ts).
 const RIVERSIDE_SITE = demoId('site:riverside');
 const HERO_REPORT = demoId('report:riverside:2026-10-09');
 
 async function shoot(page: Page, name: string, width: number) {
-  await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}/${name}-${width}.png`, fullPage: true });
 }
@@ -23,7 +24,7 @@ async function signIn(page: Page) {
 
 for (const width of WIDTHS) {
   test(`screenshots at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.goto('/login');
     await expect(
       page.getByRole('heading', { name: 'End-of-day reports, spoken in three minutes.' }),
@@ -57,7 +58,7 @@ for (const width of WIDTHS) {
 // ── Hours · Weather · Team · Glossary · Settings · Billing · Setup (P2, P8–P13) ──
 for (const width of WIDTHS) {
   test(`setup pages screenshots at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await signIn(page);
 
     await page.goto('/hours');

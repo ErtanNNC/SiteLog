@@ -86,7 +86,7 @@ test.describe('SiteLog panel (demo mode)', () => {
     page,
   }) => {
     await signIn(page);
-    await expect(page.getByTestId('try-card')).toBeVisible();
+    await expect(page.getByTestId('demo-phone-card')).toBeVisible();
     await page
       .getByRole('navigation', { name: 'Main navigation' })
       .getByRole('link', { name: /^Try it on WhatsApp/ })
@@ -113,6 +113,48 @@ test.describe('SiteLog panel (demo mode)', () => {
     const row = page.getByRole('row').filter({ hasText: 'Riverside Lofts — Block B' });
     await expect(row.getByText('Filed', { exact: true })).toBeVisible();
   });
+
+  // W1-16 · P3 at 1440 and 390 px: the channel column, the artboard's cards, "Text today's link"
+  // landing in the Demo phone, and no sideways scroll at phone width.
+  for (const width of [1440, 390] as const) {
+    test(`overview at ${width}px: channel column, attention cards, text today’s link`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await signIn(page);
+      await expect(page.getByRole('heading', { name: 'Today across 6 sites' })).toBeVisible();
+      const table = page.getByRole('table', { name: 'Sites today' });
+      await expect(table.getByRole('columnheader', { name: 'Channel' })).toBeAttached();
+      const elm = table.getByRole('row').filter({ hasText: 'Elm St. Townhomes' });
+      await expect(elm.getByText('Reports by text link')).toBeAttached();
+      const northgate = table.getByRole('row').filter({ hasText: 'Northgate Parking Structure' });
+      await expect(northgate.getByText('Reported by call')).toBeAttached();
+      const missing = page.getByTestId('needs-attention').locator('[data-kind="missing"]');
+      await expect(missing).toContainText('Priya didn’t answer 2 reminders.');
+      await expect(
+        page.getByTestId('needs-attention').locator('[data-kind="invoice_gap"]').first(),
+      ).toContainText('BrightLine Electric: 212 h billed');
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+      ).toBeLessThanOrEqual(0);
+      for (const name of ['Call Priya', 'Text today’s link', 'Mark no work']) {
+        const box = (await missing
+          .getByRole(name === 'Call Priya' ? 'link' : 'button', { name })
+          .boundingBox())!;
+        expect(box.height, name).toBeGreaterThanOrEqual(44);
+      }
+      await missing.getByRole('button', { name: 'Text today’s link' }).click();
+      await expect(page.getByText('Today’s link texted to Priya.')).toBeVisible();
+      await page.goto('/dev/phone');
+      await page
+        .getByRole('navigation', { name: 'Reporters' })
+        .getByRole('button', { name: /Priya Raman/ })
+        .click();
+      await expect(
+        page.getByText(/Today's report for Elm St\. Townhomes: \S+\/r\/[A-Z0-9]{6}/).last(),
+      ).toBeVisible();
+    });
+  }
 
   test('new report: type Elm St.’s missing report with a photo, file it and open its PDF', async ({
     page,
@@ -263,19 +305,20 @@ test.describe('language switch', () => {
     await expect(english).toBeVisible();
     await expect(page).toHaveURL(/\/login\?as=pm$/);
 
-    // Turkish again, then sign in: the shell speaks Turkish around the (English) page.
+    // Turkish again, then sign in: the shell and the Overview (W1-16) speak Turkish.
     await page
       .getByRole('group', { name: 'Language' })
       .getByRole('button', { name: 'Türkçe' })
       .click();
     await page.getByLabel('İş e-postası').fill('sam@kestrelbuild.example');
     await page.getByRole('button', { name: 'Bana giriş linki gönder' }).click();
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Today across 6 sites' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Bugün 6 şantiyede' })).toBeVisible();
     const nav = page.getByRole('navigation', { name: 'Ana gezinme' });
     await expect(nav.getByRole('link', { name: /^Genel bakış/ })).toBeVisible();
     await expect(page.getByText('Asistan hazır · mesaj ve arama')).toBeVisible();
+    await expect(page.locator('main#main [lang="en"]')).toHaveCount(0);
+    // A page not translated yet stays English inside the Turkish shell.
+    await nav.getByRole('link', { name: /^Şantiyeler/ }).click();
     await expect(page.locator('main#main [lang="en"]').first()).toBeAttached();
   });
 

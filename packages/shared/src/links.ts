@@ -159,6 +159,74 @@ export async function ensurePersonalLink(
   throw new Error(`Could not issue a personal link for reporter ${reporterId}`);
 }
 
+/** When a daily link made at `now` expires: `ttlHours` later (§5.1 `DAILY_LINK_TTL_HOURS`). */
+export function dailyLinkExpiresAt(
+  now: Date,
+  ttlHours: number = DAILY_LINK_TTL_HOURS_DEFAULT,
+): string {
+  const hours = Number.isFinite(ttlHours) && ttlHours > 0 ? ttlHours : DAILY_LINK_TTL_HOURS_DEFAULT;
+  return new Date(now.getTime() + hours * 3_600_000).toISOString();
+}
+
+/** A daily link row as `ensureDailyLink` reads it. */
+export interface DailyLinkRow {
+  id: string;
+  code_hash: string;
+  expires_at: string | null;
+}
+
+/** What `ensureDailyLink` reads and writes (api-text-daily-link; the M6 ladder later). */
+export interface DailyLinkStore {
+  /** The reporter's daily links for that site and report date that are not revoked, newest first. */
+  listDailyLinks(reporterId: string, siteId: string, reportDate: string): Promise<DailyLinkRow[]>;
+  /** Inserts a `kind 'daily'` row; false when its code_hash is taken (unique), nothing written. */
+  insertDailyLink(row: {
+    id: string;
+    code_hash: string;
+    reporter_id: string;
+    site_id: string;
+    report_date: string;
+    expires_at: string;
+  }): Promise<boolean>;
+}
+
+/**
+ * The reporter's daily link for one site and report date (§6.3 `field_links` kind `daily`, F11,
+ * F17 "Text today's link"), and its code: the newest live one (not expired at `now`) whose code can
+ * be derived again (`deriveLinkCode`, as personal links), else a new row expiring at `expiresAt`.
+ * So texting today's link twice sends the same link, and a link the ladder sends later is the one
+ * the office already texted.
+ */
+export async function ensureDailyLink(
+  store: DailyLinkStore,
+  secret: string,
+  input: { reporterId: string; siteId: string; reportDate: string; expiresAt: string; now: Date },
+  newId: () => string,
+): Promise<{ id: string; code: string; created: boolean; expiresAt: string }> {
+  const live = (
+    await store.listDailyLinks(input.reporterId, input.siteId, input.reportDate)
+  ).filter((l) => l.expires_at === null || Date.parse(l.expires_at) > input.now.getTime());
+  for (const link of live) {
+    const code = await deriveLinkCode(secret, link.id);
+    if (linkCodeHash(code) === link.code_hash)
+      return { id: link.id, code, created: false, expiresAt: link.expires_at ?? input.expiresAt };
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const id = newId();
+    const code = await deriveLinkCode(secret, id);
+    const inserted = await store.insertDailyLink({
+      id,
+      code_hash: linkCodeHash(code),
+      reporter_id: input.reporterId,
+      site_id: input.siteId,
+      report_date: input.reportDate,
+      expires_at: input.expiresAt,
+    });
+    if (inserted) return { id, code, created: true, expiresAt: input.expiresAt };
+  }
+  throw new Error(`Could not issue a daily link for reporter ${input.reporterId}`);
+}
+
 // ───────────────────────────── SHA-256 (FIPS 180-4) ─────────────────────────────
 
 const K = new Uint32Array([

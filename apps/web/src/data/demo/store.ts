@@ -18,17 +18,20 @@ import type {
   ReportRow,
   ReportSourceRow,
   ReportVersionRow,
+  ReporterRow,
   SiteDayRow,
+  SiteReporterRow,
   SiteRow,
   TranscriptRow,
   WeatherEventRow,
   WorkItemRow,
 } from '@sitelog/shared/db/types.ts';
-import type {
-  InvoiceStatus,
-  MemberRole,
-  ReporterStatus,
-  SiteDayStatus,
+import {
+  isActiveReporterStatus,
+  type InvoiceStatus,
+  type MemberRole,
+  type ReporterStatus,
+  type SiteDayStatus,
 } from '@sitelog/shared/enums.ts';
 import type { DailyReportDataV1, StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { emptyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
@@ -55,7 +58,14 @@ import { copy } from '@/copy/en';
 import { localId } from '@/lib/utils';
 import type { RowSet } from '../assemble';
 import { reporterDefaultsFor, reporterLocaleFor } from '@sitelog/shared/countries.ts';
-import { demoOrgPack, demoPhoneData, demoPhoneThread, demoReply, demoWelcome } from './demoPhone';
+import {
+  demoDailyLink,
+  demoOrgPack,
+  demoPhoneData,
+  demoPhoneThread,
+  demoReply,
+  demoWelcome,
+} from './demoPhone';
 import type {
   AddGlossaryTermInput,
   AddInvoiceInput,
@@ -75,6 +85,7 @@ import type {
   DemoPhoneEmail,
   DemoPhoneMessage,
   OrgSettingsPatch,
+  TextDailyLinkResult,
 } from '../types';
 
 /** Extra demo office user so `?as=ops` has someone to be (not part of the §18 seed). */
@@ -873,6 +884,77 @@ export class DemoStore {
     this.emit({ table: 'site_days', id: sd.id });
   }
 
+  /** "Text today's link" request ids already answered: one tap, one text (api-text-daily-link). */
+  private readonly dailyLinkRequests = new Map<string, TextDailyLinkResult>();
+
+  /**
+   * F17 "Text today's link" (W1-16), as api-text-daily-link does it: the site's primary reporter
+   * (else its first active one), today's daily link in the site's day, and the `daily_link` text
+   * unless they cannot get texts (disabled, opted out, no SMS consent). Audited like the function.
+   */
+  textDailyLink(siteId: string, requestId: string, userId: string): TextDailyLinkResult {
+    const done = this.dailyLinkRequests.get(requestId);
+    if (done) return done;
+    const d = this.data;
+    const site = d.sites.find((x) => x.id === siteId);
+    if (!site) throw new Error(copy.errors.notFound);
+    if (site.status !== 'active') throw new Error('This site is not active');
+    const links = d.siteReporters.filter((sr) => sr.site_id === siteId);
+    const reporters = links
+      .map((sr) => ({ sr, r: d.reporters.find((x) => x.id === sr.reporter_id) }))
+      .filter((x): x is { sr: SiteReporterRow; r: ReporterRow } => !!x.r);
+    const reporter =
+      reporters.find((x) => x.sr.is_primary)?.r ??
+      reporters.find((x) => isActiveReporterStatus(x.r.status))?.r;
+    if (!reporter) throw new Error('No site manager is linked to this site');
+    const date = formatDateInTz(this.now, site.timezone);
+    const sms = d.consents.some(
+      (c) => c.reporter_id === reporter.id && c.type === 'sms' && c.revoked_at === null,
+    );
+    const reason =
+      reporter.status === 'disabled'
+        ? ('no_channel' as const)
+        : reporter.status === 'opted_out'
+          ? ('opted_out' as const)
+          : sms
+            ? null
+            : ('no_consent' as const);
+    let result: TextDailyLinkResult;
+    if (reason) {
+      result = { sent: false, reason, detail: reporter.status === 'disabled' ? 'disabled' : null };
+    } else {
+      const row = demoDailyLink(d, reporter, site, date, this.nowIso());
+      this.audit({
+        org_id: d.org.id,
+        actor_type: 'system',
+        actor_id: null,
+        action: 'sms.sent',
+        entity: 'message',
+        entity_id: row.id,
+        diff: { copy_key: 'daily_link', provider: 'console' },
+      });
+      result = { sent: true, channel: 'sms' };
+    }
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'daily_link.texted',
+      entity: 'reporter',
+      entity_id: reporter.id,
+      diff: {
+        site_id: site.id,
+        report_date: date,
+        request_id: requestId,
+        channel: result.sent ? 'sms' : null,
+        ...(result.sent ? {} : { reason: result.reason }),
+      },
+    });
+    this.dailyLinkRequests.set(requestId, result);
+    this.emit({ table: 'all' });
+    return result;
+  }
+
   resolveUnknownCompany(input: ResolveUnknownCompanyInput, userId: string): void {
     const r = this.report(input.reportId);
     const d = this.data;
@@ -1195,32 +1277,65 @@ export class DemoStore {
   linkUnknownSender(input: LinkUnknownSenderInput, userId: string): void {
     const u = this.data.unknownContacts.find((x) => x.id === input.unknownSenderId);
     if (!u) throw new Error(copy.errors.notFound);
-    // As api-link-unknown-sender (checkLink): WhatsApp senders only; a text or a call needs
-    // consent first and is linked by api-link-unknown-contact (W1-16).
-    if (u.channel !== null) throw new Error(copy.errors.notAllowed);
-    const id = this.inviteReporter(
-      {
-        name: input.name,
-        phone: u.phone_e164,
-        role: input.role ?? 'backup',
-        siteIds: [input.siteId],
-        languages: ['en'],
-      },
-      userId,
-    );
+    if (u.status !== 'pending') throw new Error(`This contact was already ${u.status}`);
+    // As api-link-unknown-contact (checkContactLink, W1-16): a number that opted out or whose
+    // reporter is disabled is not linked by the office.
+    const existing = this.data.reporters.find((r) => r.phone_e164 === u.phone_e164);
+    if (existing?.status === 'opted_out' || existing?.status === 'disabled') {
+      throw new Error(copy.errors.notAllowed);
+    }
+    let id: string;
+    if (existing) {
+      // Already a reporter of the org: link the site, keep their status.
+      id = existing.id;
+      if (
+        !this.data.siteReporters.some((sr) => sr.site_id === input.siteId && sr.reporter_id === id)
+      ) {
+        this.data.siteReporters.push({
+          site_id: input.siteId,
+          reporter_id: id,
+          is_primary: !this.data.siteReporters.some(
+            (sr) => sr.site_id === input.siteId && sr.is_primary,
+          ),
+        });
+      }
+      demoWelcome(this.data, existing, input.siteId, this.nowIso());
+    } else {
+      id = this.inviteReporter(
+        {
+          name: input.name,
+          phone: u.phone_e164,
+          role: input.role ?? 'backup',
+          siteIds: [input.siteId],
+          languages: ['en'],
+        },
+        userId,
+      );
+    }
     const r = this.data.reporters.find((x) => x.id === id)!;
-    r.status = 'active';
-    r.verified_at = this.nowIso();
-    r.activated_at = r.verified_at;
+    // A WhatsApp-era sender already wrote to us, so it is active; a caller or texter is invited
+    // until their first consent (F3, F13 step 4).
+    if (u.channel === null && !isActiveReporterStatus(r.status)) {
+      r.status = 'active';
+      r.verified_at = this.nowIso();
+      r.activated_at = r.verified_at;
+    }
     u.status = 'linked';
+    u.org_id = this.data.org.id;
+    u.guessed_site_id = input.siteId;
     this.audit({
       org_id: this.data.org.id,
       actor_type: 'user',
       actor_id: userId,
       action: 'unknown_contact.linked',
-      entity: 'reporter',
-      entity_id: id,
-      diff: { site_id: input.siteId },
+      entity: 'unknown_contact',
+      entity_id: u.id,
+      diff: {
+        reporterId: id,
+        siteId: input.siteId,
+        channel: u.channel,
+        consent: u.channel === null ? 'whatsapp' : 'pending',
+      },
     });
     this.emit({ table: 'unknown_contacts', id: u.id });
   }

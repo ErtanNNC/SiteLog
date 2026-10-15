@@ -41,7 +41,7 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(o.sitesToday[0]!.projectCode).toBe('ES-0377'); // exceptions first
   });
 
-  it('overview: needs-attention order missing → needs_review → invoice_gap → unknown_sender → glossary_review', async () => {
+  it('overview: needs-attention order missing → needs_review → invoice_gap → unknown_contact → glossary_review', async () => {
     const { source: s } = source();
     const o = await s.getOverview();
     expect(o.needsAttention.map((a) => a.kind)).toEqual([
@@ -49,12 +49,122 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
       'needs_review',
       'invoice_gap',
       'invoice_gap',
-      'unknown_sender',
+      'unknown_contact',
       'glossary_review',
     ]);
-    expect(o.needsAttention[2]!.title).toBe('Invoice gap: BrightLine Electric +16 h');
-    expect(o.needsAttention[3]!.title).toBe('Invoice gap: ClearView Glazing +8 h');
-    expect(o.needsAttention[0]!.actions.map((a) => a.kind)).toEqual(['call', 'mark_no_work']);
+    // The Web-Overview artboard's cards, as copy keys with their values.
+    expect(o.needsAttention[0]!.body).toEqual([
+      { key: 'overview.attention.missing.body', vars: { first: 'Priya', count: 2 } },
+    ]);
+    expect(o.needsAttention[1]!.title).toEqual({
+      key: 'overview.attention.needs_review.titleUnknownCompany',
+      vars: { site: 'Oakmont', name: 'Ridgeway' },
+    });
+    expect(o.needsAttention[1]!.body).toEqual([
+      { key: 'overview.attention.needs_review.unknownCompany', vars: { count: 6 } },
+    ]);
+    expect(o.needsAttention[2]!.title).toEqual({
+      key: 'overview.attention.invoice_gap.title',
+      vars: { company: 'BrightLine Electric', invoiced: { hours: 212 } },
+    });
+    expect(o.needsAttention[2]!.body).toEqual([
+      {
+        key: 'overview.attention.invoice_gap.bodyOver',
+        vars: { reported: { hours: 196 }, gap: { hours: 16 } },
+      },
+    ]);
+    expect(o.needsAttention[3]!.title.vars).toMatchObject({ company: 'ClearView Glazing' });
+    expect(o.needsAttention[4]!.title.key).toBe('overview.attention.unknown_contact.titleCall');
+    expect(o.needsAttention[0]!.actions.map((a) => a.kind)).toEqual([
+      'call',
+      'text_link',
+      'mark_no_work',
+    ]);
+  });
+
+  it('overview: the channel of each site (D35), and Elm St.’s two reminders', async () => {
+    const { source: s } = source();
+    const o = await s.getOverview();
+    const byCode = Object.fromEntries(o.sitesToday.map((r) => [r.projectCode, r]));
+    // §18.1: Riverside by the web recorder, Northgate and Hillcrest by call.
+    expect(byCode['RL-2041']).toMatchObject({ channel: 'link', channelReported: true });
+    expect(byCode['NG-2210']).toMatchObject({ channel: 'call', channelReported: true });
+    expect(byCode['HS-0418']).toMatchObject({ channel: 'call', channelReported: true });
+    // Elm St. has no report: Priya's preference.
+    expect(byCode['ES-0377']).toMatchObject({
+      channel: 'link',
+      channelReported: false,
+      remindersSent: 2,
+    });
+    expect(byCode['RL-2041']!.remindersSent).toBe(0);
+  });
+
+  it('overview: a text that did not arrive today needs attention until a later one does (F17)', async () => {
+    const { source: s, store } = source();
+    const priya = store.data.reporters.find((r) => r.name === 'Priya Raman')!;
+    const reminder = store.data.messages.find(
+      (m) => m.reporter_id === priya.id && m.copy_key === 'reminder_2',
+    )!;
+    reminder.status = 'undeliverable';
+    let o = await s.getOverview();
+    const item = o.needsAttention.at(-1)!;
+    expect(item.kind).toBe('undeliverable');
+    expect(item.title).toEqual({
+      key: 'overview.attention.undeliverable.title',
+      vars: { name: 'Priya Raman' },
+    });
+    expect(item.actions.map((a) => a.kind)).toEqual(['call', 'open_team']);
+    // "Text today's link" reaches her afterwards: the item goes.
+    await s.textDailyLink(store.data.sites.find((x) => x.project_code === 'ES-0377')!.id, 'req-1');
+    o = await s.getOverview();
+    expect(o.needsAttention.some((a) => a.kind === 'undeliverable')).toBe(false);
+  });
+
+  it('overview: review reasons, call_mismatch and no_photo included (§10.5, §10.9)', async () => {
+    const { source: s, store } = source();
+    const oakmont = store.data.reports.find((r) => r.needs_review)!;
+    oakmont.review_reasons = ['call_mismatch:manpower[0].workers', 'no_photo', 'unconfirmed'];
+    const o = await s.getOverview();
+    const item = o.needsAttention.find((a) => a.kind === 'needs_review')!;
+    expect(item.title.key).toBe('overview.attention.needs_review.title');
+    expect(item.body).toEqual([
+      {
+        key: 'overview.attention.reasons.call_mismatch',
+        vars: { field: 'manpower[0].workers' },
+      },
+      { key: 'overview.attention.reasons.no_photo' },
+      { key: 'overview.attention.reasons.unconfirmed' },
+    ]);
+  });
+
+  it('texts today’s link once per request, and says why when it cannot (W1-16)', async () => {
+    const { source: s, store } = source('pm');
+    const elm = store.data.sites.find((x) => x.project_code === 'ES-0377')!;
+    const priya = store.data.reporters.find((r) => r.name === 'Priya Raman')!;
+    const before = store.data.messages.length;
+    expect(await s.textDailyLink(elm.id, 'req-a')).toEqual({ sent: true, channel: 'sms' });
+    expect(await s.textDailyLink(elm.id, 'req-a')).toEqual({ sent: true, channel: 'sms' });
+    expect(store.data.messages.length).toBe(before + 1);
+    const text = store.data.messages.at(-1)!;
+    expect(text).toMatchObject({ reporter_id: priya.id, copy_key: 'daily_link', channel: 'sms' });
+    expect(text.body).toMatch(/^Today's report for Elm St\. Townhomes: \S+\/r\/[A-Z0-9]{6}/);
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'daily_link.texted',
+      actor_type: 'user',
+      entity_id: priya.id,
+    });
+    // A second tap texts the same link (the seeded 17:00 one).
+    await s.textDailyLink(elm.id, 'req-b');
+    expect(store.data.messages.at(-1)!.body).toBe(text.body);
+    priya.status = 'opted_out';
+    expect(await s.textDailyLink(elm.id, 'req-c')).toEqual({
+      sent: false,
+      reason: 'opted_out',
+      detail: null,
+    });
+    await expect(source('accounts', store).source.textDailyLink(elm.id, 'req-d')).rejects.toThrow(
+      'You’re not allowed to do that.',
+    );
   });
 
   it('hours matrix W41: Apex 472 match · BrightLine 196 (+16) · ClearView 152 (+8) · total 1,804', async () => {
@@ -210,35 +320,59 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(results.map((r) => r.kind)).toContain('term');
   });
 
-  it('links a WhatsApp sender as an active reporter and refuses a text or a call (W1-16)', async () => {
+  it('links a caller or texter as invited until consent, a WhatsApp sender as active (W1-16)', async () => {
     const { source: s, store } = source('ops');
     // §18.1: the unknown contact called (W1-06); a caller is linked from W1-16 on.
     const luis = store.data.unknownContacts.find((u) => u.status === 'pending')!;
     expect(luis.channel).toBe('voice');
     const siteId = luis.guessed_site_id!;
+    await s.linkUnknownSender({ unknownSenderId: luis.id, siteId, name: 'Luis' });
+    expect(luis.status).toBe('linked');
+    const caller = store.data.reporters.find((r) => r.phone_e164 === luis.phone_e164)!;
+    expect(caller).toMatchObject({ status: 'invited', name: 'Luis', activated_at: null });
+    expect(
+      store.data.messages.some((m) => m.reporter_id === caller.id && m.copy_key === 'welcome'),
+    ).toBe(true);
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'unknown_contact.linked',
+      entity_id: luis.id,
+      diff: { channel: 'voice', consent: 'pending' },
+    });
     await expect(
       s.linkUnknownSender({ unknownSenderId: luis.id, siteId, name: 'Luis' }),
-    ).rejects.toThrow('You’re not allowed to do that.');
+    ).rejects.toThrow('This contact was already linked');
     const texter = {
       ...luis,
       id: 'unknown:texter',
       phone_e164: '+15550100111',
       channel: 'sms' as const,
       call_id: null,
+      status: 'pending' as const,
     };
     store.data.unknownContacts.push(texter);
+    await s.linkUnknownSender({ unknownSenderId: texter.id, siteId, name: 'Texter' });
+    expect(store.data.reporters.find((r) => r.phone_e164 === texter.phone_e164)!.status).toBe(
+      'invited',
+    );
+    // A number whose reporter opted out stays out (only START brings it back).
+    const stopped = {
+      ...texter,
+      id: 'unknown:stopped',
+      phone_e164: store.data.reporters[0]!.phone_e164,
+      status: 'pending' as const,
+    };
+    store.data.reporters[0]!.status = 'opted_out';
+    store.data.unknownContacts.push(stopped);
     await expect(
-      s.linkUnknownSender({ unknownSenderId: texter.id, siteId, name: 'Texter' }),
+      s.linkUnknownSender({ unknownSenderId: stopped.id, siteId, name: 'X' }),
     ).rejects.toThrow('You’re not allowed to do that.');
-    for (const phone of [luis.phone_e164, texter.phone_e164])
-      expect(store.data.reporters.some((r) => r.phone_e164 === phone)).toBe(false);
-    // A WhatsApp sender (no channel) is linked as before.
+    // A WhatsApp sender (no channel) is linked active, as before.
     const sender = {
-      ...luis,
+      ...texter,
       id: 'unknown:wa',
       phone_e164: '+15550100222',
       channel: null,
-      call_id: null,
+      status: 'pending' as const,
     };
     store.data.unknownContacts.push(sender);
     await s.linkUnknownSender({ unknownSenderId: sender.id, siteId, name: 'Luis' });

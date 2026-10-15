@@ -103,6 +103,20 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/api-link-unknown-sender/index.ts"
 
+# W1-16 (D38): replaces api-link-unknown-sender, which is deleted after the demo.
+[functions.api-link-unknown-contact]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/api-link-unknown-contact/index.ts"
+
+# W1-16: the panel's "Text today's link" (F17).
+[functions.api-text-daily-link]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/api-text-daily-link/index.ts"
+
 [functions.api-export-payroll]
 enabled = true
 verify_jwt = true

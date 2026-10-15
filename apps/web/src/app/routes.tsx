@@ -2,9 +2,10 @@
  * §11.1 route map. Pages live in src/app/<name>/Page.tsx and are lazy-loaded, so a page can be
  * swapped by replacing its file. Guards: RequireAuth (session + org) and RequireRole (§2.2).
  *
- * D9: the shell, sign-in, `/auth/callback`, the not-found page and the placeholders speak the
- * panel's language (EN/TR). A page wrapped in `<EnglishOnly>` still reads `copy/en.ts` directly and
- * renders in English inside the translated shell; it loses the wrapper when it gets its Turkish.
+ * D9: the shell, sign-in, `/auth/callback`, the Overview (W1-16), the not-found page and the
+ * placeholders speak the panel's language (EN/TR). A page wrapped in `<EnglishOnly>` still reads
+ * `copy/en.ts` directly and renders in English inside the translated shell; it loses the wrapper
+ * when it gets its Turkish.
  */
 import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
@@ -45,16 +46,11 @@ function guard(key: Exclude<RouteKey, 'setup'>, node: ReactNode) {
   );
 }
 
-/** `/` — accounts users land on /hours (§11.1). */
+/** `/` — accounts users land on /hours (§11.1). The Overview speaks EN and TR (W1-16). */
 function Home() {
   const { role } = useAuth();
   if (role === 'accounts') return <Navigate to="/hours" replace />;
-  return guard(
-    'overview',
-    <EnglishOnly>
-      <OverviewPage />
-    </EnglishOnly>,
-  );
+  return guard('overview', <OverviewPage />);
 }
 
 export function AppRoutes() {

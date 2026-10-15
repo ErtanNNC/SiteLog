@@ -1,4 +1,5 @@
 export * from './CalendarMonth';
+export * from './ChannelIcon';
 export * from './DataTable';
 export * from './EvidenceChips';
 export * from './HeatmapGrid';

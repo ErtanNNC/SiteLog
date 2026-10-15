@@ -588,6 +588,8 @@ The ticket is three screens and their routes; none exist. What exists is shared 
 - _Demo "Try it on WhatsApp" card_ (`apps/web/src/app/overview/Page.tsx:232-248`). Recommend: replace with a Demo phone entry (D29).
 - The Web-Overview artboard shows no channel column, while P3 and the ticket require one: the spec wins (D35).
 
+**W1-16 (2026-10-15):** built: channel column and `ChannelIcon`, Text today's link (`api-text-daily-link`), undeliverable and unknown-contact items, `call_mismatch`/`no_photo` copy, `api-link-unknown-contact` (D38, the panel switched), the Demo phone card (D29), EN/TR, screenshots at 390 px, a 10 s poll beside realtime; see `docs/PLAN_WEEK1.md` W1-16. Open: the owner's phone check, spec §19 Q55's alert line.
+
 ### W1-17 · Reports archive and Report review — partial · effort M
 
 **Done:** archive with URL filters (site, dates, status, weather delay, edited, late, incident, search), flags, PDF column, zip (`apps/web/src/app/reports/Page.tsx:39-81`, `:343-400`); version switcher with change notes (`apps/web/src/app/report/Page.tsx:370-411`); provenance (`:636-664`); clickable sources seeking the player (`apps/web/src/components/sitelog/SourceLink.tsx:18-60`); signed-URL audio with peaks; excerpts and transcript drawer (`apps/web/src/app/report/SourcePanel.tsx:77-194`); activity timeline (`:203-304`); review-reasons banner; PDF open or browser render; Sign off (admin/pm) with 10-minute undo and E2E (`apps/web/e2e/supabase/panel.spec.ts:131-156`; the audit row is not asserted).

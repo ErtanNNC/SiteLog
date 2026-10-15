@@ -132,11 +132,12 @@ for (const width of WIDTHS) {
       await expectNoViolations(page);
     });
 
-    test('the Turkish shell around an English page, with its menus open', async ({ page }) => {
+    test('the Turkish shell and Overview (W1-16), with its menus open', async ({ page }) => {
       await chooseTurkish(page);
       await signInFast(page);
       await page.goto('/');
-      await expect(h1(page, 'Today across 6 sites')).toBeVisible();
+      await expect(h1(page, 'Bugün 6 şantiyede')).toBeVisible();
+      await expect(page.locator('main [lang="en"]')).toHaveCount(0);
       await expectNoViolations(page);
       if (width === 375) {
         await page.getByRole('button', { name: 'Menüyü aç' }).click();
@@ -527,7 +528,7 @@ test.describe('no sideways scroll on narrow phones', () => {
         window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' })),
       );
       const pages: Array<[string, (p: Page) => Locator]> = [
-        ['/', (p) => h1(p, 'Today across 6 sites')],
+        ['/', (p) => h1(p, tr ? 'Bugün 6 şantiyede' : 'Today across 6 sites')],
         ['/dev/phone', (p) => h1(p, tr ? 'Demo telefon' : 'Demo phone')],
         ['/settings/channels', (p) => p.getByRole('heading', { name: 'Coming next' })],
         // Pages with controls in the top bar: below 768 px they get a row of their own.

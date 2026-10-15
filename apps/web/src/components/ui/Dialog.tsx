@@ -8,8 +8,8 @@ import {
   type ComponentRef,
   type ReactNode,
 } from 'react';
-import { copy } from '@/copy/en';
 import { PinnedLanguage } from '@/i18n/context';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
 
@@ -55,6 +55,7 @@ export const DialogContent = forwardRef<
     const opener = useRef<HTMLElement | null>(null);
     // Portaled to <body>: carry an English-only page's language with it (WCAG 3.1.2).
     const pinned = useContext(PinnedLanguage);
+    const { t } = useCopy();
     return (
       <DialogPortal>
         <DialogOverlay />
@@ -98,7 +99,7 @@ export const DialogContent = forwardRef<
                 variant="subtle"
                 size="iconDense"
                 className="absolute right-3 top-3"
-                aria-label={copy.a11y.closeDialog}
+                aria-label={t('a11y.closeDialog')}
               >
                 <X aria-hidden="true" />
               </Button>
@@ -170,6 +171,7 @@ export function ConfirmDialog({
   onConfirm,
   children,
 }: ConfirmDialogProps) {
+  const { t } = useCopy();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -180,14 +182,14 @@ export function ConfirmDialog({
         {children}
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="ghost">{cancelLabel ?? copy.common.cancel}</Button>
+            <Button variant="ghost">{cancelLabel ?? t('common.cancel')}</Button>
           </DialogClose>
           <Button
             variant={destructive ? 'destructive' : 'primary'}
             loading={loading}
             onClick={() => void onConfirm()}
           >
-            {confirmLabel ?? copy.common.confirm}
+            {confirmLabel ?? t('common.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>

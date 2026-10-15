@@ -113,6 +113,7 @@ import type {
   OrgSummary,
   ReportFilters,
   SearchResult,
+  TextDailyLinkResult,
 } from '../types';
 
 const SIGNED_URL_TTL = 600; // 10 minutes (§15)
@@ -467,7 +468,10 @@ export class SupabaseSource implements DataSource {
     const reports = await this.reportsForSiteDays(siteDays.map((d) => d.id));
     const today = formatDateInTz(now, core.org.timezone);
     const { start, sunday } = isoWeekRange(isoWeekOf(today));
-    const [versions, unknownContacts, glossary, invoices, manpower] = await Promise.all([
+    // Today's texts to reporters: the reminders (Elm St.'s "2 reminders sent") and the ones that
+    // did not arrive (F17 `undeliverable_sms`), from the day before the earliest site day (W1-16).
+    const since = fromZonedTime(`${addDays(dates[0]!, -1)}T00:00:00`, core.org.timezone);
+    const [versions, unknownContacts, glossary, invoices, manpower, messages] = await Promise.all([
       this.currentVersions(reports),
       this.sb
         .from('unknown_contacts')
@@ -489,6 +493,15 @@ export class SupabaseSource implements DataSource {
         .gte('period_end', start)
         .then(unwrap),
       this.manpowerBetween(addDays(start, -7), addDays(sunday, 7)),
+      this.sb
+        .from('messages')
+        .select('*')
+        .eq('org_id', this.orgId)
+        .eq('direction', 'out')
+        .gte('created_at', since.toISOString())
+        .order('created_at', { ascending: true })
+        .limit(1000)
+        .then(unwrap),
     ]);
     const rows: RowSet = {
       ...this.rowsFrom(core),
@@ -499,6 +512,7 @@ export class SupabaseSource implements DataSource {
       glossary,
       invoices,
       manpower,
+      messages,
     };
     return assembleOverview(rows, this.ctx());
   }
@@ -1564,6 +1578,15 @@ export class SupabaseSource implements DataSource {
   async markNoWork(siteDayId: string) {
     await this.rpc('mark_no_work', { p_site_day_id: siteDayId });
   }
+  async textDailyLink(siteId: string, requestId: string): Promise<TextDailyLinkResult> {
+    const res = await this.callFunction<TextDailyLinkResult>('api-text-daily-link', {
+      siteId,
+      requestId,
+    });
+    return res.sent
+      ? { sent: true, channel: res.channel }
+      : { sent: false, reason: res.reason, detail: res.detail ?? null };
+  }
   async resolveUnknownCompany(input: ResolveUnknownCompanyInput) {
     await this.rpc('resolve_unknown_company', {
       p_report_id: input.reportId,
@@ -1652,8 +1675,10 @@ export class SupabaseSource implements DataSource {
     return { status: result?.reporter?.status ?? ('invited' as const) };
   }
   async linkUnknownSender(input: LinkUnknownSenderInput) {
-    await this.callFunction('api-link-unknown-sender', {
-      unknownSenderId: input.unknownSenderId,
+    // D38 (W1-16): api-link-unknown-contact links callers and texters too, with F3 consent
+    // pending; api-link-unknown-sender stays deployed until the demo, then is deleted.
+    await this.callFunction('api-link-unknown-contact', {
+      unknownContactId: input.unknownSenderId,
       siteId: input.siteId,
       name: input.name,
       role: input.role ?? 'backup',
