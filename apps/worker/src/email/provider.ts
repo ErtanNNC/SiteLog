@@ -33,6 +33,15 @@ export interface EmailMessage {
   idempotencyKey?: string;
 }
 
+/**
+ * `alreadySent`: the provider had already accepted an email under this idempotency key, so this
+ * call sent nothing (a retry after the first attempt got through).
+ */
+export interface EmailSendResult {
+  id: string | null;
+  alreadySent?: boolean;
+}
+
 /** Where the console provider files what it would have sent (`console_emails`). */
 export interface ConsoleEmailStore {
   /** The row's id; a row with the same `dedupe_key` already filed returns that row's id. */
@@ -49,7 +58,7 @@ export interface ConsoleEmailStore {
 
 export interface EmailProvider {
   readonly name: 'resend' | 'console' | 'memory';
-  send(msg: EmailMessage): Promise<{ id: string | null }>;
+  send(msg: EmailMessage): Promise<EmailSendResult>;
 }
 
 export function createResendProvider(apiKey: string, from: string): EmailProvider {
@@ -79,6 +88,14 @@ export function createResendProvider(apiKey: string, from: string): EmailProvide
           msg.idempotencyKey ? { idempotencyKey: msg.idempotencyKey } : undefined,
         ),
       );
+      // 409 `invalid_idempotent_request`: this key was already used with a different body within
+      // Resend's 24 h window, i.e. an earlier attempt of this job was accepted and the retry's
+      // content changed meanwhile (the PDF re-rendered after a sign-off). That email went out, so
+      // the retry succeeds without sending; a new key would send it twice. A 409
+      // `concurrent_idempotent_requests` (the first attempt still in flight) stays an error and
+      // is retried.
+      if (error && msg.idempotencyKey && error.name === 'invalid_idempotent_request')
+        return { id: null, alreadySent: true };
       if (error) throw new Error(`Resend: ${error.name ?? 'error'} ${error.message}`);
       return { id: data?.id ?? null };
     },

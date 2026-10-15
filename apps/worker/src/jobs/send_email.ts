@@ -23,7 +23,9 @@ import { PermanentJobError, type JobHandler } from './types';
 
 /**
  * §13 — every email the worker sends, by kind. The job's dedupe key (else its id) is the email's
- * idempotency key, so a retry after the provider accepted it sends nothing twice (W1-15).
+ * idempotency key, so a retry after the provider accepted it sends nothing twice (W1-15). The key
+ * never includes the content: a retry whose body changed (the PDF re-rendered in between) finds
+ * the key used and succeeds as already sent (`alreadySent`), rather than sending a second email.
  */
 export const sendEmail: JobHandler<'send_email'> = async (ctx, payload, job) => {
   const built = await buildEmail(ctx, payload);
@@ -43,6 +45,13 @@ export const sendEmail: JobHandler<'send_email'> = async (ctx, payload, job) => 
     orgId,
     idempotencyKey: job.dedupe_key ?? `send_email:${job.id}`,
   });
+  if (res.alreadySent) {
+    ctx.log.info('email already sent under this key', {
+      kind: payload.kind,
+      provider: ctx.email.name,
+    });
+    return;
+  }
   ctx.log.info('email sent', {
     kind: payload.kind,
     to: to.length,
