@@ -65,10 +65,10 @@ const AUDITED: Record<string, string> = {
   "sql:'transcribe_upload:' || u.id": 'field_complete_upload: one transcription per upload',
   "sql:'email:report_missing:' || p_site_day_id":
     'mark_site_day_missing (spec §19 Q55): per site-day, enqueued in the transaction whose guarded update made the day missing; a day becomes missing once (reminder_stage 4 stays)',
-  "sql:'file:' || r.id || ':v' || p_version":
-    'field_confirm_report: the first web confirm of a draft version (a dead job is re-queued)',
-  "sql:'file:' || r.id || ':v' || p_version || ':c' || v_n":
-    'field_confirm_report: a later confirm of that version after its job finished without filing (n past the confirm_requested count; a taken n moves on)',
+  "sql:'file:' || r.id || ':v' || p_version || ':r' || p_draft_rev":
+    'field_confirm_report: the first web confirm of a draft version at a draft revision (report_versions.draft_rev, bumped on every change of the draft; a dead job is re-queued)',
+  "sql:'file:' || r.id || ':v' || p_version || ':r' || p_draft_rev || ':c' || v_n":
+    'field_confirm_report: a later confirm of that draft after its job finished without filing (n past the confirm_requested count; a taken n moves on)',
   "sql:'sms_inbound:' || p_provider_message_id":
     'receive_sms_inbound: per Twilio MessageSid; a redelivery whose job died re-queues it (requeue_dead_job)',
   "sql:'extract:' || r.id || ':photo:' || u.id":

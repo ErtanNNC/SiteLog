@@ -38,6 +38,13 @@ export const JobPayloadSchemas = {
      */
     version: z.number().int().min(1).optional(),
     /**
+     * The draft revision of that version the reporter confirmed (`report_versions.draft_rev`,
+     * field_confirm_report() since 20261015000070): drafts are overwritten in place, so the worker
+     * files only while the version is still at that revision. Absent: no revision check (the
+     * WhatsApp confirm, the timeouts, a web confirm queued before the migration).
+     */
+    draftRev: z.number().int().min(1).optional(),
+    /**
      * §10.1 `file_report(report_id, via)`: the channel the reporter confirmed on, stored as
      * `reports.confirmed_via` (W1-15; field_confirm_report() sends `web`). The WhatsApp confirm
      * (v1.0, `confirmMessageId`) and the timeouts send none.

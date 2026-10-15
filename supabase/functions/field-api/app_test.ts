@@ -11,6 +11,7 @@ import {
   type NotifyOutcome,
   type OrgRow,
   type QuestionRow,
+  type ReportVersionRow,
   type ReporterRow,
   type SiteRow,
   UPLOAD_MAX_BYTES,
@@ -408,21 +409,50 @@ Deno.test(
     assertEquals(view.json.status, 'processing');
     assertEquals(view.json.progress, { voiceNotes: 1, transcribed: 0, photos: 0 });
     assertEquals(view.json.data, null);
-    const early = await h.call('POST', `reports/${reportId}/confirm`);
+    assertEquals(view.json.draftRev, null);
+    const early = await h.call('POST', `reports/${reportId}/confirm`, {
+      body: { version: 1, draftRev: 1 },
+    });
     assertEquals(
       [early.status, early.json.error, early.json.status],
       [409, 'wrong_state', 'processing'],
     );
 
-    // The draft is ready: confirm enqueues file_report for the version seen, once.
+    // The draft is ready: confirm enqueues file_report for the draft seen (version and
+    // revision), once.
     h.store.reports[0]!.status = 'awaiting_confirmation';
-    const conf = await h.call('POST', `reports/${reportId}/confirm`, { body: { version: 1 } });
+    h.store.versions.push({
+      report_id: reportId,
+      version: 1,
+      data: emptyReportDataV1('2026-10-09') as never,
+      summary: null,
+      pdf_path: null,
+      author: 'agent',
+      author_user_id: null,
+      author_message_id: null,
+      change_note: null,
+      created_at: T0.toISOString(),
+      via: null,
+      draft_rev: 1,
+    });
+    assertEquals((await h.call('GET', `reports/${reportId}`)).json.draftRev, 1);
+    const conf = await h.call('POST', `reports/${reportId}/confirm`, {
+      body: { version: 1, draftRev: 1 },
+    });
     assertEquals([conf.status, conf.json.status], [202, 'queued']);
-    assertEquals((await h.call('POST', `reports/${reportId}/confirm`)).status, 202);
+    assertEquals(
+      (await h.call('POST', `reports/${reportId}/confirm`, { body: { draftRev: 1 } })).status,
+      202,
+    );
     const fileJobs = h.store.jobs.filter((j) => j.type === 'file_report');
     assertEquals(
       fileJobs.map((j) => [j.payload, j.dedupe_key]),
-      [[{ reportId, trigger: 'confirm', version: 1 }, `file:${reportId}:v1`]],
+      [
+        [
+          { reportId, trigger: 'confirm', version: 1, draftRev: 1, via: 'web' },
+          `file:${reportId}:v1:r1`,
+        ],
+      ],
     );
     // Being filed: no voice note or photo joins the confirmed draft.
     const late = await h.call('POST', 'uploads', {
@@ -433,7 +463,10 @@ Deno.test(
     assertEquals([refused.status, refused.json.error], [409, 'report_filing']);
     assertEquals(h.store.reports[0]!.status, 'awaiting_confirmation');
     h.store.reports[0]!.status = 'filed';
-    assertEquals((await h.call('POST', `reports/${reportId}/confirm`)).json, { status: 'filed' });
+    assertEquals(
+      (await h.call('POST', `reports/${reportId}/confirm`, { body: { draftRev: 1 } })).json,
+      { status: 'filed' },
+    );
 
     // Every state change is audited as the reporter.
     const actions = h.store.audits.map((a) => a.action);
@@ -622,7 +655,12 @@ Deno.test('cross-reporter access is denied', async () => {
   const view = await h.call('GET', `reports/${reportId}`, { code: CODES.dana });
   assertEquals([view.status, view.json.error], [404, 'not_found']);
   assertEquals(
-    (await h.call('POST', `reports/${reportId}/confirm`, { code: CODES.dana })).status,
+    (
+      await h.call('POST', `reports/${reportId}/confirm`, {
+        code: CODES.dana,
+        body: { draftRev: 1 },
+      })
+    ).status,
     404,
   );
   assertEquals(
@@ -1150,33 +1188,70 @@ Deno.test(
     const report = h.store.reports[0]!;
     report.status = 'awaiting_confirmation';
     report.current_version = 2; // a second draft after more audio
-    const stale = await h.call('POST', `reports/${reportId}/confirm`, { body: { version: 1 } });
+    const draft: ReportVersionRow = {
+      report_id: reportId,
+      version: 2,
+      data: emptyReportDataV1('2026-10-09') as never,
+      summary: null,
+      pdf_path: null,
+      author: 'agent',
+      author_user_id: null,
+      author_message_id: null,
+      change_note: null,
+      created_at: T0.toISOString(),
+      via: null,
+      draft_rev: 1,
+    };
+    h.store.versions.push(draft);
+    const stale = await h.call('POST', `reports/${reportId}/confirm`, {
+      body: { version: 1, draftRev: 1 },
+    });
     assertEquals(
       [stale.status, stale.json.error, stale.json.currentVersion],
       [409, 'draft_changed', 2],
     );
     assertEquals(
-      (await h.call('POST', `reports/${reportId}/confirm`, { body: { version: 'x' } })).json.error,
+      (await h.call('POST', `reports/${reportId}/confirm`, { body: { version: 'x', draftRev: 1 } }))
+        .json.error,
       'invalid_request',
+    );
+    // The revision is required.
+    assertEquals(
+      (await h.call('POST', `reports/${reportId}/confirm`, { body: { version: 2 } })).json.error,
+      'invalid_request',
+    );
+    // The same version re-extracted in place (a late photo) is a newer draft too.
+    draft.draft_rev = 2;
+    const rewritten = await h.call('POST', `reports/${reportId}/confirm`, {
+      body: { version: 2, draftRev: 1 },
+    });
+    assertEquals(
+      [rewritten.status, rewritten.json.error, rewritten.json.draftRev],
+      [409, 'draft_changed', 2],
     );
     assertEquals(
       h.store.jobs.filter((j) => j.type === 'file_report'),
       [],
     );
-    const ok = await h.call('POST', `reports/${reportId}/confirm`, { body: { version: 2 } });
+    const ok = await h.call('POST', `reports/${reportId}/confirm`, {
+      body: { version: 2, draftRev: 2 },
+    });
     assertEquals([ok.status, ok.json.status], [202, 'queued']);
     assertEquals(h.store.jobs.find((j) => j.type === 'file_report')!.payload.version, 2);
+    assertEquals(h.store.jobs.find((j) => j.type === 'file_report')!.payload.draftRev, 2);
 
     // D16: that filing completed stale (the report left and came back to awaiting_confirmation
     // at v2); the next confirm is a new occurrence, not the finished job.
     h.store.jobs.find((j) => j.type === 'file_report')!.status = 'done';
-    const again = await h.call('POST', `reports/${reportId}/confirm`, { body: { version: 2 } });
+    const again = await h.call('POST', `reports/${reportId}/confirm`, {
+      body: { version: 2, draftRev: 2 },
+    });
     assertEquals([again.status, again.json.status], [202, 'queued']);
     assertEquals(
       h.store.jobs.filter((j) => j.type === 'file_report').map((j) => [j.dedupe_key, j.status]),
       [
-        [`file:${reportId}:v2`, 'done'],
-        [`file:${reportId}:v2:c2`, 'queued'],
+        [`file:${reportId}:v2:r2`, 'done'],
+        [`file:${reportId}:v2:r2:c2`, 'queued'],
       ],
     );
   },

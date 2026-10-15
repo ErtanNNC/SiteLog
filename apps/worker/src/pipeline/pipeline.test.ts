@@ -461,12 +461,29 @@ describe('pipeline: compose + extract job + filing', () => {
     await h.db.updateReport(report.id, { status: 'awaiting_confirmation' });
     const newer = await fileReport(h.ctx, report.id, { trigger: 'confirm', version: 2 });
     expect(newer.stale).toBe(true);
+    // The same version rewritten in place since the confirm (a late photo's re-extraction): the
+    // draft revision the reporter saw is gone.
+    expect((await h.db.getVersion(report.id, 1))!.draft_rev).toBe(1);
+    await storeDraft(h.ctx, report, { ...data, summary: 'With the late photo' });
+    expect((await h.db.getVersion(report.id, 1))!.draft_rev).toBe(2);
+    const rewritten = await fileReport(h.ctx, report.id, {
+      trigger: 'confirm',
+      version: 1,
+      draftRev: 1,
+    });
+    expect(rewritten.stale).toBe(true);
     expect(h.db.jobsOfType('render_pdf')).toHaveLength(0);
-    expect(h.db.data.audit.filter((a) => a.action === 'report.confirm_stale')).toHaveLength(2);
+    const stale = h.db.data.audit.filter((a) => a.action === 'report.confirm_stale');
+    expect(stale).toHaveLength(3);
+    expect(stale[2]!.diff).toMatchObject({ confirmed_draft_rev: 1, draft_rev: 2 });
     expect((await h.db.getReport(report.id))!.status).toBe('awaiting_confirmation');
 
-    // The confirmed version, still awaiting confirmation: filed.
-    const filed = await fileReport(h.ctx, report.id, { trigger: 'confirm', version: 1 });
+    // The confirmed version at the revision shown, still awaiting confirmation: filed.
+    const filed = await fileReport(h.ctx, report.id, {
+      trigger: 'confirm',
+      version: 1,
+      draftRev: 2,
+    });
     expect([filed.stale, filed.report.status]).toEqual([undefined, 'filed']);
   });
 

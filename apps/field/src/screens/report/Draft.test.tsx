@@ -65,13 +65,13 @@ describe('Draft (F8, Field-06)', () => {
     expect(defs).toEqual(['Not stated', 'Not stated', 'Not stated', 'None']);
   });
 
-  it('confirms the version shown, then polls while it is filed', async () => {
+  it('confirms the version and revision shown, then polls while it is filed', async () => {
     const routes = fakeRoutes({
       report: vi
         .fn()
-        .mockResolvedValueOnce(draftView({ currentVersion: 2 }))
+        .mockResolvedValueOnce(draftView({ currentVersion: 2, draftRev: 3 }))
         // Queued, not filed yet: "Filing your report…".
-        .mockResolvedValueOnce(draftView({ currentVersion: 2 }))
+        .mockResolvedValueOnce(draftView({ currentVersion: 2, draftRev: 3 }))
         .mockResolvedValue(
           draftView({
             status: 'filed',
@@ -83,7 +83,7 @@ describe('Draft (F8, Field-06)', () => {
     });
     renderApp('/report/r1', { routes });
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm & send' }));
-    expect(routes.confirm).toHaveBeenCalledWith('K7Q2MX', 'r1', { version: 2 });
+    expect(routes.confirm).toHaveBeenCalledWith('K7Q2MX', 'r1', { version: 2, draftRev: 3 });
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Filing your report…' }),
     ).toBeInTheDocument();
@@ -114,7 +114,32 @@ describe('Draft (F8, Field-06)', () => {
     await waitFor(() => expect(routes.report).toHaveBeenCalledTimes(2));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm & send' }));
     await waitFor(() =>
-      expect(routes.confirm).toHaveBeenLastCalledWith('K7Q2MX', 'r1', { version: 2 }),
+      expect(routes.confirm).toHaveBeenLastCalledWith('K7Q2MX', 'r1', { version: 2, draftRev: 1 }),
+    );
+  });
+
+  it('shows the draft again when a late photo rewrote it in place after Confirm & send', async () => {
+    const routes = fakeRoutes({
+      report: vi
+        .fn()
+        .mockResolvedValueOnce(draftView({ draftRev: 1 }))
+        // The confirmed filing goes stale in the worker: the same version, a newer revision.
+        .mockResolvedValue(draftView({ draftRev: 2 })),
+      confirm: vi.fn().mockResolvedValue({ status: 'queued' }),
+    });
+    renderApp('/report/r1', { routes });
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm & send' }));
+    expect(routes.confirm).toHaveBeenCalledWith('K7Q2MX', 'r1', { version: 1, draftRev: 1 });
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Your report changed. Check it again, then send.',
+    );
+    // Back on the draft, not polling: the reporter checks it and confirms the new revision.
+    const calls = vi.mocked(routes.report).mock.calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(routes.report).toHaveBeenCalledTimes(calls);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm & send' }));
+    await waitFor(() =>
+      expect(routes.confirm).toHaveBeenLastCalledWith('K7Q2MX', 'r1', { version: 1, draftRev: 2 }),
     );
   });
 

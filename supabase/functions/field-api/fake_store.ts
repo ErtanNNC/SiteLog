@@ -454,18 +454,31 @@ export class FakeFieldStore implements FieldStore {
     return Promise.resolve({ siteDayId: day.id, status: input.status, changed: true });
   }
 
-  /** A queued or running file_report job of the report, whatever its key (20261015000001). */
-  private filingJob(reportId: string) {
+  /**
+   * A queued or running file_report job of the report, whatever its key (20261015000001); for a
+   * confirm of `draft`, not a web confirm of another draft (20261015000070).
+   */
+  private filingJob(reportId: string, draft?: { version: number; draftRev: number }) {
     return this.jobs.find(
       (j) =>
         j.type === 'file_report' &&
         j.payload.reportId === reportId &&
-        (j.status === 'queued' || j.status === 'running'),
+        (j.status === 'queued' || j.status === 'running') &&
+        !(
+          draft &&
+          j.payload.draftRev !== undefined &&
+          (j.payload.version !== draft.version || j.payload.draftRev !== draft.draftRev)
+        ),
     );
   }
 
-  /** field_confirm_report(). */
-  confirmReport(reportId: string, reporterId: string, version: number): Promise<ConfirmResult> {
+  /** field_confirm_report() (20261015000070: the version and the draft revision). */
+  confirmReport(
+    reportId: string,
+    reporterId: string,
+    version: number,
+    draftRev: number,
+  ): Promise<ConfirmResult> {
     const r = this.reports.find((x) => x.id === reportId);
     if (!r || r.status === 'void' || !this.onSite(reporterId, r.site_id)) {
       return Promise.reject(new FieldDbError('report_not_found'));
@@ -476,7 +489,10 @@ export class FakeFieldStore implements FieldStore {
     if (r.status !== 'awaiting_confirmation')
       return Promise.reject(new FieldDbError('wrong_state'));
     if (r.current_version !== version) return Promise.reject(new FieldDbError('draft_changed'));
-    const existing = this.filingJob(reportId);
+    const v = this.versions.find((x) => x.report_id === r.id && x.version === version);
+    if (!v || (v.draft_rev ?? 1) !== draftRev)
+      return Promise.reject(new FieldDbError('draft_changed'));
+    const existing = this.filingJob(reportId, { version, draftRev });
     if (existing) return Promise.resolve({ status: 'queued', jobId: existing.id, version });
     // D16: the version's first confirm, then one key per occurrence after a finished job; a dead
     // one runs again (requeue_dead_job()).
@@ -488,14 +504,14 @@ export class FakeFieldStore implements FieldStore {
     for (let n = confirms; ; n++) {
       const key =
         n === confirms
-          ? jobKeys.fileReport(reportId, version)
-          : jobKeys.fileReportOn(reportId, version, `c${n}`);
+          ? jobKeys.fileReportOn(reportId, version, `r${draftRev}`)
+          : jobKeys.fileReportOn(reportId, version, `r${draftRev}:c${n}`);
       job = this.jobs.find((j) => j.dedupe_key === key);
       if (!job) {
         job = {
           id: this.jobs.length + 1,
           type: 'file_report',
-          payload: { reportId, trigger: 'confirm', version },
+          payload: { reportId, trigger: 'confirm', version, draftRev, via: 'web' },
           dedupe_key: key,
           status: 'queued',
         };
@@ -516,7 +532,13 @@ export class FakeFieldStore implements FieldStore {
       action: 'report.confirm_requested',
       entity: 'report',
       entityId: reportId,
-      diff: { job_id: job.id, version, channel: 'web', ...(requeued ? { requeued: true } : {}) },
+      diff: {
+        job_id: job.id,
+        version,
+        draft_rev: draftRev,
+        channel: 'web',
+        ...(requeued ? { requeued: true } : {}),
+      },
     });
     return Promise.resolve({ status: 'queued', jobId: job.id, version });
   }
@@ -541,6 +563,7 @@ export class FakeFieldStore implements FieldStore {
     if (!v || JSON.stringify(v.data) !== JSON.stringify(input.base))
       return Promise.reject(new FieldDbError('draft_changed'));
     v.data = input.data as ReportVersionRow['data'];
+    v.draft_rev = (v.draft_rev ?? 1) + 1;
     Object.assign(q, {
       answer: input.answer,
       answer_source: input.answerSource,

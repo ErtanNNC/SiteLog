@@ -374,12 +374,13 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       );
     },
 
-    async confirmReport(reportId, reporterId, version) {
+    async confirmReport(reportId, reporterId, version, draftRev) {
       return await rpc<ConfirmResult>(
         admin.rpc('field_confirm_report', {
           p_report_id: reportId,
           p_reporter_id: reporterId,
           p_version: version,
+          p_draft_rev: draftRev,
         }),
       );
     },

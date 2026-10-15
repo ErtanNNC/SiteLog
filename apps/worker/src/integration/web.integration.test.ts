@@ -325,17 +325,25 @@ describe('W1-12: ES + EN voice note → extraction v2 → one question → answe
       await database.q(`update jobs set status = 'queued' where id = $1`, [job.id]);
       expect(await run(job.id)).toEqual({ ok: true });
     };
-    const [{ v }] = (await database.q<{ v: number }>(
-      `select current_version as v from reports where id = $1`,
+    const [{ v, rev }] = (await database.q<{ v: number; rev: number }>(
+      `select r.current_version as v, rv.draft_rev as rev from reports r
+       join report_versions rv on rv.report_id = r.id and rv.version = r.current_version
+       where r.id = $1`,
       [reportId],
-    )) as [{ v: number }];
+    )) as [{ v: number; rev: number }];
     const [confirmed] = await database.q<{ r: { status: string; jobId: number } }>(
-      `select field_confirm_report($1, $2, $3) as r`,
-      [reportId, MARCO, v],
+      `select field_confirm_report($1, $2, $3, $4) as r`,
+      [reportId, MARCO, v, rev],
     );
     expect(confirmed!.r.status).toBe('queued');
     const [fileJob] = await jobsOf('file_report');
-    expect(fileJob!.payload).toEqual({ reportId, trigger: 'confirm', version: v, via: 'web' });
+    expect(fileJob!.payload).toEqual({
+      reportId,
+      trigger: 'confirm',
+      version: v,
+      draftRev: rev,
+      via: 'web',
+    });
     expect(await run(fileJob!.id)).toEqual({ ok: true });
 
     const [report] = await database.q<{

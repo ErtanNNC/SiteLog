@@ -223,8 +223,16 @@ export interface FieldStore {
     status: 'no_work' | 'weather_day';
     details: Json;
   }): Promise<DayStatusResult>;
-  /** field_confirm_report(): reports/:id/confirm (F8) for that version, audited in SQL. */
-  confirmReport(reportId: string, reporterId: string, version: number): Promise<ConfirmResult>;
+  /**
+   * field_confirm_report(): reports/:id/confirm (F8) for that version at that draft revision
+   * (20261015000070), audited in SQL.
+   */
+  confirmReport(
+    reportId: string,
+    reporterId: string,
+    version: number,
+    draftRev: number,
+  ): Promise<ConfirmResult>;
   /** field_answer_question(): reports/:id/answer (F7), audited in SQL; enqueues decide_next. */
   answerQuestion(input: AnswerInput): Promise<AnswerResult>;
   audit(entry: AuditEntry): Promise<void>;

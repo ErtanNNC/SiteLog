@@ -688,6 +688,8 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         author_message_id: input.author_message_id ?? existing?.author_message_id ?? null,
         change_note: input.change_note ?? null,
         created_at: existing?.created_at ?? iso(),
+        // As the trigger of 20261015000070: a new version starts at 1, a change of data bumps it.
+        draft_rev: existing ? nextDraftRev(existing, input.data) : 1,
       };
       d.versions.set(vkey(input.report_id, input.version), row);
       return row;
@@ -695,7 +697,12 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async updateVersion(reportId, version, patch) {
       const row = d.versions.get(vkey(reportId, version));
       if (!row) throw new Error('version not found');
-      d.versions.set(vkey(reportId, version), { ...row, ...(patch as Partial<ReportVersionRow>) });
+      const { draft_rev: _ignored, ...rest } = patch as Partial<ReportVersionRow>;
+      d.versions.set(vkey(reportId, version), {
+        ...row,
+        ...rest,
+        draft_rev: 'data' in rest ? nextDraftRev(row, rest.data) : (row.draft_rev ?? 1),
+      });
     },
     async denormalizeVersion(reportId, version) {
       d.denormalized.push({ report_id: reportId, version });
@@ -1226,4 +1233,10 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async close() {},
   };
   return db;
+}
+
+/** report_versions_draft_rev() (20261015000070): the revision after a write of `data`. */
+function nextDraftRev(row: ReportVersionRow, data: unknown): number {
+  const rev = row.draft_rev ?? 1;
+  return JSON.stringify(row.data) === JSON.stringify(data) ? rev : rev + 1;
 }

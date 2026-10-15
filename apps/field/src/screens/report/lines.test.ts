@@ -3,7 +3,7 @@ import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
 import { fillCopy } from '@sitelog/shared/report/progress.ts';
 import type { FieldLanguage } from '@/i18n/language';
 import { confirmationLine, crewValue, formatNumberIn, heardAt, parseTypedNumber } from './lines';
-import { pollsIn, reportPhase } from './phase';
+import { confirmedDraftReplaced, pollsIn, reportPhase } from './phase';
 import { draftView, questionView, reportView } from './test-views';
 
 /** `t` over the shared copy, as `useFieldCopy` reads it. */
@@ -101,5 +101,21 @@ describe('report screen lines (W1-13)', () => {
         pollsIn,
       ),
     ).toEqual(['processing', 'filing']);
+  });
+
+  it('tells a draft rewritten after Confirm & send from the one confirmed', () => {
+    const confirmed = { version: 1, draftRev: 2 };
+    expect(confirmedDraftReplaced(draftView({ draftRev: 2 }), confirmed)).toBe(false);
+    expect(confirmedDraftReplaced(draftView({ draftRev: 3 }), confirmed)).toBe(true);
+    expect(confirmedDraftReplaced(draftView({ currentVersion: 2, draftRev: 2 }), confirmed)).toBe(
+      true,
+    );
+    // Filed, or still being processed: not a replaced draft.
+    expect(confirmedDraftReplaced(draftView({ status: 'filed', draftRev: 3 }), confirmed)).toBe(
+      false,
+    );
+    expect(
+      confirmedDraftReplaced(draftView({ status: 'processing', draftRev: 3 }), confirmed),
+    ).toBe(false);
   });
 });

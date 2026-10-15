@@ -41,6 +41,24 @@ export function reportPhase(view: ReportView | null, local: LocalReportState): R
   }
 }
 
+/** The draft Confirm & send was accepted for: its version and revision (`ReportView.draftRev`). */
+export interface ConfirmedDraft {
+  version: number;
+  draftRev: number | null;
+}
+
+/**
+ * While filing: the report still awaits confirmation but shows another draft than the one
+ * confirmed (a late photo re-extracted it in place), so the worker will not file it
+ * (`report.confirm_stale`) and the reporter must check the new one. Pure.
+ */
+export function confirmedDraftReplaced(view: ReportView, confirmed: ConfirmedDraft): boolean {
+  return (
+    view.status === 'awaiting_confirmation' &&
+    (view.currentVersion !== confirmed.version || view.draftRev !== confirmed.draftRev)
+  );
+}
+
 /** Phases that wait for the worker, so the screen keeps polling. */
 export function pollsIn(phase: ReportPhase): boolean {
   return phase === 'processing' || phase === 'filing';

@@ -398,6 +398,13 @@ export type ReportVersionRow = {
   created_at: string;
   /** Channel of a reporter edit. */
   via: FieldChannel | null;
+  /**
+   * The draft revision (20261015000070, NOT NULL default 1): a trigger bumps it on every change of
+   * `data` (drafts are overwritten in place), so a confirm names the draft the reporter saw. Always
+   * present on a row read from the database; optional here only so in-memory rows (the panel's
+   * demo store) need not carry it.
+   */
+  draft_rev?: number;
 };
 
 /**
@@ -1055,6 +1062,7 @@ export type Database = {
         | 'change_note'
         | 'created_at'
         | 'via'
+        | 'draft_rev'
       >;
       report_sources: Table<
         ReportSourceRow,
@@ -1230,10 +1238,15 @@ export type Database = {
         Args: { p_key: string; p_limit: number; p_window_seconds: number };
         Returns: Json;
       };
-      // reports/:id/confirm (F8): enqueues file_report for the confirmed version under the
-      // site-day lock: {status: 'queued' | 'filed', jobId, version}.
+      // reports/:id/confirm (F8): enqueues file_report for the confirmed version and draft
+      // revision (20261015000070) under the site-day lock: {status: 'queued' | 'filed', jobId, version}.
       field_confirm_report: {
-        Args: { p_report_id: string; p_reporter_id: string; p_version: number };
+        Args: {
+          p_report_id: string;
+          p_reporter_id: string;
+          p_version: number;
+          p_draft_rev: number;
+        };
         Returns: Json;
       };
       // reports/:id/answer (W1-12, 20261015000002): stores the draft field-api computed (p_data,

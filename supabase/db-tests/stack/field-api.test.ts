@@ -255,18 +255,32 @@ describeField('field-api on the local stack', () => {
 
     // Draft ready → confirm enqueues file_report for the version the reporter saw.
     await sql`update reports set status = 'awaiting_confirmation' where id = ${done.json.reportId as string}`;
+    await sql`insert into report_versions (report_id, version, data, author)
+      values (${done.json.reportId as string}, 1, ${sql.json({ schemaVersion: 2 })}, 'agent')`;
     const confirmed = await call('POST', `reports/${done.json.reportId}/confirm`, {
-      body: { version: 1 },
+      body: { version: 1, draftRev: 1 },
     });
     expect([confirmed.status, confirmed.json.status]).toEqual([202, 'queued']);
     const [file] = await sql<{ payload: Record<string, unknown>; dedupe_key: string }[]>`
       select payload, dedupe_key from jobs where type = 'file_report' and payload->>'reportId' = ${done.json.reportId as string}`;
     expect(file).toEqual({
-      payload: { reportId: done.json.reportId, trigger: 'confirm', version: 1, via: 'web' },
-      dedupe_key: `file:${done.json.reportId}:v1`,
+      payload: {
+        reportId: done.json.reportId,
+        trigger: 'confirm',
+        version: 1,
+        draftRev: 1,
+        via: 'web',
+      },
+      dedupe_key: `file:${done.json.reportId}:v1:r1`,
     });
     // A double tap answers the same, and enqueues nothing more.
-    expect((await call('POST', `reports/${done.json.reportId}/confirm`)).status).toBe(202);
+    expect(
+      (
+        await call('POST', `reports/${done.json.reportId}/confirm`, {
+          body: { version: 1, draftRev: 1 },
+        })
+      ).status,
+    ).toBe(202);
 
     // A voice note completed before the job runs does not join the confirmed draft.
     const more = await call('POST', 'uploads', {
@@ -281,7 +295,7 @@ describeField('field-api on the local stack', () => {
     const late = await call('POST', `uploads/${more.json.uploadId}/complete`);
     expect([late.status, late.json.error]).toEqual([409, 'report_filing']);
     const [still] = await sql<{ status: string; n: number }[]>`
-      select r.status, (select count(*)::int from jobs where dedupe_key = ${`file:${done.json.reportId}:v1`}) as n
+      select r.status, (select count(*)::int from jobs where dedupe_key = ${`file:${done.json.reportId}:v1:r1`}) as n
       from reports r where r.id = ${done.json.reportId as string}`;
     expect(still).toEqual({ status: 'awaiting_confirmation', n: 1 });
 
@@ -410,6 +424,8 @@ describeRace('field_complete_upload on real Postgres', () => {
       ];
     const reportId = done.r.reportId;
     await sql`update reports set status = 'awaiting_confirmation' where id = ${reportId}`;
+    await sql`insert into report_versions (report_id, version, data, author)
+      values (${reportId}, 1, ${sql.json({ schemaVersion: 2 })}, 'agent')`;
     const voice = await upload(f!.dana.id, f!.siteId, day);
 
     let started = 0;
@@ -430,12 +446,12 @@ describeRace('field_complete_upload on real Postgres', () => {
           (err: Error) => err.message,
         );
     const [confirm, complete] = await Promise.all([
-      run((tx) => tx`select field_confirm_report(${reportId}, ${f!.marco.id}, 1)`),
+      run((tx) => tx`select field_confirm_report(${reportId}, ${f!.marco.id}, 1, 1)`),
       run((tx) => tx`select field_complete_upload(${voice}, ${f!.dana.id})`),
     ]);
     const [state] = await sql<{ status: string; jobs: number; attached: boolean }[]>`
       select r.status,
-             (select count(*)::int from jobs where dedupe_key = ${`file:${reportId}:v1`}) as jobs,
+             (select count(*)::int from jobs where dedupe_key = ${`file:${reportId}:v1:r1`}) as jobs,
              (select report_id is not null from uploads where id = ${voice}) as attached
       from reports r where r.id = ${reportId}`;
     if (confirm === 'ok') {

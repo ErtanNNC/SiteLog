@@ -100,6 +100,7 @@ export function reportView(patch: Partial<ReportView> = {}): ReportView {
     confirmedAt: null,
     question: null,
     data: null,
+    draftRev: null,
     progress: { voiceNotes: 1, transcribed: 1, photos: 2 },
     pdfUrl: null,
     ...patch,
@@ -128,5 +129,5 @@ export function questionView(options: boolean | 'none' = true): ReportView {
 }
 
 export function draftView(patch: Partial<ReportView> = {}): ReportView {
-  return reportView({ status: 'awaiting_confirmation', data: heroData(5), ...patch });
+  return reportView({ status: 'awaiting_confirmation', data: heroData(5), draftRev: 1, ...patch });
 }

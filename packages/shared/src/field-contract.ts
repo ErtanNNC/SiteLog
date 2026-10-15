@@ -324,6 +324,11 @@ export interface ReportView {
   } | null;
   /** The current version's data in §10.3 v2 terms; null before the first draft. */
   data: DailyReportData | null;
+  /**
+   * The revision of that data (`report_versions.draft_rev`, bumped on every change of the draft):
+   * Confirm & send names it with `currentVersion`; null before the first draft.
+   */
+  draftRev: number | null;
   /** For the Processing ticks (F5 step 4). */
   progress: { voiceNotes: number; transcribed: number; photos: number };
   /** A filed report's PDF, signed for 10 minutes. */
@@ -331,9 +336,10 @@ export interface ReportView {
 }
 
 /**
- * `POST reports/:id/confirm` `{version?}`: `queued` (file_report enqueued for that version, the
- * current one when omitted) or `filed` already. 409 `wrong_state` unless awaiting confirmation,
- * 409 `draft_changed` when a newer draft replaced the version confirmed.
+ * `POST reports/:id/confirm` `{version?, draftRev}`: `queued` (file_report enqueued for that
+ * version, the current one when omitted, at that draft revision) or `filed` already. 409
+ * `wrong_state` unless awaiting confirmation, 409 `draft_changed` when a newer draft replaced the
+ * one confirmed (another version, or the same version re-extracted in place: another revision).
  */
 export interface ConfirmResponse {
   status: 'queued' | 'filed';

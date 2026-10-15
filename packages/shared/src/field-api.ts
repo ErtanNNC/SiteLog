@@ -60,11 +60,13 @@ export const UploadRequestSchema = z.strictObject({
 });
 
 /**
- * `POST reports/:id/confirm` (F8): the draft version the reporter saw (`ReportView.currentVersion`);
- * omitted, the current one.
+ * `POST reports/:id/confirm` (F8): the draft the reporter saw: its version
+ * (`ReportView.currentVersion`; omitted, the current one) and its revision (`ReportView.draftRev`,
+ * required: a draft is overwritten in place, so the version alone cannot tell a newer draft).
  */
 export const ConfirmRequestSchema = z.strictObject({
   version: z.number().int().min(1).optional(),
+  draftRev: z.number().int().min(1),
 });
 
 /**

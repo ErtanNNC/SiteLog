@@ -28,9 +28,10 @@ import { contextOf } from '../router/context';
  * enqueues nothing), so a failure after `status = filed` (a retried file_report job, or another
  * filing that finds it filed) can no longer skip the PDF, the text or the email
  * (docs/AUDIT_BACKLOG.md). A field-api confirm names the version the reporter confirmed
- * (`opts.version`, field_confirm_report()): if the report has left awaiting_confirmation or moved
- * to another version since, nothing is filed (`report.confirm_stale`); the reporter confirms the
- * new draft, or the timeouts file it.
+ * (`opts.version`, `opts.draftRev`, field_confirm_report()): if the report has left
+ * awaiting_confirmation, moved to another version, or its draft was rewritten in place since (a
+ * late photo's re-extraction: another `draft_rev`), nothing is filed (`report.confirm_stale`); the
+ * reporter confirms the new draft, or the timeouts file it.
  * Last step: the AI + WhatsApp cost estimate (§15 cost guardrail, src/cost.ts); it never fails filing.
  */
 
@@ -41,6 +42,11 @@ export interface FileOptions {
   confirmMessageId?: string | null;
   /** The draft version a field-api confirm was for (with trigger 'confirm'). */
   version?: number;
+  /**
+   * That version's draft revision the reporter saw (`report_versions.draft_rev`, 20261015000070):
+   * drafts are overwritten in place, so a re-extraction since the confirm makes it stale.
+   */
+  draftRev?: number;
   extraReasons?: string[];
   /**
    * The channel the reporter confirmed on (`reports.confirmed_via`, §10.1 `file_report(report_id,
@@ -92,7 +98,9 @@ export async function fileReport(
   if (
     opts.trigger === 'confirm' &&
     opts.version !== undefined &&
-    (report.status !== 'awaiting_confirmation' || report.current_version !== opts.version)
+    (report.status !== 'awaiting_confirmation' ||
+      report.current_version !== opts.version ||
+      (opts.draftRev !== undefined && (existing.draft_rev ?? 1) !== opts.draftRev))
   ) {
     await ctx.db.logAudit({
       org_id: report.org_id,
@@ -103,6 +111,9 @@ export async function fileReport(
       diff: {
         confirmed_version: opts.version,
         current_version: report.current_version,
+        ...(opts.draftRev !== undefined
+          ? { confirmed_draft_rev: opts.draftRev, draft_rev: existing.draft_rev ?? 1 }
+          : {}),
         status: report.status,
       },
     });

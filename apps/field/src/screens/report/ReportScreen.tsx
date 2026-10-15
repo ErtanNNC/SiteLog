@@ -7,7 +7,7 @@ import { useSession } from '@/session/useSession';
 import { Draft } from './Draft';
 import { Filed, PDF_WAIT_MS } from './Filed';
 import { confirmationLine } from './lines';
-import { pollsIn, reportPhase } from './phase';
+import { confirmedDraftReplaced, pollsIn, reportPhase, type ConfirmedDraft } from './phase';
 import { ProcessingView } from './Processing';
 import { Question } from './Question';
 import { useReportPoll } from './useReportPoll';
@@ -38,7 +38,9 @@ function ReportLoaded({
 }) {
   const { t, language } = useFieldCopy();
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
-  const [filing, setFiling] = useState(false);
+  // The draft Confirm & send was accepted for (null: not filing).
+  const [confirmed, setConfirmed] = useState<ConfirmedDraft | null>(null);
+  const filing = confirmed !== null;
   const [confirmation, setConfirmation] = useState<AnswerConfirmation | null>(null);
   // A refusal that sent the screen back to the latest view ("That question was already answered").
   const [notice, setNotice] = useState<string | null>(null);
@@ -47,6 +49,12 @@ function ReportLoaded({
   const [pdfLate, setPdfLate] = useState(false);
   const keepPolling = useCallback(
     (view: ReportView) => {
+      if (confirmed && confirmedDraftReplaced(view, confirmed)) {
+        // A newer draft replaced the one confirmed (its filing goes stale): show it, with a note.
+        setConfirmed(null);
+        setNotice(t('draft.errors.draft_changed'));
+        return false;
+      }
       const next = reportPhase(view, { answered, filing });
       if (pollsIn(next)) return true;
       if (next !== 'filed' || view.pdfUrl) return false;
@@ -57,7 +65,7 @@ function ReportLoaded({
       setPdfLate(true);
       return false;
     },
-    [answered, filing],
+    [answered, filing, confirmed, t],
   );
   const { view, problem, restart } = useReportPoll(code, id, keepPolling);
   const phase = reportPhase(view, { answered, filing });
@@ -78,12 +86,15 @@ function ReportLoaded({
     },
     [restart],
   );
-  const onConfirmed = useCallback(() => {
-    setFiling(true);
-    setNotice(null);
-    setConfirmation(null);
-    restart();
-  }, [restart]);
+  const onConfirmed = useCallback(
+    (draft: ConfirmedDraft) => {
+      setConfirmed(draft);
+      setNotice(null);
+      setConfirmation(null);
+      restart();
+    },
+    [restart],
+  );
 
   // F7's line (a web toast in the spec) stays on the screens after the answer; a refusal that
   // sent the screen back to the latest view says why. Each new screen starts at its heading.

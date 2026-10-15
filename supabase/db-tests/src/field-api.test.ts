@@ -369,7 +369,11 @@ describe('field_complete_upload (uploads/:id/complete)', () => {
     await svc(`update reports set status = 'awaiting_confirmation' where id = $1`, [
       first.reportId,
     ]);
-    await svc(`select field_confirm_report($1, $2, 1)`, [first.reportId, MARCO]);
+    await svc(
+      `insert into report_versions (report_id, version, data, author) values ($1, 1, '{"schemaVersion": 2}', 'agent')`,
+      [first.reportId],
+    );
+    await svc(`select field_confirm_report($1, $2, 1, 1)`, [first.reportId, MARCO]);
     const voice = await upload({ reporter: DANA, site: SITE, org: ORG, date: day });
     const photo = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day, kind: 'photo' });
     expect(await failure(`select field_complete_upload($1, $2)`, [voice, DANA])).toBe(
@@ -385,7 +389,7 @@ describe('field_complete_upload (uploads/:id/complete)', () => {
     ).toEqual([{ n: 1 }]);
     // The job ran and found nothing to file (a stale confirm): the draft takes audio again.
     await svc(`update jobs set status = 'done' where dedupe_key = $1`, [
-      `file:${first.reportId}:v1`,
+      `file:${first.reportId}:v1:r1`,
     ]);
     expect(await complete(voice, DANA)).toMatchObject({
       reportId: first.reportId,
@@ -567,15 +571,26 @@ describe('field_set_day_status (day-status, F12 buttons)', () => {
 
 describe('field_confirm_report (reports/:id/confirm, F8)', () => {
   type Confirmed = { status: 'queued' | 'filed'; jobId: number | null; version: number };
-  const confirm = (report: string, reporter: string, version: number | null) =>
-    svc<{ r: Confirmed }>(`select field_confirm_report($1, $2, $3) as r`, [
+  const confirm = (report: string, reporter: string, version: number | null, draftRev = 1) =>
+    svc<{ r: Confirmed }>(`select field_confirm_report($1, $2, $3, $4) as r`, [
       report,
       reporter,
       version,
+      draftRev,
     ]).then((rows) => rows[0]!.r);
+  const draftRev = (report: string, version = 1) =>
+    svc<{ draft_rev: number }>(
+      `select draft_rev from report_versions where report_id = $1 and version = $2`,
+      [report, version],
+    ).then((rows) => rows[0]?.draft_rev);
   const draft = async (date: string, site = SITE2) => {
     const res = await complete(await upload({ reporter: MARCO, site, org: ORG, date }), MARCO);
     await svc(`update reports set status = 'awaiting_confirmation' where id = $1`, [res.reportId]);
+    // The draft the worker wrote (the reporter confirms what the Draft screen showed).
+    await svc(
+      `insert into report_versions (report_id, version, data, author) values ($1, 1, '{"schemaVersion": 2}', 'agent')`,
+      [res.reportId],
+    );
     return res.reportId;
   };
 
@@ -590,8 +605,8 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
     expect(jobs).toEqual([
       {
         id: first.jobId,
-        payload: { reportId: report, trigger: 'confirm', version: 1, via: 'web' },
-        dedupe_key: `file:${report}:v1`,
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 1, via: 'web' },
+        dedupe_key: `file:${report}:v1:r1`,
         status: 'queued',
       },
     ]);
@@ -605,7 +620,7 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
       {
         actor_type: 'reporter',
         actor_id: MARCO,
-        diff: { job_id: first.jobId, version: 1, channel: 'web' },
+        diff: { job_id: first.jobId, version: 1, draft_rev: 1, channel: 'web' },
       },
     ]);
   });
@@ -631,12 +646,17 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
     const v1 = await confirm(report, MARCO, 1);
     // The job ran but filed nothing (the draft moved on meanwhile), and version 2 is confirmed.
     await svc(`update jobs set status = 'done' where id = $1`, [v1.jobId]);
+    await svc(
+      `insert into report_versions (report_id, version, data, author)
+       select report_id, 2, data, author from report_versions where report_id = $1 and version = 1`,
+      [report],
+    );
     await svc(`update reports set current_version = 2 where id = $1`, [report]);
     const v2 = await confirm(report, MARCO, 2);
     expect(v2.jobId).not.toBe(v1.jobId);
     expect(
       await svc(`select dedupe_key, status::text from jobs where id = $1`, [v2.jobId]),
-    ).toEqual([{ dedupe_key: `file:${report}:v2`, status: 'queued' }]);
+    ).toEqual([{ dedupe_key: `file:${report}:v2:r1`, status: 'queued' }]);
     // Version 2's job dies after six attempts; the reporter taps Confirm again: the same job runs.
     await svc(`update jobs set status = 'dead', attempts = 6, finished_at = now() where id = $1`, [
       v2.jobId,
@@ -679,19 +699,19 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
       ),
     ).toEqual([
       {
-        dedupe_key: `file:${report}:v1`,
+        dedupe_key: `file:${report}:v1:r1`,
         status: 'done',
-        payload: { reportId: report, trigger: 'confirm', version: 1, via: 'web' },
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 1, via: 'web' },
       },
       {
-        dedupe_key: `file:${report}:v1:c2`,
+        dedupe_key: `file:${report}:v1:r1:c2`,
         status: 'failed',
-        payload: { reportId: report, trigger: 'confirm', version: 1, via: 'web' },
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 1, via: 'web' },
       },
       {
-        dedupe_key: `file:${report}:v1:c3`,
+        dedupe_key: `file:${report}:v1:r1:c3`,
         status: 'queued',
-        payload: { reportId: report, trigger: 'confirm', version: 1, via: 'web' },
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 1, via: 'web' },
       },
     ]);
     // A third tap while it is queued reuses it.
@@ -700,21 +720,92 @@ describe('field_confirm_report (reports/:id/confirm, F8)', () => {
     await svc(`update jobs set status = 'done', finished_at = now() where id = $1`, [third.jobId]);
     await svc(
       `select enqueue_job('file_report', jsonb_build_object('reportId', $1::text), null, $2)`,
-      [report, `file:${report}:v1:c4`],
+      [report, `file:${report}:v1:r1:c4`],
     );
-    await svc(`update jobs set status = 'done' where dedupe_key = $1`, [`file:${report}:v1:c4`]);
+    await svc(`update jobs set status = 'done' where dedupe_key = $1`, [`file:${report}:v1:r1:c4`]);
     const fourth = await confirm(report, MARCO, 1);
     expect(
       await svc(`select dedupe_key, status::text from jobs where id = $1`, [fourth.jobId]),
-    ).toEqual([{ dedupe_key: `file:${report}:v1:c5`, status: 'queued' }]);
+    ).toEqual([{ dedupe_key: `file:${report}:v1:r1:c5`, status: 'queued' }]);
+  });
+
+  it('bumps the draft revision on every change of the draft data, and only then', async () => {
+    const report = await draft('2026-11-16');
+    expect(await draftRev(report)).toBe(1);
+    // A re-extraction overwrites the draft in place (the worker's upsert): a new revision.
+    await svc(
+      `update report_versions set data = data || '{"summary": "Late photo"}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report)).toBe(2);
+    // The same data again, a PDF path, or a caller naming a revision: no change.
+    await svc(`update report_versions set data = data where report_id = $1 and version = 1`, [
+      report,
+    ]);
+    await svc(
+      `update report_versions set pdf_path = 'x.pdf', draft_rev = 9 where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report)).toBe(2);
+    // A new version starts at 1, whatever the insert says.
+    await svc(
+      `insert into report_versions (report_id, version, data, author, draft_rev)
+       select report_id, 2, data, author, 7 from report_versions where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report, 2)).toBe(1);
+  });
+
+  it('refuses a confirm of a draft that was re-extracted in place (draft_changed), and files the new one', async () => {
+    const report = await draft('2026-11-17');
+    const seen = await draftRev(report);
+    await svc(
+      `update report_versions set data = data || '{"summary": "Late photo"}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await failure(`select field_confirm_report($1, $2, 1, $3)`, [report, MARCO, seen])).toBe(
+      'draft_changed',
+    );
+    const now = await confirm(report, MARCO, 1, 2);
+    expect(await svc(`select dedupe_key, payload from jobs where id = $1`, [now.jobId])).toEqual([
+      {
+        dedupe_key: `file:${report}:v1:r2`,
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 2, via: 'web' },
+      },
+    ]);
+  });
+
+  it('does not reuse a queued web confirm of an older revision: that one goes stale, this one files', async () => {
+    const report = await draft('2026-11-18');
+    const first = await confirm(report, MARCO, 1, 1);
+    // The draft changes while that filing waits (an extraction queued before the confirm).
+    await svc(
+      `update report_versions set data = data || '{"summary": "Late photo"}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    const second = await confirm(report, MARCO, 1, 2);
+    expect(second.jobId).not.toBe(first.jobId);
+    expect(
+      await svc(
+        `select dedupe_key, status::text from jobs where type = 'file_report' and payload->>'reportId' = $1 order by id`,
+        [report],
+      ),
+    ).toEqual([
+      { dedupe_key: `file:${report}:v1:r1`, status: 'queued' },
+      { dedupe_key: `file:${report}:v1:r2`, status: 'queued' },
+    ]);
+    // A second tap on the new draft reuses its own job.
+    expect(await confirm(report, MARCO, 1, 2)).toEqual(second);
   });
 
   it('refuses another state, a newer draft, another reporter and a void report; answers filed once filed', async () => {
     const report = await draft('2026-11-11');
-    const fail = (reporter: string, version: number | null, id = report) =>
-      failure(`select field_confirm_report($1, $2, $3)`, [id, reporter, version]);
+    const fail = (reporter: string, version: number | null, id = report, rev: number | null = 1) =>
+      failure(`select field_confirm_report($1, $2, $3, $4)`, [id, reporter, version, rev]);
     expect(await fail(MARCO, 2)).toBe('draft_changed');
     expect(await fail(MARCO, null)).toBe('draft_changed');
+    expect(await fail(MARCO, 1, report, 2)).toBe('draft_changed');
+    expect(await fail(MARCO, 1, report, null)).toBe('draft_changed');
     expect(await fail(DANA, 1)).toBe('report_not_found'); // not linked to Pier 9
     expect(await fail(OUTSIDER, 1)).toBe('report_not_found');
     expect(await fail(MARCO, 1, ID(998))).toBe('report_not_found');
@@ -779,7 +870,7 @@ describe('the field-api functions are the service role’s only', () => {
     'field_complete_upload(uuid,uuid,integer)',
     'field_set_day_status(uuid,uuid,date,text,jsonb)',
     'field_rate_limit(text,integer,integer)',
-    'field_confirm_report(uuid,uuid,integer)',
+    'field_confirm_report(uuid,uuid,integer,integer)',
     'field_flag_late_upload(uuid,uuid)',
   ];
 

@@ -723,6 +723,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
           }
         : null,
       data: version ? readReportData(version.data as Parameters<typeof readReportData>[0]) : null,
+      draftRev: version ? (version.draft_rev ?? 1) : null,
       progress,
       pdfUrl,
     };
@@ -741,17 +742,22 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
     }
     const version = body.version ?? report.current_version;
-    if (version !== report.current_version) {
+    // Drafts are overwritten in place: the revision tells the draft shown from a newer one at the
+    // same version (a late photo's re-extraction while the Draft screen was open).
+    const current = await store.getVersion(report.id, report.current_version);
+    const currentRev = current ? (current.draft_rev ?? 1) : null;
+    if (version !== report.current_version || body.draftRev !== currentRev) {
       throw new FieldError(409, 'draft_changed', undefined, {
         currentVersion: report.current_version,
+        draftRev: currentRev,
       });
     }
-    // field_confirm_report() checks both again under the site-day lock that completing an upload
-    // takes, returns a filing already queued or running, else enqueues file_report for this
-    // version under a key per confirm occurrence (GAP D16, `jobKeys.fileReport`) and audits
-    // report.confirm_requested; the worker files only that version
+    // field_confirm_report() checks all three again under the site-day lock that completing an
+    // upload takes, returns a filing already queued or running for this draft, else enqueues
+    // file_report for this version and revision under a key per confirm occurrence (GAP D16) and
+    // audits report.confirm_requested; the worker files only that version at that revision
     // (apps/worker/src/pipeline/file.ts).
-    const res = await store.confirmReport(report.id, ctx.reporter.id, version);
+    const res = await store.confirmReport(report.id, ctx.reporter.id, version, body.draftRev);
     return res.status === 'filed'
       ? c.json({ status: 'filed' } satisfies ConfirmResponse)
       : c.json({ status: 'queued' } satisfies ConfirmResponse, 202);

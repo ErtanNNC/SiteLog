@@ -429,6 +429,7 @@ export async function installFakeFieldApi(
           confirmedAt: st.confirmed ? '2026-10-09T22:43:00.000Z' : null,
           question,
           data,
+          draftRev: data ? 1 : null,
           progress: { voiceNotes: audio, transcribed: written ? audio : 0, photos: 0 },
           // A filed report's PDF, signed (W1-15's Filed screen opens it in a new tab).
           pdfUrl: status === 'filed' ? `/__storage/pdfs/${REPORT_NO}_v1.pdf?token=e2e` : null,
@@ -460,6 +461,10 @@ export async function installFakeFieldApi(
       }
       if (path === `reports/${REPORT_ID}/confirm`) {
         if (api.state.answered === null) return json(route, 409, { error: 'wrong_state' });
+        // The draft shown is version 1 at revision 1 (field-api checks both, 20261015000070).
+        const b = body as { version?: number; draftRev?: number };
+        if (b.version !== 1 || b.draftRev !== 1)
+          return json(route, 409, { error: 'draft_changed' });
         api.state.confirmed = true;
         return json(route, 202, { status: 'queued' } satisfies ConfirmResponse);
       }

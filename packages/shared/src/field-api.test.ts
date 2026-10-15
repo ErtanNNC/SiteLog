@@ -113,10 +113,19 @@ describe('field-api contract', () => {
     expect(PreferencesRequestSchema.safeParse({}).success).toBe(false);
     expect(PreferencesRequestSchema.safeParse({ messageChannel: 'sms' }).success).toBe(false);
     expect(PreferencesRequestSchema.safeParse({ noCallsToday: true }).success).toBe(false);
-    expect(ConfirmRequestSchema.safeParse({}).success).toBe(true);
-    expect(ConfirmRequestSchema.safeParse({ version: 2 }).data).toEqual({ version: 2 });
-    expect(ConfirmRequestSchema.safeParse({ version: 0 }).success).toBe(false);
-    expect(ConfirmRequestSchema.safeParse({ version: 1, via: 'web' }).success).toBe(false);
+    expect(ConfirmRequestSchema.safeParse({ draftRev: 1 }).success).toBe(true);
+    expect(ConfirmRequestSchema.safeParse({ version: 2, draftRev: 3 }).data).toEqual({
+      version: 2,
+      draftRev: 3,
+    });
+    // The revision is required: a draft is overwritten in place, the version alone is not enough.
+    expect(ConfirmRequestSchema.safeParse({}).success).toBe(false);
+    expect(ConfirmRequestSchema.safeParse({ version: 2 }).success).toBe(false);
+    expect(ConfirmRequestSchema.safeParse({ draftRev: 0 }).success).toBe(false);
+    expect(ConfirmRequestSchema.safeParse({ version: 0, draftRev: 1 }).success).toBe(false);
+    expect(ConfirmRequestSchema.safeParse({ version: 1, draftRev: 1, via: 'web' }).success).toBe(
+      false,
+    );
   });
 
   it('names one device cookie per reporter', () => {

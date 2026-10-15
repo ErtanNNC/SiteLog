@@ -477,7 +477,7 @@ export const RPCS: Record<
   field_confirm_report: {
     why: '§6.5: field-api only (service role); the office files with sign-off and edits instead.',
     allow: NONE,
-    call: (o) => `select field_confirm_report('${o.report}', '${o.reporter}', 1) as v`,
+    call: (o) => `select field_confirm_report('${o.report}', '${o.reporter}', 1, 1) as v`,
   },
   // Spec §19 Q53 (20261015000003_late_uploads.sql): field-api flags a late clip.
   field_flag_late_upload: {

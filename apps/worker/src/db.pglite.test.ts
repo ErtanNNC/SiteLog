@@ -788,7 +788,13 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
       summary: data.summary,
       author: 'agent',
     });
-    expect(v1).toMatchObject({ version: 1, author: 'agent', change_note: null, pdf_path: null });
+    expect(v1).toMatchObject({
+      version: 1,
+      author: 'agent',
+      change_note: null,
+      pdf_path: null,
+      draft_rev: 1,
+    });
     expect(v1.data).toEqual(data); // jsonb round-trip, including "yd³" and nulls
     const corrected = { ...data, summary: 'Corrected summary' };
     const v1b = await db.insertVersion({
@@ -800,13 +806,26 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
       author_message_id: audioId,
       change_note: 'reporter fix',
     });
+    // The draft is overwritten in place: its revision says it changed (20261015000070).
     expect(v1b).toMatchObject({
       summary: 'Corrected summary',
       author_message_id: audioId,
       change_note: 'reporter fix',
+      draft_rev: 2,
     });
+    // The same draft again changes nothing.
+    const v1c = await db.insertVersion({
+      report_id: reportId,
+      version: 1,
+      data: corrected,
+      summary: corrected.summary,
+      author: 'agent',
+      author_message_id: audioId,
+      change_note: 'reporter fix',
+    });
+    expect(v1c.draft_rev).toBe(2);
     await db.updateVersion(reportId, 1, { data, summary: data.summary, change_note: null });
-    expect((await db.getVersion(reportId, 1))!.data).toEqual(data);
+    expect((await db.getVersion(reportId, 1))!).toMatchObject({ data, draft_rev: 3 });
     expect(await db.getVersion(reportId, 2)).toBeNull();
     expect((await db.listVersions(reportId)).map((v) => v.version)).toEqual([1]);
     // Drafts are not denormalised: nothing in the aggregate tables yet.

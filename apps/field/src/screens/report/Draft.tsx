@@ -23,14 +23,15 @@ import {
   weatherLines,
   workLine,
 } from './lines';
+import type { ConfirmedDraft } from './phase';
 import { RELINK } from './useReportPoll';
 
 /**
  * The draft (F8, Field-06; W1-13): the crew with each company's workers × hours and the day's
  * total, then weather, work done, deliveries, safety, next workday and photos, and a sticky
- * **Confirm & send** (`reports/:id/confirm` with the version shown, so a newer draft is never
- * filed unseen). The numbers are the draft's (computed in code). The steppers are shown read-only
- * and _Fix by voice_ is not offered: editing comes in M6.
+ * **Confirm & send** (`reports/:id/confirm` with the version and draft revision shown, so a newer
+ * draft is never filed unseen). The numbers are the draft's (computed in code). The steppers are
+ * shown read-only and _Fix by voice_ is not offered: editing comes in M6.
  */
 export function Draft({
   code,
@@ -44,7 +45,7 @@ export function Draft({
   view: ReportView;
   data: DailyReportData;
   notice?: ReactNode;
-  onConfirmed: () => void;
+  onConfirmed: (draft: ConfirmedDraft) => void;
   onStale: (message: string) => void;
 }) {
   const api = useApi();
@@ -61,8 +62,15 @@ export function Draft({
     setSending(true);
     setError(null);
     try {
-      await api.confirm(code, view.id, { version: view.currentVersion });
-      onConfirmed();
+      // The draft shown, by version and revision: a draft is overwritten in place (a late photo
+      // re-extracts it), so the version alone cannot tell a newer one (`draft_changed`).
+      const draft = { version: view.currentVersion, draftRev: view.draftRev };
+      if (draft.draftRev === null) {
+        onStale(t('draft.errors.draft_changed'));
+        return;
+      }
+      await api.confirm(code, view.id, { version: draft.version, draftRev: draft.draftRev });
+      onConfirmed(draft);
     } catch (err) {
       const apiCode = apiErrorCode(err);
       if (apiCode && RELINK.has(apiCode)) {
