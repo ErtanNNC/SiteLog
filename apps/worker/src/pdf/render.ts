@@ -140,6 +140,19 @@ async function loadPhotos(
   return out;
 }
 
+/**
+ * Whether the PDF of `version` prints the report's sign-off: only the current version of a
+ * signed-off report. `reports.status` and `signed_off_*` describe the current version, so a
+ * delayed render of an older version (an office edit made v3 while v2's job waited) must not print
+ * a sign-off that version never had. Pure.
+ */
+export function versionSignedOff(
+  report: Pick<ReportRow, 'status' | 'current_version'>,
+  version: Pick<ReportVersionRow, 'version'>,
+): boolean {
+  return report.status === 'signed_off' && version.version === report.current_version;
+}
+
 /** `data`: the version's data as readers see it (§10.3 v2; `readReportData` of the stored JSON). */
 export async function buildReportPdfInput(
   ctx: Ctx,
@@ -157,7 +170,9 @@ export async function buildReportPdfInput(
   );
   const versions = await ctx.db.listVersions(report.id);
   const reporter = report.reporter_id ? await ctx.db.getReporter(report.reporter_id) : null;
-  const signer = report.signed_off_by ? await ctx.db.getUserContact(report.signed_off_by) : null;
+  const signedOff = versionSignedOff(report, version);
+  const signer =
+    signedOff && report.signed_off_by ? await ctx.db.getUserContact(report.signed_off_by) : null;
   // Typed in the panel (create_office_report): no reporter, version 1 by an office user.
   const first = versions.find((v) => v.version === 1);
   const enteredByUser =
@@ -201,12 +216,13 @@ export async function buildReportPdfInput(
     report: {
       reportNo: report.report_no,
       version: version.version,
-      status: report.status,
+      // An older version of a signed-off report was filed, not signed off.
+      status: report.status === 'signed_off' && !signedOff ? 'filed' : report.status,
       kind: report.kind as ReportPdfInput['report']['kind'],
       filedAt: report.filed_at,
       confirmedAt: report.confirmed_at,
-      signedOffAt: report.signed_off_at,
-      signedOffByName: signer?.display_name ?? signer?.email ?? null,
+      signedOffAt: signedOff ? report.signed_off_at : null,
+      signedOffByName: signedOff ? (signer?.display_name ?? signer?.email ?? null) : null,
       isLate: report.is_late,
       reviewReasons: report.review_reasons,
       channel: report.channel,

@@ -7,6 +7,8 @@ import { PermanentJobError, type JobHandler } from './types';
  * W1-15 nothing goes out on WhatsApp: the reporter's `filed` text comes from file_report through
  * the Notifier, and the payload's `sendToWhatsApp` and `notifyReporter` are ignored (D31: the
  * office-edit notice ended). A retry renders the same file again and finds the email's key taken.
+ * A version that is no longer current is still rendered (its file is kept), without its sign-off
+ * (`versionSignedOff`) and without an email.
  */
 export const renderPdf: JobHandler<'render_pdf'> = async (ctx, payload) => {
   const report = await ctx.db.getReport(payload.reportId);
@@ -33,7 +35,15 @@ export const renderPdf: JobHandler<'render_pdf'> = async (ctx, payload) => {
   });
   ctx.metrics.add({ pdfBytes: buffer.length });
 
-  if (payload.emailRecipients) {
+  if (payload.emailRecipients && version.version !== report.current_version) {
+    // A newer version exists (an office edit while this job waited): its own render emails it, and
+    // an email for this one would send the office a superseded report.
+    ctx.log.info('render_pdf: version superseded, no email', {
+      report_id: report.id,
+      version: version.version,
+      current_version: report.current_version,
+    });
+  } else if (payload.emailRecipients) {
     const kind = version.version > 1 ? 'report_updated' : 'report_filed';
     await ctx.db.enqueueJob(
       'send_email',

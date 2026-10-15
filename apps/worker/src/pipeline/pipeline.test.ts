@@ -14,7 +14,7 @@ import {
 } from '@sitelog/shared';
 import { buildEmail } from '../jobs/send_email';
 import { PermanentJobError } from '../jobs/types';
-import { buildReportPdfInput } from '../pdf/render';
+import { buildReportPdfInput, versionSignedOff } from '../pdf/render';
 import { postProcessExtraction } from '../ai/extract';
 import { compareReport, loadFixture } from '../ai/eval';
 import { createWorkerNotifier } from '../messaging';
@@ -535,6 +535,85 @@ describe('pipeline: compose + extract job + filing', () => {
       'Daily report · Riverside Lofts · Fri Oct 9 · RL-2041-0187',
     );
     expect(h.email.sent[0]!.attachments![0]!.filename).toBe('RL-2041-0187_2026-10-09_v1.pdf');
+  }, 60_000);
+
+  it('render_pdf of a version that is no longer current: no sign-off it never had, and no email (W1-14)', async () => {
+    const h = createHarness();
+    const siteDay = await h.db.getOrCreateSiteDay(
+      SITE_RIVERSIDE,
+      '2026-10-09',
+      deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+    );
+    const report = await h.db.insertReport({
+      org_id: h.org.id,
+      site_id: SITE_RIVERSIDE,
+      site_day_id: siteDay.id,
+      report_no: 'RL-2041-0187',
+      reporter_id: h.marco.id,
+      received_at: '2026-10-09T22:31:00Z',
+      kind: 'daily',
+      status: 'filed',
+    });
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
+    await storeDraft(h.ctx, report, data);
+    await h.db.insertVersion({
+      report_id: report.id,
+      version: 2,
+      data: { ...data, summary: 'Office edit' },
+      summary: 'Office edit',
+      author: 'office_user',
+      change_note: 'Fixed the Delta headcount',
+    });
+    // v2 (an office edit) is current and signed off by Lena; v1's render_pdf job ran late.
+    const signedOff = await h.db.updateReport(report.id, {
+      filed_at: h.now,
+      confirmed_at: h.now,
+      current_version: 2,
+      status: 'signed_off',
+      signed_off_by: '00000000-0000-4000-8000-00000000e001',
+      signed_off_at: h.now,
+    });
+    const site = (await h.db.siteContext(SITE_RIVERSIDE))!;
+    const v1 = (await h.db.getVersion(report.id, 1))!;
+    const v2 = (await h.db.getVersion(report.id, 2))!;
+    expect(versionSignedOff(signedOff, v1)).toBe(false);
+    expect(versionSignedOff(signedOff, v2)).toBe(true);
+    const old = await buildReportPdfInput(h.ctx, {
+      report: signedOff,
+      version: v1,
+      site,
+      data: readReportData(v1.data as unknown as StoredReportData),
+    });
+    expect(old.report).toMatchObject({
+      version: 1,
+      status: 'filed',
+      signedOffAt: null,
+      signedOffByName: null,
+    });
+    const current = await buildReportPdfInput(h.ctx, {
+      report: signedOff,
+      version: v2,
+      site,
+      data: readReportData(v2.data as unknown as StoredReportData),
+    });
+    expect(current.report).toMatchObject({
+      version: 2,
+      status: 'signed_off',
+      signedOffByName: 'Lena Ortiz',
+    });
+    expect(current.report.signedOffAt).not.toBeNull();
+
+    // The late v1 job renders its file but emails nothing: v2's own render emails the office.
+    await h.runJob('render_pdf', { reportId: report.id, version: 1, emailRecipients: true });
+    expect((await h.db.getVersion(report.id, 1))!.pdf_path).toBe(
+      `${h.org.id}/${SITE_RIVERSIDE}/RL-2041-0187_v1.pdf`,
+    );
+    expect(h.db.jobsOfType('send_email')).toHaveLength(0);
+    await h.runJob('render_pdf', { reportId: report.id, version: 2, emailRecipients: true });
+    expect(h.db.jobsOfType('send_email').map((j) => j.dedupe_key)).toEqual([
+      `email:report_updated:${report.id}:2`,
+    ]);
   }, 60_000);
 
   it('render_pdf and the filed email read a version stored as v2 like the v1 it upgrades from', async () => {
