@@ -169,6 +169,7 @@ for (const run of RUNS) {
       });
       expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/confirm`)?.body).toEqual({
         version: 1,
+        draftRev: 1,
       });
 
       // What the app sent: the consent with the wording's version, the clip by signed URL.
