@@ -83,3 +83,25 @@ Not: `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` worker'ın `.env`'ine girer (Supa
 ## Özet
 
 Hafta-1 planının M0–M3'ü (W1-01 … W1-12) yazıldı ve CI'da yeşil, preview projesi ve demo verisi hazır; M3 sonunda incelemeniz, preview migration onayı, Q54–Q63 kararları ve anahtarlar için duruyorum.
+
+## Hafta 2 (M6) — başladı
+
+Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahtar gerektirmeyen biletlerden başlıyorum: W2-01 (kanallar arası yedekleme), W2-02 (saha Ayarlar), W2-03 (geçmiş raporlar, süresi dolmuş link, yeni telefon), W2-04 (Filed ekranı ekleri).
+
+**Sizin kararınız gereken sorular (önerimle; cevap verene kadar önerdiğim varsayımla parametre olarak kuruyorum):**
+- **Q76:** Aramayı tercih eden kişilere, aramalar (M8) gelene kadar 17:00 linki gitsin mi? Öneri: evet, "arayacağız" mesajı hiç gitmesin.
+- **Q77:** Sessiz saatlerde (arama penceresi dışında) mesaj? Öneri: hatırlatma ve dürtme mesajları gitmesin; kişinin kendi işlemine cevaplar her zaman gitsin.
+- **Q78:** 30 dakikalık "taslak bekliyor" dürtmesinin metni? Öneri: `draft_ready` mesajı tekrar gönderilsin.
+- **Q79:** Rapor sürerken "İş yok" / "Hava" seçilirse? Öneri: şimdiki gibi reddedilsin.
+- **Q80:** Kişinin sayıları elle değiştirmesi raporda nasıl kaynak olarak görünsün? Öneri: yeni kaynak türü `reporter_edit`.
+- **Q81:** Kişi hangi dosyalanmış raporları düzenleyebilsin? Öneri: sorumlu olduğu şantiyelerin son 14 gündeki raporları.
+- **Q82:** Aramalar yokken SMS "OK" ne yapsın? Öneri: hiçbir şeyi onaylamasın, taslak linkini göndersin.
+- **Q83:** Anahtar kelime cevaplarının metni yok. Öneri: yeni metinler `day_off_link` ve `edit_preview`.
+- **Q84:** Bir ortamda göndericisi olmayan kanal (ör. WhatsApp) gerçek bir şirket için ne olsun? Öneri: sıradan çıkarılsın, mesajı SMS taşısın. TR'nin `{whatsapp, sms}` sırası açılmadan önce önemli.
+- **Q85:** WhatsApp'tan gelen sesli not ve fotoğraflar? Öneri: saklansın, yazıya dökülmesin; günde bir kez "linki kullanın" cevabı gitsin (yeni metin `whatsapp_use_link`).
+- **W2-04 için okuma:** web'den dosyalanan rapora ertesi gün 23:59'a kadar fotoğraf eklenebilsin mi? Spec bu süreyi yalnızca aramadan sonraki fotoğraflar için veriyor. Öneri: evet.
+
+**Sizin yapmanız gerekenler (hafta 2, acele değil ama uzun sürüyor):**
+- Twilio WhatsApp göndericisi + Meta doğrulaması + EN/ES/TR şablonlar (en uzun bekleme süresi bu).
+- Web push için VAPID anahtarları (preview projesine secret olarak).
+- Tasarım tuvalinden eksik ekranlar (Geçmiş raporlar, Ayarlar, Süresi dolmuş link) ya da "spec §9.3 yeterli" onayı.
