@@ -349,6 +349,15 @@ jobs:
           fi
           supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" "${set_args[@]}" >/dev/null
           echo "FIELD_APP_URL set to $FIELD_APP_URL."
+      - name: Device-code diagnostics (read-only)
+        # Owner-approved (2026-10-15): what happened to the last device codes. field-api's answers
+        # and errors from the function logs, and the demo orgs' newest texts and device audit rows.
+        # Reads only; no phone number and no text body is printed.
+        continue-on-error: true
+        run: |
+          key="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
+          echo "::add-mask::$key"
+          SERVICE_KEY="$key" node .github/scripts/device-code-diagnostics.mjs
       - name: Panel sign-in link
         run: |
           key="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
