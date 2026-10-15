@@ -120,8 +120,10 @@ test('first open → record → upload creates the report and the transcription 
   expect(jobs).toEqual([{ type: 'transcribe_upload' }]);
   const consents = await rest<{ type: string; method: string; text_version: string }[]>(
     'GET',
-    `consents?select=type,method,text_version&reporter_id=eq.${fx.reporter.id}&revoked_at=is.null&order=type`,
+    `consents?select=type,method,text_version&reporter_id=eq.${fx.reporter.id}&revoked_at=is.null`,
   );
+  // `order=type` would sort by the consent_type enum's declared order, not by name: sort here.
+  consents.sort((a, b) => a.type.localeCompare(b.type));
   expect(consents).toEqual([
     { type: 'data_processing', method: 'web_checkbox', text_version: 'field.consent.v1' },
     { type: 'recording', method: 'web_checkbox', text_version: 'field.consent.v1' },
