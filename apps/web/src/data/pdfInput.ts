@@ -4,6 +4,7 @@
  * database, so both render the same document.
  */
 import type { PdfImage, PdfPhoto, ReportPdfInput } from '@sitelog/pdf';
+import { versionPdfStatus, versionSignedOff } from '@sitelog/shared/status.ts';
 import type { ReportDetail, SettingsData } from './types';
 
 export function imageFormatOf(
@@ -58,6 +59,8 @@ export function buildReportPdfInput(
       caption: p.caption,
     });
   }
+  // `r.status` and the sign-off describe the current version: an older one (`?v=`) was filed.
+  const signedOff = versionSignedOff(r, detail.version);
   const languages = detail.data.languageDetected.length
     ? detail.data.languageDetected
     : detail.transcript?.language
@@ -82,12 +85,12 @@ export function buildReportPdfInput(
     report: {
       reportNo: r.reportNo,
       version: detail.version,
-      status: r.status,
+      status: versionPdfStatus(r, detail.version),
       kind: r.kind === 'weather_day' || r.kind === 'no_work' ? r.kind : 'daily',
       filedAt: r.filedAt,
       confirmedAt: r.confirmedAt,
-      signedOffAt: r.signedOffAt,
-      signedOffByName: r.signedOffByName,
+      signedOffAt: signedOff ? r.signedOffAt : null,
+      signedOffByName: signedOff ? r.signedOffByName : null,
       isLate: r.isLate,
       reviewReasons: r.reviewReasons,
       channel: r.channel,

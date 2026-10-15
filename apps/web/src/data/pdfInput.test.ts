@@ -74,6 +74,41 @@ describe('buildReportPdfInput', () => {
     expect(input.generatedAt).toBe('2026-10-10T00:00:00.000Z');
   });
 
+  it('prints the sign-off on the current version only, never on an older one (?v=)', async () => {
+    const store = new DemoStore();
+    const source = new DemoSource(store, user);
+    const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
+    const signed = (d: Awaited<ReturnType<typeof source.getReportDetail>>) => ({
+      ...d,
+      report: {
+        ...d.report,
+        status: 'signed_off' as const,
+        signedOffAt: '2026-10-10T14:00:00Z',
+        signedOffBy: user.id,
+        signedOffByName: user.name,
+      },
+    });
+    const opts = { logo: null, now: new Date('2026-10-10T15:00:00Z') };
+    const settings = await source.getSettings();
+
+    const current = signed(await source.getReportDetail(hero.id));
+    expect(current.version).toBe(current.report.currentVersion);
+    expect(buildReportPdfInput(current, settings, opts).report).toMatchObject({
+      status: 'signed_off',
+      signedOffAt: '2026-10-10T14:00:00Z',
+      signedOffByName: 'Lena Ortiz',
+    });
+
+    const older = signed(await source.getReportDetail(hero.id, 1));
+    expect(older.version).toBe(1);
+    expect(buildReportPdfInput(older, settings, opts).report).toMatchObject({
+      version: 1,
+      status: 'filed',
+      signedOffAt: null,
+      signedOffByName: null,
+    });
+  });
+
   it('marks a report typed in the panel as entered by the office user', async () => {
     const store = new DemoStore();
     const source = new DemoSource(store, user);

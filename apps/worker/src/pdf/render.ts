@@ -19,7 +19,9 @@ import {
 import {
   isVoiceSourceKind,
   readReportData,
+  versionPdfStatus,
   versionPhotos,
+  versionSignedOff as signedOffAt,
   type DailyReportData,
   type EvidencePackRow,
   type ReportRow,
@@ -142,15 +144,16 @@ async function loadPhotos(
 
 /**
  * Whether the PDF of `version` prints the report's sign-off: only the current version of a
- * signed-off report. `reports.status` and `signed_off_*` describe the current version, so a
- * delayed render of an older version (an office edit made v3 while v2's job waited) must not print
- * a sign-off that version never had. Pure.
+ * signed-off report (the shared `versionSignedOff`, which the panel's browser PDF uses too). Pure.
  */
 export function versionSignedOff(
   report: Pick<ReportRow, 'status' | 'current_version'>,
   version: Pick<ReportVersionRow, 'version'>,
 ): boolean {
-  return report.status === 'signed_off' && version.version === report.current_version;
+  return signedOffAt(
+    { status: report.status, currentVersion: report.current_version },
+    version.version,
+  );
 }
 
 /** `data`: the version's data as readers see it (§10.3 v2; `readReportData` of the stored JSON). */
@@ -217,7 +220,10 @@ export async function buildReportPdfInput(
       reportNo: report.report_no,
       version: version.version,
       // An older version of a signed-off report was filed, not signed off.
-      status: report.status === 'signed_off' && !signedOff ? 'filed' : report.status,
+      status: versionPdfStatus(
+        { status: report.status, currentVersion: report.current_version },
+        version.version,
+      ),
       kind: report.kind as ReportPdfInput['report']['kind'],
       filedAt: report.filed_at,
       confirmedAt: report.confirmed_at,
