@@ -34,7 +34,15 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
   - Eski sürümün PDF'inde yanlış imza basılmıyor (8d627d2).
   - "Bugünün linkini gönder" pasif kişiyi seçmiyor (3a252cd).
   - Geçiş temizlik dosyası ikinci çalıştırmada yeni işleri silmiyor (ce13c55).
-  - Panel tarafındaki takipler sürüyor: Türkçe bildirimler, link butonunun Türkçe hata metni, panel PDF'i, `/team` sayfasının 390 px'te yana kayması.
+  - Panel takipleri bitti:
+    - Bildirimler artık panelin dilinde gösteriliyor (affe988; yeni migration `20261015000080_notice_data`).
+    - Link butonunun hataları Türkçe (c0d46ab).
+    - Panelin ürettiği PDF'te eski sürüm yanlış imza basmıyor (260cb7a).
+    - `/team` sayfası 390 px'te yana kaymıyor (65cfcd5).
+    - Kararsız bir test düzeltildi (42e8df5).
+- **Sizin bakmanız gereken:**
+  - Bildirimlerin Türkçe metinleri (~60 metin, `packages/shared/src/copy/ui/tr.ts` içinde `shell.notifications.notices`) benim çevirim. Q66/Q68 Türkçe okumasına eklendi.
+  - Kestrel demo bildirimleri biraz değişti: "needs review" bildirimi şantiye adı yerine rapor numarasıyla başlıyor, sözlük bildirimi "3 new terms to review" diyor.
 - **Yarın sabahki telefon testi öncesi (benim yapacaklarım):** yeni migration `20261015000070` ve güncel edge function'lar preview projesine yüklenecek. Saha uygulaması artık onayda taslak sürümünü (`draftRev`) istiyor, eski field-api ile onay çalışmaz. Ardından phone-setup ve preview-worker çalışacak, linkler size gelecek. Hepsi yalnızca preview projesinde, staging'e dokunulmuyor.
 - **Geliştiriciler için not:** anahtar yoksa worker artık sahte veriye kendiliğinden geçmiyor. Yerelde uçtan uca çalıştırmak için `.env` içine `EXTRACT_PROVIDER=fake` ve `TRANSCRIBE_PROVIDER=fake` yazılmalı.
 - Actions döndükten sonraki CI'da iki eski test güncellendi (9278b0e, a41cdec); kod hatası değildi. Tüm işin birlikte CI sonucu bekleniyor.
