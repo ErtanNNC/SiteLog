@@ -471,6 +471,20 @@ export function formatMonthYearIn(yearMonth: string, locale: AnyLocale = 'en-US'
   return lang === 'es' ? `${month} de ${m[1]}` : `${month} ${m[1]}`;
 }
 
+/** "2026-10" → "Oct" · "oct" · "Eki" (Web-Sites: "2 weather days in Oct"). */
+export function formatMonthShortIn(yearMonth: string, locale: AnyLocale = 'en-US'): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(yearMonth);
+  const month = m ? DATE_NAMES[languageOf(locale)].monthsShort[Number(m[2]) - 1] : undefined;
+  if (!month) throw new Error(`Invalid year-month: ${yearMonth}`);
+  return month;
+}
+
+/** Short weekday names, Monday first: "Mon" … "Sun" · "lun" … "dom" · "Pzt" … "Paz". */
+export function weekdaysShortIn(locale: AnyLocale = 'en-US'): string[] {
+  const names = DATE_NAMES[languageOf(locale)].weekdaysShort;
+  return [1, 2, 3, 4, 5, 6, 0].map((d) => names[d]!);
+}
+
 /** Number with the locale's decimal mark and no grouping: 3.5 → "3.5" (en-US, es-US) · "3,5" (tr-TR). */
 function decimal(n: number, locale: AnyLocale, maxDigits: number): string {
   return new Intl.NumberFormat(intlLocaleOf(locale), {

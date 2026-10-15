@@ -24,7 +24,7 @@ export default defineConfig({
   testDir: './e2e',
   // Demo-mode specs only; e2e/supabase/** runs against a local Supabase stack
   // (playwright.supabase.config.ts) and the screenshots spec has its own config.
-  testMatch: /(smoke|a11y)\.spec\.ts/,
+  testMatch: /(smoke|a11y|sites)\.spec\.ts/,
   testIgnore: /supabase\//,
   timeout: 60_000,
   fullyParallel: true,
@@ -37,7 +37,11 @@ export default defineConfig({
     launchOptions: { executablePath: chromiumExecutablePath },
   },
   projects: [
-    { name: 'chromium', testMatch: /smoke\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      testMatch: /(smoke|sites)\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
     // §15 / M9: axe WCAG 2.2 AA scan of every route at 1440 and 375 px + keyboard checks.
     { name: 'a11y', testMatch: /a11y\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
   ],

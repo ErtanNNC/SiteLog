@@ -82,24 +82,8 @@ export function AppRoutes() {
           />
           <Route element={<AppShell />}>
             <Route index element={<Home />} />
-            <Route
-              path="/sites"
-              element={guard(
-                'sites',
-                <EnglishOnly>
-                  <SitesPage />
-                </EnglishOnly>,
-              )}
-            />
-            <Route
-              path="/sites/:siteId"
-              element={guard(
-                'sites',
-                <EnglishOnly>
-                  <SiteDetailPage />
-                </EnglishOnly>,
-              )}
-            />
+            <Route path="/sites" element={guard('sites', <SitesPage />)} />
+            <Route path="/sites/:siteId" element={guard('sites', <SiteDetailPage />)} />
             <Route
               path="/reports"
               element={guard(

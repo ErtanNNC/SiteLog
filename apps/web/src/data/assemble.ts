@@ -86,6 +86,7 @@ import type {
   AttentionItem,
   BillingData,
   CalendarCell,
+  CalendarChannel,
   Chip,
   CompanyOption,
   CrewRow,
@@ -275,6 +276,7 @@ export function toReporterSummary(r: ReporterRow, isPrimary: boolean): ReporterS
     languages: r.languages ?? [],
     status: r.status,
     isPrimary,
+    contactPref: r.contact_pref,
   };
 }
 
@@ -982,6 +984,7 @@ export function assembleSiteCards(rows: RowSet, ctx: AssembleCtx): SiteCard[] {
       onTime14: streak.filter((c) => c.status === 'on_time').length,
       reporterName: reporter?.name ?? null,
       reporterPhone: reporter?.phone_e164 ?? null,
+      reporterContactPref: reporter?.contact_pref ?? null,
       crewToday: filedToday ? totalsOf(rows, data).crewOnSite : null,
       weatherDaysMonth: weatherDates.size,
       needsAttention:
@@ -998,6 +1001,25 @@ export function assembleSiteCards(rows: RowSet, ctx: AssembleCtx): SiteCard[] {
 
 // ───────────────────────────── Site detail ─────────────────────────────
 
+/**
+ * P5 "channel dot per day" (W1-18): a report's `field_channel` as the calendar shows it. Web and
+ * SMS answers come through the personal text link, voice is a call, office is typed in the panel;
+ * null is a v1.0 WhatsApp report (D13), which gets no dot.
+ */
+export function calendarChannel(channel: ReportRow['channel']): CalendarChannel | null {
+  switch (channel) {
+    case 'web':
+    case 'sms':
+      return 'link';
+    case 'voice':
+      return 'call';
+    case 'office':
+      return 'office';
+    default:
+      return null;
+  }
+}
+
 function crewRowsFor(
   rows: RowSet,
   ix: Index,
@@ -1012,7 +1034,7 @@ function crewRowsFor(
     const unconfirmed = !company || company.status === 'unconfirmed';
     const badges: CrewRow['badges'] = [];
     const change = changes.get(i);
-    if (change) badges.push({ kind: 'edited', label: copy.chips.edited(report.current_version) });
+    if (change) badges.push({ kind: 'edited', version: report.current_version });
     const q = qs.find((x) => {
       const t = isRecord(x.target) ? x.target : {};
       return (
@@ -1021,21 +1043,18 @@ function crewRowsFor(
         (typeof t.companyNameHeard === 'string' && t.companyNameHeard === m.companyNameHeard)
       );
     });
-    if (q?.answered_at)
-      badges.push({ kind: 'confirmed_by_reply', label: copy.chips.confirmedByReply });
+    // P5 "CONFIRMED BY ANSWER": the reporter answered a question about this row (any channel).
+    if (q?.answered_at) badges.push({ kind: 'confirmed_by_answer' });
     else if (q?.asked_at)
       badges.push({
         kind: 'asked',
-        label: copy.chips.asked(
-          formatTimeInTz(
-            q.asked_at,
-            ix.siteById.get(report.site_id)?.timezone ?? rows.org.timezone,
-          ),
+        time: formatTimeInTz(
+          q.asked_at,
+          ix.siteById.get(report.site_id)?.timezone ?? rows.org.timezone,
         ),
       });
-    if (m.hoursBasis === 'answer' && !q)
-      badges.push({ kind: 'confirmed_by_reply', label: copy.chips.confirmedByReply });
-    if (unconfirmed) badges.push({ kind: 'unconfirmed', label: copy.chips.unconfirmed });
+    if (m.hoursBasis === 'answer' && !q) badges.push({ kind: 'confirmed_by_answer' });
+    if (unconfirmed) badges.push({ kind: 'unconfirmed' });
     return {
       companyId: m.companyId,
       companyName: m.companyName,
@@ -1089,6 +1108,7 @@ export function assembleSiteDetail(
       lostHours: lost,
       reportId: filed ? report.id : null,
       isLate: !!(sd?.is_late || report?.is_late),
+      channel: filed ? calendarChannel(report.channel) : null,
     };
   });
 

@@ -63,6 +63,8 @@ export interface ReporterSummary {
   languages: string[];
   status: ReporterStatus;
   isPrimary: boolean;
+  /** §2.3 `contact_pref`: how they prefer to report, a text link or a call (P5, W1-18). */
+  contactPref: ContactPref;
 }
 
 export interface CompanyOption {
@@ -211,6 +213,8 @@ export interface SiteCard {
   onTime14: number;
   reporterName: string | null;
   reporterPhone: string | null;
+  /** The primary reporter's §2.3 `contact_pref` (P4 "preference icon", W1-18). */
+  reporterContactPref: ContactPref | null;
   crewToday: number | null;
   weatherDaysMonth: number;
   needsAttention: boolean;
@@ -233,7 +237,19 @@ export interface CalendarCell {
   lostHours: number;
   reportId: string | null;
   isLate: boolean;
+  /** P5 "channel dot per day" (W1-18): how the day's filed report came in; null: none, or v1.0. */
+  channel: CalendarChannel | null;
 }
+
+/** A report's `field_channel` as the calendar shows it: web (and SMS) → link, voice → call. */
+export type CalendarChannel = 'link' | 'call' | 'office';
+
+/** P5 crew-by-company badges; the page words them (`siteDetail.badges`, W1-18). */
+export type CrewBadge =
+  | { kind: 'edited'; version: number }
+  | { kind: 'asked'; time: string }
+  | { kind: 'confirmed_by_answer' }
+  | { kind: 'unconfirmed' };
 
 export interface CrewRow {
   companyId: string | null;
@@ -244,7 +260,7 @@ export interface CrewRow {
   hours: number | null;
   hoursBasis: string | null;
   unconfirmed: boolean;
-  badges: Array<{ kind: 'edited' | 'asked' | 'unconfirmed' | 'confirmed_by_reply'; label: string }>;
+  badges: CrewBadge[];
 }
 
 export interface SiteDetail {

@@ -1,7 +1,8 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { DemoStore, type DemoLoginKey } from '@/data/demo/store';
+import { i18n } from '@/i18n/i18n';
 import { renderWithProviders } from '@/test/render';
 import SiteDetailPage from './Page';
 
@@ -23,16 +24,26 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
       await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' }),
     ).toBeInTheDocument();
     expect(screen.getByText('RL-2041')).toBeInTheDocument();
-    expect(screen.getByText('Deadline 17:30 · America/Chicago')).toBeInTheDocument();
+    expect(screen.getByText('Report deadline 17:30 CT')).toBeInTheDocument();
     expect(screen.getByText('Marco Ruiz')).toBeInTheDocument();
-    expect(screen.getByText('Speaks ES · EN')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Message Marco' })).toHaveAttribute(
+    expect(screen.getByText('Prefers text link · speaks ES & EN')).toBeInTheDocument();
+    // P5: Call {first} dials from the office user's phone; no WhatsApp link any more.
+    expect(screen.getByRole('link', { name: 'Call Marco' })).toHaveAttribute(
       'href',
-      'https://wa.me/15550143378',
+      'tel:+15550143378',
+    );
+    expect(screen.queryByRole('link', { name: /Message Marco/ })).toBeNull();
+    expect(document.querySelector('a[href*="wa.me"]')).toBeNull();
+    // D30: typed reports stay.
+    expect(screen.getByRole('link', { name: 'New report' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/reports/new?site='),
     );
 
     expect(screen.getByRole('grid', { name: 'October 2026' })).toBeInTheDocument();
-    expect(screen.getByRole('gridcell', { name: 'Open report for Oct 9' })).toBeInTheDocument();
+    const oct9 = screen.getByRole('gridcell', { name: /^Open report for Oct 9 · / });
+    // The hero report came in through the text link (channel 'web').
+    expect(oct9.querySelector('[data-channel="link"]')).not.toBeNull();
 
     const latest = screen.getByTestId('latest-card');
     expect(within(latest).getByText('Latest · Oct 9')).toBeInTheDocument();
@@ -44,7 +55,7 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
     const crew = screen.getByRole('table', { name: 'Crew today, by company' });
     expect(within(crew).getByText('Apex Concrete')).toBeInTheDocument();
     expect(within(crew).getByText('Edited v2')).toBeInTheDocument();
-    expect(within(crew).getByText('Confirmed by reply')).toBeInTheDocument();
+    expect(within(crew).getByText('Confirmed by answer')).toBeInTheDocument();
     expect(within(crew).getByText('Total').closest('tr')).toHaveTextContent('24');
   });
 
@@ -104,5 +115,29 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
     expect(within(dialog).queryByRole('button', { name: 'Pause site' })).toBeNull();
+  });
+
+  it('speaks Turkish when the panel does (W1-18)', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      renderRiverside();
+      expect(
+        await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Ara: Marco' })).toHaveAttribute(
+        'href',
+        'tel:+15550143378',
+      );
+      expect(screen.getByRole('button', { name: 'Şantiye ayarları' })).toBeInTheDocument();
+      expect(screen.getByText(/^Tercih: mesajla link · ES ve EN konuşur$/)).toBeInTheDocument();
+      expect(screen.getByRole('grid', { name: 'Ekim 2026' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Günlük raporlar' })).toBeInTheDocument();
+      const crew = screen.getByRole('table', { name: 'Bugünkü ekip, firmaya göre' });
+      expect(within(crew).getByText('Yanıtla onaylandı')).toBeInTheDocument();
+      expect(within(crew).getByText('Düzenlendi v2')).toBeInTheDocument();
+      expect(screen.getByText('Bu ay şimdiye kadar')).toBeInTheDocument();
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
   });
 });

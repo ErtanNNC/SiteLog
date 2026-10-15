@@ -14,6 +14,8 @@ import {
   formatMonthDay,
   formatMonthYear,
   formatMonthYearIn,
+  formatMonthShortIn,
+  weekdaysShortIn,
   formatPhone,
   formatWeekdayMonthDay,
   hoursUnit,
@@ -223,3 +225,18 @@ function collectPhones(value: unknown, out: string[] = []): string[] {
   }
   return out;
 }
+
+describe('formatMonthShortIn / weekdaysShortIn (W1-18)', () => {
+  it('names the month short in each language', () => {
+    expect(formatMonthShortIn('2026-10')).toBe('Oct');
+    expect(formatMonthShortIn('2026-10', 'tr-TR')).toBe('Eki');
+    expect(formatMonthShortIn('2026-10', 'es')).toBe('oct');
+    expect(() => formatMonthShortIn('2026-13')).toThrow();
+  });
+
+  it('lists the weekdays Monday first', () => {
+    expect(weekdaysShortIn()).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+    expect(weekdaysShortIn('tr')[0]).toBe('Pzt');
+    expect(weekdaysShortIn('tr')).toHaveLength(7);
+  });
+});

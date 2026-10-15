@@ -108,3 +108,26 @@ for (const width of WIDTHS) {
     await shoot(page, 'setup-site', width);
   });
 }
+
+// W1-18: Sites and Site detail at 1440 and 390 px, in English and Turkish (spec P4, P5).
+for (const lang of ['en', 'tr'] as const) {
+  test(`sites screenshots (${lang})`, async ({ page }) => {
+    await page.addInitScript((tr) => {
+      window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' }));
+      if (tr) window.localStorage.setItem('sitelog.language', JSON.stringify('tr'));
+    }, lang === 'tr');
+    const widths = [1440, 390] as const;
+    for (const width of widths) {
+      const suffix = lang === 'tr' ? `tr-${width}` : `${width}`;
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.goto('/sites');
+      await expect(page.getByTestId('site-card').first()).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `${OUT}/sites-${suffix}.png`, fullPage: true });
+      await page.goto(`/sites/${RIVERSIDE_SITE}`);
+      await expect(page.getByTestId('latest-card')).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `${OUT}/site-${suffix}.png`, fullPage: true });
+    }
+  });
+}

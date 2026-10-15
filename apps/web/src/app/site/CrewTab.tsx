@@ -1,6 +1,14 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
-import { formatDateInTz, isoWeekOf } from '@sitelog/shared/format.ts';
+import {
+  formatDate,
+  formatDateInTz,
+  isoWeekOf,
+  isoWeekRange,
+  parseIsoDate,
+  weekdaysShortIn,
+} from '@sitelog/shared/format.ts';
+import { upperIn } from '@sitelog/shared/locale.ts';
 import { DataTable, type Column } from '@/components/sitelog/DataTable';
 import { TableSkeleton } from '@/components/sitelog/Skeletons';
 import { EmptyState, ErrorState } from '@/components/sitelog/States';
@@ -8,14 +16,25 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { TableCell, TableRow } from '@/components/ui/Table';
-import { copy } from '@/copy/en';
 import { useDataSource } from '@/data/DataProvider';
 import { useHours } from '@/data/hooks';
 import type { HoursRow } from '@/data/types';
-import { addWeeks, formatHoursNum, formatWeekLabel } from '@/lib/format';
+import type { PanelLanguage } from '@/i18n/language';
+import { useCopy } from '@/i18n/useCopy';
+import { addWeeks } from '@/lib/format';
+import { formatNumberIn } from '@/lib/localeFormat';
+
+/** "OCT 5 – OCT 9, 2026" · "5 EKİ – 9 EKİ, 2026": the ISO week, Monday to Friday. */
+function weekLabelIn(isoWeek: string, language: PanelLanguage): string {
+  const { start, end } = isoWeekRange(isoWeek);
+  const day = (d: string) => upperIn(language, formatDate(d, 'monthDay', language));
+  return `${day(start)} – ${day(end)}, ${parseIsoDate(end).y}`;
+}
 
 /** Crew & subs tab: company × Mon–Fri hours for this site (the /hours matrix filtered). */
 export function CrewTab({ siteId, timezone }: { siteId: string; timezone: string }) {
+  const { t, language } = useCopy();
+  const num = (n: number | null | undefined) => formatNumberIn(n, language);
   const source = useDataSource();
   const [params, setParams] = useSearchParams();
   const currentWeek = isoWeekOf(formatDateInTz(source.now(), timezone));
@@ -32,27 +51,31 @@ export function CrewTab({ siteId, timezone }: { siteId: string; timezone: string
   const columns: Column<HoursRow>[] = [
     {
       key: 'company',
-      header: copy.siteDetail.crewTab.columns.company,
+      header: t('siteDetail.crewTab.columns.company'),
       cell: (r) => (
         <span className="inline-flex flex-wrap items-center gap-1.5">
           <span className="font-semibold">{r.companyName}</span>
           {r.trade ? <span className="text-caption text-dust">{r.trade}</span> : null}
-          {r.unconfirmed ? <Badge variant="dashed">{copy.chips.unconfirmed}</Badge> : null}
+          {r.unconfirmed ? (
+            <Badge variant="dashed">{t('siteDetail.badges.unconfirmed')}</Badge>
+          ) : null}
         </span>
       ),
     },
-    ...copy.hours.columns.days.map((d, i) => ({
-      key: `d${i}`,
-      header: d,
-      numeric: true,
-      hideBelowMd: true,
-      cell: (r: HoursRow) => (r.days[i] ? formatHoursNum(r.days[i]) : '—'),
-    })),
+    ...weekdaysShortIn(language)
+      .slice(0, 5)
+      .map((d, i) => ({
+        key: `d${i}`,
+        header: d,
+        numeric: true,
+        hideBelowMd: true,
+        cell: (r: HoursRow) => (r.days[i] ? num(r.days[i]) : '—'),
+      })),
     {
       key: 'reported',
-      header: copy.siteDetail.crewTab.columns.reported,
+      header: t('siteDetail.crewTab.columns.reported'),
       numeric: true,
-      cell: (r) => <span className="font-semibold">{formatHoursNum(r.reported)}</span>,
+      cell: (r) => <span className="font-semibold">{num(r.reported)}</span>,
     },
   ];
 
@@ -60,16 +83,16 @@ export function CrewTab({ siteId, timezone }: { siteId: string; timezone: string
     <Card>
       <CardHeader className="flex-col gap-3 md:flex-row md:items-center">
         <div>
-          <CardTitle>{copy.siteDetail.crewTab.title}</CardTitle>
+          <CardTitle>{t('siteDetail.crewTab.title')}</CardTitle>
           <p className="text-caption text-dust">
-            {copy.siteDetail.crewTab.subtitle(formatWeekLabel(week))}
+            {t('siteDetail.crewTab.subtitle', { week: weekLabelIn(week, language) })}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="subtle"
             size="iconDense"
-            aria-label={copy.siteDetail.crewTab.previousWeek}
+            aria-label={t('siteDetail.crewTab.previousWeek')}
             onClick={() => setWeek(addWeeks(week, -1))}
           >
             <ChevronLeft aria-hidden="true" />
@@ -80,14 +103,14 @@ export function CrewTab({ siteId, timezone }: { siteId: string; timezone: string
           <Button
             variant="subtle"
             size="iconDense"
-            aria-label={copy.siteDetail.crewTab.nextWeek}
+            aria-label={t('siteDetail.crewTab.nextWeek')}
             onClick={() => setWeek(addWeeks(week, 1))}
           >
             <ChevronRight aria-hidden="true" />
           </Button>
           <Button variant="ghost" size="dense" asChild>
             <Link to={`/hours?week=${week}&site=${siteId}`}>
-              {copy.siteDetail.crewTab.openHours}
+              {t('siteDetail.crewTab.openHours')}
             </Link>
           </Button>
         </div>
@@ -98,30 +121,30 @@ export function CrewTab({ siteId, timezone }: { siteId: string; timezone: string
         ) : hours.isError || !hours.data ? (
           <div className="px-5 pb-3">
             <ErrorState
-              thing={copy.nav.hours.toLowerCase()}
+              thing={t('siteDetail.crewTab.thing')}
               error={hours.error}
               onRetry={() => void hours.refetch()}
             />
           </div>
         ) : hours.data.rows.length === 0 ? (
           <div className="px-5 pb-3">
-            <EmptyState title={copy.siteDetail.crewTab.empty} />
+            <EmptyState title={t('siteDetail.crewTab.empty')} />
           </div>
         ) : (
           <DataTable
             columns={columns}
             rows={hours.data.rows}
             rowKey={(r) => r.key}
-            aria-label={copy.siteDetail.crewTab.title}
+            aria-label={t('siteDetail.crewTab.title')}
             footer={
               <TableRow>
-                <TableCell className="font-semibold">{copy.common.total}</TableCell>
+                <TableCell className="font-semibold">{t('siteDetail.total')}</TableCell>
                 {hours.data.totals.days.map((d, i) => (
                   <TableCell key={i} numeric className="hidden md:table-cell">
-                    {formatHoursNum(d)}
+                    {num(d)}
                   </TableCell>
                 ))}
-                <TableCell numeric>{formatHoursNum(hours.data.totals.reported)}</TableCell>
+                <TableCell numeric>{num(hours.data.totals.reported)}</TableCell>
               </TableRow>
             }
           />

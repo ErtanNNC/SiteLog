@@ -70,6 +70,11 @@ const TRANSLATED = [
   'login',
   'errorBoundary',
   'devPhone',
+  // W1-18: Sites and Site detail, with the streak bar and calendar they render.
+  'sites',
+  'siteDetail',
+  'streak',
+  'calendar',
   'team.officeRoles',
   'common.loading',
   'states.error',

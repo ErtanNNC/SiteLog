@@ -1,7 +1,12 @@
-import { CloudRain, HardHat, Phone, Plus, Users } from 'lucide-react';
+import { HardHat, Link2, Phone, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { formatMonthDay, formatPhone } from '@sitelog/shared/format.ts';
+import {
+  formatDate,
+  formatDateInTz,
+  formatMonthShortIn,
+  formatPhone,
+} from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { canAccess, ROUTE_ROLES } from '@/auth/guards';
 import { PageHeader } from '@/components/sitelog/PageHeader';
@@ -12,18 +17,21 @@ import { StreakBar, StreakLegend } from '@/components/sitelog/StreakBar';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { copy } from '@/copy/en';
+import { useDataSource } from '@/data/DataProvider';
 import { useSites } from '@/data/hooks';
 import type { SiteCard } from '@/data/types';
-import { formatCrew } from '@/lib/format';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
+import { sitePriceFor } from './price';
 
 type Tab = 'all' | 'attention' | 'paused';
 
-/** P4 · Sites — cards grid with 14-workday streaks (§11.4). */
+/** P4 · Sites — cards grid with 14-workday streaks (§11.4), in the panel's language (W1-18). */
 export default function SitesPage() {
   const sites = useSites();
-  const { role } = useAuth();
+  const { t, language } = useCopy();
+  const { role, currentOrg } = useAuth();
+  const price = sitePriceFor(currentOrg?.country, language);
   // Sites are added in the setup wizard, which is admin-only (RLS: sites_admin_insert).
   const canAddSite = canAccess(role, ROUTE_ROLES.setup!);
   const [tab, setTab] = useState<Tab>('all');
@@ -39,14 +47,14 @@ export default function SitesPage() {
   return (
     <>
       <PageHeader
-        title={copy.sites.title}
-        subtitle={copy.sites.subtitle(active.length)}
+        title={t('sites.title')}
+        subtitle={t('sites.subtitle', { count: active.length })}
         actions={
           canAddSite ? (
             <Button variant="primary" asChild>
               <Link to="/setup/site">
                 <Plus aria-hidden="true" />
-                {copy.sites.addSite}
+                {t('sites.addSite')}
               </Link>
             </Button>
           ) : undefined
@@ -55,20 +63,20 @@ export default function SitesPage() {
       {/* The filter tabs control the card grid below, which is their tab panel. */}
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <TabsList aria-label={copy.common.filter}>
-            <TabsTrigger value="all">{copy.sites.tabs.all}</TabsTrigger>
+          <TabsList aria-label={t('sites.filterLabel')}>
+            <TabsTrigger value="all">{t('sites.tabs.all')}</TabsTrigger>
             <TabsTrigger value="attention">
-              {copy.sites.tabs.attention}
+              {t('sites.tabs.attention')}
               {all.some((s) => s.needsAttention) ? (
                 <span className="font-mono text-[12px]">
                   {all.filter((s) => s.needsAttention).length}
                 </span>
               ) : null}
             </TabsTrigger>
-            <TabsTrigger value="paused">{copy.sites.tabs.paused}</TabsTrigger>
+            <TabsTrigger value="paused">{t('sites.tabs.paused')}</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-3 text-caption text-dust">
-            <span className="eyebrow">{copy.sites.legend}</span>
+            <span className="eyebrow">{t('sites.legend')}</span>
             <StreakLegend />
           </div>
         </div>
@@ -78,7 +86,7 @@ export default function SitesPage() {
             <CardsSkeleton />
           ) : sites.isError ? (
             <ErrorState
-              thing={copy.nav.sites.toLowerCase()}
+              thing={t('nav.sites').toLocaleLowerCase(language)}
               error={sites.error}
               onRetry={() => void sites.refetch()}
             />
@@ -87,24 +95,24 @@ export default function SitesPage() {
             <EmptyState
               hero
               icon={HardHat}
-              title={copy.sites.empty}
-              body={canAddSite ? copy.overview.noSites : copy.overview.noSitesAskAdmin}
+              title={t('sites.empty')}
+              body={canAddSite ? t('sites.emptyBody') : t('sites.emptyBodyAskAdmin')}
               action={
                 canAddSite ? (
                   <Button variant="primary" asChild>
-                    <Link to="/setup/site">{copy.overview.connectFirstSite}</Link>
+                    <Link to="/setup/site">{t('sites.connectFirstSite')}</Link>
                   </Button>
                 ) : undefined
               }
             />
           ) : visible.length === 0 && tab !== 'all' ? (
             <EmptyState
-              title={tab === 'attention' ? copy.sites.emptyAttention : copy.sites.emptyPaused}
+              title={tab === 'attention' ? t('sites.emptyAttention') : t('sites.emptyPaused')}
             />
           ) : (
             <ul
               className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(330px,1fr))]"
-              aria-label={copy.sites.title}
+              aria-label={t('sites.title')}
             >
               {visible.map((s) => (
                 <li key={s.siteId}>
@@ -121,10 +129,12 @@ export default function SitesPage() {
                     <span className="flex size-11 items-center justify-center rounded-full bg-signal text-asphalt">
                       <Plus aria-hidden="true" className="size-6" />
                     </span>
-                    <span className="font-h2 mt-3 text-h2">{copy.sites.connectAnother}</span>
-                    <span className="mt-1 font-mono text-[12px] uppercase tracking-[0.08em] text-dust">
-                      {copy.sites.connectAnotherPrice}
-                    </span>
+                    <span className="font-h2 mt-3 text-h2">{t('sites.connectAnother')}</span>
+                    {price ? (
+                      <span className="mt-1 font-mono text-[12px] uppercase tracking-[0.08em] text-dust">
+                        {t('sites.connectAnotherPrice', { price })}
+                      </span>
+                    ) : null}
                   </Link>
                 </li>
               ) : null}
@@ -137,10 +147,17 @@ export default function SitesPage() {
 }
 
 function SiteCardView({ site }: { site: SiteCard }) {
+  const { t, language } = useCopy();
+  const source = useDataSource();
+  const month = formatMonthShortIn(
+    formatDateInTz(source.now(), site.timezone).slice(0, 7),
+    language,
+  );
+  const PrefIcon = site.reporterContactPref === 'call' ? Phone : Link2;
   return (
     <Card
       className={cn('flex h-full flex-col', site.needsAttention && 'border-missing/60')}
-      aria-label={copy.a11y.siteCard(site.name)}
+      aria-label={t('sites.cardLabel', { name: site.name })}
       data-testid="site-card"
       data-attention={site.needsAttention || undefined}
     >
@@ -149,7 +166,7 @@ function SiteCardView({ site }: { site: SiteCard }) {
           <Link
             to={`/sites/${site.siteId}`}
             className="font-h2 block text-h2 leading-6 underline-offset-4 hover:underline"
-            aria-label={copy.sites.openSite(site.name)}
+            aria-label={t('sites.openSite', { name: site.name })}
           >
             {site.name}
           </Link>
@@ -157,47 +174,61 @@ function SiteCardView({ site }: { site: SiteCard }) {
             {site.projectCode}
           </div>
         </div>
-        {site.reportId ? (
+        {site.status === 'paused' ? (
+          <StatusChip variant="no_work" label={t('sites.paused')} />
+        ) : site.reportId ? (
           <Link to={`/reports/${site.reportId}`} className="shrink-0 rounded-chip">
-            <StatusChip variant={site.chip.variant} label={site.chip.label} />
+            <StatusChip variant={site.chip.variant} />
           </Link>
         ) : (
-          <StatusChip variant={site.chip.variant} label={site.chip.label} />
+          <StatusChip variant={site.chip.variant} />
         )}
       </div>
       <div className="px-5 pb-4">
         <div className="mb-2 text-caption text-dust">
           {site.status === 'paused' && site.pausedAt
-            ? copy.sites.pausedSince(formatMonthDay(site.pausedAt.slice(0, 10)))
-            : copy.sites.lastWorkdays(site.onTime14)}
+            ? t('sites.pausedSince', {
+                date: formatDate(site.pausedAt.slice(0, 10), 'monthDay', language),
+              })
+            : t('sites.lastWorkdays', { onTime: site.onTime14 })}
         </div>
         <StreakBar cells={site.streak} />
       </div>
-      <div className="mt-auto grid grid-cols-[1fr_auto_auto] items-center gap-3 border-t border-rebar px-5 py-3 text-caption">
+      <div className="mt-auto flex items-start justify-between gap-3 border-t border-rebar px-5 py-3 text-caption">
         <div className="min-w-0">
-          <div className="truncate font-medium text-asphalt">{site.reporterName ?? '—'}</div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-semibold text-asphalt">{site.reporterName ?? '—'}</span>
+            {site.reporterContactPref ? (
+              <span
+                className="inline-flex shrink-0 text-dust"
+                title={t(`sites.prefers.${site.reporterContactPref}`)}
+                data-testid="contact-pref"
+                data-pref={site.reporterContactPref}
+              >
+                <PrefIcon className="size-4" aria-hidden="true" />
+                <span className="sr-only">{t(`sites.prefers.${site.reporterContactPref}`)}</span>
+              </span>
+            ) : null}
+          </div>
           {site.reporterPhone ? (
             <a
               href={`tel:${site.reporterPhone}`}
-              className="inline-flex items-center gap-1 font-mono text-[12px] text-dust hover:text-asphalt"
+              className="inline-flex min-h-6 items-center font-mono text-[12px] text-dust hover:text-asphalt"
             >
-              <Phone className="size-3.5" aria-hidden="true" />
               {formatPhone(site.reporterPhone)}
             </a>
           ) : null}
         </div>
-        <div className="text-right" title={copy.sites.crewToday}>
-          <div className="eyebrow text-dust">{copy.sites.crewToday}</div>
-          <div className="inline-flex items-center gap-1 font-mono text-data tabular">
-            <Users className="size-4 text-dust" aria-hidden="true" />
-            {formatCrew(site.crewToday)}
+        <div className="shrink-0 text-right">
+          <div className="font-semibold text-asphalt tabular">
+            {site.crewToday === null
+              ? t('sites.crewTodayNone')
+              : t('sites.crewToday', { count: site.crewToday })}
           </div>
-        </div>
-        <div className="text-right" title={copy.sites.weatherDaysMonth}>
-          <div className="eyebrow text-dust">Wx</div>
-          <div className="inline-flex items-center gap-1 font-mono text-data tabular">
-            <CloudRain className="size-4 text-dust" aria-hidden="true" />
-            {site.weatherDaysMonth}
+          <div className="text-[12px] text-dust">
+            {site.weatherDaysMonth === 0
+              ? t('sites.weatherDaysNone', { month })
+              : t('sites.weatherDays', { count: site.weatherDaysMonth, month })}
           </div>
         </div>
       </div>
