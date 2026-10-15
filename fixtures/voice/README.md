@@ -1,40 +1,47 @@
-# fixtures/voice — real-style recordings
+# fixtures/voice — web recorder voice notes and their expected transcripts
 
-The eval set (§10.12) grows from here. Transcripts in `../transcripts/*.json` are the inputs the
-worker's extraction eval (`pnpm eval`) actually runs on; recordings are kept so the transcription
-step can be re-run when `TRANSCRIBE_MODEL` changes.
+One JSON file per voice note (W1-11, spec §10.2). Each holds the expected transcript (`text` and
+timed `segments`), the reporter it stands for (`reporter.locale`, `reporter.languages`), the
+Deepgram language that reporter gets (`transcriptionLanguage`: `multi` for English and/or Spanish
+speakers, `tr` for Turkish, `en` otherwise), the language(s) of the transcript (`expectedLanguage`),
+the golden extraction case it is the script of (`goldenCase`, `../transcripts/<id>.json`) and its
+recording (`audio`).
 
-## Adding a recording
+| File                              | Language | Reporter (§18)                     | What it covers                                                                                                 |
+| --------------------------------- | -------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `en-elm-2026-10-02.json`          | EN → en  | Priya Raman, Elm St. (EN · HI)     | Partial-day rain-out, one self-perform crew, a delivery (golden `elm-2026-10-02-rain-morning`)                 |
+| `es-en-riverside-2026-10-09.json` | ES + EN  | Marco Ruiz, Riverside (ES · EN)    | The hero report: code-switching, the Delta crew on site with no headcount (D27; golden `riverside-2026-10-09`) |
+| `tr-kartal-2026-10-09.json`       | TR → tr  | Emre Yıldız, Kartal (tr-TR, §18.2) | Four crews, a pour, the §18.2 glossary phrases; no golden case yet (W1-12 adds Turkish cases)                  |
 
-1. Record a voice note on WhatsApp (EN, ES or mixed; include machinery noise for a few) and export
-   the original `.ogg` from a test number, or record `.m4a` on a phone. Keep it under 5 minutes.
-2. Save it here as `<site-slug>-<YYYY-MM-DD>-<n>.ogg` (no names or phone numbers in the file name).
-3. Produce the transcript fixture with the worker's transcriber (needs `OPENAI_API_KEY`):
+## Who reads them
 
-   ```bash
-   pnpm --filter @sitelog/worker exec tsx -e "
-   import { readFileSync, writeFileSync } from 'node:fs';
-   import OpenAI from 'openai';
-   import { createFfmpegRunner } from './src/media/ffmpeg';
-   import { transcribeAudio } from './src/ai/transcribe';
-   const audio = readFileSync('../../fixtures/voice/riverside-2026-10-09-1.ogg');
-   const t = await transcribeAudio(new OpenAI(), createFfmpegRunner(), { audio, ext: 'ogg', model: process.env.TRANSCRIBE_MODEL ?? 'whisper-1', prompt: 'Construction daily site report.' });
-   writeFileSync('../../fixtures/voice/riverside-2026-10-09-1.segments.json', JSON.stringify(t, null, 2));
-   "
-   ```
+- **The fake transcriber** (`apps/worker/src/ai/fake-transcriber.ts`, `TRANSCRIBE_PROVIDER=fake`,
+  and the default outside production when the provider's key is missing): it answers with the
+  fixture a fake audio file names (the integration harness's `fakeAudio(id, seconds)`), else the
+  first fixture in the requested language (a real recording gets the transcript of its reporter's
+  language). The CI worker in `e2e-supabase` runs with it.
+- **The tests**: `apps/worker/src/ai/transcriber.test.ts` (each file parses, its language follows
+  from its reporter, the EN and ES + EN scripts equal their golden cases) and
+  `apps/worker/src/integration/upload.integration.test.ts` (a fixture upload through
+  `transcribe_upload` on PGlite).
+- **`pnpm transcribe:fixture -- <id> [audio file]`**: the by-hand check with a real key. It runs a
+  recording through the configured provider (`TRANSCRIBE_PROVIDER`, `DEEPGRAM_API_KEY` in the root
+  `.env`) with the fixture reporter's language and the golden case's hints, and prints the
+  transcript, the detected language, the latency and the word error rate against `text`.
 
-4. Copy the segments into a new `../transcripts/<id>.json` (add site context, companies, glossary,
-   photos — see the existing files; set `expectedQuestion` to the question code should ask first,
-   or `null`), and write the expected `DailyReportData` to `../expected/<id>.json`. Only values
-   that are actually said in the recording may appear in `expected`; every non-null number needs a
-   source with the segment start time. Save the model's `submit_daily_report` input for the case
-   as `../tool-outputs/<id>.json` (the worker tests replay it without an API key).
-5. Run `pnpm --filter @sitelog/worker test` (offline: every case must parse with the shared schemas,
-   be internally consistent and its recorded tool output must score as a pass) and `pnpm eval`
-   (needs `ANTHROPIC_API_KEY`; `--case <part>` to run a subset, `--recorded` to score the recorded
-   outputs offline). The eval checks manpower counts and hours exactly, weather `lostHours`
-   ±0.5 h, that every non-null number carries a source, that unknown companies are flagged, and
-   that code derives the same required gaps and next question as for the expected data.
+## No recordings yet
 
-Recordings are customer-style data: do not commit real customer audio. Synthetic recordings by
-the team are fine.
+`audio` is `null` in all three: this repository was built without a microphone or an offline
+text-to-speech engine, so there are no audio files, only the scripts. Until they exist, the
+by-hand Deepgram check needs a recording made from the script:
+
+1. Read the fixture's `text` aloud in the field app (`pnpm dev:field`, the Recording screen) or a
+   phone's voice recorder, at a natural pace, with some site noise for one of them. The browser
+   gives `audio/webm` (Chrome, Firefox) or `audio/mp4` (Safari); keep what it gives.
+2. Save it here as `<id>.webm` or `<id>.m4a` (no names or phone numbers in the file name; the
+   team's own voices only, never customer audio) and set `audio` (and `mime`, for mp4) in the JSON.
+3. Run `pnpm transcribe:fixture -- <id>` with `DEEPGRAM_API_KEY` set. Adjust `segments` to the
+   recording's real timings if you want them exact; keep `text` as said.
+
+Larger than about 1 MB per file is too big for the repository: keep notes short (under a minute)
+or store them outside git and pass the path as the second argument.

@@ -22,6 +22,7 @@ import { createMetrics, type Ctx } from '../context';
 import { createMemoryProvider } from '../email/provider';
 import { createWorkerNotifier } from '../messaging';
 import type { SmsDriver, SmsTransport } from '@sitelog/shared';
+import { createFakeTranscriber } from '../ai/fake-transcriber';
 import { registry } from '../jobs/registry';
 import { silentLogger } from '../log';
 import type { FfmpegRunner } from '../media/ffmpeg';
@@ -183,7 +184,7 @@ export function createHarness(
     db,
     wa,
     storage,
-    ai: { claude: opts.claude ?? null, openai: null },
+    ai: { claude: opts.claude ?? null, openai: null, transcriber: createFakeTranscriber() },
     email,
     notifier: createWorkerNotifier(config, db, transport, () => now),
     ffmpeg: fakeFfmpeg,

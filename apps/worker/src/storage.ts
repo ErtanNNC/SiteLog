@@ -111,6 +111,8 @@ export function mimeExtension(mime: string | null | undefined, fallback: string)
     case 'audio/ogg':
     case 'audio/opus':
       return 'ogg';
+    case 'audio/webm':
+      return 'webm';
     case 'audio/mpeg':
     case 'audio/mp3':
       return 'mp3';

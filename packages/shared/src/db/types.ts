@@ -291,7 +291,8 @@ export type TranscriptRow = {
   /**
    * The WhatsApp voice note; null on a v1.2 transcript, which sets upload_id or call_id instead
    * (at most one; nullable since 20261013000007). The W1-06 demo seed writes the first ones (the
-   * hero voice note, the unknown caller).
+   * hero voice note, the unknown caller); the worker's `transcribe_upload` writes upload_id only
+   * (W1-11). Readers key a transcript by `upload_id ?? message_id` (`transcriptMediaId`).
    */
   message_id: string | null;
   upload_id: string | null;

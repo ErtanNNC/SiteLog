@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import * as Sentry from '@sentry/node';
 import { createAnthropicClient } from './ai/claude';
 import { createOpenAiClient } from './ai/transcribe';
+import { createTranscriber } from './ai/transcriber';
 import { loadConfig, type Config } from './config';
 import { createMetrics, type Ctx } from './context';
 import { connectDb } from './db';
@@ -42,6 +43,13 @@ export function buildContext(config: Config): Ctx {
     log,
     abortableFetch(),
   );
+  const openai = createOpenAiClient(config.OPENAI_API_KEY);
+  const ffmpeg = createFfmpegRunner(
+    resolveFfmpegPath({
+      ...process.env,
+      FFMPEG_PATH: config.FFMPEG_PATH || process.env.FFMPEG_PATH,
+    }),
+  );
   return {
     config,
     db,
@@ -49,7 +57,8 @@ export function buildContext(config: Config): Ctx {
     storage,
     ai: {
       claude: createAnthropicClient(config.ANTHROPIC_API_KEY),
-      openai: createOpenAiClient(config.OPENAI_API_KEY),
+      openai,
+      transcriber: createTranscriber(config, { openai, ffmpeg, log }),
     },
     email: createEmailProvider(
       { provider: config.EMAIL_PROVIDER, apiKey: config.RESEND_API_KEY, from: config.EMAIL_FROM },
@@ -57,12 +66,7 @@ export function buildContext(config: Config): Ctx {
       { insertConsoleEmail: (row) => db.insertConsoleEmail(row) },
     ),
     notifier: createWorkerNotifier(config, db, undefined, () => new Date()),
-    ffmpeg: createFfmpegRunner(
-      resolveFfmpegPath({
-        ...process.env,
-        FFMPEG_PATH: config.FFMPEG_PATH || process.env.FFMPEG_PATH,
-      }),
-    ),
+    ffmpeg,
     log,
     now: () => new Date(),
     metrics: createMetrics(),

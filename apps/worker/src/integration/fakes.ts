@@ -11,6 +11,7 @@ import {
 } from '@sitelog/shared';
 import type { MessagesClient } from '../ai/claude';
 import { FIXTURES_DIR, findPhoneNumbers, loadFixtures, type EvalFixture } from '../ai/eval';
+import { fakeAudio, readFakeAudio } from '../ai/fake-transcriber';
 import type { TranscriptionApi } from '../ai/transcribe';
 import type { EmailProvider } from '../email/provider';
 import type { FfmpegRunner } from '../media/ffmpeg';
@@ -284,22 +285,9 @@ export function loadFixtureLibrary(filter: string[] = []): FixtureLibrary {
 
 // ───────────────────────────── Media + ffmpeg ─────────────────────────────
 
-const FAKE_AUDIO_KEY = 'sitelog-fake-audio';
-
-/** The bytes a fake voice note carries: which golden case it is and how long it lasts. */
-export function fakeAudio(fixtureId: string, durationS: number): Buffer {
-  return Buffer.from(JSON.stringify({ [FAKE_AUDIO_KEY]: fixtureId, durationS }));
-}
-
-export function readFakeAudio(buf: Buffer): { fixtureId: string; durationS: number } | null {
-  try {
-    const v = JSON.parse(buf.toString('utf8')) as Record<string, unknown>;
-    if (typeof v[FAKE_AUDIO_KEY] !== 'string') return null;
-    return { fixtureId: v[FAKE_AUDIO_KEY] as string, durationS: Number(v.durationS) || 1 };
-  } catch {
-    return null;
-  }
-}
+// The bytes a fake voice note carries (which case, how long): shared with the worker's fake
+// transcriber (TRANSCRIBE_PROVIDER=fake), which reads the same marker.
+export { fakeAudio, readFakeAudio };
 
 /** A tiny valid 1×1 PNG so photos render in the PDF without binary fixtures. */
 export const FAKE_PHOTO = Buffer.from(

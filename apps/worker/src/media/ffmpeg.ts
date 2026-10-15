@@ -25,6 +25,8 @@ export const PCM_SAMPLE_RATE = 8000;
 export const MP3_SAMPLE_RATE = 16000;
 export const MP3_BITRATE = '32k';
 export const PEAK_BUCKETS = 64;
+/** Peaks of a web recorder voice note (W1-11, `uploads.peaks`): about 600 for the players. */
+export const UPLOAD_PEAK_BUCKETS = 600;
 /** Audio longer than this is split before transcription (§F5 edge case). */
 export const SPLIT_THRESHOLD_S = 15 * 60;
 export const MAX_CHUNK_S = 10 * 60;
@@ -141,7 +143,7 @@ export function pcmDurationSeconds(pcm: Buffer, sampleRate = PCM_SAMPLE_RATE): n
   return Math.round((pcm.length / 2 / sampleRate) * 100) / 100;
 }
 
-/** 64 normalised peaks (0–1) for the web VoicePlayer waveform (§11.3). */
+/** Normalised peaks (0–1) for the VoicePlayer waveform (§11.3): 64 by default, 600 for uploads. */
 export function computePeaks(pcm: Buffer, buckets = PEAK_BUCKETS): number[] {
   const samples = Math.floor(pcm.length / 2);
   if (samples === 0) return Array.from({ length: buckets }, () => 0);
@@ -198,9 +200,13 @@ export interface AudioAnalysis {
 }
 
 /** Decode once: duration + peaks. */
-export async function analyzeAudio(run: FfmpegRunner, inputPath: string): Promise<AudioAnalysis> {
+export async function analyzeAudio(
+  run: FfmpegRunner,
+  inputPath: string,
+  buckets = PEAK_BUCKETS,
+): Promise<AudioAnalysis> {
   const { stdout } = await run(decodePcmArgs(inputPath));
-  return { durationS: pcmDurationSeconds(stdout), peaks: computePeaks(stdout) };
+  return { durationS: pcmDurationSeconds(stdout), peaks: computePeaks(stdout, buckets) };
 }
 
 export async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {

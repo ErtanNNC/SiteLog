@@ -1,12 +1,29 @@
+import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
+  analyzeAudio,
   chunkArgs,
   chunkPlan,
   computePeaks,
   convertToMp3Args,
+  createFfmpegRunner,
   decodePcmArgs,
   pcmDurationSeconds,
+  resolveFfmpegPath,
+  UPLOAD_PEAK_BUCKETS,
+  withTempDir,
 } from './ffmpeg';
+
+/** A real ffmpeg (FFMPEG_PATH, ffmpeg-static or PATH), for the decode test; skipped without one. */
+const FFMPEG = (() => {
+  const bin = resolveFfmpegPath();
+  try {
+    execFileSync(bin, ['-version'], { stdio: 'ignore' });
+    return bin;
+  } catch {
+    return null;
+  }
+})();
 
 describe('ffmpeg command building', () => {
   it('converts OGG to mono 16 kHz 32 kbps MP3 (§10.2)', () => {
@@ -60,4 +77,54 @@ describe('PCM analysis', () => {
     expect(computePeaks(Buffer.alloc(0))).toHaveLength(64);
     expect(pcmDurationSeconds(Buffer.alloc(0))).toBe(0);
   });
+});
+
+describe('upload peaks (W1-11)', () => {
+  it('computes about 600 peaks for a web recorder voice note, short or long', () => {
+    expect(UPLOAD_PEAK_BUCKETS).toBe(600);
+    for (const seconds of [0.05, 2, 180, 900]) {
+      const samples = Math.round(8000 * seconds);
+      const pcm = Buffer.alloc(samples * 2);
+      for (let i = 0; i < samples; i++) pcm.writeInt16LE(Math.round(Math.sin(i / 7) * 9000), i * 2);
+      const peaks = computePeaks(pcm, UPLOAD_PEAK_BUCKETS);
+      expect(peaks).toHaveLength(600);
+      expect(peaks.every((p) => p >= 0 && p <= 1)).toBe(true);
+      expect(Math.max(...peaks)).toBe(1);
+    }
+  });
+
+  it.skipIf(!FFMPEG)(
+    'decodes a browser webm/opus file with the real ffmpeg: duration and 600 peaks',
+    async () => {
+      await withTempDir(async (dir) => {
+        const path = `${dir}/clip.webm`;
+        // 3 s: 1 s of tone, 1 s of silence, 1 s of tone (what a MediaRecorder webm looks like).
+        execFileSync(FFMPEG!, [
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-y',
+          '-f',
+          'lavfi',
+          '-i',
+          'sine=frequency=440:duration=3',
+          '-af',
+          "volume='if(between(t,1,2),0,1)':eval=frame",
+          '-c:a',
+          'libopus',
+          '-b:a',
+          '24k',
+          path,
+        ]);
+        const a = await analyzeAudio(createFfmpegRunner(FFMPEG!), path, UPLOAD_PEAK_BUCKETS);
+        expect(a.durationS).toBeGreaterThan(2.9);
+        expect(a.durationS).toBeLessThan(3.1);
+        expect(a.peaks).toHaveLength(600);
+        // The silent second reads as (near) silence in the middle third.
+        expect(Math.max(...a.peaks.slice(230, 370))).toBeLessThan(0.05);
+        expect(Math.max(...a.peaks.slice(0, 180))).toBeGreaterThan(0.5);
+      });
+    },
+    30_000,
+  );
 });

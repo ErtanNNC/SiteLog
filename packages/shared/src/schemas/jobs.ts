@@ -136,6 +136,13 @@ export const jobKeys = {
   fileReportOn: (reportId: string, version: number, occurrence: string) =>
     `file:${reportId}:v${version}:${occurrence}`,
   /**
+   * The extraction after the web recorder's voice notes (W1-11, `transcribe_upload`): per report
+   * and its latest voice upload. It is enqueued once every voice upload of the report has its
+   * transcript, so the key names the set of notes up to that upload; a later voice note is a new
+   * latest upload and a new key, and a retried transcription finds its key taken.
+   */
+  extractUpload: (reportId: string, uploadId: string) => `extract:${reportId}:upload:${uploadId}`,
+  /**
    * The welcome of the office's nth invite of a reporter (api-invite-reporter): a double submit
    * reads the same count and enqueues once; a later invite (a disabled reporter invited again) is
    * a new welcome.

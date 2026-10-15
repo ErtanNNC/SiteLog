@@ -8,13 +8,19 @@ import type { FfmpegRunner } from './media/ffmpeg';
 import type { Storage } from './storage';
 import type { WaClient } from './wa/client';
 import type { MessagesClient } from './ai/claude';
+import type { Transcriber } from './ai/transcriber';
 
 /** Everything a job or router handler needs. Built once at boot; tests build it with fakes. */
 export interface AiClients {
   /** Anthropic Messages client (or a mock). null when ANTHROPIC_API_KEY is missing. */
   claude: MessagesClient | null;
-  /** OpenAI client for transcription. null when OPENAI_API_KEY is missing. */
+  /**
+   * OpenAI client: the v1.0 WhatsApp voice notes' transcription (until step 22) and the fallback
+   * transcriber. null when OPENAI_API_KEY is missing.
+   */
   openai: OpenAI | null;
+  /** §10.2 transcription of the web recorder's voice notes (W1-11, TRANSCRIBE_PROVIDER). */
+  transcriber: Transcriber;
 }
 
 export interface MetricsSink {

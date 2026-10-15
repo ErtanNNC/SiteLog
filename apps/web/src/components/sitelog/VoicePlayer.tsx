@@ -19,6 +19,7 @@ import {
 } from 'react';
 import { formatAudioTimestamp } from '@sitelog/shared/format.ts';
 import { copy } from '@/copy/en';
+import { waveformBars } from '@/lib/peaks';
 import { cn } from '@/lib/utils';
 
 export interface VoicePlayerHandle {
@@ -140,7 +141,7 @@ export const VoicePlayer = forwardRef<VoicePlayerHandle, VoicePlayerProps>(
     }, [ctx, handle]);
     useEffect(() => () => stopTimer(), []);
 
-    const bars = peaks.length ? peaks : Array.from({ length: 48 }, () => 0.3);
+    const bars = peaks.length ? waveformBars(peaks) : Array.from({ length: 48 }, () => 0.3);
     const progress = time / duration;
 
     return (

@@ -27,6 +27,8 @@ const AUDITED: Record<string, string> = {
   'email:{}:{}:{}': 'per email kind, report and version',
   'email:edited_after_signoff:{}:{}': 'per report and new version',
   'email:pack:{}': 'per evidence pack',
+  'jobKeys.extractUpload':
+    'extract:<report>:upload:<latest voice upload>: enqueued once every kept voice note of the report is transcribed (W1-11), so it names the notes up to that upload; a new voice note is a new latest upload',
   'send_welcome:{}':
     'the Notifier key of a send_welcome job (messages.payload, not jobs): per job, so a retry never texts twice',
   'jobKeys.fileReportOn':

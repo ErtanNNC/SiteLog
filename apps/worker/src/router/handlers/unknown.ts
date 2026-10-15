@@ -1,3 +1,4 @@
+import { openAiTranscribeModel } from '../../config';
 import { waCopy, type ConversationRow, type MessageRow } from '@sitelog/shared';
 import { guessSite } from '../../ai/site-guess';
 import { buildTranscriptionPrompt, transcribeAudio } from '../../ai/transcribe';
@@ -37,7 +38,7 @@ export async function handleUnknownSender(
         {
           audio: buffer,
           ext: message.storage_path.split('.').pop() ?? 'ogg',
-          model: ctx.config.TRANSCRIBE_MODEL,
+          model: openAiTranscribeModel(ctx.config),
           prompt: buildTranscriptionPrompt({
             siteName: 'a construction site',
             companies: [],

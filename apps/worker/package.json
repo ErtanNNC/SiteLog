@@ -14,6 +14,7 @@
     "test:stack": "vitest run --config vitest.stack.config.ts",
     "test:watch": "vitest",
     "eval": "tsx src/ai/eval.ts",
+    "transcribe:fixture": "tsx src/ai/transcribe-fixture.ts",
     "loadtest": "tsx src/integration/loadtest.ts",
     "render-sample-pdf": "tsx --tsconfig ../../packages/pdf/tsconfig.json src/pdf/render-sample.ts"
   },

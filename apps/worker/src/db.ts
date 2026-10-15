@@ -31,6 +31,7 @@ import type {
   TermStatus,
   TranscriptRow,
   UnknownContactRow,
+  UploadRow,
   WeatherEventRow,
 } from '@sitelog/shared';
 
@@ -83,6 +84,28 @@ export interface TranscriptInput {
   text: string;
   segments: Array<{ start: number; end: number; text: string }>;
   model: string | null;
+}
+
+/** A web recorder voice note's transcript, duration and peaks (W1-11, `saveUploadTranscript`). */
+export interface UploadTranscriptInput {
+  uploadId: string;
+  language: string | null;
+  text: string;
+  segments: Array<{ start: number; end: number; text: string }>;
+  model: string | null;
+  /** Measured by ffmpeg, else the provider's; null leaves the column as it is. */
+  durationS: number | null;
+  /** About 600 normalised peaks for the players (§11.3); null leaves the column as it is. */
+  peaks: number[] | null;
+  /** Audit diff of `transcript.created` (provider, model, seconds; never the text). */
+  audit: Record<string, unknown>;
+}
+
+/** A voice upload of a report and whether it has its transcript yet. */
+export interface ReportVoiceUpload {
+  id: string;
+  received_at: string | null;
+  transcribed: boolean;
 }
 
 export interface ReportInput {
@@ -321,6 +344,24 @@ export interface Db {
    */
   listTranscripts(mediaIds: string[]): Promise<TranscriptRow[]>;
   upsertTranscript(input: TranscriptInput): Promise<TranscriptRow>;
+  /** The transcript of a web recorder upload (W1-11). */
+  getUploadTranscript(uploadId: string): Promise<TranscriptRow | null>;
+  /**
+   * W1-11, in one transaction: the upload's transcript (`upload_id`, no message; kept when it
+   * exists, so a retry never writes a second one), its duration and peaks, and a
+   * `transcript.created` audit row for a new transcript only.
+   */
+  saveUploadTranscript(
+    input: UploadTranscriptInput,
+  ): Promise<{ transcript: TranscriptRow; created: boolean }>;
+
+  // uploads (web recorder, W1-07)
+  getUpload(id: string): Promise<UploadRow | null>;
+  /**
+   * The report's voice uploads whose file is kept (not purged), oldest first (received_at, id),
+   * each with whether its transcript exists.
+   */
+  listReportVoiceUploads(reportId: string): Promise<ReportVoiceUpload[]>;
 
   // reporters, sites, orgs
   listReportersByPhone(phone: string): Promise<ReporterRow[]>;
@@ -781,6 +822,50 @@ export function createDb(sql: Sql): Db {
         on conflict (message_id) do update set language = excluded.language, text = excluded.text, segments = excluded.segments, model = excluded.model
         returning *`;
       return rows[0]!;
+    },
+
+    async getUploadTranscript(uploadId) {
+      return one(
+        await sql<TranscriptRow[]>`select * from transcripts where upload_id = ${uploadId}`,
+      );
+    },
+    async saveUploadTranscript(input) {
+      return sql.begin(async (tx) => {
+        const inserted = await tx<TranscriptRow[]>`
+          insert into transcripts (upload_id, language, text, segments, model)
+          values (${input.uploadId}, ${input.language}, ${input.text}, ${tx.json(input.segments as never)}, ${input.model})
+          on conflict (upload_id) do nothing
+          returning *`;
+        const transcript =
+          inserted[0] ??
+          (
+            await tx<TranscriptRow[]>`select * from transcripts where upload_id = ${input.uploadId}`
+          )[0];
+        if (!transcript) throw new Error(`transcript of upload ${input.uploadId} not saved`);
+        await tx`update uploads set
+            duration_s = coalesce(${input.durationS}::numeric, duration_s),
+            peaks = coalesce(${input.peaks === null ? null : tx.json(input.peaks as never)}::jsonb, peaks)
+          where id = ${input.uploadId}`;
+        if (inserted[0]) {
+          await tx`select log_audit(s.org_id, 'agent', null, 'transcript.created', 'upload', u.id,
+              ${tx.json(input.audit as never)})
+            from uploads u join sites s on s.id = u.site_id where u.id = ${input.uploadId}`;
+        }
+        return { transcript, created: inserted.length > 0 };
+      });
+    },
+
+    // uploads -----------------------------------------------------------------------------
+    async getUpload(id) {
+      return one(await sql<UploadRow[]>`select * from uploads where id = ${id}`);
+    },
+    async listReportVoiceUploads(reportId) {
+      return sql<ReportVoiceUpload[]>`
+        select u.id, u.received_at,
+               exists (select 1 from transcripts t where t.upload_id = u.id) as transcribed
+        from uploads u
+        where u.report_id = ${reportId} and u.kind = 'audio' and u.purged_at is null
+        order by u.received_at nulls first, u.id`;
     },
 
     // reporters, sites, orgs --------------------------------------------------------------

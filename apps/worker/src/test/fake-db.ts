@@ -23,6 +23,7 @@ import type {
   SmsOptOutRow,
   TranscriptRow,
   UnknownContactRow,
+  UploadRow,
   WeatherEventRow,
 } from '@sitelog/shared';
 import { backoffSeconds, formatReportNo, reportLanguageFor } from '@sitelog/shared';
@@ -93,10 +94,10 @@ export interface FakeDbData {
     created_at: string;
   }>;
   consoleEmails: ConsoleEmailRow[];
-  /** uploads (only whose they are: the dead-job notice, W1-10). */
+  /** uploads: whose they are (the dead-job notice, W1-10), and full rows for W1-11. */
   uploads: Map<
     string,
-    { id: string; report_id: string | null; reporter_id: string | null; site_id: string }
+    Pick<UploadRow, 'id' | 'report_id' | 'reporter_id' | 'site_id'> & Partial<UploadRow>
   >;
 }
 
@@ -281,6 +282,75 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       };
       d.transcripts.set(input.message_id, row);
       return row;
+    },
+
+    async getUploadTranscript(uploadId) {
+      // Upload transcripts share the map, keyed by the upload id (their media id).
+      const t = d.transcripts.get(uploadId);
+      return t && t.upload_id === uploadId ? t : null;
+    },
+    async saveUploadTranscript(input) {
+      const existing = d.transcripts.get(input.uploadId);
+      const transcript: TranscriptRow = existing ?? {
+        ...V12_ROW_DEFAULTS.transcripts,
+        id: randomUUID(),
+        message_id: null,
+        upload_id: input.uploadId,
+        language: input.language,
+        text: input.text,
+        segments: input.segments as TranscriptRow['segments'],
+        model: input.model,
+        created_at: iso(),
+      };
+      d.transcripts.set(input.uploadId, transcript);
+      const u = d.uploads.get(input.uploadId);
+      if (u) {
+        if (input.durationS !== null) u.duration_s = input.durationS;
+        if (input.peaks !== null) u.peaks = input.peaks;
+      }
+      if (!existing) {
+        const site = u ? d.sites.get(u.site_id) : undefined;
+        d.audit.push({
+          org_id: site?.org_id ?? '',
+          actor_type: 'agent',
+          action: 'transcript.created',
+          entity: 'upload',
+          entity_id: input.uploadId,
+          diff: input.audit as Json,
+        });
+      }
+      return { transcript, created: !existing };
+    },
+    async getUpload(id) {
+      const u = d.uploads.get(id);
+      if (!u) return null;
+      return {
+        kind: 'audio',
+        storage_path: '',
+        mime: null,
+        bytes: null,
+        duration_s: null,
+        peaks: null,
+        recorded_at: null,
+        received_at: null,
+        caption: null,
+        uploaded_by: null,
+        purged_at: null,
+        ...u,
+      };
+    },
+    async listReportVoiceUploads(reportId) {
+      return Array.from(d.uploads.values())
+        .filter((u) => u.report_id === reportId && (u.kind ?? 'audio') === 'audio' && !u.purged_at)
+        .sort(
+          (a, b) =>
+            (a.received_at ?? '').localeCompare(b.received_at ?? '') || a.id.localeCompare(b.id),
+        )
+        .map((u) => ({
+          id: u.id,
+          received_at: u.received_at ?? null,
+          transcribed: d.transcripts.get(u.id)?.upload_id === u.id,
+        }));
     },
 
     async listReportersByPhone(phone) {
@@ -930,7 +1000,10 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return d.jobs.get(id) ?? null;
     },
     async getUploadOwner(id) {
-      return d.uploads.get(id) ?? null;
+      const u = d.uploads.get(id);
+      return u
+        ? { id: u.id, report_id: u.report_id, reporter_id: u.reporter_id, site_id: u.site_id }
+        : null;
     },
     async enqueueJob(type, payload, opts = {}) {
       if (opts.dedupeKey) {

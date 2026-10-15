@@ -73,7 +73,15 @@ export const ConfigSchema = z.object({
   WA_DISPLAY_NUMBER: z.string().default('+15550142290'),
 
   OPENAI_API_KEY: z.string().default(''),
-  TRANSCRIBE_MODEL: z.string().default('whisper-1'),
+  /**
+   * §10.2 transcription (W1-11, src/ai/transcriber.ts): Deepgram by default, OpenAI the fallback,
+   * `fake` the fixtures/voice transcripts. Outside production a provider without its key becomes
+   * the fake; in production it never does (the job fails until the key is set).
+   */
+  TRANSCRIBE_PROVIDER: z.enum(['deepgram', 'openai', 'fake']).default('deepgram'),
+  DEEPGRAM_API_KEY: z.string().default(''),
+  /** The provider's model; empty: nova-3 for Deepgram, whisper-1 for OpenAI. */
+  TRANSCRIBE_MODEL: z.string().default(''),
   ANTHROPIC_API_KEY: z.string().default(''),
   CLAUDE_MODEL: z.string().default('claude-sonnet-5-5'),
   CLAUDE_MODEL_FAST: z.string().default(''),
@@ -129,6 +137,19 @@ export const ConfigSchema = z.object({
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
+
+/**
+ * The OpenAI model of the v1.0 WhatsApp voice notes (`transcribe_audio`, the unknown-sender
+ * snippet), which keep calling OpenAI until step 22: TRANSCRIBE_MODEL when OpenAI is the
+ * configured provider, else OpenAI's default (TRANSCRIBE_MODEL then names a Deepgram model).
+ */
+export function openAiTranscribeModel(
+  config: Pick<Config, 'TRANSCRIBE_PROVIDER' | 'TRANSCRIBE_MODEL'>,
+): string {
+  return config.TRANSCRIBE_PROVIDER === 'openai' && config.TRANSCRIBE_MODEL
+    ? config.TRANSCRIBE_MODEL
+    : 'whisper-1';
+}
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = ConfigSchema.safeParse(env);

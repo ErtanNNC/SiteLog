@@ -50,6 +50,12 @@ export function estimateClaudeCostUsd(model: string, usage: TokenUsage): number 
  */
 export const TRANSCRIPTION_USD_PER_MINUTE = 0.006;
 
+/**
+ * Deepgram Nova-3 pre-recorded, USD per minute of audio (pay-as-you-go list price when W1-11 was
+ * built): monolingual (`en`, `tr`) and multilingual (`multi`). Only the estimate uses them.
+ */
+export const DEEPGRAM_USD_PER_MINUTE = { monolingual: 0.0043, multilingual: 0.0052 } as const;
+
 export function estimateTranscriptionCostUsd(
   _model: string,
   audioSeconds: number,
