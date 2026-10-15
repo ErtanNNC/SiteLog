@@ -89,6 +89,7 @@ Hafta-1 planının M0–M3'ü (W1-01 … W1-12) yazıldı ve CI'da yeşil, previ
 Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahtar gerektirmeyen biletlerden başlıyorum: W2-01 (kanallar arası yedekleme), W2-02 (saha Ayarlar), W2-03 (geçmiş raporlar, süresi dolmuş link, yeni telefon), W2-04 (Filed ekranı ekleri).
 
 **Sizin kararınız gereken sorular (önerimle; cevap verene kadar önerdiğim varsayımla parametre olarak kuruyorum):**
+
 - **Q76:** Aramayı tercih eden kişilere, aramalar (M8) gelene kadar 17:00 linki gitsin mi? Öneri: evet, "arayacağız" mesajı hiç gitmesin.
 - **Q77:** Sessiz saatlerde (arama penceresi dışında) mesaj? Öneri: hatırlatma ve dürtme mesajları gitmesin; kişinin kendi işlemine cevaplar her zaman gitsin.
 - **Q78:** 30 dakikalık "taslak bekliyor" dürtmesinin metni? Öneri: `draft_ready` mesajı tekrar gönderilsin.
@@ -102,6 +103,7 @@ Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahta
 - **W2-04 için okuma:** web'den dosyalanan rapora ertesi gün 23:59'a kadar fotoğraf eklenebilsin mi? Spec bu süreyi yalnızca aramadan sonraki fotoğraflar için veriyor. Öneri: evet.
 
 **Sizin yapmanız gerekenler (hafta 2, acele değil ama uzun sürüyor):**
+
 - Twilio WhatsApp göndericisi + Meta doğrulaması + EN/ES/TR şablonlar (en uzun bekleme süresi bu).
 - Web push için VAPID anahtarları (preview projesine secret olarak).
 - Tasarım tuvalinden eksik ekranlar (Geçmiş raporlar, Ayarlar, Süresi dolmuş link) ya da "spec §9.3 yeterli" onayı.
