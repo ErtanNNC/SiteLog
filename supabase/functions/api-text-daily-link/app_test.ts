@@ -206,7 +206,36 @@ Deno.test('an unknown site is 404; a paused site or one with nobody linked is 40
     assertEquals(err.status, 409);
     assertEquals(links.length, 0);
   }
+  const none = await assertRejects(
+    () => textDailyLink(setup({ reporters: [] }).deps, LENA, { siteId: SITE, requestId: REQ }),
+    HttpError,
+  );
+  assertEquals(none.details, { code: 'no_reporter' });
 });
+
+Deno.test(
+  'a site whose linked reporters are all inactive is 409 no_active_reporter, nothing texted',
+  async () => {
+    const { deps, links, messaging } = setup({
+      reporters: [
+        { id: PRIYA, name: 'Priya', status: 'disabled', is_primary: true },
+        {
+          id: '77777777-7777-4777-8777-777777777777',
+          name: 'Ola',
+          status: 'invited',
+          is_primary: false,
+        },
+      ],
+    });
+    const err = await assertRejects(
+      () => textDailyLink(deps, LENA, { siteId: SITE, requestId: REQ }),
+      HttpError,
+    );
+    assertEquals([err.status, err.details], [409, { code: 'no_active_reporter' }]);
+    assertEquals(links.length, 0);
+    assertEquals(messaging.sent.length, 0);
+  },
+);
 
 Deno.test('without SMS consent nothing is sent, and the answer says why', async () => {
   const { deps, messaging, audits } = setup({ held: ['recording'] });
@@ -222,15 +251,20 @@ Deno.test('without SMS consent nothing is sent, and the answer says why', async 
   assertEquals(audits.at(-1)!.diff.reason, 'no_consent');
 });
 
-Deno.test('pickReporter: the primary reporter, else the first active one', () => {
+Deno.test('pickReporter: the active primary reporter, else the first active one', () => {
   const r = (id: string, status: string, is_primary = false) => ({
     id,
     name: id,
     status,
     is_primary,
   });
-  assertEquals(pickReporter([r('a', 'active'), r('b', 'invited', true)])?.id, 'b');
+  assertEquals(pickReporter([r('a', 'active'), r('b', 'active', true)])?.id, 'b');
+  // A primary who is not active (disabled, opted out, invited only) is passed over.
+  assertEquals(pickReporter([r('a', 'active'), r('b', 'disabled', true)])?.id, 'a');
+  assertEquals(pickReporter([r('a', 'active'), r('b', 'opted_out', true)])?.id, 'a');
+  assertEquals(pickReporter([r('a', 'active'), r('b', 'invited', true)])?.id, 'a');
   assertEquals(pickReporter([r('a', 'invited'), r('b', 'active')])?.id, 'b');
+  assertEquals(pickReporter([r('a', 'disabled', true), r('b', 'invited')]), null);
   assertEquals(pickReporter([r('a', 'disabled')]), null);
   assertEquals(pickReporter([]), null);
 });

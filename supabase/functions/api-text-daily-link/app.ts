@@ -19,8 +19,9 @@ import { HttpError } from '../_shared/http.ts';
  * an injected store, so the Deno tests run it without a database.
  *
  * - Who: admin, pm and ops of the site's org, everyone who sees the Overview (spec §19 Q69).
- * - To whom: the site's primary reporter, else its first active one (F17 "Call {manager}" names
- *   the same person); a site with nobody linked is 409.
+ * - To whom: the site's active primary reporter, else its first active one (F17 "Call {manager}"
+ *   names the same person); a disabled, opted-out or not yet active primary is passed over. A site
+ *   with nobody linked is 409 `no_reporter`, one with nobody active 409 `no_active_reporter`.
  * - Which link: today's in the site's time zone, reused while it lives (`ensureDailyLink`), so a
  *   second tap texts the same link; a new one expires after DAILY_LINK_TTL_HOURS (§5.1).
  * - Once per request: the panel sends a fresh `requestId` per tap; it is the Notifier's dedupe
@@ -85,14 +86,17 @@ export type TextLinkResult =
       reportDate: string;
     };
 
-/** The site's reporter for today's link: the primary one, else the first active one. */
+/**
+ * The site's reporter for today's link: the primary one among the active ones, else the first
+ * active one; null when nobody linked is active (disabled, opted out, invited only).
+ */
 export function pickReporter(reporters: readonly TextLinkReporter[]): TextLinkReporter | null {
-  return (
-    reporters.find((r) => r.is_primary) ??
-    reporters.find((r) => isActiveReporterStatus(r.status)) ??
-    null
-  );
+  const active = reporters.filter((r) => isActiveReporterStatus(r.status));
+  return active.find((r) => r.is_primary) ?? active[0] ?? null;
 }
+
+/** The 409 codes when the site has no one to text (`details.code`). */
+export type NoReporterCode = 'no_reporter' | 'no_active_reporter';
 
 export async function textDailyLink(
   deps: TextLinkDeps,
@@ -108,8 +112,20 @@ export async function textDailyLink(
     throw new HttpError(403, `This action needs one of these roles: ${TEXT_LINK_ROLES.join(', ')}`);
   }
   if (site.status !== 'active') throw new HttpError(409, 'This site is not active');
-  const reporter = pickReporter(await store.siteReporters(site.id));
-  if (!reporter) throw new HttpError(409, 'No site manager is linked to this site');
+  const linked = await store.siteReporters(site.id);
+  if (!linked.length) {
+    throw new HttpError(409, 'No site manager is linked to this site', {
+      code: 'no_reporter' satisfies NoReporterCode,
+    });
+  }
+  const reporter = pickReporter(linked);
+  if (!reporter) {
+    throw new HttpError(
+      409,
+      'No active site manager on this site: the linked ones are disabled, opted out or have not accepted their invite yet',
+      { code: 'no_active_reporter' satisfies NoReporterCode },
+    );
+  }
 
   const now = deps.now();
   const reportDate = formatDateInTz(now, site.timezone);
