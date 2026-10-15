@@ -28,6 +28,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 
 ## Sizden beklenen
 
+0. **GitHub Actions çalışmıyor (2026-10-15 13:54 UTC'den beri):** e28184b'nin CI işleri runner almadan 1–4 saniyede düşüyor (yeniden çalıştırma da aynı). Büyük olasılıkla hesabın Actions dakika ya da harcama limiti doldu. GitHub → Settings → Billing and plans → Actions'tan kontrol edin (limit artırma / ödeme yöntemi). O zamana kadar geliştirme yerelde testlerle sürüyor; CI doğrulaması ve preview yenilemesi bekliyor.
 1. **Anahtarlar:** `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` (W1-11/W1-12'den itibaren; yoksa fake/console ile devam ederim, gerçek transkripsiyon ve çıkarım çalışmaz) · `RESEND_API_KEY` (W1-15; yoksa `EMAIL_PROVIDER=console`) · Twilio / İletimerkezi isteğe bağlı (console sürücüsü ve Demo phone yeter).
 2. **Uzun süreli kayıtlar:** Twilio toll-free doğrulaması (US) ve İletimerkezi `SITELOG` başlığı (TR); onaylanınca gönderici kimliklerini `pnpm countries:set` ile siz girersiniz (paket satırı, env değil).
 3. **Kontroller:** field preview'u telefonla açma (W1-04/W1-07 probe'u), logo kontrolü; W1-09 için iPhone (Safari) ve Android (Chrome) ile HTTPS önizlemeden: 2 dk ses + 2 fotoğraf, uçak modunda kuyruk, ekran kilidi, sessize alma ve gelen arama sırasında kayıt.
