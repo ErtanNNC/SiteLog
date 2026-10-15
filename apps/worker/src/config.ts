@@ -85,8 +85,8 @@ export const ConfigSchema = z.object({
   /**
    * The model calls (`ctx.ai.claude`: extraction, answers, corrections, day-off, site guess):
    * Claude by default, `fake` the recorded tool outputs of fixtures/tool-outputs
-   * (src/ai/fake-claude.ts). Outside production Claude without ANTHROPIC_API_KEY becomes the
-   * fake; in production `fake` is ignored and a missing key fails the jobs.
+   * (src/ai/fake-claude.ts), only when set explicitly: Claude without ANTHROPIC_API_KEY fails the
+   * jobs (no fallback), and `fake` is refused in production (the worker does not start).
    */
   EXTRACT_PROVIDER: z.enum(['claude', 'fake']).default('claude'),
   ANTHROPIC_API_KEY: z.string().default(''),

@@ -406,51 +406,46 @@ export interface ExtractorChoice {
   note: string | null;
 }
 
+/** EXTRACT_PROVIDER=fake under NODE_ENV=production: the worker refuses to start. */
+export const FAKE_EXTRACTION_IN_PRODUCTION =
+  'EXTRACT_PROVIDER=fake is refused in production: a fake extraction is invented report content. Unset it (Claude) or run with NODE_ENV=development.';
+
 /**
- * EXTRACT_PROVIDER (default `claude`) with its key. Outside production Claude without
- * ANTHROPIC_API_KEY becomes the fake, as the transcriber does. In production never: a fake
- * extraction would be invented report content, so `fake` is ignored there and Claude without its
- * key leaves no client (every model call fails until the key is set, as before).
+ * EXTRACT_PROVIDER (default `claude`) with its key. The fake answers only when EXTRACT_PROVIDER=fake
+ * is set explicitly, never as a fallback: Claude without ANTHROPIC_API_KEY leaves no client, so
+ * every model call fails (the jobs retry, then fail) until the key is set, with a warning at boot.
+ * In production `fake` is refused (throws): a fake extraction would be invented report content.
  */
 export function resolveExtractorChoice(
   config: Pick<Config, 'EXTRACT_PROVIDER' | 'ANTHROPIC_API_KEY' | 'NODE_ENV'>,
 ): ExtractorChoice {
-  const production = config.NODE_ENV === 'production';
   if (config.EXTRACT_PROVIDER === 'fake') {
-    if (production)
-      return {
-        provider: 'claude',
-        note: config.ANTHROPIC_API_KEY
-          ? 'EXTRACT_PROVIDER=fake is ignored in production: Claude answers'
-          : 'EXTRACT_PROVIDER=fake is ignored in production and ANTHROPIC_API_KEY is not set: extraction fails until it is',
-      };
-    return { provider: 'fake', note: null };
-  }
-  if (!config.ANTHROPIC_API_KEY) {
-    if (production)
-      return {
-        provider: 'claude',
-        note: 'ANTHROPIC_API_KEY is not set: extraction fails until it is',
-      };
+    if (config.NODE_ENV === 'production') throw new Error(FAKE_EXTRACTION_IN_PRODUCTION);
     return {
       provider: 'fake',
-      note: 'EXTRACT_PROVIDER=claude without ANTHROPIC_API_KEY: the fake extractor (fixtures/tool-outputs) answers',
+      note: 'EXTRACT_PROVIDER=fake: the fake extractor (fixtures/tool-outputs) answers every model call',
+    };
+  }
+  if (!config.ANTHROPIC_API_KEY) {
+    return {
+      provider: 'claude',
+      note: 'ANTHROPIC_API_KEY is not set: extraction fails until it is (EXTRACT_PROVIDER=fake for fixture answers outside production)',
     };
   }
   return { provider: 'claude', note: null };
 }
 
-/** `ctx.ai.claude`: Anthropic, the fixture fake (outside production), or null (no key in production). */
+/** `ctx.ai.claude`: Anthropic, the fixture fake (EXTRACT_PROVIDER=fake), or null (no key). */
 export function createExtractionClient(
   config: Pick<Config, 'EXTRACT_PROVIDER' | 'ANTHROPIC_API_KEY' | 'NODE_ENV'>,
   log: Logger,
 ): MessagesClient | null {
   const choice = resolveExtractorChoice(config);
-  if (choice.note)
-    (config.NODE_ENV === 'production' ? log.warn : log.info)('extraction provider', {
-      provider: choice.provider,
-      note: choice.note,
-    });
+  // Always at boot: which provider answers, so a fake or a keyless worker is never a surprise.
+  (choice.note ? log.warn : log.info)('extraction provider', {
+    provider: choice.provider,
+    ...(choice.note ? { note: choice.note } : {}),
+  });
   if (choice.provider === 'fake')
     return createFixtureClaude({
       lib: () => loadFixtureLibrary(),

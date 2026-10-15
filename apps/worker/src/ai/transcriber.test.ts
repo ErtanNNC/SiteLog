@@ -11,6 +11,7 @@ import {
   buildKeyterms,
   createOpenAiTranscriber,
   createTranscriber,
+  FAKE_TRANSCRIPTION_IN_PRODUCTION,
   KEYTERMS_MAX,
   resolveTranscriberChoice,
   transcriptionLanguage,
@@ -153,30 +154,39 @@ describe('provider choice', () => {
     expect(base.TRANSCRIBE_PROVIDER).toBe('deepgram');
   });
 
-  it('keyless outside production: the fake answers', () => {
-    const c = resolveTranscriberChoice({ ...base, NODE_ENV: 'development' });
-    expect(c).toMatchObject({ provider: 'fake', model: 'fake', missingKey: null });
-    expect(c.note).toMatch(/without DEEPGRAM_API_KEY/);
-    expect(
-      resolveTranscriberChoice({ ...base, TRANSCRIBE_PROVIDER: 'openai', NODE_ENV: 'test' })
-        .provider,
-    ).toBe('fake');
+  it('keyless: never the fake, in any environment; every job fails naming the key', async () => {
+    for (const env of ['development', 'test', 'production'] as const) {
+      const config = { ...base, NODE_ENV: env };
+      expect(resolveTranscriberChoice(config)).toMatchObject({
+        provider: 'deepgram',
+        missingKey: 'DEEPGRAM_API_KEY',
+      });
+      expect(resolveTranscriberChoice({ ...config, TRANSCRIBE_PROVIDER: 'openai' })).toMatchObject({
+        provider: 'openai',
+        missingKey: 'OPENAI_API_KEY',
+      });
+      const log = memoryLogger();
+      const t = createTranscriber(config, {
+        openai: null,
+        ffmpeg: async () => ({ stdout: Buffer.alloc(0), stderr: '' }),
+        log,
+      });
+      await expect(t.transcribe(req())).rejects.toThrow(/DEEPGRAM_API_KEY is required/);
+      expect(log.lines.join('\n')).toMatch(/"level":"warn".*DEEPGRAM_API_KEY is not set/);
+    }
   });
 
-  it('keyless in production: never the fake; every job fails naming the key', async () => {
-    const config = { ...base, NODE_ENV: 'production' as const };
-    expect(resolveTranscriberChoice(config)).toMatchObject({
-      provider: 'deepgram',
-      missingKey: 'DEEPGRAM_API_KEY',
-    });
-    const log = memoryLogger();
-    const t = createTranscriber(config, {
-      openai: null,
-      ffmpeg: async () => ({ stdout: Buffer.alloc(0), stderr: '' }),
-      log,
-    });
-    await expect(t.transcribe(req())).rejects.toThrow(/DEEPGRAM_API_KEY is required/);
-    expect(log.lines.join('\n')).toMatch(/"level":"warn".*DEEPGRAM_API_KEY is not set/);
+  it('refuses TRANSCRIBE_PROVIDER=fake in production', () => {
+    for (const key of ['', 'k']) {
+      expect(() =>
+        resolveTranscriberChoice({
+          ...base,
+          TRANSCRIBE_PROVIDER: 'fake',
+          DEEPGRAM_API_KEY: key,
+          NODE_ENV: 'production',
+        }),
+      ).toThrow(FAKE_TRANSCRIPTION_IN_PRODUCTION);
+    }
   });
 
   it('OpenAI as the fallback takes its own default model; an explicit model wins; fake when asked', () => {

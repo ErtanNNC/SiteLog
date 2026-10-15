@@ -24,7 +24,8 @@ export const PLATFORM_FUNCTION_ENV = new Set([
 export const NOT_IN_ENV_EXAMPLE: Record<string, string> = {
   STRIPE_PRICE_ID_SITE:
     'legacy price id, read by api-billing only while STRIPE_PRICE_ID_SITE_US is unset (GAP 9.1)',
-  NODE_ENV: 'set by the runtime (Fly: production; pnpm dev:worker: development)',
+  NODE_ENV:
+    'set by the runtime (Fly: production; pnpm dev:worker: development, production for the cut-over worker via apps/worker/.env, RUNBOOK §2 step 7)',
   WA_GRAPH_BASE: 'v1.0 test hook for the Meta Graph API base URL (step 22)',
   WORKER_ID: 'defaults to the host name / Fly machine id',
   JOB_TIMEOUT_MS: 'tuning, default 5 min (RUNBOOK §3)',

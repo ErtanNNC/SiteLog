@@ -155,18 +155,22 @@ export const DEFAULT_TRANSCRIBE_MODEL: Record<TranscribeProvider, string> = {
 export interface TranscriberChoice {
   provider: TranscribeProvider;
   model: string;
-  /** Deepgram or OpenAI chosen in production without its key: every job fails until it is set. */
+  /** Deepgram or OpenAI chosen without its key: every job fails until it is set. */
   missingKey: string | null;
   /** Why the choice differs from TRANSCRIBE_PROVIDER, for the boot log. */
   note: string | null;
 }
 
+/** TRANSCRIBE_PROVIDER=fake under NODE_ENV=production: the worker refuses to start. */
+export const FAKE_TRANSCRIPTION_IN_PRODUCTION =
+  'TRANSCRIBE_PROVIDER=fake is refused in production: a fake transcript is invented report content. Set deepgram (or openai) with its key, or run with NODE_ENV=development.';
+
 /**
- * TRANSCRIBE_PROVIDER (default `deepgram`) with its key. Outside production a provider without
- * its key becomes the fake (as EMAIL_PROVIDER=resend without a key becomes console), so a
- * keyless checkout runs end to end. In production it never does: a fake transcript would be
- * invented report content, so the job fails (and retries) until the key is set. TRANSCRIBE_MODEL
- * is the chosen provider's model; empty takes that provider's default.
+ * TRANSCRIBE_PROVIDER (default `deepgram`) with its key. The fake answers only when
+ * TRANSCRIBE_PROVIDER=fake is set explicitly, never as a fallback: a provider without its key
+ * fails every job (which retries) until the key is set, with a warning at boot. In production
+ * `fake` is refused (throws): a fake transcript would be invented report content.
+ * TRANSCRIBE_MODEL is the chosen provider's model; empty takes that provider's default.
  */
 export function resolveTranscriberChoice(
   config: Pick<
@@ -183,31 +187,21 @@ export function resolveTranscriberChoice(
       : requested === 'openai'
         ? config.OPENAI_API_KEY
         : 'n/a';
-  if (requested !== 'fake' && !key) {
-    if (config.NODE_ENV === 'production') {
-      return {
-        provider: requested,
-        model: config.TRANSCRIBE_MODEL || DEFAULT_TRANSCRIBE_MODEL[requested],
-        missingKey: keyName,
-        note: `${keyName} is not set: transcription fails until it is`,
-      };
-    }
+  if (requested === 'fake') {
+    if (config.NODE_ENV === 'production') throw new Error(FAKE_TRANSCRIPTION_IN_PRODUCTION);
     return {
       provider: 'fake',
       model: DEFAULT_TRANSCRIBE_MODEL.fake,
       missingKey: null,
-      note: `TRANSCRIBE_PROVIDER=${requested} without ${keyName}: the fake transcriber (fixtures/voice) answers`,
+      note: 'TRANSCRIBE_PROVIDER=fake: every voice note gets a fixtures/voice transcript',
     };
   }
-  if (requested === 'fake') {
+  if (!key) {
     return {
-      provider: 'fake',
-      model: DEFAULT_TRANSCRIBE_MODEL.fake,
-      missingKey: null,
-      note:
-        config.NODE_ENV === 'production'
-          ? 'TRANSCRIBE_PROVIDER=fake in production: every voice note gets a fixture transcript'
-          : null,
+      provider: requested,
+      model: config.TRANSCRIBE_MODEL || DEFAULT_TRANSCRIBE_MODEL[requested],
+      missingKey: keyName,
+      note: `${keyName} is not set: transcription fails until it is (TRANSCRIBE_PROVIDER=fake for fixture transcripts outside production)`,
     };
   }
   return {
@@ -279,10 +273,11 @@ export function createTranscriber(
 ): Transcriber {
   const choice = resolveTranscriberChoice(config);
   if (choice.note)
-    (choice.missingKey || config.NODE_ENV === 'production' ? deps.log.warn : deps.log.info)(
-      'transcription provider',
-      { provider: choice.provider, model: choice.model, note: choice.note },
-    );
+    deps.log.warn('transcription provider', {
+      provider: choice.provider,
+      model: choice.model,
+      note: choice.note,
+    });
   if (choice.missingKey) return missingKeyTranscriber(choice);
   if (choice.provider === 'fake') return createFakeTranscriber();
   if (choice.provider === 'openai') {

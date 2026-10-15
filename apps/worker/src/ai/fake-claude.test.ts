@@ -8,6 +8,7 @@ import { runReportExtraction, type ExtractionInputV2 } from './extract';
 import {
   DEFAULT_FAKE_EXTRACTION_CASE,
   createExtractionClient,
+  FAKE_EXTRACTION_IN_PRODUCTION,
   createFixtureClaude,
   loadFixtureLibrary,
   resolveExtractorChoice,
@@ -35,21 +36,12 @@ function fake(): FakeClaude {
 }
 
 describe('EXTRACT_PROVIDER choice', () => {
-  it('outside production: fake when asked, and when Claude has no key', () => {
-    expect(
-      resolveExtractorChoice({
-        EXTRACT_PROVIDER: 'fake',
-        ANTHROPIC_API_KEY: '',
-        NODE_ENV: 'development',
-      }),
-    ).toEqual({ provider: 'fake', note: null });
-    const keyless = resolveExtractorChoice({
-      EXTRACT_PROVIDER: 'claude',
-      ANTHROPIC_API_KEY: '',
-      NODE_ENV: 'development',
-    });
-    expect(keyless.provider).toBe('fake');
-    expect(keyless.note).toMatch(/without ANTHROPIC_API_KEY: the fake extractor/);
+  it('the fake only when EXTRACT_PROVIDER=fake is set, outside production', () => {
+    for (const env of ['development', 'test'] as const) {
+      expect(
+        resolveExtractorChoice({ EXTRACT_PROVIDER: 'fake', ANTHROPIC_API_KEY: '', NODE_ENV: env }),
+      ).toMatchObject({ provider: 'fake', note: expect.stringMatching(/EXTRACT_PROVIDER=fake/) });
+    }
     expect(
       resolveExtractorChoice({
         EXTRACT_PROVIDER: 'claude',
@@ -59,37 +51,61 @@ describe('EXTRACT_PROVIDER choice', () => {
     ).toEqual({ provider: 'claude', note: null });
   });
 
-  it('in production never the fake: Claude, and no client without the key', () => {
-    for (const p of ['claude', 'fake'] as const) {
+  it('never falls back to the fake: Claude without its key leaves no client, in every environment', () => {
+    for (const env of ['development', 'test', 'production'] as const) {
       expect(
         resolveExtractorChoice({
-          EXTRACT_PROVIDER: p,
+          EXTRACT_PROVIDER: 'claude',
           ANTHROPIC_API_KEY: '',
-          NODE_ENV: 'production',
-        }).provider,
-      ).toBe('claude');
+          NODE_ENV: env,
+        }),
+      ).toMatchObject({
+        provider: 'claude',
+        note: expect.stringMatching(/ANTHROPIC_API_KEY is not set: extraction fails/),
+      });
       const log = memoryLogger();
       const client = createExtractionClient(
-        { EXTRACT_PROVIDER: p, ANTHROPIC_API_KEY: '', NODE_ENV: 'production' },
+        { EXTRACT_PROVIDER: 'claude', ANTHROPIC_API_KEY: '', NODE_ENV: env },
         log,
       );
       expect(client).toBeNull();
-      expect(log.lines.join('\n')).toMatch(/ANTHROPIC_API_KEY is not set: extraction fails/);
+      expect(log.lines.join('\n')).toMatch(
+        /"level":"warn".*extraction provider.*ANTHROPIC_API_KEY is not set/,
+      );
     }
-    const ignored = resolveExtractorChoice({
-      EXTRACT_PROVIDER: 'fake',
-      ANTHROPIC_API_KEY: 'k',
-      NODE_ENV: 'production',
-    });
-    expect(ignored).toMatchObject({ provider: 'claude', note: expect.stringMatching(/ignored/) });
+    // The default config (pnpm dev:worker with no key) is Claude, not the fake.
+    expect(
+      createExtractionClient(testConfig({ ANTHROPIC_API_KEY: '' }), memoryLogger()),
+    ).toBeNull();
   });
 
-  it('a keyless worker outside production gets the fake client, with a log line saying so', () => {
+  it('refuses EXTRACT_PROVIDER=fake in production, with or without a key', () => {
+    for (const key of ['', 'k']) {
+      expect(() =>
+        resolveExtractorChoice({
+          EXTRACT_PROVIDER: 'fake',
+          ANTHROPIC_API_KEY: key,
+          NODE_ENV: 'production',
+        }),
+      ).toThrow(FAKE_EXTRACTION_IN_PRODUCTION);
+      expect(() =>
+        createExtractionClient(
+          { EXTRACT_PROVIDER: 'fake', ANTHROPIC_API_KEY: key, NODE_ENV: 'production' },
+          memoryLogger(),
+        ),
+      ).toThrow(/refused in production/);
+    }
+  });
+
+  it('an explicit fake worker gets the fixture client, with a warning saying so', () => {
     const log = memoryLogger();
-    const client = createExtractionClient(testConfig({ ANTHROPIC_API_KEY: '' }), log) as FakeClaude;
+    const client = createExtractionClient(
+      testConfig({ EXTRACT_PROVIDER: 'fake', ANTHROPIC_API_KEY: '' }),
+      log,
+    ) as FakeClaude;
     expect(client).not.toBeNull();
     expect(client.calls).toEqual([]);
-    expect(log.lines.join('\n')).toMatch(/extraction provider.*fake extractor/);
+    expect(log.lines.join('\n')).toMatch(/"level":"warn".*extraction provider.*fake extractor/);
   });
 
   it('defaults to claude and rejects other names', () => {
