@@ -11,7 +11,7 @@ import { API_URL, FIELD_E2E_PORT, FIELD_E2E_URL } from './e2e/supabase/stack';
  * the field host. `supabase/functions/.env` must allow that origin (`CORS_EXTRA_ORIGINS` with
  * http://localhost:4176) and set `STORAGE_PUBLIC_URL` to the API URL, so the signed upload URLs
  * name a host the browser reaches (CI's e2e-supabase job does both). Chromium gets a fake
- * microphone (a tone) with the permission granted.
+ * microphone playing the speech-like WAV of `playwright.config.ts` with the permission granted.
  */
 const DIST = 'node_modules/.e2e/field-supabase';
 

@@ -21,8 +21,9 @@
  *   the new build no longer lists, and the host answers an old build's missing hashed files with
  *   `index.html` (the app fallback), so a page left on the old build would fail to load its next lazy
  *   chunk. An open page therefore keeps one consistent build, and a recording is never cut off by a
- *   reload. An immediate update (skip waiting, then reload on `controllerchange`) is for W1-09, held
- *   back while a recording or upload is in progress.
+ *   reload. An immediate update (skip waiting, then reload on `controllerchange`), held back while a
+ *   recording or upload is in progress, was left for W1-09 but is not in its Build list and is not
+ *   built yet (GAP step 18, "Open").
  */
 import type { VitePWAOptions } from 'vite-plugin-pwa';
 import { colors } from '@sitelog/shared/tokens.ts';

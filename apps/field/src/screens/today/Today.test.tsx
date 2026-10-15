@@ -181,6 +181,24 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
     await waitFor(() => expect(routes.resolve).toHaveBeenCalledWith('K7Q2MX'));
   });
 
+  it.each([
+    [410, 'link_revoked', 'Link no longer valid'],
+    [410, 'link_expired', 'Link expired'],
+    [403, 'reporter_disabled', 'Account paused'],
+  ] as const)(
+    'explains a link refused with %s %s through the link flow, not as a lost signal',
+    async (status, code, title) => {
+      const routes = fakeRoutes({
+        today: vi.fn().mockRejectedValue(apiError(status, code)),
+        resolve: vi.fn().mockRejectedValue(apiError(status, code)),
+      });
+      renderApp('/today', { routes });
+      expect(await screen.findByRole('heading', { level: 1, name: title })).toBeInTheDocument();
+      expect(routes.resolve).toHaveBeenCalledWith('K7Q2MX');
+      expect(screen.queryByText(/Check your signal/)).not.toBeInTheDocument();
+    },
+  );
+
   it('asks for the link when none is stored, and recovers from a failed load', async () => {
     renderApp('/today', { session: null });
     expect(screen.getByRole('heading', { level: 1, name: 'Open your link' })).toBeInTheDocument();

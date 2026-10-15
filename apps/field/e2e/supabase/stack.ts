@@ -43,9 +43,12 @@ export async function rest<T = unknown>(
   return (text ? JSON.parse(text) : null) as T;
 }
 
-/** A PostgREST `in.(…)` list, each value quoted (phone numbers carry `+`). */
+/**
+ * A PostgREST `in.(…)` list, each value quoted and percent-encoded: PostgREST reads a raw `+` in
+ * the query string as a space, so the phone numbers in the rate-limit keys need `%2B`.
+ */
 export function inList(values: readonly string[]): string {
-  return `in.(${values.map((v) => `"${v}"`).join(',')})`;
+  return `in.(${values.map((v) => `"${encodeURIComponent(v)}"`).join(',')})`;
 }
 
 function randomCode(length = 8): string {

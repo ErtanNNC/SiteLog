@@ -22,6 +22,15 @@ import { SiteSheet } from './SiteSheet';
 import { dayClosed, todayStatus, type TodayStatusKey } from './status';
 
 const PROMPTS = ['work', 'crew', 'hours', 'weather', 'deliveries', 'safety'] as const;
+/** Refusals of `today` the link flow handles or explains (as Processing does). */
+const RELINK = new Set([
+  'device_unverified',
+  'consent_required',
+  'link_expired',
+  'link_revoked',
+  'link_not_found',
+  'reporter_disabled',
+]);
 const DAY_ERRORS = [
   'report_in_progress',
   'report_filed',
@@ -187,8 +196,10 @@ function TodayLoaded({
       } catch (err) {
         if (signal?.aborted) return;
         const apiCode = apiErrorCode(err);
-        if (apiCode === 'device_unverified' || apiCode === 'consent_required') {
-          // The phone must pass the link flow again (a new phone, a revoked device).
+        if (apiCode && RELINK.has(apiCode)) {
+          // The phone must pass the link flow again (a new phone, a revoked device), or the link
+          // flow explains why the link no longer works (expired, revoked, a paused reporter): no
+          // "check your signal" for a refusal no retry can change.
           navigate(`/r/${code}`, { replace: true });
           return;
         }
