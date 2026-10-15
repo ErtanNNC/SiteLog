@@ -13,6 +13,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 **3–4** — M3 _pipeline v1_ (W1-10 worker çalışma zamanı, W1-11 Deepgram transkripsiyonu, W1-12 çıkarım v2, sorular ve sahadan cevap), hepsi CI'da yeşil (son run 38719172765). Anahtarlı kontroller (`ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`) yapılmadı.
 
 **4–5** — M4:
+
 - W1-13 sahada soru → taslak → onayla gönder: CI'da yeşil (run 38740645053); kutusu yalnızca telefon kontrolünüzü bekliyor.
 - W1-14 PDF günlük rapor EN/TR, Türkçe örnek, imza sonrası yeniden PDF (bcd7b8c, e28184b): yerel testler yeşil. Örnek PDF'ler sohbette.
 - W1-15 web'den dosyalama, "dosyalandı" SMS'i, PDF'li e-posta (tekrar denemede iki kez gitmez), Filed ekranı (a5da973): yerel testler yeşil.
