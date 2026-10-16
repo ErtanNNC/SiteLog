@@ -1,5 +1,18 @@
 # SiteLog · Durum
 
+**2026-10-16 (gece):**
+
+- **Web push önizlemede açık.** VAPID anahtarları worker'a geçiyor (9c3bc89). field-api'nin açık anahtarı GitHub secret'ından kuruldu; kurulum logunda "web push on" yazıyor. Telefonda test: uygulamayı ana ekrana ekle, Ayarlar → Bildirimler → izin ver. Demo şirketler (Kestrel, Demir) bildirimi yalnızca Demo phone'da gösterir (Q116). **Sizden:** gerçek telefona bildirim için demo olmayan bir test şirketi. Bunun için telefon numarası, panel e-postası ve ülke (US/TR) gerekiyor.
+- **Hafta 3 planı yazıldı:** `docs/PLAN_WEEK3.md` (2fa6ae4), W3-01 … W3-18, M7–M9. W3-01 … W3-08 için anahtar ve onay gerekmiyor (M9'un tamamı dahil). Ben buradan devam ediyorum.
+- **Spec düzeltmesi:** W2-03 commit'i (c7f8d59) spec'in §20 eklerini (A–E) yanlışlıkla silmişti. Ekler aynen geri getirildi (d8f23dc).
+- **Yeni sorular Q117–Q134** (sesli arama, giden arama, fatura farkı, EOT paketi) spec §19'a "açık" olarak eklendi. Her birinde önerdiğim varsayılan var, hafta 3 onunla ilerliyor. Farklı karar verirseniz değiştiririm.
+- **Sizden, en uzun sürenler önce:**
+  1. Şimdiden başlayın: Twilio hesap yükseltmesi, Elastic SIP trunk, sesli arama yapabilen bir US numarası, Trust Hub profili ve SHAKEN/STIR. Bunlar olmazsa aramalar "spam" görünür. W3-17 (giden aramalar) için gerekli.
+  2. Şimdiden başlayın: avukattan iki metin. Otomatik AI aramaları için onay metni (TCPA) ve her ülke ve dil için arama kaydı bildirimi. KVKK açısından ses kaydının yurt dışına gönderilmesi de bu metinlere dahil.
+  3. Hafta ortasına kadar (her biri birkaç dakika): LiveKit Cloud projesi (Build plan, `lk` CLI erişimi, ücretsiz US numarası) ve Azure Speech F0 kaynağı. Ayrıca şu onaylar: sesli asistana mevcut Deepgram ve Anthropic anahtarlarının ve `VOICE_AGENT_TOOL_SECRET`'ın secret olarak eklenmesi, `voice-events` deploy'u ve `countries:set --voice` komutu.
+  4. W3-16 sırasında: EN/ES/TR seslerin dinleme testi, gecikme ölçümü ve "Talk now" için telefonlar.
+  5. Field-08, Field-09, Web-Hours, Web-Weather ve Web-Glossary tasarımlarının dışa aktarılması. Ya da spec ve mevcut sayfaların referans olduğunu onaylayın.
+
 **2026-10-16 (akşam):** Q107–Q114 ve Q116 da onaylandı; tek açık kalan Q40'ın avukat kısmı.
 
 **2026-10-16:** önerimle kurulup onayınızı bekleyen tüm sorular (Q94, Q96–Q105) onaylandı ve spec §19'da karar verilmiş olarak işaretlendi. Şu an onayınızı bekleyen açık bir soru yok; yalnızca anahtarlar ve sizin yapmanız gereken işler (aşağıda) duruyor.
