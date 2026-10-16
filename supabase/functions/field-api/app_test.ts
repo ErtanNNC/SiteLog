@@ -157,7 +157,9 @@ function setup(
   const clock = { now: T0 };
   const store = new FakeFieldStore(() => clock.now);
   const us = DEMO_COUNTRIES.find((c) => c.code === 'US')!;
-  store.countries.push({ ...us, ...opts.country });
+  // The US pack as the W2-02 … W2-14 tests know it, without WhatsApp (W2-16's order adds it;
+  // the WhatsApp tests set the order they need).
+  store.countries.push({ ...us, message_channels: ['push', 'sms'], ...opts.country });
   store.orgs.push({
     id: ORG,
     name: 'Kestrel Build Group',

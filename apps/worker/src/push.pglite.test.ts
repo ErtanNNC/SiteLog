@@ -130,8 +130,8 @@ describe('web push (W2-14)', () => {
       `select code, message_channels::text from countries order by code`,
     );
     expect(packs.map((p) => [p.code, p.message_channels])).toEqual([
-      ['TR', '{push,sms}'],
-      ['US', '{push,sms}'],
+      ['TR', '{push,whatsapp,sms}'],
+      ['US', '{push,sms,whatsapp}'],
     ]);
     await expect(
       pg.q(`update countries set message_channels = '{sms,push}' where code = 'US'`),

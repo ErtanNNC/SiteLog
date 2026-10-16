@@ -98,10 +98,13 @@ Deno.test('fieldCountryView: the pack subset, never the sender or a provider', (
     voiceNumber: null,
     fieldLocales: ['tr-TR', 'en-US'],
     twoWaySms: false,
-    messageChannels: ['push', 'sms'],
+    messageChannels: ['push', 'whatsapp', 'sms'],
     legalKeys: {},
   });
   assert(!JSON.stringify(view).includes('SITELOG'));
+  // Nor the WhatsApp sender or its templates (W2-15).
+  const wa = fieldCountryView({ ...tr, whatsappSenderId: '+905320000099' as never });
+  assert(!JSON.stringify(wa).includes('905320000099'));
 });
 
 Deno.test('scopeSites: a personal link covers every site, a daily link its own', () => {
@@ -354,7 +357,10 @@ Deno.test('settingsView: the built channels, and every consent given with its st
 });
 
 Deno.test('settingsView: push is the toggle, offered with the pack and a key pair (W2-14)', () => {
-  const us = toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!);
+  const us = {
+    ...toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!),
+    messageChannels: ['push', 'sms'] as const,
+  };
   const reporter = { contact_pref: 'link', locale: 'en-US', message_channel: null } as const;
   const given = [
     { type: 'recording', revoked_at: null },
@@ -390,7 +396,10 @@ Deno.test('settingsView: push is the toggle, offered with the pack and a key pai
 Deno.test(
   'settingsView: texts listed for Turn on when never given, while the pack texts (Q86)',
   () => {
-    const us = toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!);
+    const us = {
+      ...toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!),
+      messageChannels: ['push', 'sms'] as const,
+    };
     const reporter = { contact_pref: 'link', locale: 'en-US', message_channel: null } as const;
     const given = [
       { type: 'recording', revoked_at: null },

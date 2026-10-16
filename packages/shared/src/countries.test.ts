@@ -62,9 +62,11 @@ describe('country pack rows (spec §4.6)', () => {
       expect(row.sms_sender_id, row.code).toBeNull();
       expect(row.voice_number, row.code).toBeNull();
       expect(row.legal_keys, row.code).toEqual({});
-      // Week 1 builds SMS only (spec §19 Q19 decides the real orders).
-      // W2-14 (§19 Q107): push first, reached only by a reporter who turned notifications on.
-      expect(row.message_channels, row.code).toEqual(['push', 'sms']);
+      // W2-14 (§19 Q107): push first, reached only by a reporter who turned notifications on;
+      // W2-16 (§19 Q19): US SMS then WhatsApp, TR WhatsApp then SMS.
+      expect(row.message_channels, row.code).toEqual(
+        row.code === 'US' ? ['push', 'sms', 'whatsapp'] : ['push', 'whatsapp', 'sms'],
+      );
     }
   });
 
@@ -84,7 +86,7 @@ describe('country pack rows (spec §4.6)', () => {
       paper: 'a4',
       currency: 'TRY',
       defaultTimezone: 'Europe/Istanbul',
-      messageChannels: ['push', 'sms'],
+      messageChannels: ['push', 'whatsapp', 'sms'],
       smsProvider: 'iletimerkezi',
       whatsappProvider: 'twilio',
       smsSenderType: 'alphanumeric',
@@ -158,21 +160,15 @@ describe('country pack rows (spec §4.6)', () => {
   });
 
   it('catches a pack whose languages lack copy for its capabilities', () => {
-    // A valid row (a long code can take replies), but Turkish has no two-way text and no reply
-    // hint: a new country is a row only when its languages have the copy (spec §4.6).
+    // A valid row (a long code can take replies), but Turkish has no welcome reply hint (its
+    // two-way texts exist since W2-16, for WhatsApp): a new country is a row only when its
+    // languages have the copy (spec §4.6).
     const trTwoWay = toCountryPack({
       ...DEMO_COUNTRIES.find((c) => c.code === 'TR')!,
       sms_sender_type: 'long_code',
       two_way_sms: true,
     });
-    expect(packCopyGaps(trTwoWay)).toEqual([
-      'tr-TR.unknown_number',
-      'tr-TR.help',
-      'tr-TR.stop_confirm',
-      'tr-TR.pref_call_ok',
-      'tr-TR.pref_text_ok',
-      'tr-TR.welcome.replyHint',
-    ]);
+    expect(packCopyGaps(trTwoWay)).toEqual(['tr-TR.welcome.replyHint']);
     // The same pack with English only is complete.
     expect(packCopyGaps({ ...trTwoWay, fieldLocales: ['en-US'] })).toEqual([]);
   });
