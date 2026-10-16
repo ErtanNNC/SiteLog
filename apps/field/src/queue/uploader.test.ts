@@ -266,3 +266,55 @@ describe('uploadItem (F5 step 3)', () => {
     expect(await out).toEqual({ ok: false, permanent: false, error: 'timeout' });
   });
 });
+
+describe('uploadItem: a spoken answer (F7 Other…, W2-09)', () => {
+  const answerTo = { reportId: 'r1', questionId: 'q-delta' };
+
+  it('goes in the question’s report, then answer {uploadId} after complete', async () => {
+    const h = harness();
+    const answer = vi.fn(async () => ({
+      status: 'listening' as const,
+      reportStatus: 'awaiting_answer' as const,
+      confirmation: null,
+    }));
+    const out = await uploadItem(
+      item({ answerTo }),
+      { routes: { ...h.routes, answer }, put: h.put },
+      h.persist,
+    );
+    expect(out.ok).toBe(true);
+    expect(h.routes.createUpload.mock.calls[0]![1]).toEqual({
+      kind: 'audio',
+      mime: 'audio/webm;codecs=opus',
+      bytes: 3,
+      answerTo,
+      recordedAt: '2026-10-09T20:00:00.000Z',
+    });
+    expect(answer).toHaveBeenCalledWith('K7Q2MX', 'r1', { questionId: 'q-delta', uploadId: 'u1' });
+  });
+
+  it('a question settled meanwhile leaves nothing to do; no signal fails the try for a retry', async () => {
+    const h = harness();
+    const closed = vi.fn(async () => {
+      throw apiError(409, 'question_closed');
+    });
+    expect(
+      (
+        await uploadItem(
+          item({ answerTo }),
+          { routes: { ...h.routes, answer: closed }, put: h.put },
+          h.persist,
+        )
+      ).ok,
+    ).toBe(true);
+    const offline = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    const out = await uploadItem(
+      item({ answerTo, uploadId: 'u1', signedUrl: created.signedUrl, putDone: true }),
+      { routes: { ...h.routes, answer: offline }, put: h.put },
+      h.persist,
+    );
+    expect(out).toMatchObject({ ok: false, permanent: false });
+  });
+});

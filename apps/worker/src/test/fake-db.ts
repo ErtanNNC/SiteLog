@@ -353,6 +353,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         batch_id: null,
         batch_size: null,
         ...u,
+        question_id: u.question_id ?? null,
       };
     },
     async countBatchPhotos(batchId) {
@@ -383,7 +384,8 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
             u.report_id === reportId &&
             (u.kind ?? 'audio') === 'audio' &&
             !u.purged_at &&
-            !u.batch_id,
+            !u.batch_id &&
+            !u.question_id,
         )
         .sort(
           (a, b) =>
@@ -869,6 +871,10 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       if (patch.asked_at !== undefined) next.asked_at = toIso(patch.asked_at);
       if (patch.answered_at !== undefined) next.answered_at = toIso(patch.answered_at);
       d.questions.set(id, next);
+    },
+    settleVoiceAnswer() {
+      // field_settle_voice_answer() is SQL: the parse_answer tests run on PGlite (W2-09).
+      return Promise.reject(new Error('fake db: settleVoiceAnswer runs on PGlite only'));
     },
     async timeOutQuestion(id, at) {
       const row = d.questions.get(id);

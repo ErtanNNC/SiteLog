@@ -60,6 +60,12 @@ export const JobPayloadSchemas = {
   }),
   extract_report: z.object({ reportId: uuid, reason: z.string().optional() }),
   /**
+   * §10.7 (W2-09, F7 *Other…*): the answer clip `uploadId` the reporter spoke for the open web
+   * question `questionId` (field_answer_question_voice()): transcribed, parsed by `parse_answer`,
+   * then applied in code (≥ 0.7) or asked once more; unclear twice → recorded unanswered.
+   */
+  parse_answer: z.object({ reportId: uuid, questionId: uuid, uploadId: uuid }),
+  /**
    * §10.1 decide_next. `timeout` (W2-07, §7.2 web rules): a step of the web clock, enqueued
    * delayed by decide_next itself (`run_after`) and checked again when it runs:
    * - `answer`: the open question unanswered for 60 min → recorded unanswered, the draft is
@@ -256,6 +262,11 @@ export const jobKeys = {
    * a question is answered once.
    */
   decideAnswer: (reportId: string, questionId: string) => `decide:${reportId}:answer:${questionId}`,
+  /**
+   * A spoken answer's parse (W2-09, §10.7; field_answer_question_voice(), SQL): per question and
+   * answer clip. A clip is spoken once and answers one question; a second try is a new clip.
+   */
+  parseAnswer: (questionId: string, uploadId: string) => `answer:${questionId}:${uploadId}`,
   /**
    * The `question_ready` text (W1-12): the `notify` job's key and the Notifier's, per question, so
    * a retried decide_next never texts twice and a new question is a new text (D25). Since W2-07 a

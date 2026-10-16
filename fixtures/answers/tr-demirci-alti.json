@@ -1,0 +1,55 @@
+{
+  "id": "tr-demirci-alti",
+  "description": "Turkish, spoken: the rebar crew of the Kartal report (no headcount in the note) answered “Demirciler altı kişiydi, tam gün çalıştılar.” → 6 × full day (8 h, Demir İnşaat’s shift) = 48 h.",
+  "voice": "answer-tr-demirci-alti",
+  "language": "tr",
+  "question": {
+    "field": "manpower.workers",
+    "prompt": "Demirci ekibi dördüncü katta başladı dediniz. Kaç kişiydiler, ne kadar çalıştılar?",
+    "options": [],
+    "target": {
+      "manpowerIndex": 0,
+      "companyName": "Demirci ekibi",
+      "companyNameHeard": "demirci ekibi",
+      "path": "manpower.workers:Demirci ekibi"
+    }
+  },
+  "companies": [
+    {
+      "id": "usta",
+      "name": "Usta Beton",
+      "aliases": []
+    },
+    {
+      "id": "volt",
+      "name": "Volt Elektrik",
+      "aliases": []
+    }
+  ],
+  "defaultShiftHours": 8,
+  "crew": {
+    "companyName": "Demirci ekibi",
+    "companyNameHeard": "demirci ekibi",
+    "area": "4. kat"
+  },
+  "recorded": {
+    "field": "manpower.workers",
+    "value": {
+      "workers": 6,
+      "fullDay": true
+    },
+    "confidence": 0.93
+  },
+  "expected": {
+    "applies": true,
+    "value": {
+      "workers": 6,
+      "fullDay": true
+    },
+    "crew": {
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48
+    }
+  }
+}

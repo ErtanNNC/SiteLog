@@ -1,15 +1,18 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useId, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import type { AnswerRequest } from '@sitelog/shared/field-api.ts';
 import type { AnswerConfirmation, ReportView } from '@sitelog/shared/field-contract.ts';
 import { apiErrorCode, isOfflineError } from '@/api/field';
 import { useApi } from '@/api/useApi';
-import { ChoiceButton, PrimaryButton } from '@/components/Buttons';
+import { ChoiceButton, PrimaryButton, SolidButton } from '@/components/Buttons';
 import { Header } from '@/components/Header';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Screen } from '@/components/Screen';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
+import { useQueue } from '@/queue/useQueue';
+import type { Clip, RecorderDeps } from '@/recorder/recorder';
 import { heardAt, parseTypedNumber } from './lines';
+import { OtherSheet } from './OtherSheet';
 import { RELINK } from './useReportPoll';
 
 type OpenQuestion = NonNullable<ReportView['question']>;
@@ -21,33 +24,92 @@ const NUMBER_FIELDS: readonly string[] = ['manpower.workers', 'manpower.hours', 
 /**
  * The open question (F7, Field-05; W1-13): one per screen, the "Quick check" card with at most two
  * answers to tap (56 px), or for a question without answers (D28) a number input, with "Full day"
- * as the default hours of a headcount. _Other…_ (say it, M6) is not shown. The answer goes to
- * field-api (`reports/:id/answer`, mapped in code there); `ReportScreen` then shows F7's
- * confirmation line and polls for the next question or the draft.
+ * as the default hours of a headcount. The answer goes to field-api (`reports/:id/answer`, mapped
+ * in code there); `ReportScreen` then shows F7's confirmation line and polls for the next
+ * question or the draft.
+ *
+ * W2-09: *Other — say it* on every question opens `OtherSheet`: the answer said (a clip of at most
+ * 30 seconds through the upload queue, then `answer {uploadId}`; the worker parses it) or, for a
+ * number field, typed. While the worker listens (`question.voice.state`, or the clip still in the
+ * queue) the card says "Listening to your answer…"; after a clip it could not read it says "I
+ * didn't catch that" and asks again with the same answers.
  */
 export function Question({
   code,
   view,
   question,
   notice,
+  listening = false,
   onAnswered,
+  onSpoken,
   onStale,
+  recorderDeps,
 }: {
   code: string;
   view: ReportView;
   question: OpenQuestion;
   notice?: ReactNode;
+  /** The worker is listening to a spoken answer of this question (ReportScreen polls). */
+  listening?: boolean;
   onAnswered: (questionId: string, confirmation: AnswerConfirmation) => void;
+  /** A spoken answer reached field-api (`answer {uploadId}`): poll for what the worker made of it. */
+  onSpoken?: (questionId: string) => void;
   onStale: (message: string) => void;
+  /** Tests: a fake MediaRecorder for *Say it*. */
+  recorderDeps?: RecorderDeps;
 }) {
   const api = useApi();
+  const queue = useQueue();
   const navigate = useNavigate();
   const { t } = useFieldCopy();
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [otherOpen, setOtherOpen] = useState(false);
+  // A clip of this question sent from here, until the view shows the worker has it (listening)
+  // or settled it (one more unclear try than when it was sent).
+  const [queued, setQueued] = useState<{ unclear: number } | null>(null);
+  const unclearNow = question.voice?.unclear ?? 0;
+  if (queued && (listening || unclearNow > queued.unclear)) setQueued(null);
   const heard = heardAt(view);
   const options = question.options ?? [];
   const progress = progressLines(view, t);
+  const numberField = NUMBER_FIELDS.includes(question.field);
+  const waiting = listening || queued !== null;
+  const retry = !waiting && question.voice?.state === 'retry';
+
+  const say = useCallback(
+    (clip: Clip) => {
+      setOtherOpen(false);
+      setError(null);
+      setQueued({ unclear: unclearNow });
+      void (async () => {
+        try {
+          const item = await queue.enqueue({
+            code,
+            kind: 'audio',
+            mime: clip.mime,
+            blob: clip.blob,
+            siteId: view.siteId,
+            date: view.date,
+            recordedAt: clip.startedAt,
+            answerTo: { reportId: view.id, questionId: question.id },
+          });
+          const done = await queue.waitFor(item.id);
+          if (done.status === 'failed') {
+            setError(t('question.errors.generic'));
+            setQueued(null);
+            return;
+          }
+          onSpoken?.(question.id);
+        } catch (err) {
+          console.error('[field] could not queue the spoken answer', err);
+          setError(t('question.queueFailed'));
+          setQueued(null);
+        }
+      })();
+    },
+    [code, onSpoken, queue, question.id, t, unclearNow, view.date, view.id, view.siteId],
+  );
 
   async function send(answer: Omit<AnswerRequest, 'questionId'>) {
     if (sending) return;
@@ -135,26 +197,65 @@ export function Question({
             {t('question.heardAt', { time: heard })}
           </span>
         ) : null}
+        {waiting ? (
+          <p
+            role="status"
+            className="m-0 flex items-center gap-2 rounded-card bg-concrete px-3.5 py-2.5 text-[16px] leading-6 font-semibold"
+          >
+            <span
+              aria-hidden="true"
+              className="size-2.5 flex-none rounded-full bg-signal motion-safe:animate-pulse"
+            />
+            {t('question.listening')}
+          </p>
+        ) : retry ? (
+          <p
+            role="status"
+            className="m-0 rounded-card border border-rebar bg-concrete px-3.5 py-2.5 text-[16px] leading-6"
+          >
+            {t('question.retry')}
+          </p>
+        ) : null}
         <div className="mt-auto flex flex-col gap-2.5">
           {options.length > 0 ? (
             options.slice(0, 2).map((option) => (
               <ChoiceButton
                 key={option.id}
-                disabled={sending}
+                disabled={sending || waiting}
                 onClick={() => void send({ optionId: option.id })}
               >
                 {option.label}
               </ChoiceButton>
             ))
-          ) : NUMBER_FIELDS.includes(question.field) ? (
+          ) : numberField ? (
             <NumberAnswer
               field={question.field as NumberField}
-              sending={sending}
+              sending={sending || waiting}
               onSend={(answer) => void send(answer)}
             />
-          ) : (
-            <p className="m-0 text-[16px] leading-6 text-steel">{t('question.cannotAnswer')}</p>
-          )}
+          ) : null}
+          <SolidButton
+            disabled={sending || waiting}
+            aria-haspopup="dialog"
+            onClick={() => setOtherOpen(true)}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0 M12 18v3" />
+            </svg>
+            {t('question.other')}
+          </SolidButton>
           {sending ? (
             <p role="status" className="m-0 text-[15px] leading-5 text-dust">
               {t('question.sending')}
@@ -169,6 +270,25 @@ export function Question({
       </section>
 
       <p className="m-0 text-center text-[14px] leading-5 text-dust">{t('question.close')}</p>
+      <OtherSheet
+        open={otherOpen}
+        prompt={question.prompt}
+        typed={
+          numberField ? (
+            <NumberAnswer
+              field={question.field as NumberField}
+              sending={sending}
+              onSend={(answer) => {
+                setOtherOpen(false);
+                void send(answer);
+              }}
+            />
+          ) : null
+        }
+        onSay={say}
+        onClose={() => setOtherOpen(false)}
+        recorderDeps={recorderDeps}
+      />
     </Screen>
   );
 }

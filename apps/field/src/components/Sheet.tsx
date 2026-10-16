@@ -65,7 +65,7 @@ export function Sheet({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="relative flex max-h-[85dvh] flex-col gap-4 overflow-y-auto rounded-t-card border-t border-rebar bg-chalk px-[18px] pt-5 pb-6 text-asphalt outline-none"
+        className="relative flex max-h-[85dvh] flex-col gap-4 overflow-y-auto [&>*]:flex-none rounded-t-card border-t border-rebar bg-chalk px-[18px] pt-5 pb-6 text-asphalt outline-none"
       >
         {children}
       </div>

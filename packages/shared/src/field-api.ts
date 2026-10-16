@@ -66,6 +66,16 @@ export const AddToReportSchema = z.strictObject({
   caption: z.boolean(),
 });
 
+/**
+ * F7 *Other…* (W2-09): the open question a spoken answer is for. The clip is an `audio` upload of
+ * that question's report (its site and day), never report material: it is not a voice note of the
+ * report and nothing is extracted from it; `reports/:id/answer {uploadId}` hands it to the worker.
+ */
+export const AnswerToSchema = z.strictObject({
+  reportId: z.uuid(),
+  questionId: z.uuid(),
+});
+
 export const UploadRequestSchema = z
   .strictObject({
     kind: z.enum(UPLOAD_KINDS),
@@ -76,11 +86,18 @@ export const UploadRequestSchema = z
     /** The phone's clock when recording started (§6.3 uploads.recorded_at). */
     recordedAt: z.iso.datetime({ offset: true }).optional(),
     addTo: AddToReportSchema.optional(),
+    answerTo: AnswerToSchema.optional(),
   })
   .refine((b) => !b.addTo || (b.siteId === undefined && b.date === undefined), {
     message: 'addTo takes the report’s site and date',
     path: ['addTo'],
   })
+  .refine(
+    (b) =>
+      !b.answerTo ||
+      (b.kind === 'audio' && !b.addTo && b.siteId === undefined && b.date === undefined),
+    { message: 'answerTo is one audio clip in the question’s report', path: ['answerTo'] },
+  )
   .refine((b) => !b.addTo || b.kind === 'photo' || b.addTo.caption, {
     message: 'only a batch with a caption takes audio',
     path: ['kind'],
@@ -98,11 +115,12 @@ export const ConfirmRequestSchema = z.strictObject({
 
 /**
  * `POST reports/:id/answer` (F7, Field-05; W1-12): the open question's answer, as an option the
- * reporter tapped (`optionId`, one of `ReportView.question.options`) or, D28, a number they typed
+ * reporter tapped (`optionId`, one of `ReportView.question.options`), D28 a number they typed
  * (`value`: the headcount, hours per worker or lost hours the question asks for), with the hours
- * for a headcount (`hours`: a number, or `'full_day'`, the field app's default). Exactly one of
- * `optionId` and `value`. _Other…_ (a spoken or typed free answer, Appendix B's `uploadId`) comes
- * with M6 and is refused until then.
+ * for a headcount (`hours`: a number, or `'full_day'`, the field app's default), or, W2-09 (F7
+ * *Other…*, Appendix B), a spoken answer: `uploadId`, a completed answer clip of this question
+ * (`UploadRequest.answerTo`) that the worker parses (`parse_answer`, §10.7). Exactly one of
+ * `optionId`, `value` and `uploadId`.
  */
 export const AnswerRequestSchema = z
   .strictObject({
@@ -110,9 +128,10 @@ export const AnswerRequestSchema = z
     optionId: z.string().trim().min(1).max(20).optional(),
     value: z.number().min(0).max(9999).optional(),
     hours: z.union([z.number().min(0).max(24), z.literal('full_day')]).optional(),
+    uploadId: z.uuid().optional(),
   })
-  .refine((a) => (a.optionId === undefined) !== (a.value === undefined), {
-    message: 'optionId or value, not both',
+  .refine((a) => [a.optionId, a.value, a.uploadId].filter((x) => x !== undefined).length === 1, {
+    message: 'one of optionId, value or uploadId',
   })
   .refine((a) => a.hours === undefined || a.value !== undefined, {
     message: 'hours goes with value',
@@ -177,6 +196,7 @@ export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 export type ConsentRequest = z.infer<typeof ConsentRequestSchema>;
 export type UploadRequest = z.infer<typeof UploadRequestSchema>;
 export type AddToReport = z.infer<typeof AddToReportSchema>;
+export type AnswerTo = z.infer<typeof AnswerToSchema>;
 export type ConfirmRequest = z.infer<typeof ConfirmRequestSchema>;
 export type AnswerRequest = z.infer<typeof AnswerRequestSchema>;
 export type DayStatusRequest = z.infer<typeof DayStatusRequestSchema>;

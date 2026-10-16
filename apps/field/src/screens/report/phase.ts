@@ -6,13 +6,15 @@ import type { ReportView } from '@sitelog/shared/field-contract.ts';
  * - `processing`: the worker is writing or deciding (also right after an answer, until its
  *   decide_next has run): poll.
  * - `question` (Field-05), `draft` (Field-06): the reporter's turn; no polling.
+ * - `listening` (W2-09): the Question screen while the worker parses a spoken answer of it
+ *   (`question.voice.state`): poll for what it made of it.
  * - `filing`: Confirm & send was accepted, the worker files it: poll until filed.
  * - `filed`: the Filed screen (Field-07, W1-15); it polls only until the PDF exists.
  * - `ready`: awaiting confirmation with no draft to show (not written by the worker): no polling.
  * - `gone`: void.
  */
 export type ReportPhase =
-  'processing' | 'question' | 'draft' | 'filing' | 'filed' | 'ready' | 'gone';
+  'processing' | 'question' | 'listening' | 'draft' | 'filing' | 'filed' | 'ready' | 'gone';
 
 export interface LocalReportState {
   /** Questions this phone answered: their view may still show them until the next poll. */
@@ -34,7 +36,8 @@ export function reportPhase(view: ReportView | null, local: LocalReportState): R
       return view.data ? 'draft' : 'ready';
     case 'awaiting_answer':
       // No open question yet (being written), or the one this phone answered: decide_next runs.
-      return view.question && !local.answered.has(view.question.id) ? 'question' : 'processing';
+      if (!view.question || local.answered.has(view.question.id)) return 'processing';
+      return view.question.voice?.state === 'listening' ? 'listening' : 'question';
     case 'collecting':
     case 'processing':
       return 'processing';
@@ -61,5 +64,5 @@ export function confirmedDraftReplaced(view: ReportView, confirmed: ConfirmedDra
 
 /** Phases that wait for the worker, so the screen keeps polling. */
 export function pollsIn(phase: ReportPhase): boolean {
-  return phase === 'processing' || phase === 'filing';
+  return phase === 'processing' || phase === 'filing' || phase === 'listening';
 }

@@ -13,6 +13,8 @@ import {
   optionAnswer,
   parseQuickAnswer,
   pickNextQuestion,
+  statedNumbers,
+  unstatedAnswerNumber,
   validateReport,
 } from './validate.ts';
 
@@ -574,5 +576,65 @@ describe('W1-12: v2 data, channel-neutral options, D28, EN/ES/TR', () => {
     expect(parseQuickAnswer('company.unknown', "It's Delta Mechanical")).toEqual({
       companyAction: 'map',
     });
+  });
+});
+
+describe('W2-09: spoken answers (never invent numbers; the clip is a source)', () => {
+  it('statedNumbers: digits and EN, ES, TR words, and a crew said as a sum', () => {
+    expect([...statedNumbers('Five, all day.')]).toEqual([5]);
+    expect([...statedNumbers('Eran cinco, todo el día.')]).toEqual([5]);
+    expect([...statedNumbers('Demirciler altı kişiydi, tam gün çalıştılar.')]).toEqual([6]);
+    expect([...statedNumbers('4 guys and the foreman till 3:30')].sort()).toEqual([3, 30, 4, 5]);
+    expect([...statedNumbers("I'll check with the foreman later")]).toEqual([]);
+  });
+
+  it('unstatedAnswerNumber: a number the answer does not state is refused; full day and no stoppage are code’s', () => {
+    expect(unstatedAnswerNumber({ workers: 5, fullDay: true }, 'Five, all day.')).toBeNull();
+    expect(
+      unstatedAnswerNumber({ workers: 5, fullDay: true, hoursPerWorker: 8 }, 'Five, all day.'),
+    ).toBeNull();
+    expect(unstatedAnswerNumber({ workers: 6 }, 'Five, all day.')).toBe('workers');
+    expect(unstatedAnswerNumber({ workers: 5, hoursPerWorker: 9 }, 'five guys')).toBe(
+      'hoursPerWorker',
+    );
+    expect(unstatedAnswerNumber({ workers: 5, endTime: '15:00' }, 'five till three')).toBeNull();
+    expect(unstatedAnswerNumber({ workers: 5, endTime: '16:00' }, 'five till three')).toBe(
+      'endTime',
+    );
+    expect(unstatedAnswerNumber({ lostHours: 0 }, 'no stoppage')).toBeNull();
+    expect(unstatedAnswerNumber({ lostHours: 2.5 }, 'lost two and a half hours')).toBe('lostHours');
+    expect(unstatedAnswerNumber({ totalHours: 40 }, 'five full day')).toBe('totalHours');
+  });
+
+  it('applyAnswer: the answer and the clip are the value’s sources, totals in code', () => {
+    const d = upgradeV1toV2(complete());
+    d.manpower.push({
+      companyId: 'delta',
+      companyNameHeard: 'the Delta guys',
+      companyName: 'Delta Mechanical',
+      workers: null,
+      hoursPerWorker: 8,
+      totalHours: null,
+      hoursBasis: 'full_day_default',
+      confidence: 0.85,
+      source: [{ type: 'voice_note', uploadId: 'u1', start: 33 }],
+    });
+    const i = d.manpower.length - 1;
+    const out = applyAnswer(
+      d,
+      { field: 'manpower.workers', target: { manpowerIndex: i } },
+      { workers: 5, fullDay: true },
+      {
+        defaultShiftHours: 8,
+        source: { type: 'answer', questionId: 'q1' },
+        extraSources: [{ type: 'voice_note', uploadId: 'clip', start: 0, end: 2.1 }],
+      },
+    ).data.manpower[i]!;
+    expect(out).toMatchObject({ workers: 5, hoursPerWorker: 8, totalHours: 40 });
+    expect(out.source).toEqual([
+      { type: 'voice_note', uploadId: 'u1', start: 33 },
+      { type: 'answer', questionId: 'q1' },
+      { type: 'voice_note', uploadId: 'clip', start: 0, end: 2.1 },
+    ]);
   });
 });

@@ -31,6 +31,8 @@ import {
   settingsView,
   storedObjectProblem,
   verifyCodeHash,
+  voiceAnswerView,
+  lastVoiceAnswerView,
 } from './logic.ts';
 
 const bytesOf = (...values: number[]) => {
@@ -413,3 +415,64 @@ Deno.test(
     assertEquals(noWork.data.summary, 'No work at Pier 9 today.');
   },
 );
+
+Deno.test('W2-09: the spoken answer on the question and the last one settled', () => {
+  const at = '2026-10-09T22:40:00Z';
+  assertEquals(voiceAnswerView({ voice_answers: [] }), null);
+  assertEquals(voiceAnswerView({ voice_answers: [{ uploadId: 'u1', at, status: 'listening' }] }), {
+    state: 'listening',
+    unclear: 0,
+  });
+  assertEquals(
+    voiceAnswerView({
+      voice_answers: [
+        { uploadId: 'u1', at, status: 'unclear' },
+        { uploadId: 'u2', at, status: 'listening' },
+      ],
+    }),
+    { state: 'listening', unclear: 1 },
+  );
+  assertEquals(voiceAnswerView({ voice_answers: [{ uploadId: 'u1', at, status: 'unclear' }] }), {
+    state: 'retry',
+    unclear: 1,
+  });
+  // A stale try (answered by a tap meanwhile) shows nothing; neither does a malformed column.
+  assertEquals(voiceAnswerView({ voice_answers: [{ uploadId: 'u1', at, status: 'stale' }] }), null);
+  assertEquals(voiceAnswerView({ voice_answers: {} }), null);
+
+  const confirmation = {
+    kind: 'crew' as const,
+    company: 'Delta Mechanical',
+    workers: 5,
+    hoursPerWorker: 8,
+    totalHours: 40,
+  };
+  assertEquals(
+    lastVoiceAnswerView([
+      { id: 'q0', answered_at: '2026-10-09T22:30:00Z', answer: { unclear: true } },
+      { id: 'q1', answered_at: at, answer: { voice: { uploadId: 'u1' }, confirmation } },
+    ]),
+    { questionId: 'q1', outcome: 'applied', confirmation },
+  );
+  // The latest answered question was tapped: no spoken line.
+  assertEquals(
+    lastVoiceAnswerView([
+      { id: 'q1', answered_at: '2026-10-09T22:30:00Z', answer: { voice: {}, confirmation } },
+      { id: 'q2', answered_at: at, answer: { optionId: 'o2' } },
+    ]),
+    null,
+  );
+  assertEquals(
+    lastVoiceAnswerView([
+      { id: 'q3', answered_at: at, answer: { unanswered: true, unclear: true } },
+    ]),
+    { questionId: 'q3', outcome: 'unclear' },
+  );
+  // Timed out (§7.2), not unclear: no spoken line.
+  assertEquals(
+    lastVoiceAnswerView([
+      { id: 'q4', answered_at: at, answer: { unanswered: true, timeout: true } },
+    ]),
+    null,
+  );
+});

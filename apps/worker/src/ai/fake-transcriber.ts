@@ -4,9 +4,10 @@ import { loadVoiceFixtures, type VoiceFixture } from './voice-fixtures';
 /**
  * The fake transcriber (W1-11): no network, no key. It answers with the expected transcript of a
  * fixtures/voice note: the one a fake audio file names (`fakeAudio(id, s)`, the integration
- * harness's bytes), else the first fixture in the requested language (`tr`, `multi`, `en`), so any
- * real recording (the CI field flow's Chromium microphone) gets a transcript in its reporter's
- * language. Used by the tests, keyless development and the CI worker (TRANSCRIBE_PROVIDER=fake).
+ * harness's bytes), else the first fixture of the request's purpose (a report's voice note, a
+ * spoken answer, the Welcome test; W2-09, W2-13) in the requested language (`tr`, `multi`, `en`),
+ * so any real recording (the CI field flow's Chromium microphone) gets a transcript of its kind in
+ * its reporter's language. Used by the tests, keyless development and the CI worker (TRANSCRIBE_PROVIDER=fake).
  */
 
 const FAKE_AUDIO_KEY = 'sitelog-fake-audio';
@@ -46,9 +47,11 @@ export function createFakeTranscriber(
       req.signal?.throwIfAborted();
       const all = fixtures();
       const marker = readFakeAudio(req.audio);
+      const kind = all.filter((f) => f.kind === (req.purpose ?? 'report'));
       const fixture =
         (marker && all.find((f) => f.id === marker.fixtureId)) ||
-        all.find((f) => f.transcriptionLanguage === req.language) ||
+        kind.find((f) => f.transcriptionLanguage === req.language) ||
+        kind[0] ||
         all[0];
       if (!fixture) throw new Error('fake transcriber: fixtures/voice is empty');
       calls.push({

@@ -498,6 +498,11 @@ export type QuestionRow = {
   channel: FieldChannel | null;
   call_id: string | null;
   answer_source: Json | null;
+  /**
+   * W2-09 (20261016000060): the spoken answers to this web question, oldest first:
+   * `{uploadId, at, status: 'listening' | 'applied' | 'unclear', confidence?, reason?}`.
+   */
+  voice_answers: Json;
 };
 
 export type GlossaryTermRow = {
@@ -639,6 +644,11 @@ export type UploadRow = {
    */
   batch_id: string | null;
   batch_size: number | null;
+  /**
+   * W2-09 (20261016000060, F7 *Other…*): a spoken answer's clip names the question it answers;
+   * never report material (no report source, not extracted). Null for every other upload.
+   */
+  question_id: string | null;
 };
 
 /** §6.3 calls (rows written from week 2): admin, pm and ops read them. */
@@ -1040,6 +1050,7 @@ export type Database = {
         | 'purged_at'
         | 'batch_id'
         | 'batch_size'
+        | 'question_id'
       >;
       calls: Table<
         CallRow,
@@ -1122,6 +1133,7 @@ export type Database = {
         | 'channel'
         | 'call_id'
         | 'answer_source'
+        | 'voice_answers'
       >;
       glossary_terms: Table<
         GlossaryTermRow,
@@ -1316,6 +1328,29 @@ export type Database = {
           p_answer_source: Json;
           /** "Add <company>": {name, manpowerIndex}; the unconfirmed company is created in SQL. */
           p_new_company?: Json | null;
+        };
+        Returns: Json;
+      };
+      /** W2-09 (20261016000060): F7 Other…, a spoken answer clip handed to parse_answer. */
+      field_answer_question_voice: {
+        Args: {
+          p_report_id: string;
+          p_question_id: string;
+          p_reporter_id: string;
+          p_upload_id: string;
+        };
+        Returns: Json;
+      };
+      /** W2-09: the worker settles a spoken answer (`applied` with the draft, or `unclear`). */
+      field_settle_voice_answer: {
+        Args: {
+          p_question_id: string;
+          p_upload_id: string;
+          p_outcome: string;
+          p_detail?: Json;
+          p_base?: Json | null;
+          p_data?: Json | null;
+          p_answer?: Json | null;
         };
         Returns: Json;
       };

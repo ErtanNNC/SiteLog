@@ -1095,6 +1095,7 @@ Deno.test('reports/:id view, history and preferences', async () => {
     channel: 'web',
     call_id: null,
     answer_source: null,
+    voice_answers: [],
   });
   h.store.versions.push({
     report_id: reportId,
@@ -1119,6 +1120,7 @@ Deno.test('reports/:id view, history and preferences', async () => {
       { id: 'b', label: '5 · full day' },
     ],
     manpowerIndex: null,
+    voice: null,
   });
   // The crew the question is about, for "Heard at 1:20 in your note" (W1-13).
   h.store.questions[0]!.target = { manpowerIndex: 0, path: 'manpower.workers:Delta' };
@@ -1499,6 +1501,7 @@ async function awaitingAnswer(h: Harness, siteId = SITE_A) {
     channel: 'web',
     call_id: null,
     answer_source: null,
+    voice_answers: [],
     ...over,
   });
   h.store.questions.push(question());
@@ -1605,6 +1608,181 @@ Deno.test('answer (W1-12, D28): a typed headcount with the hours the reporter se
     totalHours: 24,
   });
 });
+
+/** W2-09: an answer clip for the open question: created, put, completed. */
+async function answerClip(h: Harness, reportId: string, questionId: string) {
+  const u = await h.call('POST', 'uploads', {
+    body: { kind: 'audio', mime: 'audio/webm', bytes: 2, answerTo: { reportId, questionId } },
+  });
+  assertEquals(u.status, 201);
+  h.store.put(`audio/${u.json.path}`);
+  return u.json as { uploadId: string; path: string };
+}
+
+Deno.test(
+  'answer by voice (W2-09, F7 Other…): the clip is staged, never report material; parse_answer queued once',
+  async () => {
+    const h = setup();
+    const { reportId, questionId } = await awaitingAnswer(h);
+    const clip = await answerClip(h, reportId, questionId);
+    // The clip goes in the report's site and day, and names the question.
+    const row = h.store.uploads.find((x) => x.id === clip.uploadId)!;
+    assertEquals(
+      [row.question_id, row.site_id, row.storage_path.split('/')[2]],
+      [questionId, SITE_A, '2026-10-09'],
+    );
+    // Answering before the clip is complete is refused.
+    const early = await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, uploadId: clip.uploadId },
+    });
+    assertEquals([early.status, early.json.error], [409, 'upload_missing']);
+
+    const jobsBefore = h.store.jobs.length;
+    const done = await h.call('POST', `uploads/${clip.uploadId}/complete`);
+    assertEquals(
+      [done.status, done.json.reportId, done.json.reportStatus],
+      [200, reportId, 'awaiting_answer'],
+    );
+    // Not a voice note of the report: no transcription, no new status, not counted.
+    assertEquals(h.store.jobs.length, jobsBefore);
+    const view = await h.call('GET', `reports/${reportId}`);
+    assertEquals((view.json.progress as { voiceNotes: number }).voiceNotes, 1);
+    assertEquals((view.json.question as { voice: unknown }).voice, null);
+
+    const res = await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, uploadId: clip.uploadId },
+    });
+    assertEquals(
+      [res.status, res.json],
+      [202, { status: 'listening', reportStatus: 'awaiting_answer', confirmation: null }],
+    );
+    const parse = h.store.jobs.filter((j) => j.type === 'parse_answer');
+    assertEquals(
+      parse.map((j) => [j.dedupe_key, j.payload]),
+      [
+        [
+          `answer:${questionId}:${clip.uploadId}`,
+          { reportId, questionId, uploadId: clip.uploadId },
+        ],
+      ],
+    );
+    assert(h.store.audits.some((a) => a.action === 'report.answer_spoken'));
+    // The report still awaits the answer; the question shows "Listening to your answer…".
+    const listening = await h.call('GET', `reports/${reportId}`);
+    assertEquals(
+      [listening.json.status, (listening.json.question as { voice: unknown }).voice],
+      ['awaiting_answer', { state: 'listening', unclear: 0 }],
+    );
+    assertEquals(listening.json.lastVoiceAnswer, null);
+
+    // A retry of the same clip is answered the same way; nothing is queued twice.
+    const again = await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, uploadId: clip.uploadId },
+    });
+    assertEquals([again.status, again.json.status], [202, 'listening']);
+    assertEquals(h.store.jobs.filter((j) => j.type === 'parse_answer').length, 1);
+    // A second clip while the first is being listened to waits for it.
+    const second = await answerClip(h, reportId, questionId);
+    await h.call('POST', `uploads/${second.uploadId}/complete`);
+    const pending = await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, uploadId: second.uploadId },
+    });
+    assertEquals([pending.status, pending.json.error], [409, 'answer_pending']);
+  },
+);
+
+Deno.test(
+  'answer by voice (W2-09): scope, closed questions, other clips; the retry and the outcome views',
+  async () => {
+    const h = setup();
+    const { reportId, questionId, report } = await awaitingAnswer(h);
+    // An answer clip is audio, for the question's report only, and takes no site or date.
+    const photo = await h.call('POST', 'uploads', {
+      body: { kind: 'photo', mime: 'image/jpeg', bytes: 2, answerTo: { reportId, questionId } },
+    });
+    assertEquals([photo.status, photo.json.error], [400, 'invalid_request']);
+    const withSite = await h.call('POST', 'uploads', {
+      body: {
+        kind: 'audio',
+        mime: 'audio/webm',
+        bytes: 2,
+        siteId: SITE_A,
+        answerTo: { reportId, questionId },
+      },
+    });
+    assertEquals(withSite.status, 400);
+    const unknown = await h.call('POST', 'uploads', {
+      body: {
+        kind: 'audio',
+        mime: 'audio/webm',
+        bytes: 2,
+        answerTo: { reportId, questionId: '11111111-0000-4000-8000-00000000f999' },
+      },
+    });
+    assertEquals([unknown.status, unknown.json.error], [404, 'not_found']);
+    // A report outside the link's sites is not found (the daily link of Pier 9).
+    const outside = await h.call('POST', 'uploads', {
+      code: CODES.marcoDaily,
+      body: { kind: 'audio', mime: 'audio/webm', bytes: 2, answerTo: { reportId, questionId } },
+    });
+    assertEquals(outside.status, 404);
+    // A report voice note is not an answer clip.
+    const note = h.store.uploads.find((u) => u.report_id === reportId && !u.question_id)!;
+    const notClip = await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, uploadId: note.id },
+    });
+    assertEquals([notClip.status, notClip.json.error], [404, 'not_found']);
+
+    // The worker could not read the first clip: the question is asked once more.
+    const clip = await answerClip(h, reportId, questionId);
+    await h.call('POST', `uploads/${clip.uploadId}/complete`);
+    await h.call('POST', `reports/${reportId}/answer`, {
+      body: { questionId, uploadId: clip.uploadId },
+    });
+    const q = h.store.questions[0]!;
+    q.voice_answers = [{ uploadId: clip.uploadId, at: T0.toISOString(), status: 'unclear' }];
+    const retry = await h.call('GET', `reports/${reportId}`);
+    assertEquals((retry.json.question as { voice: unknown }).voice, { state: 'retry', unclear: 1 });
+
+    // Applied by the worker: the question answered with code's confirmation.
+    Object.assign(q, {
+      answered_at: T0.toISOString(),
+      answer: {
+        voice: { uploadId: clip.uploadId },
+        parsed: { workers: 5, fullDay: true },
+        confirmation: {
+          kind: 'crew',
+          company: 'Delta Mechanical',
+          workers: 5,
+          hoursPerWorker: 8,
+          totalHours: 40,
+        },
+      },
+    });
+    report.status = 'processing';
+    const applied = await h.call('GET', `reports/${reportId}`);
+    assertEquals(applied.json.lastVoiceAnswer, {
+      questionId,
+      outcome: 'applied',
+      confirmation: {
+        kind: 'crew',
+        company: 'Delta Mechanical',
+        workers: 5,
+        hoursPerWorker: 8,
+        totalHours: 40,
+      },
+    });
+    // A clip for an answered question is refused.
+    const late = await h.call('POST', 'uploads', {
+      body: { kind: 'audio', mime: 'audio/webm', bytes: 2, answerTo: { reportId, questionId } },
+    });
+    assertEquals([late.status, late.json.error], [409, 'question_closed']);
+    // Unclear twice: the view says so (F7 "then move on and flag").
+    q.answer = { unanswered: true, unclear: true, via: 'web' };
+    const unclear = await h.call('GET', `reports/${reportId}`);
+    assertEquals(unclear.json.lastVoiceAnswer, { questionId, outcome: 'unclear' });
+  },
+);
 
 Deno.test(
   'answer (W1-12): scoped like the other routes; wrong question, state or answer refused',

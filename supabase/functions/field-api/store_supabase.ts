@@ -5,6 +5,7 @@ import {
   FIELD_DB_ERRORS,
   FieldDbError,
   type AnswerResult,
+  type VoiceAnswerResult,
   type AttachPhotosResult,
   type CompleteUploadResult,
   type ConfirmResult,
@@ -284,11 +285,25 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       return data;
     },
 
+    async listAnsweredQuestions(reportId) {
+      const { data } = await admin
+        .from('questions')
+        .select('*')
+        .eq('report_id', reportId)
+        .not('answered_at', 'is', null)
+        .order('answered_at', { ascending: false })
+        .limit(10)
+        .throwOnError();
+      return data;
+    },
+
     async countReportMedia(reportId) {
+      // A spoken answer's clip (W2-09, `question_id`) is not a voice note of the report.
       const { data: uploads } = await admin
         .from('uploads')
         .select('id, kind')
         .eq('report_id', reportId)
+        .is('question_id', null)
         .throwOnError();
       const voice = uploads.filter((u) => u.kind === 'audio').map((u) => u.id);
       let transcribed = 0;
@@ -473,6 +488,17 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
           p_answer: input.answer,
           p_answer_source: input.answerSource,
           p_new_company: input.newCompany,
+        }),
+      );
+    },
+
+    async answerQuestionVoice(input) {
+      return await rpc<VoiceAnswerResult>(
+        admin.rpc('field_answer_question_voice', {
+          p_report_id: input.reportId,
+          p_question_id: input.questionId,
+          p_reporter_id: input.reporterId,
+          p_upload_id: input.uploadId,
         }),
       );
     },

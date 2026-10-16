@@ -90,6 +90,25 @@ export interface TranscriptInput {
   model: string | null;
 }
 
+export interface SettleVoiceAnswerInput {
+  questionId: string;
+  uploadId: string;
+  outcome: 'applied' | 'unclear';
+  /** Kept on the try (`confidence`, `reason`); `reviewReasons` flag the report when applied. */
+  detail: Record<string, unknown>;
+  base?: Json;
+  data?: Json;
+  answer?: Json;
+}
+
+export interface SettleVoiceAnswerResult {
+  settled: boolean;
+  status: 'applied' | 'unclear' | 'stale' | 'listening';
+  /** `unclear` and asked once more (the first unclear try). */
+  retry?: boolean;
+  jobId?: number | null;
+}
+
 /** A web recorder voice note's transcript, duration and peaks (W1-11, `saveUploadTranscript`). */
 export interface UploadTranscriptInput {
   uploadId: string;
@@ -540,6 +559,14 @@ export interface Db {
    * question's row lock, so an answer that commits first wins and this changes nothing.
    */
   timeOutQuestion(id: string, at: Date): Promise<boolean>;
+  /**
+   * W2-09 (field_settle_voice_answer(), 20261016000060): a spoken answer's outcome. `applied`
+   * writes the draft built in code (refused `draft_changed` when the draft moved since `base`),
+   * answers the question and enqueues decide_next; `unclear` marks the try and, at the second,
+   * records the question unanswered (flagged) and enqueues decide_next. `settled` false for a try
+   * settled before or a question answered meanwhile (`status` says which).
+   */
+  settleVoiceAnswer(input: SettleVoiceAnswerInput): Promise<SettleVoiceAnswerResult>;
 
   // web pipeline (W1-12)
   /**
@@ -969,7 +996,7 @@ export function createDb(sql: Sql): Db {
                exists (select 1 from transcripts t where t.upload_id = u.id) as transcribed
         from uploads u
         where u.report_id = ${reportId} and u.kind = 'audio' and u.purged_at is null
-          and u.batch_id is null
+          and u.batch_id is null and u.question_id is null
         order by u.received_at nulls first, u.id`;
     },
     async countBatchPhotos(batchId) {
@@ -1354,6 +1381,16 @@ export function createDb(sql: Sql): Db {
         where id = ${id} and answered_at is null
         returning id`;
       return rows.length > 0;
+    },
+
+    async settleVoiceAnswer(input) {
+      const [row] = await sql<Array<{ r: SettleVoiceAnswerResult }>>`
+        select field_settle_voice_answer(${input.questionId}, ${input.uploadId}, ${input.outcome},
+          ${sql.json(input.detail as never)},
+          ${input.base === undefined ? null : sql.json(input.base as never)},
+          ${input.data === undefined ? null : sql.json(input.data as never)},
+          ${input.answer === undefined ? null : sql.json(input.answer as never)}) as r`;
+      return row!.r;
     },
 
     // web pipeline (W1-12) -------------------------------------------------------------------

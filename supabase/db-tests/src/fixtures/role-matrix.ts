@@ -511,6 +511,18 @@ export const RPCS: Record<
     call: (o) =>
       `select field_attach_photos('${o.report}', '${o.upload}', '1 photo added', null) as v`,
   },
+  // W2-09 (20261016000060_voice_answers.sql): F7 Other…, a spoken answer to a web question.
+  field_answer_question_voice: {
+    why: '§6.5: field-api only (service role); a reporter answers through reports/:id/answer.',
+    allow: NONE,
+    call: (o) =>
+      `select field_answer_question_voice('${o.report}', '${o.question}', '${o.reporter}', '${o.upload}') as v`,
+  },
+  field_settle_voice_answer: {
+    why: '§10.7: the worker only (service role): parse_answer settles a spoken answer.',
+    allow: NONE,
+    call: (o) => `select field_settle_voice_answer('${o.question}', '${o.upload}', 'unclear') as v`,
+  },
   // Spec §19 Q53 (20261015000003_late_uploads.sql): field-api flags a late clip.
   field_flag_late_upload: {
     why: '§6.5: field-api only (service role); a late clip is flagged by the server, never a client.',

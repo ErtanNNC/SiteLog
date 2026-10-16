@@ -311,8 +311,10 @@ Notes:
   (enqueues `file_report` for the confirmed version under the same site-day lock),
   `field_report_day_off()` (W2-08: `day-status` sets the site-day and, for a weather day or a
   no-work day with `no_work_pdf`, makes the report from the answers and queues its filing;
-  `field_set_day_status()` before it) and `field_rate_limit()` (30 a minute per device, 5 code sends and 5
-  checks an hour per phone). `uploads/:id/complete` checks the stored object's type and size
+  `field_set_day_status()` before it), `field_answer_question_voice()` (W2-09: F7 _Other…_, a
+  completed answer clip of the open question, `uploads.question_id`, handed to the worker's
+  `parse_answer`; the clip completes onto the question's report as no report material) and
+  `field_rate_limit()` (30 a minute per device, 5 code sends and 5 checks an hour per phone). `uploads/:id/complete` checks the stored object's type and size
   (Storage's object info) before it attaches it. Refusals are JSON `{error: <code>}` from
   `packages/shared/src/field-contract.ts`.
 - **sms-webhook** (W1-08). `POST /` (or `/inbound`): a Twilio inbound text, signed over

@@ -60,6 +60,8 @@ export interface CompleteUploadResult {
    * worker attaches it after the transcription, which this call enqueued).
    */
   batch?: { id: string; ready: boolean; captionUploadId: string | null };
+  /** W2-09: a spoken answer's clip, staged on its question's report (no source, no job). */
+  answerClip?: boolean;
 }
 
 /** field_attach_photos() (20261016000030, F9): the version the batch made (or made before). */
@@ -107,6 +109,13 @@ export interface AnswerInput {
   newCompany: { name: string; manpowerIndex: number } | null;
 }
 
+/** field_answer_question_voice() (20261016000060, W2-09): the clip handed to parse_answer. */
+export interface VoiceAnswerResult {
+  status: 'listening';
+  reportStatus: ReportStatus;
+  jobId: number | null;
+}
+
 /** field_report_day_off() (W2-08; field_set_day_status() before it). */
 export interface DayStatusResult {
   siteDayId: string;
@@ -144,6 +153,7 @@ export const FIELD_DB_ERRORS = [
   'invalid_batch',
   'batch_not_found',
   'batch_incomplete',
+  'answer_pending',
 ] as const;
 
 export interface ReportMediaCounts {
@@ -237,6 +247,8 @@ export interface FieldStore extends DailyLinkStore {
   /** The open question (not answered), latest first. */
   getOpenQuestion(reportId: string): Promise<QuestionRow | null>;
   getQuestion(id: string): Promise<QuestionRow | null>;
+  /** The report's answered questions, the latest answer first (W2-09: the last spoken one). */
+  listAnsweredQuestions(reportId: string): Promise<QuestionRow[]>;
   countReportMedia(reportId: string): Promise<ReportMediaCounts>;
   /** Reports (not void) of these sites from `sinceDate` on, with their date. */
   listRecentReports(siteIds: string[], sinceDate: string): Promise<ReportWithDate[]>;
@@ -254,6 +266,8 @@ export interface FieldStore extends DailyLinkStore {
     /** F9: the batch of photos added to a filed report (both set, or neither). */
     batch_id?: string | null;
     batch_size?: number | null;
+    /** W2-09: the web question a spoken answer's clip answers. */
+    question_id?: string | null;
   }): Promise<UploadRow>;
   getUpload(id: string): Promise<UploadRow | null>;
   createSignedUploadUrl(
@@ -318,5 +332,15 @@ export interface FieldStore extends DailyLinkStore {
   ): Promise<ConfirmResult>;
   /** field_answer_question(): reports/:id/answer (F7), audited in SQL; enqueues decide_next. */
   answerQuestion(input: AnswerInput): Promise<AnswerResult>;
+  /**
+   * field_answer_question_voice() (W2-09, F7 Other…): a completed clip of the open question as
+   * its spoken answer: the `listening` try and the parse_answer job, audited in SQL.
+   */
+  answerQuestionVoice(input: {
+    reportId: string;
+    questionId: string;
+    reporterId: string;
+    uploadId: string;
+  }): Promise<VoiceAnswerResult>;
   audit(entry: AuditEntry): Promise<void>;
 }

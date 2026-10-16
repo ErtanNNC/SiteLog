@@ -145,6 +145,8 @@ export const FIELD_API_ERRORS = [
   'wrong_state',
   'question_closed',
   'answer_not_accepted',
+  /** W2-09: a spoken answer to this question is still being listened to (`parse_answer`). */
+  'answer_pending',
   /** F9 (W2-04): the filed report takes no more photos (its window ended at 23:59 the next day). */
   'photos_window_closed',
   /** F9: FILED_PHOTOS_MAX photos were added after filing already. */
@@ -359,7 +361,25 @@ export interface ReportView {
      * (Field-05: the crew's voice-note source); null when it names no crew.
      */
     manpowerIndex: number | null;
+    /**
+     * W2-09 (F7 *Other…*): the spoken answer to this question, while it matters: `listening`
+     * while the worker transcribes and parses the clip ("Listening to your answer…"), `retry`
+     * after a clip it could not read (below `PARSE_ANSWER_MIN_CONFIDENCE`): "I didn't catch
+     * that", the question asked once more with its choices. `unclear`: the tries it could not
+     * read so far (the app tells a new outcome from the one it saw before sending). Null otherwise.
+     */
+    voice: { state: 'listening' | 'retry'; unclear: number } | null;
   } | null;
+  /**
+   * W2-09: the last spoken answer the worker settled, for F7's line on the screens that follow
+   * it: `confirmation` (code's numbers, as after a tap) when it was applied, `unclear` when it
+   * could not be read twice and the question was left for the office (`unanswered:<field>`, F7
+   * "then move on and flag"). Null when no spoken answer was settled.
+   */
+  lastVoiceAnswer:
+    | { questionId: string; outcome: 'applied'; confirmation: AnswerConfirmation }
+    | { questionId: string; outcome: 'unclear' }
+    | null;
   /** The current version's data in §10.3 v2 terms; null before the first draft. */
   data: DailyReportData | null;
   /**
@@ -406,11 +426,30 @@ export interface ConfirmResponse {
  * not the open one, 400 `answer_not_accepted` when the option or the number does not answer it.
  */
 export interface AnswerResponse {
-  status: 'processing' | 'already_answered';
+  /**
+   * `listening` (W2-09): a spoken answer was taken; the worker parses it (`parse_answer`), so the
+   * app polls `GET reports/:id` (`question.voice`, then `lastVoiceAnswer`). No confirmation yet.
+   */
+  status: 'processing' | 'already_answered' | 'listening';
   reportStatus: ReportStatus;
-  /** F7's confirmation line, in numbers code read from the draft the answer made (W1-13). */
-  confirmation: AnswerConfirmation;
+  /**
+   * F7's confirmation line, in numbers code read from the draft the answer made (W1-13); null
+   * while a spoken answer is being listened to.
+   */
+  confirmation: AnswerConfirmation | null;
 }
+
+/**
+ * F7 *Other…* (W2-09): a spoken answer is a short clip; the recorder stops it at 30 seconds, and
+ * field-api refuses a longer one when it can measure it.
+ */
+export const ANSWER_CLIP_MAX_MS = 30_000;
+
+/** §10.7: a parsed answer below this confidence is not applied; the question is asked once more. */
+export const PARSE_ANSWER_MIN_CONFIDENCE = 0.7;
+
+/** F7: a spoken answer that cannot be read this many times leaves the question for the office. */
+export const VOICE_ANSWER_TRIES = 2;
 
 /**
  * What an answer changed, for F7's confirmation line ("Delta Mechanical: 5 workers, 8 hours each

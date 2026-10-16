@@ -129,6 +129,7 @@ export async function handleAnswer(
         replyText: text,
         companies,
         defaultShiftHours: Number(site.settings.default_shift_hours),
+        via: via === 'voice' ? 'voice' : 'text',
       },
       ctx.log,
     );

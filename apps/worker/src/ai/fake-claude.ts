@@ -14,13 +14,15 @@ import {
 } from '@sitelog/shared';
 import type { Config } from '../config';
 import type { Logger } from '../log';
+import { loadAnswerCases, type AnswerCase } from './answer-fixtures';
 import { createAnthropicClient, type MessagesClient } from './claude';
 import { FIXTURES_DIR, findPhoneNumbers, loadFixtures, type EvalFixture } from './eval';
 
 /**
  * The fake extraction provider (`EXTRACT_PROVIDER=fake`): a Messages client that answers every
  * tool the worker calls (submit_daily_report, classify_reply, parse_answer, apply_correction,
- * classify_day_off, guess_site) from the golden set, with no network and no key. It mirrors the
+ * classify_day_off, guess_site) from the golden set, with no network and no key. parse_answer
+ * answers from fixtures/answers (W2-09) when the reply is one of its transcripts. It mirrors the
  * fake transcriber (`TRANSCRIBE_PROVIDER=fake`): the integration harness and the load test use it
  * with simulated latency, and a keyless worker outside production uses it so the whole field flow
  * (record → transcript → draft → question → answer → filed) runs without Anthropic. The
@@ -356,10 +358,14 @@ export function createFixtureClaude(opts: FixtureClaudeOptions): FakeClaude {
             return toolMessage(params, tool, guess, fast, n);
           }
           case 'parse_answer': {
-            calls.push({ tool });
             await wait('claudeFast');
             const field = /^QUESTION field=([\w.]+)/m.exec(text)?.[1] ?? 'manpower.workers';
-            const parsed = opts.parseAnswer?.(replyOf(text), field) ??
+            const reply = replyOf(text);
+            // W2-09: the golden set's recorded output for an answer whose transcript it holds.
+            const golden = goldenAnswers().find((c) => c.transcript.trim() === reply);
+            calls.push({ tool, ...(golden ? { fixtureId: golden.id } : {}) });
+            const parsed = opts.parseAnswer?.(reply, field) ??
+              golden?.recorded ??
               (field.startsWith('manpower') ? r.parse_answer['delta-5-full-day']! : null) ?? {
                 field,
                 value: { text: 'n/a' },
@@ -394,6 +400,12 @@ export function createFixtureClaude(opts: FixtureClaudeOptions): FakeClaude {
 }
 
 // ───────────────────────────── Choice (EXTRACT_PROVIDER) ─────────────────────────────
+
+let answerCases: AnswerCase[] | null = null;
+/** fixtures/answers (W2-09), loaded on the first parse_answer. */
+function goldenAnswers(): AnswerCase[] {
+  return (answerCases ??= loadAnswerCases());
+}
 
 /** The case a transcript no golden case matches gets: the hero report, one open question (D27). */
 export const DEFAULT_FAKE_EXTRACTION_CASE = 'riverside-2026-10-09';

@@ -13,6 +13,23 @@ recording (`audio`).
 | `es-en-riverside-2026-10-09.json` | ES + EN  | Marco Ruiz, Riverside (ES · EN)    | The hero report: code-switching, the Delta crew on site with no headcount (D27; golden `riverside-2026-10-09`) |
 | `tr-kartal-2026-10-09.json`       | TR → tr  | Emre Yıldız, Kartal (tr-TR, §18.2) | Four crews, a pour, the §18.2 glossary phrases (golden `kartal-2026-10-09-tr`, W1-12)                          |
 
+### Spoken answers (W2-09, `kind: "answer"`)
+
+F7 _Other…_: the clip a reporter says for an open question. Each is the answer of a case in
+`../answers/` (the `parse_answer` golden set), whose recorded tool output the fake Claude returns
+for that transcript.
+
+| File                                | Language | Reporter                     | What it covers                                             |
+| ----------------------------------- | -------- | ---------------------------- | ---------------------------------------------------------- |
+| `answer-en-delta-five-all-day.json` | EN       | Marco Ruiz (ES · EN → multi) | "Five, all day." to the Delta question (W2-09's Done-when) |
+| `answer-es-delta-cinco.json`        | ES       | Marco Ruiz                   | The same answer in Spanish                                 |
+| `answer-tr-demirci-alti.json`       | TR       | Emre Yıldız (tr)             | The rebar crew of the Kartal report: six, a full day       |
+| `answer-en-unclear.json`            | EN       | Priya Raman (EN · HI → en)   | No answer in it: below 0.7, asked once more, then flagged  |
+
+Every file has a `kind` (`report` when absent, `answer`, `test`); the fake transcriber answers a
+request with a fixture of the request's purpose (`TranscriptionRequest.purpose`), so a real
+Chromium recording of an answer gets an answer transcript in its reporter's language.
+
 ## Who reads them
 
 - **The fake transcriber** (`apps/worker/src/ai/fake-transcriber.ts`, `TRANSCRIBE_PROVIDER=fake`,

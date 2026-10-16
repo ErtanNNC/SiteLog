@@ -22,6 +22,7 @@ import {
   FieldDbError,
   type AnswerInput,
   type AnswerResult,
+  type VoiceAnswerResult,
   type CompleteUploadResult,
   type ConfirmResult,
   type DayStatusResult,
@@ -266,8 +267,15 @@ export class FakeFieldStore implements FieldStore {
   getQuestion(id: string) {
     return Promise.resolve(this.questions.find((q) => q.id === id) ?? null);
   }
+  listAnsweredQuestions(reportId: string) {
+    return Promise.resolve(
+      this.questions
+        .filter((q) => q.report_id === reportId && q.answered_at !== null)
+        .sort((a, b) => (b.answered_at ?? '').localeCompare(a.answered_at ?? '')),
+    );
+  }
   countReportMedia(reportId: string) {
-    const ups = this.uploads.filter((u) => u.report_id === reportId);
+    const ups = this.uploads.filter((u) => u.report_id === reportId && !u.question_id);
     const voice = ups.filter((u) => u.kind === 'audio');
     return Promise.resolve({
       voiceNotes: voice.length,
@@ -290,13 +298,14 @@ export class FakeFieldStore implements FieldStore {
       UploadRow,
       'id' | 'reporter_id' | 'site_id' | 'kind' | 'storage_path' | 'mime' | 'bytes' | 'recorded_at'
     > &
-      Partial<Pick<UploadRow, 'batch_id' | 'batch_size'>>,
+      Partial<Pick<UploadRow, 'batch_id' | 'batch_size' | 'question_id'>>,
   ) {
     this.calls.push('insertUpload');
     const u: UploadRow = {
       ...row,
       batch_id: row.batch_id ?? null,
       batch_size: row.batch_size ?? null,
+      question_id: row.question_id ?? null,
       report_id: null,
       duration_s: null,
       peaks: null,
@@ -389,10 +398,31 @@ export class FakeFieldStore implements FieldStore {
         alreadyComplete: true,
         jobId: null,
         ...(u.batch_id ? { batch: this.batchState(u) } : {}),
+        ...(u.question_id ? { answerClip: true } : {}),
       });
     }
     const site = this.sites.find((s) => s.id === u.site_id)!;
     const date = u.storage_path.split('/')[2]!;
+    if (u.question_id) {
+      // W2-09 (20261016000060): a spoken answer's clip, staged on its question's report.
+      const q = this.questions.find((x) => x.id === u.question_id);
+      const r = q ? this.reports.find((x) => x.id === q.report_id) : undefined;
+      const d = r ? this.siteDays.find((x) => x.id === r.site_day_id) : undefined;
+      if (!q || !r || r.status === 'void' || r.site_id !== site.id || d?.date !== date) {
+        return Promise.reject(new FieldDbError('upload_path_mismatch'));
+      }
+      u.report_id = r.id;
+      u.bytes = bytes ?? u.bytes;
+      return Promise.resolve({
+        reportId: r.id,
+        reportNo: r.report_no,
+        reportStatus: r.status,
+        created: false,
+        alreadyComplete: false,
+        jobId: null,
+        answerClip: true,
+      });
+    }
     const day = this.siteDay(site.id, date);
     let r = this.reports.find((x) => x.site_day_id === day.id && x.status !== 'void');
     if (u.batch_id) {
@@ -722,6 +752,7 @@ export class FakeFieldStore implements FieldStore {
           channel: 'web',
           call_id: null,
           answer_source: { type: 'answer', questionId: q.id },
+          voice_answers: [],
         });
       }
       this.versions.push({
@@ -894,6 +925,61 @@ export class FakeFieldStore implements FieldStore {
       diff: { question_id: q.id, field: q.field, channel: 'web', job_id: job.id },
     });
     return Promise.resolve({ status: 'processing', reportStatus: 'processing', jobId: job.id });
+  }
+
+  /** field_answer_question_voice() (20261016000060, W2-09). */
+  answerQuestionVoice(input: {
+    reportId: string;
+    questionId: string;
+    reporterId: string;
+    uploadId: string;
+  }): Promise<VoiceAnswerResult> {
+    this.calls.push('answerQuestionVoice');
+    const r = this.reports.find((x) => x.id === input.reportId);
+    if (!r || r.status === 'void' || !this.onSite(input.reporterId, r.site_id)) {
+      return Promise.reject(new FieldDbError('report_not_found'));
+    }
+    const q = this.questions.find((x) => x.id === input.questionId && x.report_id === r.id);
+    if (!q) return Promise.reject(new FieldDbError('question_not_found'));
+    const tries = (q.voice_answers ?? []) as Array<{ uploadId: string; status: string }>;
+    if (tries.some((t) => t.uploadId === input.uploadId)) {
+      return Promise.resolve({ status: 'listening', reportStatus: r.status, jobId: null });
+    }
+    if (q.answered_at !== null || q.channel !== 'web')
+      return Promise.reject(new FieldDbError('question_closed'));
+    if (r.status !== 'awaiting_answer') return Promise.reject(new FieldDbError('wrong_state'));
+    if (tries.at(-1)?.status === 'listening')
+      return Promise.reject(new FieldDbError('answer_pending'));
+    const u = this.uploads.find((x) => x.id === input.uploadId);
+    if (
+      !u ||
+      u.question_id !== q.id ||
+      u.reporter_id !== input.reporterId ||
+      u.report_id !== r.id ||
+      u.kind !== 'audio'
+    ) {
+      return Promise.reject(new FieldDbError('upload_not_found'));
+    }
+    q.voice_answers = [...tries, { uploadId: u.id, at: this.iso(), status: 'listening' }];
+    const key = jobKeys.parseAnswer(q.id, u.id);
+    const job: FakeJob = {
+      id: this.jobs.length + 1,
+      type: 'parse_answer',
+      payload: { reportId: r.id, questionId: q.id, uploadId: u.id },
+      dedupe_key: key,
+      status: 'queued',
+    };
+    this.jobs.push(job);
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: input.reporterId,
+      action: 'report.answer_spoken',
+      entity: 'report',
+      entityId: r.id,
+      diff: { question_id: q.id, field: q.field, channel: 'web', upload_id: u.id, job_id: job.id },
+    });
+    return Promise.resolve({ status: 'listening', reportStatus: r.status, jobId: job.id });
   }
 
   audit(entry: AuditEntry) {

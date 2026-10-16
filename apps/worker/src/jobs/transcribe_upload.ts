@@ -63,7 +63,16 @@ export const transcribeUploadJob: JobHandler<'transcribe_upload'> = async (ctx, 
   await extractWhenAllTranscribed(ctx, upload.report_id, log);
 };
 
-async function transcribe(ctx: Ctx, upload: UploadRow, log: Ctx['log']): Promise<void> {
+/**
+ * Transcribes a web recorder upload and saves its transcript (one transaction, idempotent; see the
+ * job's steps 1–3). Also the spoken answer's clip of `parse_answer` (W2-09, purpose `answer`).
+ */
+export async function transcribe(
+  ctx: Ctx,
+  upload: UploadRow,
+  log: Ctx['log'],
+  purpose: 'report' | 'answer' = 'report',
+): Promise<void> {
   const site = await ctx.db.siteContext(upload.site_id);
   if (!site) throw new PermanentJobError(`site ${upload.site_id} not found`);
   const reporter = upload.reporter_id ? await ctx.db.getReporter(upload.reporter_id) : null;
@@ -97,6 +106,7 @@ async function transcribe(ctx: Ctx, upload: UploadRow, log: Ctx['log']): Promise
     prompt: buildTranscriptionPrompt({ ...vocabulary, areas }),
     ...(analysis ? { durationS: analysis.durationS } : {}),
     signal: ctx.signal,
+    ...(purpose === 'report' ? {} : { purpose }),
   });
   // Saved even when the job timed out meanwhile: the provider's work is not thrown away.
   const latencyMs = Date.now() - started;

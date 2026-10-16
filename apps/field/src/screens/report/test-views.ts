@@ -106,6 +106,7 @@ export function reportView(patch: Partial<ReportView> = {}): ReportView {
     pdfUrl: null,
     addPhotos: null,
     changeNote: null,
+    lastVoiceAnswer: null,
     ...patch,
   };
 }
@@ -127,6 +128,7 @@ export function questionView(options: boolean | 'none' = true): ReportView {
             ]
           : null,
       manpowerIndex: 2,
+      voice: null,
     },
   });
 }

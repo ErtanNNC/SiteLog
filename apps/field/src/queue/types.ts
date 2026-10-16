@@ -1,5 +1,5 @@
 import type { CompleteResponse } from '@sitelog/shared/field-contract.ts';
-import type { AddToReport } from '@sitelog/shared/field-api.ts';
+import type { AddToReport, AnswerTo } from '@sitelog/shared/field-api.ts';
 import type { UploadKind } from '@sitelog/shared/enums.ts';
 
 /**
@@ -46,6 +46,11 @@ export interface QueuedUpload {
    * photos*), one of a batch; absent for report material (and on items stored before W2-04).
    */
   addTo?: AddToReport | null;
+  /**
+   * W2-09 (F7 *Other…*): a spoken answer to the open question; once completed, the queue hands it
+   * to `reports/:id/answer {uploadId}`. Absent for report material.
+   */
+  answerTo?: AnswerTo | null;
   /** Epoch ms. */
   createdAt: number;
   status: QueuedStatus;
@@ -138,6 +143,8 @@ export interface NewUpload {
   recordedAt: string | null;
   /** F9: the filed report and batch this photo or caption joins. */
   addTo?: AddToReport | null;
+  /** W2-09: the open question this clip answers (spoken *Other…*). */
+  answerTo?: AnswerTo | null;
 }
 
 /** A recording being made (F5 step 2), saved chunk by chunk until its clip is queued. */

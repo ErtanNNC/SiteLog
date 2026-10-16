@@ -221,8 +221,10 @@ jobs:
         run: pnpm --filter @sitelog/web e2e:supabase --project=supabase
       # The worker (W1-08) against the stack, keyless: console SMS and console email (both land in
       # the Demo phone), the fake transcriber (W1-11: a voice note gets a fixtures/voice
-      # transcript, no Deepgram key), no AI or weather keys (those jobs fail and retry), the same
-      # LINK_SIGNING_SECRET as the functions. It starts after the panel specs, so their jobs (the
+      # transcript, no Deepgram key), the fake Claude (W2-09: extraction and parse_answer answer
+      # from the golden set, fixtures/tool-outputs and fixtures/answers; explicit, never in
+      # production), no weather key (those jobs fail and retry), the same LINK_SIGNING_SECRET as
+      # the functions. It starts after the panel specs, so their jobs (the
       # EOT pack, PDFs) are processed now and the specs above still see them queued.
       # WORKER_CLOCK_OVERRIDE (test only, refused in production; never on a hosted project): the
       # worker's clock starts at WORKER_CLOCK_START, just after the ladder spec's 17:46 Chicago
@@ -236,6 +238,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ env.SERVICE_ROLE_KEY }}
           EMAIL_PROVIDER: console
           TRANSCRIBE_PROVIDER: fake
+          EXTRACT_PROVIDER: fake
           LINK_SIGNING_SECRET: e2e-link-signing-secret-not-for-production
           FIELD_APP_URL: http://localhost:5174
           WORKER_PORT: '8080'

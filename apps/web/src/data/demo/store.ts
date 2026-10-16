@@ -702,6 +702,7 @@ export class DemoStore {
         uploaded_by: userId,
         purged_at: null,
         batch_id: null,
+        question_id: null,
         batch_size: null,
       });
       this.data.sources.push({

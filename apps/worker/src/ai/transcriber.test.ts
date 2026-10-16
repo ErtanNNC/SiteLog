@@ -261,7 +261,20 @@ describe('fixtures/voice and the fake transcriber', () => {
   const fixtures = loadVoiceFixtures();
 
   it('has EN, ES + EN (the hero, Delta headcount unclear) and TR, each consistent with its reporter and text', () => {
-    expect(fixtures.map((f) => f.transcriptionLanguage).sort()).toEqual(['en', 'multi', 'tr']);
+    const notes = fixtures.filter((f) => f.kind === 'report');
+    expect(notes.map((f) => f.transcriptionLanguage).sort()).toEqual(['en', 'multi', 'tr']);
+    // W2-09: spoken answers in EN, ES and TR (fixtures/answers), one too unclear to apply.
+    expect(
+      fixtures
+        .filter((f) => f.kind === 'answer')
+        .map((f) => f.id)
+        .sort(),
+    ).toEqual([
+      'answer-en-delta-five-all-day',
+      'answer-en-unclear',
+      'answer-es-delta-cinco',
+      'answer-tr-demirci-alti',
+    ]);
     for (const f of fixtures) {
       expect(transcriptionLanguage(f.reporter)).toBe(f.transcriptionLanguage);
       expect(f.text).toBe(f.segments.map((s) => s.text).join(' '));
@@ -271,7 +284,7 @@ describe('fixtures/voice and the fake transcriber', () => {
       // Never a phone number in a fixture the fake hands to the pipeline.
       expect(f.text).not.toMatch(/\d{7,}/);
     }
-    const hero = fixtures.find((f) => f.transcriptionLanguage === 'multi')!;
+    const hero = notes.find((f) => f.transcriptionLanguage === 'multi')!;
     expect(hero.text).toMatch(/Delta guys were on two/);
     expect(hero.text).not.toMatch(
       /Delta[^.]*\b(\d+|one|two|three|four|five|six) (guys|men|workers)/i,
@@ -309,6 +322,17 @@ describe('fixtures/voice and the fake transcriber', () => {
       'tr-kartal-2026-10-09',
       'es-en-riverside-2026-10-09',
       'en-elm-2026-10-02',
+    ]);
+    // W2-09: an answer clip gets an answer transcript in its reporter's language.
+    expect((await fake.transcribe(req({ language: 'multi', purpose: 'answer' }))).text).toBe(
+      'Five, all day.',
+    );
+    expect((await fake.transcribe(req({ language: 'tr', purpose: 'answer' }))).text).toMatch(
+      /^Demirciler altı kişiydi/,
+    );
+    expect(fake.calls.slice(3).map((c) => c.fixtureId)).toEqual([
+      'answer-en-delta-five-all-day',
+      'answer-tr-demirci-alti',
     ]);
     const aborted = new AbortController();
     aborted.abort(new Error('timed out'));

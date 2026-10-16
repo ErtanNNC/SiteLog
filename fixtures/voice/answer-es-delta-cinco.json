@@ -1,0 +1,24 @@
+{
+  "id": "answer-es-delta-cinco",
+  "description": "Spanish. Marco Ruiz answers the Delta headcount question in Spanish (W2-09): five, the whole day. The answer case fixtures/answers/es-delta-cinco.",
+  "kind": "answer",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Riverside Lofts — Block B",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["es", "en"]
+  },
+  "transcriptionLanguage": "multi",
+  "expectedLanguage": "es",
+  "goldenCase": null,
+  "durationS": 2.9,
+  "text": "Eran cinco, todo el día.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 2.6,
+      "text": "Eran cinco, todo el día."
+    }
+  ]
+}

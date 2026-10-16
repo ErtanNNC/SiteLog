@@ -33,7 +33,9 @@ export type Persist = (patch: Partial<QueuedUpload>) => Promise<void>;
 export type SendableUpload = QueuedUpload & { blob: Blob };
 
 export interface UploaderDeps {
-  routes: Pick<FieldRoutes, 'createUpload' | 'completeUpload'>;
+  /** `answer` hands a spoken answer's clip to field-api after it completes (W2-09). */
+  routes: Pick<FieldRoutes, 'createUpload' | 'completeUpload'> &
+    Partial<Pick<FieldRoutes, 'answer'>>;
   /** PUTs the file to the signed URL; the default is `fetch`. */
   put?: (url: string, blob: Blob, mime: string, signal: AbortSignal) => Promise<{ status: number }>;
 }
@@ -140,6 +142,38 @@ function failure(err: unknown): UploadOutcome & { ok: false } {
   return { ok: false, permanent: false, error: status ? `http_${status}` : 'internal' };
 }
 
+/**
+ * W2-09: a completed answer clip goes to `reports/:id/answer {uploadId}` (field-api queues
+ * parse_answer). A question answered meanwhile, a report that moved on, or a clip already being
+ * listened to leave nothing to do: the item is done. Anything else (no signal) fails the try, and
+ * the next one completes again (`alreadyComplete`) and answers again (field-api answers a repeat
+ * the same way).
+ */
+const ANSWER_SETTLED: ReadonlySet<FieldApiErrorCode> = new Set<FieldApiErrorCode>([
+  'question_closed',
+  'wrong_state',
+  'answer_pending',
+  'not_found',
+]);
+
+async function answerWith(
+  item: QueuedUpload,
+  deps: UploaderDeps,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  if (!deps.routes.answer || !item.answerTo || !item.uploadId) return;
+  const { reportId, questionId } = item.answerTo;
+  try {
+    await withDeadline(API_DEADLINE_MS, signal, () =>
+      deps.routes.answer!(item.code, reportId, { questionId, uploadId: item.uploadId! }),
+    );
+  } catch (err) {
+    const code = apiErrorCode(err);
+    if (code && ANSWER_SETTLED.has(code)) return;
+    throw err;
+  }
+}
+
 export async function uploadItem(
   item: SendableUpload,
   deps: UploaderDeps,
@@ -162,10 +196,13 @@ export async function uploadItem(
             kind: current.kind,
             mime: current.mime,
             bytes: current.bytes,
-            // F9: a photo for a filed report goes in that report's site and day.
+            // F9: a photo for a filed report goes in that report's site and day; W2-09: so does
+            // a spoken answer, in its question's report.
             ...(current.addTo
               ? { addTo: current.addTo }
-              : { siteId: current.siteId, date: current.date }),
+              : current.answerTo
+                ? { answerTo: current.answerTo }
+                : { siteId: current.siteId, date: current.date }),
             ...(current.recordedAt ? { recordedAt: current.recordedAt } : {}),
           },
           s,
@@ -206,6 +243,7 @@ export async function uploadItem(
         deps.routes.completeUpload(current.code, current.uploadId!, s),
       );
       await save({ putDone: true });
+      if (current.answerTo) await answerWith(current, deps, signal);
       return { ok: true, result };
     } catch (err) {
       const code = apiErrorCode(err);

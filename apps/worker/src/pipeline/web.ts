@@ -18,6 +18,7 @@ import {
   type ReportRow,
   type ReportSourceRow,
   type ReportStatus,
+  type Source,
   type StoredReportData,
   type ValidationResult,
 } from '@sitelog/shared';
@@ -155,7 +156,7 @@ export function reapplyAnswers(
   let out = data;
   const reapplied: string[] = [];
   for (const q of questions) {
-    const answer = q.answer as { parsed?: AnswerValue } | null;
+    const answer = q.answer as { parsed?: AnswerValue; voice?: Source } | null;
     if (!q.answered_at || !answer?.parsed || !gapPaths.has(questionPath(q))) continue;
     const target = { ...((q.target ?? {}) as QuestionSpec['target']) };
     if (target.manpowerIndex !== undefined) {
@@ -170,6 +171,8 @@ export function reapplyAnswers(
       defaultShiftHours: ctx.defaultShiftHours,
       workingHours: ctx.workingHours,
       source: { type: 'answer', questionId: q.id },
+      // W2-09: a spoken answer's clip stays a source of the value.
+      ...(answer.voice?.type === 'voice_note' ? { extraSources: [answer.voice] } : {}),
     }).data;
     reapplied.push(q.id);
   }

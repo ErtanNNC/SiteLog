@@ -633,6 +633,54 @@ export function parseQuickAnswer(field: QuestionField, text: string): AnswerValu
 }
 
 /**
+ * The numbers a spoken or typed answer states, in EN, ES and TR words or digits, plus a crew said
+ * as a sum ("four and the foreman" → 5, `crewCount`). Pure.
+ */
+export function statedNumbers(text: string): Set<number> {
+  const t = text
+    .trim()
+    .toLowerCase()
+    .replace(/\u0307/g, '')
+    .replace(/\s+/g, ' ');
+  const normalized = t.replace(/[\p{L}]+/gu, (w) =>
+    w in NUMBER_WORDS ? String(NUMBER_WORDS[w]) : w,
+  );
+  const out = new Set<number>();
+  for (const m of normalized.matchAll(/\d+(?:[.,]\d+)?/g)) out.add(Number(m[0].replace(',', '.')));
+  const sum = crewCount(normalized);
+  if (sum !== null) out.add(sum);
+  return out;
+}
+
+/**
+ * "Never invent numbers" for a parsed answer (W2-09, §10.7): every number the model put in the
+ * value must be one the answer states (`statedNumbers`), except what code derives from words it
+ * did say ("full day", "half day": hours from the org's shift; "no stoppage": 0 lost hours). An
+ * end time must name its hour. Null when the value only carries stated numbers, else the first
+ * key that does not (the caller treats the answer as unclear). Pure.
+ */
+export function unstatedAnswerNumber(value: AnswerValue, text: string): string | null {
+  const stated = statedNumbers(text);
+  const said = (n: number) => stated.has(n) || stated.has(round2(n));
+  if (value.workers != null && !said(value.workers)) return 'workers';
+  if (
+    value.hoursPerWorker != null &&
+    !value.fullDay &&
+    !value.halfDay &&
+    !said(value.hoursPerWorker)
+  )
+    return 'hoursPerWorker';
+  if (value.totalHours != null && !said(value.totalHours)) return 'totalHours';
+  if (value.lostHours != null && value.lostHours !== 0 && !said(value.lostHours))
+    return 'lostHours';
+  if (value.endTime) {
+    const h = Number(value.endTime.slice(0, 2));
+    if (!said(h) && !said(h > 12 ? h - 12 : h)) return 'endTime';
+  }
+  return null;
+}
+
+/**
  * D28: an answer given as a number (the field app's number input for a question with no options).
  * Headcount: `workers` (and the hours the reporter set: a number, or 'full_day'); hours:
  * hours per worker; weather: lost hours. Other questions are answered with an option, so a number
@@ -682,6 +730,11 @@ export interface ApplyAnswerContext<S extends Source | SourceV1 = Source | Sourc
    * reply `{type:'reply', messageId}` for v1 data until step 22.
    */
   source: S;
+  /**
+   * More sources of the value (W2-09): a spoken answer's clip, `{type:'voice_note', uploadId,
+   * start, end}`, after the answer itself.
+   */
+  extraSources?: readonly S[];
   confidence?: number;
   companies?: ReadonlyArray<{ id: string; name: string }>;
 }
@@ -728,6 +781,7 @@ export function applyAnswer<D extends AnyReportData>(
   const next = structuredClone(data) as unknown as LooseData;
   const done = (ackText: string | null) => ({ data: next as unknown as D, ackText });
   const src = ctx.source as Source | SourceV1;
+  const srcs = [src, ...((ctx.extraSources ?? []) as ReadonlyArray<Source | SourceV1>)];
   // v2 calls a value from an answer 'answer' (§10.3); v1 called it 'reply'.
   const answered = data.schemaVersion === 2 ? 'answer' : 'reply';
   const conf = ctx.confidence ?? 1;
@@ -755,7 +809,7 @@ export function applyAnswer<D extends AnyReportData>(
                 ? answered
                 : 'unknown',
             confidence: conf,
-            source: [src],
+            source: [...srcs],
           });
         } else {
           return done(null);
@@ -783,7 +837,7 @@ export function applyAnswer<D extends AnyReportData>(
           entry.hoursBasis = answered;
         }
         entry.confidence = Math.max(entry.confidence, conf);
-        entry.source = [...entry.source, src];
+        entry.source = [...entry.source, ...srcs];
       }
       const { entries } = recomputeManpowerTotals(next.manpower);
       next.manpower = entries;
@@ -809,13 +863,13 @@ export function applyAnswer<D extends AnyReportData>(
         if (id && name) {
           entry.companyId = id;
           entry.companyName = name;
-          entry.source = [...entry.source, src];
+          entry.source = [...entry.source, ...srcs];
           return done(`Thanks — logged as ${name}.`);
         }
       }
       if (answer.companyAction === 'add' || answer.companyName) {
         entry.companyName = answer.companyName ?? entry.companyName;
-        entry.source = [...entry.source, src];
+        entry.source = [...entry.source, ...srcs];
         return done(`Thanks — I've added ${entry.companyName} for the office to confirm.`);
       }
       return done(null);
@@ -828,7 +882,7 @@ export function applyAnswer<D extends AnyReportData>(
         if (answer.impact) period.impact = answer.impact;
         if (answer.start) period.start = answer.start;
         if (answer.end) period.end = answer.end;
-        period.source = [...period.source, src];
+        period.source = [...period.source, ...srcs];
       } else if (lost === 0 && !answer.impact && answer.text && !next.weather.conditionsText) {
         // "Dry, no impact" to "What was the weather like?": the conditions, no stoppage period.
         next.weather.conditionsText = answer.text;
@@ -839,7 +893,7 @@ export function applyAnswer<D extends AnyReportData>(
           lostHours: round2(lost ?? 0),
           start: answer.start,
           end: answer.end,
-          source: [src],
+          source: [...srcs],
         });
       } else if (answer.text && !next.weather.conditionsText) {
         next.weather.conditionsText = answer.text;
@@ -857,7 +911,7 @@ export function applyAnswer<D extends AnyReportData>(
       if (answer.noIncidentsStated !== undefined)
         next.safety.noIncidentsStated = answer.noIncidentsStated;
       if (answer.toolboxTalk) next.safety.toolboxTalk = answer.toolboxTalk;
-      next.safety.source = [...next.safety.source, src];
+      next.safety.source = [...next.safety.source, ...srcs];
       return done('Thanks — safety noted.');
     }
     case 'photo':

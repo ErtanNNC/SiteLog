@@ -189,6 +189,7 @@ export class UploadQueue {
       date: input.date,
       recordedAt: input.recordedAt,
       ...(input.addTo ? { addTo: input.addTo } : {}),
+      ...(input.answerTo ? { answerTo: input.answerTo } : {}),
       createdAt: this.now(),
       status: opts.hold ? 'held' : 'queued',
       attempts: 0,

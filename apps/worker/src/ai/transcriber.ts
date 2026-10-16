@@ -33,6 +33,12 @@ export interface TranscriptionRequest {
   durationS?: number;
   /** The job's AbortSignal (W1-10): a timed-out job's request stops. */
   signal?: AbortSignal;
+  /**
+   * What the clip is (W2-09, W2-13): a report's voice note (the default), a spoken answer to a
+   * question, or the Welcome screen's test. Providers ignore it; the fake answers with a fixture
+   * of that kind.
+   */
+  purpose?: 'report' | 'answer' | 'test';
 }
 
 export interface Transcription {

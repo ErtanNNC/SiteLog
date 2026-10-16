@@ -67,6 +67,7 @@ import {
   type SignOutResponse,
   type SiteRow,
   type TodayResponse,
+  type AnswerTo,
   type UploadRequest,
   type UploadResponse,
   type VerifyResponse,
@@ -103,6 +104,8 @@ import {
   storedObjectProblem,
   storedQuestionOptions,
   verifyCodeHash,
+  voiceAnswerView,
+  lastVoiceAnswerView,
 } from './logic.ts';
 import { FieldDbError, type FieldStore, type OrgContext } from './store.ts';
 
@@ -626,6 +629,9 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     const media = uploadMediaType(body.mime);
     if (!media || media.kind !== body.kind) throw new FieldError(400, 'media_type_not_allowed');
     if (body.addTo) return c.json(await uploadToFiled(ctx, body, body.addTo, media.ext), 201);
+    if (body.answerTo) {
+      return c.json(await uploadAnswerClip(ctx, body, body.answerTo, media.ext), 201);
+    }
     if (ctx.link.kind === 'photos' && body.kind !== 'photo') {
       throw new FieldError(400, 'kind_not_allowed', 'A photos link takes photos only (F9)');
     }
@@ -741,6 +747,65 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     };
   }
 
+  /**
+   * F7 *Other…* (W2-09): a spoken answer's clip for the open web question of a report in the
+   * link's scope, awaiting that answer. The clip goes in the report's site and day and names the
+   * question (`uploads.question_id`): field_complete_upload() stages it on the report without
+   * making it report material; `reports/:id/answer {uploadId}` then hands it to the worker.
+   */
+  async function uploadAnswerClip(
+    ctx: DeviceContext,
+    body: UploadRequest,
+    answerTo: AnswerTo,
+    ext: string,
+  ): Promise<UploadResponse> {
+    const report = await reportInScope(ctx, answerTo.reportId);
+    const question = await store.getQuestion(answerTo.questionId);
+    if (!question || question.report_id !== report.id) {
+      throw new FieldError(404, 'not_found', 'Question not found');
+    }
+    if (question.channel !== 'web' || question.answered_at !== null) {
+      throw new FieldError(409, 'question_closed');
+    }
+    if (report.status !== 'awaiting_answer') {
+      throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    }
+    const site = ctx.sites.find((s) => s.id === report.site_id)!;
+    if (site.status !== 'active') throw new FieldError(409, 'site_inactive');
+    const day = await store.getSiteDayById(report.site_day_id);
+    if (!day) throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    const id = randomUUID();
+    const bucket = uploadBucket(body.kind);
+    const path = uploadStoragePath(ctx.reporter.org_id, site.id, day.date, id, ext);
+    await store.insertUpload({
+      id,
+      reporter_id: ctx.reporter.id,
+      site_id: site.id,
+      kind: body.kind,
+      storage_path: path,
+      mime: uploadMediaType(body.mime)!.mime,
+      bytes: body.bytes,
+      recorded_at: body.recordedAt ?? null,
+      question_id: question.id,
+    });
+    const signed = await store.createSignedUploadUrl(bucket, path);
+    await audit(ctx, 'upload.created', 'upload', id, {
+      kind: body.kind,
+      site_id: site.id,
+      date: day.date,
+      report_id: report.id,
+      question_id: question.id,
+      answer_clip: true,
+    });
+    return {
+      uploadId: id,
+      bucket,
+      path,
+      ...signed,
+      signedUrl: publicSignedUrl(signed.signedUrl, deps.publicUrl?.()),
+    };
+  }
+
   // ── uploads/:id/complete ─────────────────────────────────────────────────────────────────────
   app.post('/uploads/:id/complete', async (c) => {
     const ctx = await authenticate(c, { consent: true });
@@ -833,11 +898,12 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     const ctx = await authenticate(c, { consent: true });
     const report = await reportInScope(ctx, c.req.param('id'));
     const site = ctx.sites.find((s) => s.id === report.site_id)!;
-    const [day, version, question, progress] = await Promise.all([
+    const [day, version, question, progress, answered] = await Promise.all([
       store.getSiteDayById(report.site_day_id),
       store.getVersion(report.id, report.current_version),
       store.getOpenQuestion(report.id),
       store.countReportMedia(report.id),
+      store.listAnsweredQuestions(report.id),
     ]);
     const filed = report.status === 'filed' || report.status === 'signed_off';
     const pdfUrl =
@@ -864,8 +930,10 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
             prompt: question.prompt,
             options: questionOptions(question.options),
             manpowerIndex: questionManpowerIndex(question.target),
+            voice: voiceAnswerView(question),
           }
         : null,
+      lastVoiceAnswer: lastVoiceAnswerView(answered),
       data: version ? readReportData(version.data as Parameters<typeof readReportData>[0]) : null,
       draftRev: version ? (version.draft_rev ?? 1) : null,
       progress,
@@ -945,6 +1013,36 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     }
     const field = question.field as QuestionField;
     const target = (question.target ?? {}) as QuestionSpec['target'];
+
+    // W2-09 (F7 *Other…*, §10.7): a spoken answer. The clip must be a completed answer clip of
+    // this question; the worker transcribes it and parses it (parse_answer), then applies the
+    // value in code or asks once more. The report stays awaiting the answer meanwhile.
+    if (body.uploadId !== undefined) {
+      const upload = await store.getUpload(body.uploadId);
+      if (
+        !upload ||
+        upload.reporter_id !== ctx.reporter.id ||
+        upload.question_id !== question.id ||
+        upload.kind !== 'audio'
+      ) {
+        throw new FieldError(404, 'not_found', 'Upload not found');
+      }
+      if (upload.report_id !== report.id) {
+        throw new FieldError(409, 'upload_missing', 'The clip has not been completed yet');
+      }
+      const res = await store.answerQuestionVoice({
+        reportId: report.id,
+        questionId: question.id,
+        reporterId: ctx.reporter.id,
+        uploadId: upload.id,
+      });
+      const out: AnswerResponse = {
+        status: 'listening',
+        reportStatus: res.reportStatus,
+        confirmation: null,
+      };
+      return c.json(out, 202);
+    }
 
     // The answer in code (§10.5): the option's value (a fallback option) or its label parsed (the
     // model's option); D28, a typed number for the field it answers. Never a model call here.
@@ -1324,6 +1422,7 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   invalid_batch: [400, 'invalid_request'],
   batch_not_found: [404, 'not_found'],
   batch_incomplete: [409, 'wrong_state'],
+  answer_pending: [409, 'answer_pending'],
 };
 
 function errorResponse(c: Context, err: unknown, now: Date): Response {

@@ -290,12 +290,29 @@ export const uiEn = {
       invalidNumber: 'Enter a number.',
       /** A question with no answers to tap and no number to type (not asked by the worker today). */
       cannotAnswer: 'This one can’t be answered here yet. The office will check it.',
+      /** W2-09 (F7 Other…): say the answer (a 30-second clip) or, for a number, type it. */
+      other: 'Other — say it',
+      otherTitle: 'Say your answer',
+      otherHint: 'Up to 30 seconds. Nothing else is recorded.',
+      record: 'Record your answer',
+      recording: 'Recording',
+      stop: 'Stop & send',
+      typeIt: 'Or type it',
+      noMic:
+        'The microphone is off. Type the number, or allow the microphone in your phone’s settings.',
+      noMicOnly: 'The microphone is off. Allow it in your phone’s settings, or pick an answer.',
+      cancel: 'Cancel',
+      listening: 'Listening to your answer…',
+      retry: 'I didn’t catch that. Say it again, or pick an answer.',
+      unclear: 'I couldn’t make that out, so I’ve left it for the office to check.',
+      queueFailed: 'Couldn’t keep your answer on this phone. Try again.',
       errors: {
         question_closed: 'That question was already answered. Here is the latest.',
         wrong_state: 'Your report changed. Here is the latest.',
         answer_not_accepted: 'That answer didn’t work. Try again.',
         offline: 'No connection. Check your signal and try again.',
         generic: 'Couldn’t send your answer. Try again.',
+        answer_pending: 'Still listening to your last answer.',
       },
     },
     /** F7's confirmation line after an answer (numbers from code, never the model). */

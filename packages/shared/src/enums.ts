@@ -228,6 +228,11 @@ export const JOB_TYPES = [
   'weekly_digest',
   /** A message to a field reporter through the Notifier (§10.1, D48; W1-10). */
   'notify',
+  /**
+   * §10.7 (W2-09): a spoken *Other…* answer of the web recorder: the clip transcribed, then
+   * `parse_answer` (the model) and the value applied in code, or the question asked once more.
+   */
+  'parse_answer',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

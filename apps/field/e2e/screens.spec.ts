@@ -137,13 +137,13 @@ for (const run of RUNS) {
       await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
       await expectFieldScreen(page);
 
-      // The question (F7, Field-05; W1-13): one per screen, two answers, no Other… until M6.
+      // The question (F7, Field-05; W1-13): one per screen, two answers and Other — say it (W2-09).
       const question = page.getByRole('heading', { level: 1, name: market.question.prompt });
       await expect(question).toBeVisible({ timeout: 10_000 });
       await expect(question).toBeFocused();
       await expect(page.getByText(field.question.badge, { exact: true })).toBeVisible();
       const answers = page.getByRole('main').getByRole('button');
-      await expect(answers).toHaveText([...market.question.options]);
+      await expect(answers).toHaveText([...market.question.options, field.question.other]);
       await expectFieldScreen(page);
       await page.getByRole('button', { name: market.question.options[1] }).click();
 
@@ -242,6 +242,139 @@ test.describe('question and draft (W1-13)', () => {
     expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/answer`)?.body).toEqual({
       questionId: QUESTION_ID,
       value: 5,
+      hours: 'full_day',
+    });
+  });
+});
+
+/** Today → Recording → the question (an answered device and consent): the Question screen. */
+async function toQuestion(page: Page, lang: keyof typeof UI_RESOURCES, market: Market) {
+  const field = UI_RESOURCES[lang].field;
+  await page.goto(`/r/${CODE}`);
+  await page.getByRole('link', { name: field.today.record }).click();
+  await recordAndSend(page, lang);
+  await page.getByRole('button', { name: field.recording.stopSend }).click();
+  await expect(page.getByRole('heading', { level: 1, name: market.question.prompt })).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+/** F7 Other… (W2-09): open the sheet, record a short answer with the fake microphone, send it. */
+async function sayAnswer(page: Page, lang: keyof typeof UI_RESOURCES) {
+  const q = UI_RESOURCES[lang].field.question;
+  await page.getByRole('button', { name: q.other }).click();
+  const sheet = page.getByRole('dialog', { name: q.otherTitle });
+  await expect(sheet).toBeVisible();
+  const record = sheet.getByRole('button', { name: q.record });
+  const box = await record.boundingBox();
+  expect(box!.height, 'Record ≥ 120 px (§14.6)').toBeGreaterThanOrEqual(120);
+  await record.click();
+  await expect(sheet.getByRole('timer')).toHaveText(/^00:0[1-9] \/ 00:30$/, { timeout: 10_000 });
+  await sheet.getByRole('button', { name: q.stop }).click();
+  await expect(sheet).toHaveCount(0);
+}
+
+for (const run of RUNS) {
+  test.describe(`Other… said (F7, W2-09) in ${run.lang}`, () => {
+    test.use({ locale: run.locale });
+
+    test('the answer said is listened to, applied in code with F7’s line, then the draft', async ({
+      page,
+    }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const market = run.market();
+      const api = await installFakeFieldApi(page, market, { verified: true, consented: true });
+      await toQuestion(page, run.lang, market);
+      await sayAnswer(page, run.lang);
+      await expect(
+        page.getByRole('status').filter({ hasText: field.question.listening }),
+      ).toBeVisible();
+      await expectFieldScreen(page);
+      // The worker's numbers (code's), then the draft.
+      const asked = market.draft.manpower[market.askedCrew]!;
+      await expect(page.getByRole('status').filter({ hasText: asked.companyName })).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(page.getByRole('heading', { level: 1, name: field.draft.title })).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(
+        page.getByText(`5 × ${run.lang === 'tr' ? '8 sa' : '8 h'}`).first(),
+      ).toBeVisible();
+      // The clip went as an answer clip of the question, then `answer {uploadId}`.
+      const upload = api.calls.filter((c) => c.method === 'POST' && c.path === 'uploads').at(-1)!;
+      expect(upload.body).toMatchObject({
+        kind: 'audio',
+        answerTo: { reportId: REPORT_ID, questionId: QUESTION_ID },
+      });
+      expect(upload.body).not.toHaveProperty('siteId');
+      const answer = api.calls.find((c) => c.path === `reports/${REPORT_ID}/answer`)!;
+      expect(answer.body).toEqual({
+        questionId: QUESTION_ID,
+        uploadId: api.stored.at(-1)!.uploadId,
+      });
+      // Not a voice note of the report.
+      expect(api.completed).toHaveLength(1);
+    });
+  });
+}
+
+test.describe('Other… (F7, W2-09) off the happy path', () => {
+  test.use({ locale: 'en-US' });
+
+  test('unclear: asked once more, then left for the office; the sheet types a number; 1440 px', async ({
+    page,
+  }) => {
+    const field = UI_RESOURCES.en.field;
+    const market = kestrel('en-US');
+    await installFakeFieldApi(page, market, {
+      verified: true,
+      consented: true,
+      voiceAnswer: 'unclear',
+    });
+    await toQuestion(page, 'en', market);
+    // The sheet: Say it, and for a number field the number input.
+    await page.getByRole('button', { name: field.question.other }).click();
+    const sheet = page.getByRole('dialog', { name: field.question.otherTitle });
+    await expect(sheet.getByRole('heading', { name: field.question.typeIt })).toBeVisible();
+    await expect(sheet.getByLabel(field.question.workers)).toBeVisible();
+    await expectFieldScreen(page);
+    await sheet.getByRole('button', { name: field.question.cancel }).click();
+    await expect(sheet).toHaveCount(0);
+
+    await sayAnswer(page, 'en');
+    await expect(page.getByRole('status').filter({ hasText: field.question.retry })).toBeVisible({
+      timeout: 15_000,
+    });
+    // Asked once more, with the same answers to tap.
+    await expect(page.getByRole('button', { name: market.question.options[0] })).toBeEnabled();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expectFieldScreen(page);
+    await sayAnswer(page, 'en');
+    await expect(page.getByRole('status').filter({ hasText: field.question.unclear })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole('heading', { level: 1, name: field.draft.title })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expectFieldScreen(page);
+  });
+
+  test('a number typed in the sheet answers like the card’s input', async ({ page }) => {
+    const field = UI_RESOURCES.en.field;
+    const market = kestrel('en-US');
+    const api = await installFakeFieldApi(page, market, { verified: true, consented: true });
+    await toQuestion(page, 'en', market);
+    await page.getByRole('button', { name: field.question.other }).click();
+    const sheet = page.getByRole('dialog', { name: field.question.otherTitle });
+    await sheet.getByLabel(field.question.workers).fill('6');
+    await sheet.getByRole('button', { name: field.question.send }).click();
+    await expect(page.getByRole('heading', { level: 1, name: field.draft.title })).toBeVisible({
+      timeout: 15_000,
+    });
+    expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/answer`)?.body).toEqual({
+      questionId: QUESTION_ID,
+      value: 6,
       hours: 'full_day',
     });
   });
@@ -623,6 +756,7 @@ function pastReports(market: Market): {
     pdfUrl: '/__storage/pdfs/RL-2041-0187_v2.pdf?token=e2e',
     addPhotos: null,
     changeNote: null,
+    lastVoiceAnswer: null,
   };
   return {
     history: [

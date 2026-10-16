@@ -35,8 +35,9 @@ function question(over: Partial<QuestionRow> = {}): QuestionRow {
     channel: 'web',
     call_id: null,
     answer_source: null,
+    voice_answers: [],
     ...over,
-  };
+  } as QuestionRow;
 }
 
 describe('D25: the 30 s device rule', () => {

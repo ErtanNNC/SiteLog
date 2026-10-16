@@ -1,6 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 import type { FieldCountryView } from '@sitelog/shared/countries.ts';
 import type {
+  AnswerConfirmation,
   AnswerResponse,
   CompleteResponse,
   ConfirmResponse,
@@ -59,6 +60,18 @@ function crew(
 }
 
 /** The draft after the answer: the asked crew's headcount from it, the total computed (code's). */
+/** F7's line for a headcount answered (code's numbers, as field-api and the worker make it). */
+export function crewConfirmation(market: Market, workers: number): AnswerConfirmation {
+  const entry = answeredDraft(market, workers).manpower[market.askedCrew]!;
+  return {
+    kind: 'crew',
+    company: entry.companyName,
+    workers,
+    hoursPerWorker: entry.hoursPerWorker,
+    totalHours: entry.totalHours,
+  };
+}
+
 export function answeredDraft(market: Market, workers: number): DailyReportData {
   const draft = structuredClone(market.draft);
   const entry = draft.manpower[market.askedCrew]!;
@@ -215,6 +228,15 @@ export interface FakeFieldApi {
     processingPolls: number;
     /** The headcount answered (null: the question is open). */
     answered: number | null;
+    /**
+     * W2-09: the spoken answer being listened to (its clip), the unclear tries so far, and whether
+     * the question was left for the office (unclear twice).
+     */
+    listening: string | null;
+    unclearTries: number;
+    leftForOffice: boolean;
+    /** The question answered by voice (for `lastVoiceAnswer`). */
+    spokenAnswer: boolean;
     /** Confirm & send was accepted. */
     confirmed: boolean;
     /** Settings (F15, W2-02): what `preferences` answers; consent/revoke and PATCH change it. */
@@ -271,6 +293,11 @@ export interface FakeOptions {
   reports?: Record<string, ReportView>;
   /** `POST expired/daily-link` (F16): the answer, or a refusal. */
   expiredAnswer?: ExpiredLinkResponse | Refusal;
+  /**
+   * W2-09: what the worker makes of a spoken answer: a headcount (applied, full day), or
+   * `unclear` (asked once more, then left for the office). Default 5.
+   */
+  voiceAnswer?: number | 'unclear';
 }
 
 export async function installFakeFieldApi(
@@ -287,6 +314,10 @@ export async function installFakeFieldApi(
       report: null,
       processingPolls: 1,
       answered: null,
+      listening: null,
+      unclearTries: 0,
+      leftForOffice: false,
+      spokenAnswer: false,
       confirmed: false,
       prefs: {
         contactPref: market.reporter.contactPref,
@@ -312,9 +343,12 @@ export async function installFakeFieldApi(
   const options = api.options;
   let uploads = 0;
   const batchOf = new Map<string, string>();
+  /** W2-09: answer clips (uploads with `answerTo`). */
+  const answerClips = new Set<string>();
   let reportPolls = 0;
   let pollsSinceAnswer = 0;
   let pollsSinceConfirm = 0;
+  let listeningPolls = 0;
 
   await page.route('**/__storage/upload/**', async (route) => {
     if (api.state.noSignal) return route.abort('internetdisconnected');
@@ -481,6 +515,7 @@ export async function installFakeFieldApi(
             addTo?: { reportId: string; batchId: string; photos: number; caption: boolean };
           }
         ).addTo;
+        if ((body as { answerTo?: unknown }).answerTo) answerClips.add(uploadId);
         if (addTo) {
           // F9: a photo (or caption) for a filed report of `options.reports`, in a batch.
           api.batches[addTo.batchId] ??= {
@@ -539,6 +574,17 @@ export async function installFakeFieldApi(
           };
           return json(route, 200, res);
         }
+        if (answerClips.has(uploadId)) {
+          // W2-09: an answer clip is staged on the question's report, not a voice note of it.
+          const res: CompleteResponse = {
+            reportId: REPORT_ID,
+            reportNo: REPORT_NO,
+            reportStatus: 'awaiting_answer',
+            created: false,
+            alreadyComplete: false,
+          };
+          return json(route, 200, res);
+        }
         if (options.completeError) return refuse(options.completeError);
         api.completed.push(uploadId);
         api.state.dayStatus = 'processing';
@@ -564,7 +610,28 @@ export async function installFakeFieldApi(
         let status: ReportView['status'] = 'processing';
         let question: ReportView['question'] = null;
         let data: DailyReportData | null = null;
-        if (written && st.answered === null) {
+        // W2-09: the worker settles a spoken answer on the poll after the one that showed it.
+        let voice: NonNullable<ReportView['question']>['voice'] = null;
+        if (written && st.listening !== null) {
+          if (listeningPolls++ >= 1) {
+            st.listening = null;
+            listeningPolls = 0;
+            const said = options.voiceAnswer ?? 5;
+            if (said === 'unclear') {
+              st.unclearTries++;
+              if (st.unclearTries >= 2) st.leftForOffice = true;
+              else voice = { state: 'retry', unclear: st.unclearTries };
+            } else {
+              st.answered = said;
+              st.spokenAnswer = true;
+            }
+          } else {
+            voice = { state: 'listening', unclear: st.unclearTries };
+          }
+        } else if (st.unclearTries === 1 && !st.leftForOffice) {
+          voice = { state: 'retry', unclear: st.unclearTries };
+        }
+        if (written && st.answered === null && !st.leftForOffice) {
           status = 'awaiting_answer';
           data = market.draft;
           question = {
@@ -575,7 +642,12 @@ export async function installFakeFieldApi(
               ? null
               : market.question.options.map((label, i) => ({ id: `o${i + 1}`, label })),
             manpowerIndex: market.askedCrew,
+            voice,
           };
+        } else if (st.leftForOffice) {
+          // Unclear twice (F7): left for the office, the draft without the headcount.
+          data = market.draft;
+          status = ++pollsSinceAnswer <= 1 ? 'processing' : 'awaiting_confirmation';
         } else if (st.answered !== null) {
           // decide_next runs once after the answer, then the draft; filing after Confirm & send.
           data = answeredDraft(market, st.answered);
@@ -611,30 +683,48 @@ export async function installFakeFieldApi(
               ? { canAdd: true, remaining: 4, until: '2026-10-11T04:59:00.000Z', pending: 0 }
               : null,
           changeNote: null,
+          lastVoiceAnswer: st.leftForOffice
+            ? { questionId: QUESTION_ID, outcome: 'unclear' }
+            : st.spokenAnswer && st.answered !== null
+              ? {
+                  questionId: QUESTION_ID,
+                  outcome: 'applied',
+                  confirmation: crewConfirmation(market, st.answered),
+                }
+              : null,
         };
         if (status === 'filed')
           api.state.report = { id: REPORT_ID, reportNo: REPORT_NO, status, kind: 'daily' };
         return json(route, 200, res);
       }
       if (path === `reports/${REPORT_ID}/answer`) {
-        const b = body as { questionId: string; optionId?: string; value?: number };
+        const b = body as {
+          questionId: string;
+          optionId?: string;
+          value?: number;
+          uploadId?: string;
+        };
         if (b.questionId !== QUESTION_ID || api.state.answered !== null) {
           return json(route, 409, { error: 'question_closed' });
+        }
+        if (b.uploadId) {
+          // W2-09: a spoken answer, listened to by the worker.
+          if (!answerClips.has(b.uploadId)) return json(route, 404, { error: 'not_found' });
+          api.state.listening = b.uploadId;
+          const res: AnswerResponse = {
+            status: 'listening',
+            reportStatus: 'awaiting_answer',
+            confirmation: null,
+          };
+          return json(route, 202, res);
         }
         const workers = b.optionId ? Number(b.optionId === 'o1' ? 4 : 5) : b.value;
         if (typeof workers !== 'number') return json(route, 400, { error: 'answer_not_accepted' });
         api.state.answered = workers;
-        const entry = answeredDraft(market, workers).manpower[market.askedCrew]!;
         const res: AnswerResponse = {
           status: 'processing',
           reportStatus: 'processing',
-          confirmation: {
-            kind: 'crew',
-            company: entry.companyName,
-            workers,
-            hoursPerWorker: entry.hoursPerWorker,
-            totalHours: entry.totalHours,
-          },
+          confirmation: crewConfirmation(market, workers),
         };
         return json(route, 202, res);
       }

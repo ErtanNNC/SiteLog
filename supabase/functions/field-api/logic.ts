@@ -18,12 +18,15 @@ import {
   photosLinkExpiresAt,
   previousWorkingDay,
   settingsMessageChannels,
+  type AnswerConfirmation,
   type AnswerValue,
   type ConsentRow,
   type ConsentType,
   type CountryPack,
   type DailyReportData,
   type DayOffDetails,
+  type QuestionRow,
+  type ReportView,
   type OrgLocale,
   type UnitSystem,
   type FieldApiErrorCode,
@@ -397,6 +400,59 @@ export function originAllowed(
 export function questionOptions(options: unknown): { id: string; label: string }[] | null {
   const out = storedQuestionOptions(options).map(({ id, label }) => ({ id, label }));
   return out.length ? out : null;
+}
+
+/** One spoken try at a web question (W2-09, `questions.voice_answers`). */
+interface VoiceTry {
+  uploadId: string;
+  status: 'listening' | 'applied' | 'unclear' | 'stale';
+}
+
+function voiceTries(value: unknown): VoiceTry[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (t): t is VoiceTry =>
+      !!t &&
+      typeof t === 'object' &&
+      typeof t.uploadId === 'string' &&
+      typeof t.status === 'string',
+  );
+}
+
+/**
+ * The open question's spoken answer as the Question screen shows it (W2-09): `listening` while
+ * parse_answer runs, `retry` after a try it could not read (asked once more); else null. Pure.
+ */
+export function voiceAnswerView(
+  question: Pick<QuestionRow, 'voice_answers'>,
+): NonNullable<ReportView['question']>['voice'] {
+  const tries = voiceTries(question.voice_answers);
+  const unclear = tries.filter((t) => t.status === 'unclear').length;
+  const last = tries.at(-1);
+  if (last?.status === 'listening') return { state: 'listening', unclear };
+  if (last?.status === 'unclear') return { state: 'retry', unclear };
+  return null;
+}
+
+/**
+ * The last spoken answer the worker settled (W2-09), for F7's line after it: the latest answered
+ * question whose answer came by voice (`answer.voice`, with code's confirmation) or was left
+ * unclear (`answer.unclear`). Null when the latest answered question was not spoken. Pure.
+ */
+export function lastVoiceAnswerView(
+  answered: ReadonlyArray<Pick<QuestionRow, 'id' | 'answer' | 'answered_at'>>,
+): ReportView['lastVoiceAnswer'] {
+  const latest = [...answered]
+    .filter((q) => q.answered_at)
+    .sort((a, b) => (b.answered_at ?? '').localeCompare(a.answered_at ?? ''))[0];
+  const answer = latest?.answer as
+    { voice?: unknown; unclear?: boolean; confirmation?: AnswerConfirmation } | null | undefined;
+  if (!latest || !answer || typeof answer !== 'object') return null;
+  if (answer.unclear === true) return { questionId: latest.id, outcome: 'unclear' };
+  if (answer.voice && answer.confirmation && typeof answer.confirmation === 'object') {
+    return { questionId: latest.id, outcome: 'applied', confirmation: answer.confirmation };
+  }
+  return null;
 }
 
 /** The crew a question is about (`questions.target.manpowerIndex`), else null (W1-13). */

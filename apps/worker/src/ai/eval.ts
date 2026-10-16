@@ -22,6 +22,7 @@ import {
   type QuestionField,
   type RequiredFieldKey,
 } from '@sitelog/shared';
+import { runAnswerEval } from './answer-fixtures';
 import { createAnthropicClient, type MessagesClient } from './claude';
 import { runReportExtraction, type ExtractionInputV2 } from './extract';
 import { buildOrgContextBlock } from './prompts/extraction';
@@ -57,6 +58,8 @@ import { createLogger } from '../log';
  *   pnpm eval -- --write-recorded             regenerate fixtures/tool-outputs from fixtures/expected
  *   pnpm eval -- --list                       list the cases
  *   pnpm eval -- --concurrency 4              parallel API calls (default 3)
+ *   pnpm eval -- --answers                    the parse_answer golden set (fixtures/answers, W2-09)
+ *                                             on the live fast model; with --recorded, offline
  *
  * Exit 1 when a case fails or a fixture is broken.
  */
@@ -1010,6 +1013,8 @@ export interface EvalOptions {
   list: boolean;
   help: boolean;
   concurrency: number;
+  /** W2-09: the parse_answer golden set (fixtures/answers) instead of the extraction cases. */
+  answers: boolean;
 }
 
 export function parseArgs(argv: string[]): EvalOptions {
@@ -1020,6 +1025,7 @@ export function parseArgs(argv: string[]): EvalOptions {
     list: false,
     help: false,
     concurrency: 3,
+    answers: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -1046,6 +1052,9 @@ export function parseArgs(argv: string[]): EvalOptions {
       case '--list':
         opts.list = true;
         break;
+      case '--answers':
+        opts.answers = true;
+        break;
       case '--concurrency': {
         const n = Number(value());
         if (Number.isInteger(n) && n > 0) opts.concurrency = Math.min(n, 16);
@@ -1067,6 +1076,7 @@ const USAGE = `usage: pnpm eval [-- options]
   --recorded         score the recorded tool outputs offline (no API key needed)
   --write-recorded   regenerate fixtures/tool-outputs from fixtures/expected (then prettier)
   --list             list the cases and exit
+  --answers          the parse_answer golden set (fixtures/answers); with --recorded, offline
   --concurrency <n>  parallel API calls in a live run (default 3)`;
 
 async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
@@ -1092,6 +1102,21 @@ export async function runEval(
   if (opts.help) {
     console.log(USAGE);
     return 0;
+  }
+  if (opts.answers) {
+    const key = env.ANTHROPIC_API_KEY ?? '';
+    if (!opts.recorded && !key) {
+      console.log(
+        'skipped: ANTHROPIC_API_KEY is not set (--answers --recorded scores the recorded parse_answer outputs offline)',
+      );
+      return 0;
+    }
+    return runAnswerEval({
+      recorded: opts.recorded,
+      client: opts.recorded ? null : createAnthropicClient(key),
+      model: env.CLAUDE_MODEL_FAST || env.CLAUDE_MODEL || 'claude-sonnet-5-5',
+      filter: opts.cases,
+    });
   }
   const ids = listFixtureIds(dir).filter((id) => matchesFilter(id, opts.cases));
   if (ids.length === 0) {

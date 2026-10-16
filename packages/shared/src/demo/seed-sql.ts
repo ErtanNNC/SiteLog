@@ -281,7 +281,7 @@ alter table site_days enable trigger site_days_updated_at;
   parts.push(insertRows('unknown_contacts', d.unknownContacts));
   parts.push(insertRows('report_versions', d.versions, { chunk: 25 }));
   parts.push(insertRows('report_sources', d.sources));
-  parts.push(insertRows('questions', d.questions, { json: ['options'] }));
+  parts.push(insertRows('questions', d.questions, { json: ['options', 'voice_answers'] }));
   parts.push(insertRows('manpower_entries', d.manpower));
   parts.push(insertRows('work_items', d.workItems));
   parts.push(insertRows('weather_events', d.weatherEvents, { omit: ['claim_ready'] }));

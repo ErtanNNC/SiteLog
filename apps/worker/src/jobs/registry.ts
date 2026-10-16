@@ -5,6 +5,7 @@ import { fetchWeather } from './fetch_weather';
 import { fileReportJob } from './file_report';
 import { inboundMessage } from './inbound_message';
 import { notifyJob } from './notify';
+import { parseAnswerJob } from './parse_answer';
 import { parseReply } from './parse_reply';
 import { renderPdf } from './render_pdf';
 import { retentionCleanup } from './retention_cleanup';
@@ -37,4 +38,5 @@ export const registry: JobRegistry = {
   retention_cleanup: retentionCleanup,
   weekly_digest: weeklyDigest,
   notify: notifyJob,
+  parse_answer: parseAnswerJob,
 };
