@@ -34,6 +34,8 @@ const AUDITED: Record<string, string> = {
     'the Notifier key of the office\'s "Text today\'s link" (api-text-daily-link, W1-16): per request id, which the panel makes fresh per tap, so a retried request texts once and the next tap texts again',
   sendKey:
     "the Notifier key of F16's \"Send me today's link\" (field-api expired/daily-link, W2-03), expired_daily_link:<expired link>:<site day>: per expired link and site day, so however often the button is tapped one text goes out that day; field-api claims the key (field_claim_send, 20261016000090) around the send, so two taps at once take turns and the second gets the Notifier's answer for the first",
+  'sms_reply:{}:{}:{}':
+    "sms_keyword's replies (W2-12 review), sms_reply:<inbound message>:<key>:<report, site or correction>: the Notifier.reply key in messages.payload; one reply per text and target, so a retried job never answers twice, and a new text is a new key",
   'jobKeys.decideAfterExtract':
     'decide:<report>:extract-job:<extract job id> (W1-12, web reports): per extract job that wrote the draft; a retry of that job finds its key taken, a new extraction is a new job id',
   'jobKeys.questionReady':

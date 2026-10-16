@@ -29,7 +29,13 @@ import { assertE164, type E164 } from '../format.ts';
 import { MASKED_CODE, maskFieldLinkUrl } from '../links.ts';
 import { languageOf } from '../locale.ts';
 import { SmsSendError, TWILIO_OPTED_OUT_CODE } from '../sms/transports.ts';
-import { attemptIsFinal, attemptNumber, planAttempt, type MessageAttempt } from './walk.ts';
+import {
+  attemptIsFinal,
+  attemptNumber,
+  attemptWasSent,
+  planAttempt,
+  type MessageAttempt,
+} from './walk.ts';
 
 /**
  * The Notifier (spec §4.5; W1-08): the one send function for messages to field reporters. It picks
@@ -250,6 +256,11 @@ export interface ReplyInput<K extends ReplySmsKey> {
   locale: string;
   key: K;
   vars: SmsVars<K>;
+  /**
+   * One reply per key (W2-12 review): a reply already sent under it is returned, not sent again, so
+   * a retried job that answers one text with several replies sends each once. Needs `reporterId`.
+   */
+  dedupeKey?: string;
 }
 
 export interface SmsNotifier extends Notifier {
@@ -740,6 +751,18 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       if (!smsReplyAllowed(input.pack, input.key)) {
         throw new Error(`SMS "${input.key}" is not a reply this pack can send (smsReplyAllowed)`);
       }
+      let existingId: string | undefined;
+      if (input.dedupeKey && input.reporterId) {
+        const prior = (await store.listByDedupeKey(input.reporterId, input.dedupeKey)).map(
+          attemptOf,
+        );
+        const sent = prior.find(attemptWasSent);
+        if (sent) return { messageId: sent.id };
+        // A refusal for good stays one (the caller's path again); a pending one is sent again.
+        const final = prior.find(attemptIsFinal);
+        if (final) throw refusalOf(final);
+        existingId = prior.at(-1)?.id;
+      }
       const driver = pickMessageTransport(
         { isDemo: input.org?.isDemo ?? false },
         input.pack,
@@ -765,12 +788,14 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         vars: input.vars as Readonly<Record<string, unknown>>,
         text,
         stored,
+        ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}),
+        ...(existingId ? { existingId } : {}),
       };
       if (driver === 'console' && !input.org?.isDemo) {
         // A real org's (or an unknown number's) reply with no sender for the pack here, e.g. one
         // cleared after the text came in: nothing reaches the phone, so the row says `failed`,
         // and the refusal is for good (the caller marks the text handled, with no reply).
-        const id = deps.randomUUID();
+        const id = existingId ?? deps.randomUUID();
         const error = consoleRealOrgError(input.pack.code);
         await writeRow(transmitInput, id, 'failed', error);
         await store.audit({

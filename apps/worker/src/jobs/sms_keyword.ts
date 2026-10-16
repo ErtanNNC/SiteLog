@@ -59,7 +59,8 @@ import { PermanentJobError, type JobHandler } from './types';
  *   with the Past reports link (Q102).
  *
  * Every answer is audited `sms.keyword_answered` (actor the reporter, the outcome and the replies).
- * A retry after a reply was sent may send it again (at-least-once, as `sms_inbound`).
+ * Each reply is keyed by the text and its target (`sms_reply:<message>:<key>:<target>`), so a
+ * retry sends none twice.
  */
 export const smsKeyword: JobHandler<'sms_keyword'> = async (ctx, payload) => {
   const message = await ctx.db.getMessage(payload.messageId);
@@ -127,12 +128,17 @@ interface KeywordCtx {
 /** Most answers a text gets (several sites, several drafts): enough for a backup's sites. */
 const MAX_REPLIES = 3;
 
-/** A reply to the text in the reporter's language; null when the provider refused it for good. */
+/**
+ * A reply to the text in the reporter's language; null when the provider refused it for good.
+ * Each reply is keyed by the text, the key and what it is about (`target`: a report, a site, a
+ * correction), so a retried job sends each of its replies once (W2-12 review).
+ */
 async function reply<K extends ReplySmsKey>(
   k: KeywordCtx,
   reporter: InboundReporterRow,
   key: K,
   vars: SmsVars<K>,
+  target: string,
 ): Promise<string | null> {
   try {
     const sent = await k.ctx.notifier.reply({
@@ -143,6 +149,7 @@ async function reply<K extends ReplySmsKey>(
       locale: reporter.locale,
       key,
       vars,
+      dedupeKey: `sms_reply:${k.message.id}:${key}:${target}`,
     });
     return sent.messageId;
   } catch (err) {
@@ -192,9 +199,13 @@ async function answerOk(k: KeywordCtx): Promise<void> {
     const reporter = byId(k, draft.reporter_id);
     const { base, code } = await personalLinkCode(k.ctx, reporter.id, reporter.orgId);
     replies.push(
-      await reply(k, reporter, 'draft_ready', {
-        link: fieldReportLinkUrl(base, code, draft.report_id),
-      }),
+      await reply(
+        k,
+        reporter,
+        'draft_ready',
+        { link: fieldReportLinkUrl(base, code, draft.report_id) },
+        draft.report_id,
+      ),
     );
   }
   await audit(k, first, {
@@ -260,10 +271,13 @@ async function answerDayOff(k: KeywordCtx, keyword: 'no_work' | 'weather'): Prom
       });
     }
     replies.push(
-      await reply(k, reporter, 'day_off_link', {
-        site: day.site_name,
-        link: fieldLinkUrl(base, link.code),
-      }),
+      await reply(
+        k,
+        reporter,
+        'day_off_link',
+        { site: day.site_name, link: fieldLinkUrl(base, link.code) },
+        day.site_id,
+      ),
     );
   }
   await audit(k, first, {
@@ -302,9 +316,13 @@ async function editUnclear(
   let replyId: string | null = null;
   if (smsReplyAllowed(k.pack, 'edit_unclear')) {
     const { base, code } = await personalLinkCode(k.ctx, reporter.id, reporter.orgId);
-    replyId = await reply(k, reporter, 'edit_unclear', {
-      link: fieldHistoryLinkUrl(base, code, reportId),
-    });
+    replyId = await reply(
+      k,
+      reporter,
+      'edit_unclear',
+      { link: fieldHistoryLinkUrl(base, code, reportId) },
+      reportId ?? 'history',
+    );
   }
   await audit(k, reporter, {
     keyword: 'edit',
@@ -469,11 +487,17 @@ async function answerEditPreview(k: KeywordCtx, correctionId: string): Promise<v
   let replyId: string | null = null;
   if (smsReplyAllowed(k.pack, 'edit_preview')) {
     const { base, code } = await personalLinkCode(ctx, reporter.id, reporter.orgId);
-    replyId = await reply(k, reporter, 'edit_preview', {
-      weekday: formatDate(day.date, 'weekday', language),
-      change: lines,
-      link: fieldHistoryLinkUrl(base, code, report.id),
-    });
+    replyId = await reply(
+      k,
+      reporter,
+      'edit_preview',
+      {
+        weekday: formatDate(day.date, 'weekday', language),
+        change: lines,
+        link: fieldHistoryLinkUrl(base, code, report.id),
+      },
+      correction.id,
+    );
   }
   await audit(k, reporter, {
     keyword: 'edit',

@@ -566,6 +566,33 @@ describe('Notifier replies (sms-webhook)', () => {
     ).rejects.toThrow(/smsReplyAllowed/);
   });
 
+  it('a reply with a dedupe key is sent once; a failed one goes again on its row (W2-12 review)', async () => {
+    const h = harness({
+      faults: { sms: new SmsSendError('twilio 503', { driver: 'twilio', retryable: true }) },
+    });
+    const input = {
+      pack: US_LIVE,
+      org: { id: 'org-1', isDemo: false },
+      reporterId: 'r-marco',
+      phone: assertE164('+15550143378'),
+      locale: 'en-US',
+      key: 'draft_ready' as const,
+      vars: { link: WELCOME.link },
+      dedupeKey: 'sms_reply:m-in:draft_ready:report-1',
+    };
+    await expect(h.notifier.reply(input)).rejects.toThrow(/503/);
+    expect(h.rows.size).toBe(1);
+    h.faults.sms = null;
+    const first = await h.notifier.reply(input);
+    expect(h.rows.size).toBe(1);
+    expect(h.rows.get(first.messageId)).toMatchObject({
+      status: 'sent',
+      payload: { dedupe_key: input.dedupeKey },
+    });
+    expect(await h.notifier.reply(input)).toEqual(first);
+    expect(h.sent).toHaveLength(1);
+  });
+
   it("a real org's reply on console (its pack has no sender here) is failed and refused for good", async () => {
     const h = harness();
     const err = await h.notifier

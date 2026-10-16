@@ -204,6 +204,11 @@ describe('SMS report keywords (W2-12) on the Demo phone of a two-way demo org', 
     expect(audit!.diff).toMatchObject({ keyword: 'weather', outcome: 'day_off_link' });
     expect(audit!.diff.site_ids).toContain(RIVERSIDE);
 
+    // A retry of the job (it crashed after the replies): no reply goes twice (W2-12 review).
+    const count = sent.length;
+    expect(await run(await byKey(jobKeys.smsKeyword(id)))).toEqual({ ok: true });
+    expect(await replies(since)).toHaveLength(count);
+
     // NO WORK again: the same link (ensureDailyLink), no second row.
     const again = await stamp();
     await text('no work');
@@ -250,6 +255,9 @@ describe('SMS report keywords (W2-12) on the Demo phone of a two-way demo org', 
       ),
     ).toEqual([]);
     expect((await answered(id))[0]!.diff).toMatchObject({ keyword: 'ok', outcome: 'draft_link' });
+    // A retry sends the draft link once (W2-12 review).
+    expect(await run(await byKey(jobKeys.smsKeyword(id)))).toEqual({ ok: true });
+    expect(await replies(since)).toHaveLength(sent.length);
 
     // With the draft gone, WEATHER skips Riverside (a live report there) and OK says nothing.
     const later = await stamp();
