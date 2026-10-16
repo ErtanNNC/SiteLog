@@ -181,14 +181,14 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-06 · Crew hours, invoice check and payroll CSV on v1.2 (F19, P8)
 
-- [ ] **W3-06 done** · today _partial_ (M)
+- [ ] **W3-06 done** · today _partial_ (M) · built (`20261016000270_invoice_gap_notice.sql`, `e2e/supabase/hours.spec.ts`); ticks when the `e2e-supabase` CI job runs the new spec green
 - **Spec:** F19, P8 ("evidence links can be voice-note or call timestamps", "h" / "sa"), §13 _Invoice gap_ (ops, accounts), §2.2 (accounts), §16.2 M9 (**BrightLine shows +16 h with evidence**). **Design:** none in `docs/design/` (the canvas's Web-Hours is not exported; build on the v1.0 page and note it).
 - **Already in the repo:** the page, the invoice dialog and check aside, `buildQueryMailto`, `invoice_gaps` RPC, `api-export-payroll` with the spec's columns; the Kestrel week Oct 5–9 (1,804 h, BrightLine +16 h, ClearView +8 h). Open audit findings this ticket closes: `docs/AUDIT_BACKLOG.md` "Payroll CSV does not neutralise spreadsheet formulas…" (`:738`, `:913`), "No 'invoice_gap' panel notification is ever produced" (`:829`), "Crew hours for accounts users links to report pages they cannot open" (`:871`, check it is still open), "Invoice upload path uses the raw file name…" (`:878`).
 - **Build:**
-  - [ ] EN/TR: the page out of `<EnglishOnly>`, its copy in `en.ts` and `copy/ui/tr.ts`, hours "h" / "sa" and money by the org's currency (`Intl`, minor units).
-  - [ ] Evidence per gap day from v2 sources: a voice note (_audio 0:41_), a **call** (_call 2:15_, opening P7 at that second) or an answer; the `mailto:` query lists the same with the report numbers; accounts users see numbers without links (§2.2).
-  - [ ] `invoice_gap` notice per Q133's parameter (`INVOICE_GAP_POLICY`), keyed per invoice and gap, from the invoice save and from a new version that changes the hours behind it.
-  - [ ] Payroll CSV: every cell starting `=`, `+`, `-`, `@`, tab or CR prefixed with `'` (OWASP); the invoice upload path from a slug and a uuid.
+  - [x] EN/TR: the page out of `<EnglishOnly>`, its copy in `en.ts` and `copy/ui/tr.ts`, hours "h" / "sa" and money by the org's currency (`Intl`, minor units). _As built: no money on the page (`sub_invoices` has no amount, spec §6.3), so nothing to format; numbers and dates in the panel's language._
+  - [x] Evidence per gap day from v2 sources: a voice note (_audio 0:41_), a **call** (_call 2:15_, opening P7 at that second) or an answer; the `mailto:` query lists the same with the report numbers; accounts users see numbers without links (§2.2).
+  - [x] `invoice_gap` notice per Q133's parameter (`INVOICE_GAP_POLICY`), keyed per invoice and gap, from the invoice save and from a new version that changes the hours behind it.
+  - [x] Payroll CSV: every cell starting `=`, `+`, `-`, `@`, tab or CR prefixed with `'` (OWASP); the invoice upload path from a slug and a uuid.
 - **Tests:** CSV injection vectors; gap notice once per change; evidence from voice-note, call and answer sources; page tests EN/TR at 390/1440 px; an `e2e:supabase` spec on the seeded week.
 - **Done when:** in CI, the seeded week shows BrightLine +16 h with its voice-note evidence and Northgate's call evidence, the invoice save posts one `invoice_gap` notice to ops and accounts, the CSV neutralises a formula name, and the page reads in Turkish.
 - **Needs:** nothing.

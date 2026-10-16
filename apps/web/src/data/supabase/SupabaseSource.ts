@@ -42,6 +42,7 @@ import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/
 import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/shared/format.ts';
 import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numbering.ts';
+import { invoiceUploadPath } from '@sitelog/shared/invoices.ts';
 import {
   officePhotoStoragePath,
   type OfficePhotoMime,
@@ -1169,21 +1170,43 @@ export class SupabaseSource implements DataSource {
           .then(unwrap),
       ),
     ]);
-    const transcripts = await inChunks(
-      sources.flatMap((s) => {
-        const id = sourceMediaId(s);
-        return id ? [id] : [];
-      }),
-      (part) => this.sb.from('transcripts').select('*').or(mediaIdFilter(part)).then(unwrap),
-      MEDIA_OR_CHUNK,
-    );
+    // The calls and answered questions the crew lines cite (W3-06: call and answer evidence).
+    const cited = (key: 'callId' | 'questionId', type: 'call' | 'answer') =>
+      this.user.role === 'accounts'
+        ? []
+        : [
+            ...new Set(
+              manpower.flatMap((m) => {
+                const src = m.source as Record<string, unknown> | null;
+                const id = src && src.type === type ? src[key] : null;
+                return typeof id === 'string' ? [id] : [];
+              }),
+            ),
+          ];
+    const [transcripts, callTranscripts, questions] = await Promise.all([
+      inChunks(
+        sources.flatMap((s) => {
+          const id = sourceMediaId(s);
+          return id ? [id] : [];
+        }),
+        (part) => this.sb.from('transcripts').select('*').or(mediaIdFilter(part)).then(unwrap),
+        MEDIA_OR_CHUNK,
+      ),
+      inChunks(cited('callId', 'call'), (part) =>
+        this.sb.from('transcripts').select('*').in('call_id', part).then(unwrap),
+      ),
+      inChunks(cited('questionId', 'answer'), (part) =>
+        this.sb.from('questions').select('*').in('id', part).then(unwrap),
+      ),
+    ]);
     const rows: RowSet = {
       ...this.rowsFrom(core),
       manpower,
       invoices,
       reports,
       sources,
-      transcripts,
+      transcripts: [...transcripts, ...callTranscripts],
+      questions,
     };
     return assembleHours(rows, this.ctx(), week, siteId);
   }
@@ -1762,7 +1785,8 @@ export class SupabaseSource implements DataSource {
   async addInvoice(input: AddInvoiceInput) {
     let file_path: string | null = null;
     if (input.file) {
-      file_path = `${this.orgId}/${Date.now()}-${input.file.name}`;
+      // Safe characters only, the org's folder first (audit :878; packages/shared/src/invoices.ts).
+      file_path = invoiceUploadPath(this.orgId, input.file.name, randomUuid());
       const up = await this.sb.storage.from('invoices').upload(file_path, input.file);
       if (up.error) throw new Error(up.error.message);
     }

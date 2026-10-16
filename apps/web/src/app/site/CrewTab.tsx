@@ -1,14 +1,6 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router';
-import {
-  formatDate,
-  formatDateInTz,
-  isoWeekOf,
-  isoWeekRange,
-  parseIsoDate,
-  weekdaysShortIn,
-} from '@sitelog/shared/format.ts';
-import { upperIn } from '@sitelog/shared/locale.ts';
+import { formatDateInTz, isoWeekOf, weekdaysShortIn } from '@sitelog/shared/format.ts';
 import { DataTable, type Column } from '@/components/sitelog/DataTable';
 import { TableSkeleton } from '@/components/sitelog/Skeletons';
 import { EmptyState, ErrorState } from '@/components/sitelog/States';
@@ -19,17 +11,9 @@ import { TableCell, TableRow } from '@/components/ui/Table';
 import { useDataSource } from '@/data/DataProvider';
 import { useHours } from '@/data/hooks';
 import type { HoursRow } from '@/data/types';
-import type { PanelLanguage } from '@/i18n/language';
 import { useCopy } from '@/i18n/useCopy';
 import { addWeeks } from '@/lib/format';
-import { formatNumberIn } from '@/lib/localeFormat';
-
-/** "OCT 5 – OCT 9, 2026" · "5 EKİ – 9 EKİ, 2026": the ISO week, Monday to Friday. */
-function weekLabelIn(isoWeek: string, language: PanelLanguage): string {
-  const { start, end } = isoWeekRange(isoWeek);
-  const day = (d: string) => upperIn(language, formatDate(d, 'monthDay', language));
-  return `${day(start)} – ${day(end)}, ${parseIsoDate(end).y}`;
-}
+import { formatNumberIn, formatWeekLabelIn as weekLabelIn } from '@/lib/localeFormat';
 
 /** Crew & subs tab: company × Mon–Fri hours for this site (the /hours matrix filtered). */
 export function CrewTab({ siteId, timezone }: { siteId: string; timezone: string }) {

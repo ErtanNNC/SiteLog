@@ -126,6 +126,18 @@ function ReportScreen({
   const [noteError, setNoteError] = useState<string | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [focusAnchor, setFocusAnchor] = useState<string | null>(null);
+  const [params] = useSearchParams();
+  // `?clip=<voice note or call>&at=<s>` (Crew hours evidence, W3-06): the player waits there,
+  // highlighted, without playing on its own.
+  const cueClip = params.get('clip');
+  const cueAt = Number(params.get('at'));
+  useEffect(() => {
+    if (!player || !cueClip || !Number.isFinite(cueAt) || cueAt < 0) return;
+    if (!detail.clips.some((c) => c.id === cueClip)) return;
+    player.seek(cueAt, cueClip, false);
+    // Once per opened link: the player's identity changes as it plays.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cueClip, cueAt, detail.clips]);
   const [pendingData, setPendingData] = useState<ReportDetail['storedData'] | null>(null);
   // The version the edit was opened on: a newer one by save time refuses it (§19 Q106).
   const [editBase, setEditBase] = useState<number | null>(null);

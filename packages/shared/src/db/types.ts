@@ -554,6 +554,8 @@ export type SubInvoiceRow = {
   queried_at: string | null;
   resolved_at: string | null;
   created_at: string;
+  /** Invoiced − reported hours of the last `invoice_gap` notice; null until one (W3-06, §19 Q133). */
+  gap_notified: number | null;
 };
 
 export type EvidencePackRow = {
@@ -1279,6 +1281,7 @@ export type Database = {
         | 'queried_at'
         | 'resolved_at'
         | 'created_at'
+        | 'gap_notified'
       >;
       evidence_packs: Table<
         EvidencePackRow,
@@ -1825,6 +1828,14 @@ export type Database = {
         };
         Returns: string;
       };
+      // W3-06 (20261016000270_invoice_gap_notice.sql), service role only: a company's filed hours
+      // in a period, and the §19 Q133 invoice gap notice (also run by the sub_invoices and reports
+      // triggers).
+      invoice_reported_hours: {
+        Args: { p_org: string; p_company: string; p_start: string; p_end: string };
+        Returns: number;
+      };
+      invoice_gap_check: { Args: { p_invoice_id: string; p_cause: string }; Returns: boolean };
       invoice_gaps: {
         Args: { p_org: string; p_start: string; p_end: string };
         Returns: Array<{

@@ -1,6 +1,10 @@
-/** Payroll CSV (§F15 step 5, §P8). Pure: rows in, text out. RFC 4180 quoting, CRLF line endings. */
+/**
+ * Payroll CSV (§F15 step 5, §P8). Pure: rows in, text out. RFC 4180 quoting, CRLF line endings,
+ * and text that starts like a spreadsheet formula prefixed with `'` (OWASP CSV injection, W3-06).
+ */
 
 import {
+  csvCell,
   normalizePayrollColumns,
   PAYROLL_COLUMNS,
   type PayrollColumn,
@@ -48,10 +52,12 @@ export interface PayrollRow {
 
 export type CsvValue = string | number | null | undefined;
 
+/**
+ * One cell: `csvCell` (packages/shared/src/report/payroll.ts), so a company, site or trade named
+ * `=HYPERLINK(…)`, `+1`, `-1` or `@SUM(…)` opens as text, and numbers stay numbers.
+ */
 export function csvEscape(value: CsvValue): string {
-  if (value === null || value === undefined) return '';
-  const s = String(value);
-  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return csvCell(value);
 }
 
 export function toCsv(

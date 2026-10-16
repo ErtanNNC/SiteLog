@@ -51,8 +51,15 @@ import {
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import { sourceMediaId } from '@sitelog/shared/report/media.ts';
 import { reportLanguageFor } from '@sitelog/shared/locale.ts';
-import { formatDateInTz } from '@sitelog/shared/format.ts';
+import { formatDateInTz, isoWeekOf } from '@sitelog/shared/format.ts';
 import { noticeData } from '@sitelog/shared/notifications.ts';
+import {
+  invoiceHours,
+  invoiceUploadPath,
+  roundHours,
+  shouldNotifyInvoiceGap,
+  type SubInvoiceStatus,
+} from '@sitelog/shared/invoices.ts';
 import { deadlineInstant } from '@sitelog/shared/schedule/reminders.ts';
 import { fromZonedTime } from 'date-fns-tz';
 import { copy } from '@/copy/en';
@@ -395,7 +402,86 @@ export class DemoStore {
         data: noticeData('report_edited', { reportNo: report.report_no }),
       });
     }
+    this.checkReportInvoiceGaps(report, userId);
     return next;
+  }
+
+  /** A company's filed hours in a period, as `invoice_reported_hours()` (W3-06). */
+  private reportedHours(companyId: string, start: string, end: string): number {
+    const d = this.data;
+    let total = 0;
+    for (const r of d.reports) {
+      if (r.status !== 'filed' && r.status !== 'signed_off') continue;
+      const sd = d.siteDays.find((x) => x.id === r.site_day_id);
+      if (!sd || sd.date < start || sd.date > end) continue;
+      for (const m of d.manpower)
+        if (m.report_id === r.id && m.version === r.current_version && m.company_id === companyId)
+          total += Number(m.hours);
+    }
+    return total;
+  }
+
+  /**
+   * Spec §19 Q133's default (`INVOICE_GAP_POLICY`), as `invoice_gap_check()` does it: one
+   * `invoice_gap` notice per invoice and gap, for admin, ops and accounts (W3-06).
+   */
+  private checkInvoiceGap(invoiceId: string, userId: string | null, cause: string): void {
+    const inv = this.data.invoices.find((i) => i.id === invoiceId);
+    if (!inv || !inv.period_start || !inv.period_end) return;
+    if (inv.total_hours === null && !(Array.isArray(inv.lines) && inv.lines.length)) return;
+    const invoiced = roundHours(invoiceHours(inv));
+    const reported = roundHours(
+      this.reportedHours(inv.company_id, inv.period_start, inv.period_end),
+    );
+    const gap = roundHours(invoiced - reported);
+    const lastNotified = inv.gap_notified === null ? null : Number(inv.gap_notified);
+    if (!shouldNotifyInvoiceGap({ status: inv.status as SubInvoiceStatus, gap, lastNotified }))
+      return;
+    const company = this.data.companies.find((c) => c.id === inv.company_id)?.name ?? '';
+    inv.gap_notified = gap;
+    const sign = gap > 0 ? '+' : '−';
+    this.notify({
+      user_id: null,
+      kind: 'invoice_gap',
+      title: `Invoice gap: ${company} ${sign}${Math.abs(gap)} h`,
+      body: `${inv.invoice_no ?? ''} invoices ${invoiced} h · reports show ${reported} h`,
+      target_path: `/hours?week=${isoWeekOf(inv.period_start)}`,
+      data: noticeData('invoice_gap', {
+        company,
+        invoiceNo: inv.invoice_no ?? '',
+        invoiced,
+        reported,
+        gap,
+      }),
+    });
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: userId ? 'user' : 'system',
+      actor_id: userId,
+      action: 'invoice.gap_notified',
+      entity: 'sub_invoice',
+      entity_id: inv.id,
+      diff: { gap, previous: lastNotified, invoiced, reported, cause },
+    });
+  }
+
+  /** A new version of a report: the open invoices of its companies covering its day (W3-06). */
+  private checkReportInvoiceGaps(report: ReportRow, userId: string | null): void {
+    const date = this.data.siteDays.find((x) => x.id === report.site_day_id)?.date;
+    if (!date) return;
+    const companies = new Set(
+      this.data.manpower.filter((m) => m.report_id === report.id).map((m) => m.company_id),
+    );
+    for (const inv of this.data.invoices)
+      if (
+        inv.status === 'open' &&
+        companies.has(inv.company_id) &&
+        inv.period_start &&
+        inv.period_end &&
+        inv.period_start <= date &&
+        inv.period_end >= date
+      )
+        this.checkInvoiceGap(inv.id, userId, 'report_version');
   }
 
   // ─── Mutations ───
@@ -1191,8 +1277,9 @@ export class DemoStore {
 
   addInvoice(input: AddInvoiceInput, userId: string): void {
     const total = input.totalHours ?? input.lines.reduce((a, l) => a + l.hours, 0);
+    const id = localId('invoice');
     this.data.invoices.push({
-      id: localId('invoice'),
+      id,
       org_id: this.data.org.id,
       company_id: input.companyId,
       invoice_no: input.invoiceNo,
@@ -1200,11 +1287,12 @@ export class DemoStore {
       period_end: input.periodEnd,
       lines: input.lines,
       total_hours: total,
-      file_path: input.file ? `${this.data.org.id}/invoices/${input.file.name}` : null,
+      file_path: input.file ? invoiceUploadPath(this.data.org.id, input.file.name, id) : null,
       status: 'open',
       queried_at: null,
       resolved_at: null,
       created_at: this.nowIso(),
+      gap_notified: null,
     });
     this.audit({
       org_id: this.data.org.id,
@@ -1215,6 +1303,7 @@ export class DemoStore {
       entity_id: input.companyId,
       diff: { invoice_no: input.invoiceNo, total },
     });
+    this.checkInvoiceGap(id, userId, 'invoice_added');
     this.emit({ table: 'all' });
   }
 

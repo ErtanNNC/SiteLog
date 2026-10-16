@@ -708,14 +708,31 @@ export interface InvoiceDayComparison {
   reportIds: string[];
 }
 
+/**
+ * What a gap day's evidence cites (P8 "evidence links can be voice-note or call timestamps"): the
+ * crew line's voice note (or the report's), a call second, an answered question, or only the
+ * report (typed in the panel, or edited).
+ */
+export type InvoiceEvidenceKind = 'voice_note' | 'call' | 'answer' | 'report';
+
 export interface InvoiceEvidence {
   date: string;
   reportId: string;
   reportNo: string;
   siteName: string;
-  quote: string;
-  audioStart: number | null;
-  messageId: string | null;
+  kind: InvoiceEvidenceKind;
+  /**
+   * The words behind the hours: the transcript segment at the cited second (a call: the
+   * reporter's), or the answer. Null when there is none to read (a typed report; an accounts user,
+   * who cannot read transcripts): the page shows `crew` instead.
+   */
+  quote: string | null;
+  /** The crew lines of the company in that report: workers × hours each, and their total. */
+  crew: { company: string; lines: Array<{ workers: number; hoursEach: number }>; total: number };
+  /** The voice note (upload or WhatsApp message) or call the source cites; P7 plays it. */
+  clipId: string | null;
+  /** The cited second in that clip, if any. */
+  at: number | null;
 }
 
 export interface InvoiceDetail {

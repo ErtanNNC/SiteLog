@@ -125,6 +125,11 @@ const TRANSLATED = [
   'toasts.undone',
   'toasts.versionSavedN',
   'toasts.companyResolved',
+  // W3-06: Crew hours, its invoice check and Add invoice dialog.
+  'hours',
+  'common.close',
+  'common.total',
+  'toasts.invoiceAdded',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

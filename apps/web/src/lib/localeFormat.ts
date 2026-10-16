@@ -1,4 +1,5 @@
-import { intlLocaleOf } from '@sitelog/shared/locale.ts';
+import { formatDate, formatHoursIn, isoWeekRange, parseIsoDate } from '@sitelog/shared/format.ts';
+import { intlLocaleOf, upperIn } from '@sitelog/shared/locale.ts';
 import type { PanelLanguage } from '@/i18n/language';
 
 /**
@@ -38,4 +39,23 @@ export function joinLanguageCodes(
   const upper = codes.map((c) => c.toUpperCase());
   if (upper.length < 2) return upper.join('');
   return and(upper.slice(0, -1).join(', '), upper.at(-1)!);
+}
+
+/** "OCT 5 – OCT 9, 2026" · "5 EKİ – 9 EKİ, 2026": an ISO week, Monday to Friday. */
+export function formatWeekLabelIn(isoWeek: string, language: PanelLanguage): string {
+  const { start, end } = isoWeekRange(isoWeek);
+  const day = (d: string) => upperIn(language, formatDate(d, 'monthDay', language));
+  return `${day(start)} – ${day(end)}, ${parseIsoDate(end).y}`;
+}
+
+/** A signed gap: +16 → "+16 h", −8 → "−8 sa"; with `unit: false` the number only ("+16"). */
+export function formatSignedHoursIn(
+  gap: number,
+  language: PanelLanguage,
+  opts: { unit?: boolean } = {},
+): string {
+  if (Math.abs(gap) < 0.005) return '0';
+  const sign = gap > 0 ? '+' : '−';
+  const abs = Math.abs(gap);
+  return `${sign}${opts.unit === false ? formatNumberIn(abs, language) : formatHoursIn(abs, language)}`;
 }

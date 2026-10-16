@@ -320,8 +320,12 @@ test.describe('language switch', () => {
     await expect(nav.getByRole('link', { name: /^Genel bakış/ })).toBeVisible();
     await expect(page.getByText('Asistan hazır · mesaj ve arama')).toBeVisible();
     await expect(page.locator('main#main [lang="en"]')).toHaveCount(0);
-    // A page not translated yet stays English inside the Turkish shell.
+    // Crew hours speaks Turkish since W3-06.
     await nav.getByRole('link', { name: /^Puantaj/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Ekip saatleri' })).toBeVisible();
+    await expect(page.locator('main#main [lang="en"]')).toHaveCount(0);
+    // A page not translated yet (the typed report, P7a) stays English inside the Turkish shell.
+    await page.goto('/reports/new');
     await expect(page.locator('main#main [lang="en"]').first()).toBeAttached();
   });
 

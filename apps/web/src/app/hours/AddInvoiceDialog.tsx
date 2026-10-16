@@ -18,10 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
+import { weekdaysShortIn } from '@sitelog/shared/format.ts';
 import { useAddInvoice } from '@/data/hooks';
 import type { HoursMatrix } from '@/data/types';
-import { formatHoursNum, weekdayName } from '@/lib/format';
+import { useCopy } from '@/i18n/useCopy';
+import { formatNumberIn } from '@/lib/localeFormat';
 
 interface Props {
   open: boolean;
@@ -32,7 +33,8 @@ interface Props {
 
 /** "Add invoice": company, invoice no, period, per-day hours grid (prefilled from the week), file. */
 export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props) {
-  const c = copy.hours.addDialog;
+  const { t, language } = useCopy();
+  const weekdays = weekdaysShortIn(language);
   const add = useAddInvoice();
   const [companyId, setCompanyId] = useState('');
   const [invoiceNo, setInvoiceNo] = useState('');
@@ -67,10 +69,10 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
 
   const submit = () => {
     const next: Record<string, string> = {};
-    if (!companyId) next.company = c.companyRequired;
-    if (!invoiceNo.trim()) next.invoiceNo = c.invoiceNoRequired;
-    if (periodEnd < periodStart) next.period = c.periodInvalid;
-    if (!Number.isFinite(total)) next.hours = c.hoursInvalid;
+    if (!companyId) next.company = t('hours.addDialog.companyRequired');
+    if (!invoiceNo.trim()) next.invoiceNo = t('hours.addDialog.invoiceNoRequired');
+    if (periodEnd < periodStart) next.period = t('hours.addDialog.periodInvalid');
+    if (!Number.isFinite(total)) next.hours = t('hours.addDialog.hoursInvalid');
     setErrors(next);
     if (Object.keys(next).length) return;
     add.mutate(
@@ -103,8 +105,8 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
     >
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{c.title}</DialogTitle>
-          <DialogDescription>{c.description}</DialogDescription>
+          <DialogTitle>{t('hours.addDialog.title')}</DialogTitle>
+          <DialogDescription>{t('hours.addDialog.description')}</DialogDescription>
         </DialogHeader>
         <form
           className="mt-4 grid gap-4"
@@ -118,17 +120,19 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
             <div className="grid gap-1.5">
               {noCompanies ? (
                 <>
-                  <span className="text-caption font-medium text-asphalt">{c.company}</span>
+                  <span className="text-caption font-medium text-asphalt">
+                    {t('hours.addDialog.company')}
+                  </span>
                   <p className="text-caption text-dust" data-testid="no-companies">
-                    {c.noCompanies}
+                    {t('hours.addDialog.noCompanies')}
                   </p>
                 </>
               ) : (
                 <>
-                  <Label htmlFor="inv-company">{c.company}</Label>
+                  <Label htmlFor="inv-company">{t('hours.addDialog.company')}</Label>
                   <Select value={companyId} onValueChange={pickCompany}>
                     <SelectTrigger id="inv-company" aria-invalid={!!errors.company}>
-                      <SelectValue placeholder={c.companyPlaceholder} />
+                      <SelectValue placeholder={t('hours.addDialog.companyPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
                       {companies.map((co) => (
@@ -147,12 +151,12 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
               ) : null}
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="inv-no">{c.invoiceNo}</Label>
+              <Label htmlFor="inv-no">{t('hours.addDialog.invoiceNo')}</Label>
               <Input
                 id="inv-no"
                 value={invoiceNo}
                 onChange={(e) => setInvoiceNo(e.target.value)}
-                placeholder={c.invoiceNoPlaceholder}
+                placeholder={t('hours.addDialog.invoiceNoPlaceholder')}
                 aria-invalid={!!errors.invoiceNo}
                 className="font-mono"
               />
@@ -163,7 +167,7 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
               ) : null}
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="inv-start">{c.periodStart}</Label>
+              <Label htmlFor="inv-start">{t('hours.addDialog.periodStart')}</Label>
               <Input
                 id="inv-start"
                 type="date"
@@ -173,7 +177,7 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="inv-end">{c.periodEnd}</Label>
+              <Label htmlFor="inv-end">{t('hours.addDialog.periodEnd')}</Label>
               <Input
                 id="inv-end"
                 type="date"
@@ -191,13 +195,13 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
           </div>
 
           <fieldset className="grid gap-1.5">
-            <legend className="text-caption font-medium">{c.hours}</legend>
-            <p className="text-caption text-dust">{c.hoursHint}</p>
+            <legend className="text-caption font-medium">{t('hours.addDialog.hours')}</legend>
+            <p className="text-caption text-dust">{t('hours.addDialog.hoursHint')}</p>
             <div className="grid grid-cols-5 gap-2">
               {matrix.days.map((d, i) => (
                 <div key={d} className="grid gap-1">
                   <Label htmlFor={`inv-h-${i}`} className="eyebrow text-dust">
-                    {weekdayName(d).slice(0, 3)}
+                    {weekdays[i]}
                   </Label>
                   <Input
                     id={`inv-h-${i}`}
@@ -213,12 +217,14 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
               ))}
             </div>
             <div className="flex items-center justify-between text-caption">
-              <span className="text-dust">{c.total}</span>
+              <span className="text-dust">{t('hours.addDialog.total')}</span>
               <span
                 className="font-mono text-data font-semibold tabular"
                 data-testid="invoice-total"
               >
-                {Number.isFinite(total) ? `${formatHoursNum(total)} ${copy.common.hoursUnit}` : '—'}
+                {Number.isFinite(total)
+                  ? `${formatNumberIn(total, language)} ${t('common.hoursUnit')}`
+                  : '—'}
               </span>
             </div>
             {errors.hours ? (
@@ -229,7 +235,7 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
           </fieldset>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="inv-file">{c.file}</Label>
+            <Label htmlFor="inv-file">{t('hours.addDialog.file')}</Label>
             <input
               id="inv-file"
               type="file"
@@ -237,15 +243,15 @@ export function AddInvoiceDialog({ open, onOpenChange, matrix, onAdded }: Props)
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               className="block w-full text-caption text-dust file:mr-3 file:h-target-dense file:rounded-btn file:border file:border-rebar file:bg-chalk file:px-3 file:font-semibold file:text-asphalt"
             />
-            <p className="text-caption text-dust">{c.fileHint}</p>
+            <p className="text-caption text-dust">{t('hours.addDialog.fileHint')}</p>
           </div>
 
           <DialogFooter className="mt-2">
             <DialogClose asChild>
-              <Button variant="ghost">{copy.common.cancel}</Button>
+              <Button variant="ghost">{t('common.cancel')}</Button>
             </DialogClose>
             <Button type="submit" variant="primary" loading={add.isPending} disabled={noCompanies}>
-              {c.save}
+              {t('hours.addDialog.save')}
             </Button>
           </DialogFooter>
         </form>

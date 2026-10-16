@@ -466,7 +466,7 @@ export function useSaveSiteRecipients() {
 export function useAddInvoice() {
   const s = useDataSource();
   return useSourceMutation((vars: AddInvoiceInput) => s.addInvoice(vars), {
-    success: copy.toasts.invoiceAdded,
+    success: () => translate('toasts.invoiceAdded'),
   });
 }
 
@@ -478,9 +478,9 @@ export function useSetInvoiceStatus() {
     {
       success: (v) =>
         v.status === 'queried'
-          ? copy.hours.queried
+          ? translate('hours.queried')
           : v.status === 'resolved'
-            ? copy.hours.resolved
+            ? translate('hours.resolved')
             : copy.toasts.saved,
     },
   );

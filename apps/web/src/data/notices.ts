@@ -330,9 +330,11 @@ export function noticeText(data: unknown): NoticeText | null {
     case 'invoice_gap': {
       const { company, invoiceNo, invoiced, reported, gap } = n.params;
       return {
+        // Either way (spec §19 Q133): "+16 h" or "−8 h".
         title: copyRef('shell.notifications.notices.invoice_gap.title', {
           company,
-          gap: { hours: gap },
+          sign: gap < 0 ? '−' : '+',
+          gap: { hours: Math.abs(gap) },
         }),
         body: one(
           copyRef('shell.notifications.notices.invoice_gap.body', {

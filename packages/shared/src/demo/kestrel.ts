@@ -1892,6 +1892,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
     no: string,
     days: number[],
     total: number,
+    gapNotified: number | null = null,
     status: SubInvoiceRow['status'] = 'open',
   ): SubInvoiceRow => ({
     id: demoId(`invoice:${no}`),
@@ -1909,14 +1910,18 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
     queried_at: null,
     resolved_at: null,
     created_at: t('2026-10-09', '15:30'),
+    // The gaps were notified when the invoices were saved (spec §19 Q133, W3-06): the seed writes
+    // that state, so loading it posts no second notice. The bell keeps §18.1's one notice
+    // (BrightLine); ClearView's is older and not in the seeded list.
+    gap_notified: gapNotified,
   });
   const invoices: SubInvoiceRow[] = cal.live
     ? []
     : [
         inv('apex', 'AP-1097', [88, 96, 96, 88, 104], 472),
-        inv('brightline', 'BL-3381', [40, 44, 40, 44, 44], 212),
+        inv('brightline', 'BL-3381', [40, 44, 40, 44, 44], 212, 16),
         inv('ironclad', 'IC-0554', [48, 40, 48, 48, 48], 232),
-        inv('clearview', 'CV-2210', [32, 32, 32, 32, 32], 160),
+        inv('clearview', 'CV-2210', [32, 32, 32, 32, 32], 160, 8),
       ];
 
   // Riverside's EOT evidence pack for September, built Oct 2. A live demo moves its period with

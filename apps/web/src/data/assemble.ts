@@ -53,7 +53,11 @@ import type { PanelCopyTree } from '@sitelog/shared/copy/ui/types.ts';
 import { deriveTotals } from '@sitelog/shared/report/hours.ts';
 import { fillCopy } from '@sitelog/shared/report/progress.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
-import { normalizePayrollColumns, type PayrollColumn } from '@sitelog/shared/report/payroll.ts';
+import {
+  csvCell,
+  normalizePayrollColumns,
+  type PayrollColumn,
+} from '@sitelog/shared/report/payroll.ts';
 import { versionPhotos } from '@sitelog/shared/report/photos.ts';
 import {
   isVoiceSourceKind,
@@ -86,7 +90,6 @@ import {
 } from '@sitelog/shared/format.ts';
 import { copy } from '@/copy/en';
 import { copyRef } from '@/i18n/copyRef';
-import { formatHoursNum } from '@/lib/format';
 import { groupBy, isRecord, sum, uniq } from '@/lib/utils';
 import type {
   ActivityEntry,
@@ -2240,6 +2243,68 @@ function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** What a crew line's first source cites, for the invoice check's evidence (P8). */
+interface EvidenceCite {
+  kind: InvoiceEvidence['kind'];
+  clipId: string | null;
+  at: number | null;
+  questionId: string | null;
+}
+
+/**
+ * A manpower row's source as invoice evidence: a voice note second (v2 `voice_note`, v1 `audio`),
+ * a call second, an answered question; a row with no source at all (WhatsApp-era data) points at
+ * the report's voice note; anything else (an office or reporter edit) at the report.
+ */
+function evidenceSource(
+  src: Record<string, unknown> | null,
+  reportAudio: ReportSourceRow | null,
+): EvidenceCite {
+  const at = src && typeof src.start === 'number' ? src.start : null;
+  if (src?.type === 'call' && typeof src.callId === 'string')
+    return { kind: 'call', clipId: src.callId, at, questionId: null };
+  if (src?.type === 'voice_note' || src?.type === 'audio') {
+    const id = voiceMediaIdOf(src as unknown as Source);
+    if (id) return { kind: 'voice_note', clipId: id, at, questionId: null };
+  }
+  if (src?.type === 'answer' && typeof src.questionId === 'string')
+    return { kind: 'answer', clipId: null, at: null, questionId: src.questionId };
+  const audioId = !src && reportAudio ? sourceMediaId(reportAudio) : null;
+  if (audioId) return { kind: 'voice_note', clipId: audioId, at: null, questionId: null };
+  return { kind: 'report', clipId: null, at: null, questionId: null };
+}
+
+/**
+ * The words behind a gap day's hours: the voice note's transcript segment at the cited second,
+ * the reporter's segment of the call at that second (never the agent's), or the answer. Null when
+ * there is nothing to read (the rows are not loaded for an accounts user).
+ */
+function evidenceQuote(
+  cite: EvidenceCite,
+  rows: RowSet,
+  transcriptByMedia: Map<string | null, TranscriptRow>,
+): string | null {
+  const at = cite.at;
+  if (cite.kind === 'voice_note' && cite.clipId && at !== null) {
+    const t = transcriptByMedia.get(cite.clipId);
+    const seg = t ? segmentsOf(t.segments).find((x) => at >= x.start && at < x.end) : undefined;
+    return seg?.text.trim() || null;
+  }
+  if (cite.kind === 'call' && cite.clipId && at !== null) {
+    const t = rows.transcripts.find((x) => x.call_id === cite.clipId);
+    const segs = t
+      ? segmentsOf(t.segments).filter((x) => x.speaker !== 'agent' && at >= x.start && at < x.end)
+      : [];
+    const seg = segs.find((x) => x.speaker === 'reporter') ?? segs[0];
+    return seg?.text.trim() || null;
+  }
+  if (cite.kind === 'answer' && cite.questionId) {
+    const q = rows.questions.find((x) => x.id === cite.questionId);
+    return q ? answerText(q.answer) : null;
+  }
+  return null;
+}
+
 export function assembleHours(
   rows: RowSet,
   _ctx: AssembleCtx,
@@ -2373,39 +2438,28 @@ export function assembleHours(
           const entries = subs.filter((m) => m.report_id === rid && keyOf(m) === r.key);
           const entry = entries[0];
           if (!rep && !entry) continue;
-          // The manpower row's voice-note source: v1 audio (messageId) or v2 voice_note (uploadId).
-          const src =
-            entry &&
-            isRecord(entry.source) &&
-            (entry.source.type === 'audio' || entry.source.type === 'voice_note')
-              ? entry.source
-              : null;
-          const audioStart = src && typeof src.start === 'number' ? src.start : null;
-          // The voice note the entry cites (a spoken correction is a note of its own, F10), else
-          // the report's.
-          const audio = audioByReport.get(rid);
-          const mediaId =
-            (src ? voiceMediaIdOf(src as unknown as Source) : null) ??
-            (audio ? sourceMediaId(audio) : null);
-          const transcript = mediaId ? transcriptByMedia.get(mediaId) : undefined;
-          const seg =
-            transcript && audioStart !== null
-              ? segmentsOf(transcript.segments).find(
-                  (s) => audioStart >= s.start && audioStart < s.end,
-                )
-              : undefined;
-          const quote =
-            seg?.text ??
-            `${r.companyName} · ${entries.map((m) => `${m.workers} × ${formatHoursNum(Number(m.hours) / Math.max(1, Number(m.workers)))} h`).join(', ')} = ${formatHoursNum(sum(entries.map((m) => Number(m.hours))))} h`;
+          const cited = entry && isRecord(entry.source) ? entry.source : null;
+          const cite = evidenceSource(cited, audioByReport.get(rid) ?? null);
+          const quote = evidenceQuote(cite, rows, transcriptByMedia);
           const siteId = rep?.site_id ?? entry?.site_id;
           evidence.push({
             date: d.date,
             reportId: rid,
             reportNo: rep?.report_no ?? entry?.report_no ?? '',
             siteName: (siteId && ix.siteById.get(siteId)?.name) || '',
+            kind: cite.kind,
             quote,
-            audioStart,
-            messageId: mediaId,
+            crew: {
+              company: r.companyName,
+              lines: entries.map((m) => ({
+                workers: Number(m.workers),
+                hoursEach:
+                  Math.round((Number(m.hours) / Math.max(1, Number(m.workers))) * 100) / 100,
+              })),
+              total: sum(entries.map((m) => Number(m.hours))),
+            },
+            clipId: cite.clipId,
+            at: cite.at,
           });
         }
       }
@@ -2464,10 +2518,8 @@ export function payrollCsv(
   const cm = currentManpower(rows, ix).filter(
     (m) => m.date >= start && m.date <= end && (!siteId || m.site_id === siteId),
   );
-  const esc = (v: string | number | null | undefined) => {
-    const s = v === null || v === undefined ? '' : String(v);
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
+  // The same cells as api-export-payroll: RFC 4180 quoting, formulas neutralised (W3-06).
+  const esc = csvCell;
   const lines = [columns.join(',')];
   for (const m of cm.sort((a, b) =>
     a.date === b.date ? a.site_id.localeCompare(b.site_id) : a.date < b.date ? -1 : 1,

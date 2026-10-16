@@ -209,7 +209,7 @@ export const copy = {
           body: '{{reportNo}} · {{crew}} on site · {{hours}}',
         },
         invoice_gap: {
-          title: 'Invoice gap: {{company}} +{{gap}}',
+          title: 'Invoice gap: {{company}} {{sign}}{{gap}}',
           body: '{{invoiceNo}} invoices {{invoiced}} · reports show {{reported}}',
         },
       },
@@ -1442,62 +1442,74 @@ export const copy = {
     },
   },
 
+  /** P8 · Crew hours (F19). EN/TR since W3-06; the Turkish is in packages/shared/src/copy/ui/tr.ts. */
   hours: {
     title: 'Crew hours',
     subtitle: 'Subcontractor hours by company, checked against invoices',
+    /** The page named inside the error state ("Couldn't load crew hours"). */
+    thing: 'crew hours',
     payrollCsv: 'Payroll CSV',
     weekPicker: 'Week',
     previousWeek: 'Previous week',
     nextWeek: 'Next week',
     siteSelect: 'Site',
     allSites: 'All sites',
+    kpisLabel: 'Key figures',
     kpis: {
       subHours: 'Subcontractor hours',
       companies: 'Companies on site',
       gaps: 'Invoice gaps found',
-      gapsDetail: (hours: string, subs: number) => `${hours} · ${plural(subs, 'sub')}`,
+      gapsDetail_one: '{{hours}} · {{count}} sub',
+      gapsDetail_other: '{{hours}} · {{count}} subs',
     },
     columns: {
       company: 'Company',
       reported: 'Reported',
       invoiced: 'Invoiced',
       gap: 'Gap',
-      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
     },
     gap: { match: 'match', awaiting: 'awaiting', confirm: 'Confirm', unconfirmed: 'Unconfirmed' },
     addInvoice: 'Add invoice',
     invoiceCheck: 'Invoice check',
-    invoice: (no: string, period: string) => `${no} · ${period}`,
+    invoice: '{{no}} · {{period}}',
     compare: { day: 'Day', invoice: 'Invoice', reports: 'Reports', gap: 'Gap' },
     evidence: 'Evidence',
     sendQuery: 'Send query with evidence',
     markResolved: 'Mark resolved',
     queried: 'Query sent',
     resolved: 'Marked resolved',
-    csvReady: 'Payroll CSV ready.',
     empty: 'No hours reported this week.',
     selectRow: 'Select a row with a gap to compare it with the invoice.',
     selectRowTitle: 'Invoice check',
     perCompanyHint: 'Invoices are checked per company. Choose All sites to compare them.',
-    sitesLabel: (sites: string) => sites,
     unconfirmedHint: 'Heard in a report but not yet a known subcontractor.',
-    openRow: (company: string) => `Compare ${company} with its invoice`,
+    /** §2.2: an accounts user cannot open reports or the glossary to confirm a company. */
+    unconfirmedAsk:
+      'Heard in a report but not yet a known subcontractor. Ask an ops user to confirm it.',
+    openRow: 'Compare {{company}} with its invoice',
     totalRow: 'Total',
-    status: 'Status',
-    evidenceFor: (date: string, site: string) => `${date} · ${site}`,
-    audioLink: (ts: string) => `audio ${ts}`,
-    openReport: (no: string) => `Open report ${no}`,
+    evidenceFor: '{{date}} · {{site}}',
+    /** Evidence chips (P8): "audio 0:41" and "call 2:15" are `source.links`; these have no second. */
+    evidenceKinds: {
+      voiceNote: 'voice note',
+      answer: 'answer',
+      report: 'report',
+    },
+    openReport: 'Open report {{no}}',
+    openReportAt: 'Open report {{no}} at {{source}}',
+    /** A gap day without words to quote (typed report, or no transcript to read): the crew lines. */
+    crewQuote: '{{company}} · {{lines}} = {{total}}',
+    crewLine: '{{workers}} × {{hours}}',
     noEvidence: 'No gap days to show evidence for.',
     noReportEvidence: 'No site report recorded hours for this company on the gap days.',
     queryMail: {
-      subject: (company: string, no: string) => `Invoice ${no} — hours query from SiteLog`,
-      intro: (company: string, no: string, period: string) =>
-        `Hello ${company},\n\nInvoice ${no} (${period}) shows more hours than our daily site reports. Day by day:`,
-      row: (date: string, invoiced: string, reported: string, gap: string) =>
-        `${date}: invoiced ${invoiced}, reported ${reported}, gap ${gap}`,
-      total: (invoiced: string, reported: string, gap: string) =>
-        `Total: invoiced ${invoiced}, reported ${reported}, gap ${gap}`,
+      subject: 'Invoice {{no}} — hours query from SiteLog',
+      intro:
+        'Hello {{company}},\n\nInvoice {{no}} ({{period}}) shows more hours than our daily site reports. Day by day:',
+      row: '{{date}}: invoiced {{invoiced}}, reported {{reported}}, gap {{gap}}',
+      total: 'Total: invoiced {{invoiced}}, reported {{reported}}, gap {{gap}}',
       evidence: 'Site report evidence:',
+      evidenceLine: '- {{date}} · {{site}} · {{reportNo}} · {{source}}: “{{quote}}”',
       outro:
         'Could you check these days and send a corrected invoice or the timesheets behind the difference?\n\nThanks,',
     },

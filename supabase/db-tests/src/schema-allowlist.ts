@@ -72,7 +72,7 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'd12-bookkeeping',
     reason:
-      'Repo-only bookkeeping columns kept as recorded additions (GAP 9.2 "extras"): created/updated timestamps, sites.paused_at, invoice query and resolve times, evidence-pack sections, error and ready time, the queue\'s locked_by, finished_at and lock_key, the manpower company-name snapshot and hours basis, work-item quantities.',
+      'Repo-only bookkeeping columns kept as recorded additions (GAP 9.2 "extras"): created/updated timestamps, sites.paused_at, invoice query and resolve times and the last notified invoice gap (W3-06, spec §19 Q133), evidence-pack sections, error and ready time, the queue\'s locked_by, finished_at and lock_key, the manpower company-name snapshot and hours basis, work-item quantities.',
     closes: 'kept',
     decision: 'D12',
     diffs: [
@@ -93,6 +93,7 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
       'column extra: site_days.created_at (timestamp with time zone not null default now())',
       'column extra: site_days.updated_at (timestamp with time zone not null default now())',
       'column extra: sites.paused_at (timestamp with time zone)',
+      'column extra: sub_invoices.gap_notified (numeric(8,2))',
       'column extra: sub_invoices.queried_at (timestamp with time zone)',
       'column extra: sub_invoices.resolved_at (timestamp with time zone)',
       'column extra: work_items.quantity (text)',

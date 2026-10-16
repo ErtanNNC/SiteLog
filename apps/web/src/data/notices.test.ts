@@ -115,6 +115,14 @@ describe('noticeText: panel notices in the reader’s language', () => {
         body: 'BL-3381 invoices 212 h · reports show 196 h',
       },
     );
+    // Spec §19 Q133: a gap either way (W3-06), in the reader's language.
+    const under = { ...SAMPLES.invoice_gap, invoiced: 188, gap: -8 };
+    expect(render({ key: 'invoice_gap', params: under } as NoticeData, 'en').title).toBe(
+      'Invoice gap: BrightLine −8 h',
+    );
+    expect(render({ key: 'invoice_gap', params: under } as NoticeData, 'tr').title).toBe(
+      'Fatura farkı: BrightLine −8 sa',
+    );
   });
 
   it('leaves the stored body to notices whose body someone wrote (a change note, a snippet)', () => {

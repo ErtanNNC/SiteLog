@@ -34,8 +34,11 @@ export interface MediaPlayerHandle {
 
 interface PlayerCtx {
   register: (clipId: string, h: MediaPlayerHandle | null) => void;
-  /** Seeks a clip (without an id: the first one registered) and plays it from there. */
-  seek: (seconds: number, clipId?: string) => void;
+  /**
+   * Seeks a clip (without an id: the first one registered) and plays it from there; with
+   * `autoplay` false it only moves there (a link that opens P7 at a second, W3-06).
+   */
+  seek: (seconds: number, clipId?: string, autoplay?: boolean) => void;
   /** A player started: the others pause. */
   started: (clipId: string) => void;
   /** The clip playing or last sought, and its time. */
@@ -65,12 +68,12 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
     for (const [id, h] of handles.current) if (id !== clipId) h.pause();
   }, []);
   const seek = useCallback(
-    (s: number, clipId?: string) => {
+    (s: number, clipId?: string, autoplay = true) => {
       const id = clipId ?? order.current[0] ?? null;
       setHighlight({ clipId: id, at: s });
       if (id === null) return;
-      started(id);
-      handles.current.get(id)?.seek(s, true);
+      if (autoplay) started(id);
+      handles.current.get(id)?.seek(s, autoplay);
     },
     [started],
   );
