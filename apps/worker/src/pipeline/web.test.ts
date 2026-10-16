@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { QuestionRow } from '@sitelog/shared';
+import { jobKeys, type QuestionRow } from '@sitelog/shared';
 import { loadFixture } from '../ai/eval';
 import { validateDraft } from './validate';
 import {
   DEVICE_ACTIVE_MS,
+  REARM_GRACE_MAX_MS,
   deviceActive,
+  rearmGraceMs,
   planWebNext,
   reapplyAnswers,
   withReportPhotos,
@@ -205,5 +207,24 @@ describe('withReportPhotos', () => {
       { uploadId: 'u-new', caption: 'L5 rebar', takenAt: now.toISOString() },
     ]);
     expect(withReportPhotos(out!, [], now)).toBeNull();
+  });
+});
+
+describe('re-armable timers (W2-07)', () => {
+  it('keys the first arming by the base key, then <base>:re<n>', () => {
+    expect(jobKeys.rearm('decide:r:timeout:q', 0)).toBe('decide:r:timeout:q');
+    expect(jobKeys.rearm('decide:r:timeout:q', 3)).toBe('decide:r:timeout:q:re3');
+  });
+
+  it('waits 2 min, then doubles, up to 30 min', () => {
+    expect([1, 2, 3, 4, 5, 6, 20].map(rearmGraceMs)).toEqual([
+      120_000,
+      240_000,
+      480_000,
+      960_000,
+      REARM_GRACE_MAX_MS,
+      REARM_GRACE_MAX_MS,
+      REARM_GRACE_MAX_MS,
+    ]);
   });
 });

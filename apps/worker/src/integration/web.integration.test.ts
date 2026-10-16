@@ -717,3 +717,209 @@ async function photo13(): Promise<{ jobId: number | null }> {
   );
   return { jobId: r!.r.jobId };
 }
+
+describe('W2-07: an answer timeout that fires while more audio is processed is armed again', () => {
+  const answerTimers = (reportId: string) =>
+    database.q<{ id: number; dedupe_key: string; status: string; run_after: string }>(
+      `select id, dedupe_key, status::text, run_after from jobs
+        where type = 'decide_next' and payload ->> 'reportId' = $1
+          and payload -> 'timeout' ->> 'step' = 'answer' order by id`,
+      [reportId],
+    );
+  const questionOf = async (reportId: string) =>
+    (
+      await database.q<{ id: string; answer: unknown; answered_at: string | null }>(
+        `select id, answer, answered_at from questions where report_id = $1`,
+        [reportId],
+      )
+    )[0]!;
+
+  /** A report of `date` awaiting its one question, asked at the clock's time. */
+  async function questionAsked(date: string, opts: { photo?: boolean } = {}) {
+    const up = await world.uploadVoiceNote({
+      reporterId: MARCO,
+      siteId: RIVERSIDE,
+      fixtureId: 'es-en-riverside-2026-10-09',
+      date,
+    });
+    if (opts.photo) {
+      const [u] = await database.q<{ id: string }>(
+        `insert into uploads (reporter_id, site_id, kind, storage_path, mime, recorded_at)
+         values ($1, $2, 'photo', 'pending', 'image/jpeg', now()) returning id`,
+        [MARCO, RIVERSIDE],
+      );
+      await database.q(`update uploads set storage_path = $2 where id = $1`, [
+        u!.id,
+        `${ORG}/${RIVERSIDE}/${date}/${u!.id}.jpg`,
+      ]);
+      await database.q(`select field_complete_upload($1, $2, 1)`, [u!.id, MARCO]);
+    }
+    expect(await run(up.jobId!)).toEqual({ ok: true });
+    await runQueued(up.reportId, 'extract_report');
+    await seen(DEVICE_ACTIVE_MS + 1_000);
+    await runQueued(up.reportId, 'decide_next');
+    expect(await status(up.reportId)).toBe('awaiting_answer');
+    return { reportId: up.reportId, questionId: (await questionOf(up.reportId)).id };
+  }
+
+  /** More audio: the clip and its transcription job (not run). */
+  const moreAudio = (date: string) =>
+    world.uploadVoiceNote({
+      reporterId: MARCO,
+      siteId: RIVERSIDE,
+      fixtureId: 'es-en-riverside-2026-10-09',
+      date,
+    });
+
+  it('question at t0, a clip at t0+55 untranscribed past t0+60, the gap still open → it times out', async () => {
+    clock.set(new Date('2026-10-14T17:00:00Z'));
+    const { reportId, questionId } = await questionAsked('2026-10-14');
+    const base = `decide:${reportId}:timeout:${questionId}`;
+
+    clock.advance(55 * 60_000);
+    const second = await moreAudio('2026-10-14');
+    expect(await status(reportId)).toBe('processing');
+
+    // t0 + 60: the clip is not transcribed yet; the timer does not drop the question.
+    clock.advance(5 * 60_000);
+    const [timer] = await answerTimers(reportId);
+    expect(timer!.dedupe_key).toBe(base);
+    expect(await run(timer!.id)).toEqual({ ok: true });
+    expect((await questionOf(reportId)).answered_at).toBeNull();
+    let timers = await answerTimers(reportId);
+    expect(timers.map((t) => [t.dedupe_key, t.status])).toEqual([
+      [base, 'done'],
+      [`${base}:re1`, 'queued'],
+    ]);
+    // A retried timer finds the re-arm live and arms nothing more.
+    await runAgain(timer!.id);
+    expect(await answerTimers(reportId)).toHaveLength(2);
+
+    // The clip is transcribed and extracted; the gap is still open, so the question waits and
+    // its live re-armed timer stands.
+    clock.advance(60_000);
+    expect(await run(second.jobId!)).toEqual({ ok: true });
+    await runQueued(reportId, 'extract_report');
+    await runQueued(reportId, 'decide_next');
+    expect(await status(reportId)).toBe('awaiting_answer');
+    timers = await answerTimers(reportId);
+    expect(timers).toHaveLength(2);
+
+    clock.advance(2 * 60_000);
+    expect(await run(timers[1]!.id)).toEqual({ ok: true });
+    expect(await status(reportId)).toBe('awaiting_confirmation');
+    expect(await questionOf(reportId)).toMatchObject({
+      id: questionId,
+      answer: { unanswered: true, timeout: true },
+    });
+    const audits = await database.q<{ diff: { question_id: string } }>(
+      `select diff from audit_log where entity_id = $1 and action = 'report.question_timeout'`,
+      [reportId],
+    );
+    expect(audits.map((a) => a.diff.question_id)).toEqual([questionId]);
+  });
+
+  it('a timer that finished without acting (no live one left) is armed again by the next decide_next', async () => {
+    clock.set(new Date('2026-10-15T17:00:00Z'));
+    const { reportId, questionId } = await questionAsked('2026-10-15');
+    const base = `decide:${reportId}:timeout:${questionId}`;
+    clock.advance(55 * 60_000);
+    const second = await moreAudio('2026-10-15');
+    // As before this fix: the timer ran at t0 + 60 while the report was busy and finished done.
+    clock.advance(5 * 60_000);
+    await database.q(`update jobs set status = 'done', finished_at = now() where dedupe_key = $1`, [
+      base,
+    ]);
+    clock.advance(60_000);
+    expect(await run(second.jobId!)).toEqual({ ok: true });
+    await runQueued(reportId, 'extract_report');
+    await runQueued(reportId, 'decide_next');
+    expect(await status(reportId)).toBe('awaiting_answer');
+    // The wait finds no live timer: one is armed under the next key, due at once (past t0 + 60).
+    const timers = await answerTimers(reportId);
+    expect(timers.map((t) => [t.dedupe_key, t.status])).toEqual([
+      [base, 'done'],
+      [`${base}:re1`, 'queued'],
+    ]);
+    expect(await run(timers[1]!.id)).toEqual({ ok: true });
+    expect(await status(reportId)).toBe('awaiting_confirmation');
+    expect((await questionOf(reportId)).answer).toMatchObject({ unanswered: true, timeout: true });
+  });
+
+  it('a draft shown again with the same data after its clock ran out while busy gets a new clock', async () => {
+    clock.set(new Date('2026-10-16T17:00:00Z'));
+    const { reportId, questionId } = await questionAsked('2026-10-16', { photo: true });
+    // The reporter answers (5 workers, as W1-12's answer): the draft.
+    const { raw, data } = await draftOf(reportId);
+    const [q] = await database.q<{
+      field: 'manpower.workers';
+      target: object;
+      options: QuestionOption[];
+    }>(`select field, target, options from questions where id = $1`, [questionId]);
+    const option = q!.options.find((o) => o.id === 'o2')!;
+    const value = optionAnswer(q!.field, option)!;
+    const applied = applyAnswer(data, { field: q!.field, target: q!.target }, value, {
+      defaultShiftHours: 8,
+      source: { type: 'answer', questionId },
+    });
+    await database.q(`select field_answer_question($1, $2, $3, $4, $5, $6, $7, null)`, [
+      reportId,
+      questionId,
+      MARCO,
+      JSON.stringify(raw),
+      JSON.stringify(applied.data),
+      JSON.stringify({ optionId: 'o2', text: option.label, parsed: value, via: 'web' }),
+      JSON.stringify({ type: 'answer', questionId }),
+    ]);
+    await runQueued(reportId, 'decide_next');
+    expect(await status(reportId)).toBe('awaiting_confirmation');
+    const revOf = async () =>
+      (
+        await database.q<{ rev: number }>(
+          `select rv.draft_rev as rev from reports r join report_versions rv
+             on rv.report_id = r.id and rv.version = r.current_version where r.id = $1`,
+          [reportId],
+        )
+      )[0]!.rev;
+    const rev = await revOf();
+    const fileBase = `decide:${reportId}:file-timeout:v1:r${rev}`;
+    const nudgeBase = `notify:draft_nudge:${reportId}:v1:r${rev}`;
+
+    // More audio on the draft; its clock runs out while the clip waits for its transcription.
+    clock.advance(10 * 60_000);
+    const second = await moreAudio('2026-10-16');
+    expect(await status(reportId)).toBe('processing');
+    clock.advance(2 * 3600_000);
+    for (const key of [nudgeBase, fileBase]) {
+      const [job] = await database.q<{ id: number }>(`select id from jobs where dedupe_key = $1`, [
+        key,
+      ]);
+      expect(await run(job!.id)).toEqual({ ok: true });
+    }
+    expect(await status(reportId)).toBe('processing');
+
+    // The re-extraction writes the same draft (same revision): the draft gets a new clock.
+    expect(await run(second.jobId!)).toEqual({ ok: true });
+    await runQueued(reportId, 'extract_report');
+    await runQueued(reportId, 'decide_next');
+    expect(await status(reportId)).toBe('awaiting_confirmation');
+    expect(await revOf()).toBe(rev);
+    const clock2 = (await clockJobs(reportId)).filter(
+      (j) => j.status === 'queued' && !j.dedupe_key.includes(':timeout:'),
+    );
+    expect(clock2.map((j) => j.dedupe_key).sort()).toEqual(
+      [`${fileBase}:re1`, `${nudgeBase}:re1`].sort(),
+    );
+    const nudge = clock2.find((j) => j.type === 'notify')!;
+    expect(nudge.payload).toMatchObject({ dedupeKey: `${nudgeBase}:re1` });
+
+    const file = clock2.find((j) => j.type === 'decide_next')!;
+    expect(await run(file.id)).toEqual({ ok: true });
+    expect(await status(reportId)).toBe('filed');
+    const filed = await database.q<{ diff: { trigger: string } }>(
+      `select diff from audit_log where entity_id = $1 and action = 'report.filed'`,
+      [reportId],
+    );
+    expect(filed.map((f) => f.diff.trigger)).toEqual(['timeout']);
+  });
+});

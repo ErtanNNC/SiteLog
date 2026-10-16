@@ -312,6 +312,14 @@ export const jobKeys = {
   decideFileTimeout: (reportId: string, version: number, draftRev: number) =>
     `decide:${reportId}:file-timeout:v${version}:r${draftRev}`,
   /**
+   * The nth arming of a re-armable timer (W2-07: `decideTimeout`, `decideFileTimeout`,
+   * `draftNudge`): the base key first, then `<base>:re<n>`. A key names one job for good, so a
+   * timer that fired while the report was busy (an extraction running, a clip not transcribed, a
+   * spoken answer being read) and changed nothing is armed again under the next key; the web
+   * pipeline arms one only while no job of the timer is queued or running.
+   */
+  rearm: (baseKey: string, n: number) => (n === 0 ? baseKey : `${baseKey}:re${n}`),
+  /**
    * The `filed` text of a report (§9.2, F8; W1-15): the `notify` job's dedupe key and the
    * Notifier's. A report is filed once, so a retried or repeated filing never texts twice.
    */

@@ -579,6 +579,13 @@ export interface Db {
   reporterDeviceLastSeen(reporterId: string): Promise<string | null>;
   /** A queued or running job of this type for the report, other than `exceptJobId`. */
   hasActiveReportJob(type: JobType, reportId: string, exceptJobId?: number): Promise<boolean>;
+  /**
+   * The jobs of a re-armable timer (W2-07, `jobKeys.timerKeys`), by their dedupe keys (the base
+   * key and its re-arms), oldest first.
+   */
+  listJobsByKeys(
+    keys: readonly string[],
+  ): Promise<Array<Pick<JobRow, 'id' | 'status' | 'dedupe_key'>>>;
 
   // unknown contacts (§6.3; the WhatsApp router writes them with no channel, D13)
   findPendingUnknownContact(phone: string): Promise<UnknownContactRow | null>;
@@ -1435,6 +1442,14 @@ export function createDb(sql: Sql): Db {
           and status in ('queued', 'running') and id <> ${exceptJobId ?? -1}
         limit 1`;
       return rows.length > 0;
+    },
+
+    async listJobsByKeys(keys) {
+      if (keys.length === 0) return [];
+      return sql<Array<Pick<JobRow, 'id' | 'status' | 'dedupe_key'>>>`
+        select id, status, dedupe_key from jobs
+        where dedupe_key = any(${sql.array([...keys])}::text[])
+        order by id`;
     },
 
     // unknown contacts --------------------------------------------------------------------

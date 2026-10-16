@@ -40,12 +40,10 @@ const AUDITED: Record<string, string> = {
     'notify:question_ready:<question> (the Notifier key in messages.payload, W1-12): one text per question; a retried decide_next never texts twice, a new question is a new key',
   'jobKeys.draftReady':
     'notify:draft_ready:<report>:<decide job id> (the Notifier key, W1-12): per decide_next job that showed the draft; a retry never texts twice, a draft shown again after more audio or photos comes from a new decide job',
-  'jobKeys.decideTimeout':
-    'decide:<report>:timeout:<question> (W2-07, the §7.2 web answer timeout): a delayed decide_next per question, and a question is asked once; a retried decide_next finds the key taken',
-  'jobKeys.decideFileTimeout':
-    'decide:<report>:file-timeout:v<version>:r<draft rev> (W2-07, the §7.2 confirmation timeout): per draft version and revision, so a newer draft restarts the clock; a filing that finds the report filed or the draft moved on does nothing',
+  timerKey:
+    'jobKeys.rearm(<base>, n) (W2-07, the §7.2 web clock): the answer timeout decide:<report>:timeout:<question> and the confirmation timeout decide:<report>:file-timeout:v<version>:r<draft rev>, then <base>:re<n>. The pipeline arms a timer only while none of its jobs is queued or running (a retry finds the live one); a timer that fired while the report was busy and changed nothing is armed again under the next n (up to MAX_TIMER_REARMS), so the question still times out and the draft still files',
   nudgeKey:
-    'jobKeys.draftNudge, notify:draft_nudge:<report>:v<version>:r<draft rev> (W2-07, the 30-minute nudge): the notify job and its Notifier key per draft version and revision, so a retry never nudges twice and a newer draft has its own nudge',
+    'jobKeys.rearm(jobKeys.draftNudge(…), n), notify:draft_nudge:<report>:v<version>:r<draft rev>[:re<n>] (W2-07, the 30-minute nudge): the notify job and its Notifier key per draft version, revision and arming of the filing timer it goes with, so a retry never nudges twice and a draft shown again after its clock ran out without filing gets a new clock',
   'jobKeys.renderPdf':
     'render_pdf:<report>:<version> (file_report, W1-15): per report version; versions are immutable, and a retried filing finds the key taken',
   'jobKeys.reportEmail':

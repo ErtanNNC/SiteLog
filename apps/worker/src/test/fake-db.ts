@@ -849,6 +849,12 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async reporterDeviceLastSeen(reporterId) {
       return d.deviceSeen.get(reporterId) ?? null;
     },
+    async listJobsByKeys(keys) {
+      return Array.from(d.jobs.values())
+        .filter((j) => j.dedupe_key !== null && keys.includes(j.dedupe_key))
+        .sort((a, b) => a.id - b.id)
+        .map((j) => ({ id: j.id, status: j.status, dedupe_key: j.dedupe_key }));
+    },
     async hasActiveReportJob(type, reportId, exceptJobId) {
       return Array.from(d.jobs.values()).some(
         (j) =>

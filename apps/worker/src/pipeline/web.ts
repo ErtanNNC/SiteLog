@@ -61,6 +61,11 @@ import { selectNextQuestion, validateDraft } from './validate';
  *   decide_next, `timeout.step 'file'`, trigger `timeout`, reason `unconfirmed`), or the filing at
  *   +15 min with `filing_mode = 'auto_15min'`; keyed per version and draft revision, so a newer
  *   draft restarts the clock and the old steps find their draft gone.
+ * - A timer never ends the clock by finding the report busy: the answer timeout that fires while
+ *   an extraction runs, a clip waits for its transcript or the report processes more audio is
+ *   armed again a few minutes on (`rearmGraceMs`), and a question or draft shown with no live
+ *   timer (one finished without acting, a re-extraction wrote the same draft) gets a new one
+ *   (`jobKeys.rearm`, since a key names one job for good).
  */
 
 /** D25: no `question_ready` / `draft_ready` text while the field app was used this recently. */
@@ -242,14 +247,20 @@ export async function decideNextWeb(
   policy: TimeoutPolicy = TIMEOUT_POLICY_DEFAULTS,
 ): Promise<void> {
   if (timeout?.step === 'file') return fileTimeoutWeb(ctx, report, timeout);
-  // A newer extraction (another voice note, a photo on the draft) decides after it.
-  if (await ctx.db.hasActiveReportJob('extract_report', report.id)) {
-    ctx.log.info('decide_next: an extraction is pending; it decides', { report_id: report.id });
-    return;
-  }
-  const voice = await ctx.db.listReportVoiceUploads(report.id);
-  if (voice.some((u) => !u.transcribed)) {
-    ctx.log.info('decide_next: a voice note is not transcribed yet', { report_id: report.id });
+  // A newer extraction (another voice note, a photo on the draft) decides after it. An answer
+  // timeout that finds the report busy is armed again (a few minutes on), never dropped: the
+  // decide_next after that extraction may well find the gap still open.
+  const extracting = await ctx.db.hasActiveReportJob('extract_report', report.id);
+  const voice = extracting ? [] : await ctx.db.listReportVoiceUploads(report.id);
+  const busy = extracting
+    ? 'an extraction is pending; it decides'
+    : voice.some((u) => !u.transcribed)
+      ? 'a voice note is not transcribed yet'
+      : null;
+  if (busy) {
+    ctx.log.info(`decide_next: ${busy}`, { report_id: report.id });
+    if (timeout?.step === 'answer')
+      await rearmAnswerTimeout(ctx, report, timeout.questionId, job, busy);
     return;
   }
   const site = await ctx.db.siteContext(report.site_id);
@@ -269,7 +280,9 @@ export async function decideNextWeb(
   const now = ctx.now();
   // §7.2 / F7: the open question unanswered for 60 min → recorded unanswered, then the draft.
   const timedOut =
-    timeout?.step === 'answer' ? await answerTimeoutWeb(ctx, report, timeout.questionId) : null;
+    timeout?.step === 'answer'
+      ? await answerTimeoutWeb(ctx, report, timeout.questionId, job)
+      : null;
   if (timeout?.step === 'answer' && !timedOut) return;
   const questions = await ctx.db.listQuestions(report.id);
   const plan: WebPlan = timedOut
@@ -363,11 +376,12 @@ export async function decideNextWeb(
       draftRev,
       shownAt: now,
       policy,
+      exceptJobId: job.id,
     });
   } else {
     const question = plan.kind === 'wait' ? plan.question : await ctx.db.getQuestion(questionId!);
     guard = { reportId: report.id, status: 'awaiting_answer', questionId: questionId! };
-    if (question) await startAnswerClock(ctx, report, question);
+    if (question) await startAnswerClock(ctx, report, question, job.id);
   }
 
   if (!reporter) return;
@@ -451,21 +465,108 @@ async function enqueueReporterText(
   );
 }
 
+/** How many times a timer is armed again before it gives up (with the grace below, about a day). */
+export const MAX_TIMER_REARMS = 48;
+/** The first re-arm's wait; each next one doubles, up to `REARM_GRACE_MAX_MS`. */
+export const REARM_GRACE_MS = 2 * 60_000;
+export const REARM_GRACE_MAX_MS = 30 * 60_000;
+
+/** The wait of the nth re-arm (n ≥ 1) of a timer that found the report busy. Pure. */
+export function rearmGraceMs(n: number): number {
+  return Math.min(REARM_GRACE_MS * 2 ** Math.max(0, n - 1), REARM_GRACE_MAX_MS);
+}
+
 /**
- * F7's clock for an open web question: a delayed decide_next at asked + 60 min, keyed per
- * question (a retried decide_next finds it taken). Delays are measured from the database's clock
- * (`delayMs`), the one the queue reads.
+ * The generation to arm a re-armable timer under (`jobKeys.rearm(baseKey, n)`), or null when one
+ * of its jobs other than `exceptJobId` is still queued or running (the live timer stands) or every
+ * generation is used. A key names one job for good (D16), so a timer whose job finished without
+ * acting needs the next generation's key to run again.
  */
-async function startAnswerClock(ctx: Ctx, report: ReportRow, question: QuestionRow) {
+async function timerGeneration(
+  ctx: Ctx,
+  baseKey: string,
+  exceptJobId: number | null,
+): Promise<number | null> {
+  const keys = Array.from({ length: MAX_TIMER_REARMS + 1 }, (_, n) => jobKeys.rearm(baseKey, n));
+  const jobs = await ctx.db.listJobsByKeys(keys);
+  if (jobs.some((j) => j.id !== exceptJobId && (j.status === 'queued' || j.status === 'running')))
+    return null;
+  const taken = new Set(jobs.map((j) => j.dedupe_key));
+  const n = keys.findIndex((k) => !taken.has(k));
+  if (n < 0) {
+    ctx.log.warn('timer not armed again: every re-arm is used', { base_key: baseKey });
+    return null;
+  }
+  return n;
+}
+
+/**
+ * F7's clock for an open web question: a delayed decide_next at asked + 60 min (at once when that
+ * has passed), keyed per question and arming (a retried decide_next finds the live one; one that
+ * finished without timing the question out is armed again, `jobKeys.rearm`). Delays are measured
+ * from the database's clock (`delayMs`), the one the queue reads.
+ */
+async function startAnswerClock(
+  ctx: Ctx,
+  report: ReportRow,
+  question: QuestionRow,
+  exceptJobId: number | null,
+) {
   const askedAt = new Date(question.asked_at ?? question.created_at);
+  await armAnswerTimer(
+    ctx,
+    report,
+    question.id,
+    exceptJobId,
+    () => answerTimeoutAt(askedAt).getTime() - ctx.now().getTime(),
+  );
+}
+
+async function armAnswerTimer(
+  ctx: Ctx,
+  report: ReportRow,
+  questionId: string,
+  exceptJobId: number | null,
+  delay: (generation: number) => number,
+): Promise<number | null> {
+  const n = await timerGeneration(ctx, jobKeys.decideTimeout(report.id, questionId), exceptJobId);
+  if (n === null) return null;
+  const timerKey = jobKeys.rearm(jobKeys.decideTimeout(report.id, questionId), n);
   await ctx.db.enqueueJob(
     'decide_next',
-    { reportId: report.id, timeout: { step: 'answer', questionId: question.id } },
-    {
-      dedupeKey: jobKeys.decideTimeout(report.id, question.id),
-      delayMs: answerTimeoutAt(askedAt).getTime() - ctx.now().getTime(),
-    },
+    { reportId: report.id, timeout: { step: 'answer', questionId } },
+    { dedupeKey: timerKey, delayMs: Math.max(0, delay(n)) },
   );
+  return n;
+}
+
+/**
+ * The answer timeout found the question still open but the report busy (an extraction running, a
+ * clip not transcribed, the report processing more audio): rather than finish having changed
+ * nothing, which would leave the question open for good, it is armed again a few minutes on.
+ */
+async function rearmAnswerTimeout(
+  ctx: Ctx,
+  report: ReportRow,
+  questionId: string,
+  job: JobRow,
+  reason: string,
+): Promise<void> {
+  const question = await ctx.db.getQuestion(questionId);
+  if (
+    !question ||
+    question.report_id !== report.id ||
+    question.answered_at ||
+    !OPEN_STATUSES.includes(report.status)
+  )
+    return;
+  const n = await armAnswerTimer(ctx, report, questionId, job.id, rearmGraceMs);
+  ctx.log.info('answer timeout deferred: the report is busy', {
+    report_id: report.id,
+    question_id: questionId,
+    reason,
+    rearm: n,
+  });
 }
 
 /**
@@ -478,25 +579,41 @@ async function startConfirmationClock(
   report: ReportRow,
   reporterId: string | null,
   settings: Pick<OrgSettingsRow, 'filing_mode'>,
-  draft: { version: number; draftRev: number; shownAt: Date; policy: TimeoutPolicy },
+  draft: {
+    version: number;
+    draftRev: number;
+    shownAt: Date;
+    policy: TimeoutPolicy;
+    exceptJobId: number | null;
+  },
 ): Promise<void> {
   const { version, draftRev } = draft;
+  // The filing timer leads: while it is live the clock stands (a retried decide_next); once it
+  // finished without filing (it fired while more audio was processed and the re-extraction
+  // wrote the same draft), the draft shown again gets a new clock, nudge included.
+  const generation = await timerGeneration(
+    ctx,
+    jobKeys.decideFileTimeout(report.id, version, draftRev),
+    draft.exceptJobId,
+  );
+  if (generation === null) return;
   for (const step of confirmationSchedule(draft.shownAt, settings.filing_mode)) {
     if (step.kind === 'file') {
+      const timerKey = jobKeys.rearm(
+        jobKeys.decideFileTimeout(report.id, version, draftRev),
+        generation,
+      );
       await ctx.db.enqueueJob(
         'decide_next',
         {
           reportId: report.id,
           timeout: { step: 'file', trigger: step.trigger, version, draftRev },
         },
-        {
-          dedupeKey: jobKeys.decideFileTimeout(report.id, version, draftRev),
-          delayMs: step.at.getTime() - draft.shownAt.getTime(),
-        },
+        { dedupeKey: timerKey, delayMs: step.at.getTime() - draft.shownAt.getTime() },
       );
     } else if (reporterId) {
       const { base, code } = await personalLinkCode(ctx, reporterId, report.org_id);
-      const nudgeKey = jobKeys.draftNudge(report.id, version, draftRev);
+      const nudgeKey = jobKeys.rearm(jobKeys.draftNudge(report.id, version, draftRev), generation);
       await ctx.db.enqueueJob(
         'notify',
         {
@@ -522,15 +639,27 @@ async function startConfirmationClock(
  * The answer timeout's re-check (§7.2, F7): the report still awaits that question, which is still
  * open and asked at least 60 min ago; then it is recorded unanswered (a guarded update: an answer
  * committing first wins), the report flagged `unanswered:<field>` and audited. Null, and nothing
- * changed, when the question was answered or the report moved on meanwhile.
+ * changed, when the question was answered or the report moved on meanwhile; null too, with the
+ * timer armed again (`rearmAnswerTimeout`), while the report processes more audio.
  */
 async function answerTimeoutWeb(
   ctx: Ctx,
   report: ReportRow,
   questionId: string,
+  job: JobRow,
 ): Promise<QuestionRow | null> {
   const question = await ctx.db.getQuestion(questionId);
   const now = ctx.now();
+  if (
+    question &&
+    question.report_id === report.id &&
+    !question.answered_at &&
+    (report.status === 'collecting' || report.status === 'processing')
+  ) {
+    // More audio arrived after the question: its decide_next comes, and this timer with it.
+    await rearmAnswerTimeout(ctx, report, questionId, job, `report ${report.status}`);
+    return null;
+  }
   if (
     report.status !== 'awaiting_answer' ||
     !question ||
