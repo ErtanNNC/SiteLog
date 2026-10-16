@@ -16,13 +16,14 @@ test('Demo phone (TR): HELP on WhatsApp is answered there in Turkish', async ({ 
   await signInWithMagicLink(page, SEED.demirAdmin.email);
   await page.goto('/dev/phone');
   await expect(page.getByRole('heading', { level: 1, name: 'Demo telefon' })).toBeVisible();
+  const reporters = page.getByRole('navigation', { name: 'Rapor verenler' });
+  await reporters.getByRole('button', { name: new RegExp(EMRE) }).click();
+  // The one-way note belongs to the open thread, so it shows once a reporter is picked.
   await expect(
     page.getByText(
       'TR ülke paketinde SMS tek yönlü: rapor veren SiteLog’a WhatsApp’tan yanıt verir.',
     ),
   ).toBeVisible();
-  const reporters = page.getByRole('navigation', { name: 'Rapor verenler' });
-  await reporters.getByRole('button', { name: new RegExp(EMRE) }).click();
   const thread = page.getByRole('list', { name: `${EMRE} ile mesajlar` });
   // No texts reply on a one-way pack (§19 Q35): only the WhatsApp box.
   await expect(page.getByRole('textbox', { name: `${EMRE} olarak yanıtla` })).toHaveCount(0);
