@@ -73,8 +73,13 @@ export function fromWhatsappAddress(address: string | null | undefined): E164 | 
 }
 
 export interface WhatsappTransportDeps {
-  /** When the person last wrote to SiteLog on WhatsApp (`messages`, channel whatsapp, in). */
-  lastInbound(phone: E164): Promise<string | null>;
+  /**
+   * When the person last wrote to this pack's WhatsApp sender through Twilio (`messages`, channel
+   * whatsapp, in, provider twilio, `payload.to` the sender): the start of their 24-hour window on
+   * that sender, or null. A Demo phone (console) row or a message to another sender never opens
+   * it (W2-15/16 review).
+   */
+  lastInbound(phone: E164, sender: string): Promise<string | null>;
   now?: () => Date;
 }
 
@@ -111,7 +116,7 @@ export function createTwilioWhatsappTransport(
         To: whatsappAddress(message.to),
         From: whatsappAddress(opts.sender),
       });
-      const open = isServiceWindowOpen(await deps.lastInbound(message.to), now());
+      const open = isServiceWindowOpen(await deps.lastInbound(message.to, opts.sender), now());
       let meta: Record<string, string>;
       if (open) {
         form.set('Body', message.body);
@@ -246,8 +251,8 @@ export function createWhatsappRegistration(deps: WhatsappRegistrationDeps): Chan
       if (recipient.org.isDemo) return true;
       if (recipient.pack.whatsappSenderId === null) return false;
       const phone = recipient.reporter.phone_e164 as E164;
-      if (isServiceWindowOpen(await deps.lastInbound(phone), (deps.now ?? (() => new Date()))()))
-        return true;
+      const window = await deps.lastInbound(phone, recipient.pack.whatsappSenderId);
+      if (isServiceWindowOpen(window, (deps.now ?? (() => new Date()))())) return true;
       return (
         key !== undefined &&
         whatsappContentSid(recipient.pack, key, languageOf(recipient.reporter.locale)) !== null

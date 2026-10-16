@@ -1864,6 +1864,26 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
     expect(consents.every((c) => c.revoked_at === null)).toBe(true);
   });
 
+  it('the WhatsApp window opens only by a Twilio message to that sender (W2-15/16 review)', async () => {
+    const phone = '+15550149876';
+    const SENDER = '+15550100001';
+    // Inbound rows as sms-webhook's receive_inbound_message() writes them (`payload.to`).
+    const inbound = async (provider: string, to: string, at: string) => {
+      await sql`
+        insert into messages (id, phone_e164, channel, direction, provider, provider_message_id,
+          body, status, payload, created_at)
+        values (${randomUUID()}, ${phone}, 'whatsapp', 'in', ${provider}, ${randomUUID()},
+          'HELP', 'received', ${sql.json({ to })}, ${at})`;
+    };
+    // A Demo phone reply (console) and a message to another pack's sender: no window here.
+    await inbound('console', SENDER, '2026-10-09T10:00:00Z');
+    await inbound('twilio', '+905320000099', '2026-10-09T11:00:00Z');
+    expect(await db.lastInboundWhatsapp(phone, SENDER)).toBeNull();
+    await inbound('twilio', SENDER, '2026-10-09T09:00:00Z');
+    expect(await db.lastInboundWhatsapp(phone, SENDER)).toBe('2026-10-09T09:00:00.000Z');
+    expect(await db.lastInboundWhatsapp(phone, '+905320000099')).toBe('2026-10-09T11:00:00.000Z');
+  });
+
   it('the Notifier over Postgres: a welcome on the demo org, its row, its retry and its audit', async () => {
     const sent: string[] = [];
     const notifier = createWorkerNotifier(testConfig(), db, (driver) => ({

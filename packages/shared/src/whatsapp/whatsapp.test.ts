@@ -133,13 +133,22 @@ describe('Twilio WhatsApp transport (W2-15)', () => {
 
   it('inside the window: free-form text (a session message)', async () => {
     const t = twilio();
+    const asked: Array<[string, string]> = [];
     const transport = createTwilioWhatsappTransport(
       { accountSid: 'AC1', authToken: 'tok' },
       t.fetch,
-      { lastInbound: async () => '2026-10-09T09:00:00Z', now: () => NOW },
+      {
+        lastInbound: async (phone, sender) => {
+          asked.push([phone, sender]);
+          return '2026-10-09T09:00:00Z';
+        },
+        now: () => NOW,
+      },
     );
     const sent = await transport.send(message({ key: 'filed', vars: {} }), opts);
     expect(sent.payload).toEqual({ whatsapp_mode: 'session' });
+    // The window is the one on the sender this goes from (W2-15/16 review), not any message.
+    expect(asked).toEqual([['+905321234567', '+905320000099']]);
     expect(t.forms[0]!.get('Body')).toBe(message().body);
     expect(t.forms[0]!.get('ContentSid')).toBeNull();
   });
@@ -215,11 +224,15 @@ describe('the WhatsApp channel registration (W2-15)', () => {
 
   it('reachable: a demo org always; a real one with a sender and an open window or a template', async () => {
     let last: string | null = null;
+    const senders: string[] = [];
     const reg = createWhatsappRegistration({
       fetch: async () => new Response('{}'),
       twilio: () => ({}),
       statusCallbackUrl: 'https://x/status',
-      lastInbound: async () => last,
+      lastInbound: async (_phone, sender) => {
+        senders.push(sender);
+        return last;
+      },
       randomUUID: () => 'u',
       now: () => NOW,
     });
@@ -227,6 +240,8 @@ describe('the WhatsApp channel registration (W2-15)', () => {
     expect(await reg.reachable!(recipient(), 'filed')).toBe(false);
     last = '2026-10-09T16:00:00Z';
     expect(await reg.reachable!(recipient(), 'filed')).toBe(true);
+    // Read on the pack's own WhatsApp sender (W2-15/16 review).
+    expect(new Set(senders)).toEqual(new Set([TR_WA.whatsappSenderId]));
     expect(await reg.reachable!(recipient({ pack: pack('TR') }), 'daily_link')).toBe(false);
     expect(
       await reg.reachable!(

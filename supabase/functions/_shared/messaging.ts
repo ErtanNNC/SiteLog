@@ -211,14 +211,24 @@ export function supabaseLinkStore(admin: AppClient): PersonalLinkStore {
   };
 }
 
-/** When the phone last wrote on WhatsApp (W2-15): the start of its 24-hour window, or null. */
-export async function lastInboundWhatsapp(admin: AppClient, phone: string): Promise<string | null> {
+/**
+ * When the phone last wrote to `sender` (the pack's WhatsApp sender) through Twilio (W2-15): the
+ * start of its 24-hour window there, or null. A Demo phone (console) row or a message to another
+ * sender never opens it (W2-15/16 review).
+ */
+export async function lastInboundWhatsapp(
+  admin: AppClient,
+  phone: string,
+  sender: string,
+): Promise<string | null> {
   const { data } = await admin
     .from('messages')
     .select('created_at')
     .eq('phone_e164', phone)
     .eq('channel', 'whatsapp')
     .eq('direction', 'in')
+    .eq('provider', 'twilio')
+    .eq('payload->>to', sender)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -242,7 +252,7 @@ export function edgeWhatsappRegistration(
       authToken: optionalEnv('TWILIO_AUTH_TOKEN'),
     }),
     statusCallbackUrl: statusCallbackUrl(),
-    lastInbound: (phone) => lastInboundWhatsapp(admin, phone),
+    lastInbound: (phone, sender) => lastInboundWhatsapp(admin, phone, sender),
     randomUUID: () => crypto.randomUUID(),
   });
 }

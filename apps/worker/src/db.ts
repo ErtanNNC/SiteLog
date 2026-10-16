@@ -727,7 +727,11 @@ export interface Db {
    * W2-15: when this phone last wrote to SiteLog on WhatsApp (the newest inbound `whatsapp`
    * message), the start of its 24-hour window; null when never.
    */
-  lastInboundWhatsapp(phone: string): Promise<string | null>;
+  /**
+   * W2-15: when the phone last wrote to `sender` (the pack's WhatsApp sender) through Twilio: the
+   * start of its 24-hour window there. Console (Demo phone) rows and other senders never count.
+   */
+  lastInboundWhatsapp(phone: string, sender: string): Promise<string | null>;
   insertSmsMessage(row: OutboundMessageRow): Promise<void>;
   updateSmsMessage(
     id: string,
@@ -1728,10 +1732,11 @@ export function createDb(sql: Sql): Db {
           and (s.device_id is null or d.revoked_at is null)
         order by s.created_at, s.id`;
     },
-    async lastInboundWhatsapp(phone) {
+    async lastInboundWhatsapp(phone, sender) {
       const rows = await sql<Array<{ at: Date | string }>>`
         select created_at as at from messages
         where phone_e164 = ${phone} and channel = 'whatsapp' and direction = 'in'
+          and provider = 'twilio' and payload->>'to' = ${sender}
         order by created_at desc limit 1`;
       const at = rows[0]?.at;
       return at === undefined ? null : new Date(at).toISOString();

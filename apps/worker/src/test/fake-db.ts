@@ -1010,9 +1010,16 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         .filter((p) => p.reporter_id === reporterId && p.revoked_at === null)
         .map(({ id, endpoint, p256dh, auth }) => ({ id, endpoint, p256dh, auth }));
     },
-    async lastInboundWhatsapp(phone) {
+    async lastInboundWhatsapp(phone, sender) {
       const ins = Array.from(d.messages.values())
-        .filter((m) => m.phone_e164 === phone && m.channel === 'whatsapp' && m.direction === 'in')
+        .filter(
+          (m) =>
+            m.phone_e164 === phone &&
+            m.channel === 'whatsapp' &&
+            m.direction === 'in' &&
+            m.provider === 'twilio' &&
+            (m.payload as { to?: unknown } | null)?.to === sender,
+        )
         .map((m) => m.created_at)
         .sort();
       return ins.at(-1) ?? null;

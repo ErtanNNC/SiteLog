@@ -206,7 +206,7 @@ export function workerWhatsappRegistration(
     fetch: (url, init) => fetchImpl(url, init),
     twilio: () => ({ accountSid: config.TWILIO_ACCOUNT_SID, authToken: config.TWILIO_AUTH_TOKEN }),
     statusCallbackUrl: statusCallbackUrl(config),
-    lastInbound: (phone) => db.lastInboundWhatsapp(phone),
+    lastInbound: (phone, sender) => db.lastInboundWhatsapp(phone, sender),
     randomUUID: () => crypto.randomUUID(),
     now,
   });
