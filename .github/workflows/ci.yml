@@ -47,6 +47,30 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:db
 
+  voice-agent:
+    name: Voice agent (ruff · pyright · pytest, no keys, no network)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: 0.11.32
+          enable-cache: true
+          cache-dependency-glob: apps/voice-agent/uv.lock
+      - run: pnpm install --frozen-lockfile
+      - name: uv sync (Python 3.12 from .python-version)
+        working-directory: apps/voice-agent
+        run: uv sync --locked
+      - run: pnpm voice:test
+      - name: Voice contract up to date
+        run: pnpm voice:contract -- --check
+
   edge-functions:
     name: Deno check (edge functions)
     runs-on: ubuntu-latest
