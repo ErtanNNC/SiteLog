@@ -247,6 +247,22 @@ describe('Draft (F8, Field-06)', () => {
     ).toBeInTheDocument();
   });
 
+  it('no stepper while Confirm & send is in flight (W2-10 review)', async () => {
+    let answer: (v: { status: 'queued' }) => void = () => {};
+    const routes = fakeRoutes({
+      report: vi.fn().mockResolvedValue(draftView()),
+      confirm: vi.fn(() => new Promise<{ status: 'queued' }>((r) => (answer = r))),
+    });
+    renderApp('/report/r1', { routes });
+    await screen.findByRole('button', { name: 'Apex Concrete, 6 workers, 8 hours each — change' });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm & send' }));
+    await waitFor(() => expect(routes.confirm).toHaveBeenCalled());
+    expect(
+      screen.queryByRole('button', { name: 'Apex Concrete, 6 workers, 8 hours each — change' }),
+    ).toBeNull();
+    await act(async () => answer({ status: 'queued' }));
+  });
+
   it('a stepper refuses what is not a number, and closes without a call when nothing changed', async () => {
     const routes = fakeRoutes({ report: vi.fn().mockResolvedValue(draftView()) });
     renderApp('/report/r1', { routes });

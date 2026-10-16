@@ -446,3 +446,37 @@ describe('service role only', () => {
     }
   });
 });
+
+describe('a fix while the draft is being filed (W2-10 review, 20261016000120)', () => {
+  it('Save change and a stepper are refused once Confirm & send queued the filing', async () => {
+    const { reportId, base } = await awaiting('2026-10-03');
+    const req = await request(reportId, { text: 'Apex had 7, not 6' });
+    const rev = (await version(reportId)).draft_rev;
+    await settle(req.id, 'ready', preview(base, rev));
+    await svc(`select field_confirm_report($1, $2, 1, $3)`, [reportId, MARCO, rev]);
+    expect(
+      await failure(`select field_apply_correction($1, $2, $3)`, [req.id, reportId, MARCO]),
+    ).toBe('report_filing');
+    const edited = applyCrewEdit(
+      base,
+      { index: 0, workers: 8, hoursPerWorker: 8 },
+      {
+        source: { type: 'reporter_edit', reporterId: MARCO, at: 'x', via: 'web' },
+        defaultShiftHours: 8,
+      },
+    );
+    if (!edited.ok) throw new Error('edit');
+    expect(
+      await failure(`select field_edit_draft($1, $2, 1, $3, $4, $5, $6, $7)`, [
+        reportId,
+        MARCO,
+        rev,
+        JSON.stringify(base),
+        JSON.stringify(edited.data),
+        JSON.stringify(edited.changes),
+        JSON.stringify({ type: 'reporter_edit' }),
+      ]),
+    ).toBe('report_filing');
+    expect((await version(reportId)).data.manpower[0]!.workers).toBe(6);
+  });
+});

@@ -351,7 +351,9 @@ export function Draft({
       <ReportSections
         data={data}
         onEditCrew={
-          fixBusy
+          // No stepper while a fix is busy or Confirm & send is on its way: the draft confirmed
+          // is the one filed (W2-10 review; field_edit_draft() refuses `report_filing` too).
+          fixBusy || sending
             ? undefined
             : (i) => {
                 setStepperError(null);
