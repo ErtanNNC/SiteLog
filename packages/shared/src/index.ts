@@ -42,6 +42,7 @@ export * from './notify/notifier.ts';
 export * from './notify/walk.ts';
 export * from './notify/fallback.ts';
 export * from './schedule/reminders.ts';
+export * from './schedule/remind.ts';
 export * from './schedule/day.ts';
 export * from './weather/observed.ts';
 export * from './webhook/meta.ts';
