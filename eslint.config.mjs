@@ -19,6 +19,7 @@ export default tseslint.config(
       'apps/field/e2e/**',
       '**/*.d.ts',
       '.claude/**', // agent worktrees (local only)
+      '**/.venv/**', // Python virtualenvs (apps/voice-agent, uv)
     ],
   },
   js.configs.recommended,

@@ -31,6 +31,8 @@
     "countries:set": "pnpm --filter @sitelog/scripts countries-set",
     "cutover:preflight": "pnpm --filter @sitelog/scripts cutover-preflight",
     "voice:contract": "pnpm --filter @sitelog/scripts voice-contract",
+    "voice:test": "cd apps/voice-agent && uv run --locked ruff check && uv run --locked ruff format --check && uv run --locked pyright && uv run --locked pytest -m 'not live'",
+    "voice:console": "cd apps/voice-agent && lk agent console",
     "brand": "pnpm --filter @sitelog/web brand && pnpm --filter @sitelog/field brand",
     "check": "pnpm typecheck && pnpm lint && pnpm test"
   },

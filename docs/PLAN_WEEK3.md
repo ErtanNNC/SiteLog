@@ -97,11 +97,11 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-02 · `apps/voice-agent` scaffold: Python package, fakes, pytest, CI job
 
-- [ ] **W3-02 done** · today _missing_ (M)
+- [ ] **W3-02 done** · today _partial_ (M): scaffold, fakes and `pnpm voice:test` built (74 tests, no key, no network); the CI job and the CLAUDE.md line wait for the lead (`.github/` and CLAUDE.md are edited elsewhere)
 - **Spec:** §4.2, §5 (Python 3.11+, `livekit-agents` with `deepgram`, `anthropic`, `azure`, `silero`, `inference.TurnDetector`; `httpx`; `lk agent deploy`), §9.4, §17 (Voice: scripted call simulations), Appendix A (W3-01).
 - **Already in the repo:** nothing in Python; the pnpm workspace, the CI jobs `check`, `db`, `edge-functions`, `e2e`, `e2e-supabase`, `eval`.
 - **Build:**
-  - [ ] Layout (Appendix A refined; one package, `src/` layout):
+  - [x] Layout (Appendix A refined; one package, `src/` layout):
 
     ```
     apps/voice-agent/
@@ -125,11 +125,11 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
         test_*.py       # unit; sim/ replays fixtures/calls/*.json (W3-15)
     ```
 
-  - [ ] Dependencies pinned exactly in `uv.lock` (`livekit-agents` with the plugins above, `httpx`, `pydantic`, `pydantic-settings`, `sentry-sdk`; dev: `pytest`, `pytest-asyncio`, `respx`, `pytest-socket`, `ruff`, `pyright`, `jsonschema`). The exact testing API of the pinned `livekit-agents` (text-mode `AgentSession.run`, its result assertions) is checked when pinning; where it is not public, the harness drives `dialog.py` and `tools.py` directly.
-  - [ ] Fakes, so nothing needs a key or a network: `FakeFieldApi` (respx routes answering from `fixtures/calls/*.json`, validating every request against `contract/`), `FakeLLM` (replays recorded agent turns: text and tool calls, per fixture), text-mode sessions (no STT/TTS); `pytest-socket` forbids any other network.
-  - [ ] Root scripts: `pnpm voice:test` (`uv run ruff check`, `ruff format --check`, `pyright`, `pytest -m "not live"`) and `pnpm voice:console` (`lk agent console`, by hand); both listed in CLAUDE.md "Commands".
+  - [x] Dependencies pinned exactly in `uv.lock` (`livekit-agents` with the plugins above, `httpx`, `pydantic`, `pydantic-settings`, `sentry-sdk`; dev: `pytest`, `pytest-asyncio`, `respx`, `pytest-socket`, `ruff`, `pyright`, `jsonschema`). The exact testing API of the pinned `livekit-agents` (text-mode `AgentSession.run`, its result assertions) is checked when pinning; where it is not public, the harness drives `dialog.py` and `tools.py` directly. _As built:_ `livekit-agents` 1.8.3 (plugins `anthropic`, `azure`, `deepgram`, `silero`; `inference.TurnDetector` is in the core package, so no `turn-detector` extra and no `transformers`), Python 3.12; its public `AgentSession.run()` / `RunResult.expect` drive the text-mode sessions.
+  - [x] Fakes, so nothing needs a key or a network: `FakeFieldApi` (respx routes answering from `fixtures/calls/*.json`, validating every request against `contract/`), `FakeLLM` (replays recorded agent turns: text and tool calls, per fixture), text-mode sessions (no STT/TTS); `pytest-socket` forbids any other network. _As built:_ `apps/voice-agent/tests/fakes/`; the first fixture is `fixtures/calls/smoke-get-context.json` (its `$comment` gives the shape W3-15 extends).
+  - [x] Root scripts: `pnpm voice:test` (`uv run ruff check`, `ruff format --check`, `pyright`, `pytest -m "not live"`) and `pnpm voice:console` (`lk agent console`, by hand); both listed in CLAUDE.md "Commands" (_open:_ the CLAUDE.md line is proposed in the W3-02 report, not yet added).
   - [ ] CI job `voice-agent` (in `.github/workflows/ci.yml`, coordinated with the eval work editing that file): `astral-sh/setup-uv`, `uv sync --frozen`, the `voice:test` steps, and `pnpm voice:contract` with `git diff --exit-code`. `deploy.yml` gets no agent step: `lk agent deploy` stays an owner-approved hand step (RUNBOOK, W3-16).
-  - [ ] Sentry for the agent (`SENTRY_DSN`, the `voice-agent` environment tag); logs carry the call id, never a phone number or a transcript.
+  - [x] Sentry for the agent (`SENTRY_DSN`, the `voice-agent` environment tag); logs carry the call id, never a phone number or a transcript. _As built:_ `observability.py`, events tagged `service: voice-agent` with `SENTRY_ENVIRONMENT`; a log filter and Sentry's `before_send` redact phone numbers.
 - **Tests:** config parsing; the field-api client (auth headers, timeout, one retry on 5xx, never on 4xx, contract validation both ways); the prompt files equal §9.4; one text-mode smoke session with `FakeLLM` and `FakeFieldApi` that calls `get_context` and ends.
 - **Done when:** `pnpm voice:test` passes locally and the `voice-agent` CI job is green on PR #1 with no key and no network.
 - **Needs:** nothing.

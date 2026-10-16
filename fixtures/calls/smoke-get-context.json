@@ -1,0 +1,54 @@
+{
+  "$comment": "W3-02 smoke call for the Python agent's text-mode harness (apps/voice-agent/tests). start: the calls/start request the agent sends and field-api's answer (the fake derives callToken). routes: field-api's answers per voice route, in order (the last repeats). reporterTurns: what the reporter says, one run each. agentTurns: the dialog model's recorded turns, one per model request ({text} and/or {toolCalls}). W3-15 adds the full scripts beside this one.",
+  "id": "smoke-get-context",
+  "locale": "en-US",
+  "start": {
+    "request": {
+      "room": "call-5b1f0c3e-8a2d-4c6e-9f10-2b3c4d5e6f70",
+      "transport": "pstn",
+      "from": "+15550142087"
+    },
+    "response": {
+      "callId": "5b1f0c3e-8a2d-4c6e-9f10-2b3c4d5e6f70",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": { "firstName": "Kevin", "locale": "en-US" }
+    }
+  },
+  "routes": {
+    "get_context": [
+      {
+        "call": { "direction": "inbound", "transport": "pstn", "purpose": "daily_report" },
+        "reporter": { "firstName": "Kevin", "locale": "en-US" },
+        "company": "Kestrel Builders",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b",
+            "name": "Northgate Parking Structure",
+            "status": "pending",
+            "deadline": "18:00"
+          }
+        ],
+        "siteId": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b",
+        "companies": [
+          { "name": "Delta Precast", "aliases": ["Delta"] },
+          { "name": "Apex Concrete", "aliases": ["Apex"] }
+        ],
+        "keyterms": ["Delta Precast", "Apex Concrete", "post-tension"],
+        "consents": { "recording": true, "dataProcessing": true, "sms": true, "autoCall": false },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 2
+      }
+    ],
+    "end_call": [{ "ok": true }]
+  },
+  "reporterTurns": [
+    "Hi, it's Kevin at Northgate. Actually I'll call back later, my number is 555 014 2087."
+  ],
+  "agentTurns": [
+    { "toolCalls": [{ "name": "get_context", "args": {} }] },
+    { "toolCalls": [{ "name": "end_call", "args": { "outcome": "abandoned" } }] },
+    { "text": "Goodbye." }
+  ]
+}

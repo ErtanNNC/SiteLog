@@ -21,4 +21,11 @@ apps/worker/src/ai/prompts/*.md
 # which checks them byte for byte.
 apps/voice-agent/contract
 apps/voice-agent/copy
+# The voice agent's system prompts, §9.4's dialog policy verbatim; a test compares them with the spec.
+apps/voice-agent/src/sitelog_voice/prompts/*.md
+# Python artefacts (uv, pytest, ruff)
+apps/voice-agent/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
 .claude/
