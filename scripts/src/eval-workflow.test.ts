@@ -118,8 +118,8 @@ describe('eval.yml', () => {
     expect(CODE).not.toMatch(
       /^\s*(push|pull_request|pull_request_target|schedule|workflow_run|repository_dispatch):/m,
     );
-    // Both triggers take the same inputs, and a call passes no secrets (the job reads the preview
-    // Environment's key itself).
+    // Both triggers take the same inputs; a call declares no secrets (Deploy inherits them, and the
+    // job reads ANTHROPIC_API_KEY alone).
     const [dispatch, call] = on.replace(/^on:\n/, '').split(/^ {2}workflow_call:$/m);
     expect(call.replace(/^ {2}#.*\n/gm, '').trim()).toBe(
       dispatch

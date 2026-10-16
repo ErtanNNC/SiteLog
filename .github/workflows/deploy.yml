@@ -636,13 +636,16 @@ jobs:
     name: Eval · Claude models on the golden sets (preview key)
     needs: plan
     # Guard repeated literally: environment preview, branch spec-v1.2. Read-only (eval.yml: contents:
-    # read, the Anthropic key only, no database).
+    # read, the Anthropic key only, no database). `secrets: inherit` because a called workflow sees no
+    # repository secret otherwise (the first run had an empty key); eval.yml reads ANTHROPIC_API_KEY
+    # alone and hands it to the eval step only.
     if: >-
       needs.plan.outputs.eval == 'true' &&
       inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
     permissions:
       contents: read
     uses: ./.github/workflows/eval.yml
+    secrets: inherit
     with:
       models: ${{ inputs.eval_models || 'claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5' }}
       sets: ${{ inputs.eval_sets || 'all' }}

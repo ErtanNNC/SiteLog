@@ -571,7 +571,8 @@ describe('deploy.yml plan step, run under bash', () => {
     expect(job.condition).toContain("github.ref == 'refs/heads/spec-v1.2'");
     expect(job.text).toMatch(/^ {4}uses: \.\/\.github\/workflows\/eval\.yml$/m);
     expect(job.text).toMatch(/^ {4}permissions:\n {6}contents: read$/m);
-    expect(job.text).not.toMatch(/secrets/);
+    // A called workflow sees no repository secret unless inherited; eval.yml reads only the key.
+    expect(job.text).toMatch(/^ {4}secrets: inherit$/m);
   });
 
   it('the inventory runs alone, from staging only', () => {
