@@ -153,6 +153,45 @@ describe('Settings (F15, §9.3; W2-02)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('turns WhatsApp on and off, even with texts stopped by STOP (W2-15, §19 Q25, Q40)', async () => {
+    const waOff: PreferencesResponse['consents'] = [
+      { type: 'sms', held: false },
+      { type: 'recording', held: true },
+      { type: 'data_processing', held: true },
+      { type: 'whatsapp', held: false },
+    ];
+    const waOn = waOff.map((c) => (c.type === 'whatsapp' ? { ...c, held: true } : c));
+    const routes = fakeRoutes({
+      preferences: vi
+        .fn()
+        .mockResolvedValue(
+          prefs({ consents: waOff, textsOptedOut: true, messageChannels: ['whatsapp', 'sms'] }),
+        ),
+      grantConsent: vi.fn().mockResolvedValue(prefs({ consents: waOn, textsOptedOut: true })),
+      revokeConsent: vi.fn().mockResolvedValue(prefs({ consents: waOff, textsOptedOut: true })),
+    });
+    renderApp('/settings', { routes });
+    const on = await screen.findByRole('button', {
+      name: 'Turn on: WhatsApp messages with my daily report link',
+    });
+    // Texts stay stopped (START undoes STOP): WhatsApp is the only Turn on.
+    expect(screen.getAllByRole('button', { name: /^Turn on: / })).toHaveLength(1);
+    fireEvent.click(on);
+    const sheet = screen.getByRole('dialog', { name: 'Turn WhatsApp messages on?' });
+    expect(sheet).toHaveTextContent('Message me on WhatsApp');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Turn on' }));
+    expect(routes.grantConsent).toHaveBeenCalledWith('K7Q2MX', {
+      type: 'whatsapp',
+      textVersion: 'field.consent.v1',
+    });
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Turn off: WhatsApp messages with my daily report link',
+      }),
+    );
+    expect(routes.revokeConsent).toHaveBeenCalledWith('K7Q2MX', { type: 'whatsapp' });
+  });
+
   it('sends the pack’s consent key as the version when it names one', async () => {
     const routes = fakeRoutes({
       preferences: vi.fn().mockResolvedValue(prefs({ consents: TEXTS_OFF })),

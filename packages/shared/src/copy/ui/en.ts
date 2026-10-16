@@ -92,6 +92,8 @@ export const uiEn = {
       consentRequired: 'I agree to the recording and processing of my reports',
       consentSms: 'Text me the daily report link',
       consentCall: 'Call me at report time (automated)',
+      /** W2-15 (spec §19 Q25): only when the pack lists WhatsApp; the `whatsapp` consent. */
+      consentWhatsapp: 'Message me on WhatsApp',
       prefLegend: 'How do you want to report?',
       prefLink: 'Text link',
       prefLinkHint: 'Tap the link, talk, done. Add photos.',
@@ -607,6 +609,7 @@ export const uiEn = {
         sms: 'Texts with my daily report link',
         auto_call: 'Automated calls at report time',
         push: 'Notifications on this phone',
+        whatsapp: 'WhatsApp messages with my daily report link',
       },
       /** W2-14: web push, shown only in the installed app (spec §9.3, §19 Q27). */
       push: {
@@ -635,6 +638,8 @@ export const uiEn = {
       turnOnLabel: 'Turn on: {{consent}}',
       turnOnSheet: {
         title: 'Turn texts back on?',
+        /** W2-15: *Turn on* for WhatsApp (Message me on WhatsApp, spec §19 Q25, Q40). */
+        titleWhatsapp: 'Turn WhatsApp messages on?',
         body: 'By turning this on, you agree again to:',
         note: 'You can turn them off here at any time.',
         confirm: 'Turn on',

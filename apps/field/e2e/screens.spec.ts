@@ -405,6 +405,45 @@ test.describe('Other… (F7, W2-09) off the happy path', () => {
   });
 });
 
+test.describe('Message me on WhatsApp (W2-15, spec §19 Q25, Q40)', () => {
+  test.use({ locale: 'tr-TR' });
+
+  test('the opt-in on Welcome, unticked by default, then Turn off and on in Settings', async ({
+    page,
+  }) => {
+    const field = UI_RESOURCES.tr.field;
+    const market = demir();
+    const api = await installFakeFieldApi(page, market, { verified: true, whatsapp: true });
+    await page.goto(`/r/${CODE}`);
+    const wa = page.getByRole('checkbox', { name: field.welcome.consentWhatsapp });
+    await expect(wa).not.toBeChecked();
+    await page.getByRole('checkbox', { name: field.welcome.consentRequired }).check();
+    await wa.check();
+    await page.getByRole('button', { name: field.welcome.continue }).click();
+    await expect(
+      page.getByRole('heading', { level: 1, name: field.welcomeTest.title }),
+    ).toBeVisible();
+    expect((api.consent as { types: string[] }).types).toContain('whatsapp');
+
+    await page.goto('/settings');
+    const s = field.settings;
+    const off = page.getByRole('button', { name: `${s.turnOff}: ${s.consents.whatsapp}` });
+    await off.click();
+    expect(api.calls.find((c) => c.path === 'consent/revoke')!.body).toEqual({ type: 'whatsapp' });
+    await page.getByRole('button', { name: `${s.turnOn}: ${s.consents.whatsapp}` }).click();
+    const sheet = page.getByRole('dialog', { name: s.turnOnSheet.titleWhatsapp });
+    await expect(sheet).toContainText(field.welcome.consentWhatsapp);
+    await sheet.getByRole('button', { name: s.turnOnSheet.confirm }).click();
+    expect(api.calls.find((c) => c.path === 'consent/grant')!.body).toEqual({
+      type: 'whatsapp',
+      textVersion: market.country.legalKeys.consent ?? 'field.consent.v1',
+    });
+    await expect(
+      page.getByRole('button', { name: `${s.turnOff}: ${s.consents.whatsapp}` }),
+    ).toBeVisible();
+  });
+});
+
 test.describe('the test recording off the happy path (F4, W2-13)', () => {
   test.use({ locale: 'en-US' });
 

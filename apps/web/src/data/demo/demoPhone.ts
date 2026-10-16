@@ -245,10 +245,12 @@ export function demoReply(data: DemoDataset, reporterId: string, body: string, a
   data.messages.push(smsRow(data, to, 'out', text, plan.reply.key, at));
 }
 
-/** A reporter's thread: texts and, since W2-14, pushes to the installed app. */
+/** A reporter's thread: texts and, since W2-14 / W2-15, pushes and WhatsApp messages. */
 function smsOf(data: DemoDataset, reporterId: string): MessageRow[] {
   return data.messages.filter(
-    (m) => (m.channel === 'sms' || m.channel === 'push') && m.reporter_id === reporterId,
+    (m) =>
+      (m.channel === 'sms' || m.channel === 'push' || m.channel === 'whatsapp') &&
+      m.reporter_id === reporterId,
   );
 }
 
@@ -290,7 +292,7 @@ export function demoPhoneThread(data: DemoDataset, reporterId: string): DemoPhon
       status: m.status,
       copyKey: m.copy_key,
       provider: m.provider,
-      channel: m.channel === 'push' ? ('push' as const) : ('sms' as const),
+      channel: m.channel === 'push' || m.channel === 'whatsapp' ? m.channel : ('sms' as const),
       at: m.created_at,
     }));
 }

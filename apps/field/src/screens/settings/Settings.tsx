@@ -35,6 +35,9 @@ const STOPS_REPORTING = OFFICE_NOTIFIED_REVOCATIONS as readonly ConsentType[];
 
 type Saving = 'pref' | 'channel' | 'locale' | ConsentType | 'turnOn' | 'signOut' | null;
 
+/** The consents Settings can turn back on (spec §19 Q86; WhatsApp W2-15, §19 Q25, Q40). */
+type TurnOnType = 'sms' | 'whatsapp';
+
 /**
  * Settings (F15, spec §9.3; W2-02): the report mode (*Text link* / *Phone call*, §19 Q33 allows a
  * call without a voice number), the message channel (only when the pack offers more than one built
@@ -72,6 +75,7 @@ function SettingsLoaded({
   const [saving, setSaving] = useState<Saving>(null);
   const [status, setStatus] = useState<'saved' | 'error' | null>(null);
   const [sheet, setSheet] = useState<ConsentType | 'turnOn' | 'signOut' | null>(null);
+  const [turnOnType, setTurnOnType] = useState<TurnOnType>('sms');
   const [pushProblem, setPushProblem] = useState<'blocked' | 'failed' | null>(null);
   const [canPush] = useState(() => pushSupported());
   const ids = {
@@ -163,13 +167,13 @@ function SettingsLoaded({
     }
   }
 
-  /** Spec §19 Q86: texts back on, with the version of the wording the sheet shows again. */
+  /** Spec §19 Q86: texts (or WhatsApp, W2-15) on, with the wording the sheet shows again. */
   async function turnOn() {
     setSaving('turnOn');
     setStatus(null);
     try {
       const res = await api.grantConsent(code, {
-        type: 'sms',
+        type: turnOnType,
         textVersion: country.legalKeys.consent ?? FIELD_CONSENT_TEXT_VERSION,
       });
       setSheet(null);
@@ -418,13 +422,14 @@ function SettingsLoaded({
                         {saving === type ? t('settings.saving') : t('settings.turnOff')}
                       </QuietButton>
                     </div>
-                  ) : type === 'sms' && !prefs.textsOptedOut ? (
+                  ) : (type === 'sms' && !prefs.textsOptedOut) || type === 'whatsapp' ? (
                     <div className="w-32 flex-none">
                       <QuietButton
                         aria-label={t('settings.turnOnLabel', { consent: label })}
                         disabled={busy}
                         onClick={() => {
                           setStatus(null);
+                          setTurnOnType(type);
                           setSheet('turnOn');
                         }}
                       >
@@ -544,12 +549,14 @@ function SettingsLoaded({
           id={`${ids.sheet}-on`}
           className="m-0 text-[22px] leading-7 font-extrabold [font-stretch:118%]"
         >
-          {t('settings.turnOnSheet.title')}
+          {turnOnType === 'whatsapp'
+            ? t('settings.turnOnSheet.titleWhatsapp')
+            : t('settings.turnOnSheet.title')}
         </h2>
         <p className="m-0 text-[16px] leading-6 text-steel">{t('settings.turnOnSheet.body')}</p>
         {/* The wording the reporter agreed to on Welcome (Field-02), shown again (§19 Q86). */}
         <p className="m-0 rounded-card bg-concrete px-3.5 py-3 text-[16px] leading-6 font-semibold">
-          {t('welcome.consentSms')}
+          {turnOnType === 'whatsapp' ? t('welcome.consentWhatsapp') : t('welcome.consentSms')}
         </p>
         <p className="m-0 text-[15px] leading-[21px] text-steel">
           {t('settings.turnOnSheet.note')}

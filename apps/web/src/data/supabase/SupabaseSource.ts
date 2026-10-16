@@ -2054,7 +2054,7 @@ export class SupabaseSource implements DataSource {
           .select('body, created_at', { count: 'exact' })
           .eq('org_id', this.orgId)
           .eq('reporter_id', r.id)
-          .in('channel', ['sms', 'push'])
+          .in('channel', ['sms', 'push', 'whatsapp'])
           .order('created_at', { ascending: false })
           .limit(1);
         const rows = unwrap(res) as Array<{ body: string | null; created_at: string }>;
@@ -2092,8 +2092,9 @@ export class SupabaseSource implements DataSource {
         .select('id, direction, body, status, copy_key, provider, channel, created_at')
         .eq('org_id', this.orgId)
         .eq('reporter_id', reporterId)
-        // W2-14: pushes to the installed app share the thread, labelled by channel.
-        .in('channel', ['sms', 'push'])
+        // W2-14: pushes to the installed app share the thread, labelled by channel; W2-15 the
+        // WhatsApp messages (Twilio's; v1.0 Meta rows have no channel and stay out).
+        .in('channel', ['sms', 'push', 'whatsapp'])
         .order('created_at', { ascending: false })
         .limit(500),
     ) as Array<{
@@ -2103,7 +2104,7 @@ export class SupabaseSource implements DataSource {
       status: string;
       copy_key: string | null;
       provider: string | null;
-      channel: 'sms' | 'push';
+      channel: 'sms' | 'push' | 'whatsapp';
       created_at: string;
     }>;
     return rows.reverse().map((m) => ({

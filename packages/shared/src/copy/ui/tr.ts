@@ -1325,6 +1325,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       consentRequired: 'Raporlarımın kaydedilmesini ve işlenmesini kabul ediyorum',
       consentSms: 'Günlük rapor linkini mesajla gönderin',
       consentCall: 'Rapor saatinde beni arayın (otomatik arama)',
+      consentWhatsapp: "Bana WhatsApp'tan mesaj gönderin",
       prefLegend: 'Nasıl rapor vermek istersiniz?',
       prefLink: 'Mesajla link',
       prefLinkHint: 'Linke dokunun, anlatın, bitti. Fotoğraf ekleyin.',
@@ -1771,6 +1772,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         sms: 'Günlük rapor linkimin mesajla gönderilmesi',
         auto_call: 'Rapor saatinde otomatik arama',
         push: 'Bu telefonda bildirim',
+        whatsapp: "Günlük rapor linkimin WhatsApp'tan gönderilmesi",
       },
       push: {
         title: 'Bildirimler',
@@ -1794,6 +1796,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       turnOnLabel: 'Aç: {{consent}}',
       turnOnSheet: {
         title: 'Mesajlar yeniden açılsın mı?',
+        titleWhatsapp: 'WhatsApp mesajları açılsın mı?',
         body: 'Açarak şunu yeniden kabul etmiş olursunuz:',
         note: 'İstediğiniz zaman buradan kapatabilirsiniz.',
         confirm: 'Aç',

@@ -79,6 +79,8 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
     });
     expect(required).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Text me the daily report link' })).toBeChecked();
+    // The pack lists no WhatsApp: no opt-in (W2-15).
+    expect(screen.queryByRole('checkbox', { name: 'Message me on WhatsApp' })).toBeNull();
     // No automated calls before M8 (spec §19 Q33, Q51): the auto_call box is not asked.
     expect(screen.queryByRole('checkbox', { name: /Call me at report time/ })).toBeNull();
     expect(screen.getByRole('radio', { name: /Text link/ })).toBeChecked();
@@ -209,6 +211,43 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
       expect(routes.consent).toHaveBeenCalledWith('K7Q2MX', {
         types: ['recording', 'data_processing'],
         textVersion: 'US.consent.v1',
+        contactPref: 'link',
+        locale: 'en-US',
+      }),
+    );
+  });
+
+  it('offers Message me on WhatsApp, unticked, only where the pack lists it (W2-15, §19 Q25)', async () => {
+    const routes = fakeRoutes({
+      resolve: vi.fn().mockResolvedValue(
+        resolved({
+          needsDeviceCheck: false,
+          sites: [SITE],
+          country: { ...US_COUNTRY, messageChannels: ['push', 'sms', 'whatsapp'] },
+        }),
+      ),
+      consent: vi.fn().mockResolvedValue({
+        consents: [],
+        status: 'active',
+        contactPref: 'link',
+        locale: 'en-US',
+      }),
+      today: vi.fn().mockResolvedValue(todayResponse()),
+    });
+    renderApp('/r/K7Q2MX', { session: null, routes });
+    const wa = await screen.findByRole('checkbox', { name: 'Message me on WhatsApp' });
+    expect(wa).not.toBeChecked();
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'I agree to the recording and processing of my reports',
+      }),
+    );
+    fireEvent.click(wa);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() =>
+      expect(routes.consent).toHaveBeenCalledWith('K7Q2MX', {
+        types: ['recording', 'data_processing', 'sms', 'whatsapp'],
+        textVersion: 'field.consent.v1',
         contactPref: 'link',
         locale: 'en-US',
       }),

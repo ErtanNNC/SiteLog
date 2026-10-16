@@ -78,6 +78,7 @@ export const uiEs: UiResources = {
       consentRequired: 'Acepto la grabación y el procesamiento de mis reportes',
       consentSms: 'Envíenme por texto el enlace del reporte diario',
       consentCall: 'Llámenme a la hora del reporte (llamada automática)',
+      consentWhatsapp: 'Envíenme mensajes por WhatsApp',
       prefLegend: '¿Cómo quiere reportar?',
       prefLink: 'Enlace por texto',
       prefLinkHint: 'Toque el enlace, hable, listo. Agregue fotos.',
@@ -535,6 +536,7 @@ export const uiEs: UiResources = {
         sms: 'Mensajes de texto con el enlace de mi reporte diario',
         auto_call: 'Llamadas automáticas a la hora del reporte',
         push: 'Notificaciones en este teléfono',
+        whatsapp: 'Mensajes de WhatsApp con el enlace de mi reporte diario',
       },
       push: {
         title: 'Notificaciones',
@@ -558,6 +560,7 @@ export const uiEs: UiResources = {
       turnOnLabel: 'Activar: {{consent}}',
       turnOnSheet: {
         title: '¿Volver a activar los mensajes de texto?',
+        titleWhatsapp: '¿Activar los mensajes de WhatsApp?',
         body: 'Al activarlos, acepta de nuevo:',
         note: 'Puede desactivarlos aquí cuando quiera.',
         confirm: 'Activar',

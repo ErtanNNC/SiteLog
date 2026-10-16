@@ -346,6 +346,8 @@ export interface FakeOptions {
   fixAnswer?: 'one_more' | 'unclear';
   /** W2-14: this environment has a VAPID key pair and the pack lists push (the toggle shows). */
   push?: boolean;
+  /** W2-15: the pack lists WhatsApp (*Message me on WhatsApp* on Welcome and in Settings). */
+  whatsapp?: boolean;
 }
 
 /** W2-14: the fake VAPID public key `push/key` answers (65 bytes, base64url). */
@@ -529,7 +531,9 @@ export async function installFakeFieldApi(
           sites: api.state.verified
             ? sites.filter((s) => !options.dailyLinkSite || s.id === options.dailyLinkSite)
             : [],
-          country: market.country,
+          country: options.whatsapp
+            ? { ...market.country, messageChannels: ['push', 'whatsapp', 'sms'] }
+            : market.country,
         };
         return json(route, 200, res);
       }
@@ -570,11 +574,13 @@ export async function installFakeFieldApi(
       }
       // §19 Q86: texts back on; an opted-out phone is refused (field-api's 409).
       if (path === 'consent/grant') {
-        if (api.state.prefs.textsOptedOut) return json(route, 409, { error: 'texts_opted_out' });
+        const { type } = body as { type: string };
+        if (type === 'sms' && api.state.prefs.textsOptedOut)
+          return json(route, 409, { error: 'texts_opted_out' });
         api.state.prefs = {
           ...api.state.prefs,
           consents: api.state.prefs.consents.map((c) =>
-            c.type === 'sms' ? { ...c, held: true } : c,
+            c.type === type ? { ...c, held: true } : c,
           ),
         };
         return json(route, 200, api.state.prefs);
@@ -603,9 +609,20 @@ export async function installFakeFieldApi(
         api.state.activated = true;
         api.state.prefs = {
           ...api.state.prefs,
-          consents: (['sms', 'recording', 'data_processing'] as const)
-            .filter((t) => (body as { types: string[] }).types.includes(t))
-            .map((type) => ({ type, held: true })),
+          consents: [
+            ...(['sms', 'recording', 'data_processing'] as const)
+              .filter((t) => (body as { types: string[] }).types.includes(t))
+              .map((type) => ({ type, held: true })),
+            // W2-15: listed wherever the pack lists WhatsApp, held when ticked.
+            ...(options.whatsapp
+              ? [
+                  {
+                    type: 'whatsapp' as const,
+                    held: (body as { types: string[] }).types.includes('whatsapp'),
+                  },
+                ]
+              : []),
+          ],
         };
         const b = body as { contactPref: ConsentResponse['contactPref']; locale: ReporterLocale };
         const res: ConsentResponse = {
