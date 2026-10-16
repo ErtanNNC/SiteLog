@@ -370,6 +370,25 @@ describe('photos after filing (F9)', () => {
     ).toEqual([{ actor_type: 'reporter' }]);
   });
 
+  it('§19 Q101: photos added again before the first batch was emailed still email the signer (W2-12 review)', async () => {
+    const date = siteDate(1);
+    const report = await filedReport(date, 'signed_off', SITE2);
+    const renderPayload = async (version: number) =>
+      (
+        await svc<{ payload: Record<string, unknown> }>(
+          `select payload from jobs where dedupe_key = $1`,
+          [`render_pdf:${report}:${version}`],
+        )
+      )[0]!.payload;
+    for (const version of [2, 3]) {
+      const batch = ID(seq++);
+      await complete(await batchUpload(date, batch, 1, 'photo', SITE2));
+      expect((await attach(report, batch, '1 photo added')).version).toBe(version);
+      // v2 reopened the sign-off; v3 supersedes it before its render queued the email.
+      expect(await renderPayload(version)).toMatchObject({ signerId: SIGNER });
+    }
+  });
+
   it("is the service role's only", async () => {
     const grants = await svc<{ anon: boolean; auth: boolean; svc: boolean }>(
       `select has_function_privilege('anon', 'field_attach_photos(uuid,uuid,text,text)', 'execute') as anon,

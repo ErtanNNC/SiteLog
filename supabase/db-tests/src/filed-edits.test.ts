@@ -645,6 +645,17 @@ describe('create_report_version emails the signer (W2-11 review)', () => {
     expect(await renderPayload(reportId, 3)).toMatchObject({ signerId: LENA });
   });
 
+  it("Q101: a reporter's second change before the first one's email still emails the signer (W2-12 review)", async () => {
+    const { reportId } = await filed(daysAgo(5), { signedOff: true });
+    const first = await request(reportId, { text: 'Apex had 7' });
+    await settle(first.id, 'ready', preview(daysAgo(5)));
+    expect((await save(first.id, reportId)).version).toBe(2);
+    const second = await request(reportId, { text: 'Apex had 8' });
+    await settle(second.id, 'ready', preview(daysAgo(5), 2));
+    expect((await save(second.id, reportId)).version).toBe(3);
+    expect(await renderPayload(reportId, 3)).toMatchObject({ signerId: LENA });
+  });
+
   it("Q101: once the superseded version's email was queued, the signer is not carried again", async () => {
     const { reportId } = await filed(daysAgo(11), { signedOff: true });
     const req = await request(reportId, { text: 'Apex had 7' });
