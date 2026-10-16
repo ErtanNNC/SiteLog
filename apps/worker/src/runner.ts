@@ -137,7 +137,7 @@ export async function runJob(
   try {
     const payload = parseJobPayload(type, job.payload);
     const handler = registry[type] as (c: Ctx, p: unknown, j: JobRow) => Promise<void>;
-    await runWithSignal(controller.signal, () => handler(ctx, payload, job));
+    await runWithSignal(controller.signal, () => handler(ctx, payload, job), job.attempts);
     outcome = { ok: true };
   } catch (err) {
     outcome = { ok: false, err };

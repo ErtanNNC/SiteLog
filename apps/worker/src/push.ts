@@ -1,6 +1,7 @@
 import webpush from 'web-push';
 import {
   isAllowedPushEndpoint,
+  JOB_MAX_ATTEMPTS,
   MessageSendError,
   PUSH_DRIVER,
   pushChannelSpec,
@@ -10,6 +11,7 @@ import {
   type MessageTransport,
   type PushSubscriptionRow,
 } from '@sitelog/shared';
+import { currentAttempt, currentSignal } from './abort';
 import type { Config } from './config';
 import type { Db } from './db';
 
@@ -26,14 +28,27 @@ import type { Db } from './db';
  *   gets `console` (the Demo phone shows the row; nothing is sent).
  * - The `messages` row has `channel 'push'`, no phone, provider `webpush` or `console`.
  * - Every live subscription of the reporter gets the notification (two phones, two notifications).
- *   The push service's answer per subscription (`pushResult`): 2xx sent; 404 / 410 gone (the row is
- *   revoked `gone`, audited); 429 / 5xx retry; anything else refused. One sent: the message went
- *   out. None sent: a retry when any may pass later (the job retries this channel), otherwise an
- *   `undeliverable` refusal, so the Notifier falls back to the next channel (W2-01, §19 Q22).
+ *   The requests go out in parallel, each with its own timeout (`PUSH_REQUEST_TIMEOUT_MS`) as well
+ *   as the job's signal, never following a redirect. The push service's answer per subscription
+ *   (`pushResult`): 2xx sent; 404 / 410 gone (the row is revoked `gone`, audited); 429 / 5xx, a
+ *   network failure or a timeout retry; anything else refused. One sent: the message went out.
+ *   None sent: a retry when any may pass later (the job retries this channel) until the job's
+ *   `PUSH_MAX_ATTEMPTS`th run or its last, otherwise an `undeliverable` refusal, so the Notifier
+ *   falls back to the next channel once (W2-01, §19 Q22).
  */
 
 /** How long a push service keeps a notification for a phone that is offline (RFC 8030 TTL). */
 export const PUSH_TTL_SECONDS = 4 * 60 * 60;
+
+/** How long one request to a push service may take (combined with the job's own signal). */
+export const PUSH_REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * How many runs of a job may retry push for one message (a 429, a 5xx, a network failure or a
+ * timeout on every phone) before push counts as undeliverable and the Notifier texts instead: the
+ * job's backoff makes that about two and a half minutes (30 s, then 2 min).
+ */
+export const PUSH_MAX_ATTEMPTS = 3;
 
 export type VapidConfig = Pick<Config, 'VAPID_PUBLIC_KEY' | 'VAPID_PRIVATE_KEY' | 'VAPID_SUBJECT'>;
 
@@ -55,6 +70,10 @@ export interface PushDeps {
   fetch: typeof fetch;
   randomUUID: () => string;
   warn?: (message: string, fields: Record<string, unknown>) => void;
+  /** The running job's attempt (default: the runner's, `currentAttempt`). */
+  attempt?: () => number | undefined;
+  /** Per-request timeout (default `PUSH_REQUEST_TIMEOUT_MS`). */
+  timeoutMs?: number;
 }
 
 /** The `console` push: nothing leaves the worker; the Notifier writes the row (Demo phone). */
@@ -67,8 +86,10 @@ export function consolePushTransport(randomUUID: () => string): MessageTransport
 }
 
 /** The real push transport: one encrypted request per live subscription of the reporter. */
-export function webPushTransport(deps: PushDeps): MessageTransport {
+export function webPushTransport(input: PushDeps): MessageTransport {
+  const deps = { ...input, attempt: input.attempt ?? currentAttempt };
   const { config } = deps;
+  const timeoutMs = input.timeoutMs ?? PUSH_REQUEST_TIMEOUT_MS;
   const vapidDetails = {
     subject: config.VAPID_SUBJECT.trim(),
     publicKey: config.VAPID_PUBLIC_KEY.trim(),
@@ -111,9 +132,46 @@ export function webPushTransport(deps: PushDeps): MessageTransport {
       // A push service answers; it never redirects. A 3xx is refused (`pushResult`), never followed
       // to wherever it points.
       redirect: 'manual',
+      // Each request its own limit; the job's signal still aborts it (`abortableFetch`).
+      signal: AbortSignal.timeout(timeoutMs),
     });
     // The service's id of the message (RFC 8030 §5: the Location of the push message resource).
     return { status: res.status, id: res.headers.get('location') };
+  }
+
+  /** One subscription's outcome: sent (with the service's id), retry later, or not this one. */
+  type Outcome =
+    | { kind: 'sent'; id: string | null }
+    | { kind: 'retry'; error: string }
+    | { kind: 'failed'; error: string };
+
+  async function deliver(sub: Subscription, body: string): Promise<Outcome> {
+    let outcome: { status: number; id: string | null };
+    try {
+      outcome = await sendOne(sub, body);
+    } catch (err) {
+      const text = err instanceof Error ? err.message : String(err);
+      // A network failure or a timeout may pass later; anything else (web-push throws on keys it
+      // cannot use) is refused for this subscription.
+      const network =
+        err instanceof TypeError ||
+        (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) ||
+        /fetch|network|ECONN|ETIMEDOUT|abort|timeout/i.test(text);
+      deps.warn?.('push: send failed', { subscription_id: sub.id, error: text.slice(0, 200) });
+      if (network) return { kind: 'retry', error: text };
+      return { kind: 'failed', error: text };
+    }
+    const result = pushResult(outcome.status);
+    if (result === 'sent') return { kind: 'sent', id: outcome.id };
+    if (result === 'retry') {
+      return { kind: 'retry', error: `push: service answered ${outcome.status}` };
+    }
+    if (result === 'gone') {
+      await deps.store.pushSubscriptionGone(sub.id, outcome.status);
+      return { kind: 'failed', error: `push: subscription gone (${outcome.status})` };
+    }
+    deps.warn?.('push: refused', { subscription_id: sub.id, status: outcome.status });
+    return { kind: 'failed', error: `push: service refused (${outcome.status})` };
   }
 
   return {
@@ -124,43 +182,39 @@ export function webPushTransport(deps: PushDeps): MessageTransport {
       const subs = await deps.store.listLivePushSubscriptions(message.reporterId);
       if (subs.length === 0) throw refusal('push: no live subscription', false, 'no_subscription');
       const body = JSON.stringify(pushPayload(message));
-      let sent = false;
-      let providerId: string | null = null;
-      let retry: string | null = null;
-      let last = '';
-      for (const sub of subs) {
-        let outcome: { status: number; id: string | null };
-        try {
-          outcome = await sendOne(sub, body);
-        } catch (err) {
-          // A network failure or a subscription whose keys cannot be used.
-          const text = err instanceof Error ? err.message : String(err);
-          const network =
-            err instanceof TypeError || /fetch|network|ECONN|ETIMEDOUT|abort/i.test(text);
-          if (network) retry = text;
-          last = text;
-          deps.warn?.('push: send failed', { subscription_id: sub.id, error: text.slice(0, 200) });
-          continue;
+      // Every phone at once: one slow push service never holds up another.
+      const settled = await Promise.allSettled(subs.map((sub) => deliver(sub, body)));
+      const outcomes = settled.map((r): Outcome =>
+        r.status === 'fulfilled' ? r.value : { kind: 'retry', error: errorText(r.reason) },
+      );
+      // The job itself was aborted (its timeout): that is the job's failure, not the channel's.
+      const jobSignal = currentSignal();
+      if (jobSignal?.aborted) throw jobSignal.reason;
+      const sent = outcomes.find((o) => o.kind === 'sent');
+      if (sent) return { providerId: sent.id ?? `webpush-${deps.randomUUID()}` };
+      const retry = outcomes.find((o) => o.kind === 'retry');
+      if (retry) {
+        // Bounded: after PUSH_MAX_ATTEMPTS runs of the job, or on its last, push gives up for
+        // this message, so the Notifier falls back to the next channel (SMS) once, instead of
+        // retrying push for the job's whole life and never texting.
+        const attempt = deps.attempt();
+        if (attempt !== undefined && attempt >= Math.min(PUSH_MAX_ATTEMPTS, JOB_MAX_ATTEMPTS)) {
+          throw refusal(
+            `${retry.error} (attempt ${attempt}: giving up)`,
+            false,
+            'retries_exhausted',
+          );
         }
-        const result = pushResult(outcome.status);
-        if (result === 'sent') {
-          sent = true;
-          providerId ??= outcome.id;
-        } else if (result === 'gone') {
-          await deps.store.pushSubscriptionGone(sub.id, outcome.status);
-          last = `push: subscription gone (${outcome.status})`;
-        } else if (result === 'retry') {
-          retry = `push: service answered ${outcome.status}`;
-        } else {
-          last = `push: service refused (${outcome.status})`;
-          deps.warn?.('push: refused', { subscription_id: sub.id, status: outcome.status });
-        }
+        throw refusal(retry.error, true, null);
       }
-      if (sent) return { providerId: providerId ?? `webpush-${deps.randomUUID()}` };
-      if (retry) throw refusal(retry, true, null);
-      throw refusal(last || 'push: not delivered', false, 'gone');
+      const last = outcomes.at(-1);
+      throw refusal(last && 'error' in last ? last.error : 'push: not delivered', false, 'gone');
     },
   };
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**

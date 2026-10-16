@@ -2,7 +2,15 @@ import { createECDH, randomBytes, randomUUID } from 'node:crypto';
 import webpush from 'web-push';
 import { describe, expect, it } from 'vitest';
 import { assertE164, MessageSendError, type OutboundMessage } from '@sitelog/shared';
-import { createPushRegistration, vapidConfigured, webPushTransport, type PushStore } from './push';
+import { runWithSignal } from './abort';
+import {
+  createPushRegistration,
+  PUSH_MAX_ATTEMPTS,
+  vapidConfigured,
+  webPushTransport,
+  type PushDeps,
+  type PushStore,
+} from './push';
 
 const VAPID = webpush.generateVAPIDKeys();
 const config = {
@@ -33,8 +41,9 @@ const MESSAGE: OutboundMessage = {
 
 function setup(
   subs: ReturnType<typeof sub>[],
-  answer: (url: string) => number | Error,
+  answer: (url: string, init: RequestInit | undefined) => number | Error | Promise<number>,
   requests: Array<{ url: string; init: RequestInit | undefined }> = [],
+  extra: Partial<Pick<PushDeps, 'attempt' | 'timeoutMs'>> = {},
 ) {
   const gone: Array<[string, number]> = [];
   const store: PushStore = {
@@ -46,11 +55,11 @@ function setup(
   };
   const fetchImpl: typeof fetch = async (url, init) => {
     requests.push({ url: String(url), init });
-    const a = answer(String(url));
+    const a = await answer(String(url), init);
     if (a instanceof Error) throw a;
     return new Response(null, { status: a });
   };
-  const transport = webPushTransport({ config, store, fetch: fetchImpl, randomUUID });
+  const transport = webPushTransport({ config, store, fetch: fetchImpl, randomUUID, ...extra });
   return { transport, gone };
 }
 
@@ -115,6 +124,63 @@ describe('web push transport (W2-14)', () => {
       expect(err.retryable, String(answer)).toBe(true);
       expect(gone).toEqual([]);
     }
+  });
+
+  it('sends to every phone at once, each request with its own timeout (W2-14 review)', async () => {
+    // The first phone's service answers only once the second phone's request has gone out:
+    // one after the other, this would wait for ever.
+    let second!: () => void;
+    const secondAsked = new Promise<void>((resolve) => (second = resolve));
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const { transport } = setup(
+      [sub('a'), sub('b')],
+      async (url) => {
+        if (url.endsWith('/a')) {
+          await secondAsked;
+          return 201;
+        }
+        second();
+        return 201;
+      },
+      requests,
+    );
+    await transport.send(MESSAGE, {});
+    expect(requests).toHaveLength(2);
+    for (const r of requests) expect(r.init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('a push service that never answers times out: retryable', async () => {
+    const hang = (_url: string, init: RequestInit | undefined) =>
+      new Promise<number>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+      });
+    const { transport } = setup([sub('a')], hang, [], { timeoutMs: 20, attempt: () => 1 });
+    const err = await refusal(transport.send(MESSAGE, {}));
+    expect(err.retryable).toBe(true);
+  });
+
+  it('gives up after PUSH_MAX_ATTEMPTS runs: undeliverable, so the Notifier texts instead', async () => {
+    expect(PUSH_MAX_ATTEMPTS).toBe(3);
+    for (const [attempt, retryable] of [
+      [1, true],
+      [2, true],
+      [3, false],
+      [5, false],
+    ] as const) {
+      const { transport } = setup([sub('a')], () => 503, [], { attempt: () => attempt });
+      const err = await refusal(transport.send(MESSAGE, {}));
+      expect(err.retryable, `attempt ${attempt}`).toBe(retryable);
+      expect(err.undeliverable, `attempt ${attempt}`).toBe(!retryable);
+      if (!retryable) expect(err.opts.code).toBe('retries_exhausted');
+    }
+    // By default the runner's attempt (runWithSignal) is the one read.
+    const { transport } = setup([sub('a')], () => 503);
+    const err = await runWithSignal(
+      new AbortController().signal,
+      () => refusal(transport.send(MESSAGE, {})),
+      PUSH_MAX_ATTEMPTS,
+    );
+    expect(err.undeliverable).toBe(true);
   });
 
   it('never follows a redirect: a 3xx is refused (W2-14 review, §19 Q115)', async () => {

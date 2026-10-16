@@ -11,10 +11,27 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  */
 
 const jobSignal = new AsyncLocalStorage<AbortSignal>();
+const jobAttempt = new AsyncLocalStorage<number>();
 
-/** Runs `fn` with `signal` as the current job's signal (for `abortableFetch` and `currentSignal`). */
-export function runWithSignal<T>(signal: AbortSignal, fn: () => Promise<T>): Promise<T> {
-  return jobSignal.run(signal, fn);
+/**
+ * Runs `fn` with `signal` as the current job's signal (for `abortableFetch` and `currentSignal`)
+ * and, when given, `attempt` as the job's attempt number (`jobs.attempts`, for `currentAttempt`).
+ */
+export function runWithSignal<T>(
+  signal: AbortSignal,
+  fn: () => Promise<T>,
+  attempt?: number,
+): Promise<T> {
+  if (attempt === undefined) return jobSignal.run(signal, fn);
+  return jobSignal.run(signal, () => jobAttempt.run(attempt, fn));
+}
+
+/**
+ * The running job's attempt (1 on its first run), or undefined outside a job. A transport whose
+ * retryable failures must not retry for the job's whole life reads it (web push, W2-14 review).
+ */
+export function currentAttempt(): number | undefined {
+  return jobAttempt.getStore();
 }
 
 /** The running job's signal, or undefined outside a job (boot, the timeout sweep, tests). */

@@ -2,6 +2,7 @@ import { createECDH, randomBytes, randomUUID } from 'node:crypto';
 import webpush from 'web-push';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createConsoleSmsTransport, type JobPayloads } from '@sitelog/shared';
+import { runWithSignal } from './abort';
 import { testConfig, type Config } from './config';
 import type { Ctx } from './context';
 import { notifyJob } from './jobs/notify';
@@ -211,6 +212,36 @@ describe('web push (W2-14)', () => {
     expect(headers.TTL).toBe(String(4 * 60 * 60));
     expect(headers.Authorization).toMatch(new RegExp(`^vapid t=.+, k=${VAPID.publicKey}$`));
     expect(JSON.stringify(call.init.body)).not.toContain('ABCDEF');
+  });
+
+  it('a push service that keeps failing: retried, then SMS once on the third run (W2-14 review)', async () => {
+    await pg.q(`update orgs set is_demo = false where id = $1`, [ORG]);
+    await pg.q(`update countries set sms_sender_id = '+18885550142' where code = 'US'`);
+    await subscribe();
+    service.status = 503;
+    const payload = await draftReady('push-503-bounded');
+    const ctx = ctxOf(testConfig(KEYS));
+    const run = (attempt: number) =>
+      runWithSignal(
+        new AbortController().signal,
+        () => notifyJob(ctx, payload, {} as never),
+        attempt,
+      );
+    for (const attempt of [1, 2]) {
+      await expect(run(attempt), `run ${attempt}`).rejects.toThrow(/503/);
+      expect((await rows(payload.dedupeKey)).map((m) => [m.channel, m.status])).toEqual([
+        ['push', 'failed'],
+      ]);
+    }
+    await run(3);
+    expect((await rows(payload.dedupeKey)).map((m) => [m.channel, m.status])).toEqual([
+      ['push', 'undeliverable'],
+      ['sms', 'sent'],
+    ]);
+    // A later run (a redelivery) sends nothing more on any channel.
+    await run(4);
+    expect(await rows(payload.dedupeKey)).toHaveLength(2);
+    expect(service.calls).toHaveLength(3);
   });
 
   it('410 Gone revokes the subscription (audited) and the message falls back to SMS', async () => {
