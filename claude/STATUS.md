@@ -163,13 +163,32 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
 - **Q100:** değişiklik notunu ("Apex Concrete 6 → 7 işçi") yapay zekâ değil kod yazıyor. Demo verisindeki örnek metin biraz farklı okunuyor.
 - **Q101:** ofis, kişinin değişikliğinin PDF'i hazırlanmadan daha yeni bir sürüm yaparsa, kişinin sürümü için ayrı "güncellendi" e-postası ve mesajı gitmiyor.
 
-**Sırada:**
+**W2-11 incelemesi, W2-04 düzeltmesi ve W2-12 yapıldı (9c3abeb … 457e43d):**
 
-- W2-11'in bağımsız incelemesi.
-- Küçük bir eksik: imzalı rapora sonradan fotoğraf eklenince (W2-04) "güncellendi" e-postası imzalayan kişiye gitmiyor. Düzeltilecek.
-- W2-12: SMS anahtar kelimeleri (İŞ YOK, HAVA, DÜZELT, OK; iki yönlü SMS ülkelerinde).
+- **W2-11 incelemesi:** 2 orta, 2 küçük sorun bulundu; hepsi kendi testiyle düzeltildi.
+  - Değişiklik önizlemesi artık her zaman neyin değiştiğini yazıyor; boş önizleme kaydedilemiyor.
+  - **Q106 (önerimle karar verilmiş sayıldı):** ofis bir raporu düzenlemek için açtıktan sonra kişi telefondan yeni bir sürüm kaydederse, ofisin kaydı reddediliyor ve panel "Rapor değişti. En son sürümü görmek için yenileyin." diyor. Böylece kişinin değişikliği sessizce silinmiyor.
+  - "Rapor değişti" uyarısı ekran yenilense de görünüyor.
+  - İmzalı bir rapor ofis tarafından düzenlenince imzalayan kişiye de "güncellendi" e-postası gidiyor.
+- **W2-04:** imzalı rapora sonradan fotoğraf eklenince imzalayan kişiye de "güncellendi" e-postası gidiyor.
+- **W2-12, SMS anahtar kelimeleri (yalnızca iki yönlü SMS ülkeleri; TR tek yönlü olduğu için orada çalışmıyor):**
+  - **OK:** hiçbir şeyi onaylamıyor, açık taslağın linkini gönderiyor (Q82).
+  - **NO WORK / WEATHER:** bugün raporu açık olan şantiyelerin günlük linkini gönderiyor. Gün, ancak kişi linkte bilgileri kaydedince değişiyor.
+  - **EDIT** (ör. "EDIT FRI Apex was 7 not 6"): değişikliğin önizlemesini ve onay linkini gönderiyor. Kişi linkte "Kaydet"e basmadan hiçbir şey değişmiyor.
+  - Anahtar kelimeler İngilizce, İspanyolca ve Türkçe okunuyor. STOP ile çıkmış numaralara cevap gitmiyor ve her cevap kayda geçiyor.
+  - Yeni migration'lar: `20261016000130` – `…160`.
+  - Gerçek deneme için `ANTHROPIC_API_KEY` lazım.
 
-**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10, W2-11, yeni migration'lar `…080` – `…120`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
+**Yeni sorular (önerimle kuruldu; aksini söylemezseniz böyle kalır):**
+
+- **Q102:** anlaşılamayan bir EDIT mesajına "anlayamadım" mesajı ve Geçmiş raporlar linki gidiyor.
+- **Q103:** açık taslak yokken gelen OK'a cevap gitmiyor (kayda geçiyor).
+- **Q104:** NO WORK / WEATHER, bugün raporu açık olan en fazla 3 şantiye için cevaplanıyor; açık şantiye yoksa cevap gitmiyor.
+- **Q105 (metin kontrolünüz):** anahtar kelimelerin İspanyolca ve Türkçe karşılıkları. YES, OK olarak okunmuyor, çünkü Twilio'da abonelik kelimesi.
+
+**Sırada:** W2-12 incelemesi, ardından W2-14 (web push; gerçek gönderim için VAPID anahtarları lazım, o zamana kadar sahte gönderici) ve W2-15/16 (Twilio üzerinden WhatsApp; anahtarlar gelene kadar sahte gönderici).
+
+**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10, W2-11, W2-12, yeni migration'lar `…080` – `…160`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
 
 ## Hafta 2 (M6) — başladı
 
