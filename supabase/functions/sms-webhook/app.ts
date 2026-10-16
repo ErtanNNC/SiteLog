@@ -2,6 +2,8 @@ import { z } from 'zod';
 import {
   EMPTY_TWIML,
   assertE164,
+  isTwilioWhatsappForm,
+  parseTwilioWhatsappInbound,
   keywordOf,
   lateFallback,
   messageDedupeKey,
@@ -29,7 +31,8 @@ import type { SmsWebhookStore } from './store.ts';
  * sms-webhook (W1-08; spec §4.4, §9.1, §9.5, F13, F15; verify_jwt = false). The Twilio inbound
  * endpoint is never named whatsapp-webhook (GAP D49).
  *
- *   POST /sms-webhook (or /inbound)  Twilio's messaging webhook: X-Twilio-Signature, form fields,
+ *   POST /sms-webhook (or /inbound)  Twilio's messaging webhook (texts and, since W2-16, WhatsApp
+ *                                    messages, `whatsapp:` addresses): X-Twilio-Signature, form fields,
  *                                    store + enqueue `sms_inbound` in one transaction
  *                                    (`receive_sms_inbound()`) → empty TwiML. The worker runs
  *                                    the keywords and the reply (`processInboundSms`), so the
@@ -45,7 +48,8 @@ import type { SmsWebhookStore } from './store.ts';
  *   POST /sms-webhook/demo-reply     The panel's Demo phone (§11.1): an admin of a demo org types a
  *                                    text as the reporter; the same handler, inline, console only,
  *                                    inside the caller's org, and only on packs with two-way SMS
- *                                    (spec §19 Q35). JWT.
+ *                                    (spec §19 Q35), or on the WhatsApp thread where the pack lists
+ *                                    WhatsApp (W2-16). JWT.
  *
  * The pack is found by the sender id that received the text (`To` = `countries.sms_sender_id`,
  * unique across packs). A text is stored once per provider message id: a redelivery of a text
@@ -74,6 +78,8 @@ export interface SmsWebhookDeps {
 const DemoReplySchema = z.object({
   reporterId: z.uuid(),
   body: z.string().trim().min(1).max(1600),
+  /** W2-16: the Demo phone's WhatsApp thread (default the texts). */
+  channel: z.enum(['sms', 'whatsapp']).default('sms'),
 });
 
 interface InboundText {
@@ -82,6 +88,9 @@ interface InboundText {
   to: string;
   body: string;
   optOutType: string | null;
+  /** W2-16: a WhatsApp message (default a text). */
+  channel?: 'sms' | 'whatsapp';
+  media?: Array<{ url: string; content_type: string | null }>;
 }
 
 export interface InboundResult {
@@ -228,22 +237,75 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
   }> {
     const reporters = await store.reportersByPhone(text.from, pack.code, opts.scope);
     const primary = orderInboundReporters(reporters)[0] ?? null;
-    const keyword = pack.twoWaySms ? keywordOf(text.body, text.optOutType) : null;
+    const whatsapp = text.channel === 'whatsapp';
+    // WhatsApp is two-way on every pack (spec §19 Q26); Twilio's OptOutType is SMS's.
+    const keyword =
+      whatsapp || pack.twoWaySms ? keywordOf(text.body, whatsapp ? null : text.optOutType) : null;
     const received = await store.receiveInbound({
       id: uuid(),
+      ...(whatsapp ? { channel: 'whatsapp' as const } : {}),
       org_id: primary?.orgId ?? null,
       reporter_id: primary?.id ?? null,
       phone_e164: text.from,
       provider: opts.provider,
       provider_message_id: text.providerId,
       body: text.body,
-      payload: { to: text.to, keyword, pack: pack.code, opt_out_type: text.optOutType },
+      payload: {
+        to: text.to,
+        keyword,
+        pack: pack.code,
+        opt_out_type: whatsapp ? null : text.optOutType,
+        ...(whatsapp ? { num_media: text.media?.length ?? 0, media: text.media ?? [] } : {}),
+      },
     });
     return { ...received, keyword };
   }
 
+  /**
+   * W2-16 (spec §9.5, §19 Q26, Q85; GAP D49 (2)): a Twilio WhatsApp message, posted to this same
+   * webhook with `whatsapp:` addresses. The pack is the one whose WhatsApp sender received it; the
+   * row (`channel 'whatsapp'`) opens the person's 24-hour window, and the worker's `sms_inbound`
+   * job runs the keywords (on every pack), the answers and the media reply.
+   */
+  async function whatsappInbound(params: URLSearchParams): Promise<Response> {
+    const message = parseTwilioWhatsappInbound(params);
+    if (!message) {
+      logWarn('whatsapp.inbound.unreadable');
+      return twiml();
+    }
+    const row = await store.packByWhatsappSender(message.to);
+    if (!row) {
+      logWarn('whatsapp.inbound.unknown_sender_id', { to: message.to });
+      return twiml();
+    }
+    const pack = toCountryPack(row);
+    const stored = await storeInbound(
+      {
+        providerId: message.messageSid,
+        from: message.from,
+        to: message.to,
+        body: message.body,
+        optOutType: null,
+        channel: 'whatsapp',
+        media: message.media.map((m) => ({ url: m.url, content_type: m.contentType })),
+      },
+      pack,
+      { provider: 'twilio', scope: { realOnly: true } },
+    );
+    logInfo('whatsapp.inbound.queued', {
+      messageId: stored.id,
+      jobId: stored.jobId,
+      keyword: stored.keyword,
+      pack: pack.code,
+      media: message.numMedia,
+      redelivered: stored.duplicate,
+    });
+    return twiml();
+  }
+
   async function inbound(req: Request): Promise<Response> {
     const params = await signedForm(req);
+    if (isTwilioWhatsappForm(params)) return await whatsappInbound(params);
     const text = parseTwilioInbound(params);
     if (!text) {
       logWarn('sms.inbound.unreadable');
@@ -449,7 +511,14 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
     }
     if (ctx.reporter.status === 'disabled') throw new HttpError(409, 'This reporter is disabled');
     const pack = toCountryPack(ctx.country);
-    if (!pack.twoWaySms) {
+    const whatsapp = body.channel === 'whatsapp';
+    if (whatsapp && !pack.messageChannels.includes('whatsapp')) {
+      throw new HttpError(
+        409,
+        'This country pack lists no WhatsApp: its replies cannot come by it',
+      );
+    }
+    if (!whatsapp && !pack.twoWaySms) {
       throw new HttpError(409, 'This country pack has one-way SMS: replies cannot reach SiteLog');
     }
     const from = assertE164(ctx.reporter.phone_e164);
@@ -458,9 +527,10 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       {
         providerId: `console:${uuid()}`,
         from,
-        to: pack.smsSenderId ?? 'console',
+        to: (whatsapp ? pack.whatsappSenderId : pack.smsSenderId) ?? 'console',
         body: body.body,
         optOutType: null,
+        ...(whatsapp ? { channel: 'whatsapp' as const } : {}),
       },
       pack,
       { provider: 'console', scope },
@@ -481,6 +551,7 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
         pack,
         scope,
         applyPhoneOptOut: false,
+        ...(whatsapp ? { channel: 'whatsapp' as const } : {}),
       },
     );
     logInfo('sms.demo_reply.handled', {

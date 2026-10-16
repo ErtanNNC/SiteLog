@@ -1,4 +1,4 @@
-import { smsReplyAllowed } from '../channels.ts';
+import { replyAllowed, type ReplyChannel } from '../channels.ts';
 import type { KeywordReplySmsKey, TwoWaySmsKey } from '../copy/sms.ts';
 import type { CountryPack } from '../countries.ts';
 import type { ContactPref, ReporterStatus } from '../enums.ts';
@@ -236,6 +236,21 @@ export interface InboundSmsPlan {
    * for the worker's `sms_keyword` job; null otherwise (and always on a one-way pack).
    */
   reportKeyword: SmsReportKeyword | null;
+  /**
+   * W2-16, WhatsApp only (spec §19 Q40, the first option): the `whatsapp` consent of each
+   * reporter of the phone, revoked by STOP or given back by START (§19 Q112); SMS is untouched.
+   */
+  consentChanges: Array<{ reporterId: string; grant: boolean }>;
+  /**
+   * W2-16, WhatsApp only (spec §19 Q85): a voice note or photo from a reporter: stored, never
+   * transcribed, and answered with `whatsapp_use_link` once a day.
+   */
+  mediaReply: boolean;
+  /**
+   * W2-16, WhatsApp only (spec §19 Q26): a text that is no keyword, from a reporter: the worker's
+   * `whatsapp_answer` job reads it as the answer to their open web question, if one is open.
+   */
+  answer: boolean;
 }
 
 /**
@@ -288,11 +303,21 @@ export function planInboundSms(input: {
   /** A pending `unknown_contacts` row already exists for the number. */
   pendingUnknown: boolean;
   now: Date;
+  /** W2-16: the channel the message came in on (default SMS). */
+  channel?: ReplyChannel;
+  /** W2-16: the media the WhatsApp message carries (voice notes, photos). */
+  numMedia?: number;
 }): InboundSmsPlan {
+  const channel = input.channel ?? 'sms';
+  const whatsapp = channel === 'whatsapp';
   const ordered = orderInboundReporters(input.reporters);
   const disabled = input.reporters.filter((r) => r.status === 'disabled');
   const first = ordered[0] ?? null;
-  const keyword = input.pack.twoWaySms ? keywordOf(input.body, input.optOutType) : null;
+  // WhatsApp is two-way on every pack (spec §19 Q26), whatever the pack's SMS; Twilio's
+  // `OptOutType` is SMS's (Advanced Opt-Out), never read for a WhatsApp message.
+  const twoWay = whatsapp || input.pack.twoWaySms;
+  const optOutType = whatsapp ? null : input.optOutType;
+  const keyword = twoWay ? keywordOf(input.body, optOutType) : null;
   const plan: InboundSmsPlan = {
     keyword,
     reporterId: first?.id ?? null,
@@ -301,12 +326,30 @@ export function planInboundSms(input: {
     unknownContact: false,
     phoneOptOut: null,
     reportKeyword: null,
+    consentChanges: [],
+    mediaReply: false,
+    answer: false,
   };
-  if (!input.pack.twoWaySms) return plan;
-  const providerReplies = Boolean(input.optOutType?.trim());
+  if (!twoWay) return plan;
+  const providerReplies = Boolean(optOutType?.trim());
   const reply = (key: Exclude<TwoWaySmsKey, KeywordReplySmsKey>, reporterId: string | null) =>
-    !providerReplies && smsReplyAllowed(input.pack, key) ? { key, reporterId } : null;
+    !providerReplies && replyAllowed(input.pack, key, channel) ? { key, reporterId } : null;
   const at = input.now.toISOString();
+  // An SMS opt-out (`opted_out`) is about texts only (§19 Q40): on WhatsApp it blocks nothing.
+  const stoppedHere = (r: InboundReporter) => !whatsapp && r.status === 'opted_out';
+
+  if (whatsapp && keyword === 'stop') {
+    // §19 Q40 (the first option): WhatsApp's opt-out is its consent, for every reporter of the
+    // phone on the pack; texts go on. The confirmation names WhatsApp.
+    for (const r of [...ordered, ...disabled])
+      plan.consentChanges.push({ reporterId: r.id, grant: false });
+    if (first) plan.reply = reply('whatsapp_stop_confirm', first.id);
+    return plan;
+  }
+  if (whatsapp && keyword === 'start') {
+    // §19 Q112: the WhatsApp consent back for those who had given it; no reply (as SMS START).
+    for (const r of ordered) plan.consentChanges.push({ reporterId: r.id, grant: true });
+  }
 
   if (keyword === 'stop') {
     plan.phoneOptOut = 'record';
@@ -327,7 +370,7 @@ export function planInboundSms(input: {
     if (first) plan.reply = reply('stop_confirm', first.id);
     return plan;
   }
-  if (keyword === 'start') {
+  if (keyword === 'start' && !whatsapp) {
     plan.phoneOptOut = 'clear';
     for (const r of ordered)
       if (r.status === 'opted_out')
@@ -351,6 +394,11 @@ export function planInboundSms(input: {
     plan.reply = reply('unknown_number', null);
     return plan;
   }
+  if (whatsapp && (input.numMedia ?? 0) > 0) {
+    // §19 Q85: voice notes and photos go through the link; the message is stored, never read.
+    plan.mediaReply = true;
+    return plan;
+  }
 
   switch (keyword) {
     case 'help':
@@ -360,13 +408,13 @@ export function planInboundSms(input: {
     case 'text': {
       const pref: ContactPref = keyword === 'call' ? 'call' : 'link';
       for (const r of ordered)
-        if (r.status !== 'opted_out' && r.contactPref !== pref)
+        if (!stoppedHere(r) && r.contactPref !== pref)
           plan.changes.push({
             reporterId: r.id,
             patch: { contact_pref: pref },
             action: 'reporter.preferences_changed',
           });
-      if (first.status !== 'opted_out')
+      if (!stoppedHere(first))
         plan.reply = reply(keyword === 'call' ? 'pref_call_ok' : 'pref_text_ok', first.id);
       break;
     }
@@ -377,9 +425,13 @@ export function planInboundSms(input: {
       // W2-12: answered by the worker (`sms_keyword`), never for a phone that opted out (the
       // first reporter is opted out only when every one is). Twilio's `OptOutType` never names
       // these, so no provider reply competes with it.
-      if (first.status !== 'opted_out') plan.reportKeyword = keyword;
+      if (!stoppedHere(first)) plan.reportKeyword = keyword;
+      break;
+    case 'start':
       break;
     default:
+      // W2-16 (spec §19 Q26): on WhatsApp any other text may answer an open web question.
+      if (whatsapp && keyword === null && input.body.trim() !== '') plan.answer = true;
       break;
   }
   return plan;

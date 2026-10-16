@@ -1,5 +1,6 @@
 import {
   createNotifier,
+  createWhatsappRegistration,
   type NotifierAuditEntry,
   type NotifierStore,
   type NotifyRecipient,
@@ -24,6 +25,8 @@ export interface FakeMessaging {
   /** `sms_opt_outs` as `phone:country`. */
   phoneOptOuts: Set<string>;
   reporterOptOuts: Array<{ reporterId: string; at: string }>;
+  /** W2-15/16: WhatsApp messages the Twilio driver sent (the forms it posted). */
+  waSent: URLSearchParams[];
 }
 
 export function fakeMessaging(opts: { fail?: Error } = {}): FakeMessaging {
@@ -84,13 +87,39 @@ export function fakeMessaging(opts: { fail?: Error } = {}): FakeMessaging {
       return Promise.resolve({ providerId: `${driver}:${sent.length}` });
     },
   });
+  const waSent: URLSearchParams[] = [];
+  // WhatsApp (W2-15): console for demo orgs; Twilio, recorded, for a pack with a WhatsApp sender.
+  const whatsapp = createWhatsappRegistration({
+    fetch: (_url, init) => {
+      waSent.push(new URLSearchParams(String(init.body)));
+      return Promise.resolve(
+        new Response(JSON.stringify({ sid: `SMwa${waSent.length}` }), { status: 201 }),
+      );
+    },
+    twilio: () => ({ accountSid: 'AC1', authToken: 'tok' }),
+    statusCallbackUrl: null,
+    // The message being answered opened the window.
+    lastInbound: () => Promise.resolve(new Date().toISOString()),
+    randomUUID: () => crypto.randomUUID(),
+  });
   const notifier = createNotifier({
     store,
     transport,
+    channels: [whatsapp],
     statusCallbackUrl: null,
     randomUUID: () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`,
   });
-  return { notifier, store, rows, audits, sent, recipients, phoneOptOuts, reporterOptOuts };
+  return {
+    notifier,
+    store,
+    rows,
+    audits,
+    sent,
+    recipients,
+    phoneOptOuts,
+    reporterOptOuts,
+    waSent,
+  };
 }
 
 /** Personal links in memory (`ensurePersonalLink`). */

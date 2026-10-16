@@ -2,8 +2,8 @@ import {
   deliverableChannels,
   MessageSendError,
   pickMessageTransport,
+  replyAllowed,
   SMS_CHANNEL,
-  smsReplyAllowed,
   smsRenderOptions,
   smsSendOptionsFor,
   type MessageChannelSpec,
@@ -13,6 +13,7 @@ import {
   type NotifierKey,
   type NotifyOutcome,
   type NotifySkipDetail,
+  type ReplyChannel,
   type SmsDriver,
   type SmsTransport,
 } from '../channels.ts';
@@ -270,6 +271,11 @@ export interface ReplyInput<K extends ReplySmsKey> {
    * a retried job that answers one text with several replies sends each once. Needs `reporterId`.
    */
   dedupeKey?: string;
+  /**
+   * The channel of the message it answers (W2-16): SMS (default), or WhatsApp, where every pack
+   * has replies and links and the reply goes free-form inside the window that message opened.
+   */
+  channel?: ReplyChannel;
 }
 
 export interface SmsNotifier extends Notifier {
@@ -782,9 +788,13 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       return Promise.reject(new Error('Outbound calls come with M8 (spec §4.5, §7.3)'));
     },
     async reply(input) {
-      if (!smsReplyAllowed(input.pack, input.key)) {
+      const channel: ReplyChannel = input.channel ?? 'sms';
+      if (!replyAllowed(input.pack, input.key, channel)) {
         throw new Error(`SMS "${input.key}" is not a reply this pack can send (smsReplyAllowed)`);
       }
+      const registration = registry.find((r) => r.spec.channel === channel);
+      if (!registration)
+        throw new Error(`Notifier: message channel "${channel}" is not registered`);
       let existingId: string | undefined;
       if (input.dedupeKey && input.reporterId) {
         const prior = (await store.listByDedupeKey(input.reporterId, input.dedupeKey)).map(
@@ -800,11 +810,19 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       const driver = pickMessageTransport(
         { isDemo: input.org?.isDemo ?? false },
         input.pack,
-        'sms',
+        channel,
+        specs,
       );
       const language = languageOf(input.locale);
       const locale = language as SmsLocaleFor<typeof input.key>;
-      const options = smsRenderOptions(input.pack);
+      const options =
+        channel === 'sms'
+          ? smsRenderOptions(input.pack)
+          : (registration.renderOptions?.(input.pack) ?? {
+              ...smsRenderOptions(input.pack),
+              twoWay: true,
+              linksAllowed: true,
+            });
       const text = renderSms(input.key, locale, input.vars, options);
       const stored =
         driver === 'console' && input.org?.isDemo
@@ -815,13 +833,14 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         reporterId: input.reporterId,
         phone: input.phone,
         pack: input.pack,
-        channel: 'sms',
+        channel,
         driver,
         key: input.key,
         language,
         vars: input.vars as Readonly<Record<string, unknown>>,
         text,
         stored,
+        reply: true,
         ...(input.dedupeKey ? { dedupeKey: input.dedupeKey } : {}),
         ...(existingId ? { existingId } : {}),
       };
@@ -830,11 +849,14 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         // cleared after the text came in: nothing reaches the phone, so the row says `failed`,
         // and the refusal is for good (the caller marks the text handled, with no reply).
         const id = existingId ?? deps.randomUUID();
-        const error = consoleRealOrgError(input.pack.code);
+        const error =
+          channel === 'sms'
+            ? consoleRealOrgError(input.pack.code)
+            : `console: no ${channel} sender set for pack ${input.pack.code}`;
         await writeRow(transmitInput, id, 'failed', error);
         await store.audit({
           orgId: transmitInput.orgId,
-          action: 'sms.failed',
+          action: `${channel}.failed`,
           entity: 'message',
           entityId: id,
           diff: {
@@ -845,7 +867,9 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
             detail: 'console_real_org',
           },
         });
-        throw new SmsSendError(error, { driver: 'console', retryable: false });
+        if (channel === 'sms')
+          throw new SmsSendError(error, { driver: 'console', retryable: false });
+        throw new MessageSendError(error, channel, { driver: 'console', retryable: false });
       }
       const messageId = await transmit(transmitInput);
       return { messageId };

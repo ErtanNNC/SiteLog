@@ -26,6 +26,16 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
       return (data as CountryRow | null) ?? null;
     },
 
+    async packByWhatsappSender(to) {
+      const { data } = await admin
+        .from('countries')
+        .select('*')
+        .eq('whatsapp_sender_id', to.trim())
+        .maybeSingle()
+        .throwOnError();
+      return (data as CountryRow | null) ?? null;
+    },
+
     async reportersByPhone(phone, country, scope) {
       const { data: reporters } = await admin
         .from('reporters')
@@ -67,9 +77,11 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
     },
 
     async receiveInbound(row) {
-      // One transaction (20261014000008): the row, its audit and its job, or none of them.
+      // One transaction (20261014000008; any channel since 20261016000240): the row, its audit
+      // and its job, or none of them.
       const { data } = await admin
-        .rpc('receive_sms_inbound', {
+        .rpc('receive_inbound_message', {
+          p_channel: row.channel ?? 'sms',
           p_id: row.id,
           p_org_id: row.org_id,
           p_reporter_id: row.reporter_id,
@@ -103,7 +115,7 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
         .from('unknown_contacts')
         .select('id, message_id')
         .eq('phone_e164', phone)
-        .eq('channel', 'sms')
+        .eq('channel', opts?.channel ?? 'sms')
         .eq('status', 'pending');
       // The row this same text created on an earlier attempt does not count (its retry still
       // sends the F13 auto-reply).
@@ -122,7 +134,7 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
       if (existing[0]) return { id: existing[0].id, created: false };
       const { data } = await admin
         .from('unknown_contacts')
-        .insert({ ...row, channel: 'sms', status: 'pending' })
+        .insert({ ...row, channel: row.channel ?? 'sms', status: 'pending' })
         .select('id')
         .single()
         .throwOnError();
@@ -178,6 +190,27 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
     enqueueNotify: (payload, jobKey) => enqueueJob(admin, 'notify', payload, { dedupeKey: jobKey }),
 
     // W2-12: OK, NO WORK, WEATHER and EDIT are the worker's (EDIT needs the model).
+    async enqueueWhatsappAnswer(messageId) {
+      await enqueueJob(
+        admin,
+        'whatsapp_answer',
+        { messageId },
+        { dedupeKey: jobKeys.whatsappAnswer(messageId) },
+      );
+    },
+
+    async whatsappConsent(reporterId, grant, messageId) {
+      // 20261016000240: revoked or given back with its audit, as the reporter (§19 Q40, Q112).
+      const { data } = await admin
+        .rpc('inbound_whatsapp_consent', {
+          p_reporter_id: reporterId,
+          p_grant: grant,
+          p_message_id: messageId,
+        })
+        .throwOnError();
+      return (data as { changed?: boolean } | null)?.changed === true;
+    },
+
     async enqueueSmsKeyword(messageId) {
       await enqueueJob(
         admin,

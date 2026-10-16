@@ -1,0 +1,18 @@
+{
+  "path": "",
+  "params": {
+    "SmsMessageSid": "{{sid}}",
+    "NumMedia": "0",
+    "ProfileName": "Site Manager",
+    "SmsSid": "{{sid}}",
+    "WaId": "{{wa_id}}",
+    "SmsStatus": "received",
+    "To": "whatsapp:{{to}}",
+    "NumSegments": "1",
+    "MessageSid": "{{sid}}",
+    "AccountSid": "AC00000000000000000000000000000000",
+    "From": "whatsapp:{{phone}}",
+    "ApiVersion": "2010-04-01",
+    "Body": "OK"
+  }
+}

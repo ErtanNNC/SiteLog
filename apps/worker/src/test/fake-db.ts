@@ -916,6 +916,38 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async listAppliedCorrections() {
       return [];
     },
+    // W2-16: the WhatsApp answer path runs on PGlite only (field_answer_question()).
+    answerQuestionByWhatsapp() {
+      return Promise.reject(new Error('fake db: answerQuestionByWhatsapp runs on PGlite only'));
+    },
+    async openWebQuestions(reporterIds) {
+      const out: Array<{ report_id: string; question_id: string; reporter_id: string }> = [];
+      for (const q of d.questions.values()) {
+        const r = d.reports.get(q.report_id);
+        if (!r || !r.reporter_id || !reporterIds.includes(r.reporter_id)) continue;
+        if (r.status !== 'awaiting_answer' || q.channel !== 'web' || q.answered_at) continue;
+        out.push({ report_id: r.id, question_id: q.id, reporter_id: r.reporter_id });
+      }
+      return out.reverse();
+    },
+    async inboundWhatsappConsent(reporterId, grant, messageId) {
+      const rows = d.consents.filter((c) => c.reporter_id === reporterId && c.type === 'whatsapp');
+      const held = rows.filter((c) => c.revoked_at === null);
+      if (!grant) {
+        for (const c of held) c.revoked_at = new Date().toISOString();
+        return held.length > 0;
+      }
+      if (held.length > 0 || rows.length === 0) return false;
+      d.consents.push({
+        ...rows.at(-1)!,
+        id: crypto.randomUUID(),
+        method: 'whatsapp_keyword',
+        evidence: { message_id: messageId },
+        given_at: new Date().toISOString(),
+        revoked_at: null,
+      });
+      return true;
+    },
     settleVoiceAnswer() {
       // field_settle_voice_answer() is SQL: the parse_answer tests run on PGlite (W2-09).
       return Promise.reject(new Error('fake db: settleVoiceAnswer runs on PGlite only'));
@@ -1086,7 +1118,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       const contact = await db.insertUnknownContact({
         org_id: row.org_id,
         phone_e164: row.phone_e164,
-        channel: 'sms',
+        channel: row.channel ?? 'sms',
         message_id: row.message_id,
         snippet: row.snippet,
       });

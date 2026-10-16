@@ -21,7 +21,9 @@ import { resolve } from 'node:path';
 import {
   metaSignature,
   normalizeWebhook,
+  isTwilioWhatsappForm,
   parseTwilioInbound,
+  parseTwilioWhatsappInbound,
   parseTwilioStatus,
   twilioSignature,
 } from '@sitelog/shared';
@@ -90,11 +92,15 @@ export function substituteTwilio(
   vars: { phone: string; to: string; sid: string },
 ): string {
   const sid = `SM${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
-  return template
-    .replace(/\{\{phone\}\}/g, `+${vars.phone.replace(/\D/g, '')}`)
-    .replace(/\{\{to\}\}/g, vars.to)
-    .replace(/\{\{sid\}\}/g, sid)
-    .replace(/\{\{message_sid\}\}/g, vars.sid || sid);
+  return (
+    template
+      .replace(/\{\{phone\}\}/g, `+${vars.phone.replace(/\D/g, '')}`)
+      .replace(/\{\{to\}\}/g, vars.to)
+      // W2-16: a WhatsApp form names the person's number without `+` too.
+      .replace(/\{\{wa_id\}\}/g, vars.phone.replace(/\D/g, ''))
+      .replace(/\{\{sid\}\}/g, sid)
+      .replace(/\{\{message_sid\}\}/g, vars.sid || sid)
+  );
 }
 
 /** The signed request a Twilio fixture becomes: URL, form body and X-Twilio-Signature. */
@@ -110,7 +116,13 @@ export async function twilioRequest(
 
 async function replayTwilio(args: Args, file: string, fixture: TwilioFixture): Promise<boolean> {
   const form = new URLSearchParams(fixture.params);
-  const inbound = fixture.path === '' ? parseTwilioInbound(form) : null;
+  // W2-16: a WhatsApp message comes on the same webhook with `whatsapp:` addresses.
+  const inbound =
+    fixture.path === ''
+      ? isTwilioWhatsappForm(form)
+        ? parseTwilioWhatsappInbound(form)
+        : parseTwilioInbound(form)
+      : null;
   const status = fixture.path === '/status' ? parseTwilioStatus(form) : null;
   console.log(
     `\n${file}: Twilio ${fixture.path || 'inbound'} ` +

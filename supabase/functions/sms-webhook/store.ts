@@ -17,9 +17,11 @@ import type {
  * inline for the Demo phone) needs the shared `InboundSmsStore` part; the routes add the rest.
  */
 
-/** The `messages` row of an inbound text (channel 'sms', direction 'in'). */
+/** The `messages` row of an inbound text or WhatsApp message (direction 'in'). */
 export interface InboundMessageRow {
   id: string;
+  /** W2-16: `whatsapp` for a Twilio WhatsApp message (default `sms`). */
+  channel?: 'sms' | 'whatsapp';
   org_id: string | null;
   reporter_id: string | null;
   phone_e164: string;
@@ -27,7 +29,15 @@ export interface InboundMessageRow {
   provider_message_id: string;
   body: string;
   /** What the worker's `sms_inbound` job needs besides the row: the pack and Twilio's keyword. */
-  payload: { to: string; keyword: SmsKeyword | null; pack: string; opt_out_type: string | null };
+  payload: {
+    to: string;
+    keyword: SmsKeyword | null;
+    pack: string;
+    opt_out_type: string | null;
+    /** W2-16: a WhatsApp message's media count and URLs (stored, never transcribed, §19 Q85). */
+    num_media?: number;
+    media?: Array<{ url: string; content_type: string | null }>;
+  };
 }
 
 /** An outbound row a Twilio status callback reports on. */
@@ -57,6 +67,8 @@ export interface OfficeNotification {
 export interface SmsWebhookStore extends InboundSmsStore {
   /** The pack whose `sms_sender_id` is this sender (unique across packs, 20261014000007). */
   packBySender(to: string): Promise<CountryRow | null>;
+  /** W2-16: the pack whose `whatsapp_sender_id` is this sender (unique, 20261016000210). */
+  packByWhatsappSender(to: string): Promise<CountryRow | null>;
   /**
    * `receive_sms_inbound()`, one transaction: writes the inbound row and its `sms.received` audit
    * (actor: the reporter, or the system for an unknown number), and for a Twilio text not yet

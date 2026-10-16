@@ -30,6 +30,8 @@ export const MESSAGE_JOB_TYPES: readonly JobTypeKey[] = [
   'send_welcome',
   'sms_inbound',
   'sms_keyword',
+  // W2-16: a WhatsApp text read as an answer (the message names the reporter).
+  'whatsapp_answer',
   'send_message',
   'send_template',
   'inbound_message',

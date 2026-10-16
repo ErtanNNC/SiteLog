@@ -136,6 +136,57 @@ export function parseTwilioInbound(params: URLSearchParams): TwilioInboundSms | 
   };
 }
 
+/** A medium sent with an inbound WhatsApp message (Twilio keeps it at `url`, behind the account). */
+export interface TwilioInboundMedia {
+  url: string;
+  contentType: string | null;
+}
+
+/** An inbound WhatsApp message as Twilio posts it (W2-16): `whatsapp:` addresses. */
+export interface TwilioInboundWhatsapp {
+  messageSid: string;
+  /** The person's number, without `whatsapp:`. */
+  from: E164;
+  /** The receiving sender, without `whatsapp:`: the pack's `whatsapp_sender_id`. */
+  to: E164;
+  body: string;
+  numMedia: number;
+  media: TwilioInboundMedia[];
+}
+
+/** Whether the form is a WhatsApp message (`From` is a `whatsapp:` address). */
+export function isTwilioWhatsappForm(params: URLSearchParams): boolean {
+  return (params.get('From') ?? '').trim().startsWith('whatsapp:');
+}
+
+/**
+ * The fields of an inbound WhatsApp message, or null when they are not one. Its media (voice
+ * notes, photos; spec §19 Q85) are listed by URL and type; the sender's WhatsApp profile name is
+ * never read (no personal data SiteLog does not need).
+ */
+export function parseTwilioWhatsappInbound(params: URLSearchParams): TwilioInboundWhatsapp | null {
+  const messageSid = params.get('MessageSid') ?? params.get('SmsSid');
+  const from = /^whatsapp:(\+[1-9]\d{6,14})$/.exec(params.get('From')?.trim() ?? '')?.[1];
+  const to = /^whatsapp:(\+[1-9]\d{6,14})$/.exec(params.get('To')?.trim() ?? '')?.[1];
+  if (!messageSid || !from || !to) return null;
+  const parsed = Number.parseInt(params.get('NumMedia') ?? '0', 10);
+  const numMedia = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 10) : 0;
+  const media: TwilioInboundMedia[] = [];
+  for (let i = 0; i < numMedia; i++) {
+    const url = params.get(`MediaUrl${i}`)?.trim();
+    if (url && /^https:\/\//.test(url))
+      media.push({ url, contentType: params.get(`MediaContentType${i}`)?.trim() || null });
+  }
+  return {
+    messageSid,
+    from: from as E164,
+    to: to as E164,
+    body: params.get('Body') ?? '',
+    numMedia,
+    media,
+  };
+}
+
 /** A delivery-status callback (`StatusCallback` of a message SiteLog sent). */
 export interface TwilioStatusCallback {
   messageSid: string;

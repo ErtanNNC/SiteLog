@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   DAILY_LINK_TTL_HOURS_DEFAULT,
-  SmsSendError,
+  MessageSendError,
   assertE164,
   correctionNote,
   dailyLinkExpiresAt,
@@ -16,7 +16,7 @@ import {
   parseSmsKeyword,
   readSmsEdit,
   resolveDayReference,
-  smsReplyAllowed,
+  replyAllowed,
   toCountryPack,
   type CorrectionChange,
   type CountryPack,
@@ -24,6 +24,7 @@ import {
   type InboundReporterRow,
   type InboundScope,
   type MessageRow,
+  type ReplyChannel,
   type ReplySmsKey,
   type SmsVars,
 } from '@sitelog/shared';
@@ -65,16 +66,23 @@ import { PermanentJobError, type JobHandler } from './types';
 export const smsKeyword: JobHandler<'sms_keyword'> = async (ctx, payload) => {
   const message = await ctx.db.getMessage(payload.messageId);
   if (!message) throw new PermanentJobError(`message ${payload.messageId} not found`);
-  if (message.channel !== 'sms' || message.direction !== 'in' || !message.phone_e164) {
-    throw new PermanentJobError(`message ${message.id} is not an inbound SMS`);
+  // W2-16: a keyword sent on WhatsApp is answered on WhatsApp (two-way on every pack).
+  const channel = message.channel;
+  if (
+    (channel !== 'sms' && channel !== 'whatsapp') ||
+    message.direction !== 'in' ||
+    !message.phone_e164
+  ) {
+    throw new PermanentJobError(`message ${message.id} is not an inbound text or WhatsApp message`);
   }
   const meta = (message.payload ?? {}) as { pack?: string };
   const packRow = meta.pack ? await ctx.db.getCountry(meta.pack) : null;
   if (!packRow) throw new PermanentJobError(`message ${message.id} names no country pack`);
   const pack = toCountryPack(packRow);
   const log = ctx.log.child({ message_id: message.id, pack: pack.code });
-  // A one-way pack never acts on a keyword (§9.2), even if its pack changed after the text came in.
-  if (!pack.twoWaySms) {
+  // A one-way pack never acts on a keyword (§9.2), even if its pack changed after the text came in;
+  // WhatsApp is two-way on every pack (spec §19 Q26).
+  if (channel === 'sms' && !pack.twoWaySms) {
     log.info('sms_keyword: the pack has no two-way SMS; nothing answered');
     return;
   }
@@ -89,8 +97,9 @@ export const smsKeyword: JobHandler<'sms_keyword'> = async (ctx, payload) => {
   const phone = assertE164(message.phone_e164);
   const reporters = orderInboundReporters(
     await ctx.db.listInboundReporters(phone, pack.code, scope),
-  ).filter((r) => r.status !== 'opted_out');
-  const k: KeywordCtx = { ctx, message, pack, phone, reporters, log };
+    // An SMS opt-out stops texts only (§19 Q40): on WhatsApp it blocks no answer.
+  ).filter((r) => channel === 'whatsapp' || r.status !== 'opted_out');
+  const k: KeywordCtx = { ctx, message, pack, phone, reporters, log, channel };
   if (reporters.length === 0) {
     // Opted out (or removed) since the text came in: nothing goes to the phone.
     log.info('sms_keyword: no reporter to answer');
@@ -123,6 +132,8 @@ interface KeywordCtx {
   /** The phone's reporters on the pack, not opted out, the one a reply speaks for first. */
   reporters: InboundReporterRow[];
   log: Ctx['log'];
+  /** W2-16: the channel the keyword came in on; its replies go back on it. */
+  channel: ReplyChannel;
 }
 
 /** Most answers a text gets (several sites, several drafts): enough for a backup's sites. */
@@ -150,11 +161,12 @@ async function reply<K extends ReplySmsKey>(
       key,
       vars,
       dedupeKey: `sms_reply:${k.message.id}:${key}:${target}`,
+      channel: k.channel,
     });
     return sent.messageId;
   } catch (err) {
     // Recorded on the reply's row by the Notifier (e.g. Twilio 21610); anything else retries.
-    if (err instanceof SmsSendError && !err.retryable) return null;
+    if (err instanceof MessageSendError && !err.retryable) return null;
     throw err;
   }
 }
@@ -171,7 +183,7 @@ async function audit(
     action: 'sms.keyword_answered',
     entity: 'message',
     entity_id: k.message.id,
-    diff: { channel: 'sms', pack: k.pack.code, ...diff },
+    diff: { channel: k.channel, pack: k.pack.code, ...diff },
   });
 }
 
@@ -186,7 +198,7 @@ async function answerOk(k: KeywordCtx): Promise<void> {
     0,
     MAX_REPLIES,
   );
-  if (drafts.length === 0 || !smsReplyAllowed(k.pack, 'draft_ready')) {
+  if (drafts.length === 0 || !replyAllowed(k.pack, 'draft_ready', k.channel)) {
     await audit(k, first, {
       keyword: 'ok',
       outcome: drafts.length === 0 ? 'no_draft' : 'links_not_allowed',
@@ -230,7 +242,7 @@ async function answerDayOff(k: KeywordCtx, keyword: 'no_work' | 'weather'): Prom
     );
   });
   const targets = open.slice(0, MAX_REPLIES);
-  if (targets.length === 0 || !smsReplyAllowed(k.pack, 'day_off_link')) {
+  if (targets.length === 0 || !replyAllowed(k.pack, 'day_off_link', k.channel)) {
     await audit(k, first, {
       keyword,
       outcome: targets.length === 0 ? 'no_open_day' : 'links_not_allowed',
@@ -314,7 +326,7 @@ async function editUnclear(
   reportId: string | null = null,
 ): Promise<void> {
   let replyId: string | null = null;
-  if (smsReplyAllowed(k.pack, 'edit_unclear')) {
+  if (replyAllowed(k.pack, 'edit_unclear', k.channel)) {
     const { base, code } = await personalLinkCode(k.ctx, reporter.id, reporter.orgId);
     replyId = await reply(
       k,
@@ -371,6 +383,7 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
     const res = await classifyUtterance(
       ctx.ai.claude,
       ctx.config.CLAUDE_MODEL_FAST || ctx.config.CLAUDE_MODEL,
+      // A WhatsApp EDIT is a written message too: the prompt's text channel.
       { channel: 'sms', keyword: 'EDIT', text: k.message.body ?? '' },
       k.log,
     );
@@ -485,7 +498,7 @@ async function answerEditPreview(k: KeywordCtx, correctionId: string): Promise<v
     );
   }
   let replyId: string | null = null;
-  if (smsReplyAllowed(k.pack, 'edit_preview')) {
+  if (replyAllowed(k.pack, 'edit_preview', k.channel)) {
     const { base, code } = await personalLinkCode(ctx, reporter.id, reporter.orgId);
     replyId = await reply(
       k,

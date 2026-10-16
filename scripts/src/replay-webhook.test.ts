@@ -1,7 +1,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseTwilioInbound, parseTwilioStatus, verifyTwilioSignature } from '@sitelog/shared';
+import {
+  isTwilioWhatsappForm,
+  parseTwilioInbound,
+  parseTwilioStatus,
+  parseTwilioWhatsappInbound,
+  verifyTwilioSignature,
+} from '@sitelog/shared';
 import {
   isTwilioFixture,
   parseArgs,
@@ -46,6 +52,38 @@ describe('replay-webhook Twilio mode (W1-08)', () => {
         expect(parseTwilioStatus(form)?.messageSid).toBe('SMstatus1');
       }
     }
+  });
+
+  it('every WhatsApp fixture (W2-16) is a Twilio WhatsApp form sms-webhook can read once filled', () => {
+    const dir = join(import.meta.dirname, '..', '..', 'fixtures', 'whatsapp');
+    const files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+    expect(files.length).toBeGreaterThanOrEqual(6);
+    for (const f of files) {
+      const raw = readFileSync(join(dir, f), 'utf8');
+      expect(isTwilioFixture(JSON.parse(raw)), f).toBe(true);
+      const fixture = JSON.parse(
+        substituteTwilio(raw, { phone: '905321234567', to: '+905320000099', sid: 'SMwa1' }),
+      ) as TwilioFixture;
+      const form = new URLSearchParams(fixture.params);
+      if (fixture.path === '') {
+        expect(isTwilioWhatsappForm(form), f).toBe(true);
+        const inbound = parseTwilioWhatsappInbound(form);
+        expect(inbound, f).toMatchObject({ from: '+905321234567', to: '+905320000099' });
+        expect(form.get('WaId')).toBe('905321234567');
+        // An SMS reader never takes it for a text.
+        expect(parseTwilioInbound(form), f).toBeNull();
+      } else {
+        expect(parseTwilioStatus(form)?.messageSid).toBe('SMwa1');
+      }
+    }
+    const note = JSON.parse(
+      substituteTwilio(readFileSync(join(dir, 'inbound-voice-note.json'), 'utf8'), {
+        phone: '905321234567',
+        to: '+905320000099',
+        sid: 'SMwa1',
+      }),
+    ) as TwilioFixture;
+    expect(parseTwilioWhatsappInbound(new URLSearchParams(note.params))!.media).toHaveLength(1);
   });
 
   it('fills the placeholders: E.164 sender, the pack sender, a fresh SID per replay', () => {

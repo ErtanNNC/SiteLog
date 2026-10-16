@@ -40,10 +40,9 @@ describe('SMS copy vs spec §9.2', () => {
     expect([...table.keys()].sort()).toEqual([...SMS_KEYS].sort());
     const twoWay = [...table].filter(([, r]) => r.twoWay).map(([k]) => k);
     expect(twoWay.sort()).toEqual([...TWO_WAY_SMS_KEYS].sort());
-    // The two-way rows have no TR text, except the report keywords' replies (W2-12, §19 Q83).
-    const keywordReply = (k: string) => (KEYWORD_REPLY_SMS_KEYS as readonly string[]).includes(k);
-    for (const [key, row] of table)
-      expect(row.tr === null, key).toBe(row.twoWay && !keywordReply(key));
+    // Every row has TR text: the two-way ones since W2-16 (sent on WhatsApp; TR SMS is one-way).
+    for (const [key, row] of table) expect(row.tr, key).not.toBeNull();
+    expect(KEYWORD_REPLY_SMS_KEYS.length).toBe(3);
   });
 
   it('copies EN (two-way) and TR (one-way) verbatim', () => {

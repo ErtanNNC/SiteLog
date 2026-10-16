@@ -4,6 +4,7 @@ import { createConsoleSmsTransport, type JobPayloads } from '@sitelog/shared';
 import { testConfig, type Config } from './config';
 import type { Ctx } from './context';
 import { notifyJob } from './jobs/notify';
+import { smsInbound } from './jobs/sms_inbound';
 import { silentLogger } from './log';
 import { createWorkerNotifier, workerWhatsappRegistration } from './messaging';
 import { startPgliteDatabase, type PgliteDatabase } from './test/pglite';
@@ -100,7 +101,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   twilio.status = 201;
-  twilio.json = { sid: 'SMwa1' };
+  twilio.json = { sid: `SMwa-${randomUUID()}` };
   twilio.forms = [];
   await pg.q(`update orgs set is_demo = true where id = $1`, [ORG]);
   await pg.q(
@@ -183,5 +184,33 @@ describe('WhatsApp (W2-15)', () => {
     const payload = daily('no-sender');
     await notifyJob(ctxOf(LIVE), payload, {} as never);
     expect((await rows(payload.dedupeKey)).map((r) => r.channel)).toEqual(['sms']);
+  });
+
+  it('W2-16: STOP on WhatsApp through Twilio revokes the WhatsApp consent only, confirmed there', async () => {
+    await goLive(false);
+    const [{ r }] = (await pg.q<{ r: { id: string; jobId: number } }>(
+      `select receive_inbound_message('whatsapp', $1, $2, $3, $4, 'twilio', $5, 'STOP',
+         '{"to":"+15550142299","keyword":"stop","pack":"US","opt_out_type":null,"num_media":0}'::jsonb) as r`,
+      [randomUUID(), ORG, MARCO, MARCO_PHONE, `SMwa-${randomUUID()}`],
+    )) as [{ r: { id: string; jobId: number } }];
+    await smsInbound(ctxOf(LIVE), { messageId: r.id }, {} as never);
+    const held = await pg.q<{ type: string }>(
+      `select distinct type::text from consents where reporter_id = $1 and revoked_at is null
+         and type in ('sms', 'whatsapp')`,
+      [MARCO],
+    );
+    expect(held).toEqual([{ type: 'sms' }]);
+    const [status] = await pg.q<{ status: string }>(`select status from reporters where id = $1`, [
+      MARCO,
+    ]);
+    expect(status!.status).not.toBe('opted_out');
+    // The message just opened the 24-hour window: the confirmation goes free-form.
+    expect(twilio.forms.at(-1)!.get('Body')).toBe(
+      "You won't get more WhatsApp messages from SiteLog. Reply START to resume.",
+    );
+    expect(twilio.forms.at(-1)!.get('To')).toBe(`whatsapp:${MARCO_PHONE}`);
+    // Handled once: a redelivery runs nothing.
+    await smsInbound(ctxOf(LIVE), { messageId: r.id }, {} as never);
+    expect(twilio.forms).toHaveLength(1);
   });
 });

@@ -108,6 +108,9 @@ describe('planInboundSms (F13, F15)', () => {
         unknownContact: false,
         phoneOptOut: null,
         reportKeyword: null,
+        consentChanges: [],
+        mediaReply: false,
+        answer: false,
       });
     }
   });
@@ -137,6 +140,9 @@ describe('planInboundSms (F13, F15)', () => {
       keyword: 'stop',
       phoneOptOut: 'record',
       reportKeyword: null,
+      consentChanges: [],
+      mediaReply: false,
+      answer: false,
       reply: { key: 'stop_confirm', reporterId: 'r-marco' },
     });
   });
@@ -158,6 +164,9 @@ describe('planInboundSms (F13, F15)', () => {
       unknownContact: false,
       phoneOptOut: 'record',
       reportKeyword: null,
+      consentChanges: [],
+      mediaReply: false,
+      answer: false,
     });
     // Already recorded: nothing to change, the phone's opt-out is recorded again (idempotent).
     expect(
@@ -174,6 +183,9 @@ describe('planInboundSms (F13, F15)', () => {
       unknownContact: false,
       phoneOptOut: 'record',
       reportKeyword: null,
+      consentChanges: [],
+      mediaReply: false,
+      answer: false,
     });
   });
 
@@ -188,6 +200,9 @@ describe('planInboundSms (F13, F15)', () => {
     expect(plan('START', [])).toMatchObject({
       phoneOptOut: 'clear',
       reportKeyword: null,
+      consentChanges: [],
+      mediaReply: false,
+      answer: false,
       unknownContact: true,
       reply: { key: 'unknown_number', reporterId: null },
     });
@@ -262,6 +277,9 @@ describe('planInboundSms (F13, F15)', () => {
       unknownContact: false,
       phoneOptOut: null,
       reportKeyword: null,
+      consentChanges: [],
+      mediaReply: false,
+      answer: false,
     });
   });
 
@@ -274,6 +292,9 @@ describe('planInboundSms (F13, F15)', () => {
       unknownContact: true,
       phoneOptOut: null,
       reportKeyword: null,
+      consentChanges: [],
+      mediaReply: false,
+      answer: false,
     });
     expect(plan('hello again', [], { pendingUnknown: true })).toMatchObject({
       reply: null,
@@ -382,6 +403,9 @@ describe('§9.5 report keywords (W2-12): EN, ES and TR', () => {
       expect(plan(body, [reporter()], { pack: TR }), body).toMatchObject({
         keyword: null,
         reportKeyword: null,
+        consentChanges: [],
+        mediaReply: false,
+        answer: false,
         reply: null,
       });
   });

@@ -15,8 +15,14 @@ import { PermanentJobError, type JobHandler } from './types';
 export const smsInbound: JobHandler<'sms_inbound'> = async (ctx, payload) => {
   const message = await ctx.db.getMessage(payload.messageId);
   if (!message) throw new PermanentJobError(`message ${payload.messageId} not found`);
-  if (message.channel !== 'sms' || message.direction !== 'in' || !message.phone_e164) {
-    throw new PermanentJobError(`message ${message.id} is not an inbound SMS`);
+  // W2-16: a Twilio WhatsApp message comes the same way (sms-webhook, `channel 'whatsapp'`).
+  const channel = message.channel;
+  if (
+    (channel !== 'sms' && channel !== 'whatsapp') ||
+    message.direction !== 'in' ||
+    !message.phone_e164
+  ) {
+    throw new PermanentJobError(`message ${message.id} is not an inbound text or WhatsApp message`);
   }
   if (message.provider !== 'twilio') {
     throw new PermanentJobError(`message ${message.id} (${message.provider}) is handled inline`);
@@ -25,6 +31,7 @@ export const smsInbound: JobHandler<'sms_inbound'> = async (ctx, payload) => {
     handled_at?: string;
     pack?: string;
     opt_out_type?: string | null;
+    num_media?: number;
   };
   if (meta.handled_at) {
     ctx.log.info('inbound sms already handled', { message_id: message.id, at: meta.handled_at });
@@ -59,6 +66,9 @@ export const smsInbound: JobHandler<'sms_inbound'> = async (ctx, payload) => {
       pack: toCountryPack(packRow),
       scope: { realOnly: true },
       applyPhoneOptOut: true,
+      ...(channel === 'whatsapp'
+        ? { channel: 'whatsapp' as const, numMedia: Number(meta.num_media ?? 0) || 0 }
+        : {}),
     },
   );
   ctx.log.info('inbound sms handled', {
@@ -67,6 +77,8 @@ export const smsInbound: JobHandler<'sms_inbound'> = async (ctx, payload) => {
     changes: result.changes.length,
     unknown: result.unknownContact,
     reply: result.replyId !== null,
+    answer: result.answer,
+    channel,
     pack: packRow.code,
   });
 };

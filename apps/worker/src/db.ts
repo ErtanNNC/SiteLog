@@ -392,6 +392,13 @@ export interface SmsKeywordDay {
   has_report: boolean;
 }
 
+/** W2-16: an open web question a WhatsApp text may answer (`openWebQuestions`). */
+export interface OpenWebQuestion {
+  report_id: string;
+  question_id: string;
+  reporter_id: string;
+}
+
 /** W2-12: a web draft an SMS OK answers with (`smsKeywordDrafts`). */
 export interface SmsKeywordDraft {
   report_id: string;
@@ -746,7 +753,7 @@ export interface Db {
    */
   hasPendingUnknownContact(
     phone: string,
-    channel: 'sms',
+    channel: 'sms' | 'whatsapp',
     excludeMessageId?: string | null,
   ): Promise<boolean>;
   /**
@@ -759,7 +766,30 @@ export interface Db {
     snippet: string;
     /** The guessed org (spec §19 Q44), else null. */
     org_id: string | null;
+    /** W2-16: the message's channel (default 'sms'). */
+    channel?: 'sms' | 'whatsapp';
   }): Promise<{ id: string; created: boolean }>;
+  /**
+   * W2-16: STOP (`grant` false) / START on WhatsApp: the reporter's `whatsapp` consent
+   * (`inbound_whatsapp_consent()`, audited); true when it changed.
+   */
+  inboundWhatsappConsent(reporterId: string, grant: boolean, messageId: string): Promise<boolean>;
+  /**
+   * W2-16 (§19 Q26): the open web questions of these reporters' reports that await an answer,
+   * newest first (`whatsapp_answer`).
+   */
+  openWebQuestions(reporterIds: string[]): Promise<OpenWebQuestion[]>;
+  /** W2-16: a WhatsApp answer applied (`field_answer_question()` with channel 'whatsapp'). */
+  answerQuestionByWhatsapp(input: {
+    reportId: string;
+    questionId: string;
+    reporterId: string;
+    messageId: string;
+    base: Json;
+    data: Json;
+    answer: Json;
+    newCompany: Json | null;
+  }): Promise<{ status: string; reportStatus: string; jobId: number | null }>;
   /** Real (non-demo) orgs of the pack that linked an earlier contact of this phone (§19 Q44). */
   linkedContactOrgs(phone: string, country: string): Promise<string[]>;
   /**
@@ -1751,7 +1781,8 @@ export function createDb(sql: Sql): Db {
           select id from unknown_contacts where message_id = ${row.message_id} limit 1
         ), inserted as (
           insert into unknown_contacts (org_id, phone_e164, channel, message_id, snippet)
-          select ${row.org_id}, ${row.phone_e164}, 'sms', ${row.message_id}, ${row.snippet}
+          select ${row.org_id}, ${row.phone_e164}, ${row.channel ?? 'sms'}::field_channel,
+                 ${row.message_id}, ${row.snippet}
           where not exists (select 1 from existing)
           returning id
         )
@@ -1759,6 +1790,33 @@ export function createDb(sql: Sql): Db {
         union all
         select id, false as created from existing`;
       return rows[0]!;
+    },
+    async inboundWhatsappConsent(reporterId, grant, messageId) {
+      const rows = await sql<
+        Array<{ r: { changed?: boolean } }>
+      >`select inbound_whatsapp_consent(${reporterId}, ${grant}, ${messageId}) as r`;
+      return rows[0]?.r?.changed === true;
+    },
+    async openWebQuestions(reporterIds) {
+      if (reporterIds.length === 0) return [];
+      return sql<OpenWebQuestion[]>`
+        select r.id as report_id, q.id as question_id, r.reporter_id
+        from reports r join questions q on q.report_id = r.id
+        where r.reporter_id = any(${reporterIds}::uuid[]) and r.status = 'awaiting_answer'
+          and q.channel = 'web' and q.answered_at is null
+        order by q.created_at desc, q.id`;
+    },
+    async answerQuestionByWhatsapp(input) {
+      const rows = await sql<
+        Array<{ r: { status: string; reportStatus: string; jobId: number | null } }>
+      >`
+        select field_answer_question(${input.reportId}::uuid, ${input.questionId}::uuid,
+          ${input.reporterId}::uuid, ${sql.json(input.base as never)}::jsonb,
+          ${sql.json(input.data as never)}::jsonb, ${sql.json(input.answer as never)}::jsonb,
+          ${sql.json({ type: 'answer', questionId: input.questionId } as never)}::jsonb,
+          ${input.newCompany === null ? null : sql.json(input.newCompany as never)}::jsonb,
+          'whatsapp'::field_channel, ${input.messageId}::uuid) as r`;
+      return rows[0]!.r;
     },
     async linkedContactOrgs(phone, country) {
       const rows = await sql<Array<{ org_id: string }>>`

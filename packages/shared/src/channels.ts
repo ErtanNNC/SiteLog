@@ -1,6 +1,7 @@
 import {
   isTwoWaySmsKey,
   messageKeyHasLink,
+  WHATSAPP_REPLY_KEYS,
   type RenderSmsOptions,
   type SmsKey,
   type SmsVars,
@@ -470,7 +471,21 @@ export function deliverableChannels(input: {
  */
 export function smsReplyAllowed(pack: CountryPack, key: ReplySmsKey): boolean {
   if (!pack.twoWaySms) return false;
+  if ((WHATSAPP_REPLY_KEYS as readonly string[]).includes(key)) return false;
   return !messageKeyHasLink(key) || pack.smsLinksAllowed;
+}
+
+/** The channels a reply to an inbound message goes on: the one the message came in on (W2-16). */
+export type ReplyChannel = 'sms' | 'whatsapp';
+
+/**
+ * Whether a reply may answer an inbound message on its channel (W2-16; §9.5, §19 Q26): on SMS
+ * `smsReplyAllowed` (the pack's two-way SMS and links); on WhatsApp always, on every pack: the
+ * person just wrote on WhatsApp, which is two-way and carries links, so the reply goes free-form
+ * inside the 24-hour window their message opened.
+ */
+export function replyAllowed(pack: CountryPack, key: ReplySmsKey, channel: ReplyChannel): boolean {
+  return channel === 'whatsapp' ? true : smsReplyAllowed(pack, key);
 }
 
 /**

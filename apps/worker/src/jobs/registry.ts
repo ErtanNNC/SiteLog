@@ -20,6 +20,7 @@ import { transcribeAudioJob } from './transcribe_audio';
 import { transcribeUploadJob } from './transcribe_upload';
 import type { JobRegistry } from './types';
 import { weeklyDigest } from './weekly_digest';
+import { whatsappAnswerJob } from './whatsapp_answer';
 
 /** One handler per JOB_TYPES entry (§10.1). */
 export const registry: JobRegistry = {
@@ -46,4 +47,5 @@ export const registry: JobRegistry = {
   transcribe_test_clip: transcribeTestClipJob,
   delete_test_clip: deleteTestClipJob,
   apply_correction: applyCorrectionJob,
+  whatsapp_answer: whatsappAnswerJob,
 };

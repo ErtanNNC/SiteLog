@@ -885,3 +885,129 @@ Deno.test(
     assertMatch(h.store.notifications[0]!.body, /\(twilio 30002\)/);
   },
 );
+
+// ── W2-16: inbound WhatsApp (spec §9.5, §19 Q26, Q40, Q85; GAP D49 (2)) ──────────────────────────
+
+const TR_WA_SENDER = '+905320000099';
+
+/** A Twilio WhatsApp form: `whatsapp:` addresses on the same webhook. */
+const wa = (from: string, body: string, extra: Record<string, string> = {}) => ({
+  MessageSid: `SM${Math.random().toString(36).slice(2, 12)}`,
+  AccountSid: 'AC1',
+  From: `whatsapp:${from}`,
+  To: `whatsapp:${TR_WA_SENDER}`,
+  Body: body,
+  NumMedia: '0',
+  ...extra,
+});
+
+function setupWa(): Harness {
+  const h = setup();
+  h.store.countries.find((c) => c.code === 'TR')!.whatsapp_sender_id = TR_WA_SENDER;
+  // Emre's org is a real one here: a WhatsApp message to the real sender reaches it.
+  h.store.reporters.find((r) => r.id === EMRE)!.orgIsDemo = false;
+  return h;
+}
+
+Deno.test(
+  'W2-16: a Twilio WhatsApp message is stored with its channel, keyword on a one-way pack, for the worker',
+  async () => {
+    const h = setupWa();
+    const params = wa('+905321234567', 'HELP');
+    const res = await h.twilio('', params);
+    assertEquals([res.status, await res.text()], [200, EMPTY_TWIML]);
+    const [inbound] = h.store.inbound;
+    assertEquals(
+      [inbound!.channel, inbound!.provider, inbound!.phone_e164, inbound!.reporter_id],
+      ['whatsapp', 'twilio', '+905321234567', EMRE],
+    );
+    // TR SMS is one-way; WhatsApp is two-way on every pack (§19 Q26).
+    assertEquals(inbound!.payload, {
+      to: TR_WA_SENDER,
+      keyword: 'help',
+      pack: 'TR',
+      opt_out_type: null,
+      num_media: 0,
+      media: [],
+    });
+    assertEquals(h.store.jobs, [
+      { id: 1, messageId: inbound!.id, dedupeKey: `sms_inbound:${params.MessageSid}` },
+    ]);
+    assertEquals(h.store.audits.filter((a) => a.action === 'whatsapp.received').length, 1);
+    // A redelivery joins the job; nothing is sent here.
+    await h.twilio('', params);
+    assertEquals([h.store.inbound.length, h.store.jobs.length], [1, 1]);
+    assertEquals(h.messaging.waSent, []);
+  },
+);
+
+Deno.test(
+  'W2-16: a WhatsApp voice note keeps its media (stored, never transcribed, Q85)',
+  async () => {
+    const h = setupWa();
+    await h.twilio(
+      '',
+      wa('+905321234567', '', {
+        NumMedia: '1',
+        MediaUrl0: 'https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/MM1/Media/ME1',
+        MediaContentType0: 'audio/ogg',
+      }),
+    );
+    assertEquals(h.store.inbound[0]!.payload.num_media, 1);
+    assertEquals(h.store.inbound[0]!.payload.media, [
+      {
+        url: 'https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/MM1/Media/ME1',
+        content_type: 'audio/ogg',
+      },
+    ]);
+  },
+);
+
+Deno.test(
+  'W2-16: a WhatsApp sender no pack has, or a wrong signature: nothing is stored',
+  async () => {
+    const h = setupWa();
+    await h.twilio('', { ...wa('+905321234567', 'HELP'), To: 'whatsapp:+15550000000' });
+    assertEquals((await h.twilio('', wa('+905321234567', 'HELP'), { sign: 'forged' })).status, 403);
+    assertEquals(h.store.inbound, []);
+  },
+);
+
+Deno.test(
+  "W2-16: Demo phone's WhatsApp thread: a TR reporter's HELP is answered there in Turkish",
+  async () => {
+    const h = setup();
+    const res = await h.demo({ reporterId: EMRE, body: 'HELP', channel: 'whatsapp' });
+    assertEquals(res.status, 201);
+    const out = (await res.json()) as { keyword: string; replyId: string };
+    assertEquals(out.keyword, 'help');
+    assertEquals(h.store.inbound[0]!.channel, 'whatsapp');
+    const reply = h.messaging.rows.find((r) => r.id === out.replyId)!;
+    assertEquals([reply.channel, reply.provider, reply.copy_key], ['whatsapp', 'console', 'help']);
+    assertMatch(reply.body, /^Demir Yapı A\.Ş\. için SiteLog günlük raporları\. Linkiniz: https:/);
+    assertEquals(h.messaging.sent, []);
+  },
+);
+
+Deno.test(
+  'W2-16: Demo phone WhatsApp STOP revokes the WhatsApp consent only; a "5" goes to whatsapp_answer',
+  async () => {
+    const h = setup();
+    h.store.waConsent.set(EMRE, 'held');
+    const stop = await h.demo({ reporterId: EMRE, body: 'STOP', channel: 'whatsapp' });
+    assertEquals(stop.status, 201);
+    assertEquals(h.store.waConsent.get(EMRE), 'revoked');
+    assertEquals(h.store.reporters.find((r) => r.id === EMRE)!.status, 'active');
+    assertEquals(h.store.notifications, []);
+    assertEquals(h.messaging.rows.at(-1)!.copy_key, 'whatsapp_stop_confirm');
+    const five = await h.demo({ reporterId: EMRE, body: '5', channel: 'whatsapp' });
+    const { messageId } = (await five.json()) as { messageId: string };
+    assertEquals(h.store.answerJobs, [messageId]);
+    // A pack that lists no WhatsApp has no WhatsApp thread.
+    h.store.countries.find((c) => c.code === 'US')!.message_channels = ['push', 'sms'];
+    assertEquals(
+      (await h.demo({ reporterId: MARCO, body: 'HELP', channel: 'whatsapp' })).status,
+      409,
+    );
+  },
+);

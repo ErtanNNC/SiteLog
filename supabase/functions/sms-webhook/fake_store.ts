@@ -40,6 +40,7 @@ export class FakeSmsStore implements SmsWebhookStore {
     snippet: string;
     org_id: string | null;
     status: 'pending';
+    channel?: 'sms' | 'whatsapp';
   }> = [];
   /** `sms_opt_outs` as `phone:country`. */
   phoneOptOuts = new Set<string>();
@@ -54,6 +55,33 @@ export class FakeSmsStore implements SmsWebhookStore {
 
   packBySender(to: string) {
     return Promise.resolve(this.countries.find((c) => c.sms_sender_id === to.trim()) ?? null);
+  }
+
+  packByWhatsappSender(to: string) {
+    return Promise.resolve(this.countries.find((c) => c.whatsapp_sender_id === to.trim()) ?? null);
+  }
+
+  /** W2-16: the `whatsapp_answer` jobs queued, by message id. */
+  answerJobs: string[] = [];
+  /** W2-16: reporters' whatsapp consents (`held` / `revoked`). */
+  waConsent = new Map<string, 'held' | 'revoked'>();
+
+  enqueueWhatsappAnswer(messageId: string) {
+    if (!this.answerJobs.includes(messageId)) this.answerJobs.push(messageId);
+    return Promise.resolve();
+  }
+
+  whatsappConsent(reporterId: string, grant: boolean) {
+    const now = this.waConsent.get(reporterId);
+    if (!grant && now === 'held') {
+      this.waConsent.set(reporterId, 'revoked');
+      return Promise.resolve(true);
+    }
+    if (grant && now === 'revoked') {
+      this.waConsent.set(reporterId, 'held');
+      return Promise.resolve(true);
+    }
+    return Promise.resolve(false);
   }
 
   reportersByPhone(phone: string, country: string, scope: InboundScope) {
@@ -80,7 +108,7 @@ export class FakeSmsStore implements SmsWebhookStore {
         orgId: row.org_id,
         actorType: row.reporter_id ? 'reporter' : 'system',
         actorId: row.reporter_id,
-        action: 'sms.received',
+        action: `${row.channel ?? 'sms'}.received`,
         entity: 'message',
         entityId: row.id,
         diff: { provider: row.provider, keyword: row.payload.keyword, pack: row.payload.pack },
@@ -117,12 +145,13 @@ export class FakeSmsStore implements SmsWebhookStore {
     return Promise.resolve();
   }
 
-  hasPendingUnknown(phone: string, opts?: { excludeMessageId?: string }) {
+  hasPendingUnknown(phone: string, opts?: { excludeMessageId?: string; channel?: string }) {
     return Promise.resolve(
       this.unknown.some(
         (u) =>
           u.phone_e164 === phone &&
           u.status === 'pending' &&
+          (u.channel ?? 'sms') === (opts?.channel ?? 'sms') &&
           u.message_id !== opts?.excludeMessageId,
       ),
     );
@@ -133,6 +162,7 @@ export class FakeSmsStore implements SmsWebhookStore {
     message_id: string;
     snippet: string;
     org_id: string | null;
+    channel?: 'sms' | 'whatsapp';
   }) {
     const existing = this.unknown.find((u) => u.message_id === row.message_id);
     if (existing) return Promise.resolve({ id: existing.id, created: false });

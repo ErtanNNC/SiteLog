@@ -62,13 +62,11 @@ const lower = (locale: SmsLocale, s: string) =>
   s.toLocaleLowerCase(locale === 'tr' ? 'tr-TR' : locale === 'es' ? 'es-US' : 'en-US');
 
 describe('SMS catalog (§9.2)', () => {
-  it('has every key in EN and ES, and in TR every key except the two-way replies to STOP, HELP, CALL, TEXT and unknown numbers', () => {
+  it('has every key in EN, ES and TR (TR two-way texts since W2-16, for WhatsApp)', () => {
     expect(Object.keys(SMS_CATALOGS.en).sort()).toEqual([...SMS_KEYS].sort());
     expect(Object.keys(SMS_CATALOGS.es).sort()).toEqual([...SMS_KEYS].sort());
-    const tr = SMS_KEYS.filter(
-      (k) => !isTwoWaySmsKey(k) || (KEYWORD_REPLY_SMS_KEYS as readonly string[]).includes(k),
-    );
-    expect(Object.keys(SMS_CATALOGS.tr).sort()).toEqual([...tr].sort());
+    expect(Object.keys(SMS_CATALOGS.tr).sort()).toEqual([...SMS_KEYS].sort());
+    expect(KEYWORD_REPLY_SMS_KEYS.length).toBe(3);
     expect([...TWO_WAY_SMS_KEYS]).toEqual([
       'unknown_number',
       'help',
@@ -78,6 +76,8 @@ describe('SMS catalog (§9.2)', () => {
       'day_off_link',
       'edit_preview',
       'edit_unclear',
+      'whatsapp_use_link',
+      'whatsapp_stop_confirm',
     ]);
     // The reply hint is EN and ES only: the TR pack is one-way.
     expect(Object.keys(SMS_REPLY_HINT).sort()).toEqual(['en', 'es']);
@@ -95,7 +95,7 @@ describe('SMS catalog (§9.2)', () => {
     }
   });
 
-  it('lists the 15 keys that carry a link (no SMS on a pack without links, §19 Q24)', () => {
+  it('lists the 16 keys that carry a link (no SMS on a pack without links, §19 Q24)', () => {
     expect([...MESSAGE_KEYS_WITH_LINK].sort()).toEqual(
       [
         'welcome',
@@ -113,6 +113,7 @@ describe('SMS catalog (§9.2)', () => {
         'day_off_link',
         'edit_preview',
         'edit_unclear',
+        'whatsapp_use_link',
       ].sort(),
     );
     for (const key of SMS_KEYS) {
@@ -166,13 +167,13 @@ describe('SMS catalog (§9.2)', () => {
       expect(t.withoutNumber, `${locale}.${key}`).not.toMatch(callWords[locale]);
       checked += 1;
     }
-    // welcome, daily_link, reminder_2, missed_call in EN/ES/TR, help in EN/ES.
-    expect(checked).toBe(14);
+    // welcome, daily_link, reminder_2, missed_call and help in EN/ES/TR.
+    expect(checked).toBe(15);
   });
 
-  it('never asks for a reply in Turkish (one-way sender)', () => {
+  it('never asks for a reply in Turkish on a one-way sender (two-way texts go on WhatsApp)', () => {
     for (const [locale, key, t] of entries()) {
-      if (locale !== 'tr') continue;
+      if (locale !== 'tr' || isTwoWaySmsKey(key)) continue;
       const texts = typeof t === 'string' ? [t] : [t.withNumber, t.withoutNumber];
       for (const text of texts) {
         expect(text, key).not.toMatch(/STOP|HELP|START|yanıt|cevap|reply/i);
@@ -319,7 +320,8 @@ describe('renderSms', () => {
       expect(countSmsSegments(text).default.segments, `es.${key}: "${text}"`).toBe(1);
       checked += 1;
     }
-    expect(checked).toBe(4); // unknown_number, stop_confirm, pref_call_ok, pref_text_ok
+    // unknown_number, stop_confirm, pref_call_ok, pref_text_ok, whatsapp_stop_confirm
+    expect(checked).toBe(5);
   });
 
   it('renders TR with and without a voice number (no TR number yet: §18.2)', () => {
@@ -389,9 +391,9 @@ describe('renderSms', () => {
     ).toBe('Ataşehir bugünkü rapor: x');
   });
 
-  it('refuses two-way keys in Turkish and unknown keys', () => {
-    expect(() => renderSms('help', 'tr' as 'en', { company: 'x', link: 'y' }, TWO_WAY)).toThrow(
-      'SMS "help" exists only for packs with two-way SMS and has no "tr" text',
+  it('refuses two-way keys on a one-way pack, and unknown keys', () => {
+    expect(() => renderSms('help', 'tr', { company: 'x', link: 'y' }, ONE_WAY)).toThrow(
+      'SMS "help" exists only for packs with two-way SMS',
     );
     expect(() => smsTemplate('nope' as SmsKey, 'en', TWO_WAY)).toThrow('Unknown SMS key "nope"');
     expect(() => smsTemplate('constructor' as SmsKey, 'en', TWO_WAY)).toThrow('Unknown SMS key');
@@ -482,14 +484,8 @@ describe('the pack variant: two-way SMS (spec §4.6, §9.2)', () => {
     expect(smsCopyGaps('en', { twoWay: true })).toEqual([]);
     expect(smsCopyGaps('es', { twoWay: true })).toEqual([]);
     expect(smsCopyGaps('tr', { twoWay: false })).toEqual([]);
-    expect(smsCopyGaps('tr', { twoWay: true })).toEqual([
-      'unknown_number',
-      'help',
-      'stop_confirm',
-      'pref_call_ok',
-      'pref_text_ok',
-      'welcome.replyHint',
-    ]);
+    // W2-16: Turkish has the two-way texts (WhatsApp); a two-way TR SMS sender lacks the hint only.
+    expect(smsCopyGaps('tr', { twoWay: true })).toEqual(['welcome.replyHint']);
     const shared = SMS_KEYS.filter((k) => !isTwoWaySmsKey(k));
     expect(smsCopyGaps('de', { twoWay: false })).toEqual(shared);
     expect(smsCopyGaps('constructor', { twoWay: true })).toEqual([
@@ -559,8 +555,8 @@ describe('the pack variant: links in SMS (spec §4.6, §19 Q24)', () => {
       checked += 1;
     }
     // verify_code, weather_headsup, edit_applied, site_paused, unknown_number, stop_confirm,
-    // pref_call_ok, pref_text_ok.
-    expect(checked).toBe(8);
+    // pref_call_ok, pref_text_ok, whatsapp_stop_confirm.
+    expect(checked).toBe(9);
     expect(renderSms('verify_code', 'tr', { code: '482913' }, { ...NO_LINKS, twoWay: false })).toBe(
       smsTemplate('verify_code', 'tr', ONE_WAY_NO_NUMBER).replace('{code}', '482913'),
     );

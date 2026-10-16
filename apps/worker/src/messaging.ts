@@ -73,7 +73,7 @@ export function workerInboundStore(db: Db): InboundSmsStore {
     reportersByPhone: (phone, country, scope) => db.listInboundReporters(phone, country, scope),
     updateReporter: (id, patch) => db.updateReporter(id, patch),
     hasPendingUnknown: (phone, opts) =>
-      db.hasPendingUnknownContact(phone, 'sms', opts?.excludeMessageId ?? null),
+      db.hasPendingUnknownContact(phone, opts?.channel ?? 'sms', opts?.excludeMessageId ?? null),
     insertUnknownContact: (row) => db.insertSmsUnknownContact(row),
     // The worker handles Twilio texts only (realOnly): real orgs of the pack.
     linkedContactOrgs: (phone, country) => db.linkedContactOrgs(phone, country),
@@ -89,6 +89,17 @@ export function workerInboundStore(db: Db): InboundSmsStore {
         { dedupeKey: jobKeys.smsKeyword(messageId) },
       );
     },
+    // W2-16 (§19 Q26): a WhatsApp text that may answer an open web question.
+    async enqueueWhatsappAnswer(messageId) {
+      await db.enqueueJob(
+        'whatsapp_answer',
+        { messageId },
+        { dedupeKey: jobKeys.whatsappAnswer(messageId) },
+      );
+    },
+    // W2-16 (§19 Q40, Q112): STOP / START on WhatsApp.
+    whatsappConsent: (reporterId, grant, messageId) =>
+      db.inboundWhatsappConsent(reporterId, grant, messageId),
     async notifyOrg(n) {
       await db.notifyOrg(n.orgId, n.kind, n.title, n.body, n.targetPath, null, n.data);
     },

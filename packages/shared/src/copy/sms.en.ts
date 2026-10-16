@@ -55,6 +55,10 @@ export const smsEn: SmsCatalog<SmsKey> = {
   day_off_link: 'Add the details for {site} today: {link}',
   edit_preview: '{weekday}: {change}? Confirm here: {link}',
   edit_unclear: "I couldn't make that change by text. Make it in Past reports: {link}",
+  // W2-16 (spec §19 Q85, Q40): WhatsApp only.
+  whatsapp_use_link: 'Voice notes go through your link: {link}',
+  whatsapp_stop_confirm:
+    "You won't get more WhatsApp messages from SiteLog. Reply START to resume.",
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (§9.2), appended by `renderSms`. */

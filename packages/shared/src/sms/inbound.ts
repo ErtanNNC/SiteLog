@@ -1,4 +1,4 @@
-import { smsReplyAllowed } from '../channels.ts';
+import { MessageSendError, replyAllowed, type ReplyChannel } from '../channels.ts';
 import type { TwoWaySmsKey } from '../copy/sms.ts';
 import type { CountryPack } from '../countries.ts';
 import type { ContactPref, ReporterStatus } from '../enums.ts';
@@ -14,7 +14,8 @@ import {
   type SmsKeyword,
   type SmsReportKeyword,
 } from './keywords.ts';
-import { SmsSendError } from './transports.ts';
+import { jobKeys } from '../schemas/jobs.ts';
+import { localDate } from '../schedule/day.ts';
 
 /**
  * What SiteLog does with an inbound text once it is stored (§9.5, F13, F15; W1-08): the plan of
@@ -83,10 +84,14 @@ export interface InboundSmsStore {
     },
   ): Promise<void>;
   /**
-   * A pending `unknown_contacts` row of this phone (channel 'sms') exists, other than the one the
-   * text `excludeMessageId` created (a retry of that text still sends its F13 auto-reply).
+   * A pending `unknown_contacts` row of this phone on the message's channel (default 'sms') exists,
+   * other than the one the text `excludeMessageId` created (a retry of that text still sends its
+   * F13 auto-reply).
    */
-  hasPendingUnknown(phone: E164, opts?: { excludeMessageId?: string }): Promise<boolean>;
+  hasPendingUnknown(
+    phone: E164,
+    opts?: { excludeMessageId?: string; channel?: ReplyChannel },
+  ): Promise<boolean>;
   /**
    * The F13 row of this text: inserted once per `message_id`; a retry gets the existing row back.
    * `org_id` is the guessed org (spec §19 Q44, `guessContactOrg`), else null.
@@ -96,6 +101,8 @@ export interface InboundSmsStore {
     message_id: string;
     snippet: string;
     org_id: string | null;
+    /** W2-16: the channel the message came in on (`field_channel`; default 'sms'). */
+    channel?: ReplyChannel;
   }): Promise<{ id: string; created: boolean }>;
   /**
    * Orgs in scope of this pack that linked an earlier contact of this phone (spec §19 Q44: the
@@ -112,6 +119,17 @@ export interface InboundSmsStore {
    * of this text, keyed `jobKeys.smsKeyword(messageId)`, so a re-run queues nothing new.
    */
   enqueueSmsKeyword(messageId: string): Promise<void>;
+  /**
+   * W2-16: queue the worker's `whatsapp_answer` job for a WhatsApp text that may answer an open web
+   * question (`jobKeys.whatsappAnswer(messageId)`).
+   */
+  enqueueWhatsappAnswer(messageId: string): Promise<void>;
+  /**
+   * W2-16: STOP (`grant` false) or START (`grant` true) on WhatsApp: the reporter's `whatsapp`
+   * consent (`inbound_whatsapp_consent()`, audited as the reporter); `changed` false when nothing
+   * was held, or nothing had been given before.
+   */
+  whatsappConsent(reporterId: string, grant: boolean, messageId: string): Promise<boolean>;
   notifyOrg(n: InboundSmsNotification): Promise<void>;
   audit(entry: InboundSmsAudit): Promise<void>;
   /**
@@ -151,6 +169,10 @@ export interface InboundSmsInput {
   text: InboundSmsText;
   pack: CountryPack;
   scope: InboundScope;
+  /** W2-16: the channel the message came in on (default SMS); replies go back on it. */
+  channel?: ReplyChannel;
+  /** W2-16: the media of a WhatsApp message (voice notes, photos; §19 Q85). */
+  numMedia?: number;
   /**
    * Record STOP and START in `sms_opt_outs` (the phone's own opt-out on the pack): the Twilio
    * route only. A Demo phone STOP is a demo org's and never stops a real number.
@@ -169,6 +191,10 @@ export interface InboundSmsResult {
   unknownContact: boolean;
   /** W2-12: the report keyword handed to the worker's `sms_keyword` job, if any. */
   reportKeyword: SmsReportKeyword | null;
+  /** W2-16: the WhatsApp consents STOP or START changed. */
+  consentChanges: Array<{ reporterId: string; grant: boolean }>;
+  /** W2-16: a WhatsApp text handed to the worker's `whatsapp_answer` job. */
+  answer: boolean;
 }
 
 /** §13 "Message undeliverable / opted out": the office hears about a STOP, with what to do. */
@@ -208,6 +234,7 @@ export async function processInboundSms(
 ): Promise<InboundSmsResult> {
   const { store } = deps;
   const { text, pack } = input;
+  const channel: ReplyChannel = input.channel ?? 'sms';
   const reporters = await store.reportersByPhone(text.from, pack.code, input.scope);
   const primary = orderInboundReporters(reporters)[0] ?? null;
   const plan = planInboundSms({
@@ -217,8 +244,13 @@ export async function processInboundSms(
     reporters,
     pendingUnknown: primary
       ? false
-      : await store.hasPendingUnknown(text.from, { excludeMessageId: text.messageId }),
+      : await store.hasPendingUnknown(text.from, {
+          excludeMessageId: text.messageId,
+          ...(channel === 'sms' ? {} : { channel }),
+        }),
     now: deps.now(),
+    channel,
+    numMedia: input.numMedia ?? 0,
   });
   const byId = new Map(reporters.map((r) => [r.id, r]));
 
@@ -257,6 +289,12 @@ export async function processInboundSms(
       if (notice) await store.notifyOrg(notice);
     }
   }
+  // W2-16 (spec §19 Q40): STOP / START on WhatsApp change the whatsapp consent only.
+  const consentChanges: Array<{ reporterId: string; grant: boolean }> = [];
+  for (const change of plan.consentChanges) {
+    if (await store.whatsappConsent(change.reporterId, change.grant, text.messageId))
+      consentChanges.push(change);
+  }
   if (plan.unknownContact) {
     // Spec §19 Q44: the org of the number's history (a disabled reporter here, an earlier
     // contact that org linked) when there is exactly one; else org-less, for SiteLog support.
@@ -269,6 +307,7 @@ export async function processInboundSms(
       message_id: text.messageId,
       snippet: text.body.slice(0, 200),
       org_id: orgId,
+      ...(channel === 'sms' ? {} : { channel }),
     });
     if (contact.created) {
       await store.audit({
@@ -278,7 +317,7 @@ export async function processInboundSms(
         entity: 'unknown_contact',
         entityId: contact.id,
         diff: {
-          channel: 'sms',
+          channel,
           pack: pack.code,
           message_id: text.messageId,
           org_guessed: orgId !== null,
@@ -288,8 +327,11 @@ export async function processInboundSms(
   }
 
   let replyId: string | null = null;
-  if (plan.reply) {
-    const reporter = plan.reply.reporterId ? (byId.get(plan.reply.reporterId) ?? null) : null;
+  const sendReply = async (
+    key: Parameters<typeof replyVars>[1],
+    reporter: InboundReporterRow | null,
+    dedupeKey?: string,
+  ): Promise<string | null> => {
     try {
       const sent = await deps.notifier.reply({
         pack,
@@ -297,20 +339,39 @@ export async function processInboundSms(
         reporterId: reporter?.id ?? null,
         phone: text.from,
         locale: reporter?.locale ?? pack.fieldLocales[0]!,
-        key: plan.reply.key,
-        vars: (await replyVars(deps, plan.reply.key, pack, reporter)) as never,
+        key,
+        vars: (await replyVars(deps, key, pack, reporter, channel)) as never,
+        channel,
+        ...(dedupeKey ? { dedupeKey } : {}),
       });
-      replyId = sent.messageId;
+      return sent.messageId;
     } catch (err) {
-      // A number the provider will not text (e.g. Twilio 21610 after its own STOP handling):
-      // recorded on the reply's row by the Notifier, and the text counts as handled. Anything
-      // else is thrown, so the job retries (its changes above are no-ops the second time).
-      if (!(err instanceof SmsSendError) || err.retryable) throw err;
+      // A number the provider will not text (e.g. Twilio 21610 after its own STOP handling), or a
+      // WhatsApp reply refused for good: recorded on the reply's row by the Notifier, and the
+      // text counts as handled. Anything else is thrown, so the job retries (its changes above
+      // are no-ops the second time).
+      if (!(err instanceof MessageSendError) || err.retryable) throw err;
+      return null;
     }
+  };
+  if (plan.reply) {
+    const reporter = plan.reply.reporterId ? (byId.get(plan.reply.reporterId) ?? null) : null;
+    replyId = await sendReply(plan.reply.key, reporter);
+  }
+  if (plan.mediaReply && primary) {
+    // §19 Q85: once a day per reporter (the pack's default time zone), keyed by the Notifier.
+    const day = localDate(deps.now(), pack.defaultTimezone);
+    replyId = await sendReply(
+      'whatsapp_use_link',
+      primary,
+      jobKeys.whatsappUseLink(primary.id, day),
+    );
   }
   // W2-12: the report keywords are the worker's (EDIT needs the model); queued before the text
   // is marked handled, so a crash in between queues it again under the same key.
   if (plan.reportKeyword) await store.enqueueSmsKeyword(text.messageId);
+  // W2-16 (spec §19 Q26): a WhatsApp text that may answer an open question, the worker's too.
+  if (plan.answer) await store.enqueueWhatsappAnswer(text.messageId);
   await store.markHandled(text.messageId, deps.now().toISOString());
   return {
     keyword: plan.keyword,
@@ -318,6 +379,8 @@ export async function processInboundSms(
     changes: plan.changes,
     unknownContact: plan.unknownContact,
     reportKeyword: plan.reportKeyword,
+    consentChanges,
+    answer: plan.answer,
   };
 }
 
@@ -327,9 +390,10 @@ async function replyVars(
   key: TwoWaySmsKey,
   pack: CountryPack,
   reporter: InboundReporterRow | null,
+  channel: ReplyChannel = 'sms',
 ): Promise<Record<string, string>> {
-  if (key !== 'help' || !reporter) return {};
-  if (!smsReplyAllowed(pack, key)) return {};
+  if ((key !== 'help' && key !== 'whatsapp_use_link') || !reporter) return {};
+  if (!replyAllowed(pack, key, channel)) return {};
   const link = await ensurePersonalLink(
     deps.store.links,
     deps.linkSecret(),
@@ -343,9 +407,15 @@ async function replyVars(
       action: 'field_link.created',
       entity: 'reporter',
       entityId: reporter.id,
-      diff: { kind: 'personal', site_id: null, report_date: null, via: 'sms_help' },
+      diff: {
+        kind: 'personal',
+        site_id: null,
+        report_date: null,
+        via: key === 'help' ? 'sms_help' : 'whatsapp_use_link',
+      },
     });
   }
+  if (key === 'whatsapp_use_link') return { link: fieldLinkUrl(deps.fieldAppUrl(), link.code) };
   return {
     company: reporter.orgName,
     link: fieldLinkUrl(deps.fieldAppUrl(), link.code),

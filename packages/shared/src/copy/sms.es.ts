@@ -61,6 +61,10 @@ export const smsEs: SmsCatalog<SmsKey> = {
   day_off_link: 'Agregue los detalles de {site} de hoy: {link}',
   edit_preview: '{weekday}: {change}? Confírmelo aquí: {link}',
   edit_unclear: 'No pude hacer ese cambio por mensaje. Hágalo en Reportes anteriores: {link}',
+  // W2-16 (spec §19 Q85, Q40): WhatsApp only, for the Q63 review.
+  whatsapp_use_link: 'Las notas de voz van por su enlace: {link}',
+  whatsapp_stop_confirm:
+    'SiteLog deja de enviarle mensajes de WhatsApp. Responda START para reactivarlos.',
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (mirrors `smsReplyHintEn`). */

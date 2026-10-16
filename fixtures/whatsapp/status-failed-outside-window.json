@@ -1,0 +1,13 @@
+{
+  "path": "/status",
+  "params": {
+    "MessageSid": "{{message_sid}}",
+    "MessageStatus": "failed",
+    "ErrorCode": "63016",
+    "ChannelPrefix": "whatsapp",
+    "AccountSid": "AC00000000000000000000000000000000",
+    "To": "whatsapp:{{phone}}",
+    "From": "whatsapp:{{to}}",
+    "ApiVersion": "2010-04-01"
+  }
+}

@@ -53,6 +53,8 @@ export const SMS_KEYS = [
   'day_off_link',
   'edit_preview',
   'edit_unclear',
+  'whatsapp_use_link',
+  'whatsapp_stop_confirm',
 ] as const;
 export type SmsKey = (typeof SMS_KEYS)[number];
 
@@ -66,10 +68,19 @@ export const KEYWORD_REPLY_SMS_KEYS = ['day_off_link', 'edit_preview', 'edit_unc
 export type KeywordReplySmsKey = (typeof KEYWORD_REPLY_SMS_KEYS)[number];
 
 /**
- * What a reply to an inbound text may say (`SmsNotifier.reply`): the two-way keys, and
- * `draft_ready`, the answer to OK (spec §19 Q82: the draft link, never a confirmation).
+ * Replies that exist on WhatsApp only (W2-16): a voice note or photo sent on WhatsApp gets the link
+ * once a day (spec §19 Q85), and STOP on WhatsApp stops WhatsApp only (§19 Q40, the first option),
+ * so its confirmation names WhatsApp. Never sent by SMS (`smsReplyAllowed`).
  */
-export type ReplySmsKey = TwoWaySmsKey | 'draft_ready';
+export const WHATSAPP_REPLY_KEYS = ['whatsapp_use_link', 'whatsapp_stop_confirm'] as const;
+export type WhatsappReplyKey = (typeof WHATSAPP_REPLY_KEYS)[number];
+
+/**
+ * What a reply to an inbound text may say (`SmsNotifier.reply`): the two-way keys, `draft_ready`,
+ * the answer to OK (spec §19 Q82: the draft link, never a confirmation), and `question_ready`, the
+ * question's link again after a WhatsApp answer code could not apply (W2-16, spec §19 Q113).
+ */
+export type ReplySmsKey = TwoWaySmsKey | 'draft_ready' | 'question_ready';
 
 /**
  * Keys sent only on packs with two-way SMS (replies to STOP, HELP, CALL and TEXT, and to an
@@ -83,6 +94,7 @@ export const TWO_WAY_SMS_KEYS = [
   'pref_call_ok',
   'pref_text_ok',
   ...KEYWORD_REPLY_SMS_KEYS,
+  ...WHATSAPP_REPLY_KEYS,
 ] as const;
 export type TwoWaySmsKey = (typeof TWO_WAY_SMS_KEYS)[number];
 /** Keys every pack can send, in every language. */
@@ -116,6 +128,8 @@ export const SMS_VARS = {
   day_off_link: ['site', 'link'],
   edit_preview: ['weekday', 'change', 'link'],
   edit_unclear: ['link'],
+  whatsapp_use_link: ['link'],
+  whatsapp_stop_confirm: [],
 } as const satisfies Record<SmsKey, readonly string[]>;
 
 export type SmsVarName<K extends SmsKey> = (typeof SMS_VARS)[K][number];
@@ -177,17 +191,14 @@ export interface RenderSmsOptions {
 }
 
 /**
- * Two-way keys accept only the languages that have their text (EN, ES); the report keywords'
- * replies (W2-12) every language.
+ * The languages a key has text in: every key in every language since W2-16, which gave the two-way
+ * replies Turkish text for WhatsApp (a TR reporter gets STOP, HELP, CALL and TEXT there, though TR
+ * SMS is one-way).
  */
-export type SmsLocaleFor<K extends SmsKey> = K extends KeywordReplySmsKey
-  ? SmsLocale
-  : K extends TwoWaySmsKey
-    ? 'en' | 'es'
-    : SmsLocale;
+export type SmsLocaleFor<_K extends SmsKey> = SmsLocale;
 
-/** The keys the Turkish catalogue has: the shared ones and the report keywords' replies. */
-export type TrSmsKey = SharedSmsKey | KeywordReplySmsKey;
+/** The keys the Turkish catalogue has: every key (W2-16). */
+export type TrSmsKey = SmsKey;
 
 export const SMS_CATALOGS: {
   en: SmsCatalog<SmsKey>;

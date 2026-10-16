@@ -22,6 +22,7 @@ import {
   type InboundSmsStore,
 } from './inbound.ts';
 import { SmsSendError } from './transports.ts';
+import { createWhatsappRegistration } from '../whatsapp/transport.ts';
 
 /**
  * `processInboundSms` (W1-08): the plan applied to the rows, the phone opt-out, the office
@@ -70,6 +71,8 @@ function harness(
     atomic?: boolean;
     /** Orgs that linked an earlier contact of the phone (spec §19 Q44). */
     linked?: string[];
+    /** W2-16: reporters' whatsapp consents. */
+    waConsent?: Array<[string, 'held' | 'revoked']>;
   } = {},
 ) {
   const reporters = opts.reporters ?? [{ ...reporter(), orgCountry: 'US' }];
@@ -87,9 +90,14 @@ function harness(
     message_id: string;
     snippet: string;
     org_id: string | null;
+    channel?: string;
   }> = [];
   const handled: Array<{ messageId: string; at: string }> = [];
   const keywordJobs: string[] = [];
+  const answerJobs: string[] = [];
+  /** W2-16: the whatsapp consent per reporter: held, revoked (given before), or never given. */
+  const waConsent = new Map<string, 'held' | 'revoked'>(opts.waConsent ?? []);
+  const waForms: URLSearchParams[] = [];
   const links: Array<{ id: string; code_hash: string; reporter_id: string }> = [];
   const rows = new Map<string, OutboundMessageRow>();
   const notifierAudit: NotifierAuditEntry[] = [];
@@ -114,7 +122,12 @@ function harness(
       if ('opted_out_at' in patch) r.optedOutAt = patch.opted_out_at ?? null;
     },
     hasPendingUnknown: async (phone, o) =>
-      unknown.some((u) => u.phone_e164 === phone && u.message_id !== o?.excludeMessageId),
+      unknown.some(
+        (u) =>
+          u.phone_e164 === phone &&
+          u.message_id !== o?.excludeMessageId &&
+          (u.channel ?? 'sms') === (o?.channel ?? 'sms'),
+      ),
     insertUnknownContact: async (row) => {
       const existing = unknown.find((u) => u.message_id === row.message_id);
       if (existing) return { id: existing.id, created: false };
@@ -128,6 +141,15 @@ function harness(
     markHandled: async (messageId, at) => void handled.push({ messageId, at }),
     enqueueSmsKeyword: async (messageId) => {
       if (!keywordJobs.includes(messageId)) keywordJobs.push(messageId);
+    },
+    enqueueWhatsappAnswer: async (messageId) => {
+      if (!answerJobs.includes(messageId)) answerJobs.push(messageId);
+    },
+    whatsappConsent: async (reporterId, grant) => {
+      const now = waConsent.get(reporterId);
+      if (!grant && now === 'held') return (void waConsent.set(reporterId, 'revoked'), true);
+      if (grant && now === 'revoked') return (void waConsent.set(reporterId, 'held'), true);
+      return false;
     },
     notifyOrg: async (nf) => {
       if (faults.notifyOnce) {
@@ -167,7 +189,17 @@ function harness(
   }
   const notifierStore: NotifierStore = {
     loadRecipient: async () => null,
-    listByDedupeKey: async () => [],
+    listByDedupeKey: async (reporterId, key) =>
+      [...rows.values()]
+        .filter((r) => r.reporter_id === reporterId && r.payload?.dedupe_key === key)
+        .map((r) => ({
+          id: r.id,
+          channel: r.channel,
+          status: r.status,
+          provider: r.provider,
+          provider_message_id: r.provider_message_id,
+          error: r.error,
+        })),
     insertMessage: async (row) => void rows.set(row.id, { ...row }),
     updateMessage: async (id, patch) => void Object.assign(rows.get(id)!, patch),
     isPhoneOptedOut: async () => false,
@@ -183,9 +215,26 @@ function harness(
       return { providerId: `${driver}-${sent.length}` };
     },
   });
+  const whatsapp = createWhatsappRegistration({
+    fetch: async (_url, init) => {
+      waForms.push(new URLSearchParams(String(init.body)));
+      return new Response(JSON.stringify({ sid: `SMwa${waForms.length}` }), { status: 201 });
+    },
+    twilio: () => ({ accountSid: 'AC1', authToken: 'tok' }),
+    statusCallbackUrl: null,
+    // The message being answered opened the window.
+    lastInbound: async () => T0.toISOString(),
+    randomUUID: uuid,
+    now: () => T0,
+  });
   const deps: InboundSmsDeps = {
     store,
-    notifier: createNotifier({ store: notifierStore, transport, randomUUID: uuid }),
+    notifier: createNotifier({
+      store: notifierStore,
+      transport,
+      channels: [whatsapp],
+      randomUUID: uuid,
+    }),
     linkSecret: () => SECRET,
     fieldAppUrl: () => 'https://go.sitelog.app',
     now: () => T0,
@@ -200,6 +249,8 @@ function harness(
       applyPhoneOptOut?: boolean;
       optOutType?: string | null;
       messageId?: string;
+      channel?: 'sms' | 'whatsapp';
+      numMedia?: number;
     } = {},
   ) =>
     processInboundSms(deps, {
@@ -212,6 +263,8 @@ function harness(
       pack: over.pack ?? US_LIVE,
       scope: over.scope ?? { realOnly: true },
       applyPhoneOptOut: over.applyPhoneOptOut ?? true,
+      ...(over.channel ? { channel: over.channel } : {}),
+      ...(over.numMedia ? { numMedia: over.numMedia } : {}),
     });
   return {
     run,
@@ -223,6 +276,9 @@ function harness(
     unknown,
     handled,
     keywordJobs,
+    answerJobs,
+    waConsent,
+    waForms,
     links,
     rows,
     sent,
@@ -450,6 +506,8 @@ describe('processInboundSms (W1-08)', () => {
       changes: [],
       unknownContact: false,
       reportKeyword: null,
+      consentChanges: [],
+      answer: false,
     });
     expect(h.reporters[0]!.status).toBe('active');
     expect(h.optOuts.size).toBe(0);
@@ -582,5 +640,106 @@ describe('processInboundSms: the report keywords (W2-12)', () => {
     const tr = await oneWay.run('İŞ YOK', { from: assertE164('+905321234567'), pack: TR_LIVE });
     expect(tr).toMatchObject({ keyword: null, reportKeyword: null });
     expect(oneWay.keywordJobs).toEqual([]);
+  });
+});
+
+describe('processInboundSms on WhatsApp (W2-16; spec §9.5, §19 Q26, Q40, Q85)', () => {
+  const TR_WA = pack('TR', { sms_sender_id: 'SITELOG', whatsapp_sender_id: '+905320000099' });
+  const EMRE_PHONE = assertE164('+905321234567');
+  const emre = (patch: Partial<InboundReporterRow> = {}) => ({
+    ...reporter({
+      id: 'r-emre',
+      phone: EMRE_PHONE,
+      locale: 'tr-TR',
+      orgName: 'Demir Yapı',
+      ...patch,
+    }),
+    orgCountry: 'TR',
+  });
+  const wa = { channel: 'whatsapp' as const, from: EMRE_PHONE, pack: TR_WA };
+
+  it('HELP on a one-way TR pack: answered on WhatsApp, in Turkish, with the link', async () => {
+    const h = harness({ reporters: [emre()] });
+    const out = await h.run('yardım', wa);
+    expect(out.keyword).toBeNull();
+    const help = await h.run('HELP', { ...wa, messageId: 'm-in-2' });
+    expect(help.keyword).toBe('help');
+    expect(h.waForms).toHaveLength(1);
+    expect(h.waForms[0]!.get('To')).toBe('whatsapp:+905321234567');
+    expect(h.waForms[0]!.get('From')).toBe('whatsapp:+905320000099');
+    expect(h.waForms[0]!.get('Body')).toMatch(
+      /^Demir Yapı için SiteLog günlük raporları\. Linkiniz: https:\/\/go\.sitelog\.app\/r\//,
+    );
+    expect([...h.rows.values()].at(-1)).toMatchObject({
+      channel: 'whatsapp',
+      copy_key: 'help',
+      status: 'sent',
+      payload: { whatsapp_mode: 'session' },
+    });
+    expect(h.sent).toEqual([]);
+  });
+
+  it('STOP revokes the whatsapp consent only; texts go on; START gives it back (Q40, Q112)', async () => {
+    const h = harness({ reporters: [emre()], waConsent: [['r-emre', 'held']] });
+    const stop = await h.run('STOP', wa);
+    expect(stop.consentChanges).toEqual([{ reporterId: 'r-emre', grant: false }]);
+    expect(h.waConsent.get('r-emre')).toBe('revoked');
+    expect(h.reporters[0]!.status).toBe('active');
+    expect([...h.optOuts]).toEqual([]);
+    expect(h.notifications).toEqual([]);
+    expect(h.waForms.at(-1)!.get('Body')).toBe(
+      "SiteLog'dan artık WhatsApp mesajı almayacaksınız. Yeniden başlatmak için START yazın.",
+    );
+    const start = await h.run('START', { ...wa, messageId: 'm-in-2' });
+    expect(start.consentChanges).toEqual([{ reporterId: 'r-emre', grant: true }]);
+    expect(h.waConsent.get('r-emre')).toBe('held');
+    expect(h.waForms).toHaveLength(1);
+    // Never a first opt-in: START from someone who never ticked it changes nothing.
+    const never = harness({ reporters: [emre()] });
+    expect((await never.run('START', wa)).consentChanges).toEqual([]);
+  });
+
+  it('CALL and the report keywords work on WhatsApp after an SMS STOP (texts only, Q40)', async () => {
+    const h = harness({ reporters: [emre({ status: 'opted_out' })] });
+    expect((await h.run('CALL', wa)).changes).toEqual([
+      {
+        reporterId: 'r-emre',
+        patch: { contact_pref: 'call' },
+        action: 'reporter.preferences_changed',
+      },
+    ]);
+    expect((await h.run('tamam', { ...wa, messageId: 'm-in-2' })).reportKeyword).toBe('ok');
+    expect(h.keywordJobs).toEqual(['m-in-2']);
+  });
+
+  it('a text that is no keyword goes to whatsapp_answer; on SMS it stays a text (Q26)', async () => {
+    const h = harness({ reporters: [emre()] });
+    expect((await h.run('5', wa)).answer).toBe(true);
+    expect(h.answerJobs).toEqual(['m-in-1']);
+    const sms = harness();
+    expect((await sms.run('5')).answer).toBe(false);
+    expect(sms.answerJobs).toEqual([]);
+  });
+
+  it('a voice note or photo: stored, the link once a day (Q85)', async () => {
+    const h = harness({ reporters: [emre()] });
+    await h.run('', { ...wa, numMedia: 1 });
+    await h.run('', { ...wa, numMedia: 2, messageId: 'm-in-2' });
+    expect(h.waForms).toHaveLength(1);
+    expect(h.waForms[0]!.get('Body')).toMatch(/^Sesli notlar linkinizden gönderilir: https:/);
+    expect([...h.rows.values()][0]!.payload).toMatchObject({
+      dedupe_key: 'whatsapp_use_link:r-emre:2026-10-10',
+    });
+    expect(h.answerJobs).toEqual([]);
+  });
+
+  it('an unknown number: the F13 row on WhatsApp and the reply there, once', async () => {
+    const h = harness({ reporters: [emre()] });
+    const out = await h.run('merhaba', { ...wa, from: assertE164('+905329999999') });
+    expect(out.unknownContact).toBe(true);
+    expect(h.unknown[0]).toMatchObject({ channel: 'whatsapp' });
+    expect(h.waForms[0]!.get('Body')).toBe(
+      "Bu numara SiteLog'da kayıtlı değil. Ofisinizden sizi eklemesini isteyin.",
+    );
   });
 });

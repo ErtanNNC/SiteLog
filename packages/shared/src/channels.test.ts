@@ -13,6 +13,7 @@ import {
   SMS_DRIVERS,
   SMS_ONLY_KEYS,
   smsRenderOptions,
+  replyAllowed,
   smsReplyAllowed,
   smsSendOptionsFor,
   type Notifier,
@@ -25,6 +26,7 @@ import {
   renderSms,
   SMS_KEYS,
   TWO_WAY_SMS_KEYS,
+  WHATSAPP_REPLY_KEYS,
 } from './copy/sms.ts';
 import { SMS_PROVIDERS, toCountryPack, type CountryPack } from './countries.ts';
 import type { CountryRow } from './db/types.ts';
@@ -93,9 +95,13 @@ describe('message channels (§4.5)', () => {
     expect(messageChannelOrder(zz, 'push')).toEqual(['push', 'whatsapp', 'sms']);
     expect(messageChannelOrder(zz, 'whatsapp')).toEqual(['whatsapp', 'push', 'sms']);
     // The pack is the allow-list: a preference it does not offer is ignored.
-    expect(messageChannelOrder(US, 'whatsapp')).toEqual(['push', 'sms']);
-    expect(messageChannelOrder(TR, 'push')).toEqual(['push', 'sms']);
-    expect(messageChannelOrder(US, null)).toEqual(['push', 'sms']);
+    const pushSms = pack('US', { message_channels: ['push', 'sms'] });
+    expect(messageChannelOrder(pushSms, 'whatsapp')).toEqual(['push', 'sms']);
+    // W2-16 (§19 Q19, Q107): the launch orders.
+    expect(messageChannelOrder(US, null)).toEqual(['push', 'sms', 'whatsapp']);
+    expect(messageChannelOrder(TR, null)).toEqual(['push', 'whatsapp', 'sms']);
+    expect(messageChannelOrder(TR, 'sms')).toEqual(['sms', 'push', 'whatsapp']);
+    expect(messageChannelOrder(US, 'whatsapp')).toEqual(['whatsapp', 'push', 'sms']);
   });
 
   it('never ends an order with push: another channel always follows it (§9.3, W2-14)', () => {
@@ -127,7 +133,8 @@ describe('message channels (§4.5)', () => {
   });
 
   it('keeps push out of the Settings preference: it has its own toggle (§19 Q107)', () => {
-    expect(settingsMessageChannels(US)).toEqual(['sms']);
+    expect(settingsMessageChannels(US)).toEqual(['sms', 'whatsapp']);
+    expect(settingsMessageChannels(TR)).toEqual(['whatsapp', 'sms']);
     expect(
       settingsMessageChannels(
         pack('US', { message_channels: ['push', 'whatsapp', 'sms'] }),
@@ -275,7 +282,15 @@ describe('deliverableChannels (§4.5)', () => {
 
 describe('smsReplyAllowed: the two-way replies (§9.5, F13, F15)', () => {
   it('answers HELP, STOP and an unknown sender on a two-way pack only, whatever the driver', () => {
+    // W2-16: the WhatsApp-only replies never go by SMS, and every reply may go on WhatsApp.
+    for (const key of WHATSAPP_REPLY_KEYS) {
+      expect(smsReplyAllowed(US_LIVE, key), key).toBe(false);
+      expect(replyAllowed(TR, key, 'whatsapp'), key).toBe(true);
+    }
+    expect(replyAllowed(TR, 'help', 'whatsapp')).toBe(true);
+    expect(replyAllowed(TR, 'help', 'sms')).toBe(false);
     for (const key of TWO_WAY_SMS_KEYS) {
+      if ((WHATSAPP_REPLY_KEYS as readonly string[]).includes(key)) continue;
       expect(smsReplyAllowed(US, key), key).toBe(true);
       expect(smsReplyAllowed(US_LIVE, key), key).toBe(true);
       expect(smsReplyAllowed(TR, key), key).toBe(false);

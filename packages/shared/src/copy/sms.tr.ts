@@ -48,6 +48,23 @@ export const smsTr: SmsCatalog<TrSmsKey> = {
   day_off_link: '{site} için bugünün ayrıntılarını ekleyin: {link}',
   edit_preview: '{weekday}: {change}? Buradan onaylayın: {link}',
   edit_unclear: 'Bu değişikliği mesajla yapamadım. Geçmiş raporlardan yapın: {link}',
+  // W2-16 (spec §19 Q111): the two-way replies in Turkish, sent on WhatsApp (TR SMS is one-way);
+  // for the Q63 review.
+  unknown_number: "Bu numara SiteLog'da kayıtlı değil. Ofisinizden sizi eklemesini isteyin.",
+  help: {
+    withNumber:
+      '{company} için SiteLog günlük raporları. Linkiniz: {link} - {number} numarayı arayın - Değiştirmek için CALL ya da TEXT yazın - Durdurmak için STOP yazın.',
+    withoutNumber:
+      '{company} için SiteLog günlük raporları. Linkiniz: {link} - Değiştirmek için CALL ya da TEXT yazın - Durdurmak için STOP yazın.',
+  },
+  stop_confirm: "SiteLog'dan artık mesaj almayacaksınız. Yeniden başlatmak için START yazın.",
+  pref_call_ok: 'Tamam, günlük raporunuz artık telefonla. Linke geçmek için TEXT yazın.',
+  pref_text_ok:
+    'Tamam, günlük raporunuz artık mesajla gelen linkle. Aramaya geçmek için CALL yazın.',
+  // W2-16 (spec §19 Q85, Q40): WhatsApp only.
+  whatsapp_use_link: 'Sesli notlar linkinizden gönderilir: {link}',
+  whatsapp_stop_confirm:
+    "SiteLog'dan artık WhatsApp mesajı almayacaksınız. Yeniden başlatmak için START yazın.",
 };
 
 /**
