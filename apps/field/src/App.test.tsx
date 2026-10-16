@@ -2,7 +2,6 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
 import { i18n } from './i18n/i18n';
-import { PLACEHOLDER_ROUTES } from './routes/paths';
 import { renderApp } from './test/render';
 
 // The date line uses the phone's time zone; pin it so the test does not depend on the machine's
@@ -13,29 +12,29 @@ describe('field app shell (W1-04)', () => {
   afterEach(() => vi.useRealTimers());
 
   it.each(['en', 'es', 'tr'] as const)(
-    'renders the M6 routes as placeholders in %s',
+    'renders the expired screen with no link to send in %s (W2-03)',
     async (lng) => {
       await act(() => i18n.changeLanguage(lng));
       const copy = UI_RESOURCES[lng].field;
       expect(document.documentElement.lang).toBe(lng);
-      for (const route of PLACEHOLDER_ROUTES) {
-        const { unmount } = renderApp(route.example, { session: null });
-        const title = copy.routes[route.screen];
-        expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument();
-        expect(screen.getByText(copy.placeholderBody)).toBeInTheDocument();
-        expect(screen.getByRole('banner')).toHaveTextContent('SiteLog');
-        expect(document.title).toBe(`${title} · SiteLog`);
-        unmount();
-      }
+      const { unmount } = renderApp('/expired', { session: null });
+      expect(
+        screen.getByRole('heading', { level: 1, name: copy.expired.title }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(copy.expired.noCode)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: copy.expired.send })).toBeNull();
+      expect(screen.getByRole('banner')).toHaveTextContent('SiteLog');
+      expect(document.title).toBe(`${copy.expired.title} · SiteLog`);
+      unmount();
     },
   );
 
-  it('shows today in the date line style of the app’s language on a placeholder (Field-03, Field-10)', async () => {
+  it('shows today in the date line style of the app’s language before a link (Field-03, Field-10)', async () => {
     vi.useFakeTimers({ now: new Date('2026-10-09T15:00:00Z'), toFake: ['Date'] });
     const expected = { en: 'FRI, OCT 9', es: 'VIE, 9 OCT', tr: 'CUMA, 9 EKİM' } as const;
     for (const lng of ['en', 'es', 'tr'] as const) {
       await act(() => i18n.changeLanguage(lng));
-      const { unmount } = renderApp('/history', { session: null });
+      const { unmount } = renderApp('/expired', { session: null });
       const time = screen.getByText(expected[lng]);
       expect(time.tagName).toBe('TIME');
       expect(time).toHaveAttribute('datetime', '2026-10-09');

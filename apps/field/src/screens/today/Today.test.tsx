@@ -183,7 +183,7 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
 
   it.each([
     [410, 'link_revoked', 'Link no longer valid'],
-    [410, 'link_expired', 'Link expired'],
+    [410, 'link_expired', 'This link has expired'],
     [403, 'reporter_disabled', 'Account paused'],
   ] as const)(
     'explains a link refused with %s %s through the link flow, not as a lost signal',

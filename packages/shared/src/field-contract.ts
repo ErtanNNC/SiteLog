@@ -56,6 +56,11 @@ export const FIELD_RATE_LIMITS = {
   device: { limit: 30, windowSeconds: 60 },
   codeSend: { limit: 5, windowSeconds: 60 * 60 },
   codeVerify: { limit: 5, windowSeconds: 60 * 60 },
+  /**
+   * F16 "Send me today's link" (W2-03): 3 a day per expired link (a window of 24 h from its first
+   * request), besides the device's 30 a minute when the phone sends a device cookie.
+   */
+  expiredLink: { limit: 3, windowSeconds: 24 * 60 * 60 },
 } as const;
 
 /** `history`: the last 14 days (F10 "Past reports"), in each site's time zone. */
@@ -135,6 +140,7 @@ export const FIELD_API_ERRORS = [
   'question_closed',
   'answer_not_accepted',
   'channel_not_offered',
+  'link_not_expired',
   'rate_limited',
   'internal',
 ] as const;
@@ -399,8 +405,37 @@ export interface HistoryResponse {
     date: string;
     filedAt: string | null;
     currentVersion: number;
+    /** `reports.is_late` (filed after its deadline, or a late clip): the list's Late badge. */
+    isLate: boolean;
   }[];
 }
+
+/**
+ * Why `POST expired/daily-link` sent nothing (F16; W2-03): the site is paused (`site_paused`, the
+ * wording of the SMS key of that name), no longer active or no longer the reporter's
+ * (`site_inactive`), today is not one of the org's working days (`not_working_day`), or the
+ * Notifier skipped the message (`no_consent`, `opted_out`, `no_channel`).
+ */
+export const EXPIRED_LINK_NOT_SENT = [
+  'site_paused',
+  'site_inactive',
+  'not_working_day',
+  'no_consent',
+  'opted_out',
+  'no_channel',
+] as const;
+export type ExpiredLinkNotSent = (typeof EXPIRED_LINK_NOT_SENT)[number];
+
+/**
+ * `POST expired/daily-link {code}` (F16 "Send me today's link"; W2-03): today's daily link of the
+ * expired link's site, sent to the reporter's phone on file through the Notifier. Only for an
+ * expired daily link: an unknown code is 404 `link_not_found`, a revoked one 410 `link_revoked`, a
+ * live or personal one 409 `link_not_expired` (what `resolve` already tells), a disabled reporter
+ * 403 `reporter_disabled`; 429 `rate_limited` after `FIELD_RATE_LIMITS.expiredLink`. The answer
+ * never holds the new link.
+ */
+export type ExpiredLinkResponse =
+  { sent: true; channel: MessageChannel } | { sent: false; reason: ExpiredLinkNotSent };
 
 /** One consent as Settings shows it (F15): given at least once; `held` while not revoked. */
 export interface SettingsConsent {

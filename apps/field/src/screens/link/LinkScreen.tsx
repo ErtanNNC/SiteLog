@@ -12,17 +12,18 @@ import { fieldLanguageOf } from '@/i18n/language';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { sessionFromResolve, type FieldSession } from '@/session/session';
 import { useSession } from '@/session/useSession';
+import type { ExpiredState } from '@/screens/expired/Expired';
 import { DeviceCheck } from './DeviceCheck';
 import { Welcome } from './Welcome';
 
-type LinkErrorKey = 'notFound' | 'expired' | 'revoked' | 'disabled';
+type LinkErrorKey = 'notFound' | 'revoked' | 'disabled';
 type Phase =
   | { kind: 'resolving' }
   | { kind: 'device'; session: FieldSession }
   | { kind: 'welcome'; session: FieldSession }
   | { kind: 'error'; key: LinkErrorKey | 'failed' };
 
-function linkError(err: unknown): LinkErrorKey | 'failed' {
+function linkError(err: unknown): LinkErrorKey | 'expired' | 'failed' {
   switch (apiErrorCode(err)) {
     case 'link_not_found':
     case 'invalid_request':
@@ -79,10 +80,14 @@ export function LinkScreen() {
     } catch (err) {
       const key = linkError(err);
       if (key === 'expired') {
-        // The Expired screen's language is the reporter's (the body carries it, spec §9.3).
+        // The Expired screen (F16) in the reporter's language (the body carries it, spec §9.3),
+        // with the code for "Send me today's link" and the pack's voice number.
         const body = apiErrorBody(err) as LinkExpiredBody | null;
         const lang = fieldLanguageOf(body?.locale);
         if (lang && i18n.resolvedLanguage !== lang) void i18n.changeLanguage(lang);
+        const state: ExpiredState = { code, country: body?.country ?? null };
+        navigate('/expired', { replace: true, state });
+        return;
       }
       setPhase({ kind: 'error', key });
     }

@@ -133,6 +133,12 @@ export const PreferencesRequestSchema = z
  */
 export const ConsentRevokeRequestSchema = z.strictObject({ type: z.enum(CONSENT_TYPES) });
 
+/**
+ * `POST expired/daily-link` (F16 "Send me today's link"; W2-03): the expired daily link's code in
+ * the body, as `resolve` takes it (the link no longer authenticates anything).
+ */
+export const ExpiredLinkRequestSchema = ResolveRequestSchema;
+
 export type ResolveRequest = z.infer<typeof ResolveRequestSchema>;
 export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 export type ConsentRequest = z.infer<typeof ConsentRequestSchema>;
@@ -142,3 +148,4 @@ export type AnswerRequest = z.infer<typeof AnswerRequestSchema>;
 export type DayStatusRequest = z.infer<typeof DayStatusRequestSchema>;
 export type PreferencesRequest = z.infer<typeof PreferencesRequestSchema>;
 export type ConsentRevokeRequest = z.infer<typeof ConsentRevokeRequestSchema>;
+export type ExpiredLinkRequest = z.infer<typeof ExpiredLinkRequestSchema>;

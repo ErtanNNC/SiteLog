@@ -2,7 +2,7 @@ import { optionalEnv, requireEnv } from '../_shared/env.ts';
 import { edgeNotifier } from '../_shared/messaging.ts';
 import { adminClient } from '../_shared/supabase.ts';
 import { createFieldApp } from './app.ts';
-import { notifierCodeSender } from './code_sender.ts';
+import { notifierCodeSender, notifierDailyLinkSender } from './code_sender.ts';
 import { fieldOrigins } from './logic.ts';
 import { supabaseFieldStore } from './store_supabase.ts';
 
@@ -18,10 +18,18 @@ let app: ReturnType<typeof createFieldApp> | null = null;
 function fieldApp() {
   if (!app) {
     const admin = adminClient();
+    const notifier = edgeNotifier(admin);
     app = createFieldApp({
       store: supabaseFieldStore(admin),
       // The Notifier (spec §4.5): the pack's SMS driver, console for demo orgs and unset senders.
-      sendVerifyCode: notifierCodeSender(edgeNotifier(admin)),
+      sendVerifyCode: notifierCodeSender(notifier),
+      // F16 "Send me today's link" (W2-03): the reporter's channel order.
+      sendDailyLink: notifierDailyLinkSender(notifier),
+      fieldAppUrl: () => requireEnv('FIELD_APP_URL'),
+      dailyLinkTtlHours: () => {
+        const raw = optionalEnv('DAILY_LINK_TTL_HOURS');
+        return raw ? Number(raw) : undefined;
+      },
       linkSigningSecret: () => requireEnv('LINK_SIGNING_SECRET'),
       allowedOrigins: () =>
         fieldOrigins(optionalEnv('FIELD_APP_URL'), optionalEnv('CORS_EXTRA_ORIGINS')),

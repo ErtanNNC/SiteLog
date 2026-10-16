@@ -279,7 +279,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
     expect(
       await screen.findByRole('heading', {
         level: 1,
-        name: UI_RESOURCES.tr.field.link.expired.title,
+        name: UI_RESOURCES.tr.field.expired.title,
       }),
     ).toBeInTheDocument();
     await act(() => i18n.changeLanguage('en'));

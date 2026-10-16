@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
 import { expectFieldScreen, expectNoAxeViolations } from './support/checks.ts';
+import type { HistoryResponse, ReportView } from '@sitelog/shared/field-contract.ts';
 import {
   demir,
   installFakeFieldApi,
@@ -26,6 +27,9 @@ import {
  * - Settings (F15, W2-02) in EN, ES and TR: the preference, texts off, the recording sheet, sign
  *   out back to the device check; in EN the language switch and recording off back to the consent,
  *   and the screen at 1440 px.
+ * - Past reports and the expired link (F10, F16; W2-03) in EN, ES and TR; the two-site reporter
+ *   (F14: the nearest deadline first, the switcher, a daily link of the other site) in EN; Past
+ *   reports at 1440 px.
  * The same flow against the real field-api is `e2e/supabase/`.
  */
 
@@ -542,7 +546,7 @@ for (const run of RUNS) {
             error: 'link_expired',
             extra: { locale: market.reporter.locale, country: market.country },
           },
-          title: field.link.expired.title,
+          title: field.expired.title,
         },
         { refusal: { status: 500, error: 'internal' }, title: common.errorTitle },
       ];
@@ -570,3 +574,189 @@ for (const run of RUNS) {
     });
   });
 }
+
+const PIER_9 = '3c1d2e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
+const PAST_ID = '7d2f4c1e-0000-4000-8000-000000000187';
+
+/** Two past reports: one filed late at the market's site, one awaiting confirmation at Pier 9. */
+function pastReports(market: Market): {
+  history: HistoryResponse['reports'];
+  reports: Record<string, ReportView>;
+} {
+  const filed: ReportView = {
+    id: PAST_ID,
+    reportNo: 'RL-2041-0187',
+    status: 'filed',
+    siteId: market.site.id,
+    siteName: market.site.name,
+    date: '2026-10-08',
+    channel: 'web',
+    currentVersion: 2,
+    needsReview: false,
+    filedAt: '2026-10-08T22:44:00.000Z',
+    confirmedAt: '2026-10-08T22:43:00.000Z',
+    question: null,
+    data: { ...market.draft, reportDate: '2026-10-08' },
+    draftRev: 1,
+    progress: { voiceNotes: 1, transcribed: 1, photos: 0 },
+    pdfUrl: '/__storage/pdfs/RL-2041-0187_v2.pdf?token=e2e',
+  };
+  return {
+    history: [
+      {
+        id: 'b3a1c2d4-0000-4000-8000-000000000012',
+        reportNo: 'P9-3007-0012',
+        status: 'awaiting_confirmation',
+        siteId: PIER_9,
+        siteName: 'Pier 9',
+        date: '2026-10-09',
+        filedAt: null,
+        currentVersion: 1,
+        isLate: false,
+      },
+      {
+        id: PAST_ID,
+        reportNo: 'RL-2041-0187',
+        status: 'filed',
+        siteId: market.site.id,
+        siteName: market.site.name,
+        date: '2026-10-08',
+        filedAt: '2026-10-08T22:44:00.000Z',
+        currentVersion: 2,
+        isLate: true,
+      },
+    ],
+    reports: { [PAST_ID]: filed },
+  };
+}
+
+for (const run of RUNS) {
+  test.describe(`Past reports and the expired link (W2-03) in ${run.lang}`, () => {
+    test.use({ locale: run.locale });
+
+    test('Today → Past reports → one report, read-only with its PDF', async ({ page }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const market = run.market();
+      const past = pastReports(market);
+      await installFakeFieldApi(page, market, {
+        verified: true,
+        consented: true,
+        moreSites: [{ ...market.site, id: PIER_9, name: 'Pier 9' }],
+        ...past,
+      });
+      await page.goto(`/r/${CODE}`);
+      await page.getByRole('link', { name: field.today.pastReports }).click();
+      await expect(page).toHaveURL(/\/history$/);
+      await expect(
+        page.getByRole('heading', { level: 1, name: field.routes.history }),
+      ).toBeFocused();
+      await expect(page.getByText(field.history.status.awaiting_confirmation)).toBeVisible();
+      await expect(page.getByText(field.history.late, { exact: true })).toBeVisible();
+      await expectFieldScreen(page);
+
+      await page.getByRole('link', { name: /RL-2041-0187/ }).click();
+      await expect(page).toHaveURL(new RegExp(`/history/${PAST_ID}$`));
+      await expect(page.getByRole('heading', { level: 1, name: 'RL-2041-0187' })).toBeVisible();
+      await expect(page.getByText(field.history.status.filed)).toBeVisible();
+      await expect(page.getByRole('link', { name: new RegExp(field.filed.pdf) })).toBeVisible();
+      await expect(page.getByText(market.draft.manpower[0]!.companyName)).toBeVisible();
+      // No edit action before W2-11, and no Confirm & send on a filed report.
+      await expect(page.getByRole('button', { name: field.draft.confirm })).toHaveCount(0);
+      await expectFieldScreen(page);
+      await page.getByRole('link', { name: field.history.back }).click();
+      await expect(page).toHaveURL(/\/history$/);
+    });
+
+    test('an expired daily link sends today’s link to the phone on file', async ({ page }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const market = run.market();
+      const api = await installFakeFieldApi(page, market, {
+        resolveError: {
+          status: 410,
+          error: 'link_expired',
+          extra: { locale: market.reporter.locale, country: market.country },
+        },
+      });
+      await page.goto(`/r/${CODE}`);
+      await expect(page).toHaveURL(/\/expired$/);
+      await expect(
+        page.getByRole('heading', { level: 1, name: field.expired.title }),
+      ).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('lang', run.lang);
+      await expectFieldScreen(page);
+      await page.getByRole('button', { name: field.expired.send }).click();
+      await expect(page.getByRole('status').filter({ hasText: field.expired.sent })).toBeVisible();
+      expect(api.calls.find((c) => c.path === 'expired/daily-link')!.body).toEqual({ code: CODE });
+      await expectFieldScreen(page);
+
+      // A paused site says so instead (the reason, never a link).
+      api.options.expiredAnswer = { sent: false, reason: 'site_paused' };
+      await page.goto(`/r/${CODE}`);
+      await page.getByRole('button', { name: field.expired.send }).click();
+      await expect(page.getByText(field.expired.reasons.site_paused)).toBeVisible();
+    });
+  });
+}
+
+test.describe('a two-site reporter (F14, W2-03)', () => {
+  test.use({ locale: 'en-US' });
+
+  test('nearest deadline first, the switcher, and a daily link opening its own site', async ({
+    page,
+  }) => {
+    const field = UI_RESOURCES.en.field;
+    const market = kestrel();
+    const pier: Market['site'] = { ...market.site, id: PIER_9, name: 'Pier 9' };
+    // Pier 9's deadline is the nearer one from now.
+    const deadlines = {
+      [market.site.id]: new Date(Date.now() + 5 * 3_600_000).toISOString(),
+      [PIER_9]: new Date(Date.now() + 1 * 3_600_000).toISOString(),
+    };
+    const api = await installFakeFieldApi(page, market, {
+      verified: true,
+      consented: true,
+      moreSites: [pier],
+      deadlines,
+    });
+    await page.goto(`/r/${CODE}`);
+    const pierSwitcher = page.getByRole('button', { name: `Pier 9, ${field.today.changeSite}` });
+    await expect(pierSwitcher).toBeVisible();
+    await expectFieldScreen(page);
+
+    await pierSwitcher.click();
+    await page
+      .getByRole('dialog', { name: field.today.siteSheetTitle })
+      .getByRole('button', { name: market.site.name })
+      .click();
+    await expect(
+      page.getByRole('button', { name: `${market.site.name}, ${field.today.changeSite}` }),
+    ).toBeVisible();
+    expect(api.calls.some((c) => c.path === 'today' && c.headers['x-link-code'] === CODE)).toBe(
+      true,
+    );
+
+    // The other site's daily link opens that site, with no switcher (a daily link names one site).
+    api.options.dailyLinkSite = market.site.id;
+    await page.goto('/r/D4ILY2');
+    await expect(page.getByText(market.site.name)).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: new RegExp(field.today.changeSite) }),
+    ).toHaveCount(0);
+  });
+});
+
+test.describe('Past reports at 1440 px (W2-03)', () => {
+  test('works at 1440 px too', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const market = kestrel();
+    await installFakeFieldApi(page, market, {
+      verified: true,
+      consented: true,
+      ...pastReports(market),
+    });
+    await page.goto('/r/K7Q2MX');
+    await page.getByRole('link', { name: UI_RESOURCES.en.field.today.pastReports }).click();
+    await expect(page.getByText('RL-2041-0187')).toBeVisible();
+    await expectFieldScreen(page);
+  });
+});

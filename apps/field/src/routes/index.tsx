@@ -1,12 +1,14 @@
 import { Navigate, Route, Routes } from 'react-router';
+import { Expired } from '@/screens/expired/Expired';
+import { History } from '@/screens/history/History';
+import { HistoryReport } from '@/screens/history/HistoryReport';
 import { LinkScreen } from '@/screens/link/LinkScreen';
 import { ReportScreen } from '@/screens/report/ReportScreen';
 import { Record } from '@/screens/record/Record';
 import { Settings } from '@/screens/settings/Settings';
 import { Today } from '@/screens/today/Today';
 import { NotFound } from './NotFound';
-import { Placeholder } from './Placeholder';
-import { HOME_PATH, PLACEHOLDER_ROUTES } from './paths';
+import { HOME_PATH } from './paths';
 
 /** The §9.3 route map. `/` (the manifest's start_url) opens Today. */
 export function FieldRoutes() {
@@ -18,10 +20,10 @@ export function FieldRoutes() {
       <Route path="/today" element={<Today />} />
       <Route path="/record" element={<Record />} />
       <Route path="/report/:id" element={<ReportScreen />} />
+      <Route path="/history" element={<History />} />
+      <Route path="/history/:id" element={<HistoryReport />} />
       <Route path="/settings" element={<Settings />} />
-      {PLACEHOLDER_ROUTES.map((route) => (
-        <Route key={route.path} path={route.path} element={<Placeholder screen={route.screen} />} />
-      ))}
+      <Route path="/expired" element={<Expired />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

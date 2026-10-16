@@ -1,11 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
-import { PLACEHOLDER_ROUTES } from '../src/routes/paths.ts';
 import { expectFieldScreen } from './support/checks.ts';
 
 /**
- * Smoke test of the field app shell (production build, 390 px phone): the §9.3 routes still built
- * as placeholders (M6) render in EN, ES and TR with the Field-03 header, `<html lang>` follows the
+ * Smoke test of the field app shell (production build, 390 px phone): the expired-link screen
+ * opened with no link (W2-03) renders in EN, ES and TR with the Field-03 header, `<html lang>` follows the
  * phone's language, Today without a stored link asks for the SMS link, axe finds no WCAG 2.2 AA
  * violation and nothing scrolls sideways. Then the PWA basics: manifest, icons and the service
  * worker. The W1-09 screens themselves are `screens.spec.ts`.
@@ -21,32 +20,30 @@ const LANGUAGES = [
 ] as const;
 
 for (const { lang, locale, timezoneId, date } of LANGUAGES) {
-  test.describe(`placeholders in ${lang} (${locale})`, () => {
+  test.describe(`the shell in ${lang} (${locale})`, () => {
     test.use({ locale, timezoneId });
 
-    for (const route of PLACEHOLDER_ROUTES) {
-      test(`${route.path} renders at 390 px`, async ({ page }) => {
-        const copy = UI_RESOURCES[lang];
-        const title = copy.field.routes[route.screen];
-        await page.clock.setFixedTime(NOW);
-        await page.goto(route.example);
+    test('/expired with no link renders at 390 px', async ({ page }) => {
+      const copy = UI_RESOURCES[lang];
+      const title = copy.field.expired.title;
+      await page.clock.setFixedTime(NOW);
+      await page.goto('/expired');
 
-        await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
-        await expect(page.getByText(copy.field.placeholderBody)).toBeVisible();
-        await expect(page.locator('html')).toHaveAttribute('lang', lang);
-        await expect(page).toHaveTitle(`${title} · SiteLog`);
+      await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+      await expect(page.getByText(copy.field.expired.noCode)).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('lang', lang);
+      await expect(page).toHaveTitle(`${title} · SiteLog`);
 
-        // Field-03 / Field-10 header: the mark and the name, on Asphalt; the date line under it.
-        const header = page.getByRole('banner');
-        await expect(header).toContainText('SiteLog');
-        await expect(header.locator('img[src="/brand/logo-mark.svg"]')).toBeVisible();
-        await expect(page.locator('time')).toHaveText(date);
-        await expect(page.locator('time')).toHaveAttribute('datetime', '2026-10-09');
-        await expect(page.getByRole('link', { name: copy.field.routes.settings })).toHaveCount(0);
+      // Field-03 / Field-10 header: the mark and the name, on Asphalt; the date line under it.
+      const header = page.getByRole('banner');
+      await expect(header).toContainText('SiteLog');
+      await expect(header.locator('img[src="/brand/logo-mark.svg"]')).toBeVisible();
+      await expect(page.locator('time')).toHaveText(date);
+      await expect(page.locator('time')).toHaveAttribute('datetime', '2026-10-09');
+      await expect(page.getByRole('link', { name: copy.field.routes.settings })).toHaveCount(0);
 
-        await expectFieldScreen(page);
-      });
-    }
+      await expectFieldScreen(page);
+    });
 
     test('Today without a stored link asks for the one in the text message', async ({ page }) => {
       const copy = UI_RESOURCES[lang].field;

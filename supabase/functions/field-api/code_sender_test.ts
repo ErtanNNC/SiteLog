@@ -10,7 +10,7 @@ import {
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { fakeMessaging } from '../_shared/fake_messaging.ts';
 import type { VerifyCodeMessage } from './app.ts';
-import { notifierCodeSender } from './code_sender.ts';
+import { notifierCodeSender, notifierDailyLinkSender, recipientOf } from './code_sender.ts';
 
 /** `device/send-code` through the Notifier (spec §4.5, §19 Q25; W1-08). */
 
@@ -157,3 +157,45 @@ Deno.test('an unreachable number is no_channel; other send failures are thrown',
     notifierCodeSender(outage.notifier)(message({}, { isDemo: false, sender: '+18885550142' })),
   );
 });
+
+Deno.test(
+  "F16's daily_link (W2-03): the reporter's order with consent, once per key, unreachable = no_channel",
+  async () => {
+    const m = fakeMessaging();
+    const send = notifierDailyLinkSender(m.notifier);
+    const daily = {
+      reporterId: 'r',
+      vars: { site: 'Riverside', link: 'https://go.sitelog.test/r/ABCDEF' },
+      dedupeKey: 'expired_daily_link:l1:2026-10-09',
+    };
+    // No SMS consent: skipped by the Notifier (it audits the skip).
+    m.recipients.set('r', recipientOf(message({ status: 'active' })));
+    assertEquals(await send(daily), { channel: null, reason: 'no_consent' });
+    m.recipients.set('r', recipientOf(message({ status: 'active' }, { held: ['sms'] })));
+    assertEquals((await send(daily)).channel, 'sms');
+    assertEquals((await send(daily)).channel, 'sms');
+    assertEquals(
+      m.sent.filter((x) => x.body.includes('/r/ABCDEF')).length,
+      1,
+      'one text per dedupe key',
+    );
+    const failing = fakeMessaging({
+      fail: new SmsSendError('twilio 400 21614', {
+        driver: 'twilio',
+        retryable: false,
+        undeliverable: true,
+        code: '21614',
+      }),
+    });
+    failing.recipients.set(
+      'r',
+      recipientOf(
+        message({ status: 'active' }, { held: ['sms'], isDemo: false, sender: '+18885550142' }),
+      ),
+    );
+    assertEquals(await notifierDailyLinkSender(failing.notifier)(daily), {
+      channel: null,
+      reason: 'no_channel',
+    });
+  },
+);

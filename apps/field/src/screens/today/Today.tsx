@@ -6,6 +6,7 @@ import { formatDate, formatPhone, formatTimeInTz } from '@sitelog/shared/format.
 import { apiErrorCode } from '@/api/field';
 import { useApi } from '@/api/useApi';
 import { OutlineButton, QuietButton, SolidButton } from '@/components/Buttons';
+import { buttonClasses } from '@/components/buttonStyles';
 import { DateLine } from '@/components/DateLine';
 import { Header } from '@/components/Header';
 import { OfflineBanner } from '@/components/OfflineBanner';
@@ -515,6 +516,11 @@ function TodayLoaded({
           ) : null}
         </>
       )}
+
+      {/* F10 / the `filed` text "Open your link → Past reports" (W2-03; no artboard places it). */}
+      <Link to="/history" className={buttonClasses('text')}>
+        {t('today.pastReports')}
+      </Link>
 
       <SiteSheet
         open={sheet === 'site'}

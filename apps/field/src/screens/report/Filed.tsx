@@ -2,12 +2,12 @@ import { Fragment, useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { ReportView } from '@sitelog/shared/field-contract.ts';
 import { firstName } from '@sitelog/shared/format.ts';
-import { pdfFileName } from '@sitelog/shared/report/numbering.ts';
 import { buttonClasses } from '@/components/buttonStyles';
 import { Header } from '@/components/Header';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { Screen } from '@/components/Screen';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
+import { PdfCard } from './PdfCard';
 
 /**
  * field-api signs a filed report's PDF for 10 minutes (`reports/:id` `pdfUrl`): the screen fetches
@@ -75,24 +75,6 @@ export function Filed({
       {view.reportNo}
     </b>,
   ]);
-  const fileName = pdfFileName(view.reportNo, view.date, view.currentVersion);
-  const card = (
-    <>
-      <span
-        aria-hidden="true"
-        className="box-border flex h-12 w-10 flex-none items-end justify-center rounded-chip bg-signal pb-1.5 font-mono text-[11px] font-semibold text-asphalt"
-      >
-        {t('filed.pdfBadge')}
-      </span>
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <b className="text-[15px]">{t('filed.pdf')}</b>{' '}
-        <span className="font-mono text-[13px] text-dust [overflow-wrap:anywhere]">
-          {view.pdfUrl ? fileName : t(pdfLate ? 'filed.pdfLate' : 'filed.pdfPreparing')}
-        </span>
-      </span>
-    </>
-  );
-
   return (
     <Screen title={t('filed.title')} dateLine={false} header={<Header siteName={view.siteName} />}>
       <OfflineBanner />
@@ -124,39 +106,7 @@ export function Filed({
         <p className="m-0 text-[17px] leading-6 text-steel [overflow-wrap:anywhere]">{body}</p>
       </div>
 
-      {view.pdfUrl ? (
-        <a
-          href={view.pdfUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-1.5 flex min-h-target items-center gap-3.5 rounded-card border border-rebar bg-white p-3.5 text-asphalt no-underline"
-        >
-          {card} <span className="sr-only">{t('filed.opensNewTab')}</span>
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            focusable="false"
-            className="ml-auto flex-none"
-          >
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </a>
-      ) : (
-        // Not a link until the file exists; the status is said in words, not by a missing chevron.
-        <div
-          role="status"
-          className="mt-1.5 flex min-h-target items-center gap-3.5 rounded-card border border-rebar bg-white p-3.5 text-asphalt"
-        >
-          {card}
-        </div>
-      )}
+      <PdfCard view={view} late={pdfLate} />
 
       <div className="sticky bottom-0 mt-auto bg-chalk pt-3">
         <Link to="/today" className={buttonClasses('outline')}>

@@ -4,8 +4,10 @@ import type {
   ConfirmResponse,
   ConsentResponse,
   DayStatusResponse,
+  ExpiredLinkResponse,
   FieldApiErrorBody,
   FieldApiErrorCode,
+  HistoryResponse,
   PreferencesResponse,
   ReportView,
   ResolveResponse,
@@ -78,6 +80,15 @@ export function createFieldRoutes(api: FieldApiClient = fieldApi) {
       }),
     dayStatus: (code: string, body: DayStatusRequest) =>
       api.request<DayStatusResponse>('day-status', { body, linkCode: code }),
+    /** Past reports (F10, W2-03): the last 14 days of the link's sites. */
+    history: (code: string, signal?: AbortSignal) =>
+      api.request<HistoryResponse>('history', { linkCode: code, signal }),
+    /**
+     * F16 "Send me today's link" (W2-03): the expired daily link's code in the body (it
+     * authenticates nothing); today's link is texted, never returned.
+     */
+    expiredDailyLink: (code: string) =>
+      api.request<ExpiredLinkResponse>('expired/daily-link', { body: { code } }),
     /** Settings (F15, W2-02): what it shows. */
     preferences: (code: string, signal?: AbortSignal) =>
       api.request<PreferencesResponse>('preferences', { linkCode: code, signal }),

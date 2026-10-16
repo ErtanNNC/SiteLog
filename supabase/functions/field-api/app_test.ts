@@ -18,7 +18,12 @@ import {
 } from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { EnvError } from '../_shared/env.ts';
-import { createFieldApp, publicSignedUrl, type VerifyCodeMessage } from './app.ts';
+import {
+  createFieldApp,
+  publicSignedUrl,
+  type DailyLinkMessage,
+  type VerifyCodeMessage,
+} from './app.ts';
 import { fakeMessaging } from '../_shared/fake_messaging.ts';
 import { notifierCodeSender } from './code_sender.ts';
 import { FakeFieldStore } from './fake_store.ts';
@@ -120,6 +125,8 @@ type Cookies = Record<string, string>;
 interface Harness {
   store: FakeFieldStore;
   sent: VerifyCodeMessage[];
+  /** F16: what `expired/daily-link` handed the Notifier. */
+  daily: DailyLinkMessage[];
   clock: { now: Date };
   /**
    * `cookies` replaces the browser's jar for one call (null: none); the jar keeps every cookie
@@ -142,6 +149,7 @@ function setup(
     secret?: string;
     isDemo?: boolean;
     sender?: (store: FakeFieldStore) => (m: VerifyCodeMessage) => Promise<NotifyOutcome>;
+    dailyOutcome?: NotifyOutcome;
   } = {},
 ): Harness {
   const clock = { now: T0 };
@@ -197,10 +205,12 @@ function setup(
     link(CODES.gone, GONE),
   );
   const sent: VerifyCodeMessage[] = [];
+  const daily: DailyLinkMessage[] = [];
   let bytes = 1;
   const h: Harness = {
     store,
     sent,
+    daily,
     clock,
     jar: new Map(),
     cookieOf: (reporterId) => h.jar.get(deviceCookieName(reporterId)),
@@ -235,6 +245,13 @@ function setup(
   const app = createFieldApp({
     store,
     sendVerifyCode: opts.sender ? opts.sender(store) : record,
+    sendDailyLink: (m) => {
+      // The Notifier's dedupe: one message per key.
+      const repeat = daily.some((d) => d.dedupeKey === m.dedupeKey);
+      if (!repeat) daily.push(m);
+      return Promise.resolve(opts.dailyOutcome ?? { channel: 'sms', messageId: 'msg-1' });
+    },
+    fieldAppUrl: () => FIELD_APP,
     linkSigningSecret: () => opts.secret ?? 'test-link-signing-secret',
     allowedOrigins: () => [FIELD_APP],
     now: () => clock.now,
@@ -743,6 +760,11 @@ Deno.test('rate limits: 5 code sends and 5 verifications an hour per phone', asy
   // The sixth attempt is refused even with the right code, and the lock is audited once.
   const locked = await h.call('POST', 'device/verify', { body: { code: otp } });
   assertEquals([locked.status, locked.json.error], [429, 'rate_limited']);
+  assertEquals(h.store.audits.filter((a) => a.action === 'device.verify_locked').length, 1);
+  // F16: the office is told once per lock window, however often the locked phone tries.
+  assertEquals((await h.call('POST', 'device/verify', { body: { code: otp } })).status, 429);
+  assertEquals(h.store.lockNotices.length, 1);
+  assertEquals(h.store.lockNotices[0]!.reporterId, MARCO);
   assertEquals(h.store.audits.filter((a) => a.action === 'device.verify_locked').length, 1);
   // An hour later both work again.
   h.clock.now = new Date(T0.getTime() + 61 * 60_000);
@@ -1277,6 +1299,8 @@ Deno.test('a missing LINK_SIGNING_SECRET is a 500 that says nothing more', async
   const app = createFieldApp({
     store: h.store,
     sendVerifyCode: () => Promise.resolve({ channel: 'sms', messageId: 'x' }),
+    sendDailyLink: () => Promise.resolve({ channel: 'sms', messageId: 'x' }),
+    fieldAppUrl: () => FIELD_APP,
     linkSigningSecret: () => {
       throw new EnvError('LINK_SIGNING_SECRET');
     },
@@ -1323,6 +1347,8 @@ Deno.test(
     const app = createFieldApp({
       store: h.store,
       sendVerifyCode: () => Promise.resolve({ channel: 'sms', messageId: 'x' }),
+      sendDailyLink: () => Promise.resolve({ channel: 'sms', messageId: 'x' }),
+      fieldAppUrl: () => FIELD_APP,
       linkSigningSecret: () => 'test-link-signing-secret',
       allowedOrigins: () => [],
       now: () => T0,
@@ -1778,3 +1804,205 @@ Deno.test(
     assertEquals(messaging.rows.filter((r) => r.copy_key === 'verify_code').length, 2);
   },
 );
+
+// ── F16: expired link → Send me today's link (W2-03) ─────────────────────────────────────────────
+
+Deno.test(
+  "expired/daily-link: an expired daily link texts today's link of its site, once a day",
+  async () => {
+    const h = setup();
+    const expiredLink = h.store.links.find((l) => l.code_hash === linkCodeHash(CODES.expired))!;
+    // No cookie needed: the phone that holds an expired link may be new.
+    const res = await h.call('POST', 'expired/daily-link', {
+      body: { code: CODES.expired },
+      code: null,
+      cookies: null,
+    });
+    assertEquals([res.status, res.json], [200, { sent: true, channel: 'sms' }]);
+    assertEquals(JSON.stringify(res.json).includes('/r/'), false, 'the answer holds no link');
+    assertEquals(h.daily.length, 1);
+    const sent = h.daily[0]!;
+    assertEquals(sent.reporterId, MARCO);
+    assertEquals(sent.vars.site, 'Riverside');
+    assertEquals(sent.dedupeKey, `expired_daily_link:${expiredLink.id}:2026-10-09`);
+    assertEquals(sent.vars.number, undefined, 'no voice number: no call clause');
+    // Today's daily link of the same site was made (72 h) and opens.
+    const today = h.store.links.filter(
+      (l) => l.kind === 'daily' && l.site_id === SITE_A && l.report_date === '2026-10-09',
+    );
+    assertEquals(today.length, 1);
+    assertEquals(today[0]!.expires_at, '2026-10-12T22:00:00.000Z');
+    const newCode = sent.vars.link.split('/r/')[1]!;
+    assertEquals(linkCodeHash(newCode), today[0]!.code_hash);
+    assertEquals(
+      (await h.call('POST', 'resolve', { body: { code: newCode }, code: null })).status,
+      200,
+    );
+    assert(h.store.audits.some((a) => a.action === 'field_link.created'));
+    const requested = h.store.audits.filter((a) => a.action === 'daily_link.requested');
+    assertEquals(requested.length, 1);
+    assertEquals(requested[0]!.actorType, 'reporter');
+    assertEquals(requested[0]!.diff, {
+      expired_link_id: expiredLink.id,
+      site_id: SITE_A,
+      report_date: '2026-10-09',
+      device_id: null,
+      sent: true,
+      link_id: today[0]!.id,
+      channel: 'sms',
+      message_id: 'msg-1',
+    });
+
+    // Tapped again: the same link, the same key (the Notifier sends nothing twice).
+    await h.call('POST', 'expired/daily-link', { body: { code: CODES.expired }, code: null });
+    assertEquals(h.daily.length, 1);
+    assertEquals(h.store.links.filter((l) => l.site_id === SITE_A && l.kind === 'daily').length, 2);
+    // Three a day per link, then 429.
+    await h.call('POST', 'expired/daily-link', { body: { code: CODES.expired }, code: null });
+    const limited = await h.call('POST', 'expired/daily-link', {
+      body: { code: CODES.expired },
+      code: null,
+    });
+    assertEquals([limited.status, limited.json.error], [429, 'rate_limited']);
+    assert(Number(limited.headers.get('retry-after')) > 0);
+  },
+);
+
+Deno.test(
+  'expired/daily-link: unknown, revoked, live and personal links tell no more than resolve',
+  async () => {
+    const h = setup();
+    const send = (code: string) =>
+      h.call('POST', 'expired/daily-link', { body: { code }, code: null, cookies: null });
+    const unknown = await send('NOSUCH');
+    assertEquals([unknown.status, unknown.json.error], [404, 'link_not_found']);
+    const revoked = await send(CODES.revoked);
+    assertEquals([revoked.status, revoked.json.error], [410, 'link_revoked']);
+    const personal = await send(CODES.marco);
+    assertEquals([personal.status, personal.json.error], [409, 'link_not_expired']);
+    const live = await send(CODES.marcoDaily);
+    assertEquals([live.status, live.json.error], [409, 'link_not_expired']);
+    assertEquals((await send('')).json.error, 'invalid_request');
+    // A disabled reporter's expired link sends nothing.
+    h.store.links.push(
+      link('G0NEXP', GONE, {
+        kind: 'daily',
+        site_id: SITE_A,
+        report_date: '2026-10-05',
+        expires_at: '2026-10-06T22:00:00Z',
+      }),
+    );
+    const gone = await send('G0NEXP');
+    assertEquals([gone.status, gone.json.error], [403, 'reporter_disabled']);
+    // A wrong origin is refused like every route.
+    const origin = await h.call('POST', 'expired/daily-link', {
+      body: { code: CODES.expired },
+      code: null,
+      origin: 'https://evil.test',
+    });
+    assertEquals(origin.status, 403);
+    assertEquals(h.daily, []);
+    assertEquals(
+      h.store.audits.filter((a) => a.action === 'daily_link.requested'),
+      [],
+      'refusals before the link checks are not requests',
+    );
+  },
+);
+
+Deno.test(
+  'expired/daily-link: a paused or archived site and a non-working day answer the reason',
+  async () => {
+    const h = setup();
+    const expiredOn = (code: string, siteId: string) =>
+      h.store.links.push(
+        link(code, MARCO, {
+          kind: 'daily',
+          site_id: siteId,
+          report_date: '2026-10-05',
+          expires_at: '2026-10-08T22:00:00Z',
+        }),
+      );
+    expiredOn('PAUSE1', SITE_P);
+    const paused = await h.call('POST', 'expired/daily-link', { body: { code: 'PAUSE1' } });
+    assertEquals(paused.json, { sent: false, reason: 'site_paused' });
+    // A site the reporter is no longer linked to.
+    h.store.siteReporters = h.store.siteReporters.filter((l) => l.site_id !== SITE_B);
+    expiredOn('UNLNK1', SITE_B);
+    const unlinked = await h.call('POST', 'expired/daily-link', { body: { code: 'UNLNK1' } });
+    assertEquals(unlinked.json, { sent: false, reason: 'site_inactive' });
+    // Saturday Oct 10 in Chicago: not one of the org's working days.
+    h.clock.now = new Date('2026-10-10T15:00:00Z');
+    const weekend = await h.call('POST', 'expired/daily-link', { body: { code: CODES.expired } });
+    assertEquals(weekend.json, { sent: false, reason: 'not_working_day' });
+    assertEquals(h.daily, []);
+    assertEquals(
+      h.store.links.filter((l) => l.kind === 'daily' && l.report_date === '2026-10-10'),
+      [],
+      'no link is made for a day that has none',
+    );
+    const reasons = h.store.audits
+      .filter((a) => a.action === 'daily_link.requested')
+      .map((a) => (a.diff as { reason: string }).reason);
+    assertEquals(reasons, ['site_paused', 'site_inactive', 'not_working_day']);
+  },
+);
+
+Deno.test(
+  "expired/daily-link: the Notifier's skip is the answer; a verified phone counts against its limit",
+  async () => {
+    const h = setup({ dailyOutcome: { channel: null, reason: 'no_consent' } });
+    await verifiedDevice(h);
+    const res = await h.call('POST', 'expired/daily-link', { body: { code: CODES.expired } });
+    assertEquals(res.json, { sent: false, reason: 'no_consent' });
+    const device = h.store.devices[0]!;
+    assert(h.store.rates.get(`dev:${device.id}`)!.count > 0);
+    const audit = h.store.audits.find((a) => a.action === 'daily_link.requested')!;
+    assertEquals((audit.diff as { device_id: string }).device_id, device.id);
+  },
+);
+
+Deno.test('history: the Late badge and every site of the reporter, newest first', async () => {
+  const h = setup();
+  await consented(h);
+  const day = (id: string, siteId: string, date: string) => {
+    h.store.siteDays.push({ id, site_id: siteId, date } as never);
+  };
+  const report = (id: string, dayId: string, siteId: string, no: string, extra = {}) =>
+    h.store.reports.push({
+      id,
+      site_day_id: dayId,
+      site_id: siteId,
+      org_id: ORG,
+      report_no: no,
+      status: 'filed',
+      filed_at: T0.toISOString(),
+      current_version: 1,
+      is_late: false,
+      ...extra,
+    } as never);
+  day('d1', SITE_A, '2026-10-08');
+  day('d2', SITE_B, '2026-10-09');
+  day('d3', SITE_A, '2026-10-09');
+  report('r1', 'd1', SITE_A, 'RL-2041-0001', { is_late: true });
+  report('r2', 'd2', SITE_B, 'P9-3007-0001', { status: 'awaiting_confirmation', filed_at: null });
+  report('r3', 'd3', SITE_A, 'RL-2041-0002', { status: 'void' });
+  const res = await h.call('GET', 'history');
+  assertEquals(
+    (res.json.reports as { reportNo: string; siteName: string; isLate: boolean }[]).map((r) => [
+      r.reportNo,
+      r.siteName,
+      r.isLate,
+    ]),
+    [
+      ['P9-3007-0001', 'Pier 9', false],
+      ['RL-2041-0001', 'Riverside', true],
+    ],
+  );
+  // A daily link names one site: its history is that site's.
+  const daily = await h.call('GET', 'history', { code: CODES.marcoDaily });
+  assertEquals(
+    (daily.json.reports as { reportNo: string }[]).map((r) => r.reportNo),
+    ['P9-3007-0001'],
+  );
+});

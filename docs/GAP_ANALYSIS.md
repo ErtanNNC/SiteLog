@@ -377,7 +377,7 @@ Added after this analysis by the owner's decision of 2026-10-14 (D47–D49): Sit
 
 - `supabase/functions/field-api` with a `[functions.field-api] verify_jwt = false` block (a `_redirects` proxy cannot add a Supabase JWT).
 - Auth: link code sha256 → `field_links`; `sl_dev` cookie (httpOnly, Secure, SameSite=Lax, 180 days) → `field_devices.verified_at`; every query scoped to the reporter's sites; rate limits.
-- Routes `resolve`, `device/send-code`, `device/verify`, `consent`, `today`, `uploads`, `uploads/:id/complete`, `reports/:id`, `reports/:id/answer`, `reports/:id/confirm`, `day-status`, `history`, `preferences`; `last_seen_at` on each call; audit rows with `actor_type 'reporter'`.
+- Routes `resolve`, `device/send-code`, `device/verify`, `consent`, `today`, `uploads`, `uploads/:id/complete`, `reports/:id`, `reports/:id/answer`, `reports/:id/confirm`, `day-status`, `history`, `preferences`; `last_seen_at` on each call; audit rows with `actor_type 'reporter'`. _(W2-02 added `GET preferences`, `consent/revoke`, `device/sign-out`; W2-03 added `expired/daily-link` (F16, no device needed, 3 a day per expired link) and `isLate` on `history`, and the device-check lock's office notice through `field_device_verify_locked()`, `20261016000020`.)_
 - Report creation and numbering in one transaction (ideally one RPC like `create_office_report`).
 - Tests per the plan.
 - Prerequisites from W1-05: the field tables, reporter and report status values, `reports.channel/language/confirmed_via`, `report_sources.upload_id/question_id`.

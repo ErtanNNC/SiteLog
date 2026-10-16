@@ -72,6 +72,8 @@ export class FakeFieldStore implements FieldStore {
   lateNotices: { reportId: string; uploadId: string }[] = [];
   /** field_revoke_consent(): the office notices of a revoked required consent. */
   consentNotices: { orgId: string; reporterId: string; type: ConsentType }[] = [];
+  /** field_device_verify_locked(): the office notices of a locked device check (one per window). */
+  lockNotices: { orgId: string; reporterId: string; deviceId: string; until: string }[] = [];
   /** Store methods called, for "no write happened" checks. */
   calls: string[] = [];
   private seq = 0;
@@ -160,6 +162,61 @@ export class FakeFieldStore implements FieldStore {
       count: w.count,
       resetAt: new Date(w.start + windowSeconds * 1000).toISOString(),
     });
+  }
+
+  deviceVerifyLocked(reporterId: string, deviceId: string, until: string) {
+    this.calls.push('deviceVerifyLocked');
+    const r = this.reporters.find((x) => x.id === reporterId);
+    if (!r) return Promise.reject(new FieldDbError('reporter_not_found'));
+    if (this.lockNotices.some((n) => n.reporterId === reporterId && n.until === until)) {
+      return Promise.resolve({ locked: false });
+    }
+    this.lockNotices.push({ orgId: r.org_id, reporterId, deviceId, until });
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: reporterId,
+      action: 'device.verify_locked',
+      entity: 'field_device',
+      entityId: deviceId,
+      diff: { until, notified: true },
+    });
+    return Promise.resolve({ locked: true });
+  }
+
+  listDailyLinks(reporterId: string, siteId: string, reportDate: string) {
+    return Promise.resolve(
+      this.links
+        .filter(
+          (l) =>
+            l.kind === 'daily' &&
+            l.reporter_id === reporterId &&
+            l.site_id === siteId &&
+            l.report_date === reportDate &&
+            l.revoked_at === null,
+        )
+        .reverse()
+        .map((l) => ({ id: l.id, code_hash: l.code_hash, expires_at: l.expires_at })),
+    );
+  }
+  insertDailyLink(row: {
+    id: string;
+    code_hash: string;
+    reporter_id: string;
+    site_id: string;
+    report_date: string;
+    expires_at: string;
+  }) {
+    this.calls.push('insertDailyLink');
+    if (this.links.some((l) => l.code_hash === row.code_hash)) return Promise.resolve(false);
+    this.links.push({
+      ...row,
+      kind: 'daily',
+      revoked_at: null,
+      last_opened_at: null,
+      created_at: this.iso(),
+    });
+    return Promise.resolve(true);
   }
 
   listConsents(reporterId: string) {

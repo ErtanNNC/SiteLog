@@ -294,6 +294,11 @@ export function noticeText(data: unknown): NoticeText | null {
               ),
         body: one(copyRef('shell.notifications.notices.reporter_consent_revoked.body')),
       };
+    case 'device_verify_locked':
+      return {
+        title: copyRef('shell.notifications.notices.device_verify_locked.title', n.params),
+        body: one(copyRef('shell.notifications.notices.device_verify_locked.body')),
+      };
     case 'reporter_wrong_site':
       return {
         title: copyRef('shell.notifications.notices.reporter_wrong_site.title', n.params),

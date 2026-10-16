@@ -24,7 +24,6 @@ export const uiEs: UiResources = {
       settings: 'Configuración',
       expired: 'Enlace vencido',
     },
-    placeholderBody: 'Esta pantalla llega pronto.',
     notFound: {
       title: 'Página no encontrada',
       body: 'Esa página no existe o el enlace está mal escrito.',
@@ -34,10 +33,6 @@ export const uiEs: UiResources = {
       notFound: {
         title: 'Enlace no encontrado',
         body: 'Este enlace no funciona. Pida a la oficina que le envíe uno nuevo.',
-      },
-      expired: {
-        title: 'Enlace vencido',
-        body: 'Este enlace venció. Pida a la oficina que le envíe el enlace de hoy.',
       },
       revoked: {
         title: 'Enlace ya no válido',
@@ -148,6 +143,7 @@ export const uiEs: UiResources = {
       },
       photosAdded: 'Enviando {{count}} foto(s)…',
       openReport: 'Abrir el reporte {{no}}',
+      pastReports: 'Reportes anteriores',
       failed: 'No se pudo cargar hoy. Revise su señal e intente de nuevo.',
     },
     recording: {
@@ -331,6 +327,50 @@ export const uiEs: UiResources = {
       photo: 'Foto · {{date}}',
       remove: 'Quitar',
       unsaved: 'No se guardó en este teléfono: deje SiteLog abierto hasta que se envíe.',
+    },
+    history: {
+      intro: 'Sus reportes de los últimos 14 días.',
+      empty: 'No hay reportes en los últimos 14 días.',
+      status: {
+        collecting: 'En curso',
+        processing: 'En curso',
+        awaiting_answer: 'Necesita su respuesta',
+        awaiting_confirmation: 'Listo para revisar',
+        filed: 'Enviado',
+        signed_off: 'Aprobado',
+        void: 'Anulado',
+      },
+      late: 'Tarde',
+      eyebrow: 'Reporte · {{date}}',
+      version: 'Versión {{version}}',
+      continue: 'Continuar este reporte',
+      noData: 'Aún no hay nada que mostrar: SiteLog todavía está escribiendo este reporte.',
+      back: 'Volver a Reportes anteriores',
+      failed: 'No se pudieron cargar sus reportes anteriores. Revise su señal e intente de nuevo.',
+      reportFailed: 'No se pudo cargar este reporte. Revise su señal e intente de nuevo.',
+    },
+    expired: {
+      title: 'Este enlace venció',
+      body: 'Podemos enviar el enlace de hoy por mensaje al número que la oficina tiene de usted.',
+      noCode: 'Abra el enlace de su último mensaje de texto o pida a la oficina el enlace de hoy.',
+      send: 'Envíenme el enlace de hoy',
+      sending: 'Enviando…',
+      sent: 'Enviado. Abra el enlace de hoy en el mensaje que le acabamos de enviar.',
+      reasons: {
+        site_paused: 'Esta obra está en pausa en SiteLog. Pida a la oficina que la reactive.',
+        site_inactive: 'Esta obra ya no está en su lista de SiteLog. Consulte a la oficina.',
+        not_working_day: 'Hoy no es día laborable en esta obra, así que no hay enlace para hoy.',
+        no_consent:
+          'Desactivó los mensajes, así que no podemos enviarle el enlace. Pídalo a la oficina.',
+        opted_out:
+          'Nos pidió no enviarle mensajes, así que no podemos enviar el enlace. Consulte a la oficina.',
+        no_channel: 'No pudimos enviar un mensaje a su número. Pida a la oficina que lo revise.',
+      },
+      errors: {
+        rate_limited: 'Ya lo pidió varias veces. Intente de nuevo en {{minutes}} min.',
+        offline: 'Sin conexión. Revise su señal e intente de nuevo.',
+        generic: 'No se pudo enviar el enlace. Intente de nuevo.',
+      },
     },
     settings: {
       channelTitle: '¿Dónde le enviamos los mensajes?',

@@ -1,5 +1,6 @@
 import type {
   ConsentRow,
+  DailyLinkStore,
   ConsentType,
   CountryRow,
   FieldDeviceRow,
@@ -125,8 +126,9 @@ export interface ReportMediaCounts {
 
 export type ReportWithDate = ReportRow & { date: string };
 
-export interface FieldStore {
-  // Links, reporters, orgs
+export interface FieldStore extends DailyLinkStore {
+  // Links, reporters, orgs (and, from DailyLinkStore, today's daily link for F16's
+  // "Send me today's link": `listDailyLinks`, `insertDailyLink`)
   findLink(codeHash: string): Promise<FieldLinkRow | null>;
   /** Sets last_opened_at; true when the link had never been opened. */
   markLinkOpened(linkId: string, at: string): Promise<boolean>;
@@ -163,6 +165,16 @@ export interface FieldStore {
     >,
   ): Promise<void>;
   rateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult>;
+  /**
+   * field_device_verify_locked() (20261016000020, F16): the device check's lock audited
+   * `device.verify_locked` with the office notice (`device_verify_locked`), once per window
+   * (`until`); `locked` false on a repeat.
+   */
+  deviceVerifyLocked(
+    reporterId: string,
+    deviceId: string,
+    until: string,
+  ): Promise<{ locked: boolean }>;
 
   // Consents
   listConsents(reporterId: string): Promise<ConsentRow[]>;

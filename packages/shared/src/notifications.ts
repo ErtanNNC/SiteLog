@@ -19,6 +19,7 @@ const AUDIENCE: Readonly<Record<string, readonly MemberRole[]>> = {
   message_failed: ['admin', 'ops'], // the same row of §13: a message job that died (W1-10)
   reporter_wrong_site: ['admin', 'ops'], // §2.2 "Manage reporters": admin, ops
   reporter_consent_revoked: ['admin', 'ops'], // §13 "Consent revoked" (F15, W2-02)
+  device_verify_locked: ['admin', 'ops'], // §13 "Device check locked" (F16, W2-03)
 };
 
 /** A kind §13 does not list (needs_review, glossary_review, processing_delayed, processing_failed, …). */
@@ -119,6 +120,8 @@ export const noticeDataSchema = z.discriminatedUnion('key', [
   notice('unknown_contact', {}),
   // reporter_consent_revoked (field_revoke_consent(), the recorder's Settings; W2-02)
   notice('reporter_consent_revoked', { name, type: z.enum(['recording', 'data_processing']) }),
+  // device_verify_locked (field_device_verify_locked(), 5 wrong device codes; F16, W2-03)
+  notice('device_verify_locked', { name }),
   // reporter_wrong_site (router/handlers/welcome.ts)
   notice('reporter_wrong_site', { name }),
   // billing (stripe-webhook)

@@ -5,6 +5,8 @@ import type {
   CompleteResponse,
   ConfirmResponse,
   ConsentResponse,
+  ExpiredLinkResponse,
+  HistoryResponse,
   PreferencesResponse,
   ReportView,
   ResolveResponse,
@@ -249,6 +251,19 @@ export interface FakeOptions {
   moreSites?: TodayResponse['site'][];
   /** The question has no answers to tap (D28: the number input). */
   noOptions?: boolean;
+  /** `resolve` answers a daily link of this site (F14: daily links are site-specific). */
+  dailyLinkSite?: string;
+  /**
+   * Each site's deadline (ISO): `today` without a site picks the nearest to now, as field-api's
+   * `nearestDeadlineSite` does (F14); without it, `market.site`.
+   */
+  deadlines?: Record<string, string>;
+  /** `GET history` (W2-03). */
+  history?: HistoryResponse['reports'];
+  /** `GET reports/:id` for a past report (W2-03). */
+  reports?: Record<string, ReportView>;
+  /** `POST expired/daily-link` (F16): the answer, or a refusal. */
+  expiredAnswer?: ExpiredLinkResponse | Refusal;
 }
 
 export async function installFakeFieldApi(
@@ -318,6 +333,11 @@ export async function installFakeFieldApi(
       const refuse = (r: Refusal) => json(route, r.status, { error: r.error, ...r.extra });
       const sites = [market.site, ...(options.moreSites ?? [])];
 
+      // F16: the expired link's own route needs no device (W2-03).
+      if (path === 'expired/daily-link') {
+        const answer = options.expiredAnswer ?? { sent: true, channel: 'sms' };
+        return 'error' in answer ? refuse(answer) : json(route, 200, answer);
+      }
       if (path === 'resolve') {
         if (options.resolveError) return refuse(options.resolveError);
         const res: ResolveResponse = {
@@ -329,10 +349,19 @@ export async function installFakeFieldApi(
             status: api.state.consented ? 'active' : 'invited',
           },
           org: market.org,
-          link: { kind: 'personal', siteId: null, reportDate: null, expiresAt: null },
+          link: options.dailyLinkSite
+            ? {
+                kind: 'daily',
+                siteId: options.dailyLinkSite,
+                reportDate: market.date,
+                expiresAt: '2026-10-12T22:00:00.000Z',
+              }
+            : { kind: 'personal', siteId: null, reportDate: null, expiresAt: null },
           needsDeviceCheck: !api.state.verified,
           needsConsent: !api.state.consented,
-          sites: api.state.verified ? sites : [],
+          sites: api.state.verified
+            ? sites.filter((s) => !options.dailyLinkSite || s.id === options.dailyLinkSite)
+            : [],
           country: market.country,
         };
         return json(route, 200, res);
@@ -397,17 +426,35 @@ export async function installFakeFieldApi(
       if (!api.state.consented) return json(route, 403, { error: 'consent_required' });
       if (path === 'today') {
         if (options.todayError) return refuse(options.todayError);
+        // The asked site, else the daily link's, else the nearest deadline (F14).
+        const scoped = sites.filter(
+          (s) => !options.dailyLinkSite || s.id === options.dailyLinkSite,
+        );
+        const asked = url.searchParams.get('site') ?? options.dailyLinkSite;
+        const deadlines = options.deadlines ?? {};
+        const nearest = [...scoped].sort(
+          (a, b) =>
+            Math.abs(Date.parse(deadlines[a.id] ?? market.deadlineAt) - Date.now()) -
+            Math.abs(Date.parse(deadlines[b.id] ?? market.deadlineAt) - Date.now()),
+        )[0]!;
+        const site = asked ? scoped.find((s) => s.id === asked) : nearest;
+        if (!site) return json(route, 404, { error: 'not_found' });
         const res: TodayResponse = {
-          site: market.site,
-          sites,
+          site,
+          sites: scoped,
           date: market.date,
           allowedDates: [market.date],
-          deadlineAt: market.deadlineAt,
+          deadlineAt: deadlines[site.id] ?? market.deadlineAt,
           dayStatus: api.state.dayStatus,
           report: api.state.report,
         };
         return json(route, 200, res);
       }
+      if (path === 'history') {
+        return json(route, 200, { reports: options.history ?? [] } satisfies HistoryResponse);
+      }
+      const past = /^reports\/([^/]+)$/.exec(path);
+      if (past && options.reports?.[past[1]!]) return json(route, 200, options.reports[past[1]!]);
       if (path === 'day-status') {
         api.state.dayStatus = (body as { status: TodayResponse['dayStatus'] }).status;
         return json(route, 200, { siteDayId: 'sd1', status: api.state.dayStatus, changed: true });

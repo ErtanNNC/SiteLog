@@ -485,6 +485,13 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select field_revoke_consent('${o.reporter}', 'sms', null) as v`,
   },
+  // F16 (20261016000020_device_verify_locked.sql): the device check's lock tells the office.
+  field_device_verify_locked: {
+    why: "§6.5: field-api only (service role); the lock is the server's rate limit, never a client.",
+    allow: NONE,
+    call: (o) =>
+      `select field_device_verify_locked('${o.reporter}', null, '2026-10-09T23:00:00Z') as v`,
+  },
   // Spec §19 Q53 (20261015000003_late_uploads.sql): field-api flags a late clip.
   field_flag_late_upload: {
     why: '§6.5: field-api only (service role); a late clip is flagged by the server, never a client.',

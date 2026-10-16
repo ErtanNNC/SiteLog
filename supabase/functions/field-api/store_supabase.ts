@@ -160,6 +160,37 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       );
     },
 
+    async deviceVerifyLocked(reporterId, deviceId, until) {
+      return await rpc<{ locked: boolean }>(
+        admin.rpc('field_device_verify_locked', {
+          p_reporter_id: reporterId,
+          p_device_id: deviceId,
+          p_until: until,
+        }),
+      );
+    },
+
+    async listDailyLinks(reporterId, siteId, reportDate) {
+      const { data } = await admin
+        .from('field_links')
+        .select('id, code_hash, expires_at')
+        .eq('reporter_id', reporterId)
+        .eq('site_id', siteId)
+        .eq('report_date', reportDate)
+        .eq('kind', 'daily')
+        .is('revoked_at', null)
+        .order('created_at', { ascending: false })
+        .throwOnError();
+      return data;
+    },
+
+    async insertDailyLink(row) {
+      const { error } = await admin.from('field_links').insert({ ...row, kind: 'daily' });
+      if (!error) return true;
+      if (error.code === '23505') return false;
+      throw error;
+    },
+
     async listConsents(reporterId) {
       const { data } = await admin
         .from('consents')

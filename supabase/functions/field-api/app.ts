@@ -7,6 +7,7 @@ import {
   ConsentRequestSchema,
   ConsentRevokeRequestSchema,
   DayStatusRequestSchema,
+  ExpiredLinkRequestSchema,
   FIELD_LINK_HEADER,
   FIELD_RATE_LIMITS,
   HISTORY_DAYS,
@@ -33,6 +34,12 @@ import {
   uploadMediaType,
   uploadStoragePath,
   deadlineInstant,
+  dailyLinkExpiresAt,
+  ensureDailyLink,
+  fieldLinkUrl,
+  formatDateInTz,
+  formatPhone,
+  isWorkingDay,
   type AnswerResponse,
   type AnswerValue,
   type CompleteResponse,
@@ -41,6 +48,7 @@ import {
   type ConsentType,
   type CountryPack,
   type DayStatusResponse,
+  type ExpiredLinkResponse,
   type FieldDeviceRow,
   type FieldLinkRow,
   type HistoryResponse,
@@ -112,9 +120,25 @@ export interface VerifyCodeMessage {
 /** Sends `verify_code` by SMS (SMS_ONLY_KEYS, spec §19 Q25); the Notifier's outcome. */
 export type SendVerifyCode = (message: VerifyCodeMessage) => Promise<NotifyOutcome>;
 
+/** What `expired/daily-link` hands the Notifier (F16 "Send me today's link"). */
+export interface DailyLinkMessage {
+  reporterId: string;
+  vars: { site: string; link: string; number?: string };
+  dedupeKey: string;
+}
+
+/** Sends `daily_link` on the reporter's channel order (`Notifier.send`); the Notifier's outcome. */
+export type SendDailyLink = (message: DailyLinkMessage) => Promise<NotifyOutcome>;
+
 export interface FieldApiDeps {
   store: FieldStore;
   sendVerifyCode: SendVerifyCode;
+  /** F16 "Send me today's link" (W2-03): `daily_link` through the Notifier. */
+  sendDailyLink: SendDailyLink;
+  /** FIELD_APP_URL, the base of the link texted (throws EnvError when unset). */
+  fieldAppUrl: () => string;
+  /** DAILY_LINK_TTL_HOURS (§5.1, default 72): how long a new daily link lives. */
+  dailyLinkTtlHours?: () => number | undefined;
   /** LINK_SIGNING_SECRET, read when a code is sent or checked (throws EnvError when unset). */
   linkSigningSecret: () => string;
   /** FIELD_APP_URL and CORS_EXTRA_ORIGINS (`fieldOrigins`). */
@@ -447,8 +471,10 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     const { limit, windowSeconds } = FIELD_RATE_LIMITS.codeVerify;
     const rl = await store.rateLimit(`code:${ctx.reporter.phone_e164}`, limit, windowSeconds);
     if (!rl.allowed) {
+      // F16: the first refused attempt of a window locks the check until the window ends;
+      // field_device_verify_locked() audits it and tells the office once per window.
       if (rl.count === limit + 1) {
-        await audit(ctx, 'device.verify_locked', 'field_device', device.id, { until: rl.resetAt });
+        await store.deviceVerifyLocked(ctx.reporter.id, device.id, rl.resetAt);
       }
       throw rateLimited(rl.resetAt, now());
     }
@@ -898,6 +924,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
           date: r.date,
           filedAt: r.filed_at,
           currentVersion: r.current_version,
+          isLate: r.is_late,
         })),
     };
     return c.json(body);
@@ -969,6 +996,97 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     // the office notice (F15 "office notified"). Nothing held: nothing changes.
     await store.revokeConsent(ctx.reporter.id, type, ctx.device.id);
     return c.json((await settingsBody(ctx)) satisfies PreferencesResponse);
+  });
+
+  // ── expired/daily-link (F16: Send me today's link; W2-03) ────────────────────────────────────
+  // The expired link authenticates nothing: it only names the reporter and the site. The answer
+  // tells no more than `resolve` already does about the code (unknown 404, revoked 410, live or
+  // personal 409), and never holds the new link: the Notifier texts it to the phone on file.
+  app.post('/expired/daily-link', async (c) => {
+    const { code } = await parseBody(c, ExpiredLinkRequestSchema);
+    const link = await store.findLink(linkCodeHash(code));
+    if (!link) throw new FieldError(404, 'link_not_found');
+    const reporter = await store.getReporter(link.reporter_id);
+    const org = reporter ? await store.getOrgContext(reporter.org_id) : null;
+    if (!reporter || !org) throw new FieldError(404, 'link_not_found');
+    if (link.revoked_at !== null) throw new FieldError(410, 'link_revoked');
+    const expired =
+      link.expires_at !== null && new Date(link.expires_at).getTime() <= now().getTime();
+    if (link.kind !== 'daily' || !expired || !link.site_id) {
+      throw new FieldError(409, 'link_not_expired');
+    }
+    if (reporter.status === 'disabled') throw new FieldError(403, 'reporter_disabled');
+    // The device's 30 a minute when the phone sends a cookie of this reporter, and 3 a day per link.
+    const device = await cookieDevice(c, reporter.id);
+    if (device) await seeDevice(device);
+    const { limit, windowSeconds } = FIELD_RATE_LIMITS.expiredLink;
+    const rl = await store.rateLimit(`expired_link:${link.id}`, limit, windowSeconds);
+    if (!rl.allowed) throw rateLimited(rl.resetAt, now());
+
+    const pack = toCountryPack(org.country);
+    const ctx: LinkContext = { link, reporter, org, pack };
+    const site = (await store.listReporterSites(reporter.id)).find((s) => s.id === link.site_id);
+    const reportDate = site ? formatDateInTz(now(), site.timezone) : null;
+    const base = {
+      expired_link_id: link.id,
+      site_id: link.site_id,
+      report_date: reportDate,
+      device_id: device?.id ?? null,
+    };
+    const notSent = async (reason: Extract<ExpiredLinkResponse, { sent: false }>['reason']) => {
+      await audit(ctx, 'daily_link.requested', 'field_link', link.id, {
+        ...base,
+        sent: false,
+        reason,
+      });
+      return c.json({ sent: false, reason } satisfies ExpiredLinkResponse);
+    };
+    if (!site || site.status === 'archived') return notSent('site_inactive');
+    if (site.status === 'paused') return notSent('site_paused');
+    const workingDays = org.settings?.working_days;
+    if (workingDays && !isWorkingDay(reportDate!, workingDays)) return notSent('not_working_day');
+
+    const secret = deps.linkSigningSecret();
+    const fieldAppUrl = deps.fieldAppUrl();
+    const today = await ensureDailyLink(
+      store,
+      secret,
+      {
+        reporterId: reporter.id,
+        siteId: site.id,
+        reportDate: reportDate!,
+        expiresAt: dailyLinkExpiresAt(now(), deps.dailyLinkTtlHours?.()),
+        now: now(),
+      },
+      randomUUID,
+    );
+    if (today.created) {
+      await audit(ctx, 'field_link.created', 'field_link', today.id, {
+        kind: 'daily',
+        site_id: site.id,
+        report_date: reportDate,
+        via: 'expired_link',
+      });
+    }
+    // One message per expired link and day, however often the button is tapped.
+    const outcome = await deps.sendDailyLink({
+      reporterId: reporter.id,
+      vars: {
+        site: site.name,
+        link: fieldLinkUrl(fieldAppUrl, today.code),
+        ...(pack.voiceNumber ? { number: formatPhone(pack.voiceNumber) } : {}),
+      },
+      dedupeKey: `expired_daily_link:${link.id}:${reportDate}`,
+    });
+    if (outcome.channel === null) return notSent(outcome.reason);
+    await audit(ctx, 'daily_link.requested', 'field_link', link.id, {
+      ...base,
+      sent: true,
+      link_id: today.id,
+      channel: outcome.channel,
+      message_id: outcome.messageId,
+    });
+    return c.json({ sent: true, channel: outcome.channel } satisfies ExpiredLinkResponse);
   });
 
   // ── device/sign-out (F15: Sign out this device) ──────────────────────────────────────────────

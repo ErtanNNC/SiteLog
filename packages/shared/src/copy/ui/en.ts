@@ -21,7 +21,7 @@ export const uiEn = {
     errorTitle: 'Something went wrong',
   },
   field: {
-    /** §9.3 routes, as placeholder titles. */
+    /** §9.3 routes: the browser tab's titles. */
     routes: {
       link: 'Opening your link…',
       today: 'Today',
@@ -31,7 +31,6 @@ export const uiEn = {
       settings: 'Settings',
       expired: 'Link expired',
     },
-    placeholderBody: 'This screen is coming next.',
     /** Any other path (the field host serves the app for every path). */
     notFound: {
       title: 'Page not found',
@@ -44,10 +43,6 @@ export const uiEn = {
       notFound: {
         title: 'Link not found',
         body: 'This link doesn’t work. Ask the office to send you a new one.',
-      },
-      expired: {
-        title: 'Link expired',
-        body: 'This link has expired. Ask the office to send you today’s link.',
       },
       revoked: {
         title: 'Link no longer valid',
@@ -167,6 +162,7 @@ export const uiEn = {
       photosAdded: 'Sending {{count}} photo(s)…',
       /** A report already started for the day (Field-05/06/07 are W1-13). */
       openReport: 'Open report {{no}}',
+      pastReports: 'Past reports',
       failed: 'Couldn’t load today. Check your signal and try again.',
     },
     /** Recording (F5 step 2, Field-04). */
@@ -379,6 +375,53 @@ export const uiEn = {
       remove: 'Remove',
       /** The phone's storage refused the item: it lives in this page only. */
       unsaved: 'Not saved on this phone: keep SiteLog open until it is sent.',
+    },
+    /**
+     * Past reports (F10, F14, §9.3; W2-03). No artboard: built from §9.3 and the Draft (Field-06)
+     * and Filed (Field-07) screens. _Change something_ is W2-11.
+     */
+    history: {
+      intro: 'Your reports from the last 14 days.',
+      empty: 'No reports in the last 14 days.',
+      status: {
+        collecting: 'In progress',
+        processing: 'In progress',
+        awaiting_answer: 'Needs your answer',
+        awaiting_confirmation: 'Ready to check',
+        filed: 'Filed',
+        signed_off: 'Signed off',
+        void: 'Cancelled',
+      },
+      late: 'Late',
+      eyebrow: 'Report · {{date}}',
+      version: 'Version {{version}}',
+      continue: 'Continue this report',
+      noData: 'Nothing to show yet: SiteLog is still writing this report.',
+      back: 'Back to Past reports',
+      failed: 'Couldn’t load your past reports. Check your signal and try again.',
+      reportFailed: 'Couldn’t load this report. Check your signal and try again.',
+    },
+    /** An expired daily link (F16, §9.3 Expired; W2-03). No artboard: built from §9.3. */
+    expired: {
+      title: 'This link has expired',
+      body: 'We can text today’s link to the phone number the office has for you.',
+      noCode: 'Open the link in your latest text message, or ask the office for today’s link.',
+      send: 'Send me today’s link',
+      sending: 'Sending…',
+      sent: 'Sent. Open today’s link in the message we just sent you.',
+      reasons: {
+        site_paused: 'This site is paused in SiteLog. Ask the office to resume it.',
+        site_inactive: 'This site is no longer on your list in SiteLog. Ask the office.',
+        not_working_day: 'Today is not a working day for this site, so there is no link for today.',
+        no_consent: 'You turned off texts, so we can’t text you the link. Ask the office for it.',
+        opted_out: 'You asked us to stop texting you, so we can’t send the link. Ask the office.',
+        no_channel: 'We couldn’t text your number. Ask the office to check it.',
+      },
+      errors: {
+        rate_limited: 'You asked a few times already. Try again in {{minutes}} min.',
+        offline: 'No connection. Check your signal and try again.',
+        generic: 'Couldn’t send the link. Try again.',
+      },
     },
     /**
      * Settings (F15, §9.3; W2-02). No artboard: built from §9.3 and the Field-02 / Field-03

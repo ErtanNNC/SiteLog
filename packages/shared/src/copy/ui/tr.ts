@@ -174,6 +174,10 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
             },
             body: 'Onayı telefonundaki Ayarlar ekranından kapattı; telefonundan yeniden onay verene kadar SiteLog ondan rapor almaz. Beklenmedik bir durumsa kendisiyle iletişime geçin.',
           },
+          device_verify_locked: {
+            title: '{{name}} için telefon doğrulaması bir saatliğine kilitlendi',
+            body: 'Bir saat içinde linkine 5 kez yanlış kod girildi; SiteLog bir saat boyunca yeni kod kabul etmiyor. Bunu yapan kendisi değilse linki başkasının elinde olabilir: kendisiyle iletişime geçin.',
+          },
           reporter_wrong_site: {
             title: '{{name}} şantiyenin yanlış olduğunu söylüyor',
             body: 'Ekip sayfasında şantiye atamasını kontrol edin.',
@@ -1259,7 +1263,6 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       settings: 'Ayarlar',
       expired: 'Linkin süresi doldu',
     },
-    placeholderBody: 'Bu ekran yakında geliyor.',
     notFound: {
       title: 'Sayfa bulunamadı',
       body: 'Bu sayfa yok ya da link yanlış yazılmış.',
@@ -1269,10 +1272,6 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       notFound: {
         title: 'Link bulunamadı',
         body: 'Bu link çalışmıyor. Ofisten yeni bir link isteyin.',
-      },
-      expired: {
-        title: 'Linkin süresi doldu',
-        body: 'Bu linkin süresi doldu. Ofisten bugünün linkini isteyin.',
       },
       revoked: {
         title: 'Link artık geçerli değil',
@@ -1383,6 +1382,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       },
       photosAdded: '{{count}} fotoğraf gönderiliyor…',
       openReport: '{{no}} raporunu aç',
+      pastReports: 'Geçmiş raporlar',
       failed: 'Bugün yüklenemedi. Sinyalinizi kontrol edip tekrar deneyin.',
     },
     recording: {
@@ -1562,6 +1562,48 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       photo: 'Fotoğraf · {{date}}',
       remove: 'Kaldır',
       unsaved: 'Bu telefona kaydedilemedi: gönderilene kadar SiteLog’u açık tutun.',
+    },
+    history: {
+      intro: 'Son 14 gündeki raporlarınız.',
+      empty: 'Son 14 günde rapor yok.',
+      status: {
+        collecting: 'Devam ediyor',
+        processing: 'Devam ediyor',
+        awaiting_answer: 'Cevabınızı bekliyor',
+        awaiting_confirmation: 'Kontrol için hazır',
+        filed: 'Gönderildi',
+        signed_off: 'Onaylandı',
+        void: 'İptal edildi',
+      },
+      late: 'Geç',
+      eyebrow: 'Rapor · {{date}}',
+      version: 'Sürüm {{version}}',
+      continue: 'Bu rapora devam et',
+      noData: 'Henüz gösterilecek bir şey yok: SiteLog bu raporu hâlâ yazıyor.',
+      back: 'Geçmiş raporlara dön',
+      failed: 'Geçmiş raporlarınız yüklenemedi. Sinyalinizi kontrol edip tekrar deneyin.',
+      reportFailed: 'Bu rapor yüklenemedi. Sinyalinizi kontrol edip tekrar deneyin.',
+    },
+    expired: {
+      title: 'Bu linkin süresi doldu',
+      body: 'Bugünün linkini, ofisin sizin için kayıtlı telefon numarasına mesajla gönderebiliriz.',
+      noCode: 'Son mesajınızdaki linki açın ya da ofisten bugünün linkini isteyin.',
+      send: 'Bugünün linkini gönder',
+      sending: 'Gönderiliyor…',
+      sent: 'Gönderildi. Size az önce gönderdiğimiz mesajdaki bugünün linkini açın.',
+      reasons: {
+        site_paused: 'Bu şantiye SiteLog’da duraklatıldı. Ofisten yeniden açmasını isteyin.',
+        site_inactive: 'Bu şantiye artık SiteLog’daki listenizde değil. Ofise sorun.',
+        not_working_day: 'Bugün bu şantiyede çalışma günü değil; bugün için link yok.',
+        no_consent: 'Mesajları kapattınız; linki size mesajla gönderemiyoruz. Ofisten isteyin.',
+        opted_out: 'Size mesaj göndermememizi istediniz; linki gönderemiyoruz. Ofise sorun.',
+        no_channel: 'Numaranıza mesaj gönderemedik. Ofisten numaranızı kontrol etmesini isteyin.',
+      },
+      errors: {
+        rate_limited: 'Birkaç kez istediniz. {{minutes}} dk sonra tekrar deneyin.',
+        offline: 'Bağlantı yok. Sinyalinizi kontrol edip tekrar deneyin.',
+        generic: 'Link gönderilemedi. Tekrar deneyin.',
+      },
     },
     settings: {
       channelTitle: 'Mesajlarınızı nereye gönderelim?',

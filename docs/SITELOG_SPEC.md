@@ -1072,7 +1072,7 @@ create view current_weather as
 
 - RLS on every table. Helpers `is_member(org)` and `has_role(org, roles[])` as before; office users only see their org.
 - Sign-off and office edits only through RPCs `sign_off_report` and `create_report_version` (security definer, role-checked).
-- **Field users never get a database session.** The field app talks only to `field-api`, which authenticates a request by `(link code → field_links)` + `(device cookie → field_devices.verified_at)` and then acts with the service role, scoped to that reporter's sites. The device cookie is one per reporter (`sl_dev_<8 hex>`, so one phone can serve two reporters), and `field-api` counts a device as verified for 180 days from `verified_at`, whatever cookie the browser still sends. Rate limits: 30 requests/min per device, 5 code sends and 5 code verifications/hour per phone (`rate_limits`, a window from each key's first hit). Every route looks the link code up before any limit applies; the routes that need a verified device answer an unknown code like a valid one (401), but `resolve` and `device/*` tell them apart: §19 Q42.
+- **Field users never get a database session.** The field app talks only to `field-api`, which authenticates a request by `(link code → field_links)` + `(device cookie → field_devices.verified_at)` and then acts with the service role, scoped to that reporter's sites. The device cookie is one per reporter (`sl_dev_<8 hex>`, so one phone can serve two reporters), and `field-api` counts a device as verified for 180 days from `verified_at`, whatever cookie the browser still sends. Rate limits: 30 requests/min per device, 5 code sends and 5 code verifications/hour per phone, 3 *Send me today's link* a day per expired link (W2-03) (`rate_limits`, a window from each key's first hit). Every route looks the link code up before any limit applies; the routes that need a verified device answer an unknown code like a valid one (401), but `resolve` and `device/*` tell them apart: §19 Q42.
 - The field app reaches `field-api` **same-origin**: the field host rewrites `/api/*` → `{SUPABASE_URL}/functions/v1/field-api/*` (Vite proxy in dev; Netlify/Vercel/Cloudflare rewrite in prod). This keeps the device cookie first-party — Safari blocks third-party cookies.
 - The voice agent calls `field-api` tool routes with `VOICE_AGENT_TOOL_SECRET` and a per-call token minted when the call starts (bound to `call_id` + reporter).
 - Storage: private buckets; uploads via signed upload URLs (10 min) issued by `field-api`; panel reads via signed URLs. A signed upload URL fixes neither the type nor the size, so `field-api` checks each stored object when its upload completes (the media type the upload named, at most 50 MB; the stored size goes to `uploads.bytes`) and removes one that fails. The `audio` bucket takes `audio/*` only and the `audio` and `photos` buckets 50 MB a file; `photos` takes any type until the WhatsApp intake, which stores documents there, is removed (step 22 of the migration plan).
@@ -1378,7 +1378,7 @@ Runs in `scheduler-tick` (every 5 min) per site-day not `filed | weather_day | n
 
 ### F14 · Multi-site reporter
 
-- **Web:** personal links show a site switcher on Today (default: the site whose deadline is nearest); daily links are site-specific.
+- **Web:** personal links show a site switcher on Today (default: the site whose deadline is nearest); daily links are site-specific. *As built (W1-09, accepted in W2-03):* `GET /field/today` without `?site=` answers the link's site for a daily link, else the active site whose deadline today is nearest to now; *Past reports* lists every site of the link (one heading per site when there are two or more; a daily link's history is its own site's).
 - **Call:** "Which site is this for — Riverside or Pier 9?" (≤ 3 names spoken; otherwise "Say the site name").
 
 ---
@@ -1398,6 +1398,7 @@ Runs in `scheduler-tick` (every 5 min) per site-day not `filed | weather_day | n
 - Expired daily link → screen "This link has expired" + **Send me today's link** (a message to the phone number on file) + "Or call {number}" where the pack has a voice number.
 - New phone → device check (F4 step 2). Code checks are limited to 5 an hour per phone, counted from the first attempt of the window (§6.5): once the limit is reached the right code is refused too until the window ends; office notified (M6, with F14–F16).
 - Lost phone → office revokes devices on the Team page (all device cookies invalidated).
+- *As built (W2-03):* the link check answers an expired daily link (410 `link_expired`) with the Expired screen (`/expired`, in the reporter's language). **Send me today's link** is `POST /field/expired/daily-link` (Appendix B): for an expired daily link only, today's daily link of the same site (`ensureDailyLink`, site time zone) goes to the reporter through the Notifier (`daily_link` on their channel order, with its consent and opt-out rules), one message per expired link and day; a paused site, a site no longer theirs and a day that is not one of the org's working days answer the reason instead and send nothing; audited `daily_link.requested`. The lock after 5 wrong codes posts the panel notice *Device check locked* (§13) once per lock window. What the expired screen offers beyond this is §19 Q87.
 
 ---
 
@@ -1522,9 +1523,9 @@ Spanish (`es`) versions mirror EN.
 | **Question** (Field-05) | "Quick check" card, ≤ 2 answer buttons + *Other…* (mic or number input) | One question per screen. *As built (W1-13):* the question, "Heard at m:ss in your note" (the crew's voice-note second, `question.manpowerIndex`), ≤ 2 answers of 56 px; a question with no answers (GAP D28) gets a number input, with "Full day" as the default hours of a headcount (or *Other hours*); *Other…* is hidden until M6; above the card what is done so far (transcribed, a weather stop; §19 Q65) and no "1 of n" count (§19 Q64). After an answer, F7's confirmation line from field-api's numbers (`AnswerResponse.confirmation`) stays on the screens that follow (Processing while `decide_next` runs, then the next question or the draft). |
 | **Draft** (Field-06) | Sections with numbers; tap a number for a stepper; **Fix by voice**; **Confirm & send** | Sticky bottom bar with the primary button. *As built (W1-13):* Crew (each company's workers × hours, *Answered* on a value from an answer, the day's total), Weather (lost hours in bold), Done, Delivered and Next workday (when stated), Safety, Photos; an unknown value is "—" / "Not stated", never filled in. The steppers are shown read-only and *Fix by voice* is not offered until M6. **Confirm & send** sends the draft shown (`confirm {version, draftRev}`); the screen then says "Filing your report…" and polls until filed (the Filed screen, Field-07, is W1-15); a newer draft (`draft_changed` at the confirm, or a new version or revision seen while filing, whose filing then goes stale) is shown with a note to check it again. |
 | **Filed** (Field-07) | Report no., PDF link, *Add more photos*, *Past reports*, edit hint | Confetti-free; one line of thanks. *As built (W1-15):* the check, "Filed.", the line of thanks with the report number, the PDF card (the view's signed URL in a new tab, named by the file, `{report_no}_{date}_v{n}.pdf`; "Preparing the PDF…" and polling until render_pdf stored it; fetched again before the 10-minute URL expires) and *Back to Today*; the `filed` text's link `/r/{code}/report/{id}` passes the link check and opens this screen. *Add more photos*, *Past reports* and the edit hint come with M6 (§19 Q67). |
-| **Past reports** | Last 14 days list → report view → *Change something* | Edits create a new version (F10). |
+| **Past reports** | Last 14 days list → report view → *Change something* | Edits create a new version (F10). *As built (W2-03; no artboard, built from this row and the Field-03 / Field-06 / Field-07 patterns):* `/history` lists the reports (not void) of the last 14 days of the link's sites, newest first, a heading per site when there are two or more: the date, the report number, the status as a chip with its words and a *Late* badge; a row opens `/history/:id`, the report read-only (the Draft's sections, the version when above 1, the PDF card once filed, *Continue this report* while not filed). Reached from Today's *Past reports* link (§19 Q88). *Change something* is W2-11. |
 | **Settings** | Preference, message channel (week 2), language, "Don't call me today", revoke consent, sign out this device | *As built (W2-02; no artboard, built from this row and the Field-02 / Field-03 patterns):* the preference *Text link / Phone call* (§19 Q33), the message channel only when the pack offers two or more built channels (hidden until W2-14 / W2-15), the language (the pack's field locales; the UI switches at once), every consent given with its state as text (On / Off) and *Turn off* (recording and processing behind a sheet that says reports stop and the office is told; then the Welcome & consent again), *Sign out this phone* behind a sheet (then the device check). Each change is saved as it is made. "Don't call me today" comes with M8; turning a consent back on here is §19 Q86. |
-| **Expired / offline** | Expired link → *Send me today's link*; offline banner + queued uploads count | |
+| **Expired / offline** | Expired link → *Send me today's link*; offline banner + queued uploads count | *As built (W2-03; no artboard):* "This link has expired", one line, **Send me today's link** (F16) and *Call {number}* only when the pack has a voice number; after the tap the screen says it was sent, or why not (paused site, not a working day, texts off, …), never showing the link. Opened without a link (a reload), it asks for the latest text instead. The offline banner and queue count are W1-09's. |
 
 PWA: manifest name "SiteLog", icon = logo mark, `display: standalone`, theme `#16181B`. Web push is an optional message channel for installed PWAs from week 2 (iOS allows it only there); it is never a person's only channel, and the channel order (§4.5) carries every prompt. In week 1 the service worker caches the shell only.
 
@@ -1954,6 +1955,7 @@ Loading skeletons · inline errors with retry · no-access page · offline banne
 | Needs review / call mismatch / no photo | Panel | ops, pm | Reasons |
 | Unknown contact | Panel (+ optional email) | ops, admin | Number, channel, snippet |
 | Message undeliverable / opted out | Panel | ops, admin | Reporter, channel, reason, suggested action |
+| Device check locked (F16) | Panel | ops, admin | *Added (W2-03):* `device_verify_locked`, "{name}'s phone check is locked for an hour": 5 wrong codes on their link within an hour, so new codes are refused for an hour; if it was not them, their link may be in the wrong hands. Once per lock window (`field_device_verify_locked()`, audited `device.verify_locked`) |
 | Consent revoked (F15) | Panel | ops, admin | *Added (W2-02):* `reporter_consent_revoked`, "{name} turned off consent to the recording (processing) of their reports": they did it in Settings on their phone, and SiteLog takes no reports from them until they consent again there. Only `recording` and `data_processing`; texts turned off are audited, not notified |
 | Invoice gap | Panel | ops, accounts | Company, gap |
 | Weekly digest (Mon 07:00) | Email | admin, pm | On-time %, channel mix, weather hours, invoice gaps, unsigned reports |
@@ -2335,115 +2337,5 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 74 | P7's `call_mismatch` banner ("The call recording says 5 workers, the confirmed report says 4 — check" with *Play at 2:15*): the reason code `call_mismatch:<path>` (§10.9) carries no values | Until post-call reconciliation is built (M7), a generic line naming the path, with *Play at* from the value's call source; M7 extends the code with both values (`call_mismatch:<path>:<heard>:<confirmed>`) and the banner words them · Store the values in a new column | **Decided (owner, 2026-10-15): recommendation** (the first). **Built (W1-17):** `report.reasons.call_mismatch` and `callSourceAt` (`apps/web/src/app/report/Page.tsx`). |
 | 75 | What P7's Activity shows of a text SiteLog sent (§9.2 texts carry the reporter's personal link, which records for them) | The kind ("Daily link", "Filed with PDF link") and the delivery status, never the body; a reporter's reply shows its words · The body with the link masked | **Decided (owner, 2026-10-15): recommendation** (the first). **Built (W1-17):** `reportActivity` (`apps/web/src/data/assemble.ts`); the Demo phone keeps showing the texts of demo orgs. |
 | 86 | Turning a consent back on from the recorder's Settings (F15 and §9.3 name *revoke consent* only) | Settings offers *Turn on* for a consent that is off, stored as a new consent row with the wording's version (`method 'web_checkbox'`) · Only the Welcome & consent screen gives consent: recording and processing come back there (reports stop until then), texts stay off until a later answer (the office's side of F15 is M10; START undoes an SMS STOP, not a revoked consent) · Both, with *Turn on* for texts only | **Open (owner).** *As built (W2-02):* the second, the default that adds nothing: Settings shows a consent that is off as "Off" with no action; recording and processing come back through the Welcome & consent screen, which the link flow shows while they are off. Recommendation: the first for texts (a reporter who turned texts off by mistake should not need the office), with the consent wording shown again in the sheet. |
-
----
-
-## 20. Appendices
-
-### Appendix A · Repository structure
-
-```
-sitelog/
-├─ apps/
-│  ├─ web/                 # office panel (Vite + React)
-│  ├─ field/               # field web recorder (Vite + React PWA)
-│  │  └─ src/{routes,components,recorder,queue,i18n}/
-│  ├─ worker/              # Node job runner
-│  │  └─ src/{jobs,ai,sms,voice,pdf}/
-│  └─ voice-agent/         # Python 3.11+, LiveKit Agents (deployed with `lk agent deploy`)
-│     ├─ agent.py          # entrypoint: AgentSession, per-language STT/TTS, disclosure, recording
-│     ├─ tools.py          # @function_tool wrappers → field-api /voice/tools/*
-│     ├─ prompts/          # en.md, es.md, tr.md (system prompt §9.4)
-│     ├─ recording.py      # dual-channel writer → Supabase Storage
-│     └─ pyproject.toml  livekit.toml  Dockerfile
-├─ supabase/
-│  ├─ migrations/  seed.sql   # incl. *_country_packs.sql (the countries rows, §4.6)
-│  └─ functions/
-│     ├─ field-api/        # field app + voice tool routes
-│     ├─ sms-webhook/
-│     ├─ voice-events/
-│     ├─ scheduler-tick/
-│     ├─ api-invite-reporter/  api-link-unknown-contact/  api-export-payroll/
-│     ├─ api-evidence-pack/    api-billing/               billing-webhook/
-├─ packages/shared/        # zod schemas, enums, copy keys, channel interfaces, country-pack schema (countries.ts), formatting
-├─ fixtures/               # voice/, calls/, transcripts/, expected/, sms/
-├─ scripts/                # seed-demo.ts, simulate-call.ts, replay-webhook.ts, countries-set.ts
-└─ docs/  SITELOG_SPEC.md  RUNBOOK.md
-```
-
-### Appendix B · Server API surface
-
-**`field-api` (field app)** — auth: link code + device cookie. *As built (W1-07):* the field app calls `/api/<route>` same-origin, which the field host proxies to the function; the `/field/…` prefix below is a logical grouping (GAP D39). `resolve` takes the link code in its body, every other route in the `X-Link-Code` header, with the reporter's device cookie `sl_dev_<first 8 hex of sha256(reporter id)>` (httpOnly, Secure, SameSite=Lax, Path=/, 180 days, set by `device/send-code` and renewed by `device/verify`; one per reporter). Every route but `resolve` and `device/*` (except `device/sign-out`) needs a device of the link's reporter verified in the last 180 days, and answers 401 `device_unverified` without one whatever the code (unknown, revoked or expired alike); every route but `resolve`, `device/*`, `consent` and Settings' own (`preferences`, `consent/revoke`; W2-02) needs the reporter's `recording` and `data_processing` consents. Every answer is `Cache-Control: no-store`; errors are JSON `{error: <code>, …}` (`packages/shared/src/field-contract.ts`). A browser `Origin` must be `FIELD_APP_URL` or one of `CORS_EXTRA_ORIGINS`. The writes that must be atomic are service-only RPCs: `field_complete_upload()` (number and insert the site-day's report, attach the upload, enqueue `transcribe_upload`; refused while the report is being filed), `field_confirm_report()` (under the same site-day lock, enqueue `file_report` for the confirmed version), `field_set_day_status()`, `field_rate_limit()`, `field_revoke_consent()` (W2-02).
-
-| Route | Purpose |
-|---|---|
-| `POST /field/resolve` `{code}` | Reporter first name, the org's name (the consent notice's "for {company}", F4), sites, locale, `needsDeviceCheck`, `needsConsent`, and the pack subset (voice number, field locales, two-way SMS, channel order, legal keys) |
-| `POST /field/device/send-code` · `POST /field/device/verify` `{code}` | Device verification |
-| `POST /field/consent` `{types[], textVersion, contactPref, locale}` | Store consents + preference; `textVersion` must match the pack's consent key when set (§19 Q28); with none set the field app sends its own wording's version, `field.consent.v1` (`FIELD_CONSENT_TEXT_VERSION`, W1-09) |
-| `GET /field/today?site=` | Site-day status, deadline, current report state, `allowedDates` (today; before 12:00 site time also the previous working day, F5) |
-| `POST /field/uploads` `{kind, mime, bytes, siteId?, date?, recordedAt?}` → `{uploadId, bucket, path, signedUrl, token}` · `POST /field/uploads/:id/complete` | Upload voice notes / photos. `siteId` is required when a personal link has more than one active site; `date` is one of `allowedDates`, or a day whose window closed when `recordedAt` was inside it and the upload is within 48 h of the window's end (a late clip, §19 Q53: audited late; its `complete` flags the report late to the office). `complete` checks the stored object (there, of the named type, at most 50 MB; `uploads.bytes` is the stored size) |
-| `GET /field/reports/:id` | Question / draft / filed view model. *As built (W1-13):* the open question carries `manpowerIndex` (the crew it is about, or null) besides `id`, `field`, `prompt` and `options` |
-| `POST /field/reports/:id/answer` `{questionId, optionId or value or uploadId}` | Answer a question. *As built (W1-12):* `{questionId, optionId}` (a tapped option) or `{questionId, value, hours?}` (GAP D28: the number the question asks for; `hours` a number or `'full_day'` with a headcount); `uploadId` (_Other…_ by voice) comes with M6 and is refused. The option or number is mapped in code (`optionAnswer` / `numberAnswer`, `applyAnswer`); the service-only `field_answer_question()` checks, under the site-day lock, that the report awaits an answer (409 `wrong_state`), that the question is the report's open web question (404 `not_found`, 409 `question_closed`) and that the draft is the one the answer was applied to (409 `draft_changed`), then stores the draft, the answer, `answer_source` and `answered_at`, puts the report back to `processing`, audits `report.question_answered` and queues `decide_next` (`decide:<report>:answer:<question>`); "Add <company>" also creates the unconfirmed company and flags the report for review (F7). 202 `{status: 'processing'}`; a retry with the same answer 200 `{status: 'already_answered'}`; both with `confirmation`, F7's line as numbers from the draft the answer made (W1-13: `{kind: 'crew', company, workers, hoursPerWorker, totalHours}`, `company_added`, `company_mapped`, `weather {lostHours}` or `noted`; `answerConfirmation()`), which the field app words in the reporter's language; an option or number that does not answer the question 400 `answer_not_accepted`. |
-| `POST /field/reports/:id/correction` `{text or uploadId}` → preview · `POST …/correction/:cid/apply` | Fix draft or edit filed report |
-| `POST /field/reports/:id/confirm` `{version?, draftRev}` | File the draft the reporter saw: its version (default the current one) and its revision (`ReportView.draftRev`, `report_versions.draft_rev`, required: a draft is overwritten in place, and a trigger bumps the revision on every change of its data). 409 `wrong_state` unless awaiting confirmation, 409 `draft_changed` when a newer draft replaced it (another version, or the same version re-extracted, e.g. after a late photo); the worker files only that version at that revision, else audits `report.confirm_stale`. A queued web confirm of another revision is not reused (key `file:<report>:v<n>:r<rev>`). |
-| `POST /field/day-status` `{siteId, status: no_work or weather_day, details}` | No work / weather day (W1-07: the site-day only, details `{since, workersBefore}` in the audit row; §19 Q41) |
-| `GET /field/history` | Last 14 days |
-| `PATCH /field/preferences` `{contactPref, locale, noCallsToday, messageChannel}` | Preferences (`messageChannel` from week 2, §19 Q21; `noCallsToday` from M8, refused with 400 until then). *As built (W2-02):* `messageChannel` is one of the pack's `message_channels` that is built (`settingsMessageChannels`), else 400 `channel_not_offered` with `offered`; null = the pack's order; `locale` one of the pack's field locales (400 `locale_not_offered`). A change is audited `reporter.preferences_changed` as the reporter (`from`, `to`, the device). Answers the Settings view, as `GET /field/preferences`. |
-| `GET /field/preferences` | *Added (W2-02):* what Settings shows: `contactPref`, `locale`, `messageChannel`, `messageChannels` (the pack's built channels, in its order; the choice is shown only when there are two or more) and `consents` (every type given, with `held`). |
-| `POST /field/consent/revoke` `{type}` | *Added (W2-02, F15):* turns one consent off through `field_revoke_consent()`: `revoked_at` on the reporter's unrevoked consents of that type, audited `consent.revoked` (the device, `method 'web'`), one transaction; `recording` or `data_processing` also tells the office (§13 *Consent revoked*) and stops every route but `resolve`, `device/*`, `consent` and Settings' own (403 `consent_required`) until the reporter consents again on the Welcome screen; `sms` is the per-channel opt-out of texts (§19 Q40, the first option: `reporters.status` stays as it is) and blocks every SMS but the device code (§19 Q25). Nothing held: nothing changes. Answers the Settings view. |
-| `POST /field/device/sign-out` | *Added (W2-02, F15):* revokes this device (`field_devices.revoked_at`), clears its cookie, audited `device.signed_out`; the phone then goes through the device check again (a new code makes a new device). |
-| `POST /field/voice/token` `{siteId}` → `{livekitUrl, token, room, callId}` | Start **Talk now**: creates the `calls` row (`transport = web`), the room and the agent dispatch |
-
-**`field-api` voice routes** — auth: `VOICE_AGENT_TOOL_SECRET` (+ per-call token for tools): `POST /voice/calls/start {room, from?, callId?}` → `{callToken, reporter?, locale}` (SIP calls resolve the caller here; web calls pass `callId`) · `POST /voice/tools/{get_context, update_draft, record_answer, apply_correction, file_report, set_day_status, schedule_callback, set_preference, load_report, start_fallback_recording, end_call}`.
-
-**Office RPCs & functions:** `sign_off_report`, `create_report_version`, `next_report_no`, `mark_no_work`, `resolve_unknown_company`, `api-invite-reporter` (name, mobile, role, sites, locale, contactPref → welcome message; the phone parsed with the org's pack, locale and languages defaulting from it), `api-link-unknown-contact`, `api-export-payroll`, `api-evidence-pack`, `api-billing`, `billing-webhook`, `sms-webhook`, `voice-events`, `scheduler-tick`, `set_country_endpoints()` (service role only, `pnpm countries:set`), plus panel actions *Text today's link* and *Call now* (attested).
-
-### Appendix C · Kickoff prompts
-
-**Claude Code (whole repo):**
-
-```text
-You are building SiteLog from docs/SITELOG_SPEC.md (v1.2). Read CLAUDE.md and the whole spec first.
-Week 1 follows docs/PLAN_WEEK1.md ticket by ticket (W1-01 … W1-19 = M0–M5). For each ticket: implement
-with tests, run typecheck/lint/tests, tick the ticket, commit "W1-xx: …", report against "Done when".
-(The full bootstrap prompt is in the SiteLog project: claude/START_HERE.md.)
-Follow §5 (stack), §6 (schema), §7 (state machines), §9 (field channels), §10 (AI pipeline), §14 (tokens).
-Field users never get a DB session — everything goes through field-api. Never invent product
-behaviour: add unknowns to §19 and ask.
-```
-
-**Lovable (office panel or field app UI, connected to Supabase):**
-
-```text
-Build the SiteLog {office panel | field web recorder} from the attached spec: sections {11 and 14 |
-9.3 and 14.6}. Stack: React + TypeScript + Tailwind + shadcn/ui. Use the exact color tokens and fonts
-(Archivo with font-stretch 125% for headings, IBM Plex Mono for numbers). Languages: {EN + TR | EN + ES + TR}.
-Use the seed data in §18. No gradients, no emoji, no left-border accent cards.
-{Field app: big touch targets (Record ≥ 120 px), one decision per screen, all calls go to field-api routes in Appendix B.}
-```
-
-### Appendix D · Definition of done (every task)
-
-- Typecheck, lint and tests pass; new logic has unit tests.
-- RLS / field-api scoping considered; no service key in any browser bundle.
-- UI matches tokens; works at 390 px and 1440 px; keyboard and screen-reader basics.
-- Copy from copy files in every supported language (EN/TR panel; EN/ES/TR field, messages, voice).
-- Audit log for state changes; consent checks for any message (SMS, WhatsApp, push) or call (exceptions, §19 Q25 as decided: `welcome` and `verify_code` before any consent answer; two-way replies sent by `sms-webhook`); errors to Sentry.
-- Spec updated if behaviour changed.
-
-### Appendix E · Terms
-
-| Term | Meaning | TR |
-|---|---|---|
-| Daily site report | Official record of each workday | Günlük şantiye raporu |
-| EOT (extension of time) | Contract claim for more time due to excusable delays | Süre uzatımı |
-| Toolbox talk | Short safety briefing on site | İş güvenliği bilgilendirmesi (toolbox) |
-| Subcontractor | Specialty company hired by the contractor | Taşeron / alt yüklenici |
-| Timesheet | Hours per worker/company | Puantaj |
-| Formwork | Temporary moulds for concrete | Kalıp |
-| Slab pour | Placing concrete for a floor slab | Döşeme betonu dökümü |
-| Rough-in | MEP installation before closing walls/ceilings | Kaba tesisat |
-| CMU / block | Concrete masonry units | Briket / blok |
-| Self-perform | Work by the contractor's own crew | Öz ekip |
-| Punch list | Remaining small items before handover | Eksik/kusur listesi |
-| Stood down | Work (or crane) stopped | İş durduruldu |
+| 87 | F16's Expired screen and *Send me today's link*: which link, which channel, and what an expired link of a past day or a day with nothing to report gets | Today's daily link of the expired link's site, on the reporter's channel order (the Notifier's consent and opt-out rules), one message per expired link and day, 3 requests a day per link; a paused or no longer linked site and a non-working day answer the reason and send nothing · The link of the expired link's own day while that day can still take a report (F5's late clips) · SMS only, whatever the order (as `verify_code`) | **Open (owner).** *As built (W2-03):* the first, the plan's default. The reason texts are the field app's (`field.expired.reasons.*`, EN/ES/TR), worded like the `site_paused` SMS; the limit is `FIELD_RATE_LIMITS.expiredLink`. A reporter whose texts are off (`no_consent`) is told to ask the office (§19 Q86). |
+| 88 | Where the recorder reaches *Past reports* (F10, §9.3: no artboard for it; Field-03 Today does not show it; the `filed` text says "Open your link → Past reports") and what the list holds | A text link *Past reports* at the foot of Today, and (W2-04) on the Filed screen · in Settings · in the top bar | **Open (owner).** *As built (W2-03):* the first; the list holds reports only (a no-work or weather day without a report is not listed) and in-progress ones, which open read-only with *Continue this report*. |

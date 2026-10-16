@@ -991,6 +991,58 @@ describe('field_revoke_consent (F15 Settings: Turn off; W2-02)', () => {
   });
 });
 
+describe('field_device_verify_locked (F16: 5 wrong codes lock the check; W2-03)', () => {
+  const lock = async (until: string, device: string | null = ID(901)) =>
+    (
+      await svc<{ r: { locked: boolean } }>(
+        `select field_device_verify_locked($1, $2, $3::timestamptz) as r`,
+        [MARCO, device, until],
+      )
+    )[0]!.r;
+
+  it('audits the lock on the device and tells ops and admin, once per window', async () => {
+    expect(await lock('2026-10-09T23:00:00Z')).toEqual({ locked: true });
+    expect(await lock('2026-10-09T23:00:00.000+00:00')).toEqual({ locked: false });
+    const notices = await svc<{ title: string; target_path: string; data: unknown }>(
+      `select title, target_path, data from notifications where kind = 'device_verify_locked'`,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      target_path: '/team',
+      data: { key: 'device_verify_locked', params: { name: expect.any(String) } },
+    });
+    const audits = await svc<{
+      actor_type: string;
+      entity: string;
+      entity_id: string;
+      diff: unknown;
+    }>(
+      `select actor_type, entity, entity_id, diff from audit_log
+       where action = 'device.verify_locked' and actor_id = $1`,
+      [MARCO],
+    );
+    expect(audits).toEqual([
+      {
+        actor_type: 'reporter',
+        entity: 'field_device',
+        entity_id: ID(901),
+        diff: { until: '2026-10-09T23:00:00+00:00', notified: true },
+      },
+    ]);
+    // The next window locks (and tells the office) again.
+    expect(await lock('2026-10-10T01:00:00Z')).toEqual({ locked: true });
+    expect(
+      await svc(`select notification_audience('device_verify_locked')::text as roles`),
+    ).toEqual([{ roles: '{admin,ops}' }]);
+  });
+
+  it('refuses an unknown reporter', async () => {
+    expect(await failure(`select field_device_verify_locked($1, null, now())`, [ID(999)])).toBe(
+      'reporter_not_found',
+    );
+  });
+});
+
 describe('the field-api functions are the service role’s only', () => {
   const FUNCTIONS = [
     'field_lock_site_day(uuid,date)',
@@ -1001,6 +1053,7 @@ describe('the field-api functions are the service role’s only', () => {
     'field_confirm_report(uuid,uuid,integer,integer)',
     'field_flag_late_upload(uuid,uuid)',
     'field_revoke_consent(uuid,consent_type,uuid)',
+    'field_device_verify_locked(uuid,uuid,timestamp with time zone)',
   ];
 
   it('grants execute to service_role and to no API role', async () => {

@@ -188,6 +188,10 @@ export const copy = {
           },
           body: 'They turned it off in Settings on their phone, so SiteLog takes no reports from them until they consent again on their phone. Contact them if that is unexpected.',
         },
+        device_verify_locked: {
+          title: '{{name}}’s phone check is locked for an hour',
+          body: 'Someone entered 5 wrong codes on their link within an hour, so SiteLog refuses new codes for an hour. If it was not them, their link may be in the wrong hands: contact them.',
+        },
         reporter_wrong_site: {
           title: '{{name}} says the site is wrong',
           body: 'Check the site assignment on the Team page.',

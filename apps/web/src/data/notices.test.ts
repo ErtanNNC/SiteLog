@@ -37,6 +37,7 @@ const SAMPLES: Record<NoticeKey, NoticeData['params']> = {
   reporter_stop: { name: 'Marco Ruiz', phone: '+1 555 014 3378' },
   unknown_contact: {},
   reporter_consent_revoked: { name: 'Marco Ruiz', type: 'recording' },
+  device_verify_locked: { name: 'Marco Ruiz' },
   reporter_wrong_site: { name: 'Marco Ruiz' },
   payment_failed: {},
   subscription_canceled: {},

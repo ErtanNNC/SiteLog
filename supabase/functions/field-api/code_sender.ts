@@ -1,10 +1,11 @@
 import {
   SmsSendError,
   type NotifyOutcome,
+  type Notifier,
   type NotifyRecipient,
   type SmsNotifier,
 } from '@sitelog/shared';
-import type { SendVerifyCode, VerifyCodeMessage } from './app.ts';
+import type { SendDailyLink, SendVerifyCode, VerifyCodeMessage } from './app.ts';
 
 /**
  * `device/send-code` (F4 step 2) through the Notifier (spec §4.5; W1-08): `verify_code` goes by
@@ -36,6 +37,28 @@ export function notifierCodeSender(notifier: SmsNotifier): SendVerifyCode {
   return async (message): Promise<NotifyOutcome> => {
     try {
       return await notifier.deliver(recipientOf(message), 'verify_code', { code: message.code });
+    } catch (err) {
+      if (err instanceof SmsSendError && err.undeliverable) {
+        return { channel: null, reason: 'no_channel' };
+      }
+      throw err;
+    }
+  };
+}
+
+/**
+ * `expired/daily-link` (F16 "Send me today's link"; W2-03) through the Notifier: `daily_link` on
+ * the reporter's channel order with its consent and opt-out rules (the Notifier audits a skip),
+ * once per dedupe key. A number the provider cannot reach is `no_channel`; any other send failure
+ * is thrown (500 `internal`, the button may be tapped again under the same key).
+ */
+export function notifierDailyLinkSender(notifier: Pick<Notifier, 'send'>): SendDailyLink {
+  return async (input): Promise<NotifyOutcome> => {
+    try {
+      // The key is app.ts's (`expired_daily_link:<link>:<date>`), passed through.
+      return await notifier.send(input.reporterId, 'daily_link', input.vars, {
+        dedupeKey: input.dedupeKey,
+      });
     } catch (err) {
       if (err instanceof SmsSendError && err.undeliverable) {
         return { channel: null, reason: 'no_channel' };
