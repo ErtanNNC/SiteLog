@@ -1112,7 +1112,9 @@ describe('deploy.yml preview-worker steps, run under bash', () => {
         RUN_MINUTES: '60',
         // The step's cwd is the scratch directory, where redact.mjs and worker.log are.
         RUNNER_TEMP: '.',
-        WORKER_UNTIL: String(Math.floor(Date.now() / 1000) + 1),
+        // Far enough ahead that a slow runner still reaches the first /health check (with + 1 the
+        // limit could pass before the loop started, and the step ended 0 without checking).
+        WORKER_UNTIL: String(Math.floor(Date.now() / 1000) + 3),
       },
       (dir) => {
         writeFileSync(join(dir, 'redact.mjs'), redact);
