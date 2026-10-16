@@ -515,7 +515,14 @@ describe('W2-11: Change something on a filed report (F10), version 2, _v2, Updat
     const sent = world.emails.slice(before);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.subject).toMatch(new RegExp(`^Updated: ${stored!.report_no} · `));
-    expect(sent[0]!.to).toContain(LENA.email);
+    // The site's recipients and the signer of the version it reopened (§13 Recipients + signer).
+    const recipients = (
+      await database.q<{ email: string }>(`select email from site_recipients where site_id = $1`, [
+        RIVERSIDE,
+      ])
+    ).map((r) => r.email);
+    expect(recipients.length).toBeGreaterThan(0);
+    expect([...sent[0]!.to].sort()).toEqual([...new Set([...recipients, LENA.email])].sort());
     expect(sent[0]!.text).toContain(note);
     expect(sent[0]!.attachments?.map((a) => a.filename)).toEqual([
       `${stored!.report_no}_${date}_v2.pdf`,

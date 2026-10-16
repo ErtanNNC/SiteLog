@@ -31,6 +31,9 @@ let d: SeededDraft | undefined;
 test.beforeAll(async () => {
   test.skip(!process.env.WORKER_HEALTH_URL, 'needs the worker on the stack (WORKER_HEALTH_URL)');
   f = await createFieldFixture();
+  // The site's report recipient (§13 "Recipients + signer"), as the photos and answer specs set
+  // it: the fixture's site has none, and an email with no recipient is skipped.
+  await rest('POST', 'site_recipients', { site_id: f.site.id, email: 'pm@e2e-field.example' });
   d = await seedDraft(f);
   // Filed as file_report leaves it.
   const now = new Date().toISOString();
@@ -103,12 +106,15 @@ test('Change something → apply_correction → preview → Save change → v2, 
 
   // The "Updated" email and the edit_applied text, once each.
   const emails = () =>
-    rest<{ subject: string; body_text: string }[]>(
+    rest<{ subject: string; body_text: string; recipients: string[] }[]>(
       'GET',
-      `console_emails?select=subject,body_text&org_id=eq.${fx.orgId}&kind=eq.report_updated`,
+      `console_emails?select=subject,body_text,recipients&org_id=eq.${fx.orgId}&kind=eq.report_updated`,
     );
   await expect.poll(async () => (await emails()).length, { timeout: 60_000 }).toBe(1);
-  expect((await emails())[0]!.body_text).toContain('Apex Concrete 6 → 7 workers, 48 → 56 h');
+  const [email] = await emails();
+  expect(email!.recipients).toEqual(['pm@e2e-field.example']);
+  expect(email!.subject).toMatch(new RegExp(`^Updated: ${report.reportNo} · `));
+  expect(email!.body_text).toContain('Apex Concrete 6 → 7 workers, 48 → 56 h');
   const texts = () =>
     rest<{ body: string }[]>(
       'GET',
