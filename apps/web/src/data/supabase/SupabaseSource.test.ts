@@ -1,3 +1,4 @@
+import { CodedError } from '@/lib/utils';
 import { describe, expect, it } from 'vitest';
 import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { V12_ROW_DEFAULTS } from '@sitelog/shared/db/defaults.ts';
@@ -323,12 +324,15 @@ class FakeDb {
   rpcs: Array<{ fn: string; args: Record<string, unknown> }> = [];
   /** What each RPC answers. */
   rpcData: Record<string, unknown> = {};
+  /** An RPC's error message instead (PostgREST's `error.message`, the exception's text). */
+  rpcErrors: Record<string, string> = {};
   constructor(readonly tables: Record<string, Row[]>) {}
   from(table: string) {
     return new FakeQuery(this, table);
   }
   async rpc(fn: string, args: Record<string, unknown>) {
     this.rpcs.push({ fn, args });
+    if (this.rpcErrors[fn]) return { data: null, error: { message: this.rpcErrors[fn] } };
     return { data: this.rpcData[fn] ?? null, error: null };
   }
   storage = {
@@ -590,6 +594,30 @@ describe('SupabaseSource: office photos', () => {
         args: { p_report_id: 'r1', p_data: data, p_change_note: 'Typo' },
       },
     ]);
+  });
+});
+
+describe('SupabaseSource: an office edit names its base version (W2-11 review, §19 Q106)', () => {
+  it('passes p_base_version, and a newer version on the server reads "This report changed"', async () => {
+    const { db, live } = sources();
+    db.rpcData.create_report_version = { version: 3 };
+    const data = emptyReportDataV1('2026-10-09');
+    expect(await live.createReportVersion('r1', data, 'Crew fixed', [], 2)).toEqual({ version: 3 });
+    expect(db.rpcs.at(-1)).toEqual({
+      fn: 'create_report_version',
+      args: {
+        p_report_id: 'r1',
+        p_data: data,
+        p_change_note: 'Crew fixed',
+        p_photos: [],
+        p_base_version: 2,
+      },
+    });
+    db.rpcErrors.create_report_version = 'version_changed';
+    const err = await live.createReportVersion('r1', data, 'Crew fixed', [], 1).catch((e) => e);
+    expect(err).toBeInstanceOf(CodedError);
+    expect((err as CodedError).code).toBe('version_changed');
+    expect((err as Error).message).toBe('This report changed. Reload to see the latest version.');
   });
 });
 

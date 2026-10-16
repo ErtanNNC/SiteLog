@@ -376,3 +376,18 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
     );
   });
 });
+
+describe('demo: an office edit names its base version (W2-11 review, §19 Q106)', () => {
+  it('refuses an edit opened on an older version, as create_report_version does', async () => {
+    const { store, source } = setup();
+    const report = store.data.reports.find((r) => r.status === 'filed' && r.current_version === 1)!;
+    const stored = typed('First edit.');
+    expect((await source.createReportVersion(report.id, stored, 'First', [], 1)).version).toBe(2);
+    const err = await source
+      .createReportVersion(report.id, typed('Stale edit.'), 'Stale', [], 1)
+      .catch((e: unknown) => e);
+    expect((err as { code?: string }).code).toBe('version_changed');
+    expect((err as Error).message).toBe('This report changed. Reload to see the latest version.');
+    expect(store.data.reports.find((r) => r.id === report.id)!.current_version).toBe(2);
+  });
+});

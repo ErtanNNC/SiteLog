@@ -837,6 +837,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       editMode: {
         title: 'Düzenleniyor',
         hint: 'Düzenlemeler yeni bir sürüm oluşturur. Asıl sürüm geçmişte kalır ve yeni bir PDF gönderilir.',
+        versionChanged: 'Bu rapor değişti. En son sürümü görmek için sayfayı yenileyin.',
         summary: 'Özet',
         conditions: 'Koşullar',
         weatherPeriods: 'Hava dönemleri',

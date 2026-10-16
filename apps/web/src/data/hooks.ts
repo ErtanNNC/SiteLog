@@ -280,7 +280,16 @@ export function useCreateReportVersion() {
       data: StoredReportData;
       changeNote: string;
       photos?: OfficePhotoUpload[];
-    }) => s.createReportVersion(vars.reportId, vars.data, vars.changeNote, vars.photos),
+      /** The version the edit was opened on (§19 Q106). */
+      baseVersion?: number;
+    }) =>
+      s.createReportVersion(
+        vars.reportId,
+        vars.data,
+        vars.changeNote,
+        vars.photos,
+        vars.baseVersion,
+      ),
     {
       success: (_v, r) => translate('toasts.versionSavedN', { version: r.version }),
     },

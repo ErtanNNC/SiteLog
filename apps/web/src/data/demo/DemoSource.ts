@@ -256,9 +256,17 @@ export class DemoSource implements DataSource {
     data: StoredReportData,
     changeNote: string,
     photos: OfficePhotoUpload[] = [],
+    baseVersion?: number,
   ) {
     return this.run(() => ({
-      version: this.store.createReportVersion(reportId, data, changeNote, this.user.id, photos),
+      version: this.store.createReportVersion(
+        reportId,
+        data,
+        changeNote,
+        this.user.id,
+        photos,
+        baseVersion,
+      ),
     }));
   }
   /** Demo: the photo lives in memory as an object URL, so the report and its PDF show it. */

@@ -263,6 +263,11 @@ export interface DataSource {
     data: StoredReportData,
     changeNote: string,
     photos?: OfficePhotoUpload[],
+    /**
+     * The version the edit was opened on (W2-11 review, spec §19 Q106): a newer one refuses the
+     * edit with CodedError `version_changed` ("This report changed. Reload …").
+     */
+    baseVersion?: number,
   ): Promise<{ version: number }>;
   /**
    * create_office_report: returns the existing report when the site-day already has one (its

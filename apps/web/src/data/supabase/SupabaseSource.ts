@@ -54,6 +54,7 @@ import {
   transcriptMediaId,
 } from '@sitelog/shared/report/media.ts';
 import { copy } from '@/copy/en';
+import { translate } from '@/i18n/useCopy';
 import { functionsUrl } from '@/lib/env';
 import { rasterizeSvgLogo } from '@/lib/logo';
 import { randomUuid } from '@/lib/photos';
@@ -1613,13 +1614,33 @@ export class SupabaseSource implements DataSource {
     data: StoredReportData,
     changeNote: string,
     photos: OfficePhotoUpload[] = [],
+    baseVersion?: number,
   ) {
-    const res = (await this.rpc('create_report_version', {
-      p_report_id: reportId,
-      p_data: data as never,
-      p_change_note: changeNote,
-      ...(photos.length ? { p_photos: photos as never } : {}),
-    })) as { version?: number } | null;
+    let res: { version?: number } | null;
+    try {
+      res = (await this.rpc(
+        'create_report_version',
+        baseVersion === undefined
+          ? {
+              p_report_id: reportId,
+              p_data: data as never,
+              p_change_note: changeNote,
+              ...(photos.length ? { p_photos: photos as never } : {}),
+            }
+          : {
+              p_report_id: reportId,
+              p_data: data as never,
+              p_change_note: changeNote,
+              p_photos: photos as never,
+              p_base_version: baseVersion,
+            },
+      )) as { version?: number } | null;
+    } catch (err) {
+      // §19 Q106: a newer version (the reporter's change, photos added) is never overwritten.
+      if (errorMessage(err) === 'version_changed')
+        throw new CodedError('version_changed', translate('report.editMode.versionChanged'));
+      throw err;
+    }
     return { version: res?.version ?? 0 };
   }
   async createOfficeReport(input: CreateOfficeReportInput): Promise<CreateOfficeReportResult> {

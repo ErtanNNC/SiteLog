@@ -227,6 +227,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 ### W2-11 · Edit after filing on the web (F10)
 
 - [ ] **W2-11 done** · today _partial_ (L)
+- _Review fixes 2026-10-16:_ an office edit names the version it was opened on and is refused (`version_changed`) when the reporter made a newer one (spec §19 Q106, decided as the recommended default; `20261016000150_office_edit_base_version.sql`).
 - **Spec:** F10 (web), §7.2, §9.2 `edit_applied`, §12 `_v{n}`, §13 _Report updated_, §2.2. **Design:** none in `docs/design/` for the edit preview (Field-07 shows the hint).
 - **Already in the repo:** Past reports and the report view (W2-03), correction routes and job (W2-10), `create_report_version` (office), the signed-off → filed rule in the office path, `edit_applied` copy, the "Updated" email subject (W1-15), the WhatsApp edit handler (`router/handlers/edit.ts`) to mine.
 - **Build:**

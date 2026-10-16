@@ -1583,8 +1583,21 @@ export type Database = {
       sign_off_report: { Args: { p_report_id: string }; Returns: Json };
       undo_sign_off: { Args: { p_report_id: string }; Returns: Json };
       // p_photos: new uploads [{path, mime, caption?, takenAt?, position?}] (OfficePhotoUpload), max 20 per call.
+      /**
+       * An office edit, version n+1. The overload with `p_base_version` (20261016000150, W2-11
+       * review, spec §19 Q106) refuses `version_changed` when the report has a newer version than
+       * the one the edit was opened on; the 4-argument form checks nothing (existing callers).
+       */
       create_report_version: {
-        Args: { p_report_id: string; p_data: Json; p_change_note: string; p_photos?: Json };
+        Args:
+          | { p_report_id: string; p_data: Json; p_change_note: string; p_photos?: Json }
+          | {
+              p_report_id: string;
+              p_data: Json;
+              p_change_note: string;
+              p_photos: Json;
+              p_base_version: number;
+            };
         Returns: Json;
       };
       mark_no_work: { Args: { p_site_day_id: string }; Returns: Json };

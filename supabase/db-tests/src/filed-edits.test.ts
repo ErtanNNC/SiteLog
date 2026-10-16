@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { emptyReportData, uploadStoragePath, type DailyReportData } from '@sitelog/shared';
 import { DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
-import { asService, bootDatabase, probeAs } from './harness.ts';
+import { asService, asUser, bootDatabase, probeAs } from './harness.ts';
 
 /**
  * 20261016000110_filed_edits.sql (W2-11, F10 *Change something*, §7.2, §13, §19 Q81):
@@ -537,5 +537,60 @@ describe('sms_request_filed_correction (W2-12)', () => {
       [message],
     );
     expect(k).toEqual({ lock: 'sms:+15550149377', prio: 0 });
+  });
+});
+
+/**
+ * 20261016000150_office_edit_base_version.sql (W2-11 review, spec §19 Q106): an office edit names
+ * the version it was opened on; a newer version (the reporter's change, photos added) refuses it
+ * with `version_changed` instead of being replaced. The old signature keeps working (no check).
+ */
+describe('create_report_version with the base version (W2-11 review)', () => {
+  const officeEdit = (report: string, base: number | null, note = 'Office fix') =>
+    asUser(db, LENA, async (q) => {
+      const res = await q<{ r: { version: number } }>(
+        base === null
+          ? `select create_report_version($1, $2, $3) as r`
+          : `select create_report_version($1, $2, $3, '[]'::jsonb, $4) as r`,
+        base === null
+          ? [report, JSON.stringify(crew(daysAgo(8), 9)), note]
+          : [report, JSON.stringify(crew(daysAgo(8), 9)), note, base],
+      );
+      return res.rows[0]!.r.version;
+    });
+  const officeFailure = async (report: string, base: number) => {
+    try {
+      await officeEdit(report, base);
+      return null;
+    } catch (err) {
+      return (err as Error).message;
+    }
+  };
+
+  it('refuses an edit opened on v1 once the reporter made v2; v2 and its data are kept', async () => {
+    const { reportId } = await filed(daysAgo(8));
+    const req = await request(reportId, { text: 'Apex had 7' });
+    await settle(req.id, 'ready', preview(daysAgo(8)));
+    expect((await save(req.id, reportId)).version).toBe(2);
+    expect(await officeFailure(reportId, 1)).toBe('version_changed');
+    const row = await reportRow(reportId);
+    expect(row.current_version).toBe(2);
+    const [v2] = await svc<{ workers: number }>(
+      `select (data->'manpower'->0->>'workers')::int as workers from report_versions
+        where report_id = $1 and version = 2`,
+      [reportId],
+    );
+    expect(v2!.workers).toBe(7);
+    // Opened on v2: saved as v3. The old signature (no base) still saves.
+    expect(await officeEdit(reportId, 2)).toBe(3);
+    expect(await officeEdit(reportId, null)).toBe(4);
+  });
+
+  it('is for the office roles only, as the old signature', async () => {
+    const grants = await svc<{ anon: boolean; auth: boolean }>(
+      `select has_function_privilege('anon', 'create_report_version(uuid,jsonb,text,jsonb,int)', 'execute') as anon,
+              has_function_privilege('authenticated', 'create_report_version(uuid,jsonb,text,jsonb,int)', 'execute') as auth`,
+    );
+    expect(grants).toEqual([{ anon: false, auth: true }]);
   });
 });

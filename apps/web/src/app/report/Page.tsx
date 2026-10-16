@@ -127,6 +127,8 @@ function ReportScreen({
   const [discardOpen, setDiscardOpen] = useState(false);
   const [focusAnchor, setFocusAnchor] = useState<string | null>(null);
   const [pendingData, setPendingData] = useState<ReportDetail['storedData'] | null>(null);
+  // The version the edit was opened on: a newer one by save time refuses it (§19 Q106).
+  const [editBase, setEditBase] = useState<number | null>(null);
   // The version's photos while editing: re-caption, move, remove, add (uploaded on save).
   const photos = usePhotoDraft(detail.photos);
   const settings = useSettings();
@@ -182,6 +184,7 @@ function ReportScreen({
     }
     reset(toFormValues(detail.data));
     photos.reset(detail.photos);
+    setEditBase(detail.version);
     setEditing(true);
   };
 
@@ -257,6 +260,7 @@ function ReportScreen({
         data: pendingData,
         changeNote: note.trim(),
         photos: uploads,
+        ...(editBase !== null ? { baseVersion: editBase } : {}),
       });
       if (toastId !== undefined) toast.dismiss(toastId);
       void reportPdf.prepare(r.id, res.version);

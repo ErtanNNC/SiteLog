@@ -1329,6 +1329,8 @@ export const copy = {
     editMode: {
       title: 'Editing',
       hint: 'Edits create a new version. The original stays in history, and a new PDF goes out.',
+      /** W2-11 review (§19 Q106): the report has a newer version than the one being edited. */
+      versionChanged: 'This report changed. Reload to see the latest version.',
       summary: 'Summary',
       conditions: 'Conditions',
       weatherPeriods: 'Weather periods',

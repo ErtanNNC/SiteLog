@@ -56,6 +56,7 @@ import { noticeData } from '@sitelog/shared/notifications.ts';
 import { deadlineInstant } from '@sitelog/shared/schedule/reminders.ts';
 import { fromZonedTime } from 'date-fns-tz';
 import { copy } from '@/copy/en';
+import { translate } from '@/i18n/useCopy';
 import { CodedError, localId } from '@/lib/utils';
 import type { RowSet } from '../assemble';
 import { reporterDefaultsFor, reporterLocaleFor } from '@sitelog/shared/countries.ts';
@@ -530,9 +531,13 @@ export class DemoStore {
     changeNote: string,
     userId: string,
     photos: OfficePhotoUpload[] = [],
+    baseVersion?: number,
   ): number {
     const key: PhotoKey = stored.schemaVersion === 2 ? 'uploadId' : 'messageId';
     const r = this.report(reportId);
+    // §19 Q106 (create_report_version's base version): a newer version is never overwritten.
+    if (baseVersion !== undefined && baseVersion !== r.current_version)
+      throw new CodedError('version_changed', translate('report.editMode.versionChanged'));
     if (!changeNote.trim()) throw new Error(copy.report.edit.changeNoteRequired);
     const pending = r.review_reasons
       .filter((x) => x.startsWith('unknown_company:'))
