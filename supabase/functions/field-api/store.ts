@@ -429,7 +429,8 @@ export interface FieldStore extends DailyLinkStore {
     text: string | null;
   }): Promise<RequestCorrectionResult>;
   getCorrection(id: string): Promise<DraftCorrectionRow | null>;
-  latestCorrection(reportId: string): Promise<DraftCorrectionRow | null>;
+  /** The reporter's latest fix of the report (another reporter's fix is theirs to see). */
+  latestCorrection(reportId: string, reporterId: string): Promise<DraftCorrectionRow | null>;
   /**
    * W2-11 (20261016000110, F10 *Change something*): field_request_filed_correction() (a change of
    * a filed report of the last 14 days, spoken or typed: apply_correction queued, audited;

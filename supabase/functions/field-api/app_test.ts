@@ -2932,6 +2932,12 @@ Deno.test(
       code: CODES.dana,
     });
     assertEquals(dana.status, 404);
+    // W2-10 review: Marco's fix is not on Dana's draft view (nor holds her Confirm & send).
+    h.store.corrections[0]!.status = 'ready';
+    const danaView = await h.call('GET', `reports/${reportId}`, { code: CODES.dana });
+    assertEquals(danaView.json.correction, null);
+    const marcoView = await h.call('GET', `reports/${reportId}`);
+    assertEquals((marcoView.json.correction as { id: string }).id, cid);
     // A correction clip of a report that is neither a draft nor filed is refused at upload.
     h.store.reports.find((r) => r.id === reportId)!.status = 'processing';
     const filed = await h.call('POST', 'uploads', {

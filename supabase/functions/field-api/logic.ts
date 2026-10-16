@@ -652,8 +652,7 @@ export function correctionView(
  */
 export function openCorrectionView(
   row:
-    | (Parameters<typeof correctionView>[0] & Partial<Pick<DraftCorrectionRow, 'settled_at'>>)
-    | null,
+    (Parameters<typeof correctionView>[0] & Partial<Pick<DraftCorrectionRow, 'settled_at'>>) | null,
   now: Date,
 ): CorrectionView | null {
   if (!row) return null;

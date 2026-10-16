@@ -556,11 +556,12 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       return data;
     },
 
-    async latestCorrection(reportId) {
+    async latestCorrection(reportId, reporterId) {
       const { data } = await admin
         .from('draft_corrections')
         .select('*')
         .eq('report_id', reportId)
+        .eq('reporter_id', reporterId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()

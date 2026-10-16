@@ -1147,8 +1147,9 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       correction:
         report.status === 'awaiting_confirmation' || filed
           ? openCorrectionView(
+              // W2-10 review: this reporter's own fix; another reporter's on the site is theirs.
               await store
-                .latestCorrection(report.id)
+                .latestCorrection(report.id, ctx.reporter.id)
                 .then((row) => (row && row.after_filing === filed ? row : null)),
               now(),
             )

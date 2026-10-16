@@ -1293,8 +1293,10 @@ export class FakeFieldStore implements FieldStore {
   getCorrection(id: string) {
     return Promise.resolve(this.corrections.find((c) => c.id === id) ?? null);
   }
-  latestCorrection(reportId: string) {
-    const rows = this.corrections.filter((c) => c.report_id === reportId);
+  latestCorrection(reportId: string, reporterId: string) {
+    const rows = this.corrections.filter(
+      (c) => c.report_id === reportId && c.reporter_id === reporterId,
+    );
     return Promise.resolve(rows.at(-1) ?? null);
   }
   /** As the worker's field_settle_correction() `ready` (tests set a preview up with it). */
