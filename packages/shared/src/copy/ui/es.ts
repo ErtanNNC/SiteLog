@@ -468,6 +468,20 @@ export const uiEs: UiResources = {
         confirm: 'Desactivar',
         cancel: 'Dejarlo activado',
       },
+      turnOn: 'Activar',
+      turnOnLabel: 'Activar: {{consent}}',
+      turnOnSheet: {
+        title: '¿Volver a activar los mensajes de texto?',
+        body: 'Al activarlos, acepta de nuevo:',
+        note: 'Puede desactivarlos aquí cuando quiera.',
+        confirm: 'Activar',
+        cancel: 'Ahora no',
+      },
+      textsStopped: {
+        start:
+          'Detuvo nuestros mensajes al responder STOP. Para recibirlos de nuevo, responda START a uno de nuestros mensajes.',
+        office: 'Los mensajes de texto a este teléfono están detenidos. Pregunte a la oficina.',
+      },
       signOut: 'Cerrar sesión en este teléfono',
       signOutSheet: {
         title: '¿Cerrar sesión en este teléfono?',

@@ -5,6 +5,7 @@ import type {
   DailyReportData,
   FieldDeviceRow,
   FieldLinkRow,
+  Json,
   OrgRow,
   OrgSettingsRow,
   QuestionRow,
@@ -60,6 +61,8 @@ export class FakeFieldStore implements FieldStore {
   devices: FieldDeviceRow[] = [];
   rates = new Map<string, { start: number; count: number }>();
   consents: ConsentRow[] = [];
+  /** `sms_opt_outs` rows: `<phone>|<country>`. */
+  optOuts = new Set<string>();
   siteDays: SiteDayRow[] = [];
   reports: ReportRow[] = [];
   versions: ReportVersionRow[] = [];
@@ -537,6 +540,58 @@ export class FakeFieldStore implements FieldStore {
       alreadyComplete: false,
       jobId,
     });
+  }
+
+  phoneOptedOut(phone: string, country: string) {
+    return Promise.resolve(this.optOuts.has(`${phone}|${country}`));
+  }
+
+  grantConsent(
+    reporterId: string,
+    type: 'sms',
+    textVersion: string,
+    deviceId: string,
+    evidence: Json,
+  ): Promise<{ granted: boolean }> {
+    this.calls.push('grantConsent');
+    const r = this.reporters.find((x) => x.id === reporterId);
+    if (!r) return Promise.reject(new FieldDbError('reporter_not_found'));
+    const country = this.orgs.find((o) => o.id === r.org_id)?.country ?? '';
+    if (r.status === 'opted_out' || this.optOuts.has(`${r.phone_e164}|${country}`)) {
+      return Promise.reject(new FieldDbError('texts_opted_out'));
+    }
+    if (
+      this.consents.some((c) => c.reporter_id === reporterId && c.type === type && !c.revoked_at)
+    ) {
+      return Promise.resolve({ granted: false });
+    }
+    const created: ConsentRow = {
+      id: this.id('cccccccc'),
+      reporter_id: reporterId,
+      type,
+      method: 'web_checkbox',
+      text_version: textVersion,
+      evidence,
+      given_at: this.iso(),
+      revoked_at: null,
+    };
+    this.consents.push(created);
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: reporterId,
+      action: 'consent.given',
+      entity: 'consent',
+      entityId: created.id,
+      diff: {
+        type,
+        method: 'web_checkbox',
+        text_version: textVersion,
+        via: 'settings',
+        device_id: deviceId,
+      },
+    });
+    return Promise.resolve({ granted: true });
   }
 
   revokeConsent(

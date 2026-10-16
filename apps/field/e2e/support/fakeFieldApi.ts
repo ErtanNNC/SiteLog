@@ -306,6 +306,8 @@ export interface FakeOptions {
   voiceAnswer?: number | 'unclear';
   /** W2-13: what the worker makes of the test recording (default: heard, in the reporter's language). */
   testClip?: 'heard' | 'silent' | 'rate_limited';
+  /** Settings (§19 Q86): the phone opted out of texts (STOP): `consent/grant` answers 409. */
+  textsOptedOut?: boolean;
 }
 
 /** The fake transcript of a test recording, in the reporter's language (fixtures/voice, kind test). */
@@ -347,6 +349,7 @@ export async function installFakeFieldApi(
               { type: 'data_processing', held: true },
             ]
           : [],
+        textsOptedOut: opts.textsOptedOut ?? false,
       },
     },
     calls: [],
@@ -468,6 +471,17 @@ export async function installFakeFieldApi(
           ),
         };
         if (type === 'recording' || type === 'data_processing') api.state.consented = false;
+        return json(route, 200, api.state.prefs);
+      }
+      // §19 Q86: texts back on; an opted-out phone is refused (field-api's 409).
+      if (path === 'consent/grant') {
+        if (api.state.prefs.textsOptedOut) return json(route, 409, { error: 'texts_opted_out' });
+        api.state.prefs = {
+          ...api.state.prefs,
+          consents: api.state.prefs.consents.map((c) =>
+            c.type === 'sms' ? { ...c, held: true } : c,
+          ),
+        };
         return json(route, 200, api.state.prefs);
       }
       if (path === 'device/sign-out') {

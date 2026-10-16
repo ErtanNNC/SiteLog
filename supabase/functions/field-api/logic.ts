@@ -143,27 +143,45 @@ export function needsConsent(held: ReadonlySet<ConsentType>): boolean {
 }
 
 /**
- * What Settings shows (F15, `GET` / `PATCH preferences`, `consent/revoke`; W2-02): the report
- * mode, the language, the message channel with the pack's built channels (spec §19 Q21), and every
- * consent type the reporter has given, held or turned off, in `CONSENT_TYPES` order.
+ * What Settings shows (F15, `GET` / `PATCH preferences`, `consent/revoke`, `consent/grant`; W2-02):
+ * the report mode, the language, the message channel with the pack's built channels (spec §19
+ * Q21), every consent type the reporter has given, held or turned off, in `CONSENT_TYPES` order,
+ * and the texts consent also when never given while the pack sends texts (its *Turn on*, §19 Q86),
+ * and whether the phone opted out of texts (`textsOptedOut`, `textsOptedOut()`).
  */
 export function settingsView(
   reporter: Pick<ReporterRow, 'contact_pref' | 'locale' | 'message_channel'>,
   pack: Pick<CountryPack, 'messageChannels'>,
   consents: readonly Pick<ConsentRow, 'type' | 'revoked_at'>[],
+  optedOut: boolean,
 ): PreferencesResponse {
   const { held } = consentSets(consents);
-  const given = new Set(consents.map((c) => c.type));
+  const shown = new Set(consents.map((c) => c.type));
+  if (pack.messageChannels.includes('sms')) shown.add('sms');
   return {
     contactPref: reporter.contact_pref,
     locale: reporter.locale as ReporterLocale,
     messageChannel: reporter.message_channel,
     messageChannels: settingsMessageChannels(pack),
-    consents: CONSENT_TYPES.filter((t) => given.has(t)).map((type) => ({
+    consents: CONSENT_TYPES.filter((t) => shown.has(t)).map((type) => ({
       type,
       held: held.has(type),
     })),
+    textsOptedOut: optedOut,
   };
+}
+
+/**
+ * Whether the phone opted out of texts on the org's pack (§9.5, F15): the reporter row is
+ * `opted_out` (SMS STOP, or the provider's opt-out list), or the phone has an `sms_opt_outs` row on
+ * the pack whoever it belonged to then (the Notifier's `phone_opted_out`). A consent never
+ * overrides it (spec §19 Q86): only START does.
+ */
+export function textsOptedOut(
+  reporter: Pick<ReporterRow, 'status'>,
+  phoneOptedOut: boolean,
+): boolean {
+  return reporter.status === 'opted_out' || phoneOptedOut;
 }
 
 /** The pack subset `resolve` hands the field app (spec §4.6): never the sender id or a provider. */

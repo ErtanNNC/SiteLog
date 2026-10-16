@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
 import type { PreferencesResponse, ResolveResponse } from '@sitelog/shared/field-contract.ts';
 import { i18n } from '@/i18n/i18n';
-import { apiError, demoSession, fakeRoutes, renderApp } from '@/test/render';
+import { US_COUNTRY, apiError, demoSession, fakeRoutes, renderApp } from '@/test/render';
 
 /** Marco's settings: link, English, the pack's order, the three consents of Field-02. */
 function prefs(patch: Partial<PreferencesResponse> = {}): PreferencesResponse {
@@ -17,9 +17,17 @@ function prefs(patch: Partial<PreferencesResponse> = {}): PreferencesResponse {
       { type: 'recording', held: true },
       { type: 'data_processing', held: true },
     ],
+    textsOptedOut: false,
     ...patch,
   };
 }
+
+/** Texts turned off (or never given): the texts consent reads Off. */
+const TEXTS_OFF: PreferencesResponse['consents'] = [
+  { type: 'sms', held: false },
+  { type: 'recording', held: true },
+  { type: 'data_processing', held: true },
+];
 
 describe('Settings (F15, §9.3; W2-02)', () => {
   it('shows the preference, the language, the consents with their state and sign out', async () => {
@@ -110,6 +118,98 @@ describe('Settings (F15, §9.3; W2-02)', () => {
     expect(routes.revokeConsent).toHaveBeenCalledWith('K7Q2MX', { type: 'sms' });
     expect(await screen.findByText('Off')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Turn off: / })).toHaveLength(2);
+  });
+
+  it('turns texts back on after the sheet that shows the wording again (§19 Q86)', async () => {
+    const routes = fakeRoutes({
+      preferences: vi.fn().mockResolvedValue(prefs({ consents: TEXTS_OFF })),
+      grantConsent: vi.fn().mockResolvedValue(prefs()),
+    });
+    renderApp('/settings', { routes });
+    const on = await screen.findByRole('button', {
+      name: 'Turn on: Texts with my daily report link',
+    });
+    // Only texts: recording and processing come back through the Welcome screen.
+    expect(screen.getAllByRole('button', { name: /^Turn on: / })).toHaveLength(1);
+    fireEvent.click(on);
+    const sheet = screen.getByRole('dialog', { name: 'Turn texts back on?' });
+    expect(sheet).toHaveTextContent('Text me the daily report link');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Not now' }));
+    expect(routes.grantConsent).not.toHaveBeenCalled();
+
+    fireEvent.click(on);
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Turn texts back on?' })).getByRole('button', {
+        name: 'Turn on',
+      }),
+    );
+    expect(routes.grantConsent).toHaveBeenCalledWith('K7Q2MX', {
+      type: 'sms',
+      textVersion: 'field.consent.v1',
+    });
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(screen.getAllByText('On')).toHaveLength(3);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('sends the pack’s consent key as the version when it names one', async () => {
+    const routes = fakeRoutes({
+      preferences: vi.fn().mockResolvedValue(prefs({ consents: TEXTS_OFF })),
+      grantConsent: vi.fn().mockResolvedValue(prefs()),
+    });
+    renderApp('/settings', {
+      routes,
+      session: demoSession({ country: { ...US_COUNTRY, legalKeys: { consent: 'US.consent.v2' } } }),
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /^Turn on: / }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Turn on' }));
+    expect(routes.grantConsent).toHaveBeenCalledWith('K7Q2MX', {
+      type: 'sms',
+      textVersion: 'US.consent.v2',
+    });
+  });
+
+  it('a phone opted out by STOP gets no Turn on: text START on a two-way pack', async () => {
+    const routes = fakeRoutes({
+      preferences: vi.fn().mockResolvedValue(prefs({ consents: TEXTS_OFF, textsOptedOut: true })),
+    });
+    renderApp('/settings', { routes });
+    expect(
+      await screen.findByText(
+        'You stopped our texts by replying STOP. To get them again, reply START to one of our texts.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Turn on: / })).toBeNull();
+  });
+
+  it('on a one-way pack the opted-out line sends them to the office (§19 Q94)', async () => {
+    const routes = fakeRoutes({
+      preferences: vi.fn().mockResolvedValue(prefs({ textsOptedOut: true })),
+    });
+    renderApp('/settings', {
+      routes,
+      session: demoSession({ country: { ...US_COUNTRY, twoWaySms: false } }),
+    });
+    expect(
+      await screen.findByText('Texts to this phone are stopped. Ask the office.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/reply START/)).toBeNull();
+  });
+
+  it('a STOP that came in meanwhile: the refusal reloads and shows the line', async () => {
+    const routes = fakeRoutes({
+      preferences: vi
+        .fn()
+        .mockResolvedValueOnce(prefs({ consents: TEXTS_OFF }))
+        .mockResolvedValue(prefs({ consents: TEXTS_OFF, textsOptedOut: true })),
+      grantConsent: vi.fn().mockRejectedValue(apiError(409, 'texts_opted_out')),
+    });
+    renderApp('/settings', { routes });
+    fireEvent.click(await screen.findByRole('button', { name: /^Turn on: / }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Turn on' }));
+    expect(await screen.findByText(/reply START to one of our texts/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(routes.preferences).toHaveBeenCalledTimes(2);
   });
 
   it('turns recording off only after the sheet that says reports stop, then back to the consent', async () => {
@@ -211,6 +311,9 @@ describe('Settings (F15, §9.3; W2-02)', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: copy.signOut })).toBeInTheDocument();
     expect(screen.getAllByText(copy.on)).toHaveLength(3);
+    expect(copy.turnOn.length).toBeGreaterThan(0);
+    expect(copy.turnOnSheet.title).not.toBe(UI_RESOURCES.en.field.settings.turnOnSheet.title);
+    expect(copy.textsStopped.start).toContain('START');
     await act(() => i18n.changeLanguage('en'));
   });
 });

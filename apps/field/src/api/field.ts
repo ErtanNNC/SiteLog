@@ -22,6 +22,7 @@ import type {
 import type {
   AnswerRequest,
   ConfirmRequest,
+  ConsentGrantRequest,
   ConsentRequest,
   ConsentRevokeRequest,
   DayStatusRequest,
@@ -100,6 +101,9 @@ export function createFieldRoutes(api: FieldApiClient = fieldApi) {
     /** Turn off one consent. */
     revokeConsent: (code: string, body: ConsentRevokeRequest) =>
       api.request<PreferencesResponse>('consent/revoke', { body, linkCode: code }),
+    /** Turn the texts consent back on (spec §19 Q86); refused for an opted-out phone. */
+    grantConsent: (code: string, body: ConsentGrantRequest) =>
+      api.request<PreferencesResponse>('consent/grant', { body, linkCode: code }),
     /**
      * F4's optional test recording (W2-13): a signed upload outside any report, then `complete`
      * (the worker transcribes it), then the snippet, answered once.

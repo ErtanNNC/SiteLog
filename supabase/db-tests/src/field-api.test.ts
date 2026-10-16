@@ -1182,6 +1182,107 @@ describe('field_revoke_consent (F15 Settings: Turn off; W2-02)', () => {
   });
 });
 
+describe('field_grant_consent (Settings: Turn on texts; spec §19 Q86)', () => {
+  const grant = async (reporter: string, version = 'field.consent.v1', type = 'sms') =>
+    (
+      await svc<{ r: { granted: boolean; consent_id?: string } }>(
+        `select field_grant_consent($1, $2::consent_type, $3, $4, $5) as r`,
+        [reporter, type, version, ID(902), { device_id: ID(902), user_agent: 'test' }],
+      )
+    )[0]!.r;
+  const smsRows = (reporter: string) =>
+    svc<{ revoked: boolean; method: string; text_version: string }>(
+      `select revoked_at is not null as revoked, method, text_version from consents
+       where reporter_id = $1 and type = 'sms' order by given_at, revoked_at nulls last`,
+      [reporter],
+    );
+
+  it('records a fresh consent after a revoke, audited as the reporter from Settings', async () => {
+    // Dana turned texts off in the revoke tests above.
+    expect((await smsRows(DANA)).every((r) => r.revoked)).toBe(true);
+    const res = await grant(DANA, 'field.consent.v2');
+    expect(res).toMatchObject({ granted: true, consent_id: expect.any(String) });
+    const rows = await smsRows(DANA);
+    expect(rows.at(-1)).toEqual({
+      revoked: false,
+      method: 'web_checkbox',
+      text_version: 'field.consent.v2',
+    });
+    expect(rows.filter((r) => r.revoked)).toHaveLength(1); // the revoked row stays as it was
+    const audits = await svc<{ actor_type: string; entity_id: string; diff: unknown }>(
+      `select actor_type, entity_id, diff from audit_log
+       where action = 'consent.given' and actor_id = $1`,
+      [DANA],
+    );
+    expect(audits).toEqual([
+      {
+        actor_type: 'reporter',
+        entity_id: res.consent_id,
+        diff: {
+          type: 'sms',
+          method: 'web_checkbox',
+          text_version: 'field.consent.v2',
+          via: 'settings',
+          device_id: ID(902),
+        },
+      },
+    ]);
+    // Held already: nothing changes, nothing audited.
+    expect(await grant(DANA)).toEqual({ granted: false });
+    expect(await smsRows(DANA)).toHaveLength(2);
+  });
+
+  it('never overrides an opt-out: the phone on the pack, or the reporter row', async () => {
+    await svc(
+      `insert into sms_opt_outs (phone_e164, country, method) values ($1, 'US', 'sms_keyword')`,
+      ['+15550143380'],
+    );
+    expect(
+      await failure(`select field_grant_consent($1, 'sms', 'v1', null, null)`, [OUTSIDER]),
+    ).toBe('texts_opted_out');
+    await svc(`delete from sms_opt_outs where phone_e164 = $1`, ['+15550143380']);
+    await svc(`update reporters set status = 'opted_out', opted_out_at = now() where id = $1`, [
+      OUTSIDER,
+    ]);
+    expect(
+      await failure(`select field_grant_consent($1, 'sms', 'v1', null, null)`, [OUTSIDER]),
+    ).toBe('texts_opted_out');
+    expect(await smsRows(OUTSIDER)).toEqual([]);
+    expect(
+      await svc(
+        `select count(*)::int as n from audit_log where action = 'consent.given' and actor_id = $1`,
+        [OUTSIDER],
+      ),
+    ).toEqual([{ n: 0 }]);
+    await svc(`update reporters set status = 'active', opted_out_at = null where id = $1`, [
+      OUTSIDER,
+    ]);
+  });
+
+  it('reads the opt-out of the org’s own pack only', async () => {
+    // Emre (TR pack) revokes texts; a STOP of his number on the US sender does not bind the TR one.
+    await svc(`select field_revoke_consent($1, 'sms', null)`, [EMRE]);
+    await svc(
+      `insert into sms_opt_outs (phone_e164, country, method) values ($1, 'US', 'sms_keyword')`,
+      ['+905321234567'],
+    );
+    expect(await grant(EMRE)).toMatchObject({ granted: true });
+    await svc(`delete from sms_opt_outs where phone_e164 = $1`, ['+905321234567']);
+  });
+
+  it('takes the texts consent only, with a wording version, for a known reporter', async () => {
+    expect(
+      await failure(`select field_grant_consent($1, 'recording', 'v1', null, null)`, [MARCO]),
+    ).toBe('consent_not_offered');
+    expect(await failure(`select field_grant_consent($1, 'sms', ' ', null, null)`, [MARCO])).toBe(
+      'invalid_status',
+    );
+    expect(
+      await failure(`select field_grant_consent($1, 'sms', 'v1', null, null)`, [ID(999)]),
+    ).toBe('reporter_not_found');
+  });
+});
+
 describe('field_device_verify_locked (F16: 5 wrong codes lock the check; W2-03)', () => {
   const lock = async (until: string, device: string | null = ID(901)) =>
     (
@@ -1244,6 +1345,7 @@ describe('the field-api functions are the service role’s only', () => {
     'field_confirm_report(uuid,uuid,integer,integer)',
     'field_flag_late_upload(uuid,uuid)',
     'field_revoke_consent(uuid,consent_type,uuid)',
+    'field_grant_consent(uuid,consent_type,text,uuid,jsonb)',
     'field_device_verify_locked(uuid,uuid,timestamp with time zone)',
     'field_attach_photos(uuid,uuid,text,text)',
     'field_report_day_off(uuid,uuid,date,text,jsonb,jsonb,jsonb)',

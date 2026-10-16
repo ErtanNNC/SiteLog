@@ -158,6 +158,8 @@ export const FIELD_DB_ERRORS = [
   'answer_pending',
   'test_clip_not_found',
   'consent_required',
+  'consent_not_offered',
+  'texts_opted_out',
 ] as const;
 
 export interface ReportMediaCounts {
@@ -240,6 +242,20 @@ export interface FieldStore extends DailyLinkStore {
     type: ConsentType,
     deviceId: string,
   ): Promise<{ revoked: boolean; notified: boolean }>;
+  /**
+   * field_grant_consent() (20261016000080, Settings' *Turn on* for texts, spec §19 Q86): a fresh
+   * `sms` consent with the wording's version and the evidence, audited `consent.given` (`via
+   * settings`); `granted` false when one is held. Refuses an opted-out phone (`texts_opted_out`).
+   */
+  grantConsent(
+    reporterId: string,
+    type: 'sms',
+    textVersion: string,
+    deviceId: string,
+    evidence: Json,
+  ): Promise<{ granted: boolean }>;
+  /** `sms_opt_outs`: the phone sent STOP on this pack's sender, or its provider refused it. */
+  phoneOptedOut(phone: string, country: string): Promise<boolean>;
 
   // Days and reports
   getSiteDay(siteId: string, date: string): Promise<SiteDayRow | null>;

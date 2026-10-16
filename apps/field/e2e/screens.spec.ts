@@ -584,6 +584,19 @@ for (const run of RUNS) {
       await expect(page.getByText(s.off, { exact: true })).toBeVisible();
       expect(api.calls.find((c) => c.path === 'consent/revoke')!.body).toEqual({ type: 'sms' });
 
+      // ... and back on (§19 Q86): the sheet shows the Welcome wording again.
+      await page.getByRole('button', { name: `${s.turnOn}: ${s.consents.sms}` }).click();
+      const on = page.getByRole('dialog', { name: s.turnOnSheet.title });
+      await expect(on).toContainText(field.welcome.consentSms);
+      await expectFieldScreen(page);
+      await on.getByRole('button', { name: s.turnOnSheet.confirm }).click();
+      await expect(on).toBeHidden();
+      await expect(page.getByText(s.off, { exact: true })).toHaveCount(0);
+      expect(api.calls.find((c) => c.path === 'consent/grant')!.body).toEqual({
+        type: 'sms',
+        textVersion: market.country.legalKeys.consent ?? 'field.consent.v1',
+      });
+
       // Recording off behind the sheet; Keep it on changes nothing.
       const recording = page.getByRole('button', { name: `${s.turnOff}: ${s.consents.recording}` });
       await recording.click();
@@ -636,12 +649,50 @@ test.describe('Settings: language and stopping reports (F15, W2-02)', () => {
     await expectFieldScreen(page);
   });
 
+  test('a phone opted out by STOP gets START on a two-way pack, no Turn on (Q86)', async ({
+    page,
+  }) => {
+    const s = UI_RESOURCES.en.field.settings;
+    await installFakeFieldApi(page, kestrel(), {
+      verified: true,
+      consented: true,
+      textsOptedOut: true,
+    });
+    await page.goto('/r/K7Q2MX');
+    await page.getByRole('link', { name: UI_RESOURCES.en.field.routes.settings }).click();
+    await page.getByRole('button', { name: `${s.turnOff}: ${s.consents.sms}` }).click();
+    await expect(page.getByText(s.textsStopped.start)).toBeVisible();
+    await expect(page.getByRole('button', { name: `${s.turnOn}: ${s.consents.sms}` })).toHaveCount(
+      0,
+    );
+    await expectFieldScreen(page);
+  });
+
   test('works at 1440 px too', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await installFakeFieldApi(page, kestrel(), { verified: true, consented: true });
     await page.goto('/r/K7Q2MX');
     await page.getByRole('link', { name: UI_RESOURCES.en.field.routes.settings }).click();
     await expect(page.getByText(UI_RESOURCES.en.field.settings.consents.sms)).toBeVisible();
+    await expectFieldScreen(page);
+  });
+});
+
+test.describe('Settings: an opted-out phone on a one-way pack (Q86, Q94)', () => {
+  test.use({ locale: 'tr-TR' });
+
+  test('says to ask the office, never START, and offers no Turn on', async ({ page }) => {
+    const s = UI_RESOURCES.tr.field.settings;
+    await installFakeFieldApi(page, demir(), {
+      verified: true,
+      consented: true,
+      textsOptedOut: true,
+    });
+    await page.goto(`/r/${CODE}`);
+    await page.getByRole('link', { name: UI_RESOURCES.tr.field.routes.settings }).click();
+    await expect(page.getByText(s.textsStopped.office)).toBeVisible();
+    await expect(page.getByText(s.textsStopped.start)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: new RegExp(`^${s.turnOn}: `) })).toHaveCount(0);
     await expectFieldScreen(page);
   });
 });

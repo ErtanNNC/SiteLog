@@ -499,6 +499,12 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select field_revoke_consent('${o.reporter}', 'sms', null) as v`,
   },
+  // Spec §19 Q86 (20261016000080_consent_turn_on.sql): Settings turns texts back on.
+  field_grant_consent: {
+    why: '§6.5: field-api only (service role); a reporter consents through the recorder, never a session.',
+    allow: NONE,
+    call: (o) => `select field_grant_consent('${o.reporter}', 'sms', 'v1', null, null) as v`,
+  },
   // F16 (20261016000020_device_verify_locked.sql): the device check's lock tells the office.
   field_device_verify_locked: {
     why: "§6.5: field-api only (service role); the lock is the server's rate limit, never a client.",

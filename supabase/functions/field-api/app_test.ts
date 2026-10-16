@@ -1841,7 +1841,7 @@ Deno.test(
 // ── Settings (F15, W2-02) ─────────────────────────────────────────────────────────────────────
 
 Deno.test(
-  'Settings: GET preferences shows the preference, channels and every consent given',
+  'Settings: GET preferences shows the preference, channels and every consent given (and texts)',
   async () => {
     const h = setup();
     await verifiedDevice(h);
@@ -1853,7 +1853,9 @@ Deno.test(
       locale: 'en-US',
       messageChannel: null,
       messageChannels: ['sms'],
-      consents: [],
+      // The texts consent is listed while the pack texts, so Settings can offer Turn on (Q86).
+      consents: [{ type: 'sms', held: false }],
+      textsOptedOut: false,
     });
     await h.call('POST', 'consent', {
       body: {
@@ -1956,6 +1958,118 @@ Deno.test('Settings: turning texts off revokes the sms consent only; reports go 
     'invalid_request',
   );
 });
+
+Deno.test(
+  'Settings: Turn on records a fresh texts consent, audited like the revoke (Q86)',
+  async () => {
+    const h = setup();
+    await consented(h);
+    await h.call('POST', 'consent/revoke', { body: { type: 'sms' } });
+    const res = await h.call('POST', 'consent/grant', {
+      body: { type: 'sms', textVersion: 'field.consent.v1' },
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.json.consents, [
+      { type: 'sms', held: true },
+      { type: 'recording', held: true },
+      { type: 'data_processing', held: true },
+    ]);
+    assertEquals(res.json.textsOptedOut, false);
+    const rows = h.store.consents.filter((c) => c.reporter_id === MARCO && c.type === 'sms');
+    assertEquals(rows.length, 2, 'the revoked row stays; a new row is the consent');
+    const fresh = rows.find((c) => c.revoked_at === null)!;
+    assertEquals([fresh.method, fresh.text_version], ['web_checkbox', 'field.consent.v1']);
+    assertEquals((fresh.evidence as Record<string, unknown>).device_id, h.store.devices[0]!.id);
+    const given = h.store.audits.filter((a) => a.action === 'consent.given').at(-1)!;
+    assertEquals([given.actorType, given.actorId, given.entityId], ['reporter', MARCO, fresh.id]);
+    assertEquals(given.diff, {
+      type: 'sms',
+      method: 'web_checkbox',
+      text_version: 'field.consent.v1',
+      via: 'settings',
+      device_id: h.store.devices[0]!.id,
+    });
+    // Held already: nothing changes, nothing audited.
+    const audits = h.store.audits.length;
+    await h.call('POST', 'consent/grant', {
+      body: { type: 'sms', textVersion: 'field.consent.v1' },
+    });
+    assertEquals(h.store.audits.length, audits);
+    // Texts only: recording and processing come back through the Welcome & consent screen.
+    assertEquals(
+      (await h.call('POST', 'consent/grant', { body: { type: 'recording', textVersion: 'v1' } }))
+        .json.error,
+      'invalid_request',
+    );
+  },
+);
+
+Deno.test('Settings: Turn on checks the wording version and the pack (Q86)', async () => {
+  const h = setup({ country: { legal_keys: { consent: 'US.consent.v1' } } });
+  await verifiedDevice(h);
+  // Texts never given (the box was unticked on Welcome): listed, off.
+  await h.call('POST', 'consent', {
+    body: {
+      types: ['recording', 'data_processing'],
+      textVersion: 'US.consent.v1',
+      contactPref: 'link',
+      locale: 'en-US',
+    },
+  });
+  const before = (await h.call('GET', 'preferences')).json.consents as unknown[];
+  assertEquals(before[0], { type: 'sms', held: false });
+  const stale = await h.call('POST', 'consent/grant', {
+    body: { type: 'sms', textVersion: 'field.consent.v1' },
+  });
+  assertEquals(
+    [stale.status, stale.json.error, stale.json.textVersion],
+    [409, 'text_version_mismatch', 'US.consent.v1'],
+  );
+  const ok = await h.call('POST', 'consent/grant', {
+    body: { type: 'sms', textVersion: 'US.consent.v1' },
+  });
+  assertEquals((ok.json.consents as unknown[])[0], { type: 'sms', held: true });
+
+  const noTexts = setup({ country: { message_channels: ['whatsapp'] } });
+  await consented(noTexts);
+  const refused = await noTexts.call('POST', 'consent/grant', {
+    body: { type: 'sms', textVersion: 'field.consent.v1' },
+  });
+  assertEquals([refused.status, refused.json.error], [400, 'channel_not_offered']);
+});
+
+Deno.test(
+  'Settings: Turn on never overrides an opt-out (STOP or the phone on the pack, Q86)',
+  async () => {
+    const h = setup();
+    await consented(h);
+    await h.call('POST', 'consent/revoke', { body: { type: 'sms' } });
+    const marco = h.store.reporters.find((r) => r.id === MARCO)!;
+    const grant = () =>
+      h.call('POST', 'consent/grant', { body: { type: 'sms', textVersion: 'field.consent.v1' } });
+
+    // The reporter row opted out (SMS STOP).
+    marco.status = 'opted_out';
+    assertEquals((await h.call('GET', 'preferences')).json.textsOptedOut, true);
+    const stopped = await grant();
+    assertEquals([stopped.status, stopped.json.error], [409, 'texts_opted_out']);
+    // The phone on the pack's sender (`sms_opt_outs`), whoever it belonged to then.
+    marco.status = 'active';
+    h.store.optOuts.add(`${marco.phone_e164}|US`);
+    assertEquals((await grant()).json.error, 'texts_opted_out');
+    assertEquals(
+      h.store.consents.filter((c) => c.type === 'sms' && c.revoked_at === null).length,
+      0,
+      'no consent row',
+    );
+    assertEquals(h.store.audits.filter((a) => a.action === 'consent.given').length, 3); // Welcome only
+    // An opt-out on another pack's sender does not bind this one; after START it goes.
+    h.store.optOuts.clear();
+    h.store.optOuts.add(`${marco.phone_e164}|TR`);
+    const ok = await grant();
+    assertEquals([ok.status, ok.json.textsOptedOut], [200, false]);
+  },
+);
 
 Deno.test(
   'Settings: revoking recording stops every route but resolve, device/*, consent and Settings, and tells the office',

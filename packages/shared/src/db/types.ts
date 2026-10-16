@@ -1289,6 +1289,18 @@ export type Database = {
         Args: { p_reporter_id: string; p_type: ConsentType; p_device_id: string };
         Returns: Json;
       };
+      // Settings' Turn on for texts (spec §19 Q86, 20261016000080_consent_turn_on.sql), service
+      // role only: a fresh `sms` consent audited consent.given; refused for an opted-out phone.
+      field_grant_consent: {
+        Args: {
+          p_reporter_id: string;
+          p_type: ConsentType;
+          p_text_version: string;
+          p_device_id: string;
+          p_evidence: Json;
+        };
+        Returns: Json;
+      };
       // F16 (20261016000020_device_verify_locked.sql), service role only: the device check's
       // lock (5 wrong codes an hour) audited device.verify_locked with one office notice.
       field_device_verify_locked: {

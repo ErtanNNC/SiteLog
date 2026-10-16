@@ -1,5 +1,6 @@
 import type { Json, TestClipView } from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
+import { phoneOptedOut } from '../_shared/messaging.ts';
 import type { AppClient } from '../_shared/supabase.ts';
 import {
   FIELD_DB_ERRORS,
@@ -408,6 +409,22 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
           p_device_id: deviceId,
         }),
       );
+    },
+
+    async grantConsent(reporterId, type, textVersion, deviceId, evidence) {
+      return await rpc<{ granted: boolean }>(
+        admin.rpc('field_grant_consent', {
+          p_reporter_id: reporterId,
+          p_type: type,
+          p_text_version: textVersion,
+          p_device_id: deviceId,
+          p_evidence: evidence,
+        }),
+      );
+    },
+
+    phoneOptedOut(phone, country) {
+      return phoneOptedOut(admin, phone, country);
     },
 
     async attachPhotos(reportId, batchId, changeNote, caption) {

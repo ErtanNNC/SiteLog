@@ -30,6 +30,7 @@ import {
   scopeSites,
   settingsView,
   storedObjectProblem,
+  textsOptedOut,
   verifyCodeHash,
   voiceAnswerView,
   lastVoiceAnswerView,
@@ -331,6 +332,7 @@ Deno.test('settingsView: the built channels, and every consent given with its st
       // Given again after a revocation: held.
       { type: 'recording', revoked_at: '2026-10-01T00:00:00Z' },
     ],
+    false,
   );
   assertEquals(view, {
     contactPref: 'call',
@@ -342,7 +344,39 @@ Deno.test('settingsView: the built channels, and every consent given with its st
       { type: 'recording', held: true },
       { type: 'data_processing', held: true },
     ],
+    textsOptedOut: false,
   });
+});
+
+Deno.test(
+  'settingsView: texts listed for Turn on when never given, while the pack texts (Q86)',
+  () => {
+    const us = toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!);
+    const reporter = { contact_pref: 'link', locale: 'en-US', message_channel: null } as const;
+    const given = [
+      { type: 'recording', revoked_at: null },
+      { type: 'data_processing', revoked_at: null },
+    ] as const;
+    assertEquals(settingsView(reporter, us, given, true).consents, [
+      { type: 'sms', held: false },
+      { type: 'recording', held: true },
+      { type: 'data_processing', held: true },
+    ]);
+    assertEquals(settingsView(reporter, us, given, true).textsOptedOut, true);
+    // A pack that sends no texts lists no texts consent.
+    assertEquals(
+      settingsView(reporter, { ...us, messageChannels: ['whatsapp'] }, given, false).consents.map(
+        (c) => c.type,
+      ),
+      ['recording', 'data_processing'],
+    );
+  },
+);
+
+Deno.test('textsOptedOut: the reporter row or the phone on the pack (§9.5)', () => {
+  assertEquals(textsOptedOut({ status: 'active' }, false), false);
+  assertEquals(textsOptedOut({ status: 'opted_out' }, false), true);
+  assertEquals(textsOptedOut({ status: 'active' }, true), true);
 });
 
 Deno.test(

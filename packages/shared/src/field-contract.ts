@@ -154,6 +154,11 @@ export const FIELD_API_ERRORS = [
   /** F9: FILED_PHOTOS_MAX photos were added after filing already. */
   'photo_limit',
   'channel_not_offered',
+  /**
+   * Spec §19 Q86: *Turn on* for texts refused because the phone opted out of texts (SMS STOP or
+   * the provider's opt-out list); only START undoes it (§9.5).
+   */
+  'texts_opted_out',
   'link_not_expired',
   'rate_limited',
   'internal',
@@ -564,18 +569,27 @@ export interface SettingsConsent {
 }
 
 /**
- * `GET preferences`, `PATCH preferences`, `POST consent/revoke` (F15, Settings; W2-02): what the
- * Settings screen shows. `messageChannels` are the pack's message channels that are built, in the
- * pack's order (`settingsMessageChannels`): the choice is shown only when there is more than one.
- * `messageChannel` null = the pack's order (spec §19 Q21).
+ * `GET preferences`, `PATCH preferences`, `POST consent/revoke`, `POST consent/grant` (F15,
+ * Settings; W2-02, §19 Q86): what the Settings screen shows. `messageChannels` are the pack's
+ * message channels that are built, in the pack's order (`settingsMessageChannels`): the choice is
+ * shown only when there is more than one. `messageChannel` null = the pack's order (spec §19 Q21).
  */
 export interface PreferencesResponse {
   contactPref: ContactPref;
   locale: ReporterLocale;
   messageChannel: MessageChannel | null;
   messageChannels: MessageChannel[];
-  /** Every consent type the reporter has given, in `CONSENT_TYPES` order. */
+  /**
+   * Every consent type the reporter has given, in `CONSENT_TYPES` order; the texts consent (`sms`)
+   * also when never given, while the pack sends texts, so Settings can offer *Turn on* (§19 Q86).
+   */
   consents: SettingsConsent[];
+  /**
+   * The phone opted out of texts on the org's pack: SMS STOP or the provider's opt-out list
+   * (`reporters.status 'opted_out'` or an `sms_opt_outs` row). No texts go, whatever the consent,
+   * and *Turn on* is refused (`texts_opted_out`): on a two-way pack Settings says to text START.
+   */
+  textsOptedOut: boolean;
 }
 
 /**

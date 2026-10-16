@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import type { ConsentType, ContactPref, MessageChannel } from '@sitelog/shared/enums.ts';
 import {
+  FIELD_CONSENT_TEXT_VERSION,
   OFFICE_NOTIFIED_REVOCATIONS,
   type PreferencesResponse,
 } from '@sitelog/shared/field-contract.ts';
@@ -31,17 +32,19 @@ const RELINK = new Set([
 /** Revoking one of these stops reporting: confirm first, then the Welcome & consent again. */
 const STOPS_REPORTING = OFFICE_NOTIFIED_REVOCATIONS as readonly ConsentType[];
 
-type Saving = 'pref' | 'channel' | 'locale' | ConsentType | 'signOut' | null;
+type Saving = 'pref' | 'channel' | 'locale' | ConsentType | 'turnOn' | 'signOut' | null;
 
 /**
  * Settings (F15, spec §9.3; W2-02): the report mode (*Text link* / *Phone call*, §19 Q33 allows a
  * call without a voice number), the message channel (only when the pack offers more than one built
  * channel, §19 Q21: hidden until W2-14 / W2-15), the language (the pack's field locales), the
  * consents given with their state and *Turn off* (recording and processing behind a confirm sheet:
- * reports stop and the office is told), and *Sign out this phone*. "Don't call me today" is M8's.
- * A change is saved when it is made (`PATCH preferences`, `consent/revoke`, `device/sign-out`),
- * each audited by field-api. There is no artboard: built from §9.3 and the Field-02 / Field-03
- * patterns.
+ * reports stop and the office is told), *Turn on* for texts (spec §19 Q86: the Welcome wording again
+ * in a sheet; a phone opted out by STOP gets a line instead, START on a two-way pack, the office on
+ * a one-way pack, §19 Q94), and *Sign out this phone*. "Don't call me today" is M8's. A change is
+ * saved when it is made (`PATCH preferences`, `consent/revoke`, `consent/grant`,
+ * `device/sign-out`), each audited by field-api. There is no artboard: built from §9.3 and the
+ * Field-02 / Field-03 patterns (accepted by the owner, 2026-10-16).
  */
 export function Settings() {
   const { session, patch } = useSession();
@@ -64,7 +67,7 @@ function SettingsLoaded({
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState<Saving>(null);
   const [status, setStatus] = useState<'saved' | 'error' | null>(null);
-  const [sheet, setSheet] = useState<ConsentType | 'signOut' | null>(null);
+  const [sheet, setSheet] = useState<ConsentType | 'turnOn' | 'signOut' | null>(null);
   const ids = {
     pref: useId(),
     channel: useId(),
@@ -153,6 +156,31 @@ function SettingsLoaded({
     }
   }
 
+  /** Spec §19 Q86: texts back on, with the version of the wording the sheet shows again. */
+  async function turnOn() {
+    setSaving('turnOn');
+    setStatus(null);
+    try {
+      const res = await api.grantConsent(code, {
+        type: 'sms',
+        textVersion: country.legalKeys.consent ?? FIELD_CONSENT_TEXT_VERSION,
+      });
+      setSheet(null);
+      applied(res);
+    } catch (err) {
+      if (relinkOr(err)) return;
+      if (apiErrorCode(err) === 'texts_opted_out') {
+        // STOP came in meanwhile: show the line that says how to undo it.
+        setSheet(null);
+        void load();
+        return;
+      }
+      setStatus('error');
+    } finally {
+      setSaving(null);
+    }
+  }
+
   async function signOut() {
     setSaving('signOut');
     setStatus(null);
@@ -205,7 +233,10 @@ function SettingsLoaded({
     }`;
   const radio = 'size-6 flex-none accent-asphalt m-0';
   const h2 = 'm-0 mb-2.5 p-0 text-[17px] leading-6 font-bold';
-  const sheetConsent = sheet !== null && sheet !== 'signOut' ? sheet : null;
+  const sheetConsent = sheet !== null && sheet !== 'signOut' && sheet !== 'turnOn' ? sheet : null;
+  const textsStopped = country.twoWaySms
+    ? t('settings.textsStopped.start')
+    : t('settings.textsStopped.office');
 
   return (
     <Screen title={title} dateLine={false}>
@@ -336,6 +367,24 @@ function SettingsLoaded({
                         {saving === type ? t('settings.saving') : t('settings.turnOff')}
                       </QuietButton>
                     </div>
+                  ) : type === 'sms' && !prefs.textsOptedOut ? (
+                    <div className="w-32 flex-none">
+                      <QuietButton
+                        aria-label={t('settings.turnOnLabel', { consent: label })}
+                        disabled={busy}
+                        onClick={() => {
+                          setStatus(null);
+                          setSheet('turnOn');
+                        }}
+                      >
+                        {t('settings.turnOn')}
+                      </QuietButton>
+                    </div>
+                  ) : null}
+                  {type === 'sms' && prefs.textsOptedOut ? (
+                    <p className="m-0 basis-full pb-1.5 text-[15px] leading-[21px] text-steel">
+                      {textsStopped}
+                    </p>
                   ) : null}
                 </li>
               );
@@ -387,6 +436,40 @@ function SettingsLoaded({
             className="flex-1"
           >
             {busy ? t('settings.saving') : t('settings.stopSheet.confirm')}
+          </SolidButton>
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={sheet === 'turnOn'}
+        titleId={`${ids.sheet}-on`}
+        onClose={() => (busy ? undefined : setSheet(null))}
+      >
+        <h2
+          id={`${ids.sheet}-on`}
+          className="m-0 text-[22px] leading-7 font-extrabold [font-stretch:118%]"
+        >
+          {t('settings.turnOnSheet.title')}
+        </h2>
+        <p className="m-0 text-[16px] leading-6 text-steel">{t('settings.turnOnSheet.body')}</p>
+        {/* The wording the reporter agreed to on Welcome (Field-02), shown again (§19 Q86). */}
+        <p className="m-0 rounded-card bg-concrete px-3.5 py-3 text-[16px] leading-6 font-semibold">
+          {t('welcome.consentSms')}
+        </p>
+        <p className="m-0 text-[15px] leading-[21px] text-steel">
+          {t('settings.turnOnSheet.note')}
+        </p>
+        {status === 'error' ? (
+          <p role="alert" className="m-0 text-[15px] leading-5 text-missing">
+            {t('settings.saveFailed')}
+          </p>
+        ) : null}
+        <div className="flex gap-3">
+          <QuietButton onClick={() => setSheet(null)} disabled={busy} className="flex-1">
+            {t('settings.turnOnSheet.cancel')}
+          </QuietButton>
+          <SolidButton onClick={() => void turnOn()} disabled={busy} className="flex-1">
+            {busy ? t('settings.saving') : t('settings.turnOnSheet.confirm')}
           </SolidButton>
         </div>
       </Sheet>

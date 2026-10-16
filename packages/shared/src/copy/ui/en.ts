@@ -537,6 +537,25 @@ export const uiEn = {
         confirm: 'Turn off',
         cancel: 'Keep it on',
       },
+      /** *Turn on* for the texts consent (spec §19 Q86): the wording is shown again in a sheet. */
+      turnOn: 'Turn on',
+      /** The button's accessible name: the visible "Turn on" first (WCAG 2.5.3). */
+      turnOnLabel: 'Turn on: {{consent}}',
+      turnOnSheet: {
+        title: 'Turn texts back on?',
+        body: 'By turning this on, you agree again to:',
+        note: 'You can turn them off here at any time.',
+        confirm: 'Turn on',
+        cancel: 'Not now',
+      },
+      /** Texts stopped by STOP (or the phone network's opt-out list): a consent cannot undo it. */
+      textsStopped: {
+        /** A pack with two-way SMS: START undoes STOP (§9.5). */
+        start:
+          'You stopped our texts by replying STOP. To get them again, reply START to one of our texts.',
+        /** A one-way pack: replies don't reach SiteLog (spec §19 Q94). */
+        office: 'Texts to this phone are stopped. Ask the office.',
+      },
       signOut: 'Sign out this phone',
       signOutSheet: {
         title: 'Sign out this phone?',

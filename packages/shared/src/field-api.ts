@@ -187,6 +187,18 @@ export const PreferencesRequestSchema = z
 export const ConsentRevokeRequestSchema = z.strictObject({ type: z.enum(CONSENT_TYPES) });
 
 /**
+ * `POST consent/grant` (F15, Settings; spec §19 Q86): turn the texts consent back on, a fresh
+ * consent row with the version of the wording shown again (the pack's consent key when set, as
+ * `consent`). Texts only: recording and processing come back through the Welcome & consent screen.
+ * Held already: nothing changes. A phone that opted out of texts is refused (409
+ * `texts_opted_out`): a consent never overrides STOP.
+ */
+export const ConsentGrantRequestSchema = z.strictObject({
+  type: z.literal('sms'),
+  textVersion: z.string().trim().min(1).max(64),
+});
+
+/**
  * `POST expired/daily-link` (F16 "Send me today's link"; W2-03): the expired daily link's code in
  * the body, as `resolve` takes it (the link no longer authenticates anything).
  */
@@ -210,4 +222,5 @@ export type AnswerRequest = z.infer<typeof AnswerRequestSchema>;
 export type DayStatusRequest = z.infer<typeof DayStatusRequestSchema>;
 export type PreferencesRequest = z.infer<typeof PreferencesRequestSchema>;
 export type ConsentRevokeRequest = z.infer<typeof ConsentRevokeRequestSchema>;
+export type ConsentGrantRequest = z.infer<typeof ConsentGrantRequestSchema>;
 export type ExpiredLinkRequest = z.infer<typeof ExpiredLinkRequestSchema>;

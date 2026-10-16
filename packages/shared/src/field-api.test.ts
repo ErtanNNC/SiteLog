@@ -5,6 +5,7 @@ import {
   DayStatusRequestSchema,
   DEVICE_COOKIE_MAX_AGE_S,
   FIELD_RATE_LIMITS,
+  ConsentGrantRequestSchema,
   ConsentRevokeRequestSchema,
   PreferencesRequestSchema,
   UPLOAD_MAX_BYTES,
@@ -121,6 +122,17 @@ describe('field-api contract', () => {
     expect(ConsentRevokeRequestSchema.safeParse({ type: 'sms' }).success).toBe(true);
     expect(ConsentRevokeRequestSchema.safeParse({ type: 'whatsapp' }).success).toBe(false);
     expect(ConsentRevokeRequestSchema.safeParse({}).success).toBe(false);
+    // §19 Q86: Turn on takes the texts consent only, with the wording's version.
+    expect(
+      ConsentGrantRequestSchema.safeParse({ type: 'sms', textVersion: 'field.consent.v1' }).success,
+    ).toBe(true);
+    expect(
+      ConsentGrantRequestSchema.safeParse({ type: 'recording', textVersion: 'v1' }).success,
+    ).toBe(false);
+    expect(ConsentGrantRequestSchema.safeParse({ type: 'sms', textVersion: ' ' }).success).toBe(
+      false,
+    );
+    expect(ConsentGrantRequestSchema.safeParse({ type: 'sms' }).success).toBe(false);
     expect(ConfirmRequestSchema.safeParse({ draftRev: 1 }).success).toBe(true);
     expect(ConfirmRequestSchema.safeParse({ version: 2, draftRev: 3 }).data).toEqual({
       version: 2,

@@ -1697,6 +1697,20 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         confirm: 'Kapat',
         cancel: 'Açık kalsın',
       },
+      turnOn: 'Aç',
+      turnOnLabel: 'Aç: {{consent}}',
+      turnOnSheet: {
+        title: 'Mesajlar yeniden açılsın mı?',
+        body: 'Açarak şunu yeniden kabul etmiş olursunuz:',
+        note: 'İstediğiniz zaman buradan kapatabilirsiniz.',
+        confirm: 'Aç',
+        cancel: 'Şimdi değil',
+      },
+      textsStopped: {
+        start:
+          'STOP yazarak mesajlarımızı durdurdunuz. Yeniden almak için mesajlarımızdan birine START yazın.',
+        office: 'Bu telefona mesaj gönderimi durduruldu. Ofise danışın.',
+      },
       signOut: 'Bu telefonda oturumu kapat',
       signOutSheet: {
         title: 'Bu telefonda oturum kapatılsın mı?',

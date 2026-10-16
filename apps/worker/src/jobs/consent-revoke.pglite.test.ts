@@ -9,7 +9,8 @@ import { startPgliteDatabase, type PgliteDatabase } from '../test/pglite';
  * F15 on PGlite (W2-02): texts turned off in the recorder's Settings (`field_revoke_consent()`,
  * what field-api's `consent/revoke` calls) make the Notifier skip SMS for every key, audited
  * `notify.skipped` with `no_consent`, while the device code the person asks for still goes (spec
- * §19 Q25). No `messages` row is written for the skipped text.
+ * §19 Q25). No `messages` row is written for the skipped text. Settings' *Turn on*
+ * (`field_grant_consent()`, spec §19 Q86) brings texts back, never past an opt-out.
  */
 
 let pg: PgliteDatabase;
@@ -65,5 +66,29 @@ describe('a revoked sms consent (F15 Settings)', () => {
 
     const code = await n.send(MARCO, 'verify_code', { code: '042917' });
     expect(code.channel).toBe('sms');
+  });
+
+  it('Turn on (spec §19 Q86) brings texts back; an opted-out phone stays opted out', async () => {
+    const n = notifier();
+    const vars = { site: 'Riverside Lofts', link: 'https://go.sitelog.app/r/ABCDEF' };
+    const [g] = await pg.q<{ r: { granted: boolean } }>(
+      `select field_grant_consent($1, 'sms', 'field.consent.v1', null, null) as r`,
+      [MARCO],
+    );
+    expect(g!.r.granted).toBe(true);
+    const back = await n.send(MARCO, 'daily_link', vars, { dedupeKey: 'q86:on' });
+    expect(back.channel).toBe('sms');
+
+    // STOP on the pack's sender: the consent is held, yet nothing goes and Turn on is refused.
+    await pg.q(
+      `insert into sms_opt_outs (phone_e164, country, method) values ($1, 'US', 'sms_keyword')`,
+      [MARCO_PHONE],
+    );
+    const stopped = await n.send(MARCO, 'daily_link', vars, { dedupeKey: 'q86:stopped' });
+    expect(stopped).toMatchObject({ channel: null, reason: 'opted_out' });
+    await pg.q(`select field_revoke_consent($1, 'sms', null)`, [MARCO]);
+    await expect(
+      pg.q(`select field_grant_consent($1, 'sms', 'field.consent.v1', null, null)`, [MARCO]),
+    ).rejects.toThrow('texts_opted_out');
   });
 });
