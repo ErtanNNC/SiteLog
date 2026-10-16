@@ -2,6 +2,34 @@ import { z } from 'zod';
 import { SMS_KEYS, TWO_WAY_SMS_KEYS } from '../copy/sms.ts';
 import { FIELD_CHANNELS, SITE_DAY_STATUSES, type JOB_TYPES } from '../enums.ts';
 
+/**
+ * A web report's re-check before a `notify` job sends (W2-07): `question_ready` while the question
+ * is still open, `draft_ready` (and the 30-minute nudge, spec §19 Q78) while the draft is still
+ * unconfirmed at that version and revision. Exported for the late fallback (W2-01), which carries
+ * it on.
+ */
+export const NotifyReportGuardSchema = z.object({
+  reportId: z.string().uuid(),
+  status: z.enum(['awaiting_answer', 'awaiting_confirmation']),
+  /** `question_ready`: the question must still be open (unanswered, not timed out). */
+  questionId: z.string().uuid().optional(),
+  /** `draft_ready` and the nudge: the draft must still be this version … */
+  version: z.number().int().min(1).optional(),
+  /** … at this revision (`report_versions.draft_rev`): a newer draft is a new text. */
+  draftRev: z.number().int().min(1).optional(),
+  /**
+   * Spec §19 Q61 (decided: the second): decide_next found the reporter's device active and
+   * deferred the text 30 s; it goes out only if no device of theirs was seen after this instant
+   * (else `notify.skipped`, `device_active`: they saw it on the recorder).
+   */
+  deviceNotSeenAfter: z.string().datetime({ offset: true }).optional(),
+  /**
+   * The nudge is a reminder, not an answer to the reporter's action: it passes through the quiet
+   * hours (spec §19 Q77, the org's call window at the site).
+   */
+  quietHours: z.boolean().optional(),
+});
+
 const uuid = z.string().uuid();
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -31,7 +59,28 @@ export const JobPayloadSchemas = {
     purpose: z.enum(['report', 'caption']).optional(),
   }),
   extract_report: z.object({ reportId: uuid, reason: z.string().optional() }),
-  decide_next: z.object({ reportId: uuid }),
+  /**
+   * §10.1 decide_next. `timeout` (W2-07, §7.2 web rules): a step of the web clock, enqueued
+   * delayed by decide_next itself (`run_after`) and checked again when it runs:
+   * - `answer`: the open question unanswered for 60 min → recorded unanswered, the draft is
+   *   built with the gap flagged (`unanswered:<field>`), no text (F7);
+   * - `file`: the draft at that version and revision still unconfirmed → filed with trigger
+   *   `timeout` (reason `unconfirmed`, +2 h) or `auto` (`filing_mode = 'auto_15min'`, +15 min).
+   */
+  decide_next: z.object({
+    reportId: uuid,
+    timeout: z
+      .discriminatedUnion('step', [
+        z.object({ step: z.literal('answer'), questionId: uuid }),
+        z.object({
+          step: z.literal('file'),
+          trigger: z.enum(['timeout', 'auto']),
+          version: z.number().int().min(1),
+          draftRev: z.number().int().min(1),
+        }),
+      ])
+      .optional(),
+  }),
   parse_reply: z.object({ messageId: uuid, reportId: uuid }),
   file_report: z.object({
     reportId: uuid,
@@ -147,6 +196,8 @@ export const JobPayloadSchemas = {
         notAfter: z.string().datetime({ offset: true }).optional(),
       })
       .optional(),
+    /** W2-07: the web report re-check (`NotifyReportGuardSchema`); the late fallback carries it on. */
+    reportGuard: NotifyReportGuardSchema.optional(),
   }),
 } as const satisfies Record<(typeof JOB_TYPES)[number], z.ZodType>;
 
@@ -206,16 +257,39 @@ export const jobKeys = {
    */
   decideAnswer: (reportId: string, questionId: string) => `decide:${reportId}:answer:${questionId}`,
   /**
-   * The Notifier's key (messages.payload, not jobs) of the `question_ready` text: per question, so
-   * a retried decide_next never texts twice and a new question is a new text (D25).
+   * The `question_ready` text (W1-12): the `notify` job's key and the Notifier's, per question, so
+   * a retried decide_next never texts twice and a new question is a new text (D25). Since W2-07 a
+   * `notify` job sends it, at once or 30 s later when the reporter's device was active (spec §19
+   * Q61): one job per key either way, so it can never text twice.
    */
   questionReady: (questionId: string) => `notify:question_ready:${questionId}`,
   /**
-   * The Notifier's key of the `draft_ready` text: per decide_next job that showed the draft, so a
-   * retry never texts twice and a draft shown again after more audio or photos is a new text.
+   * The `draft_ready` text: the `notify` job's key and the Notifier's, per decide_next job that
+   * showed the draft, so a retry never texts twice and a draft shown again after more audio or
+   * photos is a new text (as `questionReady`, W2-07).
    */
   draftReady: (reportId: string, decideJobId: number) =>
     `notify:draft_ready:${reportId}:${decideJobId}`,
+  /**
+   * The 30-minute nudge on an unconfirmed web draft (§7.2, W2-07; its copy is `draft_ready` until
+   * spec §19 Q78 says otherwise): the `notify` job's key and the Notifier's, per report, version and
+   * draft revision, so a newer draft restarts the clock and a retry never nudges twice.
+   */
+  draftNudge: (reportId: string, version: number, draftRev: number) =>
+    `notify:draft_nudge:${reportId}:v${version}:r${draftRev}`,
+  /**
+   * The answer timeout of a web question (§7.2, W2-07): a delayed decide_next per report and
+   * question (the WhatsApp sweep's key shape), and a question is asked once.
+   */
+  decideTimeout: (reportId: string, questionId: string) =>
+    `decide:${reportId}:timeout:${questionId}`,
+  /**
+   * The confirmation timeout of a web draft (§7.2, W2-07): a delayed decide_next that files it,
+   * per report, version and draft revision, so a newer draft restarts the clock and a retry never
+   * files twice (a filing that finds the report filed does nothing).
+   */
+  decideFileTimeout: (reportId: string, version: number, draftRev: number) =>
+    `decide:${reportId}:file-timeout:v${version}:r${draftRev}`,
   /**
    * The `filed` text of a report (§9.2, F8; W1-15): the `notify` job's dedupe key and the
    * Notifier's. A report is filed once, so a retried or repeated filing never texts twice.

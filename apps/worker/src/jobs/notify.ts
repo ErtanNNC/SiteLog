@@ -1,10 +1,14 @@
 import {
+  DEFAULT_CALL_WINDOW,
   MessageSendError,
+  REMIND_POLICY_DEFAULTS,
   SmsSendError,
   attemptIsAccountFault,
   attemptIsFinal,
   attemptOf,
+  insideWindow,
   noticeData,
+  type RemindPolicy,
   type JobPayloads,
   type NoticeData,
   type NotifierKey,
@@ -41,13 +45,18 @@ import type { JobHandler } from './types';
  * - A reminder-ladder message (W2-06) carries a `guard`: before it is sent the site-day must still
  *   wait for a report and the call window be open, or nothing goes out (`notify.skipped`,
  *   `stale_stage` / `quiet_hours`, `ladderGuardVerdict`).
+ * - A web report's text (W2-07: `question_ready`, `draft_ready`, the 30-minute nudge) carries a
+ *   `reportGuard`: the question must still be open, or the draft unconfirmed at that version and
+ *   revision (`stale_report`); a text deferred because the reporter's device was active goes out
+ *   only if no device of theirs was seen since (`device_active`, spec §19 Q61); the nudge only
+ *   inside the call window (`quiet_hours`, Q77). `reportGuardVerdict`.
  */
 
 /** Whether a message is still worth sending when its fallback runs after a late callback. */
 export type NotifyGuard = (ctx: Ctx, payload: JobPayloads['notify']) => Promise<boolean>;
 
 /** Why a guarded message is no longer sent (audited `notify.skipped`). */
-export type GuardVerdict = 'stale_stage' | 'quiet_hours';
+export type GuardVerdict = 'stale_stage' | 'quiet_hours' | 'stale_report' | 'device_active';
 
 /**
  * The reminder ladder's re-check before sending (W2-06; the payload's `guard`, written by
@@ -66,19 +75,84 @@ export async function ladderGuardVerdict(
   return null;
 }
 
-/** The ladder keys' fallback guard: the same re-check (a payload without a guard passes). */
-const ladderGuard: NotifyGuard = async (ctx, payload) =>
-  !payload.guard || (await ladderGuardVerdict(ctx, payload.guard)) === null;
+/**
+ * A web report's re-check before its text goes out (W2-07; the payload's `reportGuard`, written by
+ * decide_next): null while the text is still useful. `stale_report` when the report left the
+ * status the text is about, its question was answered or timed out, or its draft is no longer that
+ * version and revision (a newer draft has its own text and clock); `device_active` when a text
+ * deferred for the reporter's active device finds a device of theirs seen since (spec §19 Q61:
+ * they saw it on the recorder); `quiet_hours` for the nudge outside the org's call window at the
+ * site (spec §19 Q77, `RemindPolicy.quietHours`).
+ */
+export async function reportGuardVerdict(
+  ctx: Ctx,
+  guard: NonNullable<JobPayloads['notify']['reportGuard']>,
+  policy: Pick<RemindPolicy, 'quietHours'> = REMIND_POLICY_DEFAULTS,
+): Promise<GuardVerdict | null> {
+  const report = await ctx.db.getReport(guard.reportId);
+  if (!report || report.status !== guard.status) return 'stale_report';
+  if (guard.questionId) {
+    const question = await ctx.db.getQuestion(guard.questionId);
+    if (!question || question.report_id !== report.id || question.answered_at)
+      return 'stale_report';
+  }
+  if (guard.version !== undefined) {
+    if ((report.current_version || 1) !== guard.version) return 'stale_report';
+    if (guard.draftRev !== undefined) {
+      const version = await ctx.db.getVersion(report.id, guard.version);
+      if ((version?.draft_rev ?? 1) !== guard.draftRev) return 'stale_report';
+    }
+  }
+  if (guard.deviceNotSeenAfter && report.reporter_id) {
+    const seen = await ctx.db.reporterDeviceLastSeen(report.reporter_id);
+    if (seen && Date.parse(seen) > Date.parse(guard.deviceNotSeenAfter)) return 'device_active';
+  }
+  if (guard.quietHours && policy.quietHours === 'skip') {
+    const site = await ctx.db.siteContext(report.site_id);
+    if (
+      site &&
+      !insideWindow(ctx.now(), site.site.timezone, {
+        start: site.settings.call_window_start ?? DEFAULT_CALL_WINDOW.start,
+        end: site.settings.call_window_end ?? DEFAULT_CALL_WINDOW.end,
+      })
+    )
+      return 'quiet_hours';
+  }
+  return null;
+}
+
+/** Both re-checks a payload carries (the ladder's, a web report's); null when it may be sent. */
+export async function guardVerdict(
+  ctx: Ctx,
+  payload: JobPayloads['notify'],
+): Promise<{ verdict: GuardVerdict; entity: Record<string, string> } | null> {
+  if (payload.guard) {
+    const verdict = await ladderGuardVerdict(ctx, payload.guard);
+    if (verdict) return { verdict, entity: { site_day_id: payload.guard.siteDayId } };
+  }
+  if (payload.reportGuard) {
+    const verdict = await reportGuardVerdict(ctx, payload.reportGuard);
+    if (verdict) return { verdict, entity: { report_id: payload.reportGuard.reportId } };
+  }
+  return null;
+}
+
+/** The fallback guard of the guarded keys: the same re-checks (a payload without one passes). */
+const payloadGuard: NotifyGuard = async (ctx, payload) =>
+  (await guardVerdict(ctx, payload)) === null;
 
 /**
- * The guards per key (W2-01): the reminder ladder's site-day check (W2-06); W2-07 adds the open
- * question and the unconfirmed draft. A key with no guard is still useful.
+ * The guards per key (W2-01): the reminder ladder's site-day check (W2-06), the web report's open
+ * question and unconfirmed draft (W2-07: `question_ready`, `draft_ready` and the nudge, which is
+ * `draft_ready` until spec §19 Q78). A key with no guard is still useful.
  */
 export const NOTIFY_FALLBACK_GUARDS: Partial<Record<NotifierKey, NotifyGuard>> = {
-  daily_link: ladderGuard,
-  weather_headsup: ladderGuard,
-  reminder_1: ladderGuard,
-  reminder_2: ladderGuard,
+  daily_link: payloadGuard,
+  weather_headsup: payloadGuard,
+  reminder_1: payloadGuard,
+  reminder_2: payloadGuard,
+  question_ready: payloadGuard,
+  draft_ready: payloadGuard,
 };
 
 export function createNotifyJob(
@@ -124,11 +198,12 @@ export function createNotifyJob(
         });
         return;
       }
-    } else if (payload.guard) {
-      // The ladder's re-check before the first send (W2-06): a stage claimed before the report
-      // came in, or a job that waited past the call window, sends nothing.
-      const verdict = await ladderGuardVerdict(ctx, payload.guard);
-      if (verdict) {
+    } else if (payload.guard || payload.reportGuard) {
+      // The re-check before the first send: a ladder stage claimed before the report came in, a
+      // job that waited past the call window (W2-06), a web text whose question or draft moved
+      // on, or whose reporter came back to the recorder (W2-07) sends nothing.
+      const skip = await guardVerdict(ctx, payload);
+      if (skip) {
         await ctx.db.logAudit({
           org_id: reporter.org_id,
           actor_type: 'system',
@@ -138,8 +213,8 @@ export function createNotifyJob(
           diff: {
             copy_key: payload.key,
             dedupe_key: payload.dedupeKey,
-            reason: verdict,
-            site_day_id: payload.guard.siteDayId,
+            reason: skip.verdict,
+            ...skip.entity,
           },
         });
         return;

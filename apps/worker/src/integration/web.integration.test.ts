@@ -10,6 +10,7 @@ import {
 } from '@sitelog/shared';
 import { createFakeTranscriber } from '../ai/fake-transcriber';
 import { memoryLogger } from '../log';
+import { reportGuardVerdict } from '../jobs/notify';
 import { DEVICE_ACTIVE_MS } from '../pipeline/web';
 import { runJob } from '../runner';
 import { startPgliteDatabase, type PgliteDatabase } from '../test/pglite';
@@ -87,13 +88,49 @@ async function run(jobId: number) {
   return runJob(world.ctx, row!, 60_000, { workerId: 'integration' });
 }
 
-/** The queued jobs of a report, by type, oldest first. */
+/**
+ * The queued jobs of a report, by type, oldest first; the §7.2 clock's delayed decide_next steps
+ * (W2-07, `payload.timeout`) are left out (`timeoutJobs`).
+ */
 async function queued(reportId: string, type: string) {
   return database.q<{ id: number; dedupe_key: string }>(
     `select id, dedupe_key from jobs where type = $1 and status = 'queued'
-       and payload ->> 'reportId' = $2 order by id`,
+       and payload ->> 'reportId' = $2 and not payload ? 'timeout' order by id`,
     [type, reportId],
   );
+}
+
+/** The §7.2 clock of a report (W2-07): its delayed decide_next steps and nudges, by key. */
+async function clockJobs(reportId: string) {
+  return database.q<{
+    id: number;
+    type: string;
+    dedupe_key: string;
+    status: string;
+    run_after: string;
+    payload: Record<string, unknown>;
+  }>(
+    `select id, type, dedupe_key, status::text, run_after, payload from jobs
+      where (type = 'decide_next' and payload ->> 'reportId' = $1 and payload ? 'timeout')
+         or (type = 'notify' and dedupe_key like 'notify:draft_nudge:' || $1 || ':%')
+      order by id`,
+    [reportId],
+  );
+}
+
+/** The `notify` job of a Notifier key (W2-07: decide_next's texts are notify jobs). */
+async function notifyJob(dedupeKey: string) {
+  const rows = await database.q<JobRow & { run_after: string }>(
+    `select * from jobs where type = 'notify' and dedupe_key = $1`,
+    [dedupeKey],
+  );
+  expect(rows, `notify ${dedupeKey}`).toHaveLength(1);
+  return rows[0]!;
+}
+
+async function runAgain(jobId: number) {
+  await database.q(`update jobs set status = 'queued' where id = $1`, [jobId]);
+  expect(await run(jobId)).toEqual({ ok: true });
 }
 
 async function runQueued(reportId: string, type: string) {
@@ -207,12 +244,31 @@ describe('W1-12: ES + EN voice note → extraction v2 → one question → answe
     questionId = questions[0]!.id;
     expect(await status(reportId)).toBe('awaiting_answer');
     expect(await texts('question_ready')).toEqual([]);
-    const skipped = await database.q<{ diff: { key: string; reason: string } }>(
-      `select diff from audit_log where entity_id = $1 and action = 'notify.skipped'`,
+    // Spec §19 Q61: the text waits 30 s in a notify job that sends only if the device is not seen.
+    const deferred = await database.q<{ diff: { key: string; reason: string } }>(
+      `select diff from audit_log where entity_id = $1 and action = 'notify.deferred'`,
       [reportId],
     );
-    expect(skipped.map((a) => a.diff)).toMatchObject([
+    expect(deferred.map((a) => a.diff)).toMatchObject([
       { key: 'question_ready', reason: 'device_active' },
+    ]);
+    const text = await notifyJob(`notify:question_ready:${questionId}`);
+    // 30 s on the database's clock (the one claim_jobs reads).
+    const wait = new Date(text.run_after).getTime() - Date.now();
+    expect(wait).toBeGreaterThan(DEVICE_ACTIVE_MS - 10_000);
+    expect(wait).toBeLessThanOrEqual(DEVICE_ACTIVE_MS);
+    expect(text.payload).toMatchObject({
+      key: 'question_ready',
+      reportGuard: {
+        reportId,
+        status: 'awaiting_answer',
+        questionId,
+        deviceNotSeenAfter: clock.now().toISOString(),
+      },
+    });
+    // §7.2 / F7: the question's 60-minute clock.
+    expect((await clockJobs(reportId)).map((j) => [j.dedupe_key, j.payload.timeout])).toEqual([
+      [`decide:${reportId}:timeout:${questionId}`, { step: 'answer', questionId }],
     ]);
     const line = log.lines
       .map((l) => JSON.parse(l) as Record<string, unknown>)
@@ -222,7 +278,8 @@ describe('W1-12: ES + EN voice note → extraction v2 → one question → answe
 
   it('a retried decide_next asks nothing twice', async () => {
     const [row] = await database.q<JobRow>(
-      `select * from jobs where type = 'decide_next' and payload ->> 'reportId' = $1`,
+      `select * from jobs where type = 'decide_next' and payload ->> 'reportId' = $1
+         and not payload ? 'timeout'`,
       [reportId],
     );
     await database.q(`update jobs set status = 'queued' where id = $1`, [row!.id]);
@@ -232,16 +289,18 @@ describe('W1-12: ES + EN voice note → extraction v2 → one question → answe
     ).toHaveLength(1);
   });
 
-  it('the device away for 30 s: the question is texted once, with the personal link', async () => {
+  it('Q61: the device not seen in those 30 s: the question is texted once, with the personal link', async () => {
     await seen(DEVICE_ACTIVE_MS);
     const [row] = await database.q<JobRow>(
-      `select * from jobs where type = 'decide_next' and payload ->> 'reportId' = $1`,
+      `select * from jobs where type = 'decide_next' and payload ->> 'reportId' = $1
+         and not payload ? 'timeout'`,
       [reportId],
     );
-    await database.q(`update jobs set status = 'queued' where id = $1`, [row!.id]);
-    expect(await run(row!.id)).toEqual({ ok: true });
-    await database.q(`update jobs set status = 'queued' where id = $1`, [row!.id]);
-    expect(await run(row!.id)).toEqual({ ok: true });
+    // A retried decide_next finds the text's key taken: still one job.
+    await runAgain(row!.id);
+    const job = await notifyJob(`notify:question_ready:${questionId}`);
+    expect(await run(job.id)).toEqual({ ok: true });
+    await runAgain(job.id);
     const sent = await texts('question_ready');
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ channel: 'sms' });
@@ -286,7 +345,33 @@ describe('W1-12: ES + EN voice note → extraction v2 → one question → answe
       await database.q(`select 1 from questions where report_id = $1`, [reportId]),
     ).toHaveLength(1);
     expect(after.data.photos).toHaveLength(2);
+    // Q61: the reporter is still on the recorder 10 s later: the deferred text sends nothing.
+    const text = await notifyJob(`notify:draft_ready:${reportId}:${decide.id}`);
+    expect(text.payload).toMatchObject({
+      reportGuard: {
+        status: 'awaiting_confirmation',
+        deviceNotSeenAfter: clock.now().toISOString(),
+      },
+    });
+    clock.advance(10_000);
+    await seen(0);
+    expect(await run(text.id)).toEqual({ ok: true });
     expect(await texts('draft_ready')).toEqual([]);
+    const skipped = await database.q<{ diff: { copy_key: string; reason: string } }>(
+      `select diff from audit_log where entity_id = $1 and action = 'notify.skipped'`,
+      [MARCO],
+    );
+    expect(skipped.map((a) => a.diff)).toContainEqual(
+      expect.objectContaining({ copy_key: 'draft_ready', reason: 'device_active' }),
+    );
+    // §7.2: the draft's confirmation clock, keyed per version and revision.
+    const clockKeys = (await clockJobs(reportId)).map((j) => j.dedupe_key);
+    expect(clockKeys).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(new RegExp(`^notify:draft_nudge:${reportId}:v1:r\\d+$`)),
+        expect.stringMatching(new RegExp(`^decide:${reportId}:file-timeout:v1:r\\d+$`)),
+      ]),
+    );
   });
 
   it('a photo on the draft reopens it, extracts again and shows the draft again (§7.2)', async () => {
@@ -308,7 +393,16 @@ describe('W1-12: ES + EN voice note → extraction v2 → one question → answe
     expect(
       await database.q(`select 1 from questions where report_id = $1`, [reportId]),
     ).toHaveLength(1);
-    // The device away: the draft is texted, once.
+    // The device away: the draft is texted, once (its notify job runs at once).
+    const decides = await database.q<{ id: number }>(
+      `select id from jobs where type = 'decide_next' and payload ->> 'reportId' = $1
+         and not payload ? 'timeout' order by id desc limit 1`,
+      [reportId],
+    );
+    const job = await notifyJob(`notify:draft_ready:${reportId}:${decides[0]!.id}`);
+    expect(job.payload).not.toHaveProperty('reportGuard.deviceNotSeenAfter');
+    expect(await run(job.id)).toEqual({ ok: true });
+    await runAgain(job.id);
     const sent = await texts('draft_ready');
     expect(sent).toHaveLength(1);
     expect(sent[0]!.body).toMatch(
@@ -448,3 +542,178 @@ describe('W1-12: ES + EN voice note → extraction v2 → one question → answe
     expect(n!.n).toBe(1);
   }, 60_000);
 });
+
+describe('W2-07: the §7.2 web clock (answer timeout, nudge, timeout filing)', () => {
+  let reportId = '';
+  let questionId = '';
+  const jobByKey = async (key: string) => {
+    const [job] = await database.q<JobRow>(`select * from jobs where dedupe_key = $1`, [key]);
+    expect(job, key).toBeDefined();
+    return job!;
+  };
+  const draftRev = async () =>
+    (
+      await database.q<{ v: number; rev: number }>(
+        `select r.current_version as v, rv.draft_rev as rev from reports r
+         join report_versions rv on rv.report_id = r.id and rv.version = r.current_version
+         where r.id = $1`,
+        [reportId],
+      )
+    )[0]!;
+
+  it('a question nobody answers for 60 min becomes a flagged draft, with no text (F7)', async () => {
+    clock.set(new Date('2026-10-13T18:00:00Z')); // 13:00 in Chicago, inside the call window
+    const up = await world.uploadVoiceNote({
+      reporterId: MARCO,
+      siteId: RIVERSIDE,
+      fixtureId: 'es-en-riverside-2026-10-09',
+      date: '2026-10-13',
+    });
+    reportId = up.reportId;
+    expect((await photo13()).jobId).toBeNull();
+    expect(await run(up.jobId!)).toEqual({ ok: true });
+    await runQueued(reportId, 'extract_report');
+    await seen(DEVICE_ACTIVE_MS + 1_000);
+    await runQueued(reportId, 'decide_next');
+    expect(await status(reportId)).toBe('awaiting_answer');
+    const [q] = await database.q<{ id: string }>(`select id from questions where report_id = $1`, [
+      reportId,
+    ]);
+    questionId = q!.id;
+    const questionText = await notifyJob(`notify:question_ready:${questionId}`);
+
+    // 59 minutes: the timeout job claimed early by a skewed clock retries, nothing changes.
+    clock.advance(59 * 60_000);
+    const timeout = await jobByKey(`decide:${reportId}:timeout:${questionId}`);
+    expect((await run(timeout.id)).ok).toBe(false);
+    expect(await status(reportId)).toBe('awaiting_answer');
+
+    clock.advance(60_000);
+    await runAgain(timeout.id);
+    expect(await status(reportId)).toBe('awaiting_confirmation');
+    const [question] = await database.q<{ answer: unknown; answered_at: string | null }>(
+      `select answer, answered_at from questions where id = $1`,
+      [questionId],
+    );
+    expect(question).toMatchObject({ answer: { unanswered: true, timeout: true } });
+    const [report] = await database.q<{ needs_review: boolean; review_reasons: string[] }>(
+      `select needs_review, review_reasons from reports where id = $1`,
+      [reportId],
+    );
+    expect(report).toEqual({
+      needs_review: true,
+      review_reasons: ['unanswered:manpower.workers'],
+    });
+    const audits = await database.q<{ diff: { question_id: string } }>(
+      `select diff from audit_log where entity_id = $1 and action = 'report.question_timeout'`,
+      [reportId],
+    );
+    expect(audits.map((a) => a.diff.question_id)).toEqual([questionId]);
+    // No draft_ready text (the reporter sees the draft next time); the stale question text is
+    // dropped by its guard.
+    expect(
+      await database.q(`select 1 from jobs where dedupe_key like $1`, [
+        `notify:draft_ready:${reportId}:%`,
+      ]),
+    ).toEqual([]);
+    expect(await run(questionText.id)).toEqual({ ok: true });
+    expect(
+      await database.q(`select 1 from messages where payload ->> 'dedupe_key' = $1`, [
+        `notify:question_ready:${questionId}`,
+      ]),
+    ).toEqual([]);
+    // A retried timeout changes nothing.
+    await runAgain(timeout.id);
+    expect(
+      await database.q(
+        `select 1 from audit_log where entity_id = $1 and action = 'report.question_timeout'`,
+        [reportId],
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('the unconfirmed draft gets one nudge at +30 min (draft_ready, Q78), never in quiet hours (Q77)', async () => {
+    const { v, rev } = await draftRev();
+    const nudge = await jobByKey(`notify:draft_nudge:${reportId}:v${v}:r${rev}`);
+    expect(nudge.payload).toMatchObject({
+      key: 'draft_ready',
+      reportGuard: { status: 'awaiting_confirmation', version: v, draftRev: rev, quietHours: true },
+    });
+    // At 21:00 in Chicago the call window is closed: the nudge would be skipped.
+    const saved = clock.now();
+    clock.set(new Date('2026-10-14T02:00:00Z'));
+    const { reportGuard } = nudge.payload as { reportGuard: never };
+    expect(await reportGuardVerdict(world.ctx, reportGuard)).toBe('quiet_hours');
+    clock.set(new Date(saved.getTime() + 30 * 60_000));
+    expect(await run(nudge.id)).toEqual({ ok: true });
+    await runAgain(nudge.id);
+    const sent = await database.q<{ body: string }>(
+      `select body from messages where payload ->> 'dedupe_key' = $1`,
+      [`notify:draft_nudge:${reportId}:v${v}:r${rev}`],
+    );
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.body).toMatch(
+      /^Your report is ready to check: https:\/\/go\.sitelog\.test\/r\//,
+    );
+  });
+
+  it('at +2 h the draft is filed `unconfirmed`; a confirm racing it files nothing twice', async () => {
+    const { v, rev } = await draftRev();
+    // A timeout for another revision of the draft finds it moved on.
+    const staleId = await world.db.enqueueJob(
+      'decide_next',
+      { reportId, timeout: { step: 'file', trigger: 'timeout', version: v, draftRev: rev + 1 } },
+      { dedupeKey: `decide:${reportId}:file-timeout:v${v}:r${rev + 1}` },
+    );
+    expect(await run(staleId)).toEqual({ ok: true });
+    expect(await status(reportId)).toBe('awaiting_confirmation');
+
+    // The reporter confirms just as the clock runs out: the timeout's job runs first.
+    const [confirmed] = await database.q<{ r: { status: string; jobId: number } }>(
+      `select field_confirm_report($1, $2, $3, $4) as r`,
+      [reportId, MARCO, v, rev],
+    );
+    expect(confirmed!.r.status).toBe('queued');
+    clock.advance(90 * 60_000);
+    const fileTimeout = await jobByKey(`decide:${reportId}:file-timeout:v${v}:r${rev}`);
+    expect(fileTimeout.payload).toEqual({
+      reportId,
+      timeout: { step: 'file', trigger: 'timeout', version: v, draftRev: rev },
+    });
+    expect(await run(fileTimeout.id)).toEqual({ ok: true });
+    expect(await run(confirmed!.r.jobId)).toEqual({ ok: true });
+    await runAgain(fileTimeout.id);
+    const filed = await database.q<{ diff: { trigger: string; review_reasons: string[] } }>(
+      `select diff from audit_log where entity_id = $1 and action = 'report.filed'`,
+      [reportId],
+    );
+    expect(filed).toHaveLength(1);
+    expect(filed[0]!.diff.trigger).toBe('timeout');
+    expect(filed[0]!.diff.review_reasons).toEqual(
+      expect.arrayContaining(['unanswered:manpower.workers', 'unconfirmed']),
+    );
+    const [report] = await database.q<{ status: string; confirmed_at: string | null }>(
+      `select status::text, confirmed_at from reports where id = $1`,
+      [reportId],
+    );
+    expect(report).toEqual({ status: 'filed', confirmed_at: null });
+  });
+});
+
+/** A photo of the Oct 13 report (field_complete_upload), as `photo()` for Oct 12. */
+async function photo13(): Promise<{ jobId: number | null }> {
+  const [u] = await database.q<{ id: string }>(
+    `insert into uploads (reporter_id, site_id, kind, storage_path, mime, recorded_at)
+     values ($1, $2, 'photo', 'pending', 'image/jpeg', now()) returning id`,
+    [MARCO, RIVERSIDE],
+  );
+  await database.q(`update uploads set storage_path = $2 where id = $1`, [
+    u!.id,
+    `${ORG}/${RIVERSIDE}/2026-10-13/${u!.id}.jpg`,
+  ]);
+  const [r] = await database.q<{ r: { jobId: number | null } }>(
+    `select field_complete_upload($1, $2, 1) as r`,
+    [u!.id, MARCO],
+  );
+  return { jobId: r!.r.jobId };
+}

@@ -44,7 +44,10 @@ export type FileTrigger = 'confirm' | 'auto' | 'timeout' | 'office' | 'weather_d
 export interface FileOptions {
   trigger: FileTrigger;
   confirmMessageId?: string | null;
-  /** The draft version a field-api confirm was for (with trigger 'confirm'). */
+  /**
+   * The draft version a field-api confirm was for (trigger 'confirm'), or the draft a web
+   * confirmation timeout files (trigger 'timeout' / 'auto', W2-07).
+   */
   version?: number;
   /**
    * That version's draft revision the reporter saw (`report_versions.draft_rev`, 20261015000070):
@@ -119,8 +122,12 @@ async function fileOnce(ctx: Ctx, reportId: string, opts: FileOptions): Promise<
     }
     return { report, version: existing, reasons: report.review_reasons, alreadyFiled: true };
   }
+  // A confirm, or a web confirmation timeout (W2-07: the draft nobody confirmed at that version
+  // and revision), names the draft it is for: one that changed since files nothing.
+  const forDraft =
+    opts.trigger === 'confirm' || opts.trigger === 'timeout' || opts.trigger === 'auto';
   if (
-    opts.trigger === 'confirm' &&
+    forDraft &&
     opts.version !== undefined &&
     (report.status !== 'awaiting_confirmation' ||
       report.current_version !== opts.version ||
@@ -129,7 +136,7 @@ async function fileOnce(ctx: Ctx, reportId: string, opts: FileOptions): Promise<
     await ctx.db.logAudit({
       org_id: report.org_id,
       actor_type: 'system',
-      action: 'report.confirm_stale',
+      action: opts.trigger === 'confirm' ? 'report.confirm_stale' : 'report.timeout_stale',
       entity: 'report',
       entity_id: report.id,
       diff: {
@@ -139,6 +146,7 @@ async function fileOnce(ctx: Ctx, reportId: string, opts: FileOptions): Promise<
           ? { confirmed_draft_rev: opts.draftRev, draft_rev: existing.draft_rev ?? 1 }
           : {}),
         status: report.status,
+        ...(opts.trigger === 'confirm' ? {} : { trigger: opts.trigger }),
       },
     });
     return {

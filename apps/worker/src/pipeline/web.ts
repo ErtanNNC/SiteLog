@@ -7,6 +7,7 @@ import {
   readReportData,
   sourceMediaId,
   type DailyReportData,
+  type JobPayloads,
   type JobRow,
   type OrgSettingsRow,
   type CompanyRow,
@@ -23,6 +24,14 @@ import {
 import type { Ctx } from '../context';
 import type { Json } from '../db';
 import { workerLinkStore } from '../messaging';
+import {
+  TIMEOUT_POLICY_DEFAULTS,
+  answerTimedOut,
+  answerTimeoutAt,
+  confirmationSchedule,
+  type TimeoutPolicy,
+} from './timeouts';
+import { fileReport } from './file';
 import { selectNextQuestion, validateDraft } from './validate';
 
 /**
@@ -32,10 +41,25 @@ import { selectNextQuestion, validateDraft } from './validate';
  * (`decide_next` for a report with no channel) until step 22.
  *
  * `decide_next` is split in two: `planWebNext` decides what comes next from the draft and the
- * questions (pure), and `decideNextWeb` applies it (the question row, the report status, audit)
- * and then makes the one Notifier call. Every step is idempotent: a retry finds the question it
- * inserted open and waits for it, and the Notifier's key (per question, per decide job for the
- * draft) never texts twice.
+ * questions (pure), and `decideNextWeb` applies it (the question row, the report status, audit),
+ * starts the §7.2 clock and enqueues the one `notify` job. Every step is idempotent: a retry finds
+ * the question it inserted open and waits for it, and every job is keyed (the text per question or
+ * per decide job for the draft, the timeouts per question or per draft revision), so nothing is
+ * sent, nudged or filed twice.
+ *
+ * W2-07 (§7.2 web rules, spec §19 Q61):
+ * - The text is a `notify` job with a report guard (the question still open, the draft still
+ *   unconfirmed at that revision), so a late failure falls back to the next channel (W2-01) only
+ *   while it is still useful. While the reporter's device was seen in the last 30 s the job runs
+ *   30 s later and sends only if no device of theirs was seen since (Q61: they left the recorder
+ *   right after; one job per key, so it can never text twice).
+ * - A question starts its 60-minute clock (a delayed decide_next, `timeout.step 'answer'`): the
+ *   question is recorded unanswered and the draft built with the gap flagged, no text (F7).
+ * - A draft starts the confirmation clock (`pipeline/timeouts.ts`): the nudge at +30 min (a
+ *   delayed `notify`, Q78's key, through the quiet hours of Q77) and the filing at +2 h (a delayed
+ *   decide_next, `timeout.step 'file'`, trigger `timeout`, reason `unconfirmed`), or the filing at
+ *   +15 min with `filing_mode = 'auto_15min'`; keyed per version and draft revision, so a newer
+ *   draft restarts the clock and the old steps find their draft gone.
  */
 
 /** D25: no `question_ready` / `draft_ready` text while the field app was used this recently. */
@@ -206,8 +230,15 @@ export function deviceActive(lastSeen: string | null, now: Date): boolean {
   return now.getTime() - new Date(lastSeen).getTime() < DEVICE_ACTIVE_MS;
 }
 
-/** §10.1 decide_next for a web report: state changes, then at most one Notifier call. */
-export async function decideNextWeb(ctx: Ctx, report: ReportRow, job: JobRow): Promise<void> {
+/** §10.1 decide_next for a web report: state changes, the §7.2 clock, then at most one text. */
+export async function decideNextWeb(
+  ctx: Ctx,
+  report: ReportRow,
+  job: JobRow,
+  timeout?: JobPayloads['decide_next']['timeout'],
+  policy: TimeoutPolicy = TIMEOUT_POLICY_DEFAULTS,
+): Promise<void> {
+  if (timeout?.step === 'file') return fileTimeoutWeb(ctx, report, timeout);
   // A newer extraction (another voice note, a photo on the draft) decides after it.
   if (await ctx.db.hasActiveReportJob('extract_report', report.id)) {
     ctx.log.info('decide_next: an extraction is pending; it decides', { report_id: report.id });
@@ -232,17 +263,23 @@ export async function decideNextWeb(ctx: Ctx, report: ReportRow, job: JobRow): P
   }
   const photoCount = sources.filter((s) => s.kind === 'photo').length;
   const validation = validateDraft(data, site.settings, photoCount);
-  const questions = await ctx.db.listQuestions(report.id);
-  const plan = planWebNext({
-    data,
-    validation,
-    questions,
-    settings: site.settings,
-    companies: site.companies,
-    language: reporter?.locale ?? site.org.locale,
-  });
-
   const now = ctx.now();
+  // §7.2 / F7: the open question unanswered for 60 min → recorded unanswered, then the draft.
+  const timedOut =
+    timeout?.step === 'answer' ? await answerTimeoutWeb(ctx, report, timeout.questionId) : null;
+  if (timeout?.step === 'answer' && !timedOut) return;
+  const questions = await ctx.db.listQuestions(report.id);
+  const plan: WebPlan = timedOut
+    ? { kind: 'draft', resolve: null }
+    : planWebNext({
+        data,
+        validation,
+        questions,
+        settings: site.settings,
+        companies: site.companies,
+        language: reporter?.locale ?? site.org.locale,
+      });
+
   if (plan.kind !== 'wait' && plan.resolve) {
     await ctx.db.updateQuestion(plan.resolve, {
       answered_at: now,
@@ -312,18 +349,47 @@ export async function decideNextWeb(ctx: Ctx, report: ReportRow, job: JobRow): P
     return;
   }
 
+  // The §7.2 clock of what the reporter now has in front of them.
+  let guard: NotifyReportGuard;
+  if (plan.kind === 'draft') {
+    const version = report.current_version || 1;
+    const draftRev = (await ctx.db.getVersion(report.id, version))?.draft_rev ?? 1;
+    guard = { reportId: report.id, status: 'awaiting_confirmation', version, draftRev };
+    await startConfirmationClock(ctx, report, reporter?.id ?? null, site.settings, {
+      version,
+      draftRev,
+      shownAt: now,
+      policy,
+    });
+  } else {
+    const question = plan.kind === 'wait' ? plan.question : await ctx.db.getQuestion(questionId!);
+    guard = { reportId: report.id, status: 'awaiting_answer', questionId: questionId! };
+    if (question) await startAnswerClock(ctx, report, question);
+  }
+
   if (!reporter) return;
+  if (timedOut) {
+    // F7: the reporter sees the draft next time they open the link; the nudge may follow.
+    ctx.log.info('decide_next: question timed out, draft without a text', {
+      report_id: report.id,
+      question_id: timedOut.id,
+    });
+    return;
+  }
   const notice: Notice =
     plan.kind === 'draft'
       ? { key: 'draft_ready', dedupeKey: jobKeys.draftReady(report.id, job.id) }
       : { key: 'question_ready', dedupeKey: jobKeys.questionReady(questionId!) };
   const lastSeen = await ctx.db.reporterDeviceLastSeen(reporter.id);
-  if (deviceActive(lastSeen, now)) {
-    // D25: the reporter is on the recorder and sees the question or the draft there.
+  const active = deviceActive(lastSeen, now);
+  const delayMs = active ? DEVICE_ACTIVE_MS : 0;
+  if (active) {
+    // D25 and spec §19 Q61: the reporter is on the recorder and sees it there; if they leave
+    // right after (no device seen in the next 30 s), the text goes out then.
     await ctx.db.logAudit({
       org_id: report.org_id,
       actor_type: 'system',
-      action: 'notify.skipped',
+      action: 'notify.deferred',
       entity: 'report',
       entity_id: report.id,
       diff: {
@@ -331,35 +397,203 @@ export async function decideNextWeb(ctx: Ctx, report: ReportRow, job: JobRow): P
         reason: 'device_active',
         last_seen_at: lastSeen,
         dedupe_key: notice.dedupeKey,
+        delay_ms: delayMs,
       },
     });
-    return;
   }
-  await notifyReporter(ctx, reporter.id, report.org_id, notice);
+  await enqueueReporterText(
+    ctx,
+    reporter.id,
+    report.org_id,
+    notice,
+    {
+      ...guard,
+      ...(active ? { deviceNotSeenAfter: now.toISOString() } : {}),
+    },
+    delayMs,
+  );
 }
 
-/** One `question_ready` / `draft_ready` text and the Notifier's key for it. */
+type NotifyReportGuard = NonNullable<JobPayloads['notify']['reportGuard']>;
+
+/** One `question_ready` / `draft_ready` text and the key of its `notify` job and the Notifier's. */
 interface Notice {
   key: 'question_ready' | 'draft_ready';
   dedupeKey: string;
 }
 
-/** The text with the reporter's personal link (the field app opens the question or the draft). */
-async function notifyReporter(
+/**
+ * The text as a `notify` job (W2-07) with the reporter's personal link (the field app opens the
+ * question or the draft) and the report guard the job checks before it sends.
+ */
+async function enqueueReporterText(
   ctx: Ctx,
   reporterId: string,
   orgId: string,
   notice: Notice,
+  reportGuard: NotifyReportGuard,
+  delayMs: number,
 ): Promise<void> {
   const { base, code } = await personalLinkCode(ctx, reporterId, orgId);
-  const outcome = await ctx.notifier.send(
-    reporterId,
-    notice.key,
-    { link: fieldLinkUrl(base, code) },
-    { dedupeKey: notice.dedupeKey },
+  await ctx.db.enqueueJob(
+    'notify',
+    {
+      reporterId,
+      key: notice.key,
+      vars: { link: fieldLinkUrl(base, code) },
+      dedupeKey: notice.dedupeKey,
+      reportGuard,
+    },
+    { dedupeKey: notice.dedupeKey, delayMs },
   );
-  if (outcome.channel === null)
-    ctx.log.info('decide_next: nothing sent', { key: notice.key, reason: outcome.reason });
+}
+
+/**
+ * F7's clock for an open web question: a delayed decide_next at asked + 60 min, keyed per
+ * question (a retried decide_next finds it taken). Delays are measured from the database's clock
+ * (`delayMs`), the one the queue reads.
+ */
+async function startAnswerClock(ctx: Ctx, report: ReportRow, question: QuestionRow) {
+  const askedAt = new Date(question.asked_at ?? question.created_at);
+  await ctx.db.enqueueJob(
+    'decide_next',
+    { reportId: report.id, timeout: { step: 'answer', questionId: question.id } },
+    {
+      dedupeKey: jobKeys.decideTimeout(report.id, question.id),
+      delayMs: answerTimeoutAt(askedAt).getTime() - ctx.now().getTime(),
+    },
+  );
+}
+
+/**
+ * §7.2's confirmation clock for a web draft shown at `shownAt`: the nudge (a delayed `notify` with
+ * Q78's key, guarded by the draft and the quiet hours) and the filing (a delayed decide_next),
+ * each keyed per version and draft revision.
+ */
+async function startConfirmationClock(
+  ctx: Ctx,
+  report: ReportRow,
+  reporterId: string | null,
+  settings: Pick<OrgSettingsRow, 'filing_mode'>,
+  draft: { version: number; draftRev: number; shownAt: Date; policy: TimeoutPolicy },
+): Promise<void> {
+  const { version, draftRev } = draft;
+  for (const step of confirmationSchedule(draft.shownAt, settings.filing_mode)) {
+    if (step.kind === 'file') {
+      await ctx.db.enqueueJob(
+        'decide_next',
+        {
+          reportId: report.id,
+          timeout: { step: 'file', trigger: step.trigger, version, draftRev },
+        },
+        {
+          dedupeKey: jobKeys.decideFileTimeout(report.id, version, draftRev),
+          delayMs: step.at.getTime() - draft.shownAt.getTime(),
+        },
+      );
+    } else if (reporterId) {
+      const { base, code } = await personalLinkCode(ctx, reporterId, report.org_id);
+      const nudgeKey = jobKeys.draftNudge(report.id, version, draftRev);
+      await ctx.db.enqueueJob(
+        'notify',
+        {
+          reporterId,
+          key: draft.policy.nudgeKey,
+          vars: { link: fieldLinkUrl(base, code) },
+          dedupeKey: nudgeKey,
+          reportGuard: {
+            reportId: report.id,
+            status: 'awaiting_confirmation',
+            version,
+            draftRev,
+            quietHours: true,
+          },
+        },
+        { dedupeKey: nudgeKey, delayMs: step.at.getTime() - draft.shownAt.getTime() },
+      );
+    }
+  }
+}
+
+/**
+ * The answer timeout's re-check (§7.2, F7): the report still awaits that question, which is still
+ * open and asked at least 60 min ago; then it is recorded unanswered (a guarded update: an answer
+ * committing first wins), the report flagged `unanswered:<field>` and audited. Null, and nothing
+ * changed, when the question was answered or the report moved on meanwhile.
+ */
+async function answerTimeoutWeb(
+  ctx: Ctx,
+  report: ReportRow,
+  questionId: string,
+): Promise<QuestionRow | null> {
+  const question = await ctx.db.getQuestion(questionId);
+  const now = ctx.now();
+  if (
+    report.status !== 'awaiting_answer' ||
+    !question ||
+    question.report_id !== report.id ||
+    question.answered_at
+  ) {
+    ctx.log.info('answer timeout: the question is no longer open', {
+      report_id: report.id,
+      question_id: questionId,
+      status: report.status,
+    });
+    return null;
+  }
+  // The job runs at asked + 60 min (run_after); one claimed early by a skewed clock retries.
+  if (!answerTimedOut(new Date(question.asked_at ?? question.created_at), now))
+    throw new Error(`question ${question.id} has not timed out yet`);
+  if (!(await ctx.db.timeOutQuestion(question.id, now))) return null;
+  const reason = `unanswered:${question.field}`;
+  await ctx.db.updateReport(report.id, {
+    needs_review: true,
+    review_reasons: [...new Set([...report.review_reasons, reason])],
+  });
+  await ctx.db.logAudit({
+    org_id: report.org_id,
+    actor_type: 'system',
+    action: 'report.question_timeout',
+    entity: 'report',
+    entity_id: report.id,
+    diff: { question_id: question.id, field: question.field, channel: 'web', reason },
+  });
+  return question;
+}
+
+/**
+ * The confirmation timeout (§7.2): files the draft only while it is still awaiting confirmation at
+ * the version and revision whose clock this is (a confirm, a newer draft or more audio since leave
+ * it alone; `fileReport` checks again in its transaction, `report.timeout_stale`).
+ */
+async function fileTimeoutWeb(
+  ctx: Ctx,
+  report: ReportRow,
+  timeout: Extract<NonNullable<JobPayloads['decide_next']['timeout']>, { step: 'file' }>,
+): Promise<void> {
+  const current = await ctx.db.getVersion(report.id, report.current_version || 1);
+  if (
+    report.status !== 'awaiting_confirmation' ||
+    (report.current_version || 1) !== timeout.version ||
+    (current?.draft_rev ?? 1) !== timeout.draftRev
+  ) {
+    ctx.log.info('confirmation timeout: the draft moved on', {
+      report_id: report.id,
+      status: report.status,
+      version: timeout.version,
+      draft_rev: timeout.draftRev,
+    });
+    return;
+  }
+  const result = await fileReport(ctx, report.id, {
+    trigger: timeout.trigger,
+    version: timeout.version,
+    draftRev: timeout.draftRev,
+  });
+  ctx.log.info(result.stale ? 'confirmation timeout: stale' : 'report filed by timeout', {
+    report_id: report.id,
+    trigger: timeout.trigger,
+  });
 }
 
 /**

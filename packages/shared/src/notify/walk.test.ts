@@ -218,6 +218,21 @@ describe('lateFallback (a status callback after the send)', () => {
     expect(fallback.kind === 'enqueue' && fallback.payload.guard).toEqual(guard);
   });
 
+  it('carries a web report’s guard, so the fallback re-checks the question or draft (W2-07)', () => {
+    const reportGuard = {
+      reportId: '00000000-0000-4000-8000-0000000000ee',
+      status: 'awaiting_confirmation' as const,
+      version: 1,
+      draftRev: 3,
+    };
+    const fallback = lateFallback(
+      { ...message, copy_key: 'draft_ready', payload: { dedupe_key: 'notify:draft_ready:r:9' } },
+      'undeliverable',
+      { ...sentBy, key: 'draft_ready', dedupeKey: 'notify:draft_ready:r:9', reportGuard },
+    );
+    expect(fallback.kind === 'enqueue' && fallback.payload.reportGuard).toEqual(reportGuard);
+  });
+
   it('nothing for a delivery, a row outside the Notifier, or one no notify job sent', () => {
     expect(lateFallback(message, 'delivered', sentBy)).toEqual({
       kind: 'none',

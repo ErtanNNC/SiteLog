@@ -9,15 +9,16 @@ import { PermanentJobError, type JobHandler } from './types';
 /**
  * §10.1 decide_next: one question at a time (§F6) or the draft card (§F7); weather/no-work reports
  * file directly. A web recorder report goes to `decideNextWeb` (W1-12: state changes, then one
- * Notifier call unless the reporter's device was seen in the last 30 s, D25); the rest of this
- * handler is the WhatsApp worker's until step 22.
+ * `notify` job, 30 s later while the reporter's device was seen in the last 30 s, D25, Q61) and its
+ * §7.2 timeouts (W2-07: `payload.timeout`, the delayed steps it scheduled); the rest of this handler
+ * is the WhatsApp worker's until step 22.
  */
 export const decideNext: JobHandler<'decide_next'> = async (ctx, payload, job) => {
   const report = await ctx.db.getReport(payload.reportId);
   if (!report) throw new PermanentJobError(`report ${payload.reportId} not found`);
   if (report.status === 'filed' || report.status === 'signed_off' || report.status === 'void')
     return;
-  if (isWebReport(report)) return decideNextWeb(ctx, report, job);
+  if (isWebReport(report)) return decideNextWeb(ctx, report, job, payload.timeout);
   const draft = await currentData(ctx, report);
   if (!draft) throw new PermanentJobError(`report ${report.id} has no draft`);
   if (report.kind !== 'daily') {

@@ -40,6 +40,12 @@ const AUDITED: Record<string, string> = {
     'notify:question_ready:<question> (the Notifier key in messages.payload, W1-12): one text per question; a retried decide_next never texts twice, a new question is a new key',
   'jobKeys.draftReady':
     'notify:draft_ready:<report>:<decide job id> (the Notifier key, W1-12): per decide_next job that showed the draft; a retry never texts twice, a draft shown again after more audio or photos comes from a new decide job',
+  'jobKeys.decideTimeout':
+    'decide:<report>:timeout:<question> (W2-07, the §7.2 web answer timeout): a delayed decide_next per question, and a question is asked once; a retried decide_next finds the key taken',
+  'jobKeys.decideFileTimeout':
+    'decide:<report>:file-timeout:v<version>:r<draft rev> (W2-07, the §7.2 confirmation timeout): per draft version and revision, so a newer draft restarts the clock; a filing that finds the report filed or the draft moved on does nothing',
+  nudgeKey:
+    'jobKeys.draftNudge, notify:draft_nudge:<report>:v<version>:r<draft rev> (W2-07, the 30-minute nudge): the notify job and its Notifier key per draft version and revision, so a retry never nudges twice and a newer draft has its own nudge',
   'jobKeys.renderPdf':
     'render_pdf:<report>:<version> (file_report, W1-15): per report version; versions are immutable, and a retried filing finds the key taken',
   'jobKeys.reportEmail':
@@ -108,7 +114,8 @@ const NOT_KEYS = [
   'opts.dedupeKey',
   'input.dedupeKey',
   'payload.dedupeKey',
-  // decide_next's notice (apps/worker/src/pipeline/web.ts): jobKeys.questionReady / draftReady above
+  // decide_next's notice (apps/worker/src/pipeline/web.ts): jobKeys.questionReady / draftReady
+  // above, the notify job's key and the Notifier's since W2-07 (one job per key, deferred 30 s or not)
   'notice.dedupeKey',
 ];
 

@@ -870,6 +870,16 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       if (patch.answered_at !== undefined) next.answered_at = toIso(patch.answered_at);
       d.questions.set(id, next);
     },
+    async timeOutQuestion(id, at) {
+      const row = d.questions.get(id);
+      if (!row || row.answered_at) return false;
+      d.questions.set(id, {
+        ...row,
+        answered_at: toIso(at)!,
+        answer: { unanswered: true, timeout: true },
+      });
+      return true;
+    },
 
     async findPendingUnknownContact(phone) {
       return (
@@ -1147,7 +1157,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         payload: payload as JobRow['payload'],
         status: 'queued',
         attempts: 0,
-        run_after: toIso(opts.runAfter) ?? iso(),
+        run_after:
+          toIso(opts.runAfter) ??
+          (opts.delayMs ? new Date(Date.parse(iso()) + opts.delayMs).toISOString() : iso()),
         locked_at: null,
         locked_by: null,
         last_error: null,

@@ -247,6 +247,12 @@ export interface InboundChangeInput {
 export interface EnqueueOptions {
   runAfter?: Date | string | null;
   /**
+   * Run no sooner than this long after the database's `now()` (W2-07, the §7.2 clock): delays are
+   * measured on the clock `claim_jobs()` reads, so a worker on a test clock
+   * (WORKER_CLOCK_OVERRIDE) still waits the real 30 s, 30 min or 2 h. Ignored with `runAfter`.
+   */
+  delayMs?: number;
+  /**
    * A key names one job for good (GAP D16, 20261015000001): enqueueing a taken key returns that
    * job's id whatever its status (done and dead included) and runs nothing. Use a per-occurrence
    * key (`jobKeys`) for work that must run again.
@@ -528,6 +534,12 @@ export interface Db {
   getQuestion(id: string): Promise<QuestionRow | null>;
   listQuestions(reportId: string): Promise<QuestionRow[]>;
   updateQuestion(id: string, patch: QuestionPatch): Promise<void>;
+  /**
+   * §7.2 (W2-07): records a still-open question as unanswered (`answer {unanswered, timeout}`) and
+   * answers whether it was still open. One guarded update: field_answer_question() holds the
+   * question's row lock, so an answer that commits first wins and this changes nothing.
+   */
+  timeOutQuestion(id: string, at: Date): Promise<boolean>;
 
   // web pipeline (W1-12)
   /**
@@ -1335,6 +1347,14 @@ export function createDb(sql: Sql): Db {
       if (patch.answered_at !== undefined) p.answered_at = iso(patch.answered_at);
       await sql`update questions set ${setClause(p)} where id = ${id}`;
     },
+    async timeOutQuestion(id, at) {
+      const rows = await sql<Array<{ id: string }>>`
+        update questions set answered_at = ${iso(at)},
+          answer = ${sql.json({ unanswered: true, timeout: true } as never)}
+        where id = ${id} and answered_at is null
+        returning id`;
+      return rows.length > 0;
+    },
 
     // web pipeline (W1-12) -------------------------------------------------------------------
     async setReportStatus(id, to, from) {
@@ -1560,7 +1580,10 @@ export function createDb(sql: Sql): Db {
       const enqueue = async () => {
         const rows = await sql<
           Array<{ enqueue_job: number }>
-        >`select enqueue_job(${type}, ${sql.json(payload as never)}, ${iso(opts.runAfter) ?? null}, ${opts.dedupeKey ?? null}) as enqueue_job`;
+        >`select enqueue_job(${type}, ${sql.json(payload as never)},
+          coalesce(${iso(opts.runAfter) ?? null}::timestamptz,
+                   now() + ${Math.max(0, Math.round(opts.delayMs ?? 0))}::bigint * interval '1 millisecond'),
+          ${opts.dedupeKey ?? null}) as enqueue_job`;
         return rows[0]!.enqueue_job;
       };
       try {

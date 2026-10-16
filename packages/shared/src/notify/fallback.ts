@@ -12,8 +12,8 @@ import { jobKeys, type JobPayloads } from '../schemas/jobs.ts';
  * The job needs the message's variables, which hold link codes: `messages` never stores them (its
  * body is masked for real orgs), so they come from the `notify` job that sent the message. A
  * message sent outside a `notify` job (the welcome of `send_welcome`, the device code, the texts
- * `decide_next` and the panel send inline) has none and gets no late fallback; its attempts still
- * fall back at send time.
+ * the panel sends inline) has none and gets no late fallback; its attempts still fall back at send
+ * time. `decide_next`'s `question_ready` and `draft_ready` are `notify` jobs since W2-07.
  */
 
 /** The outbound row a status callback moved, as the status route reads it. */
@@ -70,6 +70,7 @@ export function lateFallback(
       dedupeKey,
       afterMessageId: message.id,
       ...(sentBy.guard ? { guard: sentBy.guard } : {}),
+      ...(sentBy.reportGuard ? { reportGuard: sentBy.reportGuard } : {}),
     },
     dedupeKey: jobKeys.notifyAfter(dedupeKey, message.id),
   };
