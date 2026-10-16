@@ -542,7 +542,7 @@ export async function installFakeFieldApi(
       }
       if (path === 'device/verify') {
         if ((body as { code?: string }).code !== OTP) {
-          return json(route, 400, { error: 'code_invalid', details: { attemptsLeft: 4 } });
+          return json(route, 400, { error: 'code_invalid', attemptsLeft: 4 });
         }
         api.state.verified = true;
         return json(route, 200, { verified: true, needsConsent: !api.state.consented });

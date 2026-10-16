@@ -184,6 +184,8 @@ export interface FieldApiErrorBody {
   details?: unknown;
   /** Seconds until a rate-limited caller may try again (also the Retry-After header). */
   retryAfter?: number;
+  /** `code_invalid`: the code checks left in this hour's window (F16). */
+  attemptsLeft?: number;
 }
 
 /** The consents without which the reporter cannot submit (F4 "required", F15 revoking). */

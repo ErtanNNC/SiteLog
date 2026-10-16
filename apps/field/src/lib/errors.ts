@@ -19,8 +19,9 @@ export function copyError(err: unknown, known: readonly string[]): CopyError {
   const code = apiErrorCode(err);
   if (code === 'rate_limited') return { key: 'rate_limited', vars: { minutes: retryMinutes(err) } };
   if (code === 'code_invalid') {
-    const details = apiErrorBody(err)?.details as { attemptsLeft?: number } | undefined;
-    return { key: 'code_invalid', vars: { attemptsLeft: details?.attemptsLeft ?? 0 } };
+    // field-api puts a refusal's extras next to `error` (`{ error, attemptsLeft }`).
+    const left = apiErrorBody(err)?.attemptsLeft;
+    return { key: 'code_invalid', vars: { attemptsLeft: typeof left === 'number' ? left : 0 } };
   }
   if (code && known.includes(code)) return { key: code };
   if (isOfflineError(err)) return { key: 'offline' };

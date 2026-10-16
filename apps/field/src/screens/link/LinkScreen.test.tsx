@@ -289,9 +289,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
         .fn()
         .mockResolvedValueOnce({ sent: true, expiresAt: 'x' })
         .mockRejectedValueOnce(apiError(429, 'rate_limited', { retryAfter: 1800 })),
-      verify: vi
-        .fn()
-        .mockRejectedValueOnce(apiError(400, 'code_invalid', { details: { attemptsLeft: 3 } })),
+      verify: vi.fn().mockRejectedValueOnce(apiError(400, 'code_invalid', { attemptsLeft: 3 })),
     });
     renderApp('/r/K7Q2MX', { session: null, routes });
     fireEvent.click(await screen.findByRole('button', { name: 'Yes, text me a code' }));
