@@ -114,6 +114,11 @@ Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahta
 - **Onayınız:** cihaz kodu SMS'i artık SMS izni reddedilmiş ya da kapatılmış olsa da gidiyor; yalnızca STOP ile çıkmış numaraya gitmiyor. Gerekçe: kişi kodu kendisi istiyor. Öneri: kabul.
 - Yeni ES/TR metinler (saha Ayarlar, iki panel bildirimi) Q63 okumasına eklendi. Ayarlar için tasarım ekranı yok; spec §9.3'e göre yapıldı.
 
+**W2-03 bitti (c7f8d59):** Geçmiş raporlar (son 14 gün, şantiyeye göre) ve tek rapor görünümü eklendi. Süresi dolmuş link ekranında "Bana bugünün linkini gönder" düğmesi var. 5 yanlış kod girilirse telefon kilitleniyor ve ofise bir bildirim gidiyor. İki şantiyesi olan kişi şantiye değiştirebiliyor. Yeni migration: `20261016000020`.
+
+- **Q87 (kararınız):** "Bana bugünün linkini gönder" düğmesi ne zaman ve ne göndersin? Öneri ve yapılan: aynı şantiyenin bugünkü linki, süresi dolmuş her link için günde bir kez. Şantiye durdurulmuşsa ya da bugün iş günü değilse link gitmiyor, nedeni ekranda gösteriliyor.
+- **Q88 (kararınız):** Geçmiş raporlara nereden girilsin? Öneri ve yapılan: Bugün ekranının altındaki bir link; W2-04'te Filed ekranına da eklenecek.
+
 **Sizin yapmanız gerekenler (hafta 2, acele değil ama uzun sürüyor):**
 
 - Twilio WhatsApp göndericisi + Meta doğrulaması + EN/ES/TR şablonlar (en uzun bekleme süresi bu).
