@@ -20,6 +20,24 @@ describe('deterministic reply handling (worker + field simulator)', () => {
     expect(stripDayReference('Friday — Apex was 7')).toBe('Apex was 7');
   });
 
+  it('strips every day word it resolves: pzt, cmt, anteayer, day before yesterday (W2-14 review)', () => {
+    expect(stripDayReference('pzt Apex 7 kişi')).toBe('Apex 7 kişi');
+    expect(stripDayReference('CMT: Apex 7')).toBe('Apex 7');
+    expect(stripDayReference('anteayer Apex eran 7')).toBe('Apex eran 7');
+    expect(stripDayReference('the day before yesterday - Apex was 7')).toBe('Apex was 7');
+    expect(stripDayReference('day  before yesterday Apex was 7')).toBe('Apex was 7');
+    // Whole words only: "Pztx" or "cmtech" start with no day.
+    expect(stripDayReference('cmtech 4 not 3')).toBe('cmtech 4 not 3');
+    expect(quickClassify('edit the day before yesterday Apex was 7', now, tz)).toMatchObject({
+      entities: { dayReference: '2026-10-07' },
+      correctionText: 'Apex was 7',
+    });
+    expect(quickClassify('edita anteayer Apex eran 7', now, tz)).toMatchObject({
+      entities: { dayReference: '2026-10-07' },
+      correctionText: 'Apex eran 7',
+    });
+  });
+
   it('day-off fallback and the "nobody worked" check', () => {
     expect(quickDayOff('rained out, sent everyone home at 11')).toMatchObject({
       kind: 'weather_day',

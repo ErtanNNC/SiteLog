@@ -127,9 +127,10 @@ export function resolveDayReference(text: string, now: Date, tz: string): string
   // "İ" lower-cases to "i" and a combining dot: drop the dot ("CUMARTESİ" → "cumartesi").
   const t = text.toLowerCase().replace(/\u0307/g, '');
   if (/\b(today|hoy)\b/.test(t) || /(^|[^\p{L}])(bugün|bugun)(?=$|[^\p{L}])/u.test(t)) return today;
+  // Before "yesterday": "the day before yesterday" holds it (W2-14 review).
+  if (/\bday before yesterday\b|\banteayer\b/.test(t)) return addDays(today, -2);
   if (/\b(yesterday|ayer)\b/.test(t) || /(^|[^\p{L}])(dün|dun)(?=$|[^\p{L}])/u.test(t))
     return addDays(today, -1);
-  if (/\bday before yesterday\b|\banteayer\b/.test(t)) return addDays(today, -2);
 
   const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(t);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
