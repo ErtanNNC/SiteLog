@@ -16,7 +16,7 @@ Rules: `CLAUDE.md`. Spec: `docs/SITELOG_SPEC.md` (v1.2), §16.2 M6. Designs: `do
 
 As in week 1 (`docs/PLAN_WEEK1.md`, "How each ticket runs"), with `W2-xx` as the commit prefix:
 
-1. One ticket at a time, in the order below: take the next unticked ticket, read its spec sections and artboards, and check its **Blocked by** list. A ticket whose questions are open builds everything its **Without the answer** line names, behind a parameter or a flag whose default is the recommended answer, and leaves the blocked boxes unticked. (Since 2026-10-16 only Q40's counsel half is open among the week-2 questions; the decided parameters keep their names.)
+1. One ticket at a time, in the order below: take the next unticked ticket, read its spec sections and artboards, and check its **Blocked by** list. A ticket whose questions are open builds everything its **Without the answer** line names, behind a parameter or a flag whose default is the recommended answer, and leaves the blocked boxes unticked. (Since 2026-10-16 the week-2 questions still open are Q40's counsel half and Q107–Q114 and Q116, each built on its recommendation; the decided parameters keep their names.)
 2. Build with tests. SQL in a new timestamped migration after the last applied one (`20261015000090` today), `packages/shared/src/db/types.ts` in the same commit (D7), the D11 allowlist and role matrix updated; a new table gets RLS and its row in the role matrix.
 3. Run `pnpm check` and `pnpm format:check`; `pnpm test:db` when SQL changed; `pnpm e2e` when UI changed; `pnpm e2e:supabase` and `pnpm test:stack` when a Supabase data path changed (CI runs both); `pnpm eval -- --recorded` when a prompt changed. Deno checks run in CI.
 4. Tick the boxes, commit `W2-xx: <summary>`, push to `spec-v1.2`; PR #1 must be green before the next ticket. Report in three lines against **Done when**. _(owner)_ checks need a real phone or an owner action; _(by hand)_ checks are the developer's, with screenshots on PR #1.
@@ -325,15 +325,15 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W2-17 · M6 acceptance: scripted e2e and real phones
 
-- [ ] **W2-17 done** · today _new_ (M)
+- [ ] **W2-17 done** · today _partial_ (M) · _Built 2026-10-16 (commits `W2-17: …`); the box waits for the suite's first CI run (no Supabase CLI or Docker here: the new and changed specs were listed, typechecked and formatted, not run) and the owner's phones. The suite is `pnpm e2e:m6`: the `e2e:supabase` specs tagged `@m6`, one flow tag each — F4 `apps/field/e2e/supabase/worker/test-clip.spec.ts` (now from a new phone, with the preference), F5 `record.spec.ts` (+ offline), F7 `worker/answer.spec.ts` and `worker/voice-answer.spec.ts` (+ *Other* typed), F8 `worker/fix-by-voice.spec.ts`, F10 `worker/change-filed.spec.ts`, F11 `apps/web/e2e/supabase/worker/ladder.spec.ts` (+ R2 and missing on Oakmont), F12 `worker/day-off.spec.ts` (new), F14 `two-sites.spec.ts` (new), F15 `settings.spec.ts` (new), F16 `expired.spec.ts` and `new-phone.spec.ts` (new). CI's `e2e-supabase` runs it as its own last step; the other Playwright steps take `--grep-invert @m6` (the field app's `stack` step is gone: all its specs are M6). Found and fixed: the site switcher's current row left Today blank. New §19 Q116 (a demo org never reaches a real phone), built on the recommendation._
 - **Spec:** §16.2 M6 **Done when**, §17.
 - **Build:**
-  - [ ] One scripted Playwright suite on the local stack with the worker, one spec per flow: F4 (new device, consent, preference, test clip), F5 (record, upload, offline), F7 (buttons, _Other…_ by voice and number), F8 (fix by voice, confirm), F10 (Past reports → change → v2), F11 (daily link → R1 → R2 → missing with a moved clock), F12 (weather and no work), F14 (two sites), F15 (preferences, consent off, sign out, STOP), F16 (expired link, new phone, the lock).
-  - [ ] `docs/DEMO_NOTES.md`: a week-2 script for the phones.
-  - [ ] Spec, README deviations, GAP and this plan updated for what M6 built; the answered §19 questions written in.
+  - [x] One scripted Playwright suite on the local stack with the worker, one spec per flow: F4 (new device, consent, preference, test clip), F5 (record, upload, offline), F7 (buttons, _Other…_ by voice and number), F8 (fix by voice, confirm), F10 (Past reports → change → v2), F11 (daily link → R1 → R2 → missing with a moved clock), F12 (weather and no work), F14 (two sites), F15 (preferences, consent off, sign out, STOP), F16 (expired link, new phone, the lock).
+  - [x] `docs/DEMO_NOTES.md`: a week-2 script for the phones.
+  - [x] Spec, README deviations, GAP and this plan updated for what M6 built; the answered §19 questions written in.
 - **Done when:** the suite passes in CI; _(owner)_ the same flows pass on a real iPhone (Safari, installed for push) and Android phone (Chrome) against the preview project with the worker running, with the keys the owner has provided; every question still open is listed in the report with the default that shipped.
 - **Needs:** owner: the phones, the preview project with the worker (owner-approved), and whatever keys and senders exist by then.
-- **Blocked by:** only Q40's counsel half among the week-2 questions (the rest were decided 2026-10-16); a question still open ships its recommended default and is named in the report.
+- **Blocked by:** only Q40's counsel half among the week-2 questions; a question still open ships its recommended default and is named in the report. Open at W2-17, each shipped on its recommendation: Q40 (counsel's half: an SMS STOP stops texts only), Q107 (push first, never last), Q108 (push off per phone; the consent with the last), Q109 (push TTL 4 hours), Q110 (WhatsApp templates are §9.2's text), Q111 (TR two-way texts, for the Q63 read), Q112 (WhatsApp START restores only a consent once given), Q113 (an unclear WhatsApp answer gets the question's link again), Q114 (WhatsApp media kept as Twilio URLs), Q116 (demo orgs never reach a real phone; deliveries on a real test org).
 
 ---
 
@@ -362,6 +362,11 @@ On 2026-10-16 the owner approved ("onaylıyorum") every pending question that wa
 
 - **Q93 · the panel plays answer clips.** P7's source link plays a spoken answer's clip (the panel loads answer clips by the question; today it shows the source but cannot play it). A panel ticket, outside W2-01 … W2-17 so far.
 - **Q63 · a native-speaker read of the ES and TR texts.** The copy written so far is accepted (decided 2026-10-16); a read by a native speaker is still advisable before the pilots, one pass at the end of M6 covering every new key.
+
+**Open, built on the recommendation (W2-14 … W2-17); they stay as built unless the owner says otherwise**
+
+- Q107 … Q109 (W2-14, web push), Q110 … Q114 (W2-15, W2-16, WhatsApp): spec §19 has each with what was built.
+- **Q116 (new, W2-17) · Whether a demo org's messages may reach a real phone.** The Notifier sends every channel of a demo org through `console` (the Demo phone), so the M6 real-phone check cannot receive a push, WhatsApp or text from Kestrel or Demir Yapı. _Built as the default:_ never; `docs/DEMO_NOTES.md` "Week 2" checks the screens on the demo orgs (Pass A) and the deliveries on a real test org the owner makes on the preview project (Pass B). _Recommended:_ keep it: one rule, and no demo text ever reaches a stranger's number.
 
 **Already in spec §19, still open, touching week 2 (owner information only)**
 
