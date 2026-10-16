@@ -888,6 +888,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async getCorrection() {
       return null;
     },
+    async getCorrectionByMessage() {
+      return null;
+    },
     // W2-12: the SMS keyword job runs on PGlite (sms-keywords.integration.test.ts).
     smsKeywordDays() {
       return Promise.reject(new Error('fake db: smsKeywordDays runs on PGlite only'));

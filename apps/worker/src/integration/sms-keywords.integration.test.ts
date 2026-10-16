@@ -366,6 +366,47 @@ describe('SMS report keywords (W2-12) on the Demo phone of a two-way demo org', 
     }
   }, 60_000);
 
+  it('a retry of an EDIT whose change was requested resolves nothing again (W2-12 review)', async () => {
+    await filedReport(resolveDayReference('TUE', new Date(), TZ)!);
+    await filedReport(resolveDayReference('MON', new Date(), TZ)!);
+    const since = await stamp();
+    const id = await text('EDIT TUE Apex was 5 not 6');
+    const [c] = await database.q<{ id: string }>(
+      `select id from draft_corrections where message_id = $1`,
+      [id],
+    );
+    expect(c).toBeDefined();
+    // The retry's model would name another day now; it is never asked.
+    const real = world.ctx.ai.claude!;
+    const calls = world.claude.calls.length;
+    world.ctx.ai.claude = {
+      messages: {
+        async create(params, opts) {
+          const res = await real.messages.create(params, opts);
+          const block = res.content[0] as { type: string; name?: string; input?: unknown };
+          if (block.type === 'tool_use' && block.name === 'classify_utterance')
+            block.input = {
+              intent: 'edit_request',
+              confidence: 0.9,
+              entities: { dayReference: 'Monday' },
+              correctionText: 'Apex was 5 not 6',
+            };
+          return res;
+        },
+      },
+    };
+    try {
+      expect(await run(await byKey(jobKeys.smsKeyword(id)))).toEqual({ ok: true });
+    } finally {
+      world.ctx.ai.claude = real;
+    }
+    expect(world.claude.calls.length).toBe(calls);
+    expect(
+      await database.q(`select 1 from draft_corrections where message_id = $1`, [id]),
+    ).toHaveLength(1);
+    expect(await replies(since)).toEqual([]);
+  }, 60_000);
+
   it('a retry after the settle queues the preview the first run could not (W2-12 review)', async () => {
     const date = resolveDayReference('THU', new Date(), TZ)!;
     await filedReport(date);

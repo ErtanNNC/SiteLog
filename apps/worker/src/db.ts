@@ -613,6 +613,8 @@ export interface Db {
 
   /** W2-10 (F8 *Fix by voice*): a correction of a web draft and its preview. */
   getCorrection(id: string): Promise<DraftCorrectionRow | null>;
+  /** W2-12: the correction an SMS EDIT made (`draft_corrections.message_id`), if any. */
+  getCorrectionByMessage(messageId: string): Promise<DraftCorrectionRow | null>;
   /**
    * W2-10 (field_settle_correction()): `ready` with the preview built in code (`detail`: data,
    * changes, operations, source, changeNote, baseVersion, baseRev; refused `draft_changed` when
@@ -1584,6 +1586,13 @@ export function createDb(sql: Sql): Db {
         join reports r on r.site_day_id = sd.id and r.status <> 'void'
         where sr.reporter_id = any(${reporterIds}::uuid[])
         order by r.id, sr.is_primary desc, sr.reporter_id`;
+    },
+    async getCorrectionByMessage(messageId) {
+      return one(
+        await sql<
+          DraftCorrectionRow[]
+        >`select * from draft_corrections where message_id = ${messageId}`,
+      );
     },
     async requestSmsCorrection(input) {
       const [row] = await sql<

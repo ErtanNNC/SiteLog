@@ -322,6 +322,13 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
   const ids = k.reporters.map((r) => r.id);
   const rest = parseSmsEdit(k.message.body ?? '')?.rest ?? '';
   if (!rest) return editUnclear(k, first, 'no_change');
+  // A retry after the change was requested: done. Resolving again could call the model again and
+  // name another report (a dead job, a false office alert, a second reply) (W2-12 review).
+  const requested = await ctx.db.getCorrectionByMessage(k.message.id);
+  if (requested) {
+    k.log.info('sms_keyword: the EDIT was requested before', { correction_id: requested.id });
+    return;
+  }
   // F15, spec §19 Q95: nothing goes to the model once a reporter of the phone turned a consent
   // off (the text is theirs too); a change of such a reporter's report is refused (W2-12 review).
   const revokedBy = new Map<string, Awaited<ReturnType<typeof revokedProcessingConsents>>>();
