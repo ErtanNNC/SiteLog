@@ -170,6 +170,19 @@ export function noticeText(data: unknown): NoticeText | null {
           }),
         ),
       };
+    case 'message_account_fault':
+      return {
+        title: n.params.name
+          ? copyRef('shell.notifications.notices.message_account_fault.title', {
+              name: n.params.name,
+            })
+          : copyRef('shell.notifications.notices.message_account_fault.titleUnnamed'),
+        body: one(
+          copyRef('shell.notifications.notices.message_account_fault.body', {
+            error: n.params.error,
+          }),
+        ),
+      };
     case 'message_no_sender':
       return {
         title: copyRef('shell.notifications.notices.message_no_sender.title', n.params),

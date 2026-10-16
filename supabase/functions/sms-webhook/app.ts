@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   EMPTY_TWIML,
-  TWILIO_ASYNC_NUMBER_CODES,
   assertE164,
   keywordOf,
   lateFallback,
@@ -14,6 +13,8 @@ import {
   parseTwilioStatus,
   processInboundSms,
   toCountryPack,
+  twilioCallbackError,
+  twilioLateFailureIsAccountFault,
   verifyTwilioSignature,
   type CountryPack,
   type E164,
@@ -37,8 +38,9 @@ import type { SmsWebhookStore } from './store.ts';
  *   POST /sms-webhook/status         Twilio's StatusCallback: messages.status (never backwards);
  *                                    a welcome the carrier could not deliver to the number flags
  *                                    the reporter for the office ("Can't reach this number", F3,
- *                                    §13); one that failed for the account or the sender tells
- *                                    the office about the account, at most once an hour.
+ *                                    §13); any text that failed for the account or the sender
+ *                                    tells the office about the account, at most once an hour;
+ *                                    a Notifier message queues its fallback (W2-01).
  *   POST /sms-webhook/demo-reply     The panel's Demo phone (§11.1): an admin of a demo org types a
  *                                    text as the reporter; the same handler, inline, console only,
  *                                    inside the caller's org, and only on packs with two-way SMS
@@ -111,10 +113,10 @@ function twiml(): Response {
   });
 }
 
-/** A §13 notice of the status route (`reporter_invite_failed`, admin and ops). */
+/** A §13 notice of the status route (`reporter_invite_failed` / `message_failed`, admin and ops). */
 export interface InviteNotice {
   orgId: string;
-  kind: 'reporter_invite_failed';
+  kind: 'reporter_invite_failed' | 'message_failed';
   title: string;
   body: string;
   targetPath: string;
@@ -157,6 +159,30 @@ export function providerFaultNotification(
     body: `Texts are failing for this account (${error}). The SMS provider accepted the welcome text and then refused it for the account or the sender, not for the reporter's number. Re-send the welcome from Team & numbers once the provider account is fixed. Other texts that fail this way in the next hour are not notified again.`,
     targetPath: '/team',
     data: noticeData('welcome_account_fault', { name: reporterName, error }),
+  };
+}
+
+/**
+ * The same notice for any other text (a Notifier message, a device code, an inline text; W2-01
+ * follow-up): the account is at fault, not the reporter's number. It stands for every text that
+ * fails this way within the hour, so the `notify` job's fallback posts no per-message
+ * `message_failed` for it (`attemptIsAccountFault`); the fallback still tries the person's next
+ * channel, if any.
+ */
+export function messageAccountFaultNotification(
+  orgId: string,
+  reporterName: string | null,
+  error: string,
+): InviteNotice {
+  return {
+    orgId,
+    kind: 'message_failed',
+    title: reporterName
+      ? `${reporterName}: a text to them failed at the SMS provider`
+      : 'A text failed at the SMS provider',
+    body: `Texts are failing for this account (${error}). The SMS provider accepted the text and then refused it for the account or the sender, not for the reporter's number. SiteLog tries their other message channels, if they have any. Other texts that fail this way in the next hour are not notified again.`,
+    targetPath: '/team',
+    data: noticeData('message_account_fault', { name: reporterName, error }),
   };
 }
 
@@ -264,7 +290,7 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
     }
     const to = nextMessageStatus(message.status, next);
     if (!to) return twiml();
-    const error = cb.errorCode ? `twilio ${cb.errorCode}` : null;
+    const error = twilioCallbackError(cb.errorCode);
     await store.updateMessageStatus(message.id, to, error);
     await store.audit({
       orgId: message.org_id,
@@ -274,21 +300,20 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       entityId: message.id,
       diff: { from: message.status, to, error_code: cb.errorCode },
     });
-    // A welcome Twilio accepted and then could not deliver arrives here after send_welcome
-    // marked the reporter invited. Only a carrier refusing the number (`undelivered` with 30003,
-    // 30004, 30005, 30006, or no code) is F3 "Can't reach this number"; `failed` (it never left
-    // the account) and every other code (30032 unverified toll-free sender, 30034 unregistered
-    // 10DLC, 30002 suspended account, 30007 filtered, …) is the account's fault, as in
-    // send_welcome, and leaves the reporter alone.
-    if ((to === 'undeliverable' || to === 'failed') && message.copy_key === 'welcome') {
-      const reason = error ?? `twilio ${cb.status}`;
-      const numberFault =
-        to === 'undeliverable' &&
-        (cb.errorCode === null || TWILIO_ASYNC_NUMBER_CODES.includes(cb.errorCode));
-      if (numberFault) await flagInviteFailure(message, reason);
-      else await providerFault(message, to, cb.errorCode, reason);
-    }
-    if (to === 'undeliverable' || to === 'failed') await fallBack(message, to);
+    if (to !== 'undeliverable' && to !== 'failed') return twiml();
+    // A text Twilio accepted and then could not deliver. Only a carrier refusing the number
+    // (`undelivered` with 30003, 30004, 30005, 30006, or no code) is the reporter's: for a
+    // welcome, F3 "Can't reach this number". `failed` (it never left the account) and every other
+    // code (30032 unverified toll-free sender, 30034 unregistered 10DLC, 30002 suspended account,
+    // 30007 filtered, …) is the account's fault, as in send_welcome: the reporter is left alone and
+    // the office hears it once per org per hour, for a welcome or any other text.
+    const reason = error ?? `twilio ${cb.status}`;
+    const accountFault = twilioLateFailureIsAccountFault(to, cb.errorCode);
+    if (accountFault) await providerFault(message, to, cb.errorCode, reason);
+    else if (message.copy_key === 'welcome') await flagInviteFailure(message, reason);
+    // Either way the message may still reach the person on their next channel (W2-01); an
+    // account fault adds no per-message `message_failed` when none is left (notify.ts).
+    await fallBack(message, to);
     return twiml();
   }
 
@@ -351,7 +376,12 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
   }
 
   async function providerFault(
-    message: { id: string; org_id: string | null; reporter_id: string | null },
+    message: {
+      id: string;
+      org_id: string | null;
+      reporter_id: string | null;
+      copy_key: string | null;
+    },
     to: 'undeliverable' | 'failed',
     code: string | null,
     error: string,
@@ -364,8 +394,11 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       const reporter = message.reporter_id
         ? await store.reporterForInvite(message.reporter_id)
         : null;
+      const name = reporter?.name ?? null;
       await store.notifyOrg(
-        providerFaultNotification(message.org_id, reporter?.name ?? null, error),
+        message.copy_key === 'welcome'
+          ? providerFaultNotification(message.org_id, name, error)
+          : messageAccountFaultNotification(message.org_id, name, error),
       );
     }
     await store.audit({
@@ -379,6 +412,7 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
         code,
         status: to,
         reporter_id: message.reporter_id,
+        copy_key: message.copy_key,
         via: 'status_callback',
         notified,
         at: at.toISOString(),

@@ -103,6 +103,8 @@ export const noticeDataSchema = z.discriminatedUnion('key', [
   notice('message_no_sender', { name }),
   // every channel of the order failed for one message (W2-01, spec §19 Q22)
   notice('message_channels_failed', { name, channels: name, error: z.string() }),
+  // a text other than the welcome failed for the account (sms-webhook /status, once an hour)
+  notice('message_account_fault', { name: nameOrNull, error: z.string() }),
   // reporter_invite_failed (jobs/send_welcome.ts; sms-webhook's status route)
   notice('welcome_undeliverable', { name }), // body: the provider's error
   notice('welcome_provider_fault', { name, error: z.string() }),

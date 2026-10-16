@@ -14,7 +14,9 @@ export type NotificationKind =
   | 'report_edited'
   // §13 "Message undeliverable / opted out" (W1-08): admin and ops.
   | 'reporter_invite_failed'
-  | 'reporter_opted_out';
+  | 'reporter_opted_out'
+  // The same row: a text that failed for the SMS account (sms-webhook /status, W2-01 follow-up).
+  | 'message_failed';
 
 export interface Notification {
   orgId: string;

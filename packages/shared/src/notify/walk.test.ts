@@ -6,6 +6,7 @@ import { DEMO_COUNTRIES } from '../demo/countries.ts';
 import type { ConsentType, MessageChannel, MsgStatus } from '../enums.ts';
 import { lateFallback, messageDedupeKey } from './fallback.ts';
 import {
+  attemptIsAccountFault,
   attemptIsFinal,
   attemptNumber,
   attemptWasSent,
@@ -219,5 +220,36 @@ describe('lateFallback (a status callback after the send)', () => {
       reason: 'no_job',
     });
     expect(messageDedupeKey({ dedupe_key: '' })).toBeNull();
+  });
+});
+
+describe('attemptIsAccountFault: late failures the provider-fault notice covers', () => {
+  const late = (status: MsgStatus, error: string | null, patch: Partial<MessageAttempt> = {}) => ({
+    status,
+    error,
+    provider: 'twilio',
+    provider_message_id: 'SM1',
+    ...patch,
+  });
+
+  it('a Twilio failed, or undelivered with an account code, is the account', () => {
+    expect(attemptIsAccountFault(late('failed', null))).toBe(true);
+    expect(attemptIsAccountFault(late('failed', 'twilio 30002'))).toBe(true);
+    for (const code of ['30032', '30034', '30002', '30007', '30008']) {
+      expect(attemptIsAccountFault(late('undeliverable', `twilio ${code}`))).toBe(true);
+    }
+  });
+
+  it('the number codes, no code, a send-time refusal and other providers are the person', () => {
+    for (const code of ['30003', '30004', '30005', '30006']) {
+      expect(attemptIsAccountFault(late('undeliverable', `twilio ${code}`))).toBe(false);
+    }
+    expect(attemptIsAccountFault(late('undeliverable', null))).toBe(false);
+    // Refused at send (Twilio 21211): never taken, so no provider message id.
+    expect(
+      attemptIsAccountFault(late('undeliverable', 'twilio 21211', { provider_message_id: null })),
+    ).toBe(false);
+    expect(attemptIsAccountFault(late('failed', null, { provider: 'console' }))).toBe(false);
+    expect(attemptIsAccountFault(late('delivered', null))).toBe(false);
   });
 });

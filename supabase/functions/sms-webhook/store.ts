@@ -43,7 +43,7 @@ export interface OutboundMessageState {
 /** A §13 "Message undeliverable / opted out" notification (`notify_org`). */
 export interface OfficeNotification {
   orgId: string;
-  kind: 'reporter_opted_out' | 'reporter_invite_failed';
+  kind: 'reporter_opted_out' | 'reporter_invite_failed' | 'message_failed';
   title: string;
   body: string;
   targetPath: string;

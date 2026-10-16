@@ -1,4 +1,5 @@
 import type { MessageChannel, MsgStatus } from '../enums.ts';
+import { twilioCallbackCode, twilioLateFailureIsAccountFault } from '../sms/transports.ts';
 
 /**
  * The fallback walk between message channels (spec §4.5, §19 Q22 decided 2026-10-15: the second
@@ -64,6 +65,21 @@ export function attemptWasSent(a: Pick<MessageAttempt, 'status'>): boolean {
 export function attemptIsFinal(a: Pick<MessageAttempt, 'status' | 'provider_message_id'>): boolean {
   if (a.status === 'undeliverable') return true;
   return a.status === 'failed' && a.provider_message_id !== null;
+}
+
+/**
+ * A final attempt that failed for the provider account or the sender, not for the person: a late
+ * Twilio callback (`provider_message_id` set) that `twilioLateFailureIsAccountFault` blames on the
+ * account. sms-webhook tells the office about those once per org per hour (`sms.provider_fault`),
+ * so the walk's end does not add a `message_failed` per message for them; a send-time refusal and
+ * a late failure for the number are the person's, and still do.
+ */
+export function attemptIsAccountFault(
+  a: Pick<MessageAttempt, 'status' | 'provider' | 'provider_message_id' | 'error'>,
+): boolean {
+  if (a.provider !== 'twilio' || a.provider_message_id === null) return false;
+  if (a.status !== 'failed' && a.status !== 'undeliverable') return false;
+  return twilioLateFailureIsAccountFault(a.status, twilioCallbackCode(a.error));
 }
 
 /** `payload.attempt` of a row (1 when absent or not a positive integer). */

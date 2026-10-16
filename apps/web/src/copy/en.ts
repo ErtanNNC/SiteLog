@@ -136,6 +136,11 @@ export const copy = {
           title: '{{name}}: a message to them was not sent',
           body: 'SiteLog tried every message channel it has for them ({{channels}}) and none could deliver the message ({{error}}). Check their number and channels in Team & numbers.',
         },
+        message_account_fault: {
+          title: '{{name}}: a text to them failed at the SMS provider',
+          titleUnnamed: 'A text failed at the SMS provider',
+          body: 'Texts are failing for this account ({{error}}). The SMS provider accepted the text and then refused it for the account or the sender, not for the reporter’s number. SiteLog tries their other message channels, if they have any. Other texts that fail this way in the next hour are not notified again.',
+        },
         message_no_sender: {
           title: '{{name}}: a message to them was not sent',
           body: 'No SMS sender is set for this organisation’s country in this environment, so the text reached no phone.',

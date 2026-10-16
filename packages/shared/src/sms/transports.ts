@@ -87,6 +87,32 @@ export const TWILIO_OPTED_OUT_CODE = '21610';
  */
 export const TWILIO_ASYNC_NUMBER_CODES: readonly string[] = ['30003', '30004', '30005', '30006'];
 
+/**
+ * Whether a late Twilio failure (a status callback after Twilio accepted the message) is the
+ * account's or the sender's fault rather than the number's (W1-08): `failed` (it never left the
+ * account), and `undelivered` with any code but `TWILIO_ASYNC_NUMBER_CODES` (30032 unverified
+ * toll-free sender, 30034 unregistered 10DLC, 30002 suspended account, 30007 filtered, …). The
+ * office hears about it once per org per hour (`sms.provider_fault`), never per text.
+ */
+export function twilioLateFailureIsAccountFault(
+  status: 'failed' | 'undeliverable',
+  code: string | null,
+): boolean {
+  if (status === 'failed') return true;
+  return code !== null && !TWILIO_ASYNC_NUMBER_CODES.includes(code);
+}
+
+/** `messages.error` of a late Twilio failure as sms-webhook's `/status` writes it (`twilio 30005`). */
+export function twilioCallbackError(code: string | null): string | null {
+  return code ? `twilio ${code}` : null;
+}
+
+/** The Twilio code in a `messages.error` written by `twilioCallbackError`, or null. */
+export function twilioCallbackCode(error: string | null): string | null {
+  const m = /^twilio (\d+)$/.exec(error ?? '');
+  return m ? m[1]! : null;
+}
+
 export interface TwilioCredentials {
   accountSid: string;
   authToken: string;

@@ -1,6 +1,9 @@
 import {
   MessageSendError,
   SmsSendError,
+  attemptIsAccountFault,
+  attemptIsFinal,
+  attemptOf,
   noticeData,
   type JobPayloads,
   type NoticeData,
@@ -24,7 +27,12 @@ import type { JobHandler } from './types';
  * - A channel refused for good hands the message to the next channel inside the Notifier (spec
  *   §19 Q22, W2-01). Refused for good on every channel of the order (`MessageSendError` not
  *   retryable: a bad number, the provider's opt-out list, a late failure on the last channel):
- *   the Notifier marked the rows and recorded an opt-out; the office is told, no retry.
+ *   the Notifier marked the rows and recorded an opt-out; the office is told, no retry. Except
+ *   when every failed attempt failed for the provider account or the sender (a late Twilio
+ *   `failed`, or `undelivered` with 30032, 30034, 30002, 30007, …: `attemptIsAccountFault`):
+ *   sms-webhook already told the office that texts are failing for the account, at most once per
+ *   org per hour (`sms.provider_fault`), so no `message_failed` per message (audited
+ *   `notify.failed` with `notice: null`).
  * - A provider outage or an account fault (retryable, or not the number's fault): thrown, so the
  *   queue retries with backoff; a job that dies tells the office (src/dead-jobs.ts).
  * - The fallback after a late status callback (`afterMessageId`, enqueued by sms-webhook's
@@ -99,6 +107,26 @@ export function createNotifyJob(
       ) {
         const error = err.message.slice(0, 200);
         const attempts = await ctx.db.listMessagesByDedupeKey(reporter.id, payload.dedupeKey);
+        const failed = attempts.map(attemptOf).filter(attemptIsFinal);
+        if (failed.length > 0 && failed.every(attemptIsAccountFault)) {
+          // The account's fault, not the person's: covered by the rate-limited provider-fault
+          // notice of sms-webhook's status route; one notice per failed text would flood.
+          await ctx.db.logAudit({
+            org_id: reporter.org_id,
+            actor_type: 'system',
+            action: 'notify.failed',
+            entity: 'reporter',
+            entity_id: reporter.id,
+            diff: {
+              key: payload.key,
+              dedupe_key: payload.dedupeKey,
+              reason: error,
+              account_fault: true,
+              notice: null,
+            },
+          });
+          return;
+        }
         const channels = [...new Set(attempts.flatMap((a) => (a.channel ? [a.channel] : [])))].join(
           ', ',
         );

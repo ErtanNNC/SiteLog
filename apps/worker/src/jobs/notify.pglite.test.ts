@@ -63,11 +63,28 @@ function ctxOf(): Ctx {
   } as unknown as Ctx;
 }
 
-/** What sms-webhook's `/status` does for a late `undelivered` callback on a row. */
-async function lateCallback(messageId: string): Promise<{ jobId: number; dedupeKey: string }> {
-  await pg.q(`update messages set status = 'undeliverable', error = 'twilio 30005' where id = $1`, [
-    messageId,
-  ]);
+/**
+ * What sms-webhook's `/status` does for a late callback on a row: `undelivered` with 30005 (the
+ * number) by default; `account` makes it a Twilio row refused for the account (`failed`, or
+ * `undelivered` 30032).
+ */
+async function lateCallback(
+  messageId: string,
+  account: { status: 'failed' | 'undeliverable'; error: string | null } | null = null,
+): Promise<{ jobId: number; dedupeKey: string }> {
+  if (account) {
+    await pg.q(
+      `update messages set status = $2, error = $3, provider = 'twilio',
+         provider_message_id = coalesce(provider_message_id, 'SM' || replace(id::text, '-', ''))
+       where id = $1`,
+      [messageId, account.status, account.error],
+    );
+  } else {
+    await pg.q(
+      `update messages set status = 'undeliverable', error = 'twilio 30005' where id = $1`,
+      [messageId],
+    );
+  }
   const [row] = await pg.q<{
     id: string;
     reporter_id: string;
@@ -79,7 +96,7 @@ async function lateCallback(messageId: string): Promise<{ jobId: number; dedupeK
     `select payload from jobs where type = 'notify' and payload->>'dedupeKey' = $1 order by id limit 1`,
     [dedupeKey],
   );
-  const fallback = lateFallback(row!, 'undeliverable', job?.payload ?? null);
+  const fallback = lateFallback(row!, account?.status ?? 'undeliverable', job?.payload ?? null);
   if (fallback.kind !== 'enqueue') throw new Error(`no fallback: ${fallback.reason}`);
   const jobId = await pg.db.enqueueJob('notify', fallback.payload, {
     dedupeKey: fallback.dedupeKey,
@@ -233,5 +250,108 @@ describe('notify: the fallback after a late status callback (W2-01)', () => {
         },
       },
     ]);
+  });
+
+  describe('an account fault (Twilio 30032, 30034, 30002, 30007, failed)', () => {
+    const notices = (key: string) =>
+      pg.q<{ kind: string; data: { key: string; params: Record<string, unknown> } }>(
+        `select kind, data from notifications where org_id = $1 and data->>'key' = $2`,
+        [ORG, key],
+      );
+
+    it('still tries the next channel', async () => {
+      const ctx = ctxOf();
+      const first = await filedJob('w201-acct-a');
+      await notifyJob(ctx, first, {} as never);
+      const [sms] = await attempts(first.dedupeKey);
+      const { jobId } = await lateCallback(sms!.id, {
+        status: 'undeliverable',
+        error: 'twilio 30032',
+      });
+      await notifyJob(ctx, await jobPayload(jobId), {} as never);
+      expect((await attempts(first.dedupeKey)).map((r) => [r.channel, r.status])).toEqual([
+        ['sms', 'undeliverable'],
+        ['whatsapp', 'delivered'],
+      ]);
+    });
+
+    it('posts no per-message message_failed when no channel is left (the provider-fault notice covers it)', async () => {
+      const ctx = ctxOf();
+      const before = (await notices('message_refused')).length;
+      const beforeAll = (
+        await pg.q(`select id from notifications where org_id = $1 and kind = 'message_failed'`, [
+          ORG,
+        ])
+      ).length;
+      await pg.q(`update countries set message_channels = '{sms}' where code = 'US'`);
+      try {
+        for (const [n, account] of [
+          ['1', { status: 'undeliverable' as const, error: 'twilio 30034' }],
+          ['2', { status: 'failed' as const, error: 'twilio 30002' }],
+          ['3', { status: 'failed' as const, error: null }],
+        ] as const) {
+          const first = await filedJob(`w201-acct-b${n}`);
+          await notifyJob(ctx, first, {} as never);
+          const [sms] = await attempts(first.dedupeKey);
+          const { jobId } = await lateCallback(sms!.id, account);
+          await notifyJob(ctx, await jobPayload(jobId), {} as never);
+          const [audit] = await pg.q<{ diff: Record<string, unknown> }>(
+            `select diff from audit_log where action = 'notify.failed' and diff->>'dedupe_key' = $1`,
+            [first.dedupeKey],
+          );
+          expect(audit!.diff).toMatchObject({ account_fault: true, notice: null });
+        }
+      } finally {
+        await pg.q(`update countries set message_channels = '{sms,whatsapp}' where code = 'US'`);
+      }
+      expect((await notices('message_refused')).length).toBe(before);
+      expect(
+        (
+          await pg.q(`select id from notifications where org_id = $1 and kind = 'message_failed'`, [
+            ORG,
+          ])
+        ).length,
+      ).toBe(beforeAll);
+    });
+
+    it('a per-recipient failure on SMS alone still posts message_failed', async () => {
+      const ctx = ctxOf();
+      const before = (await notices('message_refused')).length;
+      await pg.q(`update countries set message_channels = '{sms}' where code = 'US'`);
+      try {
+        const first = await filedJob('w201-acct-c');
+        await notifyJob(ctx, first, {} as never);
+        const [sms] = await attempts(first.dedupeKey);
+        const { jobId } = await lateCallback(sms!.id);
+        await notifyJob(ctx, await jobPayload(jobId), {} as never);
+      } finally {
+        await pg.q(`update countries set message_channels = '{sms,whatsapp}' where code = 'US'`);
+      }
+      const after = await notices('message_refused');
+      expect(after.length).toBe(before + 1);
+      expect(after.at(-1)!.data.params).toMatchObject({ error: 'twilio 30005' });
+    });
+
+    it('an account fault on SMS and a refusal of the number on the next channel: message_failed', async () => {
+      const ctx = ctxOf();
+      const first = await filedJob('w201-acct-d');
+      await notifyJob(ctx, first, {} as never);
+      const [sms] = await attempts(first.dedupeKey);
+      const { jobId } = await lateCallback(sms!.id, { status: 'failed', error: 'twilio 30007' });
+      faults.whatsapp = new MessageSendError('fakewa: not on WhatsApp', 'whatsapp', {
+        driver: 'console',
+        retryable: false,
+        undeliverable: true,
+      });
+      try {
+        await notifyJob(ctx, await jobPayload(jobId), {} as never);
+      } finally {
+        faults.whatsapp = null;
+      }
+      const failed = (await notices('message_channels_failed')).filter(
+        (n) => n.data.params.error === 'fakewa: not on WhatsApp',
+      );
+      expect(failed).toHaveLength(1);
+    });
   });
 });

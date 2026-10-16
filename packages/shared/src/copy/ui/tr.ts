@@ -122,6 +122,11 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
             body: 'SiteLog onun için kullanabildiği tüm mesaj kanallarını denedi ({{channels}}) ve hiçbiri mesajı iletemedi ({{error}}). Numarasını ve kanallarını Ekip ve numaralar sayfasında kontrol edin.',
           },
+          message_account_fault: {
+            title: '{{name}}: ona giden bir mesaj SMS sağlayıcısında başarısız oldu',
+            titleUnnamed: 'Bir mesaj SMS sağlayıcısında başarısız oldu',
+            body: 'Bu hesap için mesajlar başarısız oluyor ({{error}}). SMS sağlayıcısı mesajı kabul etti, sonra rapor verenin numarası yüzünden değil, hesap ya da gönderici yüzünden reddetti. SiteLog varsa diğer mesaj kanallarını dener. Önümüzdeki bir saat içinde aynı şekilde başarısız olan mesajlar için yeniden bildirim gelmez.',
+          },
           message_no_sender: {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
             body: 'Bu ortamda şirketin ülkesi için SMS göndericisi tanımlı değil, bu yüzden mesaj hiçbir telefona ulaşmadı.',

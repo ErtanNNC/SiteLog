@@ -408,6 +408,95 @@ Deno.test('a late failure of a notify message queues its fallback once (W2-01, Q
 });
 
 Deno.test(
+  'a late account fault on a notify message: one account notice an hour, its fallback still queued (W2-01)',
+  async () => {
+    const h = setup();
+    const filed = (n: number) => {
+      const sentBy = {
+        reporterId: DANA,
+        key: 'filed' as const,
+        vars: { report_no: `RL-2041-01${n}`, pdf_link: 'https://go.sitelog.app/r/AAAAAA/report/1' },
+        dedupeKey: `notify:filed:acct${n}`,
+      };
+      h.store.notifyJobs.push({ id: n, payload: sentBy, dedupeKey: sentBy.dedupeKey });
+      h.store.outbound.push({
+        id: `f${n}`,
+        provider_message_id: `SMacctf${n}`,
+        status: 'sent',
+        org_id: REAL_US,
+        reporter_id: DANA,
+        copy_key: 'filed',
+        error: null,
+        payload: { dedupe_key: sentBy.dedupeKey, attempt: 1 },
+      });
+    };
+    filed(1);
+    filed(2);
+    filed(3);
+    await h.twilio('/status', {
+      MessageSid: 'SMacctf1',
+      MessageStatus: 'undelivered',
+      ErrorCode: '30032',
+    });
+    await h.twilio('/status', { MessageSid: 'SMacctf2', MessageStatus: 'failed' });
+    await h.twilio('/status', {
+      MessageSid: 'SMacctf3',
+      MessageStatus: 'undelivered',
+      ErrorCode: '30034',
+    });
+    // One notice for the account, never one per text, and never about the number.
+    assertEquals(h.store.notifications.length, 1);
+    const notice = h.store.notifications[0]!;
+    assertEquals(notice.kind, 'message_failed');
+    assertEquals(notice.data, {
+      key: 'message_account_fault',
+      params: { name: 'Dana Whitfield', error: 'twilio 30032' },
+    });
+    assertMatch(notice.body, /^Texts are failing for this account \(twilio 30032\)/);
+    assertEquals(
+      h.store.audits
+        .filter((a) => a.action === 'sms.provider_fault')
+        .map((a) => [a.entityId, a.diff.copy_key, a.diff.notified]),
+      [
+        ['f1', 'filed', true],
+        ['f2', 'filed', false],
+        ['f3', 'filed', false],
+      ],
+    );
+    // The reporter is never flagged; each message may still reach them on another channel.
+    assertEquals(h.store.reporters.find((r) => r.id === DANA)!.lastInviteError ?? null, null);
+    assertEquals(
+      h.store.notifyJobs.slice(3).map((j) => j.dedupeKey),
+      [1, 2, 3].map((n) => `notify:filed:acct${n}:after:f${n}`),
+    );
+  },
+);
+
+Deno.test('a late failure for the number on a notify message posts no account notice', async () => {
+  const h = setup();
+  h.store.outbound.push({
+    id: 'n1',
+    provider_message_id: 'SMnum1',
+    status: 'sent',
+    org_id: REAL_US,
+    reporter_id: DANA,
+    copy_key: 'filed',
+    error: null,
+    payload: { dedupe_key: 'notify:filed:num1', attempt: 1 },
+  });
+  await h.twilio('/status', {
+    MessageSid: 'SMnum1',
+    MessageStatus: 'undelivered',
+    ErrorCode: '30006',
+  });
+  assertEquals(h.store.notifications, []);
+  assertEquals(
+    h.store.audits.filter((a) => a.action === 'sms.provider_fault'),
+    [],
+  );
+});
+
+Deno.test(
   'a welcome the carrier cannot deliver flags the reporter: Team\'s "Can\'t reach this number", the office notice, the audit',
   async () => {
     const h = setup();

@@ -26,6 +26,7 @@ const SAMPLES: Record<NoticeKey, NoticeData['params']> = {
   message_opted_out: { name: 'Marco Ruiz' },
   message_refused: { name: 'Marco Ruiz', error: 'twilio 21211' },
   message_no_sender: { name: 'Marco Ruiz' },
+  message_account_fault: { name: 'Marco Ruiz', error: 'twilio 30032' },
   message_channels_failed: { name: 'Marco Ruiz', channels: 'sms, whatsapp', error: 'twilio 30005' },
   welcome_undeliverable: { name: 'Marco Ruiz' },
   welcome_provider_fault: { name: 'Marco Ruiz', error: 'twilio 20003' },

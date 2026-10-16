@@ -7,6 +7,9 @@ import {
   createIletimerkeziSmsTransport,
   createSmsTransports,
   createTwilioSmsTransport,
+  twilioCallbackCode,
+  twilioCallbackError,
+  twilioLateFailureIsAccountFault,
   type FetchLike,
 } from './transports.ts';
 
@@ -187,5 +190,23 @@ describe('driver set', () => {
     });
     expect(full('twilio').driver).toBe('twilio');
     expect(full('iletimerkezi').driver).toBe('iletimerkezi');
+  });
+});
+
+describe('late Twilio failures: the account or the number (W1-08)', () => {
+  it('failed and the non-number codes are the account; 30003-30006 and no code the number', () => {
+    expect(twilioLateFailureIsAccountFault('failed', null)).toBe(true);
+    expect(twilioLateFailureIsAccountFault('undeliverable', '30032')).toBe(true);
+    expect(twilioLateFailureIsAccountFault('undeliverable', '30007')).toBe(true);
+    expect(twilioLateFailureIsAccountFault('undeliverable', '30005')).toBe(false);
+    expect(twilioLateFailureIsAccountFault('undeliverable', null)).toBe(false);
+  });
+
+  it('the stored error round-trips its code', () => {
+    expect(twilioCallbackError('30032')).toBe('twilio 30032');
+    expect(twilioCallbackError(null)).toBeNull();
+    expect(twilioCallbackCode('twilio 30032')).toBe('30032');
+    expect(twilioCallbackCode('twilio failed')).toBeNull();
+    expect(twilioCallbackCode(null)).toBeNull();
   });
 });
