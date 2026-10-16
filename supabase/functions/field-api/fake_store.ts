@@ -1,5 +1,6 @@
 import type {
   ConsentRow,
+  ConsentType,
   CountryRow,
   FieldDeviceRow,
   FieldLinkRow,
@@ -69,6 +70,8 @@ export class FakeFieldStore implements FieldStore {
   /** field_flag_late_upload(): uploads flagged late, and the office notices (one per report). */
   lateUploads: string[] = [];
   lateNotices: { reportId: string; uploadId: string }[] = [];
+  /** field_revoke_consent(): the office notices of a revoked required consent. */
+  consentNotices: { orgId: string; reporterId: string; type: ConsentType }[] = [];
   /** Store methods called, for "no write happened" checks. */
   calls: string[] = [];
   private seq = 0;
@@ -398,6 +401,39 @@ export class FakeFieldStore implements FieldStore {
       alreadyComplete: false,
       jobId,
     });
+  }
+
+  revokeConsent(
+    reporterId: string,
+    type: ConsentType,
+    deviceId: string,
+  ): Promise<{ revoked: boolean; notified: boolean }> {
+    this.calls.push('revokeConsent');
+    const r = this.reporters.find((x) => x.id === reporterId);
+    if (!r) return Promise.reject(new FieldDbError('reporter_not_found'));
+    const rows = this.consents.filter(
+      (c) => c.reporter_id === reporterId && c.type === type && c.revoked_at === null,
+    );
+    if (rows.length === 0) return Promise.resolve({ revoked: false, notified: false });
+    for (const c of rows) c.revoked_at = this.iso();
+    const notified = type === 'recording' || type === 'data_processing';
+    if (notified) this.consentNotices.push({ orgId: r.org_id, reporterId, type });
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: reporterId,
+      action: 'consent.revoked',
+      entity: 'consent',
+      entityId: rows[0]!.id,
+      diff: {
+        type,
+        consent_ids: rows.map((c) => c.id),
+        method: 'web',
+        device_id: deviceId,
+        notified,
+      },
+    });
+    return Promise.resolve({ revoked: true, notified });
   }
 
   flagLateUpload(uploadId: string, reporterId: string): Promise<{ flagged: boolean }> {

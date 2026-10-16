@@ -22,7 +22,10 @@ import {
  *   clip too short; a clip field-api refuses, Today's "Not sent" list; Today failing to load; the
  *   link errors (not found, expired, revoked, paused, failed); the site switcher;
  * - in EN: a question without answers to tap (D28) at 390 and 1440 px; the offline queue through
- *   a reload, sent in the background with Today updating by itself; the No work and Weather sheets.
+ *   a reload, sent in the background with Today updating by itself; the No work and Weather sheets;
+ * - Settings (F15, W2-02) in EN, ES and TR: the preference, texts off, the recording sheet, sign
+ *   out back to the device check; in EN the language switch and recording off back to the consent,
+ *   and the screen at 1440 px.
  * The same flow against the real field-api is `e2e/supabase/`.
  */
 
@@ -322,6 +325,98 @@ test.describe('No work / Weather (F12, spec §19 Q41)', () => {
       details: { since: '09:00', workersBefore: 12 },
     });
     await expect(page.getByText(field.today.status.weatherDay)).toBeVisible();
+  });
+});
+
+for (const run of RUNS) {
+  test.describe(`Settings (F15, W2-02) in ${run.lang}`, () => {
+    test.use({ locale: run.locale });
+
+    test('preference, language, texts off, recording off, sign out', async ({ page }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const s = field.settings;
+      const market: Market = run.market();
+      const api = await installFakeFieldApi(page, market, { verified: true, consented: true });
+      await page.goto(`/r/${CODE}`);
+      await page.getByRole('link', { name: field.routes.settings }).click();
+      await expect(page).toHaveURL(/\/settings$/);
+      const heading = page.getByRole('heading', { level: 1, name: field.routes.settings });
+      await expect(heading).toBeFocused();
+      await expect(page.getByText(s.consents.sms)).toBeVisible();
+      // One built channel: no channel choice; no "Don't call me today" before M8.
+      await expect(page.getByText(s.channelTitle)).toHaveCount(0);
+      await expectFieldScreen(page);
+
+      const call = page.getByRole('radio', { name: new RegExp(field.welcome.prefCall) });
+      await call.click();
+      await expect(page.getByRole('status').filter({ hasText: s.saved })).toBeVisible();
+      await expect(call).toBeChecked();
+      expect(api.calls.find((c) => c.method === 'PATCH')!.body).toEqual({ contactPref: 'call' });
+
+      // Texts off at once; the state reads Off as text.
+      await page.getByRole('button', { name: `${s.turnOff}: ${s.consents.sms}` }).click();
+      await expect(page.getByText(s.off, { exact: true })).toBeVisible();
+      expect(api.calls.find((c) => c.path === 'consent/revoke')!.body).toEqual({ type: 'sms' });
+
+      // Recording off behind the sheet; Keep it on changes nothing.
+      const recording = page.getByRole('button', { name: `${s.turnOff}: ${s.consents.recording}` });
+      await recording.click();
+      const sheet = page.getByRole('dialog', { name: s.stopSheet.title });
+      await expect(sheet).toBeVisible();
+      await expectFieldScreen(page);
+      await sheet.getByRole('button', { name: s.stopSheet.cancel }).click();
+      await expect(sheet).toBeHidden();
+
+      // Sign out: back through the device check (F4 step 2).
+      await page.getByRole('button', { name: s.signOut }).click();
+      const out = page.getByRole('dialog', { name: s.signOutSheet.title });
+      await out.getByRole('button', { name: s.signOutSheet.confirm }).click();
+      await expect(
+        page.getByRole('heading', {
+          level: 1,
+          name: field.device.title.replace('{{name}}', market.reporter.name),
+        }),
+      ).toBeVisible();
+      expect(api.calls.some((c) => c.path === 'device/sign-out')).toBe(true);
+    });
+  });
+}
+
+test.describe('Settings: language and stopping reports (F15, W2-02)', () => {
+  test.use({ locale: 'en-US' });
+
+  test('switches the language at once, and recording off leads back to the consent', async ({
+    page,
+  }) => {
+    const en = UI_RESOURCES.en.field;
+    const es = UI_RESOURCES.es.field;
+    const api = await installFakeFieldApi(page, kestrel(), { verified: true, consented: true });
+    await page.goto('/r/K7Q2MX');
+    await page.getByRole('link', { name: en.routes.settings }).click();
+    await page.getByRole('radio', { name: 'Español' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: es.routes.settings })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'es');
+    expect(api.calls.find((c) => c.method === 'PATCH')!.body).toEqual({ locale: 'es-US' });
+
+    await page
+      .getByRole('button', { name: `${es.settings.turnOff}: ${es.settings.consents.recording}` })
+      .click();
+    await page
+      .getByRole('dialog', { name: es.settings.stopSheet.title })
+      .getByRole('button', { name: es.settings.stopSheet.confirm })
+      .click();
+    // The Welcome & consent again: reports stop until the reporter agrees again.
+    await expect(page.getByRole('checkbox', { name: es.welcome.consentRequired })).toBeVisible();
+    await expectFieldScreen(page);
+  });
+
+  test('works at 1440 px too', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await installFakeFieldApi(page, kestrel(), { verified: true, consented: true });
+    await page.goto('/r/K7Q2MX');
+    await page.getByRole('link', { name: UI_RESOURCES.en.field.routes.settings }).click();
+    await expect(page.getByText(UI_RESOURCES.en.field.settings.consents.sms)).toBeVisible();
+    await expectFieldScreen(page);
   });
 });
 

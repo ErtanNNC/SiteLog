@@ -84,6 +84,26 @@ export const PRE_CONSENT_SMS_KEYS = [
 export const SMS_ONLY_KEYS = ['verify_code'] as const satisfies readonly NotifierKey[];
 
 /**
+ * Keys whose SMS needs no SMS consent at all, even after the person declined or revoked it: the
+ * device code, which the person asks for on the recorder to prove the number (spec §19 Q25: "the
+ * device code goes by SMS whatever the channel order … needs no prior opt-in"; W2-02: revoking
+ * texts in Settings blocks every SMS but this one, so a reporter who turned texts off can still
+ * sign in on a new phone). The opt-out (STOP, the provider's list) still applies.
+ */
+export const CONSENT_FREE_SMS_KEYS = ['verify_code'] as const satisfies readonly NotifierKey[];
+
+/**
+ * The message channels Settings offers (F15, spec §19 Q21; W2-02): the pack's, in its order, that
+ * are built. The choice is shown only when there is more than one (hidden until W2-14 / W2-15).
+ */
+export function settingsMessageChannels(
+  pack: Pick<CountryPack, 'messageChannels'>,
+  implemented: readonly MessageChannel[] = IMPLEMENTED_MESSAGE_CHANNELS,
+): MessageChannel[] {
+  return pack.messageChannels.filter((c) => implemented.includes(c));
+}
+
+/**
  * A built message channel (§4.5; W2-01): what the Notifier needs to know about it besides its
  * transport. The registry is the Notifier's (`NotifierDeps.channels`): SMS is always registered
  * (`SMS_CHANNEL`); W2-14 (push) and W2-15 (WhatsApp) register theirs, tests a fake one.
@@ -301,7 +321,8 @@ export function deliverableChannels(input: {
   const order = narrow ? base.filter((c) => narrow.includes(c)) : base;
   const neverConsented = input.consents.size === 0 && input.revoked.size === 0;
   const preConsent =
-    neverConsented && (PRE_CONSENT_SMS_KEYS as readonly MessageKey[]).includes(key);
+    (neverConsented && (PRE_CONSENT_SMS_KEYS as readonly MessageKey[]).includes(key)) ||
+    (CONSENT_FREE_SMS_KEYS as readonly MessageKey[]).includes(key);
   return order.filter((channel) => {
     if (!implemented.includes(channel)) return false;
     const consent = input.consentFor?.[channel] ?? CONSENT_FOR_CHANNEL[channel];

@@ -94,6 +94,10 @@ export function fakeRoutes(overrides: Partial<FieldRoutes> = {}): FieldRoutes {
     answer: vi.fn(refuse),
     confirm: vi.fn(refuse),
     dayStatus: vi.fn(refuse),
+    preferences: vi.fn(refuse),
+    updatePreferences: vi.fn(refuse),
+    revokeConsent: vi.fn(refuse),
+    signOut: vi.fn(refuse),
     ...overrides,
   };
 }

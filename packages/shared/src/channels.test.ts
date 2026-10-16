@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONSENT_FOR_CHANNEL,
+  CONSENT_FREE_SMS_KEYS,
   deliverableChannels,
   IMPLEMENTED_MESSAGE_CHANNELS,
   messageChannelOrder,
   pickMessageTransport,
   PRE_CONSENT_SMS_KEYS,
+  settingsMessageChannels,
   SMS_DRIVERS,
   SMS_ONLY_KEYS,
   smsRenderOptions,
@@ -100,25 +102,40 @@ describe('deliverableChannels (§4.5)', () => {
     expect(deliverable(TR, 'filed')).toEqual(['sms']);
   });
 
-  it('needs the SMS consent, except for the welcome and the device code before any consent', () => {
+  it('needs the SMS consent, except for the welcome before any consent and the device code', () => {
     expect([...PRE_CONSENT_SMS_KEYS]).toEqual(['welcome', 'verify_code']);
+    expect([...CONSENT_FREE_SMS_KEYS]).toEqual(['verify_code']);
     for (const key of NOTIFIER_KEYS) {
       const pre = (PRE_CONSENT_SMS_KEYS as readonly string[]).includes(key);
+      const free = (CONSENT_FREE_SMS_KEYS as readonly string[]).includes(key);
       // Never asked yet (F3, F4): only the welcome and the device code go out.
       expect(deliverable(US, key, { consents: NONE }), key).toEqual(pre ? ['sms'] : []);
-      // Past the consent step without SMS (declined at F4, or a call-only consent): nothing.
+      // Past the consent step without SMS (declined at F4, or a call-only consent): only the
+      // device code the person asks for (spec §19 Q25, W2-02).
       expect(deliverable(US, key, { consents: new Set(['auto_call', 'recording']) }), key).toEqual(
-        [],
+        free ? ['sms'] : [],
       );
     }
   });
 
-  it('sends nothing by SMS once the SMS consent is revoked, not even the welcome', () => {
+  it('sends nothing by SMS once the SMS consent is revoked, not even the welcome; the device code still goes', () => {
     for (const key of NOTIFIER_KEYS) {
+      const free = (CONSENT_FREE_SMS_KEYS as readonly string[]).includes(key);
       // Revoked in the field app's Settings (§9.3): the office's "Re-send welcome" stays silent.
-      expect(deliverable(US, key, { consents: NONE, revoked: new Set(['sms']) }), key).toEqual([]);
+      expect(deliverable(US, key, { consents: NONE, revoked: new Set(['sms']) }), key).toEqual(
+        free ? ['sms'] : [],
+      );
       expect(
         deliverable(US, key, { consents: new Set(['recording']), revoked: new Set(['sms']) }),
+        key,
+      ).toEqual(free ? ['sms'] : []);
+      // The opt-out still applies to it.
+      expect(
+        deliverable(US, key, {
+          consents: new Set(['recording']),
+          revoked: new Set(['sms']),
+          optedOut: new Set(['sms']),
+        }),
         key,
       ).toEqual([]);
     }
@@ -342,5 +359,18 @@ describe('the pack decides the SMS variant and sender, never the driver', () => 
     expect(typeof refused).toBe('function');
     expect(sent).toEqual([{ to: '+15550143378', body: 'hi', sender: '+18885550142' }]);
     expect(calls).toEqual(['r1:filed:notify:filed:rep1', 'r1:reminder_1:']);
+  });
+});
+
+describe('settingsMessageChannels (F15, spec §19 Q21)', () => {
+  it("offers the pack's built channels in its order", () => {
+    expect(settingsMessageChannels({ messageChannels: ['sms'] })).toEqual(['sms']);
+    // WhatsApp and push are not built yet: one channel, so Settings shows no choice.
+    expect(settingsMessageChannels({ messageChannels: ['whatsapp', 'sms', 'push'] })).toEqual([
+      'sms',
+    ]);
+    expect(
+      settingsMessageChannels({ messageChannels: ['whatsapp', 'sms'] }, ['sms', 'whatsapp']),
+    ).toEqual(['whatsapp', 'sms']);
   });
 });

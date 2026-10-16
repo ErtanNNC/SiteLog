@@ -479,6 +479,12 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select field_confirm_report('${o.report}', '${o.reporter}', 1, 1) as v`,
   },
+  // F15 (20261016000010_field_settings.sql): the recorder's Settings turns a consent off.
+  field_revoke_consent: {
+    why: '§6.5: field-api only (service role); a reporter revokes through the recorder, never a session.',
+    allow: NONE,
+    call: (o) => `select field_revoke_consent('${o.reporter}', 'sms', null) as v`,
+  },
   // Spec §19 Q53 (20261015000003_late_uploads.sql): field-api flags a late clip.
   field_flag_late_upload: {
     why: '§6.5: field-api only (service role); a late clip is flagged by the server, never a client.',

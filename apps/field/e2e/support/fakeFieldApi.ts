@@ -5,6 +5,7 @@ import type {
   CompleteResponse,
   ConfirmResponse,
   ConsentResponse,
+  PreferencesResponse,
   ReportView,
   ResolveResponse,
   TodayResponse,
@@ -212,6 +213,8 @@ export interface FakeFieldApi {
     answered: number | null;
     /** Confirm & send was accepted. */
     confirmed: boolean;
+    /** Settings (F15, W2-02): what `preferences` answers; consent/revoke and PATCH change it. */
+    prefs: PreferencesResponse;
   };
   calls: { method: string; path: string; body: unknown; headers: Record<string, string> }[];
   /** The files PUT to the fake Storage: content type and size. */
@@ -263,6 +266,19 @@ export async function installFakeFieldApi(
       processingPolls: 1,
       answered: null,
       confirmed: false,
+      prefs: {
+        contactPref: market.reporter.contactPref,
+        locale: market.reporter.locale,
+        messageChannel: null,
+        messageChannels: market.country.messageChannels.filter((c) => c === 'sms'),
+        consents: opts.consented
+          ? [
+              { type: 'sms', held: true },
+              { type: 'recording', held: true },
+              { type: 'data_processing', held: true },
+            ]
+          : [],
+      },
     },
     calls: [],
     stored: [],
@@ -305,7 +321,13 @@ export async function installFakeFieldApi(
       if (path === 'resolve') {
         if (options.resolveError) return refuse(options.resolveError);
         const res: ResolveResponse = {
-          reporter: { ...market.reporter, status: api.state.consented ? 'active' : 'invited' },
+          reporter: {
+            ...market.reporter,
+            // What Settings changed (W2-02).
+            locale: api.state.prefs.locale,
+            contactPref: api.state.prefs.contactPref,
+            status: api.state.consented ? 'active' : 'invited',
+          },
           org: market.org,
           link: { kind: 'personal', siteId: null, reportDate: null, expiresAt: null },
           needsDeviceCheck: !api.state.verified,
@@ -326,9 +348,43 @@ export async function installFakeFieldApi(
         return json(route, 200, { verified: true, needsConsent: !api.state.consented });
       }
       if (!api.state.verified) return json(route, 401, { error: 'device_unverified' });
+      // Settings (W2-02): a verified device, with or without the required consents.
+      if (path === 'preferences') {
+        if (req.method() === 'PATCH') {
+          const b = body as Partial<PreferencesResponse>;
+          api.state.prefs = {
+            ...api.state.prefs,
+            ...(b.contactPref ? { contactPref: b.contactPref } : {}),
+            ...(b.locale ? { locale: b.locale } : {}),
+            ...(b.messageChannel !== undefined ? { messageChannel: b.messageChannel } : {}),
+          };
+        }
+        return json(route, 200, api.state.prefs);
+      }
+      if (path === 'consent/revoke') {
+        const { type } = body as { type: string };
+        api.state.prefs = {
+          ...api.state.prefs,
+          consents: api.state.prefs.consents.map((c) =>
+            c.type === type ? { ...c, held: false } : c,
+          ),
+        };
+        if (type === 'recording' || type === 'data_processing') api.state.consented = false;
+        return json(route, 200, api.state.prefs);
+      }
+      if (path === 'device/sign-out') {
+        api.state.verified = false;
+        return json(route, 200, { signedOut: true });
+      }
       if (path === 'consent') {
         api.consent = body;
         api.state.consented = true;
+        api.state.prefs = {
+          ...api.state.prefs,
+          consents: (['sms', 'recording', 'data_processing'] as const)
+            .filter((t) => (body as { types: string[] }).types.includes(t))
+            .map((type) => ({ type, held: true })),
+        };
         const b = body as { contactPref: ConsentResponse['contactPref']; locale: ReporterLocale };
         const res: ConsentResponse = {
           consents: ['data_processing', 'recording', 'sms'],

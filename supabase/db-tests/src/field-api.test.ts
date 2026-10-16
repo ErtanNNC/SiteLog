@@ -908,6 +908,89 @@ describe('field_rate_limit (rate_limits, spec §6.5, D26)', () => {
   });
 });
 
+describe('field_revoke_consent (F15 Settings: Turn off; W2-02)', () => {
+  const revoke = async (reporter: string, type: string, device: string | null = ID(900)) =>
+    (
+      await svc<{ r: { revoked: boolean; notified: boolean } }>(
+        `select field_revoke_consent($1, $2::consent_type, $3) as r`,
+        [reporter, type, device],
+      )
+    )[0]!.r;
+
+  beforeAll(async () => {
+    await svc(
+      `insert into consents (reporter_id, type, method, text_version) values
+         ($1, 'sms', 'web_checkbox', 'field.consent.v1'),
+         ($1, 'recording', 'web_checkbox', 'field.consent.v1'),
+         ($1, 'data_processing', 'web_checkbox', 'field.consent.v1'),
+         ($2, 'sms', 'web_checkbox', 'field.consent.v1')`,
+      [DANA, EMRE],
+    );
+  });
+
+  it('revokes the type, audits it as the reporter, and tells nobody for texts', async () => {
+    expect(await revoke(DANA, 'sms')).toEqual({ revoked: true, notified: false });
+    const rows = await svc<{ type: string; revoked: boolean }>(
+      `select type, revoked_at is not null as revoked from consents where reporter_id = $1 order by type`,
+      [DANA],
+    );
+    expect(rows).toEqual([
+      { type: 'sms', revoked: true },
+      { type: 'recording', revoked: false },
+      { type: 'data_processing', revoked: false },
+    ]);
+    const [audit] = await svc<{
+      actor_type: string;
+      actor_id: string;
+      diff: Record<string, unknown>;
+    }>(
+      `select actor_type, actor_id, diff from audit_log where action = 'consent.revoked' and actor_id = $1`,
+      [DANA],
+    );
+    expect(audit).toMatchObject({
+      actor_type: 'reporter',
+      actor_id: DANA,
+      diff: { type: 'sms', method: 'web', device_id: ID(900), notified: false },
+    });
+    // The reporter's status is not the SMS STOP opt-out (§19 Q40).
+    expect(await svc(`select status from reporters where id = $1`, [DANA])).toEqual([
+      { status: 'active' },
+    ]);
+    // Nothing held any more: nothing changes, nothing audited.
+    expect(await revoke(DANA, 'sms')).toEqual({ revoked: false, notified: false });
+    expect(
+      await svc(
+        `select count(*)::int as n from audit_log where action = 'consent.revoked' and actor_id = $1`,
+        [DANA],
+      ),
+    ).toEqual([{ n: 1 }]);
+  });
+
+  it('a required consent tells the office (ops and admin) with the notice data', async () => {
+    expect(await revoke(DANA, 'recording')).toEqual({ revoked: true, notified: true });
+    const notices = await svc<{ kind: string; title: string; target_path: string; data: unknown }>(
+      `select kind, title, target_path, data from notifications where kind = 'reporter_consent_revoked'`,
+    );
+    expect(notices).toEqual([
+      {
+        kind: 'reporter_consent_revoked',
+        title: 'Dana Park turned off consent to the recording of their reports',
+        target_path: '/team',
+        data: { key: 'reporter_consent_revoked', params: { name: 'Dana Park', type: 'recording' } },
+      },
+    ]);
+    expect(
+      await svc(`select notification_audience('reporter_consent_revoked')::text as roles`),
+    ).toEqual([{ roles: '{admin,ops}' }]);
+  });
+
+  it('refuses an unknown reporter', async () => {
+    expect(await failure(`select field_revoke_consent($1, 'sms', null)`, [ID(999)])).toBe(
+      'reporter_not_found',
+    );
+  });
+});
+
 describe('the field-api functions are the service role’s only', () => {
   const FUNCTIONS = [
     'field_lock_site_day(uuid,date)',
@@ -917,6 +1000,7 @@ describe('the field-api functions are the service role’s only', () => {
     'field_rate_limit(text,integer,integer)',
     'field_confirm_report(uuid,uuid,integer,integer)',
     'field_flag_late_upload(uuid,uuid)',
+    'field_revoke_consent(uuid,consent_type,uuid)',
   ];
 
   it('grants execute to service_role and to no API role', async () => {

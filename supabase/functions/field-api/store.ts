@@ -133,7 +133,9 @@ export interface FieldStore {
   getReporter(id: string): Promise<ReporterRow | null>;
   updateReporter(
     id: string,
-    patch: Partial<Pick<ReporterRow, 'status' | 'activated_at' | 'contact_pref' | 'locale'>>,
+    patch: Partial<
+      Pick<ReporterRow, 'status' | 'activated_at' | 'contact_pref' | 'locale' | 'message_channel'>
+    >,
   ): Promise<ReporterRow>;
   getOrgContext(orgId: string): Promise<OrgContext | null>;
   /** The sites the reporter is linked to (site_reporters), in the reporter's org. */
@@ -151,7 +153,12 @@ export interface FieldStore {
     patch: Partial<
       Pick<
         FieldDeviceRow,
-        'verified_at' | 'last_seen_at' | 'user_agent' | 'code_hash' | 'code_expires_at'
+        | 'verified_at'
+        | 'last_seen_at'
+        | 'user_agent'
+        | 'code_hash'
+        | 'code_expires_at'
+        | 'revoked_at'
       >
     >,
   ): Promise<void>;
@@ -168,6 +175,17 @@ export interface FieldStore {
       evidence: Json;
     }[],
   ): Promise<ConsentRow[]>;
+
+  /**
+   * field_revoke_consent() (20261016000010, F15 Settings): `revoked_at` on the reporter's
+   * unrevoked consents of the type, audited `consent.revoked`; a required consent also tells the
+   * office (`reporter_consent_revoked`). `revoked` false when none was held.
+   */
+  revokeConsent(
+    reporterId: string,
+    type: ConsentType,
+    deviceId: string,
+  ): Promise<{ revoked: boolean; notified: boolean }>;
 
   // Days and reports
   getSiteDay(siteId: string, date: string): Promise<SiteDayRow | null>;

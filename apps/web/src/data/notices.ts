@@ -281,6 +281,19 @@ export function noticeText(data: unknown): NoticeText | null {
         title: copyRef('shell.notifications.notices.unknown_contact.title'),
         body: null,
       };
+    case 'reporter_consent_revoked':
+      return {
+        title:
+          n.params.type === 'recording'
+            ? copyRef('shell.notifications.notices.reporter_consent_revoked.titles.recording', {
+                name: n.params.name,
+              })
+            : copyRef(
+                'shell.notifications.notices.reporter_consent_revoked.titles.data_processing',
+                { name: n.params.name },
+              ),
+        body: one(copyRef('shell.notifications.notices.reporter_consent_revoked.body')),
+      };
     case 'reporter_wrong_site':
       return {
         title: copyRef('shell.notifications.notices.reporter_wrong_site.title', n.params),

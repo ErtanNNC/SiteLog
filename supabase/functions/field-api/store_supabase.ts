@@ -353,6 +353,16 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       );
     },
 
+    async revokeConsent(reporterId, type, deviceId) {
+      return await rpc<{ revoked: boolean; notified: boolean }>(
+        admin.rpc('field_revoke_consent', {
+          p_reporter_id: reporterId,
+          p_type: type,
+          p_device_id: deviceId,
+        }),
+      );
+    },
+
     async flagLateUpload(uploadId, reporterId) {
       return await rpc<{ flagged: boolean }>(
         admin.rpc('field_flag_late_upload', {

@@ -2,8 +2,8 @@
  * The field app's routes (spec §9.3). W1-09 builds the link check (`/r/:code`: resolve, device
  * check, welcome), Today, Record and the report's Processing state; W1-13 the question and draft
  * states of `/report/:id` (filing until filed); W1-15 the Filed screen and the `filed` text's
- * link `/r/:code/report/:id` (the link check, then that report); history, settings and expired
- * are M6 and stay placeholders.
+ * link `/r/:code/report/:id` (the link check, then that report); W2-02 Settings (F15); history
+ * and expired are M6 and stay placeholders.
  * `screen` is the route's key in the `field.routes` copy.
  *
  * Plain data (no React), so the Playwright smoke test reads the same list.
@@ -20,7 +20,7 @@ export const FIELD_ROUTES = [
   { path: '/record', screen: 'record', example: '/record', placeholder: false },
   { path: '/report/:id', screen: 'report', example: '/report/7d2f4c1e', placeholder: false },
   { path: '/history', screen: 'history', example: '/history', placeholder: true },
-  { path: '/settings', screen: 'settings', example: '/settings', placeholder: true },
+  { path: '/settings', screen: 'settings', example: '/settings', placeholder: false },
   { path: '/expired', screen: 'expired', example: '/expired', placeholder: true },
 ] as const;
 

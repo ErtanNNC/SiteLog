@@ -79,22 +79,24 @@ Deno.test(
   },
 );
 
-Deno.test('verify_code is not sent after an opt-out or a refused SMS consent', async () => {
-  const send = notifierCodeSender(fakeMessaging().notifier);
-  assertEquals(await send(message({ status: 'opted_out' })), {
-    channel: null,
-    reason: 'opted_out',
-  });
-  assertEquals(await send(message({}, { held: ['recording', 'data_processing'] })), {
-    channel: null,
-    reason: 'no_consent',
-  });
-  assertEquals((await send(message({}, { held: ['recording', 'sms'] }))).channel, 'sms');
-  assertEquals(await send(message({}, { revoked: ['sms'] })), {
-    channel: null,
-    reason: 'no_consent',
-  });
-});
+Deno.test(
+  'verify_code is not sent after an opt-out; a refused or revoked SMS consent does not stop it (Q25, W2-02)',
+  async () => {
+    const send = notifierCodeSender(fakeMessaging().notifier);
+    assertEquals(await send(message({ status: 'opted_out' })), {
+      channel: null,
+      reason: 'opted_out',
+    });
+    // The person asks for the code on the recorder to prove the number: texts turned off in
+    // Settings must not lock them out of a new phone.
+    assertEquals(
+      (await send(message({}, { held: ['recording', 'data_processing'] }))).channel,
+      'sms',
+    );
+    assertEquals((await send(message({}, { held: ['recording', 'sms'] }))).channel, 'sms');
+    assertEquals((await send(message({}, { revoked: ['sms'] }))).channel, 'sms');
+  },
+);
 
 Deno.test('the text is the §9.2 verify_code in the reporter language', async () => {
   const m = fakeMessaging();

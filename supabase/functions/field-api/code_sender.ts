@@ -8,8 +8,10 @@ import type { SendVerifyCode, VerifyCodeMessage } from './app.ts';
 
 /**
  * `device/send-code` (F4 step 2) through the Notifier (spec §4.5; W1-08): `verify_code` goes by
- * SMS whatever the channel order (SMS_ONLY_KEYS), before any consent answer but never after an
- * opt-out or a refused SMS consent (spec §19 Q25), in the reporter's language, through the pack's
+ * SMS whatever the channel order (SMS_ONLY_KEYS), with or without an SMS consent (the person asks
+ * for it; a consent declined at F4 or turned off in Settings does not stop it:
+ * CONSENT_FREE_SMS_KEYS, spec §19 Q25, W2-02) but never after an opt-out, in the reporter's
+ * language, through the pack's
  * driver (`pickMessageTransport`: the pack's provider once its sender id is set here, else
  * `console`). The Notifier writes the `messages` row and its audit.
  *

@@ -25,6 +25,7 @@ import {
   questionOptions,
   retryAfterSeconds,
   scopeSites,
+  settingsView,
   storedObjectProblem,
   verifyCodeHash,
 } from './logic.ts';
@@ -311,4 +312,30 @@ Deno.test('reportWindowEnd and lateClipAllowed (spec §19 Q53)', () => {
     ),
     true,
   );
+});
+
+Deno.test('settingsView: the built channels, and every consent given with its state (F15)', () => {
+  const us = toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!);
+  const view = settingsView(
+    { contact_pref: 'call', locale: 'es-US', message_channel: null },
+    { ...us, messageChannels: ['whatsapp', 'sms'] },
+    [
+      { type: 'recording', revoked_at: null },
+      { type: 'sms', revoked_at: '2026-10-09T22:00:00Z' },
+      { type: 'data_processing', revoked_at: null },
+      // Given again after a revocation: held.
+      { type: 'recording', revoked_at: '2026-10-01T00:00:00Z' },
+    ],
+  );
+  assertEquals(view, {
+    contactPref: 'call',
+    locale: 'es-US',
+    messageChannel: null,
+    messageChannels: ['sms'],
+    consents: [
+      { type: 'sms', held: false },
+      { type: 'recording', held: true },
+      { type: 'data_processing', held: true },
+    ],
+  });
 });

@@ -1,10 +1,11 @@
 import { Hono, type Context } from 'hono';
-import { getCookie, setCookie } from 'hono/cookie';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { z } from 'zod';
 import {
   AnswerRequestSchema,
   ConfirmRequestSchema,
   ConsentRequestSchema,
+  ConsentRevokeRequestSchema,
   DayStatusRequestSchema,
   FIELD_LINK_HEADER,
   FIELD_RATE_LIMITS,
@@ -25,6 +26,7 @@ import {
   numberAnswer,
   optionAnswer,
   readReportData,
+  settingsMessageChannels,
   sha256Hex,
   toCountryPack,
   uploadBucket,
@@ -51,6 +53,7 @@ import {
   type ReporterRow,
   type ResolveResponse,
   type SendCodeResponse,
+  type SignOutResponse,
   type SiteRow,
   type TodayResponse,
   type UploadResponse,
@@ -80,6 +83,7 @@ import {
   questionOptions,
   retryAfterSeconds,
   scopeSites,
+  settingsView,
   siteDeadline,
   storedObjectProblem,
   storedQuestionOptions,
@@ -899,37 +903,82 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     return c.json(body);
   });
 
-  // ── preferences (F15) ────────────────────────────────────────────────────────────────────────
+  // ── Settings (F15, §9.3; W2-02) ──────────────────────────────────────────────────────────────
+  // The Settings routes need a verified device but not the required consents: a reporter who
+  // turned recording off can still read and change their settings, turn texts off and sign out.
+
+  async function settingsBody(ctx: DeviceContext, reporter: ReporterRow = ctx.reporter) {
+    return settingsView(reporter, ctx.pack, await store.listConsents(ctx.reporter.id));
+  }
+
+  app.get('/preferences', async (c) => {
+    const ctx = await authenticate(c, { consent: false });
+    return c.json((await settingsBody(ctx)) satisfies PreferencesResponse);
+  });
+
   app.patch('/preferences', async (c) => {
-    const ctx = await authenticate(c, { consent: true });
+    const ctx = await authenticate(c, { consent: false });
     const body = await parseBody(c, PreferencesRequestSchema);
     if (body.locale !== undefined && !ctx.pack.fieldLocales.includes(body.locale)) {
       throw new FieldError(400, 'locale_not_offered', undefined, {
         offered: ctx.pack.fieldLocales,
       });
     }
+    // Spec §19 Q21: the pack is the allow-list, and only a built channel can be chosen.
+    const offered = settingsMessageChannels(ctx.pack);
+    if (
+      body.messageChannel !== undefined &&
+      body.messageChannel !== null &&
+      !offered.includes(body.messageChannel)
+    ) {
+      throw new FieldError(400, 'channel_not_offered', undefined, { offered });
+    }
+    const before = ctx.reporter;
     const changed = {
-      ...(body.contactPref !== undefined && body.contactPref !== ctx.reporter.contact_pref
+      ...(body.contactPref !== undefined && body.contactPref !== before.contact_pref
         ? { contact_pref: body.contactPref }
         : {}),
-      ...(body.locale !== undefined && body.locale !== ctx.reporter.locale
+      ...(body.locale !== undefined && body.locale !== before.locale
         ? { locale: body.locale }
         : {}),
+      ...(body.messageChannel !== undefined && body.messageChannel !== before.message_channel
+        ? { message_channel: body.messageChannel }
+        : {}),
     };
-    let reporter = ctx.reporter;
+    let reporter = before;
     if (Object.keys(changed).length > 0) {
-      reporter = await store.updateReporter(ctx.reporter.id, changed);
+      const from = Object.fromEntries(
+        Object.keys(changed).map((k) => [k, before[k as keyof typeof changed]]),
+      );
+      reporter = await store.updateReporter(before.id, changed);
       await audit(ctx, 'reporter.preferences_changed', 'reporter', reporter.id, {
-        from: { contact_pref: ctx.reporter.contact_pref, locale: ctx.reporter.locale },
+        from,
         to: changed,
         channel: 'web',
+        device_id: ctx.device.id,
       });
     }
-    const body2: PreferencesResponse = {
-      contactPref: reporter.contact_pref,
-      locale: reporter.locale as PreferencesResponse['locale'],
-    };
-    return c.json(body2);
+    return c.json((await settingsBody(ctx, reporter)) satisfies PreferencesResponse);
+  });
+
+  // ── consent/revoke (F15: Turn off) ───────────────────────────────────────────────────────────
+  app.post('/consent/revoke', async (c) => {
+    const ctx = await authenticate(c, { consent: false });
+    const { type } = await parseBody(c, ConsentRevokeRequestSchema);
+    // One transaction: revoked_at, the `consent.revoked` audit and, for recording or processing,
+    // the office notice (F15 "office notified"). Nothing held: nothing changes.
+    await store.revokeConsent(ctx.reporter.id, type, ctx.device.id);
+    return c.json((await settingsBody(ctx)) satisfies PreferencesResponse);
+  });
+
+  // ── device/sign-out (F15: Sign out this device) ──────────────────────────────────────────────
+  app.post('/device/sign-out', async (c) => {
+    const ctx = await authenticate(c, { consent: false });
+    await store.updateDevice(ctx.device.id, { revoked_at: now().toISOString() });
+    await audit(ctx, 'device.signed_out', 'field_device', ctx.device.id, { via: 'settings' });
+    const { maxAge: _maxAge, ...cookie } = DEVICE_COOKIE_OPTIONS;
+    deleteCookie(c, deviceCookieName(ctx.reporter.id), cookie);
+    return c.json({ signedOut: true } satisfies SignOutResponse);
   });
 
   return app;

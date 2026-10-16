@@ -6,9 +6,11 @@ import type {
   DayStatusResponse,
   FieldApiErrorBody,
   FieldApiErrorCode,
+  PreferencesResponse,
   ReportView,
   ResolveResponse,
   SendCodeResponse,
+  SignOutResponse,
   TodayResponse,
   UploadResponse,
   VerifyResponse,
@@ -17,7 +19,9 @@ import type {
   AnswerRequest,
   ConfirmRequest,
   ConsentRequest,
+  ConsentRevokeRequest,
   DayStatusRequest,
+  PreferencesRequest,
   UploadRequest,
 } from '@sitelog/shared/field-api.ts';
 import { fieldApi, FieldApiError, type FieldApiClient } from './client';
@@ -74,6 +78,17 @@ export function createFieldRoutes(api: FieldApiClient = fieldApi) {
       }),
     dayStatus: (code: string, body: DayStatusRequest) =>
       api.request<DayStatusResponse>('day-status', { body, linkCode: code }),
+    /** Settings (F15, W2-02): what it shows. */
+    preferences: (code: string, signal?: AbortSignal) =>
+      api.request<PreferencesResponse>('preferences', { linkCode: code, signal }),
+    updatePreferences: (code: string, body: PreferencesRequest) =>
+      api.request<PreferencesResponse>('preferences', { method: 'PATCH', body, linkCode: code }),
+    /** Turn off one consent. */
+    revokeConsent: (code: string, body: ConsentRevokeRequest) =>
+      api.request<PreferencesResponse>('consent/revoke', { body, linkCode: code }),
+    /** Sign out this phone: the device is revoked and its cookie cleared. */
+    signOut: (code: string) =>
+      api.request<SignOutResponse>('device/sign-out', { method: 'POST', body: {}, linkCode: code }),
   };
 }
 

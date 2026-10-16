@@ -380,5 +380,50 @@ export const uiEn = {
       /** The phone's storage refused the item: it lives in this page only. */
       unsaved: 'Not saved on this phone: keep SiteLog open until it is sent.',
     },
+    /**
+     * Settings (F15, §9.3; W2-02). No artboard: built from §9.3 and the Field-02 / Field-03
+     * patterns. The report mode reuses `welcome.pref*`, the language `common.language`.
+     */
+    settings: {
+      channelTitle: 'Where should we send your messages?',
+      channelDefault: 'Best available',
+      channelDefaultHint: 'SiteLog picks, in your company’s order',
+      channels: {
+        sms: 'Text message (SMS)',
+        whatsapp: 'WhatsApp',
+        push: 'Notifications on this phone',
+      },
+      consentsTitle: 'What you agreed to',
+      consents: {
+        recording: 'Recording of my voice notes, photos and calls',
+        data_processing: 'Processing of my reports for {{company}}',
+        sms: 'Texts with my daily report link',
+        auto_call: 'Automated calls at report time',
+      },
+      on: 'On',
+      off: 'Off',
+      turnOff: 'Turn off',
+      /** The button's accessible name: the visible "Turn off" first (WCAG 2.5.3). */
+      turnOffLabel: 'Turn off: {{consent}}',
+      /** Behind *Turn off* for recording or processing (F15: reports stop, the office is told). */
+      stopSheet: {
+        title: 'Stop reporting?',
+        body: 'With this off, SiteLog can’t take your voice notes or photos, so your reports stop. The office is told. To report again, you agree again on this phone.',
+        confirm: 'Turn off',
+        cancel: 'Keep it on',
+      },
+      signOut: 'Sign out this phone',
+      signOutSheet: {
+        title: 'Sign out this phone?',
+        body: 'To report from this phone again, open your link and enter a new code we text you.',
+        confirm: 'Sign out',
+        cancel: 'Cancel',
+      },
+      saving: 'Saving…',
+      saved: 'Saved',
+      back: 'Back to Today',
+      failed: 'Couldn’t load your settings. Check your signal and try again.',
+      saveFailed: 'Couldn’t save. Check your signal and try again.',
+    },
   },
 } as const;

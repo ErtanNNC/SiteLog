@@ -5,6 +5,7 @@ import {
   DayStatusRequestSchema,
   DEVICE_COOKIE_MAX_AGE_S,
   FIELD_RATE_LIMITS,
+  ConsentRevokeRequestSchema,
   PreferencesRequestSchema,
   UPLOAD_MAX_BYTES,
   UploadRequestSchema,
@@ -108,11 +109,16 @@ describe('field-api contract', () => {
         status: 'filed',
       }).success,
     ).toBe(false);
-    // Appendix B's messageChannel (week 2) and noCallsToday (M8) are not taken yet.
+    // Appendix B's messageChannel (W2-02; null = the pack's order); noCallsToday (M8) not yet.
     expect(PreferencesRequestSchema.safeParse({ locale: 'tr-TR' }).success).toBe(true);
     expect(PreferencesRequestSchema.safeParse({}).success).toBe(false);
-    expect(PreferencesRequestSchema.safeParse({ messageChannel: 'sms' }).success).toBe(false);
+    expect(PreferencesRequestSchema.safeParse({ messageChannel: 'sms' }).success).toBe(true);
+    expect(PreferencesRequestSchema.safeParse({ messageChannel: null }).success).toBe(true);
+    expect(PreferencesRequestSchema.safeParse({ messageChannel: 'fax' }).success).toBe(false);
     expect(PreferencesRequestSchema.safeParse({ noCallsToday: true }).success).toBe(false);
+    expect(ConsentRevokeRequestSchema.safeParse({ type: 'sms' }).success).toBe(true);
+    expect(ConsentRevokeRequestSchema.safeParse({ type: 'whatsapp' }).success).toBe(false);
+    expect(ConsentRevokeRequestSchema.safeParse({}).success).toBe(false);
     expect(ConfirmRequestSchema.safeParse({ draftRev: 1 }).success).toBe(true);
     expect(ConfirmRequestSchema.safeParse({ version: 2, draftRev: 3 }).data).toEqual({
       version: 2,

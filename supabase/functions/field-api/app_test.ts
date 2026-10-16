@@ -1057,10 +1057,10 @@ Deno.test('reports/:id view, history and preferences', async () => {
   const p = await h.call('PATCH', 'preferences', {
     body: { contactPref: 'call', locale: 'es-US' },
   });
-  assertEquals(p.json, { contactPref: 'call', locale: 'es-US' });
+  assertEquals([p.json.contactPref, p.json.locale], ['call', 'es-US']);
   assertEquals(
     (await h.call('PATCH', 'preferences', { body: { messageChannel: 'whatsapp' } })).json.error,
-    'invalid_request',
+    'channel_not_offered',
   );
   assertEquals(
     (await h.call('PATCH', 'preferences', { body: { locale: 'tr-TR' } })).json.error,
@@ -1565,5 +1565,216 @@ Deno.test(
     });
     assertEquals([theirs.status, theirs.json.error], [404, 'not_found']);
     assertEquals(pier.store.questions[0]!.answered_at, null);
+  },
+);
+
+// ── Settings (F15, W2-02) ─────────────────────────────────────────────────────────────────────
+
+Deno.test(
+  'Settings: GET preferences shows the preference, channels and every consent given',
+  async () => {
+    const h = setup();
+    await verifiedDevice(h);
+    // Before consent the Settings routes still answer (they need a verified device only).
+    const before = await h.call('GET', 'preferences');
+    assertEquals(before.status, 200);
+    assertEquals(before.json, {
+      contactPref: 'link',
+      locale: 'en-US',
+      messageChannel: null,
+      messageChannels: ['sms'],
+      consents: [],
+    });
+    await h.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing', 'sms'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'link',
+        locale: 'en-US',
+      },
+    });
+    assertEquals((await h.call('GET', 'preferences')).json.consents, [
+      { type: 'sms', held: true },
+      { type: 'recording', held: true },
+      { type: 'data_processing', held: true },
+    ]);
+    // No device: the same 401 as every other route.
+    assertEquals(
+      (await h.call('GET', 'preferences', { cookies: null })).json.error,
+      'device_unverified',
+    );
+  },
+);
+
+Deno.test(
+  "Settings: PATCH preferences takes the pack's built channels only (Q21), audited",
+  async () => {
+    const h = setup({ country: { message_channels: ['sms', 'whatsapp'] } });
+    await consented(h);
+    // WhatsApp is listed by the pack but not built (W2-15): not offered.
+    const wa = await h.call('PATCH', 'preferences', { body: { messageChannel: 'whatsapp' } });
+    assertEquals(
+      [wa.status, wa.json.error, wa.json.offered],
+      [400, 'channel_not_offered', ['sms']],
+    );
+    assertEquals(
+      (await h.call('PATCH', 'preferences', { body: { messageChannel: 'push' } })).json.error,
+      'channel_not_offered',
+    );
+    const sms = await h.call('PATCH', 'preferences', {
+      body: { messageChannel: 'sms', contactPref: 'call', locale: 'es-US' },
+    });
+    assertEquals(sms.status, 200);
+    assertEquals(
+      [sms.json.messageChannel, sms.json.contactPref, sms.json.locale, sms.json.messageChannels],
+      ['sms', 'call', 'es-US', ['sms']],
+    );
+    const marco = h.store.reporters.find((r) => r.id === MARCO)!;
+    assertEquals(
+      [marco.message_channel, marco.contact_pref, marco.locale],
+      ['sms', 'call', 'es-US'],
+    );
+    const changed = h.store.audits
+      .filter((a) => a.action === 'reporter.preferences_changed')
+      .at(-1)!;
+    const diff = changed.diff as Record<string, unknown>;
+    assertEquals(changed.actorType, 'reporter');
+    assertEquals(diff.from, { contact_pref: 'link', locale: 'en-US', message_channel: null });
+    assertEquals(diff.to, { contact_pref: 'call', locale: 'es-US', message_channel: 'sms' });
+    assert(diff.device_id, 'the device it came from');
+    // null = the pack's order again; the same value again changes and audits nothing.
+    const audits = h.store.audits.length;
+    await h.call('PATCH', 'preferences', { body: { messageChannel: 'sms' } });
+    assertEquals(h.store.audits.length, audits);
+    assertEquals(
+      (await h.call('PATCH', 'preferences', { body: { messageChannel: null } })).json
+        .messageChannel,
+      null,
+    );
+    // "Don't call me today" is M8's.
+    assertEquals(
+      (await h.call('PATCH', 'preferences', { body: { noCallsToday: true } })).json.error,
+      'invalid_request',
+    );
+  },
+);
+
+Deno.test('Settings: turning texts off revokes the sms consent only; reports go on', async () => {
+  const h = setup();
+  await consented(h);
+  const res = await h.call('POST', 'consent/revoke', { body: { type: 'sms' } });
+  assertEquals(res.status, 200);
+  assertEquals(res.json.consents, [
+    { type: 'sms', held: false },
+    { type: 'recording', held: true },
+    { type: 'data_processing', held: true },
+  ]);
+  const row = h.store.consents.find((c) => c.type === 'sms')!;
+  assertEquals(row.revoked_at, T0.toISOString());
+  const audit = h.store.audits.find((a) => a.action === 'consent.revoked')!;
+  assertEquals([audit.actorType, audit.actorId, audit.entityId], ['reporter', MARCO, row.id]);
+  assertEquals((audit.diff as Record<string, unknown>).type, 'sms');
+  // Per Q40 (first option) the SMS opt-out is the revoked consent; the status stays as it was.
+  assertEquals(h.store.reporters.find((r) => r.id === MARCO)!.status, 'active');
+  assertEquals(h.store.consentNotices, []);
+  assertEquals((await h.call('GET', 'today')).status, 200);
+  // Again: nothing held, nothing changes.
+  await h.call('POST', 'consent/revoke', { body: { type: 'sms' } });
+  assertEquals(h.store.audits.filter((a) => a.action === 'consent.revoked').length, 1);
+  assertEquals(
+    (await h.call('POST', 'consent/revoke', { body: { type: 'whatsapp' } })).json.error,
+    'invalid_request',
+  );
+});
+
+Deno.test(
+  'Settings: revoking recording stops every route but resolve, device/*, consent and Settings, and tells the office',
+  async () => {
+    const h = setup();
+    await consented(h);
+    const res = await h.call('POST', 'consent/revoke', { body: { type: 'recording' } });
+    assertEquals(res.status, 200);
+    assertEquals(h.store.consentNotices, [{ orgId: ORG, reporterId: MARCO, type: 'recording' }]);
+    const revoked = h.store.audits.find((a) => a.action === 'consent.revoked')!;
+    assertEquals((revoked.diff as Record<string, unknown>).notified, true);
+    for (const [method, path, body] of [
+      ['GET', 'today'],
+      ['GET', 'history'],
+      ['POST', 'uploads', { kind: 'audio', mime: 'audio/webm', bytes: 1, siteId: SITE_A }],
+      ['POST', 'day-status', { siteId: SITE_A, status: 'no_work' }],
+    ] as const) {
+      const r = await h.call(method, path, { body });
+      assertEquals([path, r.status, r.json.error], [path, 403, 'consent_required']);
+    }
+    // Still open: resolve (needsConsent again), Settings, and consent to report again.
+    const resolved = await h.call('POST', 'resolve', { body: { code: CODES.marco }, code: null });
+    assertEquals(resolved.json.needsConsent, true);
+    assertEquals((await h.call('GET', 'preferences')).status, 200);
+    assertEquals(
+      (await h.call('POST', 'consent/revoke', { body: { type: 'data_processing' } })).status,
+      200,
+    );
+    assertEquals(h.store.consentNotices.length, 2);
+    const again = await h.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'link',
+        locale: 'en-US',
+      },
+    });
+    assertEquals(again.status, 200);
+    assertEquals((await h.call('GET', 'today')).status, 200);
+  },
+);
+
+Deno.test(
+  'Settings: sign out revokes this device, clears its cookie, and the phone must verify again',
+  async () => {
+    const h = setup();
+    await consented(h);
+    const device = h.store.devices[0]!;
+    const out = await h.call('POST', 'device/sign-out');
+    assertEquals([out.status, out.json], [200, { signedOut: true }]);
+    assertEquals(device.revoked_at, T0.toISOString());
+    const cleared = out.headers
+      .getSetCookie()
+      .find((c) => c.startsWith(`${deviceCookieName(MARCO)}=`))!;
+    assertMatch(cleared, /Max-Age=0/);
+    assertMatch(cleared, /Path=\//);
+    const audit = h.store.audits.find((a) => a.action === 'device.signed_out')!;
+    assertEquals([audit.entity, audit.entityId, audit.actorId], ['field_device', device.id, MARCO]);
+    // The phone is back to the device check.
+    assertEquals((await h.call('GET', 'today')).json.error, 'device_unverified');
+    assertEquals(
+      (await h.call('POST', 'resolve', { body: { code: CODES.marco }, code: null })).json
+        .needsDeviceCheck,
+      true,
+    );
+    // A new code makes a new device; the revoked one stays revoked.
+    await verifiedDevice(h);
+    assertEquals(h.store.devices.length, 2);
+    assertEquals((await h.call('GET', 'today')).status, 200);
+    assertEquals((await h.call('POST', 'device/sign-out', { cookies: null })).status, 401);
+  },
+);
+
+Deno.test(
+  'Settings: with texts turned off, the device code still goes by SMS (Q25, W2-02)',
+  async () => {
+    const messaging = fakeMessaging();
+    const send = notifierCodeSender(messaging.notifier);
+    const h: Harness = setup({
+      sender: () => (m) => {
+        h.sent.push(m);
+        return send(m);
+      },
+    });
+    await consented(h);
+    await h.call('POST', 'consent/revoke', { body: { type: 'sms' } });
+    await h.call('POST', 'device/sign-out');
+    const sent = await h.call('POST', 'device/send-code');
+    assertEquals(sent.status, 202);
+    assertEquals(messaging.rows.filter((r) => r.copy_key === 'verify_code').length, 2);
   },
 );

@@ -181,6 +181,13 @@ export const copy = {
           body: '{{phone}} replied STOP, so SiteLog texts them nothing until they reply START. Call them if you need their reports.',
         },
         unknown_contact: { title: 'Unknown number tried to report' },
+        reporter_consent_revoked: {
+          titles: {
+            recording: '{{name}} turned off consent to the recording of their reports',
+            data_processing: '{{name}} turned off consent to the processing of their reports',
+          },
+          body: 'They turned it off in Settings on their phone, so SiteLog takes no reports from them until they consent again on their phone. Contact them if that is unexpected.',
+        },
         reporter_wrong_site: {
           title: '{{name}} says the site is wrong',
           body: 'Check the site assignment on the Team page.',

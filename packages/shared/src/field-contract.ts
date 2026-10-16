@@ -3,6 +3,7 @@ import type {
   ConsentType,
   ContactPref,
   FieldChannel,
+  MessageChannel,
   LinkKind,
   ReportStatus,
   ReporterStatus,
@@ -133,6 +134,7 @@ export const FIELD_API_ERRORS = [
   'wrong_state',
   'question_closed',
   'answer_not_accepted',
+  'channel_not_offered',
   'rate_limited',
   'internal',
 ] as const;
@@ -400,8 +402,37 @@ export interface HistoryResponse {
   }[];
 }
 
-/** `PATCH preferences`. */
+/** One consent as Settings shows it (F15): given at least once; `held` while not revoked. */
+export interface SettingsConsent {
+  type: ConsentType;
+  held: boolean;
+}
+
+/**
+ * `GET preferences`, `PATCH preferences`, `POST consent/revoke` (F15, Settings; W2-02): what the
+ * Settings screen shows. `messageChannels` are the pack's message channels that are built, in the
+ * pack's order (`settingsMessageChannels`): the choice is shown only when there is more than one.
+ * `messageChannel` null = the pack's order (spec §19 Q21).
+ */
 export interface PreferencesResponse {
   contactPref: ContactPref;
   locale: ReporterLocale;
+  messageChannel: MessageChannel | null;
+  messageChannels: MessageChannel[];
+  /** Every consent type the reporter has given, in `CONSENT_TYPES` order. */
+  consents: SettingsConsent[];
+}
+
+/**
+ * The consents a revocation stops reporting with (F15 "Revoking recording consent → reporter can
+ * no longer submit; office notified"): the required pair. Revoking one tells the office
+ * (`reporter_consent_revoked`, ops and admin) and every route but `resolve`, `device/*`, `consent`
+ * and Settings' own (`preferences`, `consent/revoke`, `device/sign-out`) answers 403
+ * `consent_required` until the reporter consents again on the Welcome screen.
+ */
+export const OFFICE_NOTIFIED_REVOCATIONS = REQUIRED_CONSENTS;
+
+/** `POST device/sign-out` (F15, Settings): this phone's device is revoked and its cookie cleared. */
+export interface SignOutResponse {
+  signedOut: true;
 }

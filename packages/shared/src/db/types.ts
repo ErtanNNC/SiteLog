@@ -1227,6 +1227,12 @@ export type Database = {
         Args: { p_upload_id: string; p_reporter_id: string };
         Returns: Json;
       };
+      // Settings (F15, 20261016000010_field_settings.sql), service role only: consent/revoke sets
+      // revoked_at, audits consent.revoked and tells the office of a required consent.
+      field_revoke_consent: {
+        Args: { p_reporter_id: string; p_type: ConsentType; p_device_id: string };
+        Returns: Json;
+      };
       // day-status (F12 buttons): pending or reminded → no_work or weather_day.
       field_set_day_status: {
         Args: {

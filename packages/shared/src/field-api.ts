@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CONSENT_TYPES, CONTACT_PREFS, UPLOAD_KINDS } from './enums.ts';
+import { CONSENT_TYPES, CONTACT_PREFS, MESSAGE_CHANNELS, UPLOAD_KINDS } from './enums.ts';
 import { DEVICE_COOKIE_PREFIX, UPLOAD_MAX_BYTES, VERIFY_CODE_LENGTH } from './field-contract.ts';
 import { sha256Hex } from './links.ts';
 import { REPORTER_LOCALES } from './locale.ts';
@@ -111,15 +111,27 @@ export const DayStatusRequestSchema = z.strictObject({
 });
 
 /**
- * `PATCH preferences` (F15). Appendix B also lists `noCallsToday` (outbound calls, M8) and
- * `messageChannel` (week 2, spec §19 Q21): not accepted before then.
+ * `PATCH preferences` (F15, Settings; W2-02): the report mode, the language (one of the pack's
+ * field locales) and the message channel (spec §19 Q21: one of the pack's built message channels,
+ * else 400 `channel_not_offered`; null = the pack's order). Appendix B also lists `noCallsToday`
+ * (outbound calls, M8): not accepted before then (400).
  */
 export const PreferencesRequestSchema = z
   .strictObject({
     contactPref: z.enum(CONTACT_PREFS).optional(),
     locale: z.enum(REPORTER_LOCALES).optional(),
+    messageChannel: z.enum(MESSAGE_CHANNELS).nullable().optional(),
   })
-  .refine((p) => p.contactPref !== undefined || p.locale !== undefined, 'nothing to change');
+  .refine(
+    (p) => p.contactPref !== undefined || p.locale !== undefined || p.messageChannel !== undefined,
+    'nothing to change',
+  );
+
+/**
+ * `POST consent/revoke` (F15, Settings; W2-02): turn one consent off (`consents.revoked_at`).
+ * Revoking a consent that is not held changes nothing.
+ */
+export const ConsentRevokeRequestSchema = z.strictObject({ type: z.enum(CONSENT_TYPES) });
 
 export type ResolveRequest = z.infer<typeof ResolveRequestSchema>;
 export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
@@ -129,3 +141,4 @@ export type ConfirmRequest = z.infer<typeof ConfirmRequestSchema>;
 export type AnswerRequest = z.infer<typeof AnswerRequestSchema>;
 export type DayStatusRequest = z.infer<typeof DayStatusRequestSchema>;
 export type PreferencesRequest = z.infer<typeof PreferencesRequestSchema>;
+export type ConsentRevokeRequest = z.infer<typeof ConsentRevokeRequestSchema>;

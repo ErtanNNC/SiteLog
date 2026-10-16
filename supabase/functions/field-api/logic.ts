@@ -1,4 +1,5 @@
 import {
+  CONSENT_TYPES,
   DEVICE_COOKIE_MAX_AGE_S,
   REQUIRED_CONSENTS,
   UPLOAD_MAX_BYTES,
@@ -11,6 +12,7 @@ import {
   localDate,
   nextWorkingDay,
   previousWorkingDay,
+  settingsMessageChannels,
   type AnswerValue,
   type ConsentRow,
   type ConsentType,
@@ -21,7 +23,10 @@ import {
   type FieldLinkRow,
   type FieldSite,
   type OrgSettingsRow,
+  type PreferencesResponse,
   type QuestionOption,
+  type ReporterLocale,
+  type ReporterRow,
   type SiteRow,
 } from '@sitelog/shared';
 
@@ -123,6 +128,30 @@ export function consentState(rows: readonly ConsentRow[]): {
 /** F4 step 3: the Welcome & consent screen until the required consents are held. */
 export function needsConsent(held: ReadonlySet<ConsentType>): boolean {
   return !REQUIRED_CONSENTS.every((t) => held.has(t));
+}
+
+/**
+ * What Settings shows (F15, `GET` / `PATCH preferences`, `consent/revoke`; W2-02): the report
+ * mode, the language, the message channel with the pack's built channels (spec §19 Q21), and every
+ * consent type the reporter has given, held or turned off, in `CONSENT_TYPES` order.
+ */
+export function settingsView(
+  reporter: Pick<ReporterRow, 'contact_pref' | 'locale' | 'message_channel'>,
+  pack: Pick<CountryPack, 'messageChannels'>,
+  consents: readonly Pick<ConsentRow, 'type' | 'revoked_at'>[],
+): PreferencesResponse {
+  const { held } = consentSets(consents);
+  const given = new Set(consents.map((c) => c.type));
+  return {
+    contactPref: reporter.contact_pref,
+    locale: reporter.locale as ReporterLocale,
+    messageChannel: reporter.message_channel,
+    messageChannels: settingsMessageChannels(pack),
+    consents: CONSENT_TYPES.filter((t) => given.has(t)).map((type) => ({
+      type,
+      held: held.has(type),
+    })),
+  };
 }
 
 /** The pack subset `resolve` hands the field app (spec §4.6): never the sender id or a provider. */
