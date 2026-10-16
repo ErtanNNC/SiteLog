@@ -117,7 +117,23 @@ W1-09, W1-13 ve W1-15 bu testle tamamlandı olarak işaretlendi. Bu testte giri�
 - Test kaydının dosyası her durumda siliniyor.
 - "Bana bugünün linkini gönder"e aynı anda iki kez basılırsa tek SMS gidiyor (yeni migration `20261016000090`).
 - **Q95 (önerimle, aksini söylemezseniz böyle kalır):** kişi kayıt ya da işleme iznini kapatınca, o anda işlenmekte olan raporu, sesli cevabı ve test kaydı Deepgram'a ya da Claude'a gitmiyor. Taslak otomatik dosyalanmıyor, ofis inceliyor. Kişi izni yeniden verirse atlanan iş tekrar yapılmıyor.
-- **Sırada:** W2-10 (taslağı sesle ya da +/- ile düzeltme).
+
+**W2-10 yapıldı (422c7d8, 85613da, 6dd3535; telefon testi bekliyor):** taslak ekranında kişi bir sayıyı iki yolla düzeltebiliyor:
+
+- **+/- düğmeleri:** bir ekip satırına dokunup işçi sayısını ±1, saati ±0,5 değiştirebiliyor ya da yazabiliyor.
+- **"Sesle düzelt":** en fazla 30 saniye konuşuyor (ör. "Apex'te altı değil yedi kişi vardı"). Ekranda bir önizleme çıkıyor ("Apex Concrete 6 → 7 işçi, 48 → 56 saat"). Kişi "Değişikliği kaydet" ya da "Tekrar dene"yi seçiyor.
+
+Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul edilmiyor. Değişen her değer kaynağını gösteriyor: ses kaydı ya da "telefonda değiştirildi" (Q80). Yeni migration: `20261016000100`. Gerçek deneme için `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` lazım.
+
+- **Q96 (yeni, kararınız):** kişi bir sayıyı düzelttikten sonra yeni bir ses kaydı gelip taslak yeniden oluşturulursa ne olsun? Öneri ve yapılan:
+  - yeni kayıt eski sayıyı geri getirirse kişinin düzeltmesi korunuyor;
+  - yeni kayıt üçüncü, farklı bir sayı söylerse o sayı geçerli oluyor.
+- **Q97 (yeni, kararınız):** düzeltme işlenirken taslağın 2 saatlik otomatik dosyalama süresi ne olsun? Öneri ve yapılan:
+  - süre işlemeye devam ediyor;
+  - düzeltme işlenirken ya da önizleme beklerken "Onayla ve gönder" düğmesi kapalı;
+  - "Kaydet"e basılınca yeni taslak kendi süresini baştan başlatıyor.
+- Tasarımla bir fark var: tasarımda dokunulacak yer 32 px'lik küçük bir kutu. Kural en az 56 px olduğu için ekip satırının tamamını dokunulabilir yaptım.
+- **Sırada:** W2-11 (dosyalanmış raporu telefondan düzeltme).
 
 ## Hafta 2 (M6) — başladı
 
