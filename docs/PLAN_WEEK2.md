@@ -307,15 +307,15 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W2-16 · WhatsApp inbound and the real channel orders (Q19, Q26)
 
-- [ ] **W2-16 done** · today _missing_ (M)
+- [ ] **W2-16 done** · today _partial_ (M) · _Built 2026-10-16 (commits `W2-16: …`); the box waits for CI (the new `e2e:supabase` spec `apps/web/e2e/supabase/whatsapp.spec.ts` was not run here: no local stack) and the owner's real run with the W2-15 setup. New: `20261016000230_field_channel_whatsapp.sql`, `20261016000240_whatsapp_inbound.sql` (`receive_inbound_message()`, `inbound_whatsapp_consent()`, EDIT and answers over WhatsApp), `20261016000250_channel_orders.sql`, the worker's `whatsapp_answer` job, `fixtures/whatsapp/`, the TR two-way texts and `whatsapp_use_link` / `whatsapp_stop_confirm` (EN/ES/TR, for the Q63 review), the Demo phone's WhatsApp replies (EN/TR). Open questions built on their recommendation: §19 Q111 (TR two-way texts), Q112 (START on WhatsApp), Q113 (an unclear WhatsApp answer), Q114 (media kept as Twilio URLs)._
 - **Spec:** §9.5, §19 Q19 (decided: US `{sms, whatsapp}`, TR `{whatsapp, sms}` by data migration), Q26 (decided: keywords and answers, no voice notes; adds `field_channel 'whatsapp'`), Q45, GAP D49 (2).
 - **Already in the repo:** `sms-webhook` (`receive_sms_inbound()`, the `sms_inbound` job, per-phone lock key), the keyword handling (W1-08, W2-12).
 - **Build:**
-  - [ ] Migration: `field_channel` `ADD VALUE 'whatsapp'` (its own file).
-  - [ ] Inbound WhatsApp through `sms-webhook` (Twilio posts the same form with `whatsapp:` addresses; the function is never named `whatsapp-webhook`): stored with `channel 'whatsapp'`, opens the 24 h window, runs the same keywords on every pack (WhatsApp is two-way even where SMS is not, so TR reporters get STOP, HELP, CALL, TEXT and the W2-12 keywords there); STOP on WhatsApp revokes the `whatsapp` consent (Q40).
-  - [ ] Answers over WhatsApp (Q26): a text reply to an open question is parsed with `parse_answer` (W2-09) and applied with `field_channel 'whatsapp'` on the answer.
-  - [ ] Media (voice notes, photos) per Q85 (decided 2026-10-16: stored, never transcribed; once a day a `whatsapp_use_link` reply, new key EN/ES/TR).
-  - [ ] The data migration setting Q19's orders, shipped only after W2-15's Q84 rule (decided 2026-10-16) is in place, so a real org on an environment without a WhatsApp sender keeps getting SMS.
+  - [x] Migration: `field_channel` `ADD VALUE 'whatsapp'` (its own file).
+  - [x] Inbound WhatsApp through `sms-webhook` (Twilio posts the same form with `whatsapp:` addresses; the function is never named `whatsapp-webhook`): stored with `channel 'whatsapp'`, opens the 24 h window, runs the same keywords on every pack (WhatsApp is two-way even where SMS is not, so TR reporters get STOP, HELP, CALL, TEXT and the W2-12 keywords there); STOP on WhatsApp revokes the `whatsapp` consent (Q40).
+  - [x] Answers over WhatsApp (Q26): a text reply to an open question is parsed with `parse_answer` (W2-09) and applied with `field_channel 'whatsapp'` on the answer.
+  - [x] Media (voice notes, photos) per Q85 (decided 2026-10-16: stored, never transcribed; once a day a `whatsapp_use_link` reply, new key EN/ES/TR).
+  - [x] The data migration setting Q19's orders, shipped only after W2-15's Q84 rule (decided 2026-10-16) is in place, so a real org on an environment without a WhatsApp sender keeps getting SMS.
 - **Tests:** webhook tests with WhatsApp forms (signature, dedupe, window), keyword and answer tests per pack, the migration test (orders, the pack check), an `e2e:supabase` reply in the Demo phone's WhatsApp thread.
 - **Done when:** in CI, a TR demo reporter who opted in receives `daily_link` on WhatsApp, replies HELP and gets the help text there, answers a question with "5" and sees it applied; US reporters still get SMS first.
 - **Needs:** the W2-15 owner setup for a real run.
