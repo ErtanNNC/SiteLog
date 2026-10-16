@@ -11,6 +11,7 @@ import { loadDotenv } from './dotenv';
 import { createEmailProvider } from './email/provider';
 import { createLogger } from './log';
 import { createWorkerNotifier, describePackTransports } from './messaging';
+import { vapidConfigured } from './push';
 import { createFfmpegRunner, resolveFfmpegPath } from './media/ffmpeg';
 import {
   createJobListener,
@@ -170,6 +171,8 @@ export async function main(): Promise<void> {
       ctx.log.info('sms transport per country pack', {
         packs: describePackTransports(rows),
         email: config.EMAIL_PROVIDER,
+        // W2-14: real orgs' push needs the VAPID key pair; demo orgs' push is console.
+        push: vapidConfigured(config) ? 'webpush' : 'console (no VAPID key pair: demo orgs only)',
       }),
     )
     .catch((err: unknown) => ctx.log.warn('could not read the country packs', { err }));

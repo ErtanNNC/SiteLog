@@ -2,6 +2,7 @@ import postgres, { type Sql, type TransactionSql } from 'postgres';
 import type {
   CompanyRow,
   ConsentRow,
+  PushSubscriptionRow,
   ConsoleEmailRow,
   ConversationRow,
   CountryRow,
@@ -700,6 +701,15 @@ export interface Db {
   getCountry(code: string): Promise<CountryRow | null>;
   listCountries(): Promise<CountryRow[]>;
   listConsents(reporterId: string): Promise<Array<Pick<ConsentRow, 'type' | 'revoked_at'>>>;
+  /**
+   * W2-14: the reporter's live push subscriptions (not revoked, from a device that is not signed out
+   * or revoked), oldest first.
+   */
+  listLivePushSubscriptions(
+    reporterId: string,
+  ): Promise<Array<Pick<PushSubscriptionRow, 'id' | 'endpoint' | 'p256dh' | 'auth'>>>;
+  /** W2-14: the push service answered 404/410: revoked `gone`, audited (push_subscription_gone()). */
+  pushSubscriptionGone(id: string, status: number): Promise<boolean>;
   insertSmsMessage(row: OutboundMessageRow): Promise<void>;
   updateSmsMessage(
     id: string,
@@ -1661,6 +1671,20 @@ export function createDb(sql: Sql): Db {
     async listConsents(reporterId) {
       return sql<Array<Pick<ConsentRow, 'type' | 'revoked_at'>>>`
         select type, revoked_at from consents where reporter_id = ${reporterId}`;
+    },
+    async listLivePushSubscriptions(reporterId) {
+      return sql<Array<Pick<PushSubscriptionRow, 'id' | 'endpoint' | 'p256dh' | 'auth'>>>`
+        select s.id, s.endpoint, s.p256dh, s.auth from push_subscriptions s
+        left join field_devices d on d.id = s.device_id
+        where s.reporter_id = ${reporterId} and s.revoked_at is null
+          and (s.device_id is null or d.revoked_at is null)
+        order by s.created_at, s.id`;
+    },
+    async pushSubscriptionGone(id, status) {
+      const rows = await sql<
+        Array<{ v: boolean }>
+      >`select push_subscription_gone(${id}, ${status}) as v`;
+      return rows[0]?.v === true;
     },
     async insertSmsMessage(row) {
       await sql`

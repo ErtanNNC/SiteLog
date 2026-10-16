@@ -114,6 +114,15 @@ export const ConfigSchema = z.object({
   ILETIMERKEZI_API_KEY: z.string().default(''),
   ILETIMERKEZI_API_HASH: z.string().default(''),
   SMS_WEBHOOK_URL: z.string().default(''),
+  /**
+   * Web push (W2-14, spec §4.4, §5.1): the VAPID key pair and its contact (`mailto:` or `https:`).
+   * All three set: real orgs' push goes to the push services; otherwise push is `console` (demo
+   * orgs only; a real org's push leaves its order, so SMS carries the message). The public key is
+   * also field-api's (`GET /push/key`); the private key never leaves the worker.
+   */
+  VAPID_PUBLIC_KEY: z.string().default(''),
+  VAPID_PRIVATE_KEY: z.string().default(''),
+  VAPID_SUBJECT: z.string().default(''),
   WORKER_CONCURRENCY: intFrom(4).pipe(z.number().min(1).max(64)),
   WORKER_PORT: intFrom(8080),
   WORKER_ID: z.string().default(''),

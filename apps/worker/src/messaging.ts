@@ -15,6 +15,7 @@ import {
   type SmsTransport,
 } from '@sitelog/shared';
 import { abortableFetch } from './abort';
+import { createPushRegistration } from './push';
 import type { Config } from './config';
 import type { Db } from './db';
 
@@ -160,8 +161,8 @@ export function createWorkerNotifier(
   db: Db,
   transport: (driver: SmsDriver) => SmsTransport = workerTransports(config),
   now: () => Date = () => new Date(),
-  /** Message channels besides SMS (W2-01): push (W2-14) and WhatsApp (W2-15) register here. */
-  channels: readonly ChannelRegistration[] = [],
+  /** Message channels besides SMS (W2-01): push (W2-14) by default; WhatsApp (W2-15) joins it. */
+  channels: readonly ChannelRegistration[] = [workerPushRegistration(config, db)],
 ): SmsNotifier {
   return createNotifier({
     store: workerNotifierStore(db),
@@ -170,6 +171,20 @@ export function createWorkerNotifier(
     statusCallbackUrl: statusCallbackUrl(config),
     randomUUID: () => crypto.randomUUID(),
     now,
+  });
+}
+
+/** The push channel (W2-14) with the worker env's VAPID key pair and its Db. */
+export function workerPushRegistration(
+  config: Config,
+  db: Db,
+  fetchImpl: typeof fetch = abortableFetch(),
+): ChannelRegistration {
+  return createPushRegistration({
+    config,
+    store: db,
+    fetch: (url, init) => fetchImpl(url, init),
+    randomUUID: () => crypto.randomUUID(),
   });
 }
 

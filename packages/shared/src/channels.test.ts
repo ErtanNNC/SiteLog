@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  channelCarriesKey,
   CONSENT_FOR_CHANNEL,
+  PUSH_KEYS,
   CONSENT_FREE_SMS_KEYS,
   deliverableChannels,
   IMPLEMENTED_MESSAGE_CHANNELS,
@@ -29,6 +31,7 @@ import type { CountryRow } from './db/types.ts';
 import { DEMO_COUNTRIES, demoPack } from './demo/countries.ts';
 import { CONSENT_TYPES, MESSAGE_CHANNELS, type ConsentType, type MessageChannel } from './enums.ts';
 import { assertE164 } from './format.ts';
+import { REMIND_STAGE_KEY } from './schedule/remind.ts';
 
 const row = (code: 'US' | 'TR') => DEMO_COUNTRIES.find((c) => c.code === code)!;
 /** A launch pack with changes (still a valid row: `toCountryPack` parses it). */
@@ -74,24 +77,63 @@ const deliverable = (
   });
 
 describe('message channels (§4.5)', () => {
-  it('builds SMS only in week 1; WhatsApp and push have no consent label yet', () => {
-    expect([...IMPLEMENTED_MESSAGE_CHANNELS]).toEqual(['sms']);
+  it('builds SMS and push (W2-14); WhatsApp has no consent label yet', () => {
+    expect([...IMPLEMENTED_MESSAGE_CHANNELS]).toEqual(['sms', 'push']);
     expect(Object.keys(CONSENT_FOR_CHANNEL).sort()).toEqual([...MESSAGE_CHANNELS].sort());
-    expect(CONSENT_FOR_CHANNEL).toEqual({ sms: 'sms', whatsapp: null, push: null });
+    expect(CONSENT_FOR_CHANNEL).toEqual({ sms: 'sms', whatsapp: null, push: 'push' });
     for (const consent of Object.values(CONSENT_FOR_CHANNEL))
       if (consent !== null) expect(CONSENT_TYPES).toContain(consent);
   });
 
   it('orders by the person first when the pack offers it, then the pack', () => {
-    const zz = pack('US', { message_channels: ['whatsapp', 'sms', 'push'] });
-    expect(messageChannelOrder(zz, null)).toEqual(['whatsapp', 'sms', 'push']);
-    expect(messageChannelOrder(zz, 'sms')).toEqual(['sms', 'whatsapp', 'push']);
+    const zz = pack('US', { message_channels: ['whatsapp', 'push', 'sms'] });
+    expect(messageChannelOrder(zz, null)).toEqual(['whatsapp', 'push', 'sms']);
+    // Push would come last after an SMS preference: it leaves the order (never the last channel).
+    expect(messageChannelOrder(zz, 'sms')).toEqual(['sms', 'whatsapp']);
     expect(messageChannelOrder(zz, 'push')).toEqual(['push', 'whatsapp', 'sms']);
-    expect(messageChannelOrder(zz, 'whatsapp')).toEqual(['whatsapp', 'sms', 'push']);
+    expect(messageChannelOrder(zz, 'whatsapp')).toEqual(['whatsapp', 'push', 'sms']);
     // The pack is the allow-list: a preference it does not offer is ignored.
-    expect(messageChannelOrder(US, 'whatsapp')).toEqual(['sms']);
-    expect(messageChannelOrder(TR, 'push')).toEqual(['sms']);
-    expect(messageChannelOrder(US, null)).toEqual(['sms']);
+    expect(messageChannelOrder(US, 'whatsapp')).toEqual(['push', 'sms']);
+    expect(messageChannelOrder(TR, 'push')).toEqual(['push', 'sms']);
+    expect(messageChannelOrder(US, null)).toEqual(['push', 'sms']);
+  });
+
+  it('never ends an order with push: another channel always follows it (§9.3, W2-14)', () => {
+    // The table refuses such a pack; the order drops push wherever it would come last.
+    const last = pack('US', { message_channels: ['push', 'sms'] });
+    expect(messageChannelOrder(last, 'sms')).toEqual(['sms']);
+    expect(messageChannelOrder(last, null)).toEqual(['push', 'sms']);
+    const alone = { ...last, messageChannels: ['push'] as const } as typeof last;
+    expect(messageChannelOrder(alone, null)).toEqual([]);
+    expect(messageChannelOrder(alone, 'push')).toEqual([]);
+  });
+
+  it('carries only the Q27 keys by push, never the welcome or the device code', () => {
+    expect([...PUSH_KEYS].sort()).toEqual(
+      [
+        ...new Set(Object.values(REMIND_STAGE_KEY)),
+        'question_ready',
+        'draft_ready',
+        'filed',
+      ].sort(),
+    );
+    for (const key of NOTIFIER_KEYS)
+      expect(channelCarriesKey('push', key), key).toBe(
+        (PUSH_KEYS as readonly string[]).includes(key),
+      );
+    expect(channelCarriesKey('push', 'welcome')).toBe(false);
+    expect(channelCarriesKey('push', 'verify_code')).toBe(false);
+    expect(channelCarriesKey('sms', 'welcome')).toBe(true);
+  });
+
+  it('keeps push out of the Settings preference: it has its own toggle (§19 Q107)', () => {
+    expect(settingsMessageChannels(US)).toEqual(['sms']);
+    expect(
+      settingsMessageChannels(
+        pack('US', { message_channels: ['push', 'whatsapp', 'sms'] }),
+        MESSAGE_CHANNELS,
+      ),
+    ).toEqual(['whatsapp', 'sms']);
   });
 });
 
@@ -156,17 +198,20 @@ describe('deliverableChannels (§4.5)', () => {
     expect(deliverable(US, 'daily_link', { optedOut: new Set(['whatsapp']) })).toEqual(['sms']);
   });
 
-  it('drops WhatsApp and push: not built, and no consent label even when built', () => {
+  it('drops WhatsApp (not built, no consent label) and push without its consent or for its keys', () => {
     const all = new Set(CONSENT_TYPES);
     const wa = pack('US', { message_channels: ['whatsapp', 'push', 'sms'] });
-    expect(deliverable(wa, 'filed', { preferred: 'push', consents: all })).toEqual(['sms']);
+    expect(deliverable(wa, 'filed', { preferred: 'push', consents: all })).toEqual(['push', 'sms']);
+    expect(deliverable(wa, 'filed', { consents: new Set(['sms']) })).toEqual(['sms']);
+    expect(deliverable(wa, 'welcome', { consents: all })).toEqual(['sms']);
+    expect(deliverable(wa, 'photos_link', { consents: all })).toEqual(['sms']);
     expect(
       deliverable(wa, 'filed', {
         preferred: 'whatsapp',
         consents: all,
         implemented: MESSAGE_CHANNELS,
       }),
-    ).toEqual(['sms']);
+    ).toEqual(['push', 'sms']);
   });
 
   it('computes the order from the pack: a narrowing never adds a channel the pack lacks', () => {

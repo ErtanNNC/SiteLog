@@ -6,7 +6,7 @@ import { DEMO_COUNTRIES, demoPack } from '../demo/countries.ts';
 import type { ConsentType } from '../enums.ts';
 import { assertE164 } from '../format.ts';
 import { MASKED_CODE } from '../links.ts';
-import { MessageSendError } from '../channels.ts';
+import { MessageSendError, pushChannelSpec, type OutboundMessage } from '../channels.ts';
 import { SmsConfigError, SmsSendError } from '../sms/transports.ts';
 import {
   consoleRealOrgError,
@@ -72,6 +72,8 @@ function harness(
     /** Registers a fake second channel as `whatsapp` (W2-01), consent `data_processing`. */
     second?: boolean;
     faults?: Faults;
+    /** Other registrations (W2-14's push). */
+    channels?: ChannelRegistration[];
   } = {},
 ) {
   const faults = opts.faults ?? {};
@@ -150,7 +152,7 @@ function harness(
   const notifier = createNotifier({
     store,
     transport,
-    ...(opts.second ? { channels: [second] } : {}),
+    channels: [...(opts.second ? [second] : []), ...(opts.channels ?? [])],
     statusCallbackUrl: 'https://x.supabase.co/functions/v1/sms-webhook/status',
     randomUUID: () => `m-${++n}`,
     now: () => new Date('2026-10-09T23:00:00Z'),
@@ -856,5 +858,115 @@ describe('Notifier fallback between channels (§19 Q22, W2-01)', () => {
         randomUUID: () => 'x',
       }),
     ).toThrow(/registered twice/);
+  });
+});
+
+describe('Notifier web push (W2-14, §19 Q27)', () => {
+  const FILED = { report_no: 'RL-2041-0187', pdf_link: 'https://go.sitelog.app/r/K7Q2MX/report/1' };
+  const real = (over: Parameters<typeof recipient>[0] = {}) =>
+    recipient({
+      isDemo: false,
+      pack: US_LIVE,
+      status: 'active',
+      consents: ['sms', 'push', 'recording', 'data_processing'],
+      ...over,
+    });
+  function push(opts: { live?: boolean; configured?: boolean; fault?: Error | null } = {}) {
+    const pushed: OutboundMessage[] = [];
+    const state = { live: opts.live ?? true, fault: opts.fault ?? null };
+    const registration: ChannelRegistration = {
+      spec: pushChannelSpec(opts.configured ?? true),
+      transport: (driver) => ({
+        channel: 'push',
+        driver,
+        async send(message) {
+          if (state.fault) throw state.fault;
+          pushed.push(message);
+          return { providerId: `${driver}-p${pushed.length}` };
+        },
+      }),
+      reachable: async (r) => state.live && (r.org.isDemo || (opts.configured ?? true)),
+    };
+    return { registration, pushed, state };
+  }
+  const gone = () =>
+    new MessageSendError('push: subscription gone (410)', 'push', {
+      driver: 'webpush',
+      retryable: false,
+      undeliverable: true,
+      code: 'gone',
+    });
+
+  it('a subscribed reporter gets push first: a row with no phone, the link whole in the payload', async () => {
+    const p = push();
+    const h = harness({ channels: [p.registration] });
+    const out = await h.notifier.deliver(real(), 'filed', FILED, { dedupeKey: 'notify:filed:1' });
+    expect(out).toEqual({ channel: 'push', messageId: 'm-1' });
+    expect(h.rows.get('m-1')).toMatchObject({
+      channel: 'push',
+      phone_e164: null,
+      provider: 'webpush',
+      status: 'sent',
+      copy_key: 'filed',
+    });
+    expect(h.rows.get('m-1')!.body).not.toContain('K7Q2MX');
+    expect(p.pushed[0]).toMatchObject({ reporterId: 'r-marco', key: 'filed', language: 'en' });
+    expect(p.pushed[0]!.body).toContain('K7Q2MX');
+    expect(h.sent).toEqual([]);
+  });
+
+  it('a gone subscription falls back to SMS under the same key (§19 Q22)', async () => {
+    const p = push({ fault: gone() });
+    const h = harness({ channels: [p.registration] });
+    const out = await h.notifier.deliver(
+      real(),
+      'draft_ready',
+      { link: 'https://go.sitelog.app/r/K7Q2MX' },
+      {
+        dedupeKey: 'notify:draft_ready:1',
+      },
+    );
+    expect(out).toEqual({ channel: 'sms', messageId: 'm-2' });
+    expect(h.rows.get('m-1')).toMatchObject({ channel: 'push', status: 'undeliverable' });
+    expect(h.audit.map((a) => a.action)).toEqual([
+      'push.undeliverable',
+      'notify.attempt_failed',
+      'sms.sent',
+    ]);
+  });
+
+  it('no live subscription, no consent, a key push does not carry, or no key pair for a real org: SMS', async () => {
+    for (const [label, p, r, key] of [
+      ['no subscription', push({ live: false }), real(), 'filed'],
+      ['no consent', push(), real({ consents: ['sms'] }), 'filed'],
+      ['photos_link is not a push key', push(), real(), 'photos_link'],
+      ['no VAPID pair here', push({ configured: false }), real(), 'filed'],
+    ] as const) {
+      const h = harness({ channels: [p.registration] });
+      const vars = key === 'filed' ? FILED : { link: 'https://go.sitelog.app/r/K7Q2MX' };
+      const out = await h.notifier.deliver(r, key, vars as never);
+      expect(out.channel, label).toBe('sms');
+      expect(p.pushed, label).toEqual([]);
+    }
+  });
+
+  it('a demo org gets console push without a key pair; the Demo phone row is whole', async () => {
+    const p = push({ configured: false });
+    const h = harness({ channels: [p.registration] });
+    const out = await h.notifier.deliver(real({ isDemo: true }), 'filed', FILED);
+    expect(out.channel).toBe('push');
+    expect(h.rows.get('m-1')).toMatchObject({
+      provider: 'console',
+      status: 'delivered',
+      phone_e164: null,
+    });
+    expect(h.rows.get('m-1')!.body).toContain('K7Q2MX');
+  });
+
+  it('an SMS STOP stops texts only: push still goes (§19 Q40, first option)', async () => {
+    const p = push();
+    const h = harness({ channels: [p.registration] });
+    const out = await h.notifier.deliver(real({ status: 'opted_out' }), 'filed', FILED);
+    expect(out.channel).toBe('push');
   });
 });

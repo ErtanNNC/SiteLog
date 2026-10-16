@@ -114,7 +114,8 @@ export interface OutboundMessageRow {
   id: string;
   org_id: string | null;
   reporter_id: string | null;
-  phone_e164: string;
+  /** null on a push row (spec §19 Q27: push reaches a subscription, not a number). */
+  phone_e164: string | null;
   channel: MessageChannel;
   direction: 'out';
   /** The driver: an `SmsDriver` for SMS, the registered channel's driver otherwise. */
@@ -211,6 +212,12 @@ export interface ChannelRegistration {
    * links-in-SMS rule is SMS's, spec §19 Q24).
    */
   renderOptions?(pack: CountryPack): RenderSmsOptions;
+  /**
+   * Whether the channel can reach this person now, beyond consent and the pack (W2-14: push needs a
+   * live subscription, and a VAPID key pair for a real org). A channel that cannot leaves the order
+   * before any attempt, so the message goes on the next channel. Absent: always.
+   */
+  reachable?(recipient: NotifyRecipient): Promise<boolean>;
 }
 
 export interface NotifierDeps {
@@ -435,7 +442,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       id,
       org_id: input.orgId,
       reporter_id: input.reporterId,
-      phone_e164: input.phone,
+      phone_e164: input.channel === 'push' ? null : input.phone,
       channel: input.channel,
       direction: 'out',
       provider: input.driver,
@@ -493,6 +500,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       const { providerId } = await transport.send(
         {
           to: input.phone,
+          reporterId: input.reporterId,
           body: input.text,
           key: input.key,
           language: input.language,
@@ -606,6 +614,13 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     if (order.length === 0) {
       return skip(recipient, key, skipReason(recipient, key, opts.channels, specs));
     }
+    const reachable: MessageChannel[] = [];
+    for (const channel of order) {
+      const check = registrationOf(channel).reachable;
+      if (!check || (await check(recipient))) reachable.push(channel);
+    }
+    if (reachable.length === 0) return skip(recipient, key, 'no_channel');
+    order = reachable;
     const phone = assertE164(reporter.phone_e164);
     if (order.includes('sms') && (await store.isPhoneOptedOut(phone, pack.code))) {
       order = order.filter((c) => c !== 'sms');

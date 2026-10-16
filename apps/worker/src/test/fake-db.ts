@@ -3,6 +3,7 @@ import type {
   NoticeData,
   CompanyRow,
   ConsentRow,
+  PushSubscriptionRow,
   ConsoleEmailRow,
   ConversationRow,
   CountryRow,
@@ -87,6 +88,8 @@ export interface FakeDbData {
   /** countries (the launch packs by default; tests set sender ids). */
   countries: CountryRow[];
   consents: ConsentRow[];
+  /** W2-14: web push subscriptions. */
+  pushSubscriptions: PushSubscriptionRow[];
   /** sms_opt_outs (W1-08): a phone's STOP on a pack's sender, or the provider's opt-out list. */
   smsOptOuts: SmsOptOutRow[];
   fieldLinks: Array<{
@@ -153,6 +156,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     reportCosts: new Map(),
     countries: DEMO_COUNTRIES.map((c) => structuredClone(c)),
     consents: [],
+    pushSubscriptions: [],
     smsOptOuts: [],
     fieldLinks: [],
     consoleEmails: [],
@@ -965,6 +969,27 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return d.consents
         .filter((c) => c.reporter_id === reporterId)
         .map((c) => ({ type: c.type, revoked_at: c.revoked_at }));
+    },
+    async listLivePushSubscriptions(reporterId) {
+      return d.pushSubscriptions
+        .filter((p) => p.reporter_id === reporterId && p.revoked_at === null)
+        .map(({ id, endpoint, p256dh, auth }) => ({ id, endpoint, p256dh, auth }));
+    },
+    async pushSubscriptionGone(id, status) {
+      const row = d.pushSubscriptions.find((p) => p.id === id && p.revoked_at === null);
+      if (!row) return false;
+      row.revoked_at = new Date().toISOString();
+      row.revoked_reason = 'gone';
+      d.audit.push({
+        org_id: row.org_id,
+        actor_type: 'system',
+        actor_id: null,
+        action: 'push.subscription_gone',
+        entity: 'push_subscription',
+        entity_id: id,
+        diff: { reporter_id: row.reporter_id, status },
+      });
+      return true;
     },
     async insertSmsMessage(row) {
       if (

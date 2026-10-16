@@ -46,21 +46,54 @@ export type MessageKey = SmsKey;
 export type NotifierKey = Exclude<MessageKey, TwoWaySmsKey>;
 
 /**
- * The message channels with a transport. Week 1 builds SMS only; WhatsApp (Twilio) and web push
- * join with the M6 reminders (week 2), each by registering its `MessageChannelSpec` and transport
- * with the Notifier (`NotifierDeps.channels`, W2-01) and adding itself here.
+ * The message channels with a transport. Week 1 builds SMS; W2-14 web push (the worker registers
+ * its transport, `PUSH_CHANNEL`); WhatsApp (Twilio) joins with W2-15, by registering its
+ * `MessageChannelSpec` and transport with the Notifier (`NotifierDeps.channels`, W2-01) and adding
+ * itself here. A Notifier without a channel's registration (the edge functions' for push) never
+ * sends on it.
  */
-export const IMPLEMENTED_MESSAGE_CHANNELS = ['sms'] as const satisfies readonly MessageChannel[];
+export const IMPLEMENTED_MESSAGE_CHANNELS = [
+  'sms',
+  'push',
+] as const satisfies readonly MessageChannel[];
 
 /**
  * The consent each message channel needs (`consents.type`). null = no consent label yet
- * (WhatsApp and push wait for spec §19 Q25 and Q27), so the channel is never deliverable.
+ * (WhatsApp waits for W2-15, spec §19 Q25), so the channel is never deliverable. Push: the `push`
+ * consent the Settings toggle gives (spec §19 Q27, W2-14).
  */
 export const CONSENT_FOR_CHANNEL: Readonly<Record<MessageChannel, ConsentType | null>> = {
   sms: 'sms',
   whatsapp: null,
-  push: null,
+  push: 'push',
 };
+
+/**
+ * The keys web push carries (spec §19 Q27, decided 2026-10-15): `question_ready`, `draft_ready`,
+ * `filed` and the reminder ladder's (the daily link, the weather heads-up, R1, R2; `REMIND_STAGE_KEY`
+ * in `schedule/remind.ts`). Never `welcome` or `verify_code`: push needs the installed app, which
+ * the person reaches only through the welcome's link and the device check.
+ */
+export const PUSH_KEYS = [
+  'question_ready',
+  'draft_ready',
+  'filed',
+  'daily_link',
+  'weather_headsup',
+  'reminder_1',
+  'reminder_2',
+] as const satisfies readonly NotifierKey[];
+
+/** The keys a channel may carry when it carries only some (push); absent = every Notifier key. */
+export const CHANNEL_KEYS: Readonly<Partial<Record<MessageChannel, readonly NotifierKey[]>>> = {
+  push: PUSH_KEYS,
+};
+
+/** Whether `channel` may carry `key` (`CHANNEL_KEYS`). */
+export function channelCarriesKey(channel: MessageChannel, key: NotifierKey): boolean {
+  const keys = CHANNEL_KEYS[channel];
+  return keys === undefined || keys.includes(key);
+}
 
 /**
  * Keys the spec sends before the person has consented: the welcome at invite (F3 step 1, before
@@ -94,14 +127,16 @@ export const SMS_ONLY_KEYS = ['verify_code'] as const satisfies readonly Notifie
 export const CONSENT_FREE_SMS_KEYS = ['verify_code'] as const satisfies readonly NotifierKey[];
 
 /**
- * The message channels Settings offers (F15, spec §19 Q21; W2-02): the pack's, in its order, that
- * are built. The choice is shown only when there is more than one (hidden until W2-14 / W2-15).
+ * The message channels Settings offers as a preference (F15, spec §19 Q21; W2-02): the pack's, in
+ * its order, that are built, except push, which has its own *Notifications* toggle (W2-14, §19
+ * Q107: push is reached by turning it on, never as a preference). The choice is shown only when
+ * there is more than one (hidden until W2-15).
  */
 export function settingsMessageChannels(
   pack: Pick<CountryPack, 'messageChannels'>,
   implemented: readonly MessageChannel[] = IMPLEMENTED_MESSAGE_CHANNELS,
 ): MessageChannel[] {
-  return pack.messageChannels.filter((c) => implemented.includes(c));
+  return pack.messageChannels.filter((c) => c !== 'push' && implemented.includes(c));
 }
 
 /**
@@ -130,13 +165,33 @@ export const SMS_CHANNEL: MessageChannelSpec = {
   provider: (pack) => pack.smsProvider,
 };
 
+/** The driver name of the web push transport (`messages.provider`, spec §6.3). */
+export const PUSH_DRIVER = 'webpush';
+
+/**
+ * Web push (W2-14; spec §4.4, §19 Q27): consent `push`, no pack sender. Its "sender" is the VAPID
+ * key pair of this environment (env, not the pack: standard Web Push has no provider account), so
+ * without one the channel goes through `console` (`pushChannelSpec(false)`), like a pack with no
+ * SMS sender. The worker registers it (`apps/worker/src/push.ts`).
+ */
+export function pushChannelSpec(vapidConfigured: boolean): MessageChannelSpec {
+  return {
+    channel: 'push',
+    consent: 'push',
+    sender: () => (vapidConfigured ? 'vapid' : null),
+    provider: () => PUSH_DRIVER,
+  };
+}
+
 /** The channels built in this repo, as specs (`pickMessageTransport`'s default registry). */
 export const BUILT_CHANNEL_SPECS: readonly MessageChannelSpec[] = [SMS_CHANNEL];
 
 /** What a channel's transport is asked to send: the §9.2 text and what it was rendered from. */
 export interface OutboundMessage {
-  /** The person's number (push, W2-14, adds its subscription beside it). */
+  /** The person's number (push ignores it: its transport reads the reporter's subscriptions). */
   to: E164;
+  /** The reporter the message is for (push finds their subscriptions by it); null for a reply. */
+  reporterId: string | null;
   /** The text in the person's language with the pack's variant. */
   body: string;
   key: MessageKey;
@@ -270,7 +325,9 @@ export interface SmsTransport {
 /**
  * The Notifier's order for a person (§4.5): their preferred channel first when the pack offers it,
  * then the pack's `message_channels`. A preference the pack does not list is ignored (the pack is
- * the allow-list, spec §19 Q21).
+ * the allow-list, spec §19 Q21). Push is never a person's only channel (spec §9.3; W2-14): it stays
+ * only where another channel follows it, so a message that push cannot deliver always has a
+ * channel to fall back to (the table refuses a pack whose order ends with push).
  */
 export function messageChannelOrder(
   pack: CountryPack,
@@ -278,7 +335,9 @@ export function messageChannelOrder(
 ): MessageChannel[] {
   const order = [...pack.messageChannels];
   const ranked = preferred !== null && order.includes(preferred) ? [preferred, ...order] : order;
-  return [...new Set(ranked)];
+  const unique = [...new Set(ranked)];
+  const push = unique.indexOf('push');
+  return push >= 0 && push === unique.length - 1 ? unique.slice(0, -1) : unique;
 }
 
 /**
@@ -326,6 +385,7 @@ export function deliverableChannels(input: {
     (CONSENT_FREE_SMS_KEYS as readonly MessageKey[]).includes(key);
   return order.filter((channel) => {
     if (!implemented.includes(channel)) return false;
+    if (!channelCarriesKey(channel, input.key)) return false;
     const consent = input.consentFor?.[channel] ?? CONSENT_FOR_CHANNEL[channel];
     if (consent === null) return false;
     if (input.optedOut.has(channel)) return false;
