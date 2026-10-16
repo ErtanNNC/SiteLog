@@ -106,4 +106,17 @@ describe('service worker push handlers (W2-14)', () => {
     expect(other.clients[0]!.navigated).toEqual([]);
     expect(clickTarget(none.s, { url: 'javascript:alert(1)' })).toBe(`${ORIGIN}/`);
   });
+
+  it('a window that refuses to navigate: the link opens in a new window (W2-14 review)', async () => {
+    const { s, opened, clients } = scope(['https://go.sitelog.app/today']);
+    clients[0]!.navigate = () =>
+      Promise.reject(
+        new TypeError('This service worker is not the client’s active service worker.'),
+      );
+    await openFromNotification(s, {
+      data: { url: 'https://go.sitelog.app/r/K7Q2MX' },
+      close: () => {},
+    });
+    expect(opened).toEqual(['https://go.sitelog.app/r/K7Q2MX']);
+  });
 });

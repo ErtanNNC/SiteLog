@@ -9,7 +9,8 @@ import { readPushData, type PushNotificationData } from '@sitelog/shared/notify/
  *   message's key as tag (a newer one of the same key replaces it), the app icon, and the link a
  *   tap opens in `data`.
  * - `notificationclick`: closes it and opens the link in the app: an open window of the app is
- *   navigated and focused; otherwise a new window opens. A link outside the app's origin (none
+ *   navigated and focused; otherwise (none open, or the window refuses to navigate) a new window
+ *   opens. A link outside the app's origin (none
  *   today) opens in a new window as it is.
  */
 
@@ -88,9 +89,14 @@ export async function openFromNotification(
     const windows = await scope.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const open = windows.find((w) => new URL(w.url).origin === scope.location.origin);
     if (open) {
-      await open.navigate(target);
-      await open.focus();
-      return;
+      try {
+        await open.navigate(target);
+        await open.focus();
+        return;
+      } catch {
+        // navigate() rejects for a window this worker does not control (opened before it took
+        // over, or a browser that refuses it): the link opens in a new window instead.
+      }
     }
   }
   await scope.clients.openWindow(target);
