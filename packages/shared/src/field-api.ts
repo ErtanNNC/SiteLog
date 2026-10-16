@@ -77,6 +77,13 @@ export const AnswerToSchema = z.strictObject({
   questionId: z.uuid(),
 });
 
+/**
+ * F8 *Fix by voice* (W2-10): the draft a correction clip is for. The clip is an `audio` upload of
+ * that report (its site and day), never report material (not a voice note of the report, nothing
+ * extracted from it); `reports/:id/correction {uploadId}` hands it to the worker.
+ */
+export const FixToSchema = z.strictObject({ reportId: z.uuid() });
+
 export const UploadRequestSchema = z
   .strictObject({
     kind: z.enum(UPLOAD_KINDS),
@@ -88,6 +95,7 @@ export const UploadRequestSchema = z
     recordedAt: z.iso.datetime({ offset: true }).optional(),
     addTo: AddToReportSchema.optional(),
     answerTo: AnswerToSchema.optional(),
+    fixTo: FixToSchema.optional(),
   })
   .refine((b) => !b.addTo || (b.siteId === undefined && b.date === undefined), {
     message: 'addTo takes the report’s site and date',
@@ -98,6 +106,16 @@ export const UploadRequestSchema = z
       !b.answerTo ||
       (b.kind === 'audio' && !b.addTo && b.siteId === undefined && b.date === undefined),
     { message: 'answerTo is one audio clip in the question’s report', path: ['answerTo'] },
+  )
+  .refine(
+    (b) =>
+      !b.fixTo ||
+      (b.kind === 'audio' &&
+        !b.addTo &&
+        !b.answerTo &&
+        b.siteId === undefined &&
+        b.date === undefined),
+    { message: 'fixTo is one audio clip in the draft’s report', path: ['fixTo'] },
   )
   .refine((b) => !b.addTo || b.kind === 'photo' || b.addTo.caption, {
     message: 'only a batch with a caption takes audio',
@@ -137,6 +155,34 @@ export const AnswerRequestSchema = z
   .refine((a) => a.hours === undefined || a.value !== undefined, {
     message: 'hours goes with value',
   });
+
+/**
+ * `POST reports/:id/correction` (W2-10, F8 *Fix by voice*, §10.6, Appendix B `{text or uploadId}`):
+ * a correction of the draft, said (`uploadId`: a completed correction clip of this report,
+ * `UploadRequest.fixTo`) or typed (`text`). The worker parses it (`apply_correction`) into a
+ * preview; nothing changes until the reporter saves it (`…/correction/:cid/apply`).
+ */
+export const CorrectionRequestSchema = z
+  .strictObject({
+    uploadId: z.uuid().optional(),
+    text: z.string().trim().min(2).max(500).optional(),
+  })
+  .refine((c) => (c.uploadId === undefined) !== (c.text === undefined), {
+    message: 'one of uploadId or text',
+  });
+
+/**
+ * `POST reports/:id/edit` (W2-10, the draft's steppers, F8, spec §19 Q80): one crew line's workers
+ * and hours per worker as the reporter set them, on the draft they saw (`version`, `draftRev`;
+ * 409 `draft_changed` otherwise). Totals are code's; the line cites `reporter_edit`.
+ */
+export const EditRequestSchema = z.strictObject({
+  version: z.number().int().min(1),
+  draftRev: z.number().int().min(1),
+  index: z.number().int().min(0).max(199),
+  workers: z.number().int().min(0).max(9999).nullable(),
+  hoursPerWorker: z.number().min(0).max(24).nullable(),
+});
 
 /**
  * `POST day-status` (F12, the Today buttons): no work today, or site closed for weather. Since
@@ -219,6 +265,9 @@ export type AddToReport = z.infer<typeof AddToReportSchema>;
 export type AnswerTo = z.infer<typeof AnswerToSchema>;
 export type ConfirmRequest = z.infer<typeof ConfirmRequestSchema>;
 export type AnswerRequest = z.infer<typeof AnswerRequestSchema>;
+export type FixTo = z.infer<typeof FixToSchema>;
+export type CorrectionRequest = z.infer<typeof CorrectionRequestSchema>;
+export type EditRequest = z.infer<typeof EditRequestSchema>;
 export type DayStatusRequest = z.infer<typeof DayStatusRequestSchema>;
 export type PreferencesRequest = z.infer<typeof PreferencesRequestSchema>;
 export type ConsentRevokeRequest = z.infer<typeof ConsentRevokeRequestSchema>;

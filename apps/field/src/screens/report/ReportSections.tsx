@@ -19,10 +19,20 @@ import {
 /**
  * A report's sections as the draft (F8, Field-06; W1-13) shows them: the crew with each company's
  * workers × hours and the day's total, then weather, work done, deliveries, safety, next workday
- * and photos. Read-only; the numbers are the report's (computed in code). The Draft screen and the
- * Past reports view (W2-03) both show it.
+ * and photos. The numbers are the report's (computed in code). The Draft screen and the Past
+ * reports view (W2-03) both show it; on the Draft each crew line opens its stepper (W2-10).
  */
-export function ReportSections({ data }: { data: DailyReportData }) {
+export function ReportSections({
+  data,
+  onEditCrew,
+}: {
+  data: DailyReportData;
+  /**
+   * W2-10 (F8, Field-06 "tap a number for a stepper"): each crew line is a button opening the
+   * stepper for it. Absent (read-only) on Past reports.
+   */
+  onEditCrew?: (index: number) => void;
+}) {
   const { t, language } = useFieldCopy();
   const crewId = useId();
   const totals = deriveTotals(data);
@@ -91,12 +101,9 @@ export function ReportSections({ data }: { data: DailyReportData }) {
         </div>
         {data.manpower.length > 0 ? (
           <ul className="m-0 list-none px-3.5 py-1 text-[15px] leading-[22px]">
-            {data.manpower.map((entry, i) => (
-              <li
-                key={`${entry.companyName}:${i}`}
-                className="flex min-h-10 items-center justify-between gap-3 border-b border-concrete py-1 last:border-b-0"
-              >
-                <span className="flex min-w-0 flex-wrap items-center gap-1.5 [overflow-wrap:anywhere]">
+            {data.manpower.map((entry, i) => {
+              const name = (
+                <span className="flex min-w-0 flex-wrap items-center gap-1.5 text-left [overflow-wrap:anywhere]">
                   {entry.companyName}
                   {answeredEntry(entry) ? (
                     <span className="rounded-[3px] bg-chip-review-bg px-[5px] py-px text-[10px] leading-4 font-bold text-chip-review-fg">
@@ -104,13 +111,44 @@ export function ReportSections({ data }: { data: DailyReportData }) {
                     </span>
                   ) : null}
                 </span>
-                {/* Read-only until M6 (the stepper): the value, read out in words. */}
+              );
+              const value = (
                 <span className="flex h-8 flex-none items-center rounded-btn border border-rebar bg-chalk px-2.5 font-mono text-[14px] font-medium">
                   <span aria-hidden="true">{crewValue(entry, language)}</span>
-                  <span className="sr-only">{crewValueSpoken(entry, t, language)}</span>
+                  {onEditCrew ? null : (
+                    <span className="sr-only">{crewValueSpoken(entry, t, language)}</span>
+                  )}
                 </span>
-              </li>
-            ))}
+              );
+              return (
+                <li
+                  key={`${entry.companyName}:${i}`}
+                  className="border-b border-concrete last:border-b-0"
+                >
+                  {onEditCrew ? (
+                    // The whole line is the stepper's target (56 px, §14.6); it reads as
+                    // Field-06's label: "Apex Concrete, 6 workers, 8 hours each — change".
+                    <button
+                      type="button"
+                      onClick={() => onEditCrew(i)}
+                      aria-label={t('draft.stepper.change', {
+                        company: entry.companyName,
+                        value: crewValueSpoken(entry, t, language),
+                      })}
+                      className="flex min-h-target w-full items-center justify-between gap-3 border-0 bg-transparent px-0 py-1 text-[15px] leading-[22px] text-asphalt"
+                    >
+                      {name}
+                      {value}
+                    </button>
+                  ) : (
+                    <div className="flex min-h-10 items-center justify-between gap-3 py-1">
+                      {name}
+                      {value}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="m-0 px-3.5 py-2.5 text-[15px] leading-[22px] text-dust">

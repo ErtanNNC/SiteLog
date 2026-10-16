@@ -877,6 +877,7 @@ function pastReports(market: Market): {
     addPhotos: null,
     changeNote: null,
     lastVoiceAnswer: null,
+    correction: null,
   };
   return {
     history: [
@@ -1118,5 +1119,156 @@ test.describe('Filed with Add more photos at 1440 px', () => {
     await page.goto(`/r/${CODE}/report/${PAST_ID}`);
     await expect(page.getByRole('button', { name: field.filed.addPhotos })).toBeVisible();
     await expectFieldScreen(page);
+  });
+});
+
+// ── W2-10: Fix by voice and the steppers on the draft (F8, §10.6, Q80) ─────────────────────────
+
+/** The question answered with its second option: the draft (Field-06). */
+async function toDraft(page: Page, lang: keyof typeof UI_RESOURCES, market: Market) {
+  const field = UI_RESOURCES[lang].field;
+  await toQuestion(page, lang, market);
+  await page.getByRole('button', { name: market.question.options[1] }).click();
+  await expect(page.getByRole('heading', { level: 1, name: field.draft.title })).toBeVisible({
+    timeout: 10_000,
+  });
+}
+
+/** The preview line of "one more worker" on the fixed crew (code's numbers, as the worker sends). */
+const FIX_LINE: Record<'en' | 'es' | 'tr', string> = {
+  en: 'Apex Concrete 6 → 7 workers, 48 → 56 h',
+  es: 'Apex Concrete 6 → 7 trabajadores, 48 → 56 h',
+  tr: 'Demir Yapı ekibi 6 → 7 çalışan, 48 → 56 saat',
+};
+
+for (const run of RUNS) {
+  test.describe(`Fix by voice on the draft (F8, W2-10) in ${run.lang}`, () => {
+    test.use({ locale: run.locale });
+
+    test('said on the draft: listening, the preview, Save change, the new revision filed', async ({
+      page,
+    }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const fix = field.draft.fix;
+      const market = run.market();
+      const api = await installFakeFieldApi(page, market, { verified: true, consented: true });
+      await toDraft(page, run.lang, market);
+      await page.getByRole('button', { name: fix.button }).click();
+      const sheet = page.getByRole('dialog', { name: fix.title });
+      await expect(sheet).toBeVisible();
+      await expectFieldScreen(page);
+      const record = sheet.getByRole('button', { name: fix.record });
+      expect((await record.boundingBox())!.height, 'Record ≥ 120 px').toBeGreaterThanOrEqual(120);
+      await record.click();
+      await expect(sheet.getByRole('timer')).toHaveText(/^00:0[1-9] \/ 00:30$/, {
+        timeout: 10_000,
+      });
+      await sheet.getByRole('button', { name: fix.stop }).click();
+      await expect(sheet).toHaveCount(0);
+
+      // The worker listens, then the preview from code's numbers; nothing is sent meanwhile.
+      const preview = page.getByRole('region', { name: fix.previewTitle });
+      await expect(preview).toBeVisible({ timeout: 15_000 });
+      await expect(preview.getByRole('listitem')).toHaveText(FIX_LINE[run.lang]);
+      await expect(page.getByRole('button', { name: field.draft.confirm })).toBeDisabled();
+      await expectFieldScreen(page);
+      await preview.getByRole('button', { name: fix.save }).click();
+
+      // The draft again, at its new revision, with the change; then Confirm & send files it.
+      await expect(page.getByRole('status').filter({ hasText: fix.saved }).first()).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(page.getByRole('heading', { level: 1, name: field.draft.title })).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(
+        page.getByText(`7 × ${run.lang === 'tr' ? '8 sa' : '8 h'}`).first(),
+      ).toBeVisible();
+      await expectFieldScreen(page);
+      await page.getByRole('button', { name: field.draft.confirm }).click();
+      await expect(page.getByRole('heading', { level: 1, name: field.filed.title })).toBeVisible({
+        timeout: 15_000,
+      });
+
+      // What the app sent: the clip as a correction clip of the draft, then the fix and the save.
+      const upload = api.calls.filter((c) => c.method === 'POST' && c.path === 'uploads').at(-1)!;
+      expect(upload.body).toMatchObject({ kind: 'audio', fixTo: { reportId: REPORT_ID } });
+      expect(upload.body).not.toHaveProperty('siteId');
+      expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/correction`)!.body).toEqual({
+        uploadId: api.stored.at(-1)!.uploadId,
+      });
+      expect(api.calls.some((c) => /^reports\/[^/]+\/correction\/[^/]+\/apply$/.test(c.path))).toBe(
+        true,
+      );
+      expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/confirm`)?.body).toEqual({
+        version: 1,
+        draftRev: 2,
+      });
+      // Not a voice note of the report.
+      expect(api.completed).toHaveLength(1);
+    });
+  });
+}
+
+test.describe('the steppers and a fix it cannot make (F8, W2-10)', () => {
+  test.use({ locale: 'en-US' });
+
+  test('a crew line’s stepper saves the numbers on the draft shown; 390 and 1440 px', async ({
+    page,
+  }) => {
+    const field = UI_RESOURCES.en.field;
+    const market = kestrel('en-US');
+    const api = await installFakeFieldApi(page, market, { verified: true, consented: true });
+    await toDraft(page, 'en', market);
+    await page
+      .getByRole('button', { name: 'Ironclad Steel, 3 workers, 8 hours each — change' })
+      .click();
+    const sheet = page.getByRole('dialog', { name: 'Ironclad Steel' });
+    await expect(sheet).toBeVisible();
+    await expectFieldScreen(page);
+    await sheet.getByRole('button', { name: field.draft.stepper.moreWorkers }).click();
+    await expect(sheet.getByRole('textbox', { name: field.draft.stepper.workers })).toHaveValue(
+      '4',
+    );
+    await expect(sheet.getByText('Total: 32 h')).toBeVisible();
+    await sheet.getByRole('button', { name: field.draft.stepper.save }).click();
+    await expect(
+      page.getByRole('button', { name: 'Ironclad Steel, 4 workers, 8 hours each — change' }),
+    ).toBeVisible({ timeout: 15_000 });
+    expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/edit`)!.body).toEqual({
+      version: 1,
+      draftRev: 1,
+      index: 3,
+      workers: 4,
+      hoursPerWorker: 8,
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expectFieldScreen(page);
+  });
+
+  test('a typed fix that names no crew: the model’s question and Try again', async ({ page }) => {
+    const fix = UI_RESOURCES.en.field.draft.fix;
+    const market = kestrel('en-US');
+    const api = await installFakeFieldApi(page, market, {
+      verified: true,
+      consented: true,
+      fixAnswer: 'unclear',
+    });
+    await toDraft(page, 'en', market);
+    await page.getByRole('button', { name: fix.button }).click();
+    const sheet = page.getByRole('dialog', { name: fix.title });
+    await sheet.getByRole('textbox', { name: fix.typeLabel }).fill('change it to three');
+    await sheet.getByRole('button', { name: fix.send }).click();
+    await expect(page.getByText(fix.unclear)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(market.fixClarification)).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: UI_RESOURCES.en.field.draft.confirm }),
+    ).toBeEnabled();
+    await expectFieldScreen(page);
+    expect(api.calls.find((c) => c.path === `reports/${REPORT_ID}/correction`)!.body).toEqual({
+      text: 'change it to three',
+    });
+    await page.getByRole('button', { name: fix.tryAgain }).click();
+    await expect(page.getByRole('dialog', { name: fix.title })).toBeVisible();
   });
 });

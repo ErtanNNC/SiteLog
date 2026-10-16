@@ -6,6 +6,7 @@ import type {
   TestClipResponse,
   TestClipView,
   CompleteResponse,
+  CorrectionView,
   ConfirmResponse,
   ConsentResponse,
   ExpiredLinkResponse,
@@ -40,6 +41,8 @@ export interface Market {
   /** The draft (Field-06) in the org's report language; the asked crew is `manpower[askedCrew]`. */
   draft: DailyReportData;
   askedCrew: number;
+  /** W2-10: the model's question for a fix that names no crew, in the reporter's language. */
+  fixClarification: string;
 }
 
 /** A crew line of a fake draft: `workers` null until the question is answered. */
@@ -154,6 +157,7 @@ export function kestrel(locale: ReporterLocale = 'en-US'): Market {
       },
     },
     askedCrew: 2,
+    fixClarification: locale === 'es-US' ? '¿Qué cuadrilla eran tres?' : 'Which crew had three?',
   };
 }
 
@@ -204,6 +208,7 @@ export function demir(): Market {
       safety: { incidents: [], noIncidentsStated: true, visitors: [], source: [] },
     },
     askedCrew: 0,
+    fixClarification: 'Hangi ekip üç kişiydi?',
   };
 }
 
@@ -243,6 +248,13 @@ export interface FakeFieldApi {
     activated: boolean;
     /** Confirm & send was accepted. */
     confirmed: boolean;
+    /**
+     * W2-10 (F8): the draft's revision (a fix or a stepper saved moves it on), the fix being made
+     * (its preview after one listening poll) and the crew changes saved, oldest first.
+     */
+    draftRev: number;
+    fix: { id: string; via: 'voice' | 'text'; polls: number; applied: boolean } | null;
+    fixes: { index: number; workers: number | null; hoursPerWorker: number | null }[];
     /** Settings (F15, W2-02): what `preferences` answers; consent/revoke and PATCH change it. */
     prefs: PreferencesResponse;
   };
@@ -308,6 +320,11 @@ export interface FakeOptions {
   testClip?: 'heard' | 'silent' | 'rate_limited';
   /** Settings (§19 Q86): the phone opted out of texts (STOP): `consent/grant` answers 409. */
   textsOptedOut?: boolean;
+  /**
+   * W2-10: what the worker makes of a fix: one more worker on the fixed crew (the first crew that
+   * was not asked: "Apex had seven, not six"), or `unclear` (the model asks which crew).
+   */
+  fixAnswer?: 'one_more' | 'unclear';
 }
 
 /** The fake transcript of a test recording, in the reporter's language (fixtures/voice, kind test). */
@@ -337,6 +354,9 @@ export async function installFakeFieldApi(
       spokenAnswer: false,
       activated: opts.consented ?? false,
       confirmed: false,
+      draftRev: 1,
+      fix: null,
+      fixes: [],
       prefs: {
         contactPref: market.reporter.contactPref,
         locale: market.reporter.locale,
@@ -365,6 +385,52 @@ export async function installFakeFieldApi(
   const batchOf = new Map<string, string>();
   /** W2-09: answer clips (uploads with `answerTo`). */
   const answerClips = new Set<string>();
+  /** W2-10: correction clips (uploads with `fixTo`). */
+  const fixClips = new Set<string>();
+  /** The crew a fix changes: the first one that was not asked. */
+  const fixCrew = market.askedCrew === 0 ? 1 : 0;
+  /** The draft shown: the answered one, with the fixes saved on it (totals in code). */
+  const fixedDraft = (workers: number): DailyReportData => {
+    const draft = answeredDraft(market, workers);
+    for (const f of api.state.fixes) {
+      const entry = draft.manpower[f.index]!;
+      entry.workers = f.workers;
+      entry.hoursPerWorker = f.hoursPerWorker;
+      entry.totalHours =
+        f.workers === null || f.hoursPerWorker === null ? null : f.workers * f.hoursPerWorker;
+    }
+    return draft;
+  };
+  const fixView = (st: FakeFieldApi['state']): CorrectionView | null => {
+    const f = st.fix;
+    if (!f || f.applied) return null;
+    const base = fixedDraft(st.answered ?? 0).manpower[fixCrew]!;
+    const listening = f.polls < 1;
+    const unclear = !listening && options.fixAnswer === 'unclear';
+    const to = (base.workers ?? 0) + 1;
+    return {
+      id: f.id,
+      status: listening ? 'listening' : unclear ? 'unclear' : 'ready',
+      via: f.via,
+      changes:
+        listening || unclear
+          ? null
+          : [
+              {
+                kind: 'crew',
+                company: base.companyName,
+                change: 'changed',
+                workers: [base.workers, to],
+                hoursPerWorker: [base.hoursPerWorker, base.hoursPerWorker],
+                totalHours: [base.totalHours, to * (base.hoursPerWorker ?? 0)],
+              },
+            ],
+      clarification: unclear ? market.fixClarification : null,
+      reason: unclear ? 'clarification' : null,
+      version: listening || unclear ? null : 1,
+      draftRev: listening || unclear ? null : st.draftRev,
+    };
+  };
   let reportPolls = 0;
   let pollsSinceAnswer = 0;
   let pollsSinceConfirm = 0;
@@ -596,6 +662,7 @@ export async function installFakeFieldApi(
           }
         ).addTo;
         if ((body as { answerTo?: unknown }).answerTo) answerClips.add(uploadId);
+        if ((body as { fixTo?: unknown }).fixTo) fixClips.add(uploadId);
         if (addTo) {
           // F9: a photo (or caption) for a filed report of `options.reports`, in a batch.
           api.batches[addTo.batchId] ??= {
@@ -651,6 +718,17 @@ export async function installFakeFieldApi(
             created: false,
             alreadyComplete: false,
             batch: { id: batchId, ready, version: batch.version },
+          };
+          return json(route, 200, res);
+        }
+        if (fixClips.has(uploadId)) {
+          // W2-10: a correction clip is staged on the draft, not a voice note of it.
+          const res: CompleteResponse = {
+            reportId: REPORT_ID,
+            reportNo: REPORT_NO,
+            reportStatus: 'awaiting_confirmation',
+            created: false,
+            alreadyComplete: false,
           };
           return json(route, 200, res);
         }
@@ -730,7 +808,7 @@ export async function installFakeFieldApi(
           status = ++pollsSinceAnswer <= 1 ? 'processing' : 'awaiting_confirmation';
         } else if (st.answered !== null) {
           // decide_next runs once after the answer, then the draft; filing after Confirm & send.
-          data = answeredDraft(market, st.answered);
+          data = fixedDraft(st.answered);
           status =
             ++pollsSinceAnswer <= 1
               ? 'processing'
@@ -753,7 +831,7 @@ export async function installFakeFieldApi(
           confirmedAt: st.confirmed ? '2026-10-09T22:43:00.000Z' : null,
           question,
           data,
-          draftRev: data ? 1 : null,
+          draftRev: data ? st.draftRev : null,
           progress: { voiceNotes: audio, transcribed: written ? audio : 0, photos: 0 },
           // A filed report's PDF, signed (W1-15's Filed screen opens it in a new tab).
           pdfUrl: status === 'filed' ? `/__storage/pdfs/${REPORT_NO}_v1.pdf?token=e2e` : null,
@@ -763,6 +841,7 @@ export async function installFakeFieldApi(
               ? { canAdd: true, remaining: 4, until: '2026-10-11T04:59:00.000Z', pending: 0 }
               : null,
           changeNote: null,
+          correction: status === 'awaiting_confirmation' ? fixView(st) : null,
           lastVoiceAnswer: st.leftForOffice
             ? { questionId: QUESTION_ID, outcome: 'unclear' }
             : st.spokenAnswer && st.answered !== null
@@ -808,11 +887,71 @@ export async function installFakeFieldApi(
         };
         return json(route, 202, res);
       }
+      // ── W2-10: Fix by voice and the steppers ─────────────────────────────────────────────────
+      if (path === `reports/${REPORT_ID}/correction`) {
+        const st = api.state;
+        if (st.answered === null) return json(route, 409, { error: 'wrong_state' });
+        const b = body as { uploadId?: string; text?: string };
+        if (b.uploadId && !fixClips.has(b.uploadId))
+          return json(route, 404, { error: 'not_found' });
+        if (st.fix && !st.fix.applied && st.fix.polls < 1)
+          return json(route, 409, { error: 'correction_pending' });
+        st.fix = {
+          id: `c${api.calls.length}-0000-4000-8000-000000000000`,
+          via: b.uploadId ? 'voice' : 'text',
+          polls: 0,
+          applied: false,
+        };
+        return json(route, 202, fixView(st));
+      }
+      const fixPoll = /^reports\/[^/]+\/correction\/([^/]+)$/.exec(path);
+      if (fixPoll) {
+        const st = api.state;
+        if (!st.fix || st.fix.id !== fixPoll[1]) return json(route, 404, { error: 'not_found' });
+        const view = fixView(st);
+        st.fix.polls++;
+        return json(route, 200, view);
+      }
+      const fixApply = /^reports\/[^/]+\/correction\/([^/]+)\/apply$/.exec(path);
+      if (fixApply) {
+        const st = api.state;
+        const view = fixView(st);
+        if (!st.fix || st.fix.id !== fixApply[1] || view?.status !== 'ready')
+          return json(route, 409, { error: 'correction_not_ready' });
+        const line = view.changes![0] as {
+          workers: [number, number];
+          hoursPerWorker: [number, number];
+        };
+        st.fixes.push({
+          index: fixCrew,
+          workers: line.workers[1],
+          hoursPerWorker: line.hoursPerWorker[1],
+        });
+        st.fix.applied = true;
+        st.draftRev++;
+        pollsSinceAnswer = 0;
+        return json(route, 200, { status: 'applied', reportStatus: 'processing' });
+      }
+      if (path === `reports/${REPORT_ID}/edit`) {
+        const st = api.state;
+        const b = body as {
+          version: number;
+          draftRev: number;
+          index: number;
+          workers: number | null;
+          hoursPerWorker: number | null;
+        };
+        if (b.draftRev !== st.draftRev) return json(route, 409, { error: 'draft_changed' });
+        st.fixes.push({ index: b.index, workers: b.workers, hoursPerWorker: b.hoursPerWorker });
+        st.draftRev++;
+        pollsSinceAnswer = 0;
+        return json(route, 202, { status: 'processing', reportStatus: 'processing' });
+      }
       if (path === `reports/${REPORT_ID}/confirm`) {
         if (api.state.answered === null) return json(route, 409, { error: 'wrong_state' });
-        // The draft shown is version 1 at revision 1 (field-api checks both, 20261015000070).
+        // The draft shown is version 1 at its revision (field-api checks both, 20261015000070).
         const b = body as { version?: number; draftRev?: number };
-        if (b.version !== 1 || b.draftRev !== 1)
+        if (b.version !== 1 || b.draftRev !== api.state.draftRev)
           return json(route, 409, { error: 'draft_changed' });
         api.state.confirmed = true;
         return json(route, 202, { status: 'queued' } satisfies ConfirmResponse);

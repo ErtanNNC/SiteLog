@@ -11,7 +11,9 @@ import {
   type CompleteUploadResult,
   type ConfirmResult,
   type DayStatusResult,
+  type DraftWriteResult,
   type FieldStore,
+  type RequestCorrectionResult,
   type RateLimitResult,
   type ReportWithDate,
 } from './store.ts';
@@ -309,12 +311,14 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
     },
 
     async countReportMedia(reportId) {
-      // A spoken answer's clip (W2-09, `question_id`) is not a voice note of the report.
+      // A spoken answer's clip (W2-09, `question_id`) and a correction clip (W2-10,
+      // `correction_report_id`) are not voice notes of the report.
       const { data: uploads } = await admin
         .from('uploads')
         .select('id, kind')
         .eq('report_id', reportId)
         .is('question_id', null)
+        .is('correction_report_id', null)
         .throwOnError();
       const voice = uploads.filter((u) => u.kind === 'audio').map((u) => u.id);
       let transcribed = 0;
@@ -526,6 +530,64 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
           p_question_id: input.questionId,
           p_reporter_id: input.reporterId,
           p_upload_id: input.uploadId,
+        }),
+      );
+    },
+
+    async requestCorrection(input) {
+      return await rpc<RequestCorrectionResult>(
+        admin.rpc('field_request_correction', {
+          p_report_id: input.reportId,
+          p_reporter_id: input.reporterId,
+          p_upload_id: input.uploadId,
+          p_text: input.text,
+        }),
+      );
+    },
+
+    async getCorrection(id) {
+      const { data } = await admin
+        .from('draft_corrections')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+        .throwOnError();
+      return data;
+    },
+
+    async latestCorrection(reportId) {
+      const { data } = await admin
+        .from('draft_corrections')
+        .select('*')
+        .eq('report_id', reportId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .throwOnError();
+      return data;
+    },
+
+    async applyCorrection(correctionId, reportId, reporterId) {
+      return await rpc<DraftWriteResult>(
+        admin.rpc('field_apply_correction', {
+          p_correction_id: correctionId,
+          p_report_id: reportId,
+          p_reporter_id: reporterId,
+        }),
+      );
+    },
+
+    async editDraft(input) {
+      return await rpc<DraftWriteResult>(
+        admin.rpc('field_edit_draft', {
+          p_report_id: input.reportId,
+          p_reporter_id: input.reporterId,
+          p_version: input.version,
+          p_draft_rev: input.draftRev,
+          p_base: input.base,
+          p_data: input.data,
+          p_changes: input.changes,
+          p_source: input.source,
         }),
       );
     },

@@ -359,3 +359,89 @@ export async function seedFiledReport(f: FieldFixture): Promise<FiledReport> {
   });
   return { reportId, reportNo, date };
 }
+
+export interface SeededDraft {
+  reportId: string;
+  reportNo: string;
+}
+
+/**
+ * Today's web report awaiting confirmation, as decide_next leaves it (W2-10): a v2 draft with Apex
+ * Concrete at 6 × 8 h = 48 h and Delta answered (5 × 8 h). The org asks one question per report
+ * and that one is answered, so after a fix the CI worker's decide_next shows the draft again.
+ */
+export async function seedDraft(f: FieldFixture): Promise<SeededDraft> {
+  await rest('PATCH', `org_settings?org_id=eq.${f.orgId}`, { max_questions_per_report: 1 });
+  const timezone = 'America/Chicago';
+  const date = formatDateInTz(new Date(), timezone);
+  const [day] = await rest<{ id: string }[]>('POST', 'site_days', {
+    site_id: f.site.id,
+    date,
+    status: 'processing',
+    deadline_at: new Date(Date.now() + 6 * 3600_000).toISOString(),
+  });
+  const reportNo = `${f.site.projectCode}-0003`;
+  const [report] = await rest<{ id: string }[]>('POST', 'reports', {
+    org_id: f.orgId,
+    site_id: f.site.id,
+    site_day_id: day!.id,
+    report_no: reportNo,
+    status: 'awaiting_confirmation',
+    current_version: 1,
+    reporter_id: f.reporter.id,
+    channel: 'web',
+    language: 'en',
+    received_at: new Date().toISOString(),
+  });
+  const reportId = report!.id;
+  (f.reportIds ??= []).push(reportId);
+  await rest('PATCH', `site_days?id=eq.${day!.id}`, { report_id: reportId });
+  const voice = { type: 'voice_note', uploadId: '00000000-0000-4000-8000-0000000000e3', start: 12 };
+  const line = (
+    companyName: string,
+    companyNameHeard: string,
+    workers: number,
+    start: number,
+  ): DailyReportData['manpower'][number] => ({
+    companyId: null,
+    companyNameHeard,
+    companyName,
+    workers,
+    hoursPerWorker: 8,
+    totalHours: workers * 8,
+    hoursBasis: 'full_day_default',
+    confidence: 0.95,
+    source: [{ ...voice, start } as DailyReportData['manpower'][number]['source'][number]],
+  });
+  const draft: DailyReportData = {
+    ...emptyReportData(date, { reportLanguage: 'en', units: 'imperial' }),
+    summary: 'Slab pour on Level 4; ductwork on Level 2.',
+    weather: { conditionsText: 'Dry', periods: [] },
+    manpower: [
+      line('Apex Concrete', 'Apex', 6, 12),
+      line('Delta Mechanical', 'the Delta guys', 5, 80),
+    ],
+    workPerformed: [{ area: 'Level 4', activity: 'slab pour', status: 'complete', source: [] }],
+    safety: { incidents: [], noIncidentsStated: true, visitors: [], source: [] },
+  };
+  await rest('POST', 'report_versions', {
+    report_id: reportId,
+    version: 1,
+    data: draft,
+    summary: draft.summary,
+    author: 'agent',
+  });
+  // The one question of the report, answered: decide_next asks nothing more.
+  await rest('POST', 'questions', {
+    report_id: reportId,
+    channel: 'web',
+    field: 'manpower.workers',
+    target: { manpowerIndex: 1, companyName: 'Delta Mechanical' },
+    prompt: 'How many from Delta?',
+    options: [{ id: 'o2', label: '5 · full day' }],
+    asked_at: new Date().toISOString(),
+    answered_at: new Date().toISOString(),
+    answer: { optionId: 'o2', text: '5 · full day', parsed: { workers: 5, fullDay: true } },
+  });
+  return { reportId, reportNo };
+}

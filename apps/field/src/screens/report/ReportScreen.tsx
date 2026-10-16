@@ -57,6 +57,9 @@ function ReportLoaded({
   const [spoken, setSpoken] = useState<string | null>(null);
   // A refusal that sent the screen back to the latest view ("That question was already answered").
   const [notice, setNotice] = useState<string | null>(null);
+  // W2-10: a fix or a stepper saved on the draft ("Change saved. Check the report again…"), on the
+  // screens until the draft is shown again and sent.
+  const [changed, setChanged] = useState<string | null>(null);
   // Filed without a PDF (or with photos being added, F9): what the screen is waiting for (the
   // version, and whether photos are pending), since when, and whether it has stopped waiting.
   const pdfWait = useRef<{ key: string; from: number } | null>(null);
@@ -122,6 +125,16 @@ function ReportLoaded({
       setConfirmed(draft);
       setNotice(null);
       setConfirmation(null);
+      setChanged(null);
+      restart();
+    },
+    [restart],
+  );
+  const onChanged = useCallback(
+    (message: string) => {
+      setChanged(message);
+      setNotice(null);
+      setConfirmation(null);
       restart();
     },
     [restart],
@@ -138,8 +151,16 @@ function ReportLoaded({
   // F7's line (a web toast in the spec) stays on the screens after the answer; a refusal that
   // sent the screen back to the latest view says why. Each new screen starts at its heading.
   const notices =
-    shownConfirmation || voiceUnclear || notice ? (
+    shownConfirmation || voiceUnclear || notice || changed ? (
       <div className="flex flex-col gap-2">
+        {changed ? (
+          <p
+            role="status"
+            className="m-0 rounded-card border border-rebar bg-white px-3.5 py-2.5 text-[16px] leading-6"
+          >
+            {changed}
+          </p>
+        ) : null}
         {voiceUnclear ? (
           <p
             role="status"
@@ -189,6 +210,7 @@ function ReportLoaded({
         notice={notices}
         onConfirmed={onConfirmed}
         onStale={onStale}
+        onChanged={onChanged}
       />
     );
   }

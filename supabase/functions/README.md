@@ -313,7 +313,13 @@ Notes:
   no-work day with `no_work_pdf`, makes the report from the answers and queues its filing;
   `field_set_day_status()` before it), `field_answer_question_voice()` (W2-09: F7 _Other…_, a
   completed answer clip of the open question, `uploads.question_id`, handed to the worker's
-  `parse_answer`; the clip completes onto the question's report as no report material), the
+  `parse_answer`; the clip completes onto the question's report as no report material),
+  `field_request_correction()`, `field_apply_correction()` and `field_edit_draft()` (W2-10: F8
+  _Fix by voice_ and the steppers; a completed correction clip of the draft,
+  `uploads.correction_report_id`, or typed words, handed to the worker's `apply_correction`, whose
+  preview **Save change** writes at the draft revision it was made from, else 409
+  `draft_changed`; a stepper's crew line built in code with `applyCrewEdit`, citing
+  `reporter_edit`), the
   test recording's `field_test_clip_create()`, `field_test_clip_complete()` and
   `field_test_clip_read()` (W2-13: F4's 20-second test outside any report, `test_clips`; the
   snippet answered once, then deleted) and

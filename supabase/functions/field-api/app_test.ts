@@ -2713,3 +2713,271 @@ Deno.test(
     });
   },
 );
+
+// ── W2-10: Fix by voice and the steppers on the draft (F8, §10.6, Q80) ─────────────────────────
+
+/** A web draft awaiting confirmation: Apex Concrete 6 × 8 h = 48 h, at revision 1. */
+async function awaitingDraft(h: Harness) {
+  await consented(h);
+  const u = await h.call('POST', 'uploads', {
+    body: { kind: 'audio', mime: 'audio/webm', bytes: 1, siteId: SITE_A },
+  });
+  h.store.put(`audio/${u.json.path}`);
+  const done = await h.call('POST', `uploads/${u.json.uploadId}/complete`);
+  const reportId = done.json.reportId as string;
+  const report = h.store.reports.find((r) => r.id === reportId)!;
+  report.status = 'awaiting_confirmation';
+  const note = { type: 'voice_note' as const, uploadId: u.json.uploadId as string, start: 18.9 };
+  const data: DailyReportData = {
+    ...emptyReportData('2026-10-09', { reportLanguage: 'en', units: 'imperial' }),
+    summary: 'Slab pour on Level 4.',
+    manpower: [
+      {
+        companyId: 'apex',
+        companyNameHeard: 'Apex',
+        companyName: 'Apex Concrete',
+        workers: 6,
+        hoursPerWorker: 8,
+        totalHours: 48,
+        hoursBasis: 'full_day_default',
+        confidence: 0.95,
+        source: [note],
+      },
+    ],
+  };
+  h.store.versions.push({
+    report_id: reportId,
+    version: 1,
+    data: data as never,
+    summary: null,
+    pdf_path: null,
+    author: 'agent',
+    author_user_id: null,
+    author_message_id: null,
+    change_note: null,
+    created_at: T0.toISOString(),
+    via: null,
+    draft_rev: 1,
+  });
+  return { reportId, report, data, note };
+}
+
+/** W2-10: a correction clip of the draft: created, put, completed. */
+async function fixClip(h: Harness, reportId: string, complete = true) {
+  const u = await h.call('POST', 'uploads', {
+    body: { kind: 'audio', mime: 'audio/webm', bytes: 2, fixTo: { reportId } },
+  });
+  assertEquals(u.status, 201);
+  h.store.put(`audio/${u.json.path}`);
+  if (complete) await h.call('POST', `uploads/${u.json.uploadId}/complete`);
+  return u.json as { uploadId: string; path: string };
+}
+
+const SEVEN = (data: DailyReportData): DailyReportData => ({
+  ...data,
+  manpower: [{ ...data.manpower[0]!, workers: 7, totalHours: 56 }],
+});
+const SEVEN_LINES = [
+  {
+    kind: 'crew',
+    company: 'Apex Concrete',
+    change: 'changed',
+    workers: [6, 7],
+    hoursPerWorker: [8, 8],
+    totalHours: [48, 56],
+  },
+];
+
+Deno.test(
+  'fix by voice (W2-10): the clip is staged, never report material; the preview is saved at its revision only',
+  async () => {
+    const h = setup();
+    const { reportId, data } = await awaitingDraft(h);
+    const clip = await fixClip(h, reportId, false);
+    const row = h.store.uploads.find((x) => x.id === clip.uploadId)!;
+    assertEquals(
+      [row.correction_report_id, row.site_id, row.storage_path.split('/')[2]],
+      [reportId, SITE_A, '2026-10-09'],
+    );
+    // Before the clip is complete: refused.
+    const early = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { uploadId: clip.uploadId },
+    });
+    assertEquals([early.status, early.json.error], [409, 'upload_missing']);
+    const jobsBefore = h.store.jobs.length;
+    const done = await h.call('POST', `uploads/${clip.uploadId}/complete`);
+    assertEquals([done.status, done.json.reportStatus], [200, 'awaiting_confirmation']);
+    // Not a voice note of the report: no job, not counted, the draft unchanged.
+    assertEquals(h.store.jobs.length, jobsBefore);
+    const view = await h.call('GET', `reports/${reportId}`);
+    assertEquals(
+      [(view.json.progress as { voiceNotes: number }).voiceNotes, view.json.correction],
+      [1, null],
+    );
+
+    const res = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { uploadId: clip.uploadId },
+    });
+    assertEquals(res.status, 202);
+    const cid = res.json.id as string;
+    assertEquals(res.json, {
+      id: cid,
+      status: 'listening',
+      via: 'voice',
+      changes: null,
+      clarification: null,
+      reason: null,
+      version: null,
+      draftRev: null,
+    });
+    assertEquals(
+      h.store.jobs
+        .filter((j) => j.type === 'apply_correction')
+        .map((j) => [j.dedupe_key, j.payload]),
+      [[`correction:${cid}`, { reportId, correctionId: cid }]],
+    );
+    // A retry of the same clip answers the same fix; another fix meanwhile waits.
+    const again = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { uploadId: clip.uploadId },
+    });
+    assertEquals([again.status, again.json.id], [202, cid]);
+    const typed = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { text: 'Apex had 8' },
+    });
+    assertEquals([typed.status, typed.json.error], [409, 'correction_pending']);
+    // Nothing to save yet.
+    const notReady = await h.call('POST', `reports/${reportId}/correction/${cid}/apply`);
+    assertEquals([notReady.status, notReady.json.error], [409, 'correction_not_ready']);
+    assertEquals(
+      ((await h.call('GET', `reports/${reportId}`)).json.correction as { status: string }).status,
+      'listening',
+    );
+
+    // The worker's preview (apply_correction, code's numbers).
+    h.store.settleCorrectionReady(cid, SEVEN(data), SEVEN_LINES);
+    const ready = await h.call('GET', `reports/${reportId}/correction/${cid}`);
+    assertEquals(ready.json, {
+      id: cid,
+      status: 'ready',
+      via: 'voice',
+      changes: SEVEN_LINES,
+      clarification: null,
+      reason: null,
+      version: 1,
+      draftRev: 1,
+    });
+    assertEquals(
+      ((await h.call('GET', `reports/${reportId}`)).json.correction as { status: string }).status,
+      'ready',
+    );
+
+    const saved = await h.call('POST', `reports/${reportId}/correction/${cid}/apply`);
+    assertEquals(
+      [saved.status, saved.json],
+      [200, { status: 'applied', reportStatus: 'processing' }],
+    );
+    const v = h.store.versions[0]!;
+    assertEquals(
+      [(v.data as unknown as DailyReportData).manpower[0]!.totalHours, v.draft_rev],
+      [56, 2],
+    );
+    assertEquals(
+      h.store.jobs.filter((j) => j.type === 'decide_next').map((j) => j.dedupe_key),
+      [`decide:${reportId}:correction:${cid}`],
+    );
+    assert(h.store.audits.some((a) => a.action === 'report.draft_corrected'));
+    // A retry (the answer lost): applied, nothing written twice.
+    const retry = await h.call('POST', `reports/${reportId}/correction/${cid}/apply`);
+    assertEquals([retry.status, retry.json.status], [200, 'applied']);
+    assertEquals(h.store.versions[0]!.draft_rev, 2);
+    // The draft is processing now: no correction shown, and no new fix until it is shown again.
+    const after = await h.call('GET', `reports/${reportId}`);
+    assertEquals([after.json.status, after.json.correction], ['processing', null]);
+    const late = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { text: 'Apex had 8' },
+    });
+    assertEquals([late.status, late.json.error], [409, 'wrong_state']);
+  },
+);
+
+Deno.test(
+  'fix by voice (W2-10): a newer draft makes the preview draft_changed; typed fixes; scope',
+  async () => {
+    const h = setup();
+    const { reportId, data } = await awaitingDraft(h);
+    const both = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { text: 'Apex had 7', uploadId: '11111111-0000-4000-8000-00000000abcd' },
+    });
+    assertEquals([both.status, both.json.error], [400, 'invalid_request']);
+    const res = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { text: 'Apex had 7, not 6' },
+    });
+    const cid = res.json.id as string;
+    assertEquals([res.status, res.json.via, res.json.status], [202, 'text', 'listening']);
+    h.store.settleCorrectionReady(cid, SEVEN(data), SEVEN_LINES);
+    // A late photo re-extracted the draft in place: another revision.
+    h.store.versions[0]!.draft_rev = 2;
+    const stale = await h.call('POST', `reports/${reportId}/correction/${cid}/apply`);
+    assertEquals(
+      [stale.status, stale.json.error, stale.json.currentVersion, stale.json.draftRev],
+      [409, 'draft_changed', 1, 2],
+    );
+    assertEquals(h.store.corrections[0]!.status, 'stale');
+    assertEquals((h.store.versions[0]!.data as unknown as DailyReportData).manpower[0]!.workers, 6);
+    // Dana covers the site but the fix is Marco's.
+    await consented(h, CODES.dana);
+    const dana = await h.call('GET', `reports/${reportId}/correction/${cid}`, {
+      code: CODES.dana,
+    });
+    assertEquals(dana.status, 404);
+    // A correction clip of a report that is not a draft is refused at upload.
+    h.store.reports.find((r) => r.id === reportId)!.status = 'filed';
+    const filed = await h.call('POST', 'uploads', {
+      body: { kind: 'audio', mime: 'audio/webm', bytes: 2, fixTo: { reportId } },
+    });
+    assertEquals([filed.status, filed.json.error], [409, 'wrong_state']);
+    // A photo is never a correction clip.
+    const photo = await h.call('POST', 'uploads', {
+      body: { kind: 'photo', mime: 'image/jpeg', bytes: 2, fixTo: { reportId } },
+    });
+    assertEquals([photo.status, photo.json.error], [400, 'invalid_request']);
+  },
+);
+
+Deno.test(
+  'steppers (W2-10, Q80): the crew line in code, reporter_edit, the draft the reporter saw only',
+  async () => {
+    const h = setup();
+    const { reportId, note } = await awaitingDraft(h);
+    const edit = (body: Record<string, unknown>) =>
+      h.call('POST', `reports/${reportId}/edit`, { body: { version: 1, draftRev: 1, ...body } });
+    const old = await edit({ draftRev: 2, index: 0, workers: 7, hoursPerWorker: 8 });
+    assertEquals([old.status, old.json.error], [409, 'draft_changed']);
+    const none = await edit({ index: 3, workers: 7, hoursPerWorker: 8 });
+    assertEquals([none.status, none.json.error], [400, 'edit_not_accepted']);
+    const same = await edit({ index: 0, workers: 6, hoursPerWorker: 8 });
+    assertEquals([same.status, same.json.error], [400, 'edit_not_accepted']);
+    const half = await edit({ index: 0, workers: 6.5, hoursPerWorker: 8 });
+    assertEquals([half.status, half.json.error], [400, 'invalid_request']);
+
+    const res = await edit({ index: 0, workers: 7, hoursPerWorker: 9 });
+    assertEquals(
+      [res.status, res.json],
+      [202, { status: 'processing', reportStatus: 'processing' }],
+    );
+    const m = (h.store.versions[0]!.data as unknown as DailyReportData).manpower[0]!;
+    assertEquals([m.workers, m.hoursPerWorker, m.totalHours, m.hoursBasis], [7, 9, 63, 'stated']);
+    assertEquals(m.source, [
+      note,
+      { type: 'reporter_edit', reporterId: MARCO, at: T0.toISOString(), via: 'web' },
+    ]);
+    assertEquals(
+      h.store.jobs.filter((j) => j.type === 'decide_next').map((j) => j.dedupe_key),
+      [`decide:${reportId}:edit:v1:r1`],
+    );
+    assert(h.store.audits.some((a) => a.action === 'report.draft_edited'));
+    // Processing now: no stepper until the draft is shown again.
+    const busy = await edit({ draftRev: 2, index: 0, workers: 8, hoursPerWorker: 9 });
+    assertEquals([busy.status, busy.json.error], [409, 'wrong_state']);
+  },
+);

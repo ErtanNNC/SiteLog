@@ -4,6 +4,7 @@ import type {
   ConsentType,
   CountryRow,
   DailyReportData,
+  DraftCorrectionRow,
   FieldDeviceRow,
   FieldLinkRow,
   Json,
@@ -64,7 +65,30 @@ export interface CompleteUploadResult {
   batch?: { id: string; ready: boolean; captionUploadId: string | null };
   /** W2-09: a spoken answer's clip, staged on its question's report (no source, no job). */
   answerClip?: boolean;
+  /** W2-10: a correction clip, staged on the draft it fixes (no source, no job). */
+  correctionClip?: boolean;
 }
+
+/** field_request_correction() (20261016000100, W2-10): the fix handed to apply_correction. */
+export interface RequestCorrectionResult {
+  id: string;
+  status: DraftCorrectionRow['status'];
+  jobId: number | null;
+  repeat?: boolean;
+}
+
+/**
+ * field_apply_correction() / field_edit_draft() (W2-10): the fix written to the draft (the report
+ * to processing, decide_next queued), or `stale` when the draft is not the one it was made from.
+ */
+export type DraftWriteResult =
+  | { status: 'applied' | 'processing'; reportStatus: ReportStatus; jobId: number | null }
+  | {
+      status: 'stale';
+      reportStatus: ReportStatus;
+      currentVersion: number;
+      draftRev: number | null;
+    };
 
 /** field_attach_photos() (20261016000030, F9): the version the batch made (or made before). */
 export interface AttachPhotosResult {
@@ -156,6 +180,11 @@ export const FIELD_DB_ERRORS = [
   'batch_not_found',
   'batch_incomplete',
   'answer_pending',
+  'correction_pending',
+  'correction_not_ready',
+  'correction_not_found',
+  'invalid_request',
+  'invalid_edit',
   'test_clip_not_found',
   'consent_required',
   'consent_not_offered',
@@ -295,6 +324,8 @@ export interface FieldStore extends DailyLinkStore {
     batch_size?: number | null;
     /** W2-09: the web question a spoken answer's clip answers. */
     question_id?: string | null;
+    /** W2-10: the draft a correction clip fixes. */
+    correction_report_id?: string | null;
   }): Promise<UploadRow>;
   getUpload(id: string): Promise<UploadRow | null>;
   createSignedUploadUrl(
@@ -369,6 +400,36 @@ export interface FieldStore extends DailyLinkStore {
     reporterId: string;
     uploadId: string;
   }): Promise<VoiceAnswerResult>;
+  /**
+   * W2-10 (20261016000100, F8 *Fix by voice* and the steppers): field_request_correction() (a fix
+   * of a draft awaiting confirmation, spoken or typed: apply_correction queued, audited),
+   * field_apply_correction() (Save change at the preview's revision, else `stale`) and
+   * field_edit_draft() (a stepper's line built in code on the draft the reporter saw, else
+   * `stale`). The correction rows: one by id, and a report's latest.
+   */
+  requestCorrection(input: {
+    reportId: string;
+    reporterId: string;
+    uploadId: string | null;
+    text: string | null;
+  }): Promise<RequestCorrectionResult>;
+  getCorrection(id: string): Promise<DraftCorrectionRow | null>;
+  latestCorrection(reportId: string): Promise<DraftCorrectionRow | null>;
+  applyCorrection(
+    correctionId: string,
+    reportId: string,
+    reporterId: string,
+  ): Promise<DraftWriteResult>;
+  editDraft(input: {
+    reportId: string;
+    reporterId: string;
+    version: number;
+    draftRev: number;
+    base: Json;
+    data: Json;
+    changes: Json;
+    source: Json;
+  }): Promise<DraftWriteResult>;
   /**
    * F4's test recording (W2-13, 20261016000070): field_test_clip_create() (the row, audited
    * `test_clip.created`, the 10-minute delete_test_clip; refused without the recording consent),

@@ -12,6 +12,7 @@ import type {
   UploadKind,
 } from './enums.ts';
 import type { ReporterLocale } from './locale.ts';
+import type { CorrectionChange } from './report/correction.ts';
 import type { DailyReportData } from './schemas/report.ts';
 
 /**
@@ -149,6 +150,12 @@ export const FIELD_API_ERRORS = [
   'answer_not_accepted',
   /** W2-09: a spoken answer to this question is still being listened to (`parse_answer`). */
   'answer_pending',
+  /** W2-10: a fix of this draft is still being listened to (`apply_correction`). */
+  'correction_pending',
+  /** W2-10: the correction has no preview to save (still listening, unclear, saved or replaced). */
+  'correction_not_ready',
+  /** W2-10: a stepper's numbers do not fit the crew line (no such line, or no change). */
+  'edit_not_accepted',
   /** F9 (W2-04): the filed report takes no more photos (its window ended at 23:59 the next day). */
   'photos_window_closed',
   /** F9: FILED_PHOTOS_MAX photos were added after filing already. */
@@ -413,6 +420,53 @@ export interface ReportView {
   } | null;
   /** The current version's change note (null for version 1 and drafts). */
   changeNote: string | null;
+  /**
+   * W2-10 (F8 *Fix by voice*): the latest fix of this draft while it matters (listening, a preview
+   * to save, or one it could not read); null otherwise. A reload shows the preview again.
+   */
+  correction: CorrectionView | null;
+}
+
+/** F8 *Fix by voice* (W2-10): a correction clip is short; the recorder stops it at 30 seconds. */
+export const CORRECTION_CLIP_MAX_MS = 30_000;
+
+/**
+ * W2-10: a fix still being listened to after this long (its job keeps failing) no longer holds the
+ * draft: the view shows it as unclear (`reason: 'timeout'`) and a new fix may be made (the same
+ * 5 minutes in field_request_correction()).
+ */
+export const CORRECTION_LISTEN_TIMEOUT_S = 5 * 60;
+
+/**
+ * W2-10 (F8 *Fix by voice*, §10.6, Appendix B `reports/:id/correction`): a correction of the draft
+ * and its preview. `listening` while the worker transcribes and parses it; `ready` with the
+ * preview (`changes`, code's numbers: "Apex Concrete 6 → 7 workers, 48 → 56 h") made from the
+ * draft at `version` / `draftRev`, which **Save change** applies there only (else 409
+ * `draft_changed`); `unclear` when code could not apply it (`reason`) or the model asked which
+ * line was meant (`clarification`, the model's words in the reporter's language); `applied` once
+ * saved; `stale` when the draft changed first; `discarded` when a newer fix replaced it.
+ */
+export interface CorrectionView {
+  id: string;
+  status: 'listening' | 'ready' | 'unclear' | 'applied' | 'stale' | 'discarded';
+  via: 'voice' | 'text';
+  changes: CorrectionChange[] | null;
+  clarification: string | null;
+  reason: string | null;
+  version: number | null;
+  draftRev: number | null;
+}
+
+/** `POST reports/:id/correction/:cid/apply` (W2-10): the fix is in the draft; decide_next shows it. */
+export interface ApplyCorrectionResponse {
+  status: 'applied';
+  reportStatus: ReportStatus;
+}
+
+/** `POST reports/:id/edit` (W2-10, the draft's steppers): the crew line changed; decide_next runs. */
+export interface EditResponse {
+  status: 'processing';
+  reportStatus: ReportStatus;
 }
 
 /**

@@ -1,5 +1,6 @@
 import {
   CONSENT_TYPES,
+  CORRECTION_LISTEN_TIMEOUT_S,
   DEVICE_COOKIE_MAX_AGE_S,
   REQUIRED_CONSENTS,
   UI_RESOURCES,
@@ -22,7 +23,10 @@ import {
   type AnswerValue,
   type ConsentRow,
   type ConsentType,
+  type CorrectionChange,
+  type CorrectionView,
   type CountryPack,
+  type DraftCorrectionRow,
   type DailyReportData,
   type DayOffDetails,
   type QuestionRow,
@@ -587,4 +591,51 @@ export function dayOffPlan(input: {
     defaultShiftHours: input.defaultShiftHours,
   });
   return { questions, data };
+}
+
+/**
+ * A fix of the draft as the Draft screen shows it (W2-10, F8 *Fix by voice*): its status, the
+ * preview's lines (code's numbers) once ready, the model's question when it could not tell what to
+ * change, and the draft revision the preview was made from. A fix still listening after
+ * `CORRECTION_LISTEN_TIMEOUT_S` (its job keeps failing) is shown unclear (`timeout`). Pure.
+ */
+export function correctionView(
+  row: Pick<
+    DraftCorrectionRow,
+    | 'id'
+    | 'status'
+    | 'via'
+    | 'changes'
+    | 'clarification'
+    | 'reason'
+    | 'base_version'
+    | 'base_rev'
+    | 'created_at'
+  >,
+  now: Date,
+): CorrectionView {
+  const timedOut =
+    row.status === 'listening' &&
+    now.getTime() - new Date(row.created_at).getTime() > CORRECTION_LISTEN_TIMEOUT_S * 1000;
+  const ready = row.status === 'ready';
+  return {
+    id: row.id,
+    status: timedOut ? 'unclear' : row.status,
+    via: row.via === 'voice' ? 'voice' : 'text',
+    changes:
+      ready && Array.isArray(row.changes) ? (row.changes as unknown as CorrectionChange[]) : null,
+    clarification: row.status === 'unclear' ? row.clarification : null,
+    reason: timedOut ? 'timeout' : row.reason,
+    version: ready ? row.base_version : null,
+    draftRev: ready ? row.base_rev : null,
+  };
+}
+
+/** The fix a draft shows (W2-10): the latest one while it is listening, a preview or unclear. */
+export function openCorrectionView(
+  row: Parameters<typeof correctionView>[0] | null,
+  now: Date,
+): CorrectionView | null {
+  if (!row || !['listening', 'ready', 'unclear'].includes(row.status)) return null;
+  return correctionView(row, now);
 }

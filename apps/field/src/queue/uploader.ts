@@ -197,12 +197,14 @@ export async function uploadItem(
             mime: current.mime,
             bytes: current.bytes,
             // F9: a photo for a filed report goes in that report's site and day; W2-09: so does
-            // a spoken answer, in its question's report.
+            // a spoken answer, in its question's report; W2-10: a correction clip, in its draft's.
             ...(current.addTo
               ? { addTo: current.addTo }
               : current.answerTo
                 ? { answerTo: current.answerTo }
-                : { siteId: current.siteId, date: current.date }),
+                : current.fixTo
+                  ? { fixTo: current.fixTo }
+                  : { siteId: current.siteId, date: current.date }),
             ...(current.recordedAt ? { recordedAt: current.recordedAt } : {}),
           },
           s,

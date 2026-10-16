@@ -1,4 +1,5 @@
 import type { AnswerConfirmation, ReportView } from '@sitelog/shared/field-contract.ts';
+import type { CorrectionChange } from '@sitelog/shared/report/correction.ts';
 import { abbreviateArea, formatAudioTimestamp, formatHoursIn } from '@sitelog/shared/format.ts';
 import { intlLocaleOf } from '@sitelog/shared/locale.ts';
 import type { DailyReportData, WeatherPeriod, WorkItem } from '@sitelog/shared/schemas/report.ts';
@@ -183,4 +184,47 @@ export function parseTypedNumber(
   if (!(opts.integer ? /^\d+$/ : /^\d+(\.\d+)?$/).test(s)) return null;
   const n = Number(s);
   return Number.isFinite(n) && n >= 0 && n <= opts.max ? n : null;
+}
+
+/**
+ * One line of a fix's preview (W2-10, F8): "Apex Concrete 6 → 7 workers, 48 → 56 h" from code's
+ * numbers (`CorrectionChange`); a number the draft does not have is "—". Pure.
+ */
+export function correctionLine(change: CorrectionChange, t: T, language: FieldLanguage): string {
+  const num = (n: number | null) => (n === null ? '—' : formatNumberIn(n, language));
+  switch (change.kind) {
+    case 'crew': {
+      if (change.change === 'removed')
+        return t('draft.fix.lines.removed', { company: change.company });
+      if (change.change === 'added')
+        return t('draft.fix.lines.added', {
+          company: change.company,
+          value: crewValue(
+            { workers: change.workers[1], hoursPerWorker: change.hoursPerWorker[1] },
+            language,
+          ),
+        });
+      const parts: string[] = [];
+      const pair = (p: readonly [number | null, number | null]) => ({
+        from: num(p[0]),
+        to: num(p[1]),
+      });
+      if (change.workers[0] !== change.workers[1])
+        parts.push(t('draft.fix.lines.workers', pair(change.workers)));
+      if (change.hoursPerWorker[0] !== change.hoursPerWorker[1])
+        parts.push(t('draft.fix.lines.hoursEach', pair(change.hoursPerWorker)));
+      if (change.totalHours[0] !== change.totalHours[1])
+        parts.push(t('draft.fix.lines.total', pair(change.totalHours)));
+      return `${change.company} ${parts.join(', ')}`.trim();
+    }
+    case 'lost_hours':
+      return t('draft.fix.lines.lostHours', {
+        from: num(change.lostHours[0]),
+        to: num(change.lostHours[1]),
+      });
+    case 'section':
+      return t('draft.fix.lines.section', {
+        section: t(`draft.fix.sections.${change.section}`),
+      });
+  }
 }

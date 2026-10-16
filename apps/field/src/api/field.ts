@@ -1,9 +1,12 @@
 import type {
   AnswerResponse,
+  ApplyCorrectionResponse,
   CompleteResponse,
   ConfirmResponse,
   ConsentResponse,
+  CorrectionView,
   DayStatusResponse,
+  EditResponse,
   ExpiredLinkResponse,
   FieldApiErrorBody,
   FieldApiErrorCode,
@@ -25,7 +28,9 @@ import type {
   ConsentGrantRequest,
   ConsentRequest,
   ConsentRevokeRequest,
+  CorrectionRequest,
   DayStatusRequest,
+  EditRequest,
   PreferencesRequest,
   TestClipRequest,
   UploadRequest,
@@ -79,6 +84,32 @@ export function createFieldRoutes(api: FieldApiClient = fieldApi) {
     /** Confirm & send (F8, W1-07; the Draft screen, W1-13): the draft version the reporter saw. */
     confirm: (code: string, reportId: string, body: ConfirmRequest) =>
       api.request<ConfirmResponse>(`reports/${encodeURIComponent(reportId)}/confirm`, {
+        body,
+        linkCode: code,
+      }),
+    /**
+     * F8 *Fix by voice* (W2-10): a fix of the draft (a completed correction clip, or typed words);
+     * the worker makes the preview, which the screen polls for, then **Save change** applies it
+     * at the draft revision it was made from.
+     */
+    correction: (code: string, reportId: string, body: CorrectionRequest) =>
+      api.request<CorrectionView>(`reports/${encodeURIComponent(reportId)}/correction`, {
+        body,
+        linkCode: code,
+      }),
+    correctionView: (code: string, reportId: string, id: string, signal?: AbortSignal) =>
+      api.request<CorrectionView>(
+        `reports/${encodeURIComponent(reportId)}/correction/${encodeURIComponent(id)}`,
+        { linkCode: code, signal },
+      ),
+    applyCorrection: (code: string, reportId: string, id: string) =>
+      api.request<ApplyCorrectionResponse>(
+        `reports/${encodeURIComponent(reportId)}/correction/${encodeURIComponent(id)}/apply`,
+        { method: 'POST', body: {}, linkCode: code },
+      ),
+    /** The draft's steppers (W2-10, spec §19 Q80): one crew line's workers and hours. */
+    edit: (code: string, reportId: string, body: EditRequest) =>
+      api.request<EditResponse>(`reports/${encodeURIComponent(reportId)}/edit`, {
         body,
         linkCode: code,
       }),

@@ -3,6 +3,7 @@ import type {
   ConsentType,
   CountryRow,
   DailyReportData,
+  DraftCorrectionRow,
   FieldDeviceRow,
   FieldLinkRow,
   Json,
@@ -29,7 +30,9 @@ import {
   type CompleteUploadResult,
   type ConfirmResult,
   type DayStatusResult,
+  type DraftWriteResult,
   type FieldStore,
+  type RequestCorrectionResult,
   type OrgContext,
   type RateLimitResult,
   type ReportWithDate,
@@ -85,6 +88,8 @@ export class FakeFieldStore implements FieldStore {
   attached: { batchId: string; version: number; changeNote: string; caption: string | null }[] = [];
   /** F4's test recordings (W2-13). */
   testClips: TestClipRow[] = [];
+  /** F8 fixes of a draft (W2-10). */
+  corrections: DraftCorrectionRow[] = [];
   /** Store methods called, for "no write happened" checks. */
   calls: string[] = [];
   private seq = 0;
@@ -298,7 +303,9 @@ export class FakeFieldStore implements FieldStore {
     );
   }
   countReportMedia(reportId: string) {
-    const ups = this.uploads.filter((u) => u.report_id === reportId && !u.question_id);
+    const ups = this.uploads.filter(
+      (u) => u.report_id === reportId && !u.question_id && !u.correction_report_id,
+    );
     const voice = ups.filter((u) => u.kind === 'audio');
     return Promise.resolve({
       voiceNotes: voice.length,
@@ -321,7 +328,7 @@ export class FakeFieldStore implements FieldStore {
       UploadRow,
       'id' | 'reporter_id' | 'site_id' | 'kind' | 'storage_path' | 'mime' | 'bytes' | 'recorded_at'
     > &
-      Partial<Pick<UploadRow, 'batch_id' | 'batch_size' | 'question_id'>>,
+      Partial<Pick<UploadRow, 'batch_id' | 'batch_size' | 'question_id' | 'correction_report_id'>>,
   ) {
     this.calls.push('insertUpload');
     const u: UploadRow = {
@@ -329,6 +336,7 @@ export class FakeFieldStore implements FieldStore {
       batch_id: row.batch_id ?? null,
       batch_size: row.batch_size ?? null,
       question_id: row.question_id ?? null,
+      correction_report_id: row.correction_report_id ?? null,
       report_id: null,
       duration_s: null,
       peaks: null,
@@ -422,6 +430,7 @@ export class FakeFieldStore implements FieldStore {
         jobId: null,
         ...(u.batch_id ? { batch: this.batchState(u) } : {}),
         ...(u.question_id ? { answerClip: true } : {}),
+        ...(u.correction_report_id ? { correctionClip: true } : {}),
       });
     }
     const site = this.sites.find((s) => s.id === u.site_id)!;
@@ -444,6 +453,25 @@ export class FakeFieldStore implements FieldStore {
         alreadyComplete: false,
         jobId: null,
         answerClip: true,
+      });
+    }
+    if (u.correction_report_id) {
+      // W2-10 (20261016000100): a correction clip, staged on the draft it fixes.
+      const r = this.reports.find((x) => x.id === u.correction_report_id);
+      const d = r ? this.siteDays.find((x) => x.id === r.site_day_id) : undefined;
+      if (!r || r.status === 'void' || r.site_id !== site.id || d?.date !== date) {
+        return Promise.reject(new FieldDbError('upload_path_mismatch'));
+      }
+      u.report_id = r.id;
+      u.bytes = bytes ?? u.bytes;
+      return Promise.resolve({
+        reportId: r.id,
+        reportNo: r.report_no,
+        reportStatus: r.status,
+        created: false,
+        alreadyComplete: false,
+        jobId: null,
+        correctionClip: true,
       });
     }
     const day = this.siteDay(site.id, date);
@@ -1055,6 +1083,214 @@ export class FakeFieldStore implements FieldStore {
       diff: { question_id: q.id, field: q.field, channel: 'web', upload_id: u.id, job_id: job.id },
     });
     return Promise.resolve({ status: 'listening', reportStatus: r.status, jobId: job.id });
+  }
+
+  /** field_request_correction() (20261016000100, W2-10). */
+  requestCorrection(input: {
+    reportId: string;
+    reporterId: string;
+    uploadId: string | null;
+    text: string | null;
+  }): Promise<RequestCorrectionResult> {
+    this.calls.push('requestCorrection');
+    const r = this.reports.find((x) => x.id === input.reportId);
+    if (!r || r.status === 'void' || !this.onSite(input.reporterId, r.site_id))
+      return Promise.reject(new FieldDbError('report_not_found'));
+    if (input.uploadId) {
+      const seen = this.corrections.find((c) => c.upload_id === input.uploadId);
+      if (seen)
+        return Promise.resolve({ id: seen.id, status: seen.status, jobId: null, repeat: true });
+    }
+    if (r.status !== 'awaiting_confirmation')
+      return Promise.reject(new FieldDbError('wrong_state'));
+    if (this.corrections.some((c) => c.report_id === r.id && c.status === 'listening'))
+      return Promise.reject(new FieldDbError('correction_pending'));
+    if (input.uploadId) {
+      const u = this.uploads.find((x) => x.id === input.uploadId);
+      if (
+        !u ||
+        u.correction_report_id !== r.id ||
+        u.reporter_id !== input.reporterId ||
+        u.report_id !== r.id ||
+        u.kind !== 'audio'
+      )
+        return Promise.reject(new FieldDbError('upload_not_found'));
+    }
+    for (const c of this.corrections)
+      if (c.report_id === r.id && (c.status === 'ready' || c.status === 'unclear'))
+        c.status = 'discarded';
+    const row: DraftCorrectionRow = {
+      id: this.id('cccccccc'),
+      org_id: r.org_id,
+      report_id: r.id,
+      reporter_id: input.reporterId,
+      via: input.uploadId ? 'voice' : 'text',
+      upload_id: input.uploadId,
+      text: input.text,
+      status: 'listening',
+      base_version: null,
+      base_rev: null,
+      data: null,
+      changes: null,
+      operations: null,
+      source: null,
+      change_note: null,
+      clarification: null,
+      reason: null,
+      created_at: this.iso(),
+      settled_at: null,
+      applied_at: null,
+    };
+    this.corrections.push(row);
+    const job: FakeJob = {
+      id: this.jobs.length + 1,
+      type: 'apply_correction',
+      payload: { reportId: r.id, correctionId: row.id },
+      dedupe_key: jobKeys.applyCorrection(row.id),
+      status: 'queued',
+    };
+    this.jobs.push(job);
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: input.reporterId,
+      action: 'report.correction_requested',
+      entity: 'report',
+      entityId: r.id,
+      diff: { correction_id: row.id, via: row.via, upload_id: input.uploadId, job_id: job.id },
+    });
+    return Promise.resolve({ id: row.id, status: 'listening', jobId: job.id });
+  }
+  getCorrection(id: string) {
+    return Promise.resolve(this.corrections.find((c) => c.id === id) ?? null);
+  }
+  latestCorrection(reportId: string) {
+    const rows = this.corrections.filter((c) => c.report_id === reportId);
+    return Promise.resolve(rows.at(-1) ?? null);
+  }
+  /** As the worker's field_settle_correction() `ready` (tests set a preview up with it). */
+  settleCorrectionReady(id: string, data: DailyReportData, changes: unknown[]) {
+    const c = this.corrections.find((x) => x.id === id)!;
+    const r = this.reports.find((x) => x.id === c.report_id)!;
+    const v = this.versions.find((x) => x.report_id === r.id && x.version === r.current_version)!;
+    Object.assign(c, {
+      status: 'ready',
+      data,
+      changes,
+      base_version: r.current_version,
+      base_rev: v.draft_rev ?? 1,
+      settled_at: this.iso(),
+    });
+  }
+  private writeDraft(r: ReportRow, data: unknown) {
+    const v = this.versions.find((x) => x.report_id === r.id && x.version === r.current_version)!;
+    v.data = data as Json;
+    v.draft_rev = (v.draft_rev ?? 1) + 1;
+    r.status = 'processing';
+  }
+  private staleAnswer(r: ReportRow): DraftWriteResult {
+    const v = this.versions.find((x) => x.report_id === r.id && x.version === r.current_version);
+    return {
+      status: 'stale',
+      reportStatus: r.status,
+      currentVersion: r.current_version,
+      draftRev: v?.draft_rev ?? null,
+    };
+  }
+  /** field_apply_correction() (W2-10): Save change at the preview's revision only. */
+  applyCorrection(
+    correctionId: string,
+    reportId: string,
+    reporterId: string,
+  ): Promise<DraftWriteResult> {
+    this.calls.push('applyCorrection');
+    const r = this.reports.find((x) => x.id === reportId);
+    if (!r || r.status === 'void' || !this.onSite(reporterId, r.site_id))
+      return Promise.reject(new FieldDbError('report_not_found'));
+    const c = this.corrections.find((x) => x.id === correctionId && x.report_id === r.id);
+    if (!c || c.reporter_id !== reporterId)
+      return Promise.reject(new FieldDbError('correction_not_found'));
+    if (c.status === 'applied')
+      return Promise.resolve({ status: 'applied', reportStatus: r.status, jobId: null });
+    if (c.status !== 'ready') return Promise.reject(new FieldDbError('correction_not_ready'));
+    if (r.status === 'filed' || r.status === 'signed_off')
+      return Promise.reject(new FieldDbError('wrong_state'));
+    const v = this.versions.find((x) => x.report_id === r.id && x.version === r.current_version);
+    if (
+      r.status !== 'awaiting_confirmation' ||
+      r.current_version !== c.base_version ||
+      (v?.draft_rev ?? 1) !== c.base_rev
+    ) {
+      c.status = 'stale';
+      c.reason = 'draft_changed';
+      return Promise.resolve(this.staleAnswer(r));
+    }
+    this.writeDraft(r, c.data);
+    c.status = 'applied';
+    c.applied_at = this.iso();
+    const job: FakeJob = {
+      id: this.jobs.length + 1,
+      type: 'decide_next',
+      payload: { reportId: r.id },
+      dedupe_key: jobKeys.decideCorrection(r.id, c.id),
+      status: 'queued',
+    };
+    this.jobs.push(job);
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: reporterId,
+      action: 'report.draft_corrected',
+      entity: 'report',
+      entityId: r.id,
+      diff: { correction_id: c.id, via: c.via, changes: c.changes, job_id: job.id },
+    });
+    return Promise.resolve({ status: 'applied', reportStatus: 'processing', jobId: job.id });
+  }
+  /** field_edit_draft() (W2-10): a stepper's line on the draft the reporter saw. */
+  editDraft(input: {
+    reportId: string;
+    reporterId: string;
+    version: number;
+    draftRev: number;
+    base: Json;
+    data: Json;
+    changes: Json;
+    source: Json;
+  }): Promise<DraftWriteResult> {
+    this.calls.push('editDraft');
+    const r = this.reports.find((x) => x.id === input.reportId);
+    if (!r || r.status === 'void' || !this.onSite(input.reporterId, r.site_id))
+      return Promise.reject(new FieldDbError('report_not_found'));
+    if (r.status === 'filed' || r.status === 'signed_off')
+      return Promise.reject(new FieldDbError('wrong_state'));
+    const v = this.versions.find((x) => x.report_id === r.id && x.version === r.current_version);
+    if (
+      r.status !== 'awaiting_confirmation' ||
+      r.current_version !== input.version ||
+      (v?.draft_rev ?? 1) !== input.draftRev ||
+      JSON.stringify(v?.data) !== JSON.stringify(input.base)
+    )
+      return Promise.resolve(this.staleAnswer(r));
+    this.writeDraft(r, input.data);
+    const job: FakeJob = {
+      id: this.jobs.length + 1,
+      type: 'decide_next',
+      payload: { reportId: r.id },
+      dedupe_key: jobKeys.decideEdit(r.id, input.version, input.draftRev),
+      status: 'queued',
+    };
+    this.jobs.push(job);
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: input.reporterId,
+      action: 'report.draft_edited',
+      entity: 'report',
+      entityId: r.id,
+      diff: { via: 'stepper', changes: input.changes, job_id: job.id },
+    });
+    return Promise.resolve({ status: 'processing', reportStatus: 'processing', jobId: job.id });
   }
 
   /** field_test_clip_create() (20261016000070, W2-13). */

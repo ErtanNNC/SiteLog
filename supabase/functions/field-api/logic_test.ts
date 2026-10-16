@@ -7,6 +7,8 @@ import {
 } from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import {
+  correctionView,
+  openCorrectionView,
   allowedReportDates,
   lateClipAllowed,
   reportWindowEnd,
@@ -510,3 +512,41 @@ Deno.test('W2-09: the spoken answer on the question and the last one settled', (
     null,
   );
 });
+
+Deno.test(
+  'correctionView (W2-10): the preview when ready; a fix listening too long is unclear',
+  () => {
+    const row = {
+      id: 'c1',
+      status: 'listening' as const,
+      via: 'voice' as const,
+      changes: null,
+      clarification: null,
+      reason: null,
+      base_version: null,
+      base_rev: null,
+      created_at: '2026-10-09T22:00:00Z',
+    };
+    const at = (s: number) => new Date(Date.parse(row.created_at) + s * 1000);
+    assertEquals(correctionView(row, at(60)).status, 'listening');
+    assertEquals(
+      [correctionView(row, at(301)).status, correctionView(row, at(301)).reason],
+      ['unclear', 'timeout'],
+    );
+    const lines = [{ kind: 'section', section: 'work' }];
+    const ready = correctionView(
+      { ...row, status: 'ready', changes: lines, base_version: 1, base_rev: 3 },
+      at(10),
+    );
+    assertEquals([ready.changes, ready.version, ready.draftRev], [lines, 1, 3]);
+    const unclear = correctionView(
+      { ...row, status: 'unclear', reason: 'clarification', clarification: 'Which crew?' },
+      at(10),
+    );
+    assertEquals([unclear.clarification, unclear.changes], ['Which crew?', null]);
+    // Applied, stale and discarded fixes are not shown on the draft.
+    for (const status of ['applied', 'stale', 'discarded'] as const)
+      assertEquals(openCorrectionView({ ...row, status }, at(10)), null);
+    assertEquals(openCorrectionView(null, at(10)), null);
+  },
+);

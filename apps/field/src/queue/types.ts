@@ -1,5 +1,5 @@
 import type { CompleteResponse } from '@sitelog/shared/field-contract.ts';
-import type { AddToReport, AnswerTo } from '@sitelog/shared/field-api.ts';
+import type { AddToReport, AnswerTo, FixTo } from '@sitelog/shared/field-api.ts';
 import type { UploadKind } from '@sitelog/shared/enums.ts';
 
 /**
@@ -51,6 +51,11 @@ export interface QueuedUpload {
    * to `reports/:id/answer {uploadId}`. Absent for report material.
    */
   answerTo?: AnswerTo | null;
+  /**
+   * W2-10 (F8 *Fix by voice*): a correction clip of a draft; once completed, the Draft screen
+   * hands it to `reports/:id/correction {uploadId}`. Absent for report material.
+   */
+  fixTo?: FixTo | null;
   /** Epoch ms. */
   createdAt: number;
   status: QueuedStatus;
@@ -145,6 +150,8 @@ export interface NewUpload {
   addTo?: AddToReport | null;
   /** W2-09: the open question this clip answers (spoken *Other…*). */
   answerTo?: AnswerTo | null;
+  /** W2-10: the draft this clip fixes (*Fix by voice*). */
+  fixTo?: FixTo | null;
 }
 
 /** A recording being made (F5 step 2), saved chunk by chunk until its clip is queued. */

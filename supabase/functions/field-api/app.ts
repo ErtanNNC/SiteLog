@@ -7,7 +7,9 @@ import {
   ConsentRequestSchema,
   ConsentGrantRequestSchema,
   ConsentRevokeRequestSchema,
+  CorrectionRequestSchema,
   DayStatusRequestSchema,
+  EditRequestSchema,
   ExpiredLinkRequestSchema,
   FIELD_LINK_HEADER,
   FILED_PHOTOS_MAX,
@@ -26,6 +28,7 @@ import {
   VerifyRequestSchema,
   answerConfirmation,
   applyAnswer,
+  applyCrewEdit,
   deviceCookieName,
   firstName,
   linkCodeHash,
@@ -48,6 +51,12 @@ import {
   isWorkingDay,
   type AnswerResponse,
   type AnswerValue,
+  type ApplyCorrectionResponse,
+  type CorrectionView,
+  type EditResponse,
+  type FixTo,
+  type Json,
+  type Source,
   type CompleteResponse,
   type ConfirmResponse,
   type ConsentResponse,
@@ -112,6 +121,8 @@ import {
   verifyCodeHash,
   voiceAnswerView,
   lastVoiceAnswerView,
+  correctionView,
+  openCorrectionView,
 } from './logic.ts';
 import { FieldDbError, type FieldStore, type OrgContext } from './store.ts';
 
@@ -660,6 +671,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     if (body.answerTo) {
       return c.json(await uploadAnswerClip(ctx, body, body.answerTo, media.ext), 201);
     }
+    if (body.fixTo) return c.json(await uploadFixClip(ctx, body, body.fixTo, media.ext), 201);
     if (ctx.link.kind === 'photos' && body.kind !== 'photo') {
       throw new FieldError(400, 'kind_not_allowed', 'A photos link takes photos only (F9)');
     }
@@ -824,6 +836,66 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       report_id: report.id,
       question_id: question.id,
       answer_clip: true,
+    });
+    return {
+      uploadId: id,
+      bucket,
+      path,
+      ...signed,
+      signedUrl: publicSignedUrl(signed.signedUrl, deps.publicUrl?.()),
+    };
+  }
+
+  /**
+   * A draft in the link's scope that the reporter may fix (W2-10, F8): awaiting confirmation, on
+   * an active site. Else 409 `wrong_state` (the screen shows the latest view).
+   */
+  async function draftInScope(ctx: DeviceContext, reportId: string) {
+    const report = await reportInScope(ctx, reportId);
+    if (report.status !== 'awaiting_confirmation') {
+      throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    }
+    const site = ctx.sites.find((s) => s.id === report.site_id)!;
+    if (site.status !== 'active') throw new FieldError(409, 'site_inactive');
+    return { report, site };
+  }
+
+  /**
+   * F8 *Fix by voice* (W2-10): a correction clip for a draft awaiting confirmation. The clip goes
+   * in the report's site and day and names the draft (`uploads.correction_report_id`):
+   * field_complete_upload() stages it on the report without making it report material;
+   * `reports/:id/correction {uploadId}` then hands it to the worker.
+   */
+  async function uploadFixClip(
+    ctx: DeviceContext,
+    body: UploadRequest,
+    fixTo: FixTo,
+    ext: string,
+  ): Promise<UploadResponse> {
+    const { report, site } = await draftInScope(ctx, fixTo.reportId);
+    const day = await store.getSiteDayById(report.site_day_id);
+    if (!day) throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    const id = randomUUID();
+    const bucket = uploadBucket(body.kind);
+    const path = uploadStoragePath(ctx.reporter.org_id, site.id, day.date, id, ext);
+    await store.insertUpload({
+      id,
+      reporter_id: ctx.reporter.id,
+      site_id: site.id,
+      kind: body.kind,
+      storage_path: path,
+      mime: uploadMediaType(body.mime)!.mime,
+      bytes: body.bytes,
+      recorded_at: body.recordedAt ?? null,
+      correction_report_id: report.id,
+    });
+    const signed = await store.createSignedUploadUrl(bucket, path);
+    await audit(ctx, 'upload.created', 'upload', id, {
+      kind: body.kind,
+      site_id: site.id,
+      date: day.date,
+      report_id: report.id,
+      correction_clip: true,
     });
     return {
       uploadId: id,
@@ -1035,6 +1107,11 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       pdfUrl,
       addPhotos: filed && day ? await addPhotosView(ctx, report.id, site, day.date) : null,
       changeNote: version?.change_note ?? null,
+      // W2-10: the draft's latest fix while it matters (a reload shows the preview again).
+      correction:
+        report.status === 'awaiting_confirmation'
+          ? openCorrectionView(await store.latestCorrection(report.id), now())
+          : null,
     };
     return c.json(view);
   });
@@ -1205,6 +1282,128 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       confirmation: answerConfirmation(field, target, applied.data, value),
     };
     return c.json(out, res.status === 'processing' ? 202 : 200);
+  });
+
+  // ── reports/:id/correction (F8 Fix by voice, §10.6; W2-10) ───────────────────────────────────
+  // A fix of the draft, said (a completed correction clip) or typed: field_request_correction()
+  // queues apply_correction; the worker makes the preview in code. Nothing changes until the
+  // reporter saves it (`…/apply`), and then only on the draft the preview was made from.
+  app.post('/reports/:id/correction', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const { report } = await draftInScope(ctx, c.req.param('id'));
+    const body = await parseBody(c, CorrectionRequestSchema);
+    if (body.uploadId !== undefined) {
+      const upload = await store.getUpload(body.uploadId);
+      if (
+        !upload ||
+        upload.reporter_id !== ctx.reporter.id ||
+        upload.correction_report_id !== report.id ||
+        upload.kind !== 'audio'
+      ) {
+        throw new FieldError(404, 'not_found', 'Upload not found');
+      }
+      if (upload.report_id !== report.id) {
+        throw new FieldError(409, 'upload_missing', 'The clip has not been completed yet');
+      }
+    }
+    const res = await store.requestCorrection({
+      reportId: report.id,
+      reporterId: ctx.reporter.id,
+      uploadId: body.uploadId ?? null,
+      text: body.text ?? null,
+    });
+    const row = await store.getCorrection(res.id);
+    if (!row) throw new Error(`correction ${res.id} not found`);
+    return c.json(correctionView(row, now()) satisfies CorrectionView, 202);
+  });
+
+  /** A fix of a report in the link's scope (W2-10), else 404. */
+  async function ownCorrection(ctx: DeviceContext, reportId: string, cid: string) {
+    const report = await reportInScope(ctx, reportId);
+    if (!UUID.test(cid)) throw new FieldError(404, 'not_found');
+    const row = await store.getCorrection(cid);
+    if (!row || row.report_id !== report.id || row.reporter_id !== ctx.reporter.id) {
+      throw new FieldError(404, 'not_found');
+    }
+    return { report, row };
+  }
+
+  app.get('/reports/:id/correction/:cid', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const { row } = await ownCorrection(ctx, c.req.param('id'), c.req.param('cid'));
+    return c.json(correctionView(row, now()) satisfies CorrectionView);
+  });
+
+  // Save change: field_apply_correction() writes the preview at the version and draft revision it
+  // was made from (409 `draft_changed` otherwise), moves the report to processing (§7.2 "fix
+  // requested") and queues decide_next, which shows the draft again with its new revision.
+  app.post('/reports/:id/correction/:cid/apply', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const { report, row } = await ownCorrection(ctx, c.req.param('id'), c.req.param('cid'));
+    const res = await store.applyCorrection(row.id, report.id, ctx.reporter.id);
+    if (res.status === 'stale') {
+      throw new FieldError(409, 'draft_changed', undefined, {
+        currentVersion: res.currentVersion,
+        draftRev: res.draftRev,
+      });
+    }
+    return c.json({
+      status: 'applied',
+      reportStatus: res.reportStatus,
+    } satisfies ApplyCorrectionResponse);
+  });
+
+  // ── reports/:id/edit (F8 steppers; W2-10, spec §19 Q80) ──────────────────────────────────────
+  // One crew line's workers and hours as the reporter set them, on the draft they saw: applied in
+  // code (`applyCrewEdit`: totals recomputed, the line citing `reporter_edit`), then
+  // field_edit_draft() writes it only on that draft (409 `draft_changed` otherwise).
+  app.post('/reports/:id/edit', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const { report } = await draftInScope(ctx, c.req.param('id'));
+    const body = await parseBody(c, EditRequestSchema);
+    const version = await store.getVersion(report.id, report.current_version);
+    const currentRev = version ? (version.draft_rev ?? 1) : null;
+    if (!version || body.version !== report.current_version || body.draftRev !== currentRev) {
+      throw new FieldError(409, 'draft_changed', undefined, {
+        currentVersion: report.current_version,
+        draftRev: currentRev,
+      });
+    }
+    const settings = ctx.org.settings;
+    if (!settings) throw new Error(`org ${ctx.org.org.id} has no settings`);
+    const source: Source = {
+      type: 'reporter_edit',
+      reporterId: ctx.reporter.id,
+      at: now().toISOString(),
+      via: 'web',
+    };
+    const draft = readReportData(version.data as Parameters<typeof readReportData>[0]);
+    const edited = applyCrewEdit(
+      draft,
+      { index: body.index, workers: body.workers, hoursPerWorker: body.hoursPerWorker },
+      { source, defaultShiftHours: Number(settings.default_shift_hours) },
+    );
+    if (!edited.ok) throw new FieldError(400, 'edit_not_accepted', edited.reason);
+    const res = await store.editDraft({
+      reportId: report.id,
+      reporterId: ctx.reporter.id,
+      version: body.version,
+      draftRev: body.draftRev,
+      base: version.data,
+      data: edited.data as unknown as Json,
+      changes: edited.changes as unknown as Json,
+      source: source as unknown as Json,
+    });
+    if (res.status === 'stale') {
+      throw new FieldError(409, 'draft_changed', undefined, {
+        currentVersion: res.currentVersion,
+        draftRev: res.draftRev,
+      });
+    }
+    return c.json(
+      { status: 'processing', reportStatus: res.reportStatus } satisfies EditResponse,
+      202,
+    );
   });
 
   // ── day-status (F12 buttons) ─────────────────────────────────────────────────────────────────
@@ -1555,6 +1754,11 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   batch_not_found: [404, 'not_found'],
   batch_incomplete: [409, 'wrong_state'],
   answer_pending: [409, 'answer_pending'],
+  correction_pending: [409, 'correction_pending'],
+  correction_not_ready: [409, 'correction_not_ready'],
+  correction_not_found: [404, 'not_found'],
+  invalid_request: [400, 'invalid_request'],
+  invalid_edit: [400, 'edit_not_accepted'],
   test_clip_not_found: [404, 'not_found'],
   consent_required: [403, 'consent_required'],
   consent_not_offered: [400, 'invalid_request'],
