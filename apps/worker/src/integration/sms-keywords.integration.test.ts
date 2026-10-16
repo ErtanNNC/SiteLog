@@ -428,6 +428,46 @@ describe('SMS report keywords (W2-12) on the Demo phone of a two-way demo org', 
     }
   }, 60_000);
 
+  it('a consent turned off by any reporter of the phone keeps the EDIT from the model (W2-12 review)', async () => {
+    // The same phone is also an invited reporter of another real US org, who turned processing off.
+    const [other] = await database.q<{ id: string }>(
+      `insert into orgs (name, country, is_demo) values ('Other Builders', 'US', false) returning id`,
+    );
+    const [twin] = await database.q<{ id: string }>(
+      `insert into reporters (org_id, name, phone_e164, status) values ($1, 'Marco R.', $2, 'invited')
+       returning id`,
+      [other!.id, PHONE],
+    );
+    await database.q(
+      `insert into consents (reporter_id, type, method, text_version, given_at, revoked_at)
+       values ($1, 'data_processing', 'web_checkbox', 'v1', now() - interval '1 day', now())`,
+      [twin!.id],
+    );
+    await database.q(`update orgs set is_demo = false where id = $1`, [ORG]);
+    try {
+      const calls = world.claude.calls.length;
+      const id = randomUUID();
+      await database.q(
+        `insert into messages (id, org_id, reporter_id, channel, phone_e164, direction, provider,
+                               provider_message_id, body, status, payload)
+         values ($1, null, null, 'sms', $2, 'in', 'twilio', $3, 'EDIT FRI Apex was 9 not 6',
+                 'received', $4)`,
+        [id, PHONE, `SM${id.replace(/-/g, '')}`, JSON.stringify({ pack: 'US' })],
+      );
+      const jobId = await world.ctx.db.enqueueJob(
+        'sms_keyword',
+        { messageId: id },
+        { dedupeKey: jobKeys.smsKeyword(id) },
+      );
+      expect(await run(jobId)).toEqual({ ok: true });
+      expect(world.claude.calls.length).toBe(calls);
+    } finally {
+      await database.q(`update orgs set is_demo = true where id = $1`, [ORG]);
+      await database.q(`delete from consents where reporter_id = $1`, [twin!.id]);
+      await database.q(`delete from reporters where id = $1`, [twin!.id]);
+    }
+  }, 60_000);
+
   it('a phone that opted out, or a one-way pack, gets no answer', async () => {
     await remindedToday();
     const since = await stamp();

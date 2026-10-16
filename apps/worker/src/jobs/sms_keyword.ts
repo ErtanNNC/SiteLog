@@ -322,9 +322,15 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
   const ids = k.reporters.map((r) => r.id);
   const rest = parseSmsEdit(k.message.body ?? '')?.rest ?? '';
   if (!rest) return editUnclear(k, first, 'no_change');
-  // F15, spec §19 Q95: nothing goes to the model once the reporter turned a consent off.
-  const revoked = await revokedProcessingConsents(ctx, first.id);
-  if (revoked.length > 0) return editUnclear(k, first, 'consent_revoked', { consents: revoked });
+  // F15, spec §19 Q95: nothing goes to the model once a reporter of the phone turned a consent
+  // off (the text is theirs too); a change of such a reporter's report is refused (W2-12 review).
+  const revokedBy = new Map<string, Awaited<ReturnType<typeof revokedProcessingConsents>>>();
+  for (const r of k.reporters) {
+    const revoked = await revokedProcessingConsents(ctx, r.id);
+    if (revoked.length > 0) revokedBy.set(r.id, revoked);
+  }
+  if (revokedBy.size === k.reporters.length)
+    return editUnclear(k, first, 'consent_revoked', { consents: revokedBy.get(first.id) });
 
   const days = await ctx.db.smsKeywordDays(ids);
   const tz = days[0]?.timezone;
@@ -335,7 +341,7 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
   // as `reporter_edit` and checked for numbers it does not state is the reporter's own words,
   // never the model's rewording of them (W2-12 review).
   let modelDay: string | null = null;
-  if (ctx.ai.claude) {
+  if (ctx.ai.claude && revokedBy.size === 0) {
     const res = await classifyUtterance(
       ctx.ai.claude,
       ctx.config.CLAUDE_MODEL_FAST || ctx.config.CLAUDE_MODEL,
@@ -364,6 +370,16 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
     });
   const target = filed[0]!;
   const reporter = byId(k, target.reporter_id);
+  const revoked = revokedBy.get(reporter.id);
+  if (revoked) {
+    return editUnclear(
+      k,
+      reporter,
+      'consent_revoked',
+      { consents: revoked, date },
+      target.report_id,
+    );
+  }
   try {
     const res = await ctx.db.requestSmsCorrection({
       reportId: target.report_id,
