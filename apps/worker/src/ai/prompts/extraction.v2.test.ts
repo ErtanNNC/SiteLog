@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { reportExtractionToolInputSchema } from '@sitelog/shared';
 import { FIXTURES_DIR, loadFixture, replayClient } from '../eval';
 import { postProcessReportExtraction, runReportExtraction } from '../extract';
 import {
@@ -137,5 +138,59 @@ describe('postProcessReportExtraction (code after the model)', () => {
       gust: 24,
       provider: 'Open-Meteo',
     });
+  });
+});
+
+describe('the tool input the live models sent (Eval fixes, first live run)', () => {
+  const hero = loadFixture('riverside-2026-10-09');
+
+  it('validates first time: stringified weather and safety, null for unstated details, a long option', async () => {
+    const raw = structuredClone(hero.recorded!) as unknown as Record<string, unknown> & {
+      weather: unknown;
+      safety: Record<string, unknown>;
+      workPerformed: Array<Record<string, unknown>>;
+      deliveries: Array<Record<string, unknown>>;
+      proposedQuestions: Array<{ options: string[] }>;
+    };
+    const safety = { ...raw.safety, toolboxTalk: null };
+    raw.weather = JSON.stringify(raw.weather);
+    raw.safety = JSON.stringify(safety) as unknown as Record<string, unknown>;
+    raw.workPerformed[2]!.percentComplete = null;
+    raw.workPerformed[2]!.quantity = null;
+    raw.deliveries[0]!.supplier = null;
+    raw.proposedQuestions[0]!.options = ['5 workers, a full day of work', '5 · full day'];
+    const client = replayClient(raw);
+    const res = await runReportExtraction(client, 'claude-sonnet-5-5', hero.input);
+    expect(res.call.apiCalls).toBe(1);
+    expect(res.call.retried).toBe(false);
+    expect(res.data.weather.conditionsText).toBe(hero.recorded!.weather.conditionsText);
+    expect(res.data.safety.toolboxTalk).toBeUndefined();
+    expect(res.data.workPerformed[2]).not.toHaveProperty('percentComplete');
+    expect(res.data.workPerformed[2]).not.toHaveProperty('quantity');
+    expect(res.data.deliveries[0]).not.toHaveProperty('supplier');
+    // The over-long suggestion is dropped (never cut); the stored limit holds (§10.3).
+    expect(res.data.proposedQuestions[0]!.options).toEqual(['5 · full day']);
+    // A null headcount stays null: "unknown" is never turned into a number.
+    expect(res.data.manpower[2]).toMatchObject({ workers: null, totalHours: null });
+  });
+
+  it('still fails a required value that is missing, after one retry', async () => {
+    const raw = structuredClone(hero.recorded!) as unknown as Record<string, unknown>;
+    delete raw.weather;
+    await expect(
+      runReportExtraction(replayClient(raw), 'claude-sonnet-5-5', hero.input),
+    ).rejects.toMatchObject({ kind: 'invalid_input' });
+  });
+
+  it('offers the model only the sources its input has, and says what is left out', () => {
+    const json = JSON.stringify(reportExtractionToolInputSchema());
+    expect(json).toContain('"const":"voice_note"');
+    expect(json).toContain('"const":"answer"');
+    expect(json).toContain('"const":"weather_api"');
+    for (const kind of ['office_edit', 'reporter_edit', 'call'])
+      expect(json).not.toContain(`"const":"${kind}"`);
+    expect(json).toContain('"maxLength":20');
+    expect(json).toContain('never 100 (or 0) from a status word');
+    expect(json).toContain('never describe conditions from OBSERVED_WEATHER alone');
   });
 });

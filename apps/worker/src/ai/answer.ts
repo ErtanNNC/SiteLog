@@ -62,9 +62,13 @@ export function answerRefusal(
   field: QuestionField,
   parsed: ParsedAnswer,
   transcript: string,
+  /** The question's gap path (`target.path`, e.g. "manpower.workers:Delta Mechanical"). */
+  path?: string,
 ): AnswerRefusal | null {
   if (parsed.confidence < PARSE_ANSWER_MIN_CONFIDENCE) return 'low_confidence';
-  if (parsed.field !== field) return 'other_field';
+  // The model may name the question by its gap path, which the TARGET it is shown carries: the
+  // same question. Any other path (another crew) stays another field.
+  if (parsed.field !== field && !(path && parsed.field === path)) return 'other_field';
   if (field === 'manpower.workers' && parsed.value.workers == null) return 'low_confidence';
   // A stoppage with no lost hours would be logged as 0 h lost (applyAnswer): a number nobody said.
   if (field === 'weather.impact' && parsed.value.impact && parsed.value.lostHours == null)

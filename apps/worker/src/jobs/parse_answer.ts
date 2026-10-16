@@ -146,7 +146,13 @@ export const parseAnswerJob: JobHandler<'parse_answer'> = async (ctx, payload) =
   ctx.metrics.add({ tokens: parsed.usage, estCostUsd: parsed.estCostUsd });
 
   // 3. Code decides.
-  const refusal = answerRefusal(field, parsed.data, text);
+  const targetPath = (question.target as { path?: unknown } | null)?.path;
+  const refusal = answerRefusal(
+    field,
+    parsed.data,
+    text,
+    typeof targetPath === 'string' ? targetPath : undefined,
+  );
   if (refusal) {
     await settle('unclear', { reason: refusal, confidence: parsed.data.confidence });
     return;

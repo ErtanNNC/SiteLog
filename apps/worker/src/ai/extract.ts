@@ -2,13 +2,14 @@ import {
   DailyReportDataSchema,
   DailyReportDataV1Schema,
   ExtractionOutputSchema,
-  ReportExtractionSchema,
+  ReportExtractionInputSchema,
   extractionToolInputSchema,
   hoursFromEndTime,
   recomputeManpowerTotals,
   reportExtractionToolInputSchema,
   toObserved,
   toObservedIn,
+  tidyProposedQuestions,
   type DailyReportData,
   type DailyReportDataV1,
   type ExtractionOutput,
@@ -43,7 +44,9 @@ export const EXTRACTION_TOOL = {
   name: 'submit_daily_report',
   description:
     'Submit the structured daily site report extracted from the voice note transcript, photo captions and earlier answers. ' +
-    'Every number must come from the input and carry a source; unknown values are null and listed in missingRequired.',
+    'Every number must come from the input and carry a source; an unknown count or hour figure is null and listed in missingRequired, ' +
+    'an optional detail that was not said (a percentage, a quantity, a supplier, a toolbox talk) is left out. ' +
+    'weather and safety are objects.',
 } as const;
 
 export interface ExtractionResult {
@@ -207,7 +210,8 @@ export async function runReportExtraction(
       ],
       messages: [{ role: 'user', content: buildExtractionUserMessageV2(input) }],
       tool: { ...EXTRACTION_TOOL, inputSchema: reportExtractionToolInputSchema() },
-      schema: ReportExtractionSchema,
+      // Over-long suggested answers are dropped by code, not a reason to fail the report.
+      schema: ReportExtractionInputSchema,
       maxTokens: 12_000,
       effort: 'medium',
     },
@@ -299,6 +303,7 @@ export function postProcessReportExtraction(
     },
     photos: input.photos,
     summary: cleaned.summary.trim(),
+    proposedQuestions: tidyProposedQuestions(cleaned.proposedQuestions),
   });
   return { data, discrepancies, droppedSources: dropped.n };
 }

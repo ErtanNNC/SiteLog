@@ -7,8 +7,8 @@ One JSON per fix of a draft said on the recorder (F8 _Fix by voice_). Each file 
 - `voice`: the `../voice/` clip (`kind: "correction"`) whose transcript is the fix;
 - `recorded`: the `apply_correction` tool output (`{operations, changeNote, needsClarification}`);
 - `expected`: what code must make of it: applied (the crew in code: workers, hours per worker,
-  total; the preview's lines; how many totals were dropped) or not (`reason`: `clarification`, or
-  a refusal of `applyCorrectionOps`).
+  total; the preview's lines; how many totals were dropped; `clarificationOk` when a question
+  instead is right too) or not (`reason`: `clarification`, or a refusal of `applyCorrectionOps`).
 
 | File                 | Language | What it covers                                                                    |
 | -------------------- | -------- | --------------------------------------------------------------------------------- |
@@ -16,7 +16,7 @@ One JSON per fix of a draft said on the recorder (F8 _Fix by voice_). Each file 
 | `es-apex-siete.json` | ES       | "Los de Apex eran siete, no seis." → 7 × 8 h = 56 h                               |
 | `tr-usta-bes.json`   | TR       | "Usta Beton dört değil, beş kişiydi." → 5 × 8 saat = 40 saat                      |
 | `en-which-crew.json` | EN       | "Change it to three." names no crew: the model asks which one, nothing is applied |
-| `en-apex-total.json` | EN       | The model also sets Apex's total to 60: code drops it, 7 × 8 h = 56 h             |
+| `en-apex-total.json` | EN       | The model also sets Apex's total to 60: code drops it, 7 × 8 h = 56 h; or it asks |
 
 ## Not model recordings
 

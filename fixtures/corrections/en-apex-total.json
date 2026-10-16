@@ -1,6 +1,6 @@
 {
   "id": "en-apex-total",
-  "description": "English, spoken: “Apex had seven guys, sixty hours all in.” The model also sets Apex's total to 60: code drops it and computes 7 × 8 h = 56 h (a total is never the model's).",
+  "description": "English, spoken: “Apex had seven guys, sixty hours all in.” The model also sets Apex's total to 60: code drops it and computes 7 × 8 h = 56 h (a total is never the model's). A live model that asks instead (60 h does not divide into 7 × the shift; prompt rules 3 and 7) is right too: clarificationOk.",
   "voice": "correction-en-apex-total",
   "language": "en",
   "draft": "riverside-2026-10-09",
@@ -40,6 +40,7 @@
         "totalHours": [48, 56]
       }
     ],
-    "droppedTotals": 1
+    "droppedTotals": 1,
+    "clarificationOk": true
   }
 }

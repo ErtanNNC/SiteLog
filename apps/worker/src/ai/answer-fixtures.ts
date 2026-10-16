@@ -133,7 +133,13 @@ export interface AnswerCheck {
 
 /** A parse of a case (recorded or live) against what code must make of it. Pure. */
 export function scoreAnswer(c: AnswerCase, parsed: ParsedAnswer): AnswerCheck[] {
-  const refusal = answerRefusal(c.question.field, parsed, c.transcript);
+  const path = c.question.target.path;
+  const refusal = answerRefusal(
+    c.question.field,
+    parsed,
+    c.transcript,
+    typeof path === 'string' ? path : undefined,
+  );
   const checks: AnswerCheck[] = [];
   if (!c.expected.applies) {
     checks.push({

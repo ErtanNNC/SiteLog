@@ -111,8 +111,14 @@ export type WeatherPeriod = z.infer<typeof WeatherPeriodSchema>;
 
 export const WeatherSchema = z.object({
   observed: ObservedWeatherSchema.optional(),
-  conditionsText: z.string().describe('Short description, e.g. "Light rain AM, overcast PM"'),
-  periods: z.array(WeatherPeriodSchema),
+  conditionsText: z
+    .string()
+    .describe(
+      'Conditions as the reporter described them, e.g. "Light rain AM, overcast PM". "" when the reporter said nothing about the weather (then add "weather.conditions" to missingRequired): never describe conditions from OBSERVED_WEATHER alone',
+    ),
+  periods: z
+    .array(WeatherPeriodSchema)
+    .describe('Weather stoppages or reassignments; [] when there were none'),
 });
 export type Weather = z.infer<typeof WeatherSchema>;
 
@@ -131,11 +137,29 @@ export const ManpowerEntrySchema = z.object({
   companyName: z.string().describe('Official company name (from COMPANIES, or best guess)'),
   trade: z.string().optional(),
   area: z.string().optional().describe('Normalised area, e.g. "Level 2"'),
-  workers: z.number().int().min(0).nullable().describe('Headcount. null when not stated'),
-  hoursPerWorker: z.number().min(0).max(24).nullable(),
+  workers: z
+    .number()
+    .int()
+    .min(0)
+    .nullable()
+    .describe('Headcount as said. null when not stated (never a guess)'),
+  hoursPerWorker: z
+    .number()
+    .min(0)
+    .max(24)
+    .nullable()
+    .describe(
+      'Hours each worker worked: as said, DEFAULT_SHIFT_HOURS for "full day", or derived from WORKING_HOURS and a stated start or end time ("sent everybody home at eleven"). null when not stated or derivable',
+    ),
   totalHours: z.number().min(0).nullable().describe('workers × hoursPerWorker; null when unknown'),
   hoursBasis: z.enum(HOURS_BASES),
-  confidence: z.number().min(0).max(1),
+  confidence: z
+    .number()
+    .min(0)
+    .max(1)
+    .describe(
+      "How sure you are of this crew's headcount and hours as heard (0–1). An unknown company does not lower it: companyId null already flags that",
+    ),
   source: SourcesSchema,
 });
 export type ManpowerEntry = z.infer<typeof ManpowerEntrySchema>;
@@ -144,22 +168,31 @@ export const WorkItemSchema = z.object({
   area: z.string().describe('"Level 4" | "Exterior — south elevation"'),
   activity: z.string().min(1).describe('"Slab pour", "Electrical rough-in"'),
   status: z.enum(WORK_STATUSES),
-  percentComplete: z.number().int().min(0).max(100).optional(),
+  percentComplete: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe(
+      'Only a percentage the reporter said ("about seventy percent"). Leave it out otherwise: finished work is status "complete" without a percentage, never 100 (or 0) from a status word',
+    ),
   quantity: z
     .object({
       value: z.number(),
       unit: z.string().describe('In the report\'s units, e.g. "yd³" or "m³"'),
       heardAs: z.string().optional().describe('Spoken words, e.g. "sixty-eight yards"'),
     })
-    .optional(),
+    .optional()
+    .describe('Only a quantity the reporter said; leave it out otherwise'),
   source: SourcesSchema,
 });
 export type WorkItem = z.infer<typeof WorkItemSchema>;
 
 export const DeliverySchema = z.object({
   item: z.string().min(1),
-  quantity: z.string().optional(),
-  supplier: z.string().optional(),
+  quantity: z.string().optional().describe('As said; leave it out when not said'),
+  supplier: z.string().optional().describe('As said; leave it out when not said'),
   time: z.string().optional().describe('Local time HH:MM if stated'),
   source: SourcesSchema,
 });
@@ -180,7 +213,10 @@ export const IncidentSchema = z.object({
 export type Incident = z.infer<typeof IncidentSchema>;
 
 export const SafetySchema = z.object({
-  toolboxTalk: z.string().optional().describe('Topic of the toolbox talk, if one was held'),
+  toolboxTalk: z
+    .string()
+    .optional()
+    .describe('Topic of the toolbox talk, if one was held; leave it out otherwise'),
   incidents: z.array(IncidentSchema),
   noIncidentsStated: z
     .boolean()
@@ -211,7 +247,11 @@ export const NewTermSchema = z.object({
   heard: z.string().min(1).describe('Exact words heard, e.g. "the Ridgeway crew"'),
   heardLanguage: z.string().min(1).describe('ISO 639-1 code of the words heard, e.g. "es"'),
   proposedOfficial: z.string().min(1).describe('Official construction term or company name'),
-  kind: z.enum(NEW_TERM_KINDS),
+  kind: z
+    .enum(NEW_TERM_KINDS)
+    .describe(
+      '"company" for every crew that matches no COMPANIES entry, even when GLOSSARY has a term for its words',
+    ),
   confidence: z.number().min(0).max(1),
 });
 export type NewTerm = z.infer<typeof NewTermSchema>;
@@ -284,9 +324,44 @@ export const ReportExtractionSchema = DailyReportDataSchema.omit({
     .string()
     .max(700)
     .describe('≤ 80 words, official terms, past tense, in REPORT_LANGUAGE, key facts first'),
-  weather: WeatherSchema.omit({ observed: true }),
+  weather: WeatherSchema.omit({ observed: true }).describe(
+    'An object (never a string): {conditionsText, periods}',
+  ),
+  manpower: z
+    .array(ManpowerEntrySchema)
+    .describe(
+      'One line per crew on site today, including a crew whose headcount was not said (workers null)',
+    ),
+  workPerformed: z
+    .array(WorkItemSchema)
+    .describe('Work done on site today; plans for the next workday go in nextWorkday'),
+  safety: SafetySchema.describe(
+    'An object (never a string): {toolboxTalk?, incidents, noIncidentsStated, visitors, source}',
+  ),
 });
 export type ReportExtraction = z.infer<typeof ReportExtractionSchema>;
+
+/**
+ * What code accepts from the model in `submit_daily_report` (Eval fixes): the tool's schema with
+ * the proposed questions' answers unchecked for length. The model is told the spec's limit (≤ 2
+ * answers of ≤ 20 characters: the JSON Schema's `maxItems` / `maxLength` and prompt rule 11), but
+ * a suggestion one character too long is no reason to lose the report: `tidyProposedQuestions`
+ * drops it before the data is stored, where `DailyReportDataSchema` holds the limit again.
+ */
+export const ReportExtractionInputSchema = ReportExtractionSchema.extend({
+  proposedQuestions: z.array(ProposedQuestionSchema.extend({ options: z.array(z.string()) })),
+});
+
+/** At most 2 options of at most 20 characters each (§10.3); longer ones are dropped, never cut. */
+export function tidyProposedQuestions<Q extends { options: string[] }>(questions: Q[]): Q[] {
+  return questions.map((q) => ({
+    ...q,
+    options: q.options
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0 && o.length <= 20)
+      .slice(0, 2),
+  }));
+}
 
 /** An empty, valid v2 report skeleton in the org's report language and units. */
 export function emptyReportData(
@@ -589,7 +664,37 @@ export function extractionToolInputSchema(): Record<string, unknown> {
   return toJson(ExtractionOutputSchema);
 }
 
+/** The source kinds the extraction model may cite: what its input has (§10.4 source-format note). */
+export const EXTRACTION_SOURCE_TYPES = ['voice_note', 'answer', 'weather_api'] as const;
+
+/**
+ * Keeps only the `source` variants of `kinds` in every `oneOf` of source objects: the model is not
+ * offered office or reporter edits or calls it cannot cite (code would drop them anyway), which
+ * also keeps the schema it reads small.
+ */
+function restrictSourceKinds(node: unknown, kinds: readonly string[]): unknown {
+  if (Array.isArray(node)) return node.map((n) => restrictSourceKinds(n, kinds));
+  if (!node || typeof node !== 'object') return node;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+    if (k === 'oneOf' && Array.isArray(v)) {
+      const typeOf = (x: unknown) =>
+        (x as { properties?: { type?: { const?: unknown } } })?.properties?.type?.const;
+      const isSource = v.every((x) => typeof typeOf(x) === 'string');
+      out[k] = isSource
+        ? v.filter((x) => kinds.includes(typeOf(x) as string))
+        : restrictSourceKinds(v, kinds);
+      continue;
+    }
+    out[k] = restrictSourceKinds(v, kinds);
+  }
+  return out;
+}
+
 /** JSON Schema for the Claude `submit_daily_report` tool input, v2 (§10.3, §10.4; W1-12). */
 export function reportExtractionToolInputSchema(): Record<string, unknown> {
-  return toJson(ReportExtractionSchema);
+  return restrictSourceKinds(toJson(ReportExtractionSchema), EXTRACTION_SOURCE_TYPES) as Record<
+    string,
+    unknown
+  >;
 }

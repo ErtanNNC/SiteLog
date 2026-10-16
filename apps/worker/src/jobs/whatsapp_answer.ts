@@ -171,7 +171,13 @@ export const whatsappAnswerJob: JobHandler<'whatsapp_answer'> = async (ctx, payl
     log.info('whatsapp_answer: unclear', { reason });
   };
 
-  const refusal = answerRefusal(field, parsed.data, text);
+  const targetPath = (question.target as { path?: unknown } | null)?.path;
+  const refusal = answerRefusal(
+    field,
+    parsed.data,
+    text,
+    typeof targetPath === 'string' ? targetPath : undefined,
+  );
   if (refusal) return unclear(refusal);
   const value: AnswerValue = parsed.data.value;
   let newCompany: { name: string; manpowerIndex: number } | null = null;

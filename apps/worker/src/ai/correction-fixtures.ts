@@ -74,6 +74,11 @@ export const CorrectionCaseSchema = z.strictObject({
       }),
       changes: z.array(ChangeSchema),
       droppedTotals: z.number().int().min(0),
+      /**
+       * A clarification question instead is also right (prompt rule 7): the words say something
+       * the draft's fields cannot hold as said (a total, which only code computes).
+       */
+      clarificationOk: z.boolean().optional(),
     }),
     z.strictObject({
       applies: z.literal(false),
@@ -139,7 +144,9 @@ export interface CorrectionCheck {
 export function scoreCorrection(c: CorrectionCase, result: CorrectionResult): CorrectionCheck[] {
   const checks: CorrectionCheck[] = [];
   if (result.needsClarification) {
-    const want = !c.expected.applies && c.expected.reason === 'clarification';
+    const want = c.expected.applies
+      ? c.expected.clarificationOk === true
+      : c.expected.reason === 'clarification';
     checks.push({ name: 'asks which line', ok: want, detail: result.needsClarification });
     return checks;
   }

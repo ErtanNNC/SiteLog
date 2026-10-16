@@ -80,6 +80,79 @@ export interface ToolCallRequest<T> {
   effort?: 'low' | 'medium' | 'high';
   /** Set false for calls where the retry-on-invalid is not wanted. Default true. */
   retryOnInvalid?: boolean;
+  /**
+   * A tool's own tidy-up of the input, after the generic one (`coerceToSchema`) and before Zod
+   * validation, e.g. dropping an over-long suggestion that code would never show.
+   */
+  normalize?: (input: unknown) => unknown;
+}
+
+type JsonSchemaNode = {
+  type?: string | string[];
+  properties?: Record<string, JsonSchemaNode>;
+  required?: string[];
+  items?: JsonSchemaNode;
+  anyOf?: JsonSchemaNode[];
+  oneOf?: JsonSchemaNode[];
+};
+
+function schemaAllowsNull(s: JsonSchemaNode): boolean {
+  const types = Array.isArray(s.type) ? s.type : s.type ? [s.type] : [];
+  const variants = [...(s.anyOf ?? []), ...(s.oneOf ?? [])];
+  // An untyped schema (`{}`, e.g. a JSON-patch `value`) accepts anything, null included.
+  if (types.length === 0 && variants.length === 0) return true;
+  if (types.includes('null')) return true;
+  return variants.some(schemaAllowsNull);
+}
+
+/**
+ * The tool input as the JSON Schema the model was given describes it (Eval fixes, first live run):
+ * - a value the schema types as an object or array but which arrived as a JSON string (models
+ *   sometimes stringify a nested object, e.g. `"weather": "{\"conditionsText\":…}"`) is parsed;
+ * - `null` on an OPTIONAL property whose schema does not allow null means "not stated" (the
+ *   prompts say "unknown → null"): it is dropped, so the optional field is simply absent. A
+ *   required property's null is kept and left to Zod. No value is ever made up here.
+ * Pure: returns a new value and never mutates the input.
+ */
+export function coerceToSchema(value: unknown, schema: JsonSchemaNode | undefined): unknown {
+  if (!schema) return value;
+  const types = Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : [];
+  let v = value;
+  if (typeof v === 'string' && (types.includes('object') || types.includes('array'))) {
+    const t = v.trim();
+    if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+      try {
+        const parsed: unknown = JSON.parse(t);
+        const isArr = Array.isArray(parsed);
+        const isObj = !isArr && parsed !== null && typeof parsed === 'object';
+        if ((isArr && types.includes('array')) || (isObj && types.includes('object'))) v = parsed;
+      } catch {
+        // Not JSON: left for Zod to report.
+      }
+    }
+  }
+  if (Array.isArray(v)) return schema.items ? v.map((x) => coerceToSchema(x, schema.items)) : v;
+  if (v && typeof v === 'object' && schema.properties) {
+    const required = new Set(schema.required ?? []);
+    const out: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+      const prop = schema.properties[k];
+      if (x === null && prop && !required.has(k) && !schemaAllowsNull(prop)) continue;
+      out[k] = prop ? coerceToSchema(x, prop) : x;
+    }
+    return out;
+  }
+  return v;
+}
+
+/** `coerceToSchema` against the tool's input schema, then the tool's own `normalize`. */
+export function normalizeToolInput(
+  input: unknown,
+  inputSchema: Record<string, unknown>,
+  normalize?: (input: unknown) => unknown,
+): unknown {
+  const coerced = coerceToSchema(input, inputSchema as JsonSchemaNode);
+  return normalize ? normalize(coerced) : coerced;
 }
 
 export interface ToolCallResult<T> {
@@ -244,7 +317,9 @@ export async function callTool<T>(
       throw new ToolCallError('model did not call the tool', 'no_tool_use', msg.content);
     }
 
-    const parsed = req.schema.safeParse(toolUse.input);
+    const parsed = req.schema.safeParse(
+      normalizeToolInput(toolUse.input, req.tool.inputSchema, req.normalize),
+    );
     if (parsed.success) {
       return {
         data: parsed.data,

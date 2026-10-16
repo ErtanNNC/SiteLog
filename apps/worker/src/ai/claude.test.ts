@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ExtractionOutputSchema } from '@sitelog/shared';
 import { z } from 'zod';
-import { buildParams, callTool, modelProfile, ToolCallError } from './claude';
+import { buildParams, callTool, coerceToSchema, modelProfile, ToolCallError } from './claude';
 import { runExtraction } from './extract';
 import { quickClassify, stripDayReference } from './classify';
 import { quickDayOff } from './dayoff';
@@ -130,6 +130,61 @@ describe('callTool validation retry', () => {
     await expect(callTool(client2, { ...req, model: 'claude-sonnet-5-5' })).rejects.toBeInstanceOf(
       ToolCallError,
     );
+  });
+});
+
+describe('coerceToSchema (tool input as the schema describes it)', () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      weather: {
+        type: 'object',
+        properties: { text: { type: 'string' }, note: { type: 'string' } },
+        required: ['text'],
+      },
+      items: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { pct: { type: 'integer' }, workers: { type: ['integer', 'null'] } },
+          required: ['workers'],
+        },
+      },
+      count: { type: 'integer' },
+      value: {},
+    },
+    required: ['weather', 'items', 'count'],
+  };
+
+  it('parses a stringified object or array and drops null on optional fields', () => {
+    expect(
+      coerceToSchema(
+        {
+          weather: '{"text":"Rain","note":null}',
+          items: '[{"pct":null,"workers":null}]',
+          count: null,
+          value: null,
+        },
+        schema,
+      ),
+    ).toEqual({
+      weather: { text: 'Rain' },
+      items: [{ workers: null }],
+      count: null,
+      value: null,
+    });
+  });
+
+  it('leaves what it cannot read to Zod and never mutates the input', () => {
+    const input = { weather: 'sunny', items: [], count: 3 };
+    const copy = structuredClone(input);
+    expect(coerceToSchema(input, schema)).toEqual(input);
+    expect(input).toEqual(copy);
+    expect(coerceToSchema({ weather: '[1]', items: '{}', count: 1 }, schema)).toEqual({
+      weather: '[1]',
+      items: '{}',
+      count: 1,
+    });
   });
 });
 

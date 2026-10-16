@@ -46,6 +46,14 @@ describe('fixtures/corrections (W2-10)', () => {
     }
   });
 
+  it('a model that asks about a stated total instead is right too (clarificationOk); elsewhere it is not', () => {
+    const ask = { operations: [], changeNote: '', needsClarification: 'How many hours each?' };
+    const total = cases.find((x) => x.id === 'en-apex-total')!;
+    expect(scoreCorrection(total, ask).every((x) => x.ok)).toBe(true);
+    const seven = cases.find((x) => x.id === 'en-apex-seven')!;
+    expect(scoreCorrection(seven, ask).every((x) => x.ok)).toBe(false);
+  });
+
   it('a total the model sets is never taken: 7 × 8 = 56 h, not the 60 said', () => {
     const c = cases.find((x) => x.id === 'en-apex-total')!;
     const res = applyCorrectionOps(c.base, c.recorded.operations, {

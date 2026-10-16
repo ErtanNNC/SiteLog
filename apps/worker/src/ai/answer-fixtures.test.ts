@@ -52,6 +52,22 @@ describe('fixtures/answers (W2-09)', () => {
     expect(answerRefusal('manpower.workers', { ...ok, field: 'safety' }, five.transcript)).toBe(
       'other_field',
     );
+    // The question named by its gap path is the same question; another crew's path is not.
+    const path = 'manpower.workers:Delta Mechanical';
+    expect(
+      answerRefusal('manpower.workers', { ...ok, field: path }, five.transcript, path),
+    ).toBeNull();
+    expect(
+      answerRefusal(
+        'manpower.workers',
+        { ...ok, field: 'manpower.workers:Apex Concrete' },
+        five.transcript,
+        path,
+      ),
+    ).toBe('other_field');
+    expect(answerRefusal('manpower.workers', { ...ok, field: path }, five.transcript)).toBe(
+      'other_field',
+    );
     expect(
       answerRefusal('manpower.workers', { ...ok, value: { fullDay: true } }, five.transcript),
     ).toBe('low_confidence');

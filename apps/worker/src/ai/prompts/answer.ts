@@ -12,9 +12,11 @@ The answer may be typed or spoken (a voice transcript, possibly in English, Span
 Return ONLY a call to the parse_answer tool with {field, value, confidence}.
 
 Rules:
-1. field is the QUESTION field you were given, unless the answer is clearly about something else.
+1. field is the QUESTION field exactly as given (e.g. "manpower.workers", not the TARGET path), unless the answer is
+   clearly about something else.
 2. Fill only the structured value fields the answer supports. Never invent values: a number goes in only when the
-   answer says it (as digits or words). Do not compute totals; leave totalHours out unless a total is said.
+   answer says it (as digits or words, in any of the languages: "cinco" = 5, "altı" = 6). Do not compute totals;
+   leave totalHours out unless a total is said.
 3. "Full day" / "all day" / "todo el día" / "tam gün" → fullDay true. "Half day" → halfDay true (code sets half of
    DEFAULT_SHIFT_HOURS). An end time ("till 3", "hasta las tres", "üçe kadar") → endTime "15:00" (site shifts run in
    the daytime). Hours per worker → hoursPerWorker; hours lost to weather → lostHours ("no stoppage" → 0).
