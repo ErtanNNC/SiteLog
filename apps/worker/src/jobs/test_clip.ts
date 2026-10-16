@@ -14,7 +14,8 @@ import { PermanentJobError, type JobHandler } from './types';
  * failing) is marked failed and its file deleted: the screen says it could not hear it.
  *
  * `delete_test_clip` (field_test_clip_create(), `test_clip:<id>:delete`, 10 minutes on): the file
- * and the words go, read or not. The nightly retention job is the backstop (`expireTestClips`).
+ * and the words go, read or not (the file is removed even when the row is already deleted). The
+ * nightly retention job is the backstop (`expireTestClips`).
  */
 
 export const TEST_SNIPPET_MAX = 160;
@@ -75,21 +76,29 @@ export const transcribeTestClipJob: JobHandler<'transcribe_test_clip'> = async (
   await removeFile(ctx, clip);
 };
 
+/**
+ * The row is marked deleted if it is not yet, and the file is removed either way: a clip read
+ * (field_test_clip_read() marks it deleted) after the worker failed to remove its file still has
+ * one, and removing a file already gone is harmless.
+ */
 export const deleteTestClipJob: JobHandler<'delete_test_clip'> = async (ctx, payload) => {
   const deleted = await ctx.db.deleteTestClip(payload.testClipId, 'expired');
-  if (deleted) await removeFile(ctx, deleted);
+  const clip = deleted ?? (await ctx.db.getTestClip(payload.testClipId));
+  if (clip) await removeFile(ctx, clip);
   ctx.log.info('test clip deleted', { test_clip_id: payload.testClipId, was_open: !!deleted });
 };
 
-/** The retention backstop: test recordings older than 10 minutes that are still there. */
-export async function expireTestClips(ctx: Ctx, before: Date, limit = 200): Promise<number> {
+/**
+ * The retention backstop: test recordings older than 10 minutes still open are deleted, and the
+ * file of every recent one is removed again (`listExpiredTestClips`), deleted or not, so a file
+ * whose removal failed does not outlive its row. Returns how many rows it deleted.
+ */
+export async function expireTestClips(ctx: Ctx, before: Date, limit = 500): Promise<number> {
   let n = 0;
   for (const clip of await ctx.db.listExpiredTestClips(before, limit)) {
-    const deleted = await ctx.db.deleteTestClip(clip.id, 'expired');
-    if (deleted) {
-      await removeFile(ctx, deleted);
-      n++;
-    }
+    const deleted = clip.deleted_at ? null : await ctx.db.deleteTestClip(clip.id, 'expired');
+    await removeFile(ctx, clip);
+    if (deleted) n++;
   }
   return n;
 }

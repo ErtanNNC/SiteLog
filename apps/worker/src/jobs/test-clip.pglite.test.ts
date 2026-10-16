@@ -187,6 +187,44 @@ describe('W2-13: the test recording (F4)', () => {
     expect(storage.files.has(`audio/${fresh.path}`)).toBe(true);
   });
 
+  it('a file whose removal failed after transcription goes with the delete job or the backstop', async () => {
+    const failing = (): Ctx => {
+      const c = ctx().ctx;
+      return {
+        ...c,
+        storage: {
+          ...storage,
+          remove: () => Promise.reject(new Error('storage 503')),
+        },
+      } as Ctx;
+    };
+    for (const via of ['delete job', 'retention'] as const) {
+      const clip = await newClip();
+      // Transcribed, but the file stays (a transient storage error), and the snippet is read.
+      await transcribeTestClipJob(failing(), { testClipId: clip.id }, { attempts: 1 } as never);
+      expect(storage.files.has(`audio/${clip.path}`)).toBe(true);
+      expect((await read(clip.id)).status).toBe('heard');
+      expect(await read(clip.id)).toEqual({ status: 'gone', snippet: null });
+      if (via === 'delete job') {
+        await deleteTestClipJob(ctx().ctx, { testClipId: clip.id }, {} as never);
+      } else {
+        await pg.q(
+          `update test_clips set created_at = now() - interval '11 minutes' where id = $1`,
+          [clip.id],
+        );
+        await retentionCleanup(ctx().ctx, {}, {} as never);
+      }
+      expect(storage.files.has(`audio/${clip.path}`), via).toBe(false);
+      // Deleted once: the read's audit row only.
+      expect(
+        await pg.q(
+          `select 1 from audit_log where entity_id = $1 and action = 'test_clip.deleted'`,
+          [clip.id],
+        ),
+      ).toHaveLength(1);
+    }
+  });
+
   it('needs the recording consent; one line of at most 160 characters', async () => {
     await pg.q(
       `update consents set revoked_at = now() where reporter_id = $1 and type = 'recording'`,

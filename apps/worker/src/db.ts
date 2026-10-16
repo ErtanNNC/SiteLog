@@ -744,7 +744,11 @@ export interface Db {
    * the retention backstop), audited `test_clip.deleted`; null when it was deleted already.
    */
   deleteTestClip(id: string, reason: string): Promise<TestClipRow | null>;
-  /** Test recordings not deleted yet and made before `before` (the retention backstop). */
+  /**
+   * The retention backstop's test recordings, made before `before`: those not deleted yet, first,
+   * then those deleted but made in the 2 days before `before`, whose file is removed once more
+   * (a removal that failed after the clip was read leaves no file behind).
+   */
   listExpiredTestClips(before: Date, limit: number): Promise<TestClipRow[]>;
   getInvoiceSummary(invoiceId: string): Promise<InvoiceSummary | null>;
   /**
@@ -1787,8 +1791,10 @@ export function createDb(sql: Sql): Db {
     },
     async listExpiredTestClips(before, limit) {
       return sql<TestClipRow[]>`select * from test_clips
-        where deleted_at is null and created_at < ${before.toISOString()}
-        order by created_at limit ${limit}`;
+        where created_at < ${before.toISOString()}
+          and (deleted_at is null
+               or created_at >= ${before.toISOString()}::timestamptz - interval '2 days')
+        order by (deleted_at is null) desc, created_at limit ${limit}`;
     },
     async listOrphanOfficePhotos(before, limit) {
       const rows = await sql<Array<{ name: string }>>`
