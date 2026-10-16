@@ -640,7 +640,8 @@ async function startConfirmationClock(
  * open and asked at least 60 min ago; then it is recorded unanswered (a guarded update: an answer
  * committing first wins), the report flagged `unanswered:<field>` and audited. Null, and nothing
  * changed, when the question was answered or the report moved on meanwhile; null too, with the
- * timer armed again (`rearmAnswerTimeout`), while the report processes more audio.
+ * timer armed again (`rearmAnswerTimeout`), while the report processes more audio or a spoken
+ * answer is being read.
  */
 async function answerTimeoutWeb(
   ctx: Ctx,
@@ -676,6 +677,15 @@ async function answerTimeoutWeb(
   // The job runs at asked + 60 min (run_after); one claimed early by a skewed clock retries.
   if (!answerTimedOut(new Date(question.asked_at ?? question.created_at), now))
     throw new Error(`question ${question.id} has not timed out yet`);
+  // W2-09: a spoken answer still being read (its parse_answer queued or running) is not thrown
+  // away by the clock: the timeout waits for it (a dead parse no longer holds it up).
+  if (
+    latestVoiceTryListening(question) &&
+    (await ctx.db.hasActiveReportJob('parse_answer', report.id))
+  ) {
+    await rearmAnswerTimeout(ctx, report, questionId, job, 'a spoken answer is being read');
+    return null;
+  }
   if (!(await ctx.db.timeOutQuestion(question.id, now))) return null;
   const reason = `unanswered:${question.field}`;
   await ctx.db.updateReport(report.id, {
@@ -691,6 +701,18 @@ async function answerTimeoutWeb(
     diff: { question_id: question.id, field: question.field, channel: 'web', reason },
   });
   return question;
+}
+
+/** The question's latest spoken try (`questions.voice_answers`) is still `listening`. Pure. */
+export function latestVoiceTryListening(question: Pick<QuestionRow, 'voice_answers'>): boolean {
+  const tries = Array.isArray(question.voice_answers) ? question.voice_answers : [];
+  const last = tries.at(-1);
+  return (
+    !!last &&
+    typeof last === 'object' &&
+    !Array.isArray(last) &&
+    (last as { status?: unknown }).status === 'listening'
+  );
 }
 
 /**

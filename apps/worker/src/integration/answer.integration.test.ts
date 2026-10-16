@@ -285,4 +285,53 @@ describe('W2-09: Other… answered by voice, parsed by parse_answer, applied in 
     );
     expect(asked.every((x) => x.id !== questionId)).toBe(true);
   });
+
+  it('the 60-minute timeout waits for a spoken answer still being read, which then applies', async () => {
+    const date = '2026-10-14';
+    const { reportId, questionId } = await heroQuestion(date);
+    const clip = await speak(reportId, questionId, 'answer-en-delta-five-all-day', date);
+    const timerKey = `decide:${reportId}:timeout:${questionId}`;
+    const [timer] = await database.q<{ id: number }>(`select id from jobs where dedupe_key = $1`, [
+      timerKey,
+    ]);
+    const saved = clock.now();
+    clock.set(new Date(saved.getTime() + 61 * 60_000));
+    try {
+      // The clip is still in parse_answer (listening): the timeout records nothing and re-arms.
+      expect(await run(timer!.id)).toEqual({ ok: true });
+      const [open] = await database.q<{ answered_at: string | null }>(
+        `select answered_at from questions where id = $1`,
+        [questionId],
+      );
+      expect(open!.answered_at).toBeNull();
+      const rearmed = await database.q<{ id: number; status: string }>(
+        `select id, status::text from jobs where dedupe_key = $1`,
+        [`${timerKey}:re1`],
+      );
+      expect(rearmed.map((j) => j.status)).toEqual(['queued']);
+
+      // The answer is read and applied; the re-armed timer then finds the question answered.
+      expect(await run(clip.jobId)).toEqual({ ok: true });
+      expect(await run(rearmed[0]!.id)).toEqual({ ok: true });
+      const [q] = await database.q<{
+        answer: Record<string, unknown>;
+        voice_answers: Array<Record<string, unknown>>;
+      }>(`select answer, voice_answers from questions where id = $1`, [questionId]);
+      expect(q!.voice_answers).toMatchObject([{ uploadId: clip.uploadId, status: 'applied' }]);
+      expect(q!.answer).toMatchObject({ parsed: { workers: 5, fullDay: true } });
+      expect(q!.answer.timeout).toBeUndefined();
+      const delta = (await draftOf(reportId)).manpower.find(
+        (m) => m.companyName === 'Delta Mechanical',
+      )!;
+      expect(delta).toMatchObject({ workers: 5, totalHours: 40 });
+      expect(
+        await database.q(
+          `select 1 from audit_log where entity_id = $1 and action = 'report.question_timeout'`,
+          [reportId],
+        ),
+      ).toEqual([]);
+    } finally {
+      clock.set(saved);
+    }
+  });
 });
