@@ -409,6 +409,44 @@ describe('readSmsEdit (W2-12): the day and the change of an EDIT', () => {
     expect(readSmsEdit('yesterday Apex had 7', now, tz)).toMatchObject({ date: '2026-10-12' });
   });
 
+  it('reads a day word only as a whole word, and a date only with a month name (W2-12 review)', () => {
+    const now = new Date('2026-10-13T23:00:00Z'); // Tuesday
+    for (const rest of [
+      'Friedman 4 not 3',
+      'Sunbelt had 5',
+      'Monroe 6 not 4',
+      'Dunn 3 not 2',
+      'Wedge crew 4',
+      'Salih 5 kişiydi',
+      'Pazarcı 4 değil 5',
+      'Apex 7 not 6',
+    ]) {
+      expect(readSmsEdit(rest, now, tz), rest).toEqual({
+        date: null,
+        dayText: null,
+        correction: rest,
+      });
+    }
+    expect(readSmsEdit('Tues Apex was 7', now, tz)).toEqual({
+      date: '2026-10-13',
+      dayText: 'Tues',
+      correction: 'Apex was 7',
+    });
+    expect(readSmsEdit('Thurs: Apex was 7', now, tz)).toMatchObject({
+      date: '2026-10-08',
+      correction: 'Apex was 7',
+    });
+    expect(readSmsEdit("Fri's report Apex was 7", now, tz)).toMatchObject({
+      date: '2026-10-09',
+      correction: 'Apex was 7',
+    });
+    expect(readSmsEdit('Oct 9 Apex was 7', now, tz)).toMatchObject({
+      date: '2026-10-09',
+      correction: 'Apex was 7',
+    });
+    expect(readSmsEdit('SALI Demirci 5', now, tz)).toMatchObject({ date: '2026-10-13' });
+  });
+
   it('reads no day when none starts the text', () => {
     expect(readSmsEdit('Apex was 7 not 6', new Date('2026-10-13T23:00:00Z'), tz)).toEqual({
       date: null,

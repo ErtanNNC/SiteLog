@@ -51,11 +51,16 @@ export function quickClassify(text: string, now: Date, tz: string): ClassifiedRe
   return null;
 }
 
-/** Remove the leading day reference and separators: "Friday — Apex was 7" → "Apex was 7". */
+/**
+ * Remove the leading day reference and separators: "Friday — Apex was 7" → "Apex was 7". A day
+ * word counts only as a whole word: "Friedman 4 not 3", "Sunbelt", "Monroe", "Dunn", "Salih" or
+ * "Pazarcı" start with no day, and only a month's name starts a date ("Apex 7 not 6" is no
+ * "Oct 9") (W2-12 review).
+ */
 export function stripDayReference(text: string): string {
   return text
     .replace(
-      /^\s*(the\s+)?(report\s+(for|from)\s+)?(today|yesterday|hoy|ayer|bug[üu]n|d[üu]n|pazartesi|sal[ıi]|[çc]ar[şs]amba|per[şs]embe|cumartesi|cuma|pazar|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(\/\d{2,4})?|[a-z]{3,9}\.?\s+\d{1,2}(st|nd|rd|th)?|\d{1,2}(st|nd|rd|th)?\s+(of\s+)?[a-z]{3,9})('s)?(\s+report|\s+g[üu]n[üu])?\s*/iu,
+      /^\s*(the\s+)?(report\s+(for|from)\s+)?(today|yesterday|hoy|ayer|bug[üu]n|d[üu]n|pazartesi|sal[ıi]|[çc]ar[şs]amba|per[şs]embe|cumartesi|cuma|pazar|monday|tuesday|wednesday|thursday|friday|saturday|sunday|tues|thurs|thur|mon|tue|wed|thu|fri|sat|sun|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}(\/\d{2,4})?|(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\.?\s+\d{1,2}(st|nd|rd|th)?|\d{1,2}(st|nd|rd|th)?\s+(of\s+)?(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?))(?=$|[^\p{L}\p{N}])('s)?(\s+report|\s+g[üu]n[üu])?(?=$|[^\p{L}])\s*/iu,
       '',
     )
     .replace(/^[\s,:;—–-]+/, '')

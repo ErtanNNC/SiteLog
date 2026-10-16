@@ -342,6 +342,9 @@ describe('SMS report keywords (W2-12) on the Demo phone of a two-way demo org', 
       /^I couldn't make that change by text\. Make it in Past reports: https:\/\/go\.sitelog\.test\/r\/[A-Z2-9]+\/history$/,
     );
     expect((await answered(id))[0]!.diff).toMatchObject({ keyword: 'edit', outcome: 'no_day' });
+    // A name that starts like a day ("Friedman", "Sunbelt") names no day (W2-12 review).
+    const name = await text('EDIT Friedman 4 not 3');
+    expect((await answered(name))[0]!.diff).toMatchObject({ keyword: 'edit', outcome: 'no_day' });
 
     // §19 Q95: a processing consent turned off sends nothing to the model.
     const live = await database.q<{ id: string }>(
