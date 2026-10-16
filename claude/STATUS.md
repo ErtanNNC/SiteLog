@@ -84,6 +84,16 @@ Not: `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` worker'ın `.env`'ine girer (Supa
 
 Hafta-1 planının M0–M3'ü (W1-01 … W1-12) yazıldı ve CI'da yeşil, preview projesi ve demo verisi hazır; M3 sonunda incelemeniz, preview migration onayı, Q54–Q63 kararları ve anahtarlar için duruyorum.
 
+**Kararlar (sizden, 2026-10-16):** önerimle ilerlettiğim, onayınızı bekleyen tüm sorular onaylandı. Kapsam:
+
+- Q76–Q93
+- cihaz kodu kuralı
+- W2-01'de gecikmeli yedeğe geçiş
+- Ayarlar, Geçmiş raporlar ve Süresi dolmuş link ekranlarının tasarım ekranı olmadan spec §9.3'e göre yapılması
+- şimdiye kadar yazılan ES/TR metinler
+
+Spec §19 ve planlara işleniyor. Q86 için SMS izninde "Aç" düğmesi ekleniyor. Q93 (cevap kaydını panelde dinleme) planda takip işi olarak duruyor. Yalnızca sizde olan bilgiyi gerektiren sorular hâlâ açık: İletimerkezi Türkçe karakter tablosu, Q2, Q8/Q9, Q49, Q28/Q40/Q50, Q30.
+
 ## Hafta 2 (M6) — başladı
 
 Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahtar gerektirmeyen biletlerden başlıyorum: W2-01 (kanallar arası yedekleme), W2-02 (saha Ayarlar), W2-03 (geçmiş raporlar, süresi dolmuş link, yeni telefon), W2-04 (Filed ekranı ekleri).
