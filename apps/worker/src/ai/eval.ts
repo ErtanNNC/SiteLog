@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -24,6 +24,19 @@ import {
 } from '@sitelog/shared';
 import { runAnswerEval } from './answer-fixtures';
 import { runCorrectionEval } from './correction-fixtures';
+import {
+  evalModelFor,
+  isEvalSetSummary,
+  markdownSummary,
+  parseEvalSets,
+  summarizeEval,
+  summaryLine,
+  type EvalOutcome,
+  type EvalReport,
+  type EvalSet,
+  type EvalSetSummary,
+} from './eval-summary';
+import { runUtteranceEval } from './utterance-fixtures';
 import { createAnthropicClient, type MessagesClient } from './claude';
 import { runReportExtraction, type ExtractionInputV2 } from './extract';
 import { buildOrgContextBlock } from './prompts/extraction';
@@ -61,7 +74,18 @@ import { createLogger } from '../log';
  *   pnpm eval -- --concurrency 4              parallel API calls (default 3)
  *   pnpm eval -- --answers                    the parse_answer golden set (fixtures/answers, W2-09)
  *   pnpm eval -- --corrections                the apply_correction golden set (fixtures/corrections, W2-10)
- *                                             on the live fast model; with --recorded, offline
+ *                                             on CLAUDE_MODEL; with --recorded, offline
+ *   pnpm eval -- --utterances                 the classify_utterance golden set (fixtures/utterances,
+ *                                             W2-12) on the fast model; with --recorded, offline
+ *   pnpm eval -- --set <name>                 the same by name: extraction, answers, corrections, utterances
+ *   pnpm eval -- --json <file>                also write the set's summary and per-case results as JSON
+ *   pnpm eval -- --summarize <file>...        print the Markdown table of --json files (no API calls)
+ *
+ * The model comes from env as the worker picks it (`evalModelFor`): CLAUDE_MODEL for the
+ * extraction and apply_correction, CLAUDE_MODEL_FAST (else CLAUDE_MODEL) for parse_answer and
+ * classify_utterance; set both to one id to run every set on that model (.github/workflows/eval.yml).
+ * Every scored run ends with one `EVAL_SUMMARY {json}` line (eval-summary.ts): cases, passed, failed
+ * case ids, tokens, the estimated cost at src/ai/cost.ts rates and the wall time.
  *
  * Exit 1 when a case fails or a fixture is broken.
  */
@@ -1019,6 +1043,14 @@ export interface EvalOptions {
   answers: boolean;
   /** W2-10: the apply_correction golden set (fixtures/corrections) instead of the extraction cases. */
   corrections: boolean;
+  /** W2-12: the classify_utterance golden set (fixtures/utterances) instead of the extraction cases. */
+  utterances: boolean;
+  /** `--set <name>`: the set by name (the flags above, or `extraction`). */
+  set: EvalSet | null;
+  /** `--json <file>`: write the summary and per-case results there. */
+  json: string | null;
+  /** `--summarize <file>...`: the Markdown table of earlier --json files. */
+  summarize: string[];
 }
 
 export function parseArgs(argv: string[]): EvalOptions {
@@ -1031,6 +1063,10 @@ export function parseArgs(argv: string[]): EvalOptions {
     concurrency: 3,
     answers: false,
     corrections: false,
+    utterances: false,
+    set: null,
+    json: null,
+    summarize: [],
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -1063,6 +1099,26 @@ export function parseArgs(argv: string[]): EvalOptions {
       case '--corrections':
         opts.corrections = true;
         break;
+      case '--utterances':
+        opts.utterances = true;
+        break;
+      case '--set': {
+        const sets = parseEvalSets(value());
+        if (sets.length !== 1) throw new Error('--set takes one set per run');
+        opts.set = sets[0]!;
+        break;
+      }
+      case '--json': {
+        const v = value();
+        if (!v || v.startsWith('--')) throw new Error('--json needs a file path');
+        opts.json = v;
+        break;
+      }
+      case '--summarize':
+        opts.summarize.push(...argv.slice(i + 1).filter((a) => a !== '--'));
+        if (opts.summarize.length === 0) throw new Error('--summarize needs at least one file');
+        i = argv.length;
+        break;
       case '--concurrency': {
         const n = Number(value());
         if (Number.isInteger(n) && n > 0) opts.concurrency = Math.min(n, 16);
@@ -1086,7 +1142,14 @@ const USAGE = `usage: pnpm eval [-- options]
   --list             list the cases and exit
   --answers          the parse_answer golden set (fixtures/answers); with --recorded, offline
   --corrections      the apply_correction golden set (fixtures/corrections); with --recorded, offline
-  --concurrency <n>  parallel API calls in a live run (default 3)`;
+  --utterances       the classify_utterance golden set (fixtures/utterances); with --recorded, offline
+  --set <name>       the set by name: extraction, answers, corrections or utterances
+  --json <file>      also write the set's summary (cases, passed, failed ids, tokens, cost, time) as JSON
+  --summarize <f>... print the Markdown table of --json files and exit (no API calls)
+  --concurrency <n>  parallel API calls in a live run (default 3)
+
+Models: CLAUDE_MODEL (extraction, corrections), CLAUDE_MODEL_FAST else CLAUDE_MODEL (answers,
+utterances).`;
 
 async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array<R>(items.length);
@@ -1102,6 +1165,52 @@ async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): P
   return out;
 }
 
+/** The one set a run scores: `--set`, or one of `--answers`, `--corrections`, `--utterances`. */
+export function selectedSet(opts: EvalOptions): EvalSet {
+  const flagged: EvalSet[] = [];
+  if (opts.answers) flagged.push('answers');
+  if (opts.corrections) flagged.push('corrections');
+  if (opts.utterances) flagged.push('utterances');
+  if (opts.set) flagged.push(opts.set);
+  const sets = [...new Set(flagged)];
+  if (sets.length > 1) throw new Error(`one set per run (${sets.join(', ')} asked for)`);
+  return sets[0] ?? 'extraction';
+}
+
+/** Print the `EVAL_SUMMARY` line, write the --json file, and return the exit code (1 on a failure). */
+function finish(
+  opts: EvalOptions,
+  set: EvalSet,
+  model: string,
+  outcomes: EvalOutcome[],
+  startedAt: number,
+): number {
+  const summary = summarizeEval(set, model, opts.recorded, outcomes, performance.now() - startedAt);
+  console.log(summaryLine(summary));
+  if (opts.json) {
+    const report: EvalReport = { ...summary, results: outcomes };
+    mkdirSync(dirname(opts.json), { recursive: true });
+    writeFileSync(opts.json, `${JSON.stringify(report, null, 2)}\n`);
+  }
+  return summary.failed === 0 ? 0 : 1;
+}
+
+/** `--summarize`: the Markdown table of --json files (in the order given). */
+export function summarizeFiles(files: string[]): { markdown: string; problems: string[] } {
+  const summaries: EvalSetSummary[] = [];
+  const problems: string[] = [];
+  for (const f of files) {
+    try {
+      const v = readJson(f);
+      if (isEvalSetSummary(v)) summaries.push(v);
+      else problems.push(`${f}: not an eval summary`);
+    } catch (err) {
+      problems.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+  return { markdown: summaries.length ? markdownSummary(summaries) : '', problems };
+}
+
 export async function runEval(
   argv: string[] = [],
   env: Record<string, string | undefined> = process.env,
@@ -1112,36 +1221,46 @@ export async function runEval(
     console.log(USAGE);
     return 0;
   }
-  if (opts.answers) {
-    const key = env.ANTHROPIC_API_KEY ?? '';
-    if (!opts.recorded && !key) {
-      console.log(
-        'skipped: ANTHROPIC_API_KEY is not set (--answers --recorded scores the recorded parse_answer outputs offline)',
-      );
-      return 0;
-    }
-    return runAnswerEval({
-      recorded: opts.recorded,
-      client: opts.recorded ? null : createAnthropicClient(key),
-      model: env.CLAUDE_MODEL_FAST || env.CLAUDE_MODEL || 'claude-sonnet-5-5',
-      filter: opts.cases,
-    });
+  if (opts.summarize.length) {
+    const { markdown, problems } = summarizeFiles(opts.summarize);
+    if (markdown) console.log(markdown);
+    for (const p of problems) console.error(p);
+    return problems.length ? 1 : 0;
   }
-  if (opts.corrections) {
+  const set = selectedSet(opts);
+  if (set !== 'extraction') {
     const key = env.ANTHROPIC_API_KEY ?? '';
-    const model = env.CLAUDE_MODEL ?? '';
+    const model = evalModelFor(set, env);
+    const tool = {
+      answers: 'parse_answer',
+      corrections: 'apply_correction',
+      utterances: 'classify_utterance',
+    }[set];
     if (!opts.recorded && (!key || !model)) {
+      // apply_correction never guesses its model (evalModelFor): it needs CLAUDE_MODEL too.
+      const needs =
+        set === 'corrections'
+          ? 'ANTHROPIC_API_KEY and CLAUDE_MODEL are needed'
+          : 'ANTHROPIC_API_KEY is not set';
       console.log(
-        'skipped: ANTHROPIC_API_KEY and CLAUDE_MODEL are needed (--corrections --recorded scores the recorded apply_correction outputs offline)',
+        `skipped: ${needs} (--${set} --recorded scores the recorded ${tool} outputs offline)`,
       );
       return 0;
     }
-    return runCorrectionEval({
+    const run = {
+      answers: runAnswerEval,
+      corrections: runCorrectionEval,
+      utterances: runUtteranceEval,
+    }[set];
+    const startedAt = performance.now();
+    if (!opts.recorded) console.log(`running the ${tool} set on ${model}`);
+    const outcomes = await run({
       recorded: opts.recorded,
       client: opts.recorded ? null : createAnthropicClient(key),
-      model,
+      model: model ?? '',
       filter: opts.cases,
     });
+    return finish(opts, set, model ?? '', outcomes, startedAt);
   }
   const ids = listFixtureIds(dir).filter((id) => matchesFilter(id, opts.cases));
   if (ids.length === 0) {
@@ -1187,17 +1306,28 @@ export async function runEval(
   }
 
   let cases: EvalCase[];
+  const model = evalModelFor('extraction', env)!;
+  const startedAt = performance.now();
   if (opts.recorded) {
     console.log(`scoring ${fixtures.length} recorded tool outputs (offline)`);
     cases = await mapPool(fixtures, 8, scoreRecorded);
   } else {
-    const model = env.CLAUDE_MODEL || 'claude-sonnet-5-5';
     const client = createAnthropicClient(apiKey)!;
     console.log(`running ${fixtures.length} cases on ${model} (concurrency ${opts.concurrency})`);
     cases = await mapPool(fixtures, opts.concurrency, (f) => scoreCase(f, client, model));
   }
   console.log(printTable(cases));
-  return cases.every((c) => c.ok) ? 0 : 1;
+  return finish(opts, 'extraction', model, cases.map(outcomeOf), startedAt);
+}
+
+/** An extraction case as a set outcome (the failed check names, the call's tokens). */
+export function outcomeOf(c: EvalCase): EvalOutcome {
+  return {
+    id: c.id,
+    ok: c.ok,
+    failedChecks: c.checks.filter((x) => !x.ok).map((x) => x.name),
+    usage: c.tokens,
+  };
 }
 
 /**

@@ -13,6 +13,8 @@ import {
   type QuestionSpec,
 } from '@sitelog/shared';
 import type { MessagesClient } from './claude';
+import type { TokenUsage } from './cost';
+import type { EvalOutcome } from './eval-summary';
 import { answerRefusal, parseAnswerWithModel } from './answer';
 import { loadVoiceFixtures } from './voice-fixtures';
 
@@ -178,39 +180,55 @@ export function scoreAnswer(c: AnswerCase, parsed: ParsedAnswer): AnswerCheck[] 
 
 /**
  * `pnpm eval -- --answers`: every case through the live model (`CLAUDE_MODEL_FAST`, else
- * `CLAUDE_MODEL`), or its recorded output with `recorded`. Prints one line per case; 0 when all pass.
+ * `CLAUDE_MODEL`), or its recorded output with `recorded`. Prints one line per case and returns the
+ * outcomes (eval.ts prints the summary and decides the exit code). A failed call fails its case only.
  */
 export async function runAnswerEval(opts: {
   recorded: boolean;
   client: MessagesClient | null;
   model: string;
   filter: string[];
-}): Promise<number> {
+}): Promise<EvalOutcome[]> {
   const cases = loadAnswerCases().filter(
     (c) => opts.filter.length === 0 || opts.filter.some((f) => c.id.includes(f)),
   );
-  let failed = 0;
+  const outcomes: EvalOutcome[] = [];
   for (const c of cases) {
-    let parsed: ParsedAnswer;
-    if (opts.recorded || !opts.client) {
-      parsed = c.recorded;
-    } else {
-      const res = await parseAnswerWithModel(opts.client, opts.model, {
-        question: c.question,
-        replyText: c.transcript,
-        companies: c.companies,
-        defaultShiftHours: c.defaultShiftHours,
-        via: 'voice',
-      });
-      parsed = res.data;
+    let checks: AnswerCheck[];
+    let usage: TokenUsage | undefined;
+    try {
+      let parsed: ParsedAnswer;
+      if (opts.recorded || !opts.client) {
+        parsed = c.recorded;
+      } else {
+        const res = await parseAnswerWithModel(opts.client, opts.model, {
+          question: c.question,
+          replyText: c.transcript,
+          companies: c.companies,
+          defaultShiftHours: c.defaultShiftHours,
+          via: 'voice',
+        });
+        parsed = res.data;
+        usage = res.usage;
+      }
+      checks = scoreAnswer(c, parsed);
+    } catch (err) {
+      checks = [
+        { name: 'call', ok: false, detail: err instanceof Error ? err.message : String(err) },
+      ];
     }
-    const checks = scoreAnswer(c, parsed);
     const ok = checks.every((x) => x.ok);
-    if (!ok) failed++;
+    outcomes.push({
+      id: c.id,
+      ok,
+      failedChecks: checks.filter((x) => !x.ok).map((x) => x.name),
+      usage,
+    });
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${c.id}`);
     for (const x of checks.filter((y) => !y.ok))
       console.log(`      - ${x.name}${x.detail ? ` (${x.detail})` : ''}`);
   }
-  console.log(`${cases.length - failed}/${cases.length} parse_answer cases passed`);
-  return failed === 0 ? 0 : 1;
+  const passed = outcomes.filter((o) => o.ok).length;
+  console.log(`${passed}/${cases.length} parse_answer cases passed`);
+  return outcomes;
 }

@@ -22,7 +22,8 @@ outside the main report from M7. Each file names:
 No `ANTHROPIC_API_KEY` was available when W2-12 was built, so `recorded` is the output the prompt
 asks for, written by hand. The set proves the code around the model (the day resolved in code, the
 report found in code, the preview made by `apply_correction` and code), not the model; a live run
-needs the key.
+needs the key: `pnpm eval -- --utterances` (the fast model, as the `sms_keyword` job calls it), or
+`--utterances --recorded` offline.
 
 Who reads them: `apps/worker/src/ai/utterance-fixtures.ts` (the loader) and the fake Claude
 (`EXTRACT_PROVIDER=fake`), which answers `classify_utterance` with the recorded output of the case

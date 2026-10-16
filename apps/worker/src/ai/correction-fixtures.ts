@@ -11,6 +11,8 @@ import {
   type DailyReportData,
 } from '@sitelog/shared';
 import type { MessagesClient } from './claude';
+import type { TokenUsage } from './cost';
+import type { EvalOutcome } from './eval-summary';
 import { parseCorrectionV2 } from './correction';
 import { FIXTURES_DIR, loadFixtures } from './eval';
 import { loadVoiceFixtures } from './voice-fixtures';
@@ -187,40 +189,56 @@ export function scoreCorrection(c: CorrectionCase, result: CorrectionResult): Co
 
 /**
  * `pnpm eval -- --corrections`: every case through the live model (`CLAUDE_MODEL`), or its
- * recorded output with `recorded`. Prints one line per case; 0 when all pass.
+ * recorded output with `recorded`. Prints one line per case and returns the outcomes (eval.ts
+ * prints the summary and decides the exit code). A failed call fails its case only.
  */
 export async function runCorrectionEval(opts: {
   recorded: boolean;
   client: MessagesClient | null;
   model: string;
   filter: string[];
-}): Promise<number> {
+}): Promise<EvalOutcome[]> {
   const cases = loadCorrectionCases().filter(
     (c) => opts.filter.length === 0 || opts.filter.some((f) => c.id.includes(f)),
   );
-  let failed = 0;
+  const outcomes: EvalOutcome[] = [];
   for (const c of cases) {
-    let result: CorrectionResult;
-    if (opts.recorded || !opts.client) {
-      result = c.recorded;
-    } else {
-      const res = await parseCorrectionV2(opts.client, opts.model, {
-        data: c.base,
-        correctionText: c.transcript,
-        via: 'voice',
-        defaultShiftHours: c.defaultShiftHours,
-        companies: c.companies,
-        reporterLanguage: c.language,
-      });
-      result = res.data;
+    let checks: CorrectionCheck[];
+    let usage: TokenUsage | undefined;
+    try {
+      let result: CorrectionResult;
+      if (opts.recorded || !opts.client) {
+        result = c.recorded;
+      } else {
+        const res = await parseCorrectionV2(opts.client, opts.model, {
+          data: c.base,
+          correctionText: c.transcript,
+          via: 'voice',
+          defaultShiftHours: c.defaultShiftHours,
+          companies: c.companies,
+          reporterLanguage: c.language,
+        });
+        result = res.data;
+        usage = res.usage;
+      }
+      checks = scoreCorrection(c, result);
+    } catch (err) {
+      checks = [
+        { name: 'call', ok: false, detail: err instanceof Error ? err.message : String(err) },
+      ];
     }
-    const checks = scoreCorrection(c, result);
     const ok = checks.every((x) => x.ok);
-    if (!ok) failed++;
+    outcomes.push({
+      id: c.id,
+      ok,
+      failedChecks: checks.filter((x) => !x.ok).map((x) => x.name),
+      usage,
+    });
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${c.id}`);
     for (const x of checks.filter((y) => !y.ok))
       console.log(`      - ${x.name}${x.detail ? ` (${x.detail})` : ''}`);
   }
-  console.log(`${cases.length - failed}/${cases.length} apply_correction cases passed`);
-  return failed === 0 ? 0 : 1;
+  const passed = outcomes.filter((o) => o.ok).length;
+  console.log(`${passed}/${cases.length} apply_correction cases passed`);
+  return outcomes;
 }
