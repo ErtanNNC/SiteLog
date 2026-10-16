@@ -44,7 +44,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 - **Sizin bakmanız gereken:**
   - Bildirimlerin Türkçe metinleri (~60 metin, `packages/shared/src/copy/ui/tr.ts` içinde `shell.notifications.notices`) benim çevirim. Q66/Q68 Türkçe okumasına eklendi.
   - Kestrel demo bildirimleri biraz değişti: "needs review" bildirimi şantiye adı yerine rapor numarasıyla başlıyor, sözlük bildirimi "3 new terms to review" diyor.
-- **Yarın sabahki telefon testi öncesi (benim yapacaklarım):** bekleyen tüm yeni migration'lar (`20261015000070` … `20261016000050`) ve güncel edge function'lar preview projesine yüklenecek. Saha uygulaması artık onayda taslak sürümünü (`draftRev`) istiyor, eski field-api ile onay çalışmaz. Ardından phone-setup ve preview-worker çalışacak, linkler size gelecek. Hepsi yalnızca preview projesinde, staging'e dokunulmuyor.
+- **Yarın sabahki telefon testi öncesi (benim yapacaklarım):** bekleyen tüm yeni migration'lar (`20261015000070` … `20261016000070`) ve güncel edge function'lar preview projesine yüklenecek. Saha uygulaması artık onayda taslak sürümünü (`draftRev`) istiyor, eski field-api ile onay çalışmaz. Ardından phone-setup ve preview-worker çalışacak, linkler size gelecek. Hepsi yalnızca preview projesinde, staging'e dokunulmuyor.
 - **Geliştiriciler için not:** anahtar yoksa worker artık sahte veriye kendiliğinden geçmiyor. Yerelde uçtan uca çalıştırmak için `.env` içine `EXTRACT_PROVIDER=fake` ve `TRANSCRIBE_PROVIDER=fake` yazılmalı.
 - Actions döndükten sonraki CI'da iki eski test güncellendi (9278b0e, a41cdec); kod hatası değildi. Tüm işin birlikte CI sonucu bekleniyor.
 - W1-19 yerel hazırlık bitti (a767f12): RUNBOOK §2 "Cut-over (W1-19), step by step" (adım 0–8, her biri komut, ön koşul, doğrulama, geri alma), `docs/DEMO_NOTES.md` (demo senaryosu tıklama tıklama), `pnpm cutover:preflight` (yerel ön kontrol; paketlerde sır yok: PASS), staging şeklindeki veritabanında cut-over provası (cutover.test.ts). Hiçbir uzak adım yapılmadı. **Hafta 1 ticket'larının tamamı kodlandı;** kalanlar sizin onay ve kontrollerinizde.
@@ -137,6 +137,15 @@ Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahta
 - **CI düzeltmeleri:** hatırlatma testinin iki hatası giderildi (cbeb5a1, 5d1f9f6). Worker CI'da artık test saatini kullanıyor; production'da bu ayar reddediliyor.
 - Q78 ve Q79 önerilen varsayımla kuruldu, cevabınızı bekliyor.
 - **Q91 (yeni, kararınız):** plan "kayıp saat = işçi × kaybedilen saat" diyor, spec ise yalnızca durulan saat diyor. Ayrıca 12 işçi × 8,5 saat veritabanı alanına sığmıyor. Öneri ve yapılan: kayıp saat = durulan saat; ekip-saati kaybı özete yazılıyor.
+
+**W2-09 ve W2-13 bitti (952689a, a765eef), test verisiyle:**
+
+- **"Diğer…" cevabı (W2-09):** soruya sesle ya da sayı yazarak cevap verilebiliyor. Cevap anlaşılmazsa bir kez daha soruluyor, ikinci seferde soru cevapsız olarak işaretleniyor.
+- **Test kaydı (W2-13):** uygulama ilk açıldığında kısa bir test kaydı alınıyor. Duyulan metin kişiye bir kez gösteriliyor, sonra kayıt silinip iz bırakılmıyor.
+- **Anahtar gerekiyor:** gerçek denemeler için `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` lazım.
+- **Q92 (kararınız):** sayı içermeyen bir cevap gelirse (ör. "dünküyle aynı") ne olsun? Şimdilik bir kez daha soruluyor, sonra işaretleniyor.
+- **Q93:** panelde cevap kaydı kaynak olarak görünüyor ama henüz dinlenemiyor.
+- Yeni ES/TR metinler Q63 okumasına eklendi.
 
 **Sizin yapmanız gerekenler (hafta 2, acele değil ama uzun sürüyor):**
 
