@@ -145,13 +145,31 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
 - **Küçük:** ekran okuyucu ekip satırındaki "Cevaplandı" işaretini okumuyordu.
 - **Küçük:** iki kişili şantiyede bir kişi diğerinin düzeltme önizlemesini görebiliyordu.
 
-**Şu an sürüyor:**
+**W2-10 düzeltmeleri ve W2-11 yapıldı (0f66219 … 379c905; telefon testi bekliyor):**
 
-- W2-11 (dosyalanmış raporu telefondan düzeltme): son 14 gündeki bir rapora "Bir şeyi değiştir" → konuş → önizleme → kaydet; yeni sürüm, yeni PDF, ofise "güncellendi" e-postası ve kişiye onay mesajı. 14 günden eski rapor kilitli ("ofise sorun").
-- Ardından yukarıdaki 7 W2-10 düzeltmesi, her biri ayrı commit ve testle.
-- Bitince hepsini birlikte gönderip CI'ı kontrol edeceğim.
+- W2-10 incelemesindeki 7 sorunun hepsi düzeltildi, her biri kendi testiyle (yeni migration `20261016000120`).
+- **W2-11, dosyalanmış raporu telefondan değiştirme:** Geçmiş raporlarda son 14 gündeki bir rapora "Bir şeyi değiştir" → konuş ya da yaz → önizleme → "Değişikliği kaydet".
+  - Raporun yeni sürümü (v2, v3 …) oluşuyor, eski sürüme dokunulmuyor ve her sürüm onu kimin yaptığını gösteriyor.
+  - Yeni `_v2` PDF hazırlanıyor. Ofise ve raporu imzalayan kişiye "güncellendi" e-postası, kişiye de "Güncellendi: … Sürüm 2 ofise gönderildi." mesajı gidiyor; tekrar denemelerde her biri yalnızca bir kez.
+  - İmzalanmış bir rapor değişince tekrar "dosyalandı" durumuna dönüyor ve imzalayan kişiye panelde bildirim gidiyor.
+  - 14 günden eski rapor kilitli: "Ofise sorun."
+  - Yeni migration: `20261016000110`.
+- CI'daki kırmızı test düzeltildi: testin şantiyesinde e-posta alıcısı tanımlı değildi, kodda hata yoktu.
 
-**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10, yeni migration'lar `…080` – `…100`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
+**Yeni sorular (önerimle kuruldu; aksini söylemezseniz böyle kalır):**
+
+- **Q98:** dosyalanmış raporda +/- düğmeleri yok; değişiklik sesle ya da yazarak yapılıyor ve tek seferde kaydediliyor.
+- **Q99:** durdurulmuş ya da arşivlenmiş bir şantiyenin raporu telefondan değiştirilemiyor; ofis panelden değiştiriyor.
+- **Q100:** değişiklik notunu ("Apex Concrete 6 → 7 işçi") yapay zekâ değil kod yazıyor. Demo verisindeki örnek metin biraz farklı okunuyor.
+- **Q101:** ofis, kişinin değişikliğinin PDF'i hazırlanmadan daha yeni bir sürüm yaparsa, kişinin sürümü için ayrı "güncellendi" e-postası ve mesajı gitmiyor.
+
+**Sırada:**
+
+- W2-11'in bağımsız incelemesi.
+- Küçük bir eksik: imzalı rapora sonradan fotoğraf eklenince (W2-04) "güncellendi" e-postası imzalayan kişiye gitmiyor. Düzeltilecek.
+- W2-12: SMS anahtar kelimeleri (İŞ YOK, HAVA, DÜZELT, OK; iki yönlü SMS ülkelerinde).
+
+**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10, W2-11, yeni migration'lar `…080` – `…120`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
 
 ## Hafta 2 (M6) — başladı
 
