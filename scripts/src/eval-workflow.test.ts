@@ -120,7 +120,8 @@ describe('eval.yml', () => {
     );
     // Both triggers take the same inputs; a call declares no secrets (Deploy inherits them, and the
     // job reads ANTHROPIC_API_KEY alone).
-    const [dispatch, call] = on.replace(/^on:\n/, '').split(/^ {2}workflow_call:$/m);
+    const [dispatch = '', call = ''] = on.replace(/^on:\n/, '').split(/^ {2}workflow_call:$/m);
+    expect(call).not.toBe('');
     expect(call.replace(/^ {2}#.*\n/gm, '').trim()).toBe(
       dispatch
         .replace(/^ {2}workflow_dispatch:$/m, '')
