@@ -1,3 +1,4 @@
+import { expect } from '@playwright/test';
 import { deviceCookieName, FIELD_CONSENT_TEXT_VERSION } from '@sitelog/shared/field-api.ts';
 import { formatDateInTz } from '@sitelog/shared/format.ts';
 import { LINK_CODE_ALPHABET, linkCodeHash, sha256Hex } from '@sitelog/shared/links.ts';
@@ -14,6 +15,7 @@ import { FIELD_PREVIEW_PORT } from '../../config/server.ts';
  */
 export const API_URL = (process.env.API_URL ?? 'http://127.0.0.1:54321').replace(/\/+$/, '');
 const SERVICE_ROLE_KEY = process.env.SERVICE_ROLE_KEY ?? '';
+const ANON_KEY = process.env.ANON_KEY ?? '';
 
 /**
  * The preview server's own port (4176), next to the smoke test's 4175: field-api accepts its
@@ -67,6 +69,8 @@ export interface FieldFixture {
   reporter: { id: string; name: string; firstName: string; phone: string };
   /** The personal link's code (`/r/{code}`); only its hash is stored, as for real links. */
   code: string;
+  /** Auth users a spec made as the org's admin (`officeSession`), removed with the fixture. */
+  officeUserIds?: string[];
 }
 
 /**
@@ -122,9 +126,14 @@ export async function createFieldFixture(): Promise<FieldFixture> {
  */
 export async function dropFieldFixture(f: FieldFixture | undefined): Promise<void> {
   if (!f) return;
+  // Every site of the org (W2-17: a second site, `addSite`).
+  const sites = await rest<{ id: string }[]>('GET', `sites?select=id&org_id=eq.${f.orgId}`).catch(
+    () => [{ id: f.site.id }],
+  );
+  const siteIds = sites.length ? sites.map((s) => s.id) : [f.site.id];
   const uploads = await rest<{ id: string; report_id: string | null }[]>(
     'GET',
-    `uploads?select=id,report_id&site_id=eq.${f.site.id}`,
+    `uploads?select=id,report_id&site_id=${inList(siteIds)}`,
   ).catch(() => []);
   const uploadIds = uploads.map((u) => u.id);
   const reportIds = [...new Set(uploads.map((u) => u.report_id).filter((r): r is string => !!r))];
@@ -136,6 +145,12 @@ export async function dropFieldFixture(f: FieldFixture | undefined): Promise<voi
   if (uploadIds.length)
     steps.push(() => rest('DELETE', `jobs?payload->>uploadId=${inList(uploadIds)}`));
   for (const id of f.reportIds ?? []) if (!reportIds.includes(id)) reportIds.push(id);
+  // Reports field-api made with no upload (W2-08's weather and no-work records, W2-17).
+  const orgReports = await rest<{ id: string }[]>(
+    'GET',
+    `reports?select=id&org_id=eq.${f.orgId}`,
+  ).catch(() => []);
+  for (const r of orgReports) if (!reportIds.includes(r.id)) reportIds.push(r.id);
   if (reportIds.length)
     steps.push(() => rest('DELETE', `jobs?payload->>reportId=${inList(reportIds)}`));
   // The reporter's own jobs (W1-15: the `filed` text's notify job names the reporter).
@@ -156,6 +171,9 @@ export async function dropFieldFixture(f: FieldFixture | undefined): Promise<voi
   }
   steps.push(() => rest('DELETE', `field_links?reporter_id=eq.${f.reporter.id}`));
   steps.push(() => rest('DELETE', `orgs?id=eq.${f.orgId}`));
+  // W2-17: the office user a spec made for the Demo phone's replies (`officeSession`).
+  for (const userId of f.officeUserIds ?? [])
+    steps.push(() => authAdmin('DELETE', `users/${userId}`));
   let first: unknown = null;
   for (const step of steps) {
     try {
@@ -198,7 +216,11 @@ export async function verifiedDevice(
       text_version: FIELD_CONSENT_TEXT_VERSION,
     })),
   );
-  await rest('PATCH', `reporters?id=eq.${f.reporter.id}`, { status: 'active' });
+  // As field-api's consent does (START reads activated_at to restore `active`, W2-17).
+  await rest('PATCH', `reporters?id=eq.${f.reporter.id}`, {
+    status: 'active',
+    activated_at: new Date().toISOString(),
+  });
   return { name: deviceCookieName(f.reporter.id), value: token, deviceId: device!.id };
 }
 
@@ -444,4 +466,140 @@ export async function seedDraft(f: FieldFixture): Promise<SeededDraft> {
     answer: { optionId: 'o2', text: '5 · full day', parsed: { workers: 5, fullDay: true } },
   });
   return { reportId, reportNo };
+}
+
+/**
+ * The device code texted to the reporter (F4 step 2): the six digits of the newest console
+ * `verify_code` row (what the Demo phone shows), once the reporter has more than `before` of them
+ * (pass `codesSent()` from before the tap when an earlier code exists).
+ */
+export async function deviceCode(reporterId: string, before = 0): Promise<string> {
+  let otp = '';
+  await expect
+    .poll(
+      async () => {
+        const rows = await rest<{ body: string; provider: string }[]>(
+          'GET',
+          `messages?select=body,provider&reporter_id=eq.${reporterId}&copy_key=eq.verify_code&order=created_at.desc`,
+        );
+        const m = /(\d{3})\s?(\d{3})/.exec(rows[0]?.body ?? '');
+        if (rows.length > before && m && rows[0]!.provider === 'console') otp = `${m[1]}${m[2]}`;
+        return otp;
+      },
+      { timeout: 15_000 },
+    )
+    .toMatch(/^\d{6}$/);
+  return otp;
+}
+
+/** How many device codes the reporter was texted so far (`deviceCode`'s `before`). */
+export async function codesSent(reporterId: string): Promise<number> {
+  const rows = await rest<{ id: string }[]>(
+    'GET',
+    `messages?select=id&reporter_id=eq.${reporterId}&copy_key=eq.verify_code`,
+  );
+  return rows.length;
+}
+
+/**
+ * Every day a working day for the fixture's org (W2-03, W2-08): field-api refuses a day off or
+ * today's daily link on a day that is not one (`not_working_day`), and CI runs on weekends too.
+ */
+export async function everyDayWorking(f: FieldFixture): Promise<void> {
+  await rest('PATCH', `org_settings?org_id=eq.${f.orgId}`, { working_days: [1, 2, 3, 4, 5, 6, 7] });
+}
+
+/**
+ * A second site of the fixture's org, the reporter on it as its primary (F14, W2-03): `deadline`
+ * is the site's `HH:MM` in America/Chicago.
+ */
+export async function addSite(
+  f: FieldFixture,
+  site: { name: string; projectCode: string; deadline?: string },
+): Promise<{ id: string; name: string; projectCode: string }> {
+  const [row] = await rest<{ id: string }[]>('POST', 'sites', {
+    org_id: f.orgId,
+    name: site.name,
+    project_code: site.projectCode,
+    timezone: 'America/Chicago',
+    deadline: site.deadline ?? '17:30',
+  });
+  await rest('POST', 'site_reporters', {
+    site_id: row!.id,
+    reporter_id: f.reporter.id,
+    is_primary: true,
+  });
+  return { id: row!.id, name: site.name, projectCode: site.projectCode };
+}
+
+/** A GoTrue admin call as the service role. */
+async function authAdmin<T = unknown>(
+  method: 'POST' | 'DELETE',
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const res = await fetch(`${API_URL}/auth/v1/admin/${path}`, {
+    method,
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      'content-type': 'application/json',
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`auth ${method} ${path}: HTTP ${res.status} ${text}`);
+  return (text ? JSON.parse(text) : null) as T;
+}
+
+/**
+ * An admin of the fixture's demo org, signed in (W2-17, F15): a fresh auth user, its
+ * `org_members` row, and a session minted as `supabase/db-tests/stack/api-invite-reporter.test.ts`
+ * does (a magic link's token hash verified). The Demo phone's replies (`sms-webhook/demo-reply`)
+ * take its access token. The user goes with the fixture (`dropFieldFixture`).
+ */
+export async function officeSession(f: FieldFixture): Promise<string> {
+  if (!ANON_KEY)
+    throw new Error('ANON_KEY is not set: export the output of `supabase status -o env`');
+  const email = `e2e-field-${Date.now()}@e2e-field.example`;
+  const user = await authAdmin<{ id: string }>('POST', 'users', { email, email_confirm: true });
+  (f.officeUserIds ??= []).push(user.id);
+  await rest('POST', 'org_members', { org_id: f.orgId, user_id: user.id, role: 'admin' });
+  const link = await authAdmin<{ hashed_token?: string }>('POST', 'generate_link', {
+    type: 'magiclink',
+    email,
+  });
+  if (!link.hashed_token) throw new Error('generate_link gave no hashed_token');
+  const res = await fetch(`${API_URL}/auth/v1/verify`, {
+    method: 'POST',
+    headers: { apikey: ANON_KEY, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'magiclink', token_hash: link.hashed_token }),
+  });
+  const session = (await res.json()) as { access_token?: string };
+  if (!res.ok || !session.access_token) throw new Error(`verify: HTTP ${res.status}`);
+  return session.access_token;
+}
+
+/**
+ * A text typed as the reporter in the panel's Demo phone (F15: STOP, START): sms-webhook's
+ * `/demo-reply`, handled inline on the console driver, as an admin of the demo org.
+ */
+export async function demoReply(
+  jwt: string,
+  reporterId: string,
+  body: string,
+): Promise<{ keyword: string | null; replyId: string | null }> {
+  const res = await fetch(`${API_URL}/functions/v1/sms-webhook/demo-reply`, {
+    method: 'POST',
+    headers: {
+      apikey: ANON_KEY,
+      authorization: `Bearer ${jwt}`,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({ reporterId, body }),
+  });
+  const text = await res.text();
+  if (res.status !== 201) throw new Error(`demo-reply ${body}: HTTP ${res.status} ${text}`);
+  return JSON.parse(text) as { keyword: string | null; replyId: string | null };
 }

@@ -97,7 +97,7 @@ jobs:
   e2e-supabase:
     name: E2E · local Supabase stack (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -208,14 +208,6 @@ jobs:
           pnpm --filter @sitelog/db exec vitest run --config vitest.stack.config.ts stack/field-api.test.ts stack/api-invite-reporter.test.ts -t "on the local stack"
       - name: Install Chromium
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
-      # The field app (W1-09) on the stack, at 390 px with Chromium's fake microphone: a reporter
-      # of its own demo org opens the personal link → device check (the code from the console
-      # messages row) → consent → Today → record → the clip by signed URL → complete creates the
-      # report (processing, channel web) and the transcribe_upload job → Processing; axe on every
-      # screen. Before the worker starts, so the job is still queued (apps/field/e2e/supabase/, the
-      # `stack` project).
-      - name: Field app · link → device check → consent → record → upload
-        run: pnpm --filter @sitelog/field e2e:supabase --project=stack
       # The `supabase` project: no worker runs, so the jobs these specs enqueue stay queued.
       - name: Login · realtime · edit → v2 · sign-off · payroll CSV · EOT pack
         run: pnpm --filter @sitelog/web e2e:supabase --project=supabase
@@ -228,7 +220,8 @@ jobs:
       # EOT pack, PDFs) are processed now and the specs above still see them queued.
       # WORKER_CLOCK_OVERRIDE (test only, refused in production; never on a hosted project): the
       # worker's clock starts at WORKER_CLOCK_START, just after the ladder spec's 17:46 Chicago
-      # tick (scheduler-tick's `?now=2026-10-12T22:46Z`, SCHEDULER_CLOCK_OVERRIDE), and runs on in
+      # tick (scheduler-tick's `?now=2026-10-12T22:46Z`, SCHEDULER_CLOCK_OVERRIDE; the spec runs in
+      # the M6 step, minutes later, still well before 20:00 on that clock), and runs on in
       # real time, so the ladder jobs' quiet-hours `notAfter` (20:00 Chicago that day) is ahead of
       # it, not days behind. Queue timing (run_after, claim_jobs) stays on the database clock.
       - name: Start the worker
@@ -265,15 +258,30 @@ jobs:
       - name: Invite → welcome text in the Demo phone (worker)
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
-        run: pnpm --filter @sitelog/web e2e:supabase --project=worker
-      # The field app's `worker` project (W1-13): a seeded open question on a verified phone →
-      # "5 · full day" (field-api maps it, queues decide_next) → the worker's decide_next shows the
-      # draft (Delta 5 × 8 h = 40 h) → Confirm & send queues file_report for the version shown
-      # (apps/field/e2e/supabase/worker/).
-      - name: Field app · question → draft → Confirm & send (worker)
+        run: pnpm --filter @sitelog/web e2e:supabase --project=worker --grep-invert @m6 --pass-with-no-tests
+      # The field app's `worker` project outside the M6 suite (W2-04: photos after filing → v2, the
+      # `_v2` PDF and the Updated email). The rest of apps/field/e2e/supabase/ (W1-09's link →
+      # record → upload, W1-13's question → draft → filed, W2-09 … W2-13) is tagged `@m6` and runs
+      # in the M6 step below.
+      - name: Field app · photos after filing (worker)
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
-        run: pnpm --filter @sitelog/field e2e:supabase --project=worker
+        run: pnpm --filter @sitelog/field e2e:supabase --project=worker --grep-invert @m6 --pass-with-no-tests
+      # W2-17: the M6 acceptance suite (spec §16.2 M6 Done when), one command (`pnpm e2e:m6`): every
+      # spec tagged `@m6`, one tag per flow (@F4 new phone, consent, preference, test clip; @F5
+      # record, upload, offline; @F7 buttons, Other by voice and by number; @F8 fix by voice and
+      # confirm; @F10 Past reports → change → v2; @F11 daily link → R1 → R2 → missing on the moved
+      # clock; @F12 weather and no work; @F14 two sites; @F15 preferences, consent off, STOP and
+      # START, sign out; @F16 expired link, new phone, the lock). Fake providers only (the worker
+      # above: TRANSCRIBE_PROVIDER and EXTRACT_PROVIDER fake, console SMS and email). It runs with
+      # the worker up, so the field app's `stack` specs (record, upload, offline …) see their
+      # transcription jobs queued or already picked up: they accept both. The ladder spec's ticks
+      # use scheduler-tick's `?now=` and the worker's test clock (WORKER_CLOCK_START, a few minutes
+      # behind by now, still before the 20:00 quiet-hours guard of its messages).
+      - name: M6 acceptance suite (W2-17, pnpm e2e:m6)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+        run: pnpm e2e:m6
       - name: Supabase logs
         if: failure()
         run: |

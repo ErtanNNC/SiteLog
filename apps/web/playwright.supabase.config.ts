@@ -13,6 +13,8 @@ import { ANON_KEY, APP_URL, SUPABASE_URL } from './e2e/supabase/support';
  * it enqueues stay queued; `worker` (e2e/supabase/worker/) needs the worker running against the
  * same stack (`pnpm dev:worker`, its /health at WORKER_HEALTH_URL) and skips locally without it.
  * CI runs `--project=supabase`, starts the worker, then `--project=worker` (ci.yml e2e-supabase).
+ * W2-17: specs tagged `@m6` (here the ladder, `@F11`) belong to the M6 acceptance suite,
+ * `pnpm e2e:m6`, which CI runs as its own step (the other steps `--grep-invert @m6`).
  */
 const DIST = 'node_modules/.e2e/supabase';
 const PORT = new URL(APP_URL).port;

@@ -18,6 +18,10 @@ import { API_URL, FIELD_E2E_PORT, FIELD_E2E_URL } from './e2e/supabase/stack';
  * Confirm & send) needs the worker running against the same stack (`pnpm dev:worker`, its /health
  * at WORKER_HEALTH_URL) and skips without it. CI runs `--project=stack`, starts the worker, then
  * `--project=worker` (ci.yml e2e-supabase).
+ *
+ * W2-17: the M6 acceptance suite is every spec tagged `@m6` here and in the panel's config, one
+ * flow tag each (`@F4` … `@F16`); `pnpm e2e:m6` runs both configs with `--grep @m6` (the worker
+ * up, WORKER_HEALTH_URL set), and CI runs it as its own step after the other specs.
  */
 const DIST = 'node_modules/.e2e/field-supabase';
 

@@ -50,78 +50,87 @@ test.afterAll(async () => {
   await dropFieldFixture(f);
 });
 
-test('Change something → apply_correction → preview → Save change → v2, _v2, Updated, edit_applied', async ({
-  page,
-  context,
-}) => {
-  const fx = f!;
-  const report = d!;
-  const cookie = await verifiedDevice(fx);
-  await context.addCookies([
-    { name: cookie.name, value: cookie.value, url: FIELD_E2E_URL, httpOnly: true, sameSite: 'Lax' },
-  ]);
-  await page.goto(`/r/${fx.code}`);
-  await expect(page).toHaveURL(/\/today$/);
-  await page.getByRole('link', { name: copy.today.pastReports }).click();
-  await page.getByRole('link', { name: new RegExp(report.reportNo) }).click();
-  await page.getByRole('button', { name: copy.history.change.button }).click();
-  const sheet = page.getByRole('dialog', { name: copy.history.change.title });
-  await sheet.getByRole('button', { name: copy.draft.fix.record }).click();
-  await expect(sheet.getByRole('timer')).toHaveText(/^00:0[2-9] \/ 00:30$/, { timeout: 10_000 });
-  await sheet.getByRole('button', { name: copy.draft.fix.stop }).click();
+test(
+  'Change something → apply_correction → preview → Save change → v2, _v2, Updated, edit_applied',
+  { tag: ['@m6', '@F10'] },
+  async ({ page, context }) => {
+    const fx = f!;
+    const report = d!;
+    const cookie = await verifiedDevice(fx);
+    await context.addCookies([
+      {
+        name: cookie.name,
+        value: cookie.value,
+        url: FIELD_E2E_URL,
+        httpOnly: true,
+        sameSite: 'Lax',
+      },
+    ]);
+    await page.goto(`/r/${fx.code}`);
+    await expect(page).toHaveURL(/\/today$/);
+    await page.getByRole('link', { name: copy.today.pastReports }).click();
+    await page.getByRole('link', { name: new RegExp(report.reportNo) }).click();
+    await page.getByRole('button', { name: copy.history.change.button }).click();
+    const sheet = page.getByRole('dialog', { name: copy.history.change.title });
+    await sheet.getByRole('button', { name: copy.draft.fix.record }).click();
+    await expect(sheet.getByRole('timer')).toHaveText(/^00:0[2-9] \/ 00:30$/, { timeout: 10_000 });
+    await sheet.getByRole('button', { name: copy.draft.fix.stop }).click();
 
-  const preview = page.getByRole('region', { name: copy.draft.fix.previewTitle });
-  await expect(preview).toBeVisible({ timeout: 60_000 });
-  await expect(preview.getByRole('listitem')).toHaveText('Apex Concrete 6 → 7 workers, 48 → 56 h');
-  await expectFieldScreen(page);
-  await preview.getByRole('button', { name: copy.draft.fix.save }).click();
-  await expect(
-    page
-      .getByRole('status')
-      .filter({ hasText: copy.history.change.saved.replace('{{version}}', '2') }),
-  ).toBeVisible({ timeout: 30_000 });
-
-  const [v2] = await rest<
-    {
-      author: string;
-      via: string;
-      change_note: string;
-      author_reporter_id: string;
-      data: { manpower: { workers: number; totalHours: number }[] };
-    }[]
-  >(
-    'GET',
-    `report_versions?select=author,via,change_note,author_reporter_id,data&report_id=eq.${report.reportId}&version=eq.2`,
-  );
-  expect(v2).toMatchObject({
-    author: 'reporter',
-    via: 'web',
-    change_note: 'Apex Concrete 6 → 7 workers, 48 → 56 h',
-    author_reporter_id: fx.reporter.id,
-  });
-  expect(v2!.data.manpower[0]).toMatchObject({ workers: 7, totalHours: 56 });
-
-  // render_pdf: the PDF card names _v2.
-  await expect(page.getByRole('link', { name: /_v2\.pdf/ })).toBeVisible({ timeout: 60_000 });
-
-  // The "Updated" email and the edit_applied text, once each.
-  const emails = () =>
-    rest<{ subject: string; body_text: string; recipients: string[] }[]>(
-      'GET',
-      `console_emails?select=subject,body_text,recipients&org_id=eq.${fx.orgId}&kind=eq.report_updated`,
+    const preview = page.getByRole('region', { name: copy.draft.fix.previewTitle });
+    await expect(preview).toBeVisible({ timeout: 60_000 });
+    await expect(preview.getByRole('listitem')).toHaveText(
+      'Apex Concrete 6 → 7 workers, 48 → 56 h',
     );
-  await expect.poll(async () => (await emails()).length, { timeout: 60_000 }).toBe(1);
-  const [email] = await emails();
-  expect(email!.recipients).toEqual(['pm@e2e-field.example']);
-  expect(email!.subject).toMatch(new RegExp(`^Updated: ${report.reportNo} · `));
-  expect(email!.body_text).toContain('Apex Concrete 6 → 7 workers, 48 → 56 h');
-  const texts = () =>
-    rest<{ body: string }[]>(
+    await expectFieldScreen(page);
+    await preview.getByRole('button', { name: copy.draft.fix.save }).click();
+    await expect(
+      page
+        .getByRole('status')
+        .filter({ hasText: copy.history.change.saved.replace('{{version}}', '2') }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    const [v2] = await rest<
+      {
+        author: string;
+        via: string;
+        change_note: string;
+        author_reporter_id: string;
+        data: { manpower: { workers: number; totalHours: number }[] };
+      }[]
+    >(
       'GET',
-      `messages?select=body&reporter_id=eq.${fx.reporter.id}&copy_key=eq.edit_applied`,
+      `report_versions?select=author,via,change_note,author_reporter_id,data&report_id=eq.${report.reportId}&version=eq.2`,
     );
-  await expect.poll(async () => (await texts()).length, { timeout: 60_000 }).toBe(1);
-  expect((await texts())[0]!.body).toMatch(
-    /^Updated \w+day: Apex Concrete 6 -> 7 workers, 48 -> 56 h\. Version 2 sent to the office\.$/,
-  );
-});
+    expect(v2).toMatchObject({
+      author: 'reporter',
+      via: 'web',
+      change_note: 'Apex Concrete 6 → 7 workers, 48 → 56 h',
+      author_reporter_id: fx.reporter.id,
+    });
+    expect(v2!.data.manpower[0]).toMatchObject({ workers: 7, totalHours: 56 });
+
+    // render_pdf: the PDF card names _v2.
+    await expect(page.getByRole('link', { name: /_v2\.pdf/ })).toBeVisible({ timeout: 60_000 });
+
+    // The "Updated" email and the edit_applied text, once each.
+    const emails = () =>
+      rest<{ subject: string; body_text: string; recipients: string[] }[]>(
+        'GET',
+        `console_emails?select=subject,body_text,recipients&org_id=eq.${fx.orgId}&kind=eq.report_updated`,
+      );
+    await expect.poll(async () => (await emails()).length, { timeout: 60_000 }).toBe(1);
+    const [email] = await emails();
+    expect(email!.recipients).toEqual(['pm@e2e-field.example']);
+    expect(email!.subject).toMatch(new RegExp(`^Updated: ${report.reportNo} · `));
+    expect(email!.body_text).toContain('Apex Concrete 6 → 7 workers, 48 → 56 h');
+    const texts = () =>
+      rest<{ body: string }[]>(
+        'GET',
+        `messages?select=body&reporter_id=eq.${fx.reporter.id}&copy_key=eq.edit_applied`,
+      );
+    await expect.poll(async () => (await texts()).length, { timeout: 60_000 }).toBe(1);
+    expect((await texts())[0]!.body).toMatch(
+      /^Updated \w+day: Apex Concrete 6 -> 7 workers, 48 -> 56 h\. Version 2 sent to the office\.$/,
+    );
+  },
+);
