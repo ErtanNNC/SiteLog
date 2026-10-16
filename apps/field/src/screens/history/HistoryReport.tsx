@@ -46,6 +46,8 @@ function HistoryReportLoaded({ code, id }: { code: string; id: string }) {
   const [failed, setFailed] = useState(false);
   const [saved, setSaved] = useState<{ version: number } | null>(null);
   const [savedLate, setSavedLate] = useState(false);
+  // W2-11 review: Save change refused for a newer version; kept across the card's remount.
+  const [changeStale, setChangeStale] = useState(false);
 
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -192,9 +194,12 @@ function HistoryReportLoaded({ code, id }: { code: string; id: string }) {
           onSaved={(version) => {
             setSaved({ version });
             setSavedLate(false);
+            setChangeStale(false);
             void load();
           }}
           onReload={() => void load()}
+          stale={changeStale}
+          onStale={setChangeStale}
         />
       ) : null}
       {inProgress(view.status) ? (

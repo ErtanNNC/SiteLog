@@ -26,6 +26,8 @@ export function ChangeReport({
   view,
   onSaved,
   onReload,
+  stale = false,
+  onStale,
   recorderDeps,
 }: {
   code: string;
@@ -34,6 +36,13 @@ export function ChangeReport({
   onSaved: (version: number) => void;
   /** The report moved on (locked, another version, no longer filed): load it again. */
   onReload: () => void;
+  /**
+   * W2-11 review: Save change was refused for a newer version. The reload remounts this card (it
+   * is keyed by the version), so the parent keeps the notice ("The report changed while I was
+   * listening…") until the reporter starts a new change or dismisses it.
+   */
+  stale?: boolean;
+  onStale?: (stale: boolean) => void;
   /** Tests: a fake MediaRecorder. */
   recorderDeps?: RecorderDeps;
 }) {
@@ -42,7 +51,7 @@ export function ChangeReport({
   const navigate = useNavigate();
   const { t } = useFieldCopy();
   const [fix, setFix] = useState<Fix>(() =>
-    fixFromView(view.correction?.afterFiling ? view.correction : null),
+    stale ? { kind: 'stale' } : fixFromView(view.correction?.afterFiling ? view.correction : null),
   );
   const [error, setError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -194,6 +203,7 @@ export function ChangeReport({
       const apiCode = apiErrorCode(err);
       if (apiCode === 'draft_changed' || apiCode === 'correction_not_ready') {
         setFix({ kind: 'stale' });
+        onStale?.(true);
         onReload();
         return;
       }
@@ -209,6 +219,7 @@ export function ChangeReport({
 
   function open() {
     setFix({ kind: 'idle' });
+    onStale?.(false);
     setError(null);
     setSheetOpen(true);
   }
@@ -231,6 +242,7 @@ export function ChangeReport({
         onTryAgain={open}
         onDiscard={() => {
           setFix({ kind: 'idle' });
+          onStale?.(false);
           setError(null);
         }}
         staleMessage={t('history.change.stale')}

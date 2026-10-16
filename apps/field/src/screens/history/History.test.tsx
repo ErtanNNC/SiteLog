@@ -206,6 +206,52 @@ describe('Past reports (F10, F14, §9.3; W2-03)', () => {
     expect(screen.getByRole('button', { name: 'Save change' })).toBeInTheDocument();
   });
 
+  it('W2-11 review: Save change refused for a newer version says so after the report reloads', async () => {
+    const preview = {
+      id: 'c1',
+      status: 'ready' as const,
+      via: 'text' as const,
+      changes: [
+        {
+          kind: 'crew' as const,
+          company: 'Apex Concrete',
+          change: 'changed' as const,
+          workers: [6, 7] as [number, number],
+          hoursPerWorker: [8, 8] as [number, number],
+          totalHours: [48, 56] as [number, number],
+        },
+      ],
+      clarification: null,
+      reason: null,
+      version: 1,
+      draftRev: 1,
+      afterFiling: true,
+    };
+    const v1 = reportView({
+      id: 'r2',
+      status: 'filed',
+      currentVersion: 1,
+      data: heroData(),
+      change: { canChange: true, locked: false },
+      correction: preview,
+    });
+    // The office made version 2 meanwhile; the stale preview is no longer in the view.
+    const v2 = { ...v1, currentVersion: 2, correction: null };
+    const routes = fakeRoutes({
+      report: vi.fn().mockResolvedValueOnce(v1).mockResolvedValue(v2),
+      applyCorrection: vi.fn().mockRejectedValue(apiError(409, 'draft_changed')),
+    });
+    renderApp('/history/r2', { routes });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save change' }));
+    expect(await screen.findByText('Version 2')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The report changed while I was listening. Check it, then say the change again.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save change' })).toBeNull();
+  });
+
   it('W2-11 review: a preview with no line offers no Save change', async () => {
     const routes = fakeRoutes({
       report: vi.fn().mockResolvedValue(
