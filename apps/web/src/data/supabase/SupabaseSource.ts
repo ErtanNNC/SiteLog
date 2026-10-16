@@ -744,12 +744,14 @@ export class SupabaseSource implements DataSource {
   }
 
   /**
-   * The archive's text search (§P6 "report text + transcripts") as a PostgREST `or` filter over
-   * report_archive: report number, site name, project code and the current version's summary (a
-   * substring, as in the demo), or a transcript of the report matching it (full text). `null`
-   * without a query; `''` when the query has nothing left to search for.
+   * The archive's text search (§P6 "report text + transcripts"): the query as a literal
+   * substring (`safe`) and the reports whose transcripts match it (full text, at most IN_CHUNK
+   * ids, so a request URL stays well under proxy limits). `null` without a query; `safe: ''` when
+   * the query has nothing left to search for.
    */
-  private async archiveTextFilter(query: string | null | undefined): Promise<string | null> {
+  private async archiveText(
+    query: string | null | undefined,
+  ): Promise<{ safe: string; ids: string[] } | null> {
     const text = query?.trim();
     if (!text) return null;
     // `,` `(` `)` structure an `or` filter, `"` `\` quote in it, `%` `*` are ilike wildcards.
@@ -757,7 +759,7 @@ export class SupabaseSource implements DataSource {
       .replace(/[,()"\\%*]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    if (!safe) return '';
+    if (!safe) return { safe: '', ids: [] };
     const tr = unwrap(
       await this.sb
         .from('transcripts')
@@ -773,15 +775,25 @@ export class SupabaseSource implements DataSource {
       }),
       'report_id',
     );
-    // At most IN_CHUNK ids, so the request URL stays well under proxy limits.
-    const ids = uniq(srcs.map((x) => x.report_id)).slice(0, IN_CHUNK);
-    const like = `ilike.%${safe}%`;
+    return { safe, ids: uniq(srcs.map((x) => x.report_id)).slice(0, IN_CHUNK) };
+  }
+
+  /**
+   * The archive's text search as a PostgREST `or` filter over report_archive: report number, site
+   * name, project code and the current version's summary (a substring, as in the demo), or a
+   * transcript of the report matching it. `null` without a query; `''` when the query has nothing
+   * left to search for.
+   */
+  private archiveTextFilter(text: { safe: string; ids: string[] } | null): string | null {
+    if (!text) return null;
+    if (!text.safe) return '';
+    const like = `ilike.%${text.safe}%`;
     return [
       `report_no.${like}`,
       `site_name.${like}`,
       `project_code.${like}`,
       `summary.${like}`,
-      ...(ids.length ? [`id.in.(${ids.join(',')})`] : []),
+      ...(text.ids.length ? [`id.in.(${text.ids.join(',')})`] : []),
     ].join(',');
   }
 
@@ -837,20 +849,33 @@ export class SupabaseSource implements DataSource {
       .order('id', { ascending: true });
   }
 
-  /** Lost weather hours over every report matching the filters, not just the page shown. */
-  private async archiveWeatherHours(filters: ReportFilters, text: string | null): Promise<number> {
-    let total = 0;
-    for (let from = 0; ; from += ARCHIVE_ROWS_PER_REQUEST) {
-      const rows = unwrap(
-        await this.archive('id, lost_hours', filters, text)
-          .gt('lost_hours', 0)
-          .order('id', { ascending: true })
-          .range(from, from + ARCHIVE_ROWS_PER_REQUEST - 1),
-      ) as unknown as Array<Pick<ReportArchiveRow, 'id' | 'lost_hours'>>;
-      total += rows.reduce((a, r) => a + Number(r.lost_hours), 0);
-      if (rows.length < ARCHIVE_ROWS_PER_REQUEST) break;
-    }
-    return Math.round(total * 100) / 100;
+  /**
+   * Lost weather hours over every report matching the filters, not just the page shown: one
+   * request, summed in SQL over report_archive with the same filters
+   * (`report_archive_weather_hours`, 20261016000280; audit "'X h lost to weather in this set'
+   * sums only the current page").
+   */
+  private async archiveWeatherHours(
+    filters: ReportFilters,
+    text: { safe: string; ids: string[] } | null,
+  ): Promise<number> {
+    if (text && !text.safe) return 0;
+    const status = filters.status && filters.status !== 'all' ? filters.status : null;
+    const total = await this.rpc('report_archive_weather_hours', {
+      p_org: this.orgId,
+      p_site: filters.siteId ?? null,
+      p_from: filters.from ?? null,
+      p_to: filters.to ?? null,
+      p_status: status,
+      p_edited: !!filters.edited,
+      p_late: !!filters.late,
+      p_has_weather_delay: !!filters.hasWeatherDelay,
+      p_incident: !!filters.incident,
+      p_channel: filters.channel ?? null,
+      p_text: text?.safe ?? null,
+      p_ids: text?.ids.length ? text.ids : null,
+    });
+    return Math.round(Number(total ?? 0) * 100) / 100;
   }
 
   /**
@@ -887,13 +912,14 @@ export class SupabaseSource implements DataSource {
     const sb = this.sb;
     const pageSize = filters.pageSize ?? PAGE_SIZE;
     const page = Math.max(1, filters.page ?? 1);
-    const [core, text] = await Promise.all([this.core(), this.archiveTextFilter(filters.q)]);
+    const [core, search] = await Promise.all([this.core(), this.archiveText(filters.q)]);
+    const text = this.archiveTextFilter(search);
     const [res, weatherHours] = await Promise.all([
       this.archiveOrdered(this.archive('*', filters, text, { count: 'exact' })).range(
         (page - 1) * pageSize,
         page * pageSize - 1,
       ),
-      this.archiveWeatherHours(filters, text),
+      this.archiveWeatherHours(filters, search),
     ]);
     if (res.error) {
       // A page past the last one (a stale or typed URL): PostgREST answers 416. Return it empty
@@ -1562,7 +1588,7 @@ export class SupabaseSource implements DataSource {
       );
       reports = wanted.map((id) => byId.get(id)).filter((r): r is Picked => !!r);
     } else {
-      const text = await this.archiveTextFilter(selection.filters.q);
+      const text = this.archiveTextFilter(await this.archiveText(selection.filters.q));
       const res = await this.archiveOrdered(
         this.archive('id, report_no, current_version, date', selection.filters, text, {
           count: 'exact',

@@ -216,7 +216,11 @@ export function versionRows(input: {
   }));
   const weatherEvents = data.weather.periods.map((p, i): WeatherEventRow => {
     const sources: ReadonlyArray<{ type: string }> = p.source;
-    const audio = sources.find((x) => x.type === 'audio' || x.type === 'voice_note') ?? null;
+    // A voice note, else a call second (20261016000280: P9's *Call ts* chip).
+    const audio =
+      sources.find((x) => x.type === 'audio' || x.type === 'voice_note') ??
+      sources.find((x) => x.type === 'call') ??
+      null;
     return {
       id: demoId(`wx:${reportId}:${version}:${i}`),
       report_id: reportId,

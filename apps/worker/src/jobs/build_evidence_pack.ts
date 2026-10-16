@@ -2,8 +2,14 @@ import { evidencePackStoragePath, noticeData } from '@sitelog/shared';
 import { buildEvidencePackInput, renderEvidencePackPdf } from '../pdf/render';
 import { PermanentJobError, type JobHandler } from './types';
 
-/** §F16 step 2 — EOT evidence pack PDF → exports bucket → email + panel notification. */
+/**
+ * §F16 step 2, F20 — EOT evidence pack PDF → exports bucket → email + panel notification. The PDF
+ * is in the org's report language and paper with the dialog's sections (W3-07), stored once per
+ * pack id, so a rebuild never replaces a pack already sent. `packBuildMs` (job metrics) is the
+ * build time §16.2 M9 budgets (< 2 min for a month).
+ */
 export const buildEvidencePack: JobHandler<'build_evidence_pack'> = async (ctx, payload) => {
+  const started = performance.now();
   const pack = await ctx.db.getEvidencePack(payload.packId);
   if (!pack) throw new PermanentJobError(`pack ${payload.packId} not found`);
   if (pack.status === 'ready') return;
@@ -19,6 +25,7 @@ export const buildEvidencePack: JobHandler<'build_evidence_pack'> = async (ctx, 
       pack.site_id,
       pack.period_start,
       pack.period_end,
+      pack.id,
     );
     await ctx.storage.upload('exports', path, buffer, 'application/pdf');
     await ctx.db.updateEvidencePack(pack.id, {
@@ -52,7 +59,11 @@ export const buildEvidencePack: JobHandler<'build_evidence_pack'> = async (ctx, 
       { kind: 'evidence_pack_ready', packId: pack.id },
       { dedupeKey: `email:pack:${pack.id}` },
     );
-    ctx.metrics.add({ pdfBytes: buffer.length, packDays: input.days.length });
+    ctx.metrics.add({
+      pdfBytes: buffer.length,
+      packDays: input.days.length,
+      packBuildMs: Math.round(performance.now() - started),
+    });
   } catch (err) {
     await ctx.db.updateEvidencePack(pack.id, {
       status: 'failed',

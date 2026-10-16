@@ -69,6 +69,7 @@ const AUTHENTICATED_KEEPS = [
   'add_glossary_term(uuid,text,text,term_kind,text,uuid)',
   'create_org(text,text,text,text,text)',
   'invoice_gaps(uuid,date,date)',
+  'report_archive_weather_hours(uuid,uuid,date,date,text,boolean,boolean,boolean,boolean,text,text,uuid[])',
   'mark_no_work(uuid)',
   'mark_notifications_read(uuid[])',
   'resolve_unknown_company(uuid,text,text,uuid)',

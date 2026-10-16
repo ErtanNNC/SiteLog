@@ -5,6 +5,7 @@ import {
   parseIsoDate,
   upperIn,
   type FieldChannel,
+  type PackConfirmation,
   type ReportLanguage,
   type VersionAuthor,
 } from '@sitelog/shared';
@@ -158,6 +159,83 @@ export interface PdfCopy {
   dayTime(date: string, time: string): string;
   /** "Oct 9, 2026, 20:10" · "9 Eki 2026 20:10". */
   dateTime(date: string, time: string): string;
+  /** The EOT evidence pack (F20, W3-07). */
+  pack: PackCopy;
+}
+
+/** A transcript excerpt's clip: a voice note, or the reporter's lane of a call (F20). */
+export type ExcerptClip = 'voice_note' | 'call';
+
+/**
+ * The F20 EOT evidence pack's labels and sentences (W3-07), in the report language. Dates come
+ * from the PdfCopy date helpers, hours from `hours()`.
+ */
+export interface PackCopy {
+  /** PDF metadata title. */
+  docTitle(site: string, from: string, to: string): string;
+  badge: string;
+  /** Running header, right: "Evidence pack · Oct 1 – Oct 9". */
+  running(from: string, to: string): string;
+  coverSub(from: string, to: string): string;
+  meta: {
+    projectNo: string;
+    address: string;
+    days: string;
+    hoursLost: string;
+    claimReady: string;
+    confirmed: string;
+    generated: string;
+  };
+  /** "2 of 3" (cover cells). */
+  of(n: number, total: number): string;
+  coverBody: string;
+  attribution: string;
+  summaryTitle: string;
+  cols: {
+    date: string;
+    report: string;
+    condition: string;
+    impact: string;
+    lost: string;
+    evidence: string;
+    confirmed: string;
+  };
+  fullDayLost: string;
+  total: string;
+  /** Evidence letters (audio, photo, observed weather) and their legend. */
+  letters: { audio: string; photo: string; weather: string };
+  legend: string;
+  /** The summary table's short "how it was confirmed". */
+  confirmedShort: Record<PackConfirmation, string>;
+  /** "RL-2041-0182 v1 · signed off · 3.5 h lost · claim-ready". */
+  dayLine(
+    reportNo: string,
+    version: number,
+    signedOff: boolean,
+    lost: string,
+    ready: boolean,
+  ): string;
+  /**
+   * The day's confirmation sentence (spec §19 Q134): `at` is when the site manager confirmed, else
+   * when it was filed, already formatted (null: unknown); `typed` = entered in the panel.
+   */
+  confirmation(c: PackConfirmation, at: string | null, typed: boolean): string;
+  /** After a report the site manager did not confirm and the office has not signed off. */
+  notReadyUntilSignedOff: string;
+  sections: {
+    summary: string;
+    weather: string;
+    manpower: string;
+    work: string;
+    transcripts: string;
+    photos: string;
+    observed: string;
+  };
+  noVoice: string;
+  /** "voice note 0:41", "voice note 2 · 0:41", "call 2:15" (n: the clip's number, > 1 clip). */
+  clip(kind: ExcerptClip, n: number | null, ts: string): string;
+  noObserved: string;
+  observedCols: { time: string; precip: string; temp: string; wind: string; gusts: string };
 }
 
 const LANGUAGE_NAMES: Record<ReportLanguage, Record<string, string>> = {
@@ -413,6 +491,88 @@ const en: PdfCopy = {
   dateMedium: (d) => `${monthDay(d, 'en')}, ${parseIsoDate(d).y}`,
   dayTime: (d, t) => `${monthDay(d, 'en')}, ${t}`,
   dateTime: (d, t) => `${monthDay(d, 'en')}, ${parseIsoDate(d).y}, ${t}`,
+  pack: {
+    docTitle: (site, from, to) => `EOT evidence pack — ${site} ${from}–${to}`,
+    badge: 'WEATHER DELAY EVIDENCE',
+    running: (from, to) => `Evidence pack · ${from} – ${to}`,
+    coverSub: (from, to) => `Extension-of-time evidence pack · ${from} to ${to}`,
+    meta: {
+      projectNo: 'Project no.',
+      address: 'Address',
+      days: 'Weather-affected days',
+      hoursLost: 'Hours lost',
+      claimReady: 'Claim-ready days',
+      confirmed: 'Confirmed by site manager',
+      generated: 'Generated',
+    },
+    of: (n, total) => `${n} of ${total}`,
+    coverBody:
+      'This pack collects the daily site reports, transcript excerpts from the site manager’s voice notes and calls, dated photographs and observed weather data for every day in the period on which weather stopped or reassigned work. Each day states how its report was confirmed. Recordings are retained and available on request.',
+    attribution:
+      'Weather data: Open-Meteo (CC BY 4.0), hourly values for the site location. Claim-ready = voice evidence + photo + observed weather data, on a report the site manager confirmed or the office signed off.',
+    summaryTitle: 'Delay summary by day',
+    cols: {
+      date: 'Date',
+      report: 'Report',
+      condition: 'Condition',
+      impact: 'Impact',
+      lost: 'Lost',
+      evidence: 'Evidence',
+      confirmed: 'Confirmed',
+    },
+    fullDayLost: 'Full day lost',
+    total: 'Total',
+    letters: { audio: 'A', photo: 'P', weather: 'W' },
+    legend:
+      'Evidence: A = audio with timestamp (voice note or call) · P = photo · W = observed weather data.',
+    confirmedShort: {
+      recorder: 'Recorder',
+      call: 'Call',
+      sms: 'Text',
+      whatsapp: 'WhatsApp',
+      weather_day: 'Logged',
+      office: 'Office',
+      unconfirmed: 'Not confirmed',
+    },
+    dayLine: (no, v, signedOff, lost, ready) =>
+      `${no} v${v} · ${signedOff ? 'signed off' : 'filed'} · ${lost} lost${ready ? ' · claim-ready' : ''}`,
+    confirmation: (c, at, typed) => {
+      const when = at ? ` at ${at}` : '';
+      switch (c) {
+        case 'recorder':
+          return `Confirmed by the site manager on the recorder${when}.`;
+        case 'call':
+          return `Confirmed by the site manager by voice on the call${when}.`;
+        case 'sms':
+          return `Confirmed by the site manager by text message${when}.`;
+        case 'whatsapp':
+          return `Confirmed by the site manager on WhatsApp${when}.`;
+        case 'weather_day':
+          return `Logged as a weather day by the site manager${when}.`;
+        case 'office':
+          return typed
+            ? `Entered in SiteLog by the office${when}.`
+            : `Filed in SiteLog by the office${when}, without the site manager’s confirmation.`;
+        case 'unconfirmed':
+          return `Filed automatically${when} without the site manager’s confirmation.`;
+      }
+    },
+    notReadyUntilSignedOff: 'Not counted as claim-ready until the office signs it off.',
+    sections: {
+      summary: 'Summary',
+      weather: 'Weather & delays',
+      manpower: 'Manpower on site',
+      work: 'Work performed',
+      transcripts: 'Transcript excerpts',
+      photos: 'Photos',
+      observed: 'Observed weather (hourly)',
+    },
+    noVoice: 'No voice note or call for this day.',
+    clip: (kind, n, ts) =>
+      `${kind === 'call' ? 'call' : 'voice note'}${n !== null ? ` ${n} ·` : ''} ${ts}`,
+    noObserved: 'No observed weather data for this day.',
+    observedCols: { time: 'Time', precip: 'Precip', temp: 'Temp', wind: 'Wind', gusts: 'Gusts' },
+  },
 };
 
 const tr: PdfCopy = {
@@ -625,6 +785,94 @@ const tr: PdfCopy = {
   dateMedium: (d) => `${monthDay(d, 'tr')} ${parseIsoDate(d).y}`,
   dayTime: (d, t) => `${monthDay(d, 'tr')} ${t}`,
   dateTime: (d, t) => `${monthDay(d, 'tr')} ${parseIsoDate(d).y} ${t}`,
+  pack: {
+    docTitle: (site, from, to) => `Süre uzatımı kanıt dosyası — ${site} ${from}–${to}`,
+    badge: 'HAVA MUHALEFETİ KANITLARI',
+    running: (from, to) => `Kanıt dosyası · ${from} – ${to}`,
+    coverSub: (from, to) => `Süre uzatımı kanıt dosyası · ${from} – ${to}`,
+    meta: {
+      projectNo: 'Proje no.',
+      address: 'Adres',
+      days: 'Hava engelli gün',
+      hoursLost: 'Kayıp saat',
+      claimReady: 'Talebe hazır gün',
+      confirmed: 'Şantiye şefi onaylı',
+      generated: 'Oluşturulma',
+    },
+    of: (n, total) => `${n} / ${total}`,
+    coverBody:
+      'Bu dosya, dönem içinde hava koşullarının çalışmayı durdurduğu veya değiştirdiği her gün için günlük şantiye raporlarını, şantiye şefinin sesli notlarından ve görüşmelerinden döküm alıntılarını, tarihli fotoğrafları ve ölçülen hava durumu verilerini içerir. Her gün, raporunun nasıl onaylandığını belirtir. Kayıtlar saklanmaktadır ve talep üzerine sunulabilir.',
+    attribution:
+      'Hava durumu verisi: Open-Meteo (CC BY 4.0), şantiye konumu için saatlik değerler. Talebe hazır = ses kanıtı + fotoğraf + ölçülen hava durumu verisi; rapor şantiye şefi veya ofis tarafından onaylanmış olmalıdır.',
+    summaryTitle: 'Günlere göre gecikme özeti',
+    cols: {
+      date: 'Tarih',
+      report: 'Rapor',
+      condition: 'Durum',
+      impact: 'Etki',
+      lost: 'Kayıp',
+      evidence: 'Kanıt',
+      confirmed: 'Onay',
+    },
+    fullDayLost: 'Tüm gün kayıp',
+    total: 'Toplam',
+    letters: { audio: 'S', photo: 'F', weather: 'H' },
+    legend:
+      'Kanıt: S = zaman damgalı ses kaydı (sesli not veya görüşme) · F = fotoğraf · H = ölçülen hava durumu verisi.',
+    confirmedShort: {
+      recorder: 'Kayıt ekranı',
+      call: 'Görüşme',
+      sms: 'SMS',
+      whatsapp: 'WhatsApp',
+      weather_day: 'Bildirildi',
+      office: 'Ofis',
+      unconfirmed: 'Onaylanmadı',
+    },
+    dayLine: (no, v, signedOff, lost, ready) =>
+      `${no} v${v} · ${signedOff ? 'onaylandı' : 'dosyalandı'} · ${lost} kayıp${ready ? ' · talebe hazır' : ''}`,
+    confirmation: (c, at, typed) => {
+      const when = at ? ` (saat ${at})` : '';
+      switch (c) {
+        case 'recorder':
+          return `Şantiye şefi raporu kayıt ekranında onayladı${when}.`;
+        case 'call':
+          return `Şantiye şefi raporu görüşmede sesli olarak onayladı${when}.`;
+        case 'sms':
+          return `Şantiye şefi raporu kısa mesajla onayladı${when}.`;
+        case 'whatsapp':
+          return `Şantiye şefi raporu WhatsApp’ta onayladı${when}.`;
+        case 'weather_day':
+          return `Şantiye şefi günü hava engeli olarak bildirdi${when}.`;
+        case 'office':
+          return typed
+            ? `Rapor, SiteLog’a ofis tarafından girildi${when}.`
+            : `Rapor, şantiye şefinin onayı olmadan ofis tarafından SiteLog’da dosyalandı${when}.`;
+        case 'unconfirmed':
+          return `Rapor, şantiye şefinin onayı olmadan otomatik olarak dosyalandı${when}.`;
+      }
+    },
+    notReadyUntilSignedOff: 'Ofis onaylayana kadar talebe hazır sayılmaz.',
+    sections: {
+      summary: 'Özet',
+      weather: 'Hava durumu ve gecikmeler',
+      manpower: 'Şantiyedeki işgücü',
+      work: 'Yapılan işler',
+      transcripts: 'Döküm alıntıları',
+      photos: 'Fotoğraflar',
+      observed: 'Ölçülen hava durumu (saatlik)',
+    },
+    noVoice: 'Bu gün için sesli not veya görüşme yok.',
+    clip: (kind, n, ts) =>
+      `${kind === 'call' ? 'arama' : 'sesli not'}${n !== null ? ` ${n} ·` : ''} ${ts}`,
+    noObserved: 'Bu gün için ölçülen hava durumu verisi yok.',
+    observedCols: {
+      time: 'Saat',
+      precip: 'Yağış',
+      temp: 'Sıcaklık',
+      wind: 'Rüzgâr',
+      gusts: 'Hamle',
+    },
+  },
 };
 
 export const PDF_COPY: Record<ReportLanguage, PdfCopy> = { en, tr };

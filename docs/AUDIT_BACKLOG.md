@@ -431,21 +431,21 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### EOT pack ignores the 'included sections' checklist
 
-`apps/worker/src/pdf/render.ts:167` · evidence pack / F16, §P9 · Confirmed 3/3
+`apps/worker/src/pdf/render.ts:167` · evidence pack / F16, §P9 · Confirmed 3/3 · **Fixed (W3-07):** `EvidencePackInput.sections` (`packSections(pack.sections)`, all five when none is stored) drives `EvidencePack.tsx`: Summary prints the delay summary page, Daily reports the day's summary, weather, manpower and work, Transcript excerpts, Photos and Weather data their blocks (numbered in order); with no day section ticked there is no day page. Photos and transcripts are loaded only when printed; the evidence marks and claim-ready use the photo source count (`apps/worker/src/pdf/snapshot.test.ts`, `apps/worker/src/jobs/evidence-pack.pglite.test.ts`).
 
 - **Problem:** An office user builds a pack with only 'summary' and 'weather' ticked, because the transcripts contain remarks they do not want to send to the owner. The PDF still includes every day's transcript excerpts and photos.
 - **Fix:** Add `sections` to EvidencePackInput, set from pack.sections, defaulting to all PACK_SECTIONS when empty. In EvidencePack.tsx, wrap each part in a check: - 'summary': the delay summary table on the cover. - 'reports': per-day blocks 01-04. - 'transcripts': 05. - 'photos': 06. - 'weather': 07. If no per-day section is selected, do not render the per-day <Page> at all; otherwise each day gets an empty page with only a header. When you skip loading photos and transcripts, the evidence markers must not change. Today claimReady at render.ts ~210 uses `photos.length > 0`. Base it on the photo source count instead (sources.filter(kind==='photo').length > 0), and keep audioCount and photoCount from …
 
 ### EOT packs for the same site and period overwrite each other's PDF
 
-`apps/worker/src/jobs/build_evidence_pack.ts:17` · evidence pack / F16, §P9 pack history · Confirmed 3/3
+`apps/worker/src/jobs/build_evidence_pack.ts:17` · evidence pack / F16, §P9 pack history · Confirmed 3/3 · **Fixed (W3-07):** `evidencePackStoragePath(org, site, start, end, packId)` stores `…/eot_{start}_{end}_{packId}.pdf`, so only a retry of the same pack overwrites its file (upsert kept); a rebuild of the same period is a new file and the earlier pack's download and email link keep their content (`evidence-pack.pglite.test.ts`). Packs built before keep their path.
 
 - **Problem:** On Oct 10 a pack for Riverside, Oct 1-9, is built and sent with an EOT claim. On Oct 20 a report in that range is edited (v2) and the pack is rebuilt. Downloading the Oct 10 pack from the history, or opening the 7-day link in the Oct 10 email, now returns the Oct 20 content, so the submitted evidence cannot be reproduced. Two concurrent builds also race on the same object.
 - **Fix:** Put the pack id in the path: change evidencePackStoragePath to take packId and return `${orgId}/${siteId}/eot_${periodStart}_${periodEnd}_${packId}.pdf`, and pass pack.id at build_evidence_pack.ts:17. Do NOT switch to upsert:false. If the upload succeeds and a later step fails (updateEvidencePack, logAudit, notifyOrg, enqueueJob), the pack is marked failed and the job retries. The retry rebuilds and uploads to the same path, and with upsert:false it would fail with 'already exists' every time. With a path unique to each pack, upsert:true is safe, because only retries of the same pack overwrite it. Storage.upload already hardcodes upsert:true, so changing the path is enough. Optionally updat…
 
 ### EOT pack cover states every report was confirmed on WhatsApp, including unconfirmed ones
 
-`apps/worker/src/pdf/EvidencePack.tsx:80` · evidence pack accuracy / F16 · Confirmed 3/3
+`apps/worker/src/pdf/EvidencePack.tsx:80` · evidence pack accuracy / F16 · Confirmed 3/3 · **Fixed (W3-07, spec §19 Q134):** the cover no longer says every report was confirmed on WhatsApp: it counts the days the site manager confirmed and says each day states how its report was confirmed; each day prints its confirmation line (`packConfirmation`, `packages/shared/src/report/evidence-pack.ts`: on the recorder, by voice on the call, by text, on WhatsApp for v1.0 reports, logged as a weather day, entered or filed by the office, filed automatically without confirmation) with the sign-off, and a day the site manager did not confirm counts as claim-ready only once signed off (also on P9). The summary table has a Confirmed column.
 
 - **Problem:** A pack covers 3 weather days logged through the R1 'Site closed: weather' button and one report auto-filed after 2 h with no reply. The cover tells the owner's assessor that every report was confirmed by the site manager, while the attached daily reports for those days say 'Not confirmed'. That contradiction can undermine the claim.
 - **Fix:** The suggested direction is right; these changes make it complete: 1. **New fields.** Add confirmedAt, kind ('daily' | 'weather_day') and reviewReasons to `EvidenceDay`, filled from the report row in `buildEvidencePackInput`. 2. **Who confirmed.** The 'office' trigger also sets confirmed_at, so confirmed_at alone does not prove the site manager confirmed. Either count only reports where confirmed_at is set and 'unconfirmed' is absent, and word the cover as 'confirmed on WhatsApp or by the office', or read the trigger from the report.filed audit entry. 3. **Weather-day wording.** Weather-day reports were explicitly logged by the site manager through the WhatsApp button but never confirmed. De…
@@ -629,7 +629,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Evidence-pack transcript excerpts match timestamps across different voice notes
 
-`apps/worker/src/pdf/render.ts:250` · correctness · Unverified
+`apps/worker/src/pdf/render.ts:250` · correctness · Unverified · **Fixed (W3-07):** `weatherExcerpts` takes the day's clips (`PackClip`: each voice note, and each call with its reporter lane only) and matches a period's source on (clip, second): a voice note's `uploadId` / a call's `callId`, never another clip's segment at the same second; each excerpt prints its clip ("voice note 2 · 0:05–0:12", "call 2:15–2:22") (`apps/worker/src/pdf/pdf.test.ts`).
 
 - **Problem:** A report has note A (crew, 0–60 s) and note B ('llovió desde las siete…' at 5–12 s). The weather period source is {messageId: B, start: 5}. findIndex returns note A's 0–8 s segment, so the EOT pack prints the crew sentence and its neighbours as the weather evidence instead of the rain statement.
 - **Fix:** Keep messageId on the segments passed to weatherExcerpts and match on (messageId, start).
@@ -898,7 +898,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### 'X h lost to weather in this set' sums only the current page
 
-`apps/web/src/data/supabase/SupabaseSource.ts:624` · correctness · Confirmed 3/3
+`apps/web/src/data/supabase/SupabaseSource.ts:624` · correctness · Confirmed 3/3 · **Fixed (W3-07):** `report_archive_weather_hours()` (`20261016000280_weather_call_evidence.sql`, security invoker over `report_archive`) sums the lost hours of every report matching the archive's filters, text search included, in one request; the panel no longer pages through the rows (`supabase/db-tests/src/weather-call-evidence.test.ts`, `SupabaseSource.test.ts`).
 
 - **Problem:** With 'Has weather delay' on and 120 matching reports, the hint shows only page 1's hours, a different number on each page, and understates the evidence-pack total the user is about to build.
 - **Fix:** The suggested fix works. A concrete version: add a SQL RPC that takes the same filters and returns `sum(lost_hours)` over current_weather joined to the filtered reports, and call it alongside the paged query. An alternative without a migration: run `reportArchiveQuery(filters)` a second time with `.select('id')` and no `.range()`, then sum `current_weather.lost_hours` with `.in('report_id', allIds)`. PostgREST's default max-rows limit (usually 1000) also caps this route, so it still undercounts very large sets. The RPC is the robust fix. If neither is done, relabel the hint so it says it covers this page only.

@@ -60,6 +60,11 @@ import {
 } from '@sitelog/shared/report/payroll.ts';
 import { versionPhotos } from '@sitelog/shared/report/photos.ts';
 import {
+  confirmedBySiteManager,
+  packClaimReady,
+  packConfirmation,
+} from '@sitelog/shared/report/evidence-pack.ts';
+import {
   isVoiceSourceKind,
   mediaOf,
   sourceMediaId,
@@ -75,6 +80,7 @@ import {
 import { isWorkingDay } from '@sitelog/shared/schedule/day.ts';
 import {
   addDays,
+  convertMeasure,
   daysBetween,
   firstName,
   formatAudioTimestamp,
@@ -86,8 +92,11 @@ import {
   formatTimeInTz,
   isoWeekOf,
   isoWeekRange,
+  MEASURE_DIGITS,
   parseIsoDate,
+  type MeasureKind,
 } from '@sitelog/shared/format.ts';
+import type { UnitSystem } from '@sitelog/shared/locale.ts';
 import { copy } from '@/copy/en';
 import { copyRef } from '@/i18n/copyRef';
 import { groupBy, isRecord, sum, uniq } from '@/lib/utils';
@@ -570,6 +579,28 @@ function overviewWeather(data: DailyReportData | null): OverviewWeather | null {
     start: p.start ?? null,
     end: p.end ?? null,
     impact: p.impact ?? null,
+  };
+}
+
+/**
+ * weather_events.observed in the org's units (§10.11, P9 "observed values in org units", W3-07):
+ * a v1 copy is imperial (fetch_weather's units before v1.2) and is converted for a metric org; a
+ * v2 copy is in the version's units, which are the org's (§9.6).
+ */
+export function observedWeatherIn(json: unknown, units: UnitSystem): ObservedWeather | null {
+  const observed = observedWeatherOf(json);
+  if (!observed || !isRecord(json) || typeof json.precipIn !== 'number' || units === 'imperial')
+    return observed;
+  const c = (v: number, kind: MeasureKind) => convertMeasure(v, kind, 'imperial', units);
+  const digits = MEASURE_DIGITS[units];
+  const round = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
+  return {
+    ...observed,
+    precip: round(c(observed.precip, 'precipitation'), digits.precipitation),
+    tempMin: round(c(observed.tempMin, 'temperature'), digits.temperature),
+    tempMax: round(c(observed.tempMax, 'temperature'), digits.temperature),
+    wind: round(c(observed.wind, 'wind'), digits.wind),
+    ...(observed.gust !== undefined ? { gust: round(c(observed.gust, 'wind'), digits.wind) } : {}),
   };
 }
 
@@ -2564,6 +2595,7 @@ export function assembleWeather(
   const monthEnd = monthDays(month).at(-1)!;
   const until = monthEnd < today ? monthEnd : today;
   const days = workdaysBetween(`${month}-01`, until, rows.settings.working_days);
+  const units: UnitSystem = rows.org.units === 'metric' ? 'metric' : 'imperial';
   const wx = currentWeather(rows, ix).filter(
     (w) =>
       w.date.startsWith(month) &&
@@ -2576,10 +2608,16 @@ export function assembleWeather(
     .map((w) => {
       const site = ix.siteById.get(w.site_id);
       const report = ix.reportById.get(w.report_id);
-      // The voice note of the period: v1 `audio` (messageId) or v2 `voice_note` (uploadId).
+      // The period's voice evidence: v1 `audio` (messageId), v2 `voice_note` (uploadId), or a
+      // `call` second (callId, 20261016000280).
       const audio = isRecord(w.audio_source) ? w.audio_source : null;
       const audioStart = audio && typeof audio.start === 'number' ? audio.start : null;
-      const observed = observedWeatherOf(w.observed);
+      const isCall = audio?.type === 'call' && typeof audio.callId === 'string';
+      const observed = observedWeatherIn(w.observed, units);
+      // Spec §19 Q134: a report the site manager did not confirm is claim-ready once signed off.
+      const confirmation = report ? packConfirmation(report) : null;
+      const signedOff = report?.status === 'signed_off';
+      const siteManager = confirmation === null || confirmedBySiteManager(confirmation);
       return {
         id: w.id,
         reportId: w.report_id,
@@ -2596,14 +2634,22 @@ export function assembleWeather(
         fullDay: w.full_day,
         observed,
         evidence: {
+          clip: audio ? (isCall ? ('call' as const) : ('voice_note' as const)) : null,
           audioStart,
-          messageId: audio ? voiceMediaIdOf(audio as unknown as Source) : null,
+          clipId: audio
+            ? isCall
+              ? (audio.callId as string)
+              : voiceMediaIdOf(audio as unknown as Source)
+            : null,
           photos: w.photo_count,
           weatherData: !!observed,
           // Only a site manager's report asks for a photo; one typed in the panel has no reporter.
           photoRequested: w.photo_count === 0 && !!report?.reporter_id,
         },
-        claimReady: w.claim_ready,
+        claimReady: confirmation
+          ? packClaimReady(w.claim_ready, confirmation, signedOff)
+          : w.claim_ready,
+        awaitingSignOff: !siteManager && !signedOff,
       };
     })
     .sort((a, b) =>
@@ -2645,6 +2691,7 @@ export function assembleWeather(
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   return {
     month,
+    units,
     siteId,
     sites: siteOptions,
     days,

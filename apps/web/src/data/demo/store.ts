@@ -44,6 +44,7 @@ import {
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
 import {
+  evidencePackStoragePath,
   formatReportNo,
   logoStoragePath,
   pdfStoragePath,
@@ -317,11 +318,17 @@ export class DemoStore {
     });
     const date = data.reportDate;
     data.weather.periods.forEach((p, i) => {
+      // A voice note, else a call second (20261016000280: P9's *Call ts* chip).
       const audio =
         p.source.find((s) => {
           const type: string = s.type;
           return type === 'audio' || type === 'voice_note';
-        }) ?? null;
+        }) ??
+        p.source.find((s) => {
+          const type: string = s.type;
+          return type === 'call';
+        }) ??
+        null;
       const row: WeatherEventRow = {
         id: demoId(`wx:${report.id}:${version}:${i}`),
         report_id: report.id,
@@ -1877,7 +1884,13 @@ export class DemoStore {
       if (!p) return;
       p.status = 'ready';
       p.ready_at = this.nowIso();
-      p.pdf_path = `${this.data.org.id}/${input.siteId ?? 'all'}/eot_${input.periodStart}_${input.periodEnd}.pdf`;
+      p.pdf_path = evidencePackStoragePath(
+        this.data.org.id,
+        input.siteId ?? 'all',
+        input.periodStart,
+        input.periodEnd,
+        id,
+      );
       this.notify({
         user_id: userId,
         kind: 'pack_ready',

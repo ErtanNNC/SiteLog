@@ -135,6 +135,12 @@ const TRANSLATED = [
   'common.filter',
   'toasts.termReviewed',
   'toasts.termAdded',
+  // W3-07: Weather & delays, its evidence chips, heatmap and pack dialog.
+  'weather',
+  'evidence',
+  'common.showMore',
+  'toasts.packRequested',
+  'a11y.heatmapLegend',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

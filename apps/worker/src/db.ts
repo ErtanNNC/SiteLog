@@ -449,6 +449,8 @@ export interface Db {
    * in the order given.
    */
   listTranscripts(mediaIds: string[]): Promise<TranscriptRow[]>;
+  /** Transcripts of these calls (`transcripts.call_id`, §6.3), in the order given (W3-07). */
+  listCallTranscripts(callIds: string[]): Promise<TranscriptRow[]>;
   upsertTranscript(input: TranscriptInput): Promise<TranscriptRow>;
   /** The transcript of a web recorder upload (W1-11). */
   getUploadTranscript(uploadId: string): Promise<TranscriptRow | null>;
@@ -1141,6 +1143,12 @@ export function createDb(sql: Sql): Db {
       return sql<TranscriptRow[]>`select * from transcripts
         where upload_id = any(${ids}::uuid[]) or message_id = any(${ids}::uuid[])
         order by array_position(${ids}::uuid[], coalesce(upload_id, message_id))`;
+    },
+    async listCallTranscripts(callIds) {
+      if (callIds.length === 0) return [];
+      const ids = pgArray(callIds);
+      return sql<TranscriptRow[]>`select * from transcripts where call_id = any(${ids}::uuid[])
+        order by array_position(${ids}::uuid[], call_id)`;
     },
     async upsertTranscript(input) {
       const rows = await sql<TranscriptRow[]>`

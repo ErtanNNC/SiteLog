@@ -1478,7 +1478,13 @@ describe('send_email: evidence pack ready', () => {
 
   it('signs a pack stored under its own org and site', async () => {
     const h = createHarness();
-    const path = evidencePackStoragePath(ORG_ID, SITE_OAKMONT, '2026-10-01', '2026-10-09');
+    const path = evidencePackStoragePath(
+      ORG_ID,
+      SITE_OAKMONT,
+      '2026-10-01',
+      '2026-10-09',
+      'pack-1',
+    );
     h.db.data.packs.set('pack-1', pack(path));
     const email = await buildEmail(h.ctx, {
       kind: 'evidence_pack_ready',

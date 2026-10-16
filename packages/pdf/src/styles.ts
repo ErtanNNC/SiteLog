@@ -194,6 +194,7 @@ export const styles = StyleSheet.create({
   },
   dayTitle: { fontFamily: FONT_SANS_EXPANDED, fontWeight: 800, fontSize: 13 },
   excerpt: { flexDirection: 'row', marginBottom: 3 },
-  excerptTs: { fontFamily: FONT_MONO, fontSize: 8, width: 56, color: INK_SOFT },
+  // Wide enough for a clip label ("sesli not 2 · 0:41–0:47", W3-07).
+  excerptTs: { fontFamily: FONT_MONO, fontSize: 8, width: 120, color: INK_SOFT },
   excerptText: { flex: 1, fontSize: 9, lineHeight: 1.4 },
 });

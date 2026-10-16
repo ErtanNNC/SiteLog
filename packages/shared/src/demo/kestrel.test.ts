@@ -594,7 +594,7 @@ describe('the live demo (--date, D36)', () => {
     const d = buildKestrelDemo({ date: '2026-10-14' });
     expect(
       d.packs.map((p) => [p.period_start, p.period_end, p.pdf_path!.split('/').at(-1)]),
-    ).toEqual([['2026-09-28', '2026-10-07', 'eot_2026-09-28_2026-10-07.pdf']]);
+    ).toEqual([['2026-09-28', '2026-10-07', `eot_2026-09-28_2026-10-07_${d.packs[0]!.id}.pdf`]]);
     expect(d.siteDays.some((s) => s.date === '2026-09-28')).toBe(true);
     expect(d.notifications.find((n) => n.kind === 'pack_ready')!.title).toBe(
       'EOT evidence pack ready — Riverside Lofts, Sep 28 – Oct 7',

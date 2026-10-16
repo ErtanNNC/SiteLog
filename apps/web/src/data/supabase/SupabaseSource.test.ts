@@ -315,6 +315,54 @@ class FakeQuery implements PromiseLike<Result> {
   }
 }
 
+/**
+ * report_archive_weather_hours() (20261016000280) over the fake report_archive, as the SQL reads
+ * its arguments (supabase/db-tests compares the SQL with the same filters).
+ */
+function archiveWeatherHours(rows: Row[], a: Record<string, unknown>): number {
+  const like = (v: unknown) =>
+    typeof a.p_text === 'string' &&
+    v != null &&
+    String(v).toLowerCase().includes(a.p_text.toLowerCase());
+  const ids = (a.p_ids as string[] | null) ?? [];
+  const total = rows
+    .filter((r) => {
+      const lost = Number(r.lost_hours);
+      if (r.org_id !== a.p_org || !(lost > 0)) return false;
+      if (a.p_site && r.site_id !== a.p_site) return false;
+      if (a.p_from && String(r.date) < String(a.p_from)) return false;
+      if (a.p_to && String(r.date) > String(a.p_to)) return false;
+      switch (a.p_status) {
+        case 'needs_review':
+          if (!(r.status === 'filed' && r.needs_review)) return false;
+          break;
+        case 'filed':
+          if (!(r.status === 'filed' && !r.needs_review && r.kind !== 'weather_day')) return false;
+          break;
+        case 'signed_off':
+          if (r.status !== 'signed_off') return false;
+          break;
+        case 'weather_day':
+          if (r.kind !== 'weather_day') return false;
+          break;
+      }
+      if (a.p_edited && !(Number(r.current_version) > 1)) return false;
+      if (a.p_late && !r.is_late) return false;
+      if (a.p_incident && !r.has_incident) return false;
+      if (a.p_channel === 'link' && !['web', 'sms'].includes(String(r.channel))) return false;
+      if (a.p_channel === 'call' && r.channel !== 'voice') return false;
+      if (
+        typeof a.p_text === 'string' &&
+        ![r.report_no, r.site_name, r.project_code, r.summary].some(like) &&
+        !ids.includes(String(r.id))
+      )
+        return false;
+      return true;
+    })
+    .reduce((s, r) => s + Number(r.lost_hours), 0);
+  return Math.round(total * 100) / 100;
+}
+
 class FakeDb {
   calls: Call[] = [];
   /** PostgREST's max_rows (supabase/config.toml: 1000); unlimited unless a test sets it. */
@@ -333,6 +381,8 @@ class FakeDb {
   async rpc(fn: string, args: Record<string, unknown>) {
     this.rpcs.push({ fn, args });
     if (this.rpcErrors[fn]) return { data: null, error: { message: this.rpcErrors[fn] } };
+    if (fn === 'report_archive_weather_hours' && !(fn in this.rpcData))
+      return { data: archiveWeatherHours(this.tables.report_archive ?? [], args), error: null };
     return { data: this.rpcData[fn] ?? null, error: null };
   }
   storage = {
@@ -761,13 +811,24 @@ describe('SupabaseSource.listReports', () => {
   });
 
   it('sums lost weather hours over the whole filtered set, not the page', async () => {
-    const { live, demo } = sources();
+    const { db, live, demo } = sources();
     const page = await live.listReports({ hasWeatherDelay: true, pageSize: 3 });
     expect(page.items).toHaveLength(3);
     expect(page.total).toBe(10);
     expect(page.weatherHours).toBe(36.5);
     expect(page.weatherHours).toBe(
       (await demo.listReports({ hasWeatherDelay: true })).weatherHours,
+    );
+    // One RPC with the filters (W3-07, 20261016000280), not a page-by-page sum of rows.
+    expect(db.rpcs.filter((r) => r.fn === 'report_archive_weather_hours')).toEqual([
+      {
+        fn: 'report_archive_weather_hours',
+        args: expect.objectContaining({ p_has_weather_delay: true, p_text: null }),
+      },
+    ]);
+    const searched = await live.listReports({ hasWeatherDelay: true, q: 'riverside' });
+    expect(searched.weatherHours).toBe(
+      (await demo.listReports({ hasWeatherDelay: true, q: 'riverside' })).weatherHours,
     );
   });
 

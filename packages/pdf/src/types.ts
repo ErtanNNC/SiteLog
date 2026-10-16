@@ -1,4 +1,13 @@
-import type { DailyReportData, FieldChannel, SiteDayWeather, VersionAuthor } from '@sitelog/shared';
+import type {
+  DailyReportData,
+  FieldChannel,
+  PackConfirmation,
+  PackSection,
+  ReportLanguage,
+  SiteDayWeather,
+  UnitSystem,
+  VersionAuthor,
+} from '@sitelog/shared';
 
 /** Image bytes (worker) or a URL react-pdf fetches itself (browser). */
 export type PdfImage =
@@ -85,27 +94,54 @@ export interface ReportPdfInput {
   generatedAt: string;
 }
 
+/** A transcript excerpt of a pack day: the words of one clip, never across clips (F20). */
+export interface PackExcerpt {
+  /** A voice note, or a call (the reporter's lane only). */
+  clip: 'voice_note' | 'call';
+  /** The clip's number among the day's clips of that kind, when there is more than one. */
+  clipNo: number | null;
+  start: number;
+  end: number;
+  text: string;
+}
+
 export interface EvidenceDay {
   date: string;
   reportNo: string;
   version: number;
   signedOff: boolean;
+  /** Who signed it off and when (ISO), for the confirmation line. */
+  signedOffByName: string | null;
+  signedOffAt: string | null;
+  /** How the report was confirmed (spec §19 Q134). */
+  confirmation: PackConfirmation;
+  /** Entered in the panel (no reporter). */
+  typed: boolean;
+  /** When the site manager confirmed it (ISO), else null. */
+  confirmedAt: string | null;
+  filedAt: string | null;
   data: DailyReportData;
   lostHours: number;
   fullDay: boolean;
   claimReady: boolean;
-  transcriptExcerpts: Array<{ start: number; end: number; text: string }>;
+  transcriptExcerpts: PackExcerpt[];
   photos: PdfPhoto[];
   observed: SiteDayWeather | null;
   photoCount: number;
+  /** Voice notes and calls of the report. */
   audioCount: number;
 }
 
 export interface EvidencePackInput {
   org: { name: string; logo: PdfImage | null };
   site: { name: string; projectCode: string; address: string | null; timezone: string };
+  /** The org's report language (§9.6, F20) and units (§10.11: observed weather). */
+  language: ReportLanguage;
+  units: UnitSystem;
   periodStart: string;
   periodEnd: string;
+  /** The dialog's included sections (`evidence_packs.sections`), in pack order. */
+  sections: PackSection[];
   days: EvidenceDay[];
   settings: { paper: 'letter' | 'a4' };
   generatedAt: string;

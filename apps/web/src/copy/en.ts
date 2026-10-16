@@ -403,9 +403,15 @@ export const copy = {
     channelLegend: 'How each report came in',
   },
 
+  /** P9 / F20 evidence chips (W3-07): *Voice note ts* or *Call ts* · Photos n · Weather data. */
   evidence: {
-    audio: (ts: string) => `Audio ${ts}`,
-    photos: (n: number) => `${plural(n, 'photo')}`,
+    voiceNote: 'Voice note {{ts}}',
+    call: 'Call {{ts}}',
+    /** The chip opens the report's player at that second (P7). */
+    openVoiceNote: 'Open report {{no}} at voice note {{ts}}',
+    openCall: 'Open report {{no}} at call {{ts}}',
+    photos_one: '{{count}} photo',
+    photos_other: '{{count}} photos',
     weatherData: 'Weather data',
     photoRequested: 'Photo requested',
     photoMissing: 'No photo',
@@ -1539,20 +1545,24 @@ export const copy = {
 
   weather: {
     title: 'Weather & delays',
-    subtitle: 'Every lost hour, with the voice note, photos and weather data behind it',
+    subtitle: 'Every lost hour, with the voice note or call, photos and weather data behind it',
+    /** The page named inside the error state ("Couldn't load weather & delays"). */
+    thing: 'weather & delays',
     buildPack: 'Build EOT evidence pack',
+    kpisLabel: 'Key figures',
     kpis: {
       siteDays: 'Weather-affected site-days',
       hours: 'Hours of stoppage',
       claimReady: 'Claim-ready entries',
-      claimReadyOf: (x: number, y: number) => `${x} of ${y}`,
       claimReadyHint: 'audio + photo + weather data',
     },
     heatmap: 'Stoppage hours by site and day',
-    heatmapCell: (site: string, date: string, hours: string) => `${site}, ${date}: ${hours} lost`,
+    heatmapCell: '{{site}}, {{date}}: {{hours}} lost',
     log: 'Delay log',
     fullDay: 'Full day',
-    observed: (precip: string) => `Observed precip ${precip}`,
+    observed: 'Observed precip {{precip}}',
+    /** Spec §19 Q134: a report filed without the site manager's confirmation. */
+    notConfirmed: 'Not confirmed by the site manager: claim-ready once signed off',
     pack: {
       title: 'EOT evidence pack',
       site: 'Site',
@@ -1579,30 +1589,34 @@ export const copy = {
     allSites: 'All sites',
     previousMonth: 'Previous month',
     nextMonth: 'Next month',
-    lostHours: (h: string) => `${h} lost`,
-    entries: (n: number) => `${plural(n, 'entry', 'entries')}`,
-    showingOf: (shown: number, total: number) => `Showing ${shown} of ${total}`,
-    openReport: (no: string) => `Open report ${no}`,
-    stoppedBetween: (start: string, end: string) => `Stopped ${start}–${end}`,
-    stoppedFrom: (start: string) => `Stopped from ${start}`,
+    lostLabel: 'lost',
+    entries_one: '{{count}} entry',
+    entries_other: '{{count}} entries',
+    showingOf: 'Showing {{shown}} of {{total}}',
+    openReport: 'Open report {{no}}',
+    stoppedBetween: 'Stopped {{start}}–{{end}}',
+    stoppedFrom: 'Stopped from {{start}}',
     packDialog: {
       description:
-        'The pack has a cover, a delay summary by day, each day’s signed report, transcript excerpts with timestamps, photos and the observed weather table.',
+        'The pack has a cover, a delay summary by day, each day’s report with how it was confirmed, transcript excerpts with timestamps, photos and the observed weather table, in your company’s report language.',
       from: 'From',
       to: 'To',
       siteRequired: 'Pick the site the claim is for.',
       periodInvalid: 'The end must be on or after the start.',
       sectionsRequired: 'Pick at least one section.',
       sitePlaceholder: 'Choose a site',
-      summary: (days: number, hours: string) => `${plural(days, 'site-day')} · ${hours} lost`,
-      summaryMonthOnly: (month: string, days: number, hours: string) =>
-        `${month} only: ${plural(days, 'site-day')} · ${hours} lost`,
+      summary_one: '{{count}} site-day · {{hours}} lost',
+      summary_other: '{{count}} site-days · {{hours}} lost',
+      summaryMonthOnly_one: '{{month}} only: {{count}} site-day · {{hours}} lost',
+      summaryMonthOnly_other: '{{month}} only: {{count}} site-days · {{hours}} lost',
     },
     packs: {
       empty: 'No packs yet. Build one from the delay log.',
       allSites: 'All sites',
-      requestedBy: (when: string) => `Requested ${when}`,
-      sections: (n: number) => `${plural(n, 'section')}`,
+      requestedBy: 'Requested {{when}}',
+      period: '{{from}} – {{to}}',
+      sections_one: '{{count}} section',
+      sections_other: '{{count}} sections',
       demoDownload: 'Demo mode: the worker renders the PDF; nothing to download here.',
       notStarted:
         'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact SiteLog support.',

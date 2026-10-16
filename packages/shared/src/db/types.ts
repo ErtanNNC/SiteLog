@@ -1861,6 +1861,25 @@ export type Database = {
           invoice_status: string;
         }>;
       };
+      // W3-07 (20261016000280_weather_call_evidence.sql): the Reports archive's lost weather
+      // hours over every report matching its filters (security invoker over report_archive).
+      report_archive_weather_hours: {
+        Args: {
+          p_org: string;
+          p_site?: string | null;
+          p_from?: string | null;
+          p_to?: string | null;
+          p_status?: string | null;
+          p_edited?: boolean;
+          p_late?: boolean;
+          p_has_weather_delay?: boolean;
+          p_incident?: boolean;
+          p_channel?: string | null;
+          p_text?: string | null;
+          p_ids?: string[] | null;
+        };
+        Returns: number;
+      };
       // Platform ops (20261012000003_ops.sql): platform admins only, checked in SQL.
       is_platform_admin: { Args: Record<string, never>; Returns: boolean };
       ops_queue_stats: { Args: Record<string, never>; Returns: OpsQueueStatRow[] };

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  demirEvidencePackInput,
   demirReportInput,
   heroReportData,
   heroReportDataV1,
@@ -73,6 +74,50 @@ describe.skipIf(!enabled)('PDF text snapshots (pdftotext)', () => {
     await expect(normaliseLayout(text)).toMatchFileSnapshot(
       './__snapshots__/hero-evidence-pack.pdf.txt',
     );
+  }, 60_000);
+
+  it('prints the hero evidence pack with each day’s confirmation (spec §19 Q134)', async () => {
+    const flat = pdfText(await renderEvidencePackPdf(sampleEvidencePackInput)).replace(/\s+/g, ' ');
+    expect(flat).toContain('Confirmed by the site manager on WhatsApp at 17:41.');
+    expect(flat).toContain('Confirmed by the site manager on the recorder at 18:12.');
+    expect(flat).toContain('Signed off in SiteLog by Sam Kowalski · Oct 5, 08:30.');
+    expect(flat).toContain('voice note 0:41–0:47');
+    expect(flat).not.toMatch(/Each report was confirmed/);
+  }, 60_000);
+
+  it('prints the Demir Yapı pack in Turkish, A4 and metric, with a call excerpt', async () => {
+    const pdf = await renderEvidencePackPdf(demirEvidencePackInput);
+    expect(pdf.toString('latin1')).toMatch(/\/MediaBox \[0 0 595\.\d+ 841\.\d+\]/);
+    const text = pdfText(pdf);
+    const flat = text.replace(/\s+/g, ' ');
+    expect(flat).toContain('HAVA MUHALEFETİ KANITLARI');
+    expect(flat).toContain('GÜNLERE GÖRE GECİKME ÖZETİ');
+    expect(flat).toContain('arama 2:15–2:22');
+    expect(flat).toContain('Şantiye şefi raporu görüşmede sesli olarak onayladı (saat 18:46).');
+    expect(flat).toContain(
+      'Rapor, şantiye şefinin onayı olmadan otomatik olarak dosyalandı (saat 20:45). Ofis onaylayana kadar talebe hazır sayılmaz.',
+    );
+    // Observed weather in the org's units: 0.15 in → 3.8 mm, 57 °F → 14 °C, 11 mph → 18 km/h.
+    expect(flat).toContain('YAĞIŞ (MM)');
+    expect(flat).toMatch(/08:00 3,8 14 18 34/);
+    expect(flat).not.toMatch(/Evidence pack|Confirmed by|WhatsApp/);
+    await expect(normaliseLayout(text)).toMatchFileSnapshot(
+      './__snapshots__/demir-evidence-pack.pdf.txt',
+    );
+  }, 60_000);
+
+  it('prints only the sections the office ticked', async () => {
+    const flat = pdfText(
+      await renderEvidencePackPdf({ ...sampleEvidencePackInput, sections: ['summary', 'weather'] }),
+    ).replace(/\s+/g, ' ');
+    expect(flat).toContain('DELAY SUMMARY BY DAY');
+    expect(flat).toContain('OBSERVED WEATHER (HOURLY)');
+    expect(flat).not.toMatch(/TRANSCRIPT EXCERPTS|llovió|MANPOWER ON SITE|PHOTOS/);
+    const summaryOnly = pdfText(
+      await renderEvidencePackPdf({ ...sampleEvidencePackInput, sections: ['summary'] }),
+    );
+    // No day page at all when no day section is ticked: the cover and the summary.
+    expect(pagesOf(summaryOnly)).toBe(2);
   }, 60_000);
 
   it('prints the Turkish v2 sample in Turkish on 2 pages, with ğ ş ı İ intact', async () => {

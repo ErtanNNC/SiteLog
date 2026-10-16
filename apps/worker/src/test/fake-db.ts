@@ -287,6 +287,10 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       // Transcripts are keyed by message id here (the fake has no uploads).
       return ids.map((id) => d.transcripts.get(id)).filter((t): t is TranscriptRow => !!t);
     },
+    async listCallTranscripts(ids) {
+      const all = [...d.transcripts.values()];
+      return ids.flatMap((id) => all.filter((t) => t.call_id === id));
+    },
     async upsertTranscript(input) {
       const row: TranscriptRow = {
         ...V12_ROW_DEFAULTS.transcripts,

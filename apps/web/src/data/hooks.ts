@@ -637,7 +637,7 @@ export function useSetOrgLogo(opts: { quiet?: boolean } = {}) {
 export function useRequestEvidencePack() {
   const s = useDataSource();
   return useSourceMutation((vars: RequestEvidencePackInput) => s.requestEvidencePack(vars), {
-    success: copy.toasts.packRequested,
+    success: () => translate('toasts.packRequested'),
   });
 }
 

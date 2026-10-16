@@ -37,15 +37,19 @@ describe('report numbering (§F5, §12)', () => {
       'org/site/2026-10-09/u1.webm',
     );
     expect(photoStoragePath('org', 'site', '2026-10-09', 'p1')).toBe('org/site/2026-10-09/p1.jpg');
-    expect(evidencePackStoragePath('org', 'site', '2026-10-01', '2026-10-09')).toBe(
-      'org/site/eot_2026-10-01_2026-10-09.pdf',
+    // One file per pack (W3-07): a rebuild of the same period never overwrites an earlier pack.
+    expect(evidencePackStoragePath('org', 'site', '2026-10-01', '2026-10-09', 'p1')).toBe(
+      'org/site/eot_2026-10-01_2026-10-09_p1.pdf',
+    );
+    expect(evidencePackStoragePath('org', 'site', '2026-10-01', '2026-10-09', 'p2')).not.toBe(
+      evidencePackStoragePath('org', 'site', '2026-10-01', '2026-10-09', 'p1'),
     );
     expect(logoStoragePath('org', 'svg')).toBe('org/logo.svg');
   });
 
   it("signs an evidence pack path only under the pack's own org and site", () => {
     const pack = { org_id: 'orgA', site_id: 'siteA' };
-    const own = evidencePackStoragePath('orgA', 'siteA', '2026-10-01', '2026-10-09');
+    const own = evidencePackStoragePath('orgA', 'siteA', '2026-10-01', '2026-10-09', 'p1');
     expect(isOwnEvidencePackPath({ ...pack, pdf_path: own })).toBe(true);
     for (const pdf_path of [
       null,

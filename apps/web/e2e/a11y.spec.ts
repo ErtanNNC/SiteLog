@@ -160,14 +160,7 @@ for (const width of WIDTHS) {
       await signInFast(page);
       const langOf = (l: Locator) =>
         l.evaluate((el) => el.closest('[lang]')?.getAttribute('lang') ?? null);
-      await page.goto('/weather');
-      await expect(page.getByTestId('delay-log')).toBeVisible();
-      await page.getByRole('combobox', { name: 'Site', exact: true }).click();
-      const listbox = page.getByRole('listbox');
-      await expect(listbox).toBeVisible();
-      expect(await langOf(listbox)).toBe('en');
-      await page.keyboard.press('Escape');
-
+      // Team is still English-only (Weather & delays speaks Turkish since W3-07).
       await page.goto('/team');
       await expect(page.getByTestId('unknown-sender')).toBeVisible();
       await page
@@ -178,6 +171,11 @@ for (const width of WIDTHS) {
       await expect(dialog).toBeVisible();
       expect(await langOf(dialog)).toBe('en');
       await expectNoViolations(page);
+      await dialog.getByRole('combobox', { name: 'Country' }).click();
+      const listbox = page.getByRole('listbox');
+      await expect(listbox).toBeVisible();
+      expect(await langOf(listbox)).toBe('en');
+      await page.keyboard.press('Escape');
     });
 
     test('accounts user: crew hours', async ({ page }) => {
@@ -654,7 +652,10 @@ test.describe('no sideways scroll on narrow phones', () => {
       const menuButton = page.getByRole('button', { name: tr ? 'Menüyü aç' : 'Open menu' });
       const bell = page.getByTestId('notifications-bell');
       const search = page.getByRole('combobox', { name: tr ? 'Arama' : 'Search', exact: true });
-      const siteSelect = page.getByRole('combobox', { name: 'Site', exact: true });
+      const siteSelect = page.getByRole('combobox', {
+        name: tr ? 'Şantiye' : 'Site',
+        exact: true,
+      });
       const top = async (l: Locator) => (await l.boundingBox())!.y;
       expect(await top(bell)).toBeLessThan(await top(search));
       expect(await top(search)).toBeLessThan(await top(siteSelect));

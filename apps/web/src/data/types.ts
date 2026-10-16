@@ -25,7 +25,7 @@ import type {
 } from '@sitelog/shared/schemas/report.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import type { OrgSettingsRow } from '@sitelog/shared/db/types.ts';
-import type { OrgLocale } from '@sitelog/shared/locale.ts';
+import type { OrgLocale, UnitSystem } from '@sitelog/shared/locale.ts';
 import type { CopyKey } from '@/i18n/keys';
 import type { NoticeText } from './notices';
 
@@ -774,8 +774,12 @@ export interface HeatmapCell {
 }
 
 export interface DelayEvidence {
+  /** The period's voice evidence (P9, W3-07): a voice note, else a call second; null for none. */
+  clip: 'voice_note' | 'call' | null;
+  /** The cited second in that clip. */
   audioStart: number | null;
-  messageId: string | null;
+  /** The voice note (upload or WhatsApp message) or call id; P7 opens it at `?clip=&at=`. */
+  clipId: string | null;
   photos: number;
   weatherData: boolean;
   photoRequested: boolean;
@@ -801,7 +805,13 @@ export interface DelayEntry {
    */
   observed: ObservedWeather | null;
   evidence: DelayEvidence;
+  /**
+   * The delay record's evidence (`weather_events.claim_ready`), on a report the site manager
+   * confirmed or the office signed off (spec §19 Q134).
+   */
   claimReady: boolean;
+  /** Spec §19 Q134: filed without the site manager's confirmation and not signed off yet. */
+  awaitingSignOff: boolean;
 }
 
 export interface PackItem {
@@ -822,6 +832,8 @@ export interface PackItem {
 
 export interface WeatherLog {
   month: string;
+  /** The org's units (§10.11): observed values are shown in them. */
+  units: UnitSystem;
   siteId: string | null;
   sites: SiteOption[];
   days: string[];

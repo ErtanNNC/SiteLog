@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { formatHours } from '@sitelog/shared/format.ts';
+import { formatHoursIn, formatMonthYearIn } from '@sitelog/shared/format.ts';
+import { PACK_SECTIONS } from '@sitelog/shared/report/evidence-pack.ts';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import {
@@ -20,13 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
 import { useRequestEvidencePack } from '@/data/hooks';
 import type { DelayEntry, SiteOption } from '@/data/types';
-import { formatMonthLabel } from '@/lib/format';
+import { useCopy } from '@/i18n/useCopy';
 import { monthDaysRange } from './month';
 
-const SECTIONS = ['summary', 'reports', 'transcripts', 'photos', 'weather'] as const;
+const SECTIONS = PACK_SECTIONS;
 
 interface Props {
   open: boolean;
@@ -48,10 +48,12 @@ function likeliestSite(sites: SiteOption[], entries: DelayEntry[]): string {
   return ranked[0]?.id ?? '';
 }
 
-/** "Build EOT evidence pack": site, period, included sections → requestEvidencePack (F16). The parent keys it per open. */
+/**
+ * "Build EOT evidence pack": site, period, included sections → requestEvidencePack (F20); the
+ * worker prints only the ticked sections (W3-07). The parent keys it per open. EN/TR.
+ */
 export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, entries }: Props) {
-  const c = copy.weather.pack;
-  const d = copy.weather.packDialog;
+  const { t, language } = useCopy();
   const request = useRequestEvidencePack();
   const range = monthDaysRange(month);
   const [siteId, setSiteId] = useState(() => defaultSiteId ?? likeliestSite(sites, entries));
@@ -72,15 +74,15 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
 
   const submit = () => {
     if (!siteId) {
-      setError(d.siteRequired);
+      setError(t('weather.packDialog.siteRequired'));
       return;
     }
     if (to < from) {
-      setError(d.periodInvalid);
+      setError(t('weather.packDialog.periodInvalid'));
       return;
     }
     if (sections.length === 0) {
-      setError(d.sectionsRequired);
+      setError(t('weather.packDialog.sectionsRequired'));
       return;
     }
     setError(null);
@@ -99,8 +101,8 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{c.title}</DialogTitle>
-          <DialogDescription>{d.description}</DialogDescription>
+          <DialogTitle>{t('weather.pack.title')}</DialogTitle>
+          <DialogDescription>{t('weather.packDialog.description')}</DialogDescription>
         </DialogHeader>
         <form
           className="mt-4 grid gap-4"
@@ -111,10 +113,10 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
           noValidate
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="pack-site">{c.site}</Label>
+            <Label htmlFor="pack-site">{t('weather.pack.site')}</Label>
             <Select value={siteId} onValueChange={setSiteId}>
               <SelectTrigger id="pack-site">
-                <SelectValue placeholder={d.sitePlaceholder} />
+                <SelectValue placeholder={t('weather.packDialog.sitePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
                 {sites.map((s) => (
@@ -126,11 +128,11 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
             </Select>
           </div>
           <fieldset className="grid gap-1.5">
-            <legend className="text-caption font-medium">{c.period}</legend>
+            <legend className="text-caption font-medium">{t('weather.pack.period')}</legend>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1">
                 <Label htmlFor="pack-from" className="text-dust">
-                  {d.from}
+                  {t('weather.packDialog.from')}
                 </Label>
                 <Input
                   id="pack-from"
@@ -142,7 +144,7 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
               </div>
               <div className="grid gap-1">
                 <Label htmlFor="pack-to" className="text-dust">
-                  {d.to}
+                  {t('weather.packDialog.to')}
                 </Label>
                 <Input
                   id="pack-to"
@@ -155,20 +157,27 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
             </div>
             <p className="font-mono text-[12px] text-dust" data-testid="pack-summary">
               {pastMonth
-                ? d.summaryMonthOnly(formatMonthLabel(month), siteDays, formatHours(hours))
-                : d.summary(siteDays, formatHours(hours))}
+                ? t('weather.packDialog.summaryMonthOnly', {
+                    month: formatMonthYearIn(month, language),
+                    count: siteDays,
+                    hours: formatHoursIn(hours, language),
+                  })
+                : t('weather.packDialog.summary', {
+                    count: siteDays,
+                    hours: formatHoursIn(hours, language),
+                  })}
             </p>
           </fieldset>
           <fieldset className="grid gap-2">
-            <legend className="text-caption font-medium">{c.sections}</legend>
+            <legend className="text-caption font-medium">{t('weather.pack.sections')}</legend>
             {SECTIONS.map((key) => (
               <label key={key} className="flex min-h-target-dense items-center gap-3 text-[15px]">
                 <Checkbox
                   checked={sections.includes(key)}
                   onCheckedChange={(v) => toggle(key, v === true)}
-                  aria-label={c.sectionNames[key]}
+                  aria-label={t(`weather.pack.sectionNames.${key}`)}
                 />
-                {c.sectionNames[key]}
+                {t(`weather.pack.sectionNames.${key}`)}
               </label>
             ))}
           </fieldset>
@@ -179,10 +188,10 @@ export function PackDialog({ open, onOpenChange, sites, defaultSiteId, month, en
           ) : null}
           <DialogFooter className="mt-2">
             <DialogClose asChild>
-              <Button variant="ghost">{copy.common.cancel}</Button>
+              <Button variant="ghost">{t('common.cancel')}</Button>
             </DialogClose>
             <Button type="submit" variant="primary" loading={request.isPending}>
-              {c.generate}
+              {t('weather.pack.generate')}
             </Button>
           </DialogFooter>
         </form>

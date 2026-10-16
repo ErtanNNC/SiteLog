@@ -1,6 +1,11 @@
 import { CloudRain } from 'lucide-react';
 import { Link } from 'react-router';
-import { formatDate, formatHoursIn, formatMonthYearIn } from '@sitelog/shared/format.ts';
+import {
+  formatDate,
+  formatHoursIn,
+  formatMeasure,
+  formatMonthYearIn,
+} from '@sitelog/shared/format.ts';
 import { upperIn } from '@sitelog/shared/locale.ts';
 import { EvidenceChips } from '@/components/sitelog/EvidenceChips';
 import { TableSkeleton } from '@/components/sitelog/Skeletons';
@@ -71,7 +76,13 @@ export function WeatherTab({ siteId, month }: { siteId: string; month: string; t
                       e.fullDay ? t('siteDetail.weatherTab.fullDay') : period(e.start, e.end),
                       e.observed
                         ? t('siteDetail.weatherTab.observed', {
-                            precip: `${e.observed.precip.toFixed(2)} in`,
+                            // In the org's units (§10.11), the panel's language.
+                            precip: formatMeasure(
+                              e.observed.precip,
+                              'precipitation',
+                              weather.data!.units,
+                              language,
+                            ),
                           })
                         : null,
                       e.reportNo,
@@ -79,7 +90,12 @@ export function WeatherTab({ siteId, month }: { siteId: string; month: string; t
                       .filter(Boolean)
                       .join(' · ')}
                   </p>
-                  <EvidenceChips evidence={e.evidence} className="mt-2" />
+                  <EvidenceChips
+                    evidence={e.evidence}
+                    reportId={e.reportId}
+                    reportNo={e.reportNo}
+                    className="mt-2"
+                  />
                 </div>
                 <div className="text-left md:text-right">
                   <span className="font-display text-[24px] leading-7 tabular text-signal-deep">

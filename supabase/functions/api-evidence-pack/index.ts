@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { daysBetween, isOwnEvidencePackPath } from '@sitelog/shared';
+import { daysBetween, isOwnEvidencePackPath, PACK_SECTIONS } from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
 import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
 import {
@@ -20,7 +20,8 @@ import { adminClient, type AppClient } from '../_shared/supabase.ts';
  * GET  ?id=<uuid>                                             → pack + 7-day signed download URL when ready
  */
 
-export const PACK_SECTIONS = ['summary', 'reports', 'transcripts', 'photos', 'weather'] as const;
+/** F20's sections (packages/shared, the worker's pack honours them). */
+export { PACK_SECTIONS };
 const MAX_PERIOD_DAYS = 366;
 const SIGNED_URL_SECONDS = 7 * 24 * 3600;
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'use YYYY-MM-DD');

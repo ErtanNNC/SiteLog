@@ -54,13 +54,21 @@ export function photoStoragePath(
   return `${orgId}/${siteId}/${date}/${messageId}.${ext}`;
 }
 
+/**
+ * Where an EOT pack's PDF is stored (exports bucket): one file per pack id (W3-07), so a rebuild of
+ * the same site and period, or a second pack built at the same time, never overwrites the PDF an
+ * earlier pack sent (audit "EOT packs for the same site and period overwrite each other's PDF").
+ * A retry of the same pack overwrites its own file. Packs built before W3-07 keep their
+ * `eot_{start}_{end}.pdf`.
+ */
 export function evidencePackStoragePath(
   orgId: string,
   siteId: string,
   periodStart: string,
   periodEnd: string,
+  packId: string,
 ): string {
-  return `${orgId}/${siteId}/eot_${periodStart}_${periodEnd}.pdf`;
+  return `${orgId}/${siteId}/eot_${periodStart}_${periodEnd}_${packId}.pdf`;
 }
 
 /**

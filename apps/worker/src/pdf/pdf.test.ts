@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { loadLogo, renderEvidencePackPdf, renderReportPdf, weatherExcerpts } from './render';
+import type { DailyReportData, TranscriptRow } from '@sitelog/shared';
+import {
+  loadLogo,
+  renderEvidencePackPdf,
+  renderReportPdf,
+  reporterSegments,
+  weatherExcerpts,
+  type PackClip,
+} from './render';
 import {
   demirReportInput,
   sampleEvidencePackInput,
@@ -87,29 +95,69 @@ describe('fmtPhotoTime', () => {
 });
 
 describe('weatherExcerpts', () => {
+  const seg = (prefix: string, n: number) =>
+    Array.from({ length: n }, (_, i) => ({ start: i * 6, end: i * 6 + 6, text: `${prefix}${i}` }));
+  const withSources = (source: DailyReportData['weather']['periods'][number]['source']) => ({
+    ...sampleReportInput.data,
+    weather: {
+      ...sampleReportInput.data.weather,
+      periods: [{ condition: 'Rain', lostHours: 1, source }],
+    },
+  });
+  const note = (id: string, n: number, clipNo: number | null = null): PackClip => ({
+    kind: 'voice_note',
+    id,
+    clipNo,
+    segments: seg(`${id}:`, n),
+  });
+
   it('picks the segments the weather period sources point at, with neighbours', () => {
-    const segs = Array.from({ length: 10 }, (_, i) => ({
-      start: i * 6,
-      end: i * 6 + 6,
-      text: `s${i}`,
-    }));
-    const data = {
-      ...sampleReportInput.data,
-      weather: {
-        ...sampleReportInput.data.weather,
-        periods: [
-          {
-            condition: 'Rain',
-            lostHours: 1,
-            source: [{ type: 'voice_note' as const, uploadId: 'm', start: 41 }],
-          },
-        ],
-      },
-    };
-    expect(weatherExcerpts(data, segs).map((s) => s.text)).toEqual(['s5', 's6', 's7']);
+    const data = withSources([{ type: 'voice_note', uploadId: 'm', start: 41 }]);
+    expect(weatherExcerpts(data, [note('m', 10)]).map((s) => s.text)).toEqual([
+      'm:5',
+      'm:6',
+      'm:7',
+    ]);
     expect(
-      weatherExcerpts({ ...data, weather: { ...data.weather, periods: [] } }, segs),
+      weatherExcerpts({ ...data, weather: { ...data.weather, periods: [] } }, [note('m', 10)]),
     ).toHaveLength(3);
+  });
+
+  it('quotes the cited clip only, never the same second of another voice note', () => {
+    // Note A is the crew (0–60 s), note B the rain at 5–12 s: the period cites B at 5 s.
+    const data = withSources([{ type: 'voice_note', uploadId: 'B', start: 5 }]);
+    const out = weatherExcerpts(data, [note('A', 10, 1), note('B', 3, 2)]);
+    expect(out.map((e) => e.text)).toEqual(['B:0', 'B:1']);
+    expect(out.every((e) => e.clip === 'voice_note' && e.clipNo === 2)).toBe(true);
+  });
+
+  it('quotes a call from the reporter’s lane at the cited second', () => {
+    const data = withSources([{ type: 'call', callId: 'c1', start: 135 }]);
+    const call = reporterSegments({
+      segments: [
+        { start: 120, end: 128, text: 'Was there any weather today?', speaker: 'agent' },
+        {
+          start: 130,
+          end: 140,
+          text: 'rain stopped the facade for two and a half hours',
+          speaker: 'reporter',
+        },
+        { start: 140, end: 146, text: 'Got it. Anything else?', speaker: 'agent' },
+      ],
+    } as unknown as TranscriptRow);
+    const out = weatherExcerpts(data, [
+      note('m', 2),
+      { kind: 'call', id: 'c1', clipNo: null, segments: call },
+    ]);
+    expect(out).toEqual([
+      {
+        clip: 'call',
+        clipNo: null,
+        start: 130,
+        end: 140,
+        text: 'rain stopped the facade for two and a half hours',
+      },
+    ]);
   });
 });
 

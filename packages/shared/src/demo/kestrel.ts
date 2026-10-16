@@ -56,7 +56,7 @@ import type {
 import { emptyReportDataV1 } from '../schemas/report.ts';
 import { deriveTotals } from '../report/hours.ts';
 import { noticeData } from '../notifications.ts';
-import { formatReportNo } from '../report/numbering.ts';
+import { evidencePackStoragePath, formatReportNo } from '../report/numbering.ts';
 import { PAYROLL_COLUMNS } from '../report/payroll.ts';
 import { upgradeV1toV2 } from '../report/upgrade.ts';
 import { smsRenderOptions } from '../channels.ts';
@@ -1940,7 +1940,13 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       period_start: packPeriod.start,
       period_end: packPeriod.end,
       status: 'ready',
-      pdf_path: `${ORG}/${siteId('riverside')}/eot_${packPeriod.start}_${packPeriod.end}.pdf`,
+      pdf_path: evidencePackStoragePath(
+        ORG,
+        siteId('riverside'),
+        packPeriod.start,
+        packPeriod.end,
+        demoId('pack:riverside:sep'),
+      ),
       sections: ['summary', 'reports', 'transcripts', 'photos', 'weather'],
       error: null,
       created_by: SAM,
