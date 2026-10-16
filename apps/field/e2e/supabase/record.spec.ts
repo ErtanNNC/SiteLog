@@ -97,7 +97,9 @@ test(
     const reportId = /\/report\/([0-9a-f-]{36})$/.exec(page.url())![1]!;
     const reportNo = `${fx.site.projectCode}-0001`;
     const processing = page.getByRole('heading', { level: 1, name: copy.processing.title });
-    await expect(processing).toBeVisible();
+    // The report screen is up: Processing, or already a question or the draft when the worker
+    // (CI's M6 step) got there first.
+    await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
     // Processing names the report once its first poll answered, unless the worker (up in CI's M6
     // step) has already moved it on to a question or the draft, which do not name it; the number
     // is checked in the row and on Today below either way.
