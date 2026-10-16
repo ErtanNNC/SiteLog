@@ -548,5 +548,15 @@ Deno.test(
     for (const status of ['applied', 'stale', 'discarded'] as const)
       assertEquals(openCorrectionView({ ...row, status }, at(10)), null);
     assertEquals(openCorrectionView(null, at(10)), null);
+    // W2-10 review: a fix the report moved on from is shown stale for 10 minutes after it settled.
+    const moved = {
+      ...row,
+      status: 'stale' as const,
+      reason: 'report_moved_on',
+      settled_at: '2026-10-09T22:00:30Z',
+    };
+    assertEquals(openCorrectionView(moved, at(60))?.status, 'stale');
+    assertEquals(openCorrectionView(moved, at(30 + 601)), null);
+    assertEquals(openCorrectionView({ ...moved, reason: 'draft_changed' }, at(60)), null);
   },
 );

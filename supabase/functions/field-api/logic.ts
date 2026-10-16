@@ -1,6 +1,7 @@
 import {
   CONSENT_TYPES,
   CORRECTION_LISTEN_TIMEOUT_S,
+  CORRECTION_STALE_SHOWN_S,
   DEVICE_COOKIE_MAX_AGE_S,
   REQUIRED_CONSENTS,
   UI_RESOURCES,
@@ -642,11 +643,26 @@ export function correctionView(
   };
 }
 
-/** The fix a draft shows (W2-10): the latest one while it is listening, a preview or unclear. */
+/**
+ * The fix a draft shows (W2-10): the latest one while it is listening, a preview or unclear; and,
+ * for `CORRECTION_STALE_SHOWN_S` after the worker settled it, one that met the report already
+ * moved on (`report_moved_on`: a late clip or photo sent it back to processing first), so the
+ * draft shown again says "Your report changed while I was listening" instead of dropping the fix
+ * silently (W2-10 review).
+ */
 export function openCorrectionView(
-  row: Parameters<typeof correctionView>[0] | null,
+  row:
+    | (Parameters<typeof correctionView>[0] & Partial<Pick<DraftCorrectionRow, 'settled_at'>>)
+    | null,
   now: Date,
 ): CorrectionView | null {
-  if (!row || !['listening', 'ready', 'unclear'].includes(row.status)) return null;
+  if (!row) return null;
+  if (row.status === 'stale')
+    return row.reason === 'report_moved_on' &&
+      row.settled_at &&
+      now.getTime() - Date.parse(row.settled_at) <= CORRECTION_STALE_SHOWN_S * 1000
+      ? correctionView(row, now)
+      : null;
+  if (!['listening', 'ready', 'unclear'].includes(row.status)) return null;
   return correctionView(row, now);
 }

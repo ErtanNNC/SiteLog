@@ -19,5 +19,7 @@ export function fixFromView(c: CorrectionView | null): Fix {
   if (c.status === 'listening') return { kind: 'listening', id: c.id };
   if (c.status === 'ready' && c.changes) return { kind: 'ready', view: c };
   if (c.status === 'unclear') return { kind: 'unclear', view: c };
+  // W2-10 review: the report moved on while the fix was listened to: say so, once shown again.
+  if (c.status === 'stale') return { kind: 'stale' };
   return { kind: 'idle' };
 }

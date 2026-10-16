@@ -247,6 +247,29 @@ describe('Draft (F8, Field-06)', () => {
     ).toBeInTheDocument();
   });
 
+  it('a fix the report moved on from says so when the draft is shown again (W2-10 review)', async () => {
+    const stale = {
+      id: 'c1',
+      status: 'stale' as const,
+      via: 'voice' as const,
+      changes: null,
+      clarification: null,
+      reason: 'report_moved_on',
+      version: null,
+      draftRev: null,
+      afterFiling: false,
+    };
+    const routes = fakeRoutes({
+      report: vi.fn().mockResolvedValue(draftView({ correction: stale })),
+    });
+    renderApp('/report/r1', { routes });
+    expect(
+      await screen.findByText(
+        'Your report changed while I was listening. Check it, then say the fix again.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('no stepper while Confirm & send is in flight (W2-10 review)', async () => {
     let answer: (v: { status: 'queued' }) => void = () => {};
     const routes = fakeRoutes({

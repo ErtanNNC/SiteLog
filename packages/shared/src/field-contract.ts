@@ -451,6 +451,13 @@ export const CORRECTION_CLIP_MAX_MS = 30_000;
 export const CORRECTION_LISTEN_TIMEOUT_S = 5 * 60;
 
 /**
+ * W2-10 review: a fix the worker found the report had moved on from (a late clip or photo sent the
+ * draft back to processing first) is shown this long after it settled (`ReportView.correction`,
+ * status `stale`), so the draft shown again tells the reporter to say it again.
+ */
+export const CORRECTION_STALE_SHOWN_S = 10 * 60;
+
+/**
  * W2-10 (F8 *Fix by voice*, §10.6, Appendix B `reports/:id/correction`): a correction of the draft
  * and its preview. `listening` while the worker transcribes and parses it; `ready` with the
  * preview (`changes`, code's numbers: "Apex Concrete 6 → 7 workers, 48 → 56 h") made from the
