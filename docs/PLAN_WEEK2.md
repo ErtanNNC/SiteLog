@@ -242,15 +242,15 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W2-12 · SMS keywords NO WORK, WEATHER, EDIT, OK (two-way packs)
 
-- [ ] **W2-12 done** · today _partial_ (M)
+- [ ] **W2-12 done** · today _partial_ (M) · _Built 2026-10-16 (commits below); the box waits for CI on PR #1 and the live check with `ANTHROPIC_API_KEY` (`classify_utterance` on the real fast model; the golden set's outputs here are written by hand, `fixtures/utterances`). New: `20261016000140_sms_keywords.sql` (`draft_corrections.message_id`, `sms_request_filed_correction()`, `sms_keyword` under the phone's lock), the `sms_keyword` job, `classify_utterance`, the copy keys `day_off_link`, `edit_preview`, `edit_unclear` (EN/ES/TR, for the Q63 review), the field links `/r/:code/history[/:id]`, `fixtures/sms/inbound-{ok,no-work,weather,edit}.json`. Questions built on their recommended defaults (spec §19, open): Q102 an EDIT with no preview gets `edit_unclear` and the Past reports link; Q103 OK with no open draft gets no reply; Q104 NO WORK / WEATHER answer for each site whose day is still open (at most 3), none: no reply; Q105 the ES and TR keyword words. The panel's in-memory demo stores the keywords without answering (README deviation). Not run here: `e2e:supabase` and `test:stack` (no Supabase CLI in this container)._
 - **Spec:** §9.5, F10 (SMS), F12 (SMS), §10.8 `classify_utterance`, §9.2, §19 Q45, Q46. Two-way packs only (US today).
 - **Already in the repo:** `sms-webhook` and the `sms_inbound` job with STOP, START, HELP, CALL, TEXT; OK, NO WORK, WEATHER and EDIT stored only (`packages/shared/src/sms/keywords.ts:12`, `:150`); `classify_reply` on the WhatsApp prompt (`ai/classify.ts`) and the deterministic pre-pass (`wa/replies.ts` `quickClassify`, `quickDayOff`; GAP §4 "move the reply grammar to an SMS-keyword module first").
 - **Build:**
-  - [ ] Move the reply grammar into `packages/shared/src/sms/` (EN, ES, TR words; WhatsApp keeps importing it until step 22).
-  - [ ] **NO WORK** / **WEATHER**: reply with a link to Today's day sheet for that site (F12 "a link to add details"); the site-day changes only when the details are saved (W2-08). Copy per Q83 (decided 2026-10-16: new key `day_off_link`).
-  - [ ] **EDIT FRI …**: `classify_utterance` (fast model, `CLAUDE_MODEL_FAST`) for the day and the correction, `apply_correction` (W2-10) for the preview, reply with the change and a link to confirm; never applied without the confirm on the recorder (F10). Copy per Q83 (new key `edit_preview`); the typed value's source per Q80 (`reporter_edit`).
-  - [ ] **OK** per Q82 (decided 2026-10-16: OK confirms nothing and replies with the draft link).
-  - [ ] Unknown text: stored, no reply (as built).
+  - [x] Move the reply grammar into `packages/shared/src/sms/` (EN, ES, TR words; WhatsApp keeps importing it until step 22).
+  - [x] **NO WORK** / **WEATHER**: reply with a link to Today's day sheet for that site (F12 "a link to add details"); the site-day changes only when the details are saved (W2-08). Copy per Q83 (decided 2026-10-16: new key `day_off_link`).
+  - [x] **EDIT FRI …**: `classify_utterance` (fast model, `CLAUDE_MODEL_FAST`) for the day and the correction, `apply_correction` (W2-10) for the preview, reply with the change and a link to confirm; never applied without the confirm on the recorder (F10). Copy per Q83 (new key `edit_preview`); the typed value's source per Q80 (`reporter_edit`).
+  - [x] **OK** per Q82 (decided 2026-10-16: OK confirms nothing and replies with the draft link).
+  - [x] Unknown text: stored, no reply (as built).
 - **Tests:** keyword unit tests in three languages; `sms_inbound` tests per keyword with recorded `classify_utterance` outputs; a two-orgs phone; a one-way pack ignoring all of them.
 - **Done when:** in CI (Demo phone replies on a two-way demo org), WEATHER after R1 answers with the day-sheet link, and "EDIT FRI Apex was 7 not 6" answers with the change and a confirm link that, once confirmed, makes version 2 (W2-11).
 - **Needs:** `ANTHROPIC_API_KEY` for the live check; a real US sender (owner) only for a real-phone run.
