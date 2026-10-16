@@ -97,7 +97,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-02 · `apps/voice-agent` scaffold: Python package, fakes, pytest, CI job
 
-- [ ] **W3-02 done** · today _partial_ (M): scaffold, fakes and `pnpm voice:test` built (74 tests, no key, no network), the CI job and the CLAUDE.md lines added; ticks when the `voice-agent` CI job is green
+- [x] **W3-02 done** (voice-agent CI job green, 62a8fc0) · (M): scaffold, fakes and `pnpm voice:test` built (74 tests, no key, no network), the CI job and the CLAUDE.md lines added; ticks when the `voice-agent` CI job is green
 - **Spec:** §4.2, §5 (Python 3.11+, `livekit-agents` with `deepgram`, `anthropic`, `azure`, `silero`, `inference.TurnDetector`; `httpx`; `lk agent deploy`), §9.4, §17 (Voice: scripted call simulations), Appendix A (W3-01).
 - **Already in the repo:** nothing in Python; the pnpm workspace, the CI jobs `check`, `db`, `edge-functions`, `e2e`, `e2e-supabase`, `eval`.
 - **Build:**
@@ -196,7 +196,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-07 · Weather & delays and the EOT evidence pack on v1.2 (F20, P9)
 
-- [ ] **W3-07 done** · today _partial_ (L) · built (`20261016000280_weather_call_evidence.sql`, `apps/worker/src/jobs/evidence-pack.pglite.test.ts`, `apps/web/e2e/weather.spec.ts`); ticks when CI runs the new demo e2e spec and the worker's PGlite pack test green
+- [x] **W3-07 done** (CI green with `weather.spec.ts` and the PGlite pack test, 62a8fc0) · (L) · built (`20261016000280_weather_call_evidence.sql`, `apps/worker/src/jobs/evidence-pack.pglite.test.ts`, `apps/web/e2e/weather.spec.ts`); ticks when CI runs the new demo e2e spec and the worker's PGlite pack test green
 - **Spec:** F20 ("PDF in the org's report language with transcript excerpts, photos, observed weather and attribution"), P9 (_Voice note ts_ or _Call ts_ chips, observed values in org units), §10.11, §12 (fonts, paper), §13 _EOT pack ready_, §16.2 M9 (**Riverside October EOT pack builds in < 2 min**), §19 Q91. **Design:** none exported for Web-Weather or the pack (build on v1.0 and note it).
 - **Already in the repo:** the page, heatmap, delay log, `PackDialog`, `api-evidence-pack`, `build_evidence_pack`, `EvidencePack.tsx` (English labels, "confirmed on WhatsApp"), `weatherExcerpts` (voice-note sources only), `claim_ready` (audio + photo + observed). Open audit findings this ticket closes: "EOT pack ignores the 'included sections' checklist" (`:432`), "EOT packs for the same site and period overwrite each other's PDF" (`:439`), "EOT pack cover states every report was confirmed on WhatsApp…" (`:446`), "Evidence-pack transcript excerpts match timestamps across different voice notes" (`:630`), "'X h lost to weather in this set' sums only the current page" (`:899`).
 - **Build:**
