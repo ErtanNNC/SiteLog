@@ -352,7 +352,12 @@ export interface DataSource {
    * Types a text as the reporter (demo orgs on two-way packs only): the same handler as an inbound
    * SMS (sms-webhook `/demo-reply`), so STOP, START, HELP, CALL and TEXT act as on a phone.
    */
-  sendDemoPhoneReply(reporterId: string, body: string): Promise<void>;
+  sendDemoPhoneReply(
+    reporterId: string,
+    body: string,
+    /** W2-16: the Demo phone's WhatsApp thread (default the texts). */
+    channel?: 'sms' | 'whatsapp',
+  ): Promise<void>;
   /** Live updates of the Demo phone's texts and emails (its own channel, not the org-wide one). */
   subscribeDemoPhone(onChange: () => void): () => void;
 

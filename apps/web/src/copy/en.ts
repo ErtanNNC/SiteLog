@@ -577,11 +577,16 @@ export const copy = {
       undeliverable: 'Not delivered',
     },
     replyLabel: 'Reply as {{name}}',
+    /** W2-16: a WhatsApp reply (the pack lists WhatsApp). */
+    replyLabelWhatsapp: 'Reply on WhatsApp as {{name}}',
+    replyChannel: 'Reply by',
     replyPlaceholder: 'Type a text, e.g. HELP or STOP',
     send: 'Send',
     replyFailed: 'The reply was not sent.',
     oneWay:
       'Replies are off: the {{code}} country pack has one-way SMS, so a reporter cannot text SiteLog.',
+    oneWayWhatsapp:
+      'The {{code}} country pack has one-way SMS: a reporter replies to SiteLog on WhatsApp.',
     maskedNote: 'This is not a demo organisation: link codes are masked and nothing can be typed.',
     notDemoTitle: 'The Demo phone is for demo organisations',
     notDemoBody:

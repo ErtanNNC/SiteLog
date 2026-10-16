@@ -1289,8 +1289,8 @@ export class DemoStore {
     return demoPhoneThread(this.data, reporterId);
   }
 
-  demoPhoneReply(reporterId: string, body: string): void {
-    demoReply(this.data, reporterId, body.trim(), this.nowIso());
+  demoPhoneReply(reporterId: string, body: string, channel: 'sms' | 'whatsapp' = 'sms'): void {
+    demoReply(this.data, reporterId, body.trim(), this.nowIso(), channel);
     this.emit({ table: 'all' });
   }
 

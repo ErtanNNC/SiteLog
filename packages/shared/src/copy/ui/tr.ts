@@ -1051,11 +1051,15 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         undeliverable: 'Teslim edilemedi',
       },
       replyLabel: '{{name}} olarak yanıtla',
+      replyLabelWhatsapp: "{{name}} olarak WhatsApp'tan yanıtla",
+      replyChannel: 'Yanıt kanalı',
       replyPlaceholder: 'Bir mesaj yazın, ör. HELP veya STOP',
       send: 'Gönder',
       replyFailed: 'Yanıt gönderilemedi.',
       oneWay:
         'Yanıtlar kapalı: {{code}} ülke paketinde SMS tek yönlü, rapor veren SiteLog’a mesaj gönderemez.',
+      oneWayWhatsapp:
+        '{{code}} ülke paketinde SMS tek yönlü: rapor veren SiteLog’a WhatsApp’tan yanıt verir.',
       maskedNote: 'Bu bir demo şirket değil: link kodları gizlenir ve buradan mesaj yazılamaz.',
       notDemoTitle: 'Demo telefon demo şirketler içindir',
       notDemoBody:

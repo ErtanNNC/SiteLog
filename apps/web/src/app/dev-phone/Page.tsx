@@ -160,13 +160,22 @@ function Texts({ timezone }: { timezone: string }) {
             key={reporter.id}
             reporter={reporter}
             timezone={timezone}
-            canReply={data.orgIsDemo && data.pack.twoWaySms}
+            replyChannels={
+              data.orgIsDemo
+                ? ([
+                    ...(data.pack.twoWaySms ? ['sms'] : []),
+                    ...(data.pack.whatsapp ? ['whatsapp'] : []),
+                  ] as Array<'sms' | 'whatsapp'>)
+                : []
+            }
             oneWayNote={
               !data.orgIsDemo
                 ? t('devPhone.maskedNote')
                 : data.pack.twoWaySms
                   ? null
-                  : t('devPhone.oneWay', { code: data.pack.code })
+                  : data.pack.whatsapp
+                    ? t('devPhone.oneWayWhatsapp', { code: data.pack.code })
+                    : t('devPhone.oneWay', { code: data.pack.code })
             }
             onBack={back}
             headingRef={headingRef}
@@ -228,14 +237,15 @@ function ReporterButton({
 function Thread({
   reporter,
   timezone,
-  canReply,
+  replyChannels,
   oneWayNote,
   onBack,
   headingRef,
 }: {
   reporter: DemoPhoneReporter;
   timezone: string;
-  canReply: boolean;
+  /** Where a reply can be typed: texts on a two-way pack, WhatsApp where the pack lists it. */
+  replyChannels: Array<'sms' | 'whatsapp'>;
   oneWayNote: string | null;
   onBack: () => void;
   headingRef: RefObject<HTMLHeadingElement | null>;
@@ -304,7 +314,9 @@ function Thread({
         )}
       </div>
       <footer className="border-t border-rebar px-4 py-3">
-        {canReply ? <ReplyForm reporter={reporter} /> : null}
+        {replyChannels.length > 0 ? (
+          <ReplyForm reporter={reporter} channels={replyChannels} />
+        ) : null}
         {oneWayNote ? <p className="text-caption text-dust">{oneWayNote}</p> : null}
       </footer>
     </div>
@@ -401,22 +413,61 @@ function Linkified({ text }: { text: string }) {
   return <>{parts}</>;
 }
 
-function ReplyForm({ reporter }: { reporter: DemoPhoneReporter }) {
+function ReplyForm({
+  reporter,
+  channels,
+}: {
+  reporter: DemoPhoneReporter;
+  channels: Array<'sms' | 'whatsapp'>;
+}) {
   const { t } = useCopy();
   const reply = useDemoPhoneReply();
   const [body, setBody] = useState('');
+  const [channel, setChannel] = useState<'sms' | 'whatsapp'>(channels[0]!);
   const inputId = `demo-reply-${reporter.id}`;
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const text = body.trim();
     if (!text) return;
-    reply.mutate({ reporterId: reporter.id, body: text }, { onSuccess: () => setBody('') });
+    reply.mutate(
+      { reporterId: reporter.id, body: text, channel },
+      { onSuccess: () => setBody('') },
+    );
   };
   return (
-    <form onSubmit={submit} className="flex items-end gap-2">
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
+      {channels.length > 1 ? (
+        // W2-16: the reply goes on the chosen channel (the text, or WhatsApp).
+        <fieldset className="m-0 flex w-full flex-wrap gap-2 border-0 p-0">
+          <legend className="mb-1 text-caption font-medium text-dust">
+            {t('devPhone.replyChannel')}
+          </legend>
+          {channels.map((c) => (
+            <label
+              key={c}
+              className={cn(
+                'flex min-h-target items-center gap-2 rounded-btn border px-3 text-[15px]',
+                channel === c ? 'border-asphalt' : 'border-rebar',
+              )}
+            >
+              <input
+                type="radio"
+                name={`demo-reply-channel-${reporter.id}`}
+                value={c}
+                checked={channel === c}
+                onChange={() => setChannel(c)}
+                className="size-5 accent-asphalt"
+              />
+              {t(`devPhone.channels.${c}`)}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
       <div className="min-w-0 flex-1">
         <label htmlFor={inputId} className="mb-1 block text-caption font-medium text-dust">
-          {t('devPhone.replyLabel', { name: reporter.name })}
+          {channel === 'whatsapp'
+            ? t('devPhone.replyLabelWhatsapp', { name: reporter.name })
+            : t('devPhone.replyLabel', { name: reporter.name })}
         </label>
         <Input
           id={inputId}

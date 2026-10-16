@@ -1003,7 +1003,12 @@ export interface DemoPhoneData {
   /** `orgs.is_demo`: the Demo phone is for demo orgs (staging also shows real orgs' texts). */
   orgIsDemo: boolean;
   /** The org's country pack: replies can be typed only where SMS is two-way (spec §19 Q35). */
-  pack: { code: string; twoWaySms: boolean };
+  pack: {
+    code: string;
+    twoWaySms: boolean;
+    /** W2-16: the pack lists WhatsApp: the Demo phone types WhatsApp replies too. */
+    whatsapp: boolean;
+  };
   reporters: DemoPhoneReporter[];
 }
 

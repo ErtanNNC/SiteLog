@@ -209,8 +209,8 @@ export function useDemoPhoneReply() {
   const s = useDataSource();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { reporterId: string; body: string }) =>
-      s.sendDemoPhoneReply(vars.reporterId, vars.body),
+    mutationFn: (vars: { reporterId: string; body: string; channel?: 'sms' | 'whatsapp' }) =>
+      s.sendDemoPhoneReply(vars.reporterId, vars.body, vars.channel ?? 'sms'),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.demoPhone(s.orgId) }),
     onError: (err) => toast.error(errorMessage(err, translate('devPhone.replyFailed'))),
   });

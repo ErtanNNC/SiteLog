@@ -72,6 +72,7 @@ function smsRow(
   body: string,
   copyKey: SmsKey | null,
   at: string,
+  channel: 'sms' | 'whatsapp' = 'sms',
 ): MessageRow {
   const id = localId('sms');
   return {
@@ -97,7 +98,7 @@ function smsRow(
     provider: 'console',
     provider_message_id: `console:${id}`,
     copy_key: copyKey,
-    channel: 'sms',
+    channel,
   };
 }
 
@@ -170,13 +171,25 @@ export function demoDailyLink(
   return row;
 }
 
-/** A text typed as the reporter, and what SiteLog does with it (sms-webhook's plan). */
-export function demoReply(data: DemoDataset, reporterId: string, body: string, at: string): void {
+/**
+ * A text (or, W2-16, a WhatsApp message) typed as the reporter, and what SiteLog does with it
+ * (sms-webhook's plan). WhatsApp is two-way on every pack that lists it (spec §19 Q26).
+ */
+export function demoReply(
+  data: DemoDataset,
+  reporterId: string,
+  body: string,
+  at: string,
+  channel: 'sms' | 'whatsapp' = 'sms',
+): void {
   const reporter = data.reporters.find((r) => r.id === reporterId);
   if (!reporter) throw new Error('Reporter not found');
   const pack = demoOrgPack(data);
-  if (!pack.twoWaySms) throw new Error('This country pack has one-way SMS');
-  data.messages.push(smsRow(data, reporter, 'in', body, null, at));
+  const whatsapp = channel === 'whatsapp';
+  if (whatsapp && !pack.messageChannels.includes('whatsapp'))
+    throw new Error('This country pack lists no WhatsApp');
+  if (!whatsapp && !pack.twoWaySms) throw new Error('This country pack has one-way SMS');
+  data.messages.push(smsRow(data, reporter, 'in', body, null, at, channel));
   // Every reporter with the number, disabled ones included: a STOP sticks to them too.
   const others = data.reporters.filter((r) => r.phone_e164 === reporter.phone_e164);
   const plan = planInboundSms({
@@ -194,7 +207,24 @@ export function demoReply(data: DemoDataset, reporterId: string, body: string, a
     })),
     pendingUnknown: false,
     now: new Date(at),
+    channel,
   });
+  // W2-16 (spec §19 Q40, Q112): STOP / START on WhatsApp, the whatsapp consent only.
+  for (const change of plan.consentChanges) {
+    const rows = data.consents.filter(
+      (c) => c.reporter_id === change.reporterId && c.type === 'whatsapp',
+    );
+    const held = rows.filter((c) => c.revoked_at === null);
+    if (!change.grant) for (const c of held) c.revoked_at = at;
+    else if (held.length === 0 && rows.length > 0)
+      data.consents.push({
+        ...rows.at(-1)!,
+        id: localId('consent'),
+        method: 'whatsapp_keyword',
+        given_at: at,
+        revoked_at: null,
+      });
+  }
   for (const change of plan.changes) {
     const row = data.reporters.find((r) => r.id === change.reporterId)!;
     Object.assign(row, change.patch);
@@ -226,11 +256,17 @@ export function demoReply(data: DemoDataset, reporterId: string, body: string, a
       });
     }
   }
-  if (!plan.reply) return;
-  const to = data.reporters.find((r) => r.id === plan.reply!.reporterId) ?? reporter;
-  const locale = languageOf(to.locale) === 'es' ? 'es' : 'en';
+  if (!plan.reply && !plan.mediaReply) return;
+  const to =
+    data.reporters.find((r) => r.id === (plan.reply?.reporterId ?? plan.reporterId)) ?? reporter;
+  const locale = languageOf(to.locale);
+  // WhatsApp's variant: replies and links always (W2-16).
+  const options = whatsapp
+    ? { ...renderOptions(data), twoWay: true, linksAllowed: true }
+    : renderOptions(data);
+  const key = plan.reply?.key ?? 'whatsapp_use_link';
   const text =
-    plan.reply.key === 'help'
+    key === 'help'
       ? renderSms(
           'help',
           locale,
@@ -239,10 +275,12 @@ export function demoReply(data: DemoDataset, reporterId: string, body: string, a
             link: personalLink(data, to, at),
             ...(sitelogNumber(data) ? { number: sitelogNumber(data)! } : {}),
           },
-          renderOptions(data),
+          options,
         )
-      : renderSms(plan.reply.key, locale, {}, renderOptions(data));
-  data.messages.push(smsRow(data, to, 'out', text, plan.reply.key, at));
+      : key === 'whatsapp_use_link'
+        ? renderSms(key, locale, { link: personalLink(data, to, at) }, options)
+        : renderSms(key as 'stop_confirm', locale, {}, options);
+  data.messages.push(smsRow(data, to, 'out', text, key, at, channel));
 }
 
 /** A reporter's thread: texts and, since W2-14 / W2-15, pushes and WhatsApp messages. */
@@ -276,7 +314,11 @@ export function demoPhoneData(data: DemoDataset): DemoPhoneData {
     .sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? '') || a.name.localeCompare(b.name));
   return {
     orgIsDemo: data.org.is_demo,
-    pack: { code: pack.code, twoWaySms: pack.twoWaySms },
+    pack: {
+      code: pack.code,
+      twoWaySms: pack.twoWaySms,
+      whatsapp: pack.messageChannels.includes('whatsapp'),
+    },
     reporters,
   };
 }

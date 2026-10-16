@@ -100,15 +100,48 @@ describe('Demo phone', () => {
     expect(items[0]!).toHaveTextContent('Text');
   });
 
-  it('a one-way pack shows no reply box (spec §19 Q35)', async () => {
+  it('a one-way pack types no texts, only WhatsApp where the pack lists it (§19 Q35, W2-16)', async () => {
     const store = new DemoStore();
     store.data.org.country = 'TR';
     renderWithProviders(<DevPhonePage />, { as: 'admin', store });
-    await openThread(/Marco Ruiz/);
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    const thread = await openThread(/Marco Ruiz/);
+    expect(screen.queryByRole('textbox', { name: 'Reply as Marco Ruiz' })).not.toBeInTheDocument();
     expect(
-      screen.getByText(/the TR country pack has one-way SMS, so a reporter cannot text SiteLog/),
+      screen.getByText(
+        'The TR country pack has one-way SMS: a reporter replies to SiteLog on WhatsApp.',
+      ),
     ).toBeInTheDocument();
+    // HELP on WhatsApp is answered there, labelled WhatsApp.
+    const box = screen.getByRole('textbox', { name: 'Reply on WhatsApp as Marco Ruiz' });
+    await userEvent.type(box, 'HELP{Enter}');
+    const help = await within(thread).findByText(/SiteLog daily reports for Kestrel Build Group/);
+    expect(help.closest('li')).toHaveTextContent('WhatsApp');
+  });
+
+  it('a two-way pack with WhatsApp offers both: the reply goes by the one chosen (W2-16)', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<DevPhonePage />, { as: 'admin', store });
+    const thread = await openThread(/Dana Whitfield/);
+    await userEvent.click(screen.getByRole('radio', { name: 'WhatsApp' }));
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Reply on WhatsApp as Dana Whitfield' }),
+      'HELP{Enter}',
+    );
+    const help = await within(thread).findByText(/SiteLog daily reports for Kestrel Build Group/);
+    expect(help.closest('li')).toHaveTextContent('WhatsApp');
+    // STOP on WhatsApp stops WhatsApp only: Dana is not opted out of texts (§19 Q40).
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Reply on WhatsApp as Dana Whitfield' }),
+      'STOP{Enter}',
+    );
+    expect(
+      await within(thread).findByText(
+        "You won't get more WhatsApp messages from SiteLog. Reply START to resume.",
+      ),
+    ).toBeInTheDocument();
+    expect(store.data.reporters.find((r) => r.name === 'Dana Whitfield')!.status).not.toBe(
+      'opted_out',
+    );
   });
 
   it('an invite shows the welcome text in the Demo phone, in the language the office ticked (F3)', async () => {

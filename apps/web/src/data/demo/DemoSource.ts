@@ -459,8 +459,8 @@ export class DemoSource implements DataSource {
   getDemoPhoneEmails() {
     return this.run(() => [...this.store.consoleEmails].reverse());
   }
-  sendDemoPhoneReply(reporterId: string, body: string) {
-    return this.run(() => this.store.demoPhoneReply(reporterId, body));
+  sendDemoPhoneReply(reporterId: string, body: string, channel: 'sms' | 'whatsapp' = 'sms') {
+    return this.run(() => this.store.demoPhoneReply(reporterId, body, channel));
   }
   subscribeDemoPhone(onChange: () => void): () => void {
     return this.store.subscribe(() => onChange());

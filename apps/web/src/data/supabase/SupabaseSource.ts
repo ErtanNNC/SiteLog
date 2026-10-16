@@ -2034,10 +2034,10 @@ export class SupabaseSource implements DataSource {
     const country = unwrapOne(
       await this.sb
         .from('countries')
-        .select('code, two_way_sms')
+        .select('code, two_way_sms, message_channels')
         .eq('code', org.country)
         .maybeSingle(),
-    ) as { code: string; two_way_sms: boolean };
+    ) as { code: string; two_way_sms: boolean; message_channels: string[] };
     const reporters = unwrap(
       await this.sb
         .from('reporters')
@@ -2063,7 +2063,11 @@ export class SupabaseSource implements DataSource {
     );
     return {
       orgIsDemo: org.is_demo,
-      pack: { code: country.code, twoWaySms: country.two_way_sms },
+      pack: {
+        code: country.code,
+        twoWaySms: country.two_way_sms,
+        whatsapp: country.message_channels.includes('whatsapp'),
+      },
       reporters: reporters
         .map((r, i) => {
           const { count, last } = threads[i]!;
@@ -2147,9 +2151,18 @@ export class SupabaseSource implements DataSource {
     }));
   }
 
-  async sendDemoPhoneReply(reporterId: string, body: string): Promise<void> {
-    // The same handler as an inbound SMS; the function checks admin, demo org and two-way pack.
-    await this.callFunction('sms-webhook/demo-reply', { reporterId, body });
+  async sendDemoPhoneReply(
+    reporterId: string,
+    body: string,
+    channel: 'sms' | 'whatsapp' = 'sms',
+  ): Promise<void> {
+    // The same handler as an inbound SMS or WhatsApp message; the function checks admin, demo
+    // org, and a two-way pack (texts) or a pack that lists WhatsApp (W2-16).
+    await this.callFunction('sms-webhook/demo-reply', {
+      reporterId,
+      body,
+      ...(channel === 'whatsapp' ? { channel } : {}),
+    });
   }
 
   subscribeDemoPhone(onChange: () => void): () => void {
