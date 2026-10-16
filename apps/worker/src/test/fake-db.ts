@@ -523,7 +523,8 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         (g) =>
           g.org_id === input.org_id &&
           g.heard.toLowerCase() === input.heard.toLowerCase() &&
-          g.kind === input.kind,
+          g.kind === input.kind &&
+          (g.scope_site_id ?? null) === (input.scope_site_id ?? null),
       );
       if (existing) {
         const next = {
@@ -533,7 +534,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
           official: existing.official ?? input.official,
         };
         d.glossary.set(existing.id, next);
-        return next;
+        return { row: next, inserted: false };
       }
       const row: GlossaryTermRow = {
         id: randomUUID(),
@@ -551,7 +552,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         last_seen_at: iso(),
       };
       d.glossary.set(row.id, row);
-      return row;
+      return { row, inserted: true };
     },
     async listSiteRecipients(siteId) {
       return d.recipients.filter((r) => r.site_id === siteId).map((r) => r.email);

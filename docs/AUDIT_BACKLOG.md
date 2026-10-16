@@ -835,7 +835,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Re-extractions inflate glossary times_heard and repeat the review notification
 
-`apps/worker/src/pipeline/glossary.ts:44` · glossary / F17 step 1 · Confirmed 3/3
+`apps/worker/src/pipeline/glossary.ts:44` · glossary / F17 step 1 · Confirmed 3/3 · **Fixed (W3-08):** `extract_report` passes the previous draft's `newTerms` to `learnTerms` as already counted (keyed by kind and heard phrase), so a re-extraction of the same report does not raise `times_heard`; `upsertGlossaryTerm` returns whether it inserted, and `glossary_review` names only the terms newly inserted for review (`pipeline.test.ts`, `db.pglite.test.ts`).
 
 - **Problem:** A site manager sends one voice note mentioning 'the Ridgeway guys', then a second note and a 'fix' reply. The report is extracted 3 times. The glossary card shows 'HEARD 3×' for one mention, and the bell gets three '1 new term to review' notifications.
 - **Fix:** Count each term once per report. In extract_report.ts, before calling learnTerms, drop any term whose `${kind}:${heard.trim().toLowerCase()}` already appears in previousDraft?.newTerms. The first run's draft is stored by storeDraft before learnTerms runs, so this also covers job retries and the requeue when sources change mid-extraction. Separately, have upsertGlossaryTerm say whether it inserted a new row, and make learnTerms send the glossary_review notification only for terms it newly inserted. An existing needs_review row should not trigger another notification. The "fix" path needs no change.
@@ -982,7 +982,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### resolve_unknown_company adds a duplicate glossary row on every resolve (`on conflict do nothing` can never fire)
 
-`supabase/migrations/20261011000005_rpcs.sql:230` · constraint · Unverified
+`supabase/migrations/20261011000005_rpcs.sql:230` · constraint · Unverified · **Fixed (W3-08):** `20261016000290_glossary_rpcs.sql` replaces `resolve_unknown_company()` in place: it updates the org's company rows for the name and inserts only when none matched (`supabase/db-tests/src/glossary.test.ts`). Rows the old function duplicated stay until the owner approves a cleanup.
 
 - **Problem:** Reproduced on PGlite. The org already has an auto-learned 'Ridgeway' company term. After resolve_unknown_company(…, 'Ridgeway', 'map', Apex) it has two identical confirmed 'Ridgeway → Apex Concrete' rows, and each further resolve adds another. The Glossary page lists duplicates, and listGlossary feeds both into the transcription and extraction prompts.
 - **Fix:** Update the existing row first and insert only when no row matched (`if not found then insert`), mirroring the worker's upsertGlossaryTerm. Alternatively, add a unique index on (org_id, lower(heard), kind, coalesce(scope_site_id, …)) and use a real ON CONFLICT.

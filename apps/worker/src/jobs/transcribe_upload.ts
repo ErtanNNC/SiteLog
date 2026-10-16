@@ -1,4 +1,5 @@
 import {
+  buildKeyterms,
   JOB_MAX_ATTEMPTS,
   jobKeys,
   photosAddedNote,
@@ -6,7 +7,7 @@ import {
   type UploadRow,
 } from '@sitelog/shared';
 import { buildTranscriptionPrompt } from '../ai/transcribe';
-import { buildKeyterms, transcriptionLanguage } from '../ai/transcriber';
+import { transcriptionLanguage } from '../ai/transcriber';
 import type { Ctx } from '../context';
 import {
   analyzeAudio,

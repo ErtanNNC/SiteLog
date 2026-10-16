@@ -1702,6 +1702,19 @@ export type Database = {
         };
         Returns: Json;
       };
+      // W3-08 (20261016000290): the panel's Add term, audited `glossary.added`; the same heard
+      // phrase, kind and scope updates the org's row. Returns `{id}`.
+      add_glossary_term: {
+        Args: {
+          p_org_id: string;
+          p_heard: string;
+          p_official: string;
+          p_kind: TermKind;
+          p_language?: string;
+          p_scope_site_id?: string | null;
+        };
+        Returns: Json;
+      };
       // D16 (20261015000001): `insert … on conflict (dedupe_key) do nothing`; a taken key returns its
       // job's id, whatever its status.
       enqueue_job: {

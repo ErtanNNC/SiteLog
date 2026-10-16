@@ -1216,7 +1216,34 @@ export class DemoStore {
     this.emit({ table: 'all' });
   }
 
+  /** As `add_glossary_term` (W3-08): the same phrase (any case), kind and scope updates its row. */
   addGlossaryTerm(input: AddGlossaryTermInput, userId: string): void {
+    const heard = input.heard.trim();
+    const scope = input.scopeSiteId ?? null;
+    const existing = this.data.glossary.find(
+      (g) =>
+        g.org_id === this.data.org.id &&
+        g.kind === input.kind &&
+        g.heard.toLocaleLowerCase() === heard.toLocaleLowerCase() &&
+        g.scope_site_id === scope &&
+        g.scope_reporter_id === null,
+    );
+    if (existing) {
+      existing.official = input.official.trim();
+      existing.language = input.language ?? 'en';
+      existing.status = 'confirmed';
+      this.audit({
+        org_id: this.data.org.id,
+        actor_type: 'user',
+        actor_id: userId,
+        action: 'glossary.added',
+        entity: 'glossary_term',
+        entity_id: existing.id,
+        diff: { heard: existing.heard, official: existing.official, existing: true },
+      });
+      this.emit({ table: 'all' });
+      return;
+    }
     const row: GlossaryTermRow = {
       id: localId('term'),
       org_id: this.data.org.id,

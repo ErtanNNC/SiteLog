@@ -1741,20 +1741,22 @@ export const copy = {
     },
   },
 
+  /** P11 Site glossary (W3-08: EN/TR). */
   glossary: {
     title: 'Site glossary',
     subtitle: 'What the field says, written the way reports should read',
+    thing: 'site glossary',
     addTerm: 'Add term',
-    reviewTitle: (n: number) => `New this week · review ${n}`,
-    heard: (times: number, site: string | null) =>
-      `Heard ${times}× ${site ? `· ${site}` : ''}`.trim(),
+    reviewTitle: 'New this week · review {{n}}',
+    heard: 'Heard {{times}}×',
+    heardAt: 'Heard {{times}}× · {{site}}',
     approve: 'Approve',
     change: 'Change',
     reject: 'Reject',
     addAsSub: 'Add as subcontractor',
     mapTo: 'Map to…',
     all: 'All terms',
-    tabs: { all: 'All', companies: 'Companies', spanish: 'Spanish' },
+    tabs: { all: 'All', companies: 'Companies', spanish: 'Spanish', turkish: 'Turkish' },
     columns: {
       heard: 'Heard in the field',
       official: 'Written in reports as',
@@ -1762,9 +1764,8 @@ export const copy = {
       times: 'Times',
       source: 'Source',
     },
-    scope: { org: 'All sites', site: (name: string) => name },
+    scope: { org: 'All sites' },
     search: 'Search terms',
-    reviewed: 'Term updated.',
     empty: 'No terms yet. The agent learns them from voice notes.',
     emptyReview: 'Nothing to review.',
     emptyReviewBody: 'New phrases from voice notes land here once a week’s reports are in.',
@@ -1784,7 +1785,14 @@ export const copy = {
       officialRequired: 'Enter the official term.',
     },
     kinds: { term: 'Term', company: 'Company', area: 'Area', unit: 'Unit' },
-    languages: { en: 'English', es: 'Spanish', pl: 'Polish', hi: 'Hindi', pt: 'Portuguese' },
+    languages: {
+      en: 'English',
+      es: 'Spanish',
+      tr: 'Turkish',
+      pl: 'Polish',
+      hi: 'Hindi',
+      pt: 'Portuguese',
+    },
     arrow: 'written as',
     unknownCompany: 'Unknown company',
     changeLabel: 'Official term',
@@ -1792,8 +1800,7 @@ export const copy = {
     mapToLabel: 'Map to existing company',
     mapToPlaceholder: 'Choose a company',
     mapConfirm: 'Map',
-    noResults: (q: string) => `No terms match “${q}”.`,
-    timesHeard: (n: number) => `${n}×`,
+    noResults: 'No terms match “{{q}}”.',
   },
 
   settings: {

@@ -1554,6 +1554,8 @@ KPIs, heatmap, delay log with evidence chips (*Voice note ts* or *Call ts* · Ph
 
 Extraction proposes `newTerms` (heard → official, with the heard phrase's language). Auto-learn at confidence ≥ 0.9 for plain terms, otherwise review. Review cards (Approve · Change · Reject; companies: Add as subcontractor · Map to…). Confirmed terms are used both by extraction **and** as speech-recognition hints (keywords) for calls and voice notes. Turkish examples: "kalıp" → Formwork, "döküm" → Concrete pour, "demirci ekibi" → Rebar crew.
 
+*As built (W3-08):* a term counts once per report: a re-extraction of the same report (another clip, an answer, a retry) does not raise `times_heard`, another report does; the `glossary_review` notice names only terms newly added for review, so a term already waiting never notifies again (`learnTerms`). Resolving an unknown company (P7, `resolve_unknown_company`) updates the org's company row for that name and adds one only when there is none. Every office write is an audited RPC: the review cards through `review_glossary_term` (`glossary.reviewed`), *Add term* through `add_glossary_term` (`glossary.added`; the same heard phrase, kind and scope updates its row; a new term starts at 0 times heard). The speech hints are `buildKeyterms` (`packages/shared/src/glossary/keyterms.ts`), one list for a voice note's batch transcription and a call's `get_context` (W3-03): site name(s), company names and aliases, the site's areas, and the top 50 confirmed or built-in terms in the reporter's languages; a term waiting for review is not a hint.
+
 ---
 
 ### F22 · Settings
@@ -2062,6 +2064,8 @@ As v1.0; evidence chips show *Voice note ts* or *Call ts*; observed values in or
 #### P11 · Site glossary — `/glossary`
 Tabs All · Companies · Spanish · Turkish. Cards and table as v1.0; "Heard in the field" shows the language tag.
 
+*As built (W3-08):* the v1.0 page (no Web-Glossary artboard is exported) in EN and TR. The Spanish and Turkish tabs show the terms heard in that language (`glossary_terms.language` `es` / `tr`); *Add term* offers Turkish among the languages and starts in the panel's language.
+
 #### P12 · Settings — `/settings/*`
 Tabs: Reports & reminders · **Field channels** · PDF template · Recipients · Payroll export.
 - **Reports & reminders:** deadline, working days, reminder ladder cards (−35 heads-up · 17:00 daily link · +15 R1 "Text or call — per person" · +60 R2 · +90 missing), required fields, filing (radio *Reporter confirms — on the recorder or by voice on the call* vs auto after 15 min; sign-off required; email PDF).
@@ -2405,6 +2409,7 @@ Time zone Europe/Istanbul · deadline 17:30 · locale tr-TR · metric · TRY · 
 Office user: Elif Aydın (admin, Operasyon), fictional (§19 question 18).
 Companies: Usta Beton (Beton), Volt Elektrik (Elektrik), Akış Mekanik (Mekanik), Demir Yapı öz ekip (Genel işçilik).
 Glossary seeds: "döküm" → Beton dökümü · "kalıp söktük" → Kalıp sökümü yapıldı · "demirci ekibi" → Donatı ekibi · "TBM / tool box" → İş güvenliği bilgilendirmesi.
+*As built (W3-08, §19 Q138's recommended default):* "demirci ekibi" is kind `company` (a crew word), the others kind `term`; all confirmed, Turkish.
 Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlandı. 07:00–09:30 arası yağmur nedeniyle dış cephe işleri 2,5 saat durdu."
 
 ---
@@ -2550,7 +2555,7 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 135 | §10.4's prompt v2 lost v1's weather rule ("weather not mentioned → leave conditions empty and add `weather.conditions` to missing; never describe it from OBSERVED_WEATHER alone"); the first live eval (2026-10-16) showed models writing conditions from the observed data | Put the sentence back into the verbatim v2 prompt (spec and `extraction.v2.ts`, its test compares them) · Keep it in the tool's `conditionsText` description only (as built, 796a34e) | **Open (owner).** Recommended: the first, so the rule is in the prompt the spec quotes; the description stays as a second guard. |
 | 136 | A voice note that says nobody worked ("no work today", "nobody on site"): models record a crew or work line; the golden case expects the headcount question | Code offers the no-work path: one question "No work today?" (yes → the day's `no_work` flow, F12; no → the normal questions) · Record manpower 0 · Ask for the headcount (as the golden case does) | **Open (owner).** Recommended: the first; no number is invented and the office sees a no-work day, not an empty report. |
 | 137 | A correction that states a crew total ("7 guys, 60 hours all in"): totals are code's, never the model's (§10.4 rule 3) | Ask which line to change (as the models do; the golden case accepts it since 796a34e) · Set hours per worker = total / workers · Apply the headcount at the shift's hours | **Open (owner).** Recommended: the first; dividing invents a per-worker figure nobody said. |
-| 138 | Kind of a crew word in the glossary ("demirci ekibi" is kind `term` in §18.2's demo glossary, so an unmatched crew is not flagged as an unknown company) | Crew words ("… ekibi", "the … guys") are kind `company` · Keep `term` | **Open (owner).** Recommended: the first, and the §18.2 demo glossary changes with it. |
+| 138 | Kind of a crew word in the glossary ("demirci ekibi" is kind `term` in §18.2's demo glossary, so an unmatched crew is not flagged as an unknown company) | Crew words ("… ekibi", "the … guys") are kind `company` · Keep `term` | **Open (owner).** Recommended: the first, and the §18.2 demo glossary changes with it. W3-08 applied the recommendation to the data: the Demir Yapı seed (`packages/shared/src/demo/demir.ts`) and the TR eval inputs (`fixtures/transcripts/kartal-2026-10-09-tr.json`, `atasehir-2026-10-08-rain-tr.json`) carry "demirci ekibi" as `company`; the extraction prompt is unchanged (the eval work's). Keeping `term` reverts those three files. |
 | 139 | A `percentComplete` the transcript does not state (models wrote 100 for "finished", which §10.4 rule 1 forbids; `status: complete` already says it) | Code drops a percentage whose number does not occur in the transcript, as `apply_correction` refuses unstated numbers · Rely on the prompt and the field description (as built, 796a34e) | **Open (owner).** Recommended: the first; "never invent numbers" is code's to enforce, not the model's. |
 
 ---

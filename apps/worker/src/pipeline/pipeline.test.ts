@@ -808,6 +808,41 @@ describe('pipeline: compose + extract job + filing', () => {
       Array.from(h.db.data.glossary.values()).find((g) => g.heard === 'colado')!.times_heard,
     ).toBe(2);
   });
+
+  it('counts a term once per report and notifies once per new term (W3-08)', async () => {
+    const h = createHarness();
+    const ridgeway = {
+      heard: 'the Ridgeway guys',
+      proposedOfficial: 'Ridgeway',
+      kind: 'company' as const,
+      confidence: 0.7,
+    };
+    const learn = (counted: (typeof ridgeway)[] | null) =>
+      learnTerms(h.ctx, {
+        orgId: h.org.id,
+        siteId: SITE_RIVERSIDE,
+        terms: [ridgeway],
+        companies: [],
+        glossary: [],
+        counted,
+      });
+    const heard = () =>
+      Array.from(h.db.data.glossary.values()).find((g) => g.heard === ridgeway.heard)!;
+    const notices = () => h.db.data.notifications.filter((n) => n.kind === 'glossary_review');
+
+    await learn(null); // the report's first extraction
+    expect(heard().times_heard).toBe(1);
+    expect(notices()).toHaveLength(1);
+    // A second voice note and an answer re-extract the same report: its previous draft had the term.
+    await learn([{ ...ridgeway, heard: ' The Ridgeway Guys ' }]);
+    await learn([ridgeway]);
+    expect(heard().times_heard).toBe(1);
+    expect(notices()).toHaveLength(1);
+    // Another report hears it again: counted, but it is already in the review queue.
+    await learn(null);
+    expect(heard().times_heard).toBe(2);
+    expect(notices()).toHaveLength(1);
+  });
 });
 
 describe('jobs: welcome, template, retention', () => {

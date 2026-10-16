@@ -130,6 +130,11 @@ const TRANSLATED = [
   'common.close',
   'common.total',
   'toasts.invoiceAdded',
+  // W3-08: the Site glossary, its review cards and Add term dialog.
+  'glossary',
+  'common.filter',
+  'toasts.termReviewed',
+  'toasts.termAdded',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

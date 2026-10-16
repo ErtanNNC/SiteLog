@@ -21,6 +21,7 @@ import type { Ctx } from './context';
 import { connectSql, createDb, type Db } from './db';
 import { silentLogger } from './log';
 import { createWorkerNotifier } from './messaging';
+import { learnTerms } from './pipeline/glossary';
 import { buildReportPdfInput } from './pdf/render';
 import { createMemoryStorage } from './storage';
 
@@ -444,7 +445,7 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
   });
 
   it('upserts learned terms case-insensitively per scope', async () => {
-    const first = await db.upsertGlossaryTerm({
+    const { row: first, inserted: firstNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       scope_site_id: RIVERSIDE,
       heard: 'Losa',
@@ -454,8 +455,9 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       language: 'es',
     });
     expect(first).toMatchObject({ times_heard: 1, status: 'needs_review', official: null });
+    expect(firstNew).toBe(true);
     expect(first.last_seen_at).not.toBeNull();
-    const second = await db.upsertGlossaryTerm({
+    const { row: second, inserted: secondNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       scope_site_id: RIVERSIDE,
       heard: 'losa',
@@ -464,7 +466,8 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       status: 'auto_learned',
     });
     expect(second).toMatchObject({ id: first.id, times_heard: 2, official: 'Concrete slab' });
-    const third = await db.upsertGlossaryTerm({
+    expect(secondNew).toBe(false);
+    const { row: third, inserted: thirdNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       scope_site_id: RIVERSIDE,
       heard: 'LOSA',
@@ -473,8 +476,9 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       status: 'auto_learned',
     });
     expect(third).toMatchObject({ id: first.id, times_heard: 3, official: 'Concrete slab' });
+    expect(thirdNew).toBe(false);
     // Another scope (org-wide) and another kind are different terms.
-    const orgWide = await db.upsertGlossaryTerm({
+    const { row: orgWide, inserted: orgWideNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       heard: 'losa',
       official: null,
@@ -482,7 +486,8 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       status: 'needs_review',
     });
     expect(orgWide.id).not.toBe(first.id);
-    const asCompany = await db.upsertGlossaryTerm({
+    expect(orgWideNew).toBe(true);
+    const { row: asCompany, inserted: asCompanyNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       heard: 'losa',
       official: null,
@@ -491,7 +496,40 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       company_id: company['Apex Concrete']!,
     });
     expect(asCompany.id).not.toBe(orgWide.id);
+    expect(asCompanyNew).toBe(true);
     expect(asCompany.company_id).toBe(company['Apex Concrete']);
+  });
+
+  it('a re-extraction does not raise times_heard or notify again (W3-08)', async () => {
+    const ctx = { db, log: silentLogger } as unknown as Ctx;
+    const term = {
+      heard: 'the Kowalski crew',
+      proposedOfficial: 'Kowalski',
+      kind: 'company' as const,
+      confidence: 0.6,
+    };
+    const notices = async () =>
+      (
+        await q<{ n: number }>(
+          `select count(*)::int as n from notifications where org_id = $1 and kind = 'glossary_review' and body like '%Kowalski%'`,
+          [ORG],
+        )
+      )[0]!.n;
+    const timesHeard = async () =>
+      (
+        await q<{ times_heard: number }>(
+          `select times_heard from glossary_terms where org_id = $1 and heard = $2`,
+          [ORG, term.heard],
+        )
+      ).map((r) => r.times_heard);
+    const input = { orgId: ORG, siteId: RIVERSIDE, terms: [term], companies: [], glossary: [] };
+    await learnTerms(ctx, input);
+    await learnTerms(ctx, { ...input, counted: [term] }); // the same report, extracted again
+    expect(await timesHeard()).toEqual([1]);
+    expect(await notices()).toBe(1);
+    await learnTerms(ctx, input); // another report
+    expect(await timesHeard()).toEqual([2]);
+    expect(await notices()).toBe(1);
   });
 
   it('records unknown contacts', async () => {

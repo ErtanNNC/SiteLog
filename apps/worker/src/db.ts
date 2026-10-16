@@ -538,7 +538,11 @@ export interface Db {
     siteId?: string | null,
     reporterId?: string | null,
   ): Promise<GlossaryTermRow[]>;
-  upsertGlossaryTerm(input: GlossaryUpsert): Promise<GlossaryTermRow>;
+  /**
+   * A learned term: the org's row with the same heard phrase (any case), kind and site scope is
+   * heard once more, else a new row. `inserted` says which (W3-08: only a new term notifies).
+   */
+  upsertGlossaryTerm(input: GlossaryUpsert): Promise<{ row: GlossaryTermRow; inserted: boolean }>;
   listSiteRecipients(siteId: string): Promise<string[]>;
   listMemberEmails(
     orgId: string,
@@ -1317,14 +1321,14 @@ export function createDb(sql: Sql): Db {
           GlossaryTermRow[]
         >`update glossary_terms set times_heard = times_heard + 1, last_seen_at = now(),
           official = coalesce(official, ${input.official}) where id = ${row.id} returning *`;
-        return rows[0]!;
+        return { row: rows[0]!, inserted: false };
       }
       const rows = await sql<GlossaryTermRow[]>`
         insert into glossary_terms (org_id, scope_site_id, scope_reporter_id, heard, official, language, kind, company_id, status, times_heard, last_seen_at)
         values (${input.org_id}, ${input.scope_site_id ?? null}, ${input.scope_reporter_id ?? null}, ${input.heard}, ${input.official},
                 ${input.language ?? 'en'}, ${input.kind}, ${input.company_id ?? null}, ${input.status}, 1, now())
         returning *`;
-      return rows[0]!;
+      return { row: rows[0]!, inserted: true };
     },
     async listSiteRecipients(siteId) {
       const rows = await sql<

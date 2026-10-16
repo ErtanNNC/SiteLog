@@ -51,15 +51,16 @@ describe('Demir Yapı A.Ş. (§18.2)', () => {
       ['Akış Mekanik', 'Mekanik', false],
       ['Demir Yapı öz ekip', 'Genel işçilik', true],
     ]);
-    // "TBM / tool box" is two phrases a reporter says: terms match the heard phrase exactly.
+    // "TBM / tool box" is two phrases a reporter says: terms match the heard phrase exactly. The
+    // crew word is kind `company` (spec §19 Q138's recommended default).
     expect(
-      demir.glossary.map((g) => [g.heard, g.official, g.language, g.org_id, g.status]),
+      demir.glossary.map((g) => [g.heard, g.official, g.kind, g.language, g.org_id, g.status]),
     ).toEqual([
-      ['döküm', 'Beton dökümü', 'tr', DEMIR_ORG_ID, 'confirmed'],
-      ['kalıp söktük', 'Kalıp sökümü yapıldı', 'tr', DEMIR_ORG_ID, 'confirmed'],
-      ['demirci ekibi', 'Donatı ekibi', 'tr', DEMIR_ORG_ID, 'confirmed'],
-      ['TBM', 'İş güvenliği bilgilendirmesi', 'tr', DEMIR_ORG_ID, 'confirmed'],
-      ['tool box', 'İş güvenliği bilgilendirmesi', 'tr', DEMIR_ORG_ID, 'confirmed'],
+      ['döküm', 'Beton dökümü', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
+      ['kalıp söktük', 'Kalıp sökümü yapıldı', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
+      ['demirci ekibi', 'Donatı ekibi', 'company', 'tr', DEMIR_ORG_ID, 'confirmed'],
+      ['TBM', 'İş güvenliği bilgilendirmesi', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
+      ['tool box', 'İş güvenliği bilgilendirmesi', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
     ]);
     expect(DEMIR_GLOSSARY).toHaveLength(5);
     expect(new Set(demir.glossary.map((g) => g.id)).size).toBe(5);

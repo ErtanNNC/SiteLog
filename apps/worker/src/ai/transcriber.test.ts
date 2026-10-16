@@ -8,11 +8,9 @@ import type { FfmpegRunner } from '../media/ffmpeg';
 import { FIXTURES_DIR } from './eval';
 import { createFakeTranscriber, fakeAudio } from './fake-transcriber';
 import {
-  buildKeyterms,
   createOpenAiTranscriber,
   createTranscriber,
   FAKE_TRANSCRIPTION_IN_PRODUCTION,
-  KEYTERMS_MAX,
   resolveTranscriberChoice,
   transcriptionLanguage,
   type TranscriptionRequest,
@@ -50,94 +48,6 @@ describe('language choice (§10.2)', () => {
     expect(transcriptionLanguage({ locale: 'tr-TR', languages: [] })).toBe('tr');
     expect(transcriptionLanguage({ locale: null, languages: null })).toBe('en');
     expect(transcriptionLanguage({ locale: 'de-DE', languages: [] })).toBe('en');
-  });
-});
-
-describe('key terms (§10.2)', () => {
-  const glossary = [
-    {
-      heard: 'pour on four',
-      kind: 'term' as const,
-      status: 'confirmed' as const,
-      times_heard: 9,
-      language: 'en',
-    },
-    {
-      heard: 'llovió',
-      kind: 'term' as const,
-      status: 'built_in' as const,
-      times_heard: 3,
-      language: 'es',
-    },
-    {
-      heard: 'döküm',
-      kind: 'term' as const,
-      status: 'confirmed' as const,
-      times_heard: 5,
-      language: 'tr',
-    },
-    {
-      heard: 'the deck',
-      kind: 'term' as const,
-      status: 'rejected' as const,
-      times_heard: 50,
-      language: 'en',
-    },
-    {
-      heard: 'east wing',
-      official: 'East wing (Level 2)',
-      kind: 'area' as const,
-      status: 'confirmed' as const,
-      times_heard: 1,
-      language: 'en',
-    },
-    {
-      heard: 'call me at 512 555 0142',
-      kind: 'term' as const,
-      status: 'confirmed' as const,
-      times_heard: 99,
-      language: 'en',
-    },
-  ];
-
-  it('site, companies and aliases, areas (heard and official), then confirmed terms in the reporter languages', () => {
-    const terms = buildKeyterms({
-      siteName: 'Riverside Lofts — Block B',
-      companies: [
-        { name: 'Delta Mechanical', aliases: ['the Delta guys', 'Delta'] },
-        { name: 'Apex Concrete', aliases: ['apex concrete'] },
-      ],
-      glossary,
-      languages: ['es', 'en'],
-    });
-    expect(terms).toEqual([
-      'Riverside Lofts — Block B',
-      'Delta Mechanical',
-      'the Delta guys',
-      'Delta',
-      'Apex Concrete',
-      'east wing',
-      'East wing (Level 2)',
-      'pour on four',
-      'llovió',
-    ]);
-    // Never a phone number, never a rejected term, never another language's term.
-    expect(terms.join(' ')).not.toMatch(/555|the deck|döküm/);
-  });
-
-  it('caps the list', () => {
-    const many = Array.from({ length: 300 }, (_, i) => ({
-      heard: `term ${i}`,
-      kind: 'term' as const,
-      status: 'confirmed' as const,
-      times_heard: 300 - i,
-    }));
-    const companies = Array.from({ length: 200 }, (_, i) => ({
-      name: `Company ${i}`,
-      aliases: [],
-    }));
-    const terms = buildKeyterms({ siteName: 'S', companies, glossary: many });
-    expect(terms.length).toBeLessThanOrEqual(KEYTERMS_MAX);
   });
 });
 

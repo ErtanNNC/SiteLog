@@ -1855,7 +1855,7 @@ insert into companies (id, org_id, name, trade, aliases, is_self_perform, status
 insert into glossary_terms (id, org_id, scope_site_id, scope_reporter_id, heard, official, language, kind, company_id, status, times_heard, first_seen_at, last_seen_at) values
   ('08302a04-0fc4-43ea-8aa6-e3386748cd34', '6068578e-a1cb-4424-8ef6-9852a765d8de', NULL, NULL, 'döküm', 'Beton dökümü', 'tr', 'term', NULL, 'confirmed', 0, '2026-10-05T06:00:00.000Z', NULL),
   ('b8b043fc-0605-4302-8ef8-4f58fda9650c', '6068578e-a1cb-4424-8ef6-9852a765d8de', NULL, NULL, 'kalıp söktük', 'Kalıp sökümü yapıldı', 'tr', 'term', NULL, 'confirmed', 0, '2026-10-05T06:00:00.000Z', NULL),
-  ('1e5f1033-19b8-4639-8fd6-e2b732a8ad43', '6068578e-a1cb-4424-8ef6-9852a765d8de', NULL, NULL, 'demirci ekibi', 'Donatı ekibi', 'tr', 'term', NULL, 'confirmed', 0, '2026-10-05T06:00:00.000Z', NULL),
+  ('1e5f1033-19b8-4639-8fd6-e2b732a8ad43', '6068578e-a1cb-4424-8ef6-9852a765d8de', NULL, NULL, 'demirci ekibi', 'Donatı ekibi', 'tr', 'company', NULL, 'confirmed', 0, '2026-10-05T06:00:00.000Z', NULL),
   ('5e86f7fd-b3f0-443f-8a2d-48b1648485cd', '6068578e-a1cb-4424-8ef6-9852a765d8de', NULL, NULL, 'TBM', 'İş güvenliği bilgilendirmesi', 'tr', 'term', NULL, 'confirmed', 0, '2026-10-05T06:00:00.000Z', NULL),
   ('41930b23-78c7-4705-8d67-b9b7f88871f3', '6068578e-a1cb-4424-8ef6-9852a765d8de', NULL, NULL, 'tool box', 'İş güvenliği bilgilendirmesi', 'tr', 'term', NULL, 'confirmed', 0, '2026-10-05T06:00:00.000Z', NULL);
 

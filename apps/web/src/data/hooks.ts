@@ -437,14 +437,14 @@ export function useResolveUnknownCompany() {
 export function useReviewGlossaryTerm() {
   const s = useDataSource();
   return useSourceMutation((vars: ReviewGlossaryTermInput) => s.reviewGlossaryTerm(vars), {
-    success: copy.toasts.termReviewed,
+    success: () => translate('toasts.termReviewed'),
   });
 }
 
 export function useAddGlossaryTerm() {
   const s = useDataSource();
   return useSourceMutation((vars: AddGlossaryTermInput) => s.addGlossaryTerm(vars), {
-    success: copy.toasts.termAdded,
+    success: () => translate('toasts.termAdded'),
   });
 }
 

@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { buildKeyterms } from '@sitelog/shared';
 import { loadConfig } from '../config';
 import { loadDotenv } from '../dotenv';
 import { createLogger } from '../log';
 import { createFfmpegRunner, resolveFfmpegPath } from '../media/ffmpeg';
 import { loadFixture } from './eval';
 import { createOpenAiClient } from './transcribe';
-import { buildKeyterms, createTranscriber, transcriptionLanguage } from './transcriber';
+import { createTranscriber, transcriptionLanguage } from './transcriber';
 import { loadVoiceFixtures, voiceFixturesDir } from './voice-fixtures';
 
 /**

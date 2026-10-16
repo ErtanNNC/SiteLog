@@ -1753,17 +1753,16 @@ export class SupabaseSource implements DataSource {
       p_company_id: input.companyId ?? null,
     });
   }
+  /** W3-08: the audited `add_glossary_term` (the same phrase, kind and scope updates its row). */
   async addGlossaryTerm(input: AddGlossaryTermInput) {
-    const { error } = await this.sb.from('glossary_terms').insert({
-      org_id: this.orgId,
-      heard: input.heard.trim(),
-      official: input.official.trim(),
-      kind: input.kind,
-      language: input.language ?? 'en',
-      scope_site_id: input.scopeSiteId ?? null,
-      status: 'confirmed',
+    await this.rpc('add_glossary_term', {
+      p_org_id: this.orgId,
+      p_heard: input.heard.trim(),
+      p_official: input.official.trim(),
+      p_kind: input.kind,
+      p_language: input.language ?? 'en',
+      p_scope_site_id: input.scopeSiteId ?? null,
     });
-    if (error) throw new Error(error.message);
   }
   async saveSettings(patch: OrgSettingsPatch) {
     const { error } = await this.sb

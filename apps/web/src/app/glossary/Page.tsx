@@ -17,32 +17,42 @@ import {
   SelectValue,
 } from '@/components/ui/Select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { copy } from '@/copy/en';
 import { useGlossary, useReviewGlossaryTerm } from '@/data/hooks';
 import type { CompanyOption, GlossaryTerm } from '@/data/types';
+import { useCopy, type CopyT } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { AddTermDialog } from './AddTermDialog';
 
-type Tab = 'all' | 'companies' | 'spanish';
+type Tab = 'all' | 'companies' | 'spanish' | 'turkish';
 
-const SOURCE_CHIP: Record<TermStatus, { box: string; label: string }> = {
+/** P11's language tabs: the language a term was heard in (`glossary_terms.language`). */
+const TAB_LANGUAGE: Partial<Record<Tab, string>> = { spanish: 'es', turkish: 'tr' };
+
+type ChipKey =
+  | 'chips.confirmed'
+  | 'chips.autoLearned'
+  | 'chips.builtIn'
+  | 'chips.needs_review'
+  | 'chips.rejected';
+
+const SOURCE_CHIP: Record<TermStatus, { box: string; label: ChipKey }> = {
   confirmed: {
     box: 'border-chip-filed-bg bg-chip-filed-bg text-chip-filed-fg',
-    label: copy.chips.confirmed,
+    label: 'chips.confirmed',
   },
-  auto_learned: { box: 'border-rebar bg-concrete text-asphalt', label: copy.chips.autoLearned },
-  built_in: { box: 'border-rebar bg-chalk text-dust', label: copy.chips.builtIn },
+  auto_learned: { box: 'border-rebar bg-concrete text-asphalt', label: 'chips.autoLearned' },
+  built_in: { box: 'border-rebar bg-chalk text-dust', label: 'chips.builtIn' },
   needs_review: {
     box: 'border-chip-review-bg bg-chip-review-bg text-chip-review-fg',
-    label: copy.chips.needs_review,
+    label: 'chips.needs_review',
   },
   rejected: {
     box: 'border-chip-miss-bg bg-chip-miss-bg text-chip-miss-fg',
-    label: copy.chips.rejected,
+    label: 'chips.rejected',
   },
 };
 
-function SourceChip({ status }: { status: TermStatus }) {
+function SourceChip({ status, t }: { status: TermStatus; t: CopyT }) {
   const s = SOURCE_CHIP[status];
   return (
     <span
@@ -52,39 +62,55 @@ function SourceChip({ status }: { status: TermStatus }) {
         s.box,
       )}
     >
-      {s.label}
+      {t(s.label)}
     </span>
   );
 }
 
-/** P11 · Site glossary — review queue cards + all-terms table (§11.4, F17). */
+/** "Heard 4× · Oakmont": how often, and the first word of the term's site when it has one. */
+function heardLine(t: CopyT, term: GlossaryTerm): string {
+  const site = term.scopeSiteName?.split(' ')[0];
+  return site
+    ? t('glossary.heardAt', { times: term.timesHeard, site })
+    : t('glossary.heard', { times: term.timesHeard });
+}
+
+/**
+ * P11 · Site glossary — review queue cards + all-terms table (§11.4, F17, F21), EN/TR (W3-08).
+ * Tabs All · Companies · Spanish · Turkish. Every write is an audited RPC: the review card's
+ * Approve, Change, Reject, Add as subcontractor and Map to… (`review_glossary_term`), and Add term
+ * (`add_glossary_term`).
+ */
 export default function GlossaryPage() {
+  const { t } = useCopy();
   const glossary = useGlossary();
   const [tab, setTab] = useState<Tab>('all');
   const [q, setQ] = useState('');
   const [addOpen, setAddOpen] = useState(false);
 
   const data = glossary.data;
-  const needle = q.trim().toLowerCase();
-  const terms = (data?.terms ?? []).filter((t) => {
-    if (tab === 'companies' && t.kind !== 'company') return false;
-    if (tab === 'spanish' && t.language !== 'es') return false;
+  const needle = q.trim().toLocaleLowerCase();
+  const language = TAB_LANGUAGE[tab];
+  const terms = (data?.terms ?? []).filter((term) => {
+    if (tab === 'companies' && term.kind !== 'company') return false;
+    if (language && term.language !== language) return false;
     if (!needle) return true;
     return (
-      t.heard.toLowerCase().includes(needle) || (t.official ?? '').toLowerCase().includes(needle)
+      term.heard.toLocaleLowerCase().includes(needle) ||
+      (term.official ?? '').toLocaleLowerCase().includes(needle)
     );
   });
 
   const columns: Column<GlossaryTerm>[] = [
     {
       key: 'heard',
-      header: copy.glossary.columns.heard,
-      cell: (t) => (
+      header: t('glossary.columns.heard'),
+      cell: (term) => (
         <span className="font-medium">
-          “{t.heard}”
-          {t.language !== 'en' ? (
+          “{term.heard}”
+          {term.language !== 'en' ? (
             <span className="ml-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
-              {t.language}
+              {term.language}
             </span>
           ) : null}
         </span>
@@ -92,29 +118,30 @@ export default function GlossaryPage() {
     },
     {
       key: 'official',
-      header: copy.glossary.columns.official,
-      cell: (t) => t.official ?? <span className="text-dust">{copy.glossary.unknownCompany}</span>,
+      header: t('glossary.columns.official'),
+      cell: (term) =>
+        term.official ?? <span className="text-dust">{t('glossary.unknownCompany')}</span>,
     },
     {
       key: 'scope',
-      header: copy.glossary.columns.scope,
+      header: t('glossary.columns.scope'),
       hideBelowMd: true,
-      cell: (t) => (
+      cell: (term) => (
         <span className="text-caption text-dust">
-          {t.scopeSiteName ? copy.glossary.scope.site(t.scopeSiteName) : copy.glossary.scope.org}
+          {term.scopeSiteName ?? t('glossary.scope.org')}
         </span>
       ),
     },
     {
       key: 'times',
-      header: copy.glossary.columns.times,
+      header: t('glossary.columns.times'),
       numeric: true,
-      cell: (t) => t.timesHeard,
+      cell: (term) => term.timesHeard,
     },
     {
       key: 'source',
-      header: copy.glossary.columns.source,
-      cell: (t) => <SourceChip status={t.status} />,
+      header: t('glossary.columns.source'),
+      cell: (term) => <SourceChip status={term.status} t={t} />,
     },
   ];
 
@@ -122,43 +149,42 @@ export default function GlossaryPage() {
   if (glossary.isError || !data)
     return (
       <ErrorState
-        thing={copy.nav.glossary.toLowerCase()}
+        thing={t('glossary.thing')}
         error={glossary.error}
         onRetry={() => void glossary.refetch()}
       />
     );
 
+  const reviewTitle = t('glossary.reviewTitle', { n: data.reviewQueue.length });
   return (
     <>
       <PageHeader
-        title={copy.glossary.title}
-        subtitle={copy.glossary.subtitle}
+        title={t('glossary.title')}
+        subtitle={t('glossary.subtitle')}
         actions={
           <Button variant="secondary" onClick={() => setAddOpen(true)}>
             <Plus aria-hidden="true" />
-            {copy.glossary.addTerm}
+            {t('glossary.addTerm')}
           </Button>
         }
       />
 
-      <section aria-label={copy.glossary.reviewTitle(data.reviewQueue.length)} className="mb-8">
-        <h2 className="font-h2 mb-3 text-h2">
-          {copy.glossary.reviewTitle(data.reviewQueue.length)}
-        </h2>
+      <section aria-label={reviewTitle} className="mb-8">
+        <h2 className="font-h2 mb-3 text-h2">{reviewTitle}</h2>
         {data.reviewQueue.length === 0 ? (
           <EmptyState
             icon={BookOpen}
-            title={copy.glossary.emptyReview}
-            body={copy.glossary.emptyReviewBody}
+            title={t('glossary.emptyReview')}
+            body={t('glossary.emptyReviewBody')}
           />
         ) : (
           <ul
-            className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))]"
+            className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))]"
             data-testid="review-queue"
           >
-            {data.reviewQueue.map((t) => (
-              <li key={t.id}>
-                <ReviewCard term={t} companies={data.companies} />
+            {data.reviewQueue.map((term) => (
+              <li key={term.id}>
+                <ReviewCard term={term} companies={data.companies} />
               </li>
             ))}
           </ul>
@@ -169,12 +195,13 @@ export default function GlossaryPage() {
       <Card>
         <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
           <div className="flex flex-col gap-3 border-b border-rebar px-5 py-4 md:flex-row md:items-center md:justify-between">
-            <h2 className="font-h2 text-h2">{copy.glossary.all}</h2>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <TabsList aria-label={copy.common.filter}>
-                <TabsTrigger value="all">{copy.glossary.tabs.all}</TabsTrigger>
-                <TabsTrigger value="companies">{copy.glossary.tabs.companies}</TabsTrigger>
-                <TabsTrigger value="spanish">{copy.glossary.tabs.spanish}</TabsTrigger>
+            <h2 className="font-h2 text-h2">{t('glossary.all')}</h2>
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+              <TabsList aria-label={t('common.filter')} className="max-w-full overflow-x-auto">
+                <TabsTrigger value="all">{t('glossary.tabs.all')}</TabsTrigger>
+                <TabsTrigger value="companies">{t('glossary.tabs.companies')}</TabsTrigger>
+                <TabsTrigger value="spanish">{t('glossary.tabs.spanish')}</TabsTrigger>
+                <TabsTrigger value="turkish">{t('glossary.tabs.turkish')}</TabsTrigger>
               </TabsList>
               <div className="relative">
                 <Search
@@ -185,8 +212,8 @@ export default function GlossaryPage() {
                   type="search"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder={copy.glossary.search}
-                  aria-label={copy.glossary.search}
+                  placeholder={t('glossary.search')}
+                  aria-label={t('glossary.search')}
                   className="h-target-dense w-full pl-9 sm:w-[240px]"
                 />
               </div>
@@ -197,9 +224,11 @@ export default function GlossaryPage() {
               <DataTable
                 columns={columns}
                 rows={terms}
-                rowKey={(t) => t.id}
-                aria-label={copy.glossary.all}
-                empty={{ title: needle ? copy.glossary.noResults(q.trim()) : copy.glossary.empty }}
+                rowKey={(term) => term.id}
+                aria-label={t('glossary.all')}
+                empty={{
+                  title: needle ? t('glossary.noResults', { q: q.trim() }) : t('glossary.empty'),
+                }}
               />
             </CardContent>
           </TabsContent>
@@ -212,6 +241,7 @@ export default function GlossaryPage() {
 }
 
 function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: CompanyOption[] }) {
+  const { t } = useCopy();
   const review = useReviewGlossaryTerm();
   const [mode, setMode] = useState<'idle' | 'change' | 'map'>('idle');
   const [official, setOfficial] = useState(term.official ?? '');
@@ -225,18 +255,15 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
     <Card data-testid="review-card" data-kind={term.kind} className="flex h-full flex-col">
       <CardContent className="flex flex-1 flex-col p-5">
         <div className="eyebrow text-dust">
-          {copy.glossary.heard(
-            term.timesHeard,
-            term.scopeSiteName ? term.scopeSiteName.split(' ')[0]! : null,
-          )}
+          {heardLine(t, term)}
           {term.language !== 'en' ? ` · ${term.language}` : ''}
         </div>
-        <p className="font-h2 mt-2 text-[22px] leading-7">“{term.heard}”</p>
+        <p className="font-h2 mt-2 break-words text-[22px] leading-7">“{term.heard}”</p>
         <p className="mt-1 flex items-center gap-2 text-[15px] text-dust">
           <span aria-hidden="true">→</span>
-          <span className="sr-only">{copy.glossary.arrow}</span>
+          <span className="sr-only">{t('glossary.arrow')}</span>
           <span className={cn('text-asphalt', !term.official && 'italic text-dust')}>
-            {term.official ?? copy.glossary.unknownCompany}
+            {term.official ?? t('glossary.unknownCompany')}
           </span>
         </p>
 
@@ -248,7 +275,7 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
               if (official.trim()) done('change', { official: official.trim() });
             }}
           >
-            <Label htmlFor={`change-${term.id}`}>{copy.glossary.changeLabel}</Label>
+            <Label htmlFor={`change-${term.id}`}>{t('glossary.changeLabel')}</Label>
             <Input
               id={`change-${term.id}`}
               value={official}
@@ -258,11 +285,11 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
             <div className="flex gap-2">
               <Button type="submit" variant="secondary" size="dense" loading={busy}>
                 <Check aria-hidden="true" />
-                {copy.glossary.saveChange}
+                {t('glossary.saveChange')}
               </Button>
               <Button variant="ghost" size="dense" onClick={() => setMode('idle')}>
                 <X aria-hidden="true" />
-                {copy.common.cancel}
+                {t('common.cancel')}
               </Button>
             </div>
           </form>
@@ -274,10 +301,10 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
               if (companyId) done('map_company', { companyId });
             }}
           >
-            <Label htmlFor={`map-${term.id}`}>{copy.glossary.mapToLabel}</Label>
+            <Label htmlFor={`map-${term.id}`}>{t('glossary.mapToLabel')}</Label>
             <Select value={companyId} onValueChange={setCompanyId}>
               <SelectTrigger id={`map-${term.id}`}>
-                <SelectValue placeholder={copy.glossary.mapToPlaceholder} />
+                <SelectValue placeholder={t('glossary.mapToPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
                 {companies
@@ -297,10 +324,10 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
                 loading={busy}
                 disabled={!companyId}
               >
-                {copy.glossary.mapConfirm}
+                {t('glossary.mapConfirm')}
               </Button>
               <Button variant="ghost" size="dense" onClick={() => setMode('idle')}>
-                {copy.common.cancel}
+                {t('common.cancel')}
               </Button>
             </div>
           </form>
@@ -314,10 +341,10 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
                   loading={busy}
                   onClick={() => done('add_company')}
                 >
-                  {copy.glossary.addAsSub}
+                  {t('glossary.addAsSub')}
                 </Button>
                 <Button variant="ghost" size="dense" onClick={() => setMode('map')}>
-                  {copy.glossary.mapTo}
+                  {t('glossary.mapTo')}
                 </Button>
               </>
             ) : (
@@ -329,10 +356,10 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
                   onClick={() => done('approve')}
                 >
                   <Check aria-hidden="true" />
-                  {copy.glossary.approve}
+                  {t('glossary.approve')}
                 </Button>
                 <Button variant="ghost" size="dense" onClick={() => setMode('change')}>
-                  {copy.glossary.change}
+                  {t('glossary.change')}
                 </Button>
               </>
             )}
@@ -342,7 +369,7 @@ function ReviewCard({ term, companies }: { term: GlossaryTerm; companies: Compan
               loading={busy}
               onClick={() => done('reject')}
             >
-              {copy.glossary.reject}
+              {t('glossary.reject')}
             </Button>
           </div>
         )}

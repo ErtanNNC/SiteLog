@@ -112,6 +112,7 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload, 
     terms: result.data.newTerms,
     companies: site.companies,
     glossary: site.glossary,
+    counted: previousDraft?.newTerms,
   });
 
   const sourcesNow = await ctx.db.listReportSources(report.id);
@@ -227,6 +228,7 @@ async function extractWebReport(ctx: Ctx, report: ReportRow, job: JobRow): Promi
     terms: result.data.newTerms,
     companies: site.companies,
     glossary: site.glossary,
+    counted: previousDraft?.newTerms,
   });
   const sourcesNow = await ctx.db.listReportSources(report.id);
   // Captionless photos that arrived meanwhile are added by decide_next without another model call.

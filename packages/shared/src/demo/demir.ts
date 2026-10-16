@@ -109,14 +109,18 @@ const COMPANIES: Array<{ key: string; name: string; trade: string; self?: boolea
 /**
  * §18.2 glossary seeds, verbatim: heard → official. §18.2's "TBM / tool box" names two phrases a
  * reporter says, not one: terms match the heard phrase exactly (glossary learning, transcription
- * key terms), so it is two rows with the same official term.
+ * key terms), so it is two rows with the same official term. The crew word "demirci ekibi" is kind
+ * `company` (spec §19 Q138's recommended default, W3-08): a crew the org has no company for is
+ * then flagged as an unknown company on the report, not read as a plain term.
  */
-export const DEMIR_GLOSSARY: ReadonlyArray<readonly [heard: string, official: string]> = [
-  ['döküm', 'Beton dökümü'],
-  ['kalıp söktük', 'Kalıp sökümü yapıldı'],
-  ['demirci ekibi', 'Donatı ekibi'],
-  ['TBM', 'İş güvenliği bilgilendirmesi'],
-  ['tool box', 'İş güvenliği bilgilendirmesi'],
+export const DEMIR_GLOSSARY: ReadonlyArray<
+  readonly [heard: string, official: string, kind: GlossaryTermRow['kind']]
+> = [
+  ['döküm', 'Beton dökümü', 'term'],
+  ['kalıp söktük', 'Kalıp sökümü yapıldı', 'term'],
+  ['demirci ekibi', 'Donatı ekibi', 'company'],
+  ['TBM', 'İş güvenliği bilgilendirmesi', 'term'],
+  ['tool box', 'İş güvenliği bilgilendirmesi', 'term'],
 ];
 
 export interface DemirOptions {
@@ -195,7 +199,7 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
     created_at: setup('09:00'),
   }));
 
-  const glossary: GlossaryTermRow[] = DEMIR_GLOSSARY.map(([heard, official]) => ({
+  const glossary: GlossaryTermRow[] = DEMIR_GLOSSARY.map(([heard, official, kind]) => ({
     id: demoId(`demir:term:${heard}`),
     org_id: ORG,
     scope_site_id: null,
@@ -203,7 +207,7 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
     heard,
     official,
     language: 'tr',
-    kind: 'term',
+    kind,
     company_id: null,
     status: 'confirmed',
     times_heard: 0,

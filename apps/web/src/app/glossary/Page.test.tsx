@@ -1,9 +1,37 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import { DemoStore } from '@/data/demo/store';
+import { i18n } from '@/i18n/i18n';
 import { renderWithProviders } from '@/test/render';
 import GlossaryPage from './Page';
+
+/** The demo org with a Turkish crew word waiting for review (W3-08, spec §19 Q138: a company). */
+function withTurkishTerm(): DemoStore {
+  const d = kestrelDemo();
+  return new DemoStore({
+    ...d,
+    glossary: [
+      ...d.glossary,
+      {
+        id: 'term-demirci',
+        org_id: d.org.id,
+        scope_site_id: null,
+        scope_reporter_id: null,
+        heard: 'demirci ekibi',
+        official: 'Donatı ekibi',
+        language: 'tr',
+        kind: 'company',
+        company_id: null,
+        status: 'needs_review',
+        times_heard: 1,
+        first_seen_at: d.now,
+        last_seen_at: d.now,
+      },
+    ],
+  });
+}
 
 describe('GlossaryPage (demo data)', () => {
   it('shows the review queue and the all-terms table with tabs and search', async () => {
@@ -97,5 +125,73 @@ describe('GlossaryPage (demo data)', () => {
     expect(store.data.glossary.find((t) => t.heard === 'the slab')!.official).toBe('Slab on grade');
     const table = screen.getByRole('table', { name: 'All terms' });
     await waitFor(() => expect(within(table).getByText('“the slab”')).toBeInTheDocument());
+  });
+
+  it('reads in Turkish: approving a Turkish crew word puts it in the Turkish tab', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      const store = withTurkishTerm();
+      renderWithProviders(<GlossaryPage />, { route: '/glossary', store });
+      expect(await screen.findByRole('heading', { name: 'Şantiye sözlüğü' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: 'Bu hafta yeni · 4 inceleme' }),
+      ).toBeInTheDocument();
+      const queue = screen.getByTestId('review-queue');
+      expect(queue).toHaveTextContent('4 kez duyuldu · Oakmont');
+      const card = within(queue)
+        .getByText('“demirci ekibi”')
+        .closest<HTMLElement>('[data-testid="review-card"]')!;
+      expect(card).toHaveTextContent('1 kez duyuldu · tr');
+      expect(card).toHaveTextContent('Donatı ekibi');
+
+      const table = screen.getByRole('table', { name: 'Tüm terimler' });
+      await userEvent.click(screen.getByRole('tab', { name: 'Türkçe' }));
+      expect(within(table).queryByText('“demirci ekibi”')).toBeInTheDocument();
+      expect(within(table).queryByText('“the deck”')).not.toBeInTheDocument();
+      expect(within(table).getByText('İnceleme gerekli')).toBeInTheDocument();
+
+      await userEvent.click(within(card).getByRole('button', { name: 'Taşeron olarak ekle' }));
+      await waitFor(() =>
+        expect(within(queue).queryByText('“demirci ekibi”')).not.toBeInTheDocument(),
+      );
+      expect(store.data.glossary.find((t) => t.heard === 'demirci ekibi')).toMatchObject({
+        status: 'confirmed',
+        kind: 'company',
+        language: 'tr',
+      });
+      const row = within(table).getByText('“demirci ekibi”').closest('tr')!;
+      expect(within(row).getByText('Doğrulandı')).toBeInTheDocument();
+      expect(store.data.audit.at(-1)).toMatchObject({ action: 'glossary.reviewed' });
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
+  });
+
+  it('adds a Turkish term in Turkish, and the same phrase again updates it', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      const store = new DemoStore();
+      renderWithProviders(<GlossaryPage />, { route: '/glossary', store });
+      const add = async (official: string) => {
+        await userEvent.click(await screen.findByRole('button', { name: 'Terim ekle' }));
+        const dialog = await screen.findByRole('dialog');
+        expect(within(dialog).getByLabelText('Dil')).toHaveTextContent('Türkçe');
+        await userEvent.type(within(dialog).getByLabelText('Sahada duyulan'), 'döküm');
+        await userEvent.type(within(dialog).getByLabelText('Raporlarda yazılışı'), official);
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Terim ekle' }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      };
+      await add('Döküm');
+      await add('Beton dökümü');
+      const rows = store.data.glossary.filter((t) => t.heard === 'döküm');
+      expect(rows).toEqual([
+        expect.objectContaining({ official: 'Beton dökümü', language: 'tr', status: 'confirmed' }),
+      ]);
+      await userEvent.click(screen.getByRole('tab', { name: 'Türkçe' }));
+      const table = screen.getByRole('table', { name: 'Tüm terimler' });
+      await waitFor(() => expect(within(table).getByText('“döküm”')).toBeInTheDocument());
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
   });
 });

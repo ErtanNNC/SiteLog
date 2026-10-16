@@ -3,8 +3,8 @@
  * swapped by replacing its file. Guards: RequireAuth (session + org) and RequireRole (§2.2).
  *
  * D9: the shell, sign-in, `/auth/callback`, the Overview (W1-16), Sites and Site detail (W1-18),
- * the Reports archive and Report review (W1-17), Crew hours (W3-06), the not-found page and the
- * placeholders speak the panel's language (EN/TR). A page wrapped in `<EnglishOnly>` still reads
+ * the Reports archive and Report review (W1-17), Crew hours (W3-06), the Site glossary (W3-08), the
+ * not-found page and the placeholders speak the panel's language (EN/TR). A page wrapped in `<EnglishOnly>` still reads
  * `copy/en.ts` directly and renders in English inside the translated shell; it loses the wrapper
  * when it gets its Turkish.
  */
@@ -120,15 +120,7 @@ export function AppRoutes() {
                 </EnglishOnly>,
               )}
             />
-            <Route
-              path="/glossary"
-              element={guard(
-                'glossary',
-                <EnglishOnly>
-                  <GlossaryPage />
-                </EnglishOnly>,
-              )}
-            />
+            <Route path="/glossary" element={guard('glossary', <GlossaryPage />)} />
             <Route path="/settings" element={<Navigate to="/settings/reports" replace />} />
             {/* `/settings/channels` (§11.1) is the Field channels tab, a placeholder until W1-08. */}
             <Route
