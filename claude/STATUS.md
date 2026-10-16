@@ -107,6 +107,13 @@ Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahta
 - **Onayınız (öneri: kabul):** gönderildikten sonra gelen "teslim edilemedi" bilgisiyle sonradan yedeğe geçiş şimdilik yalnızca `notify` işiyle giden mesajlarda çalışıyor (bugün "dosyalandı" mesajı). Hoş geldin, cihaz kodu ve "bugünün linki" yalnızca gönderim anında yedeğe geçiyor. Bu mesajlar W2-06/W2-07'de `notify` işine taşınacak.
 - Yeni Türkçe bildirim metni Q63 Türkçe okumasına eklendi.
 
+**W2-02 bitti (ebfcee0):** saha uygulamasında Ayarlar ekranı. Kişi buradan iletişim tercihini (link / arama) ve dili seçebiliyor, izinleri kapatabiliyor ve bu telefondan çıkış yapabiliyor. Kayıt veya işleme izni kapatılırsa ofise bildirim gidiyor (yeni migration `20261016000010`).
+**Hesap hatası bildirimleri (eb6dc4e):** SMS hesabı veya göndericide bir sorun olduğunda ofise her mesaj için ayrı bildirim gitmiyor. Saatte en fazla bir hesap bildirimi gidiyor; bu artık yalnızca hoş geldin mesajı için değil, tüm SMS'ler için geçerli.
+
+- **Q86 (yeni, kararınız):** kişi kapattığı bir izni Ayarlar'dan yeniden açabilsin mi? Şu an "aç" düğmesi yok. Kayıt ve işleme izni onay ekranından geri alınabiliyor, ama SMS izni kapatılınca geri açmanın yolu yok. Öneri: SMS için "aç" düğmesi eklensin.
+- **Onayınız:** cihaz kodu SMS'i artık SMS izni reddedilmiş ya da kapatılmış olsa da gidiyor; yalnızca STOP ile çıkmış numaraya gitmiyor. Gerekçe: kişi kodu kendisi istiyor. Öneri: kabul.
+- Yeni ES/TR metinler (saha Ayarlar, iki panel bildirimi) Q63 okumasına eklendi. Ayarlar için tasarım ekranı yok; spec §9.3'e göre yapıldı.
+
 **Sizin yapmanız gerekenler (hafta 2, acele değil ama uzun sürüyor):**
 
 - Twilio WhatsApp göndericisi + Meta doğrulaması + EN/ES/TR şablonlar (en uzun bekleme süresi bu).
