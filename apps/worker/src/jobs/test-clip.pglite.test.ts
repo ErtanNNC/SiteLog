@@ -225,6 +225,40 @@ describe('W2-13: the test recording (F4)', () => {
     }
   });
 
+  it('a consent turned off after the clip was made sends it to no provider (Q95)', async () => {
+    const clip = await newClip();
+    let calls = 0;
+    const counting = (): Ctx => {
+      const c = ctx().ctx;
+      return {
+        ...c,
+        ai: {
+          ...c.ai,
+          transcriber: {
+            ...transcriber,
+            transcribe: (i: never) => {
+              calls++;
+              return transcriber.transcribe(i);
+            },
+          },
+        },
+      } as Ctx;
+    };
+    await pg.q(`select field_revoke_consent($1, 'data_processing'::consent_type, null)`, [MARCO]);
+    try {
+      await transcribeTestClipJob(counting(), { testClipId: clip.id }, { attempts: 1 } as never);
+      expect(calls).toBe(0);
+      expect(storage.files.has(`audio/${clip.path}`)).toBe(false);
+      expect(await read(clip.id)).toEqual({ status: 'failed', snippet: null });
+    } finally {
+      await pg.q(
+        `insert into consents (reporter_id, type, method, text_version)
+         values ($1, 'data_processing', 'web_checkbox', 'field.consent.v1')`,
+        [MARCO],
+      );
+    }
+  });
+
   it('needs the recording consent; one line of at most 160 characters', async () => {
     await pg.q(
       `update consents set revoked_at = now() where reporter_id = $1 and type = 'recording'`,

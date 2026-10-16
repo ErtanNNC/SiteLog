@@ -1,6 +1,7 @@
 import { JOB_MAX_ATTEMPTS, type TestClipRow } from '@sitelog/shared';
 import { transcriptionLanguage } from '../ai/transcriber';
 import type { Ctx } from '../context';
+import { revokedProcessingConsents } from '../pipeline/consent';
 import { PermanentJobError, type JobHandler } from './types';
 
 /**
@@ -11,7 +12,9 @@ import { PermanentJobError, type JobHandler } from './types';
  * configured transcriber in the reporter's language (§10.2; the fake answers with a fixtures/voice
  * test clip), the words are kept as the snippet (at most 160 characters) for the Welcome screen,
  * and the file is deleted at once. A clip that cannot be transcribed (no file, or the last attempt
- * failing) is marked failed and its file deleted: the screen says it could not hear it.
+ * failing) is marked failed and its file deleted: the screen says it could not hear it. A clip
+ * whose reporter turned `recording` or `data_processing` off after making it (spec §19 Q95) goes
+ * to no provider: it is marked failed and its file deleted.
  *
  * `delete_test_clip` (field_test_clip_create(), `test_clip:<id>:delete`, 10 minutes on): the file
  * and the words go, read or not (the file is removed even when the row is already deleted). The
@@ -36,6 +39,15 @@ export const transcribeTestClipJob: JobHandler<'transcribe_test_clip'> = async (
   const log = ctx.log.child({ test_clip_id: clip.id });
   if (clip.deleted_at || clip.transcribed_at || clip.failed_at) {
     log.info('test clip already settled or deleted');
+    return;
+  }
+  const revoked = await revokedProcessingConsents(ctx, clip.reporter_id);
+  if (revoked.length > 0) {
+    log.info('test clip not transcribed: the reporter turned off a processing consent', {
+      consents: revoked,
+    });
+    await ctx.db.saveTestClipResult(clip.id, { failed: true });
+    await removeFile(ctx, clip);
     return;
   }
   try {
