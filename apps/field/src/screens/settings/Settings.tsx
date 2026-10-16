@@ -73,6 +73,12 @@ function SettingsLoaded({
   const [prefs, setPrefs] = useState<PreferencesResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState<Saving>(null);
+  // The radio just chosen, shown checked while it saves (a controlled radio would otherwise snap
+  // back to the stored value until field-api answers); cleared with the answer, so a refusal
+  // shows what is stored again.
+  const [choosing, setChoosing] = useState<
+    { pref: ContactPref } | { channel: MessageChannel | null } | null
+  >(null);
   const [status, setStatus] = useState<'saved' | 'error' | null>(null);
   const [sheet, setSheet] = useState<ConsentType | 'turnOn' | 'signOut' | null>(null);
   const [turnOnType, setTurnOnType] = useState<TurnOnType>('sms');
@@ -144,6 +150,7 @@ function SettingsLoaded({
       if (!relinkOr(err)) setStatus('error');
     } finally {
       setSaving(null);
+      setChoosing(null);
     }
   }
 
@@ -281,6 +288,8 @@ function SettingsLoaded({
   }
 
   const busy = saving !== null;
+  const shownPref = choosing && 'pref' in choosing ? choosing.pref : prefs.contactPref;
+  const shownChannel = choosing && 'channel' in choosing ? choosing.channel : prefs.messageChannel;
   const locales = country.fieldLocales;
   const card = (on: boolean) =>
     `flex min-h-target items-center gap-3.5 rounded-card bg-white p-3.5 ${
@@ -303,14 +312,17 @@ function SettingsLoaded({
           {t('welcome.prefLegend')}
         </legend>
         {(['link', 'call'] as const).map((value: ContactPref) => (
-          <label key={value} className={card(prefs.contactPref === value)}>
+          <label key={value} className={card(shownPref === value)}>
             <input
               type="radio"
               name="pref"
               value={value}
-              checked={prefs.contactPref === value}
+              checked={shownPref === value}
               disabled={busy}
-              onChange={() => void save('pref', { contactPref: value })}
+              onChange={() => {
+                setChoosing({ pref: value });
+                void save('pref', { contactPref: value });
+              }}
               className={radio}
             />
             <span className="flex flex-col gap-0.5">
@@ -331,14 +343,17 @@ function SettingsLoaded({
             {t('settings.channelTitle')}
           </legend>
           {([null, ...prefs.messageChannels] as (MessageChannel | null)[]).map((value) => (
-            <label key={value ?? 'default'} className={card(prefs.messageChannel === value)}>
+            <label key={value ?? 'default'} className={card(shownChannel === value)}>
               <input
                 type="radio"
                 name="channel"
                 value={value ?? ''}
-                checked={prefs.messageChannel === value}
+                checked={shownChannel === value}
                 disabled={busy}
-                onChange={() => void save('channel', { messageChannel: value })}
+                onChange={() => {
+                  setChoosing({ channel: value });
+                  void save('channel', { messageChannel: value });
+                }}
                 className={radio}
               />
               <span className="flex flex-col gap-0.5">

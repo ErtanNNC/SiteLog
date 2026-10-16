@@ -80,6 +80,38 @@ describe('Settings (F15, §9.3; W2-02)', () => {
     await act(() => i18n.changeLanguage('en'));
   });
 
+  it('shows the radio chosen while it saves, then what field-api stored', async () => {
+    let answer!: (res: PreferencesResponse) => void;
+    let refuse!: (err: unknown) => void;
+    const routes = fakeRoutes({
+      preferences: vi.fn().mockResolvedValue(prefs()),
+      updatePreferences: vi
+        .fn()
+        .mockReturnValueOnce(new Promise<PreferencesResponse>((r) => (answer = r)))
+        .mockReturnValueOnce(new Promise<PreferencesResponse>((_, r) => (refuse = r))),
+    });
+    renderApp('/settings', { routes });
+    const call = await screen.findByRole('radio', { name: /Phone call/ });
+    const link = screen.getByRole('radio', { name: /Text link/ });
+    fireEvent.click(call);
+    // Before field-api answers: the tap shows, not the stored value.
+    expect(call).toBeChecked();
+    expect(link).not.toBeChecked();
+    await act(async () => answer(prefs({ contactPref: 'call' })));
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(call).toBeChecked();
+
+    // A refusal shows what is stored again.
+    fireEvent.click(link);
+    expect(link).toBeChecked();
+    await act(async () => refuse(new TypeError('Failed to fetch')));
+    expect(
+      await screen.findByText('Couldn’t save. Check your signal and try again.'),
+    ).toBeInTheDocument();
+    expect(call).toBeChecked();
+    expect(link).not.toBeChecked();
+  });
+
   it('offers the message channel only when the pack has more than one built channel', async () => {
     const routes = fakeRoutes({
       preferences: vi
