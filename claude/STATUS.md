@@ -133,7 +133,25 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
   - düzeltme işlenirken ya da önizleme beklerken "Onayla ve gönder" düğmesi kapalı;
   - "Kaydet"e basılınca yeni taslak kendi süresini baştan başlatıyor.
 - Tasarımla bir fark var: tasarımda dokunulacak yer 32 px'lik küçük bir kutu. Kural en az 56 px olduğu için ekip satırının tamamını dokunulabilir yaptım.
-- **Sırada:** W2-11 (dosyalanmış raporu telefondan düzeltme).
+- CI yeşil (0154f5f, 2026-10-16 09:48 UTC). Önceki bir CI kırmızısı, paneldeki bir testin yoğun makinede zaman aşımına düşmesiydi; kalıcı olarak düzeltildi (f54ba7b).
+
+**W2-10 bağımsız incelemesi (2026-10-16):** ciddi hata yok; 2 orta, 5 küçük sorun bulundu. Hiçbiri sizden karar istemiyor, hepsi düzeltilecek:
+
+- **Orta:** sesle ya da yazarak yapılan bir düzeltme, şantiyede ölçülmüş hava verisi yoksa rapora ölçülmüş gibi görünen hava bilgisi yazabiliyordu (PDF'e ve hava gecikmesi kanıtına gider).
+- **Orta:** metin olarak tutulan saat ve miktarlar kişinin söyledikleriyle karşılaştırılmıyordu (ör. "yarım saat geç bitirdik" bitiş saatini 17:30 yapabiliyordu).
+- **Küçük:** "Onayla ve gönder"den hemen sonra +/- ile değişiklik, sıradaki dosyalamayı iptal edebiliyordu.
+- **Küçük:** ses kaydı yüklenirken sayfa yenilenirse düzeltme kayboluyordu.
+- **Küçük:** geç gelen bir fotoğraf raporu değiştirirse düzeltme kişiye söylenmeden düşüyordu.
+- **Küçük:** ekran okuyucu ekip satırındaki "Cevaplandı" işaretini okumuyordu.
+- **Küçük:** iki kişili şantiyede bir kişi diğerinin düzeltme önizlemesini görebiliyordu.
+
+**Şu an sürüyor:**
+
+- W2-11 (dosyalanmış raporu telefondan düzeltme): son 14 gündeki bir rapora "Bir şeyi değiştir" → konuş → önizleme → kaydet; yeni sürüm, yeni PDF, ofise "güncellendi" e-postası ve kişiye onay mesajı. 14 günden eski rapor kilitli ("ofise sorun").
+- Ardından yukarıdaki 7 W2-10 düzeltmesi, her biri ayrı commit ve testle.
+- Bitince hepsini birlikte gönderip CI'ı kontrol edeceğim.
+
+**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10, yeni migration'lar `…080` – `…100`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
 
 ## Hafta 2 (M6) — başladı
 
