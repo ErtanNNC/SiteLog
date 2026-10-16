@@ -125,7 +125,10 @@ describe('deploy.yml', () => {
       'WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast',
     ])
       expect(job.text).toContain(line);
-    expect(job.text).not.toMatch(/TWILIO_|ILETIMERKEZI_|RESEND_|VAPID_/);
+    expect(job.text).toContain('TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}');
+    expect(job.text).toContain('TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}');
+    expect(job.text).not.toMatch(/ILETIMERKEZI_|RESEND_|VAPID_/);
+    expect(job.text).not.toMatch(/TWILIO_[A-Z_]*.*GITHUB_ENV/);
     // The AI keys come only from the preview Environment's secrets, never written to GITHUB_ENV.
     expect(job.text).not.toMatch(/(ANTHROPIC|DEEPGRAM)_API_KEY.*GITHUB_ENV/);
     expect(job.text).toContain('pnpm --filter @sitelog/worker exec tsx src/index.ts');

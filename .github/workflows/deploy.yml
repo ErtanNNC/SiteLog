@@ -493,6 +493,10 @@ jobs:
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
           TRANSCRIBE_PROVIDER: ${{ secrets.DEEPGRAM_API_KEY != '' && 'deepgram' || 'fake' }}
           EXTRACT_PROVIDER: ${{ secrets.ANTHROPIC_API_KEY != '' && 'claude' || 'fake' }}
+          # Twilio for a real (non-demo) test org whose pack has a sender on the preview project;
+          # demo orgs always stay on console, and a pack with no sender here sends nothing real.
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           # Open-Meteo's free endpoint (no key; the worker's default is the commercial one).
           WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast
           WORKER_PORT: '8080'
