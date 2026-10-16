@@ -525,7 +525,7 @@ jobs:
           # The models (with the key): the preview Environment's variables CLAUDE_MODEL and
           # CLAUDE_MODEL_FAST switch them without a code change; these ids are only the defaults.
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5-5' }}
-          CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-sonnet-5-5' }}
+          CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}
           # Twilio for a real (non-demo) test org whose pack has a sender on the preview project;
           # demo orgs always stay on console, and a pack with no sender here sends nothing real.
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
