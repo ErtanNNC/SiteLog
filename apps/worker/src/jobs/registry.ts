@@ -12,6 +12,7 @@ import { retentionCleanup } from './retention_cleanup';
 import { sendEmail } from './send_email';
 import { sendMessage, sendTemplate } from './send_template';
 import { sendWelcome } from './send_welcome';
+import { deleteTestClipJob, transcribeTestClipJob } from './test_clip';
 import { smsInbound } from './sms_inbound';
 import { transcribeAudioJob } from './transcribe_audio';
 import { transcribeUploadJob } from './transcribe_upload';
@@ -39,4 +40,6 @@ export const registry: JobRegistry = {
   weekly_digest: weeklyDigest,
   notify: notifyJob,
   parse_answer: parseAnswerJob,
+  transcribe_test_clip: transcribeTestClipJob,
+  delete_test_clip: deleteTestClipJob,
 };

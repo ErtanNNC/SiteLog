@@ -256,12 +256,12 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W2-13 · Test recording on first open (F4, Q52)
 
-- [ ] **W2-13 done** · today _missing_ (S)
+- [ ] **W2-13 done** · today _missing_ (S) · _Built 2026-10-16 (commit below); the box waits for CI on PR #1 and the by-hand check with `DEEPGRAM_API_KEY` (a real test recording through Deepgram on a tunnel; no key here: the fake transcriber's test clips, fixtures/voice kind `test`). The test is the step after the consents are stored, first open only (not after consenting again from Settings); no artboard shows it (Field-02 ends at Continue), built from Field-02 and the Recording patterns. The worker deletes the file as soon as it is transcribed (earlier than the plan's "when read"); the words go when read; the 10-minute `delete_test_clip` job and the retention job are the backstops. New: `20261016000070_test_clips.sql`, `TEST_CLIP_*` and `FIELD_RATE_LIMITS.testClip`, the field `welcomeTest` copy (EN/ES/TR, for the Q63 review). The stack path is `apps/field/e2e/supabase/worker/test-clip.spec.ts` (CI's e2e-supabase worker; not run here: no Supabase CLI)._
 - **Spec:** F4 step 3 ("Optional 20-second test recording"), §9.3 _Welcome & consent_, §19 Q52 (decided: the first, in M6; Appendix B gains the route). **Design:** `Field-02-Welcome`.
 - **Already in the repo:** the Welcome screen without the test (`apps/field/src/screens/link/Welcome.tsx`); the recorder engine; the `Transcriber` interface with the fake (`apps/worker/src/ai/transcriber.ts`).
 - **Build:**
-  - [ ] `field-api` `POST /test-clip` (after the recording consent is stored, so the clip is covered by it) → a signed upload to a `test/` prefix, then `complete` enqueues `transcribe_test_clip`; `GET /test-clip/:id` returns the snippet. The clip is outside any report, never a source, and deleted with its transcript as soon as the snippet is read or after 10 minutes (retention job backstop); audited `test_clip.created` / `deleted`, rate-limited (3 per device per hour).
-  - [ ] Welcome: _Try a 20-second test_ → "Say anything — nothing gets filed." → "Heard you clearly: '…'" or "I couldn't hear anything".
+  - [x] `field-api` `POST /test-clip` (after the recording consent is stored, so the clip is covered by it) → a signed upload to a `test/` prefix, then `complete` enqueues `transcribe_test_clip`; `GET /test-clip/:id` returns the snippet. The clip is outside any report, never a source, and deleted with its transcript as soon as the snippet is read or after 10 minutes (retention job backstop); audited `test_clip.created` / `deleted`, rate-limited (3 per device per hour).
+  - [x] Welcome: _Try a 20-second test_ → "Say anything — nothing gets filed." → "Heard you clearly: '…'" or "I couldn't hear anything".
 - **Tests:** Deno tests (consent required, limits, deletion), worker test with the fake transcriber, field Playwright in EN/ES/TR.
 - **Done when:** in CI the test shows the fake transcript and leaves no upload, transcript or report behind; _(by hand, key)_ the same with Deepgram.
 - **Needs:** `DEEPGRAM_API_KEY` for the live check.

@@ -3,6 +3,7 @@ import { CONSENT_TYPES, CONTACT_PREFS, MESSAGE_CHANNELS, UPLOAD_KINDS } from './
 import {
   DEVICE_COOKIE_PREFIX,
   FILED_PHOTOS_MAX,
+  TEST_CLIP_MAX_BYTES,
   UPLOAD_MAX_BYTES,
   VERIFY_CODE_LENGTH,
 } from './field-contract.ts';
@@ -191,7 +192,14 @@ export const ConsentRevokeRequestSchema = z.strictObject({ type: z.enum(CONSENT_
  */
 export const ExpiredLinkRequestSchema = ResolveRequestSchema;
 
+/** `POST test-clip` (F4, W2-13): the test recording's media type and size. */
+export const TestClipRequestSchema = z.strictObject({
+  mime: z.string().trim().min(3).max(100),
+  bytes: z.number().int().positive().max(TEST_CLIP_MAX_BYTES),
+});
+
 export type ResolveRequest = z.infer<typeof ResolveRequestSchema>;
+export type TestClipRequest = z.infer<typeof TestClipRequestSchema>;
 export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 export type ConsentRequest = z.infer<typeof ConsentRequestSchema>;
 export type UploadRequest = z.infer<typeof UploadRequestSchema>;

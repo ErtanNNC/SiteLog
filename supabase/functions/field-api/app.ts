@@ -18,6 +18,8 @@ import {
   REQUIRED_CONSENTS,
   ResolveRequestSchema,
   SIGNED_URL_SECONDS,
+  TEST_CLIP_MAX_BYTES,
+  TestClipRequestSchema,
   UploadRequestSchema,
   VERIFY_CODE_TTL_S,
   VerifyRequestSchema,
@@ -66,6 +68,8 @@ import {
   type SendCodeResponse,
   type SignOutResponse,
   type SiteRow,
+  type TestClipResponse,
+  type TestClipView,
   type TodayResponse,
   type AnswerTo,
   type UploadRequest,
@@ -893,6 +897,73 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     return c.json(res);
   });
 
+  // ── test-clip (F4 step 3, Field-02; W2-13, spec §19 Q52) ──────────────────────────────────────
+  // The optional 20-second test after the consents: a signed upload under `test/` in the audio
+  // bucket, outside any report and never a source. field_test_clip_create() refuses it without
+  // the recording consent (which covers the clip), audits it and queues its deletion 10 minutes
+  // on; `complete` queues the transcription; the snippet is answered once, then deleted.
+  app.post('/test-clip', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const body = await parseBody(c, TestClipRequestSchema);
+    const media = uploadMediaType(body.mime);
+    if (!media || media.kind !== 'audio') throw new FieldError(400, 'media_type_not_allowed');
+    const { limit, windowSeconds } = FIELD_RATE_LIMITS.testClip;
+    const rl = await store.rateLimit(`test_clip:${ctx.device.id}`, limit, windowSeconds);
+    if (!rl.allowed) throw rateLimited(rl.resetAt, now());
+    const id = randomUUID();
+    const path = `test/${ctx.reporter.org_id}/${id}.${media.ext}`;
+    await store.createTestClip({
+      id,
+      reporterId: ctx.reporter.id,
+      deviceId: ctx.device.id,
+      path,
+      mime: media.mime,
+      bytes: body.bytes,
+    });
+    const signed = await store.createSignedUploadUrl('audio', path);
+    const res: TestClipResponse = {
+      testClipId: id,
+      bucket: 'audio',
+      path,
+      ...signed,
+      signedUrl: publicSignedUrl(signed.signedUrl, deps.publicUrl?.()),
+    };
+    return c.json(res, 201);
+  });
+
+  /** The reporter's own test recording, else 404. */
+  async function ownTestClip(ctx: DeviceContext, id: string) {
+    if (!UUID.test(id)) throw new FieldError(404, 'not_found');
+    const clip = await store.getTestClip(id);
+    if (!clip || clip.reporter_id !== ctx.reporter.id) throw new FieldError(404, 'not_found');
+    return clip;
+  }
+
+  app.post('/test-clip/:id/complete', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const clip = await ownTestClip(ctx, c.req.param('id'));
+    let bytes: number | null = clip.bytes;
+    if (!clip.completed_at && !clip.deleted_at) {
+      const object = await store.objectInfo('audio', clip.storage_path);
+      const problem = storedObjectProblem(clip.mime, object);
+      if (problem === 'upload_missing') throw new FieldError(409, problem);
+      if (problem || (object!.size ?? 0) > TEST_CLIP_MAX_BYTES) {
+        await store.removeObject('audio', clip.storage_path);
+        throw new FieldError(409, problem ?? 'upload_too_large');
+      }
+      bytes = object!.size;
+    }
+    const res = await store.completeTestClip(clip.id, ctx.reporter.id, bytes);
+    const view: TestClipView = { status: res.status, snippet: null };
+    return c.json(view, 202);
+  });
+
+  app.get('/test-clip/:id', async (c) => {
+    const ctx = await authenticate(c, { consent: true });
+    const clip = await ownTestClip(ctx, c.req.param('id'));
+    return c.json(await store.readTestClip(clip.id, ctx.reporter.id));
+  });
+
   // ── reports/:id (question, draft, filed; processing poll) ────────────────────────────────────
   app.get('/reports/:id', async (c) => {
     const ctx = await authenticate(c, { consent: true });
@@ -1423,6 +1494,8 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   batch_not_found: [404, 'not_found'],
   batch_incomplete: [409, 'wrong_state'],
   answer_pending: [409, 'answer_pending'],
+  test_clip_not_found: [404, 'not_found'],
+  consent_required: [403, 'consent_required'],
 };
 
 function errorResponse(c: Context, err: unknown, now: Date): Response {

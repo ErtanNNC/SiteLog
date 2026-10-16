@@ -3,6 +3,8 @@ import type { FieldCountryView } from '@sitelog/shared/countries.ts';
 import type {
   AnswerConfirmation,
   AnswerResponse,
+  TestClipResponse,
+  TestClipView,
   CompleteResponse,
   ConfirmResponse,
   ConsentResponse,
@@ -237,6 +239,8 @@ export interface FakeFieldApi {
     leftForOffice: boolean;
     /** The question answered by voice (for `lastVoiceAnswer`). */
     spokenAnswer: boolean;
+    /** The reporter consented once (resolve answers `active` from then on, as field-api). */
+    activated: boolean;
     /** Confirm & send was accepted. */
     confirmed: boolean;
     /** Settings (F15, W2-02): what `preferences` answers; consent/revoke and PATCH change it. */
@@ -245,6 +249,8 @@ export interface FakeFieldApi {
   calls: { method: string; path: string; body: unknown; headers: Record<string, string> }[];
   /** The files PUT to the fake Storage: content type and size. */
   stored: { uploadId: string; contentType: string; bytes: number }[];
+  /** W2-13: the test recordings (F4): the request, the file PUT, and the polls. */
+  testClips: { id: string; body: unknown; stored: boolean; polls: number }[];
   /** F9 (W2-04): the batches added to a filed report of `options.reports`, by batch id. */
   batches: Record<
     string,
@@ -298,7 +304,16 @@ export interface FakeOptions {
    * `unclear` (asked once more, then left for the office). Default 5.
    */
   voiceAnswer?: number | 'unclear';
+  /** W2-13: what the worker makes of the test recording (default: heard, in the reporter's language). */
+  testClip?: 'heard' | 'silent' | 'rate_limited';
 }
+
+/** The fake transcript of a test recording, in the reporter's language (fixtures/voice, kind test). */
+export const TEST_SNIPPETS: Record<string, string> = {
+  en: 'Testing, one, two, three. Can you hear me?',
+  es: 'Probando, uno, dos, tres. ¿Me oye bien?',
+  tr: 'Deneme, bir, iki, üç. Beni duyuyor musunuz?',
+};
 
 export async function installFakeFieldApi(
   page: Page,
@@ -318,6 +333,7 @@ export async function installFakeFieldApi(
       unclearTries: 0,
       leftForOffice: false,
       spokenAnswer: false,
+      activated: opts.consented ?? false,
       confirmed: false,
       prefs: {
         contactPref: market.reporter.contactPref,
@@ -335,6 +351,7 @@ export async function installFakeFieldApi(
     },
     calls: [],
     stored: [],
+    testClips: [],
     batches: {},
     consent: null,
     completed: [],
@@ -349,6 +366,15 @@ export async function installFakeFieldApi(
   let pollsSinceAnswer = 0;
   let pollsSinceConfirm = 0;
   let listeningPolls = 0;
+
+  // W2-13: the test recording's PUT (its own path, so `stored` holds report files only).
+  await page.route('**/__storage/test/**', async (route) => {
+    if (api.state.noSignal) return route.abort('internetdisconnected');
+    const id = new URL(route.request().url()).pathname.split('/').pop()!;
+    const clip = api.testClips.find((c) => c.id === id);
+    if (clip) clip.stored = true;
+    await json(route, 200, { Key: `audio/test/${id}` });
+  });
 
   await page.route('**/__storage/upload/**', async (route) => {
     if (api.state.noSignal) return route.abort('internetdisconnected');
@@ -389,7 +415,7 @@ export async function installFakeFieldApi(
             // What Settings changed (W2-02).
             locale: api.state.prefs.locale,
             contactPref: api.state.prefs.contactPref,
-            status: api.state.consented ? 'active' : 'invited',
+            status: api.state.activated ? 'active' : 'invited',
           },
           org: market.org,
           link: options.dailyLinkSite
@@ -451,6 +477,7 @@ export async function installFakeFieldApi(
       if (path === 'consent') {
         api.consent = body;
         api.state.consented = true;
+        api.state.activated = true;
         api.state.prefs = {
           ...api.state.prefs,
           consents: (['sms', 'recording', 'data_processing'] as const)
@@ -467,6 +494,45 @@ export async function installFakeFieldApi(
         return json(route, 200, res);
       }
       if (!api.state.consented) return json(route, 403, { error: 'consent_required' });
+      if (path === 'test-clip') {
+        if (options.testClip === 'rate_limited')
+          return json(route, 429, { error: 'rate_limited', retryAfter: 3000 });
+        const id = `7e570000-0000-4000-8000-${String(api.testClips.length + 1).padStart(12, '0')}`;
+        api.testClips.push({ id, body, stored: false, polls: 0 });
+        const res: TestClipResponse = {
+          testClipId: id,
+          bucket: 'audio',
+          path: `test/org/${id}.webm`,
+          signedUrl: `${url.origin}/__storage/test/${id}?token=t`,
+          token: 't',
+        };
+        return json(route, 201, res);
+      }
+      const testComplete = /^test-clip\/([^/]+)\/complete$/.exec(path);
+      if (testComplete) {
+        const clip = api.testClips.find((c) => c.id === testComplete[1]);
+        if (!clip) return json(route, 404, { error: 'not_found' });
+        if (!clip.stored) return json(route, 409, { error: 'upload_missing' });
+        return json(route, 202, { status: 'pending', snippet: null } satisfies TestClipView);
+      }
+      const testRead = /^test-clip\/([^/]+)$/.exec(path);
+      if (testRead) {
+        const clip = api.testClips.find((c) => c.id === testRead[1]);
+        if (!clip) return json(route, 404, { error: 'not_found' });
+        // The worker hears it on the second poll; the words go once read.
+        if (++clip.polls < 2)
+          return json(route, 200, { status: 'pending', snippet: null } satisfies TestClipView);
+        if (clip.polls > 2)
+          return json(route, 200, { status: 'gone', snippet: null } satisfies TestClipView);
+        const view: TestClipView =
+          options.testClip === 'silent'
+            ? { status: 'silent', snippet: null }
+            : {
+                status: 'heard',
+                snippet: TEST_SNIPPETS[api.state.prefs.locale.split('-')[0]!] ?? TEST_SNIPPETS.en!,
+              };
+        return json(route, 200, view);
+      }
       if (path === 'today') {
         if (options.todayError) return refuse(options.todayError);
         // The asked site, else the daily link's, else the nearest deadline (F14).

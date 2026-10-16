@@ -11,6 +11,7 @@ import {
   QUESTION_ID,
   REPORT_ID,
   REPORT_NO,
+  TEST_SNIPPETS,
   type Market,
 } from './support/fakeFieldApi.ts';
 
@@ -103,6 +104,29 @@ for (const run of RUNS) {
       await expectFieldScreen(page);
       await page.getByRole('checkbox', { name: field.welcome.consentRequired }).check();
       await page.getByRole('button', { name: field.welcome.continue }).click();
+
+      // F4's optional test recording (W2-13), now that the consent covers it: the fake
+      // microphone, then the worker's words, shown once ("Heard you clearly: '…'").
+      const testTitle = page.getByRole('heading', { level: 1, name: field.welcomeTest.title });
+      await expect(testTitle).toBeVisible();
+      await expect(testTitle).toBeFocused();
+      await expect(page.getByText(field.welcomeTest.body)).toBeVisible();
+      const start = page.getByRole('button', { name: field.welcomeTest.start });
+      expect((await start.boundingBox())!.height, 'Record ≥ 120 px (§14.6)').toBeGreaterThanOrEqual(
+        120,
+      );
+      await expectFieldScreen(page);
+      await start.click();
+      await expect(page.getByRole('timer')).toHaveText(/^00:0[1-9] \/ 00:20$/, { timeout: 10_000 });
+      await page.getByRole('button', { name: field.welcomeTest.stop }).click();
+      await expect(
+        page.getByText(field.welcomeTest.heard.replace('{{text}}', TEST_SNIPPETS[run.lang]!)),
+      ).toBeVisible({ timeout: 15_000 });
+      await expectFieldScreen(page);
+      expect(api.testClips).toHaveLength(1);
+      expect(api.testClips[0]!).toMatchObject({ stored: true });
+      expect((api.testClips[0]!.body as { mime: string }).mime).toMatch(/^audio\//);
+      await page.getByRole('button', { name: field.welcomeTest.continue }).click();
 
       // Today (Field-03 / Field-10).
       await expect(page).toHaveURL(/\/today$/);
@@ -377,6 +401,51 @@ test.describe('Other… (F7, W2-09) off the happy path', () => {
       value: 6,
       hours: 'full_day',
     });
+  });
+});
+
+test.describe('the test recording off the happy path (F4, W2-13)', () => {
+  test.use({ locale: 'en-US' });
+
+  async function toTest(page: Page, opts: Parameters<typeof installFakeFieldApi>[2] = {}) {
+    const field = UI_RESOURCES.en.field;
+    const market = kestrel('en-US');
+    const api = await installFakeFieldApi(page, market, { verified: true, ...opts });
+    await page.goto(`/r/${CODE}`);
+    await page.getByRole('checkbox', { name: field.welcome.consentRequired }).check();
+    await page.getByRole('button', { name: field.welcome.continue }).click();
+    await expect(
+      page.getByRole('heading', { level: 1, name: field.welcomeTest.title }),
+    ).toBeVisible();
+    return { api, field };
+  }
+
+  test('nothing heard: says so and offers another try; skip goes to Today; 1440 px', async ({
+    page,
+  }) => {
+    const { api, field } = await toTest(page, { testClip: 'silent' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expectFieldScreen(page);
+    await page.getByRole('button', { name: field.welcomeTest.start }).click();
+    await expect(page.getByRole('timer')).toHaveText(/^00:0[1-9] \/ 00:20$/, { timeout: 10_000 });
+    await page.getByRole('button', { name: field.welcomeTest.stop }).click();
+    await expect(page.getByText(field.welcomeTest.silent)).toBeVisible({ timeout: 15_000 });
+    await expectFieldScreen(page);
+    await page.getByRole('button', { name: field.welcomeTest.again }).click();
+    await expect(page.getByRole('button', { name: field.welcomeTest.start })).toBeVisible();
+    await page.getByRole('button', { name: field.welcomeTest.skip }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    expect(api.testClips).toHaveLength(1);
+  });
+
+  test('too many tests this hour: says so; the reporter goes on', async ({ page }) => {
+    const { field } = await toTest(page, { testClip: 'rate_limited' });
+    await page.getByRole('button', { name: field.welcomeTest.start }).click();
+    await expect(page.getByRole('timer')).toHaveText(/^00:0[1-9] \/ 00:20$/, { timeout: 10_000 });
+    await page.getByRole('button', { name: field.welcomeTest.stop }).click();
+    await expect(page.getByText(field.welcomeTest.tooMany)).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: field.welcomeTest.continue }).click();
+    await expect(page).toHaveURL(/\/today$/);
   });
 });
 

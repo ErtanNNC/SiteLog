@@ -101,6 +101,12 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
       }),
     );
 
+    // F4's optional test recording (W2-13), first open only; skipped here.
+    const test = await screen.findByRole('heading', { level: 1, name: 'Try a 20-second test' });
+    expect(test).toHaveFocus();
+    expect(screen.getByText('Say anything — nothing gets filed.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip the test' }));
+
     // Today.
     expect(
       await screen.findByRole('heading', { level: 2, name: 'Say it in any order' }),

@@ -13,6 +13,8 @@ import type {
   ResolveResponse,
   SendCodeResponse,
   SignOutResponse,
+  TestClipResponse,
+  TestClipView,
   TodayResponse,
   UploadResponse,
   VerifyResponse,
@@ -24,6 +26,7 @@ import type {
   ConsentRevokeRequest,
   DayStatusRequest,
   PreferencesRequest,
+  TestClipRequest,
   UploadRequest,
 } from '@sitelog/shared/field-api.ts';
 import { fieldApi, FieldApiError, type FieldApiClient } from './client';
@@ -97,6 +100,20 @@ export function createFieldRoutes(api: FieldApiClient = fieldApi) {
     /** Turn off one consent. */
     revokeConsent: (code: string, body: ConsentRevokeRequest) =>
       api.request<PreferencesResponse>('consent/revoke', { body, linkCode: code }),
+    /**
+     * F4's optional test recording (W2-13): a signed upload outside any report, then `complete`
+     * (the worker transcribes it), then the snippet, answered once.
+     */
+    createTestClip: (code: string, body: TestClipRequest) =>
+      api.request<TestClipResponse>('test-clip', { body, linkCode: code }),
+    completeTestClip: (code: string, id: string) =>
+      api.request<TestClipView>(`test-clip/${encodeURIComponent(id)}/complete`, {
+        method: 'POST',
+        body: {},
+        linkCode: code,
+      }),
+    testClip: (code: string, id: string, signal?: AbortSignal) =>
+      api.request<TestClipView>(`test-clip/${encodeURIComponent(id)}`, { linkCode: code, signal }),
     /** Sign out this phone: the device is revoked and its cookie cleared. */
     signOut: (code: string) =>
       api.request<SignOutResponse>('device/sign-out', { method: 'POST', body: {}, linkCode: code }),

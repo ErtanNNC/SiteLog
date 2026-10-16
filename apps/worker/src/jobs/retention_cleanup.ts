@@ -1,3 +1,5 @@
+import { TEST_CLIP_TTL_S } from '@sitelog/shared';
+import { expireTestClips } from './test_clip';
 import type { JobHandler } from './types';
 
 export const RETENTION_BATCH = 200;
@@ -58,6 +60,11 @@ export const retentionCleanup: JobHandler<'retention_cleanup'> = async (ctx, pay
     }
     if (names.length < RETENTION_BATCH) break;
   }
+  // F4's test recordings (W2-13): the backstop of their 10-minute delete job.
+  const testClipsRemoved = await expireTestClips(
+    ctx,
+    new Date(ctx.now().getTime() - TEST_CLIP_TTL_S * 1000),
+  );
   // The queue table only grows otherwise (load test): drop done jobs after JOB_RETENTION_DAYS.
   const jobsBefore = new Date(ctx.now().getTime() - JOB_RETENTION_DAYS * 86_400_000);
   let jobsDeleted = 0;
@@ -76,10 +83,17 @@ export const retentionCleanup: JobHandler<'retention_cleanup'> = async (ctx, pay
       purged,
       failed,
       orphan_photos_removed: orphansRemoved,
+      test_clips_removed: testClipsRemoved,
       jobs_deleted: jobsDeleted,
     },
   });
-  ctx.metrics.add({ purged, failed, orphanPhotosRemoved: orphansRemoved, jobsDeleted });
+  ctx.metrics.add({
+    purged,
+    failed,
+    orphanPhotosRemoved: orphansRemoved,
+    testClipsRemoved,
+    jobsDeleted,
+  });
   ctx.log.info('retention cleanup done', {
     before: before.toISOString(),
     purged,

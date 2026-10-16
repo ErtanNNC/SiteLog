@@ -233,6 +233,10 @@ export const JOB_TYPES = [
    * `parse_answer` (the model) and the value applied in code, or the question asked once more.
    */
   'parse_answer',
+  /** F4's test recording (W2-13): transcribed into the snippet, the file deleted at once. */
+  'transcribe_test_clip',
+  /** F4: the test recording and its words gone 10 minutes after it was made, read or not. */
+  'delete_test_clip',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

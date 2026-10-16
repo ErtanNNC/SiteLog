@@ -103,6 +103,23 @@ export const uiEn = {
       requiredHint: 'Tick the first box to continue.',
       failed: 'Couldn’t save. Check your signal and try again.',
     },
+    /** F4's optional test recording after the consents (W2-13; spec §19 Q52). */
+    welcomeTest: {
+      title: 'Try a 20-second test',
+      body: 'Say anything — nothing gets filed.',
+      start: 'Start the test',
+      recording: 'Recording',
+      stop: 'Stop',
+      checking: 'Listening…',
+      heard: 'Heard you clearly: “{{text}}”',
+      silent: 'I couldn’t hear anything. Check the microphone and try again.',
+      failed: 'Couldn’t check the recording. You can still go on.',
+      tooMany: 'That’s enough tests for now. You can go on.',
+      noMic: 'The microphone is off. Allow it in your phone’s settings to record your reports.',
+      again: 'Try again',
+      skip: 'Skip the test',
+      continue: 'Go to today',
+    },
     /** Today (F5 step 1, Field-03, Field-10). */
     today: {
       due: 'DUE {{time}}',

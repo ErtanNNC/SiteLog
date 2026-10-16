@@ -17,6 +17,8 @@ import type {
   SiteDayRow,
   SiteDayStatus,
   SiteRow,
+  TestClipRow,
+  TestClipView,
   UploadKind,
   UploadRow,
 } from '@sitelog/shared';
@@ -154,6 +156,8 @@ export const FIELD_DB_ERRORS = [
   'batch_not_found',
   'batch_incomplete',
   'answer_pending',
+  'test_clip_not_found',
+  'consent_required',
 ] as const;
 
 export interface ReportMediaCounts {
@@ -342,5 +346,26 @@ export interface FieldStore extends DailyLinkStore {
     reporterId: string;
     uploadId: string;
   }): Promise<VoiceAnswerResult>;
+  /**
+   * F4's test recording (W2-13, 20261016000070): field_test_clip_create() (the row, audited
+   * `test_clip.created`, the 10-minute delete_test_clip; refused without the recording consent),
+   * field_test_clip_complete() (queues transcribe_test_clip) and field_test_clip_read() (the
+   * snippet once, then deleted, audited `test_clip.deleted`).
+   */
+  createTestClip(input: {
+    id: string;
+    reporterId: string;
+    deviceId: string;
+    path: string;
+    mime: string;
+    bytes: number;
+  }): Promise<void>;
+  getTestClip(id: string): Promise<TestClipRow | null>;
+  completeTestClip(
+    id: string,
+    reporterId: string,
+    bytes: number | null,
+  ): Promise<{ status: 'pending' | 'gone' }>;
+  readTestClip(id: string, reporterId: string): Promise<TestClipView>;
   audit(entry: AuditEntry): Promise<void>;
 }

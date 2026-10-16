@@ -165,6 +165,7 @@ function jobsWhere(k: PruneScope): string {
     ids('packId', `(select id from evidence_packs where org_id = ${k.o} or site_id in ${k.S})`),
     ids('invoiceId', `(select id from sub_invoices where org_id = ${k.o})`),
     ids('unknownContactId', `(select id from unknown_contacts where org_id = ${k.o})`),
+    ids('testClipId', `(select id from test_clips where org_id = ${k.o} or reporter_id in ${k.R})`),
   ].join(' or ')})`;
 }
 
@@ -191,6 +192,8 @@ export const PRUNE: ReadonlyArray<readonly [table: string, where: (k: PruneScope
   ['unknown_contacts', (k) => `org_id = ${k.o} or call_id in ${k.C} or message_id in ${k.M}`],
   ['transcripts', (k) => `upload_id in ${k.U} or call_id in ${k.C} or message_id in ${k.M}`],
   ['uploads', (k) => `site_id in ${k.S} or reporter_id in ${k.R} or report_id in ${k.P}`],
+  // F4's test recordings (W2-13): outside any report, by the org and its reporters.
+  ['test_clips', (k) => `org_id = ${k.o} or reporter_id in ${k.R}`],
   [
     'calls',
     (k) => `org_id = ${k.o} or reporter_id in ${k.R} or site_id in ${k.S} or report_id in ${k.P}`,

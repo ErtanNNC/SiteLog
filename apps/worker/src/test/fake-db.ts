@@ -1285,6 +1285,19 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async getInvoiceSummary() {
       return null;
     },
+    // F4's test recordings are SQL (W2-13): the fake has none; the PGlite tests cover them.
+    async getTestClip() {
+      return null;
+    },
+    async saveTestClipResult() {
+      return false;
+    },
+    async deleteTestClip() {
+      return null;
+    },
+    async listExpiredTestClips() {
+      return [];
+    },
     async listOrphanOfficePhotos(before, limit) {
       const stored = new Set(
         [...d.messages.values()].filter((m) => m.org_id).map((m) => m.storage_path),

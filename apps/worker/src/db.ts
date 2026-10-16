@@ -30,6 +30,7 @@ import type {
   ReporterRow,
   SiteDayRow,
   SiteRow,
+  TestClipRow,
   SmsOptOutRow,
   TermKind,
   TermStatus,
@@ -719,6 +720,25 @@ export interface Db {
    * without storage.
    */
   listOrphanOfficePhotos(before: Date, limit: number): Promise<string[]>;
+
+  // F4's test recording (W2-13, 20261016000070)
+  getTestClip(id: string): Promise<TestClipRow | null>;
+  /**
+   * What the worker heard (`snippet`, `heard`) or that it could not transcribe it (`failed`),
+   * audited `test_clip.transcribed` / `test_clip.failed`; false when the clip was deleted or
+   * settled meanwhile (nothing written).
+   */
+  saveTestClipResult(
+    id: string,
+    result: { heard: boolean; snippet: string | null; provider: string } | { failed: true },
+  ): Promise<boolean>;
+  /**
+   * The file's row marked deleted with its words (`reason`: `expired` for the 10-minute job and
+   * the retention backstop), audited `test_clip.deleted`; null when it was deleted already.
+   */
+  deleteTestClip(id: string, reason: string): Promise<TestClipRow | null>;
+  /** Test recordings not deleted yet and made before `before` (the retention backstop). */
+  listExpiredTestClips(before: Date, limit: number): Promise<TestClipRow[]>;
   getInvoiceSummary(invoiceId: string): Promise<InvoiceSummary | null>;
   /**
    * Retention, after the file is deleted: the transcript goes; the upload keeps its row with
@@ -1714,6 +1734,46 @@ export function createDb(sql: Sql): Db {
             and not exists (select 1 from uploads u where u.id = m.id)
         ) media
         order by created_at, id limit ${limit}`;
+    },
+    async getTestClip(id) {
+      return one(await sql<TestClipRow[]>`select * from test_clips where id = ${id}`);
+    },
+    async saveTestClipResult(id, result) {
+      return sql.begin(async (tx) => {
+        const failed = 'failed' in result;
+        const rows = await tx<TestClipRow[]>`
+          update test_clips set
+            transcribed_at = ${failed ? null : sql`now()`},
+            failed_at = ${failed ? sql`now()` : null},
+            heard = ${failed ? null : result.heard},
+            snippet = ${failed ? null : result.snippet}
+          where id = ${id} and deleted_at is null and transcribed_at is null and failed_at is null
+          returning *`;
+        const row = rows[0];
+        if (!row) return false;
+        await tx`select log_audit(${row.org_id}, 'agent', null,
+            ${failed ? 'test_clip.failed' : 'test_clip.transcribed'}, 'test_clip', ${row.id},
+            ${tx.json((failed ? {} : { heard: result.heard, provider: result.provider }) as never)})`;
+        return true;
+      });
+    },
+    async deleteTestClip(id, reason) {
+      return sql.begin(async (tx) => {
+        const rows = await tx<TestClipRow[]>`
+          update test_clips set deleted_at = now(), snippet = null
+          where id = ${id} and deleted_at is null
+          returning *`;
+        const row = rows[0];
+        if (!row) return null;
+        await tx`select log_audit(${row.org_id}, 'system', null, 'test_clip.deleted', 'test_clip',
+            ${row.id}, ${tx.json({ reason, read: row.read_at !== null } as never)})`;
+        return row;
+      });
+    },
+    async listExpiredTestClips(before, limit) {
+      return sql<TestClipRow[]>`select * from test_clips
+        where deleted_at is null and created_at < ${before.toISOString()}
+        order by created_at limit ${limit}`;
     },
     async listOrphanOfficePhotos(before, limit) {
       const rows = await sql<Array<{ name: string }>>`

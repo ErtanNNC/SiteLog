@@ -2467,3 +2467,113 @@ Deno.test('photos after filing (F9): a daily link of that day adds; the paramete
   assertEquals(done.json.batch, { id: BATCH_1, ready: true, version: 2 });
   assertEquals(h.store.attached[0]!.changeNote, '1 photo added');
 });
+
+Deno.test(
+  'test-clip (W2-13, F4): needs the consent, a signed upload under test/, never a report; 3 an hour',
+  async () => {
+    const h = setup();
+    await verifiedDevice(h);
+    // Before the consent: refused, nothing stored.
+    const early = await h.call('POST', 'test-clip', { body: { mime: 'audio/webm', bytes: 10 } });
+    assertEquals([early.status, early.json.error], [403, 'consent_required']);
+    assertEquals(h.store.testClips, []);
+    const consent = await h.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'link',
+        locale: 'en-US',
+      },
+    });
+    assertEquals(consent.status, 200);
+
+    const bad = await h.call('POST', 'test-clip', { body: { mime: 'image/jpeg', bytes: 10 } });
+    assertEquals([bad.status, bad.json.error], [400, 'media_type_not_allowed']);
+    const big = await h.call('POST', 'test-clip', {
+      body: { mime: 'audio/webm', bytes: 6 * 1024 * 1024 },
+    });
+    assertEquals(big.status, 400);
+
+    const res = await h.call('POST', 'test-clip', {
+      body: { mime: 'audio/webm;codecs=opus', bytes: 10 },
+    });
+    assertEquals(res.status, 201);
+    const id = res.json.testClipId as string;
+    assertEquals(res.json.bucket, 'audio');
+    assertEquals(res.json.path, `test/${ORG}/${id}.webm`);
+    assertStringIncludes(res.json.signedUrl as string, `/audio/test/${ORG}/${id}.webm`);
+    // The 10-minute backstop is queued with it; audited; no upload, no report.
+    assertEquals(
+      h.store.jobs.map((j) => [j.type, j.dedupe_key]),
+      [['delete_test_clip', `test_clip:${id}:delete`]],
+    );
+    assert(h.store.audits.some((a) => a.action === 'test_clip.created' && a.entityId === id));
+    assertEquals([h.store.uploads.length, h.store.reports.length], [0, 0]);
+
+    // Complete before the file is there: refused; then the transcription is queued once.
+    const missing = await h.call('POST', `test-clip/${id}/complete`);
+    assertEquals([missing.status, missing.json.error], [409, 'upload_missing']);
+    h.store.put(`audio/test/${ORG}/${id}.webm`, 'audio/webm', 4000);
+    const done = await h.call('POST', `test-clip/${id}/complete`);
+    assertEquals([done.status, done.json], [202, { status: 'pending', snippet: null }]);
+    await h.call('POST', `test-clip/${id}/complete`);
+    assertEquals(h.store.jobs.filter((j) => j.type === 'transcribe_test_clip').length, 1);
+    assertEquals(h.store.testClips[0]!.bytes, 4000);
+
+    // Pending until the worker heard it; then the words once, and gone.
+    assertEquals((await h.call('GET', `test-clip/${id}`)).json, {
+      status: 'pending',
+      snippet: null,
+    });
+    Object.assign(h.store.testClips[0]!, {
+      transcribed_at: T0.toISOString(),
+      heard: true,
+      snippet: 'Testing, one, two, three.',
+    });
+    assertEquals((await h.call('GET', `test-clip/${id}`)).json, {
+      status: 'heard',
+      snippet: 'Testing, one, two, three.',
+    });
+    assertEquals((await h.call('GET', `test-clip/${id}`)).json, { status: 'gone', snippet: null });
+    assertEquals(h.store.testClips[0]!.snippet, null);
+    assert(h.store.audits.some((a) => a.action === 'test_clip.deleted' && a.entityId === id));
+
+    // Another reporter's clip, or an unknown id: not found.
+    await consented(h, CODES.dana);
+    const other = await h.call('GET', `test-clip/${id}`, { code: CODES.dana });
+    assertEquals(other.status, 404);
+    assertEquals((await h.call('GET', 'test-clip/not-a-uuid')).status, 404);
+
+    // 3 an hour per device: the fourth is refused with its wait.
+    await h.call('POST', 'test-clip', { body: { mime: 'audio/webm', bytes: 10 } });
+    await h.call('POST', 'test-clip', { body: { mime: 'audio/webm', bytes: 10 } });
+    const fourth = await h.call('POST', 'test-clip', { body: { mime: 'audio/webm', bytes: 10 } });
+    assertEquals(fourth.status, 429);
+    assert(typeof fourth.json.retryAfter === 'number');
+    assertEquals(h.store.testClips.length, 3);
+  },
+);
+
+Deno.test(
+  'test-clip (W2-13): a file of another type is removed; a silent clip says so',
+  async () => {
+    const h = setup();
+    await consented(h);
+    const res = await h.call('POST', 'test-clip', { body: { mime: 'audio/webm', bytes: 10 } });
+    const id = res.json.testClipId as string;
+    h.store.put(`audio/test/${ORG}/${id}.webm`, 'image/png', 10);
+    const done = await h.call('POST', `test-clip/${id}/complete`);
+    assertEquals([done.status, done.json.error], [409, 'media_type_not_allowed']);
+    assert(h.store.calls.includes('removeObject'));
+
+    const second = await h.call('POST', 'test-clip', { body: { mime: 'audio/mp4', bytes: 10 } });
+    const sid = second.json.testClipId as string;
+    h.store.put(`audio/test/${ORG}/${sid}.m4a`, 'audio/mp4', 10);
+    assertEquals((await h.call('POST', `test-clip/${sid}/complete`)).status, 202);
+    Object.assign(h.store.testClips[1]!, { transcribed_at: T0.toISOString(), heard: false });
+    assertEquals((await h.call('GET', `test-clip/${sid}`)).json, {
+      status: 'silent',
+      snippet: null,
+    });
+  },
+);

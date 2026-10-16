@@ -72,6 +72,8 @@ function orgIds(prefix: 'aaaaaaaa' | 'bbbbbbbb') {
     callTranscript: id(37),
     /** An email the console provider stored (W1-08, 20261014000007), for the Demo phone. */
     consoleEmail: id(38),
+    /** F4's test recording (W2-13, 20261016000070). */
+    testClip: id(39),
     users: { admin: user(1), pm: user(2), ops: user(3), accounts: user(4) } as Record<Role, string>,
   };
 }
@@ -248,6 +250,16 @@ export async function seedTwoOrgs(db: PGlite): Promise<void> {
       insert into sms_opt_outs (phone_e164, country, method) values
         ('+15550991000', 'US', 'sms_keyword'), ('+15550992000', 'US', 'provider_opt_out');
     `);
+  }
+  const testClips = await db.query<{ v: boolean }>(
+    `select to_regclass('public.test_clips') is not null as v`,
+  );
+  if (testClips.rows[0]!.v) {
+    for (const o of [ORG.A, ORG.B])
+      await db.exec(`
+        insert into test_clips (id, org_id, reporter_id, storage_path, mime) values
+          ('${o.testClip}', '${o.org}', '${o.reporter}', 'test/${o.org}/${o.testClip}.webm', 'audio/webm');
+      `);
   }
   await db.exec(`
     insert into auth.users (id, email) values ('${SPARE_USER}', 'spare@matrix.test'), ('${OPERATOR}', 'operator@matrix.test');

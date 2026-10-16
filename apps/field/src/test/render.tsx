@@ -100,6 +100,9 @@ export function fakeRoutes(overrides: Partial<FieldRoutes> = {}): FieldRoutes {
     signOut: vi.fn(refuse),
     history: vi.fn(refuse),
     expiredDailyLink: vi.fn(refuse),
+    createTestClip: vi.fn(refuse),
+    completeTestClip: vi.fn(refuse),
+    testClip: vi.fn(refuse),
     ...overrides,
   };
 }

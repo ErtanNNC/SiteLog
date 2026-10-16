@@ -293,6 +293,14 @@ export const TABLES: Record<string, TableCase> = {
     set: 'method = method',
     orgless: true,
   },
+  test_clips: {
+    why: 'F4 test recording (W2-13): field-api and the worker with the service role only; no client policy, no grant.',
+    allow: serviceOnly,
+    where: (o) => `reporter_id = '${o.reporter}'`,
+    insert: (o) =>
+      `insert into test_clips (org_id, reporter_id, storage_path, mime) values ('${o.org}', '${o.reporter}', 'test/x.webm', 'audio/webm')`,
+    set: 'snippet = snippet',
+  },
   rate_limits: {
     why: 'field-api throttling (§6.5): service role only; no client policy, no grant.',
     allow: serviceOnly,
@@ -522,6 +530,23 @@ export const RPCS: Record<
     why: '§10.7: the worker only (service role): parse_answer settles a spoken answer.',
     allow: NONE,
     call: (o) => `select field_settle_voice_answer('${o.question}', '${o.upload}', 'unclear') as v`,
+  },
+  // W2-13 (20261016000070_test_clips.sql): F4's test recording.
+  field_test_clip_create: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) =>
+      `select field_test_clip_create(gen_random_uuid(), '${o.reporter}', null, 'test/x.webm', 'audio/webm', 1) as v`,
+  },
+  field_test_clip_complete: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) => `select field_test_clip_complete(gen_random_uuid(), '${o.reporter}') as v`,
+  },
+  field_test_clip_read: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) => `select field_test_clip_read(gen_random_uuid(), '${o.reporter}') as v`,
   },
   // Spec §19 Q53 (20261015000003_late_uploads.sql): field-api flags a late clip.
   field_flag_late_upload: {

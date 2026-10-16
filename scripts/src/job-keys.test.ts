@@ -91,6 +91,10 @@ const AUDITED: Record<string, string> = {
     'field_complete_upload (W1-12): the extraction after a photo completed on a draft awaiting confirmation; per photo, and an upload completes once',
   "sql:'decide:' || r.id || ':answer:' || q.id":
     'field_answer_question (W1-12): decide_next after a web answer; per question, and a question is answered once (a retry returns already_answered). field_settle_voice_answer (W2-09) uses the same key for a spoken answer applied, or recorded unanswered after two unclear tries: the question is answered once either way, so a tap and a voice answer never both run it',
+  "sql:'test_clip:' || p_id || ':delete'":
+    'field_test_clip_create (W2-13, F4): the 10-minute delete of one test recording; per clip id, which the call creates',
+  "sql:'test_clip:' || t.id":
+    'field_test_clip_complete (W2-13, F4): the transcription of one test recording; per clip, and a retried complete finds the key taken',
   "sql:'answer:' || q.id || ':' || u.id":
     'field_answer_question_voice (W2-09, F7 Other…): parse_answer per question and answer clip (jobKeys.parseAnswer); a clip is spoken once and names one question (uploads.question_id), a retry of the same clip returns the first call, and a second try is a new clip',
   "sql:'render_pdf:' || p_report_id || ':' || v_next":

@@ -66,6 +66,16 @@ export const JobPayloadSchemas = {
    */
   parse_answer: z.object({ reportId: uuid, questionId: uuid, uploadId: uuid }),
   /**
+   * F4's test recording (W2-13; field_test_clip_complete(), `test_clip:<id>`): transcribed into
+   * the Welcome screen's snippet; the file is deleted once transcribed. Never a report source.
+   */
+  transcribe_test_clip: z.object({ testClipId: uuid }),
+  /**
+   * F4: the backstop 10 minutes after the test recording was made (field_test_clip_create(),
+   * `test_clip:<id>:delete`): the file and the words go, read or not.
+   */
+  delete_test_clip: z.object({ testClipId: uuid }),
+  /**
    * §10.1 decide_next. `timeout` (W2-07, §7.2 web rules): a step of the web clock, enqueued
    * delayed by decide_next itself (`run_after`) and checked again when it runs:
    * - `answer`: the open question unanswered for 60 min → recorded unanswered, the draft is

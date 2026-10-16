@@ -1,4 +1,4 @@
-import type { Json } from '@sitelog/shared';
+import type { Json, TestClipView } from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
 import type { AppClient } from '../_shared/supabase.ts';
 import {
@@ -500,6 +500,45 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
           p_reporter_id: input.reporterId,
           p_upload_id: input.uploadId,
         }),
+      );
+    },
+
+    async createTestClip(input) {
+      await rpc<unknown>(
+        admin.rpc('field_test_clip_create', {
+          p_id: input.id,
+          p_reporter_id: input.reporterId,
+          p_device_id: input.deviceId,
+          p_path: input.path,
+          p_mime: input.mime,
+          p_bytes: input.bytes,
+        }),
+      );
+    },
+
+    async getTestClip(id) {
+      const { data } = await admin
+        .from('test_clips')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+        .throwOnError();
+      return data;
+    },
+
+    async completeTestClip(id, reporterId, bytes) {
+      return await rpc<{ status: 'pending' | 'gone' }>(
+        admin.rpc('field_test_clip_complete', {
+          p_id: id,
+          p_reporter_id: reporterId,
+          p_bytes: bytes,
+        }),
+      );
+    },
+
+    async readTestClip(id, reporterId) {
+      return await rpc<TestClipView>(
+        admin.rpc('field_test_clip_read', { p_id: id, p_reporter_id: reporterId }),
       );
     },
 

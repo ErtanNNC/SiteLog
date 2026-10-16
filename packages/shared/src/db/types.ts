@@ -684,6 +684,28 @@ export type CallRow = {
  * or without a reporter, so the next invite of the number on the pack starts opted out and the
  * Notifier sends it nothing. Service role only.
  */
+/** F4's test recording (20261016000070, W2-13): service role only; outside any report. */
+export type TestClipRow = {
+  id: string;
+  org_id: string;
+  reporter_id: string;
+  device_id: string | null;
+  /** `audio` bucket, `test/{org}/{id}.{ext}`. */
+  storage_path: string;
+  mime: string;
+  bytes: number | null;
+  created_at: string;
+  completed_at: string | null;
+  transcribed_at: string | null;
+  heard: boolean | null;
+  /** What was heard (≤ 160 characters), until it is read. */
+  snippet: string | null;
+  failed_at: string | null;
+  read_at: string | null;
+  /** The file and the words are gone (read, or 10 minutes). */
+  deleted_at: string | null;
+};
+
 export type SmsOptOutRow = {
   phone_e164: string;
   /** The pack (`countries.code`). */
@@ -1192,6 +1214,20 @@ export type Database = {
       >;
       rate_limits: Table<RateLimitRow, 'count'>;
       sms_opt_outs: Table<SmsOptOutRow, 'opted_out_at'>;
+      test_clips: Table<
+        TestClipRow,
+        | 'id'
+        | 'device_id'
+        | 'bytes'
+        | 'created_at'
+        | 'completed_at'
+        | 'transcribed_at'
+        | 'heard'
+        | 'snippet'
+        | 'failed_at'
+        | 'read_at'
+        | 'deleted_at'
+      >;
       scheduler_state: Table<SchedulerStateRow, 'value' | 'updated_at'>;
       stripe_events: Table<StripeEventRow, 'received_at' | 'processed_at'>;
       audit_log: Table<
@@ -1341,6 +1377,23 @@ export type Database = {
         };
         Returns: Json;
       };
+      /** W2-13 (20261016000070): F4's test recording, field-api only. */
+      field_test_clip_create: {
+        Args: {
+          p_id: string;
+          p_reporter_id: string;
+          p_device_id: string | null;
+          p_path: string;
+          p_mime: string;
+          p_bytes: number;
+        };
+        Returns: Json;
+      };
+      field_test_clip_complete: {
+        Args: { p_id: string; p_reporter_id: string; p_bytes?: number | null };
+        Returns: Json;
+      };
+      field_test_clip_read: { Args: { p_id: string; p_reporter_id: string }; Returns: Json };
       /** W2-09: the worker settles a spoken answer (`applied` with the draft, or `unclear`). */
       field_settle_voice_answer: {
         Args: {

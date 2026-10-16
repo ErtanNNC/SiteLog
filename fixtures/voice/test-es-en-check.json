@@ -1,0 +1,24 @@
+{
+  "id": "test-es-en-check",
+  "description": "Spanish and English. The test recording (F4, W2-13) of Marco Ruiz (ES · EN → multi). Nothing is filed.",
+  "kind": "test",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Riverside Lofts — Block B",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["es", "en"]
+  },
+  "transcriptionLanguage": "multi",
+  "expectedLanguage": "en+es",
+  "goldenCase": null,
+  "durationS": 3.1,
+  "text": "Testing, uno, dos, tres. ¿Me oyes bien?",
+  "segments": [
+    {
+      "start": 0,
+      "end": 2.7,
+      "text": "Testing, uno, dos, tres. ¿Me oyes bien?"
+    }
+  ]
+}

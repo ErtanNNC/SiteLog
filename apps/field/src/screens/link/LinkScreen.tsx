@@ -15,12 +15,15 @@ import { useSession } from '@/session/useSession';
 import type { ExpiredState } from '@/screens/expired/Expired';
 import { DeviceCheck } from './DeviceCheck';
 import { Welcome } from './Welcome';
+import { WelcomeTest } from './WelcomeTest';
 
 type LinkErrorKey = 'notFound' | 'revoked' | 'disabled';
 type Phase =
   | { kind: 'resolving' }
   | { kind: 'device'; session: FieldSession }
   | { kind: 'welcome'; session: FieldSession }
+  /** F4 step 3's optional test recording (W2-13), on the first open only. */
+  | { kind: 'test' }
   | { kind: 'error'; key: LinkErrorKey | 'failed' };
 
 function linkError(err: unknown): LinkErrorKey | 'expired' | 'failed' {
@@ -41,7 +44,7 @@ function linkError(err: unknown): LinkErrorKey | 'expired' | 'failed' {
 
 /**
  * `/r/:code` (F4): resolves the link, then the device check on a new phone, the welcome and
- * consent on the first open, then Today. The resolved link becomes the app's session, so Today
+ * consent on the first open (with its optional test recording, W2-13), then Today. The resolved link becomes the app's session, so Today
  * and the installed app's `/` work without the SMS afterwards. `/r/:code/report/:id` (the `filed`
  * text's link, W1-15) does the same and then opens that report instead of Today.
  */
@@ -132,10 +135,16 @@ export function LinkScreen() {
             code,
             phase.session.sites.map((s) => s.id),
           );
-          navigate(target, { replace: true });
+          // F4 step 3 (W2-13): the optional test recording, now that the consent covers it; on
+          // the first open only (consenting again after Settings goes straight on).
+          if (phase.session.reporter.status === 'invited') setPhase({ kind: 'test' });
+          else navigate(target, { replace: true });
         }}
       />
     );
+  }
+  if (phase.kind === 'test') {
+    return <WelcomeTest code={code} onDone={() => navigate(target, { replace: true })} />;
   }
   if (phase.kind === 'error') {
     const key = phase.key === 'failed' ? null : phase.key;

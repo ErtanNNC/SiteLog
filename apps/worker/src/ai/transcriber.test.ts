@@ -275,6 +275,13 @@ describe('fixtures/voice and the fake transcriber', () => {
       'answer-es-delta-cinco',
       'answer-tr-demirci-alti',
     ]);
+    // W2-13: the Welcome screen's test recording in EN, ES + EN and TR.
+    expect(
+      fixtures
+        .filter((f) => f.kind === 'test')
+        .map((f) => f.transcriptionLanguage)
+        .sort(),
+    ).toEqual(['en', 'multi', 'tr']);
     for (const f of fixtures) {
       expect(transcriptionLanguage(f.reporter)).toBe(f.transcriptionLanguage);
       expect(f.text).toBe(f.segments.map((s) => s.text).join(' '));

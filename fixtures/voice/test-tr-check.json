@@ -1,0 +1,24 @@
+{
+  "id": "test-tr-check",
+  "description": "Turkish. The test recording (F4, W2-13) of Emre Yıldız (tr). Nothing is filed.",
+  "kind": "test",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Kartal Konutları — B Blok",
+  "reporter": {
+    "locale": "tr-TR",
+    "languages": ["tr"]
+  },
+  "transcriptionLanguage": "tr",
+  "expectedLanguage": "tr",
+  "goldenCase": null,
+  "durationS": 3.3,
+  "text": "Deneme, bir, iki, üç. Beni duyuyor musunuz?",
+  "segments": [
+    {
+      "start": 0,
+      "end": 2.9,
+      "text": "Deneme, bir, iki, üç. Beni duyuyor musunuz?"
+    }
+  ]
+}

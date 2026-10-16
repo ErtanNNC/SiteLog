@@ -61,6 +61,8 @@ export const FIELD_RATE_LIMITS = {
    * request), besides the device's 30 a minute when the phone sends a device cookie.
    */
   expiredLink: { limit: 3, windowSeconds: 24 * 60 * 60 },
+  /** F4's test recording (W2-13): 3 an hour per device. */
+  testClip: { limit: 3, windowSeconds: 60 * 60 },
 } as const;
 
 /** `history`: the last 14 days (F10 "Past reports"), in each site's time zone. */
@@ -450,6 +452,35 @@ export const PARSE_ANSWER_MIN_CONFIDENCE = 0.7;
 
 /** F7: a spoken answer that cannot be read this many times leaves the question for the office. */
 export const VOICE_ANSWER_TRIES = 2;
+
+/** F4's optional test recording (W2-13): the recorder stops it at 20 seconds. */
+export const TEST_CLIP_MAX_MS = 20_000;
+/** …and field-api signs at most this much for it (20 s of any browser's audio fits easily). */
+export const TEST_CLIP_MAX_BYTES = 5 * 1024 * 1024;
+/** The test recording and its words are deleted this long after it was made, read or not. */
+export const TEST_CLIP_TTL_S = 10 * 60;
+
+/**
+ * `POST test-clip` (F4, W2-13): a signed upload for the test recording, under `test/` in the
+ * `audio` bucket, outside any report. Needs the recording consent (it is what covers the clip).
+ */
+export interface TestClipResponse {
+  testClipId: string;
+  bucket: 'audio';
+  path: string;
+  signedUrl: string;
+  token: string;
+}
+
+/**
+ * `GET test-clip/:id` (F4, W2-13): `pending` until the worker transcribed it; then once, `heard`
+ * with the words ("Heard you clearly: '…'") or `silent` ("I couldn't hear anything"), after which
+ * the words are deleted (`gone` from then on); `failed` when it could not be transcribed.
+ */
+export interface TestClipView {
+  status: 'pending' | 'heard' | 'silent' | 'failed' | 'gone';
+  snippet: string | null;
+}
 
 /**
  * What an answer changed, for F7's confirmation line ("Delta Mechanical: 5 workers, 8 hours each

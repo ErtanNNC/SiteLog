@@ -13,6 +13,8 @@ import type {
   ReporterRow,
   SiteDayRow,
   SiteRow,
+  TestClipRow,
+  TestClipView,
   UploadRow,
 } from '@sitelog/shared';
 import { FILED_PHOTOS_MAX, deadlineInstant, jobKeys, photosLinkExpiresAt } from '@sitelog/shared';
@@ -78,6 +80,8 @@ export class FakeFieldStore implements FieldStore {
   lockNotices: { orgId: string; reporterId: string; deviceId: string; until: string }[] = [];
   /** field_attach_photos(): the batches attached (F9) and the versions they made. */
   attached: { batchId: string; version: number; changeNote: string; caption: string | null }[] = [];
+  /** F4's test recordings (W2-13). */
+  testClips: TestClipRow[] = [];
   /** Store methods called, for "no write happened" checks. */
   calls: string[] = [];
   private seq = 0;
@@ -980,6 +984,104 @@ export class FakeFieldStore implements FieldStore {
       diff: { question_id: q.id, field: q.field, channel: 'web', upload_id: u.id, job_id: job.id },
     });
     return Promise.resolve({ status: 'listening', reportStatus: r.status, jobId: job.id });
+  }
+
+  /** field_test_clip_create() (20261016000070, W2-13). */
+  createTestClip(input: {
+    id: string;
+    reporterId: string;
+    deviceId: string;
+    path: string;
+    mime: string;
+    bytes: number;
+  }): Promise<void> {
+    this.calls.push('createTestClip');
+    const r = this.reporters.find((x) => x.id === input.reporterId)!;
+    const recording = this.consents.some(
+      (c) => c.reporter_id === r.id && c.type === 'recording' && c.revoked_at === null,
+    );
+    if (!recording) return Promise.reject(new FieldDbError('consent_required'));
+    this.testClips.push({
+      id: input.id,
+      org_id: r.org_id,
+      reporter_id: r.id,
+      device_id: input.deviceId,
+      storage_path: input.path,
+      mime: input.mime,
+      bytes: input.bytes,
+      created_at: this.iso(),
+      completed_at: null,
+      transcribed_at: null,
+      heard: null,
+      snippet: null,
+      failed_at: null,
+      read_at: null,
+      deleted_at: null,
+    });
+    this.jobs.push({
+      id: this.jobs.length + 1,
+      type: 'delete_test_clip',
+      payload: { testClipId: input.id },
+      dedupe_key: `test_clip:${input.id}:delete`,
+      status: 'queued',
+    });
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: r.id,
+      action: 'test_clip.created',
+      entity: 'test_clip',
+      entityId: input.id,
+      diff: { device_id: input.deviceId, mime: input.mime, bytes: input.bytes },
+    });
+    return Promise.resolve();
+  }
+  getTestClip(id: string) {
+    return Promise.resolve(this.testClips.find((t) => t.id === id) ?? null);
+  }
+  /** field_test_clip_complete(). */
+  completeTestClip(id: string, reporterId: string, bytes: number | null) {
+    this.calls.push('completeTestClip');
+    const t = this.testClips.find((x) => x.id === id);
+    if (!t || t.reporter_id !== reporterId)
+      return Promise.reject(new FieldDbError('test_clip_not_found'));
+    if (t.deleted_at) return Promise.resolve({ status: 'gone' as const });
+    t.completed_at ??= this.iso();
+    t.bytes = bytes ?? t.bytes;
+    const key = `test_clip:${t.id}`;
+    if (!this.jobs.some((j) => j.dedupe_key === key)) {
+      this.jobs.push({
+        id: this.jobs.length + 1,
+        type: 'transcribe_test_clip',
+        payload: { testClipId: t.id },
+        dedupe_key: key,
+        status: 'queued',
+      });
+    }
+    return Promise.resolve({ status: 'pending' as const });
+  }
+  /** field_test_clip_read(): the snippet once, then the words go. */
+  readTestClip(id: string, reporterId: string): Promise<TestClipView> {
+    const t = this.testClips.find((x) => x.id === id);
+    if (!t || t.reporter_id !== reporterId)
+      return Promise.reject(new FieldDbError('test_clip_not_found'));
+    if (t.deleted_at)
+      return Promise.resolve({ status: t.failed_at ? 'failed' : 'gone', snippet: null });
+    if (!t.failed_at && !t.transcribed_at)
+      return Promise.resolve({ status: 'pending', snippet: null });
+    const status = t.failed_at ? 'failed' : t.heard ? 'heard' : 'silent';
+    const snippet = status === 'heard' ? t.snippet : null;
+    Object.assign(t, { read_at: this.iso(), deleted_at: this.iso(), snippet: null });
+    this.audits.push({
+      orgId: t.org_id,
+      actorType: 'reporter',
+      actorId: t.reporter_id,
+      action: 'test_clip.deleted',
+      entity: 'test_clip',
+      entityId: t.id,
+      diff: { reason: 'read', status },
+    });
+    return Promise.resolve({ status, snippet });
   }
 
   audit(entry: AuditEntry) {

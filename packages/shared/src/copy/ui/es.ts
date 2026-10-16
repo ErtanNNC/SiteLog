@@ -89,6 +89,23 @@ export const uiEs: UiResources = {
       requiredHint: 'Marque la primera casilla para continuar.',
       failed: 'No se pudo guardar. Revise su señal e intente de nuevo.',
     },
+    welcomeTest: {
+      title: 'Haga una prueba de 20 segundos',
+      body: 'Diga cualquier cosa — no se archiva nada.',
+      start: 'Empezar la prueba',
+      recording: 'Grabando',
+      stop: 'Detener',
+      checking: 'Escuchando…',
+      heard: 'Le escuché bien: “{{text}}”',
+      silent: 'No escuché nada. Revise el micrófono e intente de nuevo.',
+      failed: 'No se pudo revisar la grabación. Puede seguir igual.',
+      tooMany: 'Ya son suficientes pruebas por ahora. Puede seguir.',
+      noMic:
+        'El micrófono está apagado. Permítalo en los ajustes del teléfono para grabar sus reportes.',
+      again: 'Intentar de nuevo',
+      skip: 'Saltar la prueba',
+      continue: 'Ir a hoy',
+    },
     today: {
       due: 'VENCE {{time}}',
       changeSite: 'Cambiar de obra',

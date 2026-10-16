@@ -76,6 +76,10 @@ test('first open → record → upload creates the report and the transcription 
   await page.getByRole('checkbox', { name: copy.welcome.consentRequired }).check();
   await page.getByRole('button', { name: copy.welcome.continue }).click();
 
+  // F4's optional test recording (W2-13): no worker runs in this project, so it is skipped.
+  await expect(page.getByRole('heading', { level: 1, name: copy.welcomeTest.title })).toBeVisible();
+  await page.getByRole('button', { name: copy.welcomeTest.skip }).click();
+
   // Today.
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.getByRole('banner')).toContainText(fx.site.name);

@@ -174,6 +174,7 @@ export async function dropFieldFixture(f: FieldFixture | undefined): Promise<voi
  */
 export async function verifiedDevice(
   f: FieldFixture,
+  opts: { consent?: boolean } = {},
 ): Promise<{ name: string; value: string; deviceId: string }> {
   const token = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) =>
     b.toString(16).padStart(2, '0'),
@@ -184,6 +185,9 @@ export async function verifiedDevice(
     user_agent: 'e2e:field',
     verified_at: new Date().toISOString(),
   });
+  // `consent: false` (W2-13): a verified phone that has not consented yet (the Welcome screen).
+  if (opts.consent === false)
+    return { name: deviceCookieName(f.reporter.id), value: token, deviceId: device!.id };
   await rest(
     'POST',
     'consents',

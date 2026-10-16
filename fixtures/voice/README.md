@@ -26,6 +26,12 @@ for that transcript.
 | `answer-tr-demirci-alti.json`       | TR       | Emre Yıldız (tr)             | The rebar crew of the Kartal report: six, a full day       |
 | `answer-en-unclear.json`            | EN       | Priya Raman (EN · HI → en)   | No answer in it: below 0.7, asked once more, then flagged  |
 
+### Test recordings (W2-13, `kind: "test"`)
+
+F4's optional 20-second test on the Welcome screen: `test-en-check.json` (Priya, en),
+`test-es-en-check.json` (Marco, ES + EN → multi) and `test-tr-check.json` (Emre, tr). The fake
+transcriber answers a test clip with the one in its reporter's language; nothing is filed.
+
 Every file has a `kind` (`report` when absent, `answer`, `test`); the fake transcriber answers a
 request with a fixture of the request's purpose (`TranscriptionRequest.purpose`), so a real
 Chromium recording of an answer gets an answer transcript in its reporter's language.
