@@ -56,14 +56,15 @@ describeStack('claim_site_day_reminder racing a filing', () => {
     await sql?.end({ timeout: 5 });
   });
 
-  const messages = () =>
-    JSON.stringify([
-      {
-        reporterId,
-        key: 'reminder_1',
-        vars: { site: 'Ladder', link: 'https://go.sitelog.app/r/ABCDEFGHJKMN' },
-      },
-    ]);
+  // An array passed through sql.json: a pre-stringified value cast to ::jsonb is sent as a jsonb
+  // string scalar, which the function's array guard refuses.
+  const messages = () => [
+    {
+      reporterId,
+      key: 'reminder_1',
+      vars: { site: 'Ladder', link: 'https://go.sitelog.app/r/ABCDEFGHJKMN' },
+    },
+  ];
 
   async function race(day: string, filingFirst: boolean) {
     let release!: () => void;
@@ -83,7 +84,7 @@ describeStack('claim_site_day_reminder racing a filing', () => {
       if (filingFirst) await firstHasLock;
       return sql.begin(async (tx) => {
         const [row] = await tx<{ ok: boolean }[]>`
-          select claim_site_day_reminder(${day}, 'reminder_1', ${messages()}::jsonb, '[]'::jsonb) as ok`;
+          select claim_site_day_reminder(${day}, 'reminder_1', ${sql.json(messages())}, '[]'::jsonb) as ok`;
         if (!filingFirst) {
           release();
           await tx`select pg_sleep(0.3)`;
