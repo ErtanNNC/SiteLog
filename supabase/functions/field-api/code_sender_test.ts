@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects } from '@std/assert';
 import {
   MASKED_CODE,
+  MessageSendError,
   SmsSendError,
   toCountryPack,
   type ConsentType,
@@ -10,7 +11,12 @@ import {
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { fakeMessaging } from '../_shared/fake_messaging.ts';
 import type { VerifyCodeMessage } from './app.ts';
-import { notifierCodeSender, notifierDailyLinkSender, recipientOf } from './code_sender.ts';
+import {
+  finalRefusal,
+  notifierCodeSender,
+  notifierDailyLinkSender,
+  recipientOf,
+} from './code_sender.ts';
 
 /** `device/send-code` through the Notifier (spec §4.5, §19 Q25; W1-08). */
 
@@ -198,5 +204,51 @@ Deno.test(
       channel: null,
       reason: 'no_channel',
     });
+  },
+);
+
+Deno.test(
+  'a WhatsApp refusal final on the last channel is no_channel, never a 500 (W2-15/16 review)',
+  async () => {
+    const whatsappRefused = new MessageSendError(
+      'twilio whatsapp 63016: template refused',
+      'whatsapp',
+      {
+        driver: 'twilio',
+        retryable: false,
+        undeliverable: true,
+        code: '63016',
+      },
+    );
+    // The Notifier throws the last channel's refusal once no channel is left (the US order ends
+    // with WhatsApp).
+    const notifier = {
+      send: () => Promise.reject(whatsappRefused),
+      deliver: () => Promise.reject(whatsappRefused),
+    };
+    const daily = {
+      reporterId: 'r',
+      vars: { site: 'Riverside', link: 'https://go.sitelog.test/r/ABCDEF' },
+      dedupeKey: 'expired_daily_link:l1:2026-10-09',
+    };
+    assertEquals(await notifierDailyLinkSender(notifier)(daily), {
+      channel: null,
+      reason: 'no_channel',
+    });
+    assertEquals(
+      await notifierCodeSender(notifier as unknown as Parameters<typeof notifierCodeSender>[0])(
+        message(),
+      ),
+      { channel: null, reason: 'no_channel' },
+    );
+    // A retryable refusal on any channel is still thrown (the client may try again).
+    const busy = new MessageSendError('twilio whatsapp 503', 'whatsapp', {
+      driver: 'twilio',
+      retryable: true,
+    });
+    await assertRejects(() => notifierDailyLinkSender({ send: () => Promise.reject(busy) })(daily));
+    assertEquals(finalRefusal(whatsappRefused), true);
+    assertEquals(finalRefusal(busy), false);
+    assertEquals(finalRefusal(new Error('boom')), false);
   },
 );

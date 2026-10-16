@@ -1,5 +1,5 @@
 import {
-  SmsSendError,
+  MessageSendError,
   type NotifyOutcome,
   type Notifier,
   type NotifyRecipient,
@@ -23,6 +23,16 @@ import type { SendDailyLink, SendVerifyCode, VerifyCodeMessage } from './app.ts'
  * `no_channel` too; any other send failure is thrown (500 `internal`, the client may retry).
  */
 
+/**
+ * A refusal that is final on the channel that made it (W2-15/16 review): an SMS number the
+ * provider cannot reach, or the last channel of the order (WhatsApp on the US order) refusing for
+ * good. The Notifier throws it once no channel is left; it is `no_channel`, never a 500. A
+ * retryable one (429, 5xx, network) is thrown on.
+ */
+export function finalRefusal(err: unknown): boolean {
+  return err instanceof MessageSendError && !err.retryable && err.undeliverable;
+}
+
 /** The Notifier's view of the person a code is for. */
 export function recipientOf(message: VerifyCodeMessage): NotifyRecipient {
   return {
@@ -38,9 +48,7 @@ export function notifierCodeSender(notifier: SmsNotifier): SendVerifyCode {
     try {
       return await notifier.deliver(recipientOf(message), 'verify_code', { code: message.code });
     } catch (err) {
-      if (err instanceof SmsSendError && err.undeliverable) {
-        return { channel: null, reason: 'no_channel' };
-      }
+      if (finalRefusal(err)) return { channel: null, reason: 'no_channel' };
       throw err;
     }
   };
@@ -49,8 +57,9 @@ export function notifierCodeSender(notifier: SmsNotifier): SendVerifyCode {
 /**
  * `expired/daily-link` (F16 "Send me today's link"; W2-03) through the Notifier: `daily_link` on
  * the reporter's channel order with its consent and opt-out rules (the Notifier audits a skip),
- * once per dedupe key. A number the provider cannot reach is `no_channel`; any other send failure
- * is thrown (500 `internal`, the button may be tapped again under the same key).
+ * once per dedupe key. A refusal final on the last channel tried (`finalRefusal`: an SMS number
+ * the provider cannot reach, a WhatsApp template refused for good) is `no_channel`; any other
+ * send failure is thrown (500 `internal`, the button may be tapped again under the same key).
  */
 export function notifierDailyLinkSender(notifier: Pick<Notifier, 'send'>): SendDailyLink {
   return async (input): Promise<NotifyOutcome> => {
@@ -60,9 +69,7 @@ export function notifierDailyLinkSender(notifier: Pick<Notifier, 'send'>): SendD
         dedupeKey: input.dedupeKey,
       });
     } catch (err) {
-      if (err instanceof SmsSendError && err.undeliverable) {
-        return { channel: null, reason: 'no_channel' };
-      }
+      if (finalRefusal(err)) return { channel: null, reason: 'no_channel' };
       throw err;
     }
   };
