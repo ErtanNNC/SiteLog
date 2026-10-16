@@ -105,7 +105,7 @@ The phone checks of W1-13 and W1-15 need a worker on the preview project. Withou
 
 #### Comparing Claude models on the golden sets (`.github/workflows/eval.yml`)
 
-Scores the four golden sets (spec §10.13) on real models with the preview Environment's `ANTHROPIC_API_KEY`, so nobody handles the key locally. Actions → **Eval** → Run workflow → branch `spec-v1.2` (any other ref skips the job) with:
+Scores the four golden sets (spec §10.13) on real models with the preview Environment's `ANTHROPIC_API_KEY`, so nobody handles the key locally. Until the default branch has `eval.yml`, GitHub cannot dispatch it directly (404), so it runs through Deploy: Actions → **Deploy** → Run workflow → branch `spec-v1.2`, environment `preview`, target `eval` (any other ref or environment skips it), with `eval_models` and `eval_sets` as below (empty `eval_models` = the three defaults). Once `eval.yml` is on the default branch, Actions → **Eval** → Run workflow takes the same inputs:
 
 - `models`: comma-separated model ids (default `claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5`). Each model runs every chosen set as both `CLAUDE_MODEL` and `CLAUDE_MODEL_FAST`.
 - `sets`: `all` (default) or a comma-separated subset of `extraction` (fixtures/transcripts, report extraction v2), `answers` (`parse_answer`, fixtures/answers), `corrections` (`apply_correction`, fixtures/corrections), `utterances` (`classify_utterance`, fixtures/utterances).

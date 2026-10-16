@@ -80,6 +80,7 @@ describe('deploy.yml', () => {
       'seed',
       'phone-setup',
       'preview-worker',
+      'eval',
       'worker',
       'preview',
       'web',
@@ -539,6 +540,40 @@ describe('deploy.yml plan step, run under bash', () => {
     }
   });
 
+  it('eval: only for the preview Environment from spec-v1.2, never in `all`, read-only through eval.yml', () => {
+    const run = (ref: string, environment: string, target: string) =>
+      runStep(plan, {
+        EVENT: 'workflow_dispatch',
+        REF: ref,
+        REF_NAME: ref.replace(/^refs\/(heads|tags)\//, ''),
+        TARGET: target,
+        ENVIRONMENT: environment,
+        PR_NUMBER: '',
+      });
+    const ok = run(PREVIEW, 'preview', 'eval');
+    expect(ok.status, ok.log).toBe(0);
+    expect(ok.outputs.eval).toBe('true');
+    expect(ok.outputs.preview_worker).toBe('false');
+    expect(PLAN_TARGETS.filter((t) => ok.outputs[t] === 'true')).toEqual([]);
+    for (const [ref, environment] of [
+      [PREVIEW, 'staging'],
+      [LIVE, 'preview'],
+      [`refs/tags/spec-v1.2`, 'preview'],
+    ] as const) {
+      const r = run(ref, environment, 'eval');
+      expect(r.outputs.eval, `${ref} ${environment}`).toBe('false');
+      expect(r.log).toContain('eval skipped');
+    }
+    expect(run(PREVIEW, 'preview', 'all').outputs.eval).toBe('false');
+    const job = JOBS.get('eval')!;
+    expect(job.condition).toContain("needs.plan.outputs.eval == 'true'");
+    expect(job.condition).toContain("inputs.environment == 'preview'");
+    expect(job.condition).toContain("github.ref == 'refs/heads/spec-v1.2'");
+    expect(job.text).toMatch(/^ {4}uses: \.\/\.github\/workflows\/eval\.yml$/m);
+    expect(job.text).toMatch(/^ {4}permissions:\n {6}contents: read$/m);
+    expect(job.text).not.toMatch(/secrets/);
+  });
+
   it('the inventory runs alone, from staging only', () => {
     expect(decide('workflow_dispatch', PREVIEW, 'staging', 'inventory').on).toEqual(['inventory']);
     expect(decide('workflow_dispatch', LIVE, 'production', 'inventory').on).toEqual([]);
@@ -652,8 +687,8 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
     expect(field.condition).toContain("needs.plan.outputs.field == 'true'");
     expect(field.text).toContain("environment: ${{ inputs.environment || 'staging' }}");
     expect(JOBS.get('plan')!.text).toContain('field: ${{ steps.plan.outputs.field }}');
-    expect(WORKFLOW).toContain(
-      'options: [all, supabase, worker, web, field, inventory, seed, phone-setup, preview-worker]',
+    expect(WORKFLOW).toMatch(
+      /options:\s+\[all, supabase, worker, web, field, inventory, seed, phone-setup, preview-worker, eval\]/,
     );
   });
 

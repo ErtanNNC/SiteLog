@@ -2,7 +2,8 @@ name: Eval
 
 # Compare Claude models on the golden sets (spec §10.13) without anyone handling the Anthropic key
 # locally: the key stays in the preview Environment's secrets, and the owner dispatches this
-# workflow from spec-v1.2 with the model ids to compare (RUNBOOK §2 "Compare models").
+# workflow from spec-v1.2 with the model ids to compare (RUNBOOK §2 "Compare models"). Until the
+# default branch has this file, dispatch it through Deploy: environment preview, target eval.
 #
 # For every model × set it runs `pnpm eval -- --set <set> --json <file>` with that model as both
 # CLAUDE_MODEL and CLAUDE_MODEL_FAST, then writes one Markdown table to the job summary (model, set,
@@ -18,6 +19,18 @@ name: Eval
 
 on:
   workflow_dispatch:
+    inputs:
+      models:
+        description: Comma-separated Claude model ids; each runs as both CLAUDE_MODEL and CLAUDE_MODEL_FAST
+        type: string
+        default: claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5
+      sets:
+        description: Comma-separated golden sets (extraction, answers, corrections, utterances), or all
+        type: string
+        default: all
+  # Deploy (target eval) calls this file: a workflow_dispatch needs the file on the default branch,
+  # which has no eval.yml before the cut-over, while deploy.yml is there.
+  workflow_call:
     inputs:
       models:
         description: Comma-separated Claude model ids; each runs as both CLAUDE_MODEL and CLAUDE_MODEL_FAST

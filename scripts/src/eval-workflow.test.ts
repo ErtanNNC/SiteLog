@@ -109,12 +109,25 @@ function runStep(script: string, env: Record<string, string>, bin: Record<string
 }
 
 describe('eval.yml', () => {
-  it('runs on workflow_dispatch only, with the models and sets inputs', () => {
+  it('runs on workflow_dispatch, or called by Deploy (target eval), with the models and sets inputs', () => {
     const on = topLevel('on');
-    expect(on.split('\n').filter((l) => /^ {2}\S/.test(l))).toEqual(['  workflow_dispatch:']);
+    expect(on.split('\n').filter((l) => /^ {2}\S/.test(l))).toEqual([
+      '  workflow_dispatch:',
+      '  workflow_call:',
+    ]);
     expect(CODE).not.toMatch(
-      /^\s*(push|pull_request|pull_request_target|schedule|workflow_run|workflow_call|repository_dispatch):/m,
+      /^\s*(push|pull_request|pull_request_target|schedule|workflow_run|repository_dispatch):/m,
     );
+    // Both triggers take the same inputs, and a call passes no secrets (the job reads the preview
+    // Environment's key itself).
+    const [dispatch, call] = on.replace(/^on:\n/, '').split(/^ {2}workflow_call:$/m);
+    expect(call.replace(/^ {2}#.*\n/gm, '').trim()).toBe(
+      dispatch
+        .replace(/^ {2}workflow_dispatch:$/m, '')
+        .replace(/^ {2}#.*\n/gm, '')
+        .trim(),
+    );
+    expect(on).not.toMatch(/^ {4}secrets:/m);
     expect(on).toContain('default: claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5');
     expect(on).toMatch(/ {6}sets:\n(?: {8}.*\n)*? {8}default: all\n/);
   });

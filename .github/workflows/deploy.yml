@@ -43,15 +43,24 @@ on:
         options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; all three owner-approved)
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; all three owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
         type: choice
-        options: [all, supabase, worker, web, field, inventory, seed, phone-setup, preview-worker]
+        options:
+          [all, supabase, worker, web, field, inventory, seed, phone-setup, preview-worker, eval]
+        default: all
+      eval_models:
+        description: 'Target eval only: comma-separated Claude model ids (empty = sonnet, haiku and opus)'
+        type: string
+        default: ''
+      eval_sets:
+        description: 'Target eval only: extraction, answers, corrections, utterances, or all'
+        type: string
         default: all
 
 concurrency:
   # preview-worker runs for an hour: its own group, so seed, phone-setup and supabase dispatches to the
   # preview project are not held behind it.
-  group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || inputs.target == 'preview-worker' && 'preview-worker' || inputs.environment || 'staging' }}
+  group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || inputs.target == 'preview-worker' && 'preview-worker' || inputs.target == 'eval' && 'eval' || inputs.environment || 'staging' }}
   cancel-in-progress: false
 
 env:
@@ -77,6 +86,7 @@ jobs:
       seed: ${{ steps.plan.outputs.seed }}
       phone_setup: ${{ steps.plan.outputs.phone_setup }}
       preview_worker: ${{ steps.plan.outputs.preview_worker }}
+      eval: ${{ steps.plan.outputs.eval }}
     steps:
       - name: Decide what this run may touch
         id: plan
@@ -88,9 +98,9 @@ jobs:
           TARGET: ${{ inputs.target || 'all' }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false
+          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false eval=false
           # `all` covers the four deploy targets; the inventory runs only when asked for.
-          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ]; }; }
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != eval ]; }; }
 
           if [ "$EVENT" = pull_request ]; then
             web=true field=true preview=true
@@ -114,6 +124,13 @@ jobs:
               preview_worker=true
             else
               echo "::notice::preview-worker skipped: it runs the worker against the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = eval ]; then
+            # The model comparison (.github/workflows/eval.yml) with the preview Environment's key only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              eval=true
+            else
+              echo "::notice::eval skipped: it uses the preview Environment's Anthropic key only, dispatched with environment preview from $PREVIEW_BRANCH."
             fi
           elif [ "$TARGET" = seed ]; then
             # W1-06 apply mode (RUNBOOK §2 step 5): the two demo orgs into the preview project only.
@@ -152,6 +169,7 @@ jobs:
             echo "seed=$seed"
             echo "phone_setup=$phone_setup"
             echo "preview_worker=$preview_worker"
+            echo "eval=$eval"
           } >> "$GITHUB_OUTPUT"
           {
             echo "### Deploy plan"
@@ -164,7 +182,7 @@ jobs:
             echo
             echo "| Job | Runs |"
             echo "| --- | --- |"
-            for k in supabase worker web field preview inventory seed phone_setup preview_worker; do echo "| $k | ${!k} |"; done
+            for k in supabase worker web field preview inventory seed phone_setup preview_worker eval; do echo "| $k | ${!k} |"; done
           } >> "$GITHUB_STEP_SUMMARY"
 
   supabase:
@@ -613,6 +631,21 @@ jobs:
             phones=$(grep -cE '\+[0-9][0-9 ().-]{6,}[0-9]' "$RUNNER_TEMP/worker.log" || true)
             echo "Phone-like strings in the whole log (hidden above): ${phones:-0}"
           fi
+
+  eval:
+    name: Eval · Claude models on the golden sets (preview key)
+    needs: plan
+    # Guard repeated literally: environment preview, branch spec-v1.2. Read-only (eval.yml: contents:
+    # read, the Anthropic key only, no database).
+    if: >-
+      needs.plan.outputs.eval == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/eval.yml
+    with:
+      models: ${{ inputs.eval_models || 'claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5' }}
+      sets: ${{ inputs.eval_sets || 'all' }}
 
   worker:
     name: Worker · Fly.io
