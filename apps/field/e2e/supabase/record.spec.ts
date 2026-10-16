@@ -18,7 +18,10 @@ import {
  * proxy to the real field-api → resolve → device check (the code read from the console `messages`
  * row, as the Demo phone shows it) → welcome and consent → Today → record → Stop & send: the clip
  * goes to Storage by signed URL, `complete` creates the report (`processing`, channel `web`) and
- * the `transcribe_upload` job, and the Processing screen polls it. axe on every screen.
+ * the `transcribe_upload` job, and the Processing screen polls it. axe on every screen. Since
+ * W2-17 the spec runs in CI's M6 step with the worker up (fake transcriber and Claude): the worker
+ * may take the report past Processing (a question, the draft) within a poll or two, so the screen
+ * after Stop & send is checked for whichever of the two it shows, and Today is opened by URL.
  *
  * W2-17 (M6 acceptance, F5 step 3): the same recorder without signal. Stop & send in airplane
  * mode keeps the clip on the phone ("Saved on your phone"), and the signal coming back sends it
@@ -70,7 +73,7 @@ test(
     await page.getByRole('checkbox', { name: copy.welcome.consentRequired }).check();
     await page.getByRole('button', { name: copy.welcome.continue }).click();
 
-    // F4's optional test recording (W2-13): no worker runs in this project, so it is skipped.
+    // F4's optional test recording (W2-13), skipped.
     await expect(
       page.getByRole('heading', { level: 1, name: copy.welcomeTest.title }),
     ).toBeVisible();
@@ -92,18 +95,24 @@ test(
     // Processing: the report exists once `complete` answered.
     await expect(page).toHaveURL(/\/report\/[0-9a-f-]{36}$/, { timeout: 30_000 });
     const reportId = /\/report\/([0-9a-f-]{36})$/.exec(page.url())![1]!;
-    await expect(
-      page.getByRole('heading', { level: 1, name: copy.processing.title }),
-    ).toBeVisible();
-    await expect(page.getByText(`${fx.site.projectCode}-0001`, { exact: false })).toBeVisible();
+    const reportNo = `${fx.site.projectCode}-0001`;
+    const processing = page.getByRole('heading', { level: 1, name: copy.processing.title });
+    await expect(processing).toBeVisible();
+    // Processing names the report once its first poll answered, unless the worker (up in CI's M6
+    // step) has already moved it on to a question or the draft, which do not name it; the number
+    // is checked in the row and on Today below either way.
+    const label = page.getByText(copy.processing.report.replace('{{no}}', reportNo));
+    await expect
+      .poll(async () => (await label.isVisible()) || !(await processing.isVisible()))
+      .toBe(true);
     await expectFieldScreen(page);
 
     // The rows field-api wrote.
     const [report] = await rest<
       { channel: string; status: string; report_no: string; reporter_id: string }[]
     >('GET', `reports?select=channel,status,report_no,reporter_id&id=eq.${reportId}`);
-    expect(report).toMatchObject({ channel: 'web', report_no: `${fx.site.projectCode}-0001` });
-    // No worker runs in this step of CI; locally one may have picked the job up already.
+    expect(report).toMatchObject({ channel: 'web', report_no: reportNo });
+    // The worker may have picked the job up already (CI's M6 step runs it).
     expect(['processing', 'awaiting_answer', 'awaiting_confirmation']).toContain(report!.status);
     const uploads = await rest<
       { id: string; kind: string; mime: string; bytes: number; reporter_id: string }[]
@@ -137,13 +146,12 @@ test(
     );
     expect(reporter!.status).toBe('active');
 
-    // Today again: the day is in progress and the report opens from there.
-    await page.getByRole('link', { name: copy.sending.backToToday }).click();
+    // Today again (by URL: a question or the draft has no Back to Today): the day is in progress
+    // and the report opens from there.
+    await page.goto('/today');
     await expect(page.getByText(copy.today.status.inProgress)).toBeVisible();
     await expect(
-      page.getByRole('link', {
-        name: copy.today.openReport.replace('{{no}}', `${fx.site.projectCode}-0001`),
-      }),
+      page.getByRole('link', { name: copy.today.openReport.replace('{{no}}', reportNo) }),
     ).toBeVisible();
   },
 );
