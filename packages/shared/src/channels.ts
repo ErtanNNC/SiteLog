@@ -385,19 +385,35 @@ export interface SmsTransport {
 /**
  * The Notifier's order for a person (§4.5): their preferred channel first when the pack offers it,
  * then the pack's `message_channels`. A preference the pack does not list is ignored (the pack is
- * the allow-list, spec §19 Q21). Push is never a person's only channel (spec §9.3; W2-14): it stays
- * only where another channel follows it, so a message that push cannot deliver always has a
- * channel to fall back to (the table refuses a pack whose order ends with push).
+ * the allow-list, spec §19 Q21).
+ *
+ * Push keeps its place in the pack's order whatever the preference (spec §19 Q107: push is never a
+ * preference, its own *Notifications* toggle is the choice; W2-14 review): the preference goes
+ * first among the other channels, so a reporter who prefers texts and turned notifications on
+ * still gets push first on a launch pack, and texts when push fails for good. A stored `push`
+ * preference (never offered in Settings) still puts push first.
+ *
+ * Push is never a person's only channel (spec §9.3; W2-14): it stays only where another channel
+ * follows it, so a message that push cannot deliver always has a channel to fall back to (the
+ * table refuses a pack whose order ends with push).
  */
 export function messageChannelOrder(
   pack: CountryPack,
   preferred: MessageChannel | null,
 ): MessageChannel[] {
-  const order = [...pack.messageChannels];
-  const ranked = preferred !== null && order.includes(preferred) ? [preferred, ...order] : order;
-  const unique = [...new Set(ranked)];
-  const push = unique.indexOf('push');
-  return push >= 0 && push === unique.length - 1 ? unique.slice(0, -1) : unique;
+  const order = [...new Set(pack.messageChannels)];
+  let ranked: MessageChannel[] = order;
+  if (preferred !== null && order.includes(preferred)) {
+    if (preferred === 'push') {
+      ranked = ['push', ...order.filter((c) => c !== 'push')];
+    } else {
+      const others = [preferred, ...order.filter((c) => c !== 'push' && c !== preferred)];
+      const at = order.indexOf('push');
+      ranked = at >= 0 ? [...others.slice(0, at), 'push', ...others.slice(at)] : others;
+    }
+  }
+  const push = ranked.indexOf('push');
+  return push >= 0 && push === ranked.length - 1 ? ranked.slice(0, -1) : ranked;
 }
 
 /**

@@ -90,8 +90,8 @@ describe('message channels (§4.5)', () => {
   it('orders by the person first when the pack offers it, then the pack', () => {
     const zz = pack('US', { message_channels: ['whatsapp', 'push', 'sms'] });
     expect(messageChannelOrder(zz, null)).toEqual(['whatsapp', 'push', 'sms']);
-    // Push would come last after an SMS preference: it leaves the order (never the last channel).
-    expect(messageChannelOrder(zz, 'sms')).toEqual(['sms', 'whatsapp']);
+    // A preference goes first among the other channels; push keeps its place (§19 Q107).
+    expect(messageChannelOrder(zz, 'sms')).toEqual(['sms', 'push', 'whatsapp']);
     expect(messageChannelOrder(zz, 'push')).toEqual(['push', 'whatsapp', 'sms']);
     expect(messageChannelOrder(zz, 'whatsapp')).toEqual(['whatsapp', 'push', 'sms']);
     // The pack is the allow-list: a preference it does not offer is ignored.
@@ -100,14 +100,19 @@ describe('message channels (§4.5)', () => {
     // W2-16 (§19 Q19, Q107): the launch orders.
     expect(messageChannelOrder(US, null)).toEqual(['push', 'sms', 'whatsapp']);
     expect(messageChannelOrder(TR, null)).toEqual(['push', 'whatsapp', 'sms']);
-    expect(messageChannelOrder(TR, 'sms')).toEqual(['sms', 'push', 'whatsapp']);
-    expect(messageChannelOrder(US, 'whatsapp')).toEqual(['whatsapp', 'push', 'sms']);
+    // W2-14 review (§19 Q107): an SMS or WhatsApp preference never moves a channel ahead of push,
+    // so Settings' Notifications On is what happens.
+    expect(messageChannelOrder(TR, 'sms')).toEqual(['push', 'sms', 'whatsapp']);
+    expect(messageChannelOrder(US, 'sms')).toEqual(['push', 'sms', 'whatsapp']);
+    expect(messageChannelOrder(US, 'whatsapp')).toEqual(['push', 'whatsapp', 'sms']);
   });
 
   it('never ends an order with push: another channel always follows it (§9.3, W2-14)', () => {
     // The table refuses such a pack; the order drops push wherever it would come last.
     const last = pack('US', { message_channels: ['push', 'sms'] });
-    expect(messageChannelOrder(last, 'sms')).toEqual(['sms']);
+    // W2-14 review: an SMS preference no longer pushes push to the end (and out).
+    expect(messageChannelOrder(last, 'sms')).toEqual(['push', 'sms']);
+    expect(messageChannelOrder(last, 'push')).toEqual(['push', 'sms']);
     expect(messageChannelOrder(last, null)).toEqual(['push', 'sms']);
     const alone = { ...last, messageChannels: ['push'] as const } as typeof last;
     expect(messageChannelOrder(alone, null)).toEqual([]);
