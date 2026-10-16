@@ -16,7 +16,8 @@ export type Database = { public: { ${body} Enums: ${enums}; CompositeTypes: {} }
   return file;
 }
 
-describe('db-types-drift', () => {
+// Each case runs the TypeScript compiler over the shared types: seconds on a busy runner.
+describe('db-types-drift', { timeout: 30_000 }, () => {
   it('reports tables, columns and arguments that exist on one side only', () => {
     const file = generated(`
       Tables: {
