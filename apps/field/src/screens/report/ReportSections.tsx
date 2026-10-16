@@ -131,8 +131,12 @@ export function ReportSections({
                     <button
                       type="button"
                       onClick={() => onEditCrew(i)}
+                      // The ANSWERED chip is part of the line's name (W2-10 review: the label
+                      // replaces the button's content for screen readers).
                       aria-label={t('draft.stepper.change', {
-                        company: entry.companyName,
+                        company: answeredEntry(entry)
+                          ? `${entry.companyName}, ${t('draft.answered')}`
+                          : entry.companyName,
                         value: crewValueSpoken(entry, t, language),
                       })}
                       className="flex min-h-target w-full items-center justify-between gap-3 border-0 bg-transparent px-0 py-1 text-[15px] leading-[22px] text-asphalt"

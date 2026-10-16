@@ -30,7 +30,7 @@ describe('Draft (F8, Field-06)', () => {
     ).toEqual([
       'Apex Concrete, 6 workers, 8 hours each — change',
       'BrightLine Electric, 5 workers, 8 hours each — change',
-      'Delta Mechanical, 5 workers, 8 hours each — change',
+      'Delta Mechanical, Answered, 5 workers, 8 hours each — change',
       'Ironclad Steel, 3 workers, 8 hours each — change',
       'Kestrel crew, 4 workers, 8 hours each — change',
     ]);
