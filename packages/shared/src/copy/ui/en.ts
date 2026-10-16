@@ -483,10 +483,10 @@ export const uiEn = {
       weatherPhotoHint: 'A photo of the conditions makes the delay record stronger.',
       pastReports: 'Past reports',
       /**
-       * The edit hint; `{{pastReports}}` is set in bold. The artboard goes on "and say what to fix.
-       * The office gets a new version; the old one is kept.", which W2-11 (F10) makes true.
+       * The edit hint; `{{pastReports}}` is set in bold. Field-07's full sentence since W2-11 (F10's
+       * *Change something* makes it true).
        */
-      hint: 'Need a change later? Open {{pastReports}}.',
+      hint: 'Need a change later? Open {{pastReports}} and say what to fix. The office gets a new version; the old one is kept.',
       /** The sheet after the photos are picked (F9: up to 4, an optional voice caption). */
       photos: {
         title: 'Add photos to {{no}}',
@@ -553,6 +553,16 @@ export const uiEn = {
       back: 'Back to Past reports',
       failed: 'Couldn’t load your past reports. Check your signal and try again.',
       reportFailed: 'Couldn’t load this report. Check your signal and try again.',
+      /** F10 (W2-11): *Change something* on a filed report of the last 14 days. */
+      change: {
+        button: 'Change something',
+        title: 'Change something',
+        hint: 'Say what to change, for example “Apex had seven, not six.” Up to 30 seconds.',
+        lastChange: 'Last change: {{note}}',
+        saved: 'Change saved. Version {{version}} is with the office.',
+        stale: 'The report changed while I was listening. Check it, then say the change again.',
+        locked: 'That report is locked. Ask the office to change it.',
+      },
     },
     /** An expired daily link (F16, §9.3 Expired; W2-03). No artboard: built from §9.3. */
     expired: {

@@ -170,4 +170,20 @@ describe('Reports archive: channel and No photo (P6)', () => {
       expect(i.channel).toBe(i.reportNo === 'RL-2041-0187' ? 'link' : 'call');
     }
   });
+
+  it('names the reporter who made a version (W2-11, §19 Q81: a backup may change the day)', () => {
+    const { store, report } = hero();
+    const rows = store.rows();
+    const backup = rows.reporters.find((r) => r.id !== report.reporter_id)!;
+    const v2 = rows.versions.find((v) => v.report_id === report.id && v.version === 2)!;
+    expect(assembleReportDetail(rows, ctx(store), report.id).versions[1]!.authorName).toBe(
+      'Marco Ruiz',
+    );
+    rows.versions = rows.versions.map((v) =>
+      v === v2 ? { ...v, author_reporter_id: backup.id } : v,
+    );
+    expect(assembleReportDetail(rows, ctx(store), report.id).versions[1]!.authorName).toBe(
+      backup.name,
+    );
+  });
 });

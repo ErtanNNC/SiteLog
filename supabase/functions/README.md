@@ -319,7 +319,11 @@ Notes:
   `uploads.correction_report_id`, or typed words, handed to the worker's `apply_correction`, whose
   preview **Save change** writes at the draft revision it was made from, else 409
   `draft_changed`; a stepper's crew line built in code with `applyCrewEdit`, citing
-  `reporter_edit`), the
+  `reporter_edit`), `field_request_filed_correction()` and `field_save_filed_correction()`
+  (W2-11: F10 _Change something_; the same correction routes on a filed report of the last 14
+  days, 409 `report_locked` older; **Save change** makes version n+1 with the change note code
+  writes from the preview's lines, then `render_pdf` queues the "Updated" email and
+  `edit_applied`), the
   test recording's `field_test_clip_create()`, `field_test_clip_complete()` and
   `field_test_clip_read()` (W2-13: F4's 20-second test outside any report, `test_clips`; the
   snippet answered once, then deleted) and

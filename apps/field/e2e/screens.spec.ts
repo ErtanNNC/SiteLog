@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
+import { correctionNote } from '@sitelog/shared/report/correction-note.ts';
 import { expectFieldScreen, expectNoAxeViolations } from './support/checks.ts';
 import type { HistoryResponse, ReportView } from '@sitelog/shared/field-contract.ts';
 import {
@@ -878,6 +879,7 @@ function pastReports(market: Market): {
     changeNote: null,
     lastVoiceAnswer: null,
     correction: null,
+    change: { canChange: true, locked: false },
   };
   return {
     history: [
@@ -938,7 +940,8 @@ for (const run of RUNS) {
       await expect(page.getByText(field.history.status.filed)).toBeVisible();
       await expect(page.getByRole('link', { name: new RegExp(field.filed.pdf) })).toBeVisible();
       await expect(page.getByText(market.draft.manpower[0]!.companyName)).toBeVisible();
-      // No edit action before W2-11, and no Confirm & send on a filed report.
+      // Change something (W2-11), and no Confirm & send on a filed report.
+      await expect(page.getByRole('button', { name: field.history.change.button })).toBeVisible();
       await expect(page.getByRole('button', { name: field.draft.confirm })).toHaveCount(0);
       await expectFieldScreen(page);
       await page.getByRole('link', { name: field.history.back }).click();
@@ -972,6 +975,88 @@ for (const run of RUNS) {
       await page.goto(`/r/${CODE}`);
       await page.getByRole('button', { name: field.expired.send }).click();
       await expect(page.getByText(field.expired.reasons.site_paused)).toBeVisible();
+    });
+  });
+}
+
+for (const run of RUNS) {
+  test.describe(`Change something on a past report (F10, W2-11) in ${run.lang}`, () => {
+    test.use({ locale: run.locale });
+
+    test('Past reports → said change → preview from code’s numbers → Save change → version 3', async ({
+      page,
+    }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const change = field.history.change;
+      const market = run.market();
+      const past = pastReports(market);
+      const api = await installFakeFieldApi(page, market, {
+        verified: true,
+        consented: true,
+        ...past,
+      });
+      await page.goto(`/r/${CODE}`);
+      await page.getByRole('link', { name: field.today.pastReports }).click();
+      await page.getByRole('link', { name: /RL-2041-0187/ }).click();
+      await page.getByRole('button', { name: change.button }).click();
+      const sheet = page.getByRole('dialog', { name: change.title });
+      await expect(sheet).toBeVisible();
+      await expect(sheet.getByText(change.hint)).toBeVisible();
+      await expectFieldScreen(page);
+      await sheet.getByRole('button', { name: field.draft.fix.record }).click();
+      await expect(sheet.getByRole('timer')).toHaveText(/^00:0[1-9] \/ 00:30$/, {
+        timeout: 10_000,
+      });
+      await sheet.getByRole('button', { name: field.draft.fix.stop }).click();
+      await expect(sheet).toHaveCount(0);
+
+      // The preview: the crew line from code's numbers, as the worker sends it.
+      const crew = market.draft.manpower[0]!;
+      const to = (crew.workers ?? 0) + 1;
+      const line = correctionNote(
+        [
+          {
+            kind: 'crew',
+            company: crew.companyName,
+            change: 'changed',
+            workers: [crew.workers, to],
+            hoursPerWorker: [crew.hoursPerWorker, crew.hoursPerWorker],
+            totalHours: [crew.totalHours, to * (crew.hoursPerWorker ?? 0)],
+          },
+        ],
+        run.lang,
+      );
+      const preview = page.getByRole('region', { name: field.draft.fix.previewTitle });
+      await expect(preview).toBeVisible({ timeout: 15_000 });
+      await expect(preview.getByRole('listitem')).toHaveText(line!);
+      await expectFieldScreen(page);
+      await preview.getByRole('button', { name: field.draft.fix.save }).click();
+
+      await expect(
+        page.getByRole('status').filter({ hasText: change.saved.replace('{{version}}', '3') }),
+      ).toBeVisible({ timeout: 15_000 });
+      await expect(
+        page.getByText(field.history.version.replace('{{version}}', '3'), { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole('link', { name: /_v3\.pdf/ })).toBeVisible();
+      const upload = api.calls.find((c) => c.path === 'uploads')!;
+      expect((upload.body as { fixTo: unknown }).fixTo).toEqual({ reportId: PAST_ID });
+      expect(Object.values(api.changes).map((c) => c.version)).toEqual([3]);
+      await expectFieldScreen(page);
+    });
+
+    test('a report older than 14 days is locked', async ({ page }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const market = run.market();
+      const past = pastReports(market);
+      past.reports[PAST_ID]!.change = { canChange: false, locked: true };
+      await installFakeFieldApi(page, market, { verified: true, consented: true, ...past });
+      await page.goto(`/r/${CODE}`);
+      await page.getByRole('link', { name: field.today.pastReports }).click();
+      await page.getByRole('link', { name: /RL-2041-0187/ }).click();
+      await expect(page.getByText(field.history.change.locked)).toBeVisible();
+      await expect(page.getByRole('button', { name: field.history.change.button })).toHaveCount(0);
+      await expectFieldScreen(page);
     });
   });
 }
@@ -1035,6 +1120,11 @@ test.describe('Past reports at 1440 px (W2-03)', () => {
     await page.goto('/r/K7Q2MX');
     await page.getByRole('link', { name: UI_RESOURCES.en.field.today.pastReports }).click();
     await expect(page.getByText('RL-2041-0187')).toBeVisible();
+    await expectFieldScreen(page);
+    // W2-11: the report view with Change something and its sheet.
+    await page.getByRole('link', { name: /RL-2041-0187/ }).click();
+    await page.getByRole('button', { name: UI_RESOURCES.en.field.history.change.button }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
     await expectFieldScreen(page);
   });
 });

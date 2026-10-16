@@ -392,6 +392,15 @@ export function historyStart(now: Date, timezone: string, days: number): string 
 }
 
 /**
+ * F10 (W2-11, spec §19 Q81): a filed report of `date` may still be changed by its reporter: one
+ * of the last `days` days in the site's time zone (Past reports lists the same days; the database
+ * checks it again, field_report_changeable()). Older: "That report is locked."
+ */
+export function filedChangeable(date: string, now: Date, timezone: string, days: number): boolean {
+  return date >= historyStart(now, timezone, days);
+}
+
+/**
  * Browser origins field-api accepts (an Origin header is optional, a wrong one is refused): the
  * field app (FIELD_APP_URL) and the extra origins (CORS_EXTRA_ORIGINS, e.g. the field preview).
  * Requests come same-origin through the field host's /api proxy, so the browser's Origin is the
@@ -611,7 +620,8 @@ export function correctionView(
     | 'base_version'
     | 'base_rev'
     | 'created_at'
-  >,
+  > &
+    Partial<Pick<DraftCorrectionRow, 'after_filing'>>,
   now: Date,
 ): CorrectionView {
   const timedOut =
@@ -628,6 +638,7 @@ export function correctionView(
     reason: timedOut ? 'timeout' : row.reason,
     version: ready ? row.base_version : null,
     draftRev: ready ? row.base_rev : null,
+    afterFiling: row.after_filing === true,
   };
 }
 

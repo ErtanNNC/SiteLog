@@ -1660,7 +1660,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       weatherPhoto: 'Hava koşullarının fotoğrafını ekle',
       weatherPhotoHint: 'Hava koşullarının fotoğrafı gecikme kaydını güçlendirir.',
       pastReports: 'Geçmiş raporlar',
-      hint: 'Sonra bir değişiklik mi gerekiyor? {{pastReports}} bölümünü açın.',
+      hint: 'Sonra bir değişiklik mi gerekiyor? {{pastReports}} bölümünü açın ve neyin düzeltileceğini söyleyin. Ofis yeni bir sürüm alır; eskisi saklanır.',
       photos: {
         title: '{{no}} raporuna fotoğraf ekle',
         chosen: 'Seçilen fotoğraf: {{count}}',
@@ -1716,6 +1716,15 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       back: 'Geçmiş raporlara dön',
       failed: 'Geçmiş raporlarınız yüklenemedi. Sinyalinizi kontrol edip tekrar deneyin.',
       reportFailed: 'Bu rapor yüklenemedi. Sinyalinizi kontrol edip tekrar deneyin.',
+      change: {
+        button: 'Bir şeyi değiştir',
+        title: 'Bir şeyi değiştir',
+        hint: 'Neyin değişeceğini söyleyin, örneğin “Apex’te altı değil yedi kişi vardı.” En fazla 30 saniye.',
+        lastChange: 'Son değişiklik: {{note}}',
+        saved: 'Değişiklik kaydedildi. Sürüm {{version}} ofiste.',
+        stale: 'Ben dinlerken rapor değişti. Kontrol edin, sonra değişikliği yeniden söyleyin.',
+        locked: 'Bu rapor kilitli. Değiştirmesi için ofise başvurun.',
+      },
     },
     expired: {
       title: 'Bu linkin süresi doldu',

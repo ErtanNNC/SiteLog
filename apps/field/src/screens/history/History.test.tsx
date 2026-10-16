@@ -116,7 +116,8 @@ describe('Past reports (F10, F14, §9.3; W2-03)', () => {
       'href',
       'https://storage.test/pdf?token=t',
     );
-    // Change something is W2-11; Confirm & send is the draft's.
+    // Change something only when the view offers it (W2-11); Confirm & send is the draft's.
+    expect(screen.queryByRole('button', { name: 'Change something' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Confirm/ })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Continue this report' })).toBeNull();
     expect(screen.getByRole('link', { name: 'Back to Past reports' })).toHaveAttribute(
@@ -148,5 +149,107 @@ describe('Past reports (F10, F14, §9.3; W2-03)', () => {
       screen.getByRole('heading', { level: 1, name: copy.routes.history }),
     ).toBeInTheDocument();
     expect(screen.getByText(copy.history.late)).toBeInTheDocument();
+  });
+
+  it('W2-11 (F10): Change something, typed → preview from code’s numbers → Save change → version 2', async () => {
+    const filed = reportView({
+      id: 'r2',
+      status: 'filed',
+      currentVersion: 1,
+      data: heroData(),
+      pdfUrl: 'https://storage.test/pdf?token=t',
+      change: { canChange: true, locked: false },
+    });
+    const preview = {
+      id: 'c1',
+      status: 'ready' as const,
+      via: 'text' as const,
+      changes: [
+        {
+          kind: 'crew' as const,
+          company: 'Apex Concrete',
+          change: 'changed' as const,
+          workers: [6, 7] as [number, number],
+          hoursPerWorker: [8, 8] as [number, number],
+          totalHours: [48, 56] as [number, number],
+        },
+      ],
+      clarification: null,
+      reason: null,
+      version: 1,
+      draftRev: 1,
+      afterFiling: true,
+    };
+    const v2 = {
+      ...filed,
+      currentVersion: 2,
+      changeNote: 'Apex Concrete 6 → 7 workers, 48 → 56 h',
+      pdfUrl: 'https://storage.test/pdf2?token=t',
+    };
+    const report = vi.fn().mockResolvedValueOnce(filed).mockResolvedValue(v2);
+    const routes = fakeRoutes({
+      report,
+      correction: vi.fn().mockResolvedValue(preview),
+      applyCorrection: vi
+        .fn()
+        .mockResolvedValue({ status: 'applied', reportStatus: 'filed', version: 2 }),
+    });
+    renderApp('/history/r2', { routes });
+    fireEvent.click(await screen.findByRole('button', { name: 'Change something' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Change something');
+    fireEvent.change(screen.getByLabelText('What should change?'), {
+      target: { value: 'Apex had 7, not 6' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(await screen.findByText('Apex Concrete 6 → 7 workers, 48 → 56 h')).toBeInTheDocument();
+    expect(routes.correction).toHaveBeenCalledWith('K7Q2MX', 'r2', { text: 'Apex had 7, not 6' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save change' }));
+    expect(
+      await screen.findByText('Change saved. Version 2 is with the office.'),
+    ).toBeInTheDocument();
+    expect(routes.applyCorrection).toHaveBeenCalledWith('K7Q2MX', 'r2', 'c1');
+    expect(await screen.findByText('Version 2')).toBeInTheDocument();
+    expect(
+      screen.getByText('Last change: Apex Concrete 6 → 7 workers, 48 → 56 h'),
+    ).toBeInTheDocument();
+  });
+
+  it('W2-11: an older report is locked; a refusal on save says so', async () => {
+    const routes = fakeRoutes({
+      report: vi.fn().mockResolvedValue(
+        reportView({
+          id: 'r1',
+          status: 'signed_off',
+          data: heroData(),
+          change: { canChange: false, locked: true },
+        }),
+      ),
+    });
+    renderApp('/history/r1', { routes });
+    expect(
+      await screen.findByText('That report is locked. Ask the office to change it.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change something' })).toBeNull();
+  });
+
+  it.each(['es', 'tr'] as const)('W2-11: Change something in %s', async (lng) => {
+    await act(() => i18n.changeLanguage(lng));
+    const copy = UI_RESOURCES[lng].field;
+    const routes = fakeRoutes({
+      report: vi.fn().mockResolvedValue(
+        reportView({
+          id: 'r2',
+          status: 'filed',
+          data: heroData(),
+          change: { canChange: true, locked: false },
+        }),
+      ),
+    });
+    const session = demoSession();
+    session.reporter.locale = lng === 'es' ? 'es-US' : 'tr-TR';
+    renderApp('/history/r2', { routes, session });
+    fireEvent.click(await screen.findByRole('button', { name: copy.history.change.button }));
+    expect(await screen.findByText(copy.history.change.hint)).toBeInTheDocument();
   });
 });

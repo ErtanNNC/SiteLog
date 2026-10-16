@@ -29,6 +29,7 @@ import {
   answerConfirmation,
   applyAnswer,
   applyCrewEdit,
+  correctionNote,
   deviceCookieName,
   firstName,
   linkCodeHash,
@@ -46,12 +47,15 @@ import {
   dailyLinkExpiresAt,
   ensureDailyLink,
   fieldLinkUrl,
+  formatDate,
   formatDateInTz,
   formatPhone,
   isWorkingDay,
+  languageOf,
   type AnswerResponse,
   type AnswerValue,
   type ApplyCorrectionResponse,
+  type CorrectionChange,
   type CorrectionView,
   type EditResponse,
   type FixTo,
@@ -99,6 +103,7 @@ import {
   deviceVerified,
   fieldCountryView,
   fieldSite,
+  filedChangeable,
   filedPhotosUntil,
   historyStart,
   lateClipAllowed,
@@ -861,7 +866,37 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
   }
 
   /**
-   * F8 *Fix by voice* (W2-10): a correction clip for a draft awaiting confirmation. The clip goes
+   * F10 *Change something* (W2-11, spec §19 Q81): a filed (or signed-off) report in the link's
+   * scope (a site the reporter covers), of the last HISTORY_DAYS days in its site's time zone
+   * (409 `report_locked` older: "That report is locked. Ask the office to change it."), on an
+   * active site. Else 409 `wrong_state`.
+   */
+  async function changeTarget(ctx: DeviceContext, reportId: string) {
+    const report = await reportInScope(ctx, reportId);
+    if (report.status !== 'filed' && report.status !== 'signed_off') {
+      throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    }
+    const site = ctx.sites.find((s) => s.id === report.site_id)!;
+    const day = await store.getSiteDayById(report.site_day_id);
+    if (!day) throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    if (!filedChangeable(day.date, now(), site.timezone, HISTORY_DAYS)) {
+      throw new FieldError(409, 'report_locked');
+    }
+    if (site.status !== 'active') throw new FieldError(409, 'site_inactive');
+    return { report, site, day };
+  }
+
+  /** A correction clip's report: a draft awaiting confirmation (W2-10) or a filed one (W2-11). */
+  async function fixTarget(ctx: DeviceContext, reportId: string) {
+    const report = await reportInScope(ctx, reportId);
+    return report.status === 'filed' || report.status === 'signed_off'
+      ? changeTarget(ctx, reportId)
+      : draftInScope(ctx, reportId);
+  }
+
+  /**
+   * F8 *Fix by voice* (W2-10): a correction clip for a draft awaiting confirmation (W2-11: or a
+   * filed report the reporter may still change, F10 *Change something*). The clip goes
    * in the report's site and day and names the draft (`uploads.correction_report_id`):
    * field_complete_upload() stages it on the report without making it report material;
    * `reports/:id/correction {uploadId}` then hands it to the worker.
@@ -872,7 +907,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     fixTo: FixTo,
     ext: string,
   ): Promise<UploadResponse> {
-    const { report, site } = await draftInScope(ctx, fixTo.reportId);
+    const { report, site } = await fixTarget(ctx, fixTo.reportId);
     const day = await store.getSiteDayById(report.site_day_id);
     if (!day) throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
     const id = randomUUID();
@@ -1107,10 +1142,23 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       pdfUrl,
       addPhotos: filed && day ? await addPhotosView(ctx, report.id, site, day.date) : null,
       changeNote: version?.change_note ?? null,
-      // W2-10: the draft's latest fix while it matters (a reload shows the preview again).
+      // W2-10: the draft's latest fix while it matters (a reload shows the preview again);
+      // W2-11: on a filed report, its latest change not saved yet.
       correction:
-        report.status === 'awaiting_confirmation'
-          ? openCorrectionView(await store.latestCorrection(report.id), now())
+        report.status === 'awaiting_confirmation' || filed
+          ? openCorrectionView(
+              await store
+                .latestCorrection(report.id)
+                .then((row) => (row && row.after_filing === filed ? row : null)),
+              now(),
+            )
+          : null,
+      change:
+        filed && day
+          ? (() => {
+              const locked = !filedChangeable(day.date, now(), site.timezone, HISTORY_DAYS);
+              return { canChange: !locked && site.status === 'active', locked };
+            })()
           : null,
     };
     return c.json(view);
@@ -1288,9 +1336,13 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
   // A fix of the draft, said (a completed correction clip) or typed: field_request_correction()
   // queues apply_correction; the worker makes the preview in code. Nothing changes until the
   // reporter saves it (`…/apply`), and then only on the draft the preview was made from.
+  // W2-11 (F10 *Change something*): on a filed (or signed-off) report of the last 14 days the
+  // same route takes a change of it: field_request_filed_correction(), the preview made from the
+  // current version, and Save change makes version n+1.
   app.post('/reports/:id/correction', async (c) => {
     const ctx = await authenticate(c, { consent: true });
-    const { report } = await draftInScope(ctx, c.req.param('id'));
+    const { report } = await fixTarget(ctx, c.req.param('id'));
+    const afterFiling = report.status === 'filed' || report.status === 'signed_off';
     const body = await parseBody(c, CorrectionRequestSchema);
     if (body.uploadId !== undefined) {
       const upload = await store.getUpload(body.uploadId);
@@ -1306,12 +1358,15 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
         throw new FieldError(409, 'upload_missing', 'The clip has not been completed yet');
       }
     }
-    const res = await store.requestCorrection({
+    const input = {
       reportId: report.id,
       reporterId: ctx.reporter.id,
       uploadId: body.uploadId ?? null,
       text: body.text ?? null,
-    });
+    };
+    const res = afterFiling
+      ? await store.requestFiledCorrection(input)
+      : await store.requestCorrection(input);
     const row = await store.getCorrection(res.id);
     if (!row) throw new Error(`correction ${res.id} not found`);
     return c.json(correctionView(row, now()) satisfies CorrectionView, 202);
@@ -1340,6 +1395,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
   app.post('/reports/:id/correction/:cid/apply', async (c) => {
     const ctx = await authenticate(c, { consent: true });
     const { report, row } = await ownCorrection(ctx, c.req.param('id'), c.req.param('cid'));
+    if (row.after_filing) return c.json(await saveFiledChange(ctx, report, row));
     const res = await store.applyCorrection(row.id, report.id, ctx.reporter.id);
     if (res.status === 'stale') {
       throw new FieldError(409, 'draft_changed', undefined, {
@@ -1352,6 +1408,47 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       reportStatus: res.reportStatus,
     } satisfies ApplyCorrectionResponse);
   });
+
+  /**
+   * F10 Save change (W2-11): field_save_filed_correction() makes version n+1 from the preview at
+   * the version it was made from (409 `draft_changed` otherwise; `report_locked` after the 14
+   * days), with the change note in the report's language and the `edit_applied` text's weekday and
+   * change in the reporter's, both from the preview's lines (code's numbers, never the model's note).
+   */
+  async function saveFiledChange(
+    ctx: DeviceContext,
+    report: Awaited<ReturnType<typeof reportInScope>>,
+    row: NonNullable<Awaited<ReturnType<FieldStore['getCorrection']>>>,
+  ): Promise<ApplyCorrectionResponse> {
+    if (row.status === 'ready' || row.status === 'applied') {
+      const { day } = row.status === 'ready' ? await changeTarget(ctx, report.id) : { day: null };
+      const changes = (Array.isArray(row.changes)
+        ? row.changes
+        : []) as unknown as CorrectionChange[];
+      const reportLanguage = report.language === 'tr' ? 'tr' : 'en';
+      const note = correctionNote(changes, reportLanguage) ?? row.change_note ?? '';
+      const reporterLanguage = languageOf(ctx.reporter.locale);
+      const change = correctionNote(changes, reporterLanguage, { sms: true });
+      const res = await store.saveFiledCorrection({
+        correctionId: row.id,
+        reportId: report.id,
+        reporterId: ctx.reporter.id,
+        changeNote: note,
+        message:
+          day && change
+            ? { weekday: formatDate(day.date, 'weekday', reporterLanguage), change }
+            : null,
+      });
+      if (res.status === 'stale') {
+        throw new FieldError(409, 'draft_changed', undefined, {
+          currentVersion: res.currentVersion,
+          draftRev: res.draftRev,
+        });
+      }
+      return { status: 'applied', reportStatus: res.reportStatus, version: res.version };
+    }
+    throw new FieldError(409, 'correction_not_ready');
+  }
 
   // ── reports/:id/edit (F8 steppers; W2-10, spec §19 Q80) ──────────────────────────────────────
   // One crew line's workers and hours as the reporter set them, on the draft they saw: applied in
@@ -1757,6 +1854,7 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   correction_pending: [409, 'correction_pending'],
   correction_not_ready: [409, 'correction_not_ready'],
   correction_not_found: [404, 'not_found'],
+  report_locked: [409, 'report_locked'],
   invalid_request: [400, 'invalid_request'],
   invalid_edit: [400, 'edit_not_accepted'],
   test_clip_not_found: [404, 'not_found'],

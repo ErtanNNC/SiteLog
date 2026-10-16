@@ -54,7 +54,9 @@ describe('Filed (F8, Field-07)', () => {
     expect(
       screen.getByText(
         (_, el) =>
-          el?.tagName === 'P' && el.textContent === 'Need a change later? Open Past reports.',
+          el?.tagName === 'P' &&
+          el.textContent ===
+            'Need a change later? Open Past reports and say what to fix. The office gets a new version; the old one is kept.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();

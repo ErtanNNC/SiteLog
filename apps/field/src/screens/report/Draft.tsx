@@ -14,6 +14,7 @@ import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { useQueue } from '@/queue/useQueue';
 import type { Clip, RecorderDeps } from '@/recorder/recorder';
 import { FixSheet } from './FixSheet';
+import { fixFromView, type Fix } from './fix';
 import { correctionLine } from './lines';
 import type { ConfirmedDraft } from './phase';
 import { ReportSections } from './ReportSections';
@@ -22,28 +23,6 @@ import { RELINK } from './useReportPoll';
 
 /** How often the screen asks for a fix's preview while the worker listens (W2-10). */
 export const FIX_POLL_MS = 2_000;
-
-/**
- * A fix of the draft on this screen (W2-10): `sending` while the clip goes through the queue or
- * the fix to field-api, `listening` while the worker makes the preview, then the preview
- * (`ready`), or what it could not do (`unclear`, `stale`), `saving` while Save change runs.
- */
-type Fix =
-  | { kind: 'idle' }
-  | { kind: 'sending' }
-  | { kind: 'listening'; id: string }
-  | { kind: 'ready'; view: CorrectionView }
-  | { kind: 'saving'; view: CorrectionView }
-  | { kind: 'unclear'; view: CorrectionView | null }
-  | { kind: 'stale' };
-
-function fixFromView(c: CorrectionView | null): Fix {
-  if (!c) return { kind: 'idle' };
-  if (c.status === 'listening') return { kind: 'listening', id: c.id };
-  if (c.status === 'ready' && c.changes) return { kind: 'ready', view: c };
-  if (c.status === 'unclear') return { kind: 'unclear', view: c };
-  return { kind: 'idle' };
-}
 
 /**
  * The draft (F8, Field-06; W1-13, W2-10): the crew with each company's workers × hours and the
@@ -443,19 +422,24 @@ export function Draft({
   );
 }
 
-/** The fix's card on the draft: listening, the preview with Save change / Try again, or why not. */
-function FixCard({
+/**
+ * The fix's card on the draft: listening, the preview with Save change / Try again, or why not.
+ * W2-11: also a filed report's change (Past reports), with its own stale line.
+ */
+export function FixCard({
   fix,
   error,
   onSave,
   onTryAgain,
   onDiscard,
+  staleMessage,
 }: {
   fix: Fix;
   error: string | null;
   onSave: (c: CorrectionView) => void;
   onTryAgain: () => void;
   onDiscard: () => void;
+  staleMessage?: string;
 }) {
   const { t, language } = useFieldCopy();
   const errorLine = error ? (
@@ -513,7 +497,7 @@ function FixCard({
   const unclear = fix.kind === 'unclear' ? fix.view : null;
   const message =
     fix.kind === 'stale'
-      ? t('draft.fix.stale')
+      ? (staleMessage ?? t('draft.fix.stale'))
       : unclear?.reason === 'timeout'
         ? t('draft.fix.errors.timeout')
         : t('draft.fix.unclear');

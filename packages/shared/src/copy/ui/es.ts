@@ -430,7 +430,7 @@ export const uiEs: UiResources = {
       weatherPhoto: 'Agregar una foto de las condiciones',
       weatherPhotoHint: 'Una foto de las condiciones refuerza el registro del retraso.',
       pastReports: 'Reportes anteriores',
-      hint: '¿Necesita un cambio más tarde? Abra {{pastReports}}.',
+      hint: '¿Necesita un cambio más tarde? Abra {{pastReports}} y diga qué corregir. La oficina recibe una versión nueva; la anterior se conserva.',
       photos: {
         title: 'Agregar fotos a {{no}}',
         chosen: 'Fotos elegidas: {{count}}',
@@ -485,6 +485,15 @@ export const uiEs: UiResources = {
       back: 'Volver a Reportes anteriores',
       failed: 'No se pudieron cargar sus reportes anteriores. Revise su señal e intente de nuevo.',
       reportFailed: 'No se pudo cargar este reporte. Revise su señal e intente de nuevo.',
+      change: {
+        button: 'Cambiar algo',
+        title: 'Cambiar algo',
+        hint: 'Diga qué cambiar, por ejemplo “Apex tuvo siete, no seis.” Hasta 30 segundos.',
+        lastChange: 'Último cambio: {{note}}',
+        saved: 'Cambio guardado. La versión {{version}} está con la oficina.',
+        stale: 'El reporte cambió mientras lo escuchaba. Revíselo y diga el cambio otra vez.',
+        locked: 'Ese reporte está cerrado. Pida a la oficina que lo cambie.',
+      },
     },
     expired: {
       title: 'Este enlace venció',

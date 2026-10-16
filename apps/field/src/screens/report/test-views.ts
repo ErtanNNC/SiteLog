@@ -108,6 +108,7 @@ export function reportView(patch: Partial<ReportView> = {}): ReportView {
     changeNote: null,
     lastVoiceAnswer: null,
     correction: null,
+    change: null,
     ...patch,
   };
 }

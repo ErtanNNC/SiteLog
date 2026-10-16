@@ -14,6 +14,7 @@ import {
   type DraftWriteResult,
   type FieldStore,
   type RequestCorrectionResult,
+  type FiledSaveResult,
   type RateLimitResult,
   type ReportWithDate,
 } from './store.ts';
@@ -565,6 +566,29 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
         .maybeSingle()
         .throwOnError();
       return data;
+    },
+
+    async requestFiledCorrection(input) {
+      return await rpc<RequestCorrectionResult>(
+        admin.rpc('field_request_filed_correction', {
+          p_report_id: input.reportId,
+          p_reporter_id: input.reporterId,
+          p_upload_id: input.uploadId,
+          p_text: input.text,
+        }),
+      );
+    },
+
+    async saveFiledCorrection(input) {
+      return await rpc<FiledSaveResult>(
+        admin.rpc('field_save_filed_correction', {
+          p_correction_id: input.correctionId,
+          p_report_id: input.reportId,
+          p_reporter_id: input.reporterId,
+          p_change_note: input.changeNote,
+          p_message: input.message,
+        }),
+      );
     },
 
     async applyCorrection(correctionId, reportId, reporterId) {

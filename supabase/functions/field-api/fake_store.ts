@@ -19,9 +19,15 @@ import type {
   TestClipView,
   UploadRow,
 } from '@sitelog/shared';
-import { FILED_PHOTOS_MAX, deadlineInstant, jobKeys, photosLinkExpiresAt } from '@sitelog/shared';
+import {
+  FILED_PHOTOS_MAX,
+  HISTORY_DAYS,
+  deadlineInstant,
+  jobKeys,
+  photosLinkExpiresAt,
+} from '@sitelog/shared';
 import type { AuditEntry } from '../_shared/audit.ts';
-import type { DayOffQuestion, StoredObject } from './logic.ts';
+import { filedChangeable, type DayOffQuestion, type StoredObject } from './logic.ts';
 import {
   FieldDbError,
   type AnswerInput,
@@ -33,6 +39,7 @@ import {
   type DraftWriteResult,
   type FieldStore,
   type RequestCorrectionResult,
+  type FiledSaveResult,
   type OrgContext,
   type RateLimitResult,
   type ReportWithDate,
@@ -1093,6 +1100,28 @@ export class FakeFieldStore implements FieldStore {
     text: string | null;
   }): Promise<RequestCorrectionResult> {
     this.calls.push('requestCorrection');
+    return this.newCorrection(input, false);
+  }
+  /** field_request_filed_correction() (20261016000110, W2-11): a change of a filed report. */
+  requestFiledCorrection(input: {
+    reportId: string;
+    reporterId: string;
+    uploadId: string | null;
+    text: string | null;
+  }): Promise<RequestCorrectionResult> {
+    this.calls.push('requestFiledCorrection');
+    return this.newCorrection(input, true);
+  }
+  /** field_report_changeable(): the report's date within the last 14 days, site time. */
+  private changeable(r: ReportRow): boolean {
+    const day = this.siteDays.find((d) => d.id === r.site_day_id)!;
+    const site = this.sites.find((x) => x.id === r.site_id)!;
+    return filedChangeable(day.date, this.now(), site.timezone, HISTORY_DAYS);
+  }
+  private newCorrection(
+    input: { reportId: string; reporterId: string; uploadId: string | null; text: string | null },
+    afterFiling: boolean,
+  ): Promise<RequestCorrectionResult> {
     const r = this.reports.find((x) => x.id === input.reportId);
     if (!r || r.status === 'void' || !this.onSite(input.reporterId, r.site_id))
       return Promise.reject(new FieldDbError('report_not_found'));
@@ -1101,7 +1130,11 @@ export class FakeFieldStore implements FieldStore {
       if (seen)
         return Promise.resolve({ id: seen.id, status: seen.status, jobId: null, repeat: true });
     }
-    if (r.status !== 'awaiting_confirmation')
+    if (afterFiling) {
+      if (r.status !== 'filed' && r.status !== 'signed_off')
+        return Promise.reject(new FieldDbError('wrong_state'));
+      if (!this.changeable(r)) return Promise.reject(new FieldDbError('report_locked'));
+    } else if (r.status !== 'awaiting_confirmation')
       return Promise.reject(new FieldDbError('wrong_state'));
     if (this.corrections.some((c) => c.report_id === r.id && c.status === 'listening'))
       return Promise.reject(new FieldDbError('correction_pending'));
@@ -1140,6 +1173,8 @@ export class FakeFieldStore implements FieldStore {
       created_at: this.iso(),
       settled_at: null,
       applied_at: null,
+      after_filing: afterFiling,
+      version_created: null,
     };
     this.corrections.push(row);
     const job: FakeJob = {
@@ -1157,9 +1192,103 @@ export class FakeFieldStore implements FieldStore {
       action: 'report.correction_requested',
       entity: 'report',
       entityId: r.id,
-      diff: { correction_id: row.id, via: row.via, upload_id: input.uploadId, job_id: job.id },
+      diff: {
+        correction_id: row.id,
+        via: row.via,
+        upload_id: input.uploadId,
+        job_id: job.id,
+        ...(afterFiling ? { after_filing: true } : {}),
+      },
     });
     return Promise.resolve({ id: row.id, status: 'listening', jobId: job.id });
+  }
+  /** field_save_filed_correction() (W2-11): Save change makes version n+1 from the preview. */
+  saved: {
+    correctionId: string;
+    version: number;
+    changeNote: string;
+    message: { weekday: string; change: string } | null;
+  }[] = [];
+  saveFiledCorrection(input: {
+    correctionId: string;
+    reportId: string;
+    reporterId: string;
+    changeNote: string;
+    message: { weekday: string; change: string } | null;
+  }): Promise<FiledSaveResult> {
+    this.calls.push('saveFiledCorrection');
+    const r = this.reports.find((x) => x.id === input.reportId);
+    if (!r || r.status === 'void' || !this.onSite(input.reporterId, r.site_id))
+      return Promise.reject(new FieldDbError('report_not_found'));
+    const c = this.corrections.find((x) => x.id === input.correctionId && x.report_id === r.id);
+    if (!c || c.reporter_id !== input.reporterId || !c.after_filing)
+      return Promise.reject(new FieldDbError('correction_not_found'));
+    if (c.status === 'applied')
+      return Promise.resolve({
+        status: 'applied',
+        reportStatus: r.status,
+        version: c.version_created!,
+        repeat: true,
+      });
+    if (c.status !== 'ready') return Promise.reject(new FieldDbError('correction_not_ready'));
+    if (r.status !== 'filed' && r.status !== 'signed_off')
+      return Promise.reject(new FieldDbError('wrong_state'));
+    if (!this.changeable(r)) return Promise.reject(new FieldDbError('report_locked'));
+    const v = this.versions.find((x) => x.report_id === r.id && x.version === r.current_version);
+    if (r.current_version !== c.base_version || (v?.draft_rev ?? 1) !== c.base_rev) {
+      c.status = 'stale';
+      c.reason = 'version_changed';
+      return Promise.resolve({
+        status: 'stale',
+        reportStatus: r.status,
+        currentVersion: r.current_version,
+        draftRev: v?.draft_rev ?? null,
+      });
+    }
+    const next = r.current_version + 1;
+    this.versions.push({
+      report_id: r.id,
+      version: next,
+      data: c.data as Json,
+      summary: null,
+      pdf_path: null,
+      author: 'reporter',
+      author_user_id: null,
+      author_message_id: null,
+      author_reporter_id: input.reporterId,
+      change_note: input.changeNote,
+      created_at: this.iso(),
+      via: 'web',
+      draft_rev: 1,
+    });
+    r.current_version = next;
+    r.status = 'filed';
+    c.status = 'applied';
+    c.applied_at = this.iso();
+    c.version_created = next;
+    this.saved.push({
+      correctionId: c.id,
+      version: next,
+      changeNote: input.changeNote,
+      message: input.message,
+    });
+    this.jobs.push({
+      id: this.jobs.length + 1,
+      type: 'render_pdf',
+      payload: { reportId: r.id, version: next, emailRecipients: true },
+      dedupe_key: jobKeys.renderPdf(r.id, next),
+      status: 'queued',
+    });
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: input.reporterId,
+      action: 'report.version_created',
+      entity: 'report',
+      entityId: r.id,
+      diff: { version: next, change_note: input.changeNote, via: 'web', correction_id: c.id },
+    });
+    return Promise.resolve({ status: 'applied', reportStatus: 'filed', version: next });
   }
   getCorrection(id: string) {
     return Promise.resolve(this.corrections.find((c) => c.id === id) ?? null);

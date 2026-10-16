@@ -19,8 +19,13 @@ export function FixSheet({
   onType,
   onClose,
   recorderDeps,
+  title,
+  hint,
 }: {
   open: boolean;
+  /** W2-11: a filed report's *Change something* names the sheet and its hint itself. */
+  title?: string;
+  hint?: string;
   onSay: (clip: Clip) => void;
   onType: (text: string) => void;
   onClose: () => void;
@@ -33,6 +38,8 @@ export function FixSheet({
       {open ? (
         <SheetBody
           titleId={titleId}
+          title={title}
+          hint={hint}
           onSay={onSay}
           onType={onType}
           onClose={onClose}
@@ -45,12 +52,16 @@ export function FixSheet({
 
 function SheetBody({
   titleId,
+  title,
+  hint,
   onSay,
   onType,
   onClose,
   recorderDeps,
 }: {
   titleId: string;
+  title?: string;
+  hint?: string;
   onSay: (clip: Clip) => void;
   onType: (text: string) => void;
   onClose: () => void;
@@ -90,7 +101,7 @@ function SheetBody({
   return (
     <>
       <h2 id={titleId} className="m-0 text-[22px] leading-7 font-extrabold [font-stretch:118%]">
-        {t('draft.fix.title')}
+        {title ?? t('draft.fix.title')}
       </h2>
 
       <section className="flex flex-col items-center gap-3 rounded-card border border-rebar bg-white px-3.5 py-4">
@@ -145,7 +156,7 @@ function SheetBody({
           </>
         )}
         <p id={hintId} className="m-0 text-center text-[14px] leading-5 text-dust">
-          {t('draft.fix.hint')}
+          {hint ?? t('draft.fix.hint')}
         </p>
       </section>
 

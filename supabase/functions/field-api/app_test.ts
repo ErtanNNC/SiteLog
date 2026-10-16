@@ -2829,6 +2829,7 @@ Deno.test(
       reason: null,
       version: null,
       draftRev: null,
+      afterFiling: false,
     });
     assertEquals(
       h.store.jobs
@@ -2865,6 +2866,7 @@ Deno.test(
       reason: null,
       version: 1,
       draftRev: 1,
+      afterFiling: false,
     });
     assertEquals(
       ((await h.call('GET', `reports/${reportId}`)).json.correction as { status: string }).status,
@@ -2930,8 +2932,8 @@ Deno.test(
       code: CODES.dana,
     });
     assertEquals(dana.status, 404);
-    // A correction clip of a report that is not a draft is refused at upload.
-    h.store.reports.find((r) => r.id === reportId)!.status = 'filed';
+    // A correction clip of a report that is neither a draft nor filed is refused at upload.
+    h.store.reports.find((r) => r.id === reportId)!.status = 'processing';
     const filed = await h.call('POST', 'uploads', {
       body: { kind: 'audio', mime: 'audio/webm', bytes: 2, fixTo: { reportId } },
     });
@@ -2979,5 +2981,102 @@ Deno.test(
     // Processing now: no stepper until the draft is shown again.
     const busy = await edit({ draftRev: 2, index: 0, workers: 8, hoursPerWorker: 9 });
     assertEquals([busy.status, busy.json.error], [409, 'wrong_state']);
+  },
+);
+
+Deno.test(
+  'change something (W2-11, F10): a filed report of the last 14 days, version n+1 from code’s lines',
+  async () => {
+    const h = setup();
+    const { reportId, report, data } = await awaitingDraft(h);
+    report.status = 'filed';
+    const view = await h.call('GET', `reports/${reportId}`);
+    assertEquals(view.json.change, { canChange: true, locked: false });
+    assertEquals(view.json.correction, null);
+
+    const clip = await fixClip(h, reportId);
+    const res = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { uploadId: clip.uploadId },
+    });
+    assertEquals([res.status, res.json.afterFiling, res.json.status], [202, true, 'listening']);
+    assert(h.store.calls.includes('requestFiledCorrection'));
+    assert(!h.store.calls.includes('requestCorrection'));
+    const cid = res.json.id as string;
+    h.store.settleCorrectionReady(cid, SEVEN(data), SEVEN_LINES);
+    const ready = (await h.call('GET', `reports/${reportId}`)).json.correction as {
+      status: string;
+      afterFiling: boolean;
+    };
+    assertEquals([ready.status, ready.afterFiling], ['ready', true]);
+
+    const saved = await h.call('POST', `reports/${reportId}/correction/${cid}/apply`);
+    assertEquals(
+      [saved.status, saved.json],
+      [200, { status: 'applied', reportStatus: 'filed', version: 2 }],
+    );
+    // The note and the text from code's lines: the report language, the reporter's (GSM-7).
+    assertEquals(h.store.saved, [
+      {
+        correctionId: cid,
+        version: 2,
+        changeNote: 'Apex Concrete 6 → 7 workers, 48 → 56 h',
+        message: { weekday: 'Friday', change: 'Apex Concrete 6 -> 7 workers, 48 -> 56 h' },
+      },
+    ]);
+    assertEquals(h.store.versions.at(-1)!.author_reporter_id, MARCO);
+    assertEquals(
+      (h.store.versions.at(-1)!.data as unknown as DailyReportData).manpower[0]!.totalHours,
+      56,
+    );
+    assertEquals(h.store.versions[0]!.version, 1); // version 1 kept as it was
+    assertEquals((h.store.versions[0]!.data as unknown as DailyReportData).manpower[0]!.workers, 6);
+    // A retry (a lost answer) answers the same version and makes nothing new.
+    const again = await h.call('POST', `reports/${reportId}/correction/${cid}/apply`);
+    assertEquals([again.status, again.json.version], [200, 2]);
+    assertEquals(h.store.saved.length, 1);
+    assertEquals(
+      h.store.jobs.filter((j) => j.type === 'render_pdf').map((j) => j.dedupe_key),
+      [`render_pdf:${reportId}:2`],
+    );
+  },
+);
+
+Deno.test(
+  'change something (W2-11, Q81): a backup on the site may change it; older than 14 days is locked',
+  async () => {
+    const h = setup();
+    const { reportId, report } = await awaitingDraft(h);
+    report.status = 'signed_off';
+    // Dana covers Riverside too: her change of Marco's report is hers (§19 Q81).
+    await consented(h, CODES.dana);
+    const dana = await h.call('POST', `reports/${reportId}/correction`, {
+      code: CODES.dana,
+      body: { text: 'Apex had 7, not 6' },
+    });
+    assertEquals([dana.status, dana.json.afterFiling], [202, true]);
+    assertEquals(h.store.corrections[0]!.reporter_id, DANA);
+
+    // Fri Oct 9 is changeable through Thu Oct 22 (site time), locked from Fri Oct 23.
+    h.clock.now = new Date('2026-10-23T04:59:00Z'); // Thu Oct 22, 23:59 in Chicago
+    assertEquals((await h.call('GET', `reports/${reportId}`)).json.change, {
+      canChange: true,
+      locked: false,
+    });
+    h.clock.now = new Date('2026-10-23T15:00:00Z');
+    assertEquals((await h.call('GET', `reports/${reportId}`)).json.change, {
+      canChange: false,
+      locked: true,
+    });
+    const typed = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { text: 'Apex had 8' },
+    });
+    assertEquals([typed.status, typed.json.error], [409, 'report_locked']);
+    const upload = await h.call('POST', 'uploads', {
+      body: { kind: 'audio', mime: 'audio/webm', bytes: 2, fixTo: { reportId } },
+    });
+    assertEquals([upload.status, upload.json.error], [409, 'report_locked']);
+    // A draft's fix route never makes a version: a draft is not "filed".
+    report.status = 'processing';
+    assertEquals((await h.call('GET', `reports/${reportId}`)).json.change, null);
   },
 );

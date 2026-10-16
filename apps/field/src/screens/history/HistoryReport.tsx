@@ -12,10 +12,11 @@ import { OfflineBanner } from '@/components/OfflineBanner';
 import { Screen, ScreenTitle } from '@/components/Screen';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { NoLink } from '@/screens/NoLink';
-import { PDF_URL_REFRESH_MS } from '@/screens/report/Filed';
+import { PDF_URL_REFRESH_MS, PDF_WAIT_MS } from '@/screens/report/Filed';
 import { PdfCard } from '@/screens/report/PdfCard';
 import { ReportSections } from '@/screens/report/ReportSections';
 import { useSession } from '@/session/useSession';
+import { ChangeReport } from './ChangeReport';
 import { RELINK } from './History';
 import { inProgress, statusChip } from './status';
 
@@ -23,8 +24,12 @@ import { inProgress, statusChip } from './status';
  * One past report, read-only (F10 "pick a day → see the report", §9.3 Past reports; W2-03): the
  * date, the report number, the status in words, the Draft's sections (Field-06, W1-13) and, once
  * filed, the PDF card (Field-07, W1-15), whose signed URL is fetched again before it expires. A
- * report not filed yet offers *Continue this report* (its `/report/:id` flow). _Change something_
- * (F10) is W2-11: until then the view has no edit action.
+ * report not filed yet offers *Continue this report* (its `/report/:id` flow).
+ *
+ * W2-11 (F10): a filed report of the last 14 days offers *Change something* (`ChangeReport`);
+ * after Save change the view is loaded again ("Change saved. Version 2 is with the office.") and
+ * checked until the new version's PDF is there (`PDF_WAIT_MS` at most). An older one says it is
+ * locked. The latest version's change note is shown under its number.
  */
 export function HistoryReport() {
   const { id = '' } = useParams();
@@ -39,6 +44,8 @@ function HistoryReportLoaded({ code, id }: { code: string; id: string }) {
   const { t, tc, language } = useFieldCopy();
   const [view, setView] = useState<ReportView | null>(null);
   const [failed, setFailed] = useState(false);
+  const [saved, setSaved] = useState<{ version: number } | null>(null);
+  const [savedLate, setSavedLate] = useState(false);
 
   const load = useCallback(
     (signal?: AbortSignal) =>
@@ -77,6 +84,24 @@ function HistoryReportLoaded({ code, id }: { code: string; id: string }) {
     const timer = setTimeout(() => void load(), PDF_URL_REFRESH_MS);
     return () => clearTimeout(timer);
   }, [view?.pdfUrl, load]);
+
+  // W2-11: after Save change, check until the new version and its PDF are there (at most
+  // PDF_WAIT_MS; then the card says the PDF is on its way).
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSavedLate(true), PDF_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [saved]);
+  const waitingPdf =
+    saved !== null &&
+    view !== null &&
+    !savedLate &&
+    (view.currentVersion < saved.version || !view.pdfUrl);
+  useEffect(() => {
+    if (!waitingPdf) return;
+    const timer = setTimeout(() => void load(), 3_000);
+    return () => clearTimeout(timer);
+  }, [waitingPdf, view, load]);
 
   const back = (
     <div className="sticky bottom-0 mt-auto bg-chalk pt-3">
@@ -146,9 +171,32 @@ function HistoryReportLoaded({ code, id }: { code: string; id: string }) {
             </span>
           ) : null}
         </div>
+        {view.currentVersion > 1 && view.changeNote ? (
+          <p className="m-0 text-[15px] leading-[21px] text-steel [overflow-wrap:anywhere]">
+            {t('history.change.lastChange', { note: view.changeNote })}
+          </p>
+        ) : null}
       </div>
 
-      {filed ? <PdfCard view={view} /> : null}
+      {saved ? (
+        <p role="status" className="m-0 text-[16px] leading-6 font-semibold">
+          {t('history.change.saved', { version: saved.version })}
+        </p>
+      ) : null}
+      {filed ? <PdfCard view={view} late={saved !== null && !waitingPdf && !view.pdfUrl} /> : null}
+      {filed && view.change ? (
+        <ChangeReport
+          key={view.currentVersion}
+          code={code}
+          view={view}
+          onSaved={(version) => {
+            setSaved({ version });
+            setSavedLate(false);
+            void load();
+          }}
+          onReload={() => void load()}
+        />
+      ) : null}
       {inProgress(view.status) ? (
         <Link to={`/report/${encodeURIComponent(view.id)}`} className={buttonClasses('solid')}>
           {t('history.continue')}

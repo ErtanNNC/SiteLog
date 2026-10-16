@@ -27,6 +27,7 @@ function view(patch: Partial<ReportView> = {}): ReportView {
     changeNote: null,
     lastVoiceAnswer: null,
     correction: null,
+    change: null,
     ...patch,
   };
 }

@@ -2190,7 +2190,9 @@ export function assembleReportDetail(
         v.author === 'office_user'
           ? (memberName(rows, v.author_user_id) ?? 'Office')
           : isReporterAuthor(v.author)
-            ? reporterName
+            ? // F10 (W2-11, §19 Q81): the reporter who made the version (a backup may), else the report's.
+              (v.author_reporter_id && ix.reporterById.get(v.author_reporter_id)?.name) ||
+              reporterName
             : 'SiteLog agent',
       changeNote: v.change_note,
       createdAt: v.created_at,

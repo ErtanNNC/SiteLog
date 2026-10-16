@@ -156,6 +156,11 @@ export const FIELD_API_ERRORS = [
   'correction_not_ready',
   /** W2-10: a stepper's numbers do not fit the crew line (no such line, or no change). */
   'edit_not_accepted',
+  /**
+   * F10 (W2-11): the filed report is older than the last 14 days (site time): "That report is
+   * locked. Ask the office to change it."
+   */
+  'report_locked',
   /** F9 (W2-04): the filed report takes no more photos (its window ended at 23:59 the next day). */
   'photos_window_closed',
   /** F9: FILED_PHOTOS_MAX photos were added after filing already. */
@@ -425,6 +430,14 @@ export interface ReportView {
    * to save, or one it could not read); null otherwise. A reload shows the preview again.
    */
   correction: CorrectionView | null;
+  /**
+   * F10 (W2-11, spec §19 Q81): *Change something* on a filed (or signed-off) report; null
+   * otherwise. `canChange`: the report is of the last `HISTORY_DAYS` days (site time) and its site
+   * is active; `locked`: older ("That report is locked. Ask the office to change it."). A change
+   * goes through the same correction routes as a draft's fix (`correction.afterFiling`), and Save
+   * change makes version n+1.
+   */
+  change: { canChange: boolean; locked: boolean } | null;
 }
 
 /** F8 *Fix by voice* (W2-10): a correction clip is short; the recorder stops it at 30 seconds. */
@@ -455,12 +468,18 @@ export interface CorrectionView {
   reason: string | null;
   version: number | null;
   draftRev: number | null;
+  /** W2-11 (F10): a change of the filed report (Save change makes version n+1). */
+  afterFiling: boolean;
 }
 
-/** `POST reports/:id/correction/:cid/apply` (W2-10): the fix is in the draft; decide_next shows it. */
+/**
+ * `POST reports/:id/correction/:cid/apply` (W2-10): the fix is in the draft; decide_next shows it.
+ * W2-11 (F10): for a change of a filed report, `version` is the new version (n+1), `filed`.
+ */
 export interface ApplyCorrectionResponse {
   status: 'applied';
   reportStatus: ReportStatus;
+  version?: number;
 }
 
 /** `POST reports/:id/edit` (W2-10, the draft's steppers): the crew line changed; decide_next runs. */

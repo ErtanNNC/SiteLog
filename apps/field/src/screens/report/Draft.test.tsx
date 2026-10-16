@@ -342,6 +342,7 @@ describe('Draft (F8, Field-06)', () => {
       reason: null,
       version: 1,
       draftRev: 1,
+      afterFiling: false,
     };
     const routes = fakeRoutes({
       report: vi.fn().mockResolvedValue(draftView({ correction: ready })),

@@ -268,6 +268,11 @@ export interface FakeFieldApi {
     string,
     { reportId: string; size: number; photos: number; completed: string[]; version: number | null }
   >;
+  /** W2-11 (F10): the changes of a filed report of `options.reports`, by correction id. */
+  changes: Record<
+    string,
+    { reportId: string; via: 'voice' | 'text'; polls: number; version: number | null }
+  >;
   consent: unknown;
   completed: string[];
   /** What the fake refuses; change it between steps. */
@@ -376,6 +381,7 @@ export async function installFakeFieldApi(
     stored: [],
     testClips: [],
     batches: {},
+    changes: {},
     consent: null,
     completed: [],
     options: { ...opts },
@@ -429,6 +435,7 @@ export async function installFakeFieldApi(
       reason: unclear ? 'clarification' : null,
       version: listening || unclear ? null : 1,
       draftRev: listening || unclear ? null : st.draftRev,
+      afterFiling: false,
     };
   };
   let reportPolls = 0;
@@ -644,6 +651,82 @@ export async function installFakeFieldApi(
       }
       const past = /^reports\/([^/]+)$/.exec(path);
       if (past && options.reports?.[past[1]!]) return json(route, 200, options.reports[past[1]!]);
+      // ── W2-11: Change something on a filed report of `options.reports` (F10) ────────────────
+      const change = /^reports\/([^/]+)\/correction(?:\/([^/]+)(\/apply)?)?$/.exec(path);
+      if (change && options.reports?.[change[1]!]) {
+        const reportId = change[1]!;
+        const report = options.reports[reportId]!;
+        const crew = report.data!.manpower[0]!;
+        const to = (crew.workers ?? 0) + 1;
+        const view = (id: string): CorrectionView => {
+          const c = api.changes[id]!;
+          const listening = c.polls < 1;
+          return {
+            id,
+            status: c.version !== null ? 'applied' : listening ? 'listening' : 'ready',
+            via: c.via,
+            changes: listening
+              ? null
+              : [
+                  {
+                    kind: 'crew',
+                    company: crew.companyName,
+                    change: 'changed',
+                    workers: [crew.workers, to],
+                    hoursPerWorker: [crew.hoursPerWorker, crew.hoursPerWorker],
+                    totalHours: [crew.totalHours, to * (crew.hoursPerWorker ?? 0)],
+                  },
+                ],
+            clarification: null,
+            reason: null,
+            version: listening ? null : report.currentVersion,
+            draftRev: listening ? null : 1,
+            afterFiling: true,
+          };
+        };
+        if (!change[2]) {
+          if (!report.change?.canChange)
+            return json(route, 409, {
+              error: report.change?.locked ? 'report_locked' : 'wrong_state',
+            });
+          const b = body as { uploadId?: string; text?: string };
+          const id = `f${api.calls.length}-0000-4000-8000-000000000000`;
+          api.changes[id] = {
+            reportId,
+            via: b.uploadId ? 'voice' : 'text',
+            polls: 0,
+            version: null,
+          };
+          return json(route, 202, view(id));
+        }
+        const c = api.changes[change[2]];
+        if (!c || c.reportId !== reportId) return json(route, 404, { error: 'not_found' });
+        if (!change[3]) {
+          const res = view(change[2]);
+          c.polls++;
+          return json(route, 200, res);
+        }
+        if (view(change[2]).status !== 'ready')
+          return json(route, 409, { error: 'correction_not_ready' });
+        // Save change: version n+1 with code's numbers and its _v{n} PDF.
+        const version = report.currentVersion + 1;
+        c.version = version;
+        const hours = crew.hoursPerWorker ?? 0;
+        options.reports[reportId] = {
+          ...report,
+          currentVersion: version,
+          changeNote: `${crew.companyName} ${crew.workers} → ${to} workers, ${crew.totalHours} → ${to * hours} h`,
+          pdfUrl: `/__storage/pdfs/${report.reportNo}_v${version}.pdf?token=e2e`,
+          data: {
+            ...report.data!,
+            manpower: [
+              { ...crew, workers: to, totalHours: to * hours },
+              ...report.data!.manpower.slice(1),
+            ],
+          },
+        };
+        return json(route, 200, { status: 'applied', reportStatus: 'filed', version });
+      }
       if (path === 'day-status') {
         // W2-08 (spec §19 Q41): a weather day makes a report, which the worker files; no work
         // (no no-work PDF here) the site-day only.
@@ -842,6 +925,7 @@ export async function installFakeFieldApi(
               : null,
           changeNote: null,
           correction: status === 'awaiting_confirmation' ? fixView(st) : null,
+          change: status === 'filed' ? { canChange: false, locked: false } : null,
           lastVoiceAnswer: st.leftForOffice
             ? { questionId: QUESTION_ID, outcome: 'unclear' }
             : st.spokenAnswer && st.answered !== null

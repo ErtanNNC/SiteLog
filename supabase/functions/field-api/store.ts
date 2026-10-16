@@ -90,6 +90,20 @@ export type DraftWriteResult =
       draftRev: number | null;
     };
 
+/**
+ * field_save_filed_correction() (20261016000110, W2-11, F10): Save change of a filed report's
+ * preview: version n+1 (or the version a first save made), or `stale` when the report has a newer
+ * version than the preview was made from.
+ */
+export type FiledSaveResult =
+  | { status: 'applied'; reportStatus: ReportStatus; version: number; repeat?: boolean }
+  | {
+      status: 'stale';
+      reportStatus: ReportStatus;
+      currentVersion: number;
+      draftRev: number | null;
+    };
+
 /** field_attach_photos() (20261016000030, F9): the version the batch made (or made before). */
 export interface AttachPhotosResult {
   version: number;
@@ -183,6 +197,7 @@ export const FIELD_DB_ERRORS = [
   'correction_pending',
   'correction_not_ready',
   'correction_not_found',
+  'report_locked',
   'invalid_request',
   'invalid_edit',
   'test_clip_not_found',
@@ -415,6 +430,26 @@ export interface FieldStore extends DailyLinkStore {
   }): Promise<RequestCorrectionResult>;
   getCorrection(id: string): Promise<DraftCorrectionRow | null>;
   latestCorrection(reportId: string): Promise<DraftCorrectionRow | null>;
+  /**
+   * W2-11 (20261016000110, F10 *Change something*): field_request_filed_correction() (a change of
+   * a filed report of the last 14 days, spoken or typed: apply_correction queued, audited;
+   * `report_locked` older) and field_save_filed_correction() (Save change: version n+1 from the
+   * preview, the signer told, render_pdf with the "Updated" email and `edit_applied` queued).
+   */
+  requestFiledCorrection(input: {
+    reportId: string;
+    reporterId: string;
+    uploadId: string | null;
+    text: string | null;
+  }): Promise<RequestCorrectionResult>;
+  saveFiledCorrection(input: {
+    correctionId: string;
+    reportId: string;
+    reporterId: string;
+    changeNote: string;
+    /** `edit_applied`'s `{weekday}` and `{change}` in the reporter's language. */
+    message: { weekday: string; change: string } | null;
+  }): Promise<FiledSaveResult>;
   applyCorrection(
     correctionId: string,
     reportId: string,
