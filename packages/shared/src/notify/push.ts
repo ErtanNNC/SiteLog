@@ -62,15 +62,19 @@ export function readPushData(raw: unknown): PushNotificationData {
 
 /**
  * What a push service's answer means for one subscription (RFC 8030): `sent` (201, or any 2xx);
- * `gone` (404, 410: the subscription expired or was removed: revoke it and fall back, W2-01);
- * `retry` (429, 5xx: later, same channel); `refused` (anything else, e.g. 400 a bad payload, 403 a
- * key pair that does not match the subscription, 413 too large: this subscription cannot carry it).
+ * `gone` (the subscription can never carry a notification again: revoke it and fall back, W2-01):
+ * 404, 410 (expired or removed), and, since the W2-14 review, 400 (a malformed subscription), 403
+ * (a key pair that does not match it: the browser subscribed with another VAPID key) and 413 (the
+ * service will not take SiteLog's payload for it); `retry` (429, 5xx: later, same channel);
+ * `refused` (anything else, a 3xx included: not this time, the subscription kept).
  */
 export type PushResult = 'sent' | 'gone' | 'retry' | 'refused';
 
+const PUSH_GONE_STATUSES: readonly number[] = [400, 403, 404, 410, 413];
+
 export function pushResult(status: number): PushResult {
   if (status >= 200 && status < 300) return 'sent';
-  if (status === 404 || status === 410) return 'gone';
+  if (PUSH_GONE_STATUSES.includes(status)) return 'gone';
   if (status === 429 || status >= 500) return 'retry';
   return 'refused';
 }

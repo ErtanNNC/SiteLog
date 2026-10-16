@@ -30,7 +30,8 @@ import type { Db } from './db';
  * - Every live subscription of the reporter gets the notification (two phones, two notifications).
  *   The requests go out in parallel, each with its own timeout (`PUSH_REQUEST_TIMEOUT_MS`) as well
  *   as the job's signal, never following a redirect. The push service's answer per subscription
- *   (`pushResult`): 2xx sent; 404 / 410 gone (the row is revoked `gone`, audited); 429 / 5xx, a
+ *   (`pushResult`): 2xx sent; 400, 403, 404, 410, 413 or keys web-push cannot use gone (the row is
+ *   revoked `gone`, audited, so it is never tried again); 429 / 5xx, a
  *   network failure or a timeout retry; anything else refused. One sent: the message went out.
  *   None sent: a retry when any may pass later (the job retries this channel) until the job's
  *   `PUSH_MAX_ATTEMPTS`th run or its last, otherwise an `undeliverable` refusal, so the Notifier
@@ -118,11 +119,17 @@ export function webPushTransport(input: PushDeps): MessageTransport {
     // Only the known push services (spec §19 Q115; the database's check on a live row): never a
     // request to a host a client chose. Refused without a request.
     if (!isAllowedPushEndpoint(sub.endpoint)) return { status: 0, id: null };
-    const request = webpush.generateRequestDetails(
-      { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-      body,
-      { vapidDetails, TTL: PUSH_TTL_SECONDS, urgency: 'high', contentEncoding: 'aes128gcm' },
-    );
+    let request: ReturnType<typeof webpush.generateRequestDetails>;
+    try {
+      request = webpush.generateRequestDetails(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        body,
+        { vapidDetails, TTL: PUSH_TTL_SECONDS, urgency: 'high', contentEncoding: 'aes128gcm' },
+      );
+    } catch (err) {
+      // The subscription's keys cannot be used (web-push checks p256dh and auth): never will.
+      throw new PushKeyError(err instanceof Error ? err.message : String(err));
+    }
     const res = await deps.fetch(request.endpoint, {
       method: request.method,
       headers: Object.fromEntries(
@@ -151,8 +158,16 @@ export function webPushTransport(input: PushDeps): MessageTransport {
       outcome = await sendOne(sub, body);
     } catch (err) {
       const text = err instanceof Error ? err.message : String(err);
-      // A network failure or a timeout may pass later; anything else (web-push throws on keys it
-      // cannot use) is refused for this subscription.
+      if (err instanceof PushKeyError) {
+        // Revoked as a gone one (status 0: no request was made), so it is not tried again.
+        await deps.store.pushSubscriptionGone(sub.id, 0);
+        deps.warn?.('push: subscription keys unusable', { subscription_id: sub.id });
+        return {
+          kind: 'failed',
+          error: `push: subscription keys unusable (${text.slice(0, 120)})`,
+        };
+      }
+      // A network failure or a timeout may pass later; anything else is refused this time.
       const network =
         err instanceof TypeError ||
         (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) ||
@@ -211,6 +226,11 @@ export function webPushTransport(input: PushDeps): MessageTransport {
       throw refusal(last && 'error' in last ? last.error : 'push: not delivered', false, 'gone');
     },
   };
+}
+
+/** web-push refused the subscription's keys before any request. */
+class PushKeyError extends Error {
+  override name = 'PushKeyError';
 }
 
 function errorText(err: unknown): string {

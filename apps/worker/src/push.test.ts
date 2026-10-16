@@ -104,12 +104,30 @@ describe('web push transport (W2-14)', () => {
 
   it('every subscription gone or refused: undeliverable, so the Notifier falls back', async () => {
     const { transport, gone } = setup([sub('a'), sub('b')], (url) =>
-      url.endsWith('/a') ? 404 : 403,
+      url.endsWith('/a') ? 404 : 401,
     );
     const err = await refusal(transport.send(MESSAGE, {}));
     expect(err.undeliverable).toBe(true);
     expect(err.retryable).toBe(false);
     expect(gone).toEqual([['a', 404]]);
+  });
+
+  it('revokes a subscription answered 400, 403 or 413, as a gone one (W2-14 review)', async () => {
+    for (const status of [400, 403, 413]) {
+      const { transport, gone } = setup([sub('a')], () => status);
+      const err = await refusal(transport.send(MESSAGE, {}));
+      expect(err.undeliverable, String(status)).toBe(true);
+      expect(gone).toEqual([['a', status]]);
+    }
+  });
+
+  it('revokes a subscription whose keys web-push cannot use, without a request', async () => {
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const broken = { ...sub('a'), p256dh: 'AAAA' };
+    const { transport, gone } = setup([broken, sub('b')], () => 201, requests);
+    await transport.send(MESSAGE, {});
+    expect(gone).toEqual([['a', 0]]);
+    expect(requests.map((r) => r.url)).toEqual(['https://fcm.googleapis.com/fcm/send/b']);
   });
 
   it('no subscription left: undeliverable', async () => {

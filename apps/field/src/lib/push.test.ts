@@ -62,4 +62,43 @@ describe('web push in the browser (W2-14)', () => {
     const ok = await subscribeBrowser('BAAA', env({ permission: 'granted' }));
     expect(ok.kind).toBe('subscribed');
   });
+
+  it('subscribes again when the browser holds a subscription made with another key (W2-14 review)', async () => {
+    const key =
+      'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
+    const calls: string[] = [];
+    const held = (bytes: Uint8Array, name: string) => ({
+      options: { applicationServerKey: bytes.slice().buffer },
+      toJSON: () => ({ endpoint: `https://fcm.googleapis.com/fcm/send/${name}` }),
+      unsubscribe: async () => {
+        calls.push(`unsubscribe ${name}`);
+        return true;
+      },
+    });
+    const withHeld = (existing: ReturnType<typeof held>): PushEnv => ({
+      ...env({ permission: 'granted' }),
+      navigator: {
+        serviceWorker: {
+          ready: Promise.resolve({
+            pushManager: {
+              getSubscription: async () => existing,
+              subscribe: async () => {
+                calls.push('subscribe');
+                return held(applicationServerKey(key), 'new');
+              },
+            },
+          }),
+        },
+      },
+    });
+    const other = new Uint8Array(65).fill(7);
+    const res = await subscribeBrowser(key, withHeld(held(other, 'old')));
+    expect(calls).toEqual(['unsubscribe old', 'subscribe']);
+    expect(res).toMatchObject({ subscription: { endpoint: expect.stringMatching(/\/new$/) } });
+
+    calls.length = 0;
+    const same = await subscribeBrowser(key, withHeld(held(applicationServerKey(key), 'same')));
+    expect(calls).toEqual([]);
+    expect(same).toMatchObject({ subscription: { endpoint: expect.stringMatching(/\/same$/) } });
+  });
 });

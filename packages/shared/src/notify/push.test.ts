@@ -58,7 +58,14 @@ describe('web push payload (W2-14)', () => {
     expect([201, 202, 200].map(pushResult)).toEqual(['sent', 'sent', 'sent']);
     expect([404, 410].map(pushResult)).toEqual(['gone', 'gone']);
     expect([429, 500, 503].map(pushResult)).toEqual(['retry', 'retry', 'retry']);
-    expect([400, 403, 413].map(pushResult)).toEqual(['refused', 'refused', 'refused']);
+    // W2-14 review: a subscription these answer for can never carry a notification again.
+    expect([400, 403, 413].map(pushResult)).toEqual(['gone', 'gone', 'gone']);
+    expect([0, 301, 401, 415].map(pushResult)).toEqual([
+      'refused',
+      'refused',
+      'refused',
+      'refused',
+    ]);
   });
 });
 

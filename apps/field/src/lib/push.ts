@@ -23,6 +23,8 @@ export interface PushEnv {
 export interface PushSubscriptionLike {
   toJSON(): unknown;
   unsubscribe(): Promise<boolean>;
+  /** The key it was made with (`PushSubscription.options`); absent in older engines. */
+  options?: { applicationServerKey?: ArrayBuffer | null };
 }
 
 export interface PushManagerLike {
@@ -76,17 +78,27 @@ export async function subscribeBrowser(
   const permission = await env.Notification!.requestPermission();
   if (permission !== 'granted') return { kind: 'blocked' };
   const { pushManager } = await env.navigator.serviceWorker!.ready;
-  const existing = await pushManager.getSubscription();
+  const key = applicationServerKey(publicKey);
+  let existing = await pushManager.getSubscription();
+  // A subscription made with another VAPID key (the pair rotated, another environment) is refused
+  // by the push service for SiteLog's key (403): drop it and subscribe with the current one.
+  if (existing && !sameKey(existing.options?.applicationServerKey, key)) {
+    await existing.unsubscribe().catch(() => false);
+    existing = null;
+  }
   const sub =
-    existing ??
-    (await pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: applicationServerKey(publicKey),
-    }));
+    existing ?? (await pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
   return {
     kind: 'subscribed',
     subscription: sub.toJSON() as PushSubscribeRequest['subscription'],
   };
+}
+
+/** The subscription's key is `key` (unknown, as in older engines, counts as the same). */
+function sameKey(current: ArrayBuffer | null | undefined, key: Uint8Array): boolean {
+  if (current === undefined || current === null) return true;
+  const bytes = new Uint8Array(current);
+  return bytes.length === key.length && bytes.every((b, i) => b === key[i]);
 }
 
 /** Drops this browser's subscription (after field-api revoked it); a failure changes nothing. */
