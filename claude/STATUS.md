@@ -241,7 +241,21 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
 - **Q113:** WhatsApp'tan gelen bir cevap anlaşılamazsa kişiye sorunun linki tekrar gönderiliyor; soru açık kalıyor.
 - **Q114:** WhatsApp'tan gelen ses kaydı ve fotoğraflar Twilio'daki adresleriyle saklanıyor, kendi depolama alanımıza kopyalanmıyor.
 
-**Sırada:** W2-15/16 incelemesi, ardından W2-17 (M6 kabul testi: senaryolu uçtan uca test ve gerçek telefonlar).
+**W2-15/16 incelemesinin 4 düzeltmesi ve W2-17 (hafta 2 kabul testi) yapıldı (be72cd3 … 67ed2fa):**
+
+- **Düzeltmeler:**
+  - Bildirim servisinden gelen bir hata artık herkesin bildirim kaydını silmiyor.
+  - WhatsApp 24 saat kuralı yalnızca gerçek Twilio mesajlarını sayıyor.
+  - "Bana bugünün linkini gönder" WhatsApp reddedince "gönderilemedi" diyor.
+  - Bildirim deneme sınırı doğru sayılıyor.
+- **W2-17:** hafta 2'nin her akışı için bir uçtan uca test hazır. `pnpm e2e:m6` hepsini çalıştırıyor, CI'da da çalışıyor.
+  - Bu sırada bir hata bulundu ve düzeltildi: iki şantiyeli kişi, şantiye seçicide zaten açık olan şantiyeye dokununca Bugün ekranı boş kalıyordu.
+  - Gerçek telefonla test senaryosu: `docs/DEMO_NOTES.md` ("Week 2").
+- **Q116 (yeni, önerimle):** demo şirketlerin mesajları hiçbir zaman gerçek telefona gitmiyor. Gerçek telefona teslimi denemek için önizlemede ayrı bir test şirketi kurulması gerekiyor.
+- **Anthropic ve Deepgram anahtarlarını preview ortamına eklediniz (2026-10-16).** Önizleme worker'ı bundan sonra kayıtları gerçek Deepgram ile yazıya döküyor ve raporu gerçek Claude ile çıkarıyor. Mesajlar yine yalnızca Demo telefonda görünüyor.
+- **Model seçimi (önerim):** rapor çıkarma için Claude Sonnet 5.5, kısa işler için (cevap okuma, SMS/WhatsApp mesajı anlama) Claude Haiku 5.5. Hazır test setleriyle (`pnpm eval`) karşılaştırıp sonuçları size sunacağım.
+
+**Sırada:** yeni kodu önizlemeye yüklemek, size yeni linkler göndermek; ardından model karşılaştırması.
 
 **Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10 – W2-16, yeni migration'lar `…080` – `…260`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
 
