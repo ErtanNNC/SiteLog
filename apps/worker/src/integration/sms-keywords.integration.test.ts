@@ -332,6 +332,40 @@ describe('SMS report keywords (W2-12) on the Demo phone of a two-way demo org', 
     ]);
   }, 60_000);
 
+  it("stores the reporter's own words as the change, never the model's rewording (W2-12 review)", async () => {
+    const date = resolveDayReference('WED', new Date(), TZ)!;
+    await filedReport(date);
+    const real = world.ctx.ai.claude!;
+    world.ctx.ai.claude = {
+      messages: {
+        async create(params, opts) {
+          const res = await real.messages.create(params, opts);
+          const block = res.content[0] as { type: string; name?: string; input?: unknown };
+          if (block.type === 'tool_use' && block.name === 'classify_utterance') {
+            // A model that tidies the words and states a number the text does not.
+            block.input = {
+              intent: 'edit_request',
+              confidence: 0.9,
+              entities: { dayReference: 'Wednesday', numbers: [9, 8] },
+              correctionText: 'Apex Concrete had 9 workers for 8 hours',
+            };
+          }
+          return res;
+        },
+      },
+    };
+    try {
+      const id = await text('EDIT WED Apex 9 not 6');
+      const [c] = await database.q<{ text: string }>(
+        `select text from draft_corrections where message_id = $1`,
+        [id],
+      );
+      expect(c!.text).toBe('Apex 9 not 6');
+    } finally {
+      world.ctx.ai.claude = real;
+    }
+  }, 60_000);
+
   it('a retry after the settle queues the preview the first run could not (W2-12 review)', async () => {
     const date = resolveDayReference('THU', new Date(), TZ)!;
     await filedReport(date);

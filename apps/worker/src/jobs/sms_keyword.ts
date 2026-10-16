@@ -47,8 +47,9 @@ import { PermanentJobError, type JobHandler } from './types';
  *   open today (no live report; pending, reminded or missing), `day_off_link` with the day's link
  *   (`ensureDailyLink`). The site-day changes only when the details are saved on Today (W2-08).
  *   No open day: no reply (Q104).
- * - **EDIT** (F10 by SMS): `classify_utterance` (the fast model) names the day as written and the
- *   change, code resolves the day (`resolveDayReference`, else `readSmsEdit`), finds that day's
+ * - **EDIT** (F10 by SMS): `classify_utterance` (the fast model) names the day as written, code
+ *   resolves it; the change is the reporter's own words after the day (`readSmsEdit`), never the
+ *   model's rewording; code resolves the day (`resolveDayReference`, else `readSmsEdit`), finds that day's
  *   filed report at a site of theirs and requests the change (`sms_request_filed_correction()`):
  *   apply_correction makes the preview in code, then queues this job again with `correctionId`,
  *   which texts the preview's lines and the confirm link (`edit_preview`, `/r/{code}/history/{id}`,
@@ -330,9 +331,10 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
   if (!tz) return editUnclear(k, first, 'no_site');
   const now = ctx.now();
   const prepass = readSmsEdit(rest, now, tz);
-  // §10.8: the fast model names the day as written and the change; code resolves the day.
+  // §10.8: the fast model names the day as written; code resolves it. The change stored, cited
+  // as `reporter_edit` and checked for numbers it does not state is the reporter's own words,
+  // never the model's rewording of them (W2-12 review).
   let modelDay: string | null = null;
-  let modelChange: string | null = null;
   if (ctx.ai.claude) {
     const res = await classifyUtterance(
       ctx.ai.claude,
@@ -344,11 +346,10 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
     if (res.data.intent === 'edit_request' || res.data.intent === 'fix') {
       const ref = res.data.entities?.dayReference?.trim();
       modelDay = ref ? resolveDayReference(ref.replace(/İ/gu, 'I'), now, tz) : null;
-      modelChange = res.data.correctionText?.trim() || null;
     }
   }
   const date = modelDay ?? prepass.date;
-  const change = (modelChange ?? prepass.correction).trim();
+  const change = prepass.correction.trim();
   if (!date) return editUnclear(k, first, 'no_day');
   if (!change) return editUnclear(k, first, 'no_change', { date });
 

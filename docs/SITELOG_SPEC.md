@@ -1908,7 +1908,7 @@ Question (field, target, options) + utterance → `{ field, value, confidence }`
 
 Used for call turns outside the main report and for inbound SMS on two-way packs. Output: one intent from §9.5 + entities (day, numbers, minutes).
 
-*As built (W2-12):* `apps/worker/src/ai/utterance.ts` and `prompts/utterance.ts` (`UtteranceClassificationSchema`: intent, confidence, entities `dayReference` as written, `numbers`, `minutes`, and `correctionText`), the fast model (`CLAUDE_MODEL_FAST`), for an SMS EDIT today. The model never resolves the date or finds the report: code does. The golden set is `fixtures/utterances/` (EN, ES, TR, one with no day; recorded outputs written without a key), which `EXTRACT_PROVIDER=fake` answers from.
+*As built (W2-12):* `apps/worker/src/ai/utterance.ts` and `prompts/utterance.ts` (`UtteranceClassificationSchema`: intent, confidence, entities `dayReference` as written, `numbers`, `minutes`, and `correctionText`), the fast model (`CLAUDE_MODEL_FAST`), for an SMS EDIT today. The model never resolves the date or finds the report: code does. Its `correctionText` is not used for an EDIT: the change stored (`draft_corrections.text`), cited `reporter_edit` and checked for numbers it does not state is the reporter's own words after the day (`readSmsEdit`; W2-12 review). The golden set is `fixtures/utterances/` (EN, ES, TR, one with no day; recorded outputs written without a key), which `EXTRACT_PROVIDER=fake` answers from.
 
 ### 10.9 Post-call reconciliation
 
