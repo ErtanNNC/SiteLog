@@ -15,6 +15,7 @@ import {
   smsCopyGaps,
   smsTemplate,
   TWO_WAY_SMS_KEYS,
+  KEYWORD_REPLY_SMS_KEYS,
   type RenderSmsOptions,
   type SmsCopySource,
   type SmsKey,
@@ -61,17 +62,22 @@ const lower = (locale: SmsLocale, s: string) =>
   s.toLocaleLowerCase(locale === 'tr' ? 'tr-TR' : locale === 'es' ? 'es-US' : 'en-US');
 
 describe('SMS catalog (§9.2)', () => {
-  it('has every key in EN and ES, and every key except the two-way ones in TR', () => {
+  it('has every key in EN and ES, and in TR every key except the two-way replies to STOP, HELP, CALL, TEXT and unknown numbers', () => {
     expect(Object.keys(SMS_CATALOGS.en).sort()).toEqual([...SMS_KEYS].sort());
     expect(Object.keys(SMS_CATALOGS.es).sort()).toEqual([...SMS_KEYS].sort());
-    const shared = SMS_KEYS.filter((k) => !isTwoWaySmsKey(k));
-    expect(Object.keys(SMS_CATALOGS.tr).sort()).toEqual([...shared].sort());
+    const tr = SMS_KEYS.filter(
+      (k) => !isTwoWaySmsKey(k) || (KEYWORD_REPLY_SMS_KEYS as readonly string[]).includes(k),
+    );
+    expect(Object.keys(SMS_CATALOGS.tr).sort()).toEqual([...tr].sort());
     expect([...TWO_WAY_SMS_KEYS]).toEqual([
       'unknown_number',
       'help',
       'stop_confirm',
       'pref_call_ok',
       'pref_text_ok',
+      'day_off_link',
+      'edit_preview',
+      'edit_unclear',
     ]);
     // The reply hint is EN and ES only: the TR pack is one-way.
     expect(Object.keys(SMS_REPLY_HINT).sort()).toEqual(['en', 'es']);
@@ -89,7 +95,7 @@ describe('SMS catalog (§9.2)', () => {
     }
   });
 
-  it('lists the 12 keys that carry a link (no SMS on a pack without links, §19 Q24)', () => {
+  it('lists the 15 keys that carry a link (no SMS on a pack without links, §19 Q24)', () => {
     expect([...MESSAGE_KEYS_WITH_LINK].sort()).toEqual(
       [
         'welcome',
@@ -104,6 +110,9 @@ describe('SMS catalog (§9.2)', () => {
         'photos_link',
         'finish_report',
         'help',
+        'day_off_link',
+        'edit_preview',
+        'edit_unclear',
       ].sort(),
     );
     for (const key of SMS_KEYS) {

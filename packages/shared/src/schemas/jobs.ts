@@ -44,6 +44,13 @@ export const JobPayloadSchemas = {
   inbound_message: z.object({ messageId: uuid }),
   /** §9.5: an inbound text sms-webhook stored (`messages`, channel sms, direction in), W1-08. */
   sms_inbound: z.object({ messageId: uuid }),
+  /**
+   * §9.5 report keywords (W2-12): the inbound text `messageId` (a Twilio text, or a Demo phone
+   * reply) was OK, NO WORK, WEATHER or EDIT from a two-way pack; the worker answers it (the draft
+   * link, the day sheet link, EDIT's preview). With `correctionId`: the EDIT's preview settled
+   * (apply_correction), so the reply is the preview with its confirm link, or why there is none.
+   */
+  sms_keyword: z.object({ messageId: uuid, correctionId: uuid.optional() }),
   transcribe_audio: z.object({
     messageId: uuid,
     reportId: uuid.optional(),
@@ -382,6 +389,17 @@ export const jobKeys = {
    * a version is made once, so a retried render never texts twice.
    */
   editApplied: (reportId: string, version: number) => `notify:edit_applied:${reportId}:v${version}`,
+  /**
+   * W2-12: the `sms_keyword` job of an inbound text's report keyword (OK, NO WORK, WEATHER, EDIT;
+   * `processInboundSms`): per text, and a text is received once (`messages` per provider id).
+   */
+  smsKeyword: (messageId: string) => `sms_keyword:${messageId}`,
+  /**
+   * W2-12: the `sms_keyword` job that answers an SMS EDIT once its preview settled
+   * (apply_correction): per text and correction, and a correction settles once.
+   */
+  smsEditPreview: (messageId: string, correctionId: string) =>
+    `sms_keyword:${messageId}:${correctionId}`,
   /** The `send_email` job of a report version (render_pdf): one email per kind and version. */
   reportEmail: (kind: 'report_filed' | 'report_updated', reportId: string, version: number) =>
     `email:${kind}:${reportId}:${version}`,

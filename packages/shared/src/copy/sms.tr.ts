@@ -1,14 +1,15 @@
-import type { SharedSmsKey, SmsCatalog, SmsWeatherPhrases } from './sms.ts';
+import type { SmsCatalog, SmsWeatherPhrases, TrSmsKey } from './sms.ts';
 
 /**
  * §9.2 SMS copy, Turkish: verbatim from the spec table. The TR pack's SMS is one-way (the
  * `SITELOG` alphanumeric title, `two_way_sms = false`), so these texts never ask for a reply,
  * Turkish has no welcome reply hint, and the two-way keys (unknown_number, help, stop_confirm,
  * pref_call_ok, pref_text_ok) have no Turkish text: a pack with two-way SMS and Turkish fails `packCopyGaps()` until they
- * exist. Formal "siz", no exclamation marks (§9.7). Punctuation is GSM-7 only (spec §19 Q15), so
+ * exist. The report keywords' replies (day_off_link, edit_preview, edit_unclear; W2-12, spec §19
+ * Q83) do have Turkish text, for a two-way TR pack or WhatsApp later. Formal "siz", no exclamation marks (§9.7). Punctuation is GSM-7 only (spec §19 Q15), so
  * only Turkish letters (and the "â" of "hâlâ") fall outside GSM-7.
  */
-export const smsTr: SmsCatalog<SharedSmsKey> = {
+export const smsTr: SmsCatalog<TrSmsKey> = {
   welcome: {
     withNumber:
       'Merhaba {first}, ben SiteLog, {company} için {site} günlük rapor asistanıyım. Her iş günü {deadline} öncesi linke dokunup ~3 dk anlatın ya da {number} numarayı arayın: {link}',
@@ -42,6 +43,11 @@ export const smsTr: SmsCatalog<SharedSmsKey> = {
   edit_applied: '{weekday} güncellendi: {change}. Sürüm {v} ofise gönderildi.',
   finish_report: 'Görüşme kayıttan önce bitti. Tek dokunuşla tamamlayın: {link}',
   site_paused: "{site} SiteLog'da duraklatıldı. Ofisten yeniden açmasını isteyin.",
+  // W2-12 (spec §19 Q83, Q102): the report keywords' replies, for a two-way TR pack or WhatsApp;
+  // for the Q63 review.
+  day_off_link: '{site} için bugünün ayrıntılarını ekleyin: {link}',
+  edit_preview: '{weekday}: {change}? Buradan onaylayın: {link}',
+  edit_unclear: 'Bu değişikliği mesajla yapamadım. Geçmiş raporlardan yapın: {link}',
 };
 
 /**

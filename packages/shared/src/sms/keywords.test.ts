@@ -4,7 +4,9 @@ import { DEMO_COUNTRIES, demoPack } from '../demo/countries.ts';
 import {
   keywordOf,
   orderInboundReporters,
+  parseSmsEdit,
   parseSmsKeyword,
+  readSmsEdit,
   planInboundSms,
   type InboundReporter,
 } from './keywords.ts';
@@ -44,9 +46,7 @@ describe('§9.5 SMS keywords', () => {
     expect(
       ['STOP', 'stop', ' Stop. ', 'HELP!', 'call', 'Text', 'start\n'].map(parseSmsKeyword),
     ).toEqual(['stop', 'stop', 'stop', 'help', 'call', 'text', 'start']);
-    expect(['please stop', 'stop it', 'OK', 'NO WORK', '', 'stopp'].map(parseSmsKeyword)).toEqual([
-      null,
-      null,
+    expect(['please stop', 'stop it', '', 'stopp'].map(parseSmsKeyword)).toEqual([
       null,
       null,
       null,
@@ -107,6 +107,7 @@ describe('planInboundSms (F13, F15)', () => {
         reply: null,
         unknownContact: false,
         phoneOptOut: null,
+        reportKeyword: null,
       });
     }
   });
@@ -135,6 +136,7 @@ describe('planInboundSms (F13, F15)', () => {
     expect(plan('CANCEL', [reporter()])).toMatchObject({
       keyword: 'stop',
       phoneOptOut: 'record',
+      reportKeyword: null,
       reply: { key: 'stop_confirm', reporterId: 'r-marco' },
     });
   });
@@ -155,6 +157,7 @@ describe('planInboundSms (F13, F15)', () => {
       reply: null,
       unknownContact: false,
       phoneOptOut: 'record',
+      reportKeyword: null,
     });
     // Already recorded: nothing to change, the phone's opt-out is recorded again (idempotent).
     expect(
@@ -170,6 +173,7 @@ describe('planInboundSms (F13, F15)', () => {
       reply: null,
       unknownContact: false,
       phoneOptOut: 'record',
+      reportKeyword: null,
     });
   });
 
@@ -183,6 +187,7 @@ describe('planInboundSms (F13, F15)', () => {
     // An unknown number that texts START gets the F13 answer like any other text.
     expect(plan('START', [])).toMatchObject({
       phoneOptOut: 'clear',
+      reportKeyword: null,
       unknownContact: true,
       reply: { key: 'unknown_number', reporterId: null },
     });
@@ -256,6 +261,7 @@ describe('planInboundSms (F13, F15)', () => {
       reply: null,
       unknownContact: false,
       phoneOptOut: null,
+      reportKeyword: null,
     });
   });
 
@@ -267,6 +273,7 @@ describe('planInboundSms (F13, F15)', () => {
       reply: { key: 'unknown_number', reporterId: null },
       unknownContact: true,
       phoneOptOut: null,
+      reportKeyword: null,
     });
     expect(plan('hello again', [], { pendingUnknown: true })).toMatchObject({
       reply: null,
@@ -300,5 +307,118 @@ describe('planInboundSms (F13, F15)', () => {
       reporter({ id: 'off', status: 'disabled' }),
     ]);
     expect(ordered.map((r) => r.id)).toEqual(['new-active', 'old-active', 'invited', 'out']);
+  });
+});
+
+describe('§9.5 report keywords (W2-12): EN, ES and TR', () => {
+  it('reads OK, NO WORK and WEATHER as the whole text, in every field language', () => {
+    expect(['OK', 'ok.', 'Okay', 'vale', 'Listo!', 'TAMAM', 'Tamam.'].map(parseSmsKeyword)).toEqual(
+      Array(7).fill('ok'),
+    );
+    expect(
+      [
+        'NO WORK',
+        'no-work',
+        'No work today',
+        'no hay trabajo',
+        'Hoy no hay trabajo',
+        'İŞ YOK',
+        'iş yok',
+        'BUGÜN ÇALIŞMA YOK',
+        'calisma yok',
+      ].map(parseSmsKeyword),
+    ).toEqual(Array(9).fill('no_work'));
+    expect(
+      ['WEATHER', 'weather!', 'Rained out', 'LLUVIA', 'clima', 'HAVA', 'Yağmur', 'yagmur'].map(
+        parseSmsKeyword,
+      ),
+    ).toEqual(Array(8).fill('weather'));
+    // Inside a sentence they are texts: stored, no reply.
+    expect(
+      ['ok thanks', 'no work on Monday?', 'weather was fine', 'yes', 'hava güzel'].map(
+        parseSmsKeyword,
+      ),
+    ).toEqual(Array(5).fill(null));
+  });
+
+  it('reads EDIT as the first word, with the day and the change after it', () => {
+    expect(parseSmsEdit('EDIT FRI Apex was 7 not 6')).toEqual({ rest: 'FRI Apex was 7 not 6' });
+    expect(parseSmsEdit('editar viernes Apex eran 7, no 6')).toEqual({
+      rest: 'viernes Apex eran 7, no 6',
+    });
+    expect(parseSmsEdit('DÜZELT cuma Demirci 5 kişiydi')).toEqual({
+      rest: 'cuma Demirci 5 kişiydi',
+    });
+    expect(parseSmsEdit('  edit  ')).toEqual({ rest: '' });
+    expect(['EDITED friday', 'edit-friday', 'please edit friday'].map(parseSmsEdit)).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    expect(['EDIT FRI Apex was 7', 'Düzelt cuma'].map(parseSmsKeyword)).toEqual(['edit', 'edit']);
+  });
+
+  it('names a report keyword for the worker only for a reporter who is not opted out', () => {
+    for (const [body, keyword] of [
+      ['OK', 'ok'],
+      ['NO WORK', 'no_work'],
+      ['WEATHER', 'weather'],
+      ['EDIT FRI Apex was 7 not 6', 'edit'],
+    ] as const) {
+      expect(plan(body, [reporter()]), body).toMatchObject({
+        keyword,
+        reportKeyword: keyword,
+        reply: null,
+        changes: [],
+      });
+      expect(plan(body, [reporter({ status: 'opted_out' })]).reportKeyword, body).toBeNull();
+    }
+    // An unknown number gets the F13 reply, never a keyword's answer.
+    expect(plan('WEATHER', [])).toMatchObject({ reportKeyword: null, unknownContact: true });
+  });
+
+  it('a one-way pack acts on none of them', () => {
+    for (const body of ['OK', 'NO WORK', 'WEATHER', 'EDIT FRI Apex was 7', 'İŞ YOK', 'DÜZELT cuma'])
+      expect(plan(body, [reporter()], { pack: TR }), body).toMatchObject({
+        keyword: null,
+        reportKeyword: null,
+        reply: null,
+      });
+  });
+});
+
+describe('readSmsEdit (W2-12): the day and the change of an EDIT', () => {
+  // Friday 2026-10-09, 18:00 in Chicago.
+  const tz = 'America/Chicago';
+  it('reads the day at the start in EN, ES and TR, and the change after it', () => {
+    const now = new Date('2026-10-13T23:00:00Z'); // Tuesday
+    expect(readSmsEdit('FRI Apex was 7 not 6', now, tz)).toEqual({
+      date: '2026-10-09',
+      dayText: 'FRI',
+      correction: 'Apex was 7 not 6',
+    });
+    expect(readSmsEdit('viernes: Apex eran 7, no 6', now, tz)).toMatchObject({
+      date: '2026-10-09',
+      correction: 'Apex eran 7, no 6',
+    });
+    expect(readSmsEdit('CUMA Demirci 5 kişiydi', now, tz)).toMatchObject({
+      date: '2026-10-09',
+      correction: 'Demirci 5 kişiydi',
+    });
+    expect(readSmsEdit('CUMARTESİ Demirci 5', now, tz)).toMatchObject({ date: '2026-10-10' });
+    expect(readSmsEdit('yesterday Apex had 7', now, tz)).toMatchObject({ date: '2026-10-12' });
+  });
+
+  it('reads no day when none starts the text', () => {
+    expect(readSmsEdit('Apex was 7 not 6', new Date('2026-10-13T23:00:00Z'), tz)).toEqual({
+      date: null,
+      dayText: null,
+      correction: 'Apex was 7 not 6',
+    });
+    expect(readSmsEdit('', new Date('2026-10-13T23:00:00Z'), tz)).toEqual({
+      date: null,
+      dayText: null,
+      correction: '',
+    });
   });
 });

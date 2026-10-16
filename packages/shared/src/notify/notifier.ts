@@ -21,7 +21,7 @@ import {
   type RenderSmsOptions,
   type SmsLocaleFor,
   type SmsVars,
-  type TwoWaySmsKey,
+  type ReplySmsKey,
 } from '../copy/sms.ts';
 import type { CountryPack } from '../countries.ts';
 import type { ConsentType, MessageChannel, MsgStatus, ReporterStatus } from '../enums.ts';
@@ -233,7 +233,7 @@ export function consoleRealOrgError(packCode: string): string {
   return `console: no SMS sender set for pack ${packCode}`;
 }
 
-export interface ReplyInput<K extends TwoWaySmsKey> {
+export interface ReplyInput<K extends ReplySmsKey> {
   pack: CountryPack;
   /** The org of the reporter the reply speaks for; null for an unknown number. */
   org: NotifyOrg | null;
@@ -253,8 +253,12 @@ export interface SmsNotifier extends Notifier {
     vars: SmsVars<K>,
     opts?: { channels?: readonly MessageChannel[]; dedupeKey?: string },
   ): Promise<NotifyOutcome>;
-  /** A two-way reply to an inbound text (`TWO_WAY_SMS_KEYS`: HELP, STOP, CALL, TEXT, unknown), sms-webhook. */
-  reply<K extends TwoWaySmsKey>(input: ReplyInput<K>): Promise<{ messageId: string }>;
+  /**
+   * A two-way reply to an inbound text (`TWO_WAY_SMS_KEYS`: HELP, STOP, CALL, TEXT, unknown; the
+   * report keywords' replies, W2-12; `draft_ready` for OK, spec §19 Q82), sms-webhook and the
+   * worker's `sms_inbound` and `sms_keyword` jobs.
+   */
+  reply<K extends ReplySmsKey>(input: ReplyInput<K>): Promise<{ messageId: string }>;
 }
 
 /**

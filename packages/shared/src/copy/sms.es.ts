@@ -57,6 +57,10 @@ export const smsEs: SmsCatalog<SmsKey> = {
     'Listo, su reporte diario ahora es por llamada. Responda TEXT para cambiar a un enlace.',
   pref_text_ok:
     'Listo, su reporte diario ahora es por enlace en un mensaje. Responda CALL para cambiar a una llamada.',
+  // W2-12 (spec §19 Q83, Q102), for the Q63 review.
+  day_off_link: 'Agregue los detalles de {site} de hoy: {link}',
+  edit_preview: '{weekday}: {change}? Confírmelo aquí: {link}',
+  edit_unclear: 'No pude hacer ese cambio por mensaje. Hágalo en Reportes anteriores: {link}',
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (mirrors `smsReplyHintEn`). */

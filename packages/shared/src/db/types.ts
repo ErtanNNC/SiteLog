@@ -757,6 +757,11 @@ export type DraftCorrectionRow = {
    */
   after_filing: boolean;
   version_created: number | null;
+  /**
+   * W2-12 (20261016000140): the inbound SMS of an EDIT (F10 by SMS); a typed change with it cites
+   * `reporter_edit` via 'sms', and its settled preview is texted back with a link to confirm.
+   */
+  message_id: string | null;
 };
 
 export type SmsOptOutRow = {
@@ -1303,6 +1308,7 @@ export type Database = {
         | 'applied_at'
         | 'after_filing'
         | 'version_created'
+        | 'message_id'
       >;
       scheduler_state: Table<SchedulerStateRow, 'value' | 'updated_at'>;
       stripe_events: Table<StripeEventRow, 'received_at' | 'processed_at'>;
@@ -1498,6 +1504,19 @@ export type Database = {
           p_reporter_id: string;
           p_upload_id?: string | null;
           p_text?: string | null;
+        };
+        Returns: Json;
+      };
+      /**
+       * W2-12 (20261016000140): an SMS EDIT's change of a filed report (the worker's `sms_keyword`
+       * job only; the text's id on the correction, `report_locked`, `site_inactive`).
+       */
+      sms_request_filed_correction: {
+        Args: {
+          p_report_id: string;
+          p_reporter_id: string;
+          p_text: string;
+          p_message_id: string;
         };
         Returns: Json;
       };

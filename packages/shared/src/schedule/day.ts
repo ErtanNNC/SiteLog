@@ -76,6 +76,19 @@ const WEEKDAY_WORDS: Record<string, number> = {
   sunday: 7,
   sun: 7,
   domingo: 7,
+  // Turkish (W2-12: SMS EDIT on a two-way pack or WhatsApp; `SALI` lower-cases to "sali").
+  pazartesi: 1,
+  pzt: 1,
+  salı: 2,
+  sali: 2,
+  çarşamba: 3,
+  carsamba: 3,
+  perşembe: 4,
+  persembe: 4,
+  cuma: 5,
+  cumartesi: 6,
+  cmt: 6,
+  pazar: 7,
 };
 
 const MONTH_WORDS: Record<string, number> = {
@@ -111,9 +124,11 @@ const MONTH_WORDS: Record<string, number> = {
  */
 export function resolveDayReference(text: string, now: Date, tz: string): string | null {
   const today = localDate(now, tz);
-  const t = text.toLowerCase();
-  if (/\b(today|hoy)\b/.test(t)) return today;
-  if (/\b(yesterday|ayer)\b/.test(t)) return addDays(today, -1);
+  // "İ" lower-cases to "i" and a combining dot: drop the dot ("CUMARTESİ" → "cumartesi").
+  const t = text.toLowerCase().replace(/\u0307/g, '');
+  if (/\b(today|hoy)\b/.test(t) || /(^|[^\p{L}])(bugün|bugun)(?=$|[^\p{L}])/u.test(t)) return today;
+  if (/\b(yesterday|ayer)\b/.test(t) || /(^|[^\p{L}])(dün|dun)(?=$|[^\p{L}])/u.test(t))
+    return addDays(today, -1);
   if (/\bday before yesterday\b|\banteayer\b/.test(t)) return addDays(today, -2);
 
   const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(t);
@@ -141,7 +156,7 @@ export function resolveDayReference(text: string, now: Date, tz: string): string
       return yy ? isoOrNull(yy, m, d) : mostRecent(y, m, d, today);
     }
   }
-  for (const word of t.split(/[^a-záéíóú]+/)) {
+  for (const word of t.split(/[^a-záéíóúçğışöü]+/)) {
     const dow = WEEKDAY_WORDS[word];
     if (dow) {
       const todayDow = isoWeekday(today);

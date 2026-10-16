@@ -62,6 +62,16 @@ export function fieldReportLinkUrl(base: string, code: string, reportId: string)
 }
 
 /**
+ * Past reports through the link (W2-12: the SMS EDIT's confirm link and its fallback):
+ * `{base}/r/{code}/history`, or one report's view `{base}/r/{code}/history/{id}`, where a change
+ * texted in waits as a preview with **Save change** (F10). The field app resolves the link first.
+ */
+export function fieldHistoryLinkUrl(base: string, code: string, reportId?: string | null): string {
+  const history = `${fieldLinkUrl(base, code)}/history`;
+  return reportId ? `${history}/${encodeURIComponent(reportId)}` : history;
+}
+
+/**
  * Characters of a personal link's derived code: 12 of the 30-character alphabet, about 2^59
  * (spec §19 Q42, decided by the owner 2026-10-15: "longer codes for personal links" before real
  * reporters; 6 characters were about 7 × 10^8). A personal link derived at 6 before this change

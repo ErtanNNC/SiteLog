@@ -89,6 +89,7 @@ function harness(
     org_id: string | null;
   }> = [];
   const handled: Array<{ messageId: string; at: string }> = [];
+  const keywordJobs: string[] = [];
   const links: Array<{ id: string; code_hash: string; reporter_id: string }> = [];
   const rows = new Map<string, OutboundMessageRow>();
   const notifierAudit: NotifierAuditEntry[] = [];
@@ -125,6 +126,9 @@ function harness(
     recordPhoneOptOut: async (phone, country) => void optOuts.add(`${phone}:${country}`),
     clearPhoneOptOut: async (phone, country) => void optOuts.delete(`${phone}:${country}`),
     markHandled: async (messageId, at) => void handled.push({ messageId, at }),
+    enqueueSmsKeyword: async (messageId) => {
+      if (!keywordJobs.includes(messageId)) keywordJobs.push(messageId);
+    },
     notifyOrg: async (nf) => {
       if (faults.notifyOnce) {
         const err = faults.notifyOnce;
@@ -218,6 +222,7 @@ function harness(
     optOuts,
     unknown,
     handled,
+    keywordJobs,
     links,
     rows,
     sent,
@@ -439,7 +444,13 @@ describe('processInboundSms (W1-08)', () => {
       ],
     });
     const out = await h.run('STOP', { from: assertE164('+905321234567'), pack: TR_LIVE });
-    expect(out).toEqual({ keyword: null, replyId: null, changes: [], unknownContact: false });
+    expect(out).toEqual({
+      keyword: null,
+      replyId: null,
+      changes: [],
+      unknownContact: false,
+      reportKeyword: null,
+    });
     expect(h.reporters[0]!.status).toBe('active');
     expect(h.optOuts.size).toBe(0);
     expect(h.handled).toHaveLength(1);
@@ -527,5 +538,49 @@ describe('processInboundSms (W1-08)', () => {
     });
     expect(h.notifierAudit.map((a) => a.action)).toEqual(['sms.failed']);
     expect(h.handled).toHaveLength(1);
+  });
+});
+
+describe('processInboundSms: the report keywords (W2-12)', () => {
+  it('hands OK, NO WORK, WEATHER and EDIT to the worker, with no reply here, then marks handled', async () => {
+    for (const [body, keyword] of [
+      ['OK', 'ok'],
+      ['no work', 'no_work'],
+      ['Weather.', 'weather'],
+      ['EDIT FRI Apex was 7 not 6', 'edit'],
+    ] as const) {
+      const h = harness();
+      const out = await h.run(body);
+      expect(out, body).toMatchObject({ keyword, reportKeyword: keyword, replyId: null });
+      expect(h.keywordJobs).toEqual(['m-in-1']);
+      expect(h.sent).toEqual([]);
+      expect(h.handled).toHaveLength(1);
+      expect(h.reporters[0]!.status).toBe('active');
+    }
+  });
+
+  it('never for a phone that opted out, an unknown number or a one-way pack', async () => {
+    const out = harness({
+      reporters: [{ ...reporter({ status: 'opted_out' }), orgCountry: 'US' }],
+    });
+    expect((await out.run('WEATHER')).reportKeyword).toBeNull();
+    expect(out.keywordJobs).toEqual([]);
+
+    const unknown = harness();
+    const res = await unknown.run('EDIT FRI Apex was 7', { from: UNKNOWN });
+    expect(res).toMatchObject({ reportKeyword: null, unknownContact: true });
+    expect(unknown.keywordJobs).toEqual([]);
+
+    const oneWay = harness({
+      reporters: [
+        {
+          ...reporter({ phone: '+905321234567', locale: 'tr-TR', orgName: 'Demir' }),
+          orgCountry: 'TR',
+        },
+      ],
+    });
+    const tr = await oneWay.run('İŞ YOK', { from: assertE164('+905321234567'), pack: TR_LIVE });
+    expect(tr).toMatchObject({ keyword: null, reportKeyword: null });
+    expect(oneWay.keywordJobs).toEqual([]);
   });
 });

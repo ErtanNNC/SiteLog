@@ -50,12 +50,31 @@ export const SMS_KEYS = [
   'stop_confirm',
   'pref_call_ok',
   'pref_text_ok',
+  'day_off_link',
+  'edit_preview',
+  'edit_unclear',
 ] as const;
 export type SmsKey = (typeof SMS_KEYS)[number];
 
 /**
+ * The replies to the report keywords (W2-12, spec §19 Q83, Q102): NO WORK / WEATHER's day sheet
+ * link, EDIT's preview with its confirm link, and an EDIT that made no preview. Two-way packs (and
+ * WhatsApp, week 2) only, with text in EN, ES and TR, since a two-way TR pack or WhatsApp in Turkey
+ * gets them too.
+ */
+export const KEYWORD_REPLY_SMS_KEYS = ['day_off_link', 'edit_preview', 'edit_unclear'] as const;
+export type KeywordReplySmsKey = (typeof KEYWORD_REPLY_SMS_KEYS)[number];
+
+/**
+ * What a reply to an inbound text may say (`SmsNotifier.reply`): the two-way keys, and
+ * `draft_ready`, the answer to OK (spec §19 Q82: the draft link, never a confirmation).
+ */
+export type ReplySmsKey = TwoWaySmsKey | 'draft_ready';
+
+/**
  * Keys sent only on packs with two-way SMS (replies to STOP, HELP, CALL and TEXT, and to an
- * unknown sender, §9.5; CALL and TEXT confirmed per spec §19 Q46): EN and ES text only.
+ * unknown sender, §9.5; CALL and TEXT confirmed per spec §19 Q46): EN and ES text only; and the
+ * report keywords' replies (W2-12), EN, ES and TR.
  */
 export const TWO_WAY_SMS_KEYS = [
   'unknown_number',
@@ -63,6 +82,7 @@ export const TWO_WAY_SMS_KEYS = [
   'stop_confirm',
   'pref_call_ok',
   'pref_text_ok',
+  ...KEYWORD_REPLY_SMS_KEYS,
 ] as const;
 export type TwoWaySmsKey = (typeof TWO_WAY_SMS_KEYS)[number];
 /** Keys every pack can send, in every language. */
@@ -93,6 +113,9 @@ export const SMS_VARS = {
   stop_confirm: [],
   pref_call_ok: [],
   pref_text_ok: [],
+  day_off_link: ['site', 'link'],
+  edit_preview: ['weekday', 'change', 'link'],
+  edit_unclear: ['link'],
 } as const satisfies Record<SmsKey, readonly string[]>;
 
 export type SmsVarName<K extends SmsKey> = (typeof SMS_VARS)[K][number];
@@ -153,13 +176,23 @@ export interface RenderSmsOptions {
   linksAllowed: boolean;
 }
 
-/** Two-way keys accept only the languages that have their text (EN, ES). */
-export type SmsLocaleFor<K extends SmsKey> = K extends TwoWaySmsKey ? 'en' | 'es' : SmsLocale;
+/**
+ * Two-way keys accept only the languages that have their text (EN, ES); the report keywords'
+ * replies (W2-12) every language.
+ */
+export type SmsLocaleFor<K extends SmsKey> = K extends KeywordReplySmsKey
+  ? SmsLocale
+  : K extends TwoWaySmsKey
+    ? 'en' | 'es'
+    : SmsLocale;
+
+/** The keys the Turkish catalogue has: the shared ones and the report keywords' replies. */
+export type TrSmsKey = SharedSmsKey | KeywordReplySmsKey;
 
 export const SMS_CATALOGS: {
   en: SmsCatalog<SmsKey>;
   es: SmsCatalog<SmsKey>;
-  tr: SmsCatalog<SharedSmsKey>;
+  tr: SmsCatalog<TrSmsKey>;
 } = { en: smsEn, es: smsEs, tr: smsTr };
 
 /**

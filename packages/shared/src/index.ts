@@ -29,7 +29,7 @@ export * from './report/media.ts';
 export * from './wa/buttons.ts';
 export * from './wa/window.ts';
 export * from './wa/templates.ts';
-export * from './wa/replies.ts';
+export * from './sms/replies.ts';
 export * from './copy/whatsapp.ts';
 export * from './copy/sms.ts';
 export * from './copy/questions.ts';

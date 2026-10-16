@@ -12,6 +12,7 @@ import {
   type InboundReporter,
   type ReporterChange,
   type SmsKeyword,
+  type SmsReportKeyword,
 } from './keywords.ts';
 import { SmsSendError } from './transports.ts';
 
@@ -106,6 +107,11 @@ export interface InboundSmsStore {
   clearPhoneOptOut(phone: E164, country: string): Promise<void>;
   /** `messages.payload.handled_at`: the text was handled to the end. */
   markHandled(messageId: string, at: string): Promise<void>;
+  /**
+   * W2-12: queue the worker's `sms_keyword` job for a report keyword (OK, NO WORK, WEATHER, EDIT)
+   * of this text, keyed `jobKeys.smsKeyword(messageId)`, so a re-run queues nothing new.
+   */
+  enqueueSmsKeyword(messageId: string): Promise<void>;
   notifyOrg(n: InboundSmsNotification): Promise<void>;
   audit(entry: InboundSmsAudit): Promise<void>;
   /**
@@ -161,6 +167,8 @@ export interface InboundSmsResult {
   replyId: string | null;
   changes: ReporterChange[];
   unknownContact: boolean;
+  /** W2-12: the report keyword handed to the worker's `sms_keyword` job, if any. */
+  reportKeyword: SmsReportKeyword | null;
 }
 
 /** §13 "Message undeliverable / opted out": the office hears about a STOP, with what to do. */
@@ -300,12 +308,16 @@ export async function processInboundSms(
       if (!(err instanceof SmsSendError) || err.retryable) throw err;
     }
   }
+  // W2-12: the report keywords are the worker's (EDIT needs the model); queued before the text
+  // is marked handled, so a crash in between queues it again under the same key.
+  if (plan.reportKeyword) await store.enqueueSmsKeyword(text.messageId);
   await store.markHandled(text.messageId, deps.now().toISOString());
   return {
     keyword: plan.keyword,
     replyId,
     changes: plan.changes,
     unknownContact: plan.unknownContact,
+    reportKeyword: plan.reportKeyword,
   };
 }
 

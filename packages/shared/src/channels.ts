@@ -4,6 +4,7 @@ import {
   type RenderSmsOptions,
   type SmsKey,
   type SmsVars,
+  type ReplySmsKey,
   type TwoWaySmsKey,
 } from './copy/sms.ts';
 import type { CountryPack } from './countries.ts';
@@ -348,7 +349,7 @@ export function deliverableChannels(input: {
  * (`SmsNotifier.reply`). Confirmed by the owner with `PRE_CONSENT_SMS_KEYS` (spec §19 Q25,
  * 2026-10-15).
  */
-export function smsReplyAllowed(pack: CountryPack, key: TwoWaySmsKey): boolean {
+export function smsReplyAllowed(pack: CountryPack, key: ReplySmsKey): boolean {
   if (!pack.twoWaySms) return false;
   return !messageKeyHasLink(key) || pack.smsLinksAllowed;
 }

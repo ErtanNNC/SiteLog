@@ -1,21 +1,83 @@
 import { smsReplyAllowed } from '../channels.ts';
-import type { TwoWaySmsKey } from '../copy/sms.ts';
+import type { KeywordReplySmsKey, TwoWaySmsKey } from '../copy/sms.ts';
 import type { CountryPack } from '../countries.ts';
 import type { ContactPref, ReporterStatus } from '../enums.ts';
+import { resolveDayReference } from '../schedule/day.ts';
+import { stripDayReference } from './replies.ts';
 
 /**
  * §9.5 SMS keywords and F13/F15 (W1-08): what sms-webhook does with an inbound text. Pure, so the
  * Twilio route, the Demo phone's reply box (the same handler logic, spec §19 Q35) and the panel's
  * in-memory demo share it. `wa/replies.ts` keeps serving WhatsApp until step 22.
  *
- * Week 1 handles STOP, START, HELP, CALL and TEXT (and their synonyms, `SMS_KEYWORD_ALIASES`);
- * OK, NO WORK, WEATHER and EDIT come with the M6 reminder ladder, and every other text is stored
- * for it. Everything here runs only on a pack with
- * two-way SMS (`smsReplyAllowed`): a one-way pack's inbound texts are stored and nothing else.
+ * W1-08 handles STOP, START, HELP, CALL and TEXT (and their synonyms, `SMS_KEYWORD_ALIASES`).
+ * W2-12 adds the report keywords OK, NO WORK, WEATHER and EDIT (`SMS_REPORT_KEYWORDS`, words in
+ * EN, ES and TR): `planInboundSms` only names them (`reportKeyword`), and the worker's
+ * `sms_keyword` job answers them (a link; EDIT's preview), since EDIT needs the model and the
+ * Demo phone's inline handler has none. Every other text is stored, with no reply. Everything
+ * here runs only on a pack with two-way SMS (`smsReplyAllowed`): a one-way pack's inbound texts
+ * are stored and nothing else.
  */
 
-export const SMS_KEYWORDS = ['stop', 'start', 'help', 'call', 'text'] as const;
+/** The account keywords (W1-08): opt-out, opt-in, help, and the call / link preference. */
+export const SMS_ACCOUNT_KEYWORDS = ['stop', 'start', 'help', 'call', 'text'] as const;
+/**
+ * The report keywords (W2-12, §9.5): OK (spec §19 Q82: the draft link, never a confirmation),
+ * NO WORK and WEATHER (F12: the day sheet's link), EDIT (F10: a preview and a link to confirm).
+ */
+export const SMS_REPORT_KEYWORDS = ['ok', 'no_work', 'weather', 'edit'] as const;
+export const SMS_KEYWORDS = [...SMS_ACCOUNT_KEYWORDS, ...SMS_REPORT_KEYWORDS] as const;
 export type SmsKeyword = (typeof SMS_KEYWORDS)[number];
+export type SmsReportKeyword = (typeof SMS_REPORT_KEYWORDS)[number];
+
+export function isSmsReportKeyword(k: SmsKeyword | null): k is SmsReportKeyword {
+  return k !== null && (SMS_REPORT_KEYWORDS as readonly string[]).includes(k);
+}
+
+/**
+ * The words of the report keywords that are a whole text (W2-12), in the field languages of the
+ * packs (EN, ES for US; TR for a two-way TR pack or WhatsApp), after `normalizeKeywordText`
+ * (lower case, Turkish dotted capital I folded, spaces, hyphens and underscores as one space).
+ * The English words stay valid in every language, as STOP and HELP do. YES is not OK: it is
+ * Twilio's opt-in word.
+ */
+export const SMS_REPORT_KEYWORD_WORDS: Readonly<
+  Record<Exclude<SmsReportKeyword, 'edit'>, readonly string[]>
+> = {
+  ok: ['ok', 'okay', 'vale', 'listo', 'tamam'],
+  no_work: [
+    'no work',
+    'no work today',
+    'no trabajo',
+    'no hay trabajo',
+    'hoy no hay trabajo',
+    'sin trabajo',
+    'iş yok',
+    'is yok',
+    'bugün iş yok',
+    'bugun is yok',
+    'çalışma yok',
+    'calisma yok',
+    'bugün çalışma yok',
+    'bugun calisma yok',
+  ],
+  weather: [
+    'weather',
+    'weather day',
+    'rain',
+    'rained out',
+    'clima',
+    'lluvia',
+    'llueve',
+    'hava',
+    'hava durumu',
+    'yağmur',
+    'yagmur',
+  ],
+};
+
+/** EDIT's first word (the rest is the day and the change, "EDIT FRI Apex was 7 not 6"). */
+export const SMS_EDIT_WORDS = ['edit', 'editar', 'edita', 'corregir', 'düzelt', 'duzelt'] as const;
 
 /**
  * Words that mean a keyword (spec §9.5): the US opt-out words a carrier and the FCC's 2025 TCPA
@@ -44,14 +106,67 @@ export const SMS_KEYWORD_ALIASES: Readonly<Record<string, SmsKeyword>> = {
  * sentence is not one ("please stop at 5" is a text).
  */
 export function parseSmsKeyword(body: string): SmsKeyword | null {
-  const word = body
+  const word = normalizeKeywordText(body);
+  if ((SMS_ACCOUNT_KEYWORDS as readonly string[]).includes(word)) return word as SmsKeyword;
+  const alias = SMS_KEYWORD_ALIASES[word];
+  if (alias) return alias;
+  for (const [keyword, words] of Object.entries(SMS_REPORT_KEYWORD_WORDS))
+    if (words.some((w) => normalizeKeywordText(w) === word)) return keyword as SmsReportKeyword;
+  return parseSmsEdit(body) ? 'edit' : null;
+}
+
+/**
+ * A text as the keywords read it: NFKC, trimmed, trailing punctuation dropped, lower case (the
+ * Turkish "İ" without its combining dot, and "ı" as "i", since "I" lower-cases to "i"), and spaces, hyphens and underscores as one space.
+ */
+export function normalizeKeywordText(body: string): string {
+  return body
     .normalize('NFKC')
     .trim()
     .replace(/[\s.!?,;:]+$/u, '')
     .toLowerCase()
+    .replace(/\u0307/gu, '')
+    .replace(/ı/gu, 'i')
     .replace(/[\s_-]+/gu, ' ');
-  if ((SMS_KEYWORDS as readonly string[]).includes(word)) return word as SmsKeyword;
-  return SMS_KEYWORD_ALIASES[word] ?? null;
+}
+
+/**
+ * EDIT (W2-12, F10 by SMS): the text starts with an edit word (`SMS_EDIT_WORDS`, any case) and
+ * then a space or the end; `rest` is what follows, as written ("FRI Apex was 7 not 6"), for the
+ * worker to read the day and the change from. "EDITED" or "edit-friday" is not EDIT.
+ */
+export function parseSmsEdit(body: string): { rest: string } | null {
+  const text = body.normalize('NFKC').trim();
+  const m = /^(\S+)(?:\s+([\s\S]*))?$/u.exec(text);
+  if (!m) return null;
+  const first = normalizeKeywordText(m[1]!);
+  if (!SMS_EDIT_WORDS.some((w) => normalizeKeywordText(w) === first)) return null;
+  return { rest: (m[2] ?? '').trim() };
+}
+
+/**
+ * EDIT's day and change read by code (W2-12): the day reference at the start of `rest` ("FRI",
+ * "viernes", "cuma", "Oct 9", "yesterday"), resolved to the most recent such date on or before
+ * today in `tz`, and the words after it. The worker asks `classify_utterance` first and uses this
+ * where the model named no day or no change. A day that is not at the start is not read here.
+ */
+export function readSmsEdit(
+  rest: string,
+  now: Date,
+  tz: string,
+): { date: string | null; dayText: string | null; correction: string } {
+  // "İ" folds to "I" (same length), so the day words match case-insensitively.
+  const folded = rest.replace(/İ/gu, 'I').trim();
+  const correction = stripDayReference(folded);
+  const dayText =
+    correction !== folded && folded.endsWith(correction)
+      ? folded.slice(0, folded.length - correction.length).trim() || null
+      : null;
+  return {
+    date: dayText ? resolveDayReference(dayText, now, tz) : null,
+    dayText,
+    correction,
+  };
 }
 
 /**
@@ -103,8 +218,11 @@ export interface InboundSmsPlan {
    */
   reporterId: string | null;
   changes: ReporterChange[];
-  /** The reply, sent by SMS outside the Notifier's order and consent (`smsReplyAllowed`). */
-  reply: { key: TwoWaySmsKey; reporterId: string | null } | null;
+  /**
+   * The reply, sent by SMS outside the Notifier's order and consent (`smsReplyAllowed`): the
+   * account keywords' and the unknown number's (the report keywords' come from the worker).
+   */
+  reply: { key: Exclude<TwoWaySmsKey, KeywordReplySmsKey>; reporterId: string | null } | null;
   /** F13: record the number in `unknown_contacts` (channel 'sms'). */
   unknownContact: boolean;
   /**
@@ -113,6 +231,11 @@ export interface InboundSmsPlan {
    * a demo org's and never stops a real number).
    */
   phoneOptOut: 'record' | 'clear' | null;
+  /**
+   * W2-12: a report keyword (OK, NO WORK, WEATHER, EDIT) from a reporter who is not opted out,
+   * for the worker's `sms_keyword` job; null otherwise (and always on a one-way pack).
+   */
+  reportKeyword: SmsReportKeyword | null;
 }
 
 /**
@@ -147,7 +270,9 @@ export function orderInboundReporters<R extends InboundReporter>(reporters: read
  * - CALL / TEXT: `contact_pref` → `call` / `link` for every reporter not opted out, and the
  *   `pref_call_ok` / `pref_text_ok` confirmation unless the first reporter is opted out (spec §19
  *   Q46: the change decides how SiteLog reaches the person);
- * - any other text: stored for M6.
+ * - OK, NO WORK, WEATHER, EDIT (W2-12): named in `reportKeyword` for the worker's `sms_keyword`
+ *   job, unless the phone opted out; no reply here;
+ * - any other text: stored, no reply.
  *
  * Spec §19 Q45 (owner, 2026-10-15): when Twilio recognised the keyword itself (`OptOutType`
  * present: STOP, START or HELP on a Messaging Service with Advanced Opt-Out), Twilio sends
@@ -175,10 +300,11 @@ export function planInboundSms(input: {
     reply: null,
     unknownContact: false,
     phoneOptOut: null,
+    reportKeyword: null,
   };
   if (!input.pack.twoWaySms) return plan;
   const providerReplies = Boolean(input.optOutType?.trim());
-  const reply = (key: TwoWaySmsKey, reporterId: string | null) =>
+  const reply = (key: Exclude<TwoWaySmsKey, KeywordReplySmsKey>, reporterId: string | null) =>
     !providerReplies && smsReplyAllowed(input.pack, key) ? { key, reporterId } : null;
   const at = input.now.toISOString();
 
@@ -244,6 +370,15 @@ export function planInboundSms(input: {
         plan.reply = reply(keyword === 'call' ? 'pref_call_ok' : 'pref_text_ok', first.id);
       break;
     }
+    case 'ok':
+    case 'no_work':
+    case 'weather':
+    case 'edit':
+      // W2-12: answered by the worker (`sms_keyword`), never for a phone that opted out (the
+      // first reporter is opted out only when every one is). Twilio's `OptOutType` never names
+      // these, so no provider reply competes with it.
+      if (first.status !== 'opted_out') plan.reportKeyword = keyword;
+      break;
     default:
       break;
   }

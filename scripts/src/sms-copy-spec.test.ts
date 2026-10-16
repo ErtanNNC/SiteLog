@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  KEYWORD_REPLY_SMS_KEYS,
   SMS_KEYS,
   SMS_REPLY_HINT,
   smsTemplate,
@@ -39,7 +40,10 @@ describe('SMS copy vs spec §9.2', () => {
     expect([...table.keys()].sort()).toEqual([...SMS_KEYS].sort());
     const twoWay = [...table].filter(([, r]) => r.twoWay).map(([k]) => k);
     expect(twoWay.sort()).toEqual([...TWO_WAY_SMS_KEYS].sort());
-    for (const [key, row] of table) expect(row.tr === null, key).toBe(row.twoWay);
+    // The two-way rows have no TR text, except the report keywords' replies (W2-12, §19 Q83).
+    const keywordReply = (k: string) => (KEYWORD_REPLY_SMS_KEYS as readonly string[]).includes(k);
+    for (const [key, row] of table)
+      expect(row.tr === null, key).toBe(row.twoWay && !keywordReply(key));
   });
 
   it('copies EN (two-way) and TR (one-way) verbatim', () => {
@@ -47,7 +51,9 @@ describe('SMS copy vs spec §9.2', () => {
       const variant = { hasVoiceNumber: true, linksAllowed: true };
       expect(smsTemplate(key as SmsKey, 'en', { ...variant, twoWay: true }), key).toBe(row.en);
       if (row.tr !== null)
-        expect(smsTemplate(key as SmsKey, 'tr', { ...variant, twoWay: false }), key).toBe(row.tr);
+        expect(smsTemplate(key as SmsKey, 'tr', { ...variant, twoWay: row.twoWay }), key).toBe(
+          row.tr,
+        );
     }
   });
 

@@ -51,6 +51,10 @@ export const smsEn: SmsCatalog<SmsKey> = {
   pref_call_ok: 'OK, your daily report is now set to a call. Reply TEXT to switch to a link.',
   pref_text_ok:
     'OK, your daily report is now set to a link by text. Reply CALL to switch to a call.',
+  // W2-12 (spec §19 Q83, Q102): the report keywords' replies, two-way packs only.
+  day_off_link: 'Add the details for {site} today: {link}',
+  edit_preview: '{weekday}: {change}? Confirm here: {link}',
+  edit_unclear: "I couldn't make that change by text. Make it in Past reports: {link}",
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (§9.2), appended by `renderSms`. */

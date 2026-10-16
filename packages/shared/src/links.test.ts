@@ -8,6 +8,7 @@ import {
   ensureDailyLink,
   ensurePersonalLink,
   fieldLinkUrl,
+  fieldHistoryLinkUrl,
   fieldReportLinkUrl,
   linkCodeHash,
   maskFieldLinkUrl,
@@ -52,6 +53,17 @@ describe('field link codes', () => {
     const url = fieldReportLinkUrl('https://go.sitelog.app/', 'k7q2mx', 'r-1');
     expect(url).toBe('https://go.sitelog.app/r/K7Q2MX/report/r-1');
     expect(maskFieldLinkUrl(`PDF: ${url}`)).toBe('PDF: https://go.sitelog.app/r/••••••/report/r-1');
+  });
+
+  it('builds the Past reports links of an SMS EDIT, masked like any field link (W2-12)', () => {
+    const url = fieldHistoryLinkUrl('https://go.sitelog.app/', 'k7q2mx', 'r-1');
+    expect(url).toBe('https://go.sitelog.app/r/K7Q2MX/history/r-1');
+    expect(fieldHistoryLinkUrl('https://go.sitelog.app', 'K7Q2MX')).toBe(
+      'https://go.sitelog.app/r/K7Q2MX/history',
+    );
+    expect(maskFieldLinkUrl(`Confirm here: ${url}`)).toBe(
+      'Confirm here: https://go.sitelog.app/r/••••••/history/r-1',
+    );
   });
 
   it('makes deterministic six-character demo codes from the alphabet', () => {
