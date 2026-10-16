@@ -1,5 +1,25 @@
 # SiteLog · Durum
 
+**2026-10-16 (gece, devam):**
+
+- **Q117–Q134 onaylandı** (sizin "onay bekleyen tüm işlemleri onaylıyorum" mesajınız). Spec §19'da karar verildi olarak işaretli.
+- **Model karşılaştırması** (Actions → Deploy → environment `preview`, target `eval`):
+  - Düzeltmelerden sonra Sonnet raporların 24/28'ini doğru çıkarıyor (önce 21/28). Rapor başına yaklaşık 2,4 sent.
+  - Opus da 24/28 çıkarıyor ama yaklaşık 2,5 kat pahalı.
+  - Haiku hızlı görevlerin hepsini geçti.
+  - Önizleme ayarı: ana model Sonnet, hızlı model Haiku (9d15fbf).
+- **Bitti ve CI'da yeşil:**
+  - W3-01: sesli asistanın veri sözleşmesi, spec ekleri A ve B.
+  - W3-06: saatler sayfası EN/TR, fatura farkı bildirimi, maaş CSV'si güvenlik düzeltmesi.
+  - Çıkarım düzeltmeleri.
+- **W3-08** (sözlük EN/TR, Türkçe sekme) gönderildi, CI bekleniyor.
+- **Yeni açık sorular** (önerilerimle ilerliyorum):
+  - Q135–Q139, eval'den: hava durumu kuralı, "bugün iş yok", toplam saat söylenince ne olacağı, ekip kelimeleri, söylenmemiş yüzde.
+  - Q140–Q143, sözlükten.
+  - Q138 önerildiği gibi uygulandı: "demirci ekibi" artık şirket sayılıyor.
+- **Sizden (onay):** Q140. Staging'deki sözlükte eski hatanın oluşturduğu çift kayıtların birleştirilmesi. Bu, staging'de satır silmek demek; ancak sizin onayınızla yapılır.
+- **Önizleme worker'ı durdu** (60 dakikası doldu). Teste devam etmek isterseniz söyleyin, yeniden başlatırım.
+
 **2026-10-16 (gece):**
 
 - **Web push önizlemede açık.** VAPID anahtarları worker'a geçiyor (9c3bc89). field-api'nin açık anahtarı GitHub secret'ından kuruldu; kurulum logunda "web push on" yazıyor. Telefonda test: uygulamayı ana ekrana ekle, Ayarlar → Bildirimler → izin ver. Demo şirketler (Kestrel, Demir) bildirimi yalnızca Demo phone'da gösterir (Q116). **Sizden:** gerçek telefona bildirim için demo olmayan bir test şirketi. Bunun için telefon numarası, panel e-postası ve ülke (US/TR) gerekiyor.
