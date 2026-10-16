@@ -14,6 +14,7 @@ import {
   NO_LATENCY,
 } from './fakes';
 import { createWorld, type World } from './world';
+import { DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
 
 /**
  * F9 photos after filing (W2-04) on a real database: two photos and a voice caption added to a
@@ -247,5 +248,49 @@ describe('photos after filing (F9, W2-04): caption → version 2 → _v2 PDF →
     );
     expect(v!.change_note).toBe('1 photo added');
     expect(v!.photos.at(-1)).toEqual({ uploadId: photo, takenAt: expect.any(String) });
+  }, 60_000);
+  it('emails the signer of a signed-off report the photos reopened (§13 Recipients + signer)', async () => {
+    const q = database.q.bind(database);
+    const [r] = await q<{ id: string; current_version: number; report_no: string }>(
+      `select r.id, r.current_version, r.report_no from reports r join site_days d on d.id = r.site_day_id
+       where d.site_id = $1 and d.date = $2`,
+      [RIVERSIDE, today()],
+    );
+    const LENA = DEMO_USERS[0]!;
+    const recipients = (
+      await q<{ email: string }>(`select email from site_recipients where site_id = $1`, [
+        RIVERSIDE,
+      ])
+    ).map((x) => x.email);
+    expect(recipients).not.toContain(LENA.email);
+    await q(
+      `update reports set status = 'signed_off', signed_off_by = $2, signed_off_at = now() where id = $1`,
+      [r!.id, LENA.id],
+    );
+    // One photo, no caption: field-api attaches it when the batch is whole.
+    const batch = '9f9f9f9f-0000-4000-8000-000000000003';
+    const photo = '9f9f9f9f-0000-4000-8000-0000000000c1';
+    const path = uploadStoragePath(ORG, RIVERSIDE, today(), photo, 'png');
+    await world.storage.upload('photos', path, FAKE_PHOTO, 'image/png');
+    await q(
+      `insert into uploads (id, reporter_id, site_id, kind, storage_path, mime, recorded_at, batch_id, batch_size)
+       values ($1, $2, $3, 'photo', $4, 'image/png', now(), $5, 1)`,
+      [photo, MARCO, RIVERSIDE, path, batch],
+    );
+    await q(`select field_complete_upload($1, $2, 100)`, [photo, MARCO]);
+    await q(`select field_attach_photos($1, $2, '1 photo added', null)`, [r!.id, batch]);
+    const next = r!.current_version + 1;
+    const [render] = await q<{ id: number }>(`select id from jobs where dedupe_key = $1`, [
+      `render_pdf:${r!.id}:${next}`,
+    ]);
+    expect(await run(render!.id)).toEqual({ ok: true });
+    const [email] = await q<{ id: number }>(`select id from jobs where dedupe_key = $1`, [
+      `email:report_updated:${r!.id}:${next}`,
+    ]);
+    const before = world.emails.length;
+    expect(await run(email!.id)).toEqual({ ok: true });
+    const sent = world.emails.slice(before);
+    expect(sent).toHaveLength(1);
+    expect([...sent[0]!.to].sort()).toEqual([...new Set([...recipients, LENA.email])].sort());
   }, 60_000);
 });

@@ -344,6 +344,12 @@ describe('photos after filing (F9)', () => {
       [report],
     );
     expect(r).toEqual({ status: 'filed', signed_off_by: null });
+    // The "Updated" email goes to the signer of the version it reopened too (§13, 20261016000130).
+    const [render] = await svc<{ payload: Record<string, unknown> }>(
+      `select payload from jobs where dedupe_key = $1`,
+      [`render_pdf:${report}:2`],
+    );
+    expect(render!.payload).toMatchObject({ emailRecipients: true, signerId: SIGNER });
     const notices = await svc<{ kind: string; user_id: string; body: string; data: unknown }>(
       `select kind, user_id, body, data from notifications where org_id = $1 and target_path = $2`,
       [ORG, `/reports/${report}`],
