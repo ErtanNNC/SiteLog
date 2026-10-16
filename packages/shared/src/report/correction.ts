@@ -366,7 +366,12 @@ export function applyCorrectionOps(
   const equipment = list('equipment');
   const issues = list('issues');
   const next = list('nextWorkday');
-  const weatherIn = isObject(p.weather) ? (p.weather as Record<string, unknown>) : {};
+  // The observed weather is the weather API's, never the correction's: a value for `/weather`
+  // that carries one is not taken (the base's stays, or none).
+  const { observed: _observed, ...weatherIn } = isObject(p.weather)
+    ? (p.weather as Record<string, unknown>)
+    : {};
+  void _observed;
   const periods = sourceList(
     base.weather.periods,
     (Array.isArray(weatherIn.periods)

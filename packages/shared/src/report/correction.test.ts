@@ -306,6 +306,30 @@ describe('applyCorrectionOps (W2-10, §10.6)', () => {
   });
 });
 
+describe('applyCorrectionOps: the observed weather (W2-10 review)', () => {
+  it('never takes observed weather from the model (the base has none: none after)', () => {
+    const res = applyCorrectionOps(
+      draft(),
+      [
+        {
+          op: 'replace',
+          path: '/weather',
+          value: {
+            conditionsText: 'Rain 07:00–10:30, cold',
+            periods: draft().weather.periods,
+            observed: { tempMin: -5, tempMax: 2, precipitationMm: 40, source: 'open-meteo' },
+          },
+        },
+      ],
+      opts('it was cold too'),
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.weather.observed).toBeUndefined();
+    expect(res.data.weather.conditionsText).toBe('Rain 07:00–10:30, cold');
+  });
+});
+
 describe('applyCrewEdit (the draft steppers, Q80)', () => {
   it('sets workers and hours, totals in code, reporter_edit cited, hours stated', () => {
     const res = applyCrewEdit(
