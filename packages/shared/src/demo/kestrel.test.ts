@@ -12,6 +12,7 @@ import { readReportData } from '../report/upgrade.ts';
 import { renderSms, SMS_REPLY_HINT } from '../copy/sms.ts';
 import { formatDateInTz, formatPhone, formatTimeInTz } from '../format.ts';
 import { linkCodeHash } from '../links.ts';
+import { readCallPeaks } from '../voice.ts';
 import { languageOf } from '../locale.ts';
 import {
   DailyReportDataSchema,
@@ -386,6 +387,43 @@ describe('Kestrel demo data (§18.1)', () => {
     ]);
     expect(demo.unknownContacts[0]!.snippet).toMatch(/^this is Luis, covering Elm St\. today/);
     expect(demo.transcripts.find((x) => x.call_id === luis.id)!.text).toContain('this is Luis');
+  });
+
+  it('gives the Oct 9 call reports a two-speaker transcript and two-lane peaks (W3-05)', () => {
+    for (const no of ['NG-2210', 'HS-0418']) {
+      const report = todayReport(no)!;
+      const call = demo.calls.find((c) => c.report_id === report.id)!;
+      const lanes = readCallPeaks(call.peaks);
+      expect(lanes?.agent, no).not.toBeNull();
+      expect(lanes!.reporter).toHaveLength(96);
+      const t = demo.transcripts.find((x) => x.call_id === call.id)!;
+      const segments = t.segments as unknown as Array<{
+        start: number;
+        end: number;
+        speaker: string;
+        text: string;
+      }>;
+      expect(new Set(segments.map((x) => x.speaker))).toEqual(new Set(['agent', 'reporter']));
+      expect(segments[0]).toMatchObject({ start: 0, speaker: 'agent' });
+      expect(segments.at(-1)!.end).toBeLessThanOrEqual(call.duration_s!);
+      // Every call source of the report starts a reporter line.
+      const sources = data(report.id, 1).manpower.flatMap((m) => m.source);
+      for (const src of sources)
+        if (src.type === 'call')
+          expect(segments.find((x) => x.start === src.start)?.speaker, no).toBe('reporter');
+    }
+    const ng = demo.transcripts.find(
+      (x) => x.call_id === demo.calls.find((c) => c.report_id === todayReport('NG-2210')!.id)!.id,
+    )!;
+    expect(ng.text).toContain('14 on site, 100 hours in total. Shall I file it?');
+    // The history's call rows keep v1's single array: one lane.
+    const older = demo.calls.find(
+      (c) =>
+        c.status === 'completed' &&
+        c.report_id &&
+        !demo.transcripts.some((x) => x.call_id === c.id),
+    );
+    if (older) expect(readCallPeaks(older.peaks)?.agent).toBeNull();
   });
 
   it('logs the §18.1 texts, rendered as the app sends them', () => {

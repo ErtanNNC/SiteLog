@@ -17,6 +17,7 @@ import type {
   OrgMemberRow,
   OrgRow,
   OrgSettingsRow,
+  QuestionRow,
   ReportArchiveRow,
   ReportRow,
   ReportSourceRow,
@@ -998,8 +999,16 @@ export class SupabaseSource implements DataSource {
         .then(unwrap),
       sb.from('current_weather').select('*').eq('report_id', reportId).then(unwrap),
     ]);
-    // The sources' files: uploads first, WhatsApp messages as the fallback (report/media.ts).
-    const { messages: srcMessages, uploads } = await this.sourceFiles(sources);
+    // The sources' files: uploads first, WhatsApp messages as the fallback (report/media.ts); and
+    // the spoken answers' clips of its questions (§19 Q93: P7 plays them from the answer).
+    const questionIds = (questions as QuestionRow[]).map((q) => q.id);
+    const [{ messages: srcMessages, uploads: sourceUploads }, answerUploads] = await Promise.all([
+      this.sourceFiles(sources),
+      inChunks(questionIds, (part) =>
+        sb.from('uploads').select('*').in('question_id', part).then(unwrap),
+      ) as Promise<UploadRow[]>,
+    ]);
+    const uploads = uniqBy([...sourceUploads, ...answerUploads], (u) => u.id);
     const uploadById = new Map(uploads.map((u) => [u.id, u]));
     const msgById = new Map(srcMessages.map((m) => [m.id, m]));
     // Every voice note of the report (W1-17: each clip plays), and its WhatsApp thread if any.
@@ -1081,7 +1090,11 @@ export class SupabaseSource implements DataSource {
     // Transcripts of every clip: voice notes by upload (or WhatsApp message), calls by call.
     const answered = (calls as CallRow[]).filter((c) => c.status === 'completed');
     const transcripts = await inChunks(
-      [...voiceFiles.map((f) => `v:${f.id}`), ...answered.map((c) => `c:${c.id}`)],
+      [
+        ...voiceFiles.map((f) => `v:${f.id}`),
+        ...answerUploads.map((u) => `v:${u.id}`),
+        ...answered.map((c) => `c:${c.id}`),
+      ],
       (part) => {
         const voice = part.filter((x) => x.startsWith('v:')).map((x) => x.slice(2));
         const call = part.filter((x) => x.startsWith('c:')).map((x) => x.slice(2));
@@ -1142,7 +1155,9 @@ export class SupabaseSource implements DataSource {
     const [audioUrls, callUrls, pdfUrl, photoUrls] = await Promise.all([
       this.signedUrls(
         'audio',
-        detail.clips.flatMap((c) => (c.bucket === 'audio' && c.storagePath ? [c.storagePath] : [])),
+        [...detail.clips, ...detail.answerClips].flatMap((c) =>
+          c.bucket === 'audio' && c.storagePath ? [c.storagePath] : [],
+        ),
       ),
       this.signedUrls(
         'calls',
@@ -1156,6 +1171,10 @@ export class SupabaseSource implements DataSource {
       url: c.storagePath
         ? ((c.bucket === 'calls' ? callUrls : audioUrls).get(c.storagePath) ?? null)
         : null,
+    }));
+    detail.answerClips = detail.answerClips.map((c) => ({
+      ...c,
+      url: c.storagePath ? (audioUrls.get(c.storagePath) ?? null) : null,
     }));
     if (detail.audio)
       detail.audio.url = detail.audio.storagePath

@@ -11,7 +11,12 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState, type ComponentType } from 'react';
 import { formatAudioTimestamp, formatTimeInTz } from '@sitelog/shared/format.ts';
-import { MediaPlayer, useClipActive, useMediaPlayer } from '@/components/sitelog/MediaPlayer';
+import {
+  MediaPlayer,
+  useClipActive,
+  useMediaPlayer,
+  useSpeakerFilter,
+} from '@/components/sitelog/MediaPlayer';
 import { TranscriptExcerpt } from '@/components/sitelog/TranscriptExcerpt';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -32,6 +37,7 @@ import type {
 } from '@/data/types';
 import type { CopyKey } from '@/i18n/keys';
 import { useLooseCopy, type LooseT } from '@/i18n/useLooseCopy';
+import { callExcerptLines, showsSpeaker } from '@/lib/callLanes';
 import { formatWhen } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { durationPhrase } from './provenance';
@@ -165,11 +171,7 @@ export function SourcePanel({ detail, focusAnchor }: SourcePanelProps) {
                   {transcribed.length > 1 ? (
                     <h3 className="eyebrow mb-2 text-dust">{clipLabel(clip, tz, t)}</h3>
                   ) : null}
-                  <ol className="space-y-3" aria-label={t('report.transcript.title')}>
-                    {clip.transcript!.segments.map((s) => (
-                      <TranscriptRow key={s.start} clip={clip} segment={s} t={t} />
-                    ))}
-                  </ol>
+                  <TranscriptRows clip={clip} t={t} />
                 </section>
               ))}
             </div>
@@ -202,7 +204,14 @@ function ClipBlock({
   const tz = detail.site.timezone;
   const languages = languagesLine(detail, clip, t);
   const d = durationPhrase(clip.durationS);
-  const excerpts = mergedExcerpts(clip.excerpts);
+  const filter = useSpeakerFilter(clip.kind === 'call' ? clip.id : null);
+  // A call's excerpts carry the assistant's line before each quote (§11.3, muted); the speaker
+  // filter hides the other speaker's lines (W3-05).
+  const lines =
+    clip.kind === 'call'
+      ? callExcerptLines(mergedExcerpts(clip.excerpts), clip.transcript?.segments ?? [])
+      : mergedExcerpts(clip.excerpts);
+  const excerpts = lines.filter((e) => showsSpeaker(filter, e.speaker));
   return (
     <div data-testid="source-clip" data-clip={clip.id}>
       {labelled ? (
@@ -219,6 +228,7 @@ function ClipBlock({
         clipId={clip.id}
         kind={clip.kind}
         peaks={clip.peaks}
+        agentPeaks={clip.agentPeaks ?? null}
         durationS={clip.durationS}
         url={clip.url}
       />
@@ -230,8 +240,17 @@ function ClipBlock({
             {languages}
           </span>
         ) : null}
-        {!clip.url ? <span>{t('player.demoAudio')}</span> : null}
+        {!clip.url ? (
+          <span>{t('player.demoAudio')}</span>
+        ) : clip.synthetic ? (
+          <span data-testid="demo-tones">{t('player.demoTones')}</span>
+        ) : null}
       </div>
+      {lines.length && !excerpts.length ? (
+        <p className="mt-3 text-caption text-dust" data-testid="excerpts-filtered">
+          {t('report.aside.noExcerptsForSpeaker')}
+        </p>
+      ) : null}
       {excerpts.length ? (
         <div className="mt-3 space-y-2">
           <div className="eyebrow text-dust">{t('report.aside.excerpts')}</div>
@@ -243,13 +262,27 @@ function ClipBlock({
               start={e.start}
               end={e.end}
               quote={e.quote}
-              mapped={e.mapped}
+              mapped={e.mapped || null}
               speaker={e.speaker}
             />
           ))}
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** A clip's transcript lines in the drawer; a call's follow its speaker filter (W3-05). */
+function TranscriptRows({ clip, t }: { clip: MediaClip; t: LooseT }) {
+  const filter = useSpeakerFilter(clip.kind === 'call' ? clip.id : null);
+  return (
+    <ol className="space-y-3" aria-label={t('report.transcript.title')}>
+      {clip
+        .transcript!.segments.filter((s) => clip.kind !== 'call' || showsSpeaker(filter, s.speaker))
+        .map((s) => (
+          <TranscriptRow key={s.start} clip={clip} segment={s} t={t} />
+        ))}
+    </ol>
   );
 }
 
@@ -347,8 +380,26 @@ function activityLabel(e: ActivityEntry, t: LooseT): string {
       return status && !status.startsWith('report.') ? `${label} · ${status}` : label;
     }
     case 'call_in':
-    case 'call_out':
-      return t(`report.activity.events.${e.kind}`, { duration: duration(p.seconds) });
+    case 'call_out': {
+      // Talk now in the recorder is a browser call (W3-05); the outcome follows (§6.3).
+      const kind = p.transport === 'web' ? 'call_web' : e.kind;
+      const label = t(`report.activity.events.${kind}` as CopyKey, {
+        duration: duration(p.seconds),
+      });
+      const outcome = p.outcome
+        ? t(`report.activity.callOutcomes.${String(p.outcome)}` as CopyKey)
+        : '';
+      return outcome && !outcome.startsWith('report.') ? `${label} · ${outcome}` : label;
+    }
+    case 'call_missed': {
+      const outcome = p.outcome
+        ? t(`report.activity.callOutcomes.${String(p.outcome)}` as CopyKey)
+        : '';
+      const label = t('report.activity.events.call_missed');
+      return outcome && !outcome.startsWith('report.') && p.outcome !== 'not_reached'
+        ? `${label} · ${outcome}`
+        : label;
+    }
     case 'whatsapp_in':
     case 'whatsapp_out':
       return t(`report.activity.events.${e.kind}`, {
@@ -384,6 +435,11 @@ function Timeline({
     focused.current?.scrollIntoView({ block: 'nearest' });
   }, [focusAnchor]);
 
+  // §19 Q93: a spoken answer's clip plays under its "Question answered" entry.
+  const answerClip = (e: ActivityEntry) =>
+    e.kind === 'question_answered' && e.anchor
+      ? detail.answerClips.find((c) => c.questionId === e.anchor)
+      : undefined;
   if (!detail.activity.length)
     return <p className="text-caption text-dust">{t('report.activity.empty')}</p>;
   return (
@@ -425,9 +481,26 @@ function Timeline({
                 {e.detail ? <span> · {e.detail}</span> : null}
               </span>
             </div>
+            {answerClip(e) ? <AnswerClip clip={answerClip(e)!} t={t} /> : null}
           </li>
         );
       })}
     </ol>
+  );
+}
+
+/** A spoken answer's clip (W2-09, §19 Q93): its player and what it said. */
+function AnswerClip({ clip, t }: { clip: MediaClip; t: LooseT }) {
+  const said = clip.transcript?.text.trim();
+  return (
+    <div className="mt-2" data-testid="answer-clip" data-clip={clip.id}>
+      <div className="eyebrow mb-1 flex items-center gap-1.5 text-dust">
+        <Mic className="size-3.5" aria-hidden="true" />
+        {t('player.answerClip')}
+      </div>
+      <MediaPlayer clipId={clip.id} peaks={clip.peaks} durationS={clip.durationS} url={clip.url} />
+      {said ? <p className="mt-1 text-caption text-asphalt">“{said}”</p> : null}
+      {!clip.url ? <p className="mt-1 text-caption text-dust">{t('player.demoAudio')}</p> : null}
+    </div>
   );
 }

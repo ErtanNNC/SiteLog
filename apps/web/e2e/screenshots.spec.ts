@@ -8,6 +8,8 @@ const WIDTHS = [1440, 390] as const;
 // §18 demo ids are deterministic (packages/shared/src/demo/ids.ts).
 const RIVERSIDE_SITE = demoId('site:riverside');
 const HERO_REPORT = demoId('report:riverside:2026-10-09');
+// W3-05: Northgate's Oct 9 report came in on a call (two speaker lanes).
+const CALL_REPORT = demoId('report:northgate:2026-10-09');
 
 async function shoot(page: Page, name: string, width: number) {
   await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
@@ -52,6 +54,10 @@ for (const width of WIDTHS) {
     await expect(page.getByRole('heading', { name: 'Friday, Oct 9 — Riverside B' })).toBeVisible();
     await expect(page.getByTestId('media-player').first()).toBeVisible();
     await shoot(page, 'report', width);
+
+    await page.goto(`/reports/${CALL_REPORT}`);
+    await expect(page.getByTestId('media-player')).toHaveAttribute('data-lanes', '2');
+    await shoot(page, 'report-call', width);
   });
 }
 

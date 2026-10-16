@@ -60,13 +60,23 @@ export function provenancePhrases(
     const call = detail.clips.find((c) => c.kind === 'call');
     if (r.channel === 'voice') {
       const start = call?.receivedAt ?? r.receivedAt;
+      // W3-05: a phone call in or out, or Talk now in the recorder (a browser call).
+      const how =
+        call?.call?.transport === 'web'
+          ? 'viaBrowserCall'
+          : call?.call?.direction === 'outbound'
+            ? 'viaCallOut'
+            : 'viaCall';
       if (start && call && call.durationS > 0)
         out.push({
-          key: 'report.provenance.viaCall',
+          key: `report.provenance.${how}`,
           vars: { time: at(start), duration: duration(call.durationS) },
         });
       else if (start)
-        out.push({ key: 'report.provenance.viaCallNoLength', vars: { time: at(start) } });
+        out.push({ key: `report.provenance.${how}NoLength`, vars: { time: at(start) } });
+      // §9.4 rule 9: the call switched to the simple recording.
+      if (call?.call?.outcome === 'fallback_recording')
+        out.push({ key: 'report.provenance.fallbackRecording' });
     } else if (r.channel === 'sms') {
       if (r.receivedAt)
         out.push({ key: 'report.provenance.viaText', vars: { time: at(r.receivedAt) } });

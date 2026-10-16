@@ -443,6 +443,8 @@ export const copy = {
       playVoiceNote: 'Play voice note from {{ts}}',
       playCall: 'Play call from {{ts}}',
       showAnswer: 'Show the answer in Activity',
+      /** §19 Q93 (W3-05): an answer said on the recorder plays its clip from the answer. */
+      playAnswer: 'Play the spoken answer and show it in Activity',
       openHistory: 'Open version history',
     },
   },
@@ -458,8 +460,21 @@ export const copy = {
     languages: '{{from}} → {{to}}',
     noAudio: 'Audio not available',
     demoAudio: 'Demo playback (silent)',
+    /** W3-05: the demo's synthetic call recordings. */
+    demoTones: 'Demo recording: tones, no speech',
     speed: 'Playback speed',
     speedValue: '{{rate}}×',
+    /** §11.3 (W3-05): a call's two lanes and the speaker filter. */
+    laneReporter: 'Site manager',
+    laneAgent: 'SiteLog assistant',
+    speakerFilter: 'Speaker',
+    filter: {
+      both: 'Both',
+      reporter: 'Site manager',
+      agent: 'Assistant',
+    },
+    /** §19 Q93: a spoken answer's clip in Activity. */
+    answerClip: 'Spoken answer',
   },
 
   table: {
@@ -1063,6 +1078,14 @@ export const copy = {
       viaLink: 'voice note via text link at {{time}}',
       viaCall: 'phone call {{time}} ({{duration}})',
       viaCallNoLength: 'phone call {{time}}',
+      /** W3-05: SiteLog called the site manager (a reminder or call-back call, M8). */
+      viaCallOut: 'call from SiteLog {{time}} ({{duration}})',
+      viaCallOutNoLength: 'call from SiteLog {{time}}',
+      /** W3-05: Talk now in the recorder (`calls.transport 'web'`). */
+      viaBrowserCall: 'browser call {{time}} ({{duration}})',
+      viaBrowserCallNoLength: 'browser call {{time}}',
+      /** §9.4 rule 9: the call switched to the simple recording (outcome `fallback_recording`). */
+      fallbackRecording: 'simple recording mode',
       viaText: 'by text at {{time}}',
       viaWhatsApp: 'Reported by {{name}} by WhatsApp voice at {{time}}',
       confirmed: 'confirmed {{time}}',
@@ -1174,6 +1197,8 @@ export const copy = {
       clipVoiceNote: 'Voice note · {{time}}',
       clipCall: 'Call · {{time}}',
       noRecording: 'No recording with this report.',
+      /** W3-05: the speaker filter hides every excerpt line of this call. */
+      noExcerptsForSpeaker: 'No excerpt lines from this speaker.',
     },
     edit: {
       changeNote: 'Change note',
@@ -1234,6 +1259,19 @@ export const copy = {
       unanswered: 'Unanswered question: {{field}}',
       unconfirmed: 'Filed without confirmation from the site manager',
       call_mismatch: 'The call recording and the confirmed report differ on {{path}} — check',
+      /** §19 Q74 / Q123 (W3-05): `call_mismatch:<path>:<heard>:<confirmed>`, by the value's kind. */
+      call_mismatch_workers_one:
+        'The call recording says {{heard}} worker, the confirmed report says {{confirmed}} — check',
+      call_mismatch_workers_other:
+        'The call recording says {{heard}} workers, the confirmed report says {{confirmed}} — check',
+      call_mismatch_hours:
+        'The call recording says {{heard}} h per worker, the confirmed report says {{confirmed}} — check',
+      call_mismatch_lostHours:
+        'The call recording says {{heard}} h lost, the confirmed report says {{confirmed}} — check',
+      call_mismatch_value:
+        'The call recording says {{heard}} for {{path}}, the confirmed report says {{confirmed}} — check',
+      /** The crew or weather period the values are of, before the line. */
+      call_mismatch_of: '{{what}}: {{line}}',
       no_photo: 'No photo came in for this report',
       playAt: 'Play at {{ts}}',
       addAsSub: 'Add as subcontractor',
@@ -1272,6 +1310,8 @@ export const copy = {
         call_in: 'Call received · {{duration}}',
         call_out: 'Call placed · {{duration}}',
         call_missed: 'Call not answered',
+        /** W3-05: Talk now in the recorder. */
+        call_web: 'Browser call · {{duration}}',
         whatsapp_in: 'WhatsApp in · {{type}}',
         whatsapp_out: 'WhatsApp out · {{type}}',
         signed_off: 'Signed off',
@@ -1283,6 +1323,18 @@ export const copy = {
         missing: 'Missing — office alerted',
         voided: 'Report voided',
         other: '{{action}}',
+      },
+      /** A call's outcome, after its kind ("Call received · 2 min 41 s · filed"), §6.3 `call_outcome`. */
+      callOutcomes: {
+        filed: 'filed',
+        draft_saved: 'draft saved',
+        no_work: 'no work',
+        weather_day: 'weather day',
+        edit_applied: 'edit applied',
+        callback_requested: 'call-back requested',
+        fallback_recording: 'simple recording',
+        abandoned: 'ended without a report',
+        not_reached: 'not reached',
       },
       /** A text's delivery, after its kind ("Text sent · Daily link · delivered"). */
       status: {

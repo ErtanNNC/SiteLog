@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { formatAudioTimestamp, formatDate, formatTimeInTz } from '@sitelog/shared/format.ts';
-import type { Source } from '@sitelog/shared/schemas/report.ts';
 import { readReportData } from '@sitelog/shared/report/upgrade.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { PageHeader } from '@/components/sitelog/PageHeader';
@@ -47,7 +46,7 @@ import {
 } from '@/data/hooks';
 import { officeEntryAuthor } from '@/data/pdfInput';
 import type { ReportDetail } from '@/data/types';
-import { useLooseCopy, type LooseT } from '@/i18n/useLooseCopy';
+import { useLooseCopy } from '@/i18n/useLooseCopy';
 import { formatWhen } from '@/lib/format';
 import { openInNewTab } from '@/lib/tab';
 import { errorMessage } from '@/lib/utils';
@@ -55,6 +54,7 @@ import { PhotoPicker } from './PhotoPicker';
 import { ReportEditor } from './ReportEditor';
 import { ReportView } from './ReportView';
 import { durationPhrase, provenancePhrases, wordPhrases } from './provenance';
+import { callSourceAt, parseCallMismatch, reasonText } from './reasons';
 import { SourcePanel } from './SourcePanel';
 import {
   reportFormSchema,
@@ -319,10 +319,11 @@ function ReportScreen({
   ].map((reason) => {
     const [kind, ...rest] = reason.split(':');
     const name = rest.join(':');
-    const callAt = kind === 'call_mismatch' ? callSourceAt(detail, name) : null;
+    const mismatch = kind === 'call_mismatch' ? parseCallMismatch(reason) : null;
+    const callAt = mismatch ? callSourceAt(detail, mismatch.path) : null;
     return {
       key: reason,
-      text: reasonText(reason, t),
+      text: reasonText(reason, detail, t, language),
       action: callAt ? (
         <Button
           variant="secondary"
@@ -565,7 +566,12 @@ function ReportScreen({
           ) : (
             <ReportView
               detail={detail}
-              onShowAnswer={(anchor) => setFocusAnchor(anchor)}
+              onShowAnswer={(anchor) => {
+                setFocusAnchor(anchor);
+                // §19 Q93: an answer said on the recorder plays its clip (in Activity).
+                const clip = detail.answerClips.find((c) => c.questionId === anchor);
+                if (clip) player?.seek(0, clip.id);
+              }}
               onOpenHistory={() => {
                 const el = document.getElementById('version-switch');
                 el?.focus();
@@ -669,56 +675,4 @@ function chipVariant(detail: ReportDetail) {
   if (r.kind === 'weather_day') return 'weather_day' as const;
   if (r.status === 'filed') return 'filed' as const;
   return 'awaiting' as const;
-}
-
-/** The review reason's words (P7 banner): `kind:value` codes of `reports.review_reasons`. */
-function reasonText(reason: string, t: LooseT): string {
-  const [kind = '', ...rest] = reason.split(':');
-  const value = rest.join(':');
-  switch (kind) {
-    case 'unknown_company':
-      return t('report.reasons.unknown_company', { name: value });
-    case 'low_confidence':
-      return t('report.reasons.low_confidence', { path: value });
-    case 'unanswered':
-      return t('report.reasons.unanswered', { field: value });
-    case 'unconfirmed':
-      return t('report.reasons.unconfirmed');
-    case 'call_mismatch':
-      return t('report.reasons.call_mismatch', { path: value || '—' });
-    case 'no_photo':
-      return t('report.reasons.no_photo');
-    default:
-      return reason;
-  }
-}
-
-/**
- * The call second a `call_mismatch:<path>` reason points at (P7 "Play at 2:15"): the first call
- * source of the value at that path ("manpower[1].workers", "manpower.1.workers"), if the report
- * holds that call's recording.
- */
-function callSourceAt(
-  detail: ReportDetail,
-  path: string,
-): { callId: string; start: number } | null {
-  const keys = path
-    .replace(/\[(\d+)\]/g, '.$1')
-    .split('.')
-    .filter(Boolean);
-  let node: unknown = detail.data;
-  let sources: Source[] | undefined;
-  for (const k of keys) {
-    if (!node || typeof node !== 'object') break;
-    const rec = node as Record<string, unknown>;
-    if (Array.isArray(rec.source)) sources = rec.source as Source[];
-    node = Array.isArray(node) ? node[Number(k)] : rec[k];
-  }
-  if (node && typeof node === 'object' && Array.isArray((node as { source?: unknown }).source))
-    sources = (node as { source: Source[] }).source;
-  const call = sources?.find(
-    (s): s is Extract<Source, { type: 'call' }> =>
-      s.type === 'call' && detail.clips.some((c) => c.id === s.callId),
-  );
-  return call ? { callId: call.callId, start: call.start } : null;
 }

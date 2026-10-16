@@ -765,8 +765,10 @@ describe('Crew hours on v1.2 (W3-06)', () => {
     expect(call.date).toBe('2026-10-09');
     expect(call.clipId).toBe(store.data.calls.find((c) => c.report_id === call.reportId)!.id);
     expect(call.at).toBe(10);
-    // No transcript of that call in the demo: the crew line stands in for the words.
-    expect(call.quote).toBeNull();
+    // The reporter's words at that second of the call's transcript (W3-05 seeds it).
+    expect(call.quote).toBe(
+      'Apex, 3 guys, 8 hours, Ramp B. Shear wall formwork at Level 3, all done.',
+    );
     expect(call.crew).toEqual({
       company: 'Apex Concrete',
       lines: [{ workers: 3, hoursEach: 8 }],

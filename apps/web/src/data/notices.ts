@@ -34,7 +34,9 @@ export function reviewReasonRef(reason: string): CopyRef {
     case 'no_photo':
       return copyRef('overview.attention.reasons.no_photo');
     case 'call_mismatch':
-      return copyRef('overview.attention.reasons.call_mismatch', { field: arg });
+      // `call_mismatch:<path>:<heard>:<confirmed>` since W3-11 (§19 Q123): the line names the
+      // path; P7 words both values.
+      return copyRef('overview.attention.reasons.call_mismatch', { field: rest[0] ?? '' });
     default:
       return copyRef('overview.attention.reasons.other', { reason });
   }

@@ -302,12 +302,13 @@ describe('HoursPage on v1.2 (W3-06)', () => {
     const ngCall = store.data.calls.find((c) => c.report_id === ngReport.id)!;
     expect(call).toHaveAttribute('href', `/reports/${ngReport.id}?clip=${ngCall.id}&at=10`);
     expect(call).toHaveTextContent('call 0:10');
-    // No transcript of that call in the demo: the crew line stands in for the words.
-    expect(call.closest('li')).toHaveTextContent('“Apex Concrete · 3 × 8 h = 24 h”');
+    // The reporter's words at that second of the call (the demo's call transcript, W3-05).
+    const said = 'Apex, 3 guys, 8 hours, Ramp B. Shear wall formwork at Level 3, all done.';
+    expect(call.closest('li')).toHaveTextContent(`“${said}”`);
     const body = decodeURIComponent(
       within(aside).getByTestId('send-query').getAttribute('href')!.split('body=')[1]!,
     );
-    expect(body).toContain(`NG-2210-0069 · call 0:10: “Apex Concrete · 3 × 8 h = 24 h”`);
+    expect(body).toContain(`NG-2210-0069 · call 0:10: “${said}”`);
   });
 
   it('gives an accounts user the call and voice-note seconds without links', async () => {

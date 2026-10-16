@@ -40,7 +40,11 @@ export function SourceLinks({
 }) {
   if (!sources?.length) return null;
   const seen = new Set<string>();
-  const clipIds = new Set(detail.clips.map((c) => c.id));
+  // A spoken answer's clip is cited too (`voice_note` 0:00 with the answer, W2-09): it plays.
+  const clipIds = new Set([...detail.clips, ...detail.answerClips].map((c) => c.id));
+  const spokenAnswers = new Set(
+    detail.answerClips.flatMap((c) => (c.questionId ? [c.questionId] : [])),
+  );
   const anchors = new Set(detail.activity.flatMap((e) => (e.anchor ? [e.anchor] : [])));
   // An answer to one of the report's questions shows when it came in. An upgraded v1 reply keeps
   // the reply message's id in questionId (report/upgrade.ts): it shows that message's time.
@@ -85,6 +89,7 @@ export function SourceLinks({
             onShowAnswer={
               s.type === 'answer' && anchors.has(s.questionId) ? onShowAnswer : undefined
             }
+            spokenAnswer={s.type === 'answer' && spokenAnswers.has(s.questionId)}
             onOpenHistory={onOpenHistory}
           />
         );

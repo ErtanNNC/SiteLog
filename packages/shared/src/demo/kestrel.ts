@@ -76,6 +76,7 @@ import {
 } from './rows.ts';
 import type { DemoDataset, DemoUser } from './types.ts';
 import { heroTranscriptSegments, heroSummary } from './hero.ts';
+import { demoCallPeaks, demoCallTranscript } from './calls.ts';
 
 export const DEMO_TZ = 'America/Chicago';
 /** §18.1's Fri Oct 9, 2026: the default demo day. */
@@ -1741,6 +1742,38 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       if (isToday) {
         const v2 = toV2(dataV1, languageOf(reporter.locale));
         data = call ? sourcesToCall(v2, call.id) : v2;
+        if (call) {
+          // W3-05: the call's two-speaker transcript and its two-lane peaks (reporter left,
+          // assistant right), so P7's player shows both lanes; the history's calls keep v1's
+          // single array (one lane).
+          const callData = data as DailyReportData;
+          const totals = deriveTotals(callData, {
+            selfPerformCompanyIds: new Set([companyId('self')]),
+          });
+          const segments = demoCallTranscript(callData, {
+            callId: call.id,
+            firstName: firstName(reporter.name),
+            company: ORG_NAME,
+            durationS: Number(call.duration_s ?? 0),
+            totals,
+          });
+          call.peaks = demoCallPeaks(
+            segments,
+            Number(call.duration_s ?? 0),
+            `call:${s.key}:${c}`,
+          ) as unknown as CallRow['peaks'];
+          transcripts.push({
+            ...V12_ROW_DEFAULTS.transcripts,
+            id: demoId(`transcript:call:${s.key}:${c}`),
+            message_id: null,
+            call_id: call.id,
+            language: 'en',
+            text: segments.map((x) => x.text).join(' '),
+            segments: segments as unknown as TranscriptRow['segments'],
+            model: 'nova-3',
+            created_at: plusSeconds(call.started_at!, Number(call.duration_s ?? 0) + 20),
+          });
+        }
       }
       pushVersion(1, data, 'agent', null, confirmedAt);
       auditFiled(filedAt);

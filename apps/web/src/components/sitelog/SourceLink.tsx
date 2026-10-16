@@ -16,6 +16,8 @@ export interface SourceLinkProps {
   answerAt?: string | null;
   /** An answer given in a WhatsApp reply (an upgraded v1 source): worded "reply 17:41". */
   isReply?: boolean;
+  /** An answer said on the recorder (§19 Q93): its link also plays the clip. */
+  spokenAnswer?: boolean;
   timezone: string;
   editorName?: string | null;
   /** Reveals the answer (its question id, or a v1 reply's message id) in the Activity timeline. */
@@ -34,6 +36,7 @@ export function SourceLink({
   clipIds,
   answerAt,
   isReply,
+  spokenAnswer,
   timezone,
   editorName,
   onShowAnswer,
@@ -47,6 +50,11 @@ export function SourceLink({
     className,
   );
   const plain = cn(base, 'text-dust hover:bg-transparent hover:no-underline');
+  // §19 Q146's recommended default (open): the 24 px chip keeps its look, its hit area is 44 px.
+  const hit = cn(
+    base,
+    'relative before:absolute before:inset-x-0 before:top-1/2 before:h-target before:-translate-y-1/2',
+  );
   if (!source) return null;
   switch (source.type) {
     case 'voice_note':
@@ -64,7 +72,7 @@ export function SourceLink({
       return (
         <button
           type="button"
-          className={base}
+          className={hit}
           onClick={() => player.seek(source.start, clipId)}
           aria-label={`${label} · ${t(isCall ? 'source.links.playCall' : 'source.links.playVoiceNote', { ts })}`}
           data-source={source.type}
@@ -85,9 +93,9 @@ export function SourceLink({
       return (
         <button
           type="button"
-          className={base}
+          className={hit}
           onClick={() => onShowAnswer(source.questionId)}
-          aria-label={`${label} · ${t('source.links.showAnswer')}`}
+          aria-label={`${label} · ${t(spokenAnswer ? 'source.links.playAnswer' : 'source.links.showAnswer')}`}
           data-source="answer"
         >
           {label}
@@ -101,7 +109,7 @@ export function SourceLink({
       return (
         <button
           type="button"
-          className={base}
+          className={hit}
           onClick={onOpenHistory}
           aria-label={`${label} · ${t('source.links.openHistory')}`}
           data-source="office_edit"

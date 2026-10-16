@@ -167,14 +167,14 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-05 · Panel call player with speaker lanes; call evidence in P7
 
-- [ ] **W3-05 done** · today _partial_ (M)
+- [ ] **W3-05 done** · today _partial_ (M) · built (`apps/web/src/lib/callLanes.ts`, `apps/web/src/app/report/reasons.ts`, `apps/web/e2e/report-call.spec.ts`); ticks when CI runs the new demo e2e spec green
 - **Spec:** §11.3 `MediaPlayer` ("for calls, two lanes (reporter / assistant) and a speaker filter"), `SourceLink` (_call 2:15_), `TranscriptExcerpt`, P7 (provenance "phone call 18:41 (2 min 05 s) · confirmed by voice", Activity "call placed/answered/ended", `call_mismatch` banner), §19 Q74 (M7 extends the reason with both values), Q93 (decided: P7 plays a spoken answer's clip; a follow-up from week 2). **Design:** `Web-Report`.
 - **Already in the repo:** one-lane call playback from the `calls` bucket, call excerpts with muted agent lines, `callSourceAt`, the generic banner (W1-17); `transcripts.segments[].speaker` read as `reporter` / `agent` (`assemble.ts:586`).
 - **Build:**
-  - [ ] `MediaPlayer`: two lanes from the two-lane `peaks` (W3-01; a single array stays one lane), labels "Site manager" / "SiteLog assistant" (EN/TR), a speaker filter (both · reporter · assistant) that dims the other lane and skips its segments in the excerpt list, keyboard operable, status not by colour alone; `seek(seconds)` from a call source.
-  - [ ] Provenance and Activity for calls (inbound, outbound, Talk now: "browser call"), `confirmed_via 'voice'`, the call's outcome, the fallback-recording mode; `call_mismatch:<path>:<heard>:<confirmed>` worded with both values and _Play at m:ss_ (Q74).
-  - [ ] Q93: P7's _answer 17:41_ plays the spoken answer's clip (`uploads.question_id`).
-  - [ ] Demo data: a synthetic two-lane recording for Northgate and Hillcrest in demo mode (`apps/web/public/demo/`, generated tones, no speech), so the lanes show without a stack.
+  - [x] `MediaPlayer`: two lanes from the two-lane `peaks` (W3-01; a single array stays one lane), labels "Site manager" / "SiteLog assistant" (EN/TR), a speaker filter (both · reporter · assistant) that dims the other lane and skips its segments in the excerpt list, keyboard operable, status not by colour alone; `seek(seconds)` from a call source.
+  - [x] Provenance and Activity for calls (inbound, outbound, Talk now: "browser call"), `confirmed_via 'voice'`, the call's outcome, the fallback-recording mode; `call_mismatch:<path>:<heard>:<confirmed>` worded with both values and _Play at m:ss_ (Q74).
+  - [x] Q93: P7's _answer 17:41_ plays the spoken answer's clip (`uploads.question_id`).
+  - [x] Demo data: a synthetic two-lane recording for Northgate and Hillcrest in demo mode (`apps/web/public/demo/`, generated tones, no speech), so the lanes show without a stack.
 - **Tests:** unit tests of the lane fold and the filter; P7 tests in EN/TR (provenance, banner values, Activity); Playwright at 390 and 1440 px with axe.
 - **Done when:** in demo mode Northgate's report plays its call with two lanes, the filter hides the assistant's lines, _call 2:15_ seeks, and a `call_mismatch` reason reads "The call recording says 5 workers, the confirmed report says 4".
 - **Needs:** nothing.

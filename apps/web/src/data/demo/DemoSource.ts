@@ -11,7 +11,9 @@ import {
 } from '@sitelog/shared/report/photos.ts';
 import { seesNotification } from '@sitelog/shared/notifications.ts';
 import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
-import { DEMO_ORG_LOCALE, DEMO_SITELOG_NUMBER } from '@sitelog/shared/demo/kestrel.ts';
+import { DEMO_ORG_LOCALE, DEMO_SITELOG_NUMBER, DEMO_TODAY } from '@sitelog/shared/demo/kestrel.ts';
+import { DEMO_CALL_AUDIO_SITES, demoCallAudioPath } from '@sitelog/shared/demo/calls.ts';
+import { demoId } from '@sitelog/shared/demo/ids.ts';
 import { copy } from '@/copy/en';
 import { randomUuid } from '@/lib/photos';
 import { sleep } from '@/lib/utils';
@@ -152,6 +154,10 @@ export class DemoSource implements DataSource {
       const detail = assembleReportDetail(this.store.rows(), this.ctx(), reportId, version);
       detail.pdfUrl = this.pdfUrls.get(`${detail.report.id}:${detail.version}`) ?? null;
       detail.photos = detail.photos.map((p) => ({ ...p, url: this.photoUrl(p.storagePath) }));
+      detail.clips = detail.clips.map((c) => {
+        const url = demoCallAudioUrl(c.id);
+        return url ? { ...c, url, synthetic: true } : c;
+      });
       return detail;
     });
   }
@@ -484,4 +490,20 @@ export function demoPayrollCsv(
     store.data.settings.include_unconfirmed_in_payroll,
     store.data.settings.payroll_columns,
   );
+}
+
+/**
+ * The demo's synthetic call recordings (W3-05, `apps/web/public/demo/`, `pnpm demo:call-audio`):
+ * Northgate's and Hillcrest's Oct 9 calls play two-lane tones (no speech) laid out on their
+ * transcripts; every other demo clip keeps the silent stand-in.
+ */
+const DEMO_CALL_AUDIO = new Map<string, string>(
+  DEMO_CALL_AUDIO_SITES.map((site) => [
+    demoId(`call:${site}:${DEMO_TODAY}`),
+    `${import.meta.env.BASE_URL}${demoCallAudioPath(site)}`,
+  ]),
+);
+
+export function demoCallAudioUrl(clipId: string): string | null {
+  return DEMO_CALL_AUDIO.get(clipId) ?? null;
 }

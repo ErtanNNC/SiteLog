@@ -11,6 +11,7 @@
     "cutover-preflight": "tsx src/cutover-preflight.ts",
     "db-types-drift": "tsx src/db-types-drift.ts",
     "voice-contract": "tsx src/voice-contract.ts",
+    "demo-call-audio": "tsx src/demo-call-audio.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },

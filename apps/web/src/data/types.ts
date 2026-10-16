@@ -3,6 +3,7 @@
  * implementations (demo in-memory, Supabase) assemble them from DB-shaped rows.
  */
 import type {
+  CallOutcome,
   ContactPref,
   FieldChannel,
   InvoiceStatus,
@@ -514,6 +515,24 @@ export interface MediaClip {
   transcript: { language: string | null; text: string; segments: TranscriptSegment[] } | null;
   /** Excerpts for the values this clip is cited for (max 8, in time order). */
   excerpts: TranscriptExcerpt[];
+  /**
+   * A call's assistant lane (W3-05, `calls.peaks` `{reporter, agent}`): `peaks` is then the
+   * reporter's lane. Null or absent: one lane (a voice note, or a v1 call row's single array).
+   */
+  agentPeaks?: number[] | null;
+  /** A call's direction, transport and outcome (P7 provenance and Activity). */
+  call?: CallClipInfo | null;
+  /** A spoken answer's clip (W2-09, §19 Q93): the question it answers; never report material. */
+  questionId?: string | null;
+  /** The demo's synthetic recording (tones, no speech), so the page can say so. */
+  synthetic?: boolean;
+}
+
+export interface CallClipInfo {
+  direction: 'inbound' | 'outbound';
+  /** `pstn` (the phone network) or `web` (Talk now in the browser). */
+  transport: 'pstn' | 'web';
+  outcome: CallOutcome | null;
 }
 
 export interface TranscriptExcerpt {
@@ -660,6 +679,11 @@ export interface ReportDetail {
   audio: AudioSourceInfo | null;
   /** Every recording of the report in time order: voice notes and call recordings. */
   clips: MediaClip[];
+  /**
+   * Spoken answers' clips (W2-09 *Other — say it*, `uploads.question_id`; §19 Q93): not report
+   * material, so not in `clips`; P7 plays one from its answer (Activity, the answer's source link).
+   */
+  answerClips: MediaClip[];
   photos: PhotoSourceInfo[];
   transcript: { language: string | null; text: string; segments: TranscriptSegment[] } | null;
   excerpts: TranscriptExcerpt[];

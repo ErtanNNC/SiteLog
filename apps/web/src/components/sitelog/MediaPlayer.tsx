@@ -5,8 +5,13 @@
  * each player registers with <MediaPlayerProvider> under its clip id, so a SourceLink ("audio
  * 0:41", "call 2:15") seeks the clip it cites and plays it, and the others pause. Uses an <audio>
  * element with the signed URL; without one (demo mode) a silent timer still advances time.
+ *
+ * A call with two lanes (W3-05, `calls.peaks` `{reporter, agent}`) draws the site manager's lane
+ * over the assistant's, each labelled, with a speaker filter (both · site manager · assistant)
+ * that dims the other lane and hides its lines in the clip's excerpts and transcript
+ * (`useSpeakerFilter`). A v1 call row's single array stays one lane.
  */
-import { Pause, Play } from 'lucide-react';
+import { Check, Pause, Play } from 'lucide-react';
 import {
   createContext,
   useCallback,
@@ -19,6 +24,7 @@ import {
 } from 'react';
 import { formatAudioTimestamp } from '@sitelog/shared/format.ts';
 import { useCopy } from '@/i18n/useCopy';
+import { foldLanes, laneDimmed, SPEAKER_FILTERS, type SpeakerFilter } from '@/lib/callLanes';
 import { waveformBars } from '@/lib/peaks';
 import { cn } from '@/lib/utils';
 
@@ -46,6 +52,9 @@ interface PlayerCtx {
   setTime: (clipId: string, t: number) => void;
   /** The second a source link sought, for highlighting its excerpt and transcript segment. */
   highlight: { clipId: string | null; at: number } | null;
+  /** Each call's speaker filter (W3-05); a clip not listed shows both speakers. */
+  filters: Readonly<Record<string, SpeakerFilter>>;
+  setFilter: (clipId: string, filter: SpeakerFilter) => void;
 }
 
 const Ctx = createContext<PlayerCtx | null>(null);
@@ -78,15 +87,26 @@ export function MediaPlayerProvider({ children }: { children: ReactNode }) {
     [started],
   );
   const setTime = useCallback((clipId: string, time: number) => setActive({ clipId, time }), []);
+  const [filters, setFilters] = useState<PlayerCtx['filters']>({});
+  const setFilter = useCallback(
+    (clipId: string, filter: SpeakerFilter) => setFilters((cur) => ({ ...cur, [clipId]: filter })),
+    [],
+  );
   const value = useMemo(
-    () => ({ register, seek, started, active, setTime, highlight }),
-    [register, seek, started, active, setTime, highlight],
+    () => ({ register, seek, started, active, setTime, highlight, filters, setFilter }),
+    [register, seek, started, active, setTime, highlight, filters, setFilter],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useMediaPlayer(): PlayerCtx | null {
   return useContext(Ctx);
+}
+
+/** A call's speaker filter (W3-05): which lines its excerpts and transcript show. */
+export function useSpeakerFilter(clipId: string | null): SpeakerFilter {
+  const player = useMediaPlayer();
+  return (clipId && player?.filters[clipId]) || 'both';
 }
 
 /** Whether second `at`…`end` of a clip is where the player is, or what a source link sought. */
@@ -103,7 +123,10 @@ export interface MediaPlayerProps {
   /** The clip's id: its upload (voice note) or call. */
   clipId: string;
   kind?: 'voice_note' | 'call';
+  /** The waveform; on a call with two lanes, the site manager's lane. */
   peaks: number[];
+  /** A call's assistant lane (W3-05); null or absent: one lane. */
+  agentPeaks?: number[] | null;
   durationS: number;
   url: string | null;
   className?: string;
@@ -113,6 +136,7 @@ export function MediaPlayer({
   clipId,
   kind = 'voice_note',
   peaks,
+  agentPeaks,
   durationS,
   url,
   className,
@@ -158,7 +182,12 @@ export function MediaPlayer({
     ctx?.started(clipId);
     if (audioRef.current && url) {
       audioRef.current.playbackRate = rateRef.current;
-      void audioRef.current.play().catch(() => setPlaying(false));
+      try {
+        const started = audioRef.current.play() as Promise<void> | undefined;
+        started?.catch?.(() => setPlaying(false));
+      } catch {
+        setPlaying(false);
+      }
       return;
     }
     // Silent stand-in (demo, or a file that is gone): advance 0.25 s of audio every 250 ms × rate.
@@ -194,16 +223,40 @@ export function MediaPlayer({
   }, [ctx, clipId, handle]);
   useEffect(() => () => stopTimer(), []);
 
+  const twoLanes = isCall && !!agentPeaks;
+  const lanes = twoLanes ? foldLanes(peaks, agentPeaks) : null;
   const bars = peaks.length ? waveformBars(peaks) : Array.from({ length: 48 }, () => 0.3);
   const progress = time / duration;
   const nextRate: PlaybackRate = rate === 1 ? 1.5 : 1;
+  const filter: SpeakerFilter = (twoLanes && ctx?.filters[clipId]) || 'both';
+  const drawBars = (values: number[], dimmed = false) =>
+    values.map((p, i) => {
+      const played = i / values.length <= progress;
+      return (
+        <span
+          key={i}
+          aria-hidden="true"
+          className={cn(
+            'w-full min-w-px flex-1 rounded-[1px]',
+            played ? 'bg-signal' : 'bg-rebar',
+            dimmed && 'opacity-30',
+          )}
+          style={{ height: `${Math.max(8, Math.min(100, p * 100))}%` }}
+        />
+      );
+    });
 
-  return (
+  const player = (
     <div
-      className={cn('flex items-center gap-2 sm:gap-3', className)}
+      className={cn(
+        'flex items-center gap-2 sm:gap-3',
+        // Two lanes take a full-width line under the controls, so they stay legible at 390 px.
+        twoLanes ? 'flex-wrap' : className,
+      )}
       data-testid="media-player"
       data-clip={clipId}
       data-kind={kind}
+      data-lanes={twoLanes ? 2 : 1}
     >
       {url ? (
         <audio
@@ -235,7 +288,12 @@ export function MediaPlayer({
         )}
       </button>
       <div
-        className="flex h-target min-w-0 flex-1 cursor-pointer items-end gap-px"
+        className={cn(
+          'min-w-0 flex-1 cursor-pointer',
+          twoLanes
+            ? 'order-last flex basis-full flex-col gap-1 py-0.5'
+            : 'flex h-target items-end gap-px',
+        )}
         role="slider"
         aria-label={t(isCall ? 'player.labelCall' : 'player.label')}
         aria-valuemin={0}
@@ -258,22 +316,36 @@ export function MediaPlayer({
           }
         }}
       >
-        {bars.map((p, i) => {
-          const played = i / bars.length <= progress;
-          return (
-            <span
-              key={i}
-              aria-hidden="true"
-              className={cn(
-                'w-full min-w-px flex-1 rounded-[1px]',
-                played ? 'bg-signal' : 'bg-rebar',
-              )}
-              style={{ height: `${Math.max(8, Math.min(100, p * 100))}%` }}
-            />
-          );
-        })}
+        {lanes
+          ? (['reporter', 'agent'] as const).map((lane) => {
+              const dimmed = laneDimmed(filter, lane);
+              return (
+                <div
+                  key={lane}
+                  className={cn('min-w-0', dimmed && 'text-dust')}
+                  data-testid={`lane-${lane}`}
+                  data-dimmed={dimmed || undefined}
+                >
+                  <div
+                    className={cn(
+                      'font-mono text-[11px] uppercase leading-[14px] tracking-[0.08em]',
+                      dimmed ? 'text-dust' : 'text-asphalt',
+                    )}
+                  >
+                    {t(lane === 'agent' ? 'player.laneAgent' : 'player.laneReporter')}
+                  </div>
+                  <div className="flex h-5 items-end gap-px">
+                    {drawBars(lane === 'agent' ? (lanes.agent ?? []) : lanes.reporter, dimmed)}
+                  </div>
+                </div>
+              );
+            })
+          : drawBars(bars)}
       </div>
-      <div className="shrink-0 font-mono text-data tabular text-dust" data-testid="player-time">
+      <div
+        className={cn('shrink-0 font-mono text-data tabular text-dust', twoLanes && 'ml-auto')}
+        data-testid="player-time"
+      >
         <span className="text-asphalt">{formatAudioTimestamp(time)}</span>
         {' / '}
         {formatAudioTimestamp(duration)}
@@ -288,6 +360,43 @@ export function MediaPlayer({
       >
         {t('player.speedValue', { rate: String(rate) })}
       </button>
+    </div>
+  );
+  if (!twoLanes) return player;
+  return (
+    <div className={cn('space-y-2', className)}>
+      {player}
+      <div
+        role="group"
+        aria-label={t('player.speakerFilter')}
+        className="flex flex-wrap items-center gap-1.5"
+        data-testid="speaker-filter"
+      >
+        <span className="eyebrow basis-full text-dust" aria-hidden="true">
+          {t('player.speakerFilter')}
+        </span>
+        {SPEAKER_FILTERS.map((f) => {
+          const on = filter === f;
+          return (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={on}
+              onClick={() => ctx?.setFilter(clipId, f)}
+              className={cn(
+                'inline-flex h-target items-center gap-1 rounded-btn border px-2.5 text-caption',
+                on
+                  ? 'border-asphalt bg-concrete font-semibold text-asphalt'
+                  : 'border-rebar text-asphalt hover:bg-concrete',
+              )}
+              data-filter={f}
+            >
+              {on ? <Check className="size-4" aria-hidden="true" /> : null}
+              {t(`player.filter.${f}`)}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

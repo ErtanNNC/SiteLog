@@ -897,8 +897,10 @@ describe('SupabaseSource: Reports archive and Report review (W1-17)', () => {
     expect(got.clips).toHaveLength(1);
     expect(got.clips[0]!.url).toBe(`https://storage.test/calls/${got.clips[0]!.storagePath}`);
     const want = await demo.getReportDetail(report.id);
+    // Demo mode plays a synthetic recording of this call (W3-05); the stack signs the real one.
     expect({ ...got, clips: got.clips.map((c) => ({ ...c, url: null })), pdfUrl: null }).toEqual({
       ...want,
+      clips: want.clips.map(({ synthetic: _synthetic, ...c }) => ({ ...c, url: null })),
       pdfUrl: null,
     });
     expect(got.activity.map((a) => a.kind)).toEqual(

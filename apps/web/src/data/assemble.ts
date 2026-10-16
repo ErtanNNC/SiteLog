@@ -78,6 +78,7 @@ import {
   upgradePhotosV1,
 } from '@sitelog/shared/report/upgrade.ts';
 import { isWorkingDay } from '@sitelog/shared/schedule/day.ts';
+import { readCallPeaks } from '@sitelog/shared/voice.ts';
 import {
   addDays,
   convertMeasure,
@@ -1847,13 +1848,15 @@ export function reportClips(
     if (c.report_id !== report.id && !callIds.has(c.id)) continue;
     seen.add(c.id);
     const transcript = transcriptOf((t) => t.call_id === c.id);
+    // Two lanes since W3-01 (reporter, agent); a v1 row's single array is the reporter's lane.
+    const lanes = readCallPeaks(c.peaks);
     clips.push({
       id: c.id,
       kind: 'call',
       bucket: 'calls',
-      peaks: Array.isArray(c.peaks)
-        ? c.peaks.filter((x): x is number => typeof x === 'number')
-        : [],
+      peaks: lanes?.reporter ?? [],
+      agentPeaks: lanes?.agent ?? null,
+      call: { direction: c.direction, transport: c.transport, outcome: c.outcome },
       durationS: Number(c.duration_s ?? 0),
       storagePath: c.recording_path,
       url: null,
@@ -1871,6 +1874,41 @@ export function reportClips(
     });
   }
   return clips.sort((a, b) => byTime({ at: a.receivedAt }, { at: b.receivedAt }));
+}
+
+/**
+ * The spoken answers' clips of a report's questions (W2-09 *Other — say it*, `uploads.question_id`;
+ * §19 Q93): each with its transcript, in time order. Not report material: P7 plays one from its
+ * answer, never among the report's recordings.
+ */
+export function answerClips(rows: RowSet, report: ReportRow): MediaClip[] {
+  const questionIds = new Set(
+    rows.questions.filter((q) => q.report_id === report.id).map((q) => q.id),
+  );
+  return (rows.uploads ?? [])
+    .filter((u) => u.question_id !== null && questionIds.has(u.question_id) && u.kind === 'audio')
+    .map((u): MediaClip => {
+      const t = rows.transcripts.find((x) => x.upload_id === u.id);
+      return {
+        id: u.id,
+        kind: 'voice_note',
+        bucket: 'audio',
+        peaks: Array.isArray(u.peaks)
+          ? u.peaks.filter((x): x is number => typeof x === 'number')
+          : [],
+        durationS: Number(u.duration_s ?? 0),
+        storagePath: u.purged_at ? null : u.storage_path,
+        url: null,
+        receivedAt: u.received_at ?? u.recorded_at ?? '',
+        languages: [],
+        transcript: t
+          ? { language: t.language, text: t.text, segments: segmentsOf(t.segments) }
+          : null,
+        excerpts: [],
+        questionId: u.question_id,
+      };
+    })
+    .sort((a, b) => byTime({ at: a.receivedAt }, { at: b.receivedAt }));
 }
 
 /** Photos received with a voice note: within five minutes of it, in either direction. */
@@ -2057,7 +2095,11 @@ export function reportActivity(
       actorType: c.direction === 'inbound' ? 'reporter' : 'agent',
       actorName: c.direction === 'inbound' ? reporterName : null,
       kind: !answered ? 'call_missed' : c.direction === 'inbound' ? 'call_in' : 'call_out',
-      params: answered ? { seconds: Number(c.duration_s ?? 0) } : { status: c.status },
+      params: {
+        ...(answered ? { seconds: Number(c.duration_s ?? 0) } : { status: c.status }),
+        transport: c.transport,
+        ...(c.outcome ? { outcome: c.outcome } : {}),
+      },
       detail: null,
       anchor: c.id,
     });
@@ -2247,6 +2289,7 @@ export function assembleReportDetail(
         }
       : null,
     clips,
+    answerClips: answerClips(rows, report),
     photos,
     transcript: firstVoice?.transcript ?? null,
     excerpts: firstVoice?.excerpts ?? [],
