@@ -10,6 +10,7 @@
     "countries-set": "tsx src/countries-set.ts",
     "cutover-preflight": "tsx src/cutover-preflight.ts",
     "db-types-drift": "tsx src/db-types-drift.ts",
+    "voice-contract": "tsx src/voice-contract.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },

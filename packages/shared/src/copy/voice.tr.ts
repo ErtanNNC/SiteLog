@@ -1,0 +1,61 @@
+import type { VoiceCatalog } from './voice.ts';
+
+/**
+ * The voice assistant's lines, Turkish (W3-01). The disclosure and the outbound opening follow
+ * the spec's Turkish (F6 step 2, §9.4 "Opening (TR)"); the rest written for W3-01. Formal "siz",
+ * no exclamation marks (§9.7); for the native-speaker read (§19 Q63).
+ */
+export const voiceTr: VoiceCatalog = {
+  recording_notice: 'Günlük raporunuz için bu görüşme kaydediliyor.',
+  opening_inbound:
+    'SiteLog, merhaba {first}. {recording_notice} {site} için bugünün raporunu dinliyorum.',
+  opening_inbound_pick_site: 'SiteLog, merhaba {first}. {recording_notice}',
+  opening_outbound:
+    'Merhaba {first}, ben {company} için SiteLog asistanı. {recording_notice} {site} için bugünün raporunu alabilir miyim?',
+  opening_talk_now:
+    'SiteLog, merhaba {first}. {recording_notice} {site} için bugünün raporunu dinliyorum.',
+  go_ahead:
+    'Buyurun: bugün ne yapıldı, sahada kimler vardı, hava, teslimatlar ve eklemek istedikleriniz.',
+  pick_site: 'Bu rapor hangi şantiye için: {sites}?',
+  pick_site_by_name: 'Şantiyenin adını söyleyin.',
+  or: 'ya da',
+  backchannel: 'Hı hı, devam edin.',
+  filler: 'Anladım, bir saniye.',
+  silence_prompt: 'Hâlâ hatta mısınız?',
+  silence_goodbye:
+    'Söylediklerinizi kaydettim, raporu tamamlamanız için size bir link göndereceğim. İyi günler.',
+  time_warning: 'Görüşmenin bitmesine yaklaşık iki dakika kaldı.',
+  fallback: 'Basit yoldan yapalım: sinyal sesinden sonra her şeyi anlatın, bitince kapatın.',
+  readback_crew:
+    'Elimdeki bilgiler: {companies} firmadan sahada {workers} kişi, toplam {hours} saat.',
+  readback_crew_one_company:
+    'Elimdeki bilgiler: bir firmadan sahada {workers} kişi, toplam {hours} saat.',
+  readback_weather: 'Hava nedeniyle {hours} saat çalışılamadı.',
+  readback_change: 'Değişti: {change}.',
+  confirm_ask: 'Kaydedeyim mi?',
+  confirm_repeat: 'Kaydedeyim mi? Evet ya da hayır deyin.',
+  weather_day_crew_ask:
+    'Saat {time} itibarıyla hava nedeniyle iş durdu, ekip eve gönderildi. Bu sabah sahada kaç kişi vardı?',
+  weather_photo_link: 'Hava koşullarının bir fotoğrafı kaydı güçlendirir. Size bir link gönderdim.',
+  consent_ask:
+    'Bu görüşmeleri kaydetmem ve size rapor linklerini mesajla göndermem uygun mu? Evet ya da hayır deyin.',
+  preference_ask: 'Her iş günü arama mı istersiniz, yoksa linkinizi mesajla mı göndereyim?',
+  consent_declined: 'Anlaşıldı. Bu görüşmeden hiçbir şey saklanmayacak. İyi günler.',
+  consent_declined_link:
+    'Anlaşıldı. Bu görüşmeden hiçbir şey saklanmayacak. Raporu web üzerinden verebilmeniz için linkinizi mesajla göndereceğim. İyi günler.',
+  unknown_greeting: 'Merhaba, ben SiteLog asistanı.',
+  unknown_caller:
+    "Bu numara henüz SiteLog'da kayıtlı değil. Adınızı, firmanızı ve şantiyeyi söyleyin, ofise ileteyim.",
+  unknown_goodbye: 'Teşekkürler, ofise ileteceğim. İyi günler.',
+  goodbye_filed: 'Kaydedildi. PDF ve fotoğraf eklemeniz için bir link gönderdim. İyi akşamlar.',
+  goodbye_draft_saved:
+    'Taslağınızı kaydettim, tamamlamanız için bir link göndereceğim. İyi günler.',
+  goodbye_no_work: '{site} için bugün çalışma yok olarak kaydettim. İyi akşamlar.',
+  goodbye_weather_day:
+    '{site} için bugünü hava nedeniyle kayıp gün olarak kaydettim. İyi akşamlar.',
+  goodbye_edit_applied: 'Tamam. Güncellenen rapor ofise gidiyor. İyi günler.',
+  goodbye_callback_requested: 'Tamam, sizi saat {time} gibi arayacağım. İyi günler.',
+  goodbye_fallback_recording:
+    'Teşekkürler. Taslağı kontrol etmeniz için bir link göndereceğim. İyi günler.',
+  goodbye_abandoned: 'İyi günler.',
+};

@@ -1,0 +1,58 @@
+import type { VoiceCatalog } from './voice.ts';
+
+/**
+ * The voice assistant's lines, Spanish (W3-01): the EN lines in Spanish, "usted" as the SMS copy
+ * (§9.2 "Spanish versions mirror EN"); for the native-speaker read (§19 Q63).
+ */
+export const voiceEs: VoiceCatalog = {
+  recording_notice: 'Esta llamada se graba para escribir su reporte diario.',
+  opening_inbound:
+    'SiteLog, hola {first}. {recording_notice} Adelante con el reporte de hoy de {site}.',
+  opening_inbound_pick_site: 'SiteLog, hola {first}. {recording_notice}',
+  opening_outbound:
+    'Hola {first}, soy el asistente de SiteLog para {company}. {recording_notice} ¿Está listo para darme el reporte de hoy de {site}?',
+  opening_talk_now:
+    'SiteLog, hola {first}. {recording_notice} Adelante con el reporte de hoy de {site}.',
+  go_ahead:
+    'Adelante: qué se hizo, quién estuvo en la obra, el clima, las entregas y cualquier otra cosa.',
+  pick_site: '¿Para qué obra es: {sites}?',
+  pick_site_by_name: 'Diga el nombre de la obra.',
+  or: 'o',
+  backchannel: 'Ajá, siga.',
+  filler: 'Entendido, un momento.',
+  silence_prompt: '¿Sigue ahí?',
+  silence_goodbye: 'Guardé lo que me dijo y le enviaré un enlace para terminar el reporte. Adiós.',
+  time_warning: 'Nos quedan unos dos minutos de llamada.',
+  fallback:
+    'Hagámoslo de la forma más simple: dígame todo después del tono y cuelgue cuando termine.',
+  readback_crew:
+    'Esto es lo que tengo: {workers} en la obra de {companies} empresas, {hours} horas.',
+  readback_crew_one_company:
+    'Esto es lo que tengo: {workers} en la obra de una empresa, {hours} horas.',
+  readback_weather: 'El clima detuvo el trabajo {hours} horas.',
+  readback_change: 'Cambiado: {change}.',
+  confirm_ask: '¿Lo registro?',
+  confirm_repeat: '¿Lo registro? Diga sí o no.',
+  weather_day_crew_ask:
+    'Día de lluvia desde las {time}, el equipo se fue a casa. ¿Cuántos había en la obra esta mañana?',
+  weather_photo_link: 'Una foto de las condiciones refuerza el registro. Le envié un enlace.',
+  consent_ask:
+    '¿Está bien si grabo estas llamadas y le envío enlaces de reportes por mensaje? Diga sí o no.',
+  preference_ask: 'Cada día de trabajo, ¿prefiere una llamada o un mensaje con su enlace?',
+  consent_declined: 'Entendido. No se guarda nada de esta llamada. Adiós.',
+  consent_declined_link:
+    'Entendido. No se guarda nada de esta llamada. Le enviaré su enlace por mensaje para que haga el reporte en la web. Adiós.',
+  unknown_greeting: 'Hola, soy el asistente de SiteLog.',
+  unknown_caller:
+    'Este número todavía no está en SiteLog. Dígame su nombre, su empresa y la obra, y se lo pasaré a la oficina.',
+  unknown_goodbye: 'Gracias, se lo pasaré a la oficina. Adiós.',
+  goodbye_filed:
+    'Registrado. Le envié el PDF y un enlace para agregar fotos. Que tenga buena tarde.',
+  goodbye_draft_saved: 'Guardé su borrador y le enviaré un enlace para terminarlo. Adiós.',
+  goodbye_no_work: 'Anotado: hoy no hay trabajo en {site}. Que tenga buena tarde.',
+  goodbye_weather_day: 'Anotado: día perdido por el clima en {site}. Que tenga buena tarde.',
+  goodbye_edit_applied: 'Listo. El reporte actualizado va a la oficina. Adiós.',
+  goodbye_callback_requested: 'Está bien, le llamo a las {time}. Adiós.',
+  goodbye_fallback_recording: 'Gracias. Le enviaré un enlace para revisar el borrador. Adiós.',
+  goodbye_abandoned: 'Adiós.',
+};
