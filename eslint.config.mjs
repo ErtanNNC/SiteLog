@@ -18,6 +18,7 @@ export default tseslint.config(
       'apps/web/e2e/**',
       'apps/field/e2e/**',
       '**/*.d.ts',
+      '.claude/**', // agent worktrees (local only)
     ],
   },
   js.configs.recommended,

@@ -30,3 +30,6 @@ apps/worker/tmp/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Agent worktrees (local only)
+.claude/worktrees/

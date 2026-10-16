@@ -21,3 +21,4 @@ apps/worker/src/ai/prompts/*.md
 # which checks them byte for byte.
 apps/voice-agent/contract
 apps/voice-agent/copy
+.claude/
