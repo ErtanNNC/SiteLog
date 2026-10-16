@@ -168,6 +168,8 @@ export interface FieldApiDeps {
    */
   publicUrl?: () => string | undefined;
   now?: () => Date;
+  /** Waiting between polls of a send claim (tests pass a fake). */
+  sleep?: (ms: number) => Promise<void>;
   randomBytes?: (n: number) => Uint8Array;
   randomUUID?: () => string;
 }
@@ -188,6 +190,11 @@ interface DeviceContext extends LinkContext {
 
 type Env = { Variables: { field: DeviceContext } };
 type Ctx = Context<Env>;
+
+/** A send claim lives at most this long (a crashed request frees the key then). */
+const SEND_CLAIM_TTL_S = 30;
+const SEND_CLAIM_POLL_MS = 200;
+const SEND_CLAIM_WAIT_MS = 10_000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -219,6 +226,21 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
 
   app.onError((err, c) => errorResponse(c, err, now()));
   app.notFound((c) => c.json({ error: 'not_found' }, 404, { 'Cache-Control': 'no-store' }));
+
+  /**
+   * Waits for the one claim on a Notifier key (field_claim_send()): a request sending under the
+   * key holds it until the Notifier answers. Still held after `SEND_CLAIM_WAIT_MS` (a slow
+   * provider), the caller is asked to try again shortly (429 with Retry-After).
+   */
+  async function claimSendKey(key: string): Promise<void> {
+    const sleep = deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+    for (let waited = 0; ; waited += SEND_CLAIM_POLL_MS) {
+      if (await store.claimSend(key, SEND_CLAIM_TTL_S)) return;
+      if (waited >= SEND_CLAIM_WAIT_MS)
+        throw rateLimited(new Date(now().getTime() + SEND_CLAIM_TTL_S * 1000).toISOString(), now());
+      await sleep(SEND_CLAIM_POLL_MS);
+    }
+  }
 
   // ── Authentication helpers ───────────────────────────────────────────────────────────────────
   /** The link, its reporter, org and pack; refuses a revoked or expired link, a disabled reporter. */
@@ -1419,16 +1441,25 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
         via: 'expired_link',
       });
     }
-    // One message per expired link and day, however often the button is tapped.
-    const outcome = await deps.sendDailyLink({
-      reporterId: reporter.id,
-      vars: {
-        site: site.name,
-        link: fieldLinkUrl(fieldAppUrl, today.code),
-        ...(pack.voiceNumber ? { number: formatPhone(pack.voiceNumber) } : {}),
-      },
-      dedupeKey: `expired_daily_link:${link.id}:${reportDate}`,
-    });
+    // One message per expired link and day, however often the button is tapped. The Notifier
+    // dedupes by the messages already written under the key, so two taps at once take turns: the
+    // second waits for the first to finish and then gets the Notifier's answer for that message.
+    const sendKey = `expired_daily_link:${link.id}:${reportDate}`;
+    await claimSendKey(sendKey);
+    let outcome: NotifyOutcome;
+    try {
+      outcome = await deps.sendDailyLink({
+        reporterId: reporter.id,
+        vars: {
+          site: site.name,
+          link: fieldLinkUrl(fieldAppUrl, today.code),
+          ...(pack.voiceNumber ? { number: formatPhone(pack.voiceNumber) } : {}),
+        },
+        dedupeKey: sendKey,
+      });
+    } finally {
+      await store.releaseSend(sendKey);
+    }
     if (outcome.channel === null) return notSent(outcome.reason);
     await audit(ctx, 'daily_link.requested', 'field_link', link.id, {
       ...base,

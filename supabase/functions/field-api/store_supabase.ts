@@ -163,6 +163,16 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       );
     },
 
+    async claimSend(key, ttlSeconds) {
+      return await rpc<boolean>(
+        admin.rpc('field_claim_send', { p_key: key, p_ttl_seconds: ttlSeconds }),
+      );
+    },
+
+    async releaseSend(key) {
+      await rpc<null>(admin.rpc('field_release_send', { p_key: key }));
+    },
+
     async deviceVerifyLocked(reporterId, deviceId, until) {
       return await rpc<{ locked: boolean }>(
         admin.rpc('field_device_verify_locked', {

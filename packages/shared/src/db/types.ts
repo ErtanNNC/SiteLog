@@ -1351,6 +1351,9 @@ export type Database = {
         Args: { p_key: string; p_limit: number; p_window_seconds: number };
         Returns: Json;
       };
+      // W2-03 (20261016000090): the one sender of a Notifier key at a time (a rate_limits row).
+      field_claim_send: { Args: { p_key: string; p_ttl_seconds: number }; Returns: boolean };
+      field_release_send: { Args: { p_key: string }; Returns: undefined };
       // reports/:id/confirm (F8): enqueues file_report for the confirmed version and draft
       // revision (20261015000070) under the site-day lock: {status: 'queued' | 'filed', jobId, version}.
       field_confirm_report: {

@@ -210,6 +210,13 @@ export interface FieldStore extends DailyLinkStore {
   ): Promise<void>;
   rateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult>;
   /**
+   * field_claim_send() (20261016000090, W2-03): the one sender of a Notifier key at a time; false
+   * while another request holds it (a claim older than `ttlSeconds` is taken over).
+   */
+  claimSend(key: string, ttlSeconds: number): Promise<boolean>;
+  /** field_release_send(): lets the key go once the Notifier answered. */
+  releaseSend(key: string): Promise<void>;
+  /**
    * field_device_verify_locked() (20261016000020, F16): the device check's lock audited
    * `device.verify_locked` with the office notice (`device_verify_locked`), once per window
    * (`until`); `locked` false on a repeat.

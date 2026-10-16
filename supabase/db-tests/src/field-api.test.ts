@@ -1099,6 +1099,33 @@ describe('field_rate_limit (rate_limits, spec §6.5, D26)', () => {
   });
 });
 
+describe('field_claim_send / field_release_send (W2-03: one sender of a Notifier key)', () => {
+  const claim = (key: string, ttl = 30) =>
+    svc<{ v: boolean }>(`select field_claim_send($1, $2) as v`, [key, ttl]).then((r) => r[0]!.v);
+  const release = (key: string) => svc(`select field_release_send($1)`, [key]);
+
+  it('one holder at a time; released, the next caller claims it', async () => {
+    expect(await claim('expired_daily_link:l1:2026-10-09')).toBe(true);
+    expect(await claim('expired_daily_link:l1:2026-10-09')).toBe(false);
+    expect(await claim('expired_daily_link:l2:2026-10-09')).toBe(true);
+    await release('expired_daily_link:l1:2026-10-09');
+    expect(await claim('expired_daily_link:l1:2026-10-09')).toBe(true);
+  });
+
+  it('takes over a claim older than its ttl (a crashed request)', async () => {
+    await svc(
+      `insert into rate_limits (key, window_start, count)
+       values ('send_claim:stale-key', now() - interval '31 seconds', 1)`,
+    );
+    expect(await claim('stale-key')).toBe(true);
+    expect(await claim('stale-key')).toBe(false);
+  });
+
+  it('refuses a bad ttl', async () => {
+    expect(await failure(`select field_claim_send('x', 0)`)).toBe('invalid send claim');
+  });
+});
+
 describe('field_revoke_consent (F15 Settings: Turn off; W2-02)', () => {
   const revoke = async (reporter: string, type: string, device: string | null = ID(900)) =>
     (
@@ -1342,6 +1369,8 @@ describe('the field-api functions are the service role’s only', () => {
     'field_complete_upload(uuid,uuid,integer)',
     'field_set_day_status(uuid,uuid,date,text,jsonb)',
     'field_rate_limit(text,integer,integer)',
+    'field_claim_send(text,integer)',
+    'field_release_send(text)',
     'field_confirm_report(uuid,uuid,integer,integer)',
     'field_flag_late_upload(uuid,uuid)',
     'field_revoke_consent(uuid,consent_type,uuid)',

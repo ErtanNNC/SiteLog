@@ -175,6 +175,22 @@ export class FakeFieldStore implements FieldStore {
     });
   }
 
+  /** field_claim_send(): key → when it was claimed (ms). */
+  sendClaims = new Map<string, number>();
+
+  claimSend(key: string, ttlSeconds: number): Promise<boolean> {
+    const now = this.now().getTime();
+    const at = this.sendClaims.get(key);
+    if (at !== undefined && at > now - ttlSeconds * 1000) return Promise.resolve(false);
+    this.sendClaims.set(key, now);
+    return Promise.resolve(true);
+  }
+
+  releaseSend(key: string): Promise<void> {
+    this.sendClaims.delete(key);
+    return Promise.resolve();
+  }
+
   deviceVerifyLocked(reporterId: string, deviceId: string, until: string) {
     this.calls.push('deviceVerifyLocked');
     const r = this.reporters.find((x) => x.id === reporterId);

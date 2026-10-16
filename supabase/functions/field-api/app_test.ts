@@ -246,12 +246,15 @@ function setup(
   const app = createFieldApp({
     store,
     sendVerifyCode: opts.sender ? opts.sender(store) : record,
-    sendDailyLink: (m) => {
-      // The Notifier's dedupe: one message per key.
+    sendDailyLink: async (m) => {
+      // The Notifier's dedupe: it reads the messages under the key, then the provider sends
+      // (a round trip), so two sends at once would both find none.
       const repeat = daily.some((d) => d.dedupeKey === m.dedupeKey);
+      await new Promise((r) => setTimeout(r, 5));
       if (!repeat) daily.push(m);
-      return Promise.resolve(opts.dailyOutcome ?? { channel: 'sms', messageId: 'msg-1' });
+      return opts.dailyOutcome ?? { channel: 'sms', messageId: 'msg-1' };
     },
+    sleep: (ms) => new Promise((r) => setTimeout(r, Math.min(ms, 2))),
     fieldAppUrl: () => FIELD_APP,
     linkSigningSecret: () => opts.secret ?? 'test-link-signing-secret',
     allowedOrigins: () => [FIELD_APP],
@@ -2223,6 +2226,25 @@ Deno.test(
     });
     assertEquals([limited.status, limited.json.error], [429, 'rate_limited']);
     assert(Number(limited.headers.get('retry-after')) > 0);
+  },
+);
+
+Deno.test(
+  'expired/daily-link: two taps at once send one text, and both get the same answer',
+  async () => {
+    const h = setup();
+    const call = () =>
+      h.call('POST', 'expired/daily-link', {
+        body: { code: CODES.expired },
+        code: null,
+        cookies: null,
+      });
+    const [a, b] = await Promise.all([call(), call()]);
+    assertEquals([a.status, a.json], [200, { sent: true, channel: 'sms' }]);
+    assertEquals([b.status, b.json], [200, { sent: true, channel: 'sms' }]);
+    assertEquals(h.daily.length, 1);
+    // The claim is let go once the Notifier answered.
+    assertEquals(h.store.sendClaims.size, 0);
   },
 );
 

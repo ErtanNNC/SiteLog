@@ -488,6 +488,17 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select field_rate_limit('matrix:${o.org}', 1, 60) as v`,
   },
+  // W2-03 (20261016000090_send_claims.sql): one sender of a Notifier key at a time.
+  field_claim_send: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) => `select field_claim_send('matrix:${o.org}', 30) as v`,
+  },
+  field_release_send: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) => `select field_release_send('matrix:${o.org}') as v`,
+  },
   field_confirm_report: {
     why: '§6.5: field-api only (service role); the office files with sign-off and edits instead.',
     allow: NONE,
