@@ -30,9 +30,11 @@ import type { Db } from './db';
  * - Every live subscription of the reporter gets the notification (two phones, two notifications).
  *   The requests go out in parallel, each with its own timeout (`PUSH_REQUEST_TIMEOUT_MS`) as well
  *   as the job's signal, never following a redirect. The push service's answer per subscription
- *   (`pushResult`): 2xx sent; 400, 403, 404, 410, 413 or keys web-push cannot use gone (the row is
- *   revoked `gone`, audited, so it is never tried again); 429 / 5xx, a
- *   network failure or a timeout retry; anything else refused. One sent: the message went out.
+ *   (`pushResult`): 2xx sent; 404, 410, a 400 or 403 whose body names the subscription (another
+ *   VAPID key, a bad device token), or keys web-push cannot use gone (the row is revoked `gone`,
+ *   audited, so it is never tried again); 429 / 5xx, a network failure or a timeout retry;
+ *   anything else refused, a bare 400 or 403 included (it may be SiteLog's VAPID JWT: one
+ *   configuration error must not revoke every subscription). One sent: the message went out.
  *   None sent: a retry when any may pass later (the job retries this channel) until the job's
  *   `PUSH_MAX_ATTEMPTS`th run or its last, otherwise an `undeliverable` refusal, so the Notifier
  *   falls back to the next channel once (W2-01, §19 Q22).
@@ -115,10 +117,10 @@ export function webPushTransport(input: PushDeps): MessageTransport {
   async function sendOne(
     sub: Subscription,
     body: string,
-  ): Promise<{ status: number; id: string | null }> {
+  ): Promise<{ status: number; id: string | null; reason: string }> {
     // Only the known push services (spec §19 Q115; the database's check on a live row): never a
     // request to a host a client chose. Refused without a request.
-    if (!isAllowedPushEndpoint(sub.endpoint)) return { status: 0, id: null };
+    if (!isAllowedPushEndpoint(sub.endpoint)) return { status: 0, id: null, reason: '' };
     let request: ReturnType<typeof webpush.generateRequestDetails>;
     try {
       request = webpush.generateRequestDetails(
@@ -142,8 +144,13 @@ export function webPushTransport(input: PushDeps): MessageTransport {
       // Each request its own limit; the job's signal still aborts it (`abortableFetch`).
       signal: AbortSignal.timeout(timeoutMs),
     });
+    // A 400 or 403 is the subscription's only when its body says so (`pushResult`): read a little.
+    const reason =
+      res.status === 400 || res.status === 403
+        ? (await res.text().catch(() => '')).slice(0, 500)
+        : '';
     // The service's id of the message (RFC 8030 §5: the Location of the push message resource).
-    return { status: res.status, id: res.headers.get('location') };
+    return { status: res.status, id: res.headers.get('location'), reason };
   }
 
   /** One subscription's outcome: sent (with the service's id), retry later, or not this one. */
@@ -153,7 +160,7 @@ export function webPushTransport(input: PushDeps): MessageTransport {
     | { kind: 'failed'; error: string };
 
   async function deliver(sub: Subscription, body: string): Promise<Outcome> {
-    let outcome: { status: number; id: string | null };
+    let outcome: { status: number; id: string | null; reason: string };
     try {
       outcome = await sendOne(sub, body);
     } catch (err) {
@@ -176,7 +183,7 @@ export function webPushTransport(input: PushDeps): MessageTransport {
       if (network) return { kind: 'retry', error: text };
       return { kind: 'failed', error: text };
     }
-    const result = pushResult(outcome.status);
+    const result = pushResult(outcome.status, outcome.reason);
     if (result === 'sent') return { kind: 'sent', id: outcome.id };
     if (result === 'retry') {
       return { kind: 'retry', error: `push: service answered ${outcome.status}` };

@@ -41,7 +41,10 @@ const MESSAGE: OutboundMessage = {
 
 function setup(
   subs: ReturnType<typeof sub>[],
-  answer: (url: string, init: RequestInit | undefined) => number | Error | Promise<number>,
+  answer: (
+    url: string,
+    init: RequestInit | undefined,
+  ) => number | { status: number; body: string } | Error | Promise<number>,
   requests: Array<{ url: string; init: RequestInit | undefined }> = [],
   extra: Partial<Pick<PushDeps, 'attempt' | 'timeoutMs'>> = {},
 ) {
@@ -57,6 +60,7 @@ function setup(
     requests.push({ url: String(url), init });
     const a = await answer(String(url), init);
     if (a instanceof Error) throw a;
+    if (typeof a === 'object') return new Response(a.body, { status: a.status });
     return new Response(null, { status: a });
   };
   const transport = webPushTransport({ config, store, fetch: fetchImpl, randomUUID, ...extra });
@@ -112,12 +116,36 @@ describe('web push transport (W2-14)', () => {
     expect(gone).toEqual([['a', 404]]);
   });
 
-  it('revokes a subscription answered 400, 403 or 413, as a gone one (W2-14 review)', async () => {
-    for (const status of [400, 403, 413]) {
-      const { transport, gone } = setup([sub('a')], () => status);
+  it('a bare 400, 403 or 413 keeps the subscription: refused for this message, the SMS fallback (W2-15/16 review)', async () => {
+    // Apple and FCM answer 400 / 403 for a bad or expired VAPID JWT too (SiteLog's key or clock):
+    // one configuration error must not revoke every subscription.
+    for (const answer of [
+      400,
+      403,
+      413,
+      { status: 403, body: '{"reason":"BadJwtToken"}' },
+      { status: 403, body: '{"reason":"ExpiredJwtToken"}' },
+    ]) {
+      const { transport, gone } = setup([sub('a')], () => answer);
       const err = await refusal(transport.send(MESSAGE, {}));
-      expect(err.undeliverable, String(status)).toBe(true);
-      expect(gone).toEqual([['a', status]]);
+      expect(err.undeliverable, JSON.stringify(answer)).toBe(true);
+      expect(err.retryable).toBe(false);
+      expect(gone, JSON.stringify(answer)).toEqual([]);
+    }
+  });
+
+  it('revokes a subscription a 400 or 403 names: another VAPID key, a bad device token', async () => {
+    for (const answer of [
+      {
+        status: 403,
+        body: 'the VAPID credentials in the authorization header do not correspond to the credentials used to create the subscriptions.',
+      },
+      { status: 400, body: '{"reason":"BadDeviceToken"}' },
+    ]) {
+      const { transport, gone } = setup([sub('a')], () => answer);
+      const err = await refusal(transport.send(MESSAGE, {}));
+      expect(err.undeliverable).toBe(true);
+      expect(gone).toEqual([['a', answer.status]]);
     }
   });
 

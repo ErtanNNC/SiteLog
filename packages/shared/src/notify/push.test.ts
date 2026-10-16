@@ -55,12 +55,26 @@ describe('web push payload (W2-14)', () => {
   });
 
   it('maps the push service status (RFC 8030)', () => {
-    expect([201, 202, 200].map(pushResult)).toEqual(['sent', 'sent', 'sent']);
-    expect([404, 410].map(pushResult)).toEqual(['gone', 'gone']);
-    expect([429, 500, 503].map(pushResult)).toEqual(['retry', 'retry', 'retry']);
-    // W2-14 review: a subscription these answer for can never carry a notification again.
-    expect([400, 403, 413].map(pushResult)).toEqual(['gone', 'gone', 'gone']);
-    expect([0, 301, 401, 415].map(pushResult)).toEqual([
+    expect([201, 202, 200].map((s) => pushResult(s))).toEqual(['sent', 'sent', 'sent']);
+    expect([404, 410].map((s) => pushResult(s))).toEqual(['gone', 'gone']);
+    expect([429, 500, 503].map((s) => pushResult(s))).toEqual(['retry', 'retry', 'retry']);
+    // W2-15/16 review: a bare 400 or 403 may be SiteLog's VAPID JWT (key or clock), and 413 is
+    // SiteLog's payload: refused for this message, the subscription kept.
+    expect([400, 403, 413].map((s) => pushResult(s))).toEqual(['refused', 'refused', 'refused']);
+    expect(pushResult(403, '{"reason":"BadJwtToken"}')).toBe('refused');
+    expect(pushResult(403, '{"reason":"ExpiredJwtToken"}')).toBe('refused');
+    expect(pushResult(401, 'UnauthorizedRegistration')).toBe('refused');
+    // …unless the body names the subscription itself.
+    expect(
+      pushResult(
+        403,
+        'the VAPID credentials in the authorization header do not correspond to the credentials used to create the subscriptions.',
+      ),
+    ).toBe('gone');
+    expect(pushResult(400, 'UnauthorizedRegistration')).toBe('gone');
+    expect(pushResult(400, '{"reason":"BadDeviceToken"}')).toBe('gone');
+    expect(pushResult(400, '{"reason":"DeviceTokenNotForTopic"}')).toBe('gone');
+    expect([0, 301, 401, 415].map((s) => pushResult(s))).toEqual([
       'refused',
       'refused',
       'refused',

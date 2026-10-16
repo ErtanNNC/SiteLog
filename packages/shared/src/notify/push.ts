@@ -63,18 +63,32 @@ export function readPushData(raw: unknown): PushNotificationData {
 /**
  * What a push service's answer means for one subscription (RFC 8030): `sent` (201, or any 2xx);
  * `gone` (the subscription can never carry a notification again: revoke it and fall back, W2-01):
- * 404, 410 (expired or removed), and, since the W2-14 review, 400 (a malformed subscription), 403
- * (a key pair that does not match it: the browser subscribed with another VAPID key) and 413 (the
- * service will not take SiteLog's payload for it); `retry` (429, 5xx: later, same channel);
- * `refused` (anything else, a 3xx included: not this time, the subscription kept).
+ * 404 and 410 (expired or removed), and a 400 or 403 whose body names the subscription itself
+ * (`PUSH_GONE_REASONS`: it was made with another VAPID key, or Apple's device token is bad);
+ * `retry` (429, 5xx: later, same channel); `refused` (anything else: not this time, the
+ * subscription kept, the message falls back). A bare 400 or 403 is refused, not gone: Apple and
+ * FCM answer them for a bad or expired VAPID JWT too (SiteLog's key or clock), and revoking on
+ * those would drop every subscription at once for one configuration error. 413 is the payload's
+ * size, SiteLog's, never the subscription's (W2-15/16 review).
  */
 export type PushResult = 'sent' | 'gone' | 'retry' | 'refused';
 
-const PUSH_GONE_STATUSES: readonly number[] = [400, 403, 404, 410, 413];
+const PUSH_GONE_STATUSES: readonly number[] = [404, 410];
 
-export function pushResult(status: number): PushResult {
+/**
+ * A 400 or 403 body that names the subscription, not SiteLog's credentials: FCM's answer for a
+ * subscription made with another VAPID key ("…do not correspond to the credentials used to
+ * create the subscriptions", legacy `UnauthorizedRegistration`), Apple's `BadDeviceToken` and
+ * `DeviceTokenNotForTopic`. Apple's `BadJwtToken`, `ExpiredJwtToken` or `InvalidProviderToken`
+ * and FCM's other answers are SiteLog's side: refused.
+ */
+const PUSH_GONE_REASONS =
+  /do not correspond to the credentials used to create the subscription|UnauthorizedRegistration|BadDeviceToken|DeviceTokenNotForTopic/i;
+
+export function pushResult(status: number, body = ''): PushResult {
   if (status >= 200 && status < 300) return 'sent';
   if (PUSH_GONE_STATUSES.includes(status)) return 'gone';
+  if ((status === 400 || status === 403) && PUSH_GONE_REASONS.test(body)) return 'gone';
   if (status === 429 || status >= 500) return 'retry';
   return 'refused';
 }
