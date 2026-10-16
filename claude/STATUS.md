@@ -103,6 +103,13 @@ Spec §19 ve planlara işleniyor. Q86 için SMS izninde "Aç" düğmesi ekleniyo
 
 W1-09, W1-13 ve W1-15 bu testle tamamlandı olarak işaretlendi. Bu testte giriş linkinde bir hata çıktı ve düzeltildi (9330786).
 
+**Q86 yapıldı (74f97bd):** Ayarlar'da SMS izni için "Aç" düğmesi var. STOP ile çıkmış numara bu düğmeyle açılamıyor:
+
+- iki yönlü SMS'te kişiye "START yazın" deniyor;
+- tek yönlü SMS'te (TR) "ofise sorun" deniyor.
+- **Q94 (yeni, kararınız):** tek yönlü SMS ülkelerinde operatör üzerinden STOP yapan numara nasıl geri dönsün? START orada bize ulaşamıyor. Öneri ve yapılan: "ofise sorun". Ofisin bunu kaldırma ekranı M10'da (Ekip sayfası) gelecek.
+- **Sırada:** incelemede bulunan 5 hatanın düzeltilmesi. Ayrıca izin kapatılınca o anda işlenmekte olan raporun da durması kuruluyor (önerimle; aksini söylemezseniz böyle kalacak).
+
 ## Hafta 2 (M6) — başladı
 
 Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahtar gerektirmeyen biletlerden başlıyorum: W2-01 (kanallar arası yedekleme), W2-02 (saha Ayarlar), W2-03 (geçmiş raporlar, süresi dolmuş link, yeni telefon), W2-04 (Filed ekranı ekleri).
