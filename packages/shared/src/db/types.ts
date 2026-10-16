@@ -399,6 +399,11 @@ export type ReportVersionRow = {
   /** Channel of a reporter edit. */
   via: FieldChannel | null;
   /**
+   * F10 (20261016000110, W2-11, spec §19 Q81): the reporter who made a reporter version on the web
+   * (a backup may change a day they covered). Optional so in-memory rows need not carry it.
+   */
+  author_reporter_id?: string | null;
+  /**
    * The draft revision (20261015000070, NOT NULL default 1): a trigger bumps it on every change of
    * `data` (drafts are overwritten in place), so a confirm names the draft the reporter saw. Always
    * present on a row read from the database; optional here only so in-memory rows (the panel's
@@ -746,6 +751,12 @@ export type DraftCorrectionRow = {
   created_at: string;
   settled_at: string | null;
   applied_at: string | null;
+  /**
+   * F10 (20261016000110, W2-11): a change of a filed report; its preview is made from the current
+   * version and Save change makes version n+1 (`version_created`) instead of writing the draft.
+   */
+  after_filing: boolean;
+  version_created: number | null;
 };
 
 export type SmsOptOutRow = {
@@ -1152,6 +1163,7 @@ export type Database = {
         | 'created_at'
         | 'via'
         | 'draft_rev'
+        | 'author_reporter_id'
       >;
       report_sources: Table<
         ReportSourceRow,
@@ -1289,6 +1301,8 @@ export type Database = {
         | 'created_at'
         | 'settled_at'
         | 'applied_at'
+        | 'after_filing'
+        | 'version_created'
       >;
       scheduler_state: Table<SchedulerStateRow, 'value' | 'updated_at'>;
       stripe_events: Table<StripeEventRow, 'received_at' | 'processed_at'>;
@@ -1473,6 +1487,35 @@ export type Database = {
       field_apply_correction: {
         Args: { p_correction_id: string; p_report_id: string; p_reporter_id: string };
         Returns: Json;
+      };
+      /**
+       * W2-11 (20261016000110): F10 *Change something*, a correction of a filed report of the last
+       * 14 days (field-api only; `report_locked` older).
+       */
+      field_request_filed_correction: {
+        Args: {
+          p_report_id: string;
+          p_reporter_id: string;
+          p_upload_id?: string | null;
+          p_text?: string | null;
+        };
+        Returns: Json;
+      };
+      /** W2-11: Save change of a filed report's preview, version n+1 (field-api only). */
+      field_save_filed_correction: {
+        Args: {
+          p_correction_id: string;
+          p_report_id: string;
+          p_reporter_id: string;
+          p_change_note: string;
+          p_message?: Json | null;
+        };
+        Returns: Json;
+      };
+      /** W2-11: a report date still within F10's 14 days in the site's time zone. */
+      field_report_changeable: {
+        Args: { p_date: string; p_timezone: string };
+        Returns: boolean;
       };
       /** W2-10: a stepper's crew line written to the draft the reporter saw (field-api only). */
       field_edit_draft: {

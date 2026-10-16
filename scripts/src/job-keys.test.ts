@@ -48,6 +48,8 @@ const AUDITED: Record<string, string> = {
     'render_pdf:<report>:<version> (file_report, W1-15): per report version; versions are immutable, and a retried filing finds the key taken',
   'jobKeys.reportEmail':
     'email:<report_filed|report_updated>:<report>:<version> (render_pdf): per email kind, report and version; also the email provider idempotency key',
+  'jobKeys.editApplied':
+    'notify:edit_applied:<report>:v<version> (render_pdf of a version the reporter made on the web, W2-11, F10): the notify job and its Notifier key; a version is made once, so a retried render never texts twice',
   'jobKeys.filed':
     'notify:filed:<report> (file_report, W1-15): the notify job and its Notifier key; a report is filed once, so a retried or repeated filing never texts twice',
   'jobKeys.fileReportOn':
@@ -101,6 +103,8 @@ const AUDITED: Record<string, string> = {
     'field_apply_correction (W2-10): decide_next after Save change, per correction; a correction is applied once (a retry answers applied without a job)',
   "sql:'decide:' || r.id || ':edit:v' || p_version || ':r' || p_draft_rev":
     'field_edit_draft (W2-10, the steppers): decide_next per draft revision the edit changed; an edit at a revision is written once (the revision then moves on, and a retry is stale)',
+  "sql:'render_pdf:' || r.id || ':' || v_next":
+    'field_save_filed_correction (W2-11, F10): per report version; Save change makes version n+1 once (a retried save answers the version it made, version_created), and versions are immutable',
   "sql:'render_pdf:' || p_report_id || ':' || v_next":
     'per report version (office edits, sign-off; field_attach_photos, W2-04: the version a batch of photos made); versions are immutable',
   "sql:'render_pdf:' || p_report_id || ':' || r.current_version || ':signoff:' || (extract(epoch from now()) * 1000000)::bigint":

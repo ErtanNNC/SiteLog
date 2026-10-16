@@ -139,6 +139,24 @@ export const JobPayloadSchemas = {
     changeNote: z.string().optional(),
     /** v1.0 office-edit notice on WhatsApp (D31): accepted and ignored since W1-15. */
     notifyReporter: z.boolean().optional(),
+    /**
+     * F10 (W2-11, field_save_filed_correction()): the user who had signed the report off before
+     * this version reopened it; the "Updated" email goes to them too (§13 "Recipients + signer"),
+     * since `reports.signed_off_by` is cleared by then.
+     */
+    signerId: uuid.optional(),
+    /**
+     * F10 (W2-11): the reporter changed the filed report on the web; once the "Updated" email is
+     * queued, render_pdf queues their `edit_applied` text (§9.2) through the Notifier, once
+     * (`jobKeys.editApplied`). `weekday` and `change` are in the reporter's language (field-api).
+     */
+    editApplied: z
+      .object({
+        reporterId: uuid,
+        weekday: z.string().min(1).max(40),
+        change: z.string().min(1).max(300),
+      })
+      .optional(),
   }),
   send_email: z.object({
     kind: z.enum([
@@ -161,6 +179,8 @@ export const JobPayloadSchemas = {
     unknownContactId: uuid.optional(),
     to: z.array(z.string().email()).optional(),
     changeNote: z.string().optional(),
+    /** `report_updated` (W2-11): the signer of the version it replaced, emailed too (§13). */
+    signerId: uuid.optional(),
     /**
      * `report_missing` (W2-06): how many reminders (R1, R2) reached the reporter that day, from
      * mark_site_day_missing(); absent or 0 = none, so the email words it without reminders (§19 Q55).
@@ -356,6 +376,12 @@ export const jobKeys = {
    * edits): one PDF per version.
    */
   renderPdf: (reportId: string, version: number) => `render_pdf:${reportId}:${version}`,
+  /**
+   * The reporter's `edit_applied` text after their change of a filed report (F10, W2-11; render_pdf
+   * of the version it made): the `notify` job's key and the Notifier's, per report and version, and
+   * a version is made once, so a retried render never texts twice.
+   */
+  editApplied: (reportId: string, version: number) => `notify:edit_applied:${reportId}:v${version}`,
   /** The `send_email` job of a report version (render_pdf): one email per kind and version. */
   reportEmail: (kind: 'report_filed' | 'report_updated', reportId: string, version: number) =>
     `email:${kind}:${reportId}:${version}`,

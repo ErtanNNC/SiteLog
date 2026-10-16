@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   applyAnswer,
+  correctionNote,
+  formatDate,
   optionAnswer,
   readReportData,
   type DailyReportData,
@@ -13,6 +15,7 @@ import { runJob } from '../runner';
 import { startPgliteDatabase, type PgliteDatabase } from '../test/pglite';
 import { createSim, loadFixtureLibrary, manualClock, NO_LATENCY } from './fakes';
 import { createWorld, type World } from './world';
+import { DEMO_USERS } from '@sitelog/shared/demo/kestrel.ts';
 
 /**
  * W2-10 (F8 *Fix by voice*, §10.6, §7.2) on a real database (PGlite, every migration and the §18
@@ -393,4 +396,143 @@ describe('W2-10: Fix by voice on the draft, apply_correction, Save change, Confi
     );
     expect(r!.review_reasons).toContain('consent_revoked');
   });
+});
+
+/** A day before today in the site's time zone (F10's 14 days run on the database's clock). */
+function recentDate(days: number): string {
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  const d = new Date(`${today}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+describe('W2-11: Change something on a filed report (F10), version 2, _v2, Updated, edit_applied', () => {
+  it('Marco changes the Apex count 6 → 7 after sign-off: once each under retries', async () => {
+    // A day of the last 14 that no other test used, and Marco's consents as given (Q95's test
+    // turned one off).
+    let date = recentDate(0);
+    for (let n = 0; n < 14; n++) {
+      date = recentDate(n);
+      const used = await database.q(
+        `select 1 from site_days where site_id = $1 and date = $2::date`,
+        [RIVERSIDE, date],
+      );
+      if (used.length === 0) break;
+    }
+    await database.q(`update consents set revoked_at = null where reporter_id = $1`, [MARCO]);
+    const reportId = await heroDraft(date);
+    const { rev } = await draftOf(reportId);
+    await database.q(`select field_confirm_report($1, $2, 1, $3)`, [reportId, MARCO, rev]);
+    await runQueued('file_report', reportId);
+    expect(await status(reportId)).toBe('filed');
+    const LENA = DEMO_USERS[0]!;
+    await database.q(
+      `update reports set status = 'signed_off', signed_off_by = $2, signed_off_at = now() where id = $1`,
+      [reportId, LENA.id],
+    );
+
+    // The clip of the change, as field-api makes it (fixTo on a filed report).
+    const [u] = await database.q<{ id: string }>(
+      `insert into uploads (reporter_id, site_id, kind, storage_path, mime, recorded_at, correction_report_id)
+       values ($1, $2, 'audio', 'pending', 'audio/webm', now(), $3) returning id`,
+      [MARCO, RIVERSIDE, reportId],
+    );
+    const path = `${ORG}/${RIVERSIDE}/${date}/${u!.id}.webm`;
+    await database.q(`update uploads set storage_path = $2 where id = $1`, [u!.id, path]);
+    const body = fakeAudio('correction-en-apex-seven', 3);
+    await world.storage.upload('audio', path, body, 'audio/webm');
+    await database.q(`select field_complete_upload($1, $2, $3)`, [u!.id, MARCO, body.length]);
+    const [req] = await database.q<{ r: { id: string; jobId: number } }>(
+      `select field_request_filed_correction($1, $2, $3, null) as r`,
+      [reportId, MARCO, u!.id],
+    );
+    expect(await run(req!.r.jobId)).toEqual({ ok: true });
+    const preview = await correction(req!.r.id);
+    expect(preview.status).toBe('ready');
+    const changes = preview.changes as Parameters<typeof correctionNote>[0];
+    // Version 1 is untouched by the preview.
+    expect(apex((await draftOf(reportId)).data)).toMatchObject({ workers: 6, totalHours: 48 });
+
+    // Save change, as field-api calls it (the note and the text from code's lines).
+    const note = correctionNote(changes, 'en')!;
+    const change = correctionNote(changes, 'en', { sms: true })!;
+    const weekday = formatDate(date, 'weekday', 'en');
+    const [saved] = await database.q<{ r: { status: string; version: number } }>(
+      `select field_save_filed_correction($1, $2, $3, $4, $5) as r`,
+      [req!.r.id, reportId, MARCO, note, JSON.stringify({ weekday, change })],
+    );
+    expect(saved!.r).toMatchObject({ status: 'applied', version: 2 });
+    expect(note).toBe('Apex Concrete 6 → 7 workers, 48 → 56 h');
+    const v2 = await draftOf(reportId);
+    expect(apex(v2.data)).toMatchObject({ workers: 7, hoursPerWorker: 8, totalHours: 56 });
+    expect(apex(v2.data).source).toContainEqual({
+      type: 'voice_note',
+      uploadId: u!.id,
+      start: 0,
+      end: 2.3,
+    });
+    const [notice] = await database.q<{ user_id: string; data: unknown }>(
+      `select user_id, data from notifications where kind = 'report_edited' and target_path = $1`,
+      [`/reports/${reportId}`],
+    );
+    expect(notice).toEqual({
+      user_id: LENA.id,
+      data: { key: 'report_edited', params: { reportNo: expect.any(String) } },
+    });
+
+    // render_pdf (_v2), the "Updated" email to the recipients and the signer, edit_applied: twice
+    // each (a retry), once each.
+    const byKey = async (key: string) =>
+      (await database.q<JobRow>(`select * from jobs where dedupe_key = $1`, [key]))[0]!;
+    const rerun = async (job: JobRow) => {
+      await database.q(`update jobs set status = 'queued' where id = $1`, [job.id]);
+      expect(await run(job.id)).toEqual({ ok: true });
+    };
+    const render = await byKey(`render_pdf:${reportId}:2`);
+    await rerun(render);
+    await rerun(render);
+    const [stored] = await database.q<{ pdf_path: string; report_no: string }>(
+      `select v.pdf_path, r.report_no from report_versions v join reports r on r.id = v.report_id
+       where v.report_id = $1 and v.version = 2`,
+      [reportId],
+    );
+    expect(stored!.pdf_path).toMatch(new RegExp(`${stored!.report_no}_v2\\.pdf$`));
+    const later = await database.q<{ type: string; dedupe_key: string }>(
+      `select type, dedupe_key from jobs where (type = 'send_email' or type = 'notify')
+         and dedupe_key like any (array['email:report_updated:' || $1 || '%', 'notify:edit_applied:' || $1 || '%'])
+       order by id`,
+      [reportId],
+    );
+    expect(later).toEqual([
+      { type: 'send_email', dedupe_key: `email:report_updated:${reportId}:2` },
+      { type: 'notify', dedupe_key: `notify:edit_applied:${reportId}:v2` },
+    ]);
+
+    const before = world.emails.length;
+    const email = await byKey(`email:report_updated:${reportId}:2`);
+    await rerun(email);
+    await rerun(email);
+    const sent = world.emails.slice(before);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.subject).toMatch(new RegExp(`^Updated: ${stored!.report_no} · `));
+    expect(sent[0]!.to).toContain(LENA.email);
+    expect(sent[0]!.text).toContain(note);
+    expect(sent[0]!.attachments?.map((a) => a.filename)).toEqual([
+      `${stored!.report_no}_${date}_v2.pdf`,
+    ]);
+
+    const text = await byKey(`notify:edit_applied:${reportId}:v2`);
+    await rerun(text);
+    await rerun(text);
+    const msgs = await database.q<{ body: string }>(
+      `select body from messages where reporter_id = $1 and copy_key = 'edit_applied'
+         and payload ->> 'dedupe_key' = $2`,
+      [MARCO, `notify:edit_applied:${reportId}:v2`],
+    );
+    expect(msgs).toEqual([
+      {
+        body: `Updated ${weekday}: Apex Concrete 6 -> 7 workers, 48 -> 56 h. Version 2 sent to the office.`,
+      },
+    ]);
+  }, 60_000);
 });

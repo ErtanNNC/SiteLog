@@ -16,6 +16,7 @@ export * from './report/hours.ts';
 export * from './report/upgrade.ts';
 export * from './report/patch.ts';
 export * from './report/correction.ts';
+export * from './report/correction-note.ts';
 export * from './report/numbering.ts';
 export * from './report/payroll.ts';
 export * from './report/validate.ts';

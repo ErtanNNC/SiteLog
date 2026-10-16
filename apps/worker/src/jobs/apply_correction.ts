@@ -29,6 +29,10 @@ import { PermanentJobError, type JobHandler } from './types';
  *
  * The model never files and never changes the draft: it only reads the fix. A correction settled
  * before, or a report no longer awaiting confirmation, changes nothing (`stale`).
+ *
+ * W2-11 (F10 *Change something*): a correction `after_filing` is made the same way on the filed (or
+ * signed-off) report's current version; Save change makes version n+1 from its preview
+ * (field_save_filed_correction()), never this job. A report no longer filed makes it `stale`.
  */
 export const applyCorrectionJob: JobHandler<'apply_correction'> = async (ctx, payload) => {
   const [report, correction] = await Promise.all([
@@ -56,7 +60,12 @@ export const applyCorrectionJob: JobHandler<'apply_correction'> = async (ctx, pa
     ctx.metrics.add({ correctionOutcome: res.settled ? res.status : `not_settled:${res.status}` });
     return res;
   };
-  if (report.status !== 'awaiting_confirmation') {
+  // W2-11 (F10): a change after filing is previewed on the filed (or signed-off) report's current
+  // version; a draft's fix while the draft awaits confirmation.
+  const inPlace = correction.after_filing
+    ? report.status === 'filed' || report.status === 'signed_off'
+    : report.status === 'awaiting_confirmation';
+  if (!inPlace) {
     await settle('stale', { reason: 'report_moved_on' });
     return;
   }

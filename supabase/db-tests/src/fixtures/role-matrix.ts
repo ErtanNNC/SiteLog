@@ -580,6 +580,24 @@ export const RPCS: Record<
     call: (o) =>
       `select field_edit_draft('${o.report}', '${o.reporter}', 1, 1, '{}', '{"schemaVersion": 2}', '[]', '{}') as v`,
   },
+  // W2-11 (20261016000110_filed_edits.sql): F10 Change something on a filed report.
+  field_request_filed_correction: {
+    why: '§6.5: field-api only (service role); a reporter changes a filed report through reports/:id/correction.',
+    allow: NONE,
+    call: (o) =>
+      `select field_request_filed_correction('${o.report}', '${o.reporter}', null, 'Apex had 7') as v`,
+  },
+  field_save_filed_correction: {
+    why: '§6.5: field-api only (service role); Save change of a filed report goes through reports/:id/correction/:cid/apply.',
+    allow: NONE,
+    call: (o) =>
+      `select field_save_filed_correction(gen_random_uuid(), '${o.report}', '${o.reporter}', 'x') as v`,
+  },
+  field_report_changeable: {
+    why: 'F10 (W2-11): the 14-day check of the field RPCs; service role only.',
+    allow: NONE,
+    call: () => `select field_report_changeable(current_date, 'UTC') as v`,
+  },
   // W2-13 (20261016000070_test_clips.sql): F4's test recording.
   field_test_clip_create: {
     why: '§6.5: field-api only (service role).',

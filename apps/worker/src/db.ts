@@ -1463,7 +1463,7 @@ export function createDb(sql: Sql): Db {
         Array<Pick<DraftCorrectionRow, 'id' | 'via' | 'changes' | 'source' | 'applied_at'>>
       >`
         select id, via, changes, source, applied_at from draft_corrections
-        where report_id = ${reportId} and status = 'applied'
+        where report_id = ${reportId} and status = 'applied' and not after_filing
         order by applied_at, created_at`;
     },
 

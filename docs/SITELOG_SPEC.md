@@ -892,8 +892,11 @@ create table draft_corrections (                 -- F8 (W2-10): fixes of a web d
   created_at timestamptz not null default now(),
   settled_at timestamptz,
   applied_at timestamptz,
+  after_filing boolean not null default false,   -- F10 (W2-11): a change of a filed report; Save change makes version n+1
+  version_created int,                           -- F10: the version Save change made
   check (via <> 'text' or text is not null),
-  check (status not in ('ready', 'applied') or (data is not null and base_version is not null and base_rev is not null))
+  check (status not in ('ready', 'applied') or (data is not null and base_version is not null and base_rev is not null)),
+  check (version_created is null or (after_filing and status = 'applied'))
 );
 
 create table test_clips (                        -- F4's 20-second test recording (W2-13): outside any report, never a source; service role only
@@ -958,6 +961,7 @@ create table report_versions (
   author version_author not null,
   author_user_id uuid,
   via field_channel,                             -- for reporter edits
+  author_reporter_id uuid references reporters on delete set null, -- the reporter who made a reporter version on the web (F10, §19 Q81; W2-11)
   change_note text,
   draft_rev int not null default 1,              -- bumped on every change of a draft's data (a trigger; not the filing write); a confirm names it
   created_at timestamptz default now(),

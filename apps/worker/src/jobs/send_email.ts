@@ -85,9 +85,13 @@ export async function buildEmail(
         throw new PermanentJobError(`report ${report.id} version/site missing`);
       const data = readReportData(version.data as unknown as StoredReportData);
       const to = payload.to ?? [...site.recipients];
-      if (payload.kind === 'report_updated' && report.signed_off_by) {
-        const signer = await ctx.db.getUserContact(report.signed_off_by);
-        if (signer?.email) to.push(signer.email);
+      if (payload.kind === 'report_updated') {
+        // §13 "Recipients + signer": the signer of the report now, or of the version this one
+        // reopened (F10, W2-11: the reporter's change cleared the sign-off before this email).
+        for (const id of new Set([report.signed_off_by, payload.signerId].filter(Boolean))) {
+          const signer = await ctx.db.getUserContact(id as string);
+          if (signer?.email) to.push(signer.email);
+        }
       }
       const attachments: EmailAttachment[] = [];
       if (version.pdf_path) {
