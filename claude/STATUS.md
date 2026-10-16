@@ -1,5 +1,7 @@
 # SiteLog · Durum
 
+**2026-10-16:** önerimle kurulup onayınızı bekleyen tüm sorular (Q94, Q96–Q105) onaylandı ve spec §19'da karar verilmiş olarak işaretlendi. Şu an onayınızı bekleyen açık bir soru yok; yalnızca anahtarlar ve sizin yapmanız gereken işler (aşağıda) duruyor.
+
 Güncelleme: 2026-10-15 22:30 UTC · dal `spec-v1.2` · PR #1 · son CI yeşil: a9cc55f (run 38740645053); **tüm hafta-1 işi CI'da yeşil: run 38796723632 (f1d46c4), e2e:supabase ve worker akışları dahil**
 
 Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün aralıklarını kullanıyorum (M0 gün 1 · M1 gün 1–2 · M2 gün 2–3 · M3 gün 3–4 · M4 gün 4–5 · M5 gün 5–7 → demo). Planın farklı bir eşlemesi varsa söyleyin, buna göre düzeltirim.
@@ -107,7 +109,7 @@ W1-09, W1-13 ve W1-15 bu testle tamamlandı olarak işaretlendi. Bu testte giri�
 
 - iki yönlü SMS'te kişiye "START yazın" deniyor;
 - tek yönlü SMS'te (TR) "ofise sorun" deniyor.
-- **Q94 (yeni, kararınız):** tek yönlü SMS ülkelerinde operatör üzerinden STOP yapan numara nasıl geri dönsün? START orada bize ulaşamıyor. Öneri ve yapılan: "ofise sorun". Ofisin bunu kaldırma ekranı M10'da (Ekip sayfası) gelecek.
+- **Q94 (onaylandı 2026-10-16):** tek yönlü SMS ülkelerinde operatör üzerinden STOP yapan numara nasıl geri dönsün? START orada bize ulaşamıyor. Öneri ve yapılan: "ofise sorun". Ofisin bunu kaldırma ekranı M10'da (Ekip sayfası) gelecek.
 
 **Hafta-2 incelemesinin düzeltmeleri bitti (58431d8 … 07aa8c0):**
 
@@ -125,10 +127,10 @@ W1-09, W1-13 ve W1-15 bu testle tamamlandı olarak işaretlendi. Bu testte giri�
 
 Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul edilmiyor. Değişen her değer kaynağını gösteriyor: ses kaydı ya da "telefonda değiştirildi" (Q80). Yeni migration: `20261016000100`. Gerçek deneme için `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` lazım.
 
-- **Q96 (yeni, kararınız):** kişi bir sayıyı düzelttikten sonra yeni bir ses kaydı gelip taslak yeniden oluşturulursa ne olsun? Öneri ve yapılan:
+- **Q96 (onaylandı 2026-10-16):** kişi bir sayıyı düzelttikten sonra yeni bir ses kaydı gelip taslak yeniden oluşturulursa ne olsun? Öneri ve yapılan:
   - yeni kayıt eski sayıyı geri getirirse kişinin düzeltmesi korunuyor;
   - yeni kayıt üçüncü, farklı bir sayı söylerse o sayı geçerli oluyor.
-- **Q97 (yeni, kararınız):** düzeltme işlenirken taslağın 2 saatlik otomatik dosyalama süresi ne olsun? Öneri ve yapılan:
+- **Q97 (onaylandı 2026-10-16):** düzeltme işlenirken taslağın 2 saatlik otomatik dosyalama süresi ne olsun? Öneri ve yapılan:
   - süre işlemeye devam ediyor;
   - düzeltme işlenirken ya da önizleme beklerken "Onayla ve gönder" düğmesi kapalı;
   - "Kaydet"e basılınca yeni taslak kendi süresini baştan başlatıyor.
@@ -156,7 +158,7 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
   - Yeni migration: `20261016000110`.
 - CI'daki kırmızı test düzeltildi: testin şantiyesinde e-posta alıcısı tanımlı değildi, kodda hata yoktu.
 
-**Yeni sorular (önerimle kuruldu; aksini söylemezseniz böyle kalır):**
+**Yeni sorular (2026-10-16'da onayladınız, böyle kaldı):**
 
 - **Q98:** dosyalanmış raporda +/- düğmeleri yok; değişiklik sesle ya da yazarak yapılıyor ve tek seferde kaydediliyor.
 - **Q99:** durdurulmuş ya da arşivlenmiş bir şantiyenin raporu telefondan değiştirilemiyor; ofis panelden değiştiriyor.
@@ -179,12 +181,12 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
   - Yeni migration'lar: `20261016000130` – `…160`.
   - Gerçek deneme için `ANTHROPIC_API_KEY` lazım.
 
-**Yeni sorular (önerimle kuruldu; aksini söylemezseniz böyle kalır):**
+**Yeni sorular (2026-10-16'da onayladınız, böyle kaldı):**
 
 - **Q102:** anlaşılamayan bir EDIT mesajına "anlayamadım" mesajı ve Geçmiş raporlar linki gidiyor.
 - **Q103:** açık taslak yokken gelen OK'a cevap gitmiyor (kayda geçiyor).
 - **Q104:** NO WORK / WEATHER, bugün raporu açık olan en fazla 3 şantiye için cevaplanıyor; açık şantiye yoksa cevap gitmiyor.
-- **Q105 (metin kontrolünüz):** anahtar kelimelerin İspanyolca ve Türkçe karşılıkları. YES, OK olarak okunmuyor, çünkü Twilio'da abonelik kelimesi.
+- **Q105:** anahtar kelimelerin İspanyolca ve Türkçe karşılıkları. YES, OK olarak okunmuyor, çünkü Twilio'da abonelik kelimesi.
 
 **Sırada:** W2-12 incelemesi, ardından W2-14 (web push; gerçek gönderim için VAPID anahtarları lazım, o zamana kadar sahte gönderici) ve W2-15/16 (Twilio üzerinden WhatsApp; anahtarlar gelene kadar sahte gönderici).
 
@@ -194,7 +196,7 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
 
 Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahtar gerektirmeyen biletlerden başlıyorum: W2-01 (kanallar arası yedekleme), W2-02 (saha Ayarlar), W2-03 (geçmiş raporlar, süresi dolmuş link, yeni telefon), W2-04 (Filed ekranı ekleri).
 
-**Sizin kararınız gereken sorular (önerimle; cevap verene kadar önerdiğim varsayımla parametre olarak kuruyorum):**
+**Sorular (hepsi onaylandı 2026-10-16; önerdiğim varsayımla kurulmuştu):**
 
 - **Q76:** Aramayı tercih eden kişilere, aramalar (M8) gelene kadar 17:00 linki gitsin mi? Öneri: evet, "arayacağız" mesajı hiç gitmesin.
 - **Q77:** Sessiz saatlerde (arama penceresi dışında) mesaj? Öneri: hatırlatma ve dürtme mesajları gitmesin; kişinin kendi işlemine cevaplar her zaman gitsin.
@@ -216,24 +218,24 @@ Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahta
 **W2-02 bitti (ebfcee0):** saha uygulamasında Ayarlar ekranı. Kişi buradan iletişim tercihini (link / arama) ve dili seçebiliyor, izinleri kapatabiliyor ve bu telefondan çıkış yapabiliyor. Kayıt veya işleme izni kapatılırsa ofise bildirim gidiyor (yeni migration `20261016000010`).
 **Hesap hatası bildirimleri (eb6dc4e):** SMS hesabı veya göndericide bir sorun olduğunda ofise her mesaj için ayrı bildirim gitmiyor. Saatte en fazla bir hesap bildirimi gidiyor; bu artık yalnızca hoş geldin mesajı için değil, tüm SMS'ler için geçerli.
 
-- **Q86 (yeni, kararınız):** kişi kapattığı bir izni Ayarlar'dan yeniden açabilsin mi? Şu an "aç" düğmesi yok. Kayıt ve işleme izni onay ekranından geri alınabiliyor, ama SMS izni kapatılınca geri açmanın yolu yok. Öneri: SMS için "aç" düğmesi eklensin.
+- **Q86 (onaylandı 2026-10-16):** kişi kapattığı bir izni Ayarlar'dan yeniden açabilsin mi? Şu an "aç" düğmesi yok. Kayıt ve işleme izni onay ekranından geri alınabiliyor, ama SMS izni kapatılınca geri açmanın yolu yok. Öneri: SMS için "aç" düğmesi eklensin.
 - **Onayınız:** cihaz kodu SMS'i artık SMS izni reddedilmiş ya da kapatılmış olsa da gidiyor; yalnızca STOP ile çıkmış numaraya gitmiyor. Gerekçe: kişi kodu kendisi istiyor. Öneri: kabul.
 - Yeni ES/TR metinler (saha Ayarlar, iki panel bildirimi) Q63 okumasına eklendi. Ayarlar için tasarım ekranı yok; spec §9.3'e göre yapıldı.
 
 **W2-03 bitti (c7f8d59):** Geçmiş raporlar (son 14 gün, şantiyeye göre) ve tek rapor görünümü eklendi. Süresi dolmuş link ekranında "Bana bugünün linkini gönder" düğmesi var. 5 yanlış kod girilirse telefon kilitleniyor ve ofise bir bildirim gidiyor. İki şantiyesi olan kişi şantiye değiştirebiliyor. Yeni migration: `20261016000020`.
 
-- **Q87 (kararınız):** "Bana bugünün linkini gönder" düğmesi ne zaman ve ne göndersin? Öneri ve yapılan: aynı şantiyenin bugünkü linki, süresi dolmuş her link için günde bir kez. Şantiye durdurulmuşsa ya da bugün iş günü değilse link gitmiyor, nedeni ekranda gösteriliyor.
-- **Q88 (kararınız):** Geçmiş raporlara nereden girilsin? Öneri ve yapılan: Bugün ekranının altındaki bir link; W2-04'te Filed ekranına da eklenecek.
+- **Q87 (onaylandı 2026-10-16):** "Bana bugünün linkini gönder" düğmesi ne zaman ve ne göndersin? Öneri ve yapılan: aynı şantiyenin bugünkü linki, süresi dolmuş her link için günde bir kez. Şantiye durdurulmuşsa ya da bugün iş günü değilse link gitmiyor, nedeni ekranda gösteriliyor.
+- **Q88 (onaylandı 2026-10-16):** Geçmiş raporlara nereden girilsin? Öneri ve yapılan: Bugün ekranının altındaki bir link; W2-04'te Filed ekranına da eklenecek.
 
 **W2-04 bitti (1a7f0e0):** Filed ekranından "Daha fazla fotoğraf ekle" yapılabiliyor (en fazla 4 fotoğraf, ertesi gün 23:59'a kadar, isteğe bağlı sesli açıklamayla). Eklenen fotoğraflar raporun yeni sürümünü (v2) oluşturuyor: yeni PDF ve "güncellendi" e-postası gidiyor, eski sürüme dokunulmuyor. Ekranda ayrıca "Geçmiş raporlar" linki ve düzenleme ipucu var. Yeni migration: `20261016000030`.
 
-- **Q89 (kararınız):** web'den dosyalanan rapora bu süre içinde fotoğraf eklenebilsin mi? Kişisel link de olsa günlük link de olsa geçerli olsun mu? Öneri ve yapılan: evet, ikisi için de (ayar: `FILED_PHOTOS_ON_WEB_LINKS`).
+- **Q89 (onaylandı 2026-10-16):** web'den dosyalanan rapora bu süre içinde fotoğraf eklenebilsin mi? Kişisel link de olsa günlük link de olsa geçerli olsun mu? Öneri ve yapılan: evet, ikisi için de (ayar: `FILED_PHOTOS_ON_WEB_LINKS`).
 - Tasarımla bir fark var: tasarımdaki buton "Add photos", spec'te "Add more photos" yazıyor. Spec'teki kullanıldı.
 
 **W2-05 ve W2-06 bitti (e81dd56, 62a411c):** hatırlatma merdiveni yeniden çalışıyor, artık SMS ile ve Notifier üzerinden. Sırası: 17:00 günün linki, ardından ön uyarı, R1 ve R2. Rapor dosyalanınca sonraki hatırlatmalar duruyor. Her adım bir kez çalışıyor ve gönderimden hemen önce yeniden kontrol ediliyor. Yaz saati geçişleri test edildi. Denetim listesindeki 6 hatırlatma bulgusu kapandı. Yeni migration: `20261016000040`.
 
 - Q76 ve Q77 önerdiğim varsayımla kuruldu, cevabınızı bekliyor.
-- **Q90 (yeni, kararınız):** bir şantiyede yedek kişi varsa hatırlatmaları kim alsın? Öneri ve yapılan: şantiyenin tüm aktif kişileri, önce asıl kişi.
+- **Q90 (onaylandı 2026-10-16):** bir şantiyede yedek kişi varsa hatırlatmaları kim alsın? Öneri ve yapılan: şantiyenin tüm aktif kişileri, önce asıl kişi.
 - Hava durumu cümlesinin ES/TR metni Q63 okumasına eklendi.
 
 **W2-07 ve W2-08 bitti (330c567, 13ef494):**
@@ -242,14 +244,14 @@ Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahta
 - **İş yok / Hava (W2-08):** bunlar artık rapor olarak kaydediliyor. Kayıp saat kodda hesaplanıyor ve sıradaki hatırlatmalar duruyor. Yeni migration: `20261016000050`.
 - **CI düzeltmeleri:** hatırlatma testinin iki hatası giderildi (cbeb5a1, 5d1f9f6). Worker CI'da artık test saatini kullanıyor; production'da bu ayar reddediliyor.
 - Q78 ve Q79 önerilen varsayımla kuruldu, cevabınızı bekliyor.
-- **Q91 (yeni, kararınız):** plan "kayıp saat = işçi × kaybedilen saat" diyor, spec ise yalnızca durulan saat diyor. Ayrıca 12 işçi × 8,5 saat veritabanı alanına sığmıyor. Öneri ve yapılan: kayıp saat = durulan saat; ekip-saati kaybı özete yazılıyor.
+- **Q91 (onaylandı 2026-10-16):** plan "kayıp saat = işçi × kaybedilen saat" diyor, spec ise yalnızca durulan saat diyor. Ayrıca 12 işçi × 8,5 saat veritabanı alanına sığmıyor. Öneri ve yapılan: kayıp saat = durulan saat; ekip-saati kaybı özete yazılıyor.
 
 **W2-09 ve W2-13 bitti (952689a, a765eef), test verisiyle:**
 
 - **"Diğer…" cevabı (W2-09):** soruya sesle ya da sayı yazarak cevap verilebiliyor. Cevap anlaşılmazsa bir kez daha soruluyor, ikinci seferde soru cevapsız olarak işaretleniyor.
 - **Test kaydı (W2-13):** uygulama ilk açıldığında kısa bir test kaydı alınıyor. Duyulan metin kişiye bir kez gösteriliyor, sonra kayıt silinip iz bırakılmıyor.
 - **Anahtar gerekiyor:** gerçek denemeler için `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` lazım.
-- **Q92 (kararınız):** sayı içermeyen bir cevap gelirse (ör. "dünküyle aynı") ne olsun? Şimdilik bir kez daha soruluyor, sonra işaretleniyor.
+- **Q92 (onaylandı 2026-10-16):** sayı içermeyen bir cevap gelirse (ör. "dünküyle aynı") ne olsun? Şimdilik bir kez daha soruluyor, sonra işaretleniyor.
 - **Q93:** panelde cevap kaydı kaynak olarak görünüyor ama henüz dinlenemiyor.
 - Yeni ES/TR metinler Q63 okumasına eklendi.
 
