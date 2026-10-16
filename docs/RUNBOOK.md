@@ -243,6 +243,10 @@ EMAIL_PROVIDER=console                                     # or resend + RESEND_
 
 Afterwards (not part of the demo): step 22 removes `whatsapp-webhook`, the `WA_*` secrets and `VITE_WA_DISPLAY_NUMBER`, each owner-approved.
 
+### Voice secrets (W3-03)
+
+`field-api` serves the voice agent's `/voice/*` routes. Set `VOICE_AGENT_TOOL_SECRET` and `VOICE_CALL_TOKEN_SECRET` as functions secrets (`openssl rand -base64 32` each; on a hosted project only with the owner's approval). Give the agent only `VOICE_AGENT_TOOL_SECRET`: the call-token secret stays with `field-api`, so the agent cannot mint a token for another call. Without them the `/voice/*` routes answer 500 "not configured" and the field routes go on.
+
 ### Country packs per environment (GAP D47, W1-06a)
 
 Everything country-specific is a row of `countries` (spec §4.6): languages, units, paper, currency, default time zone, message channel order, SMS and WhatsApp provider, SMS sender type, two-way SMS, links in SMS, legal keys. Two kinds of value:
