@@ -137,7 +137,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-03 · Calls data and the `field-api` call routes (start, context, bookkeeping)
 
-- [ ] **W3-03 done** · today _partial_ (L) · built (`20261016000300_voice_calls.sql`, `supabase/functions/field-api/voice.ts`, `voice_test.ts`, `supabase/db-tests/src/voice-calls.test.ts`); ticks when CI runs the Deno tests (`edge-functions`) green
+- [x] **W3-03 done** (Deno tests green in CI, 23d6d21) · was _partial_ (L) · built (`20261016000300_voice_calls.sql`, `supabase/functions/field-api/voice.ts`, `voice_test.ts`, `supabase/db-tests/src/voice-calls.test.ts`); ticks when CI runs the Deno tests (`edge-functions`) green
 - **Spec:** §4.3 B, §6.3 `calls`, §6.5, §9.4 ("How a call starts", tools), F6 step 3, F14 (call), §10.12 (no phone numbers to models, tools scoped to the caller's sites), §19 Q29, Q44.
 - **Already in the repo:** `calls` and its RLS (select for admin, pm, ops); `field-api` on Hono with the store split (`app.ts`, `store.ts`, `store_supabase.ts`, `fake_store.ts`); `ensurePersonalLink`, `ensureDailyLink`; the reporter lookup by phone per pack for SMS (`sms-webhook`, §19 Q44's rule).
 - **Build:**
@@ -167,7 +167,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-05 · Panel call player with speaker lanes; call evidence in P7
 
-- [ ] **W3-05 done** · today _partial_ (M) · built (`apps/web/src/lib/callLanes.ts`, `apps/web/src/app/report/reasons.ts`, `apps/web/e2e/report-call.spec.ts`); ticks when CI runs the new demo e2e spec green
+- [x] **W3-05 done** (`report-call.spec.ts` green in CI, 23d6d21) · was _partial_ (M) · built (`apps/web/src/lib/callLanes.ts`, `apps/web/src/app/report/reasons.ts`, `apps/web/e2e/report-call.spec.ts`); ticks when CI runs the new demo e2e spec green
 - **Spec:** §11.3 `MediaPlayer` ("for calls, two lanes (reporter / assistant) and a speaker filter"), `SourceLink` (_call 2:15_), `TranscriptExcerpt`, P7 (provenance "phone call 18:41 (2 min 05 s) · confirmed by voice", Activity "call placed/answered/ended", `call_mismatch` banner), §19 Q74 (M7 extends the reason with both values), Q93 (decided: P7 plays a spoken answer's clip; a follow-up from week 2). **Design:** `Web-Report`.
 - **Already in the repo:** one-lane call playback from the `calls` bucket, call excerpts with muted agent lines, `callSourceAt`, the generic banner (W1-17); `transcripts.segments[].speaker` read as `reporter` / `agent` (`assemble.ts:586`).
 - **Build:**
@@ -211,7 +211,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-08 · Glossary review and key terms for calls (F21, P11)
 
-- [ ] **W3-08 done** · today _partial_ (M) · built (`20261016000290_glossary_rpcs.sql`, `packages/shared/src/glossary/keyterms.ts`, `e2e/glossary.spec.ts`); ticks when W3-03's `get_context` returns `buildKeyterms` with its Deno test, and CI runs the new e2e spec green
+- [x] **W3-08 done** (`get_context` key terms with its Deno test and `glossary.spec.ts` green in CI, 23d6d21) · was _partial_ (M) · built (`20261016000290_glossary_rpcs.sql`, `packages/shared/src/glossary/keyterms.ts`, `e2e/glossary.spec.ts`); ticks when W3-03's `get_context` returns `buildKeyterms` with its Deno test, and CI runs the new e2e spec green
 - **Spec:** F21 (auto-learn ≥ 0.9 for plain terms; review cards Approve · Change · Reject; companies Add as subcontractor · Map to…; "confirmed terms are used both by extraction **and** as speech-recognition hints for calls and voice notes"), P11 (tabs All · Companies · Spanish · Turkish), §10.2 hints, §18.2 TR seeds. **Design:** none exported for Web-Glossary.
 - **Already in the repo:** the page (tabs All · Companies · Spanish), `AddTermDialog`, `review_glossary_term`, `resolve_unknown_company`, `learnTerms` and `termLanguage`, batch key terms (`buildKeyterms` in `apps/worker/src/ai/transcriber.ts`, confirmed and built-in terms only). Open audit findings: "Re-extractions inflate glossary times_heard and repeat the review notification" (`:836`), "resolve_unknown_company adds a duplicate glossary row on every resolve" (`:983`).
 - **Build:**
