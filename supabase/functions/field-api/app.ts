@@ -17,6 +17,7 @@ import {
   FIELD_RATE_LIMITS,
   HISTORY_DAYS,
   PreferencesRequestSchema,
+  PushSubscribeRequestSchema,
   QUESTION_FIELDS,
   REQUIRED_CONSENTS,
   ResolveRequestSchema,
@@ -74,6 +75,7 @@ import {
   type LinkExpiredBody,
   type NotifyOutcome,
   type PreferencesResponse,
+  type PushKeyResponse,
   type QuestionField,
   type QuestionSpec,
   type ReportView,
@@ -183,6 +185,12 @@ export interface FieldApiDeps {
    * names with that prefix in `supabase/functions/.env` and refuses them in `secrets set`.
    */
   publicUrl?: () => string | undefined;
+  /**
+   * VAPID_PUBLIC_KEY (W2-14): the key the browser subscribes with (`GET push/key`); unset = no
+   * push in this environment (the Settings toggle stays hidden). Public by design: the private key
+   * is the worker's only.
+   */
+  vapidPublicKey?: () => string | undefined;
   now?: () => Date;
   /** Waiting between polls of a send claim (tests pass a fake). */
   sleep?: (ms: number) => Promise<void>;
@@ -1579,12 +1587,18 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
   // The Settings routes need a verified device but not the required consents: a reporter who
   // turned recording off can still read and change their settings, turn texts off and sign out.
 
+  const vapidKey = (): string | null => deps.vapidPublicKey?.()?.trim() || null;
+
   async function settingsBody(ctx: DeviceContext, reporter: ReporterRow = ctx.reporter) {
-    const [consents, phoneOptedOut] = await Promise.all([
+    const [consents, phoneOptedOut, deviceSubscribed] = await Promise.all([
       store.listConsents(ctx.reporter.id),
       store.phoneOptedOut(reporter.phone_e164, ctx.pack.code),
+      store.devicePushSubscribed(ctx.reporter.id, ctx.device.id),
     ]);
-    return settingsView(reporter, ctx.pack, consents, textsOptedOut(reporter, phoneOptedOut));
+    return settingsView(reporter, ctx.pack, consents, textsOptedOut(reporter, phoneOptedOut), {
+      keySet: vapidKey() !== null,
+      deviceSubscribed,
+    });
   }
 
   app.get('/preferences', async (c) => {
@@ -1668,6 +1682,52 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       user_agent: c.req.header('user-agent')?.slice(0, 500) ?? null,
       ip: clientIp(c.req.raw.headers),
     });
+    return c.json((await settingsBody(ctx)) satisfies PreferencesResponse);
+  });
+
+  // ── push (F15 Settings *Notifications*; W2-14, spec §19 Q27, Q40) ────────────────────────────
+  // The VAPID public key, then the browser's subscription stored with the `push` consent, or this
+  // device's subscriptions revoked with it (the per-channel opt-out of §19 Q40). Each audited by
+  // the database functions. The field app asks for permission only when the toggle is turned on.
+  app.get('/push/key', async (c) => {
+    const ctx = await authenticate(c, { consent: false });
+    const offered = ctx.pack.messageChannels.includes('push');
+    return c.json({ publicKey: offered ? vapidKey() : null } satisfies PushKeyResponse);
+  });
+
+  app.post('/push/subscribe', async (c) => {
+    const ctx = await authenticate(c, { consent: false });
+    const body = await parseBody(c, PushSubscribeRequestSchema);
+    if (!ctx.pack.messageChannels.includes('push') || vapidKey() === null) {
+      throw new FieldError(400, 'channel_not_offered', undefined, {
+        offered: settingsMessageChannels(ctx.pack),
+      });
+    }
+    const required = ctx.pack.legalKeys.consent;
+    if (required !== undefined && body.textVersion !== required) {
+      throw new FieldError(409, 'text_version_mismatch', undefined, { textVersion: required });
+    }
+    const userAgent = c.req.header('user-agent')?.slice(0, 500) ?? null;
+    await store.pushSubscribe({
+      reporterId: ctx.reporter.id,
+      deviceId: ctx.device.id,
+      endpoint: body.subscription.endpoint,
+      p256dh: body.subscription.keys.p256dh,
+      auth: body.subscription.keys.auth,
+      userAgent,
+      textVersion: body.textVersion,
+      evidence: {
+        device_id: ctx.device.id,
+        user_agent: userAgent,
+        ip: clientIp(c.req.raw.headers),
+      },
+    });
+    return c.json((await settingsBody(ctx)) satisfies PreferencesResponse);
+  });
+
+  app.post('/push/unsubscribe', async (c) => {
+    const ctx = await authenticate(c, { consent: false });
+    await store.pushUnsubscribe(ctx.reporter.id, ctx.device.id, 'unsubscribed');
     return c.json((await settingsBody(ctx)) satisfies PreferencesResponse);
   });
 
@@ -1776,6 +1836,8 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     const ctx = await authenticate(c, { consent: false });
     await store.updateDevice(ctx.device.id, { revoked_at: now().toISOString() });
     await audit(ctx, 'device.signed_out', 'field_device', ctx.device.id, { via: 'settings' });
+    // No notifications to a phone that is signed out (W2-14); the push consent stays.
+    await store.pushUnsubscribe(ctx.reporter.id, ctx.device.id, 'signed_out');
     const { maxAge: _maxAge, ...cookie } = DEVICE_COOKIE_OPTIONS;
     deleteCookie(c, deviceCookieName(ctx.reporter.id), cookie);
     return c.json({ signedOut: true } satisfies SignOutResponse);
@@ -1865,6 +1927,7 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   consent_required: [403, 'consent_required'],
   consent_not_offered: [400, 'invalid_request'],
   texts_opted_out: [409, 'texts_opted_out'],
+  channel_not_offered: [400, 'channel_not_offered'],
 };
 
 function errorResponse(c: Context, err: unknown, now: Date): Response {

@@ -150,6 +150,8 @@ function setup(
     isDemo?: boolean;
     sender?: (store: FakeFieldStore) => (m: VerifyCodeMessage) => Promise<NotifyOutcome>;
     dailyOutcome?: NotifyOutcome;
+    /** VAPID_PUBLIC_KEY (W2-14); unset = no push in this environment. */
+    vapid?: string;
   } = {},
 ): Harness {
   const clock = { now: T0 };
@@ -259,6 +261,7 @@ function setup(
     linkSigningSecret: () => opts.secret ?? 'test-link-signing-secret',
     allowedOrigins: () => [FIELD_APP],
     now: () => clock.now,
+    vapidPublicKey: () => opts.vapid,
     // Deterministic but distinct bytes: tokens differ per call.
     randomBytes: (n) => Uint8Array.from({ length: n }, () => (bytes = (bytes * 73 + 41) % 251)),
   });
@@ -1859,6 +1862,8 @@ Deno.test(
       // The texts consent is listed while the pack texts, so Settings can offer Turn on (Q86).
       consents: [{ type: 'sms', held: false }],
       textsOptedOut: false,
+      // No VAPID key pair in this environment: no Notifications toggle (W2-14).
+      push: { offered: false, on: false },
     });
     await h.call('POST', 'consent', {
       body: {
@@ -3107,5 +3112,132 @@ Deno.test(
     // A draft's fix route never makes a version: a draft is not "filed".
     report.status = 'processing';
     assertEquals((await h.call('GET', `reports/${reportId}`)).json.change, null);
+  },
+);
+
+// ── push (W2-14, spec §19 Q27, Q40) ─────────────────────────────────────────────────────────────
+
+const VAPID_PUBLIC = 'BP4yVZ_test_public_key_only';
+const SUBSCRIPTION = {
+  endpoint: 'https://fcm.googleapis.com/fcm/send/abc123',
+  expirationTime: null,
+  keys: {
+    p256dh:
+      'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM',
+    auth: 'tBHItJI5svbpez7KI4CCXg',
+  },
+};
+
+Deno.test(
+  'push: the key, offered only where the pack lists push and a key pair is set',
+  async () => {
+    const h = setup({ vapid: VAPID_PUBLIC });
+    await consented(h);
+    assertEquals((await h.call('GET', 'push/key')).json, { publicKey: VAPID_PUBLIC });
+    const prefs = (await h.call('GET', 'preferences')).json;
+    assertEquals(prefs.push, { offered: true, on: false });
+    // The push consent is the toggle's, never a row of the consents list.
+    assertEquals(
+      (prefs.consents as { type: string }[]).some((c) => c.type === 'push'),
+      false,
+    );
+
+    const noKey = setup();
+    await consented(noKey);
+    assertEquals((await noKey.call('GET', 'push/key')).json, { publicKey: null });
+    assertEquals((await noKey.call('GET', 'preferences')).json.push, { offered: false, on: false });
+
+    const noPush = setup({ vapid: VAPID_PUBLIC, country: { message_channels: ['sms'] } });
+    await consented(noPush);
+    assertEquals((await noPush.call('GET', 'push/key')).json, { publicKey: null });
+    const refused = await noPush.call('POST', 'push/subscribe', {
+      body: { subscription: SUBSCRIPTION, textVersion: 'field.consent.v1' },
+    });
+    assertEquals([refused.status, refused.json.error], [400, 'channel_not_offered']);
+
+    // A verified device is required, as for every Settings route.
+    const anon = setup({ vapid: VAPID_PUBLIC });
+    assertEquals((await anon.call('GET', 'push/key')).status, 401);
+  },
+);
+
+Deno.test('push: subscribe stores the subscription and the push consent, audited', async () => {
+  const h = setup({ vapid: VAPID_PUBLIC });
+  await consented(h);
+  const res = await h.call('POST', 'push/subscribe', {
+    body: { subscription: SUBSCRIPTION, textVersion: 'field.consent.v1' },
+  });
+  assertEquals(res.status, 200);
+  assertEquals(res.json.push, { offered: true, on: true });
+  const device = h.store.devices[0]!.id;
+  assertEquals(
+    h.store.pushSubscriptions.map((p) => [p.reporter_id, p.device_id, p.endpoint, p.revoked_at]),
+    [[MARCO, device, SUBSCRIPTION.endpoint, null]],
+  );
+  const consent = h.store.consents.find((c) => c.type === 'push')!;
+  assertEquals(
+    [consent.method, consent.text_version, consent.revoked_at],
+    ['web_checkbox', 'field.consent.v1', null],
+  );
+  assertEquals(
+    h.store.audits.slice(-2).map((a) => a.action),
+    ['push.subscribed', 'consent.given'],
+  );
+  // The same subscription again changes nothing new.
+  const audits = h.store.audits.length;
+  await h.call('POST', 'push/subscribe', {
+    body: { subscription: SUBSCRIPTION, textVersion: 'field.consent.v1' },
+  });
+  assertEquals(h.store.audits.length, audits);
+  assertEquals(h.store.pushSubscriptions.length, 1);
+});
+
+Deno.test('push: refuses a bad subscription and a stale wording version', async () => {
+  const h = setup({ vapid: VAPID_PUBLIC, country: { legal_keys: { consent: 'US.consent.v1' } } });
+  await verifiedDevice(h);
+  for (const subscription of [
+    { ...SUBSCRIPTION, endpoint: 'http://insecure.test/x' },
+    { ...SUBSCRIPTION, keys: { p256dh: 'has spaces', auth: 'x' } },
+    { endpoint: SUBSCRIPTION.endpoint },
+  ]) {
+    const bad = await h.call('POST', 'push/subscribe', {
+      body: { subscription, textVersion: 'US.consent.v1' },
+    });
+    assertEquals([bad.status, bad.json.error], [400, 'invalid_request']);
+  }
+  const stale = await h.call('POST', 'push/subscribe', {
+    body: { subscription: SUBSCRIPTION, textVersion: 'field.consent.v1' },
+  });
+  assertEquals([stale.status, stale.json.error], [409, 'text_version_mismatch']);
+  assertEquals(h.store.pushSubscriptions.length, 0);
+});
+
+Deno.test(
+  'push: unsubscribe revokes the subscription and the consent (Q40); sign-out keeps the consent',
+  async () => {
+    const h = setup({ vapid: VAPID_PUBLIC });
+    await consented(h);
+    await h.call('POST', 'push/subscribe', {
+      body: { subscription: SUBSCRIPTION, textVersion: 'field.consent.v1' },
+    });
+    const off = await h.call('POST', 'push/unsubscribe', { body: {} });
+    assertEquals(off.status, 200);
+    assertEquals(off.json.push, { offered: true, on: false });
+    assertEquals(h.store.pushSubscriptions[0]!.revoked_reason, 'unsubscribed');
+    assertEquals(h.store.consents.find((c) => c.type === 'push')!.revoked_at !== null, true);
+    assertEquals(
+      h.store.audits.slice(-2).map((a) => a.action),
+      ['push.unsubscribed', 'consent.revoked'],
+    );
+
+    await h.call('POST', 'push/subscribe', {
+      body: { subscription: SUBSCRIPTION, textVersion: 'field.consent.v1' },
+    });
+    assertEquals((await h.call('POST', 'device/sign-out')).status, 200);
+    assertEquals(h.store.pushSubscriptions.at(-1)!.revoked_reason, 'signed_out');
+    assertEquals(
+      h.store.consents.filter((c) => c.type === 'push' && c.revoked_at === null).length,
+      1,
+    );
   },
 );

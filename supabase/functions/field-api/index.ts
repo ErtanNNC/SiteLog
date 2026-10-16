@@ -35,6 +35,8 @@ function fieldApp() {
         fieldOrigins(optionalEnv('FIELD_APP_URL'), optionalEnv('CORS_EXTRA_ORIGINS')),
       // Local stacks only: the gateway as the browser reaches it (.env.example, STORAGE_PUBLIC_URL).
       publicUrl: () => optionalEnv('STORAGE_PUBLIC_URL'),
+      // W2-14: the browser subscribes with it; the private key stays with the worker.
+      vapidPublicKey: () => optionalEnv('VAPID_PUBLIC_KEY'),
     });
   }
   return app;

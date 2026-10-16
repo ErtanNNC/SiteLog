@@ -98,7 +98,7 @@ Deno.test('fieldCountryView: the pack subset, never the sender or a provider', (
     voiceNumber: null,
     fieldLocales: ['tr-TR', 'en-US'],
     twoWaySms: false,
-    messageChannels: ['sms'],
+    messageChannels: ['push', 'sms'],
     legalKeys: {},
   });
   assert(!JSON.stringify(view).includes('SITELOG'));
@@ -347,7 +347,42 @@ Deno.test('settingsView: the built channels, and every consent given with its st
       { type: 'data_processing', held: true },
     ],
     textsOptedOut: false,
+    push: { offered: false, on: false },
   });
+});
+
+Deno.test('settingsView: push is the toggle, offered with the pack and a key pair (W2-14)', () => {
+  const us = toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!);
+  const reporter = { contact_pref: 'link', locale: 'en-US', message_channel: null } as const;
+  const given = [
+    { type: 'recording', revoked_at: null },
+    { type: 'data_processing', revoked_at: null },
+    { type: 'push', revoked_at: null },
+  ] as const;
+  const on = settingsView(reporter, us, given, false, { keySet: true, deviceSubscribed: true });
+  assertEquals(on.push, { offered: true, on: true });
+  assertEquals(on.messageChannels, ['sms']);
+  assertEquals(
+    on.consents.map((c) => c.type),
+    ['sms', 'recording', 'data_processing'],
+  );
+  // Another phone's subscription, or no consent: off on this one.
+  assertEquals(
+    settingsView(reporter, us, given, false, { keySet: true, deviceSubscribed: false }).push,
+    { offered: true, on: false },
+  );
+  assertEquals(
+    settingsView(reporter, us, given.slice(0, 2), false, { keySet: true, deviceSubscribed: true })
+      .push,
+    { offered: true, on: false },
+  );
+  assertEquals(
+    settingsView(reporter, { ...us, messageChannels: ['sms'] }, given, false, {
+      keySet: true,
+      deviceSubscribed: true,
+    }).push.offered,
+    false,
+  );
 });
 
 Deno.test(

@@ -204,6 +204,7 @@ export const FIELD_DB_ERRORS = [
   'consent_required',
   'consent_not_offered',
   'texts_opted_out',
+  'channel_not_offered',
 ] as const;
 
 export interface ReportMediaCounts {
@@ -305,6 +306,33 @@ export interface FieldStore extends DailyLinkStore {
     deviceId: string,
     evidence: Json,
   ): Promise<{ granted: boolean }>;
+  /**
+   * field_push_subscribe() (20261016000180, W2-14): stores the browser subscription of this device
+   * and, when not held, the `push` consent (`web_checkbox`), audited `push.subscribed` and
+   * `consent.given`. Refuses a pack without push (`channel_not_offered`).
+   */
+  pushSubscribe(input: {
+    reporterId: string;
+    deviceId: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    userAgent: string | null;
+    textVersion: string;
+    evidence: Json;
+  }): Promise<{ subscription_id: string }>;
+  /**
+   * field_push_unsubscribe(): revokes this device's live subscriptions (`unsubscribed` from the
+   * toggle, `signed_out` from *Sign out this phone*), audited; `unsubscribed` also revokes the
+   * `push` consent once no live subscription is left (spec §19 Q40, Q108).
+   */
+  pushUnsubscribe(
+    reporterId: string,
+    deviceId: string,
+    reason: 'unsubscribed' | 'signed_out',
+  ): Promise<{ revoked: number; consent_revoked: boolean }>;
+  /** Whether this device has a live push subscription of the reporter. */
+  devicePushSubscribed(reporterId: string, deviceId: string): Promise<boolean>;
   /** `sms_opt_outs`: the phone sent STOP on this pack's sender, or its provider refused it. */
   phoneOptedOut(phone: string, country: string): Promise<boolean>;
 

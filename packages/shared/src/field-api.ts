@@ -245,6 +245,34 @@ export const ConsentGrantRequestSchema = z.strictObject({
 });
 
 /**
+ * `POST push/subscribe` (F15 Settings *Notifications*, W2-14, spec §19 Q27): the browser's
+ * `PushSubscription.toJSON()` (an https endpoint and its p256dh and auth keys) and the version of
+ * the wording the toggle shows, stored as the `push` consent (`web_checkbox`).
+ */
+export const PushSubscribeRequestSchema = z.strictObject({
+  subscription: z.object({
+    endpoint: z
+      .string()
+      .max(2048)
+      .regex(/^https:\/\/[^\s]+$/, 'an https endpoint'),
+    expirationTime: z.number().nullable().optional(),
+    keys: z.object({
+      p256dh: z
+        .string()
+        .regex(/^[A-Za-z0-9_-]+={0,2}$/)
+        .min(1)
+        .max(200),
+      auth: z
+        .string()
+        .regex(/^[A-Za-z0-9_-]+={0,2}$/)
+        .min(1)
+        .max(100),
+    }),
+  }),
+  textVersion: z.string().trim().min(1).max(64),
+});
+
+/**
  * `POST expired/daily-link` (F16 "Send me today's link"; W2-03): the expired daily link's code in
  * the body, as `resolve` takes it (the link no longer authenticates anything).
  */
@@ -273,3 +301,4 @@ export type PreferencesRequest = z.infer<typeof PreferencesRequestSchema>;
 export type ConsentRevokeRequest = z.infer<typeof ConsentRevokeRequestSchema>;
 export type ConsentGrantRequest = z.infer<typeof ConsentGrantRequestSchema>;
 export type ExpiredLinkRequest = z.infer<typeof ExpiredLinkRequestSchema>;
+export type PushSubscribeRequest = z.infer<typeof PushSubscribeRequestSchema>;

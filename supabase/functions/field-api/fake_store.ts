@@ -15,6 +15,7 @@ import type {
   ReporterRow,
   SiteDayRow,
   SiteRow,
+  PushSubscriptionRow,
   TestClipRow,
   TestClipView,
   UploadRow,
@@ -95,6 +96,8 @@ export class FakeFieldStore implements FieldStore {
   attached: { batchId: string; version: number; changeNote: string; caption: string | null }[] = [];
   /** F4's test recordings (W2-13). */
   testClips: TestClipRow[] = [];
+  /** W2-14: web push subscriptions. */
+  pushSubscriptions: PushSubscriptionRow[] = [];
   /** F8 fixes of a draft (W2-10). */
   corrections: DraftCorrectionRow[] = [];
   /** Store methods called, for "no write happened" checks. */
@@ -591,6 +594,137 @@ export class FakeFieldStore implements FieldStore {
       alreadyComplete: false,
       jobId,
     });
+  }
+
+  pushSubscribe(i: {
+    reporterId: string;
+    deviceId: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    userAgent: string | null;
+    textVersion: string;
+    evidence: Json;
+  }): Promise<{ subscription_id: string }> {
+    this.calls.push('pushSubscribe');
+    const r = this.reporters.find((x) => x.id === i.reporterId);
+    if (!r) return Promise.reject(new FieldDbError('reporter_not_found'));
+    const country = this.orgs.find((o) => o.id === r.org_id)?.country ?? '';
+    const pack = this.countries.find((c) => c.code === country);
+    if (!pack?.message_channels.includes('push')) {
+      return Promise.reject(new FieldDbError('channel_not_offered'));
+    }
+    const live = this.pushSubscriptions.filter((p) => p.reporter_id === r.id && !p.revoked_at);
+    let sub = live.find((p) => p.endpoint === i.endpoint);
+    if (sub) {
+      Object.assign(sub, { p256dh: i.p256dh, auth: i.auth, device_id: i.deviceId });
+    } else {
+      for (const p of live.filter((x) => x.device_id === i.deviceId)) {
+        p.revoked_at = this.iso();
+        p.revoked_reason = 'replaced';
+      }
+      sub = {
+        id: this.id('dddddddd'),
+        org_id: r.org_id,
+        reporter_id: r.id,
+        device_id: i.deviceId,
+        endpoint: i.endpoint,
+        p256dh: i.p256dh,
+        auth: i.auth,
+        user_agent: i.userAgent,
+        created_at: this.iso(),
+        revoked_at: null,
+        revoked_reason: null,
+      };
+      this.pushSubscriptions.push(sub);
+      this.audits.push({
+        orgId: r.org_id,
+        actorType: 'reporter',
+        actorId: r.id,
+        action: 'push.subscribed',
+        entity: 'push_subscription',
+        entityId: sub.id,
+        diff: { device_id: i.deviceId },
+      });
+    }
+    if (!this.consents.some((c) => c.reporter_id === r.id && c.type === 'push' && !c.revoked_at)) {
+      const consent: ConsentRow = {
+        id: this.id('cccccccc'),
+        reporter_id: r.id,
+        type: 'push',
+        method: 'web_checkbox',
+        text_version: i.textVersion,
+        evidence: i.evidence,
+        given_at: this.iso(),
+        revoked_at: null,
+      };
+      this.consents.push(consent);
+      this.audits.push({
+        orgId: r.org_id,
+        actorType: 'reporter',
+        actorId: r.id,
+        action: 'consent.given',
+        entity: 'consent',
+        entityId: consent.id,
+        diff: { type: 'push', method: 'web_checkbox', via: 'settings', device_id: i.deviceId },
+      });
+    }
+    return Promise.resolve({ subscription_id: sub.id });
+  }
+
+  pushUnsubscribe(
+    reporterId: string,
+    deviceId: string,
+    reason: 'unsubscribed' | 'signed_out',
+  ): Promise<{ revoked: number; consent_revoked: boolean }> {
+    this.calls.push(`pushUnsubscribe:${reason}`);
+    const r = this.reporters.find((x) => x.id === reporterId);
+    if (!r) return Promise.reject(new FieldDbError('reporter_not_found'));
+    const subs = this.pushSubscriptions.filter(
+      (p) => p.reporter_id === reporterId && p.device_id === deviceId && !p.revoked_at,
+    );
+    for (const p of subs) {
+      p.revoked_at = this.iso();
+      p.revoked_reason = reason;
+    }
+    if (subs.length > 0)
+      this.audits.push({
+        orgId: r.org_id,
+        actorType: 'reporter',
+        actorId: reporterId,
+        action: 'push.unsubscribed',
+        entity: 'push_subscription',
+        entityId: subs[0]!.id,
+        diff: { reason, device_id: deviceId },
+      });
+    let consentRevoked = false;
+    const left = this.pushSubscriptions.some((p) => p.reporter_id === reporterId && !p.revoked_at);
+    if (reason === 'unsubscribed' && !left) {
+      const rows = this.consents.filter(
+        (c) => c.reporter_id === reporterId && c.type === 'push' && !c.revoked_at,
+      );
+      for (const c of rows) c.revoked_at = this.iso();
+      consentRevoked = rows.length > 0;
+      if (consentRevoked)
+        this.audits.push({
+          orgId: r.org_id,
+          actorType: 'reporter',
+          actorId: reporterId,
+          action: 'consent.revoked',
+          entity: 'consent',
+          entityId: rows[0]!.id,
+          diff: { type: 'push', method: 'web', device_id: deviceId, notified: false },
+        });
+    }
+    return Promise.resolve({ revoked: subs.length, consent_revoked: consentRevoked });
+  }
+
+  devicePushSubscribed(reporterId: string, deviceId: string): Promise<boolean> {
+    return Promise.resolve(
+      this.pushSubscriptions.some(
+        (p) => p.reporter_id === reporterId && p.device_id === deviceId && !p.revoked_at,
+      ),
+    );
   }
 
   phoneOptedOut(phone: string, country: string) {

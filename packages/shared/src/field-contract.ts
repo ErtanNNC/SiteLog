@@ -670,6 +670,18 @@ export interface PreferencesResponse {
    * and *Turn on* is refused (`texts_opted_out`): on a two-way pack Settings says to text START.
    */
   textsOptedOut: boolean;
+  /**
+   * Web push to this phone (W2-14, spec §19 Q27): `offered` when the pack lists push and this
+   * environment has a VAPID key pair (`GET push/key`); `on` when this device has a live
+   * subscription and the `push` consent is held. The `push` consent is not in `consents`: the
+   * *Notifications* toggle is its control.
+   */
+  push: { offered: boolean; on: boolean };
+}
+
+/** `GET push/key` (W2-14): the VAPID public key the browser subscribes with; null = no push here. */
+export interface PushKeyResponse {
+  publicKey: string | null;
 }
 
 /**

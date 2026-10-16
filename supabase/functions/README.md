@@ -76,6 +76,9 @@ supabase secrets set TWILIO_ACCOUNT_SID=AC... TWILIO_AUTH_TOKEN=... \
   SMS_WEBHOOK_URL=https://<project-ref>.supabase.co/functions/v1/sms-webhook
 # only for a pack whose sms_provider is iletimerkezi (TR) and whose sender id is set
 supabase secrets set ILETIMERKEZI_API_KEY=... ILETIMERKEZI_API_HASH=...
+# web push (W2-14): field-api serves the public key to the field app; the private key and the
+# subject are the worker's only (never a functions secret). Unset: no Notifications toggle.
+supabase secrets set VAPID_PUBLIC_KEY=B...
 ```
 
 Local development reads the same names from `supabase/functions/.env` (`supabase functions serve
@@ -326,7 +329,11 @@ Notes:
   `edit_applied`), the
   test recording's `field_test_clip_create()`, `field_test_clip_complete()` and
   `field_test_clip_read()` (W2-13: F4's 20-second test outside any report, `test_clips`; the
-  snippet answered once, then deleted) and
+  snippet answered once, then deleted), web push's `field_push_subscribe()` and
+  `field_push_unsubscribe()` (W2-14: Settings' _Notifications_; `push/key` answers
+  `VAPID_PUBLIC_KEY`, or null without one or on a pack without push; `push/subscribe` stores the
+  browser's subscription and the `push` consent; `push/unsubscribe` and `device/sign-out` revoke
+  the phone's subscriptions, the former also the consent with the last one) and
   `field_rate_limit()` (30 a minute per device, 5 code sends and 5 checks an hour per phone). `uploads/:id/complete` checks the stored object's type and size
   (Storage's object info) before it attaches it. Refusals are JSON `{error: <code>}` from
   `packages/shared/src/field-contract.ts`.

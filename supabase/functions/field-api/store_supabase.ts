@@ -442,6 +442,43 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       return phoneOptedOut(admin, phone, country);
     },
 
+    async pushSubscribe(i) {
+      return await rpc<{ subscription_id: string }>(
+        admin.rpc('field_push_subscribe', {
+          p_reporter_id: i.reporterId,
+          p_device_id: i.deviceId,
+          p_endpoint: i.endpoint,
+          p_p256dh: i.p256dh,
+          p_auth: i.auth,
+          p_user_agent: i.userAgent,
+          p_text_version: i.textVersion,
+          p_evidence: i.evidence,
+        }),
+      );
+    },
+
+    async pushUnsubscribe(reporterId, deviceId, reason) {
+      return await rpc<{ revoked: number; consent_revoked: boolean }>(
+        admin.rpc('field_push_unsubscribe', {
+          p_reporter_id: reporterId,
+          p_device_id: deviceId,
+          p_reason: reason,
+        }),
+      );
+    },
+
+    async devicePushSubscribed(reporterId, deviceId) {
+      const { data, error } = await admin
+        .from('push_subscriptions')
+        .select('id')
+        .eq('reporter_id', reporterId)
+        .eq('device_id', deviceId)
+        .is('revoked_at', null)
+        .limit(1);
+      if (error) throw error;
+      return (data ?? []).length > 0;
+    },
+
     async attachPhotos(reportId, batchId, changeNote, caption) {
       return await rpc<AttachPhotosResult>(
         admin.rpc('field_attach_photos', {

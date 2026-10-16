@@ -159,10 +159,13 @@ export function settingsView(
   pack: Pick<CountryPack, 'messageChannels'>,
   consents: readonly Pick<ConsentRow, 'type' | 'revoked_at'>[],
   optedOut: boolean,
+  push: { keySet: boolean; deviceSubscribed: boolean } = { keySet: false, deviceSubscribed: false },
 ): PreferencesResponse {
   const { held } = consentSets(consents);
   const shown = new Set(consents.map((c) => c.type));
   if (pack.messageChannels.includes('sms')) shown.add('sms');
+  // The *Notifications* toggle is the push consent's control (W2-14), not a row of the list.
+  shown.delete('push');
   return {
     contactPref: reporter.contact_pref,
     locale: reporter.locale as ReporterLocale,
@@ -173,6 +176,10 @@ export function settingsView(
       held: held.has(type),
     })),
     textsOptedOut: optedOut,
+    push: {
+      offered: pack.messageChannels.includes('push') && push.keySet,
+      on: push.deviceSubscribed && held.has('push'),
+    },
   };
 }
 
