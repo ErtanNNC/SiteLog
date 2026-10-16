@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig, openAiTranscribeModel, STALE_LOCK_MS } from './config';
+import {
+  loadConfig,
+  openAiTranscribeModel,
+  STALE_LOCK_MS,
+  WORKER_CLOCK_REFUSED,
+  workerClock,
+} from './config';
 
 const BASE = { SUPABASE_DB_URL: 'postgres://localhost/test' };
 
@@ -43,5 +49,52 @@ describe('worker config: transcription (W1-11)', () => {
         }),
       ),
     ).toBe('gpt-4o-transcribe');
+  });
+});
+
+describe('worker config: the CI test clock (WORKER_CLOCK_OVERRIDE, W2-06)', () => {
+  const START = '2026-10-12T22:46:30.000Z';
+
+  it('is the real clock by default', () => {
+    const now = workerClock(loadConfig(BASE), () => 1_000);
+    expect(now().getTime()).toBe(1_000);
+  });
+
+  it('starts at WORKER_CLOCK_START and moves on in real time', () => {
+    let real = 5_000_000;
+    const config = loadConfig({
+      ...BASE,
+      WORKER_CLOCK_OVERRIDE: 'true',
+      WORKER_CLOCK_START: START,
+    });
+    const now = workerClock(config, () => real);
+    expect(now().toISOString()).toBe(START);
+    real += 90_000;
+    expect(now().toISOString()).toBe('2026-10-12T22:48:00.000Z');
+  });
+
+  it('is refused in production and without a start', () => {
+    expect(() =>
+      loadConfig({
+        ...BASE,
+        NODE_ENV: 'production',
+        WORKER_CLOCK_OVERRIDE: 'true',
+        WORKER_CLOCK_START: START,
+      }),
+    ).toThrow(WORKER_CLOCK_REFUSED);
+    expect(() =>
+      workerClock({
+        NODE_ENV: 'production',
+        WORKER_CLOCK_OVERRIDE: true,
+        WORKER_CLOCK_START: START,
+      }),
+    ).toThrow(WORKER_CLOCK_REFUSED);
+    expect(() => loadConfig({ ...BASE, WORKER_CLOCK_OVERRIDE: 'true' })).toThrow(
+      /WORKER_CLOCK_START/,
+    );
+    // Off, a stray start changes nothing.
+    expect(
+      workerClock(loadConfig({ ...BASE, WORKER_CLOCK_START: START }), () => 7)().getTime(),
+    ).toBe(7);
   });
 });

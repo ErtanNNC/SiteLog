@@ -4,7 +4,7 @@ import * as Sentry from '@sentry/node';
 import { createExtractionClient } from './ai/fake-claude';
 import { createOpenAiClient } from './ai/transcribe';
 import { createTranscriber } from './ai/transcriber';
-import { loadConfig, type Config } from './config';
+import { loadConfig, workerClock, type Config } from './config';
 import { createMetrics, type Ctx } from './context';
 import { connectDb } from './db';
 import { loadDotenv } from './dotenv';
@@ -44,6 +44,8 @@ export function buildContext(config: Config): Ctx {
     abortableFetch(),
   );
   const openai = createOpenAiClient(config.OPENAI_API_KEY);
+  // The real clock, or CI's test clock (WORKER_CLOCK_OVERRIDE, never in production).
+  const now = workerClock(config);
   const ffmpeg = createFfmpegRunner(
     resolveFfmpegPath({
       ...process.env,
@@ -65,10 +67,10 @@ export function buildContext(config: Config): Ctx {
       log,
       { insertConsoleEmail: (row) => db.insertConsoleEmail(row) },
     ),
-    notifier: createWorkerNotifier(config, db, undefined, () => new Date()),
+    notifier: createWorkerNotifier(config, db, undefined, now),
     ffmpeg,
     log,
-    now: () => new Date(),
+    now,
     metrics: createMetrics(),
     signal: NEVER_ABORTED,
   };
@@ -171,6 +173,14 @@ export async function main(): Promise<void> {
       }),
     )
     .catch((err: unknown) => ctx.log.warn('could not read the country packs', { err }));
+  if (config.WORKER_CLOCK_OVERRIDE)
+    ctx.log.warn(
+      'WORKER_CLOCK_OVERRIDE: the worker runs on a test clock (never on a hosted project)',
+      {
+        start: config.WORKER_CLOCK_START,
+        now: ctx.now().toISOString(),
+      },
+    );
   runner.start();
   listener = startJobListener(config, ctx, runner);
 

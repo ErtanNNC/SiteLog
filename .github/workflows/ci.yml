@@ -224,6 +224,11 @@ jobs:
       # transcript, no Deepgram key), no AI or weather keys (those jobs fail and retry), the same
       # LINK_SIGNING_SECRET as the functions. It starts after the panel specs, so their jobs (the
       # EOT pack, PDFs) are processed now and the specs above still see them queued.
+      # WORKER_CLOCK_OVERRIDE (test only, refused in production; never on a hosted project): the
+      # worker's clock starts at WORKER_CLOCK_START, just after the ladder spec's 17:46 Chicago
+      # tick (scheduler-tick's `?now=2026-10-12T22:46Z`, SCHEDULER_CLOCK_OVERRIDE), and runs on in
+      # real time, so the ladder jobs' quiet-hours `notAfter` (20:00 Chicago that day) is ahead of
+      # it, not days behind. Queue timing (run_after, claim_jobs) stays on the database clock.
       - name: Start the worker
         env:
           SUPABASE_DB_URL: ${{ env.DB_URL }}
@@ -239,6 +244,8 @@ jobs:
           # poll: NOTIFY (or the wake after another job finishes) claims it. The HELP reply is
           # answered inline by sms-webhook's /demo-reply, not by the worker.
           POLL_INTERVAL_MS: '120000'
+          WORKER_CLOCK_OVERRIDE: 'true'
+          WORKER_CLOCK_START: '2026-10-12T22:46:30Z'
         run: |
           nohup pnpm --filter @sitelog/worker exec tsx src/index.ts > "$RUNNER_TEMP/worker.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/worker.pid"

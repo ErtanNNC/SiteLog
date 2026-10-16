@@ -34,6 +34,9 @@ export const NOT_IN_ENV_EXAMPLE: Record<string, string> = {
   WORKER_DRY_RUN: 'tests only',
   SCHEDULER_CLOCK_OVERRIDE:
     "tests only: scheduler-tick takes `?now=` (CI's e2e-supabase functions env, the W2-06 ladder spec); never set on a hosted project",
+  WORKER_CLOCK_OVERRIDE:
+    "tests only: the worker's clock starts at WORKER_CLOCK_START and runs on in real time (CI's e2e-supabase worker, the W2-06 ladder spec); refused in production, never set on a hosted project",
+  WORKER_CLOCK_START: 'tests only: the start of the WORKER_CLOCK_OVERRIDE clock (an ISO instant)',
 };
 
 /**

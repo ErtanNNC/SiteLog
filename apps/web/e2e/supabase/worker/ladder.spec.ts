@@ -6,7 +6,9 @@ import { admin, SEED, signInWithMagicLink, SUPABASE_URL } from '../support';
  * ladder through the Notifier. A fresh Elm St. site-day on Monday Oct 12 2026; scheduler-tick
  * with the clock at 17:46 Chicago (`?now=`, SCHEDULER_CLOCK_OVERRIDE in CI's functions env)
  * claims the daily link and R1 for Priya, the worker texts both on the console driver (Kestrel is
- * a demo org), and the Demo phone shows them. The day is then filed; the 18:31 tick sends no R2.
+ * a demo org), and the Demo phone shows them. The worker runs on CI's test clock too
+ * (WORKER_CLOCK_OVERRIDE from 2026-10-12T22:46:30Z), or the jobs' quiet-hours guard (20:00 Chicago
+ * that day) would already be past on the real clock and nothing would be sent. The day is then filed; the 18:31 tick sends no R2.
  * The tick's other periodic work is arranged away first (weather slots, digest, retention), so it
  * only creates the day's site-days and runs the ladder.
  */

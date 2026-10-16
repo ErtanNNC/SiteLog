@@ -141,6 +141,15 @@ export const ConfigSchema = z.object({
   FFMPEG_PATH: z.string().default(''),
   /** Skip the ffmpeg + storage path in tests. */
   WORKER_DRY_RUN: bool.default(false),
+  /**
+   * Test-only (CI's e2e-supabase, W2-06): the worker's clock starts at WORKER_CLOCK_START and runs
+   * on from there in real time (`workerClock`), so jobs a scheduler-tick on the test clock
+   * (`SCHEDULER_CLOCK_OVERRIDE`, `?now=`) claimed are judged on that clock: a ladder job's
+   * quiet-hours `notAfter` is not already past. Refused in production (the worker does not start);
+   * never set on a hosted project.
+   */
+  WORKER_CLOCK_OVERRIDE: bool.default(false),
+  WORKER_CLOCK_START: z.string().default(''),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -168,7 +177,35 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!cfg.CLAUDE_MODEL_FAST) cfg.CLAUDE_MODEL_FAST = cfg.CLAUDE_MODEL;
   if (!cfg.WORKER_ID) cfg.WORKER_ID = `${hostname()}-${process.pid}`;
   if (cfg.EMAIL_PROVIDER === 'resend' && !cfg.RESEND_API_KEY) cfg.EMAIL_PROVIDER = 'console';
+  if (cfg.WORKER_CLOCK_OVERRIDE) {
+    if (cfg.NODE_ENV === 'production') throw new Error(WORKER_CLOCK_REFUSED);
+    if (!Number.isFinite(Date.parse(cfg.WORKER_CLOCK_START)))
+      throw new Error(
+        'Invalid worker configuration: WORKER_CLOCK_OVERRIDE needs WORKER_CLOCK_START (an ISO instant)',
+      );
+  }
   return cfg;
+}
+
+/** WORKER_CLOCK_OVERRIDE under NODE_ENV=production: the worker refuses to start. */
+export const WORKER_CLOCK_REFUSED =
+  'WORKER_CLOCK_OVERRIDE is refused in production: a moved clock would file, remind and skip on the wrong time. Unset it, or run with NODE_ENV=development.';
+
+/**
+ * The worker's clock (`ctx.now`, the Notifier's): the real time, or with WORKER_CLOCK_OVERRIDE
+ * (test only, refused in production by `loadConfig`) WORKER_CLOCK_START plus the real time elapsed
+ * since the clock was made, so the test clock moves on as the run does.
+ */
+export function workerClock(
+  config: Pick<Config, 'NODE_ENV' | 'WORKER_CLOCK_OVERRIDE' | 'WORKER_CLOCK_START'>,
+  realNow: () => number = Date.now,
+): () => Date {
+  if (!config.WORKER_CLOCK_OVERRIDE) return () => new Date(realNow());
+  if (config.NODE_ENV === 'production') throw new Error(WORKER_CLOCK_REFUSED);
+  const start = Date.parse(config.WORKER_CLOCK_START);
+  if (!Number.isFinite(start)) throw new Error('WORKER_CLOCK_START is not an ISO instant');
+  const boot = realNow();
+  return () => new Date(start + (realNow() - boot));
 }
 
 function hostname(): string {

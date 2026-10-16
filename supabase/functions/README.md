@@ -241,7 +241,8 @@ Notes:
   `LINK_SIGNING_SECRET` and `FIELD_APP_URL`, as field-api does). With nobody to text the stage is
   still claimed (audited) and the office alert fires at the missing step. `?now=` sets the tick's
   clock only where `SCHEDULER_CLOCK_OVERRIDE=true` (the local stack and CI's e2e-supabase; never
-  a hosted project). The past_due grace
+  a hosted project); the worker that sends those jobs follows the same test clock with
+  `WORKER_CLOCK_OVERRIDE` / `WORKER_CLOCK_START` (CI only, refused in production). The past_due grace
   period starts at the latest `billing.status_changed → past_due` audit row written by
   `stripe-webhook`; a past_due org without such a row is treated as still inside the grace period.
   The weekly digest covers the previous Mon–Sun week and is tracked per org in
