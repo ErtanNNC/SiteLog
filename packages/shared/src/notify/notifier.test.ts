@@ -88,6 +88,8 @@ function harness(
     sender?: string;
     statusCallback?: string;
   }> = [];
+  /** `opts.tries` of every send handed to a transport, failed ones included (W2-15/16 review). */
+  const tries: Array<number | undefined> = [];
   const optOuts: Array<{ phone_e164: string; country: string; method: string }> = [];
   const reporterOptOuts: Array<{ reporterId: string; at: string }> = [];
   const store: NotifierStore = {
@@ -104,6 +106,7 @@ function harness(
           error: row.error,
           error_code: row.payload?.error_code ?? null,
           attempt: row.payload?.attempt ?? null,
+          tries: row.payload?.tries ?? null,
         })),
     insertMessage: async (row) => void rows.set(row.id, { ...row }),
     updateMessage: async (id, patch) => void Object.assign(rows.get(id)!, patch),
@@ -126,6 +129,7 @@ function harness(
     return {
       driver,
       async send(to, body, o) {
+        tries.push(o.tries);
         if (opts.fail) throw opts.fail;
         if (faults.sms) throw faults.sms;
         sent.push({ driver, to, body, sender: o.sender, statusCallback: o.statusCallback });
@@ -163,7 +167,17 @@ function harness(
   const setSecondSender = (v: string | null | undefined) => {
     secondSender = v;
   };
-  return { notifier, rows, audit, sent, optOuts, reporterOptOuts, faults, setSecondSender };
+  return {
+    notifier,
+    rows,
+    audit,
+    sent,
+    tries,
+    optOuts,
+    reporterOptOuts,
+    faults,
+    setSecondSender,
+  };
 }
 
 describe('Notifier (spec §4.5)', () => {
@@ -381,7 +395,7 @@ describe('Notifier (spec §4.5)', () => {
     const again = await h.notifier.deliver(recipient(), 'welcome', WELCOME, { dedupeKey: 'job:7' });
     expect(again).toEqual(first);
     expect(h.sent).toHaveLength(1);
-    expect(h.rows.get('m-1')!.payload).toEqual({ dedupe_key: 'job:7', attempt: 1 });
+    expect(h.rows.get('m-1')!.payload).toEqual({ dedupe_key: 'job:7', attempt: 1, tries: 1 });
 
     const failing = harness({
       fail: new SmsSendError('twilio 503: busy', { driver: 'twilio', retryable: true }),
@@ -440,6 +454,7 @@ describe('Notifier (spec §4.5)', () => {
       dedupe_key: 'job:9',
       attempt: 1,
       error_code: '21614',
+      tries: 1,
     });
   });
 
@@ -735,6 +750,24 @@ describe('Notifier fallback between channels (§19 Q22, W2-01)', () => {
     expect(h.rows.size).toBe(1);
     expect(h.rows.get('m-1')).toMatchObject({ status: 'sent', payload: { attempt: 1 } });
     expect(actions(h)).toEqual(['sms.failed', 'sms.sent']);
+  });
+
+  it('counts the sends of a row (payload.tries) and hands the count to the transport (W2-15/16 review)', async () => {
+    const h = harness({
+      second: true,
+      faults: { sms: new SmsSendError('twilio 503: busy', { driver: 'twilio', retryable: true }) },
+    });
+    const send = () => h.notifier.deliver(real(), 'filed', FILED, { dedupeKey: 'k:tries' });
+    await expect(send()).rejects.toThrow(/busy/);
+    expect(h.rows.get('m-1')!.payload).toMatchObject({ attempt: 1, tries: 1 });
+    await expect(send()).rejects.toThrow(/busy/);
+    expect(h.rows.get('m-1')!.payload).toMatchObject({ attempt: 1, tries: 2 });
+    h.faults.sms = null;
+    expect(await send()).toEqual({ channel: 'sms', messageId: 'm-1' });
+    // One row, three sends: a channel bounding its own retries (push) counts these, not the job's.
+    expect(h.tries).toEqual([1, 2, 3]);
+    expect(h.rows.size).toBe(1);
+    expect(h.rows.get('m-1')).toMatchObject({ status: 'sent', payload: { attempt: 1, tries: 3 } });
   });
 
   it('a late failed or undeliverable callback: the re-run sends on the next channel, once', async () => {

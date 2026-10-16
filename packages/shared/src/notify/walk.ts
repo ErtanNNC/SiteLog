@@ -31,6 +31,8 @@ export interface MessageAttempt {
   error_code: string | null;
   /** `payload.attempt`; a row written before W2-01 has none and counts as the first. */
   attempt: number;
+  /** `payload.tries`: how many sends this row has had (W2-15/16 review; absent: none counted). */
+  tries?: number;
 }
 
 /** What the Notifier does next for a logical message. */

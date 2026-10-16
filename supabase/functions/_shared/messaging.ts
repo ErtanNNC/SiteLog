@@ -106,10 +106,12 @@ export function supabaseNotifierStore(admin: AppClient): NotifierStore {
       // the same refusal, and the attempt number.
       return data.map(({ payload, ...prior }) => {
         const code = (payload as { error_code?: unknown } | null)?.error_code;
+        const tries = (payload as { tries?: unknown } | null)?.tries;
         return {
           ...prior,
           error_code: typeof code === 'string' ? code : null,
           attempt: attemptNumber(payload),
+          tries: typeof tries === 'number' ? tries : null,
         };
       });
     },

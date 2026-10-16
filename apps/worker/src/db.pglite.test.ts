@@ -2090,6 +2090,7 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
         error: 'twilio 400 21610: unsubscribed',
         error_code: '21610',
         attempt: null,
+        tries: null,
       },
     ]);
   });

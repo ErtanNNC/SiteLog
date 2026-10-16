@@ -229,6 +229,23 @@ describe('web push transport (W2-14)', () => {
     expect(err.undeliverable).toBe(true);
   });
 
+  it('counts push tries per message, not the job’s runs (W2-15/16 review)', async () => {
+    // A job whose earlier runs failed before push (a database error): push still gets its tries.
+    for (const [tries, attempt, retryable] of [
+      [1, 3, true],
+      [2, 4, true],
+      [3, 3, false],
+      [3, 1, false],
+      // The job's last run gives up whatever the count, so the fallback still goes out.
+      [1, 6, false],
+    ] as const) {
+      const { transport } = setup([sub('a')], () => 503, [], { attempt: () => attempt });
+      const err = await refusal(transport.send(MESSAGE, { tries }));
+      expect(err.retryable, `try ${tries}, run ${attempt}`).toBe(retryable);
+      if (!retryable) expect(err.opts.code).toBe('retries_exhausted');
+    }
+  });
+
   it('never follows a redirect: a 3xx is refused (W2-14 review, §19 Q115)', async () => {
     for (const status of [301, 302, 307, 308]) {
       const requests: Array<{ url: string; init: RequestInit | undefined }> = [];

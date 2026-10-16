@@ -51,6 +51,7 @@ export function fakeMessaging(opts: { fail?: Error } = {}): FakeMessaging {
             error: row.error,
             error_code: row.payload?.error_code ?? null,
             attempt: row.payload?.attempt ?? null,
+            tries: row.payload?.tries ?? null,
           })),
       ),
     isPhoneOptedOut: (phone, country) => Promise.resolve(phoneOptOuts.has(`${phone}:${country}`)),

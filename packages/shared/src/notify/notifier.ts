@@ -122,6 +122,12 @@ export type OutboundMessagePayload = {
   whatsapp_mode?: string;
   /** WhatsApp: the approved template's content sid of a `template` send. */
   content_sid?: string;
+  /**
+   * How many times this row was handed to its transport, this send included (W2-15/16 review):
+   * a channel that bounds its own retries (push, `PUSH_MAX_ATTEMPTS`) counts them per message,
+   * not by the job's attempt.
+   */
+  tries?: number;
 };
 
 /** A `messages` row the Notifier writes: one per attempt (SMS, or a registered channel). */
@@ -164,6 +170,8 @@ export interface PriorMessage {
   error_code?: string | null;
   /** `payload.attempt` (absent on rows before W2-01: the first attempt). */
   attempt?: number | null;
+  /** `payload.tries`: sends of this row so far (absent: none counted). */
+  tries?: number | null;
 }
 
 /** A `PriorMessage` as the walk reads it. */
@@ -177,6 +185,7 @@ export function attemptOf(prior: PriorMessage): MessageAttempt {
     error: prior.error,
     error_code: prior.error_code ?? null,
     attempt: attemptNumber({ attempt: prior.attempt }),
+    tries: typeof prior.tries === 'number' && prior.tries > 0 ? prior.tries : 0,
   };
 }
 
@@ -445,6 +454,8 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     attempt?: number;
     /** The row of an earlier attempt to send again on. */
     existingId?: string;
+    /** This send's number on its row (`payload.tries`): 1, or one more than the row's last. */
+    tries?: number;
     /** The id of a new row (default: a new UUID). */
     newId?: string;
     /** The report the message is about (`payload.report_id`). */
@@ -463,6 +474,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       ...(input.attempt !== undefined ? { attempt: input.attempt } : {}),
       ...(input.reportId !== undefined ? { report_id: input.reportId } : {}),
       ...(code ? { error_code: code } : {}),
+      ...(input.tries !== undefined ? { tries: input.tries } : {}),
       ...(meta ?? {}),
     };
     return Object.keys(payload).length === 0 ? null : payload;
@@ -498,7 +510,13 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     status: MsgStatus,
     error: string | null,
   ): Promise<void> {
-    if (input.existingId) await store.updateMessage(id, { status, error });
+    if (input.existingId)
+      await store.updateMessage(id, {
+        status,
+        error,
+        // The send count moves on with the row (W2-15/16 review).
+        ...(input.tries !== undefined ? { payload: payloadOf(input) } : {}),
+      });
     else await store.insertMessage(rowOf(input, id, status, error));
   }
 
@@ -551,6 +569,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
               ? {}
               : { sender }),
           ...(statusCallback ? { statusCallback } : {}),
+          ...(input.tries !== undefined ? { tries: input.tries } : {}),
         },
       );
       await store.updateMessage(id, {
@@ -576,8 +595,9 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       await store.updateMessage(id, {
         status: undeliverable ? 'undeliverable' : 'failed',
         error: message,
-        // The code goes with the row, so a replay under the dedupe key throws the same refusal.
-        ...(code ? { payload: payloadOf(input, code) } : {}),
+        // The code goes with the row, so a replay under the dedupe key throws the same refusal;
+        // the send count too (W2-15/16 review).
+        ...(code || input.tries !== undefined ? { payload: payloadOf(input, code) } : {}),
       });
       await store.audit({
         orgId: input.orgId,
@@ -744,6 +764,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         dedupeKey: opts.dedupeKey,
         attempt: plan.attempt,
         existingId: plan.retry?.id,
+        tries: (plan.retry?.tries ?? 0) + 1,
         ...(opts.reportId ? { reportId: opts.reportId } : {}),
       };
       if (driver === 'console' && !org.isDemo) {

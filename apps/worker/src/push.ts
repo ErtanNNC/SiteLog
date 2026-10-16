@@ -35,9 +35,10 @@ import type { Db } from './db';
  *   audited, so it is never tried again); 429 / 5xx, a network failure or a timeout retry;
  *   anything else refused, a bare 400 or 403 included (it may be SiteLog's VAPID JWT: one
  *   configuration error must not revoke every subscription). One sent: the message went out.
- *   None sent: a retry when any may pass later (the job retries this channel) until the job's
- *   `PUSH_MAX_ATTEMPTS`th run or its last, otherwise an `undeliverable` refusal, so the Notifier
- *   falls back to the next channel once (W2-01, §19 Q22).
+ *   None sent: a retry when any may pass later (the job retries this channel) until the
+ *   message's `PUSH_MAX_ATTEMPTS`th push try (the row's send count) or the job's last run,
+ *   otherwise an `undeliverable` refusal, so the Notifier falls back to the next channel once
+ *   (W2-01, §19 Q22).
  */
 
 /** How long a push service keeps a notification for a phone that is offline (RFC 8030 TTL). */
@@ -47,9 +48,10 @@ export const PUSH_TTL_SECONDS = 4 * 60 * 60;
 export const PUSH_REQUEST_TIMEOUT_MS = 10_000;
 
 /**
- * How many runs of a job may retry push for one message (a 429, a 5xx, a network failure or a
- * timeout on every phone) before push counts as undeliverable and the Notifier texts instead: the
- * job's backoff makes that about two and a half minutes (30 s, then 2 min).
+ * How many push tries one message gets (a 429, a 5xx, a network failure or a timeout on every
+ * phone; counted on its `messages` row, not by the job's attempt) before push counts as
+ * undeliverable and the Notifier texts instead: the job's backoff makes that about two and a half
+ * minutes (30 s, then 2 min).
  */
 export const PUSH_MAX_ATTEMPTS = 3;
 
@@ -199,7 +201,7 @@ export function webPushTransport(input: PushDeps): MessageTransport {
   return {
     channel: 'push',
     driver: PUSH_DRIVER,
-    async send(message) {
+    async send(message, opts) {
       if (!message.reporterId) throw refusal('push: no reporter', false, null);
       const subs = await deps.store.listLivePushSubscriptions(message.reporterId);
       if (subs.length === 0) throw refusal('push: no live subscription', false, 'no_subscription');
@@ -216,13 +218,17 @@ export function webPushTransport(input: PushDeps): MessageTransport {
       if (sent) return { providerId: sent.id ?? `webpush-${deps.randomUUID()}` };
       const retry = outcomes.find((o) => o.kind === 'retry');
       if (retry) {
-        // Bounded: after PUSH_MAX_ATTEMPTS runs of the job, or on its last, push gives up for
-        // this message, so the Notifier falls back to the next channel (SMS) once, instead of
-        // retrying push for the job's whole life and never texting.
+        // Bounded: after PUSH_MAX_ATTEMPTS push tries of this message (the row's send count,
+        // `opts.tries`, kept by the Notifier; the job's attempt when there is none), or on the
+        // job's last run, push gives up for this message, so the Notifier falls back to the next
+        // channel (SMS) once, instead of retrying push for the job's whole life and never
+        // texting. A job run that failed before reaching push is not a push try (W2-15/16 review).
         const attempt = deps.attempt();
-        if (attempt !== undefined && attempt >= Math.min(PUSH_MAX_ATTEMPTS, JOB_MAX_ATTEMPTS)) {
+        const tries = opts.tries ?? attempt;
+        const lastRun = attempt !== undefined && attempt >= JOB_MAX_ATTEMPTS;
+        if ((tries !== undefined && tries >= PUSH_MAX_ATTEMPTS) || lastRun) {
           throw refusal(
-            `${retry.error} (attempt ${attempt}: giving up)`,
+            `${retry.error} (push try ${tries ?? '?'}${lastRun ? ', the job’s last run' : ''}: giving up)`,
             false,
             'retries_exhausted',
           );

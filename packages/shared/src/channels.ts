@@ -371,6 +371,11 @@ export interface SmsSendOptions {
   sender?: string;
   /** Delivery-status webhook (Twilio). */
   statusCallback?: string;
+  /**
+   * This send's number on its `messages` row (1 for the first, then one more per retry of the
+   * same message on the same channel; W2-15/16 review). Absent outside the Notifier's walk.
+   */
+  tries?: number;
 }
 
 /**

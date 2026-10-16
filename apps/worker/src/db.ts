@@ -1758,7 +1758,9 @@ export function createDb(sql: Sql): Db {
         select id, channel, status, provider, provider_message_id, error,
           payload->>'error_code' as error_code,
           case when jsonb_typeof(payload->'attempt') = 'number' then (payload->>'attempt')::int end
-            as attempt
+            as attempt,
+          case when jsonb_typeof(payload->'tries') = 'number' then (payload->>'tries')::int end
+            as tries
         from messages
         where reporter_id = ${reporterId} and payload->>'dedupe_key' = ${dedupeKey}
         order by created_at, id`;
