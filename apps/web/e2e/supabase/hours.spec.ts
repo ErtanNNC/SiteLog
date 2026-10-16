@@ -43,7 +43,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function openRow(page: Page, company: string) {
-  await page.getByRole('button', { name: `Compare ${company} with its invoice` }).click();
+  // The row toggles its aside; saving an invoice opens that company's already.
+  const row = page.getByRole('button', { name: `Compare ${company} with its invoice` });
+  if ((await row.getAttribute('aria-pressed')) !== 'true') await row.click();
   const aside = page.getByTestId('invoice-check');
   await expect(aside).toContainText(company);
   return aside;
