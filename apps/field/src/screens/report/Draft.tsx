@@ -467,7 +467,10 @@ export function FixCard({
       </section>
     );
   }
-  if (fix.kind === 'ready' || fix.kind === 'saving') {
+  // W2-11 review: a preview with no line has nothing to save; it reads as "I couldn't make it".
+  const empty =
+    (fix.kind === 'ready' || fix.kind === 'saving') && (fix.view.changes ?? []).length === 0;
+  if ((fix.kind === 'ready' || fix.kind === 'saving') && !empty) {
     const lines = fix.view.changes ?? [];
     return (
       <section aria-labelledby="fix-preview" className={card}>
@@ -512,7 +515,7 @@ export function FixCard({
         <p className="m-0 text-[16px] leading-6 [overflow-wrap:anywhere]">
           {unclear.clarification}
         </p>
-      ) : fix.kind === 'unclear' && unclear?.reason !== 'timeout' ? (
+      ) : (fix.kind === 'unclear' && unclear?.reason !== 'timeout') || empty ? (
         <p className="m-0 text-[15px] leading-[21px] text-steel">{t('draft.fix.unclearHint')}</p>
       ) : null}
       <div className="flex gap-2.5">

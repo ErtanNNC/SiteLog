@@ -3048,6 +3048,29 @@ Deno.test(
 );
 
 Deno.test(
+  'change something (W2-11 review): a preview with no line is never saved, nor worded by the model',
+  async () => {
+    const h = setup();
+    const { reportId, report, data } = await awaitingDraft(h);
+    report.status = 'filed';
+    const res = await h.call('POST', `reports/${reportId}/correction`, {
+      body: { text: 'Apex was on level five' },
+    });
+    const cid = res.json.id as string;
+    // A preview settled before the W2-11 review fix: ready, with a model note and no lines.
+    h.store.settleCorrectionReady(cid, SEVEN(data), []);
+    h.store.corrections.find((c) => c.id === cid)!.change_note = 'model note';
+    const saved = await h.call('POST', `reports/${reportId}/correction/${cid}/apply`);
+    assertEquals([saved.status, saved.json.error], [409, 'correction_not_ready']);
+    assertEquals(h.store.saved, []);
+    assertEquals(
+      h.store.jobs.filter((j) => j.type === 'render_pdf'),
+      [],
+    );
+  },
+);
+
+Deno.test(
   'change something (W2-11, Q81): a backup on the site may change it; older than 14 days is locked',
   async () => {
     const h = setup();

@@ -420,6 +420,7 @@ export const uiEn = {
           section: '{{section}} changed',
         },
         sections: {
+          crew: 'Crew',
           summary: 'Summary',
           workingHours: 'Working hours',
           weather: 'Weather',

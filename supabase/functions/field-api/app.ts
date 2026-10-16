@@ -1427,14 +1427,17 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
         ? row.changes
         : []) as unknown as CorrectionChange[];
       const reportLanguage = report.language === 'tr' ? 'tr' : 'en';
-      const note = correctionNote(changes, reportLanguage) ?? row.change_note ?? '';
+      // §19 Q100: the note is code's lines, never the model's; a preview with no line saves nothing.
+      const note = correctionNote(changes, reportLanguage);
+      if (!note && row.status === 'ready') throw new FieldError(409, 'correction_not_ready');
       const reporterLanguage = languageOf(ctx.reporter.locale);
       const change = correctionNote(changes, reporterLanguage, { sms: true });
       const res = await store.saveFiledCorrection({
         correctionId: row.id,
         reportId: report.id,
         reporterId: ctx.reporter.id,
-        changeNote: note,
+        // A retry of a save (applied) answers the version it made; its note is not read then.
+        changeNote: note ?? '',
         message:
           day && change
             ? { weekday: formatDate(day.date, 'weekday', reporterLanguage), change }

@@ -1607,6 +1607,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           section: 'Değişti: {{section}}',
         },
         sections: {
+          crew: 'Ekip',
           summary: 'Özet',
           workingHours: 'Çalışma saatleri',
           weather: 'Hava',

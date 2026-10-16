@@ -55,6 +55,8 @@ export type NumberChange = [from: number | null, to: number | null];
 
 /** A section of the draft a correction changed, beyond the crew numbers. */
 export type CorrectionSection =
+  /** A crew line's words changed (area, trade, the name heard, the hours basis), not its numbers. */
+  | 'crew'
   | 'summary'
   | 'workingHours'
   | 'weather'
@@ -507,10 +509,13 @@ export function applyCorrectionOps(
       return { ok: false, reason: 'number_not_stated', detail: 'summary' };
   }
 
+  // Every preview names what it changes (Save change words its note from these lines, §19 Q100).
+  const changes = correctionChanges(base, data);
+  if (changes.length === 0) return { ok: false, reason: 'no_change' };
   return {
     ok: true,
     data,
-    changes: correctionChanges(base, data),
+    changes,
     operations: clean.ops,
     droppedTotals: clean.droppedTotals,
   };
@@ -527,6 +532,7 @@ export function correctionChanges(
   const out: CorrectionChange[] = [];
   const matches = matchCrew(before.manpower, after.manpower);
   const seen = new Set<number>();
+  let crewWords = false;
   after.manpower.forEach((a, i) => {
     const j = matches[i] ?? null;
     if (j !== null) seen.add(j);
@@ -537,8 +543,11 @@ export function correctionChanges(
       b.hoursPerWorker === a.hoursPerWorker &&
       b.totalHours === a.totalHours &&
       b.companyName === a.companyName
-    )
+    ) {
+      // W2-11 review: the same numbers, other words (area, trade, name heard, hours basis).
+      if (!jsonEqual(stripCodeKeys(b), stripCodeKeys(a))) crewWords = true;
       return;
+    }
     out.push({
       kind: 'crew',
       company: a.companyName,
@@ -559,6 +568,7 @@ export function correctionChanges(
       totalHours: [b.totalHours, null],
     });
   });
+  if (crewWords) out.push({ kind: 'section', section: 'crew' });
   const lost = (d: DailyReportData) =>
     round2(d.weather.periods.reduce((n, p) => n + (p.lostHours ?? 0), 0));
   const weatherChanged = !jsonEqual(

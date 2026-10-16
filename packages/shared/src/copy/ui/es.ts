@@ -377,6 +377,7 @@ export const uiEs: UiResources = {
           section: 'Cambió: {{section}}',
         },
         sections: {
+          crew: 'Cuadrilla',
           summary: 'Resumen',
           workingHours: 'Horario',
           weather: 'Clima',

@@ -206,6 +206,35 @@ describe('Past reports (F10, F14, §9.3; W2-03)', () => {
     expect(screen.getByRole('button', { name: 'Save change' })).toBeInTheDocument();
   });
 
+  it('W2-11 review: a preview with no line offers no Save change', async () => {
+    const routes = fakeRoutes({
+      report: vi.fn().mockResolvedValue(
+        reportView({
+          id: 'r2',
+          status: 'filed',
+          currentVersion: 1,
+          data: heroData(),
+          change: { canChange: true, locked: false },
+          correction: {
+            id: 'c0',
+            status: 'ready',
+            via: 'text',
+            changes: [],
+            clarification: null,
+            reason: null,
+            version: 1,
+            draftRev: 1,
+            afterFiling: true,
+          },
+        }),
+      ),
+    });
+    renderApp('/history/r2', { routes });
+    expect(await screen.findByText('I couldn’t make that change.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save change' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
   it('W2-11 (F10): Change something, typed → preview from code’s numbers → Save change → version 2', async () => {
     const filed = reportView({
       id: 'r2',

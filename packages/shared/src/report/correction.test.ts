@@ -306,6 +306,30 @@ describe('applyCorrectionOps (W2-10, §10.6)', () => {
   });
 });
 
+describe('applyCorrectionOps: a crew line changed in its words only (W2-11 review)', () => {
+  it('names the crew in the preview when only its area, trade or heard name changes', () => {
+    const res = applyCorrectionOps(
+      draft(),
+      [{ op: 'add', path: '/manpower/0/area', value: 'Level 5' }],
+      opts('Apex was on level five.'),
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.data.manpower[0]!.area).toBe('Level 5');
+    // Never a ready preview without a line: Save change words its note from these.
+    expect(res.changes).toEqual([{ kind: 'section', section: 'crew' }]);
+  });
+
+  it('an identical crew line is no change at all', () => {
+    const res = applyCorrectionOps(
+      draft(),
+      [{ op: 'replace', path: '/manpower/0/companyName', value: 'Apex Concrete' }],
+      opts('Apex Concrete.'),
+    );
+    expect(res).toMatchObject({ ok: false, reason: 'no_change' });
+  });
+});
+
 describe('applyCorrectionOps: the observed weather (W2-10 review)', () => {
   it('never takes observed weather from the model (the base has none: none after)', () => {
     const res = applyCorrectionOps(
