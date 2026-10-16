@@ -49,16 +49,18 @@ describe('sender ids across packs (spec §4.6, F13)', () => {
           default_timezone, message_channels, sms_sender_type, sms_sender_id, two_way_sms, sms_links_allowed)
         values ('ZZ', 'en-US', '{en-US}', 'imperial', 'letter', 'USD', 'America/Chicago', '{sms}',
           'long_code', '+18885550142', true, true);
-        select set_country_endpoints('US', '+18885550142', null);
+        select set_country_endpoints('US', '+18885550142', null, null, null);
       `),
     ).toBe('23505');
-    expect(await errorOf(`select set_country_endpoints('US', '+18885550142', null)`)).toBeNull();
+    expect(
+      await errorOf(`select set_country_endpoints('US', '+18885550142', null, null, null)`),
+    ).toBeNull();
   });
 
   it('sms-webhook can find the pack by the receiving sender id', async () => {
     await db.exec('begin; set local role service_role;');
     try {
-      await db.query(`select set_country_endpoints('TR', 'SITELOG', null)`);
+      await db.query(`select set_country_endpoints('TR', 'SITELOG', null, null, null)`);
       const found = await db.query<{ code: string }>(
         `select code from countries where sms_sender_id = $1`,
         ['SITELOG'],

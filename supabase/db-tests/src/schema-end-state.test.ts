@@ -44,11 +44,15 @@ describe('schema end state (D11)', () => {
     expect(spec.tables.size).toBe(36);
     expect(spec.enums.size).toBe(26);
     expect(blocks['6.4']!.match(/^create index /gm)).toHaveLength(9);
-    expect(blocks['6.4']!.match(/^create unique index /gm)).toHaveLength(1);
+    // W2-15: the unique WhatsApp sender beside the SMS one.
+    expect(blocks['6.4']!.match(/^create unique index /gm)).toHaveLength(2);
     const indexes = [...spec.indexes.values()].reduce((n, set) => n + set.size, 0);
-    expect(indexes).toBe(13);
+    expect(indexes).toBe(14);
     expect(spec.indexes.get('countries')).toEqual(
-      new Set(['UNIQUE btree (sms_sender_id) WHERE (sms_sender_id IS NOT NULL)']),
+      new Set([
+        'UNIQUE btree (sms_sender_id) WHERE (sms_sender_id IS NOT NULL)',
+        'UNIQUE btree (whatsapp_sender_id) WHERE (whatsapp_sender_id IS NOT NULL)',
+      ]),
     );
     expect(spec.indexes.get('jobs')).toEqual(new Set(['btree (status, run_after)']));
     expect(spec.views.size).toBe(2);

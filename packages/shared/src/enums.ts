@@ -31,7 +31,15 @@ export type ReporterStatus = (typeof REPORTER_STATUSES)[number];
 export const CONTACT_PREFS = ['link', 'call'] as const;
 export type ContactPref = (typeof CONTACT_PREFS)[number];
 
-export const CONSENT_TYPES = ['sms', 'auto_call', 'recording', 'data_processing', 'push'] as const;
+/** `push` since W2-14 (§19 Q27), `whatsapp` since W2-15 (§19 Q25, Q40). */
+export const CONSENT_TYPES = [
+  'sms',
+  'auto_call',
+  'recording',
+  'data_processing',
+  'push',
+  'whatsapp',
+] as const;
 export type ConsentType = (typeof CONSENT_TYPES)[number];
 
 export const COMPANY_STATUSES = ['confirmed', 'unconfirmed'] as const;

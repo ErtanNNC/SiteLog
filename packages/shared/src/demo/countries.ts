@@ -8,7 +8,7 @@ import { toCountryPack, type CountryPack } from '../countries.ts';
  * supabase/db-tests/src/countries.test.ts fails until these rows equal the migrated ones, so a
  * migration that adds or changes a pack changes this list in the same commit.
  *
- * `sms_sender_id` and `voice_number` are per environment and null here, as the migration seeds
+ * `sms_sender_id`, `voice_number`, `whatsapp_sender_id` and `whatsapp_templates` are per environment and null here, as the migration seeds
  * them: every pack sends through `console` until its sender is set in a database
  * (set_country_endpoints()). `created_at` is the migration's date; a database row holds the
  * moment the migration ran, which the parity test does not compare.
@@ -30,6 +30,8 @@ export const DEMO_COUNTRIES: readonly CountryRow[] = [
     two_way_sms: false,
     sms_links_allowed: true,
     voice_number: null,
+    whatsapp_sender_id: null,
+    whatsapp_templates: null,
     legal_keys: {},
     created_at: '2026-10-14T00:00:00.000Z',
   },
@@ -49,6 +51,8 @@ export const DEMO_COUNTRIES: readonly CountryRow[] = [
     two_way_sms: true,
     sms_links_allowed: true,
     voice_number: null,
+    whatsapp_sender_id: null,
+    whatsapp_templates: null,
     legal_keys: {},
     created_at: '2026-10-14T00:00:00.000Z',
   },

@@ -1297,6 +1297,25 @@ describe('field_grant_consent (Settings: Turn on texts; spec §19 Q86)', () => {
     await svc(`delete from sms_opt_outs where phone_e164 = $1`, ['+905321234567']);
   });
 
+  it('takes the WhatsApp consent too, which an SMS opt-out never blocks (W2-15, §19 Q40)', async () => {
+    await svc(`update reporters set status = 'opted_out', opted_out_at = now() where id = $1`, [
+      OUTSIDER,
+    ]);
+    expect(await grant(OUTSIDER, 'field.consent.v1', 'whatsapp')).toMatchObject({
+      granted: true,
+    });
+    expect(await grant(OUTSIDER, 'field.consent.v1', 'whatsapp')).toEqual({ granted: false });
+    const [audit] = await svc<{ diff: Record<string, unknown> }>(
+      `select diff from audit_log where action = 'consent.given' and actor_id = $1`,
+      [OUTSIDER],
+    );
+    expect(audit!.diff).toMatchObject({ type: 'whatsapp', via: 'settings' });
+    await svc(`select field_revoke_consent($1, 'whatsapp', null)`, [OUTSIDER]);
+    await svc(`update reporters set status = 'active', opted_out_at = null where id = $1`, [
+      OUTSIDER,
+    ]);
+  });
+
   it('takes the texts consent only, with a wording version, for a known reporter', async () => {
     expect(
       await failure(`select field_grant_consent($1, 'recording', 'v1', null, null)`, [MARCO]),

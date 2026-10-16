@@ -289,14 +289,14 @@ describe('country pack rows (§4.6)', () => {
     // A policy migration that moved TR to a long code on a database where SITELOG is set fails
     // at push time, instead of leaving a row toCountryPack() throws on.
     await rolledBack(async () => {
-      await svc(`select set_country_endpoints('TR', 'SITELOG', null)`);
+      await svc(`select set_country_endpoints('TR', 'SITELOG', null, null, null)`);
       expect(
         await sqlState(svc(`update countries set sms_sender_type = 'long_code' where code = 'TR'`)),
       ).toBe('23514');
     });
     // The same migration passes when it also clears the sender (set again for the new type).
     await rolledBack(async () => {
-      await svc(`select set_country_endpoints('TR', 'SITELOG', null)`);
+      await svc(`select set_country_endpoints('TR', 'SITELOG', null, null, null)`);
       await svc(
         `update countries set sms_sender_type = 'long_code', sms_sender_id = null where code = 'TR'`,
       );
@@ -395,11 +395,11 @@ describe('set_country_endpoints() (service role only)', () => {
   it('sets a sender id and a voice number per pack type, audited', async () => {
     await rolledBack(async () => {
       const [tr] = await svc<{ r: CountryRow }>(
-        `select to_jsonb(set_country_endpoints('tr', ' SITELOG ', null)) as r`,
+        `select to_jsonb(set_country_endpoints('tr', ' SITELOG ', null, null, null)) as r`,
       );
       expect(tr!.r).toMatchObject({ code: 'TR', sms_sender_id: 'SITELOG', voice_number: null });
       const [us] = await svc<{ r: CountryRow }>(
-        `select to_jsonb(set_country_endpoints('US', '+18885550142', '+15550142290')) as r`,
+        `select to_jsonb(set_country_endpoints('US', '+18885550142', '+15550142290', null, null)) as r`,
       );
       expect(us!.r).toMatchObject({ sms_sender_id: '+18885550142', voice_number: '+15550142290' });
       expect(toCountryPack(us!.r).voiceNumber).toBe('+15550142290');
@@ -416,8 +416,18 @@ describe('set_country_endpoints() (service role only)', () => {
           entity_id: null,
           diff: {
             code: 'TR',
-            from: { sms_sender_id: null, voice_number: null },
-            to: { sms_sender_id: 'SITELOG', voice_number: null },
+            from: {
+              sms_sender_id: null,
+              voice_number: null,
+              whatsapp_sender_id: null,
+              whatsapp_templates: null,
+            },
+            to: {
+              sms_sender_id: 'SITELOG',
+              voice_number: null,
+              whatsapp_sender_id: null,
+              whatsapp_templates: null,
+            },
           },
         },
         {
@@ -428,33 +438,87 @@ describe('set_country_endpoints() (service role only)', () => {
           entity_id: null,
           diff: {
             code: 'US',
-            from: { sms_sender_id: null, voice_number: null },
-            to: { sms_sender_id: '+18885550142', voice_number: '+15550142290' },
+            from: {
+              sms_sender_id: null,
+              voice_number: null,
+              whatsapp_sender_id: null,
+              whatsapp_templates: null,
+            },
+            to: {
+              sms_sender_id: '+18885550142',
+              voice_number: '+15550142290',
+              whatsapp_sender_id: null,
+              whatsapp_templates: null,
+            },
           },
         },
       ]);
       // A blank value clears it (back to console, Talk now only).
       const [cleared] = await svc<{ r: CountryRow }>(
-        `select to_jsonb(set_country_endpoints('US', '', null)) as r`,
+        `select to_jsonb(set_country_endpoints('US', '', null, null, null)) as r`,
       );
       expect(cleared!.r).toMatchObject({ sms_sender_id: null, voice_number: null });
     });
   });
 
   it.each([
-    ['an E.164 sender on an alphanumeric pack', `'TR', '+905320000512', null`],
-    ['a 12-character title', `'TR', 'SITELOGAPP12', null`],
-    ['a title on a toll-free pack', `'US', 'SITELOG', null`],
-    ['a malformed voice number', `'US', null, '555-0142'`],
-    ['an unknown pack', `'DE', null, null`],
+    ['an E.164 sender on an alphanumeric pack', `'TR', '+905320000512', null, null, null`],
+    ['a 12-character title', `'TR', 'SITELOGAPP12', null, null, null`],
+    ['a title on a toll-free pack', `'US', 'SITELOG', null, null, null`],
+    ['a malformed voice number', `'US', null, '555-0142', null, null`],
+    ['an unknown pack', `'DE', null, null, null, null`],
+    ['a WhatsApp sender that is not E.164 (W2-15)', `'TR', null, null, '0532 000 0000', null`],
+    ['WhatsApp templates that are not an object', `'TR', null, null, null, '[]'::jsonb`],
+    [
+      'a template with a bad content sid',
+      `'TR', null, null, null, '{"daily_link":{"tr":"HX1"}}'::jsonb`,
+    ],
+    [
+      'a template in another language',
+      `'TR', null, null, null, '{"daily_link":{"de":"HX${'a'.repeat(32)}"}}'::jsonb`,
+    ],
+    [
+      'a template key that is not a key',
+      `'TR', null, null, null, '{"Daily Link":{"tr":"HX${'a'.repeat(32)}"}}'::jsonb`,
+    ],
   ])('refuses %s (22023)', async (_label, args) => {
     expect(await rolledBack(() => sqlState(svc(`select set_country_endpoints(${args})`)))).toBe(
       '22023',
     );
   });
 
+  it('sets and clears the WhatsApp sender and template ids, audited (W2-15)', async () => {
+    await rolledBack(async () => {
+      const sid = `HX${'b'.repeat(32)}`;
+      const [set] = await svc<{ r: Record<string, unknown> }>(
+        `select to_jsonb(set_country_endpoints('TR', null, null, ' +905320000000 ', '{"daily_link":{"tr":"${sid}"}}'::jsonb)) as r`,
+      );
+      expect(set!.r).toMatchObject({
+        whatsapp_sender_id: '+905320000000',
+        whatsapp_templates: { daily_link: { tr: sid } },
+      });
+      const [audit] = await svc<{ diff: Record<string, Record<string, unknown>> }>(
+        `select diff from audit_log where action = 'country.endpoints_set' order by id desc limit 1`,
+      );
+      expect(audit!.diff.to).toMatchObject({
+        whatsapp_sender_id: '+905320000000',
+        whatsapp_templates: { daily_link: { tr: sid } },
+      });
+      // {} clears the templates; one sender per pack (the inbound lookup, W2-16).
+      const [cleared] = await svc<{ r: Record<string, unknown> }>(
+        `select to_jsonb(set_country_endpoints('TR', null, null, '+905320000000', '{}'::jsonb)) as r`,
+      );
+      expect(cleared!.r).toMatchObject({ whatsapp_templates: null });
+      expect(
+        await sqlState(
+          svc(`select set_country_endpoints('US', null, null, '+905320000000', null)`),
+        ),
+      ).toBe('23505');
+    });
+  });
+
   it('runs as the service role, and cannot be run by a signed-in user or anon', async () => {
-    const sql = `select set_country_endpoints('TR', 'SITELOG', null)`;
+    const sql = `select set_country_endpoints('TR', 'SITELOG', null, null, null)`;
     for (const caller of [
       { role: 'authenticated', userId: LENA },
       { role: 'anon' },
@@ -466,13 +530,13 @@ describe('set_country_endpoints() (service role only)', () => {
     // countries-set.test.ts runs it as service_role). service_role keeps EXECUTE through
     // Supabase's default privileges (the revoke names public, anon, authenticated).
     const [priv] = await svc<{ ok: boolean }>(
-      `select has_function_privilege('service_role', 'set_country_endpoints(text,text,text)', 'execute') as ok`,
+      `select has_function_privilege('service_role', 'set_country_endpoints(text,text,text,text,jsonb)', 'execute') as ok`,
     );
     expect(priv!.ok).toBe(true);
     await rolledBack(async () => {
       await db.exec('set local role service_role');
       const res = await db.query<{ code: string; sms_sender_id: string }>(
-        `select code, sms_sender_id from set_country_endpoints('TR', 'SITELOG', null)`,
+        `select code, sms_sender_id from set_country_endpoints('TR', 'SITELOG', null, null, null)`,
       );
       expect(res.rows).toEqual([{ code: 'TR', sms_sender_id: 'SITELOG' }]);
     });

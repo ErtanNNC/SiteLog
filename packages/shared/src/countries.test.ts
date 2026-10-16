@@ -44,6 +44,8 @@ const ZZ_ROW: CountryRow = {
   two_way_sms: false,
   sms_links_allowed: false,
   voice_number: null,
+  whatsapp_sender_id: null,
+  whatsapp_templates: null,
   legal_keys: {},
   created_at: '2026-10-14T00:00:00.000Z',
 };
@@ -90,6 +92,8 @@ describe('country pack rows (spec §4.6)', () => {
       twoWaySms: false,
       smsLinksAllowed: true,
       voiceNumber: null,
+      whatsappSenderId: null,
+      whatsappTemplates: {},
       legalKeys: {},
     });
     const set = toCountryPack({

@@ -4,6 +4,7 @@ import type { CountryRow } from './db/types.ts';
 import { MessageChannelSchema, type MessageChannel } from './enums.ts';
 import { assertE164, isE164, type E164 } from './format.ts';
 import {
+  LANGUAGES,
   ORG_LOCALES,
   REPORTER_LOCALES,
   UNIT_SYSTEMS,
@@ -57,6 +58,21 @@ export const LegalKeysSchema = z.strictObject({
   recording_notice: z.string().min(1).optional(),
   consent: z.string().min(1).optional(),
 });
+
+/** A Twilio Content API id (`HX` and 32 hex digits): an approved WhatsApp template (W2-15). */
+export const WHATSAPP_CONTENT_SID_RE = /^HX[0-9a-fA-F]{32}$/;
+
+/**
+ * `countries.whatsapp_templates` (W2-15, spec §19 Q39): `{<message key>: {<language>: <content
+ * sid>}}`, per environment, as set_country_endpoints() checks it (a key of lower-case letters,
+ * digits and underscores; `en`, `es`, `tr`; a content sid). Which keys a template may carry is
+ * `WHATSAPP_KEYS` (channels.ts), checked by `pnpm countries:set`.
+ */
+export const WhatsappTemplatesSchema = z.record(
+  z.string().regex(/^[a-z][a-z0-9_]{0,39}$/, 'a message key'),
+  z.partialRecord(z.enum(LANGUAGES), z.string().regex(WHATSAPP_CONTENT_SID_RE, 'a content sid')),
+);
+export type WhatsappTemplates = z.infer<typeof WhatsappTemplatesSchema>;
 
 /** The shapes `set_country_endpoints()` accepts for a sender id, by the pack's sender type. */
 export function isValidSmsSenderId(type: SmsSenderType, senderId: string): boolean {
@@ -118,6 +134,12 @@ export const CountryRowSchema = z
       .string()
       .regex(/^\+[1-9]\d{6,14}$/, 'voice_number must be E.164')
       .nullable(),
+    // W2-15 (20261016000210): per environment, null in every migration.
+    whatsapp_sender_id: z
+      .string()
+      .regex(/^\+[1-9]\d{6,14}$/, 'whatsapp_sender_id must be E.164')
+      .nullable(),
+    whatsapp_templates: WhatsappTemplatesSchema.nullable(),
     legal_keys: LegalKeysSchema,
     created_at: z.string(),
   })
@@ -183,6 +205,13 @@ export interface CountryPack {
   smsLinksAllowed: boolean;
   /** null = Talk now only (no phone number to call). */
   voiceNumber: E164 | null;
+  /**
+   * The Twilio WhatsApp sender in this environment (W2-15, §19 Q39); null = `console` for demo
+   * orgs, and WhatsApp leaves a real org's order (§19 Q84).
+   */
+  whatsappSenderId: E164 | null;
+  /** The approved template of each key per language in this environment; `{}` = none. */
+  whatsappTemplates: WhatsappTemplates;
   legalKeys: { privacyNotice?: string; recordingNotice?: string; consent?: string };
 }
 
@@ -211,6 +240,8 @@ export function toCountryPack(row: CountryRow): CountryPack {
     twoWaySms: r.two_way_sms,
     smsLinksAllowed: r.sms_links_allowed,
     voiceNumber: r.voice_number === null ? null : assertE164(r.voice_number),
+    whatsappSenderId: r.whatsapp_sender_id === null ? null : assertE164(r.whatsapp_sender_id),
+    whatsappTemplates: r.whatsapp_templates ?? {},
     legalKeys,
   };
 }

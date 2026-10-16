@@ -420,13 +420,39 @@ describe('cost per report', () => {
     await msg('out', 'template', { kind: 'sitelog_reminder_2', siteDayId: r.siteDayId }, 'failed');
     await msg('out', 'text', { kind: 'filed', reportId: r.id });
     await msg('out', 'template', { kind: 'sitelog_reminder_1', siteDayId: other.siteDayId });
+    // W2-15: the Notifier's messages about the report, by channel (payload.report_id).
+    const notifier = async (
+      channel: string,
+      provider: string,
+      status: string,
+      payload: Record<string, unknown>,
+    ) =>
+      svc(
+        `insert into messages (phone_e164, channel, direction, provider, status, body, payload)
+         values ('+15550100000', $1::message_channel, 'out', $2, $3::msg_status, 'x', $4)`,
+        [channel, provider, status, JSON.stringify(payload)],
+      );
+    await notifier('sms', 'twilio', 'delivered', { report_id: r.id });
+    await notifier('sms', 'twilio', 'undeliverable', { report_id: r.id });
+    await notifier('sms', 'console', 'delivered', { report_id: r.id });
+    await notifier('whatsapp', 'twilio', 'read', { report_id: r.id, whatsapp_mode: 'template' });
+    await notifier('whatsapp', 'twilio', 'sent', { report_id: r.id, whatsapp_mode: 'session' });
+    await notifier('sms', 'twilio', 'sent', { report_id: other.id });
 
-    const inputs = await svc<{ ai_usd: string; job_count: number; wa_templates: number }>(
-      `select * from report_cost_inputs($1)`,
-      [r.id],
-    );
+    const inputs = await svc<{
+      ai_usd: string;
+      job_count: number;
+      wa_templates: number;
+      sms_messages: number;
+      whatsapp_templates: number;
+    }>(`select * from report_cost_inputs($1)`, [r.id]);
     expect(Number(inputs[0]!.ai_usd)).toBeCloseTo(0.1168, 6);
-    expect(inputs[0]).toMatchObject({ job_count: 4, wa_templates: 3 });
+    expect(inputs[0]).toMatchObject({
+      job_count: 4,
+      wa_templates: 3,
+      sms_messages: 1,
+      whatsapp_templates: 1,
+    });
     const none = await svc<{ ai_usd: string; job_count: number; wa_templates: number }>(
       `select * from report_cost_inputs($1)`,
       ['00000000-0000-4000-8000-000000000000'],

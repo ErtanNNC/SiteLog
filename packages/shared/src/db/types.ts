@@ -29,7 +29,13 @@ import type {
   VersionAuthor,
 } from '../enums.ts';
 import type { ReportLanguage, OrgLocale, ReporterLocale, UnitSystem } from '../locale.ts';
-import type { PaperSize, SmsProvider, SmsSenderType, WhatsappProvider } from '../countries.ts';
+import type {
+  PaperSize,
+  SmsProvider,
+  SmsSenderType,
+  WhatsappProvider,
+  WhatsappTemplates,
+} from '../countries.ts';
 
 /**
  * Hand-maintained Supabase `Database` type for @supabase/supabase-js (§6.3).
@@ -70,6 +76,13 @@ export type CountryRow = {
   sms_links_allowed: boolean;
   /** Per environment, E.164; null = Talk now only. */
   voice_number: string | null;
+  /**
+   * Per environment (W2-15, spec §19 Q39), E.164: the Twilio WhatsApp sender; null = console for
+   * demo orgs, and for a real org WhatsApp leaves the order (§19 Q84).
+   */
+  whatsapp_sender_id: string | null;
+  /** Per environment: `{<message key>: {<language>: <Twilio content sid>}}`; null = none. */
+  whatsapp_templates: WhatsappTemplates | null;
   legal_keys: { privacy_notice?: string; recording_notice?: string; consent?: string };
   created_at: string;
 };
@@ -961,6 +974,8 @@ export type Database = {
         | 'whatsapp_provider'
         | 'sms_sender_id'
         | 'voice_number'
+        | 'whatsapp_sender_id'
+        | 'whatsapp_templates'
         | 'legal_keys'
         | 'created_at'
       >;
@@ -1371,8 +1386,15 @@ export type Database = {
         Returns: Json;
       };
       // Service role only (revoked from anon and authenticated): a pack's per-environment values.
+      // The WhatsApp sender and template ids since W2-15 (20261016000210_whatsapp_sender.sql).
       set_country_endpoints: {
-        Args: { p_code: string; p_sms_sender_id: string | null; p_voice_number: string | null };
+        Args: {
+          p_code: string;
+          p_sms_sender_id: string | null;
+          p_voice_number: string | null;
+          p_whatsapp_sender_id: string | null;
+          p_whatsapp_templates: Json | null;
+        };
         Returns: CountryRow;
       };
       next_report_no: { Args: { p_site_id: string }; Returns: string };
@@ -1394,8 +1416,9 @@ export type Database = {
         Args: { p_reporter_id: string; p_type: ConsentType; p_device_id: string };
         Returns: Json;
       };
-      // Settings' Turn on for texts (spec §19 Q86, 20261016000080_consent_turn_on.sql), service
-      // role only: a fresh `sms` consent audited consent.given; refused for an opted-out phone.
+      // Settings' Turn on for texts (spec §19 Q86, 20261016000080_consent_turn_on.sql) and, since
+      // W2-15, WhatsApp (20261016000210), service role only: a fresh `sms` or `whatsapp` consent
+      // audited consent.given; texts refused for an opted-out phone.
       field_grant_consent: {
         Args: {
           p_reporter_id: string;
@@ -1808,7 +1831,14 @@ export type Database = {
       // Worker (service role) only.
       report_cost_inputs: {
         Args: { p_report_id: string };
-        Returns: Array<{ ai_usd: number; job_count: number; wa_templates: number }>;
+        Returns: Array<{
+          ai_usd: number;
+          job_count: number;
+          wa_templates: number;
+          /** W2-15 (20261016000220): the report's texts and WhatsApp templates a provider took. */
+          sms_messages: number;
+          whatsapp_templates: number;
+        }>;
       };
       report_cost_baseline: {
         Args: { p_kind: string; p_before: string; p_exclude?: string | null; p_days?: number };
