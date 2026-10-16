@@ -330,6 +330,77 @@ describe('applyCorrectionOps: the observed weather (W2-10 review)', () => {
   });
 });
 
+describe('applyCorrectionOps: numbers in times and words are stated (W2-10 review)', () => {
+  it('a weather period’s start and end, the working hours and a delivery time name their hour', () => {
+    const period = (start: string) =>
+      applyCorrectionOps(
+        draft(),
+        [{ op: 'add', path: '/weather/periods/0/start', value: start }],
+        opts('the rain started at seven'),
+      );
+    expect(period('07:00')).toMatchObject({ ok: true });
+    expect(period('09:00')).toMatchObject({ ok: false, reason: 'number_not_stated' });
+    const hours = (start: string) =>
+      applyCorrectionOps(
+        draft(),
+        [{ op: 'add', path: '/workingHours', value: { start, end: '15:30' } }],
+        opts('we started at 6 and finished at 3:30'),
+      );
+    expect(hours('06:00')).toMatchObject({ ok: true });
+    expect(hours('05:00')).toMatchObject({
+      ok: false,
+      reason: 'number_not_stated',
+      detail: 'workingHours.start',
+    });
+    const delivery = (time: string, text: string) =>
+      applyCorrectionOps(
+        draft(),
+        [{ op: 'add', path: '/deliveries/-', value: { item: 'Rebar', time, source: [] } }],
+        opts(text),
+      );
+    expect(delivery('10:00', 'rebar came at 10')).toMatchObject({ ok: true });
+    expect(delivery('11:00', 'rebar came at 10')).toMatchObject({
+      ok: false,
+      reason: 'number_not_stated',
+      detail: 'time',
+    });
+  });
+
+  it('figures written in words (a quantity, the summary) are stated ones', () => {
+    const quantity = (q: string) =>
+      applyCorrectionOps(
+        draft(),
+        [
+          {
+            op: 'add',
+            path: '/deliveries/-',
+            value: { item: 'Rebar', quantity: q, source: [] },
+          },
+        ],
+        opts('two loads of rebar, 2 loads'),
+      );
+    expect(quantity('2 loads')).toMatchObject({ ok: true });
+    expect(quantity('3 loads')).toMatchObject({
+      ok: false,
+      reason: 'number_not_stated',
+      detail: 'quantity',
+    });
+    const summary = (text: string) =>
+      applyCorrectionOps(
+        draft(),
+        [{ op: 'replace', path: '/summary', value: text }],
+        opts('say the pour was on L4 and took 6 hours'),
+      );
+    // "L4" was in the summary already; 6 is stated.
+    expect(summary('Slab pour on L4 took 6 hours.')).toMatchObject({ ok: true });
+    expect(summary('Slab pour on L4 took 9 hours.')).toMatchObject({
+      ok: false,
+      reason: 'number_not_stated',
+      detail: 'summary',
+    });
+  });
+});
+
 describe('applyCrewEdit (the draft steppers, Q80)', () => {
   it('sets workers and hours, totals in code, reporter_edit cited, hours stated', () => {
     const res = applyCrewEdit(

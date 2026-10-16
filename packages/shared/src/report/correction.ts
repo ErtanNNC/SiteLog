@@ -230,6 +230,28 @@ function resolveCompany(
     : { ...entry, companyId: null };
 }
 
+/** The digit runs of a text ("2 loads of 12 m" → 2, 12), as `statedNumbers` reads them. */
+function digitRuns(text: string): number[] {
+  return [...text.matchAll(/\d+(?:[.,]\d+)?/g)].map((m) => Number(m[0].replace(',', '.')));
+}
+
+/**
+ * The numbers written inside the strings of a value (any depth), with their key: a quantity
+ * ("3 loads"), a summary's figures. Times (`time`, `start`, `end`) are checked by their hour.
+ */
+function stringNumberLeaves(v: unknown, key = ''): Array<{ key: string; value: number }> {
+  if (typeof v === 'string')
+    return TIME_KEYS.has(key) ? [] : digitRuns(v).map((value) => ({ key, value }));
+  if (Array.isArray(v)) return v.flatMap((x) => stringNumberLeaves(x, key));
+  if (isObject(v))
+    return Object.entries(v).flatMap(([k, x]) =>
+      CODE_KEYS.has(k) ? [] : stringNumberLeaves(x, k),
+    );
+  return [];
+}
+
+const TIME_KEYS = new Set(['time', 'start', 'end']);
+
 /** The numbers of a value (any depth), with their key, for the stated-numbers rule. */
 function numberLeaves(v: unknown, key = ''): Array<{ key: string; value: number }> {
   if (typeof v === 'number') return [{ key, value: v }];
@@ -443,9 +465,19 @@ export function applyCorrectionOps(
         };
     }
     for (const { item, base: prev } of periods.changed) {
-      if (prev && item.lostHours === prev.lostHours) continue;
-      if (unstatedAnswerNumber({ lostHours: item.lostHours }, text))
-        return { ok: false, reason: 'number_not_stated', detail: 'weather.lostHours' };
+      // Lost hours and the period's times: the ones the correction brings in are stated.
+      const value: Parameters<typeof unstatedAnswerNumber>[0] = {};
+      if (!prev || item.lostHours !== prev.lostHours) value.lostHours = item.lostHours;
+      if (item.start && item.start !== prev?.start) value.start = item.start;
+      if (item.end && item.end !== prev?.end) value.end = item.end;
+      const problem = unstatedAnswerNumber(value, text);
+      if (problem) return { ok: false, reason: 'number_not_stated', detail: `weather.${problem}` };
+    }
+    // The working hours: a changed start or end names its hour.
+    for (const k of ['start', 'end'] as const) {
+      const t = data.workingHours?.[k];
+      if (t && t !== base.workingHours?.[k] && unstatedAnswerNumber({ [k]: t }, text))
+        return { ok: false, reason: 'number_not_stated', detail: `workingHours.${k}` };
     }
     const others = [work, deliveries, equipment, issues, next, incidents].flatMap((l) => l.changed);
     for (const { item, base: prev } of others) {
@@ -454,7 +486,25 @@ export function applyCorrectionOps(
         (l) => !kept.has(`${l.key}:${l.value}`) && !said(l.value),
       );
       if (bad) return { ok: false, reason: 'number_not_stated', detail: bad.key };
+      // Figures written in its words (a delivery's "3 loads") too, and a delivery's time its hour.
+      const keptText = new Set(stringNumberLeaves(prev).map((l) => `${l.key}:${l.value}`));
+      const badText = stringNumberLeaves(item).find(
+        (l) => !keptText.has(`${l.key}:${l.value}`) && !said(l.value),
+      );
+      if (badText) return { ok: false, reason: 'number_not_stated', detail: badText.key };
+      const time = (item as { time?: string }).time;
+      if (
+        time &&
+        time !== (prev as { time?: string } | undefined)?.time &&
+        unstatedAnswerNumber({ start: time }, text)
+      )
+        return { ok: false, reason: 'number_not_stated', detail: 'time' };
     }
+    // The summary's figures.
+    const keptSummary = new Set(digitRuns(base.summary ?? ''));
+    const badSummary = digitRuns(data.summary ?? '').find((n) => !keptSummary.has(n) && !said(n));
+    if (badSummary !== undefined)
+      return { ok: false, reason: 'number_not_stated', detail: 'summary' };
   }
 
   return {
