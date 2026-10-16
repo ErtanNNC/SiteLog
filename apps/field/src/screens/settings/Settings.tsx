@@ -486,7 +486,12 @@ function SettingsLoaded({
             </p>
           </div>
           {pushProblem || (!prefs.push.on && pushBlocked()) ? (
-            <p role="alert" className="m-0 mt-2 text-[15px] leading-5 text-missing">
+            // An alert only answers the reporter's tap; a permission refused before is read as
+            // the screen's state, not announced on arrival (WCAG 4.1.3).
+            <p
+              role={pushProblem ? 'alert' : 'status'}
+              className="m-0 mt-2 text-[15px] leading-5 text-missing"
+            >
               {pushProblem === 'failed' ? t('settings.push.failed') : t('settings.push.blocked')}
             </p>
           ) : null}
