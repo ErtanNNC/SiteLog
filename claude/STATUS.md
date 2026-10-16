@@ -44,7 +44,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 - **Sizin bakmanız gereken:**
   - Bildirimlerin Türkçe metinleri (~60 metin, `packages/shared/src/copy/ui/tr.ts` içinde `shell.notifications.notices`) benim çevirim. Q66/Q68 Türkçe okumasına eklendi.
   - Kestrel demo bildirimleri biraz değişti: "needs review" bildirimi şantiye adı yerine rapor numarasıyla başlıyor, sözlük bildirimi "3 new terms to review" diyor.
-- **Yarın sabahki telefon testi öncesi (benim yapacaklarım):** yeni migration'lar (`20261015000070`, `…080`, `…090`) ve güncel edge function'lar preview projesine yüklenecek. Saha uygulaması artık onayda taslak sürümünü (`draftRev`) istiyor, eski field-api ile onay çalışmaz. Ardından phone-setup ve preview-worker çalışacak, linkler size gelecek. Hepsi yalnızca preview projesinde, staging'e dokunulmuyor.
+- **Yarın sabahki telefon testi öncesi (benim yapacaklarım):** bekleyen tüm yeni migration'lar (`20261015000070` … `20261016000030`) ve güncel edge function'lar preview projesine yüklenecek. Saha uygulaması artık onayda taslak sürümünü (`draftRev`) istiyor, eski field-api ile onay çalışmaz. Ardından phone-setup ve preview-worker çalışacak, linkler size gelecek. Hepsi yalnızca preview projesinde, staging'e dokunulmuyor.
 - **Geliştiriciler için not:** anahtar yoksa worker artık sahte veriye kendiliğinden geçmiyor. Yerelde uçtan uca çalıştırmak için `.env` içine `EXTRACT_PROVIDER=fake` ve `TRANSCRIBE_PROVIDER=fake` yazılmalı.
 - Actions döndükten sonraki CI'da iki eski test güncellendi (9278b0e, a41cdec); kod hatası değildi. Tüm işin birlikte CI sonucu bekleniyor.
 - W1-19 yerel hazırlık bitti (a767f12): RUNBOOK §2 "Cut-over (W1-19), step by step" (adım 0–8, her biri komut, ön koşul, doğrulama, geri alma), `docs/DEMO_NOTES.md` (demo senaryosu tıklama tıklama), `pnpm cutover:preflight` (yerel ön kontrol; paketlerde sır yok: PASS), staging şeklindeki veritabanında cut-over provası (cutover.test.ts). Hiçbir uzak adım yapılmadı. **Hafta 1 ticket'larının tamamı kodlandı;** kalanlar sizin onay ve kontrollerinizde.
@@ -118,6 +118,11 @@ Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahta
 
 - **Q87 (kararınız):** "Bana bugünün linkini gönder" düğmesi ne zaman ve ne göndersin? Öneri ve yapılan: aynı şantiyenin bugünkü linki, süresi dolmuş her link için günde bir kez. Şantiye durdurulmuşsa ya da bugün iş günü değilse link gitmiyor, nedeni ekranda gösteriliyor.
 - **Q88 (kararınız):** Geçmiş raporlara nereden girilsin? Öneri ve yapılan: Bugün ekranının altındaki bir link; W2-04'te Filed ekranına da eklenecek.
+
+**W2-04 bitti (1a7f0e0):** Filed ekranından "Daha fazla fotoğraf ekle" yapılabiliyor (en fazla 4 fotoğraf, ertesi gün 23:59'a kadar, isteğe bağlı sesli açıklamayla). Eklenen fotoğraflar raporun yeni sürümünü (v2) oluşturuyor: yeni PDF ve "güncellendi" e-postası gidiyor, eski sürüme dokunulmuyor. Ekranda ayrıca "Geçmiş raporlar" linki ve düzenleme ipucu var. Yeni migration: `20261016000030`.
+
+- **Q89 (kararınız):** web'den dosyalanan rapora bu süre içinde fotoğraf eklenebilsin mi? Kişisel link de olsa günlük link de olsa geçerli olsun mu? Öneri ve yapılan: evet, ikisi için de (ayar: `FILED_PHOTOS_ON_WEB_LINKS`).
+- Tasarımla bir fark var: tasarımdaki buton "Add photos", spec'te "Add more photos" yazıyor. Spec'teki kullanıldı.
 
 **Sizin yapmanız gerekenler (hafta 2, acele değil ama uzun sürüyor):**
 
