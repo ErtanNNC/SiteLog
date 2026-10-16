@@ -606,6 +606,33 @@ describe('W2-09: spoken answers (never invent numbers; the clip is a source)', (
     expect(unstatedAnswerNumber({ totalHours: 40 }, 'five full day')).toBe('totalHours');
   });
 
+  it('unstatedAnswerNumber: a full day, half day, no stoppage or time only when the answer says it', () => {
+    // Full day / half day: the phrase in EN, ES or TR, never the model's guess.
+    expect(
+      unstatedAnswerNumber({ workers: 5, fullDay: true }, 'yeah Delta was here, five, same crew'),
+    ).toBe('fullDay');
+    expect(unstatedAnswerNumber({ fullDay: true }, 'Eran cinco, todo el día.')).toBeNull();
+    expect(unstatedAnswerNumber({ fullDay: true }, 'beş kişi, tam gün')).toBeNull();
+    expect(unstatedAnswerNumber({ fullDay: true }, 'a full-day crew')).toBeNull();
+    expect(unstatedAnswerNumber({ halfDay: true }, 'they left a bit early')).toBe('halfDay');
+    expect(unstatedAnswerNumber({ halfDay: true }, 'half a day')).toBeNull();
+    expect(unstatedAnswerNumber({ halfDay: true }, 'medio día')).toBeNull();
+    expect(unstatedAnswerNumber({ halfDay: true }, 'yarım gün çalıştılar')).toBeNull();
+    // Weather times name their hour, as an end time does.
+    expect(unstatedAnswerNumber({ start: '09:00', end: '13:00' }, 'it rained in the morning')).toBe(
+      'start',
+    );
+    expect(unstatedAnswerNumber({ end: '13:00' }, 'it rained in the morning')).toBe('end');
+    expect(unstatedAnswerNumber({ start: '09:00', end: '13:00' }, 'from nine to one')).toBeNull();
+    expect(unstatedAnswerNumber({ start: 'morning' }, 'it rained in the morning')).toBeNull();
+    // 0 lost hours: a no-stoppage phrase or "zero", never by default.
+    expect(unstatedAnswerNumber({ lostHours: 0 }, 'it rained in the morning')).toBe('lostHours');
+    expect(unstatedAnswerNumber({ lostHours: 0 }, 'we didn’t stop')).toBeNull();
+    expect(unstatedAnswerNumber({ lostHours: 0 }, 'zero')).toBeNull();
+    expect(unstatedAnswerNumber({ lostHours: 0 }, 'sin impacto')).toBeNull();
+    expect(unstatedAnswerNumber({ lostHours: 0 }, 'etkisi yok')).toBeNull();
+  });
+
   it('applyAnswer: the answer and the clip are the value’s sources, totals in code', () => {
     const d = upgradeV1toV2(complete());
     d.manpower.push({

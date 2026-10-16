@@ -54,8 +54,9 @@ export type AnswerRefusal = 'low_confidence' | 'number_not_stated' | 'other_fiel
 
 /**
  * Code's rule for a parsed answer (§10.7, CLAUDE.md "never invent numbers"): below 0.7 it is
- * asked once more; an answer for another field, a headcount without a number, or a number the
- * answer does not state (`unstatedAnswerNumber`) is treated the same way. Pure.
+ * asked once more; an answer for another field, a headcount without a number, a weather stoppage
+ * without its lost hours, or a number (or a full day, half day, no stoppage) the answer does not
+ * state (`unstatedAnswerNumber`) is treated the same way. Pure.
  */
 export function answerRefusal(
   field: QuestionField,
@@ -65,6 +66,9 @@ export function answerRefusal(
   if (parsed.confidence < PARSE_ANSWER_MIN_CONFIDENCE) return 'low_confidence';
   if (parsed.field !== field) return 'other_field';
   if (field === 'manpower.workers' && parsed.value.workers == null) return 'low_confidence';
+  // A stoppage with no lost hours would be logged as 0 h lost (applyAnswer): a number nobody said.
+  if (field === 'weather.impact' && parsed.value.impact && parsed.value.lostHours == null)
+    return 'number_not_stated';
   if (unstatedAnswerNumber(parsed.value, transcript) !== null) return 'number_not_stated';
   return null;
 }

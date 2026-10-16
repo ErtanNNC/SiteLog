@@ -523,8 +523,20 @@ const NUMBER_WORDS: Record<string, number> = {
   // "on" (10) is left out: it is also the English preposition ("five on level two").
 };
 
-const FULL_DAY = String.raw`full day|all day|whole day|todo el d[ií]a|d[ií]a completo|jornada completa|tam gün|bütün gün|tüm gün`;
-const HALF_DAY = String.raw`half day|half a day|medio d[ií]a|media jornada|yarım gün`;
+const FULL_DAY = String.raw`full[- ]day|all day|whole day|todo el d[ií]a|d[ií]a completo|jornada completa|tam gün|bütün gün|tüm gün`;
+const HALF_DAY = String.raw`half[- ]day|half a day|medio d[ií]a|media jornada|yarım gün`;
+/** "No weather stoppage" in EN, ES and TR: the words that stand for 0 lost hours. */
+const NO_STOPPAGE = String.raw`no stoppage|no impact|dry|didn[’']?t stop|did not stop|nothing stopped|no delay|no time lost|no hours lost|didn[’']?t lose (?:any )?time|worked through|sin paro|sin impacto|seco|no paramos|duruş yok|etkisi yok|kuru|durmadık`;
+
+/** Lower case, one space, a Turkish "İ" as "i", number words as digits. Pure. */
+function normalizeAnswerText(text: string): string {
+  const t = text
+    .trim()
+    .toLowerCase()
+    .replace(/\u0307/g, '')
+    .replace(/\s+/g, ' ');
+  return t.replace(/[\p{L}]+/gu, (w) => (w in NUMBER_WORDS ? String(NUMBER_WORDS[w]) : w));
+}
 
 /**
  * Quick parser for button and text answers like "5 · full day", "4, till 3", "six guys 8h",
@@ -597,13 +609,7 @@ export function parseQuickAnswer(field: QuestionField, text: string): AnswerValu
       return has ? value : null;
     }
     case 'weather.impact': {
-      if (
-        hasPhrase(
-          normalized,
-          String.raw`no stoppage|no impact|dry|didn'?t stop|nothing stopped|no delay|sin paro|sin impacto|seco|duruş yok|etkisi yok|kuru`,
-        )
-      )
-        return { lostHours: 0 };
+      if (hasPhrase(normalized, NO_STOPPAGE)) return { lostHours: 0 };
       if (hoursValue !== null) return { lostHours: hoursValue };
       return null;
     }
@@ -637,14 +643,7 @@ export function parseQuickAnswer(field: QuestionField, text: string): AnswerValu
  * as a sum ("four and the foreman" → 5, `crewCount`). Pure.
  */
 export function statedNumbers(text: string): Set<number> {
-  const t = text
-    .trim()
-    .toLowerCase()
-    .replace(/\u0307/g, '')
-    .replace(/\s+/g, ' ');
-  const normalized = t.replace(/[\p{L}]+/gu, (w) =>
-    w in NUMBER_WORDS ? String(NUMBER_WORDS[w]) : w,
-  );
+  const normalized = normalizeAnswerText(text);
   const out = new Set<number>();
   for (const m of normalized.matchAll(/\d+(?:[.,]\d+)?/g)) out.add(Number(m[0].replace(',', '.')));
   const sum = crewCount(normalized);
@@ -654,14 +653,27 @@ export function statedNumbers(text: string): Set<number> {
 
 /**
  * "Never invent numbers" for a parsed answer (W2-09, §10.7): every number the model put in the
- * value must be one the answer states (`statedNumbers`), except what code derives from words it
- * did say ("full day", "half day": hours from the org's shift; "no stoppage": 0 lost hours). An
- * end time must name its hour. Null when the value only carries stated numbers, else the first
- * key that does not (the caller treats the answer as unclear). Pure.
+ * value must be one the answer states (`statedNumbers`), and what code derives from words only
+ * counts when the answer says those words: `fullDay` / `halfDay` (hours from the org's shift)
+ * need a full-day / half-day phrase, `lostHours: 0` a no-stoppage phrase (or "zero"). A time
+ * (`endTime`, a weather `start` / `end`) must name its hour. With `fullDay` or `halfDay` stated,
+ * `hoursPerWorker` is not checked: `applyAnswer` takes the shift's hours, never the model's. Null
+ * when the value only carries stated numbers, else the first key that does not (the caller treats
+ * the answer as unclear and asks again). Pure.
  */
 export function unstatedAnswerNumber(value: AnswerValue, text: string): string | null {
+  const normalized = normalizeAnswerText(text);
   const stated = statedNumbers(text);
   const said = (n: number) => stated.has(n) || stated.has(round2(n));
+  const saidHour = (time: string) => {
+    const m = /^\s*(\d{1,2})(?::\d{2})?/.exec(time);
+    // A time with no digits ("morning") carries no number; one with digits must name its hour.
+    if (!m) return !/\d/.test(time);
+    const h = Number(m[1]);
+    return said(h) || said(h > 12 ? h - 12 : h);
+  };
+  if (value.fullDay && !hasPhrase(normalized, FULL_DAY)) return 'fullDay';
+  if (value.halfDay && !hasPhrase(normalized, HALF_DAY)) return 'halfDay';
   if (value.workers != null && !said(value.workers)) return 'workers';
   if (
     value.hoursPerWorker != null &&
@@ -671,12 +683,15 @@ export function unstatedAnswerNumber(value: AnswerValue, text: string): string |
   )
     return 'hoursPerWorker';
   if (value.totalHours != null && !said(value.totalHours)) return 'totalHours';
-  if (value.lostHours != null && value.lostHours !== 0 && !said(value.lostHours))
+  if (
+    value.lostHours != null &&
+    !said(value.lostHours) &&
+    !(value.lostHours === 0 && hasPhrase(normalized, NO_STOPPAGE))
+  )
     return 'lostHours';
-  if (value.endTime) {
-    const h = Number(value.endTime.slice(0, 2));
-    if (!said(h) && !said(h > 12 ? h - 12 : h)) return 'endTime';
-  }
+  if (value.endTime && !saidHour(value.endTime)) return 'endTime';
+  if (value.start && !saidHour(value.start)) return 'start';
+  if (value.end && !saidHour(value.end)) return 'end';
   return null;
 }
 

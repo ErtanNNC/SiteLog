@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ParsedAnswerSchema } from '@sitelog/shared';
+import { ParsedAnswerSchema, type ParsedAnswer } from '@sitelog/shared';
 import { answerRefusal, parseAnswerWithModel } from './answer';
 import { loadAnswerCases, scoreAnswer } from './answer-fixtures';
 import { findPhoneNumbers, runEval } from './eval';
@@ -70,6 +70,46 @@ describe('fixtures/answers (W2-09)', () => {
         five.transcript,
       ),
     ).toBe('number_not_stated');
+  });
+
+  it('code refuses words the reporter never said: a full day, a half day, times, no stoppage (W2-09)', () => {
+    const parsed = (field: string, value: ParsedAnswer['value']): ParsedAnswer => ({
+      field,
+      value,
+      confidence: 0.95,
+    });
+    const workers = (value: ParsedAnswer['value'], text: string) =>
+      answerRefusal('manpower.workers', parsed('manpower.workers', value), text);
+    const weather = (value: ParsedAnswer['value'], text: string) =>
+      answerRefusal('weather.impact', parsed('weather.impact', value), text);
+    // The reviewer's examples: none of them is applied, so the question is asked again.
+    expect(workers({ workers: 5, fullDay: true }, 'yeah Delta was here, same crew as usual')).toBe(
+      'number_not_stated',
+    );
+    expect(workers({ workers: 4, halfDay: true }, 'four of them, they left a bit early')).toBe(
+      'number_not_stated',
+    );
+    expect(
+      weather(
+        { impact: 'rain', start: '09:00', end: '13:00', lostHours: 4 },
+        'it rained in the morning',
+      ),
+    ).toBe('number_not_stated');
+    expect(weather({ lostHours: 0 }, 'it rained in the morning')).toBe('number_not_stated');
+    expect(weather({ impact: 'rain' }, 'it rained in the morning')).toBe('number_not_stated');
+    // What the reporter did say still applies.
+    expect(workers({ workers: 5, fullDay: true }, 'Five, all day.')).toBeNull();
+    expect(workers({ workers: 4, halfDay: true }, 'cuatro, medio día')).toBeNull();
+    expect(workers({ workers: 6, fullDay: true }, 'altı kişi, tam gün')).toBeNull();
+    expect(
+      weather(
+        { impact: 'rain', start: '09:00', end: '13:00', lostHours: 4 },
+        'rain from nine to one, we lost four hours',
+      ),
+    ).toBeNull();
+    expect(weather({ lostHours: 0 }, 'no stoppage, we worked through')).toBeNull();
+    expect(weather({ lostHours: 0 }, 'sin paro')).toBeNull();
+    expect(weather({ lostHours: 0 }, 'duruş yok')).toBeNull();
   });
 
   it('the fake Claude answers parse_answer with the recorded output of the transcript', async () => {
