@@ -101,6 +101,21 @@ The phone checks of W1-13 and W1-15 need a worker on the preview project. Withou
 - **Before it:** `seed` (today's demo) and `phone-setup` (field-api's `FIELD_APP_URL` and `LINK_SIGNING_SECRET`, and the panel sign-in links), as for the W1-09 check. The run summary says until when (UTC) the worker runs; a heartbeat every 5 minutes prints its health and a log tail, and the last step prints its last 200 log lines, with phone numbers, email addresses, link codes and email previews hidden.
 - **The check.** On the phone, open Marco Ruiz's or Dana Whitfield's link and record anything: the fake transcriber answers with the hero note (`fixtures/voice/es-en-riverside-2026-10-09.json`, an EN/ES reporter's language) and the fake extraction with its recorded output, so the question is the Delta crew's headcount ("Quick check: you said 'the Delta guys' were on Level 2. How many, and for how long?", 4 or 5 · full day). Answer "5 · full day"; a report without a photo then gets the photo question (Kestrel requires one: "No photo today", or add a photo with the note) → the draft shows Delta 5 × 8 h = 40 h → **Confirm & send** → Filed with the PDF; the `filed` text and the report email appear in the Demo phone. A Turkish reporter (Demir Yapı, Emre Yıldız) gets the Kartal note and its questions.
 
+- **Models.** With `ANTHROPIC_API_KEY` in the preview Environment the worker extracts with `CLAUDE_MODEL` and runs the fast calls (`parse_answer`, `classify_utterance`) on `CLAUDE_MODEL_FAST`. Both come from the preview Environment's **variables** (Settings → Environments → `preview` → Environment variables), with `claude-sonnet-5-5` and `claude-haiku-5-5` as the workflow's defaults while a variable is unset. To switch a model, set or change the variable and dispatch `preview-worker` again: no code change, no commit. Compare candidates first with the eval workflow (below).
+
+#### Comparing Claude models on the golden sets (`.github/workflows/eval.yml`)
+
+Scores the four golden sets (spec §10.13) on real models with the preview Environment's `ANTHROPIC_API_KEY`, so nobody handles the key locally. Actions → **Eval** → Run workflow → branch `spec-v1.2` (any other ref skips the job) with:
+
+- `models`: comma-separated model ids (default `claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5`). Each model runs every chosen set as both `CLAUDE_MODEL` and `CLAUDE_MODEL_FAST`.
+- `sets`: `all` (default) or a comma-separated subset of `extraction` (fixtures/transcripts, report extraction v2), `answers` (`parse_answer`, fixtures/answers), `corrections` (`apply_correction`, fixtures/corrections), `utterances` (`classify_utterance`, fixtures/utterances).
+
+The job is read-only (`contents: read`, `ANTHROPIC_API_KEY` its only secret, handed to the eval step only; no database, no other provider; `scripts/src/eval-workflow.test.ts` holds it to that). It costs real API calls: with the defaults, three models × every case (the run summary shows what each set cost, estimated).
+
+**Reading the result.** The run's summary page has one table row per model × set: `Passed` (cases passed / total), `Failed cases` (case ids, the first eight), `Tokens in / out`, `Est. cost` (USD at `apps/worker/src/ai/cost.ts` rates, an estimate; check the console for the bill), `Time` (wall time of the set, sequential calls for the small sets, 3 in parallel for extraction), then one total row per model. Failed cases do not fail the run; a set that ends without its summary (a broken fixture, a crash) does, and its log is in the step's group. The `eval-results` artifact (30 days) holds one JSON per model × set (`EVAL_SUMMARY` fields plus each case's failed check names) and its log, which says what failed and why. Locally the same files come from `pnpm eval -- --set <set> --json <file>` and the table from `pnpm eval -- --summarize <files>`.
+
+Pick the model on pass rate first (every case in a golden set is a behaviour the product needs), then cost and time; then set it in the preview Environment's variables (above) and run the phone check.
+
 #### Staging inventory (read-only, W1-01 step 0)
 
 Actions → Deploy → Run workflow → branch `spec-v1.2`, environment `staging`, target `inventory` (the live branch's own `deploy.yml` has no `inventory` target until the cut-over). It needs the staging `SUPABASE_*` settings above and writes everything to the run summary:
