@@ -207,12 +207,43 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
 - **Q108:** kişinin iki telefonu varsa, birinde bildirimi kapatmak diğerini etkilemiyor. Bildirim izni yalnızca son telefon da kapatınca geri alınıyor.
 - **Q109:** telefon kapalıysa bildirim 4 saat bekletiliyor.
 
-**Sırada:**
+**W2-14 incelemesinin 7 düzeltmesi ve W2-15/16 (Twilio üzerinden WhatsApp) yapıldı (aa21f87 … 1744bb5):**
 
-- W2-14 incelemesi.
-- W2-15/16: Twilio üzerinden WhatsApp. Anahtarlar gelene kadar sahte gönderici kullanılacak.
+- **W2-14 düzeltmeleri:** her biri kendi testiyle.
+  - Bildirim adresi olarak artık yalnızca Google, Mozilla, Apple ve Microsoft bildirim servisleri kabul ediliyor (Q115, önerimle karar verildi). Böylece sunucu, bir kişinin verdiği rastgele bir adrese istek atamıyor.
+  - Bildirim servisi çökerse en fazla 3 deneme yapılıyor, sonra mesaj bir kez SMS ile gidiyor.
+  - Anahtar değişince eski bildirim kaydı kapatılıyor.
+  - Bildirime dokununca sayfa her zaman açılıyor.
+  - Ayarlar'daki "Bildirimler açık" bilgisi doğru gösteriliyor.
+- **W2-15, WhatsApp gönderme:** Twilio üzerinden WhatsApp mesajı.
+  - Kişi Hoş geldin ekranında ya da Ayarlar'da "WhatsApp'tan mesaj at"ı işaretlerse mesajlar WhatsApp'tan gidiyor.
+  - Son 24 saatte kişiden mesaj gelmediyse onaylı şablon kullanılıyor, geldiyse serbest metin.
+  - Göndericisi tanımlı olmayan ortamda gerçek şirketlerin mesajı SMS ile gidiyor; demo şirketlerde mesajlar Demo telefonda görünüyor.
+- **W2-16, WhatsApp'tan gelen mesajlar:** anahtar kelimeler çalışıyor.
+  - WhatsApp'ta STOP yalnızca WhatsApp'ı kapatıyor, SMS'i değil (Q40'ın ilk seçeneği; avukat cevabı hâlâ bekleniyor).
+  - Bir soruya WhatsApp'tan yazılan cevap rapora işleniyor.
+  - Ses kaydı ve fotoğraf saklanıyor ama yazıya dökülmüyor; kişiye günde bir kez "linki kullanın" deniyor (Q85).
+  - Kanal sırası: ABD bildirim → SMS → WhatsApp; Türkiye bildirim → WhatsApp → SMS.
+- Yeni migration'lar: `20261016000200` – `…260`.
 
-**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10 – W2-14, yeni migration'lar `…080` – `…190`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
+**Sizin yapmanız gerekenler (WhatsApp için):**
+
+- Twilio WhatsApp göndericisi ve Meta işletme doğrulaması.
+- EN/ES/TR şablonların Meta'ya gönderilip onaylanması. Şablon metinlerini `pnpm countries:set -- --code TR --print-whatsapp-templates` komutu yazdırıyor.
+- Onaydan sonra gönderici numarası ve şablon kimlikleri her veritabanına `pnpm countries:set` ile girilecek. Barındırılan veritabanı için önce sizin onayınızı alacağım.
+- Göndericinin gelen mesaj ve durum adreslerinin sms-webhook'a yönlendirilmesi; adımlar RUNBOOK'ta.
+
+**Yeni sorular (önerimle kuruldu; aksini söylemezseniz böyle kalır):**
+
+- **Q110:** şablon metni §9.2 metninin aynısı. Meta, değişkenle başlayan ya da biten şablonu kabul etmediği için başa "SiteLog: " ya da sona " - SiteLog" ekleniyor.
+- **Q111 (metin kontrolünüz):** iki yönlü cevapların Türkçe metinleri (yardım, STOP onayı, bilinmeyen numara, tercih değişikliği).
+- **Q112:** WhatsApp'ta START, WhatsApp iznini yalnızca daha önce bu izni vermiş kişiye geri veriyor.
+- **Q113:** WhatsApp'tan gelen bir cevap anlaşılamazsa kişiye sorunun linki tekrar gönderiliyor; soru açık kalıyor.
+- **Q114:** WhatsApp'tan gelen ses kaydı ve fotoğraflar Twilio'daki adresleriyle saklanıyor, kendi depolama alanımıza kopyalanmıyor.
+
+**Sırada:** W2-15/16 incelemesi, ardından W2-17 (M6 kabul testi: senaryolu uçtan uca test ve gerçek telefonlar).
+
+**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10 – W2-16, yeni migration'lar `…080` – `…260`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
 
 ## Hafta 2 (M6) — başladı
 
