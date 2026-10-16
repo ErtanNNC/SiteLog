@@ -2591,6 +2591,9 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 149 | "Call me" / "text me" said on a call (`set_preference`): the spoken confirmation only, or also §9.5's `pref_*_ok` text | Spoken only (as built, W3-03) · Spoken and the text | **Open (owner).** Recommended: spoken only; the reporter just heard it, and a text adds a message to pay for. |
 | 150 | `load_report`'s spoken summary of another day when its headcount or hours are unknown | The report only, "your report for {day}" (as built) · Add the weather and the first work line | **Open (owner).** Recommended: the first; code reads back only numbers it has. |
 | 151 | A retried tool request whose first copy is still running | 409 `request_in_progress`, the agent does not retry a 4xx (as built) · field-api waits for the first and returns its answer | **Open (owner).** Recommended: the second for `file_report` and `update_draft` (a caller should never hear an error for a slow first try), the first elsewhere; W3-09/W3-10 build it. |
+| 152 | A crew or weather period in the call recording but not in the confirmed report (or the reverse): what `call_mismatch:<path>:<heard>:<confirmed>` holds | Leave the missing side empty (`call_mismatch:manpower[3]:Delta 5:`); P7 shows the generic line · A word for it ("not in the report") | **Open (owner).** Recommended: the first; W3-11 builds it. |
+| 153 | P7's line for `call_unreconciled` (Q123), shown as the raw code today | "The call recording could not be checked against the report; its seconds are live timestamps." (EN/TR, with W3-11) · No line | **Open (owner).** Recommended: the first. |
+| 154 | The call player's speaker filter while playing | Dims the other lane and hides its lines (as built, W3-05) · Also skips the other speaker's stretches | **Open (owner).** Recommended: the first; skipping changes what the office hears without them choosing it. |
 
 ---
 
