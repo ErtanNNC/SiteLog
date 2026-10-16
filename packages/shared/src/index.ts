@@ -27,7 +27,7 @@ export * from './report/progress.ts';
 export * from './report/photos.ts';
 export * from './report/media.ts';
 export * from './wa/buttons.ts';
-export * from './wa/window.ts';
+export * from './messaging/window.ts';
 export * from './wa/templates.ts';
 export * from './sms/replies.ts';
 export * from './copy/whatsapp.ts';
