@@ -270,6 +270,34 @@ describe('transcribe_upload (W1-11): a fixture upload → transcript, peaks, ext
     expect(t!.text).toMatch(/^Kartal Konutları B Blok/);
     expect(tr.storagePath.endsWith('.m4a')).toBe(true);
   });
+
+  it("hints with the reporter's own confirmed terms, never another reporter's (spec §19 Q143)", async () => {
+    const org = (
+      await database.q<{ org_id: string }>(`select org_id from reporters where id = $1`, [MARCO])
+    )[0]!.org_id;
+    const other = (
+      await database.q<{ id: string }>(
+        `select id from reporters where org_id = $1 and id <> $2 limit 1`,
+        [org, MARCO],
+      )
+    )[0]!.id;
+    await database.q(
+      `insert into glossary_terms (org_id, scope_reporter_id, heard, language, kind, status, times_heard)
+       values ($1, $2, 'la cimbra', 'es', 'term', 'confirmed', 5),
+              ($1, $3, 'zz other reporter term', 'en', 'term', 'confirmed', 50)`,
+      [org, MARCO, other],
+    );
+    const d = await world.uploadVoiceNote({
+      reporterId: MARCO,
+      siteId: RIVERSIDE,
+      fixtureId: 'es-en-riverside-2026-10-09',
+      date: '2026-10-12',
+    });
+    expect((await run(d.jobId!)).ok).toBe(true);
+    const keyterms = fake.calls.at(-1)!.keyterms;
+    expect(keyterms).toContain('la cimbra');
+    expect(keyterms).not.toContain('zz other reporter term');
+  });
 });
 
 describe('transcribe_upload through Deepgram (mocked HTTP) on the same database', () => {

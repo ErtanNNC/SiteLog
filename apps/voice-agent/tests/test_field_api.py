@@ -34,7 +34,9 @@ def test_derive_call_token_matches_the_shared_vectors() -> None:
 
 
 async def start(api: FieldApi) -> CallAuth:
-    auth, started = await api.calls_start(room=ROOM, transport="pstn", from_e164="+15550142087")
+    auth, started = await api.calls_start(
+        room=ROOM, transport="pstn", from_e164="+15550142087", to_e164="+15550142290"
+    )
     assert started.reporter is not None and started.reporter.first_name == "Kevin"
     return auth
 
@@ -50,6 +52,7 @@ async def test_auth_headers(api: FieldApi, fake_api: FakeFieldApi) -> None:
     assert start_seen.headers["authorization"] == f"Bearer {SECRET}"
     assert "x-call-token" not in start_seen.headers  # calls/start has no token yet
     assert start_seen.body["from"] == "+15550142087"
+    assert start_seen.body["to"] == "+15550142290"
     assert ctx_seen.headers["authorization"] == f"Bearer {SECRET}"
     assert ctx_seen.headers["x-call-token"] == auth.call_token
     assert ctx_seen.body == {"callId": CALL}
@@ -58,7 +61,9 @@ async def test_auth_headers(api: FieldApi, fake_api: FakeFieldApi) -> None:
 async def test_wrong_secret_or_token_is_refused_without_retry(fake_api: FakeFieldApi) -> None:
     async with FieldApi(base_url=BASE_URL, tool_secret="wrong", retry_delay_s=0) as bad:
         with pytest.raises(FieldApiError) as err:
-            await bad.calls_start(room=ROOM, transport="pstn", from_e164="+15550142087")
+            await bad.calls_start(
+                room=ROOM, transport="pstn", from_e164="+15550142087", to_e164="+15550142290"
+            )
     assert err.value.status == 401 and err.value.code == "unauthorized"
     assert len(fake_api.seen("calls_start")) == 1
 
@@ -75,6 +80,12 @@ async def test_one_retry_on_5xx(api: FieldApi, fake_api: FakeFieldApi) -> None:
     ctx = await api.get_context(auth)
     assert ctx.max_questions == 2
     assert [c.status for c in fake_api.seen("get_context")] == [503, 200]
+    # W3-03: the retry names the same request, so field-api answers it once; another request
+    # gets another id.
+    first, retry = fake_api.seen("get_context")
+    assert first.headers["x-request-id"] == retry.headers["x-request-id"]
+    await api.get_context(auth)
+    assert fake_api.seen("get_context")[2].headers["x-request-id"] != first.headers["x-request-id"]
 
 
 async def test_gives_up_after_the_second_5xx(api: FieldApi, fake_api: FakeFieldApi) -> None:

@@ -53,11 +53,17 @@ def test_typed_views_match_the_contract(model: Any) -> None:
 def test_request_validation_and_refinements() -> None:
     c = default_contract()
     c.check_request(
-        "calls_start", {"room": f"call-{CALL}", "transport": "pstn", "from": "+15550142087"}
+        "calls_start",
+        {"room": f"call-{CALL}", "transport": "pstn", "from": "+15550142087", "to": "+15550142290"},
     )
     c.check_request("calls_start", {"room": f"call-{CALL}", "transport": "web", "callId": CALL})
-    with pytest.raises(ContractError, match="from or callId"):
+    with pytest.raises(ContractError, match="from and to"):
         c.check_request("calls_start", {"room": f"call-{CALL}", "transport": "pstn"})
+    # W3-03: a SIP start names the number it called too.
+    with pytest.raises(ContractError, match="from and to"):
+        c.check_request(
+            "calls_start", {"room": f"call-{CALL}", "transport": "pstn", "from": "+15550142087"}
+        )
     with pytest.raises(ContractError, match="web call passes callId"):
         c.check_request(
             "calls_start", {"room": f"call-{CALL}", "transport": "web", "from": "+15550142087"}

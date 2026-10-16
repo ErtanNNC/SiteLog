@@ -37,6 +37,9 @@ function fieldApp() {
       publicUrl: () => optionalEnv('STORAGE_PUBLIC_URL'),
       // W2-14: the browser subscribes with it; the private key stays with the worker.
       vapidPublicKey: () => optionalEnv('VAPID_PUBLIC_KEY'),
+      // W3-03: the voice agent's bearer, and field-api's own key of the per-call tokens.
+      voiceToolSecret: () => requireEnv('VOICE_AGENT_TOOL_SECRET'),
+      callTokenSecret: () => requireEnv('VOICE_CALL_TOKEN_SECRET'),
     });
   }
   return app;

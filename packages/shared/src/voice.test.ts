@@ -88,7 +88,10 @@ const TOOL_EXAMPLES: { [T in (typeof VOICE_TOOLS)[number]]: [VoiceToolRequest<T>
     { callId: CALL, minutes: 30 },
     { status: 'scheduled', at: '2026-10-16T22:15:00Z', localTime: '17:15' },
   ],
-  set_preference: [{ callId: CALL, contactPref: 'link' }, { ok: true }],
+  set_preference: [
+    { callId: CALL, contactPref: 'link' },
+    { ok: true, confirmation: 'OK, your daily report is now set to a link by text.' },
+  ],
   load_report: [
     { callId: CALL, dayReference: 'Friday' },
     {
@@ -151,9 +154,18 @@ describe('voice contract schemas', () => {
   it('starts a SIP call by number and a web call by its id', () => {
     const room = `call-${CALL}`;
     expect(
+      VoiceCallStartRequestSchema.safeParse({
+        room,
+        from: '+15550143378',
+        to: '+15550142290',
+        transport: 'pstn',
+      }).success,
+    ).toBe(true);
+    // W3-03: a SIP call names the number it called (the pack is found by it, §4.6).
+    expect(
       VoiceCallStartRequestSchema.safeParse({ room, from: '+15550143378', transport: 'pstn' })
         .success,
-    ).toBe(true);
+    ).toBe(false);
     expect(
       VoiceCallStartRequestSchema.safeParse({ room, callId: CALL, transport: 'web' }).success,
     ).toBe(true);

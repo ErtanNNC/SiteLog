@@ -90,6 +90,8 @@ async function addOtherOrg(): Promise<void> {
       values ('${other(13)}', '${RPT}', 'web', 'manpower.workers', 'How many?');
     insert into calls (id, org_id, reporter_id, site_id, report_id, direction)
       values ('${CALL}', '${O}', '${REPORTER}', '${SITE}', '${RPT}', 'inbound');
+    insert into voice_tool_requests (call_id, request_key, tool, status, response)
+      values ('${CALL}', 'other-req', 'end_call', 200, '{"ok": true}'::jsonb);
     insert into unknown_contacts (id, org_id, phone_e164, channel, call_id)
       values ('${other(15)}', '${O}', '+15550190009', 'voice', '${CALL}');
     insert into conversations (id, org_id, reporter_id, phone_e164)

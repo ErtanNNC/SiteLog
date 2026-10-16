@@ -1,4 +1,8 @@
 import type {
+  CallOutcome,
+  CallRow,
+  CallTransport,
+  CompanyRow,
   ConsentRow,
   DailyLinkStore,
   ConsentType,
@@ -7,6 +11,7 @@ import type {
   DraftCorrectionRow,
   FieldDeviceRow,
   FieldLinkRow,
+  GlossaryTermRow,
   Json,
   OrgRow,
   OrgSettingsRow,
@@ -39,7 +44,7 @@ export interface OrgContext {
   country: CountryRow;
   settings: Pick<
     OrgSettingsRow,
-    'default_deadline' | 'working_days' | 'default_shift_hours'
+    'default_deadline' | 'working_days' | 'default_shift_hours' | 'max_questions_per_report'
   > | null;
 }
 
@@ -165,6 +170,86 @@ export interface DayStatusResult {
   report: { id: string; reportNo: string } | null;
 }
 
+/** voice_call_start() (20261016000300, W3-03): the call the room is, and whose. */
+export interface VoiceCallStartResult {
+  callId: string;
+  /** Null for an unknown caller (F13). */
+  reporterId: string | null;
+  orgId: string | null;
+  siteId: string | null;
+  /** The room's call had started already (the agent retried). */
+  repeat: boolean;
+}
+
+/** voice_call_end(): `ended` false on a repeat; the post_call_reconcile job of a known caller. */
+export interface VoiceCallEndResult {
+  ended: boolean;
+  jobId: number | null;
+}
+
+/**
+ * The calls data behind field-api's `/voice/*` routes (W3-03): the service-only RPCs of
+ * 20261016000300_voice_calls.sql and the reads the tools need. Never hands a phone number to a
+ * route that could answer it: `callerReporters` takes the number from the call row.
+ */
+export interface VoiceStore {
+  voiceCallStart(input: {
+    room: string;
+    transport: CallTransport;
+    callId: string | null;
+    from: string | null;
+    to: string | null;
+  }): Promise<VoiceCallStartResult>;
+  getCall(id: string): Promise<CallRow | null>;
+  /**
+   * §19 Q44: the reporters a SIP call's number belongs to in the real orgs of a pack (not
+   * disabled), active first, then invited, then opted out, newest first.
+   */
+  callerReporters(callId: string, country: string): Promise<ReporterRow[]>;
+  voiceCallPickSite(
+    callId: string,
+    siteId: string,
+    reporterId: string,
+  ): Promise<{ siteId: string; changed: boolean }>;
+  voiceCallFallback(callId: string, reason: string, at: number): Promise<{ marked: boolean }>;
+  voiceCallRecording(callId: string, path: string): Promise<void>;
+  voiceCallEnd(input: {
+    callId: string;
+    outcome: CallOutcome;
+    dialogLog: Json;
+    metrics: Json;
+  }): Promise<VoiceCallEndResult>;
+  /**
+   * `voice_tool_requests` (W3-03): claims a named request of a call. `claimed` false gives the
+   * first request's tool and kept answer (`status` null while it still runs).
+   */
+  claimToolRequest(
+    callId: string,
+    key: string,
+    tool: string,
+  ): Promise<
+    | { claimed: true }
+    | { claimed: false; tool: string; status: number | null; response: Json | null }
+  >;
+  /** Keeps the claimed request's 2xx answer for its retries. */
+  finishToolRequest(callId: string, key: string, status: number, response: Json): Promise<void>;
+  /** Frees a claimed key whose request failed, so a retry runs it again. */
+  releaseToolRequest(callId: string, key: string): Promise<void>;
+  /** The orgs' companies (names and aliases), for the agent and its speech hints. */
+  listCompanies(orgIds: string[]): Promise<Pick<CompanyRow, 'org_id' | 'name' | 'aliases'>[]>;
+  /**
+   * Glossary terms for speech hints: SiteLog's, the orgs', those scoped to one of the sites, and
+   * (spec §19 Q143) those scoped to one of the reporters.
+   */
+  listGlossary(
+    orgIds: string[],
+    siteIds: string[],
+    reporterIds: string[],
+  ): Promise<
+    Pick<GlossaryTermRow, 'heard' | 'official' | 'language' | 'kind' | 'status' | 'times_heard'>[]
+  >;
+}
+
 /** An RPC refused the call; `code` is the exception message the SQL raises (a field-api error). */
 export class FieldDbError extends Error {
   constructor(readonly code: string) {
@@ -205,6 +290,12 @@ export const FIELD_DB_ERRORS = [
   'consent_not_offered',
   'texts_opted_out',
   'channel_not_offered',
+  // W3-03 (20261016000300_voice_calls.sql)
+  'call_not_found',
+  'call_conflict',
+  'call_ended',
+  'voice_number_unknown',
+  'reporter_disabled',
 ] as const;
 
 export interface ReportMediaCounts {
@@ -215,7 +306,7 @@ export interface ReportMediaCounts {
 
 export type ReportWithDate = ReportRow & { date: string };
 
-export interface FieldStore extends DailyLinkStore {
+export interface FieldStore extends DailyLinkStore, VoiceStore {
   // Links, reporters, orgs (and, from DailyLinkStore, today's daily link for F16's
   // "Send me today's link": `listDailyLinks`, `insertDailyLink`)
   findLink(codeHash: string): Promise<FieldLinkRow | null>;

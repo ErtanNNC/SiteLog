@@ -132,6 +132,7 @@ import {
   openCorrectionView,
 } from './logic.ts';
 import { FieldDbError, type FieldStore, type OrgContext } from './store.ts';
+import { registerVoiceRoutes } from './voice.ts';
 
 /**
  * field-api (W1-07; spec §6.5, Appendix B, F4, F5, F12): the field app's only backend. Hono
@@ -191,6 +192,13 @@ export interface FieldApiDeps {
    * is the worker's only.
    */
   vapidPublicKey?: () => string | undefined;
+  /**
+   * W3-03, the voice routes (`voice.ts`): VOICE_AGENT_TOOL_SECRET, the bearer the voice agent
+   * sends, and VOICE_CALL_TOKEN_SECRET, field-api's own key of the per-call tokens (each throws
+   * EnvError when unset: the voice routes answer 500 "not configured", the field routes go on).
+   */
+  voiceToolSecret?: () => string;
+  callTokenSecret?: () => string;
   now?: () => Date;
   /** Waiting between polls of a send claim (tests pass a fake). */
   sleep?: (ms: number) => Promise<void>;
@@ -1851,6 +1859,23 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     return c.json({ signedOut: true } satisfies SignOutResponse);
   });
 
+  // ── /voice/* (W3-03): the voice agent's routes, server to server (voice.ts) ──────────────────
+  registerVoiceRoutes(app, {
+    store,
+    voiceToolSecret:
+      deps.voiceToolSecret ??
+      (() => {
+        throw new EnvError('VOICE_AGENT_TOOL_SECRET');
+      }),
+    callTokenSecret:
+      deps.callTokenSecret ??
+      (() => {
+        throw new EnvError('VOICE_CALL_TOKEN_SECRET');
+      }),
+    publicSignedUrl: (url) => publicSignedUrl(url, deps.publicUrl?.()),
+    now,
+  });
+
   return app;
 }
 
@@ -1936,6 +1961,12 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   consent_not_offered: [400, 'invalid_request'],
   texts_opted_out: [409, 'texts_opted_out'],
   channel_not_offered: [400, 'channel_not_offered'],
+  // W3-03: the voice RPCs (20261016000300_voice_calls.sql).
+  call_not_found: [404, 'call_not_found'],
+  call_conflict: [409, 'call_conflict'],
+  call_ended: [409, 'call_ended'],
+  voice_number_unknown: [404, 'voice_number_unknown'],
+  reporter_disabled: [403, 'reporter_disabled'],
 };
 
 function errorResponse(c: Context, err: unknown, now: Date): Response {

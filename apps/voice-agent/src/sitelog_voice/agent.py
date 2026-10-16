@@ -146,6 +146,7 @@ async def entrypoint(ctx: JobContext) -> None:
     room = ctx.room
     call_id = _room_call_id(room)
     from_e164: str | None = None
+    to_e164: str | None = None
     participant = await ctx.wait_for_participant()
     is_sip = participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
     transport = "pstn" if is_sip else "web"
@@ -153,6 +154,8 @@ async def entrypoint(ctx: JobContext) -> None:
         # An inbound SIP call: field-api finds the reporter by the caller's number (§19 Q44).
         # An outbound call (W3-17) or Talk now names its call in the room metadata instead.
         from_e164 = participant.attributes.get("sip.phoneNumber")
+        # The pack's number the caller dialled: field-api finds the pack by it (W3-03).
+        to_e164 = participant.attributes.get("sip.trunkPhoneNumber")
 
     api = FieldApi(
         base_url=settings.field_api_base(),
@@ -160,9 +163,9 @@ async def entrypoint(ctx: JobContext) -> None:
         timeout_s=settings.field_api_timeout_s,
     )
     auth, started = await api.calls_start(
-        room=room.name, transport=transport, from_e164=from_e164, call_id=call_id
+        room=room.name, transport=transport, from_e164=from_e164, to_e164=to_e164, call_id=call_id
     )
-    from_e164 = None  # stored by field-api; the agent keeps no copy
+    from_e164 = to_e164 = None  # stored by field-api; the agent keeps no copy
     log.info("call started", extra={"call_id": auth.call_id, "transport": transport})
 
     if started.reporter is None:

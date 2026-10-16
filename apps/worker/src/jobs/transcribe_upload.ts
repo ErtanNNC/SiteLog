@@ -100,10 +100,15 @@ export async function transcribe(
     locale: reporter?.locale ?? site.org.locale,
     languages: reporter?.languages ?? [],
   });
+  // Spec §19 Q143 (W3-03): the hints also take the terms scoped to this reporter, as a call's do
+  // (`get_context`); the site context's glossary (extraction) leaves them out.
+  const glossary = reporter
+    ? await ctx.db.listGlossary(site.org.id, site.site.id, reporter.id)
+    : site.glossary;
   const vocabulary = {
     siteName: site.site.name,
     companies: site.companies,
-    glossary: site.glossary,
+    glossary,
     languages: reporter?.languages ?? [],
   };
   const areas = site.glossary

@@ -27,7 +27,10 @@ async def test_text_mode_call_gets_context_and_ends(
 ) -> None:
     start = smoke_fixture["start"]["request"]
     auth, started = await api.calls_start(
-        room=start["room"], transport=start["transport"], from_e164=start["from"]
+        room=start["room"],
+        transport=start["transport"],
+        from_e164=start["from"],
+        to_e164=start["to"],
     )
     assert started.reporter is not None
     state = CallState(api=api, auth=auth, locale=started.reporter.locale)
@@ -74,7 +77,9 @@ async def test_end_call_cannot_claim_filed(
 ) -> None:
     """The model saying `filed` does not file: only field-api's `filed` answer does (Q119)."""
     start = smoke_fixture["start"]["request"]
-    auth, _ = await api.calls_start(room=start["room"], transport="pstn", from_e164=start["from"])
+    auth, _ = await api.calls_start(
+        room=start["room"], transport="pstn", from_e164=start["from"], to_e164=start["to"]
+    )
     state = CallState(api=api, auth=auth, locale="en-US")
     turns = [
         {"toolCalls": [{"name": "file_report", "args": {}}]},

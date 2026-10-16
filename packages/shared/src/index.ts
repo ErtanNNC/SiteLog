@@ -7,6 +7,7 @@ export * from './links.ts';
 export * from './redact.ts';
 export * from './field-api.ts';
 export * from './voice.ts';
+export * from './voice-tools.ts';
 export * from './tokens.ts';
 export * from './status.ts';
 export * from './notifications.ts';

@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * W3-01: spec Appendix B lists every route `field-api` serves. The routes are read from the Hono
- * app (`supabase/functions/field-api/app.ts`, `app.get|post|patch|put|delete('<path>'`) and each
+ * app (`supabase/functions/field-api/app.ts`, and `voice.ts` for the `/voice/*` routes since
+ * W3-03: `app.get|post|patch|put|delete('<path>'`) and each
  * must appear in Appendix B as `` `METHOD /field<path>` `` (the field app's logical prefix, GAP
  * D39), or `` `METHOD <path>` `` for the server-to-server `/voice/*` routes. A route added
  * without its Appendix B entry fails here.
@@ -12,7 +13,8 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SPEC = readFileSync(join(ROOT, 'docs', 'SITELOG_SPEC.md'), 'utf8');
-const APP = readFileSync(join(ROOT, 'supabase', 'functions', 'field-api', 'app.ts'), 'utf8');
+const FIELD_API = join(ROOT, 'supabase', 'functions', 'field-api');
+const APP = ['app.ts', 'voice.ts'].map((f) => readFileSync(join(FIELD_API, f), 'utf8')).join('\n');
 
 function appendixB(): string {
   const start = SPEC.indexOf('### Appendix B · Server API surface');
@@ -48,6 +50,9 @@ describe('spec Appendix B vs field-api', () => {
     expect(routes.length).toBeGreaterThanOrEqual(28);
     expect(routes).toContain('POST /resolve');
     expect(routes).toContain('PATCH /preferences');
+    // W3-03: the voice routes.
+    expect(routes).toContain('POST /voice/calls/start');
+    expect(routes).toContain('POST /voice/tools/get_context');
   });
 
   it('lists every served route', () => {

@@ -317,6 +317,14 @@ export const TABLES: Record<string, TableCase> = {
       `insert into draft_corrections (org_id, report_id, reporter_id, via, text) values ('${o.org}', '${o.report}', '${o.reporter}', 'text', 'Apex had 7')`,
     set: 'reason = reason',
   },
+  voice_tool_requests: {
+    why: "The voice agent's kept tool answers (W3-03): field-api with the service role only; no client policy, no grant.",
+    allow: serviceOnly,
+    where: (o) => `call_id = '${o.call}'`,
+    insert: (o) =>
+      `insert into voice_tool_requests (call_id, request_key, tool) values ('${o.call}', 'matrix-new', 'end_call')`,
+    set: 'response = response',
+  },
   rate_limits: {
     why: 'field-api throttling (§6.5): service role only; no client policy, no grant.',
     allow: serviceOnly,
@@ -664,6 +672,38 @@ export const RPCS: Record<
     why: '§6.5: field-api only (service role); a late clip is flagged by the server, never a client.',
     allow: NONE,
     call: (o) => `select field_flag_late_upload('${o.upload}', '${o.reporter}') as v`,
+  },
+  // W3-03 (20261016000300_voice_calls.sql): the voice agent's calls, through field-api's /voice/*.
+  voice_call_start: {
+    why: '§6.5: field-api only (service role) for the voice agent, which never gets a database session.',
+    allow: NONE,
+    call: () =>
+      `select voice_call_start('call-${'0'.repeat(8)}-0000-4000-8000-${'0'.repeat(12)}', 'pstn', null, '+15550100001', '+15550100002') as v`,
+  },
+  voice_call_update: {
+    why: '§6.5: field-api and voice-events only (service role).',
+    allow: NONE,
+    call: (o) => `select voice_call_update('${o.call}', 'completed') as v`,
+  },
+  voice_call_pick_site: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) => `select voice_call_pick_site('${o.call}', '${o.site}', '${o.reporter}') as v`,
+  },
+  voice_call_fallback: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) => `select voice_call_fallback('${o.call}', 'agent_error', 1) as v`,
+  },
+  voice_call_recording: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) => `select voice_call_recording('${o.call}', 'x.ogg') as v`,
+  },
+  voice_call_end: {
+    why: '§6.5: field-api and voice-events only (service role); office users never end a call.',
+    allow: NONE,
+    call: (o) => `select voice_call_end('${o.call}', 'abandoned', '[]', '{}') as v`,
   },
 };
 

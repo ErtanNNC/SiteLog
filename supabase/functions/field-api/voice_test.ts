@@ -1,0 +1,1027 @@
+import { assert, assertEquals, assertMatch } from '@std/assert';
+import {
+  type CallRow,
+  type ConsentType,
+  type CountryRow,
+  deriveCallToken,
+  emptyReportData,
+  GetContextResponseSchema,
+  LoadReportResponseSchema,
+  type OrgRow,
+  type ReporterRow,
+  type SiteRow,
+  VOICE_TOOL_RATE_LIMIT,
+  VoiceCallStartResponseSchema,
+} from '@sitelog/shared';
+import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
+import { createFieldApp } from './app.ts';
+import { FakeFieldStore } from './fake_store.ts';
+
+/**
+ * field-api's /voice/* routes (W3-03; spec §6.5, §9.4, Appendix B "field-api voice routes") on the
+ * in-memory store: both auth layers (the agent's bearer, the per-call token), scoping to the
+ * call's reporter and sites, an unknown caller, a number in two orgs, a reporter of three sites,
+ * the rate limit, and no phone number in any answer. The SQL behind the RPCs is tested on PGlite
+ * (supabase/db-tests/src/voice-calls.test.ts).
+ *
+ * The fixture is Kestrel's §18.1 people in a real (not demo) org: a real caller never reaches a
+ * demo org (§19 Q44, Q116), so the CI check of the ticket's "Done when" runs on these rows.
+ */
+
+const ORG = '22222222-0000-4000-8000-000000000001';
+const ORG2 = '22222222-0000-4000-8000-000000000002';
+const NORTHGATE = '22222222-0000-4000-8000-0000000000a1';
+const RIVERSIDE = '22222222-0000-4000-8000-0000000000a2';
+const PIER9 = '22222222-0000-4000-8000-0000000000a3';
+const ELM = '22222222-0000-4000-8000-0000000000a4';
+const LAKEVIEW = '22222222-0000-4000-8000-0000000000b1';
+const KEVIN = '22222222-0000-4000-8000-000000000101';
+const MARCO = '22222222-0000-4000-8000-000000000102';
+const KEVIN2 = '22222222-0000-4000-8000-000000000103';
+const KEVIN_PHONE = '+15550142087';
+const MARCO_PHONE = '+15550143378';
+const VOICE_NUMBER = '+15550142290';
+const SECRET = 'test-voice-agent-tool-secret';
+const TOKEN_SECRET = 'test-voice-call-token-secret';
+const T0 = new Date('2026-10-09T22:00:00Z'); // Fri Oct 9, 17:00 in Chicago
+
+const room = (n: number) => `call-33333333-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
+const idOf = (r: string) => r.slice(5);
+
+function site(id: string, orgId: string, name: string, extra: Partial<SiteRow> = {}): SiteRow {
+  return {
+    id,
+    org_id: orgId,
+    name,
+    project_code: name.slice(0, 2).toUpperCase(),
+    address: null,
+    lat: null,
+    lng: null,
+    timezone: 'America/Chicago',
+    deadline: null,
+    working_hours: '07:00–15:30',
+    status: 'active',
+    active_since: '2026-01-01',
+    paused_at: null,
+    report_seq: 0,
+    created_at: '2026-01-01T00:00:00Z',
+    ...extra,
+  };
+}
+
+function reporter(
+  id: string,
+  orgId: string,
+  name: string,
+  phone: string,
+  extra: Partial<ReporterRow> = {},
+): ReporterRow {
+  return {
+    id,
+    org_id: orgId,
+    name,
+    phone_e164: phone,
+    role: 'site_manager',
+    languages: ['en'],
+    status: 'active',
+    invited_at: '2026-10-01T15:00:00Z',
+    verified_at: null,
+    last_invite_error: null,
+    created_at: '2026-10-01T15:00:00Z',
+    locale: 'en-US',
+    contact_pref: 'call',
+    activated_at: '2026-10-01T15:00:00Z',
+    opted_out_at: null,
+    message_channel: null,
+    ...extra,
+  };
+}
+
+interface Opts {
+  isDemo?: boolean;
+  country?: Partial<CountryRow>;
+  /** No VOICE_CALL_TOKEN_SECRET / VOICE_AGENT_TOOL_SECRET in this environment. */
+  unconfigured?: boolean;
+}
+
+function setup(opts: Opts = {}) {
+  const clock = { now: T0 };
+  const store = new FakeFieldStore(() => clock.now);
+  const us = DEMO_COUNTRIES.find((c) => c.code === 'US')!;
+  store.countries.push({ ...us, voice_number: VOICE_NUMBER, ...opts.country });
+  const org = (id: string, name: string) =>
+    ({
+      id,
+      name,
+      country: 'US',
+      locale: 'en-US',
+      timezone: 'America/Chicago',
+      is_demo: opts.isDemo ?? false,
+      units: 'imperial',
+    }) as OrgRow;
+  store.orgs.push(org(ORG, 'Kestrel Build Group'));
+  store.settings.push({
+    org_id: ORG,
+    default_deadline: '17:30:00',
+    working_days: [1, 2, 3, 4, 5],
+    default_shift_hours: 8,
+    max_questions_per_report: 2,
+  } as never);
+  store.sites.push(
+    site(NORTHGATE, ORG, 'Northgate Parking Structure', { deadline: '17:45:00' }),
+    site(RIVERSIDE, ORG, 'Riverside Lofts'),
+    site(PIER9, ORG, 'Pier 9'),
+    site(ELM, ORG, 'Elm Street Medical'),
+  );
+  store.reporters.push(
+    reporter(KEVIN, ORG, "Kevin O'Brien", KEVIN_PHONE),
+    reporter(MARCO, ORG, 'Marco Ruiz', MARCO_PHONE, {
+      languages: ['es', 'en'],
+      locale: 'es-US',
+      contact_pref: 'link',
+    }),
+  );
+  store.siteReporters.push(
+    { site_id: NORTHGATE, reporter_id: KEVIN },
+    { site_id: RIVERSIDE, reporter_id: MARCO },
+    { site_id: PIER9, reporter_id: MARCO },
+    { site_id: ELM, reporter_id: MARCO },
+  );
+  store.siteDays.push({
+    id: 'sd-ng-1009',
+    site_id: NORTHGATE,
+    date: '2026-10-09',
+    status: 'reminded',
+  } as never);
+  const consent = (reporterId: string, type: ConsentType) =>
+    store.consents.push({
+      id: crypto.randomUUID(),
+      reporter_id: reporterId,
+      type,
+      method: 'web_checkbox',
+      text_version: 'field.consent.v1',
+      evidence: null,
+      given_at: '2026-10-01T15:00:00Z',
+      revoked_at: null,
+    });
+  for (const t of ['recording', 'data_processing', 'sms'] as const) consent(KEVIN, t);
+  store.companies.push(
+    { org_id: ORG, name: 'Apex Concrete', aliases: ['the Apex guys'] },
+    { org_id: ORG, name: 'BrightLine Electric', aliases: [] },
+  );
+  store.glossary.push(
+    {
+      org_id: ORG,
+      scope_site_id: NORTHGATE,
+      scope_reporter_id: null,
+      heard: 'Ramp B',
+      official: null,
+      language: 'en',
+      kind: 'area',
+      status: 'confirmed',
+      times_heard: 4,
+    },
+    {
+      org_id: ORG,
+      scope_site_id: null,
+      scope_reporter_id: KEVIN,
+      heard: 'PT deck',
+      official: 'post-tension deck',
+      language: 'en',
+      kind: 'term',
+      status: 'confirmed',
+      times_heard: 3,
+    },
+    {
+      org_id: ORG,
+      scope_site_id: null,
+      scope_reporter_id: MARCO,
+      heard: 'la losa',
+      official: null,
+      language: 'es',
+      kind: 'term',
+      status: 'confirmed',
+      times_heard: 9,
+    },
+    {
+      org_id: ORG,
+      scope_site_id: RIVERSIDE,
+      scope_reporter_id: null,
+      heard: 'Riverside core',
+      official: null,
+      language: 'en',
+      kind: 'area',
+      status: 'confirmed',
+      times_heard: 2,
+    },
+  );
+  const app = createFieldApp({
+    store,
+    sendVerifyCode: () => Promise.resolve({ channel: 'sms', messageId: 'm' }),
+    sendDailyLink: () => Promise.resolve({ channel: 'sms', messageId: 'm' }),
+    fieldAppUrl: () => 'https://go.sitelog.test',
+    linkSigningSecret: () => 'test-link-signing-secret',
+    allowedOrigins: () => ['https://go.sitelog.test'],
+    now: () => clock.now,
+    ...(opts.unconfigured
+      ? {}
+      : { voiceToolSecret: () => SECRET, callTokenSecret: () => TOKEN_SECRET }),
+  });
+  const call = async (
+    path: string,
+    body: unknown,
+    o: { bearer?: string | null; token?: string | null; origin?: string; requestId?: string } = {},
+  ) => {
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    const bearer = o.bearer === undefined ? SECRET : o.bearer;
+    if (bearer) headers['authorization'] = `Bearer ${bearer}`;
+    if (o.token) headers['x-call-token'] = o.token;
+    if (o.origin) headers['origin'] = o.origin;
+    if (o.requestId) headers['x-request-id'] = o.requestId;
+    const res = await app.request(`/field-api/${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+    const text = await res.text();
+    return { status: res.status, json: text ? JSON.parse(text) : {}, text, headers: res.headers };
+  };
+  /** A SIP call from `from` to the pack's number: its id and token. */
+  const sip = async (n: number, from: string) => {
+    const res = await call('voice/calls/start', {
+      room: room(n),
+      from,
+      to: VOICE_NUMBER,
+      transport: 'pstn',
+    });
+    assertEquals(res.status, 200, res.text);
+    return {
+      callId: res.json.callId as string,
+      token: res.json.callToken as string,
+      json: res.json,
+    };
+  };
+  const tool = (name: string, callId: string, token: string, body: Record<string, unknown> = {}) =>
+    call(`voice/tools/${name}`, { callId, ...body }, { token });
+  return { store, clock, call, sip, tool };
+}
+
+/** No phone number of the fixture anywhere in an answer (§10.12). */
+function assertNoPhone(text: string) {
+  for (const phone of [KEVIN_PHONE, MARCO_PHONE, VOICE_NUMBER, '5550142087', '5550143378']) {
+    assert(!text.includes(phone), `answer carries ${phone}: ${text}`);
+  }
+}
+
+Deno.test(
+  "done when: Kevin's SIP call gets his first name, a token, Northgate today, and nothing else",
+  async () => {
+    const h = setup();
+    const start = await h.call('voice/calls/start', {
+      room: room(1),
+      from: KEVIN_PHONE,
+      to: VOICE_NUMBER,
+      transport: 'pstn',
+    });
+    assertEquals(start.status, 200);
+    VoiceCallStartResponseSchema.parse(start.json);
+    assertEquals(start.json.reporter, { firstName: 'Kevin', locale: 'en-US' });
+    assertEquals(start.json.callToken, await deriveCallToken(TOKEN_SECRET, idOf(room(1))));
+    assertEquals(start.headers.get('cache-control'), 'no-store');
+    assertNoPhone(start.text);
+    // The number is kept server side only.
+    const row = h.store.callRows[0]!;
+    assertEquals([row.from_e164, row.reporter_id, row.site_id], [KEVIN_PHONE, KEVIN, NORTHGATE]);
+
+    const ctx = await h.tool('get_context', start.json.callId, start.json.callToken);
+    assertEquals(ctx.status, 200, ctx.text);
+    const body = GetContextResponseSchema.parse(ctx.json);
+    assertEquals(body.sites, [
+      { id: NORTHGATE, name: 'Northgate Parking Structure', status: 'reminded', deadline: '17:45' },
+    ]);
+    assertEquals(body.siteId, NORTHGATE);
+    assertEquals(body.company, 'Kestrel Build Group');
+    assertEquals(body.reportLanguage, 'en');
+    assertEquals(body.call, { direction: 'inbound', transport: 'pstn', purpose: 'daily_report' });
+    assertEquals(body.consents, {
+      recording: true,
+      dataProcessing: true,
+      sms: true,
+      autoCall: false,
+    });
+    assertEquals(
+      [body.recordingNoticeVersion, body.consentTextVersion],
+      ['voice.recording_notice.v1', 'voice.consent.v1'],
+    );
+    assertEquals(body.maxQuestions, 2);
+    // Key terms (buildKeyterms, W3-08): the site, the companies and aliases, the site's area, and
+    // Kevin's own term (§19 Q143), never Marco's or another site's.
+    for (const t of [
+      'Northgate Parking Structure',
+      'Apex Concrete',
+      'the Apex guys',
+      'Ramp B',
+      'PT deck',
+    ]) {
+      assert(body.keyterms.includes(t), t);
+    }
+    assert(!body.keyterms.includes('la losa'));
+    assert(!body.keyterms.includes('Riverside core'));
+    assertNoPhone(ctx.text);
+
+    // Every other reporter's site is refused.
+    for (const other of [RIVERSIDE, PIER9, ELM]) {
+      const pick = await h.tool('pick_site', start.json.callId, start.json.callToken, {
+        siteId: other,
+      });
+      assertEquals([pick.status, pick.json.error], [403, 'out_of_scope']);
+      const load = await h.tool('load_report', start.json.callId, start.json.callToken, {
+        dayReference: 'today',
+        siteId: other,
+      });
+      assertEquals([load.status, load.json.error], [403, 'out_of_scope']);
+    }
+    const call = h.store.callRows[0]!;
+    assertEquals(call.site_id, NORTHGATE);
+    // Audited, without the number.
+    const started = h.store.audits.find((a) => a.action === 'call.started')!;
+    assertNoPhone(JSON.stringify(started));
+  },
+);
+
+Deno.test(
+  'auth: the bearer secret on every route, the call token on every tool, no browser',
+  async () => {
+    const h = setup();
+    const { callId, token } = await h.sip(2, KEVIN_PHONE);
+    const startBody = { room: room(3), from: KEVIN_PHONE, to: VOICE_NUMBER, transport: 'pstn' };
+    for (const bearer of [null, 'wrong-secret', `${SECRET}x`]) {
+      const res = await h.call('voice/calls/start', startBody, { bearer });
+      assertEquals([res.status, res.json.error], [401, 'unauthorized']);
+      const tool = await h.call('voice/tools/get_context', { callId }, { bearer, token });
+      assertEquals([tool.status, tool.json.error], [401, 'unauthorized']);
+    }
+    // Nothing was started by the refused requests.
+    assertEquals(h.store.callRows.length, 1);
+    // A browser Origin, even the field app's, is refused.
+    const browser = await h.call(
+      'voice/tools/get_context',
+      { callId },
+      { token, origin: 'https://go.sitelog.test' },
+    );
+    assertEquals([browser.status, browser.json.error], [403, 'origin_not_allowed']);
+
+    // The token is the call's: none, a wrong one, another call's, or one under the bearer secret.
+    const other = await h.sip(4, MARCO_PHONE);
+    for (const bad of [null, 'x'.repeat(43), other.token, await deriveCallToken(SECRET, callId)]) {
+      const res = await h.call('voice/tools/get_context', { callId }, { token: bad });
+      assertEquals([res.status, res.json.error], [401, 'call_token_invalid']);
+    }
+    // A token for a call that does not exist tells nothing more than a wrong one: 404 only with
+    // the right token.
+    const ghost = '33333333-0000-4000-8000-0000000000ff';
+    const ghostRes = await h.call(
+      'voice/tools/get_context',
+      { callId: ghost },
+      { token: await deriveCallToken(TOKEN_SECRET, ghost) },
+    );
+    assertEquals([ghostRes.status, ghostRes.json.error], [404, 'call_not_found']);
+    // The recording route takes the token too, and the same call in the path and the body.
+    const rec = await h.call(
+      `voice/calls/${callId}/recording`,
+      { callId, mime: 'audio/ogg', bytes: 1000, durationS: 60 },
+      { token: other.token },
+    );
+    assertEquals(rec.status, 401);
+    const mismatch = await h.call(
+      `voice/calls/${other.callId}/recording`,
+      { callId, mime: 'audio/ogg', bytes: 1000, durationS: 60 },
+      { token },
+    );
+    assertEquals([mismatch.status, mismatch.json.error], [400, 'invalid_request']);
+  },
+);
+
+Deno.test(
+  'an environment without the secrets serves no voice route (and the field routes go on)',
+  async () => {
+    const h = setup({ unconfigured: true });
+    const res = await h.call('voice/calls/start', {
+      room: room(5),
+      from: KEVIN_PHONE,
+      to: VOICE_NUMBER,
+      transport: 'pstn',
+    });
+    assertEquals([res.status, res.json.error], [500, 'internal']);
+    assertEquals(h.store.callRows.length, 0);
+  },
+);
+
+Deno.test(
+  'calls/start: idempotent per room, a conflict refused, an unknown number refused',
+  async () => {
+    const h = setup();
+    const a = await h.sip(6, KEVIN_PHONE);
+    const again = await h.sip(6, KEVIN_PHONE);
+    assertEquals([again.callId, again.token], [a.callId, a.token]);
+    assertEquals(h.store.callRows.length, 1);
+    assertEquals(h.store.audits.filter((x) => x.action === 'call.started').length, 1);
+    const conflict = await h.call('voice/calls/start', {
+      room: room(6),
+      from: MARCO_PHONE,
+      to: VOICE_NUMBER,
+      transport: 'pstn',
+    });
+    assertEquals([conflict.status, conflict.json.error], [409, 'call_conflict']);
+    const unknownNumber = await h.call('voice/calls/start', {
+      room: room(7),
+      from: KEVIN_PHONE,
+      to: '+15550100000',
+      transport: 'pstn',
+    });
+    assertEquals([unknownNumber.status, unknownNumber.json.error], [404, 'voice_number_unknown']);
+    // The contract: a SIP start names both numbers; a web call its call id.
+    const noTo = await h.call('voice/calls/start', {
+      room: room(8),
+      from: KEVIN_PHONE,
+      transport: 'pstn',
+    });
+    assertEquals([noTo.status, noTo.json.error], [400, 'invalid_request']);
+    const webNoId = await h.call('voice/calls/start', {
+      room: room(8),
+      from: KEVIN_PHONE,
+      to: VOICE_NUMBER,
+      transport: 'web',
+    });
+    assertEquals(webNoId.status, 400);
+  },
+);
+
+Deno.test(
+  'an unknown caller: unknown, a token, no reporter, and no tool but end_call (F13)',
+  async () => {
+    const h = setup();
+    const res = await h.call('voice/calls/start', {
+      room: room(9),
+      from: '+15550199999',
+      to: VOICE_NUMBER,
+      transport: 'pstn',
+    });
+    assertEquals(res.status, 200);
+    assertEquals(res.json.unknown, true);
+    assertEquals(res.json.reporter, undefined);
+    VoiceCallStartResponseSchema.parse(res.json);
+    assertNoPhone(res.text);
+    assert(!res.text.includes('+15550199999'));
+    const { callId, callToken } = res.json;
+    for (const [name, body] of [
+      ['get_context', {}],
+      ['pick_site', { siteId: NORTHGATE }],
+      ['set_preference', { contactPref: 'link' }],
+      ['load_report', { dayReference: 'today' }],
+      ['start_fallback_recording', { reason: 'agent_error', at: 3 }],
+    ] as const) {
+      const t = await h.tool(name, callId, callToken, body);
+      assertEquals([t.status, t.json.error], [403, 'unknown_caller'], name);
+    }
+    const rec = await h.call(
+      `voice/calls/${callId}/recording`,
+      { callId, mime: 'audio/ogg', bytes: 10, durationS: 5 },
+      { token: callToken },
+    );
+    assertEquals([rec.status, rec.json.error], [403, 'unknown_caller']);
+    const end = await h.tool('end_call', callId, callToken, {
+      outcome: 'abandoned',
+      dialogLog: [],
+      metrics: {
+        latencyP50Ms: null,
+        latencyP95Ms: null,
+        interruptions: 0,
+        sttConfidence: null,
+        turns: 0,
+      },
+    });
+    assertEquals([end.status, end.json.ok], [200, true]);
+    // No post-call job for a caller nobody knows.
+    assertEquals(h.store.jobs.filter((j) => j.type === 'post_call_reconcile').length, 0);
+  },
+);
+
+Deno.test('a demo org is never reached by a SIP caller (§19 Q44, Q116)', async () => {
+  const h = setup({ isDemo: true });
+  const res = await h.call('voice/calls/start', {
+    room: room(10),
+    from: KEVIN_PHONE,
+    to: VOICE_NUMBER,
+    transport: 'pstn',
+  });
+  assertEquals(res.json.unknown, true);
+});
+
+Deno.test('a reporter of three sites: get_context lists them, pick_site fixes one', async () => {
+  const h = setup();
+  const { callId, token, json } = await h.sip(11, MARCO_PHONE);
+  assertEquals(json.reporter, { firstName: 'Marco', locale: 'es-US' });
+  const ctx = GetContextResponseSchema.parse((await h.tool('get_context', callId, token)).json);
+  assertEquals(ctx.siteId, null);
+  assertEquals(ctx.sites.map((s) => s.name).sort(), [
+    'Elm Street Medical',
+    'Pier 9',
+    'Riverside Lofts',
+  ]);
+  assertEquals(ctx.sites.find((s) => s.id === RIVERSIDE)!.status, null);
+  assertEquals(ctx.sites.find((s) => s.id === RIVERSIDE)!.deadline, '17:30');
+  // Marco's own term and his sites' areas (Q143), never Kevin's.
+  assert(ctx.keyterms.includes('la losa'));
+  assert(ctx.keyterms.includes('Riverside core'));
+  assert(!ctx.keyterms.includes('PT deck'));
+  assert(!ctx.keyterms.includes('Ramp B'));
+  // Kevin's site is not his.
+  const wrong = await h.tool('pick_site', callId, token, { siteId: NORTHGATE });
+  assertEquals([wrong.status, wrong.json.error], [403, 'out_of_scope']);
+  const pick = await h.tool('pick_site', callId, token, { siteId: PIER9 });
+  assertEquals([pick.status, pick.json], [200, { siteId: PIER9, name: 'Pier 9' }]);
+  assertEquals(h.store.callRows[0]!.site_id, PIER9);
+  const after = GetContextResponseSchema.parse((await h.tool('get_context', callId, token)).json);
+  assertEquals([after.siteId, after.sites.map((s) => s.id)], [PIER9, [PIER9]]);
+  // He may still change his mind among his own sites.
+  const change = await h.tool('pick_site', callId, token, { siteId: ELM });
+  assertEquals(change.status, 200);
+  assertEquals(h.store.audits.filter((a) => a.action === 'call.site_picked').length, 2);
+});
+
+Deno.test(
+  'a number in two real orgs: the site question covers both; pick_site moves the call',
+  async () => {
+    const h = setup();
+    h.store.orgs.push({
+      id: ORG2,
+      name: 'Second Build',
+      country: 'US',
+      locale: 'en-US',
+      timezone: 'America/Chicago',
+      is_demo: false,
+      units: 'imperial',
+    } as OrgRow);
+    h.store.sites.push(site(LAKEVIEW, ORG2, 'Lakeview Tower'));
+    h.store.reporters.push(
+      reporter(KEVIN2, ORG2, "Kevin O'Brien", KEVIN_PHONE, {
+        status: 'invited',
+        created_at: '2026-10-05T00:00:00Z',
+      }),
+    );
+    h.store.siteReporters.push({ site_id: LAKEVIEW, reporter_id: KEVIN2 });
+    h.store.companies.push({ org_id: ORG2, name: 'Lakeside Steel', aliases: [] });
+    const { callId, token } = await h.sip(12, KEVIN_PHONE);
+    const row = h.store.callRows[0]!;
+    // Active before invited: Kestrel's row is the call's until the site is known.
+    assertEquals([row.reporter_id, row.org_id, row.site_id], [KEVIN, ORG, null]);
+    const ctx = GetContextResponseSchema.parse((await h.tool('get_context', callId, token)).json);
+    assertEquals(ctx.sites.map((s) => s.name).sort(), [
+      'Lakeview Tower',
+      'Northgate Parking Structure',
+    ]);
+    assert(ctx.keyterms.includes('Lakeside Steel'));
+    const pick = await h.tool('pick_site', callId, token, { siteId: LAKEVIEW });
+    assertEquals(pick.status, 200);
+    assertEquals([row.reporter_id, row.org_id, row.site_id], [KEVIN2, ORG2, LAKEVIEW]);
+    const after = GetContextResponseSchema.parse((await h.tool('get_context', callId, token)).json);
+    assertEquals([after.company, after.sites.map((s) => s.id)], ['Second Build', [LAKEVIEW]]);
+    // A demo org with the same number is never among them.
+    assertNoPhone(JSON.stringify(after));
+  },
+);
+
+Deno.test(
+  'a Talk now call starts by its call id; its reporter and site come from the row',
+  async () => {
+    const h = setup();
+    const id = '33333333-0000-4000-8000-000000000100';
+    h.store.callRows.push({
+      id,
+      org_id: ORG,
+      reporter_id: MARCO,
+      site_id: RIVERSIDE,
+      report_id: null,
+      direction: 'inbound',
+      transport: 'web',
+      purpose: 'daily_report',
+      provider_call_id: null,
+      from_e164: null,
+      to_e164: null,
+      status: 'queued',
+      outcome: null,
+      disclosure_played: false,
+      started_at: null,
+      answered_at: null,
+      ended_at: null,
+      duration_s: null,
+      recording_path: null,
+      peaks: null,
+      dialog_log: null,
+      metrics: null,
+      created_at: T0.toISOString(),
+      language: null,
+      call_token_issued_at: null,
+      attempt: null,
+      site_day_id: null,
+      fallback: null,
+    } satisfies CallRow);
+    // Before the start, no tool works even with the right token.
+    const early = await h.tool('get_context', id, await deriveCallToken(TOKEN_SECRET, id));
+    assertEquals([early.status, early.json.error], [409, 'call_not_started']);
+    const res = await h.call('voice/calls/start', {
+      room: `call-${id}`,
+      callId: id,
+      transport: 'web',
+    });
+    assertEquals(res.status, 200, res.text);
+    assertEquals(res.json.reporter, { firstName: 'Marco', locale: 'es-US' });
+    const ctx = GetContextResponseSchema.parse(
+      (await h.tool('get_context', id, res.json.callToken)).json,
+    );
+    assertEquals(
+      [ctx.siteId, ctx.call.transport, ctx.sites.map((s) => s.id)],
+      [RIVERSIDE, 'web', [RIVERSIDE]],
+    );
+    // Marco never agreed to recording: the agent is told (F3, §19 Q120).
+    assertEquals(ctx.consents.recording, false);
+    const wrongTransport = await h.call('voice/calls/start', {
+      room: `call-${id}`,
+      callId: id,
+      transport: 'pstn',
+      from: MARCO_PHONE,
+      to: VOICE_NUMBER,
+    });
+    assertEquals([wrongTransport.status, wrongTransport.json.error], [409, 'call_conflict']);
+  },
+);
+
+Deno.test(
+  'set_preference: audited as the reporter via voice, worded in the call language; "not today" waits for W3-17',
+  async () => {
+    const h = setup();
+    const { callId, token } = await h.sip(13, MARCO_PHONE);
+    const res = await h.tool('set_preference', callId, token, { contactPref: 'call' });
+    assertEquals(res.status, 200);
+    assertEquals(res.json, {
+      ok: true,
+      confirmation: 'Listo, su reporte diario ahora es por llamada.',
+    });
+    assertEquals(h.store.reporters.find((r) => r.id === MARCO)!.contact_pref, 'call');
+    const audit = h.store.audits.find((a) => a.action === 'reporter.preferences_changed')!;
+    assertEquals([audit.actorType, audit.actorId], ['reporter', MARCO]);
+    assertEquals((audit.diff as Record<string, unknown>).channel, 'voice');
+    assertEquals((audit.diff as Record<string, unknown>).call_id, callId);
+    // The same mode again: the sentence, no change, no second audit.
+    const same = await h.tool('set_preference', callId, token, { contactPref: 'call' });
+    assertEquals(same.json.confirmation, 'Listo, su reporte diario ahora es por llamada.');
+    assertEquals(
+      h.store.audits.filter((a) => a.action === 'reporter.preferences_changed').length,
+      1,
+    );
+    const notToday = await h.tool('set_preference', callId, token, { noCallsToday: true });
+    assertEquals([notToday.status, notToday.json.error], [400, 'not_available']);
+  },
+);
+
+Deno.test(
+  "load_report: the day resolved by code, a filed report of the caller's sites in 14 days",
+  async () => {
+    const h = setup();
+    const day = (id: string, siteId: string, date: string) =>
+      h.store.siteDays.push({ id, site_id: siteId, date } as never);
+    const report = (id: string, dayId: string, siteId: string, no: string, extra = {}) =>
+      h.store.reports.push({
+        id,
+        site_day_id: dayId,
+        site_id: siteId,
+        org_id: ORG,
+        report_no: no,
+        status: 'filed',
+        filed_at: T0.toISOString(),
+        current_version: 1,
+        is_late: false,
+        ...extra,
+      } as never);
+    const version = (reportId: string, workers: number) =>
+      h.store.versions.push({
+        report_id: reportId,
+        version: 1,
+        data: {
+          ...emptyReportData('2026-10-08', { reportLanguage: 'en', units: 'imperial' }),
+          manpower: [
+            {
+              companyId: null,
+              companyNameHeard: 'Apex',
+              companyName: 'Apex Concrete',
+              workers,
+              hoursPerWorker: 8,
+              totalHours: 1,
+              hoursBasis: 'stated',
+              confidence: 0.9,
+              source: [],
+            },
+          ],
+        } as never,
+        summary: null,
+        pdf_path: null,
+        author: 'agent',
+        author_user_id: null,
+        author_message_id: null,
+        change_note: null,
+        created_at: T0.toISOString(),
+        via: null,
+        draft_rev: 1,
+      } as never);
+    const R1 = '44444444-0000-4000-8000-000000000001';
+    day('ng-1008', NORTHGATE, '2026-10-08');
+    report(R1, 'ng-1008', NORTHGATE, 'NG-2210-0068');
+    version(R1, 6);
+    day('ng-0918', NORTHGATE, '2026-09-18');
+    report('44444444-0000-4000-8000-000000000002', 'ng-0918', NORTHGATE, 'NG-2210-0050');
+    // Marco's Thursday report at Riverside is not Kevin's to load.
+    day('rl-1008', RIVERSIDE, '2026-10-08');
+    report('44444444-0000-4000-8000-000000000003', 'rl-1008', RIVERSIDE, 'RL-0001');
+
+    const { callId, token } = await h.sip(14, KEVIN_PHONE);
+    const found = await h.tool('load_report', callId, token, { dayReference: "Thursday's report" });
+    assertEquals(found.status, 200, found.text);
+    const body = LoadReportResponseSchema.parse(found.json);
+    // Code's totals (6 × 8 = 48), never the stored 1.
+    assertEquals(body, {
+      status: 'found',
+      reportId: R1,
+      date: '2026-10-08',
+      reportNo: 'NG-2210-0068',
+      summary: "Thursday's report, NG-2210-0068: 6 on site, 48 hours.",
+    });
+    const none = await h.tool('load_report', callId, token, { dayReference: 'Tuesday' });
+    assertEquals(none.json, { status: 'not_found' });
+    const old = await h.tool('load_report', callId, token, { dayReference: '2026-09-18' });
+    assertEquals(old.json, { status: 'locked' });
+    const unclear = await h.tool('load_report', callId, token, { dayReference: 'the other day' });
+    assertEquals(unclear.json, { status: 'not_found' });
+
+    // Without the processing consents nothing is read (§19 Q120).
+    h.store.consents.find(
+      (c) => c.reporter_id === KEVIN && c.type === 'data_processing',
+    )!.revoked_at = T0.toISOString();
+    const refused = await h.tool('load_report', callId, token, { dayReference: 'Thursday' });
+    assertEquals([refused.status, refused.json.error], [403, 'consent_required']);
+  },
+);
+
+Deno.test(
+  "recording, fallback and end_call: the path is the call's, end once with one post_call job",
+  async () => {
+    const h = setup();
+    const { callId, token } = await h.sip(15, KEVIN_PHONE);
+    const fb = await h.tool('start_fallback_recording', callId, token, {
+      reason: 'not_understood',
+      at: 95.5,
+    });
+    assertEquals([fb.status, fb.json], [200, { ok: true }]);
+    assertEquals(h.store.callRows[0]!.fallback, { reason: 'not_understood', at: 95.5 });
+
+    const metrics = {
+      latencyP50Ms: 800,
+      latencyP95Ms: 1900,
+      interruptions: 1,
+      sttConfidence: 0.9,
+      turns: 7,
+    };
+    const dialogLog = [{ t: 0.5, speaker: 'agent', text: 'SiteLog, hi Kevin.' }];
+    const end = await h.tool('end_call', callId, token, {
+      outcome: 'fallback_recording',
+      dialogLog,
+      metrics,
+    });
+    assertEquals([end.status, end.json], [200, { ok: true }]);
+    const again = await h.tool('end_call', callId, token, {
+      outcome: 'filed',
+      dialogLog: [],
+      metrics,
+    });
+    assertEquals(again.status, 200);
+    const row = h.store.callRows[0]!;
+    assertEquals([row.outcome, row.status], ['fallback_recording', 'completed']);
+    assertEquals(row.dialog_log, dialogLog);
+    const jobs = h.store.jobs.filter((j) => j.type === 'post_call_reconcile');
+    assertEquals(
+      jobs.map((j) => j.dedupe_key),
+      [`post_call:${callId}`],
+    );
+
+    // After the end: no tool, but the recording is still signed (uploaded at call end).
+    const late = await h.tool('get_context', callId, token);
+    assertEquals([late.status, late.json.error], [409, 'call_ended']);
+    const rec = await h.call(
+      `voice/calls/${callId}/recording`,
+      { callId, mime: 'audio/ogg', bytes: 4096, durationS: 125 },
+      { token },
+    );
+    assertEquals(rec.status, 201, rec.text);
+    assertEquals(rec.json.bucket, 'calls');
+    assertEquals(rec.json.path, `${ORG}/${callId}.ogg`);
+    assertMatch(rec.json.signedUrl as string, /\/calls\//);
+    assertEquals(row.recording_path, `${ORG}/${callId}.ogg`);
+    // An hour later, not even that.
+    h.clock.now = new Date(T0.getTime() + 2 * 60 * 60 * 1000);
+    const tooLate = await h.call(
+      `voice/calls/${callId}/recording`,
+      { callId, mime: 'audio/ogg', bytes: 4096, durationS: 125 },
+      { token },
+    );
+    assertEquals([tooLate.status, tooLate.json.error], [409, 'call_ended']);
+  },
+);
+
+Deno.test('recording: refused without the recording consent (§19 Q120)', async () => {
+  const h = setup();
+  const { callId, token } = await h.sip(16, MARCO_PHONE);
+  const rec = await h.call(
+    `voice/calls/${callId}/recording`,
+    { callId, mime: 'audio/ogg', bytes: 10, durationS: 5 },
+    { token },
+  );
+  assertEquals([rec.status, rec.json.error], [403, 'consent_required']);
+  assertEquals(h.store.callRows[0]!.recording_path, null);
+});
+
+Deno.test('a call takes 60 tool calls a minute, and none an hour after it started', async () => {
+  const h = setup();
+  const { callId, token } = await h.sip(17, KEVIN_PHONE);
+  for (let i = 0; i < VOICE_TOOL_RATE_LIMIT.limit; i++) {
+    const ok = await h.tool('get_context', callId, token);
+    assertEquals(ok.status, 200);
+  }
+  const limited = await h.tool('get_context', callId, token);
+  assertEquals([limited.status, limited.json.error], [429, 'rate_limited']);
+  assert(Number(limited.json.retryAfter) > 0);
+  h.clock.now = new Date(T0.getTime() + 61 * 1000);
+  assertEquals((await h.tool('get_context', callId, token)).status, 200);
+  h.clock.now = new Date(T0.getTime() + 61 * 60 * 1000);
+  const expired = await h.tool('get_context', callId, token);
+  assertEquals([expired.status, expired.json.error], [409, 'call_ended']);
+});
+
+Deno.test('a disabled reporter: the call keeps no tool', async () => {
+  const h = setup();
+  const { callId, token } = await h.sip(18, KEVIN_PHONE);
+  h.store.reporters.find((r) => r.id === KEVIN)!.status = 'disabled';
+  const res = await h.tool('get_context', callId, token);
+  assertEquals([res.status, res.json.error], [403, 'reporter_disabled']);
+});
+
+Deno.test('the pack legal keys name the wording versions the call stores', async () => {
+  const h = setup({
+    country: {
+      legal_keys: { recording_notice: 'us.recording.2026-11', consent: 'us.consent.2026-11' },
+    },
+  });
+  const { callId, token } = await h.sip(19, KEVIN_PHONE);
+  const ctx = GetContextResponseSchema.parse((await h.tool('get_context', callId, token)).json);
+  assertEquals(
+    [ctx.recordingNoticeVersion, ctx.consentTextVersion],
+    ['us.recording.2026-11', 'us.consent.2026-11'],
+  );
+});
+
+Deno.test(
+  'retries: a named request runs once per call; its retry gets the kept answer',
+  async () => {
+    // The agent retries a tool once after a 5xx or a transport error (W3-02) with the same
+    // X-Request-Id; the model-backed tools (file_report, record_answer, W3-09 … W3-14) go through
+    // the same `once`, so a retried filing files once. Here: every write W3-03 serves.
+    const h = setup();
+    const { callId, token } = await h.sip(20, MARCO_PHONE);
+    const named = (name: string, body: Record<string, unknown>, requestId: string) =>
+      h.call(`voice/tools/${name}`, { callId, ...body }, { token, requestId });
+
+    // set_preference: the retry replays, nothing is written twice.
+    const first = await named('set_preference', { contactPref: 'call' }, 'req-1');
+    assertEquals(first.status, 200);
+    const updates = h.store.calls.filter((x) => x === 'updateReporter').length;
+    const retry = await named('set_preference', { contactPref: 'call' }, 'req-1');
+    assertEquals([retry.status, retry.json], [200, first.json]);
+    assertEquals(retry.headers.get('idempotent-replay'), 'true');
+    assertEquals(h.store.calls.filter((x) => x === 'updateReporter').length, updates);
+
+    // pick_site: a replay never re-runs an older pick over a newer one.
+    await named('pick_site', { siteId: PIER9 }, 'req-2');
+    await named('pick_site', { siteId: ELM }, 'req-3');
+    const late = await named('pick_site', { siteId: PIER9 }, 'req-2');
+    assertEquals([late.status, late.json.siteId], [200, PIER9]);
+    assertEquals(h.store.callRows[0]!.site_id, ELM);
+    assertEquals(h.store.calls.filter((x) => x === 'voiceCallPickSite').length, 2);
+
+    // The same id for another tool is a conflict; a malformed id is refused.
+    const other = await named(
+      'start_fallback_recording',
+      { reason: 'agent_error', at: 1 },
+      'req-1',
+    );
+    assertEquals([other.status, other.json.error], [409, 'request_conflict']);
+    const bad = await named(
+      'start_fallback_recording',
+      { reason: 'agent_error', at: 1 },
+      'bad id!',
+    );
+    assertEquals([bad.status, bad.json.error], [400, 'invalid_request']);
+
+    // A refused request frees its id: the retry runs again (and is refused again, nothing kept).
+    const refused = await named('pick_site', { siteId: NORTHGATE }, 'req-4');
+    assertEquals(refused.status, 403);
+    assert(!h.store.toolRequests.has(`${callId}|req-4`));
+
+    // A request whose first try is still running: 409, the agent does not retry a 4xx.
+    h.store.toolRequests.set(`${callId}|req-5`, { tool: 'end_call', status: null, response: null });
+    const metrics = {
+      latencyP50Ms: null,
+      latencyP95Ms: null,
+      interruptions: 0,
+      sttConfidence: null,
+      turns: 0,
+    };
+    const running = await named(
+      'end_call',
+      { outcome: 'draft_saved', dialogLog: [], metrics },
+      'req-5',
+    );
+    assertEquals([running.status, running.json.error], [409, 'request_in_progress']);
+
+    // end_call: one end, one post-call job, the retry replayed.
+    const end = await named(
+      'end_call',
+      { outcome: 'draft_saved', dialogLog: [], metrics },
+      'req-6',
+    );
+    const endRetry = await named(
+      'end_call',
+      { outcome: 'draft_saved', dialogLog: [], metrics },
+      'req-6',
+    );
+    assertEquals(
+      [end.status, endRetry.status, endRetry.headers.get('idempotent-replay')],
+      [200, 200, 'true'],
+    );
+    assertEquals(h.store.jobs.filter((j) => j.type === 'post_call_reconcile').length, 1);
+    assertEquals(h.store.audits.filter((a) => a.action === 'call.ended').length, 1);
+  },
+);
+
+Deno.test(
+  'retries without a request id are safe too: every W3-03 write is idempotent on its own',
+  async () => {
+    const h = setup();
+    const { callId, token } = await h.sip(21, KEVIN_PHONE);
+    const metrics = {
+      latencyP50Ms: null,
+      latencyP95Ms: null,
+      interruptions: 0,
+      sttConfidence: null,
+      turns: 0,
+    };
+    for (let i = 0; i < 2; i++) {
+      assertEquals(
+        (await h.tool('set_preference', callId, token, { contactPref: 'link' })).status,
+        200,
+      );
+      assertEquals((await h.tool('pick_site', callId, token, { siteId: NORTHGATE })).status, 200);
+      assertEquals(
+        (await h.tool('start_fallback_recording', callId, token, { reason: 'agent_error', at: 2 }))
+          .status,
+        200,
+      );
+      const rec = await h.call(
+        `voice/calls/${callId}/recording`,
+        { callId, mime: 'audio/ogg', bytes: 10, durationS: 5 },
+        { token },
+      );
+      assertEquals([rec.status, rec.json.path], [201, `${ORG}/${callId}.ogg`]);
+    }
+    for (let i = 0; i < 2; i++) {
+      assertEquals(
+        (
+          await h.tool('end_call', callId, token, {
+            outcome: 'draft_saved',
+            dialogLog: [],
+            metrics,
+          })
+        ).status,
+        200,
+      );
+    }
+    const actions = h.store.audits.map((a) => a.action);
+    for (const action of [
+      'reporter.preferences_changed',
+      'call.fallback_started',
+      'call.recording_requested',
+      'call.ended',
+    ]) {
+      assertEquals(actions.filter((a) => a === action).length, 1, action);
+    }
+    assertEquals(h.store.jobs.filter((j) => j.type === 'post_call_reconcile').length, 1);
+  },
+);

@@ -35,6 +35,7 @@ import {
   type OrgLocale,
   type UnitSystem,
   type FieldApiErrorCode,
+  type VoiceApiErrorCode,
   type FieldCountryView,
   type FieldDeviceRow,
   type FieldLinkRow,
@@ -58,7 +59,7 @@ import {
 export class FieldError extends Error {
   constructor(
     readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 429 | 500,
-    readonly code: FieldApiErrorCode,
+    readonly code: FieldApiErrorCode | VoiceApiErrorCode,
     message?: string,
     readonly extra: Record<string, unknown> = {},
   ) {

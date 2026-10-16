@@ -18,10 +18,12 @@ import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import {
   LANGUAGES,
+  VOICE_API_ERRORS,
   VOICE_CALL_TOKEN_HEADER,
   VOICE_CATALOGS,
   VOICE_CONTRACT,
   VOICE_KEYS,
+  VOICE_REQUEST_ID_HEADER,
   VOICE_ROUTES,
 } from '@sitelog/shared';
 
@@ -52,8 +54,12 @@ export function voiceContractFiles(): Map<string, string> {
     json({
       $comment: COMMENT,
       callTokenHeader: VOICE_CALL_TOKEN_HEADER,
+      // W3-03: names a request (the same on its retry); field-api runs it once per call.
+      requestIdHeader: VOICE_REQUEST_ID_HEADER,
       auth: 'Authorization: Bearer VOICE_AGENT_TOOL_SECRET on every route',
       routes: VOICE_ROUTES,
+      // W3-03: the `error` codes field-api answers on /voice/*.
+      errors: VOICE_API_ERRORS,
     }),
   );
   for (const language of LANGUAGES) {

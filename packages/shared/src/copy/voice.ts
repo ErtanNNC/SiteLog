@@ -69,6 +69,12 @@ export const VOICE_KEYS = [
   'goodbye_callback_requested',
   'goodbye_fallback_recording',
   'goodbye_abandoned',
+  // Tool answers worded by code (W3-03): F15 on a call (`set_preference`, the spoken form of
+  // §9.5's CALL / TEXT replies) and F10's `load_report` summary (numbers from code, §19 Q118).
+  'pref_call_ok',
+  'pref_text_ok',
+  'load_report_summary',
+  'load_report_found',
 ] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 

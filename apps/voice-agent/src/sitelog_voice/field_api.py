@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -99,7 +100,12 @@ class FieldApi:
         """POST `body` to the route, validated both ways; returns the parsed answer."""
         route = self._contract.route(route_name)
         self._contract.check_request(route_name, body)
-        headers = {"Authorization": f"Bearer {self._secret}"}
+        # One id per request, the same on its retry: field-api runs a named request once per call
+        # and answers the retry with the first answer (W3-03), so a retried write never repeats.
+        headers = {
+            "Authorization": f"Bearer {self._secret}",
+            self._contract.request_id_header: uuid.uuid4().hex,
+        }
         if route.call_token:
             if auth is None:
                 raise ValueError(f"route {route_name} needs the call token")
@@ -160,13 +166,17 @@ class FieldApi:
         room: str,
         transport: str,
         from_e164: str | None = None,
+        to_e164: str | None = None,
         call_id: str | None = None,
     ) -> tuple[CallAuth, CallsStartResponse]:
         """The agent's first request in a room. `from_e164` goes to field-api only (stored server
-        side, §9.4) and is never kept on the agent beyond this call."""
+        side, §9.4) and is never kept on the agent beyond this call; `to_e164` is the pack's number
+        the caller dialled (field-api finds the pack by it, W3-03)."""
         body: dict[str, Any] = {"room": room, "transport": transport}
         if from_e164 is not None:
             body["from"] = from_e164
+        if to_e164 is not None:
+            body["to"] = to_e164
         if call_id is not None:
             body["callId"] = call_id
         data = await self.request("calls_start", body)

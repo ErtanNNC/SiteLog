@@ -31,6 +31,15 @@ import { REPORT_LANGUAGES, REPORTER_LOCALES } from './locale.ts';
 /** The header that carries the per-call token on every `/voice/tools/*` request. */
 export const VOICE_CALL_TOKEN_HEADER = 'X-Call-Token';
 
+/**
+ * W3-03: the header that names an agent request (`[A-Za-z0-9_.:-]{1,128}`, e.g. a uuid), the same
+ * on its one retry. field-api runs a named request once per call and answers a retry with the
+ * first 2xx answer (`voice_tool_requests`), so a retried `file_report` never files twice and a
+ * retried `record_answer` never counts twice. Without it a request runs again.
+ */
+export const VOICE_REQUEST_ID_HEADER = 'X-Request-Id';
+export const VOICE_REQUEST_ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
+
 /** A LiveKit room of a call: `call-{uuid}` (§9.4 "How a call starts"; `calls.provider_call_id`). */
 export const VOICE_ROOM_RE = /^call-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -86,14 +95,17 @@ export const VoiceDraftStateSchema = z.strictObject({
 
 /**
  * `POST /voice/calls/start` (§9.4 "How a call starts"): the agent's first request in a room. A SIP
- * call passes the caller's number (`from`, from the SIP participant's attributes) and the reporter
- * is found by it in the real orgs of the pack whose voice number was called (§19 Q44); a Talk now
- * call (`web`) and an outbound call pass the `callId` the call row already has.
+ * call passes the caller's number (`from`, the SIP participant's `sip.phoneNumber`) and the number
+ * it called (`to`, `sip.trunkPhoneNumber`; W3-03), and the reporter is found by `from` in the real
+ * orgs of the pack whose voice number is `to` (§4.6, §19 Q44); a Talk now call (`web`) and an
+ * outbound call pass the `callId` the call row already has.
  */
 export const VoiceCallStartRequestSchema = z
   .strictObject({
     room: z.string().regex(VOICE_ROOM_RE, 'call-{uuid}'),
     from: e164.optional(),
+    /** The pack's voice number the caller dialled (W3-03: the pack is found by it, §4.6). */
+    to: e164.optional(),
     callId: uuid.optional(),
     transport: z.enum(CALL_TRANSPORTS),
   })
@@ -101,11 +113,11 @@ export const VoiceCallStartRequestSchema = z
     message: 'a web call passes its callId',
     path: ['callId'],
   })
-  .refine((b) => b.from !== undefined || b.callId !== undefined, {
-    message: 'from or callId',
+  .refine((b) => b.callId !== undefined || (b.from !== undefined && b.to !== undefined), {
+    message: 'callId, or from and to',
     path: ['from'],
   })
-  .describe('A web call passes callId; every call passes from or callId.');
+  .describe('A web call passes callId; every other call passes callId, or from and to.');
 
 /**
  * The answer: the call, its token, and the reporter's first name and locale; or `unknown: true`
@@ -386,7 +398,15 @@ export const SetPreferenceRequestSchema = z
   })
   .refine((b) => b.contactPref !== undefined || b.noCallsToday !== undefined, 'nothing to change')
   .describe('contactPref or noCallsToday (or both).');
-export const SetPreferenceResponseSchema = z.strictObject({ ok: z.literal(true) });
+export const SetPreferenceResponseSchema = z.strictObject({
+  ok: z.literal(true),
+  /**
+   * W3-03: the sentence to say in the call language (`pref_call_ok` / `pref_text_ok`, the spoken
+   * form of §9.5's CALL / TEXT replies): the mode now set, changed or not; null when the request
+   * set no mode.
+   */
+  confirmation: z.string().min(1).max(400).nullable(),
+});
 
 /**
  * `load_report` (§9.4, F10 "change Friday's report"): the day as said; code resolves it
@@ -531,11 +551,62 @@ export const VOICE_CONTRACT: Record<string, z.ZodType> = {
   ),
 };
 
+// ───────────────────────────── Limits and errors (W3-03) ─────────────────────────────
+
+/** Tool calls a call may make: 60 a minute (`rate_limits`, key `call:<callId>`; W3-03). */
+export const VOICE_TOOL_RATE_LIMIT = { limit: 60, windowSeconds: 60 } as const;
+
+/**
+ * How long after its start a call's token works for the tools (W3-03): §9.4 caps a call at 12
+ * minutes and `callSeconds` at an hour; past this, or once the call ended, a tool answers 409
+ * `call_ended`. The recording upload is the exception: it is signed until `VOICE_RECORDING_GRACE_S`
+ * after the end (the agent uploads at call end, §9.4 "Recording").
+ */
+export const VOICE_CALL_MAX_S = 60 * 60;
+export const VOICE_RECORDING_GRACE_S = 60 * 60;
+
+/** The error codes of `/voice/*` (JSON `{error, message?}`, as every field-api answer). */
+export const VOICE_API_ERRORS = [
+  'invalid_request',
+  'not_found',
+  /** No or a wrong `Authorization: Bearer VOICE_AGENT_TOOL_SECRET` (401). */
+  'unauthorized',
+  /** A browser `Origin` on a server-to-server route (403). */
+  'origin_not_allowed',
+  /** No or a wrong `X-Call-Token` for the call named (401). */
+  'call_token_invalid',
+  'call_not_found',
+  /** The call has not started yet (no `calls/start`) (409). */
+  'call_not_started',
+  /** The call has ended, or started more than `VOICE_CALL_MAX_S` ago (409). */
+  'call_ended',
+  'call_conflict',
+  /** The `to` of a SIP start is no pack's voice number (404). */
+  'voice_number_unknown',
+  /** A tool on an unknown caller's call (F13; W3-14 handles them) (403). */
+  'unknown_caller',
+  /** A site, report or reporter outside the call's reporter and sites (403). */
+  'out_of_scope',
+  'reporter_disabled',
+  'consent_required',
+  /** `noCallsToday` before §19 Q129's column exists (W3-17) (400). */
+  'not_available',
+  'rate_limited',
+  /** The first request with this `X-Request-Id` is still running (409). */
+  'request_in_progress',
+  /** This `X-Request-Id` named another tool's request in this call (409). */
+  'request_conflict',
+  'internal',
+] as const;
+export type VoiceApiErrorCode = (typeof VOICE_API_ERRORS)[number];
+
 // ───────────────────────────── The per-call token (§6.5) ─────────────────────────────
 
 /**
  * The per-call token (§6.5: "minted when the call starts, bound to `call_id` + reporter"):
- * HMAC-SHA-256 of `sitelog/call_token/v1/<callId>` (the id in lower case) under a server secret,
+ * HMAC-SHA-256 of `sitelog/call_token/v1/<callId>` (the id in lower case) under a server secret
+ * (W3-03: `VOICE_CALL_TOKEN_SECRET`, field-api's only, never `VOICE_AGENT_TOOL_SECRET`: the agent
+ * holds that one and must not be able to mint the token of another call),
  * as base64url without padding (43 characters). Like a link code (`deriveLinkCode`) nothing is
  * stored: `field-api` derives it again for the call a tool names and compares. The reporter
  * binding is the call row's `reporter_id`, fixed when the call starts; the token names the call.

@@ -58,4 +58,8 @@ export const voiceTr: VoiceCatalog = {
   goodbye_fallback_recording:
     'Teşekkürler. Taslağı kontrol etmeniz için bir link göndereceğim. İyi günler.',
   goodbye_abandoned: 'İyi günler.',
+  pref_call_ok: 'Tamam, günlük raporunuz artık telefonla.',
+  pref_text_ok: 'Tamam, günlük raporunuz artık mesajla gelen linkle.',
+  load_report_summary: '{day} raporu, {report_no}: sahada {workers} kişi, {hours} saat.',
+  load_report_found: '{day} raporunu buldum, {report_no}.',
 };

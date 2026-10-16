@@ -285,6 +285,17 @@ export async function seedTwoOrgs(db: PGlite): Promise<void> {
           ('${o.correction}', '${o.org}', '${o.report}', '${o.reporter}', 'text', 'Apex had 7');
       `);
   }
+  // W3-03: the voice agent's kept tool answers, on each org's call.
+  const toolRequests = await db.query<{ v: boolean }>(
+    `select to_regclass('public.voice_tool_requests') is not null as v`,
+  );
+  if (toolRequests.rows[0]!.v) {
+    for (const o of [ORG.A, ORG.B])
+      await db.exec(`
+        insert into voice_tool_requests (call_id, request_key, tool, status, response) values
+          ('${o.call}', 'matrix-1', 'end_call', 200, '{"ok": true}');
+      `);
+  }
   await db.exec(`
     insert into auth.users (id, email) values ('${SPARE_USER}', 'spare@matrix.test'), ('${OPERATOR}', 'operator@matrix.test');
     insert into platform_admins (user_id, note) values ('${OPERATOR}', 'matrix');

@@ -703,6 +703,30 @@ export type CallRow = {
   dialog_log: Json | null;
   metrics: Json | null;
   created_at: string | null;
+  /** W3-03: the call language, the reporter's locale when the call started (e.g. 'en-US'). */
+  language: string | null;
+  /** W3-03: field-api handed the agent this call's token (`voice_call_start`); no tool before it. */
+  call_token_issued_at: string | null;
+  /** Outbound: the ladder's R1 = 1, R2 = 2, the one callback = 3 (spec §19 Q128; W3-17). */
+  attempt: number | null;
+  /** W3-03: the call's site-day once its site is known. */
+  site_day_id: string | null;
+  /** W3-03 (§9.4 rule 9): the simple recording mode started, `{reason, at}`. */
+  fallback: Json | null;
+};
+
+/**
+ * W3-03 (20261016000300): a voice agent tool request named by `X-Request-Id`, run once per call;
+ * a retry gets the kept 2xx answer. Service role only (field-api).
+ */
+export type VoiceToolRequestRow = {
+  call_id: string;
+  request_key: string;
+  tool: string;
+  /** The kept answer's status; null while the first request runs. */
+  status: number | null;
+  response: Json | null;
+  created_at: string;
 };
 
 /**
@@ -1193,7 +1217,13 @@ export type Database = {
         | 'dialog_log'
         | 'metrics'
         | 'created_at'
+        | 'language'
+        | 'call_token_issued_at'
+        | 'attempt'
+        | 'site_day_id'
+        | 'fallback'
       >;
+      voice_tool_requests: Table<VoiceToolRequestRow, 'status' | 'response' | 'created_at'>;
       report_versions: Table<
         ReportVersionRow,
         | 'summary'
@@ -1412,6 +1442,50 @@ export type Database = {
       field_flag_late_upload: {
         Args: { p_upload_id: string; p_reporter_id: string };
         Returns: Json;
+      };
+      // W3-03 (20261016000300_voice_calls.sql), service role only: field-api's /voice/* routes.
+      voice_call_start: {
+        Args: {
+          p_room: string;
+          p_transport: CallTransport;
+          p_call_id?: string | null;
+          p_from?: string | null;
+          p_to?: string | null;
+        };
+        Returns: Json;
+      };
+      voice_call_update: {
+        Args: {
+          p_call_id: string;
+          p_status?: CallStatus | null;
+          p_disclosure_played?: boolean | null;
+          p_answered_at?: string | null;
+        };
+        Returns: Json;
+      };
+      voice_call_pick_site: {
+        Args: { p_call_id: string; p_site_id: string; p_reporter_id: string };
+        Returns: Json;
+      };
+      voice_call_fallback: {
+        Args: { p_call_id: string; p_reason: string; p_at: number };
+        Returns: Json;
+      };
+      voice_call_recording: {
+        Args: { p_call_id: string; p_path: string };
+        Returns: Json;
+      };
+      voice_call_end: {
+        Args: { p_call_id: string; p_outcome: CallOutcome; p_dialog_log: Json; p_metrics: Json };
+        Returns: Json;
+      };
+      call_site_day: {
+        Args: { p_site_id: string; p_at: string };
+        Returns: string;
+      };
+      call_status_rank: {
+        Args: { p_status: CallStatus };
+        Returns: number;
       };
       // Settings (F15, 20261016000010_field_settings.sql), service role only: consent/revoke sets
       // revoked_at, audits consent.revoked and tells the office of a required consent.

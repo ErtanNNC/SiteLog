@@ -63,10 +63,10 @@ class Route:
 
 
 def _refine_calls_start_request(body: Mapping[str, Any]) -> str | None:
-    if "from" not in body and "callId" not in body:
-        return "every call passes from or callId"
     if body.get("transport") == "web" and "callId" not in body:
         return "a web call passes callId"
+    if "callId" not in body and ("from" not in body or "to" not in body):
+        return "every call passes callId, or from and to"
     return None
 
 
@@ -103,6 +103,8 @@ class Contract:
         self.directory = directory
         index = json.loads((directory / "index.json").read_text(encoding="utf-8"))
         self.call_token_header: str = index["callTokenHeader"]
+        # W3-03: names a request, the same on its retry; field-api runs it once per call.
+        self.request_id_header: str = index["requestIdHeader"]
         self.routes: dict[str, Route] = {
             name: Route(
                 name=name,

@@ -1,4 +1,8 @@
 import type {
+  CallOutcome,
+  CallRow,
+  CallTransport,
+  CompanyRow,
   ConsentRow,
   ConsentType,
   CountryRow,
@@ -6,6 +10,7 @@ import type {
   DraftCorrectionRow,
   FieldDeviceRow,
   FieldLinkRow,
+  GlossaryTermRow,
   Json,
   OrgRow,
   OrgSettingsRow,
@@ -44,6 +49,8 @@ import {
   type OrgContext,
   type RateLimitResult,
   type ReportWithDate,
+  type VoiceCallEndResult,
+  type VoiceCallStartResult,
 } from './store.ts';
 
 /**
@@ -100,6 +107,21 @@ export class FakeFieldStore implements FieldStore {
   pushSubscriptions: PushSubscriptionRow[] = [];
   /** F8 fixes of a draft (W2-10). */
   corrections: DraftCorrectionRow[] = [];
+  /** W3-03: `calls` rows (named so beside `calls`, the store methods called). */
+  callRows: CallRow[] = [];
+  companies: Pick<CompanyRow, 'org_id' | 'name' | 'aliases'>[] = [];
+  glossary: Pick<
+    GlossaryTermRow,
+    | 'org_id'
+    | 'scope_site_id'
+    | 'scope_reporter_id'
+    | 'heard'
+    | 'official'
+    | 'language'
+    | 'kind'
+    | 'status'
+    | 'times_heard'
+  >[] = [];
   /** Store methods called, for "no write happened" checks. */
   calls: string[] = [];
   private seq = 0;
@@ -1658,6 +1680,264 @@ export class FakeFieldStore implements FieldStore {
       diff: { reason: 'read', status },
     });
     return Promise.resolve({ status, snippet });
+  }
+
+  // ── Calls (W3-03): as 20261016000300_voice_calls.sql, for the cases the route tests use ──────
+  private realCallers(phone: string, country: string): ReporterRow[] {
+    const rank = (st: string) => (st === 'active' ? 0 : st === 'invited' ? 1 : 2);
+    return this.reporters
+      .filter((r) => {
+        const org = this.orgs.find((o) => o.id === r.org_id);
+        return (
+          r.phone_e164 === phone &&
+          r.status !== 'disabled' &&
+          org !== undefined &&
+          org.country === country &&
+          !org.is_demo
+        );
+      })
+      .sort((a, b) => rank(a.status) - rank(b.status) || b.created_at.localeCompare(a.created_at));
+  }
+  private activeSitesOf(reporter: ReporterRow): SiteRow[] {
+    return this.siteReporters
+      .filter((sr) => sr.reporter_id === reporter.id)
+      .flatMap((sr) => this.sites.filter((s) => s.id === sr.site_id))
+      .filter((s) => s.org_id === reporter.org_id && s.status === 'active');
+  }
+  private siteDayOf(siteId: string): string | null {
+    const site = this.sites.find((s) => s.id === siteId)!;
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: site.timezone }).format(this.now());
+    return this.siteDays.find((d) => d.site_id === siteId && d.date === date)?.id ?? null;
+  }
+  private callAudit(call: CallRow, action: string, diff: Json) {
+    this.audits.push({
+      orgId: call.org_id,
+      actorType: 'agent',
+      actorId: null,
+      action,
+      entity: 'call',
+      entityId: call.id,
+      diff,
+    });
+  }
+  voiceCallStart(input: {
+    room: string;
+    transport: CallTransport;
+    callId: string | null;
+    from: string | null;
+    to: string | null;
+  }): Promise<VoiceCallStartResult> {
+    this.calls.push('voiceCallStart');
+    const result = (c: CallRow, repeat: boolean): VoiceCallStartResult => ({
+      callId: c.id,
+      reporterId: c.reporter_id,
+      orgId: c.org_id,
+      siteId: c.site_id,
+      repeat,
+    });
+    let c = this.callRows.find((x) => x.provider_call_id === input.room);
+    if (c) {
+      if (
+        (input.callId !== null && c.id !== input.callId) ||
+        c.transport !== input.transport ||
+        (input.callId === null && c.from_e164 !== input.from)
+      )
+        return Promise.reject(new FieldDbError('call_conflict'));
+      if (c.ended_at) return Promise.reject(new FieldDbError('call_ended'));
+      if (c.call_token_issued_at) return Promise.resolve(result(c, true));
+    } else if (input.callId) {
+      c = this.callRows.find((x) => x.id === input.callId);
+      if (!c) return Promise.reject(new FieldDbError('call_not_found'));
+      if (
+        c.transport !== input.transport ||
+        (c.provider_call_id !== null && c.provider_call_id !== input.room)
+      )
+        return Promise.reject(new FieldDbError('call_conflict'));
+      if (c.ended_at) return Promise.reject(new FieldDbError('call_ended'));
+    }
+    if (c) {
+      const row = c;
+      const rep = this.reporters.find((r) => r.id === row.reporter_id);
+      if (!rep || rep.status === 'disabled') {
+        return Promise.reject(new FieldDbError('reporter_disabled'));
+      }
+      Object.assign(row, {
+        provider_call_id: input.room,
+        status: row.status === 'queued' || row.status === 'ringing' ? 'in_progress' : row.status,
+        started_at: row.started_at ?? this.iso(),
+        answered_at: row.answered_at ?? this.iso(),
+        call_token_issued_at: this.iso(),
+        language: row.language ?? rep.locale,
+        site_day_id: row.site_day_id ?? (row.site_id ? this.siteDayOf(row.site_id) : null),
+      });
+      this.callAudit(row, 'call.started', {
+        transport: row.transport,
+        reporter_id: row.reporter_id,
+      });
+      return Promise.resolve(result(row, false));
+    }
+    const pack = this.countries.find((x) => x.voice_number !== null && x.voice_number === input.to);
+    if (!pack) return Promise.reject(new FieldDbError('voice_number_unknown'));
+    const callers = this.realCallers(input.from!, pack.code);
+    let rep: ReporterRow | undefined = callers[0];
+    const pairs = callers.flatMap((r) => this.activeSitesOf(r).map((s) => ({ r, s })));
+    let site: SiteRow | null = null;
+    if (rep && pairs.length === 1) {
+      rep = pairs[0]!.r;
+      site = pairs[0]!.s;
+    }
+    const row: CallRow = {
+      id: input.room.slice(5),
+      org_id: rep?.org_id ?? null,
+      reporter_id: rep?.id ?? null,
+      site_id: site?.id ?? null,
+      report_id: null,
+      direction: 'inbound',
+      transport: 'pstn',
+      purpose: 'daily_report',
+      provider_call_id: input.room,
+      from_e164: input.from,
+      to_e164: input.to,
+      status: 'in_progress',
+      outcome: null,
+      disclosure_played: false,
+      started_at: this.iso(),
+      answered_at: this.iso(),
+      ended_at: null,
+      duration_s: null,
+      recording_path: null,
+      peaks: null,
+      dialog_log: null,
+      metrics: null,
+      created_at: this.iso(),
+      language: rep?.locale ?? null,
+      call_token_issued_at: this.iso(),
+      attempt: null,
+      site_day_id: site ? this.siteDayOf(site.id) : null,
+      fallback: null,
+    };
+    this.callRows.push(row);
+    this.callAudit(row, 'call.started', { unknown: !rep, orgs: callers.length });
+    return Promise.resolve(result(row, false));
+  }
+  getCall(id: string) {
+    return Promise.resolve(this.callRows.find((c) => c.id === id) ?? null);
+  }
+  callerReporters(callId: string, country: string) {
+    const c = this.callRows.find((x) => x.id === callId);
+    return Promise.resolve(c?.from_e164 ? this.realCallers(c.from_e164, country) : []);
+  }
+  voiceCallPickSite(callId: string, siteId: string, reporterId: string) {
+    this.calls.push('voiceCallPickSite');
+    const c = this.callRows.find((x) => x.id === callId);
+    if (!c) return Promise.reject(new FieldDbError('call_not_found'));
+    if (c.ended_at) return Promise.reject(new FieldDbError('call_ended'));
+    const rep = this.reporters.find((r) => r.id === reporterId);
+    if (
+      !rep ||
+      (rep.id !== c.reporter_id && rep.phone_e164 !== c.from_e164) ||
+      !this.activeSitesOf(rep).some((s) => s.id === siteId)
+    )
+      return Promise.reject(new FieldDbError('site_not_found'));
+    if (c.site_id === siteId && c.reporter_id === rep.id)
+      return Promise.resolve({ siteId, changed: false });
+    Object.assign(c, {
+      site_id: siteId,
+      reporter_id: rep.id,
+      org_id: rep.org_id,
+      site_day_id: this.siteDayOf(siteId),
+    });
+    this.callAudit(c, 'call.site_picked', { site_id: siteId, reporter_id: rep.id });
+    return Promise.resolve({ siteId, changed: true });
+  }
+  voiceCallFallback(callId: string, reason: string, at: number) {
+    const c = this.callRows.find((x) => x.id === callId);
+    if (!c) return Promise.reject(new FieldDbError('call_not_found'));
+    if (c.ended_at) return Promise.reject(new FieldDbError('call_ended'));
+    if (c.fallback) return Promise.resolve({ marked: false });
+    c.fallback = { reason, at };
+    this.callAudit(c, 'call.fallback_started', { reason, at });
+    return Promise.resolve({ marked: true });
+  }
+  voiceCallRecording(callId: string, path: string) {
+    const c = this.callRows.find((x) => x.id === callId);
+    if (!c) return Promise.reject(new FieldDbError('call_not_found'));
+    if (path !== `${c.org_id}/${c.id}.ogg`)
+      return Promise.reject(new FieldDbError('invalid_request'));
+    if (c.recording_path !== path) {
+      c.recording_path = path;
+      this.callAudit(c, 'call.recording_requested', { path });
+    }
+    return Promise.resolve();
+  }
+  voiceCallEnd(input: {
+    callId: string;
+    outcome: CallOutcome;
+    dialogLog: Json;
+    metrics: Json;
+  }): Promise<VoiceCallEndResult> {
+    const c = this.callRows.find((x) => x.id === input.callId);
+    if (!c) return Promise.reject(new FieldDbError('call_not_found'));
+    if (c.ended_at) return Promise.resolve({ ended: false, jobId: null });
+    Object.assign(c, {
+      outcome: input.outcome,
+      dialog_log: input.dialogLog,
+      metrics: input.metrics,
+      ended_at: this.iso(),
+      status: ['queued', 'ringing', 'in_progress'].includes(c.status) ? 'completed' : c.status,
+    });
+    let jobId: number | null = null;
+    if (c.reporter_id) {
+      const key = `post_call:${c.id}`;
+      const existing = this.jobs.find((j) => j.dedupe_key === key);
+      if (existing) jobId = existing.id;
+      else {
+        jobId = this.jobs.length + 1;
+        this.jobs.push({
+          id: jobId,
+          type: 'post_call_reconcile',
+          payload: { callId: c.id },
+          dedupe_key: key,
+          status: 'queued',
+        });
+      }
+    }
+    this.callAudit(c, 'call.ended', { outcome: input.outcome, job_id: jobId });
+    return Promise.resolve({ ended: true, jobId });
+  }
+  /** `voice_tool_requests`: `${callId}|${key}` → the claim and its kept answer. */
+  toolRequests = new Map<string, { tool: string; status: number | null; response: Json | null }>();
+  claimToolRequest(callId: string, key: string, tool: string) {
+    const k = `${callId}|${key}`;
+    const row = this.toolRequests.get(k);
+    if (row) return Promise.resolve({ claimed: false as const, ...row });
+    this.toolRequests.set(k, { tool, status: null, response: null });
+    return Promise.resolve({ claimed: true as const });
+  }
+  finishToolRequest(callId: string, key: string, status: number, response: Json) {
+    const row = this.toolRequests.get(`${callId}|${key}`);
+    if (row) Object.assign(row, { status, response });
+    return Promise.resolve();
+  }
+  releaseToolRequest(callId: string, key: string) {
+    const k = `${callId}|${key}`;
+    if (this.toolRequests.get(k)?.status === null) this.toolRequests.delete(k);
+    return Promise.resolve();
+  }
+  listCompanies(orgIds: string[]) {
+    return Promise.resolve(this.companies.filter((c) => orgIds.includes(c.org_id)));
+  }
+  listGlossary(orgIds: string[], siteIds: string[], reporterIds: string[]) {
+    return Promise.resolve(
+      this.glossary
+        .filter(
+          (g) =>
+            (g.org_id === null || orgIds.includes(g.org_id)) &&
+            (g.scope_site_id === null || siteIds.includes(g.scope_site_id)) &&
+            (g.scope_reporter_id === null || reporterIds.includes(g.scope_reporter_id)),
+        )
+        .sort((a, b) => b.times_heard - a.times_heard),
+    );
   }
 
   audit(entry: AuditEntry) {

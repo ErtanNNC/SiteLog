@@ -18,6 +18,7 @@ worker and the web panel use.
 | `api-evidence-pack`        | Supabase JWT, admin/pm/ops                        | Request an EOT evidence pack; fetch a 7-day signed download URL                               |
 | `api-billing`              | Supabase JWT, admin                               | Stripe checkout / portal / quantity sync / pause & resume site / invoices / status            |
 | `field-api`                | link code + `sl_dev_*` device cookie (no JWT)     | The field app's only backend (W1-07, spec §6.5, Appendix B): link, device, consent, uploads   |
+| `field-api` `/voice/*`     | bearer `VOICE_AGENT_TOOL_SECRET` + `X-Call-Token` | W3-03: the voice agent's routes, server to server: call start, `get_context`, tools           |
 | `sms-webhook`              | `X-Twilio-Signature`; `/demo-reply`: JWT, admin   | Twilio inbound texts (§9.5 keywords, F13) and delivery status; the Demo phone's typed replies |
 
 Every function but `field-api` is `Deno.serve(withHandler(...))`: CORS preflight for the panel origin
@@ -79,6 +80,12 @@ supabase secrets set ILETIMERKEZI_API_KEY=... ILETIMERKEZI_API_HASH=...
 # web push (W2-14): field-api serves the public key to the field app; the private key and the
 # subject are the worker's only (never a functions secret). Unset: no Notifications toggle.
 supabase secrets set VAPID_PUBLIC_KEY=B...
+# voice agent (W3-03): field-api's /voice/* routes take VOICE_AGENT_TOOL_SECRET as the agent's
+# bearer (the agent gets the same value); VOICE_CALL_TOKEN_SECRET signs the per-call tokens and is
+# field-api's only (never the agent's, so it cannot mint the token of another call). Unset: the
+# voice routes answer 500 "not configured", the field app's routes are unaffected.
+supabase secrets set VOICE_AGENT_TOOL_SECRET=$(openssl rand -base64 32) \
+  VOICE_CALL_TOKEN_SECRET=$(openssl rand -base64 32)
 ```
 
 Local development reads the same names from `supabase/functions/.env` (`supabase functions serve
@@ -300,6 +307,25 @@ Notes:
   `org_members` row up front so the membership exists on first sign-in. For an email that already
   has an account no invite can be sent; the membership is added and the user signs in with their
   usual magic link (`emailSent: false` in the response).
+- **field-api `/voice/*`** (W3-03, `voice.ts`; spec §6.5, §9.4, Appendix B "field-api voice
+  routes"). Server to server: every route needs `Authorization: Bearer VOICE_AGENT_TOOL_SECRET`
+  (constant-time) and refuses any browser `Origin`; every tool and the recording route also need
+  `X-Call-Token` = `deriveCallToken(VOICE_CALL_TOKEN_SECRET, callId)` for the call the body names
+  (checked before the call is read; nothing stored), 60 calls a minute per call. `calls/start`
+  (`voice_call_start()`) finds a SIP caller by `from` in the real orgs of the pack whose
+  `voice_number` is `to` (§19 Q44; `countries_voice_number_key`), or starts the Talk now / outbound
+  row its `callId` names; it answers the first name, the locale and the token, never a number. The
+  tools act on the call's reporter and sites only (403 `out_of_scope`); an unknown caller's call
+  has `end_call` only (403 `unknown_caller`, F13). Served now: `get_context` (sites with today's
+  status and deadline, companies, `buildKeyterms` with the caller's own terms, §19 Q143; the
+  consents and wording versions), `pick_site` (F14; a number in two orgs moves the call to that
+  site's reporter), `set_preference` (audited as the reporter, `channel: voice`; `noCallsToday`
+  400 `not_available` until W3-17), `load_report` (F10, 14 days, code's totals in the summary),
+  `start_fallback_recording`, `end_call` (one `post_call_reconcile` job, `post_call:<call>`) and
+  `calls/:id/recording` (a signed upload to `calls/{org}/{call}.ogg`, until an hour after the end;
+  needs the `recording` consent). A write with `X-Request-Id` runs once per call
+  (`voice_tool_requests`): the agent's retry gets the kept 2xx answer (`Idempotent-Replay: true`);
+  the model-backed tools (W3-09 … W3-14, `file_report` among them) use the same `once()`.
 - **field-api** (W1-07). `resolve` takes the link code in its body, every other route in the
   `X-Link-Code` header; a new device gets the reporter's cookie `sl_dev_<8 hex>` (one per
   reporter; httpOnly, Secure, SameSite=Lax, Path=/, 180 days) from `device/send-code`, and

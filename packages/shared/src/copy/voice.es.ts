@@ -55,4 +55,8 @@ export const voiceEs: VoiceCatalog = {
   goodbye_callback_requested: 'Está bien, le llamo a las {time}. Adiós.',
   goodbye_fallback_recording: 'Gracias. Le enviaré un enlace para revisar el borrador. Adiós.',
   goodbye_abandoned: 'Adiós.',
+  pref_call_ok: 'Listo, su reporte diario ahora es por llamada.',
+  pref_text_ok: 'Listo, su reporte diario ahora es por enlace en un mensaje.',
+  load_report_summary: 'Reporte del {day}, {report_no}: {workers} en obra, {hours} horas.',
+  load_report_found: 'Encontré el reporte del {day}, {report_no}.',
 };

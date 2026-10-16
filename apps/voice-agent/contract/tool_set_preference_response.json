@@ -7,10 +7,23 @@
     "ok": {
       "type": "boolean",
       "const": true
+    },
+    "confirmation": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
-    "ok"
+    "ok",
+    "confirmation"
   ],
   "additionalProperties": false
 }

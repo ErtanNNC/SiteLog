@@ -6,7 +6,8 @@
     "request": {
       "room": "call-5b1f0c3e-8a2d-4c6e-9f10-2b3c4d5e6f70",
       "transport": "pstn",
-      "from": "+15550142087"
+      "from": "+15550142087",
+      "to": "+15550142290"
     },
     "response": {
       "callId": "5b1f0c3e-8a2d-4c6e-9f10-2b3c4d5e6f70",

@@ -1198,6 +1198,11 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       dialog_log: null,
       metrics: null,
       created_at: input.startedAt,
+      language: input.reporter?.locale ?? null,
+      call_token_issued_at: answered ? input.startedAt : null,
+      attempt: null,
+      site_day_id: null,
+      fallback: null,
     };
   };
 

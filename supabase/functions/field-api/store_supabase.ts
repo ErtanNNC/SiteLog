@@ -17,6 +17,8 @@ import {
   type FiledSaveResult,
   type RateLimitResult,
   type ReportWithDate,
+  type VoiceCallEndResult,
+  type VoiceCallStartResult,
 } from './store.ts';
 
 /**
@@ -100,7 +102,7 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
         admin.from('countries').select('*').eq('code', org.country).single().throwOnError(),
         admin
           .from('org_settings')
-          .select('default_deadline, working_days, default_shift_hours')
+          .select('default_deadline, working_days, default_shift_hours, max_questions_per_report')
           .eq('org_id', orgId)
           .maybeSingle()
           .throwOnError(),
@@ -696,5 +698,164 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
     async audit(entry) {
       await logAudit(admin, entry);
     },
+
+    // ── Calls (W3-03, 20261016000300_voice_calls.sql) ─────────────────────────────────────────
+    async voiceCallStart(input) {
+      return await rpc<VoiceCallStartResult>(
+        admin.rpc('voice_call_start', {
+          p_room: input.room,
+          p_transport: input.transport,
+          p_call_id: input.callId,
+          p_from: input.from,
+          p_to: input.to,
+        }),
+      );
+    },
+
+    async getCall(id) {
+      const { data } = await admin
+        .from('calls')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle()
+        .throwOnError();
+      return data;
+    },
+
+    async callerReporters(callId, country) {
+      const { data: call } = await admin
+        .from('calls')
+        .select('from_e164')
+        .eq('id', callId)
+        .maybeSingle()
+        .throwOnError();
+      if (!call?.from_e164) return [];
+      const { data: reporters } = await admin
+        .from('reporters')
+        .select('*')
+        .eq('phone_e164', call.from_e164)
+        .neq('status', 'disabled')
+        .throwOnError();
+      if (reporters.length === 0) return [];
+      // A real caller never reaches a demo org (§19 Q44, Q116).
+      const { data: orgs } = await admin
+        .from('orgs')
+        .select('id')
+        .in('id', [...new Set(reporters.map((r) => r.org_id))])
+        .eq('country', country)
+        .eq('is_demo', false)
+        .throwOnError();
+      const real = new Set(orgs.map((o) => o.id));
+      return reporters.filter((r) => real.has(r.org_id)).sort(callerOrder);
+    },
+
+    async voiceCallPickSite(callId, siteId, reporterId) {
+      return await rpc<{ siteId: string; changed: boolean }>(
+        admin.rpc('voice_call_pick_site', {
+          p_call_id: callId,
+          p_site_id: siteId,
+          p_reporter_id: reporterId,
+        }),
+      );
+    },
+
+    async voiceCallFallback(callId, reason, at) {
+      return await rpc<{ marked: boolean }>(
+        admin.rpc('voice_call_fallback', { p_call_id: callId, p_reason: reason, p_at: at }),
+      );
+    },
+
+    async voiceCallRecording(callId, path) {
+      await rpc(admin.rpc('voice_call_recording', { p_call_id: callId, p_path: path }));
+    },
+
+    async voiceCallEnd(input) {
+      return await rpc<VoiceCallEndResult>(
+        admin.rpc('voice_call_end', {
+          p_call_id: input.callId,
+          p_outcome: input.outcome,
+          p_dialog_log: input.dialogLog,
+          p_metrics: input.metrics,
+        }),
+      );
+    },
+
+    async claimToolRequest(callId, key, tool) {
+      const { data: inserted } = await admin
+        .from('voice_tool_requests')
+        .upsert(
+          { call_id: callId, request_key: key, tool },
+          { onConflict: 'call_id,request_key', ignoreDuplicates: true },
+        )
+        .select('call_id')
+        .throwOnError();
+      if (inserted && inserted.length > 0) return { claimed: true };
+      const { data: row } = await admin
+        .from('voice_tool_requests')
+        .select('tool, status, response')
+        .eq('call_id', callId)
+        .eq('request_key', key)
+        .single()
+        .throwOnError();
+      return { claimed: false, tool: row.tool, status: row.status, response: row.response };
+    },
+
+    async finishToolRequest(callId, key, status, response) {
+      await admin
+        .from('voice_tool_requests')
+        .update({ status, response })
+        .eq('call_id', callId)
+        .eq('request_key', key)
+        .throwOnError();
+    },
+
+    async releaseToolRequest(callId, key) {
+      await admin
+        .from('voice_tool_requests')
+        .delete()
+        .eq('call_id', callId)
+        .eq('request_key', key)
+        .is('status', null)
+        .throwOnError();
+    },
+
+    async listCompanies(orgIds) {
+      if (orgIds.length === 0) return [];
+      const { data } = await admin
+        .from('companies')
+        .select('org_id, name, aliases')
+        .in('org_id', orgIds)
+        .order('name')
+        .throwOnError();
+      return data;
+    },
+
+    async listGlossary(orgIds, siteIds, reporterIds) {
+      if (orgIds.length === 0) return [];
+      const { data } = await admin
+        .from('glossary_terms')
+        .select(
+          'heard, official, language, kind, status, times_heard, org_id, scope_site_id, scope_reporter_id',
+        )
+        .or(`org_id.is.null,org_id.in.(${orgIds.join(',')})`)
+        .order('times_heard', { ascending: false })
+        .throwOnError();
+      const sites = new Set(siteIds);
+      const reporters = new Set(reporterIds);
+      return data.filter(
+        (g) =>
+          (g.scope_site_id === null || sites.has(g.scope_site_id)) &&
+          (g.scope_reporter_id === null || reporters.has(g.scope_reporter_id)),
+      );
+    },
   };
+}
+
+/** §19 Q44's order: active, then invited, then opted out; newest first. */
+function callerOrder(
+  a: { status: string; created_at: string },
+  b: { status: string; created_at: string },
+): number {
+  const rank = (s: string) => (s === 'active' ? 0 : s === 'invited' ? 1 : 2);
+  return rank(a.status) - rank(b.status) || b.created_at.localeCompare(a.created_at);
 }
