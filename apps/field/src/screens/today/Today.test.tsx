@@ -78,6 +78,20 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
     );
   });
 
+  it('keeps Today when the switcher picks the site already shown (F14, W2-17)', async () => {
+    const routes = fakeRoutes({
+      today: vi.fn().mockResolvedValue(todayResponse({ sites: [SITE, SITE_2] })),
+    });
+    renderApp('/today', { routes, session: demoSession({ sites: [SITE, SITE_2] }) });
+    expect(await screen.findByText('Not sent yet')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Riverside Lofts — Block B, Change site' }));
+    const sheet = screen.getByRole('dialog', { name: 'Which site?' });
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Riverside Lofts — Block B' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Which site?' })).toBeNull());
+    expect(screen.getByText('Not sent yet')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Record today’s report' })).toBeInTheDocument();
+  });
+
   it('writes No work and Weather through day-status after a confirm sheet (F12)', async () => {
     const routes = fakeRoutes({
       today: vi

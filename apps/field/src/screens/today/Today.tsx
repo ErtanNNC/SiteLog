@@ -542,6 +542,9 @@ function TodayLoaded({
         currentId={today.site.id}
         onPick={(id) => {
           setSheet(null);
+          // The site already shown: nothing to load (its siteId would not change, so the load
+          // effect would not run and Today would stay blank).
+          if (id === today.site.id) return;
           loadedSite.current = null;
           setToday(null);
           patch({ siteId: id, date: null });
