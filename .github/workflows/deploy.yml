@@ -335,6 +335,9 @@ jobs:
       # The demo orgs' admins: Kestrel (US, Lena) and Demir Yapı (TR, Elif); each sees only its own
       # org's texts on the Demo phone.
       SIGN_IN_AS: lena@kestrelbuild.example elif@demiryapi.example
+      # Web push (W2-14): field-api hands the browser this public key (`GET push/key`); the pair's
+      # private half stays on the worker. Owner-approved (2026-10-16) as a field-api secret.
+      VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
     steps:
       - name: Check configuration
         run: |
@@ -361,8 +364,16 @@ jobs:
             set_args+=("LINK_SIGNING_SECRET=$secret")
             echo "LINK_SIGNING_SECRET was missing: set to a new random value."
           fi
+          if [ -n "$VAPID_PUBLIC_KEY" ]; then
+            set_args+=("VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY")
+          fi
           supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" "${set_args[@]}" >/dev/null
           echo "FIELD_APP_URL set to $FIELD_APP_URL."
+          if [ -n "$VAPID_PUBLIC_KEY" ]; then
+            echo "VAPID_PUBLIC_KEY set from the preview Environment (web push on)."
+          else
+            echo "No VAPID_PUBLIC_KEY in the preview Environment: web push stays off."
+          fi
       - uses: actions/checkout@v4
         with:
           sparse-checkout: .github/scripts
@@ -493,10 +504,18 @@ jobs:
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
           TRANSCRIBE_PROVIDER: ${{ secrets.DEEPGRAM_API_KEY != '' && 'deepgram' || 'fake' }}
           EXTRACT_PROVIDER: ${{ secrets.ANTHROPIC_API_KEY != '' && 'claude' || 'fake' }}
+          # The models (with the key): the preview Environment's variables CLAUDE_MODEL and
+          # CLAUDE_MODEL_FAST switch them without a code change; these ids are only the defaults.
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5-5' }}
+          CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}
           # Twilio for a real (non-demo) test org whose pack has a sender on the preview project;
           # demo orgs always stay on console, and a pack with no sender here sends nothing real.
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          # Web push (W2-14) for a real (non-demo) org; demo orgs stay on console push.
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           # Open-Meteo's free endpoint (no key; the worker's default is the commercial one).
           WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast
           WORKER_PORT: '8080'

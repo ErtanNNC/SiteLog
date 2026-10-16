@@ -125,9 +125,20 @@ describe('deploy.yml', () => {
       'WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast',
     ])
       expect(job.text).toContain(line);
+    // The models come from the preview Environment's variables, with config defaults in the YAML,
+    // and reach the worker process only (never GITHUB_ENV).
+    const startStep = jobSteps(job.text).find((s) => s.name === 'Start the worker')!.text;
+    expect(startStep).toContain("CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5-5' }}");
+    expect(startStep).toContain(
+      "CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}",
+    );
+    expect(job.text).not.toMatch(/CLAUDE_MODEL[A-Z_]*.*GITHUB_ENV/);
     expect(job.text).toContain('TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}');
     expect(job.text).toContain('TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}');
-    expect(job.text).not.toMatch(/ILETIMERKEZI_|RESEND_|VAPID_/);
+    for (const k of ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT'])
+      expect(job.text).toContain(`${k}: \${{ secrets.${k} }}`);
+    expect(job.text).not.toMatch(/ILETIMERKEZI_|RESEND_/);
+    expect(job.text).not.toMatch(/VAPID_[A-Z_]*.*GITHUB_ENV/);
     expect(job.text).not.toMatch(/TWILIO_[A-Z_]*.*GITHUB_ENV/);
     // The AI keys come only from the preview Environment's secrets, never written to GITHUB_ENV.
     expect(job.text).not.toMatch(/(ANTHROPIC|DEEPGRAM)_API_KEY.*GITHUB_ENV/);
@@ -164,6 +175,11 @@ describe('deploy.yml', () => {
     expect(phone.condition).toContain("github.ref == 'refs/heads/spec-v1.2'");
     expect(phone.text).toContain('environment: preview');
     expect(phone.text).toContain('"$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF"');
+    // The VAPID public key (owner-approved, 2026-10-16) comes from the preview Environment; the
+    // private half never reaches a function secret.
+    expect(phone.text).toContain('VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}');
+    expect(phone.text).toContain('set_args+=("VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY")');
+    expect(phone.text).not.toMatch(/VAPID_PRIVATE_KEY|VAPID_SUBJECT/);
     for (const [id, job] of changing) {
       expect(job.condition, id).toContain(GUARD);
       expect(job.condition, id).toMatch(/needs\.plan\.outputs\.\w+ == 'true'/);
