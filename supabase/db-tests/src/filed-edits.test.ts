@@ -594,3 +594,69 @@ describe('create_report_version with the base version (W2-11 review)', () => {
     expect(grants).toEqual([{ anon: false, auth: true }]);
   });
 });
+
+/**
+ * 20261016000160_office_edit_signer.sql (W2-11 review, §13, §19 Q101): an office edit that reopens
+ * a signed-off report emails its signer (render_pdf `signerId`); an office edit that supersedes a
+ * reporter's version which reopened a sign-off before its "Updated" email was queued carries that
+ * signer on, and once that email was queued it does not.
+ */
+describe('create_report_version emails the signer (W2-11 review)', () => {
+  const officeEdit = (report: string, base: number) =>
+    asUser(db, LENA, async (q) => {
+      const res = await q<{ r: { version: number } }>(
+        `select create_report_version($1, $2, 'Office fix', '[]'::jsonb, $3) as r`,
+        [report, JSON.stringify(crew(daysAgo(9), 9)), base],
+      );
+      return res.rows[0]!.r.version;
+    });
+  const renderPayload = async (report: string, version: number) =>
+    (
+      await svc<{ payload: Record<string, unknown> }>(
+        `select payload from jobs where dedupe_key = $1`,
+        [`render_pdf:${report}:${version}`],
+      )
+    )[0]!.payload;
+
+  it('an office edit of a signed-off report names its signer for the "Updated" email', async () => {
+    const { reportId } = await filed(daysAgo(9), { signedOff: true });
+    expect(await officeEdit(reportId, 1)).toBe(2);
+    expect(await renderPayload(reportId, 2)).toMatchObject({
+      emailRecipients: true,
+      signerId: LENA,
+    });
+    // v2's render queued its email (to the signer); the next edit of the filed report has none.
+    await svc(`select enqueue_job('send_email', $1::jsonb, null, $2)`, [
+      JSON.stringify({ kind: 'report_updated', reportId, version: 2, signerId: LENA }),
+      `email:report_updated:${reportId}:2`,
+    ]);
+    expect(await officeEdit(reportId, 2)).toBe(3);
+    expect(await renderPayload(reportId, 3)).not.toHaveProperty('signerId');
+  });
+
+  it("Q101: the signer of a reporter's version superseded before its email is carried on", async () => {
+    const { reportId } = await filed(daysAgo(10), { signedOff: true });
+    const req = await request(reportId, { text: 'Apex had 7' });
+    await settle(req.id, 'ready', preview(daysAgo(10)));
+    expect((await save(req.id, reportId)).version).toBe(2);
+    expect(await renderPayload(reportId, 2)).toMatchObject({ signerId: LENA });
+    // The office makes v3 before v2's render queued its email: v3's email reaches the signer.
+    expect(await officeEdit(reportId, 2)).toBe(3);
+    expect(await renderPayload(reportId, 3)).toMatchObject({ signerId: LENA });
+  });
+
+  it("Q101: once the superseded version's email was queued, the signer is not carried again", async () => {
+    const { reportId } = await filed(daysAgo(11), { signedOff: true });
+    const req = await request(reportId, { text: 'Apex had 7' });
+    await settle(req.id, 'ready', preview(daysAgo(11)));
+    expect((await save(req.id, reportId)).version).toBe(2);
+    await svc(
+      `select enqueue_job('send_email', jsonb_build_object('kind', 'report_updated', 'reportId', $1::text,
+                                                           'version', 2, 'signerId', $2::text),
+                          null, $3)`,
+      [reportId, LENA, `email:report_updated:${reportId}:2`],
+    );
+    expect(await officeEdit(reportId, 2)).toBe(3);
+    expect(await renderPayload(reportId, 3)).not.toHaveProperty('signerId');
+  });
+});
