@@ -998,6 +998,19 @@ function iso(v: string | Date | null | undefined): string | null {
   return v instanceof Date ? v.toISOString() : v;
 }
 
+/**
+ * A Postgres array literal (`{"a","b"}`) for a bind parameter, cast in the query
+ * (`${pgArray(ids)}::uuid[]`). postgres.js's sql.array() needs the server's array type oids,
+ * which it loads after connecting; a query sent before they arrive (the worker's first timeout
+ * sweep, through the Supabase pooler) went out as `a,b,c` and Postgres refused it as a malformed
+ * array literal. A text literal the server parses needs no type cache.
+ */
+export function pgArray(values: readonly unknown[]): string {
+  return `{${values
+    .map((v) => (v === null ? 'NULL' : `"${String(v).replace(/[\\"]/g, (c) => `\\${c}`)}"`))
+    .join(',')}}`;
+}
+
 export function createDb(sql: Sql): Db {
   const toParam = (col: string, v: unknown): unknown => {
     if (v === null) return null;
@@ -1072,11 +1085,11 @@ export function createDb(sql: Sql): Db {
       if (changedBefore) {
         return sql<
           ConversationRow[]
-        >`select * from conversations where state = any(${sql.array(states)}::convo_state[]) and state_changed_at < ${changedBefore.toISOString()} order by state_changed_at`;
+        >`select * from conversations where state = any(${pgArray(states)}::convo_state[]) and state_changed_at < ${changedBefore.toISOString()} order by state_changed_at`;
       }
       return sql<
         ConversationRow[]
-      >`select * from conversations where state = any(${sql.array(states)}::convo_state[]) order by state_changed_at`;
+      >`select * from conversations where state = any(${pgArray(states)}::convo_state[]) order by state_changed_at`;
     },
 
     // messages ----------------------------------------------------------------------------
@@ -1102,7 +1115,7 @@ export function createDb(sql: Sql): Db {
         return sql<
           MessageRow[]
         >`select * from messages where conversation_id = ${conversationId} and direction = 'in'
-          and created_at between ${from.toISOString()} and ${to.toISOString()} and type = any(${sql.array(types)}::msg_type[]) order by created_at`;
+          and created_at between ${from.toISOString()} and ${to.toISOString()} and type = any(${pgArray(types)}::msg_type[]) order by created_at`;
       }
       return sql<
         MessageRow[]
@@ -1120,7 +1133,7 @@ export function createDb(sql: Sql): Db {
       if (mediaIds.length === 0) return [];
       // Callers pass voice notes in chronological order; keep it (heap/index order is arbitrary
       // and transcription jobs finish out of order), so PDFs and evidence packs stay stable.
-      const ids = sql.array(mediaIds);
+      const ids = pgArray(mediaIds);
       return sql<TranscriptRow[]>`select * from transcripts
         where upload_id = any(${ids}::uuid[]) or message_id = any(${ids}::uuid[])
         order by array_position(${ids}::uuid[], coalesce(upload_id, message_id))`;
@@ -1322,7 +1335,7 @@ export function createDb(sql: Sql): Db {
     async listMemberEmails(orgId, roles) {
       return sql<Array<{ email: string; user_id: string; display_name: string | null }>>`
         select u.email, m.user_id, m.display_name from org_members m join auth.users u on u.id = m.user_id
-        where m.org_id = ${orgId} and m.role = any(${sql.array(roles)}::member_role[]) and u.email is not null order by u.email`;
+        where m.org_id = ${orgId} and m.role = any(${pgArray(roles)}::member_role[]) and u.email is not null order by u.email`;
     },
     async getUserContact(userId) {
       return one(
@@ -1411,7 +1424,7 @@ export function createDb(sql: Sql): Db {
     async findReportsByDate(siteIds, date) {
       if (siteIds.length === 0) return [];
       return sql<ReportRow[]>`select r.* from reports r join site_days sd on sd.id = r.site_day_id
-        where r.site_id = any(${sql.array(siteIds)}::uuid[]) and sd.date = ${date} and r.status in ('filed','signed_off')
+        where r.site_id = any(${pgArray(siteIds)}::uuid[]) and sd.date = ${date} and r.status in ('filed','signed_off')
         order by r.filed_at desc`;
     },
     async listReportsForSitePeriod(siteId, start, end) {
@@ -1604,7 +1617,7 @@ export function createDb(sql: Sql): Db {
         join sites s on s.id = sr.site_id and s.org_id = r.org_id and s.status = 'active'
         left join site_days sd on sd.site_id = s.id
                               and sd.date = (now() at time zone s.timezone)::date
-        where sr.reporter_id = any(${reporterIds}::uuid[])
+        where sr.reporter_id = any(${pgArray(reporterIds)}::uuid[])
         order by sr.is_primary desc, s.name, s.id`;
     },
     async smsKeywordDrafts(reporterIds) {
@@ -1612,7 +1625,7 @@ export function createDb(sql: Sql): Db {
       return sql<SmsKeywordDraft[]>`
         select r.id as report_id, r.reporter_id, r.org_id, s.name as site_name
         from reports r join sites s on s.id = r.site_id
-        where r.reporter_id = any(${reporterIds}::uuid[]) and r.status = 'awaiting_confirmation'
+        where r.reporter_id = any(${pgArray(reporterIds)}::uuid[]) and r.status = 'awaiting_confirmation'
           and r.channel = 'web'
         order by r.created_at desc`;
     },
@@ -1627,7 +1640,7 @@ export function createDb(sql: Sql): Db {
         join sites s on s.id = sr.site_id and s.org_id = rp.org_id
         join site_days sd on sd.site_id = s.id and sd.date = ${date}::date
         join reports r on r.site_day_id = sd.id and r.status <> 'void'
-        where sr.reporter_id = any(${reporterIds}::uuid[])
+        where sr.reporter_id = any(${pgArray(reporterIds)}::uuid[])
         order by r.id, sr.is_primary desc, sr.reporter_id`;
     },
     async getCorrectionByMessage(messageId) {
@@ -1664,7 +1677,7 @@ export function createDb(sql: Sql): Db {
     async setReportStatus(id, to, from) {
       const rows = await sql<Array<{ id: string }>>`
         update reports set status = ${to}::report_status
-        where id = ${id} and status = any(${sql.array([...from])}::report_status[])
+        where id = ${id} and status = any(${pgArray([...from])}::report_status[])
         returning id`;
       return rows.length > 0;
     },
@@ -1688,7 +1701,7 @@ export function createDb(sql: Sql): Db {
       if (keys.length === 0) return [];
       return sql<Array<Pick<JobRow, 'id' | 'status' | 'dedupe_key'>>>`
         select id, status, dedupe_key from jobs
-        where dedupe_key = any(${sql.array([...keys])}::text[])
+        where dedupe_key = any(${pgArray([...keys])}::text[])
         order by id`;
     },
 
@@ -1809,7 +1822,7 @@ export function createDb(sql: Sql): Db {
       return sql<OpenWebQuestion[]>`
         select r.id as report_id, q.id as question_id, r.reporter_id
         from reports r join questions q on q.report_id = r.id
-        where r.reporter_id = any(${reporterIds}::uuid[]) and r.status = 'awaiting_answer'
+        where r.reporter_id = any(${pgArray(reporterIds)}::uuid[]) and r.status = 'awaiting_answer'
           and q.channel = 'web' and q.answered_at is null
         order by q.created_at desc, q.id`;
     },
