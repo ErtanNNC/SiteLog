@@ -12,6 +12,7 @@ import {
 } from '@sitelog/shared';
 import { answerRefusal, parseAnswerWithModel } from '../ai/answer';
 import type { Json, SettleVoiceAnswerResult } from '../db';
+import { skippedForConsent } from '../pipeline/consent';
 import { transcribe } from './transcribe_upload';
 import { PermanentJobError, type JobHandler } from './types';
 
@@ -82,6 +83,20 @@ export const parseAnswerJob: JobHandler<'parse_answer'> = async (ctx, payload) =
   };
   if (question.answered_at || report.status !== 'awaiting_answer') {
     await settle('unclear', { reason: 'stale' });
+    return;
+  }
+
+  // F15, spec §19 Q95: the clip goes to no provider once the reporter turned consent off; the
+  // try is settled unclear, so the recorder stops listening.
+  if (
+    await skippedForConsent(ctx, {
+      jobType: 'parse_answer',
+      reporterId: report.reporter_id,
+      report,
+      detail: { question_id: question.id, upload_id: upload.id },
+    })
+  ) {
+    await settle('unclear', { reason: 'consent_revoked' });
     return;
   }
 

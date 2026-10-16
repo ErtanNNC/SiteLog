@@ -923,3 +923,160 @@ describe('W2-07: an answer timeout that fires while more audio is processed is a
     expect(filed.map((f) => f.diff.trigger)).toEqual(['timeout']);
   });
 });
+
+describe('F15 / spec §19 Q95: a processing consent turned off stops the work in flight', () => {
+  const revoke = (type: 'recording' | 'data_processing') =>
+    database.q(`select field_revoke_consent($1, $2::consent_type, null)`, [MARCO, type]);
+  const consentAgain = (type: 'recording' | 'data_processing') =>
+    database.q(
+      `insert into consents (reporter_id, type, method, text_version)
+       values ($1, $2::consent_type, 'web_checkbox', 'field.consent.v1')`,
+      [MARCO, type],
+    );
+  const skipped = (reportId: string) =>
+    database.q<{ diff: { job_type: string; reason: string; consents: string[] } }>(
+      `select diff from audit_log where entity_id = $1 and action = 'report.processing_skipped'
+        order by id`,
+      [reportId],
+    );
+  const transcriptOf = (uploadId: string) =>
+    database.q(`select 1 from transcripts where upload_id = $1`, [uploadId]);
+
+  it('a queued transcription sends no audio once recording consent is off', async () => {
+    clock.set(new Date('2026-10-19T17:00:00Z'));
+    const up = await world.uploadVoiceNote({
+      reporterId: MARCO,
+      siteId: RIVERSIDE,
+      fixtureId: 'es-en-riverside-2026-10-09',
+      date: '2026-10-19',
+    });
+    await revoke('recording');
+    try {
+      expect(await run(up.jobId!)).toEqual({ ok: true });
+      expect(await transcriptOf(up.uploadId)).toEqual([]);
+      expect(await queued(up.reportId, 'extract_report')).toEqual([]);
+      expect((await skipped(up.reportId)).map((a) => a.diff)).toEqual([
+        expect.objectContaining({
+          job_type: 'transcribe_upload',
+          reason: 'consent_revoked',
+          consents: ['recording'],
+        }),
+      ]);
+      const [r] = await database.q<{ status: string; review_reasons: string[] }>(
+        `select status::text, review_reasons from reports where id = $1`,
+        [up.reportId],
+      );
+      expect(r).toEqual({ status: 'processing', review_reasons: ['consent_revoked'] });
+    } finally {
+      await consentAgain('recording');
+    }
+  });
+
+  it('a queued extraction sends nothing to Claude once data processing consent is off', async () => {
+    clock.set(new Date('2026-10-20T17:00:00Z'));
+    const up = await world.uploadVoiceNote({
+      reporterId: MARCO,
+      siteId: RIVERSIDE,
+      fixtureId: 'es-en-riverside-2026-10-09',
+      date: '2026-10-20',
+    });
+    expect(await run(up.jobId!)).toEqual({ ok: true });
+    const calls = world.claude.calls.length;
+    await revoke('data_processing');
+    try {
+      await runQueued(up.reportId, 'extract_report');
+      expect(world.claude.calls.length).toBe(calls);
+      expect(await queued(up.reportId, 'decide_next')).toEqual([]);
+      expect((await skipped(up.reportId)).map((a) => a.diff.job_type)).toEqual(['extract_report']);
+    } finally {
+      await consentAgain('data_processing');
+    }
+  });
+
+  it('the confirmation timeout files no draft of a reporter who turned consent off', async () => {
+    clock.set(new Date('2026-10-21T17:00:00Z'));
+    const up = await world.uploadVoiceNote({
+      reporterId: MARCO,
+      siteId: RIVERSIDE,
+      fixtureId: 'es-en-riverside-2026-10-09',
+      date: '2026-10-21',
+    });
+    const reportId = up.reportId;
+    // A photo, so the one question is the Delta headcount; answered, the draft is shown.
+    const [u] = await database.q<{ id: string }>(
+      `insert into uploads (reporter_id, site_id, kind, storage_path, mime, recorded_at)
+       values ($1, $2, 'photo', 'pending', 'image/jpeg', now()) returning id`,
+      [MARCO, RIVERSIDE],
+    );
+    await database.q(`update uploads set storage_path = $2 where id = $1`, [
+      u!.id,
+      `${ORG}/${RIVERSIDE}/2026-10-21/${u!.id}.jpg`,
+    ]);
+    await database.q(`select field_complete_upload($1, $2, 1)`, [u!.id, MARCO]);
+    expect(await run(up.jobId!)).toEqual({ ok: true });
+    await runQueued(reportId, 'extract_report');
+    await runQueued(reportId, 'decide_next');
+    const [q] = await database.q<{
+      id: string;
+      field: 'manpower.workers';
+      target: object;
+      options: QuestionOption[];
+    }>(`select id, field, target, options from questions where report_id = $1`, [reportId]);
+    const { raw, data } = await draftOf(reportId);
+    const option = q!.options.find((o) => o.id === 'o2')!;
+    const value = optionAnswer(q!.field, option)!;
+    const applied = applyAnswer(data, { field: q!.field, target: q!.target }, value, {
+      defaultShiftHours: 8,
+      source: { type: 'answer', questionId: q!.id },
+    });
+    await database.q(`select field_answer_question($1, $2, $3, $4, $5, $6, $7, null)`, [
+      reportId,
+      q!.id,
+      MARCO,
+      JSON.stringify(raw),
+      JSON.stringify(applied.data),
+      JSON.stringify({ optionId: 'o2', text: option.label, parsed: value, via: 'web' }),
+      JSON.stringify({ type: 'answer', questionId: q!.id }),
+    ]);
+    await runQueued(reportId, 'decide_next');
+    expect(await status(reportId)).toBe('awaiting_confirmation');
+
+    await revoke('data_processing');
+    try {
+      clock.advance(2 * 3600_000);
+      const [file] = await database.q<{ id: number }>(
+        `select id from jobs where dedupe_key like $1`,
+        [`decide:${reportId}:file-timeout:%`],
+      );
+      expect(await run(file!.id)).toEqual({ ok: true });
+      expect(await status(reportId)).toBe('awaiting_confirmation');
+      expect(
+        await database.q(
+          `select 1 from jobs where type = 'file_report' and payload ->> 'reportId' = $1`,
+          [reportId],
+        ),
+      ).toEqual([]);
+      const [audit] = await database.q<{ diff: Record<string, unknown> }>(
+        `select diff from audit_log where entity_id = $1 and action = 'report.timeout_filing_skipped'`,
+        [reportId],
+      );
+      expect(audit!.diff).toMatchObject({
+        reason: 'consent_revoked',
+        consents: ['data_processing'],
+      });
+      const notices = await database.q<{ target_path: string }>(
+        `select target_path from notifications where kind = 'reporter_consent_revoked'
+           and target_path = $1`,
+        [`/reports/${reportId}`],
+      );
+      expect(notices).toHaveLength(1);
+      const [r] = await database.q<{ needs_review: boolean; review_reasons: string[] }>(
+        `select needs_review, review_reasons from reports where id = $1`,
+        [reportId],
+      );
+      expect(r).toEqual({ needs_review: true, review_reasons: ['consent_revoked'] });
+    } finally {
+      await consentAgain('data_processing');
+    }
+  });
+});

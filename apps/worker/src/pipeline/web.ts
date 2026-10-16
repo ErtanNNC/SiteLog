@@ -32,6 +32,11 @@ import {
   confirmationSchedule,
   type TimeoutPolicy,
 } from './timeouts';
+import {
+  CONSENT_REVIEW_REASON,
+  revokedProcessingConsents,
+  type ProcessingConsent,
+} from './consent';
 import { fileReport } from './file';
 import { selectNextQuestion, validateDraft } from './validate';
 
@@ -739,6 +744,13 @@ async function fileTimeoutWeb(
     });
     return;
   }
+  // F15, spec §19 Q95: a reporter who turned a processing consent off is not filed for by the
+  // clock; the report stays unfiled (flagged) and the office is told.
+  const revoked = await revokedProcessingConsents(ctx, report.reporter_id);
+  if (revoked.length > 0) {
+    await leaveUnfiledForConsent(ctx, report, revoked, timeout.trigger);
+    return;
+  }
   const result = await fileReport(ctx, report.id, {
     trigger: timeout.trigger,
     version: timeout.version,
@@ -747,6 +759,49 @@ async function fileTimeoutWeb(
   ctx.log.info(result.stale ? 'confirmation timeout: stale' : 'report filed by timeout', {
     report_id: report.id,
     trigger: timeout.trigger,
+  });
+}
+
+/**
+ * The confirmation timeout found the reporter's processing consent off: no filing; the report is
+ * flagged `consent_revoked`, audited `report.timeout_filing_skipped`, and the office gets the
+ * `reporter_consent_revoked` notice again, pointing at the report.
+ */
+async function leaveUnfiledForConsent(
+  ctx: Ctx,
+  report: ReportRow,
+  revoked: readonly ProcessingConsent[],
+  trigger: string,
+): Promise<void> {
+  if (!report.review_reasons.includes(CONSENT_REVIEW_REASON)) {
+    await ctx.db.updateReport(report.id, {
+      needs_review: true,
+      review_reasons: [...report.review_reasons, CONSENT_REVIEW_REASON],
+    });
+  }
+  await ctx.db.logAudit({
+    org_id: report.org_id,
+    actor_type: 'system',
+    action: 'report.timeout_filing_skipped',
+    entity: 'report',
+    entity_id: report.id,
+    diff: { reason: 'consent_revoked', consents: [...revoked], trigger },
+  });
+  const reporter = report.reporter_id ? await ctx.db.getReporter(report.reporter_id) : null;
+  const name = reporter?.name ?? 'A reporter';
+  const type = revoked[0]!;
+  await ctx.db.notifyOrg(
+    report.org_id,
+    'reporter_consent_revoked',
+    `${name} turned off consent to the ${type === 'recording' ? 'recording' : 'processing'} of their reports`,
+    'Their draft report was not filed automatically. Review it, or contact them if that is unexpected.',
+    `/reports/${report.id}`,
+    null,
+    { key: 'reporter_consent_revoked', params: { name, type } },
+  );
+  ctx.log.info('confirmation timeout: not filed, the reporter turned consent off', {
+    report_id: report.id,
+    consents: revoked,
   });
 }
 

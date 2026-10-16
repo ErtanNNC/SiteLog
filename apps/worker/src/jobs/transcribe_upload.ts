@@ -16,6 +16,7 @@ import {
   type AudioAnalysis,
 } from '../media/ffmpeg';
 import { mimeExtension } from '../storage';
+import { skippedForConsent } from '../pipeline/consent';
 import { PermanentJobError, type JobHandler } from './types';
 
 /**
@@ -58,6 +59,16 @@ export const transcribeUploadJob: JobHandler<'transcribe_upload'> = async (ctx, 
 
   if (!(await ctx.db.getUploadTranscript(upload.id))) {
     if (upload.purged_at) throw new PermanentJobError(`upload ${upload.id} was purged`);
+    // F15, spec §19 Q95: no audio to the transcriber once the reporter turned consent off.
+    if (
+      await skippedForConsent(ctx, {
+        jobType: 'transcribe_upload',
+        reporterId: upload.reporter_id,
+        report: await ctx.db.getReport(upload.report_id),
+        detail: { upload_id: upload.id },
+      })
+    )
+      return;
     await transcribe(ctx, upload, log);
   }
   await extractWhenAllTranscribed(ctx, upload.report_id, log);
@@ -161,7 +172,18 @@ async function captionThenAttach(
   let caption: string | null = null;
   try {
     let transcript = await ctx.db.getUploadTranscript(upload.id);
-    if (!transcript && !upload.purged_at) {
+    if (
+      !transcript &&
+      !upload.purged_at &&
+      // F15, spec §19 Q95: the photos go on without the caption's words.
+      !(await skippedForConsent(ctx, {
+        jobType: 'transcribe_upload',
+        reporterId: upload.reporter_id,
+        report: await ctx.db.getReport(reportId),
+        detail: { upload_id: upload.id, caption: true },
+        flag: false,
+      }))
+    ) {
       await transcribe(ctx, upload, log);
       transcript = await ctx.db.getUploadTranscript(upload.id);
     }

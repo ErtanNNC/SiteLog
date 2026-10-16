@@ -6,6 +6,7 @@ import {
   composeReportExtractionInput,
   siteDayWeatherOf,
 } from '../pipeline/compose';
+import { skippedForConsent } from '../pipeline/consent';
 import { currentData, isPlainPhoto, storeDraft } from '../pipeline/draft';
 import { learnTerms } from '../pipeline/glossary';
 import { currentDraftV2, isWebReport, reapplyAnswers, storeWebDraft } from '../pipeline/web';
@@ -28,6 +29,15 @@ export const extractReport: JobHandler<'extract_report'> = async (ctx, payload, 
     });
     return;
   }
+  // F15, spec §19 Q95: nothing of the report goes to Claude once the reporter turned consent off.
+  if (
+    await skippedForConsent(ctx, {
+      jobType: 'extract_report',
+      reporterId: report.reporter_id,
+      report,
+    })
+  )
+    return;
   if (isWebReport(report)) return extractWebReport(ctx, report, job);
   const site = await ctx.db.siteContext(report.site_id);
   if (!site) throw new PermanentJobError(`site ${report.site_id} not found`);

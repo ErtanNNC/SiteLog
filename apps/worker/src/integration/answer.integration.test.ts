@@ -334,4 +334,38 @@ describe('W2-09: Other… answered by voice, parsed by parse_answer, applied in 
       clock.set(saved);
     }
   });
+
+  it('F15 / §19 Q95: a clip spoken before recording consent is turned off goes to no provider', async () => {
+    const date = '2026-10-15';
+    const { reportId, questionId } = await heroQuestion(date);
+    const clip = await speak(reportId, questionId, 'answer-en-delta-five-all-day', date);
+    const calls = world.claude.calls.length;
+    await database.q(`select field_revoke_consent($1, 'recording', null)`, [MARCO]);
+    try {
+      expect(await run(clip.jobId)).toEqual({ ok: true });
+      expect(world.claude.calls.length).toBe(calls);
+      expect(
+        await database.q(`select 1 from transcripts where upload_id = $1`, [clip.uploadId]),
+      ).toEqual([]);
+      const [q] = await database.q<{
+        answered_at: string | null;
+        voice_answers: Array<Record<string, unknown>>;
+      }>(`select answered_at, voice_answers from questions where id = $1`, [questionId]);
+      expect(q!.answered_at).toBeNull();
+      expect(q!.voice_answers).toMatchObject([
+        { uploadId: clip.uploadId, status: 'unclear', reason: 'consent_revoked' },
+      ]);
+      const [audit] = await database.q<{ diff: Record<string, unknown> }>(
+        `select diff from audit_log where entity_id = $1 and action = 'report.processing_skipped'`,
+        [reportId],
+      );
+      expect(audit!.diff).toMatchObject({ job_type: 'parse_answer', reason: 'consent_revoked' });
+    } finally {
+      await database.q(
+        `insert into consents (reporter_id, type, method, text_version)
+         values ($1, 'recording', 'web_checkbox', 'field.consent.v1')`,
+        [MARCO],
+      );
+    }
+  });
 });
