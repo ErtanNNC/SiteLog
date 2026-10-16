@@ -137,6 +137,13 @@ export const CountryRowSchema = z
         path: ['message_channels'],
         message: 'a pack without links in SMS needs whatsapp or push',
       });
+    // Push is never a person's only channel (spec §9.3, W2-14): another channel follows it.
+    if (row.message_channels.at(-1) === 'push')
+      ctx.addIssue({
+        code: 'custom',
+        path: ['message_channels'],
+        message: 'push cannot end message_channels: another channel must follow it',
+      });
     if (
       row.sms_sender_id !== null &&
       (row.sms_sender_id !== row.sms_sender_id.trim() ||

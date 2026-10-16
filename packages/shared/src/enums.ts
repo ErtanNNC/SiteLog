@@ -31,7 +31,7 @@ export type ReporterStatus = (typeof REPORTER_STATUSES)[number];
 export const CONTACT_PREFS = ['link', 'call'] as const;
 export type ContactPref = (typeof CONTACT_PREFS)[number];
 
-export const CONSENT_TYPES = ['sms', 'auto_call', 'recording', 'data_processing'] as const;
+export const CONSENT_TYPES = ['sms', 'auto_call', 'recording', 'data_processing', 'push'] as const;
 export type ConsentType = (typeof CONSENT_TYPES)[number];
 
 export const COMPANY_STATUSES = ['confirmed', 'unconfirmed'] as const;

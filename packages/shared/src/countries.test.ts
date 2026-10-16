@@ -61,7 +61,8 @@ describe('country pack rows (spec §4.6)', () => {
       expect(row.voice_number, row.code).toBeNull();
       expect(row.legal_keys, row.code).toEqual({});
       // Week 1 builds SMS only (spec §19 Q19 decides the real orders).
-      expect(row.message_channels, row.code).toEqual(['sms']);
+      // W2-14 (§19 Q107): push first, reached only by a reporter who turned notifications on.
+      expect(row.message_channels, row.code).toEqual(['push', 'sms']);
     }
   });
 
@@ -81,7 +82,7 @@ describe('country pack rows (spec §4.6)', () => {
       paper: 'a4',
       currency: 'TRY',
       defaultTimezone: 'Europe/Istanbul',
-      messageChannels: ['sms'],
+      messageChannels: ['push', 'sms'],
       smsProvider: 'iletimerkezi',
       whatsappProvider: 'twilio',
       smsSenderType: 'alphanumeric',
@@ -198,7 +199,12 @@ describe('country pack rows (spec §4.6)', () => {
       { sms_sender_type: 'alphanumeric', two_way_sms: false, sms_sender_id: 'SITELOG ' },
     ],
     ['a two-way alphanumeric sender', { sms_sender_type: 'alphanumeric', two_way_sms: true }],
-    ['no links in SMS and no other channel', { sms_links_allowed: false }],
+    [
+      'no links in SMS and no other channel',
+      { sms_links_allowed: false, message_channels: ['sms'] },
+    ],
+    ['an order that ends with push (§9.3, W2-14)', { message_channels: ['sms', 'push'] }],
+    ['push alone', { message_channels: ['push'] }],
     ['an unknown legal key', { legal_keys: { terms: 'US.terms.v1' } }],
     ['an empty legal key', { legal_keys: { consent: '' } }],
   ])('rejects %s', (_label, patch) => {

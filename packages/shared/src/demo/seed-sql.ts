@@ -196,6 +196,8 @@ export const PRUNE: ReadonlyArray<readonly [table: string, where: (k: PruneScope
   ['uploads', (k) => `site_id in ${k.S} or reporter_id in ${k.R} or report_id in ${k.P}`],
   // F4's test recordings (W2-13): outside any report, by the org and its reporters.
   ['test_clips', (k) => `org_id = ${k.o} or reporter_id in ${k.R}`],
+  // Web push subscriptions (W2-14): by the org and its reporters.
+  ['push_subscriptions', (k) => `org_id = ${k.o} or reporter_id in ${k.R}`],
   [
     'calls',
     (k) => `org_id = ${k.o} or reporter_id in ${k.R} or site_id in ${k.S} or report_id in ${k.P}`,

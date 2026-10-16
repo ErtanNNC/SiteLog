@@ -112,6 +112,8 @@ async function addOtherOrg(): Promise<void> {
       values ('${other(26)}', '${O}', '${REPORTER}', 'test/other/clip.webm', 'audio/webm');
     insert into draft_corrections (id, org_id, report_id, reporter_id, via, text)
       values ('${other(27)}', '${O}', '${RPT}', '${REPORTER}', 'text', 'Other fix');
+    insert into push_subscriptions (id, org_id, reporter_id, device_id, endpoint, p256dh, auth)
+      values ('${other(28)}', '${O}', '${REPORTER}', '${other(24)}', 'https://push.test/other', 'k', 'a');
     insert into report_costs (report_id, org_id, kind, filed_at, cost_cents)
       values ('${RPT}', '${O}', 'daily', '2026-10-09T23:00:00Z', 12);
     insert into audit_log (org_id, actor_type, action) values ('${O}', 'system', 'other.thing');

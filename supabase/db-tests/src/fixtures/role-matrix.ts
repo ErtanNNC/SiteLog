@@ -293,6 +293,14 @@ export const TABLES: Record<string, TableCase> = {
     set: 'method = method',
     orgless: true,
   },
+  push_subscriptions: {
+    why: 'Web push subscriptions (W2-14, §19 Q27): field-api and the worker with the service role only; no client policy, no grant.',
+    allow: serviceOnly,
+    where: (o) => `reporter_id = '${o.reporter}'`,
+    insert: (o) =>
+      `insert into push_subscriptions (org_id, reporter_id, endpoint, p256dh, auth) values ('${o.org}', '${o.reporter}', 'https://push.test/' || gen_random_uuid(), 'k', 'a')`,
+    set: 'user_agent = user_agent',
+  },
   test_clips: {
     why: 'F4 test recording (W2-13): field-api and the worker with the service role only; no client policy, no grant.',
     allow: serviceOnly,
@@ -604,6 +612,23 @@ export const RPCS: Record<
     why: 'F10 (W2-11): the 14-day check of the field RPCs; service role only.',
     allow: NONE,
     call: () => `select field_report_changeable(current_date, 'UTC') as v`,
+  },
+  // W2-14 (20261016000180_push_subscriptions.sql): web push.
+  field_push_subscribe: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) =>
+      `select field_push_subscribe('${o.reporter}', null, 'https://push.test/x', 'k', 'a', null, 'v1', '{}'::jsonb) as v`,
+  },
+  field_push_unsubscribe: {
+    why: '§6.5: field-api only (service role).',
+    allow: NONE,
+    call: (o) => `select field_push_unsubscribe('${o.reporter}', null, 'unsubscribed') as v`,
+  },
+  push_subscription_gone: {
+    why: 'W2-14: the worker (service role) after a 404/410 from a push service.',
+    allow: NONE,
+    call: () => `select push_subscription_gone(gen_random_uuid(), 410) as v`,
   },
   // W2-13 (20261016000070_test_clips.sql): F4's test recording.
   field_test_clip_create: {

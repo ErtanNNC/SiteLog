@@ -76,6 +76,8 @@ function orgIds(prefix: 'aaaaaaaa' | 'bbbbbbbb') {
     testClip: id(39),
     /** A fix of the report's draft (W2-10, 20261016000100). */
     correction: id(40),
+    /** A web push subscription (W2-14, 20261016000180). */
+    pushSubscription: id(41),
     users: { admin: user(1), pm: user(2), ops: user(3), accounts: user(4) } as Record<Role, string>,
   };
 }
@@ -261,6 +263,16 @@ export async function seedTwoOrgs(db: PGlite): Promise<void> {
       await db.exec(`
         insert into test_clips (id, org_id, reporter_id, storage_path, mime) values
           ('${o.testClip}', '${o.org}', '${o.reporter}', 'test/${o.org}/${o.testClip}.webm', 'audio/webm');
+      `);
+  }
+  const pushSubs = await db.query<{ v: boolean }>(
+    `select to_regclass('public.push_subscriptions') is not null as v`,
+  );
+  if (pushSubs.rows[0]!.v) {
+    for (const o of [ORG.A, ORG.B])
+      await db.exec(`
+        insert into push_subscriptions (id, org_id, reporter_id, endpoint, p256dh, auth) values
+          ('${o.pushSubscription}', '${o.org}', '${o.reporter}', 'https://push.test/${o.pushSubscription}', 'k', 'a');
       `);
   }
   const corrections = await db.query<{ v: boolean }>(

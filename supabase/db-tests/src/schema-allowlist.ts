@@ -315,14 +315,13 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'step23-messages',
     reason:
-      'messages is extended in place (D15): v1.0 Meta WhatsApp rows have no body, phone number or message channel and start as received; office photo rows have no phone number. msg_status keeps read for WhatsApp receipts (D49). After the Meta integration is retired (step 22), legacy rows move to an archive and messages gets the v1.2 NOT NULLs (body, phone_e164, channel) and default.',
+      'messages is extended in place (D15): v1.0 Meta WhatsApp rows have no body, phone number or message channel and start as received; office photo rows have no phone number. msg_status keeps read for WhatsApp receipts (D49). After the Meta integration is retired (step 22), legacy rows move to an archive and messages gets the v1.2 NOT NULLs (body, channel) and default; phone_e164 stays nullable for push rows (spec §19 Q27, checked since W2-14).',
     closes: 'step 23',
     decision: 'D15',
     diffs: [
       "column default: messages.status (spec 'queued'::msg_status; repo 'received'::msg_status)",
       'column nullability: messages.body (spec not null; repo null)',
       'column nullability: messages.channel (spec not null; repo null)',
-      'column nullability: messages.phone_e164 (spec not null; repo null)',
     ],
   },
   {

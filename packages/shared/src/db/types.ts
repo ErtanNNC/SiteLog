@@ -273,8 +273,9 @@ export type MessageRow = {
   created_at: string;
   /** SMS columns (§6.3 messages, D15): null on WhatsApp and office rows. */
   reporter_id: string | null;
+  /** null only on `channel 'push'` rows (spec §19 Q27, 20261016000180) and v1.0 rows. */
   phone_e164: string | null;
-  /** twilio | iletimerkezi | console */
+  /** twilio | iletimerkezi | console | webpush */
   provider: string | null;
   provider_message_id: string | null;
   /** §9.2 copy key, e.g. `daily_link`. */
@@ -694,6 +695,24 @@ export type CallRow = {
  * or without a reporter, so the next invite of the number on the pack starts opted out and the
  * Notifier sends it nothing. Service role only.
  */
+/**
+ * Web push (20261016000180, W2-14, spec §19 Q27): a reporter's browser subscription, written by
+ * field-api; service role only. Revoked, never deleted: `revoked_reason` says why.
+ */
+export type PushSubscriptionRow = {
+  id: string;
+  org_id: string;
+  reporter_id: string;
+  device_id: string | null;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  user_agent: string | null;
+  created_at: string;
+  revoked_at: string | null;
+  revoked_reason: 'unsubscribed' | 'signed_out' | 'replaced' | 'gone' | null;
+};
+
 /** F4's test recording (20261016000070, W2-13): service role only; outside any report. */
 export type TestClipRow = {
   id: string;
@@ -1274,6 +1293,10 @@ export type Database = {
       >;
       rate_limits: Table<RateLimitRow, 'count'>;
       sms_opt_outs: Table<SmsOptOutRow, 'opted_out_at'>;
+      push_subscriptions: Table<
+        PushSubscriptionRow,
+        'id' | 'device_id' | 'user_agent' | 'created_at' | 'revoked_at' | 'revoked_reason'
+      >;
       test_clips: Table<
         TestClipRow,
         | 'id'
@@ -1567,6 +1590,26 @@ export type Database = {
         Returns: Json;
       };
       field_test_clip_read: { Args: { p_id: string; p_reporter_id: string }; Returns: Json };
+      /** W2-14 (20261016000180): web push subscriptions, field-api only. */
+      field_push_subscribe: {
+        Args: {
+          p_reporter_id: string;
+          p_device_id: string | null;
+          p_endpoint: string;
+          p_p256dh: string;
+          p_auth: string;
+          p_user_agent: string | null;
+          p_text_version: string;
+          p_evidence: Json;
+        };
+        Returns: Json;
+      };
+      field_push_unsubscribe: {
+        Args: { p_reporter_id: string; p_device_id: string | null; p_reason: string };
+        Returns: Json;
+      };
+      /** W2-14: the worker revokes a subscription the push service answered 404 or 410 for. */
+      push_subscription_gone: { Args: { p_id: string; p_status: number }; Returns: boolean };
       /** W2-09: the worker settles a spoken answer (`applied` with the draft, or `unclear`). */
       field_settle_voice_answer: {
         Args: {
