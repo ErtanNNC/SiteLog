@@ -54,6 +54,10 @@ const AUDITED: Record<string, string> = {
     'notify:edit_applied:<report>:v<version> (render_pdf of a version the reporter made on the web, W2-11, F10): the notify job and its Notifier key; a version is made once, so a retried render never texts twice',
   'jobKeys.smsKeyword':
     "sms_keyword:<message> (processInboundSms, the worker store and sms-webhook's Demo phone, W2-12): the answer to one inbound text's report keyword (OK, NO WORK, WEATHER, EDIT); a text is stored once per provider id, so a re-run of its handling finds the key taken",
+  'jobKeys.whatsappAnswer':
+    "whatsapp_answer:<message> (processInboundSms, the worker store and sms-webhook's Demo phone, W2-16): one inbound WhatsApp text read as an answer; a message is stored once per provider id, so a re-run of its handling finds the key taken",
+  'whatsapp_answer:{}:unclear':
+    'the Notifier key of the question link a whatsapp_answer job sends back when code could not apply the answer (W2-16, spec §19 Q113): per inbound message, so a retried job never sends it twice',
   'jobKeys.smsEditPreview':
     'sms_keyword:<message>:<correction> (apply_correction of an SMS EDIT, W2-12): the text of the settled preview; a correction settles once, and a retried apply_correction finds the key taken',
   'jobKeys.filed':

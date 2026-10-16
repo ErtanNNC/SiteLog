@@ -48,9 +48,10 @@ export type CompanyStatus = (typeof COMPANY_STATUSES)[number];
 /**
  * How a report or answer reached SiteLog (§6.2 `field_channel`), plus `office` for reports typed
  * in the panel (GAP D13, a recorded deviation). null = v1.0 Meta WhatsApp rows (D13, amended by
- * D49).
+ * D49). `whatsapp` since W2-16 (§19 Q26): keywords, answers and unknown contacts over Twilio
+ * WhatsApp.
  */
-export const FIELD_CHANNELS = ['web', 'voice', 'sms', 'office'] as const;
+export const FIELD_CHANNELS = ['web', 'voice', 'sms', 'office', 'whatsapp'] as const;
 export type FieldChannel = (typeof FIELD_CHANNELS)[number];
 
 /**
@@ -253,6 +254,11 @@ export const JOB_TYPES = [
    * them and makes the preview; nothing changes the draft until the reporter saves it.
    */
   'apply_correction',
+  /**
+   * §19 Q26 (W2-16): a WhatsApp text that may answer the reporter's open web question:
+   * `parse_answer` (the model) reads it, code applies the value with `field_channel 'whatsapp'`.
+   */
+  'whatsapp_answer',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

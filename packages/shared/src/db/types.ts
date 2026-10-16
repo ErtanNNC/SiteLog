@@ -1507,6 +1507,10 @@ export type Database = {
           p_answer_source: Json;
           /** "Add <company>": {name, manpowerIndex}; the unconfirmed company is created in SQL. */
           p_new_company?: Json | null;
+          /** W2-16 (20261016000240): `web` (default) or `whatsapp` (the worker's whatsapp_answer). */
+          p_channel?: FieldChannel;
+          /** W2-16: the inbound WhatsApp message the answer came in. */
+          p_message_id?: string | null;
         };
         Returns: Json;
       };
@@ -1720,6 +1724,26 @@ export type Database = {
           p_payload: Json;
         };
         Returns: { id: string; duplicate: boolean; handled: boolean; jobId: number | null };
+      };
+      /** W2-16 (20261016000240): receive_sms_inbound() for any inbound channel (sms, whatsapp). */
+      receive_inbound_message: {
+        Args: {
+          p_channel: MessageChannel;
+          p_id: string;
+          p_org_id: string | null;
+          p_reporter_id: string | null;
+          p_phone_e164: string;
+          p_provider: string;
+          p_provider_message_id: string;
+          p_body: string;
+          p_payload: Json;
+        };
+        Returns: { id: string; duplicate: boolean; handled: boolean; jobId: number | null };
+      };
+      /** W2-16 (20261016000240): STOP / START on WhatsApp, the whatsapp consent (service role). */
+      inbound_whatsapp_consent: {
+        Args: { p_reporter_id: string; p_grant: boolean; p_message_id: string | null };
+        Returns: Json;
       };
       claim_jobs: { Args: { p_worker: string; p_limit: number }; Returns: JobRow[] };
       complete_job: { Args: { p_job_id: number }; Returns: undefined };

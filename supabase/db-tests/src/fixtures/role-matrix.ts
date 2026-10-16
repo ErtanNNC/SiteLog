@@ -532,6 +532,18 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select field_grant_consent('${o.reporter}', 'sms', 'v1', null, null) as v`,
   },
+  // W2-16 (20261016000240_whatsapp_inbound.sql): inbound WhatsApp through sms-webhook.
+  receive_inbound_message: {
+    why: 'sms-webhook only (service role): a Twilio text or WhatsApp message, its audit and its job.',
+    allow: NONE,
+    call: () =>
+      `select receive_inbound_message('whatsapp', gen_random_uuid(), null, null, '+15550100000', 'twilio', 'SMrm-' || gen_random_uuid(), 'x', '{}'::jsonb) as v`,
+  },
+  inbound_whatsapp_consent: {
+    why: 'sms-webhook and the worker only (service role): STOP / START on WhatsApp (§19 Q40, Q112).',
+    allow: NONE,
+    call: (o) => `select inbound_whatsapp_consent('${o.reporter}', false, null) as v`,
+  },
   // F16 (20261016000020_device_verify_locked.sql): the device check's lock tells the office.
   field_device_verify_locked: {
     why: "§6.5: field-api only (service role); the lock is the server's rate limit, never a client.",

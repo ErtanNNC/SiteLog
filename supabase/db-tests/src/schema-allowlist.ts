@@ -211,10 +211,12 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'd13-office',
     reason:
-      'field_channel has office for reports typed in the panel (typed reports are a recorded office fallback, D30). It has no whatsapp: WhatsApp is a message channel (message_channel, D48), and an inbound label waits for spec §19 Q26.',
+      'field_channel has office for reports typed in the panel (typed reports are a recorded office fallback, D30). Its whatsapp label (W2-16, spec §19 Q26: answers and keywords over WhatsApp) is in the spec and comes after office in the repo, labels being append-only.',
     closes: 'kept',
     decision: 'D13',
-    diffs: ['enum labels: field_channel (spec web,voice,sms; repo web,voice,sms,office)'],
+    diffs: [
+      'enum labels: field_channel (spec web,voice,sms,whatsapp; repo web,voice,sms,office,whatsapp)',
+    ],
   },
   {
     id: 'd13-channel-nullable',

@@ -25,14 +25,15 @@ describe('Postgres enum mirrors (§6.2)', () => {
     expect(REPORT_STATUSES.slice(0, 3)).toEqual(['collecting', 'processing', 'awaiting_answer']);
     expect(REPORTER_STATUSES.slice(-2)).toEqual(['opted_out', 'disabled']);
     expect(MSG_STATUSES.at(-1)).toBe('undeliverable');
-    // §6.2 web/voice/sms, plus `office` for typed reports (D13).
-    expect(FIELD_CHANNELS).toEqual(['web', 'voice', 'sms', 'office']);
+    // §6.2 web/voice/sms, plus `office` for typed reports (D13) and `whatsapp` (W2-16, §19 Q26).
+    expect(FIELD_CHANNELS).toEqual(['web', 'voice', 'sms', 'office', 'whatsapp']);
   });
 
   it('parses only known labels', () => {
     expect(FieldChannelSchema.parse('office')).toBe('office');
-    // WhatsApp is a message channel (D48), not a way a report reaches SiteLog (§19 Q26).
-    expect(FieldChannelSchema.safeParse('whatsapp').success).toBe(false);
+    // W2-16 (§19 Q26): answers and keywords reach SiteLog over WhatsApp too.
+    expect(FieldChannelSchema.safeParse('whatsapp').success).toBe(true);
+    expect(FieldChannelSchema.safeParse('push').success).toBe(false);
     expect(SourceKindSchema.safeParse('voice_note').success).toBe(true);
     expect(SourceKindSchema.safeParse('audio').success).toBe(false);
   });

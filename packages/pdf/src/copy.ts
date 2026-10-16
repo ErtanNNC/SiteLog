@@ -369,6 +369,7 @@ const en: PdfCopy = {
         sms: 'by text message',
         office: 'in SiteLog',
         whatsapp_legacy: 'on WhatsApp',
+        whatsapp: 'on WhatsApp',
       };
       out.push(`Confirmed by the site manager ${how[confirm.via]} at ${confirm.confirmedAt}.`);
     } else if (confirm.filedAt) {
@@ -393,6 +394,7 @@ const en: PdfCopy = {
         sms: 'Confirmed by text message',
         office: 'Confirmed in SiteLog',
         whatsapp_legacy: 'Confirmed on WhatsApp',
+        whatsapp: 'Confirmed on WhatsApp',
       };
       return `${how[via]} · ${at}`;
     },
@@ -579,6 +581,7 @@ const tr: PdfCopy = {
         sms: 'raporu kısa mesajla onayladı',
         office: 'raporu SiteLog’da onayladı',
         whatsapp_legacy: 'raporu WhatsApp’ta onayladı',
+        whatsapp: 'raporu WhatsApp’ta onayladı',
       };
       out.push(`Şantiye şefi ${how[confirm.via]} (saat ${confirm.confirmedAt}).`);
     } else if (confirm.filedAt) {
@@ -603,6 +606,7 @@ const tr: PdfCopy = {
         sms: 'Kısa mesajla onaylandı',
         office: 'SiteLog’da onaylandı',
         whatsapp_legacy: 'WhatsApp’ta onaylandı',
+        whatsapp: 'WhatsApp’ta onaylandı',
       };
       return `${how[via]} · ${at}`;
     },

@@ -51,6 +51,11 @@ export const JobPayloadSchemas = {
    * (apply_correction), so the reply is the preview with its confirm link, or why there is none.
    */
   sms_keyword: z.object({ messageId: uuid, correctionId: uuid.optional() }),
+  /**
+   * §19 Q26 (W2-16): an inbound WhatsApp text from a reporter that is no keyword: if one of their
+   * reports awaits the answer to a web question, `parse_answer` reads it and code applies it.
+   */
+  whatsapp_answer: z.object({ messageId: uuid }),
   transcribe_audio: z.object({
     messageId: uuid,
     reportId: uuid.optional(),
@@ -410,6 +415,16 @@ export const jobKeys = {
    * `processInboundSms`): per text, and a text is received once (`messages` per provider id).
    */
   smsKeyword: (messageId: string) => `sms_keyword:${messageId}`,
+  /**
+   * W2-16: the `whatsapp_answer` job of an inbound WhatsApp text (`processInboundSms`): per message,
+   * and a message is received once (`messages` per provider id).
+   */
+  whatsappAnswer: (messageId: string) => `whatsapp_answer:${messageId}`,
+  /**
+   * W2-16 (spec §19 Q85): the Notifier key of the `whatsapp_use_link` reply to a voice note or
+   * photo sent on WhatsApp, per reporter and day (the pack's default time zone): one reply a day.
+   */
+  whatsappUseLink: (reporterId: string, day: string) => `whatsapp_use_link:${reporterId}:${day}`,
   /**
    * W2-12: the `sms_keyword` job that answers an SMS EDIT once its preview settled
    * (apply_correction): per text and correction, and a correction settles once.

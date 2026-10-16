@@ -417,7 +417,7 @@ describe('field_answer_question (reports/:id/answer)', () => {
       `select has_function_privilege('anon', f, 'execute') as anon,
               has_function_privilege('authenticated', f, 'execute') as authenticated,
               has_function_privilege('service_role', f, 'execute') as service
-       from (select 'field_answer_question(uuid,uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb)'::text as f) x`,
+       from (select 'field_answer_question(uuid,uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,field_channel,uuid)'::text as f) x`,
     );
     expect(row).toEqual({ anon: false, authenticated: false, service: true });
     const res = await probeAs(
