@@ -131,7 +131,7 @@ describe('deploy.yml', () => {
     const startStep = jobSteps(job.text).find((s) => s.name === 'Start the worker')!.text;
     expect(startStep).toContain("CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5-5' }}");
     expect(startStep).toContain(
-      "CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}",
+      "CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-sonnet-5-5' }}",
     );
     expect(job.text).not.toMatch(/CLAUDE_MODEL[A-Z_]*.*GITHUB_ENV/);
     expect(job.text).toContain('TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}');
