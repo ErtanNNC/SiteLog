@@ -318,3 +318,58 @@ describe('uploadItem: a spoken answer (F7 Other…, W2-09)', () => {
     expect(out).toMatchObject({ ok: false, permanent: false });
   });
 });
+
+describe('uploadItem: a correction clip (F8 Fix by voice, W2-10 review)', () => {
+  const fixTo = { reportId: 'r1' };
+
+  it('goes in the draft’s report, then correction {uploadId} after complete, from the queue', async () => {
+    const h = harness();
+    const correction = vi.fn(async () => ({
+      id: 'c1',
+      status: 'listening' as const,
+      via: 'voice' as const,
+      changes: null,
+      clarification: null,
+      reason: null,
+      version: null,
+      draftRev: null,
+      afterFiling: false,
+    }));
+    const out = await uploadItem(
+      item({ fixTo }),
+      { routes: { ...h.routes, correction }, put: h.put },
+      h.persist,
+    );
+    expect(out.ok).toBe(true);
+    expect(h.routes.createUpload.mock.calls[0]![1]).toMatchObject({ fixTo });
+    expect(correction).toHaveBeenCalledWith('K7Q2MX', 'r1', { uploadId: 'u1' });
+  });
+
+  it('a fix already pending or a report moved on is done; no signal fails the try', async () => {
+    for (const code of ['correction_pending', 'wrong_state'] as const) {
+      const h = harness();
+      const settled = vi.fn(async () => {
+        throw apiError(409, code);
+      });
+      expect(
+        (
+          await uploadItem(
+            item({ fixTo }),
+            { routes: { ...h.routes, correction: settled }, put: h.put },
+            h.persist,
+          )
+        ).ok,
+      ).toBe(true);
+    }
+    const h = harness();
+    const offline = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    const out = await uploadItem(
+      item({ fixTo, uploadId: 'u1', signedUrl: created.signedUrl, putDone: true }),
+      { routes: { ...h.routes, correction: offline }, put: h.put },
+      h.persist,
+    );
+    expect(out).toMatchObject({ ok: false, permanent: false });
+  });
+});

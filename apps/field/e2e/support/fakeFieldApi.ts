@@ -253,7 +253,13 @@ export interface FakeFieldApi {
      * (its preview after one listening poll) and the crew changes saved, oldest first.
      */
     draftRev: number;
-    fix: { id: string; via: 'voice' | 'text'; polls: number; applied: boolean } | null;
+    fix: {
+      id: string;
+      via: 'voice' | 'text';
+      polls: number;
+      applied: boolean;
+      uploadId?: string;
+    } | null;
     fixes: { index: number; workers: number | null; hoursPerWorker: number | null }[];
     /** Settings (F15, W2-02): what `preferences` answers; consent/revoke and PATCH change it. */
     prefs: PreferencesResponse;
@@ -271,7 +277,13 @@ export interface FakeFieldApi {
   /** W2-11 (F10): the changes of a filed report of `options.reports`, by correction id. */
   changes: Record<
     string,
-    { reportId: string; via: 'voice' | 'text'; polls: number; version: number | null }
+    {
+      reportId: string;
+      via: 'voice' | 'text';
+      polls: number;
+      version: number | null;
+      uploadId?: string;
+    }
   >;
   consent: unknown;
   completed: string[];
@@ -690,12 +702,18 @@ export async function installFakeFieldApi(
               error: report.change?.locked ? 'report_locked' : 'wrong_state',
             });
           const b = body as { uploadId?: string; text?: string };
+          // The same clip again (the queue sent it, then the screen): the same change.
+          const seen = Object.entries(api.changes).find(
+            ([, c]) => b.uploadId !== undefined && c.uploadId === b.uploadId,
+          );
+          if (seen) return json(route, 202, view(seen[0]));
           const id = `f${api.calls.length}-0000-4000-8000-000000000000`;
           api.changes[id] = {
             reportId,
             via: b.uploadId ? 'voice' : 'text',
             polls: 0,
             version: null,
+            ...(b.uploadId ? { uploadId: b.uploadId } : {}),
           };
           return json(route, 202, view(id));
         }
@@ -978,6 +996,8 @@ export async function installFakeFieldApi(
         const b = body as { uploadId?: string; text?: string };
         if (b.uploadId && !fixClips.has(b.uploadId))
           return json(route, 404, { error: 'not_found' });
+        // The same clip again (the queue sent it, then the screen): the same fix.
+        if (b.uploadId && st.fix?.uploadId === b.uploadId) return json(route, 202, fixView(st));
         if (st.fix && !st.fix.applied && st.fix.polls < 1)
           return json(route, 409, { error: 'correction_pending' });
         st.fix = {
@@ -985,6 +1005,7 @@ export async function installFakeFieldApi(
           via: b.uploadId ? 'voice' : 'text',
           polls: 0,
           applied: false,
+          ...(b.uploadId ? { uploadId: b.uploadId } : {}),
         };
         return json(route, 202, fixView(st));
       }

@@ -33,9 +33,12 @@ export type Persist = (patch: Partial<QueuedUpload>) => Promise<void>;
 export type SendableUpload = QueuedUpload & { blob: Blob };
 
 export interface UploaderDeps {
-  /** `answer` hands a spoken answer's clip to field-api after it completes (W2-09). */
+  /**
+   * `answer` hands a spoken answer's clip to field-api after it completes (W2-09), `correction`
+   * a correction clip (W2-10), so neither is lost when the page goes before the upload finishes.
+   */
   routes: Pick<FieldRoutes, 'createUpload' | 'completeUpload'> &
-    Partial<Pick<FieldRoutes, 'answer'>>;
+    Partial<Pick<FieldRoutes, 'answer' | 'correction'>>;
   /** PUTs the file to the signed URL; the default is `fetch`. */
   put?: (url: string, blob: Blob, mime: string, signal: AbortSignal) => Promise<{ status: number }>;
 }
@@ -174,6 +177,39 @@ async function answerWith(
   }
 }
 
+/**
+ * W2-10 review: a completed correction clip goes to `reports/:id/correction {uploadId}` (field-api
+ * queues apply_correction) from the queue itself, so a fix said just before a reload is still
+ * listened to; the screen's own call after `waitFor` gets the same fix back (field-api answers a
+ * repeat of the clip with it). A fix already pending, a report that moved on (filed, locked) or
+ * gone leave nothing to do: the item is done. Anything else fails the try for a retry.
+ */
+const CORRECTION_SETTLED: ReadonlySet<FieldApiErrorCode> = new Set<FieldApiErrorCode>([
+  'correction_pending',
+  'wrong_state',
+  'report_locked',
+  'site_inactive',
+  'not_found',
+]);
+
+async function correctWith(
+  item: QueuedUpload,
+  deps: UploaderDeps,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  if (!deps.routes.correction || !item.fixTo || !item.uploadId) return;
+  const { reportId } = item.fixTo;
+  try {
+    await withDeadline(API_DEADLINE_MS, signal, () =>
+      deps.routes.correction!(item.code, reportId, { uploadId: item.uploadId! }),
+    );
+  } catch (err) {
+    const code = apiErrorCode(err);
+    if (code && CORRECTION_SETTLED.has(code)) return;
+    throw err;
+  }
+}
+
 export async function uploadItem(
   item: SendableUpload,
   deps: UploaderDeps,
@@ -246,6 +282,7 @@ export async function uploadItem(
       );
       await save({ putDone: true });
       if (current.answerTo) await answerWith(current, deps, signal);
+      if (current.fixTo) await correctWith(current, deps, signal);
       return { ok: true, result };
     } catch (err) {
       const code = apiErrorCode(err);
