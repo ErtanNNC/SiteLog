@@ -46,12 +46,22 @@ function linkError(err: unknown): LinkErrorKey | 'expired' | 'failed' {
  * `/r/:code` (F4): resolves the link, then the device check on a new phone, the welcome and
  * consent on the first open (with its optional test recording, W2-13), then Today. The resolved link becomes the app's session, so Today
  * and the installed app's `/` work without the SMS afterwards. `/r/:code/report/:id` (the `filed`
- * text's link, W1-15) does the same and then opens that report instead of Today.
+ * text's link, W1-15) does the same and then opens that report instead of Today;
+ * `/r/:code/history[/:id]` (an SMS EDIT's confirm link and its fallback, W2-12) opens Past reports
+ * or that report's view, where the texted change waits as a preview with **Save change**.
  */
-export function LinkScreen() {
+export function LinkScreen({ to = 'report' }: { to?: 'report' | 'history' } = {}) {
   const { code: raw = '', id } = useParams();
   const code = normalizeLinkCode(raw);
-  const target = id ? `/report/${encodeURIComponent(id)}` : '/today';
+  // W2-12: an SMS EDIT's links open Past reports (`/r/:code/history[/:id]`).
+  const target =
+    to === 'history'
+      ? id
+        ? `/history/${encodeURIComponent(id)}`
+        : '/history'
+      : id
+        ? `/report/${encodeURIComponent(id)}`
+        : '/today';
   const api = useApi();
   const navigate = useNavigate();
   const { session, update } = useSession();

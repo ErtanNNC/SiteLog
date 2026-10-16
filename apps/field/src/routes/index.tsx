@@ -17,6 +17,8 @@ export function FieldRoutes() {
       <Route path="/" element={<Navigate to={HOME_PATH} replace />} />
       <Route path="/r/:code" element={<LinkScreen />} />
       <Route path="/r/:code/report/:id" element={<LinkScreen />} />
+      <Route path="/r/:code/history" element={<LinkScreen to="history" />} />
+      <Route path="/r/:code/history/:id" element={<LinkScreen to="history" />} />
       <Route path="/today" element={<Today />} />
       <Route path="/record" element={<Record />} />
       <Route path="/report/:id" element={<ReportScreen />} />

@@ -151,6 +151,61 @@ describe('Past reports (F10, F14, §9.3; W2-03)', () => {
     expect(screen.getByText(copy.history.late)).toBeInTheDocument();
   });
 
+  it('W2-12: an SMS EDIT’s confirm link (/r/:code/history/:id) opens the report with the texted change waiting', async () => {
+    const preview = {
+      id: 'c9',
+      status: 'ready' as const,
+      via: 'text' as const,
+      changes: [
+        {
+          kind: 'crew' as const,
+          company: 'Apex Concrete',
+          change: 'changed' as const,
+          workers: [6, 7] as [number, number],
+          hoursPerWorker: [8, 8] as [number, number],
+          totalHours: [48, 56] as [number, number],
+        },
+      ],
+      clarification: null,
+      reason: null,
+      version: 1,
+      draftRev: 1,
+      afterFiling: true,
+    };
+    const routes = fakeRoutes({
+      resolve: vi.fn().mockResolvedValue({
+        reporter: {
+          name: 'Marco Ruiz',
+          firstName: 'Marco',
+          locale: 'en-US',
+          contactPref: 'link',
+          status: 'active',
+        },
+        org: { name: 'Kestrel Build Group' },
+        link: { kind: 'personal', siteId: null, reportDate: null, expiresAt: null },
+        needsDeviceCheck: false,
+        needsConsent: false,
+        sites: [SITE],
+        country: demoSession().country,
+      }),
+      report: vi.fn().mockResolvedValue(
+        reportView({
+          id: 'r2',
+          status: 'filed',
+          currentVersion: 1,
+          data: heroData(),
+          change: { canChange: true, locked: false },
+          correction: preview,
+        }),
+      ),
+    });
+    renderApp('/r/k7q2mx/history/r2', { session: null, routes });
+    expect(await screen.findByText('Apex Concrete 6 → 7 workers, 48 → 56 h')).toBeInTheDocument();
+    expect(routes.resolve).toHaveBeenCalledWith('K7Q2MX');
+    expect(routes.report).toHaveBeenCalledWith('K7Q2MX', 'r2', expect.any(AbortSignal));
+    expect(screen.getByRole('button', { name: 'Save change' })).toBeInTheDocument();
+  });
+
   it('W2-11 (F10): Change something, typed → preview from code’s numbers → Save change → version 2', async () => {
     const filed = reportView({
       id: 'r2',
