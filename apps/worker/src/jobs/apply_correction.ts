@@ -1,5 +1,6 @@
 import {
   applyCorrectionOps,
+  jobKeys,
   readReportData,
   type DraftCorrectionRow,
   type Source,
@@ -33,6 +34,11 @@ import { PermanentJobError, type JobHandler } from './types';
  * W2-11 (F10 *Change something*): a correction `after_filing` is made the same way on the filed (or
  * signed-off) report's current version; Save change makes version n+1 from its preview
  * (field_save_filed_correction()), never this job. A report no longer filed makes it `stale`.
+ *
+ * W2-12 (F10 by SMS): a correction with `message_id` came from an SMS EDIT
+ * (sms_request_filed_correction()); its typed words cite `reporter_edit` via 'sms', and once it is
+ * settled the `sms_keyword` job texts the preview back with its confirm link
+ * (`jobKeys.smsEditPreview`).
  */
 export const applyCorrectionJob: JobHandler<'apply_correction'> = async (ctx, payload) => {
   const [report, correction] = await Promise.all([
@@ -51,6 +57,14 @@ export const applyCorrectionJob: JobHandler<'apply_correction'> = async (ctx, pa
     detail: Record<string, unknown>,
   ): Promise<SettleCorrectionResult> => {
     const res = await ctx.db.settleCorrection(correction.id, outcome, detail);
+    if (correction.message_id) {
+      // W2-12: an SMS EDIT; its text gets the preview (or why there is none) once settled.
+      await ctx.db.enqueueJob(
+        'sms_keyword',
+        { messageId: correction.message_id, correctionId: correction.id },
+        { dedupeKey: jobKeys.smsEditPreview(correction.message_id, correction.id) },
+      );
+    }
     log.info('correction settled', {
       outcome,
       reason: detail.reason ?? null,
@@ -172,7 +186,8 @@ async function correctionWords(
         type: 'reporter_edit',
         reporterId: correction.reporter_id,
         at: new Date(correction.created_at).toISOString(),
-        via: 'web',
+        // §19 Q80: the channel the reporter typed it on (W2-12: an SMS EDIT).
+        via: correction.message_id ? 'sms' : 'web',
       },
     };
   }

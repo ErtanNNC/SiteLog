@@ -15,6 +15,7 @@ import { sendMessage, sendTemplate } from './send_template';
 import { sendWelcome } from './send_welcome';
 import { deleteTestClipJob, transcribeTestClipJob } from './test_clip';
 import { smsInbound } from './sms_inbound';
+import { smsKeyword } from './sms_keyword';
 import { transcribeAudioJob } from './transcribe_audio';
 import { transcribeUploadJob } from './transcribe_upload';
 import type { JobRegistry } from './types';
@@ -24,6 +25,7 @@ import { weeklyDigest } from './weekly_digest';
 export const registry: JobRegistry = {
   inbound_message: inboundMessage,
   sms_inbound: smsInbound,
+  sms_keyword: smsKeyword,
   transcribe_audio: transcribeAudioJob,
   transcribe_upload: transcribeUploadJob,
   extract_report: extractReport,

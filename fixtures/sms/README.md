@@ -14,3 +14,12 @@ For a local stack, set `SMS_WEBHOOK_URL=http://127.0.0.1:54321/functions/v1/sms-
 `TWILIO_AUTH_TOKEN` in `supabase/functions/.env` (the URL Twilio signs must be the one the function
 checks), and the US pack's sender with `pnpm countries:set -- --code US --sms-sender +18885550142`
 (on a local database only): `sms-webhook` finds the pack by `To`.
+
+The report keywords (W2-12, two-way packs only): `inbound-ok.json` (OK: the open draft's link,
+spec §19 Q82), `inbound-no-work.json` and `inbound-weather.json` (the day sheet's link of each
+site whose day is still open), and `inbound-edit.json` ("EDIT FRI Apex was 7 not 6": a preview of
+Friday's filed report and a link to confirm it). `sms-webhook` stores them and the worker answers
+them (`sms_inbound`, then `sms_keyword`), so `pnpm dev:worker` must run on the same stack; an EDIT
+needs `ANTHROPIC_API_KEY` or `EXTRACT_PROVIDER=fake` (the recorded `fixtures/utterances` and
+`fixtures/corrections` outputs). A text from a real sender reaches real orgs only: Marco is a demo
+reporter, so on the seed use the panel's Demo phone, or pass `--phone` of a reporter of a real org.

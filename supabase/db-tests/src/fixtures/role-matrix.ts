@@ -593,6 +593,13 @@ export const RPCS: Record<
     call: (o) =>
       `select field_save_filed_correction(gen_random_uuid(), '${o.report}', '${o.reporter}', 'x') as v`,
   },
+  // W2-12 (20261016000140_sms_keywords.sql): an SMS EDIT's change of a filed report.
+  sms_request_filed_correction: {
+    why: "§6.5: the worker's sms_keyword job only (service role); a reporter's SMS EDIT is answered by the worker.",
+    allow: NONE,
+    call: (o) =>
+      `select sms_request_filed_correction('${o.report}', '${o.reporter}', 'Apex had 7', gen_random_uuid()) as v`,
+  },
   field_report_changeable: {
     why: 'F10 (W2-11): the 14-day check of the field RPCs; service role only.',
     allow: NONE,

@@ -172,6 +172,14 @@ export class FakeSmsStore implements SmsWebhookStore {
     return Promise.resolve(job?.payload ?? null);
   }
 
+  /** W2-12: the `sms_keyword` jobs queued, by message id (one per text: its job key). */
+  keywordJobs: string[] = [];
+
+  enqueueSmsKeyword(messageId: string) {
+    if (!this.keywordJobs.includes(messageId)) this.keywordJobs.push(messageId);
+    return Promise.resolve();
+  }
+
   enqueueNotify(payload: JobPayloads['notify'], dedupeKey: string) {
     const existing = this.notifyJobs.find((j) => j.dedupeKey === dedupeKey);
     if (existing) return Promise.resolve(existing.id);

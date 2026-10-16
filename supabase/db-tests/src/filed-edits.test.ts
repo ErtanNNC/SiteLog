@@ -417,3 +417,125 @@ describe('service role only', () => {
     }
   });
 });
+
+/**
+ * 20261016000140_sms_keywords.sql (W2-12, F10 by SMS): sms_request_filed_correction() is the typed
+ * path for an SMS EDIT, with the text's id on the correction and channel 'sms' in the audit; a
+ * retry of the same text answers its correction; the 14 days, one at a time and Q99 as on the web;
+ * the sms_keyword job runs under the phone's lock with the messages' priority.
+ */
+describe('sms_request_filed_correction (W2-12)', () => {
+  const inbound = async (body: string, phone = '+15550149301') => {
+    const id = ID(seq++);
+    await svc(
+      `insert into messages (id, org_id, reporter_id, channel, phone_e164, direction, provider,
+                             provider_message_id, body, status)
+       values ($1, $2, $3, 'sms', $4, 'in', 'twilio', $5, $6, 'received')`,
+      [id, ORG, MARCO, phone, `SM${id.replace(/-/g, '')}`, body],
+    );
+    return id;
+  };
+  const smsRequest = (report: string, text: string, message: string, reporter = MARCO) =>
+    svc<{ r: { id: string; status: string; jobId: number | null; repeat?: boolean } }>(
+      `select sms_request_filed_correction($1, $2, $3, $4) as r`,
+      [report, reporter, text, message],
+    ).then((rows) => rows[0]!.r);
+
+  it('a typed change from the text, apply_correction queued, audited with channel sms; a retry answers it', async () => {
+    const { reportId } = await filed(daysAgo(6));
+    const message = await inbound('EDIT FRI Apex was 7 not 6');
+    const req = await smsRequest(reportId, 'Apex was 7 not 6', message);
+    expect(req.status).toBe('listening');
+    const [row] = await svc<Record<string, unknown>>(
+      `select via, text, after_filing, message_id, reporter_id from draft_corrections where id = $1`,
+      [req.id],
+    );
+    expect(row).toEqual({
+      via: 'text',
+      text: 'Apex was 7 not 6',
+      after_filing: true,
+      message_id: message,
+      reporter_id: MARCO,
+    });
+    const [job] = await svc<{ dedupe_key: string; lock_key: string }>(
+      `select dedupe_key, job_lock_key(type, payload) as lock_key from jobs where id = $1`,
+      [req.jobId],
+    );
+    expect(job).toEqual({ dedupe_key: `correction:${req.id}`, lock_key: `report:${reportId}` });
+    const [audit] = await svc<{ actor_type: string; diff: Record<string, unknown> }>(
+      `select actor_type, diff from audit_log
+        where entity_id = $1 and action = 'report.correction_requested' and diff->>'correction_id' = $2`,
+      [reportId, req.id],
+    );
+    expect(audit).toMatchObject({
+      actor_type: 'reporter',
+      diff: { channel: 'sms', message_id: message, after_filing: true },
+    });
+    expect(await smsRequest(reportId, 'Apex was 7 not 6', message)).toMatchObject({
+      id: req.id,
+      repeat: true,
+    });
+    // One at a time, as on the web.
+    expect(
+      await failure(`select sms_request_filed_correction($1, $2, 'Apex had 8', $3)`, [
+        reportId,
+        MARCO,
+        await inbound('EDIT FRI Apex had 8'),
+      ]),
+    ).toBe('correction_pending');
+  });
+
+  it('refuses a report older than 14 days, of a paused site, of another site, and an outbound message', async () => {
+    const { reportId: old } = await filed(daysAgo(15));
+    expect(
+      await failure(`select sms_request_filed_correction($1, $2, 'Apex had 7', $3)`, [
+        old,
+        MARCO,
+        await inbound('EDIT'),
+      ]),
+    ).toBe('report_locked');
+    const { reportId } = await filed(daysAgo(7));
+    expect(
+      await failure(`select sms_request_filed_correction($1, $2, 'Apex had 7', $3)`, [
+        reportId,
+        OMAR,
+        await inbound('EDIT'),
+      ]),
+    ).toBe('report_not_found');
+    const out = ID(seq++);
+    await svc(
+      `insert into messages (id, org_id, channel, phone_e164, direction, provider, body, status)
+       values ($1, $2, 'sms', '+15550149301', 'out', 'console', 'x', 'sent')`,
+      [out, ORG],
+    );
+    expect(
+      await failure(`select sms_request_filed_correction($1, $2, 'Apex had 7', $3)`, [
+        reportId,
+        MARCO,
+        out,
+      ]),
+    ).toBe('message_not_found');
+    await svc(`update sites set status = 'paused' where id = $1`, [SITE]);
+    try {
+      expect(
+        await failure(`select sms_request_filed_correction($1, $2, 'Apex had 7', $3)`, [
+          reportId,
+          MARCO,
+          await inbound('EDIT'),
+        ]),
+      ).toBe('site_inactive');
+    } finally {
+      await svc(`update sites set status = 'active' where id = $1`, [SITE]);
+    }
+  });
+
+  it('sms_keyword runs under the phone lock with the messages priority', async () => {
+    const message = await inbound('WEATHER', '+15550149377');
+    const [k] = await svc<{ lock: string; prio: number }>(
+      `select job_lock_key('sms_keyword', jsonb_build_object('messageId', $1::text)) as lock,
+              job_priority('sms_keyword') as prio`,
+      [message],
+    );
+    expect(k).toEqual({ lock: 'sms:+15550149377', prio: 0 });
+  });
+});

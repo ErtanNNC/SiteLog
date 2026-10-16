@@ -1175,6 +1175,7 @@ export class FakeFieldStore implements FieldStore {
       applied_at: null,
       after_filing: afterFiling,
       version_created: null,
+      message_id: null,
     };
     this.corrections.push(row);
     const job: FakeJob = {

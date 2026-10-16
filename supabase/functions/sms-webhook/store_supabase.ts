@@ -1,5 +1,6 @@
 import {
   JobPayloadSchemas,
+  jobKeys,
   type CountryRow,
   type InboundReporterRow,
   type Json,
@@ -175,6 +176,18 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
     },
 
     enqueueNotify: (payload, jobKey) => enqueueJob(admin, 'notify', payload, { dedupeKey: jobKey }),
+
+    // W2-12: OK, NO WORK, WEATHER and EDIT are the worker's (EDIT needs the model).
+    async enqueueSmsKeyword(messageId) {
+      await enqueueJob(
+        admin,
+        'sms_keyword',
+        { messageId },
+        {
+          dedupeKey: jobKeys.smsKeyword(messageId),
+        },
+      );
+    },
 
     async reporterForInvite(id) {
       const { data } = await admin

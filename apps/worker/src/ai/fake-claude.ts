@@ -16,13 +16,14 @@ import type { Config } from '../config';
 import type { Logger } from '../log';
 import { loadAnswerCases, type AnswerCase } from './answer-fixtures';
 import { loadCorrectionCases, type CorrectionCase } from './correction-fixtures';
+import { loadUtteranceCases, type UtteranceCase } from './utterance-fixtures';
 import { createAnthropicClient, type MessagesClient } from './claude';
 import { FIXTURES_DIR, findPhoneNumbers, loadFixtures, type EvalFixture } from './eval';
 
 /**
  * The fake extraction provider (`EXTRACT_PROVIDER=fake`): a Messages client that answers every
  * tool the worker calls (submit_daily_report, classify_reply, parse_answer, apply_correction,
- * classify_day_off, guess_site) from the golden set, with no network and no key. parse_answer
+ * classify_utterance, classify_day_off, guess_site) from the golden set, with no network and no key. parse_answer
  * answers from fixtures/answers (W2-09) when the reply is one of its transcripts, apply_correction
  * from fixtures/corrections (W2-10) when the fix is one of its transcripts. It mirrors the
  * fake transcriber (`TRANSCRIBE_PROVIDER=fake`): the integration harness and the load test use it
@@ -402,6 +403,21 @@ export function createFixtureClaude(opts: FixtureClaudeOptions): FakeClaude {
               : r.classify_day_off.holiday;
             return toolMessage(params, tool, out, fast, n);
           }
+          case 'classify_utterance': {
+            await wait('claudeFast');
+            // W2-12: the golden set's recorded output for the message it holds (fixtures/utterances);
+            // any other message is "other", so code reads the day and the change itself.
+            const message = replyOf(text);
+            const golden = goldenUtterances().find((c) => c.text.trim() === message);
+            calls.push({ tool, ...(golden ? { fixtureId: golden.id } : {}) });
+            return toolMessage(
+              params,
+              tool,
+              golden?.recorded ?? { intent: 'other', confidence: 0.5 },
+              fast,
+              n,
+            );
+          }
           case 'guess_site': {
             calls.push({ tool });
             await wait('claudeFast');
@@ -421,6 +437,12 @@ let correctionCases: CorrectionCase[] | null = null;
 /** fixtures/corrections (W2-10), loaded on the first apply_correction. */
 function goldenCorrections(): CorrectionCase[] {
   return (correctionCases ??= loadCorrectionCases());
+}
+
+let utteranceCases: UtteranceCase[] | null = null;
+/** fixtures/utterances (W2-12), loaded on the first classify_utterance. */
+function goldenUtterances(): UtteranceCase[] {
+  return (utteranceCases ??= loadUtteranceCases());
 }
 
 let answerCases: AnswerCase[] | null = null;

@@ -375,6 +375,40 @@ export interface DigestStats {
   invoiceGaps: Array<{ companyName: string; gap: number }>;
 }
 
+/** W2-12: today at a site an SMS NO WORK / WEATHER may answer for (`smsKeywordDays`). */
+export interface SmsKeywordDay {
+  reporter_id: string;
+  site_id: string;
+  site_name: string;
+  timezone: string;
+  /** Today in the site's time zone (YYYY-MM-DD). */
+  date: string;
+  day_status: SiteDayRow['status'] | null;
+  has_report: boolean;
+}
+
+/** W2-12: a web draft an SMS OK answers with (`smsKeywordDrafts`). */
+export interface SmsKeywordDraft {
+  report_id: string;
+  reporter_id: string;
+  org_id: string;
+  site_name: string;
+}
+
+/** W2-12: a live report of the day an SMS EDIT names (`smsEditReports`). */
+export interface SmsEditReport {
+  report_id: string;
+  /** A reporter of the phone who covers the report's site (the primary first). */
+  reporter_id: string;
+  org_id: string;
+  site_id: string;
+  site_name: string;
+  timezone: string;
+  site_status: string;
+  status: ReportRow['status'];
+  date: string;
+}
+
 export interface Db {
   // conversations
   /** null for a message without a conversation (a photo uploaded in the panel). */
@@ -593,6 +627,40 @@ export interface Db {
   listAppliedCorrections(
     reportId: string,
   ): Promise<Array<Pick<DraftCorrectionRow, 'id' | 'via' | 'changes' | 'source' | 'applied_at'>>>;
+
+  // SMS report keywords (W2-12)
+  /**
+   * Today at each active site the reporters cover (in the site's time zone): the site, its day's
+   * status (null without a row yet) and whether the day has a live report (§19 Q79). NO WORK and
+   * WEATHER answer with the day sheet's link of the days still open.
+   */
+  smsKeywordDays(reporterIds: string[]): Promise<SmsKeywordDay[]>;
+  /** The reporters' web drafts awaiting confirmation, newest first (OK, spec §19 Q82). */
+  smsKeywordDrafts(reporterIds: string[]): Promise<SmsKeywordDraft[]>;
+  /** The live reports of `date` at the sites the reporters cover (EDIT), with who covers them. */
+  smsEditReports(reporterIds: string[], date: string): Promise<SmsEditReport[]>;
+  /** sms_request_filed_correction(): an SMS EDIT's change of a filed report (P0001 codes thrown). */
+  requestSmsCorrection(input: {
+    reportId: string;
+    reporterId: string;
+    text: string;
+    messageId: string;
+  }): Promise<{ id: string; status: string; jobId: number | null; repeat?: boolean }>;
+  /** The reporter's live daily links of a site and day, newest first (`ensureDailyLink`). */
+  listDailyLinks(
+    reporterId: string,
+    siteId: string,
+    reportDate: string,
+  ): Promise<Array<{ id: string; code_hash: string; expires_at: string | null }>>;
+  /** false when the code hash is taken (unique); nothing written then. */
+  insertDailyLink(row: {
+    id: string;
+    code_hash: string;
+    reporter_id: string;
+    site_id: string;
+    report_date: string;
+    expires_at: string;
+  }): Promise<boolean>;
 
   // web pipeline (W1-12)
   /**
@@ -1465,6 +1533,69 @@ export function createDb(sql: Sql): Db {
         select id, via, changes, source, applied_at from draft_corrections
         where report_id = ${reportId} and status = 'applied' and not after_filing
         order by applied_at, created_at`;
+    },
+
+    // SMS report keywords (W2-12) -------------------------------------------------------------
+    async smsKeywordDays(reporterIds) {
+      if (reporterIds.length === 0) return [];
+      return sql<SmsKeywordDay[]>`
+        select sr.reporter_id, s.id as site_id, s.name as site_name, s.timezone,
+               to_char((now() at time zone s.timezone)::date, 'YYYY-MM-DD') as date,
+               sd.status::text as day_status,
+               exists (select 1 from reports x where x.site_day_id = sd.id and x.status <> 'void')
+                 as has_report
+        from site_reporters sr
+        join reporters r on r.id = sr.reporter_id
+        join sites s on s.id = sr.site_id and s.org_id = r.org_id and s.status = 'active'
+        left join site_days sd on sd.site_id = s.id
+                              and sd.date = (now() at time zone s.timezone)::date
+        where sr.reporter_id = any(${reporterIds}::uuid[])
+        order by sr.is_primary desc, s.name, s.id`;
+    },
+    async smsKeywordDrafts(reporterIds) {
+      if (reporterIds.length === 0) return [];
+      return sql<SmsKeywordDraft[]>`
+        select r.id as report_id, r.reporter_id, r.org_id, s.name as site_name
+        from reports r join sites s on s.id = r.site_id
+        where r.reporter_id = any(${reporterIds}::uuid[]) and r.status = 'awaiting_confirmation'
+          and r.channel = 'web'
+        order by r.created_at desc`;
+    },
+    async smsEditReports(reporterIds, date) {
+      if (reporterIds.length === 0) return [];
+      return sql<SmsEditReport[]>`
+        select distinct on (r.id) r.id as report_id, sr.reporter_id, r.org_id, s.id as site_id,
+               s.name as site_name, s.timezone, s.status::text as site_status,
+               r.status::text as status, to_char(sd.date, 'YYYY-MM-DD') as date
+        from site_reporters sr
+        join reporters rp on rp.id = sr.reporter_id
+        join sites s on s.id = sr.site_id and s.org_id = rp.org_id
+        join site_days sd on sd.site_id = s.id and sd.date = ${date}::date
+        join reports r on r.site_day_id = sd.id and r.status <> 'void'
+        where sr.reporter_id = any(${reporterIds}::uuid[])
+        order by r.id, sr.is_primary desc, sr.reporter_id`;
+    },
+    async requestSmsCorrection(input) {
+      const [row] = await sql<
+        Array<{ r: { id: string; status: string; jobId: number | null; repeat?: boolean } }>
+      >`select sms_request_filed_correction(${input.reportId}, ${input.reporterId},
+          ${input.text}, ${input.messageId}) as r`;
+      return row!.r;
+    },
+    async listDailyLinks(reporterId, siteId, reportDate) {
+      return sql<Array<{ id: string; code_hash: string; expires_at: string | null }>>`
+        select id, code_hash, expires_at from field_links
+        where reporter_id = ${reporterId} and kind = 'daily' and site_id = ${siteId}
+          and report_date = ${reportDate}::date and revoked_at is null
+        order by created_at desc`;
+    },
+    async insertDailyLink(row) {
+      const rows = await sql<Array<{ id: string }>>`
+        insert into field_links (id, code_hash, reporter_id, kind, site_id, report_date, expires_at)
+        values (${row.id}, ${row.code_hash}, ${row.reporter_id}, 'daily', ${row.site_id},
+                ${row.report_date}::date, ${row.expires_at})
+        on conflict (code_hash) do nothing returning id`;
+      return rows.length > 0;
     },
 
     // web pipeline (W1-12) -------------------------------------------------------------------

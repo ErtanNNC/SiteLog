@@ -884,6 +884,25 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async getCorrection() {
       return null;
     },
+    // W2-12: the SMS keyword job runs on PGlite (sms-keywords.integration.test.ts).
+    smsKeywordDays() {
+      return Promise.reject(new Error('fake db: smsKeywordDays runs on PGlite only'));
+    },
+    smsKeywordDrafts() {
+      return Promise.reject(new Error('fake db: smsKeywordDrafts runs on PGlite only'));
+    },
+    smsEditReports() {
+      return Promise.reject(new Error('fake db: smsEditReports runs on PGlite only'));
+    },
+    requestSmsCorrection() {
+      return Promise.reject(new Error('fake db: requestSmsCorrection runs on PGlite only'));
+    },
+    listDailyLinks() {
+      return Promise.reject(new Error('fake db: listDailyLinks runs on PGlite only'));
+    },
+    insertDailyLink() {
+      return Promise.reject(new Error('fake db: insertDailyLink runs on PGlite only'));
+    },
     settleCorrection() {
       return Promise.reject(new Error('fake db: settleCorrection runs on PGlite only'));
     },

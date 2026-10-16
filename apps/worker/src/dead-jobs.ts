@@ -29,6 +29,7 @@ export const MESSAGE_JOB_TYPES: readonly JobTypeKey[] = [
   'notify',
   'send_welcome',
   'sms_inbound',
+  'sms_keyword',
   'send_message',
   'send_template',
   'inbound_message',
@@ -114,7 +115,7 @@ export function deadJobNotice(job: JobRow, s: DeadJobSubject): DeadJobNotice | n
   const type = job.type as JobTypeKey;
   const tries = `SiteLog tried ${JOB_MAX_ATTEMPTS} times over about three hours and has stopped`;
   if (MESSAGE_JOB_TYPES.includes(type) && s.reporter) {
-    const inbound = type === 'sms_inbound' || type === 'inbound_message';
+    const inbound = type === 'sms_inbound' || type === 'sms_keyword' || type === 'inbound_message';
     return {
       kind: 'message_failed',
       title: inbound

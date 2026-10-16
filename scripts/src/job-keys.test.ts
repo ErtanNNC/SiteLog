@@ -50,6 +50,10 @@ const AUDITED: Record<string, string> = {
     'email:<report_filed|report_updated>:<report>:<version> (render_pdf): per email kind, report and version; also the email provider idempotency key',
   'jobKeys.editApplied':
     'notify:edit_applied:<report>:v<version> (render_pdf of a version the reporter made on the web, W2-11, F10): the notify job and its Notifier key; a version is made once, so a retried render never texts twice',
+  'jobKeys.smsKeyword':
+    "sms_keyword:<message> (processInboundSms, the worker store and sms-webhook's Demo phone, W2-12): the answer to one inbound text's report keyword (OK, NO WORK, WEATHER, EDIT); a text is stored once per provider id, so a re-run of its handling finds the key taken",
+  'jobKeys.smsEditPreview':
+    'sms_keyword:<message>:<correction> (apply_correction of an SMS EDIT, W2-12): the text of the settled preview; a correction settles once, and a retried apply_correction finds the key taken',
   'jobKeys.filed':
     'notify:filed:<report> (file_report, W1-15): the notify job and its Notifier key; a report is filed once, so a retried or repeated filing never texts twice',
   'jobKeys.fileReportOn':

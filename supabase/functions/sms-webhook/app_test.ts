@@ -611,6 +611,46 @@ Deno.test(
 );
 
 Deno.test(
+  'Demo phone: OK, NO WORK, WEATHER and EDIT go to the worker (sms_keyword), with no reply here (W2-12)',
+  async () => {
+    const h = setup();
+    for (const body of ['OK', 'no work', 'WEATHER', 'EDIT FRI Apex was 7 not 6']) {
+      const res = await h.demo({ reporterId: MARCO, body });
+      assertEquals(res.status, 201);
+      const out = (await res.json()) as { replyId: string | null };
+      assertEquals(out.replyId, null);
+    }
+    assertEquals(
+      h.store.inbound.map((m) => m.payload.keyword),
+      ['ok', 'no_work', 'weather', 'edit'],
+    );
+    assertEquals(
+      h.store.keywordJobs,
+      h.store.inbound.map((m) => m.id),
+    );
+    assert(h.store.inbound.every((m) => m.handled_at));
+    assertEquals(h.messaging.sent, []);
+    // An opted-out phone's keyword is stored and nothing more.
+    h.store.reporters.find((r) => r.id === MARCO)!.status = 'opted_out';
+    await h.demo({ reporterId: MARCO, body: 'WEATHER' });
+    assertEquals(h.store.keywordJobs.length, 4);
+  },
+);
+
+Deno.test(
+  'a Twilio report keyword is stored with its keyword, for the worker (W2-12)',
+  async () => {
+    const h = setup();
+    await h.twilio('', sms('+15550145521', 'EDIT FRI Apex was 7 not 6'));
+    assertEquals(h.store.inbound[0]!.payload.keyword, 'edit');
+    assertEquals(h.store.jobs.length, 1);
+    // The sms_inbound job queues sms_keyword in the worker; nothing is sent here.
+    assertEquals(h.store.keywordJobs, []);
+    assertEquals(h.messaging.sent, []);
+  },
+);
+
+Deno.test(
   'Demo phone: STOP opts the reporter out, tells the office, and never records the phone',
   async () => {
     const h = setup();

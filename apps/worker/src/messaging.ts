@@ -1,5 +1,6 @@
 import {
   consentSets,
+  jobKeys,
   createNotifier,
   createSmsTransports,
   toCountryPack,
@@ -78,6 +79,14 @@ export function workerInboundStore(db: Db): InboundSmsStore {
       db.recordSmsOptOut({ phone_e164: phone, country, method: 'sms_keyword' }),
     clearPhoneOptOut: (phone, country) => db.clearSmsOptOut(phone, country),
     markHandled: (messageId, at) => db.markSmsHandled(messageId, at),
+    // W2-12: OK, NO WORK, WEATHER and EDIT are answered by the sms_keyword job.
+    async enqueueSmsKeyword(messageId) {
+      await db.enqueueJob(
+        'sms_keyword',
+        { messageId },
+        { dedupeKey: jobKeys.smsKeyword(messageId) },
+      );
+    },
     async notifyOrg(n) {
       await db.notifyOrg(n.orgId, n.kind, n.title, n.body, n.targetPath, null, n.data);
     },
