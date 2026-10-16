@@ -94,6 +94,15 @@ Hafta-1 planının M0–M3'ü (W1-01 … W1-12) yazıldı ve CI'da yeşil, previ
 
 Spec §19 ve planlara işleniyor. Q86 için SMS izninde "Aç" düğmesi ekleniyor. Q93 (cevap kaydını panelde dinleme) planda takip işi olarak duruyor. Yalnızca sizde olan bilgiyi gerektiren sorular hâlâ açık: İletimerkezi Türkçe karakter tablosu, Q2, Q8/Q9, Q49, Q28/Q40/Q50, Q30.
 
+**Telefon testi geçti (sizden, 2026-10-16):** preview ortamında tüm akışı adım adım denediniz, hepsi beklendiği gibi çalıştı. Denenen akış:
+
+- cihaz kodu, izinler, test kaydı
+- kayıt, soru ve "Diğer…" cevabı
+- taslak, onay, dosyalama ve PDF
+- fotoğraf ekleme, geçmiş raporlar, ayarlar
+
+W1-09, W1-13 ve W1-15 bu testle tamamlandı olarak işaretlendi. Bu testte giriş linkinde bir hata çıktı ve düzeltildi (9330786).
+
 ## Hafta 2 (M6) — başladı
 
 Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahtar gerektirmeyen biletlerden başlıyorum: W2-01 (kanallar arası yedekleme), W2-02 (saha Ayarlar), W2-03 (geçmiş raporlar, süresi dolmuş link, yeni telefon), W2-04 (Filed ekranı ekleri).

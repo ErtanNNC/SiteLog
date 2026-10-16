@@ -252,7 +252,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-09 · Field screens: device check → Today → Recording
 
-- [ ] **W1-09 done** · today _missing_ (XL) · step 18 (first half) · _CI run 38666565445 is green, including the field flow on the local stack (link → device code → consent → record with Chromium's fake microphone → upload → report `web` and the `transcribe_upload` job → Processing, axe on each screen); the box waits for the owner's iPhone and Android checks._
+- [x] **W1-09 done** · _owner phone check passed on the preview, 2026-10-16_ · · today _missing_ (XL) · step 18 (first half) · _CI run 38666565445 is green, including the field flow on the local stack (link → device code → consent → record with Chromium's fake microphone → upload → report `web` and the `transcribe_upload` job → Processing, axe on each screen); the box waits for the owner's iPhone and Android checks._
 - **Spec:** §9.3, §14.6, F4, F5, F12 (buttons). **Design:** `Field-01-SMS`, `Field-02-Welcome`, `Field-03-Today`, `Field-04-Recording`, `Field-10-Today-TR`.
 - **Already in the repo:** nothing. Reuse `formatDuration`/`formatTimeInTz` (`packages/shared/src/format.ts:95`, `:145`) and the progress phrases (`packages/shared/src/report/progress.ts:18-30`, copy moves to the `field` namespace).
 - **Build (this repo):**
@@ -325,7 +325,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-13 · Field screens: Question → Draft → Confirm
 
-- [ ] **W1-13 done** · today _conflicts_ (M) · step 18 (second half) · _CI green (run 38740645053, the e2e:supabase worker flow included); waits only for the owner's phone check through the preview with the worker on the preview project._
+- [x] **W1-13 done** · _owner phone check passed on the preview, 2026-10-16_ · · today _conflicts_ (M) · step 18 (second half) · _CI green (run 38740645053, the e2e:supabase worker flow included); waits only for the owner's phone check through the preview with the worker on the preview project._
 - **Spec:** §9.3, F7 (buttons only), F8. **Design:** `Field-05-Question`, `Field-06-Draft`.
 - **Already in the repo:** code-only answer mapping (5 × 8 h = 40 h, `packages/shared/src/report/validate.ts:361`, `:481-488`), re-keyed in W1-12; the idempotent `file_report` job (`apps/worker/src/jobs/file_report.ts`); the `confirm` route (W1-07) and the `answer` route (W1-12).
 - **Build (this repo):**
@@ -361,7 +361,7 @@ The kit plan was written for an empty folder. This repo is the spec v1.0 build (
 
 ### W1-15 · Filing, SMS and email
 
-- [ ] **W1-15 done** · today _conflicts_ (L) · step 19 (filing part)
+- [x] **W1-15 done** · _owner phone check passed on the preview, 2026-10-16_ · · today _conflicts_ (L) · step 19 (filing part)
 - **Spec:** §10.1 `file_report`, §13, F8. **Design:** `Field-07-Filed`.
 - **Already in the repo:** `fileReport` freezes the version, runs `denormalize_report_version`, sets `filed_at`, `confirmed_at`, `is_late`, review reasons and the site-day status, writes audit rows and enqueues `render_pdf` (`apps/worker/src/pipeline/file.ts:87-151`); a second call is a no-op; a field-api confirm files only the version confirmed, while still awaiting confirmation (W1-07: `field_confirm_report()`, `report.confirm_stale`); email by Resend or console with the PDF under the §12 name and the §13 EN subject (`apps/worker/src/jobs/send_email.ts:55-102`).
 - **Moved in from W1-14:** WhatsApp delivery out of `render_pdf`.
