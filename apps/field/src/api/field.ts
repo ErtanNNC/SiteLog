@@ -12,6 +12,7 @@ import type {
   FieldApiErrorCode,
   HistoryResponse,
   PreferencesResponse,
+  PushKeyResponse,
   ReportView,
   ResolveResponse,
   SendCodeResponse,
@@ -32,6 +33,7 @@ import type {
   DayStatusRequest,
   EditRequest,
   PreferencesRequest,
+  PushSubscribeRequest,
   TestClipRequest,
   UploadRequest,
 } from '@sitelog/shared/field-api.ts';
@@ -135,6 +137,19 @@ export function createFieldRoutes(api: FieldApiClient = fieldApi) {
     /** Turn the texts consent back on (spec §19 Q86); refused for an opted-out phone. */
     grantConsent: (code: string, body: ConsentGrantRequest) =>
       api.request<PreferencesResponse>('consent/grant', { body, linkCode: code }),
+    /** Web push (W2-14): the VAPID public key; null = no push in this environment. */
+    pushKey: (code: string, signal?: AbortSignal) =>
+      api.request<PushKeyResponse>('push/key', { linkCode: code, signal }),
+    /** This phone's subscription, stored with the `push` consent (spec §19 Q27). */
+    pushSubscribe: (code: string, body: PushSubscribeRequest) =>
+      api.request<PreferencesResponse>('push/subscribe', { body, linkCode: code }),
+    /** Notifications off on this phone: its subscription and, when it was the last, the consent. */
+    pushUnsubscribe: (code: string) =>
+      api.request<PreferencesResponse>('push/unsubscribe', {
+        method: 'POST',
+        body: {},
+        linkCode: code,
+      }),
     /**
      * F4's optional test recording (W2-13): a signed upload outside any report, then `complete`
      * (the worker transcribes it), then the snippet, answered once.

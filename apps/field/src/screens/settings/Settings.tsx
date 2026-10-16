@@ -15,6 +15,7 @@ import { OfflineBanner } from '@/components/OfflineBanner';
 import { Screen, ScreenTitle } from '@/components/Screen';
 import { Sheet } from '@/components/Sheet';
 import { fieldLanguageOf, type FieldLanguage } from '@/i18n/language';
+import { pushBlocked, pushSupported, subscribeBrowser, unsubscribeBrowser } from '@/lib/push';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { NoLink } from '@/screens/NoLink';
 import type { FieldSession } from '@/session/session';
@@ -41,7 +42,10 @@ type Saving = 'pref' | 'channel' | 'locale' | ConsentType | 'turnOn' | 'signOut'
  * consents given with their state and *Turn off* (recording and processing behind a confirm sheet:
  * reports stop and the office is told), *Turn on* for texts (spec §19 Q86: the Welcome wording again
  * in a sheet; a phone opted out by STOP gets a line instead, START on a two-way pack, the office on
- * a one-way pack, §19 Q94), and *Sign out this phone*. "Don't call me today" is M8's. A change is
+ * a one-way pack, §19 Q94), *Notifications* (W2-14, web push: only in the installed app with the
+ * Push API, when field-api offers it; the browser's permission is asked only when it is turned on;
+ * on = this phone's subscription and the `push` consent, off = both revoked, spec §19 Q27, Q40),
+ * and *Sign out this phone*. "Don't call me today" is M8's. A change is
  * saved when it is made (`PATCH preferences`, `consent/revoke`, `consent/grant`,
  * `device/sign-out`), each audited by field-api. There is no artboard: built from §9.3 and the
  * Field-02 / Field-03 patterns (accepted by the owner, 2026-10-16).
@@ -68,11 +72,14 @@ function SettingsLoaded({
   const [saving, setSaving] = useState<Saving>(null);
   const [status, setStatus] = useState<'saved' | 'error' | null>(null);
   const [sheet, setSheet] = useState<ConsentType | 'turnOn' | 'signOut' | null>(null);
+  const [pushProblem, setPushProblem] = useState<'blocked' | 'failed' | null>(null);
+  const [canPush] = useState(() => pushSupported());
   const ids = {
     pref: useId(),
     channel: useId(),
     lang: useId(),
     consents: useId(),
+    push: useId(),
     sheet: useId(),
   };
 
@@ -176,6 +183,50 @@ function SettingsLoaded({
         return;
       }
       setStatus('error');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  /** Notifications on: permission (asked now, never before), the subscription, the consent. */
+  async function pushOn() {
+    setSaving('push');
+    setStatus(null);
+    setPushProblem(null);
+    try {
+      const { publicKey } = await api.pushKey(code);
+      if (!publicKey) {
+        void load();
+        return;
+      }
+      const result = await subscribeBrowser(publicKey);
+      if (result.kind === 'blocked') {
+        setPushProblem('blocked');
+        return;
+      }
+      applied(
+        await api.pushSubscribe(code, {
+          subscription: result.subscription,
+          textVersion: country.legalKeys.consent ?? FIELD_CONSENT_TEXT_VERSION,
+        }),
+      );
+    } catch (err) {
+      if (!relinkOr(err)) setPushProblem('failed');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  /** Notifications off: field-api revokes the subscription and the consent, then the browser's. */
+  async function pushOff() {
+    setSaving('push');
+    setStatus(null);
+    setPushProblem(null);
+    try {
+      applied(await api.pushUnsubscribe(code));
+      await unsubscribeBrowser();
+    } catch (err) {
+      if (!relinkOr(err)) setStatus('error');
     } finally {
       setSaving(null);
     }
@@ -390,6 +441,50 @@ function SettingsLoaded({
               );
             })}
           </ul>
+        </section>
+      ) : null}
+
+      {prefs.push.offered && canPush ? (
+        <section aria-labelledby={ids.push} className="flex flex-col">
+          <h2 id={ids.push} className={h2}>
+            {t('settings.push.title')}
+          </h2>
+          <div className="flex min-h-target flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-rebar bg-white py-2 pr-2 pl-3.5">
+            <span className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
+              <span className="text-[16px] leading-[22px]">{t('settings.push.label')}</span>
+              {/* The state is text, never colour alone. */}
+              <span
+                className={`font-mono text-[13px] tracking-[0.06em] uppercase ${
+                  prefs.push.on ? 'text-filed' : 'text-dust'
+                }`}
+              >
+                {prefs.push.on ? t('settings.on') : t('settings.off')}
+              </span>
+            </span>
+            <div className="w-32 flex-none">
+              <QuietButton
+                aria-label={t(prefs.push.on ? 'settings.turnOffLabel' : 'settings.turnOnLabel', {
+                  consent: t('settings.push.label'),
+                })}
+                disabled={busy}
+                onClick={() => void (prefs.push.on ? pushOff() : pushOn())}
+              >
+                {saving === 'push'
+                  ? t('settings.saving')
+                  : prefs.push.on
+                    ? t('settings.turnOff')
+                    : t('settings.turnOn')}
+              </QuietButton>
+            </div>
+            <p className="m-0 basis-full pb-1.5 text-[15px] leading-[21px] text-steel">
+              {t('settings.push.hint')}
+            </p>
+          </div>
+          {pushProblem || (!prefs.push.on && pushBlocked()) ? (
+            <p role="alert" className="m-0 mt-2 text-[15px] leading-5 text-missing">
+              {pushProblem === 'failed' ? t('settings.push.failed') : t('settings.push.blocked')}
+            </p>
+          ) : null}
         </section>
       ) : null}
 

@@ -1016,6 +1016,8 @@ export interface DemoPhoneMessage {
   /** §9.2 copy key of a text SiteLog sent (`welcome`, `verify_code`, …). */
   copyKey: string | null;
   provider: string | null;
+  /** W2-14: `sms` or `push` (a push to the installed field app has no phone). */
+  channel: 'sms' | 'push';
   at: string;
 }
 

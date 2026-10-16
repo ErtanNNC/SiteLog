@@ -18,6 +18,7 @@ function prefs(patch: Partial<PreferencesResponse> = {}): PreferencesResponse {
       { type: 'data_processing', held: true },
     ],
     textsOptedOut: false,
+    push: { offered: false, on: false },
     ...patch,
   };
 }

@@ -1034,6 +1034,12 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       fromSiteLog: 'SiteLog',
       opensInNewTab: '(yeni sekmede açılır)',
       copyKey: 'Mesaj',
+      channelLabel: 'Kanal',
+      channels: {
+        sms: 'SMS',
+        push: 'Anlık bildirim',
+        whatsapp: 'WhatsApp',
+      },
       statusLabel: 'Durum',
       status: {
         queued: 'Gönderiliyor',
@@ -1764,6 +1770,15 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         data_processing: 'Raporlarımın {{company}} için işlenmesi',
         sms: 'Günlük rapor linkimin mesajla gönderilmesi',
         auto_call: 'Rapor saatinde otomatik arama',
+        push: 'Bu telefonda bildirim',
+      },
+      push: {
+        title: 'Bildirimler',
+        label: 'Bu telefonda bildirim',
+        hint: 'Rapor hatırlatmalarınız bildirim olarak gelir. Bu telefona ulaşamazsa size mesaj göndeririz.',
+        blocked:
+          'SiteLog bildirimleri bu telefonda engelli. Telefonunuzun ayarlarından izin verin, sonra buradan açın.',
+        failed: 'Bildirimler açılamadı. Tekrar deneyin.',
       },
       on: 'Açık',
       off: 'Kapalı',

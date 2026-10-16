@@ -2054,7 +2054,7 @@ export class SupabaseSource implements DataSource {
           .select('body, created_at', { count: 'exact' })
           .eq('org_id', this.orgId)
           .eq('reporter_id', r.id)
-          .eq('channel', 'sms')
+          .in('channel', ['sms', 'push'])
           .order('created_at', { ascending: false })
           .limit(1);
         const rows = unwrap(res) as Array<{ body: string | null; created_at: string }>;
@@ -2089,10 +2089,11 @@ export class SupabaseSource implements DataSource {
     const rows = unwrap(
       await this.sb
         .from('messages')
-        .select('id, direction, body, status, copy_key, provider, created_at')
+        .select('id, direction, body, status, copy_key, provider, channel, created_at')
         .eq('org_id', this.orgId)
         .eq('reporter_id', reporterId)
-        .eq('channel', 'sms')
+        // W2-14: pushes to the installed app share the thread, labelled by channel.
+        .in('channel', ['sms', 'push'])
         .order('created_at', { ascending: false })
         .limit(500),
     ) as Array<{
@@ -2102,6 +2103,7 @@ export class SupabaseSource implements DataSource {
       status: string;
       copy_key: string | null;
       provider: string | null;
+      channel: 'sms' | 'push';
       created_at: string;
     }>;
     return rows.reverse().map((m) => ({
@@ -2111,6 +2113,7 @@ export class SupabaseSource implements DataSource {
       status: m.status,
       copyKey: m.copy_key,
       provider: m.provider,
+      channel: m.channel,
       at: m.created_at,
     }));
   }

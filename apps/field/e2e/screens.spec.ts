@@ -622,6 +622,146 @@ for (const run of RUNS) {
   });
 }
 
+/**
+ * W2-14: the installed app (`display-mode: standalone`) with a fake Push API: permission granted
+ * or denied when asked, and a subscription the fake `PushManager` hands out.
+ */
+async function installedWithPush(page: Page, permission: 'granted' | 'denied' | 'default') {
+  await page.addInitScript((answer) => {
+    const real = window.matchMedia.bind(window);
+    window.matchMedia = (query: string) =>
+      query === '(display-mode: standalone)'
+        ? ({ matches: true, media: query } as MediaQueryList)
+        : real(query);
+    const asked: string[] = [];
+    (window as unknown as { __pushAsked: string[] }).__pushAsked = asked;
+    let current: unknown = null;
+    const subscription = {
+      toJSON: () => ({
+        endpoint: 'https://fcm.googleapis.com/fcm/send/e2e',
+        expirationTime: null,
+        keys: { p256dh: 'BPe2eKey', auth: 'e2eAuth' },
+      }),
+      unsubscribe: async () => {
+        current = null;
+        return true;
+      },
+    };
+    const pushManager = {
+      getSubscription: async () => current,
+      subscribe: async () => (current = subscription),
+    };
+    Object.defineProperty(window, 'PushManager', {
+      value: function PushManager() {},
+      configurable: true,
+    });
+    Object.defineProperty(window, 'Notification', {
+      configurable: true,
+      value: {
+        permission: answer === 'denied' ? 'denied' : 'default',
+        requestPermission: async () => {
+          asked.push('permission');
+          return answer;
+        },
+      },
+    });
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { ready: Promise.resolve({ pushManager }), register: async () => ({}) },
+    });
+  }, permission);
+}
+
+for (const run of RUNS) {
+  test.describe(`Settings: Notifications in the installed app (W2-14) in ${run.lang}`, () => {
+    test.use({ locale: run.locale });
+
+    test('asks for permission only on the toggle; on and off are saved', async ({ page }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const s = field.settings;
+      await installedWithPush(page, 'granted');
+      const api = await installFakeFieldApi(page, run.market(), {
+        verified: true,
+        consented: true,
+        push: true,
+      });
+      await page.goto(`/r/${CODE}`);
+      await page.getByRole('link', { name: field.routes.settings }).click();
+      await expect(page.getByRole('heading', { level: 2, name: s.push.title })).toBeVisible();
+      await expect(page.getByText(s.push.hint)).toBeVisible();
+      // Nothing asked before the toggle.
+      expect(
+        await page.evaluate(() => (window as unknown as { __pushAsked: string[] }).__pushAsked),
+      ).toEqual([]);
+      await expectFieldScreen(page);
+
+      await page.getByRole('button', { name: `${s.turnOn}: ${s.push.label}` }).click();
+      await expect(
+        page.getByRole('button', { name: `${s.turnOff}: ${s.push.label}` }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(() => (window as unknown as { __pushAsked: string[] }).__pushAsked),
+      ).toEqual(['permission']);
+      expect(api.calls.find((c) => c.path === 'push/subscribe')!.body).toEqual({
+        subscription: {
+          endpoint: 'https://fcm.googleapis.com/fcm/send/e2e',
+          expirationTime: null,
+          keys: { p256dh: 'BPe2eKey', auth: 'e2eAuth' },
+        },
+        textVersion: run.market().country.legalKeys.consent ?? 'field.consent.v1',
+      });
+      // The push consent is the toggle's, not a row of the consents (one label on the screen).
+      await expect(page.getByText(s.push.label, { exact: true })).toHaveCount(1);
+      await expectFieldScreen(page);
+
+      await page.getByRole('button', { name: `${s.turnOff}: ${s.push.label}` }).click();
+      await expect(
+        page.getByRole('button', { name: `${s.turnOn}: ${s.push.label}` }),
+      ).toBeVisible();
+      expect(api.calls.some((c) => c.path === 'push/unsubscribe')).toBe(true);
+      expect(api.pushSubscription).toBeNull();
+    });
+  });
+}
+
+test.describe('Settings: Notifications hidden or blocked (W2-14)', () => {
+  test('hidden in a browser tab, and where field-api offers no push', async ({ page }) => {
+    const s = UI_RESOURCES.en.field.settings;
+    await installFakeFieldApi(page, kestrel(), { verified: true, consented: true, push: true });
+    await page.goto(`/r/${CODE}`);
+    await page.getByRole('link', { name: UI_RESOURCES.en.field.routes.settings }).click();
+    await expect(page.getByText(s.consents.sms)).toBeVisible();
+    await expect(page.getByRole('heading', { name: s.push.title })).toHaveCount(0);
+  });
+
+  test('hidden in the installed app without push here', async ({ page }) => {
+    const s = UI_RESOURCES.en.field.settings;
+    await installedWithPush(page, 'granted');
+    await installFakeFieldApi(page, kestrel(), { verified: true, consented: true });
+    await page.goto(`/r/${CODE}`);
+    await page.getByRole('link', { name: UI_RESOURCES.en.field.routes.settings }).click();
+    await expect(page.getByText(s.consents.sms)).toBeVisible();
+    await expect(page.getByRole('heading', { name: s.push.title })).toHaveCount(0);
+  });
+
+  test('a refused permission says how to allow it, and nothing is stored', async ({ page }) => {
+    const s = UI_RESOURCES.en.field.settings;
+    await installedWithPush(page, 'denied');
+    const api = await installFakeFieldApi(page, kestrel(), {
+      verified: true,
+      consented: true,
+      push: true,
+    });
+    await page.goto(`/r/${CODE}`);
+    await page.getByRole('link', { name: UI_RESOURCES.en.field.routes.settings }).click();
+    await page.getByRole('button', { name: `${s.turnOn}: ${s.push.label}` }).click();
+    await expect(page.getByRole('alert').filter({ hasText: s.push.blocked })).toBeVisible();
+    expect(api.calls.some((c) => c.path === 'push/subscribe')).toBe(false);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expectFieldScreen(page);
+  });
+});
+
 test.describe('Settings: language and stopping reports (F15, W2-02)', () => {
   test.use({ locale: 'en-US' });
 

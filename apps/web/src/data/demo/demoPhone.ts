@@ -245,8 +245,11 @@ export function demoReply(data: DemoDataset, reporterId: string, body: string, a
   data.messages.push(smsRow(data, to, 'out', text, plan.reply.key, at));
 }
 
+/** A reporter's thread: texts and, since W2-14, pushes to the installed app. */
 function smsOf(data: DemoDataset, reporterId: string): MessageRow[] {
-  return data.messages.filter((m) => m.channel === 'sms' && m.reporter_id === reporterId);
+  return data.messages.filter(
+    (m) => (m.channel === 'sms' || m.channel === 'push') && m.reporter_id === reporterId,
+  );
 }
 
 export function demoPhoneData(data: DemoDataset): DemoPhoneData {
@@ -287,6 +290,7 @@ export function demoPhoneThread(data: DemoDataset, reporterId: string): DemoPhon
       status: m.status,
       copyKey: m.copy_key,
       provider: m.provider,
+      channel: m.channel === 'push' ? ('push' as const) : ('sms' as const),
       at: m.created_at,
     }));
 }

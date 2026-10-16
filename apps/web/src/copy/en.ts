@@ -559,6 +559,13 @@ export const copy = {
     fromSiteLog: 'SiteLog',
     opensInNewTab: '(opens in a new tab)',
     copyKey: 'Message',
+    /** W2-14: the channel of each message (a push to the installed app, or a text). */
+    channelLabel: 'Channel',
+    channels: {
+      sms: 'Text',
+      push: 'Push notification',
+      whatsapp: 'WhatsApp',
+    },
     statusLabel: 'Status',
     status: {
       queued: 'Sending',

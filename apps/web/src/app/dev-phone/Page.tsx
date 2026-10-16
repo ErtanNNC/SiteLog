@@ -339,6 +339,9 @@ function Bubble({
       </div>
       <p className="font-mono text-[12px] text-dust">
         {when(message.at, timezone)}
+        {' · '}
+        <span className="sr-only">{t('devPhone.channelLabel')} </span>
+        {t(`devPhone.channels.${message.channel}`)}
         {message.copyKey ? (
           <>
             {' · '}

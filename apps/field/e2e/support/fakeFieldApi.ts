@@ -286,6 +286,8 @@ export interface FakeFieldApi {
     }
   >;
   consent: unknown;
+  /** W2-14: the subscription `push/subscribe` stored, null once unsubscribed. */
+  pushSubscription: unknown;
   completed: string[];
   /** What the fake refuses; change it between steps. */
   options: FakeOptions;
@@ -342,7 +344,13 @@ export interface FakeOptions {
    * was not asked: "Apex had seven, not six"), or `unclear` (the model asks which crew).
    */
   fixAnswer?: 'one_more' | 'unclear';
+  /** W2-14: this environment has a VAPID key pair and the pack lists push (the toggle shows). */
+  push?: boolean;
 }
+
+/** W2-14: the fake VAPID public key `push/key` answers (65 bytes, base64url). */
+export const FAKE_VAPID_KEY =
+  'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
 
 /** The fake transcript of a test recording, in the reporter's language (fixtures/voice, kind test). */
 export const TEST_SNIPPETS: Record<string, string> = {
@@ -387,6 +395,7 @@ export async function installFakeFieldApi(
             ]
           : [],
         textsOptedOut: opts.textsOptedOut ?? false,
+        push: { offered: opts.push ?? false, on: false },
       },
     },
     calls: [],
@@ -395,6 +404,7 @@ export async function installFakeFieldApi(
     batches: {},
     changes: {},
     consent: null,
+    pushSubscription: null,
     completed: [],
     options: { ...opts },
   };
@@ -567,6 +577,20 @@ export async function installFakeFieldApi(
             c.type === 'sms' ? { ...c, held: true } : c,
           ),
         };
+        return json(route, 200, api.state.prefs);
+      }
+      // W2-14: web push, a verified device with or without the required consents.
+      if (path === 'push/key') {
+        return json(route, 200, { publicKey: options.push ? FAKE_VAPID_KEY : null });
+      }
+      if (path === 'push/subscribe') {
+        api.pushSubscription = (body as { subscription: unknown }).subscription;
+        api.state.prefs = { ...api.state.prefs, push: { ...api.state.prefs.push, on: true } };
+        return json(route, 200, api.state.prefs);
+      }
+      if (path === 'push/unsubscribe') {
+        api.pushSubscription = null;
+        api.state.prefs = { ...api.state.prefs, push: { ...api.state.prefs.push, on: false } };
         return json(route, 200, api.state.prefs);
       }
       if (path === 'device/sign-out') {

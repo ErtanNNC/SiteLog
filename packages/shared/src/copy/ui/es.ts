@@ -534,6 +534,15 @@ export const uiEs: UiResources = {
         data_processing: 'Procesamiento de mis reportes para {{company}}',
         sms: 'Mensajes de texto con el enlace de mi reporte diario',
         auto_call: 'Llamadas automáticas a la hora del reporte',
+        push: 'Notificaciones en este teléfono',
+      },
+      push: {
+        title: 'Notificaciones',
+        label: 'Notificaciones en este teléfono',
+        hint: 'Los avisos de su reporte le llegan como notificaciones. Si una no llega a este teléfono, le enviamos un mensaje de texto.',
+        blocked:
+          'Las notificaciones de SiteLog están bloqueadas en este teléfono. Permítalas en la configuración del teléfono y luego actívelas aquí.',
+        failed: 'No se pudieron activar las notificaciones. Intente de nuevo.',
       },
       on: 'Activado',
       off: 'Desactivado',

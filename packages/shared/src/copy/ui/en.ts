@@ -606,6 +606,16 @@ export const uiEn = {
         data_processing: 'Processing of my reports for {{company}}',
         sms: 'Texts with my daily report link',
         auto_call: 'Automated calls at report time',
+        push: 'Notifications on this phone',
+      },
+      /** W2-14: web push, shown only in the installed app (spec §9.3, §19 Q27). */
+      push: {
+        title: 'Notifications',
+        label: 'Notifications on this phone',
+        hint: 'Your report prompts arrive as notifications. If one can’t reach this phone, we text you instead.',
+        blocked:
+          'Notifications are blocked for SiteLog on this phone. Allow them in your phone’s settings, then turn them on here.',
+        failed: 'Couldn’t turn on notifications. Try again.',
       },
       on: 'On',
       off: 'Off',

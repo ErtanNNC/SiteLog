@@ -74,6 +74,32 @@ describe('Demo phone', () => {
     });
   });
 
+  it('shows a push to the installed app in the thread with its channel (W2-14)', async () => {
+    const store = new DemoStore();
+    const marco = store.data.reporters.find((r) => r.name === 'Marco Ruiz')!;
+    const template = store.data.messages.find((m) => m.reporter_id === marco.id)!;
+    store.data.messages.push({
+      ...template,
+      id: '00000000-0000-4000-8000-00000000f00d',
+      channel: 'push',
+      phone_e164: null,
+      direction: 'out',
+      provider: 'console',
+      copy_key: 'draft_ready',
+      body: 'Your draft is ready to check: https://go.sitelog.app/r/K7Q2MX',
+      status: 'delivered',
+      created_at: '2099-01-01T00:00:00.000Z',
+    });
+    renderWithProviders(<DevPhonePage />, { as: 'admin', store });
+    const thread = await openThread(/Marco Ruiz/);
+    const items = within(thread).getAllByRole('listitem');
+    const push = items.at(-1)!;
+    expect(push).toHaveTextContent('Your draft is ready to check');
+    expect(push).toHaveTextContent('Push notification');
+    expect(push).toHaveTextContent('draft_ready');
+    expect(items[0]!).toHaveTextContent('Text');
+  });
+
   it('a one-way pack shows no reply box (spec §19 Q35)', async () => {
     const store = new DemoStore();
     store.data.org.country = 'TR';

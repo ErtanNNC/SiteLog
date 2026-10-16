@@ -108,6 +108,9 @@ export function fakeRoutes(overrides: Partial<FieldRoutes> = {}): FieldRoutes {
     createTestClip: vi.fn(refuse),
     completeTestClip: vi.fn(refuse),
     testClip: vi.fn(refuse),
+    pushKey: vi.fn(refuse),
+    pushSubscribe: vi.fn(refuse),
+    pushUnsubscribe: vi.fn(refuse),
     ...overrides,
   };
 }

@@ -59,14 +59,23 @@ describe('PWA manifest (§9.3, §14.5)', () => {
   });
 });
 
-describe('service worker (shell only)', () => {
-  const workbox = pwaOptions.workbox ?? {};
+describe('service worker (the shell, and web push since W2-14)', () => {
+  const inject = pwaOptions.injectManifest ?? {};
+  const sw = readFileSync(join(SRC, 'sw.ts'), 'utf8');
+  /** The worker's code without its comments. */
+  const code = sw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 
   it('precaches the built shell and its fonts, and caches nothing at run time', () => {
-    expect(pwaOptions.strategies ?? 'generateSW').toBe('generateSW');
-    expect(workbox.globPatterns).toBe(PRECACHE_GLOBS);
+    expect(pwaOptions.strategies).toBe('injectManifest');
+    expect([pwaOptions.srcDir, pwaOptions.filename]).toEqual(['src', 'sw.ts']);
+    expect(inject.globPatterns).toBe(PRECACHE_GLOBS);
+    expect(inject.rollupFormat).toBe('iife');
     expect(PRECACHE_GLOBS).toEqual(['**/*.{js,css,html}', '**/*-latin-*.woff2']);
-    expect(workbox.runtimeCaching ?? []).toEqual([]);
+    expect(code).toContain('precacheAndRoute(self.__WB_MANIFEST)');
+    expect(code).toContain('cleanupOutdatedCaches()');
+    // No runtime caching: the only route is the navigation fallback to the shell.
+    expect(code.match(/registerRoute\(/g)).toHaveLength(1);
+    expect(code).not.toMatch(/CacheFirst|NetworkFirst|StaleWhileRevalidate|workbox-strategies/);
     expect(pwaOptions.includeAssets).toEqual(['brand/*.svg', 'brand/*.png']);
   });
 
@@ -118,8 +127,8 @@ describe('service worker (shell only)', () => {
   });
 
   it('never answers /api navigations with the shell', () => {
-    expect(workbox.navigateFallback).toBe('/index.html');
-    expect(workbox.navigateFallbackDenylist).toBe(NAVIGATE_FALLBACK_DENYLIST);
+    expect(code).toContain("createHandlerBoundToURL('/index.html')");
+    expect(code).toContain('denylist: NAVIGATE_FALLBACK_DENYLIST');
     const denied = (path: string) => NAVIGATE_FALLBACK_DENYLIST.some((re) => re.test(path));
     expect(denied('/api/resolve')).toBe(true);
     expect(denied('/api')).toBe(true);
@@ -128,13 +137,21 @@ describe('service worker (shell only)', () => {
     expect(denied('/r/K7Q2MX')).toBe(false);
   });
 
-  it('registers with a plain script, never swaps the build under an open page, and has no push', () => {
+  it('registers with a plain script and never swaps the build under an open page', () => {
     expect(pwaOptions.injectRegister).toBe('script');
     // The first install controls the page; a new version waits until the app's windows are closed.
-    expect(workbox.clientsClaim).toBe(true);
-    expect(workbox.skipWaiting).toBeFalsy();
+    expect(code).toContain('clientsClaim()');
+    expect(code).not.toMatch(/skipWaiting/);
     expect(pwaOptions.registerType ?? 'prompt').toBe('prompt');
     expect(pwaOptions.devOptions?.enabled).toBe(false);
-    expect(JSON.stringify(pwaOptions)).not.toMatch(/push|notification/i);
+  });
+
+  it('handles push and notificationclick with the tested handlers (W2-14)', () => {
+    expect(code).toMatch(
+      /addEventListener\('push', \(event\) => event\.waitUntil\(showPush\(self, event\.data\)\)\)/,
+    );
+    expect(code).toMatch(
+      /addEventListener\('notificationclick'[\s\S]*openFromNotification\(self, event\.notification\)/,
+    );
   });
 });

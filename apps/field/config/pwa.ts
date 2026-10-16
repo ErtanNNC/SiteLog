@@ -9,12 +9,15 @@
  *   is already installed follows later changes without a reinstall.
  *   No `description`: the manifest has one language and the app speaks three (the plugin would
  *   otherwise copy package.json's).
- * - Service worker (Workbox `generateSW`): the built JS, CSS and HTML, the brand files and the fonts
+ * - Service worker (Workbox `injectManifest` since W2-14, `src/sw.ts`): the built JS, CSS and HTML, the brand files and the fonts
  *   (Archivo and IBM Plex Mono, latin and latin-ext, bundled by `src/fonts.css`), so the installed
  *   shell paints with its own fonts and no third-party request. No runtime caching, so `/api`
  *   (field-api) always goes to the network, and the navigation fallback to `index.html` never
- *   answers `/api`. No web push in week 1: push arrives as a message channel with M6 (spec §4.5,
- *   §9.3), never a person's only channel; it will need `injectManifest` for its push handlers.
+ *   answers `/api`. W2-14 moved it from `generateSW` to `injectManifest` with the same rules (in
+ *   `src/sw.ts`, the globs and the denylist in `config/pwa-rules.ts`) and added the web push
+ *   handlers (`src/sw/handlers.ts`: show the notification, open its link in the app), web push
+ *   being an optional message channel for the installed app, never a person's only channel (spec
+ *   §4.5, §9.3). Built as a classic script (`iife`), so every browser registers it the same way.
  *   Registered by the plain `registerSW.js` script. The first install takes control of the open
  *   page (`clientsClaim`). A new version does not take over an open page: no `skipWaiting`, so it
  *   waits until every window of the app is closed. On activation Workbox deletes the precached files
@@ -27,6 +30,9 @@
  */
 import type { VitePWAOptions } from 'vite-plugin-pwa';
 import { colors } from '@sitelog/shared/tokens.ts';
+import { NAVIGATE_FALLBACK_DENYLIST, PRECACHE_GLOBS } from './pwa-rules.ts';
+
+export { NAVIGATE_FALLBACK_DENYLIST, PRECACHE_GLOBS };
 
 /** Icons in `public/brand/`, written by `pnpm --filter @sitelog/field brand`. */
 export const PWA_ICONS = [
@@ -35,17 +41,10 @@ export const PWA_ICONS = [
   { src: '/brand/pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
 ] as const;
 
-/**
- * The precached build: the shell (JS, CSS, HTML) and the font files `src/fonts.css` bundles. Only the
- * latin and latin-ext subsets exist in the build (latin-ext carries Turkish and Spanish letters), and
- * both names contain `-latin-`.
- */
-export const PRECACHE_GLOBS = ['**/*.{js,css,html}', '**/*-latin-*.woff2'];
-
-/** Navigations the shell must never answer: field-api, proxied or rewritten to Supabase (D39, D43). */
-export const NAVIGATE_FALLBACK_DENYLIST = [/^\/api(?:\/|\?|$)/];
-
 export const pwaOptions: Partial<VitePWAOptions> = {
+  strategies: 'injectManifest',
+  srcDir: 'src',
+  filename: 'sw.ts',
   injectRegister: 'script',
   includeAssets: ['brand/*.svg', 'brand/*.png'],
   manifest: {
@@ -60,15 +59,12 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     background_color: colors.chalk.toUpperCase(),
     icons: PWA_ICONS.map((icon) => ({ ...icon })),
   },
-  workbox: {
+  // The worker (`src/sw.ts`) precaches these, answers navigations with the shell except
+  // NAVIGATE_FALLBACK_DENYLIST, cleans outdated caches, claims the first page, never skips waiting
+  // and caches nothing at run time (no field-api responses).
+  injectManifest: {
     globPatterns: PRECACHE_GLOBS,
-    navigateFallback: '/index.html',
-    navigateFallbackDenylist: NAVIGATE_FALLBACK_DENYLIST,
-    cleanupOutdatedCaches: true,
-    // No skipWaiting: see above.
-    clientsClaim: true,
-    // The shell only: nothing is cached at run time (no field-api responses).
-    runtimeCaching: [],
+    rollupFormat: 'iife',
   },
   devOptions: { enabled: false },
 };
