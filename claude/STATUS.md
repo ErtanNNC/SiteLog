@@ -108,7 +108,16 @@ W1-09, W1-13 ve W1-15 bu testle tamamlandı olarak işaretlendi. Bu testte giri�
 - iki yönlü SMS'te kişiye "START yazın" deniyor;
 - tek yönlü SMS'te (TR) "ofise sorun" deniyor.
 - **Q94 (yeni, kararınız):** tek yönlü SMS ülkelerinde operatör üzerinden STOP yapan numara nasıl geri dönsün? START orada bize ulaşamıyor. Öneri ve yapılan: "ofise sorun". Ofisin bunu kaldırma ekranı M10'da (Ekip sayfası) gelecek.
-- **Sırada:** incelemede bulunan 5 hatanın düzeltilmesi. Ayrıca izin kapatılınca o anda işlenmekte olan raporun da durması kuruluyor (önerimle; aksini söylemezseniz böyle kalacak).
+
+**Hafta-2 incelemesinin düzeltmeleri bitti (58431d8 … 07aa8c0):**
+
+- Rapor meşgulken (ör. yazıya dökme sürerken) dolan 60 dakikalık soru süresi artık kaybolmuyor; birkaç dakika sonra yeniden deneniyor.
+- Sesli cevaplar artık kişinin söylemediği bir sayıyı rapora eklemiyor ("tam gün", "yarım gün", hava saatleri, "0 saat kayıp" için kişinin bunu gerçekten söylemesi gerekiyor).
+- Hâlâ okunan bir sesli cevap, süre dolduğu için kaybolmuyor.
+- Test kaydının dosyası her durumda siliniyor.
+- "Bana bugünün linkini gönder"e aynı anda iki kez basılırsa tek SMS gidiyor (yeni migration `20261016000090`).
+- **Q95 (önerimle, aksini söylemezseniz böyle kalır):** kişi kayıt ya da işleme iznini kapatınca, o anda işlenmekte olan raporu, sesli cevabı ve test kaydı Deepgram'a ya da Claude'a gitmiyor. Taslak otomatik dosyalanmıyor, ofis inceliyor. Kişi izni yeniden verirse atlanan iş tekrar yapılmıyor.
+- **Sırada:** W2-10 (taslağı sesle ya da +/- ile düzeltme).
 
 ## Hafta 2 (M6) — başladı
 
