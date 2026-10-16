@@ -235,12 +235,14 @@ export const ConsentRevokeRequestSchema = z.strictObject({ type: z.enum(CONSENT_
 /**
  * `POST consent/grant` (F15, Settings; spec §19 Q86): turn the texts consent back on, a fresh
  * consent row with the version of the wording shown again (the pack's consent key when set, as
- * `consent`). Texts only: recording and processing come back through the Welcome & consent screen.
+ * `consent`). Texts, and WhatsApp (W2-15): recording and processing come back through the Welcome
+ * & consent screen.
  * Held already: nothing changes. A phone that opted out of texts is refused (409
  * `texts_opted_out`): a consent never overrides STOP.
  */
 export const ConsentGrantRequestSchema = z.strictObject({
-  type: z.literal('sms'),
+  /** `whatsapp` since W2-15 (*Message me on WhatsApp*, spec §19 Q25), when the pack lists it. */
+  type: z.enum(['sms', 'whatsapp']),
   textVersion: z.string().trim().min(1).max(64),
 });
 

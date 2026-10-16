@@ -3,6 +3,8 @@ import {
   consentSets,
   createNotifier,
   createSmsTransports,
+  createWhatsappRegistration,
+  type ChannelRegistration,
   toCountryPack,
   type CountryRow,
   type Json,
@@ -207,11 +209,51 @@ export function supabaseLinkStore(admin: AppClient): PersonalLinkStore {
   };
 }
 
-/** The Notifier of an edge function: supabase-js store, env drivers, sms-webhook status URL. */
+/** When the phone last wrote on WhatsApp (W2-15): the start of its 24-hour window, or null. */
+export async function lastInboundWhatsapp(admin: AppClient, phone: string): Promise<string | null> {
+  const { data } = await admin
+    .from('messages')
+    .select('created_at')
+    .eq('phone_e164', phone)
+    .eq('channel', 'whatsapp')
+    .eq('direction', 'in')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+    .throwOnError();
+  return data?.created_at ?? null;
+}
+
+/**
+ * The WhatsApp channel of an edge function (W2-15): Twilio with the env's account (the SMS one),
+ * the window read with the service role. sms-webhook's replies on WhatsApp (W2-16), field-api's and
+ * the panel's inline texts go through it.
+ */
+export function edgeWhatsappRegistration(
+  admin: AppClient,
+  fetchImpl: typeof fetch = fetch,
+): ChannelRegistration {
+  return createWhatsappRegistration({
+    fetch: (url, init) => fetchImpl(url, init),
+    twilio: () => ({
+      accountSid: optionalEnv('TWILIO_ACCOUNT_SID'),
+      authToken: optionalEnv('TWILIO_AUTH_TOKEN'),
+    }),
+    statusCallbackUrl: statusCallbackUrl(),
+    lastInbound: (phone) => lastInboundWhatsapp(admin, phone),
+    randomUUID: () => crypto.randomUUID(),
+  });
+}
+
+/**
+ * The Notifier of an edge function: supabase-js store, env drivers, sms-webhook status URL, and
+ * WhatsApp (W2-15). Push is the worker's only (W2-14).
+ */
 export function edgeNotifier(admin: AppClient): SmsNotifier {
   return createNotifier({
     store: supabaseNotifierStore(admin),
     transport: smsTransportsFromEnv(),
+    channels: [edgeWhatsappRegistration(admin)],
     statusCallbackUrl: statusCallbackUrl(),
     randomUUID: () => crypto.randomUUID(),
   });

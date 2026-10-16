@@ -8,6 +8,7 @@ import { assertE164 } from '../format.ts';
 import { MASKED_CODE } from '../links.ts';
 import { MessageSendError, pushChannelSpec, type OutboundMessage } from '../channels.ts';
 import { SmsConfigError, SmsSendError } from '../sms/transports.ts';
+import { createWhatsappRegistration } from '../whatsapp/transport.ts';
 import {
   consoleRealOrgError,
   createNotifier,
@@ -132,11 +133,13 @@ function harness(
       },
     };
   };
+  let secondSender: string | null | undefined;
   const second: ChannelRegistration = {
     spec: {
       channel: 'whatsapp',
       consent: 'data_processing',
-      sender: (p) => (p.smsSenderId === null ? null : 'wa-sender'),
+      sender: (p) =>
+        secondSender !== undefined ? secondSender : p.smsSenderId === null ? null : 'wa-sender',
       provider: () => 'fakewa',
     },
     transport: (driver) => ({
@@ -157,7 +160,10 @@ function harness(
     randomUUID: () => `m-${++n}`,
     now: () => new Date('2026-10-09T23:00:00Z'),
   });
-  return { notifier, rows, audit, sent, optOuts, reporterOptOuts, faults };
+  const setSecondSender = (v: string | null | undefined) => {
+    secondSender = v;
+  };
+  return { notifier, rows, audit, sent, optOuts, reporterOptOuts, faults, setSecondSender };
 }
 
 describe('Notifier (spec §4.5)', () => {
@@ -853,7 +859,7 @@ describe('Notifier fallback between channels (§19 Q22, W2-01)', () => {
     });
     expect(h.rows.get('m-1')).toMatchObject({ provider: 'console', status: 'delivered' });
     expect(h.rows.get('m-1')!.body).toContain('K7Q2MX');
-    // A real org whose pack has no sender for its first channel here: W1-08's skip, until W2-15 builds §19 Q84.
+    // A real org whose pack has no sender for any channel here: W1-08's skip, on SMS.
     const noSender = recipient({
       isDemo: false,
       pack: pack('US', { message_channels: ['whatsapp', 'sms'] }),
@@ -864,7 +870,25 @@ describe('Notifier fallback between channels (§19 Q22, W2-01)', () => {
       reason: 'no_channel',
       detail: 'console_real_org',
     });
-    expect(h.rows.get('m-2')).toMatchObject({ channel: 'whatsapp', status: 'failed' });
+    expect(h.rows.get('m-2')).toMatchObject({ channel: 'sms', status: 'failed' });
+    expect([...h.rows.values()].some((r) => r.channel === 'whatsapp' && !r.org_id)).toBe(false);
+  });
+
+  it('§19 Q84 (W2-15): a channel with no sender here leaves a real org’s order; SMS carries it', async () => {
+    const h = harness({ second: true });
+    // The fake second channel has a sender only when SMS has one; this pack's WhatsApp has none.
+    const smsOnly = recipient({
+      isDemo: false,
+      pack: pack('US', { sms_sender_id: '+18885550142', message_channels: ['whatsapp', 'sms'] }),
+      consents: ['sms', 'data_processing'],
+    });
+    h.setSecondSender(null);
+    expect(await h.notifier.deliver(smsOnly, 'filed', FILED, { dedupeKey: 'k1' })).toEqual({
+      channel: 'sms',
+      messageId: 'm-1',
+    });
+    expect([...h.rows.values()].map((r) => [r.channel, r.status])).toEqual([['sms', 'sent']]);
+    expect(h.audit.some((a) => a.action === 'notify.attempt_failed')).toBe(false);
   });
 
   it('refuses a channel registered twice and names unregistered ones', () => {
@@ -995,5 +1019,140 @@ describe('Notifier web push (W2-14, §19 Q27)', () => {
     const h = harness({ channels: [p.registration] });
     const out = await h.notifier.deliver(real({ status: 'opted_out' }), 'filed', FILED);
     expect(out.channel).toBe('push');
+  });
+});
+
+describe('Notifier WhatsApp (W2-15; §19 Q25, Q39, Q84)', () => {
+  const SID = `HX${'a'.repeat(32)}`;
+  const DAILY = { site: 'Riverside Lofts — Block B', link: 'https://go.sitelog.app/r/K7Q2MX' };
+  const FILED = { report_no: 'RL-2041-0187', pdf_link: 'https://go.sitelog.app/r/K7Q2MX/report/1' };
+  const order = { message_channels: ['push', 'whatsapp', 'sms'] as CountryRow['message_channels'] };
+
+  function wa(reply: { status: number; json: unknown } = { status: 201, json: { sid: 'SMwa1' } }) {
+    const forms: URLSearchParams[] = [];
+    const registration = createWhatsappRegistration({
+      fetch: async (_url, init) => {
+        forms.push(new URLSearchParams(String(init.body)));
+        return new Response(JSON.stringify(reply.json), { status: reply.status });
+      },
+      twilio: () => ({ accountSid: 'AC1', authToken: 'tok' }),
+      statusCallbackUrl: 'https://x.supabase.co/functions/v1/sms-webhook/status',
+      lastInbound: async () => null,
+      randomUUID: () => 'wa-uuid',
+      now: () => new Date('2026-10-09T23:00:00Z'),
+    });
+    return { registration, forms };
+  }
+
+  it('a demo reporter who opted in gets daily_link on WhatsApp (console, the Demo phone row)', async () => {
+    const w = wa();
+    const h = harness({ channels: [w.registration] });
+    const r = recipient({ pack: pack('US', order), consents: ['sms', 'whatsapp'] });
+    expect(await h.notifier.deliver(r, 'daily_link', DAILY, { dedupeKey: 'd1' })).toEqual({
+      channel: 'whatsapp',
+      messageId: 'm-1',
+    });
+    expect(h.rows.get('m-1')).toMatchObject({
+      channel: 'whatsapp',
+      provider: 'console',
+      status: 'delivered',
+      phone_e164: '+15550143378',
+    });
+    expect(h.rows.get('m-1')!.body).toContain('K7Q2MX');
+    expect(w.forms).toHaveLength(0);
+    // Without the opt-in: SMS.
+    const noOptIn = recipient({ pack: pack('US', order), consents: ['sms'] });
+    expect(
+      (await h.notifier.deliver(noOptIn, 'daily_link', DAILY, { dedupeKey: 'd2' })).channel,
+    ).toBe('sms');
+  });
+
+  it('a real org: the approved template outside the window, recorded with the report id', async () => {
+    const w = wa();
+    const h = harness({ channels: [w.registration] });
+    const live = pack('US', {
+      ...order,
+      sms_sender_id: '+18885550142',
+      whatsapp_sender_id: '+15550142299',
+      whatsapp_templates: { daily_link: { en: SID } },
+    });
+    const r = recipient({ isDemo: false, pack: live, consents: ['sms', 'whatsapp'] });
+    const out = await h.notifier.deliver(r, 'daily_link', DAILY, {
+      dedupeKey: 'd1',
+      reportId: 'rep-1',
+    });
+    expect(out).toEqual({ channel: 'whatsapp', messageId: 'm-1' });
+    expect(h.rows.get('m-1')).toMatchObject({
+      provider: 'twilio',
+      status: 'sent',
+      provider_message_id: 'SMwa1',
+      payload: {
+        dedupe_key: 'd1',
+        attempt: 1,
+        report_id: 'rep-1',
+        whatsapp_mode: 'template',
+        content_sid: SID,
+      },
+    });
+    // The masked text is stored; the template went with its variables.
+    expect(h.rows.get('m-1')!.body).not.toContain('K7Q2MX');
+    expect(w.forms[0]!.get('ContentSid')).toBe(SID);
+    expect(w.forms[0]!.get('StatusCallback')).toContain('/sms-webhook/status');
+    expect(h.audit.find((a) => a.action === 'whatsapp.sent')).toMatchObject({
+      diff: { copy_key: 'daily_link', provider: 'twilio', channel: 'whatsapp' },
+    });
+    // A key with no approved template leaves WhatsApp before any attempt: SMS.
+    expect((await h.notifier.deliver(r, 'filed', FILED, { dedupeKey: 'f1' })).channel).toBe('sms');
+  });
+
+  it('a template Twilio refuses falls back to SMS under the same key, audited', async () => {
+    const w = wa({ status: 400, json: { code: 63027, message: 'Template does not exist' } });
+    const h = harness({ channels: [w.registration] });
+    const live = pack('US', {
+      ...order,
+      sms_sender_id: '+18885550142',
+      whatsapp_sender_id: '+15550142299',
+      whatsapp_templates: { daily_link: { en: SID } },
+    });
+    const r = recipient({ isDemo: false, pack: live, consents: ['sms', 'whatsapp'] });
+    expect(await h.notifier.deliver(r, 'daily_link', DAILY, { dedupeKey: 'd1' })).toEqual({
+      channel: 'sms',
+      messageId: 'm-2',
+    });
+    expect([...h.rows.values()].map((m) => [m.channel, m.status])).toEqual([
+      ['whatsapp', 'undeliverable'],
+      ['sms', 'sent'],
+    ]);
+    expect(h.audit.find((a) => a.action === 'notify.attempt_failed')).toMatchObject({
+      diff: { channel: 'whatsapp', next_channel: 'sms', code: '63027' },
+    });
+  });
+
+  it('§19 Q84: no WhatsApp sender here, a real org’s message goes by SMS with no WhatsApp row', async () => {
+    const w = wa();
+    const h = harness({ channels: [w.registration] });
+    const r = recipient({
+      isDemo: false,
+      pack: pack('TR', { ...order, sms_sender_id: 'SITELOG' }),
+      locale: 'tr-TR',
+      consents: ['sms', 'whatsapp'],
+    });
+    expect((await h.notifier.deliver(r, 'daily_link', DAILY, { dedupeKey: 'd1' })).channel).toBe(
+      'sms',
+    );
+    expect([...h.rows.values()].map((m) => m.channel)).toEqual(['sms']);
+  });
+
+  it('WhatsApp opt-out is its consent revoked; an SMS STOP leaves WhatsApp (§19 Q40)', async () => {
+    const w = wa();
+    const h = harness({ channels: [w.registration] });
+    const p = pack('US', order);
+    const revoked = recipient({ pack: p, consents: ['sms'], revoked: ['whatsapp'] });
+    expect((await h.notifier.deliver(revoked, 'daily_link', DAILY)).channel).toBe('sms');
+    const stopped = recipient({ pack: p, status: 'opted_out', consents: ['sms', 'whatsapp'] });
+    expect((await h.notifier.deliver(stopped, 'daily_link', DAILY)).channel).toBe('whatsapp');
+    // The welcome never goes on WhatsApp (before the opt-in, §19 Q25).
+    const fresh = recipient({ pack: p, consents: ['whatsapp'] });
+    expect((await h.notifier.deliver(fresh, 'welcome', WELCOME)).channel).toBe(null);
   });
 });

@@ -152,6 +152,7 @@ export function needsConsent(held: ReadonlySet<ConsentType>): boolean {
  * the report mode, the language, the message channel with the pack's built channels (spec §19
  * Q21), every consent type the reporter has given, held or turned off, in `CONSENT_TYPES` order,
  * and the texts consent also when never given while the pack sends texts (its *Turn on*, §19 Q86),
+ * and so the WhatsApp consent where the pack lists WhatsApp (W2-15),
  * and whether the phone opted out of texts (`textsOptedOut`, `textsOptedOut()`).
  */
 export function settingsView(
@@ -164,6 +165,8 @@ export function settingsView(
   const { held } = consentSets(consents);
   const shown = new Set(consents.map((c) => c.type));
   if (pack.messageChannels.includes('sms')) shown.add('sms');
+  // W2-15: *Message me on WhatsApp* is offered wherever the pack lists WhatsApp (spec §19 Q25).
+  if (pack.messageChannels.includes('whatsapp')) shown.add('whatsapp');
   // The *Notifications* toggle is the push consent's control (W2-14), not a row of the list.
   shown.delete('push');
   return {

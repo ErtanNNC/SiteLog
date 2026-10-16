@@ -4,6 +4,15 @@
  *   pnpm countries:set -- --code TR --sms-sender SITELOG
  *   pnpm countries:set -- --code US --sms-sender +18885550142 --voice +15550142290
  *   pnpm countries:set -- --code TR --clear-sms-sender        → back to the console transport
+ *   pnpm countries:set -- --code TR --whatsapp-sender +905320000000 --whatsapp-templates tr.json
+ *   pnpm countries:set -- --code TR --clear-whatsapp-sender   → WhatsApp leaves real orgs' orders
+ *   pnpm countries:set -- --code TR --print-whatsapp-templates → the bodies to submit, no write
+ *
+ * W2-15 (spec §19 Q39): the WhatsApp sender (E.164, the Twilio WhatsApp sender) and the approved
+ * template ids, a JSON file `{<message key>: {<language>: <content sid>}}` (keys of
+ * `WHATSAPP_KEYS`, languages en/es/tr, content sids `HX…`; `{}` clears them). The template bodies
+ * to submit for approval are printed from the pack's variant (its voice number and field
+ * languages) with `--print-whatsapp-templates`.
  *
  * Policy values of a pack (languages, units, providers, two-way SMS …) change only by migration.
  * The SMS sender id and the voice number differ per environment, so every migration seeds them
@@ -18,12 +27,19 @@
  * project also `--allow-staging`. Never set a sender before its registration is approved
  * (US toll-free verification, the TR BTK title): from then on real messages go out from it.
  */
+import { readFile } from 'node:fs/promises';
+import { WHATSAPP_KEYS } from '@sitelog/shared/channels.ts';
 import { isE164 } from '@sitelog/shared/format.ts';
 import {
   isValidSmsSenderId,
   SMS_SENDER_TYPES,
+  WhatsappTemplatesSchema,
   type SmsSenderType,
+  type WhatsappTemplates,
 } from '@sitelog/shared/countries.ts';
+import { assertE164 } from '@sitelog/shared/format.ts';
+import type { ReporterLocale } from '@sitelog/shared/locale.ts';
+import { whatsappTemplatesFor } from '@sitelog/shared/whatsapp/templates.ts';
 import { describeTarget, STAGING_PROJECT_REF } from './seed-target.ts';
 
 /** `undefined` keeps the current value, `null` clears it. */
@@ -31,15 +47,22 @@ export interface CountriesSetArgs {
   code: string;
   smsSenderId?: string | null;
   voiceNumber?: string | null;
+  whatsappSenderId?: string | null;
+  /** A JSON file of template ids (`--whatsapp-templates`), or null to clear them. */
+  whatsappTemplatesFile?: string | null;
+  /** Print the WhatsApp template bodies of the pack and write nothing. */
+  printWhatsappTemplates?: true;
   yes: boolean;
   allowStaging: boolean;
 }
+
+type ValueField = 'smsSenderId' | 'voiceNumber' | 'whatsappSenderId' | 'whatsappTemplatesFile';
 
 export function parseCountriesSetArgs(argv: readonly string[]): CountriesSetArgs {
   const rest = argv.filter((a) => a !== '--');
   let code: string | undefined;
   const out: Omit<CountriesSetArgs, 'code'> = { yes: false, allowStaging: false };
-  const once = (name: string, field: 'smsSenderId' | 'voiceNumber', value: string | null) => {
+  const once = (name: string, field: ValueField, value: string | null) => {
     if (out[field] !== undefined) throw new Error(`${name} conflicts with an earlier flag`);
     out[field] = value;
   };
@@ -60,6 +83,15 @@ export function parseCountriesSetArgs(argv: readonly string[]): CountriesSetArgs
       once('--voice', 'voiceNumber', value('--voice'));
     else if (a === '--clear-sms-sender') once('--clear-sms-sender', 'smsSenderId', null);
     else if (a === '--clear-voice') once('--clear-voice', 'voiceNumber', null);
+    else if (a === '--whatsapp-sender' || a.startsWith('--whatsapp-sender='))
+      once('--whatsapp-sender', 'whatsappSenderId', value('--whatsapp-sender'));
+    else if (a === '--clear-whatsapp-sender')
+      once('--clear-whatsapp-sender', 'whatsappSenderId', null);
+    else if (a === '--whatsapp-templates' || a.startsWith('--whatsapp-templates='))
+      once('--whatsapp-templates', 'whatsappTemplatesFile', value('--whatsapp-templates'));
+    else if (a === '--clear-whatsapp-templates')
+      once('--clear-whatsapp-templates', 'whatsappTemplatesFile', null);
+    else if (a === '--print-whatsapp-templates') out.printWhatsappTemplates = true;
     else if (a === '--yes') out.yes = true;
     else if (a === '--allow-staging') out.allowStaging = true;
     else throw new Error(`unknown argument ${a}`);
@@ -72,6 +104,8 @@ export function parseCountriesSetArgs(argv: readonly string[]): CountriesSetArgs
   for (const [flag, field] of [
     ['--sms-sender', 'smsSenderId'],
     ['--voice', 'voiceNumber'],
+    ['--whatsapp-sender', 'whatsappSenderId'],
+    ['--whatsapp-templates', 'whatsappTemplatesFile'],
   ] as const) {
     const v = out[field];
     if (typeof v === 'string') {
@@ -82,9 +116,20 @@ export function parseCountriesSetArgs(argv: readonly string[]): CountriesSetArgs
   }
   if (typeof out.voiceNumber === 'string' && !isE164(out.voiceNumber))
     throw new Error(`--voice must be E.164, e.g. +15550142290 (got "${out.voiceNumber}")`);
-  if (out.smsSenderId === undefined && out.voiceNumber === undefined)
+  if (typeof out.whatsappSenderId === 'string' && !isE164(out.whatsappSenderId))
     throw new Error(
-      'nothing to set: pass --sms-sender, --voice, --clear-sms-sender or --clear-voice',
+      `--whatsapp-sender must be E.164, e.g. +15550142290 (got "${out.whatsappSenderId}")`,
+    );
+  const sets =
+    out.smsSenderId !== undefined ||
+    out.voiceNumber !== undefined ||
+    out.whatsappSenderId !== undefined ||
+    out.whatsappTemplatesFile !== undefined;
+  if (out.printWhatsappTemplates && sets)
+    throw new Error('--print-whatsapp-templates writes nothing: pass it alone with --code');
+  if (!sets && !out.printWhatsappTemplates)
+    throw new Error(
+      'nothing to set: pass --sms-sender, --voice, --whatsapp-sender, --whatsapp-templates or a --clear-… flag',
     );
   return { code, ...out };
 }
@@ -129,17 +174,73 @@ export interface PackEndpoints {
   sms_sender_type: SmsSenderType;
   sms_sender_id: string | null;
   voice_number: string | null;
+  field_locales: ReporterLocale[];
+  whatsapp_provider: string;
+  whatsapp_sender_id: string | null;
+  whatsapp_templates: WhatsappTemplates | null;
 }
 
-/** The values to store: a flag left out keeps the current one. */
+export interface NextEndpoints {
+  smsSenderId: string | null;
+  voiceNumber: string | null;
+  whatsappSenderId: string | null;
+  whatsappTemplates: WhatsappTemplates | null;
+}
+
+/**
+ * The values to store: a flag left out keeps the current one. `templates` is the parsed
+ * `--whatsapp-templates` file (`undefined` when the flag was left out, null to clear).
+ */
 export function nextEndpoints(
   before: PackEndpoints,
-  args: Pick<CountriesSetArgs, 'smsSenderId' | 'voiceNumber'>,
-): { smsSenderId: string | null; voiceNumber: string | null } {
+  args: Pick<CountriesSetArgs, 'smsSenderId' | 'voiceNumber' | 'whatsappSenderId'>,
+  templates?: WhatsappTemplates | null,
+): NextEndpoints {
   return {
     smsSenderId: args.smsSenderId === undefined ? before.sms_sender_id : args.smsSenderId,
     voiceNumber: args.voiceNumber === undefined ? before.voice_number : args.voiceNumber,
+    whatsappSenderId:
+      args.whatsappSenderId === undefined ? before.whatsapp_sender_id : args.whatsappSenderId,
+    whatsappTemplates: templates === undefined ? before.whatsapp_templates : templates,
   };
+}
+
+/**
+ * A `--whatsapp-templates` file's JSON, checked as set_country_endpoints() does and against the
+ * keys WhatsApp carries (`WHATSAPP_KEYS`): `{}` clears (null).
+ */
+export function parseWhatsappTemplates(text: string): WhatsappTemplates | null {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error('--whatsapp-templates: the file is not JSON');
+  }
+  const parsed = WhatsappTemplatesSchema.safeParse(json);
+  if (!parsed.success)
+    throw new Error(
+      `--whatsapp-templates: expected {<message key>: {<en|es|tr>: <HX… content sid>}} (${parsed.error.issues[0]?.message ?? 'invalid'})`,
+    );
+  const unknown = Object.keys(parsed.data).filter(
+    (k) => !(WHATSAPP_KEYS as readonly string[]).includes(k),
+  );
+  if (unknown.length > 0)
+    throw new Error(
+      `--whatsapp-templates: ${unknown.join(', ')} is not a key WhatsApp carries (${WHATSAPP_KEYS.join(', ')})`,
+    );
+  return Object.keys(parsed.data).length === 0 ? null : parsed.data;
+}
+
+/** The template bodies to submit for a pack (its voice number and field languages, W2-15). */
+export function describeWhatsappTemplates(row: PackEndpoints): string[] {
+  const set = row.whatsapp_templates ?? {};
+  return whatsappTemplatesFor({
+    voiceNumber: row.voice_number === null ? null : assertE164(row.voice_number),
+    fieldLocales: row.field_locales,
+  }).map(({ key, language, body, variables }) => {
+    const sid = set[key]?.[language];
+    return `${key}.${language} [${variables.map((v, i) => `{{${i + 1}}}=${v}`).join(', ')}]${sid ? ` (${sid})` : ' (not set)'}: ${body}`;
+  });
 }
 
 /** The shape set_country_endpoints() takes for the pack's sender type, checked before writing. */
@@ -160,12 +261,17 @@ export function describeEndpoints(row: PackEndpoints): string {
     ? `${row.sms_sender_id} (sends through ${row.sms_provider})`
     : 'not set (console transport)';
   const voice = row.voice_number ?? 'not set (Talk now only)';
-  return `${row.code} · ${row.sms_sender_type} SMS sender: ${sender} · voice number: ${voice}`;
+  const wa = row.whatsapp_sender_id
+    ? `${row.whatsapp_sender_id} (sends through ${row.whatsapp_provider})`
+    : 'not set (console for demo orgs; real orgs skip WhatsApp)';
+  const templates = Object.keys(row.whatsapp_templates ?? {}).length;
+  return `${row.code} · ${row.sms_sender_type} SMS sender: ${sender} · voice number: ${voice} · WhatsApp sender: ${wa} · WhatsApp templates: ${templates} key(s)`;
 }
 
-const COLUMNS = 'code, sms_provider, sms_sender_type, sms_sender_id, voice_number';
+const COLUMNS =
+  'code, sms_provider, sms_sender_type, sms_sender_id, voice_number, field_locales, whatsapp_provider, whatsapp_sender_id, whatsapp_templates';
 export const SELECT_PACK_SQL = `select ${COLUMNS} from countries where code = $1 for update`;
-export const SET_ENDPOINTS_SQL = `select ${COLUMNS} from set_country_endpoints($1, $2, $3)`;
+export const SET_ENDPOINTS_SQL = `select ${COLUMNS} from set_country_endpoints($1, $2, $3, $4, $5::jsonb)`;
 
 /** A transaction's query function (postgres.js `sql.unsafe` in the script, a fake in tests). */
 export type Query = (text: string, params: unknown[]) => Promise<readonly unknown[]>;
@@ -177,20 +283,29 @@ export type Query = (text: string, params: unknown[]) => Promise<readonly unknow
 export async function applyCountriesSet(
   query: Query,
   args: CountriesSetArgs,
+  templates?: WhatsappTemplates | null,
 ): Promise<{ before: PackEndpoints; after: PackEndpoints; changed: boolean }> {
   const [found] = (await query(SELECT_PACK_SQL, [args.code])) as PackEndpoints[];
   if (!found) throw new Error(`no country pack ${args.code} in this database`);
   if (!(SMS_SENDER_TYPES as readonly string[]).includes(found.sms_sender_type))
     throw new Error(`pack ${args.code} has an unknown sender type ${found.sms_sender_type}`);
-  const next = nextEndpoints(found, args);
+  if (args.printWhatsappTemplates) return { before: found, after: found, changed: false };
+  const next = nextEndpoints(found, args, templates);
   const problem = senderProblem(found.sms_sender_type, next.smsSenderId);
   if (problem) throw new Error(problem);
-  if (next.smsSenderId === found.sms_sender_id && next.voiceNumber === found.voice_number)
+  if (
+    next.smsSenderId === found.sms_sender_id &&
+    next.voiceNumber === found.voice_number &&
+    next.whatsappSenderId === found.whatsapp_sender_id &&
+    JSON.stringify(next.whatsappTemplates) === JSON.stringify(found.whatsapp_templates)
+  )
     return { before: found, after: found, changed: false };
   const [after] = (await query(SET_ENDPOINTS_SQL, [
     args.code,
     next.smsSenderId,
     next.voiceNumber,
+    next.whatsappSenderId,
+    next.whatsappTemplates === null ? null : JSON.stringify(next.whatsappTemplates),
   ])) as PackEndpoints[];
   if (!after) throw new Error('set_country_endpoints() returned no row');
   return { before: found, after, changed: true };
@@ -209,6 +324,8 @@ export interface CountriesSetDeps {
   /** Called only after the target passed refuseCountriesTarget(). */
   connect: (dbUrl: string) => Promise<CountriesSetConnection>;
   log: (line: string) => void;
+  /** Reads a `--whatsapp-templates` file (default: from disk). */
+  readFile?: (path: string) => Promise<string>;
 }
 
 /** postgres.js on SUPABASE_DB_URL, one connection; imported only once the target is allowed. */
@@ -237,6 +354,15 @@ export async function runCountriesSet(
   deps: CountriesSetDeps,
 ): Promise<{ before: PackEndpoints; after: PackEndpoints; changed: boolean }> {
   const args = parseCountriesSetArgs(argv);
+  // The template file is read and checked before anything connects.
+  const templates =
+    typeof args.whatsappTemplatesFile === 'string'
+      ? parseWhatsappTemplates(
+          await (deps.readFile ?? ((path) => readFile(path, 'utf8')))(args.whatsappTemplatesFile),
+        )
+      : args.whatsappTemplatesFile === null
+        ? null
+        : undefined;
   const dbUrl = deps.env.SUPABASE_DB_URL?.trim() ?? '';
   const refusal = refuseCountriesTarget({
     dbUrl,
@@ -248,7 +374,12 @@ export async function runCountriesSet(
   deps.log(`countries:set → ${describeTarget(dbUrl)}`);
   const db = await deps.connect(dbUrl);
   try {
-    const result = await db.transaction((query) => applyCountriesSet(query, args));
+    const result = await db.transaction((query) => applyCountriesSet(query, args, templates));
+    if (args.printWhatsappTemplates) {
+      deps.log(`  WhatsApp templates to submit for ${result.before.code}:`);
+      for (const line of describeWhatsappTemplates(result.before)) deps.log(`  ${line}`);
+      return result;
+    }
     deps.log(`  before: ${describeEndpoints(result.before)}`);
     deps.log(
       result.changed

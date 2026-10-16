@@ -45,7 +45,8 @@ const run = (...argv: string[]) => applyCountriesSet(query, parseCountriesSetArg
 
 async function pack(code: string): Promise<PackEndpoints> {
   const [row] = (await query(
-    `select code, sms_provider, sms_sender_type, sms_sender_id, voice_number
+    `select code, sms_provider, sms_sender_type, sms_sender_id, voice_number, field_locales,
+            whatsapp_provider, whatsapp_sender_id, whatsapp_templates
        from countries where code = $1`,
     [code],
   )) as PackEndpoints[];
@@ -99,8 +100,18 @@ describe('countries:set on the migrated schema', () => {
           entity: 'country',
           diff: {
             code: 'US',
-            from: { sms_sender_id: null, voice_number: null },
-            to: { sms_sender_id: null, voice_number: '+15550142290' },
+            from: {
+              sms_sender_id: null,
+              voice_number: null,
+              whatsapp_sender_id: null,
+              whatsapp_templates: null,
+            },
+            to: {
+              sms_sender_id: null,
+              voice_number: '+15550142290',
+              whatsapp_sender_id: null,
+              whatsapp_templates: null,
+            },
           },
         },
         {
@@ -109,8 +120,18 @@ describe('countries:set on the migrated schema', () => {
           entity: 'country',
           diff: {
             code: 'US',
-            from: { sms_sender_id: null, voice_number: '+15550142290' },
-            to: { sms_sender_id: '+18885550142', voice_number: '+15550142290' },
+            from: {
+              sms_sender_id: null,
+              voice_number: '+15550142290',
+              whatsapp_sender_id: null,
+              whatsapp_templates: null,
+            },
+            to: {
+              sms_sender_id: '+18885550142',
+              voice_number: '+15550142290',
+              whatsapp_sender_id: null,
+              whatsapp_templates: null,
+            },
           },
         },
       ]);

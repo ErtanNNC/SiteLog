@@ -347,6 +347,63 @@ Deno.test('status callbacks move a message forward only', async () => {
   );
 });
 
+Deno.test(
+  'W2-15: WhatsApp status callbacks reach read; a late failure falls back with no account notice',
+  async () => {
+    const h = setup();
+    const sentBy = {
+      reporterId: DANA,
+      key: 'daily_link' as const,
+      vars: { site: 'Pier 9', link: 'https://go.sitelog.app/r/AAAAAA' },
+      dedupeKey: 'notify:daily:x',
+    };
+    h.store.notifyJobs.push({ id: 1, payload: sentBy, dedupeKey: sentBy.dedupeKey });
+    h.store.outbound.push(
+      {
+        id: 'wa1',
+        provider_message_id: 'SMwa1',
+        status: 'sent',
+        org_id: REAL_US,
+        reporter_id: DANA,
+        copy_key: 'daily_link',
+        error: null,
+        channel: 'whatsapp',
+      },
+      {
+        id: 'wa2',
+        provider_message_id: 'SMwa2',
+        status: 'sent',
+        org_id: REAL_US,
+        reporter_id: DANA,
+        copy_key: 'daily_link',
+        error: null,
+        channel: 'whatsapp',
+        payload: { dedupe_key: 'notify:daily:x', attempt: 1 },
+      },
+    );
+    await h.twilio('/status', { MessageSid: 'SMwa1', MessageStatus: 'delivered' });
+    await h.twilio('/status', { MessageSid: 'SMwa1', MessageStatus: 'read' });
+    assertEquals(h.store.outbound[0]!.status, 'read');
+    assertEquals(
+      h.store.audits.filter((a) => a.action === 'whatsapp.status').map((a) => a.diff),
+      [
+        { from: 'sent', to: 'delivered', error_code: null },
+        { from: 'delivered', to: 'read', error_code: null },
+      ],
+    );
+    // 63016 (outside the window) or `failed`: the next channel, never the texts-account notice.
+    await h.twilio('/status', {
+      MessageSid: 'SMwa2',
+      MessageStatus: 'failed',
+      ErrorCode: '63016',
+    });
+    assertEquals(h.store.outbound[1]!.status, 'failed');
+    assertEquals(h.store.notifications, []);
+    assertEquals(h.store.audits.filter((a) => a.action === 'sms.provider_fault').length, 0);
+    assertEquals(h.store.notifyJobs.at(-1)!.dedupeKey, 'notify:daily:x:after:wa2');
+  },
+);
+
 Deno.test('a late failure of a notify message queues its fallback once (W2-01, Q22)', async () => {
   const h = setup();
   const FILED = '00000000-0000-4000-8000-0000000000f1';

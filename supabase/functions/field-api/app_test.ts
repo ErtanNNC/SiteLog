@@ -1891,11 +1891,11 @@ Deno.test(
   async () => {
     const h = setup({ country: { message_channels: ['sms', 'whatsapp'] } });
     await consented(h);
-    // WhatsApp is listed by the pack but not built (W2-15): not offered.
+    // WhatsApp is built (W2-15): offered where the pack lists it.
     const wa = await h.call('PATCH', 'preferences', { body: { messageChannel: 'whatsapp' } });
     assertEquals(
-      [wa.status, wa.json.error, wa.json.offered],
-      [400, 'channel_not_offered', ['sms']],
+      [wa.status, wa.json.messageChannel, wa.json.messageChannels],
+      [200, 'whatsapp', ['sms', 'whatsapp']],
     );
     assertEquals(
       (await h.call('PATCH', 'preferences', { body: { messageChannel: 'push' } })).json.error,
@@ -1907,7 +1907,7 @@ Deno.test(
     assertEquals(sms.status, 200);
     assertEquals(
       [sms.json.messageChannel, sms.json.contactPref, sms.json.locale, sms.json.messageChannels],
-      ['sms', 'call', 'es-US', ['sms']],
+      ['sms', 'call', 'es-US', ['sms', 'whatsapp']],
     );
     const marco = h.store.reporters.find((r) => r.id === MARCO)!;
     assertEquals(
@@ -1919,7 +1919,11 @@ Deno.test(
       .at(-1)!;
     const diff = changed.diff as Record<string, unknown>;
     assertEquals(changed.actorType, 'reporter');
-    assertEquals(diff.from, { contact_pref: 'link', locale: 'en-US', message_channel: null });
+    assertEquals(diff.from, {
+      contact_pref: 'link',
+      locale: 'en-US',
+      message_channel: 'whatsapp',
+    });
     assertEquals(diff.to, { contact_pref: 'call', locale: 'es-US', message_channel: 'sms' });
     assert(diff.device_id, 'the device it came from');
     // null = the pack's order again; the same value again changes and audits nothing.
@@ -1961,11 +1965,88 @@ Deno.test('Settings: turning texts off revokes the sms consent only; reports go 
   // Again: nothing held, nothing changes.
   await h.call('POST', 'consent/revoke', { body: { type: 'sms' } });
   assertEquals(h.store.audits.filter((a) => a.action === 'consent.revoked').length, 1);
+  // W2-15: WhatsApp is turned off on its own consent; never given, nothing changes.
   assertEquals(
-    (await h.call('POST', 'consent/revoke', { body: { type: 'whatsapp' } })).json.error,
-    'invalid_request',
+    (await h.call('POST', 'consent/revoke', { body: { type: 'whatsapp' } })).status,
+    200,
   );
+  assertEquals(h.store.audits.filter((a) => a.action === 'consent.revoked').length, 1);
 });
+
+Deno.test(
+  'W2-15: Message me on WhatsApp on Welcome and in Settings, where the pack lists it (Q25, Q40)',
+  async () => {
+    const h = setup({ country: { message_channels: ['push', 'whatsapp', 'sms'] } });
+    await verifiedDevice(h);
+    const consent = await h.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing', 'sms', 'whatsapp'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'link',
+        locale: 'en-US',
+      },
+    });
+    assertEquals(consent.status, 200);
+    assert((consent.json.consents as string[]).includes('whatsapp'));
+    const given = h.store.consents.find((c) => c.type === 'whatsapp')!;
+    assertEquals([given.method, given.revoked_at], ['web_checkbox', null]);
+    // Settings lists it; Turn off revokes it alone (the per-channel opt-out of Q40).
+    const off = await h.call('POST', 'consent/revoke', { body: { type: 'whatsapp' } });
+    assertEquals(
+      (off.json.consents as Array<{ type: string; held: boolean }>).find(
+        (c) => c.type === 'whatsapp',
+      ),
+      { type: 'whatsapp', held: false },
+    );
+    assertEquals(h.store.consents.find((c) => c.type === 'sms')!.revoked_at, null);
+    // An SMS opt-out never blocks WhatsApp's Turn on.
+    h.store.reporters.find((r) => r.id === MARCO)!.status = 'opted_out';
+    const on = await h.call('POST', 'consent/grant', {
+      body: { type: 'whatsapp', textVersion: 'field.consent.v1' },
+    });
+    assertEquals(on.status, 200);
+    assertEquals(
+      (on.json.consents as Array<{ type: string; held: boolean }>).find(
+        (c) => c.type === 'whatsapp',
+      ),
+      { type: 'whatsapp', held: true },
+    );
+
+    // A pack without WhatsApp offers neither.
+    const us = setup();
+    await verifiedDevice(us);
+    const refused = await us.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing', 'whatsapp'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'link',
+        locale: 'en-US',
+      },
+    });
+    assertEquals([refused.status, refused.json.error], [400, 'channel_not_offered']);
+    await us.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing', 'sms'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'link',
+        locale: 'en-US',
+      },
+    });
+    assertEquals(
+      (
+        await us.call('POST', 'consent/grant', {
+          body: { type: 'whatsapp', textVersion: 'field.consent.v1' },
+        })
+      ).json.error,
+      'channel_not_offered',
+    );
+    assert(
+      !((await us.call('GET', 'preferences')).json.consents as Array<{ type: string }>).some(
+        (c) => c.type === 'whatsapp',
+      ),
+    );
+  },
+);
 
 Deno.test(
   'Settings: Turn on records a fresh texts consent, audited like the revoke (Q86)',

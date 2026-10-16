@@ -35,7 +35,8 @@ import type { SmsWebhookStore } from './store.ts';
  *                                    the keywords and the reply (`processInboundSms`), so the
  *                                    handling survives whatever Twilio's retry policy does (its
  *                                    default retries connection failures only, never a 5xx).
- *   POST /sms-webhook/status         Twilio's StatusCallback: messages.status (never backwards);
+ *   POST /sms-webhook/status         Twilio's StatusCallback (SMS and, since W2-15, WhatsApp, `read`
+ *                                    included): messages.status (never backwards);
  *                                    a welcome the carrier could not deliver to the number flags
  *                                    the reporter for the office ("Can't reach this number", F3,
  *                                    §13); any text that failed for the account or the sender
@@ -291,16 +292,25 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
     const to = nextMessageStatus(message.status, next);
     if (!to) return twiml();
     const error = twilioCallbackError(cb.errorCode);
+    const whatsapp = message.channel === 'whatsapp';
     await store.updateMessageStatus(message.id, to, error);
     await store.audit({
       orgId: message.org_id,
       actorType: 'system',
-      action: 'sms.status',
+      action: whatsapp ? 'whatsapp.status' : 'sms.status',
       entity: 'message',
       entityId: message.id,
       diff: { from: message.status, to, error_code: cb.errorCode },
     });
     if (to !== 'undeliverable' && to !== 'failed') return twiml();
+    if (whatsapp) {
+      // W2-15: a WhatsApp message Twilio took and then could not deliver (63016 outside the
+      // window, 63024 not on WhatsApp, a template Meta paused, …): never a texts-account notice
+      // nor "Can't reach this number" (the welcome is never on WhatsApp); the message goes on the
+      // person's next channel (W2-01), and the office hears only if every channel fails.
+      await fallBack(message, to);
+      return twiml();
+    }
     // A text Twilio accepted and then could not deliver. Only a carrier refusing the number
     // (`undelivered` with 30003, 30004, 30005, 30006, or no code) is the reporter's: for a
     // welcome, F3 "Can't reach this number". `failed` (it never left the account) and every other

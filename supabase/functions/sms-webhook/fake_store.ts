@@ -162,6 +162,7 @@ export class FakeSmsStore implements SmsWebhookStore {
             reporter_id: m.reporter_id,
             copy_key: m.copy_key,
             payload: m.payload ?? null,
+            channel: m.channel ?? 'sms',
           }
         : null,
     );

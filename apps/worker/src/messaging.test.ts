@@ -16,11 +16,14 @@ describe('worker messaging (W1-08)', () => {
   it('logs one line per pack: console until the sender id is set here', () => {
     const rows = DEMO_COUNTRIES.map((c) => ({ ...c }));
     expect(describePackTransports(rows)).toEqual({
-      TR: 'console: no sender id',
-      US: 'console: no sender id',
+      TR: 'console: no sender id; whatsapp: no sender id',
+      US: 'console: no sender id; whatsapp: no sender id',
     });
     rows.find((r) => r.code === 'TR')!.sms_sender_id = 'SITELOG';
-    expect(describePackTransports(rows).TR).toBe('iletimerkezi (SITELOG)');
+    rows.find((r) => r.code === 'TR')!.whatsapp_sender_id = '+905320000099';
+    expect(describePackTransports(rows).TR).toBe(
+      'iletimerkezi (SITELOG); whatsapp twilio (+905320000099)',
+    );
   });
 
   it("reads the org's pack fresh; an unknown pack is an error", async () => {

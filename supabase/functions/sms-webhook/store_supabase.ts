@@ -151,7 +151,7 @@ export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
     async messageByProviderId(providerId) {
       const { data } = await admin
         .from('messages')
-        .select('id, status, org_id, reporter_id, copy_key, payload')
+        .select('id, status, org_id, reporter_id, copy_key, payload, channel')
         .eq('provider_message_id', providerId)
         .maybeSingle()
         .throwOnError();

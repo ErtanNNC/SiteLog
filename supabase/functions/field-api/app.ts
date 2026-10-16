@@ -579,6 +579,13 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
         offered: ctx.pack.fieldLocales,
       });
     }
+    // W2-15 (spec §19 Q25): *Message me on WhatsApp* only where the pack lists WhatsApp; push is
+    // given by its own toggle (W2-14), never here.
+    if (body.types.includes('whatsapp') && !ctx.pack.messageChannels.includes('whatsapp')) {
+      throw new FieldError(400, 'channel_not_offered', undefined, {
+        offered: settingsMessageChannels(ctx.pack),
+      });
+    }
     const fresh = [...new Set(body.types)].filter((t) => !ctx.consents.held.has(t));
     const evidence = {
       device_id: ctx.device.id,
@@ -1661,14 +1668,15 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     return c.json((await settingsBody(ctx)) satisfies PreferencesResponse);
   });
 
-  // ── consent/grant (F15: Turn on texts; spec §19 Q86) ─────────────────────────────────────────
-  // A fresh `sms` consent with the wording shown again (its version checked as `consent` does),
-  // audited like the revoke. A phone that opted out of texts stays opted out: 409
-  // `texts_opted_out` (START undoes STOP, §9.5), checked in the same transaction.
+  // ── consent/grant (F15: Turn on texts; spec §19 Q86; WhatsApp W2-15) ─────────────────────────
+  // A fresh `sms` or `whatsapp` consent (the pack must list the channel) with the wording shown
+  // again (its version checked as `consent` does), audited like the revoke. A phone that opted out
+  // of texts stays opted out: 409 `texts_opted_out` (START undoes STOP, §9.5), checked in the same
+  // transaction; that never blocks WhatsApp (§19 Q40, the first option).
   app.post('/consent/grant', async (c) => {
     const ctx = await authenticate(c, { consent: false });
     const body = await parseBody(c, ConsentGrantRequestSchema);
-    if (!ctx.pack.messageChannels.includes('sms')) {
+    if (!ctx.pack.messageChannels.includes(body.type)) {
       throw new FieldError(400, 'channel_not_offered', undefined, {
         offered: settingsMessageChannels(ctx.pack),
       });

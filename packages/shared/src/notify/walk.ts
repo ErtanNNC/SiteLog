@@ -75,8 +75,12 @@ export function attemptIsFinal(a: Pick<MessageAttempt, 'status' | 'provider_mess
  * a late failure for the number are the person's, and still do.
  */
 export function attemptIsAccountFault(
-  a: Pick<MessageAttempt, 'status' | 'provider' | 'provider_message_id' | 'error'>,
+  a: Pick<MessageAttempt, 'status' | 'provider' | 'provider_message_id' | 'error'> & {
+    channel?: MessageChannel | null;
+  },
 ): boolean {
+  // sms-webhook's account notice is about texts (W2-15): a WhatsApp failure is never counted here.
+  if (a.channel === 'whatsapp' || a.channel === 'push') return false;
   if (a.provider !== 'twilio' || a.provider_message_id === null) return false;
   if (a.status !== 'failed' && a.status !== 'undeliverable') return false;
   return twilioLateFailureIsAccountFault(a.status, twilioCallbackCode(a.error));

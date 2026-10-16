@@ -98,6 +98,8 @@ export const PUBLIC_SERVER_ENV = new Set([
   'SENTRY_DSN',
   'LOG_LEVEL',
   'COST_WA_TEMPLATE_USD',
+  'COST_SMS_USD',
+  'COST_WHATSAPP_TEMPLATE_USD',
 ]);
 
 /**

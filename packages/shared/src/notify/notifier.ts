@@ -51,10 +51,14 @@ import {
  * - A phone that sent STOP on the pack's sender (`sms_opt_outs`, whoever it belonged to then) gets
  *   nothing by SMS (`opted_out`, detail `phone_opted_out`), even when this reporter row is not
  *   opted out: the opt-out follows the number, not the row.
- * - `console` on a real org (a pack without a sender id here) reaches no phone: the row is written
- *   `failed` with the reason, masked, so the staging Demo phone shows what would have gone out, and
- *   the caller gets `no_channel` with detail `console_real_org` (the office is told by the sending
- *   job). `verify_code` is then not written at all: a code nobody receives is of no use, and the
+ * - Spec §19 Q84 (decided 2026-10-16, built in W2-15): for a real org a channel with no sender in
+ *   this environment (`pickMessageTransport` answers `console`: no WhatsApp sender, no SMS sender)
+ *   leaves the order before any attempt, so the next channel carries the message (with the TR
+ *   order `{push, whatsapp, sms}` and no WhatsApp sender, SMS). Only when no channel of the order
+ *   has a sender does W1-08's rule apply, on SMS: the row is written `failed` with the reason,
+ *   masked, so the staging Demo phone shows what would have gone out, and the caller gets
+ *   `no_channel` with detail `console_real_org` (the office is told by the sending job).
+ *   `verify_code` is then not written at all: a code nobody receives is of no use, and the
  *   W1-07 rule keeps it out of the office's reach (spec §19 Q48). A reply to an inbound text
  *   (`reply`) on `console` for a real org (its pack's sender cleared after the text came in) is
  *   written `failed` the same way and thrown as a refusal for good, never recorded as delivered.
@@ -71,9 +75,7 @@ import {
  *   message through a `notify` job) hands the message to the next deliverable channel, under the
  *   same dedupe key. Each attempt is its own row (`payload.attempt`), and the attempt the walk
  *   moves past is audited `notify.attempt_failed` with its reason before the next goes out. A
- *   retryable error retries the same channel (the job's backoff). `console` on a real org
- *   (`console_real_org`) stays W1-08's skip, with no fallback, until W2-15 builds spec §19 Q84
- *   (decided 2026-10-16: a channel with no sender here leaves a real org's order; SMS carries it).
+ *   retryable error retries the same channel (the job's backoff).
  * - A refused send (`SmsSendError`) marks the row `failed` or `undeliverable`, is audited and is
  *   thrown on, so a job retries what may pass later and records what never will. A provider that
  *   refuses because the number is on its own opt-out list (Twilio 21610, `optedOut`) also records
@@ -113,6 +115,12 @@ export type OutboundMessagePayload = {
   attempt?: number;
   /** The provider's code of a refused send. */
   error_code?: string;
+  /** The report the message is about (W2-15: its per-channel messaging cost, §15). */
+  report_id?: string;
+  /** WhatsApp (W2-15): `template` outside the 24-hour window, `session` inside it. */
+  whatsapp_mode?: string;
+  /** WhatsApp: the approved template's content sid of a `template` send. */
+  content_sid?: string;
 };
 
 /** A `messages` row the Notifier writes: one per attempt (SMS, or a registered channel). */
@@ -221,9 +229,10 @@ export interface ChannelRegistration {
   /**
    * Whether the channel can reach this person now, beyond consent and the pack (W2-14: push needs a
    * live subscription, and a VAPID key pair for a real org). A channel that cannot leaves the order
-   * before any attempt, so the message goes on the next channel. Absent: always.
+   * before any attempt, so the message goes on the next channel. Absent: always. W2-15: WhatsApp
+   * outside the 24-hour window needs an approved template of `key` in the reporter's language.
    */
-  reachable?(recipient: NotifyRecipient): Promise<boolean>;
+  reachable?(recipient: NotifyRecipient, key?: NotifierKey): Promise<boolean>;
 }
 
 export interface NotifierDeps {
@@ -269,7 +278,7 @@ export interface SmsNotifier extends Notifier {
     recipient: NotifyRecipient,
     key: K,
     vars: SmsVars<K>,
-    opts?: { channels?: readonly MessageChannel[]; dedupeKey?: string },
+    opts?: { channels?: readonly MessageChannel[]; dedupeKey?: string; reportId?: string },
   ): Promise<NotifyOutcome>;
   /**
    * A two-way reply to an inbound text (`TWO_WAY_SMS_KEYS`: HELP, STOP, CALL, TEXT, unknown; the
@@ -432,15 +441,25 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     existingId?: string;
     /** The id of a new row (default: a new UUID). */
     newId?: string;
+    /** The report the message is about (`payload.report_id`). */
+    reportId?: string;
+    /** A reply to an inbound message (WhatsApp: free-form inside its window). */
+    reply?: boolean;
   }
 
-  function payloadOf(input: TransmitInput, code?: string | null): OutboundMessageRow['payload'] {
-    if (input.dedupeKey === undefined && input.attempt === undefined && !code) return null;
-    return {
+  function payloadOf(
+    input: TransmitInput,
+    code?: string | null,
+    meta?: Record<string, string>,
+  ): OutboundMessageRow['payload'] {
+    const payload = {
       ...(input.dedupeKey !== undefined ? { dedupe_key: input.dedupeKey } : {}),
       ...(input.attempt !== undefined ? { attempt: input.attempt } : {}),
+      ...(input.reportId !== undefined ? { report_id: input.reportId } : {}),
       ...(code ? { error_code: code } : {}),
+      ...(meta ?? {}),
     };
+    return Object.keys(payload).length === 0 ? null : payload;
   }
 
   function rowOf(
@@ -508,7 +527,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     const statusCallback = registration.statusCallback?.(input.driver) ?? null;
     const sender = registration.spec.sender(input.pack);
     try {
-      const { providerId } = await transport.send(
+      const { providerId, payload: meta } = await transport.send(
         {
           to: input.phone,
           reporterId: input.reporterId,
@@ -516,6 +535,8 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
           key: input.key,
           language: input.language,
           vars: input.vars,
+          pack: input.pack,
+          ...(input.reply ? { reply: true } : {}),
         },
         {
           ...(input.channel === 'sms'
@@ -530,6 +551,8 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         status: input.driver === 'console' ? 'delivered' : 'sent',
         provider_message_id: providerId,
         error: null,
+        // What the transport records about the send (WhatsApp: template or session, W2-15).
+        ...(meta && Object.keys(meta).length > 0 ? { payload: payloadOf(input, null, meta) } : {}),
       });
       await store.audit({
         orgId: input.orgId,
@@ -606,7 +629,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     recipient: NotifyRecipient,
     key: K,
     vars: SmsVars<K>,
-    opts: { channels?: readonly MessageChannel[]; dedupeKey?: string } = {},
+    opts: { channels?: readonly MessageChannel[]; dedupeKey?: string; reportId?: string } = {},
   ): Promise<NotifyOutcome> {
     const { reporter, org, pack } = recipient;
     if (reporter.status === 'disabled') return skip(recipient, key, 'no_channel', 'disabled');
@@ -628,10 +651,20 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
     const reachable: MessageChannel[] = [];
     for (const channel of order) {
       const check = registrationOf(channel).reachable;
-      if (!check || (await check(recipient))) reachable.push(channel);
+      if (!check || (await check(recipient, key))) reachable.push(channel);
     }
     if (reachable.length === 0) return skip(recipient, key, 'no_channel');
     order = reachable;
+    if (!org.isDemo) {
+      // Spec §19 Q84 (W2-15): a channel with no sender in this environment leaves a real org's
+      // order, so the next one carries the message. With none left, W1-08's rule on SMS below
+      // (`console_real_org`: a masked `failed` row, the office told by the sending job).
+      const withSender = order.filter(
+        (c) => pickMessageTransport({ isDemo: false }, pack, c, specs) !== 'console',
+      );
+      if (withSender.length > 0) order = withSender;
+      else if (order.includes('sms')) order = ['sms'];
+    }
     const phone = assertE164(reporter.phone_e164);
     if (order.includes('sms') && (await store.isPhoneOptedOut(phone, pack.code))) {
       order = order.filter((c) => c !== 'sms');
@@ -705,11 +738,12 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         dedupeKey: opts.dedupeKey,
         attempt: plan.attempt,
         existingId: plan.retry?.id,
+        ...(opts.reportId ? { reportId: opts.reportId } : {}),
       };
       if (driver === 'console' && !org.isDemo) {
         // Nothing reaches the phone: the masked row records what would have gone out (the
-        // staging Demo phone shows it), and the caller tells the office. No fallback: W1-08's
-        // rule stands until W2-15 builds spec §19 Q84 (decided 2026-10-16).
+        // staging Demo phone shows it), and the caller tells the office. Only when no channel of
+        // the order has a sender here (spec §19 Q84 removed the others above).
         const id = plan.retry?.id ?? deps.randomUUID();
         await writeRow(input, id, 'failed', consoleRealOrgError(pack.code));
         return skip(recipient, key, 'no_channel', 'console_real_org', { message_id: id });

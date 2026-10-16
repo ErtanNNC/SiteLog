@@ -77,10 +77,10 @@ const deliverable = (
   });
 
 describe('message channels (§4.5)', () => {
-  it('builds SMS and push (W2-14); WhatsApp has no consent label yet', () => {
-    expect([...IMPLEMENTED_MESSAGE_CHANNELS]).toEqual(['sms', 'push']);
+  it('builds SMS, push (W2-14) and WhatsApp (W2-15), each with its consent', () => {
+    expect([...IMPLEMENTED_MESSAGE_CHANNELS]).toEqual(['sms', 'push', 'whatsapp']);
     expect(Object.keys(CONSENT_FOR_CHANNEL).sort()).toEqual([...MESSAGE_CHANNELS].sort());
-    expect(CONSENT_FOR_CHANNEL).toEqual({ sms: 'sms', whatsapp: null, push: 'push' });
+    expect(CONSENT_FOR_CHANNEL).toEqual({ sms: 'sms', whatsapp: 'whatsapp', push: 'push' });
     for (const consent of Object.values(CONSENT_FOR_CHANNEL))
       if (consent !== null) expect(CONSENT_TYPES).toContain(consent);
   });
@@ -198,20 +198,34 @@ describe('deliverableChannels (§4.5)', () => {
     expect(deliverable(US, 'daily_link', { optedOut: new Set(['whatsapp']) })).toEqual(['sms']);
   });
 
-  it('drops WhatsApp (not built, no consent label) and push without its consent or for its keys', () => {
+  it('drops WhatsApp and push without their consent or for keys they do not carry', () => {
     const all = new Set(CONSENT_TYPES);
     const wa = pack('US', { message_channels: ['whatsapp', 'push', 'sms'] });
-    expect(deliverable(wa, 'filed', { preferred: 'push', consents: all })).toEqual(['push', 'sms']);
+    expect(deliverable(wa, 'filed', { preferred: 'push', consents: all })).toEqual([
+      'push',
+      'whatsapp',
+      'sms',
+    ]);
     expect(deliverable(wa, 'filed', { consents: new Set(['sms']) })).toEqual(['sms']);
+    // W2-15: the welcome and the device code never go on WhatsApp (before its opt-in; SMS only).
     expect(deliverable(wa, 'welcome', { consents: all })).toEqual(['sms']);
-    expect(deliverable(wa, 'photos_link', { consents: all })).toEqual(['sms']);
-    expect(
-      deliverable(wa, 'filed', {
-        preferred: 'whatsapp',
-        consents: all,
-        implemented: MESSAGE_CHANNELS,
-      }),
-    ).toEqual(['push', 'sms']);
+    expect(deliverable(wa, 'verify_code', { consents: all })).toEqual(['sms']);
+    expect(deliverable(wa, 'photos_link', { consents: all })).toEqual(['whatsapp', 'sms']);
+    // An SMS opt-out (STOP) stops texts only (§19 Q40): WhatsApp still goes.
+    expect(deliverable(wa, 'filed', { consents: all, optedOut: new Set(['sms']) })).toEqual([
+      'whatsapp',
+      'push',
+    ]);
+    expect(deliverable(wa, 'filed', { preferred: 'whatsapp', consents: all })).toEqual([
+      'whatsapp',
+      'push',
+      'sms',
+    ]);
+    // A Notifier without WhatsApp's registration never sends on it.
+    expect(deliverable(wa, 'filed', { consents: all, implemented: ['sms', 'push'] })).toEqual([
+      'push',
+      'sms',
+    ]);
   });
 
   it('computes the order from the pack: a narrowing never adds a channel the pack lacks', () => {
@@ -312,12 +326,16 @@ describe('pickMessageTransport (§4.5, §5.2)', () => {
     expect(pickMessageTransport({ isDemo: false }, trTwilio, 'sms')).toBe('twilio');
   });
 
-  it('has no WhatsApp or push transport until week 2 (M6)', () => {
-    for (const channel of ['whatsapp', 'push'] as const)
-      for (const isDemo of [true, false])
-        expect(() => pickMessageTransport({ isDemo }, US_LIVE, channel)).toThrow(
-          `Message channel "${channel}" is not built until week 2 (M6)`,
-        );
+  it('WhatsApp: console for demo orgs and a pack with no WhatsApp sender, else Twilio (W2-15)', () => {
+    expect(pickMessageTransport({ isDemo: false }, US_LIVE, 'whatsapp')).toBe('console');
+    const wa = pack('US', { whatsapp_sender_id: '+15550142299' });
+    expect(pickMessageTransport({ isDemo: false }, wa, 'whatsapp')).toBe('twilio');
+    expect(pickMessageTransport({ isDemo: true }, wa, 'whatsapp')).toBe('console');
+    // Push is registered by the worker only (its spec needs the VAPID pair).
+    for (const isDemo of [true, false])
+      expect(() => pickMessageTransport({ isDemo }, US_LIVE, 'push')).toThrow(
+        'Message channel "push" is not built until week 2 (M6)',
+      );
   });
 
   it('only ever names a driver (every pack provider has one)', () => {
@@ -410,10 +428,12 @@ describe('the pack decides the SMS variant and sender, never the driver', () => 
 describe('settingsMessageChannels (F15, spec §19 Q21)', () => {
   it("offers the pack's built channels in its order", () => {
     expect(settingsMessageChannels({ messageChannels: ['sms'] })).toEqual(['sms']);
-    // WhatsApp and push are not built yet: one channel, so Settings shows no choice.
+    // W2-15: WhatsApp is built; push is its own toggle, never a choice here (§19 Q107).
     expect(settingsMessageChannels({ messageChannels: ['whatsapp', 'sms', 'push'] })).toEqual([
+      'whatsapp',
       'sms',
     ]);
+    expect(settingsMessageChannels({ messageChannels: ['push', 'sms'] })).toEqual(['sms']);
     expect(
       settingsMessageChannels({ messageChannels: ['whatsapp', 'sms'] }, ['sms', 'whatsapp']),
     ).toEqual(['whatsapp', 'sms']);

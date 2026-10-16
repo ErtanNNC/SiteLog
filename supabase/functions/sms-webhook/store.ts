@@ -1,4 +1,5 @@
 import type {
+  MessageChannel,
   CountryRow,
   InboundSmsAudit,
   InboundSmsStore,
@@ -38,6 +39,8 @@ export interface OutboundMessageState {
   copy_key: string | null;
   /** `messages.payload`: the Notifier's dedupe key and attempt (W2-01). */
   payload?: unknown;
+  /** `messages.channel`: `sms`, or `whatsapp` (W2-15: Twilio posts both to `/status`). */
+  channel?: MessageChannel | null;
 }
 
 /** A §13 "Message undeliverable / opted out" notification (`notify_org`). */

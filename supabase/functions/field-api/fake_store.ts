@@ -733,7 +733,7 @@ export class FakeFieldStore implements FieldStore {
 
   grantConsent(
     reporterId: string,
-    type: 'sms',
+    type: 'sms' | 'whatsapp',
     textVersion: string,
     deviceId: string,
     evidence: Json,
@@ -742,7 +742,10 @@ export class FakeFieldStore implements FieldStore {
     const r = this.reporters.find((x) => x.id === reporterId);
     if (!r) return Promise.reject(new FieldDbError('reporter_not_found'));
     const country = this.orgs.find((o) => o.id === r.org_id)?.country ?? '';
-    if (r.status === 'opted_out' || this.optOuts.has(`${r.phone_e164}|${country}`)) {
+    if (
+      type === 'sms' &&
+      (r.status === 'opted_out' || this.optOuts.has(`${r.phone_e164}|${country}`))
+    ) {
       return Promise.reject(new FieldDbError('texts_opted_out'));
     }
     if (

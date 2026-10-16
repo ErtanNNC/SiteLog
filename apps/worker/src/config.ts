@@ -147,6 +147,22 @@ export const ConfigSchema = z.object({
     .default(0.004)
     .transform((v) => (typeof v === 'number' ? v : Number.parseFloat(v)))
     .pipe(z.number().min(0).max(1)),
+  /**
+   * W2-15 (§15, GAP D49 (5)): the per-channel messaging cost of a report's Notifier messages, USD
+   * per text a provider took (Twilio US SMS, one segment) and per business-initiated WhatsApp
+   * template (Meta's utility template plus Twilio's fee). Session messages inside the 24 h window
+   * and push cost nothing. See src/cost.ts.
+   */
+  COST_SMS_USD: z
+    .union([z.string(), z.number()])
+    .default(0.0083)
+    .transform((v) => (typeof v === 'number' ? v : Number.parseFloat(v)))
+    .pipe(z.number().min(0).max(1)),
+  COST_WHATSAPP_TEMPLATE_USD: z
+    .union([z.string(), z.number()])
+    .default(0.009)
+    .transform((v) => (typeof v === 'number' ? v : Number.parseFloat(v)))
+    .pipe(z.number().min(0).max(1)),
   FFMPEG_PATH: z.string().default(''),
   /** Skip the ffmpeg + storage path in tests. */
   WORKER_DRY_RUN: bool.default(false),

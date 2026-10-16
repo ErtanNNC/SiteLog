@@ -3,6 +3,7 @@ import {
   jobKeys,
   createNotifier,
   createSmsTransports,
+  createWhatsappRegistration,
   toCountryPack,
   type CountryPack,
   type ChannelRegistration,
@@ -161,14 +162,40 @@ export function createWorkerNotifier(
   db: Db,
   transport: (driver: SmsDriver) => SmsTransport = workerTransports(config),
   now: () => Date = () => new Date(),
-  /** Message channels besides SMS (W2-01): push (W2-14) by default; WhatsApp (W2-15) joins it. */
-  channels: readonly ChannelRegistration[] = [workerPushRegistration(config, db)],
+  /** Message channels besides SMS (W2-01): push (W2-14) and WhatsApp (W2-15) by default. */
+  channels: readonly ChannelRegistration[] = [
+    workerPushRegistration(config, db),
+    workerWhatsappRegistration(config, db),
+  ],
 ): SmsNotifier {
   return createNotifier({
     store: workerNotifierStore(db),
     transport,
     channels,
     statusCallbackUrl: statusCallbackUrl(config),
+    randomUUID: () => crypto.randomUUID(),
+    now,
+  });
+}
+
+/**
+ * The WhatsApp channel (W2-15) through Twilio, with the worker env's Twilio account (the SMS one,
+ * spec §4.4) and the 24-hour window read from its Db.
+ */
+export function workerWhatsappRegistration(
+  config: Pick<
+    Config,
+    'TWILIO_ACCOUNT_SID' | 'TWILIO_AUTH_TOKEN' | 'SMS_WEBHOOK_URL' | 'SUPABASE_URL'
+  >,
+  db: Pick<Db, 'lastInboundWhatsapp'>,
+  fetchImpl: typeof fetch = abortableFetch(),
+  now: () => Date = () => new Date(),
+): ChannelRegistration {
+  return createWhatsappRegistration({
+    fetch: (url, init) => fetchImpl(url, init),
+    twilio: () => ({ accountSid: config.TWILIO_ACCOUNT_SID, authToken: config.TWILIO_AUTH_TOKEN }),
+    statusCallbackUrl: statusCallbackUrl(config),
+    lastInbound: (phone) => db.lastInboundWhatsapp(phone),
     randomUUID: () => crypto.randomUUID(),
     now,
   });
@@ -189,14 +216,19 @@ export function workerPushRegistration(
 }
 
 /**
- * One line per pack for the worker's start log: which SMS transport a real org of the pack gets
- * in this database. Demo orgs always get `console`.
+ * One line per pack for the worker's start log: which SMS (and, W2-15, WhatsApp) transport a real
+ * org of the pack gets in this database. Demo orgs always get `console`.
  */
 export function describePackTransports(rows: readonly CountryRow[]): Record<string, string> {
   return Object.fromEntries(
-    rows.map((row) => [
-      row.code,
-      row.sms_sender_id ? `${row.sms_provider} (${row.sms_sender_id})` : 'console: no sender id',
-    ]),
+    rows.map((row) => {
+      const sms = row.sms_sender_id
+        ? `${row.sms_provider} (${row.sms_sender_id})`
+        : 'console: no sender id';
+      const wa = row.whatsapp_sender_id
+        ? `whatsapp ${row.whatsapp_provider} (${row.whatsapp_sender_id})`
+        : 'whatsapp: no sender id';
+      return [row.code, `${sms}; ${wa}`];
+    }),
   );
 }

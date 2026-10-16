@@ -251,6 +251,22 @@ export const JobPayloadSchemas = {
   }),
 } as const satisfies Record<(typeof JOB_TYPES)[number], z.ZodType>;
 
+/**
+ * The report a `notify` job's message is about (W2-15: `messages.payload.report_id`, the report's
+ * per-channel messaging cost): its web report guard's, else the report named by its dedupe key
+ * (`jobKeys.filed`, `draftReady`, `draftNudge`, `editApplied`, and their `:after:` fallbacks).
+ */
+export function notifyReportId(
+  payload: Pick<JobPayloads['notify'], 'dedupeKey' | 'reportGuard'>,
+): string | null {
+  if (payload.reportGuard) return payload.reportGuard.reportId;
+  const m =
+    /^notify:(?:filed|draft_ready|draft_nudge|edit_applied):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::|$)/i.exec(
+      payload.dedupeKey,
+    );
+  return m ? m[1]!.toLowerCase() : null;
+}
+
 export type JobPayloads = {
   [K in keyof typeof JobPayloadSchemas]: z.infer<(typeof JobPayloadSchemas)[K]>;
 };

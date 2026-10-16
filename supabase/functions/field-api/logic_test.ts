@@ -340,11 +340,13 @@ Deno.test('settingsView: the built channels, and every consent given with its st
     contactPref: 'call',
     locale: 'es-US',
     messageChannel: null,
-    messageChannels: ['sms'],
+    // W2-15: WhatsApp is built, and its consent listed for Turn on where the pack lists it.
+    messageChannels: ['whatsapp', 'sms'],
     consents: [
       { type: 'sms', held: false },
       { type: 'recording', held: true },
       { type: 'data_processing', held: true },
+      { type: 'whatsapp', held: false },
     ],
     textsOptedOut: false,
     push: { offered: false, on: false },
@@ -405,7 +407,7 @@ Deno.test(
       settingsView(reporter, { ...us, messageChannels: ['whatsapp'] }, given, false).consents.map(
         (c) => c.type,
       ),
-      ['recording', 'data_processing'],
+      ['recording', 'data_processing', 'whatsapp'],
     );
   },
 );

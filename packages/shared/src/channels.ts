@@ -47,24 +47,25 @@ export type NotifierKey = Exclude<MessageKey, TwoWaySmsKey>;
 
 /**
  * The message channels with a transport. Week 1 builds SMS; W2-14 web push (the worker registers
- * its transport, `PUSH_CHANNEL`); WhatsApp (Twilio) joins with W2-15, by registering its
- * `MessageChannelSpec` and transport with the Notifier (`NotifierDeps.channels`, W2-01) and adding
- * itself here. A Notifier without a channel's registration (the edge functions' for push) never
- * sends on it.
+ * its transport, `pushChannelSpec`); W2-15 WhatsApp through Twilio (`WHATSAPP_CHANNEL`, registered
+ * by the worker and the edge functions, `whatsapp/transport.ts`). A Notifier without a channel's
+ * registration (the edge functions' for push) never sends on it.
  */
 export const IMPLEMENTED_MESSAGE_CHANNELS = [
   'sms',
   'push',
+  'whatsapp',
 ] as const satisfies readonly MessageChannel[];
 
 /**
- * The consent each message channel needs (`consents.type`). null = no consent label yet
- * (WhatsApp waits for W2-15, spec §19 Q25), so the channel is never deliverable. Push: the `push`
- * consent the Settings toggle gives (spec §19 Q27, W2-14).
+ * The consent each message channel needs (`consents.type`); null = no consent label, never
+ * deliverable. Push: the `push` consent the Settings toggle gives (spec §19 Q27, W2-14). WhatsApp:
+ * the `whatsapp` consent of *Message me on WhatsApp* on Field-02 or in Settings (spec §19 Q25,
+ * W2-15); revoked by unticking it or by STOP on WhatsApp (§19 Q40, the first option).
  */
 export const CONSENT_FOR_CHANNEL: Readonly<Record<MessageChannel, ConsentType | null>> = {
   sms: 'sms',
-  whatsapp: null,
+  whatsapp: 'whatsapp',
   push: 'push',
 };
 
@@ -84,9 +85,33 @@ export const PUSH_KEYS = [
   'reminder_2',
 ] as const satisfies readonly NotifierKey[];
 
-/** The keys a channel may carry when it carries only some (push); absent = every Notifier key. */
+/**
+ * The keys WhatsApp carries (W2-15, spec §19 Q25): every Notifier key but the two first-contact
+ * ones. The welcome goes before any consent, so before the WhatsApp opt-in that only the welcome's
+ * link reaches; the device code always goes by SMS (`SMS_ONLY_KEYS`). Each is a business-initiated
+ * message: outside the 24-hour window it needs an approved template (`whatsapp/templates.ts`).
+ */
+export const WHATSAPP_KEYS = [
+  'daily_link',
+  'call_coming',
+  'weather_headsup',
+  'reminder_1',
+  'reminder_2',
+  'missed_call',
+  'question_ready',
+  'draft_ready',
+  'filed',
+  'photos_link',
+  'edit_applied',
+  'finish_report',
+  'site_paused',
+] as const satisfies readonly NotifierKey[];
+export type WhatsappKey = (typeof WHATSAPP_KEYS)[number];
+
+/** The keys a channel may carry when it carries only some; absent = every Notifier key. */
 export const CHANNEL_KEYS: Readonly<Partial<Record<MessageChannel, readonly NotifierKey[]>>> = {
   push: PUSH_KEYS,
+  whatsapp: WHATSAPP_KEYS,
 };
 
 /** Whether `channel` may carry `key` (`CHANNEL_KEYS`). */
@@ -130,7 +155,7 @@ export const CONSENT_FREE_SMS_KEYS = ['verify_code'] as const satisfies readonly
  * The message channels Settings offers as a preference (F15, spec §19 Q21; W2-02): the pack's, in
  * its order, that are built, except push, which has its own *Notifications* toggle (W2-14, §19
  * Q107: push is reached by turning it on, never as a preference). The choice is shown only when
- * there is more than one (hidden until W2-15).
+ * there is more than one (a pack that lists SMS and WhatsApp, W2-15).
  */
 export function settingsMessageChannels(
   pack: Pick<CountryPack, 'messageChannels'>,
@@ -183,8 +208,23 @@ export function pushChannelSpec(vapidConfigured: boolean): MessageChannelSpec {
   };
 }
 
+/** The driver of the WhatsApp transport: the pack's `whatsapp_provider` (only `twilio`). */
+export const WHATSAPP_DRIVERS = ['twilio', 'console'] as const;
+export type WhatsappDriver = (typeof WHATSAPP_DRIVERS)[number];
+
+/**
+ * WhatsApp through Twilio (W2-15; spec §4.4, §19 Q25, Q39): consent `whatsapp`, the pack's
+ * `whatsapp_sender_id` (per environment; null = `console`) and `whatsapp_provider`.
+ */
+export const WHATSAPP_CHANNEL: MessageChannelSpec = {
+  channel: 'whatsapp',
+  consent: 'whatsapp',
+  sender: (pack) => pack.whatsappSenderId,
+  provider: (pack) => pack.whatsappProvider,
+};
+
 /** The channels built in this repo, as specs (`pickMessageTransport`'s default registry). */
-export const BUILT_CHANNEL_SPECS: readonly MessageChannelSpec[] = [SMS_CHANNEL];
+export const BUILT_CHANNEL_SPECS: readonly MessageChannelSpec[] = [SMS_CHANNEL, WHATSAPP_CHANNEL];
 
 /** What a channel's transport is asked to send: the §9.2 text and what it was rendered from. */
 export interface OutboundMessage {
@@ -199,6 +239,13 @@ export interface OutboundMessage {
   language: string;
   /** The key's variables, unmasked (a WhatsApp template's variables, W2-15). */
   vars: Readonly<Record<string, unknown>>;
+  /** The org's country pack (WhatsApp reads its template ids, W2-15). */
+  pack?: CountryPack;
+  /**
+   * A reply to a message the person just sent (`SmsNotifier.reply`): WhatsApp sends it free-form
+   * inside the 24-hour window that message opened.
+   */
+  reply?: boolean;
 }
 
 /**
@@ -208,7 +255,14 @@ export interface OutboundMessage {
 export interface MessageTransport {
   readonly channel: MessageChannel;
   readonly driver: string;
-  send(message: OutboundMessage, opts: SmsSendOptions): Promise<{ providerId: string }>;
+  /**
+   * `payload`: what the row's `messages.payload` should also record about this send (WhatsApp:
+   * `whatsapp_mode` template or session, and the template's content sid, W2-15).
+   */
+  send(
+    message: OutboundMessage,
+    opts: SmsSendOptions,
+  ): Promise<{ providerId: string; payload?: Record<string, string> }>;
 }
 
 /**
@@ -293,7 +347,12 @@ export interface Notifier {
     reporterId: string,
     key: K,
     vars: SmsVars<K>,
-    opts?: { channels?: readonly MessageChannel[]; dedupeKey?: string },
+    opts?: {
+      channels?: readonly MessageChannel[];
+      dedupeKey?: string;
+      /** The report the message is about (`messages.payload.report_id`, its cost, W2-15). */
+      reportId?: string;
+    },
   ): Promise<NotifyOutcome>;
   /** Places an outbound call if the reporter prefers calls, has auto-call consent and is inside the call window. */
   call(reporterId: string, purpose: CallPurpose, ctx: CallContext): Promise<void>;
@@ -420,7 +479,7 @@ export function smsReplyAllowed(pack: CountryPack, key: ReplySmsKey): boolean {
  * use `console` (they never message real people); so does a pack with no sender of that channel
  * in this environment (nothing goes out before a sender is approved and set,
  * `set_country_endpoints()`); otherwise the pack's provider for the channel. A channel with no
- * registration (WhatsApp, push until W2-15 / W2-14) throws.
+ * registration throws.
  */
 export function pickMessageTransport(
   org: { isDemo: boolean },

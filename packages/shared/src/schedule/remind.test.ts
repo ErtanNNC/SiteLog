@@ -113,14 +113,15 @@ describe('remind(): the §7.4 table over every pack capability, preference and s
                 twoWaySms: twoWay,
                 voiceNumber: voice ? ('+15550100000' as CountryPack['voiceNumber']) : null,
                 smsLinksAllowed: links,
-                // A pack that forbids links in SMS must list another channel (§4.6); none is built.
+                // A pack that forbids links in SMS must list another channel (§4.6); the table
+                // reads SMS alone (WhatsApp, built in W2-15, is left out of `implemented`).
                 messageChannels: links ? ['sms'] : ['sms', 'whatsapp'],
               });
               const r = reporter({
                 contactPref: pref,
                 consents: new Set<ConsentType>(['sms', 'auto_call']),
               });
-              const got = remind(r, p, stage, ctx({ outboundTrunk: trunk }));
+              const got = remind(r, p, stage, ctx({ outboundTrunk: trunk, implemented: ['sms'] }));
               rows.push([
                 `twoWay=${twoWay} voice=${voice} links=${links} trunk=${trunk} ${pref} ${stage}`,
                 got,
@@ -390,8 +391,13 @@ describe('remindChannels', () => {
 
   it('drops SMS for a key with a link when the pack forbids links; keeps it for the heads-up', () => {
     const p = pack({ smsLinksAllowed: false, messageChannels: ['sms', 'whatsapp'] });
-    expect(remindChannels(p, { messageChannel: null }, 'daily_link')).toEqual([]);
-    expect(remindChannels(p, { messageChannel: null }, 'weather_headsup')).toEqual(['sms']);
+    expect(remindChannels(p, { messageChannel: null }, 'daily_link', ['sms'])).toEqual([]);
+    // W2-15: WhatsApp is built, so it carries the link.
+    expect(remindChannels(p, { messageChannel: null }, 'daily_link')).toEqual(['whatsapp']);
+    expect(remindChannels(p, { messageChannel: null }, 'weather_headsup')).toEqual([
+      'sms',
+      'whatsapp',
+    ]);
     expect(remindChannels(p, { messageChannel: null }, 'daily_link', ['sms', 'whatsapp'])).toEqual([
       'whatsapp',
     ]);

@@ -301,7 +301,7 @@ export interface FieldStore extends DailyLinkStore {
    */
   grantConsent(
     reporterId: string,
-    type: 'sms',
+    type: 'sms' | 'whatsapp',
     textVersion: string,
     deviceId: string,
     evidence: Json,

@@ -101,6 +101,8 @@ describe('cost per report on PGlite', () => {
       aiUsd: 0.25,
       jobCount: 1,
       waTemplates: 1,
+      smsMessages: 0,
+      whatsappTemplates: 0,
     });
     expect(
       await db.reportCostBaseline({
@@ -159,6 +161,8 @@ describe('cost per report on PGlite', () => {
       aiUsd: 0.25,
       jobCount: 2,
       waTemplates: 0,
+      smsMessages: 0,
+      whatsappTemplates: 0,
     });
   });
 });

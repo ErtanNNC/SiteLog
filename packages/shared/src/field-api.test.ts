@@ -86,7 +86,7 @@ describe('field-api contract', () => {
     ).toBe(true);
     expect(
       ConsentRequestSchema.safeParse({
-        types: ['whatsapp'],
+        types: ['email'],
         textVersion: 'v1',
         contactPref: 'link',
         locale: 'en-US',
@@ -120,7 +120,9 @@ describe('field-api contract', () => {
     expect(PreferencesRequestSchema.safeParse({ messageChannel: 'fax' }).success).toBe(false);
     expect(PreferencesRequestSchema.safeParse({ noCallsToday: true }).success).toBe(false);
     expect(ConsentRevokeRequestSchema.safeParse({ type: 'sms' }).success).toBe(true);
-    expect(ConsentRevokeRequestSchema.safeParse({ type: 'whatsapp' }).success).toBe(false);
+    // W2-15: the WhatsApp consent is turned off like any other (spec §19 Q40).
+    expect(ConsentRevokeRequestSchema.safeParse({ type: 'whatsapp' }).success).toBe(true);
+    expect(ConsentRevokeRequestSchema.safeParse({ type: 'email' }).success).toBe(false);
     expect(ConsentRevokeRequestSchema.safeParse({}).success).toBe(false);
     // §19 Q86: Turn on takes the texts consent only, with the wording's version.
     expect(
@@ -133,6 +135,10 @@ describe('field-api contract', () => {
       false,
     );
     expect(ConsentGrantRequestSchema.safeParse({ type: 'sms' }).success).toBe(false);
+    expect(
+      ConsentGrantRequestSchema.safeParse({ type: 'whatsapp', textVersion: 'field.consent.v1' })
+        .success,
+    ).toBe(true);
     expect(ConfirmRequestSchema.safeParse({ draftRev: 1 }).success).toBe(true);
     expect(ConfirmRequestSchema.safeParse({ version: 2, draftRev: 3 }).data).toEqual({
       version: 2,

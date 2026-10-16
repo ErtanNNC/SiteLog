@@ -978,6 +978,13 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         .filter((p) => p.reporter_id === reporterId && p.revoked_at === null)
         .map(({ id, endpoint, p256dh, auth }) => ({ id, endpoint, p256dh, auth }));
     },
+    async lastInboundWhatsapp(phone) {
+      const ins = Array.from(d.messages.values())
+        .filter((m) => m.phone_e164 === phone && m.channel === 'whatsapp' && m.direction === 'in')
+        .map((m) => m.created_at)
+        .sort();
+      return ins.at(-1) ?? null;
+    },
     async pushSubscriptionGone(id, status) {
       const row = d.pushSubscriptions.find((p) => p.id === id && p.revoked_at === null);
       if (!row) return false;
@@ -1288,7 +1295,21 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         const p = obj(m.payload);
         return p.reportId === reportId || (!!report && p.siteDayId === report.site_day_id);
       }).length;
-      return { aiUsd, jobCount, waTemplates };
+      // W2-15 (20261016000220): the Notifier's messages about the report, by channel.
+      const sent = Array.from(d.messages.values()).filter((m) => {
+        const p = obj(m.payload);
+        return (
+          m.direction === 'out' &&
+          p.report_id === reportId &&
+          m.provider !== 'console' &&
+          ['sent', 'delivered', 'read'].includes(m.status)
+        );
+      });
+      const smsMessages = sent.filter((m) => m.channel === 'sms').length;
+      const whatsappTemplates = sent.filter(
+        (m) => m.channel === 'whatsapp' && obj(m.payload).whatsapp_mode === 'template',
+      ).length;
+      return { aiUsd, jobCount, waTemplates, smsMessages, whatsappTemplates };
     },
     async reportCostBaseline({ kind, before, excludeReportId, days }) {
       const end = new Date(before).getTime();

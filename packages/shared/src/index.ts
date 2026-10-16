@@ -44,6 +44,8 @@ export * from './notify/notifier.ts';
 export * from './notify/walk.ts';
 export * from './notify/fallback.ts';
 export * from './notify/push.ts';
+export * from './whatsapp/templates.ts';
+export * from './whatsapp/transport.ts';
 export * from './schedule/reminders.ts';
 export * from './schedule/remind.ts';
 export * from './schedule/day.ts';

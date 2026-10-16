@@ -8,6 +8,7 @@ import {
   attemptOf,
   insideWindow,
   noticeData,
+  notifyReportId,
   type RemindPolicy,
   type JobPayloads,
   type NoticeData,
@@ -223,8 +224,11 @@ export function createNotifyJob(
 
     let outcome;
     try {
+      const reportId = notifyReportId(payload);
       outcome = await ctx.notifier.send(reporter.id, key, payload.vars as SmsVars<NotifierKey>, {
         dedupeKey: payload.dedupeKey,
+        // W2-15: the report's per-channel messaging cost (`messages.payload.report_id`).
+        ...(reportId ? { reportId } : {}),
       });
     } catch (err) {
       if (
