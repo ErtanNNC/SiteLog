@@ -44,7 +44,7 @@ Gün numaraları: 27 günlük plan bu repoda yok; spec §16'nın hafta-1 gün ar
 - **Sizin bakmanız gereken:**
   - Bildirimlerin Türkçe metinleri (~60 metin, `packages/shared/src/copy/ui/tr.ts` içinde `shell.notifications.notices`) benim çevirim. Q66/Q68 Türkçe okumasına eklendi.
   - Kestrel demo bildirimleri biraz değişti: "needs review" bildirimi şantiye adı yerine rapor numarasıyla başlıyor, sözlük bildirimi "3 new terms to review" diyor.
-- **Yarın sabahki telefon testi öncesi (benim yapacaklarım):** bekleyen tüm yeni migration'lar (`20261015000070` … `20261016000040`) ve güncel edge function'lar preview projesine yüklenecek. Saha uygulaması artık onayda taslak sürümünü (`draftRev`) istiyor, eski field-api ile onay çalışmaz. Ardından phone-setup ve preview-worker çalışacak, linkler size gelecek. Hepsi yalnızca preview projesinde, staging'e dokunulmuyor.
+- **Yarın sabahki telefon testi öncesi (benim yapacaklarım):** bekleyen tüm yeni migration'lar (`20261015000070` … `20261016000050`) ve güncel edge function'lar preview projesine yüklenecek. Saha uygulaması artık onayda taslak sürümünü (`draftRev`) istiyor, eski field-api ile onay çalışmaz. Ardından phone-setup ve preview-worker çalışacak, linkler size gelecek. Hepsi yalnızca preview projesinde, staging'e dokunulmuyor.
 - **Geliştiriciler için not:** anahtar yoksa worker artık sahte veriye kendiliğinden geçmiyor. Yerelde uçtan uca çalıştırmak için `.env` içine `EXTRACT_PROVIDER=fake` ve `TRANSCRIBE_PROVIDER=fake` yazılmalı.
 - Actions döndükten sonraki CI'da iki eski test güncellendi (9278b0e, a41cdec); kod hatası değildi. Tüm işin birlikte CI sonucu bekleniyor.
 - W1-19 yerel hazırlık bitti (a767f12): RUNBOOK §2 "Cut-over (W1-19), step by step" (adım 0–8, her biri komut, ön koşul, doğrulama, geri alma), `docs/DEMO_NOTES.md` (demo senaryosu tıklama tıklama), `pnpm cutover:preflight` (yerel ön kontrol; paketlerde sır yok: PASS), staging şeklindeki veritabanında cut-over provası (cutover.test.ts). Hiçbir uzak adım yapılmadı. **Hafta 1 ticket'larının tamamı kodlandı;** kalanlar sizin onay ve kontrollerinizde.
@@ -129,6 +129,14 @@ Plan: `docs/PLAN_WEEK2.md` (5d28574), W2-01 … W2-17. Sizden karar ya da anahta
 - Q76 ve Q77 önerdiğim varsayımla kuruldu, cevabınızı bekliyor.
 - **Q90 (yeni, kararınız):** bir şantiyede yedek kişi varsa hatırlatmaları kim alsın? Öneri ve yapılan: şantiyenin tüm aktif kişileri, önce asıl kişi.
 - Hava durumu cümlesinin ES/TR metni Q63 okumasına eklendi.
+
+**W2-07 ve W2-08 bitti (330c567, 13ef494):**
+
+- **Zaman aşımları (W2-07):** web'de cevaplanmayan soru 60 dakika sonra taslağa işaretli olarak geçiyor. Onaylanmayan taslak için 30. dakikada bir hatırlatma gidiyor, 2 saatte otomatik dosyalanıyor. Kişi taslaktan hemen çıkarsa 30 saniye sonra "taslak hazır" mesajı gidiyor.
+- **İş yok / Hava (W2-08):** bunlar artık rapor olarak kaydediliyor. Kayıp saat kodda hesaplanıyor ve sıradaki hatırlatmalar duruyor. Yeni migration: `20261016000050`.
+- **CI düzeltmeleri:** hatırlatma testinin iki hatası giderildi (cbeb5a1, 5d1f9f6). Worker CI'da artık test saatini kullanıyor; production'da bu ayar reddediliyor.
+- Q78 ve Q79 önerilen varsayımla kuruldu, cevabınızı bekliyor.
+- **Q91 (yeni, kararınız):** plan "kayıp saat = işçi × kaybedilen saat" diyor, spec ise yalnızca durulan saat diyor. Ayrıca 12 işçi × 8,5 saat veritabanı alanına sığmıyor. Öneri ve yapılan: kayıp saat = durulan saat; ekip-saati kaybı özete yazılıyor.
 
 **Sizin yapmanız gerekenler (hafta 2, acele değil ama uzun sürüyor):**
 
