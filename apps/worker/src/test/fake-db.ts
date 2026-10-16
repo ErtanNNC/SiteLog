@@ -103,6 +103,14 @@ export interface FakeDbData {
     string,
     Pick<UploadRow, 'id' | 'report_id' | 'reporter_id' | 'site_id'> & Partial<UploadRow>
   >;
+  /** field_attach_photos() calls (F9, W2-04): the batches attached and the versions they made. */
+  photoBatches: Array<{
+    reportId: string;
+    batchId: string;
+    changeNote: string;
+    caption: string | null;
+    version: number;
+  }>;
 }
 
 export interface FakeDb extends Db {
@@ -149,6 +157,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     fieldLinks: [],
     consoleEmails: [],
     uploads: new Map(),
+    photoBatches: [],
   };
   let jobSeq = 0;
   let taken = 0;
@@ -341,12 +350,41 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         caption: null,
         uploaded_by: null,
         purged_at: null,
+        batch_id: null,
+        batch_size: null,
         ...u,
       };
     },
+    async countBatchPhotos(batchId) {
+      return Array.from(d.uploads.values()).filter(
+        (u) => u.batch_id === batchId && u.kind === 'photo',
+      ).length;
+    },
+    async attachPhotos(reportId, batchId, changeNote, caption) {
+      const done = d.photoBatches.find((b) => b.batchId === batchId);
+      if (done) return { version: done.version, alreadyAttached: true };
+      const report = d.reports.get(reportId);
+      if (!report) throw new Error('report_not_found');
+      report.current_version += 1;
+      report.status = 'filed';
+      d.photoBatches.push({
+        reportId,
+        batchId,
+        changeNote,
+        caption,
+        version: report.current_version,
+      });
+      return { version: report.current_version, alreadyAttached: false };
+    },
     async listReportVoiceUploads(reportId) {
       return Array.from(d.uploads.values())
-        .filter((u) => u.report_id === reportId && (u.kind ?? 'audio') === 'audio' && !u.purged_at)
+        .filter(
+          (u) =>
+            u.report_id === reportId &&
+            (u.kind ?? 'audio') === 'audio' &&
+            !u.purged_at &&
+            !u.batch_id,
+        )
         .sort(
           (a, b) =>
             (a.received_at ?? '').localeCompare(b.received_at ?? '') || a.id.localeCompare(b.id),

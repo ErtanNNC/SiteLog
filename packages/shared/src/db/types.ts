@@ -633,6 +633,12 @@ export type UploadRow = {
   uploaded_by: string | null;
   /** + Retention deleted the file (20261014000002): the row and its sources' key stay (D12). */
   purged_at: string | null;
+  /**
+   * F9 (20261016000030, W2-04): photos (and one voice caption) added together to a filed report;
+   * null for report material. `batch_size` is how many uploads the batch holds.
+   */
+  batch_id: string | null;
+  batch_size: number | null;
 };
 
 /** §6.3 calls (rows written from week 2): admin, pm and ops read them. */
@@ -1032,6 +1038,8 @@ export type Database = {
         | 'caption'
         | 'uploaded_by'
         | 'purged_at'
+        | 'batch_id'
+        | 'batch_size'
       >;
       calls: Table<
         CallRow,
@@ -1237,6 +1245,17 @@ export type Database = {
       // lock (5 wrong codes an hour) audited device.verify_locked with one office notice.
       field_device_verify_locked: {
         Args: { p_reporter_id: string; p_device_id: string; p_until: string };
+        Returns: Json;
+      };
+      // F9 (20261016000030_photos_after_filing.sql), service role only: a complete batch of
+      // photos added after filing → a new version, render_pdf and the "Updated" email.
+      field_attach_photos: {
+        Args: {
+          p_report_id: string;
+          p_batch_id: string;
+          p_change_note: string;
+          p_caption?: string | null;
+        };
         Returns: Json;
       };
       // day-status (F12 buttons): pending or reminded → no_work or weather_day.

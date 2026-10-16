@@ -21,8 +21,15 @@ export const JobPayloadSchemas = {
     reportId: uuid.optional(),
     testMode: z.boolean().optional(),
   }),
-  /** §10.1: a voice note of the web recorder (field-api uploads/:id/complete, W1-07; handler W1-11). */
-  transcribe_upload: z.object({ uploadId: uuid }),
+  /**
+   * §10.1: a voice note of the web recorder (field-api uploads/:id/complete, W1-07; handler W1-11).
+   * `purpose: 'caption'` (F9, W2-04): the voice caption of photos added after filing: transcribed
+   * into the photos' caption, then the batch is attached as a new version; never extracted.
+   */
+  transcribe_upload: z.object({
+    uploadId: uuid,
+    purpose: z.enum(['report', 'caption']).optional(),
+  }),
   extract_report: z.object({ reportId: uuid, reason: z.string().optional() }),
   decide_next: z.object({ reportId: uuid }),
   parse_reply: z.object({ messageId: uuid, reportId: uuid }),

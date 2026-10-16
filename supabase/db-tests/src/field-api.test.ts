@@ -1054,6 +1054,7 @@ describe('the field-api functions are the service role’s only', () => {
     'field_flag_late_upload(uuid,uuid)',
     'field_revoke_consent(uuid,consent_type,uuid)',
     'field_device_verify_locked(uuid,uuid,timestamp with time zone)',
+    'field_attach_photos(uuid,uuid,text,text)',
   ];
 
   it('grants execute to service_role and to no API role', async () => {

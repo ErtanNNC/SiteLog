@@ -15,7 +15,9 @@ import {
   deviceVerified,
   fieldCountryView,
   fieldOrigins,
+  filedPhotosUntil,
   historyStart,
+  linkMayAddPhotos,
   nearestDeadlineSite,
   needsConsent,
   newDeviceToken,
@@ -338,4 +340,36 @@ Deno.test('settingsView: the built channels, and every consent given with its st
       { type: 'data_processing', held: true },
     ],
   });
+});
+
+Deno.test(
+  'linkMayAddPhotos (F9, spec §19 Q89): photos links always, web links by the parameter',
+  () => {
+    const S = 'site-a';
+    const photos = { kind: 'photos' as const, site_id: S, report_date: '2026-10-09' };
+    const daily = { kind: 'daily' as const, site_id: S, report_date: '2026-10-09' };
+    const personal = { kind: 'personal' as const, site_id: null, report_date: null };
+    assert(linkMayAddPhotos(photos, S, '2026-10-09'));
+    assert(!linkMayAddPhotos(photos, S, '2026-10-08'));
+    assert(!linkMayAddPhotos(photos, 'site-b', '2026-10-09'));
+    assert(linkMayAddPhotos(photos, S, '2026-10-09', false));
+    // The default (Q89's recommendation): the web links of that day too.
+    assert(linkMayAddPhotos(daily, S, '2026-10-09'));
+    assert(!linkMayAddPhotos(daily, S, '2026-10-08'));
+    assert(linkMayAddPhotos(personal, S, '2026-10-09'));
+    // The other reading: photos links only.
+    assert(!linkMayAddPhotos(daily, S, '2026-10-09', false));
+    assert(!linkMayAddPhotos(personal, S, '2026-10-09', false));
+  },
+);
+
+Deno.test('filedPhotosUntil: 23:59 the next day at the site (F9)', () => {
+  assertEquals(
+    filedPhotosUntil('2026-10-09', { timezone: 'America/Chicago' }),
+    '2026-10-11T04:59:00.000Z',
+  );
+  assertEquals(
+    filedPhotosUntil('2026-10-09', { timezone: 'Europe/Istanbul' }),
+    '2026-10-10T20:59:00.000Z',
+  );
 });

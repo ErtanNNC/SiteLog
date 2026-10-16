@@ -11,6 +11,7 @@ import {
   isWorkingDay,
   localDate,
   nextWorkingDay,
+  photosLinkExpiresAt,
   previousWorkingDay,
   settingsMessageChannels,
   type AnswerValue,
@@ -272,6 +273,38 @@ export function lateClipAllowed(
   const graceEnd =
     reportWindowEnd(date, site, workingDays).getTime() + LATE_CLIP_GRACE_HOURS * 3600 * 1000;
   return now.getTime() <= graceEnd;
+}
+
+/**
+ * Spec §19 Q89 (open; this is the default): F9 gives a window for photos only to a photos link
+ * texted after a call-filed report. With this on, a report filed on the web takes photos from the
+ * Filed screen in the same window, through the reporter's personal link or a daily link of that
+ * day; off, only photos links add photos after filing. field_complete_upload() checks the window
+ * and the limit again; which links may is decided here.
+ */
+export const FILED_PHOTOS_ON_WEB_LINKS = true;
+
+/**
+ * Whether `link` may add photos to the filed report of `date` at `siteId` (F9): a photos link of
+ * that day and site; with FILED_PHOTOS_ON_WEB_LINKS also a daily link of that day and site and a
+ * personal link (whose sites the route has already checked).
+ */
+export function linkMayAddPhotos(
+  link: Pick<FieldLinkRow, 'kind' | 'site_id' | 'report_date'>,
+  siteId: string,
+  date: string,
+  webLinks: boolean = FILED_PHOTOS_ON_WEB_LINKS,
+): boolean {
+  const sameDay = link.report_date === date && (link.site_id === null || link.site_id === siteId);
+  if (link.kind === 'photos') return sameDay;
+  if (!webLinks) return false;
+  if (link.kind === 'daily') return sameDay;
+  return link.kind === 'personal';
+}
+
+/** F9's window for a filed report of `date`: until 23:59 the next day, site time (ISO). */
+export function filedPhotosUntil(date: string, site: Pick<SiteRow, 'timezone'>): string {
+  return photosLinkExpiresAt(date, site.timezone);
 }
 
 /** What Storage holds at an upload's path (`FieldStore.objectInfo`). */

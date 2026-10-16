@@ -1,4 +1,5 @@
 import type { CompleteResponse } from '@sitelog/shared/field-contract.ts';
+import type { AddToReport } from '@sitelog/shared/field-api.ts';
 import type { UploadKind } from '@sitelog/shared/enums.ts';
 
 /**
@@ -40,6 +41,11 @@ export interface QueuedUpload {
   date: string;
   /** When recording started (`uploads.recorded_at`), ISO; null for a picked file. */
   recordedAt: string | null;
+  /**
+   * F9 (W2-04): a photo or caption added to a filed report (the Filed screen's *Add more
+   * photos*), one of a batch; absent for report material (and on items stored before W2-04).
+   */
+  addTo?: AddToReport | null;
   /** Epoch ms. */
   createdAt: number;
   status: QueuedStatus;
@@ -104,6 +110,8 @@ export const FINAL_ERRORS = [
   'kind_not_allowed',
   'invalid_request',
   'file_missing',
+  'photos_window_closed',
+  'photo_limit',
   'removed',
 ] as const;
 
@@ -128,6 +136,8 @@ export interface NewUpload {
   siteId: string;
   date: string;
   recordedAt: string | null;
+  /** F9: the filed report and batch this photo or caption joins. */
+  addTo?: AddToReport | null;
 }
 
 /** A recording being made (F5 step 2), saved chunk by chunk until its clip is queued. */

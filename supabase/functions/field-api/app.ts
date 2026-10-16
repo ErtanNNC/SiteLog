@@ -9,6 +9,7 @@ import {
   DayStatusRequestSchema,
   ExpiredLinkRequestSchema,
   FIELD_LINK_HEADER,
+  FILED_PHOTOS_MAX,
   FIELD_RATE_LIMITS,
   HISTORY_DAYS,
   PreferencesRequestSchema,
@@ -26,6 +27,7 @@ import {
   linkCodeHash,
   numberAnswer,
   optionAnswer,
+  photosAddedNote,
   readReportData,
   settingsMessageChannels,
   sha256Hex,
@@ -64,6 +66,7 @@ import {
   type SignOutResponse,
   type SiteRow,
   type TodayResponse,
+  type UploadRequest,
   type UploadResponse,
   type VerifyResponse,
 } from '@sitelog/shared';
@@ -79,8 +82,10 @@ import {
   deviceVerified,
   fieldCountryView,
   fieldSite,
+  filedPhotosUntil,
   historyStart,
   lateClipAllowed,
+  linkMayAddPhotos,
   nearestDeadlineSite,
   needsConsent,
   numberAnswerLabel,
@@ -611,6 +616,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     const body = await parseBody(c, UploadRequestSchema);
     const media = uploadMediaType(body.mime);
     if (!media || media.kind !== body.kind) throw new FieldError(400, 'media_type_not_allowed');
+    if (body.addTo) return c.json(await uploadToFiled(ctx, body, body.addTo, media.ext), 201);
     if (ctx.link.kind === 'photos' && body.kind !== 'photo') {
       throw new FieldError(400, 'kind_not_allowed', 'A photos link takes photos only (F9)');
     }
@@ -655,6 +661,77 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     return c.json(res, 201);
   });
 
+  /**
+   * F9 (W2-04): the Filed screen's *Add more photos*. The filed (or signed-off) report in the
+   * link's scope, a link that may add photos to it (`linkMayAddPhotos`, spec §19 Q89), inside F9's
+   * window (until 23:59 the next day, site time) and under FILED_PHOTOS_MAX photos after filing
+   * (this batch's own completed photos not counted twice); the upload goes in the report's day and
+   * joins the batch. field_complete_upload() checks the window, the limit and the batch again.
+   */
+  async function filedTarget(ctx: DeviceContext, reportId: string) {
+    const report = await reportInScope(ctx, reportId);
+    if (report.status !== 'filed' && report.status !== 'signed_off') {
+      throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    }
+    const day = await store.getSiteDayById(report.site_day_id);
+    const site = ctx.sites.find((s) => s.id === report.site_id)!;
+    if (!day) throw new FieldError(409, 'wrong_state', undefined, { status: report.status });
+    return { report, day, site, until: filedPhotosUntil(day.date, site) };
+  }
+
+  async function uploadToFiled(
+    ctx: DeviceContext,
+    body: UploadRequest,
+    addTo: NonNullable<UploadRequest['addTo']>,
+    ext: string,
+  ): Promise<UploadResponse> {
+    const { report, day, site, until } = await filedTarget(ctx, addTo.reportId);
+    if (!linkMayAddPhotos(ctx.link, site.id, day.date)) {
+      throw new FieldError(403, 'kind_not_allowed', 'This link cannot add photos after filing');
+    }
+    if (site.status !== 'active') throw new FieldError(409, 'site_inactive');
+    if (now().getTime() > new Date(until).getTime()) {
+      throw new FieldError(409, 'photos_window_closed', undefined, { until });
+    }
+    const state = await store.filedPhotoState(report.id, addTo.batchId);
+    if (state.added + addTo.photos > FILED_PHOTOS_MAX) {
+      throw new FieldError(409, 'photo_limit', undefined, {
+        remaining: Math.max(0, FILED_PHOTOS_MAX - state.added),
+      });
+    }
+    const id = randomUUID();
+    const bucket = uploadBucket(body.kind);
+    const path = uploadStoragePath(ctx.reporter.org_id, site.id, day.date, id, ext);
+    await store.insertUpload({
+      id,
+      reporter_id: ctx.reporter.id,
+      site_id: site.id,
+      kind: body.kind,
+      storage_path: path,
+      mime: uploadMediaType(body.mime)!.mime,
+      bytes: body.bytes,
+      recorded_at: body.recordedAt ?? null,
+      batch_id: addTo.batchId,
+      batch_size: addTo.photos + (addTo.caption ? 1 : 0),
+    });
+    const signed = await store.createSignedUploadUrl(bucket, path);
+    await audit(ctx, 'upload.created', 'upload', id, {
+      kind: body.kind,
+      site_id: site.id,
+      date: day.date,
+      report_id: report.id,
+      batch_id: addTo.batchId,
+      after_filing: true,
+    });
+    return {
+      uploadId: id,
+      bucket,
+      path,
+      ...signed,
+      signedUrl: publicSignedUrl(signed.signedUrl, deps.publicUrl?.()),
+    };
+  }
+
   // ── uploads/:id/complete ─────────────────────────────────────────────────────────────────────
   app.post('/uploads/:id/complete', async (c) => {
     const ctx = await authenticate(c, { consent: true });
@@ -690,6 +767,33 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       bytes = object!.size;
     }
     const result = await store.completeUpload(upload.id, ctx.reporter.id, bytes);
+    if (result.batch) {
+      // F9 (W2-04): a batch added to the filed report. Whole and without a caption: its version
+      // now (also on a retried complete, whose first answer was lost: field_attach_photos()
+      // answers the version a batch made before). With a caption the worker attaches it after
+      // the transcription field_complete_upload() enqueued.
+      let version: number | null = null;
+      if (result.batch.ready && !result.batch.captionUploadId) {
+        const report = await store.getReport(result.reportId);
+        const photos = upload.batch_size ?? 1;
+        const attached = await store.attachPhotos(
+          result.reportId,
+          result.batch.id,
+          photosAddedNote(report?.language ?? 'en', photos),
+          null,
+        );
+        version = attached.version;
+      }
+      const res: CompleteResponse = {
+        reportId: result.reportId,
+        reportNo: result.reportNo,
+        reportStatus: version !== null ? 'filed' : result.reportStatus,
+        created: false,
+        alreadyComplete: result.alreadyComplete,
+        batch: { id: result.batch.id, ready: result.batch.ready, version },
+      };
+      return c.json(res);
+    }
     // Spec §19 Q53: a file that reaches its report after its day's window closed (a late clip
     // `uploads` accepted, or one created just before the window closed) is flagged late to the
     // office, once per upload (a retried complete flags nothing twice). Judged at the moment the
@@ -756,9 +860,29 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       draftRev: version ? (version.draft_rev ?? 1) : null,
       progress,
       pdfUrl,
+      addPhotos: filed && day ? await addPhotosView(ctx, report.id, site, day.date) : null,
+      changeNote: version?.change_note ?? null,
     };
     return c.json(view);
   });
+
+  /** F9 on a filed report's view: whether this link may add photos now, and what is pending. */
+  async function addPhotosView(
+    ctx: DeviceContext,
+    reportId: string,
+    site: SiteRow,
+    date: string,
+  ): Promise<NonNullable<ReportView['addPhotos']>> {
+    const state = await store.filedPhotoState(reportId);
+    const until = filedPhotosUntil(date, site);
+    const remaining = Math.max(0, FILED_PHOTOS_MAX - state.added);
+    const canAdd =
+      remaining > 0 &&
+      site.status === 'active' &&
+      now().getTime() <= new Date(until).getTime() &&
+      linkMayAddPhotos(ctx.link, site.id, date);
+    return { canAdd, remaining, until, pending: state.pending };
+  }
 
   // ── reports/:id/confirm (F8: Confirm & send) ─────────────────────────────────────────────────
   app.post('/reports/:id/confirm', async (c) => {
@@ -1167,6 +1291,11 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   invalid_status: [400, 'invalid_request'],
   question_not_found: [404, 'not_found'],
   question_closed: [409, 'question_closed'],
+  photos_window_closed: [409, 'photos_window_closed'],
+  photo_limit: [409, 'photo_limit'],
+  invalid_batch: [400, 'invalid_request'],
+  batch_not_found: [404, 'not_found'],
+  batch_incomplete: [409, 'wrong_state'],
 };
 
 function errorResponse(c: Context, err: unknown, now: Date): Response {

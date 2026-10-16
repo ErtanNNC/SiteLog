@@ -22,6 +22,8 @@ function view(patch: Partial<ReportView> = {}): ReportView {
     draftRev: null,
     progress: { voiceNotes: 1, transcribed: 0, photos: 2 },
     pdfUrl: null,
+    addPhotos: null,
+    changeNote: null,
     ...patch,
   };
 }

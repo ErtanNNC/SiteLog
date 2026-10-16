@@ -389,6 +389,19 @@ export interface Db {
    * each with whether its transcript exists.
    */
   listReportVoiceUploads(reportId: string): Promise<ReportVoiceUpload[]>;
+  /** F9 (W2-04): how many photos a batch added after filing holds. */
+  countBatchPhotos(batchId: string): Promise<number>;
+  /**
+   * field_attach_photos() (20261016000030, F9): a whole batch as the filed report's next version
+   * with `changeNote` and the caption; render_pdf and the "Updated" email; audited in SQL. A batch
+   * attached before answers its version (`alreadyAttached`).
+   */
+  attachPhotos(
+    reportId: string,
+    batchId: string,
+    changeNote: string,
+    caption: string | null,
+  ): Promise<{ version: number; alreadyAttached: boolean }>;
 
   // reporters, sites, orgs
   listReportersByPhone(phone: string): Promise<ReporterRow[]>;
@@ -944,7 +957,18 @@ export function createDb(sql: Sql): Db {
                exists (select 1 from transcripts t where t.upload_id = u.id) as transcribed
         from uploads u
         where u.report_id = ${reportId} and u.kind = 'audio' and u.purged_at is null
+          and u.batch_id is null
         order by u.received_at nulls first, u.id`;
+    },
+    async countBatchPhotos(batchId) {
+      const [row] = await sql<Array<{ n: number }>>`
+        select count(*)::int as n from uploads where batch_id = ${batchId} and kind = 'photo'`;
+      return row?.n ?? 0;
+    },
+    async attachPhotos(reportId, batchId, changeNote, caption) {
+      const [row] = await sql<Array<{ r: { version: number; alreadyAttached: boolean } }>>`
+        select field_attach_photos(${reportId}, ${batchId}, ${changeNote}, ${caption}) as r`;
+      return { version: row!.r.version, alreadyAttached: row!.r.alreadyAttached };
     },
 
     // reporters, sites, orgs --------------------------------------------------------------

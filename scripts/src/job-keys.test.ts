@@ -67,6 +67,8 @@ const AUDITED: Record<string, string> = {
     'per site-day and ladder stage (logic.ts reminderJob, unused since W1-10 until the M6 SMS ladder)',
   // SQL (the latest body of each function)
   "sql:'transcribe_upload:' || u.id": 'field_complete_upload: one transcription per upload',
+  "sql:'transcribe_upload:' || v_caption":
+    'field_complete_upload (W2-04, F9): the voice caption of a batch of photos added after filing, transcribed once the batch is whole; per caption upload, and an upload completes once (a retry returns alreadyComplete)',
   "sql:'email:report_missing:' || p_site_day_id":
     'mark_site_day_missing (spec §19 Q55): per site-day, enqueued in the transaction whose guarded update made the day missing; a day becomes missing once (reminder_stage 4 stays)',
   "sql:'file:' || r.id || ':v' || p_version || ':r' || p_draft_rev":
@@ -80,7 +82,7 @@ const AUDITED: Record<string, string> = {
   "sql:'decide:' || r.id || ':answer:' || q.id":
     'field_answer_question (W1-12): decide_next after a web answer; per question, and a question is answered once (a retry returns already_answered)',
   "sql:'render_pdf:' || p_report_id || ':' || v_next":
-    'per report version (office edits, sign-off)',
+    'per report version (office edits, sign-off; field_attach_photos, W2-04: the version a batch of photos made); versions are immutable',
   "sql:'render_pdf:' || p_report_id || ':' || r.current_version || ':signoff:' || (extract(epoch from now()) * 1000000)::bigint":
     'sign_off_report (W1-14): the re-render that prints the sign-off; per sign-off event (transaction time in µs), since a report can be signed off again after an undo',
   "sql:'render_pdf:' || p_report_id || ':' || r.current_version || ':signoff_undone:' || (extract(epoch from now()) * 1000000)::bigint":

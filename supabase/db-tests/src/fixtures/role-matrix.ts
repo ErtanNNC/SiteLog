@@ -492,6 +492,13 @@ export const RPCS: Record<
     call: (o) =>
       `select field_device_verify_locked('${o.reporter}', null, '2026-10-09T23:00:00Z') as v`,
   },
+  // F9 (20261016000030_photos_after_filing.sql): photos added after filing become a version.
+  field_attach_photos: {
+    why: '§6.5: field-api and the worker only (service role); the office adds photos with create_report_version.',
+    allow: NONE,
+    call: (o) =>
+      `select field_attach_photos('${o.report}', '${o.upload}', '1 photo added', null) as v`,
+  },
   // Spec §19 Q53 (20261015000003_late_uploads.sql): field-api flags a late clip.
   field_flag_late_upload: {
     why: '§6.5: field-api only (service role); a late clip is flagged by the server, never a client.',

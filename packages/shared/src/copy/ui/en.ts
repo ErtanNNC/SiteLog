@@ -231,6 +231,9 @@ export const uiEn = {
         reporter_disabled: 'Your reporting is paused. Ask the office, then try again.',
         site_inactive: 'This site is paused. Ask the office, then try again.',
         file_missing: 'The file is no longer on this phone.',
+        photos_window_closed:
+          'This report takes no more photos: the time to add them ended at 23:59 the day after.',
+        photo_limit: 'This report already has the most photos that can be added after filing.',
         generic: 'Couldn’t send this. Ask the office for help.',
       },
     },
@@ -361,6 +364,41 @@ export const uiEn = {
       pdfLate: 'The PDF is on its way. The office already has your report.',
       /** Read by screen readers after "Open the PDF". */
       opensNewTab: '(opens in a new tab)',
+      /** F9 (W2-04): spec §9.3 says *Add more photos*; the artboard's button says "Add photos". */
+      addPhotos: 'Add more photos',
+      pastReports: 'Past reports',
+      /**
+       * The edit hint; `{{pastReports}}` is set in bold. The artboard goes on "and say what to fix.
+       * The office gets a new version; the old one is kept.", which W2-11 (F10) makes true.
+       */
+      hint: 'Need a change later? Open {{pastReports}}.',
+      /** The sheet after the photos are picked (F9: up to 4, an optional voice caption). */
+      photos: {
+        title: 'Add photos to {{no}}',
+        chosen: 'Photos chosen: {{count}}',
+        photo: 'Photo {{n}}',
+        /** `{{until}}` is the window's end in the site's time zone ("Sat 23:59"). */
+        window: 'Photos you can still add: {{count}}, until {{until}}.',
+        tooMany: 'Only {{count}} more can be added, so the first {{count}} are kept.',
+        caption: 'Voice caption (optional)',
+        captionHint: 'Say what the photos show. The office reads it under each photo.',
+        record: 'Record a caption',
+        stop: 'Stop',
+        recording: 'Recording',
+        captionReady: 'Caption recorded',
+        removeCaption: 'Remove caption',
+        noMic: 'The microphone isn’t available. The photos go without a caption.',
+        send: 'Send photos',
+        cancel: 'Cancel',
+        /** After *Send photos*, until the new version exists. */
+        adding: 'Adding your photos…',
+        /** The caption is being transcribed (the worker makes the version after it). */
+        captioning: 'Adding your photos and caption…',
+        /** Still no new version after the wait: the screen stops checking. */
+        late: 'Your photos are on their way. The office will get them with your caption.',
+        added: 'Photos added. Version {{version}} is with the office.',
+        failed: 'Couldn’t add the photos.',
+      },
     },
     /** The offline banner and the upload queue (F5 step 3). */
     offline: {

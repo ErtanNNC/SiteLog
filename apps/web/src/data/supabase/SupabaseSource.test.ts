@@ -1045,6 +1045,8 @@ describe('SupabaseSource: report files in uploads (W1-05 step 10)', () => {
           caption: s.kind === 'photo' ? (s.caption ?? m.body) : null,
           uploaded_by: null,
           purged_at: null,
+          batch_id: null,
+          batch_size: null,
         });
       const photoOnly = opts.photosWithoutMessages && s.kind === 'photo';
       if (photoOnly) dropped.add(m.id as string);

@@ -24,17 +24,27 @@ export function ReportScreen() {
   const { id = '' } = useParams();
   const { session } = useSession();
   if (!session) return <NoLink />;
-  return <ReportLoaded key={id} code={session.code} id={id} reporterName={session.reporter.name} />;
+  return (
+    <ReportLoaded
+      key={id}
+      code={session.code}
+      id={id}
+      reporterName={session.reporter.name}
+      sites={session.sites}
+    />
+  );
 }
 
 function ReportLoaded({
   code,
   id,
   reporterName,
+  sites,
 }: {
   code: string;
   id: string;
   reporterName: string;
+  sites: readonly { id: string; timezone: string }[];
 }) {
   const { t, language } = useFieldCopy();
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
@@ -44,8 +54,9 @@ function ReportLoaded({
   const [confirmation, setConfirmation] = useState<AnswerConfirmation | null>(null);
   // A refusal that sent the screen back to the latest view ("That question was already answered").
   const [notice, setNotice] = useState<string | null>(null);
-  // Filed without a PDF: when the screen first saw it, and whether it has stopped waiting.
-  const pdfWaitFrom = useRef<number | null>(null);
+  // Filed without a PDF (or with photos being added, F9): what the screen is waiting for (the
+  // version, and whether photos are pending), since when, and whether it has stopped waiting.
+  const pdfWait = useRef<{ key: string; from: number } | null>(null);
   const [pdfLate, setPdfLate] = useState(false);
   const keepPolling = useCallback(
     (view: ReportView) => {
@@ -57,11 +68,18 @@ function ReportLoaded({
       }
       const next = reportPhase(view, { answered, filing });
       if (pollsIn(next)) return true;
-      if (next !== 'filed' || view.pdfUrl) return false;
-      // Filed before render_pdf stored the file: check again until the PDF is there, for
-      // PDF_WAIT_MS at most (a render that died must not poll forever).
-      pdfWaitFrom.current ??= Date.now();
-      if (Date.now() - pdfWaitFrom.current < PDF_WAIT_MS) return true;
+      if (next !== 'filed') return false;
+      const pending = (view.addPhotos?.pending ?? 0) > 0;
+      if (view.pdfUrl && !pending) return false;
+      // Filed before render_pdf stored the file, or photos added after filing waiting for their
+      // caption (F9): check again until the PDF of this version is there, for PDF_WAIT_MS at most
+      // per version (a render that died must not poll forever).
+      const key = `${view.currentVersion}:${pending}`;
+      if (pdfWait.current?.key !== key) {
+        pdfWait.current = { key, from: Date.now() };
+        setPdfLate(false);
+      }
+      if (Date.now() - pdfWait.current.from < PDF_WAIT_MS) return true;
       setPdfLate(true);
       return false;
     },
@@ -147,11 +165,13 @@ function ReportLoaded({
     return (
       <Filed
         key="filed"
+        code={code}
         view={view}
         reporterName={reporterName}
+        timezone={sites.find((s) => s.id === view.siteId)?.timezone}
         onRefresh={restart}
         notice={notices}
-        pdfLate={pdfLate && !view.pdfUrl}
+        pdfLate={pdfLate && (!view.pdfUrl || (view.addPhotos?.pending ?? 0) > 0)}
       />
     );
   }

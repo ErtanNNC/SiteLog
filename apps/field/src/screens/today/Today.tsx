@@ -252,7 +252,8 @@ function TodayLoaded({
   }, []);
 
   const pendingPhotos = snapshot.items.filter(
-    (i) => i.kind === 'photo' && (i.status === 'queued' || i.status === 'uploading'),
+    // A photo added to a filed report (F9) is the Filed screen's, not today's.
+    (i) => i.kind === 'photo' && !i.addTo && (i.status === 'queued' || i.status === 'uploading'),
   ).length;
 
   async function onPhotos(e: ChangeEvent<HTMLInputElement>) {

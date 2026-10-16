@@ -221,6 +221,11 @@ export interface FakeFieldApi {
   calls: { method: string; path: string; body: unknown; headers: Record<string, string> }[];
   /** The files PUT to the fake Storage: content type and size. */
   stored: { uploadId: string; contentType: string; bytes: number }[];
+  /** F9 (W2-04): the batches added to a filed report of `options.reports`, by batch id. */
+  batches: Record<
+    string,
+    { reportId: string; size: number; photos: number; completed: string[]; version: number | null }
+  >;
   consent: unknown;
   completed: string[];
   /** What the fake refuses; change it between steps. */
@@ -297,12 +302,14 @@ export async function installFakeFieldApi(
     },
     calls: [],
     stored: [],
+    batches: {},
     consent: null,
     completed: [],
     options: { ...opts },
   };
   const options = api.options;
   let uploads = 0;
+  const batchOf = new Map<string, string>();
   let reportPolls = 0;
   let pollsSinceAnswer = 0;
   let pollsSinceConfirm = 0;
@@ -461,6 +468,22 @@ export async function installFakeFieldApi(
       }
       if (path === 'uploads') {
         const uploadId = `00000000-0000-4000-8000-${String(++uploads).padStart(12, '0')}`;
+        const addTo = (
+          body as {
+            addTo?: { reportId: string; batchId: string; photos: number; caption: boolean };
+          }
+        ).addTo;
+        if (addTo) {
+          // F9: a photo (or caption) for a filed report of `options.reports`, in a batch.
+          api.batches[addTo.batchId] ??= {
+            reportId: addTo.reportId,
+            size: addTo.photos + (addTo.caption ? 1 : 0),
+            photos: addTo.photos,
+            completed: [],
+            version: null,
+          };
+          batchOf.set(uploadId, addTo.batchId);
+        }
         const res: UploadResponse = {
           uploadId,
           bucket: 'audio',
@@ -475,6 +498,38 @@ export async function installFakeFieldApi(
         const uploadId = complete[1]!;
         if (!api.stored.some((s) => s.uploadId === uploadId)) {
           return json(route, 409, { error: 'upload_missing' });
+        }
+        const batchId = batchOf.get(uploadId);
+        if (batchId) {
+          const batch = api.batches[batchId]!;
+          if (!batch.completed.includes(uploadId)) batch.completed.push(uploadId);
+          const report = options.reports![batch.reportId]!;
+          const ready = batch.completed.length >= batch.size;
+          if (ready && batch.version === null) {
+            // The batch is whole: the next version, "N photos added", its _v{n} PDF.
+            const version = report.currentVersion + 1;
+            batch.version = version;
+            options.reports![batch.reportId] = {
+              ...report,
+              currentVersion: version,
+              changeNote: batch.photos === 1 ? '1 photo added' : `${batch.photos} photos added`,
+              pdfUrl: `/__storage/pdfs/${report.reportNo}_v${version}.pdf?token=e2e`,
+              addPhotos: report.addPhotos && {
+                ...report.addPhotos,
+                remaining: report.addPhotos.remaining - batch.photos,
+                canAdd: report.addPhotos.remaining - batch.photos > 0,
+              },
+            };
+          }
+          const res: CompleteResponse = {
+            reportId: batch.reportId,
+            reportNo: report.reportNo,
+            reportStatus: 'filed',
+            created: false,
+            alreadyComplete: false,
+            batch: { id: batchId, ready, version: batch.version },
+          };
+          return json(route, 200, res);
         }
         if (options.completeError) return refuse(options.completeError);
         api.completed.push(uploadId);
@@ -536,6 +591,12 @@ export async function installFakeFieldApi(
           progress: { voiceNotes: audio, transcribed: written ? audio : 0, photos: 0 },
           // A filed report's PDF, signed (W1-15's Filed screen opens it in a new tab).
           pdfUrl: status === 'filed' ? `/__storage/pdfs/${REPORT_NO}_v1.pdf?token=e2e` : null,
+          // F9 (W2-04): the Filed screen offers more photos until 23:59 the next day.
+          addPhotos:
+            status === 'filed'
+              ? { canAdd: true, remaining: 4, until: '2026-10-11T04:59:00.000Z', pending: 0 }
+              : null,
+          changeNote: null,
         };
         if (status === 'filed') api.state.report = { id: REPORT_ID, reportNo: REPORT_NO, status };
         return json(route, 200, res);

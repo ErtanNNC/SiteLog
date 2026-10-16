@@ -298,3 +298,60 @@ export async function seedOpenQuestion(f: FieldFixture): Promise<OpenQuestion> {
   });
   return { reportId, reportNo, questionId: question!.id, prompt };
 }
+
+export interface FiledReport {
+  reportId: string;
+  reportNo: string;
+  date: string;
+}
+
+/**
+ * Today's web report, filed (W2-04): version 1 as file_report leaves it (no photos), the site-day
+ * filed. F9's window (until 23:59 tomorrow at the site) is open, so the Filed screen offers *Add
+ * more photos*.
+ */
+export async function seedFiledReport(f: FieldFixture): Promise<FiledReport> {
+  const timezone = 'America/Chicago';
+  const date = formatDateInTz(new Date(), timezone);
+  const [day] = await rest<{ id: string }[]>('POST', 'site_days', {
+    site_id: f.site.id,
+    date,
+    status: 'filed',
+    deadline_at: new Date(Date.now() + 6 * 3600_000).toISOString(),
+  });
+  const reportNo = `${f.site.projectCode}-0002`;
+  const now = new Date().toISOString();
+  const [report] = await rest<{ id: string }[]>('POST', 'reports', {
+    org_id: f.orgId,
+    site_id: f.site.id,
+    site_day_id: day!.id,
+    report_no: reportNo,
+    status: 'filed',
+    current_version: 1,
+    reporter_id: f.reporter.id,
+    channel: 'web',
+    language: 'en',
+    received_at: now,
+    confirmed_at: now,
+    confirmed_via: 'web',
+    filed_at: now,
+  });
+  const reportId = report!.id;
+  (f.reportIds ??= []).push(reportId);
+  await rest('PATCH', `site_days?id=eq.${day!.id}`, { report_id: reportId });
+  const data: DailyReportData = {
+    ...emptyReportData(date, { reportLanguage: 'en', units: 'imperial' }),
+    summary: 'Slab pour on Level 4.',
+    weather: { conditionsText: 'Dry', periods: [] },
+    workPerformed: [{ area: 'Level 4', activity: 'slab pour', status: 'complete', source: [] }],
+    safety: { incidents: [], noIncidentsStated: true, visitors: [], source: [] },
+  };
+  await rest('POST', 'report_versions', {
+    report_id: reportId,
+    version: 1,
+    data,
+    summary: data.summary,
+    author: 'agent',
+  });
+  return { reportId, reportNo, date };
+}

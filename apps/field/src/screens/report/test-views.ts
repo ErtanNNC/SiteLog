@@ -103,6 +103,8 @@ export function reportView(patch: Partial<ReportView> = {}): ReportView {
     draftRev: null,
     progress: { voiceNotes: 1, transcribed: 1, photos: 2 },
     pdfUrl: null,
+    addPhotos: null,
+    changeNote: null,
     ...patch,
   };
 }

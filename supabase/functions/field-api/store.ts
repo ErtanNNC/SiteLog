@@ -53,6 +53,26 @@ export interface CompleteUploadResult {
   created: boolean;
   alreadyComplete: boolean;
   jobId: number | null;
+  /**
+   * F9 (20261016000030): an upload of a batch added to a filed report, staged. `ready` once the
+   * batch's last upload completed; `captionUploadId` when it holds a voice caption (then the
+   * worker attaches it after the transcription, which this call enqueued).
+   */
+  batch?: { id: string; ready: boolean; captionUploadId: string | null };
+}
+
+/** field_attach_photos() (20261016000030, F9): the version the batch made (or made before). */
+export interface AttachPhotosResult {
+  version: number;
+  alreadyAttached: boolean;
+}
+
+/** F9: a filed report's photos added after filing (uploads of a batch the report holds). */
+export interface FiledPhotoState {
+  /** Photos completed on the report after filing (staged or in a version): F9's limit. */
+  added: number;
+  /** Of those, the ones no version holds yet (their batch is incomplete or being captioned). */
+  pending: number;
 }
 
 /** field_confirm_report(): the file_report job for the confirmed version, or filed already. */
@@ -116,6 +136,11 @@ export const FIELD_DB_ERRORS = [
   'invalid_status',
   'question_not_found',
   'question_closed',
+  'photos_window_closed',
+  'photo_limit',
+  'invalid_batch',
+  'batch_not_found',
+  'batch_incomplete',
 ] as const;
 
 export interface ReportMediaCounts {
@@ -223,6 +248,9 @@ export interface FieldStore extends DailyLinkStore {
     mime: string;
     bytes: number;
     recorded_at: string | null;
+    /** F9: the batch of photos added to a filed report (both set, or neither). */
+    batch_id?: string | null;
+    batch_size?: number | null;
   }): Promise<UploadRow>;
   getUpload(id: string): Promise<UploadRow | null>;
   createSignedUploadUrl(
@@ -246,6 +274,21 @@ export interface FieldStore extends DailyLinkStore {
    * notice per report. Once per upload (`flagged` false on a repeat).
    */
   flagLateUpload(uploadId: string, reporterId: string): Promise<{ flagged: boolean }>;
+  /**
+   * field_attach_photos() (20261016000030, F9): a complete batch as a new version of the filed
+   * report with `changeNote` (and the caption), render_pdf and the "Updated" email; audited in SQL.
+   */
+  attachPhotos(
+    reportId: string,
+    batchId: string,
+    changeNote: string,
+    caption: string | null,
+  ): Promise<AttachPhotosResult>;
+  /**
+   * F9: the photos added to the report after filing (`FiledPhotoState`); with `exceptBatch`, the
+   * completed photos of that batch are left out (a batch's own photos are not counted twice).
+   */
+  filedPhotoState(reportId: string, exceptBatch?: string): Promise<FiledPhotoState>;
   setDayStatus(input: {
     reporterId: string;
     siteId: string;

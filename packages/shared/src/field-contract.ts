@@ -73,6 +73,12 @@ export const SIGNED_URL_SECONDS = 10 * 60;
 export const UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
 
 /**
+ * F9: at most this many photos are added to a filed report after filing (per F9 window, until
+ * 23:59 the day after the report's date, site time); field_complete_upload() checks it again.
+ */
+export const FILED_PHOTOS_MAX = 4;
+
+/**
  * The media types the recorder may upload, with the kind and file extension field-api stores them
  * under (§9.3: `audio/webm;codecs=opus` on Chrome and Android, `audio/mp4` on iOS Safari; the
  * `<input capture>` fallback and photos).
@@ -139,6 +145,10 @@ export const FIELD_API_ERRORS = [
   'wrong_state',
   'question_closed',
   'answer_not_accepted',
+  /** F9 (W2-04): the filed report takes no more photos (its window ended at 23:59 the next day). */
+  'photos_window_closed',
+  /** F9: FILED_PHOTOS_MAX photos were added after filing already. */
+  'photo_limit',
   'channel_not_offered',
   'link_not_expired',
   'rate_limited',
@@ -299,6 +309,12 @@ export interface CompleteResponse {
   created: boolean;
   /** The upload was completed before (a retry): nothing changed. */
   alreadyComplete: boolean;
+  /**
+   * F9 (W2-04): an upload of a batch added to a filed report. `ready` once every upload of the
+   * batch completed; `version` is the new version, once made (null while the caption is being
+   * transcribed: the worker makes it, so poll `reports/:id`).
+   */
+  batch?: { id: string; ready: boolean; version: number | null };
 }
 
 /** `GET reports/:id`: the question, draft or filed view model (Field-05, -06, -07; processing). */
@@ -341,6 +357,21 @@ export interface ReportView {
   progress: { voiceNotes: number; transcribed: number; photos: number };
   /** A filed report's PDF, signed for 10 minutes. */
   pdfUrl: string | null;
+  /**
+   * F9 (W2-04): photos after filing; null unless the report is filed (or signed off).
+   * `canAdd`: this link may add photos now (F9's window, the link's kind: spec §19 Q89) and
+   * `remaining` > 0; `until`: the window's end (ISO); `pending`: photos received but not yet in a
+   * version (their caption is being transcribed). The change note of the latest version
+   * (`changeNote`, e.g. "2 photos added") says what the last version changed.
+   */
+  addPhotos: {
+    canAdd: boolean;
+    remaining: number;
+    until: string;
+    pending: number;
+  } | null;
+  /** The current version's change note (null for version 1 and drafts). */
+  changeNote: string | null;
 }
 
 /**

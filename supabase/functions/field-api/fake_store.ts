@@ -14,7 +14,7 @@ import type {
   SiteRow,
   UploadRow,
 } from '@sitelog/shared';
-import { deadlineInstant, jobKeys } from '@sitelog/shared';
+import { FILED_PHOTOS_MAX, deadlineInstant, jobKeys, photosLinkExpiresAt } from '@sitelog/shared';
 import type { AuditEntry } from '../_shared/audit.ts';
 import type { StoredObject } from './logic.ts';
 import {
@@ -74,6 +74,8 @@ export class FakeFieldStore implements FieldStore {
   consentNotices: { orgId: string; reporterId: string; type: ConsentType }[] = [];
   /** field_device_verify_locked(): the office notices of a locked device check (one per window). */
   lockNotices: { orgId: string; reporterId: string; deviceId: string; until: string }[] = [];
+  /** field_attach_photos(): the batches attached (F9) and the versions they made. */
+  attached: { batchId: string; version: number; changeNote: string; caption: string | null }[] = [];
   /** Store methods called, for "no write happened" checks. */
   calls: string[] = [];
   private seq = 0;
@@ -286,11 +288,14 @@ export class FakeFieldStore implements FieldStore {
     row: Pick<
       UploadRow,
       'id' | 'reporter_id' | 'site_id' | 'kind' | 'storage_path' | 'mime' | 'bytes' | 'recorded_at'
-    >,
+    > &
+      Partial<Pick<UploadRow, 'batch_id' | 'batch_size'>>,
   ) {
     this.calls.push('insertUpload');
     const u: UploadRow = {
       ...row,
+      batch_id: row.batch_id ?? null,
+      batch_size: row.batch_size ?? null,
       report_id: null,
       duration_s: null,
       peaks: null,
@@ -382,12 +387,51 @@ export class FakeFieldStore implements FieldStore {
         created: false,
         alreadyComplete: true,
         jobId: null,
+        ...(u.batch_id ? { batch: this.batchState(u) } : {}),
       });
     }
     const site = this.sites.find((s) => s.id === u.site_id)!;
     const date = u.storage_path.split('/')[2]!;
     const day = this.siteDay(site.id, date);
     let r = this.reports.find((x) => x.site_day_id === day.id && x.status !== 'void');
+    if (u.batch_id) {
+      // F9 (20261016000030): staged on the filed report until the batch is whole.
+      if (!r || (r.status !== 'filed' && r.status !== 'signed_off')) {
+        return Promise.reject(new FieldDbError('wrong_state'));
+      }
+      if (this.now().getTime() > Date.parse(photosLinkExpiresAt(date, site.timezone))) {
+        return Promise.reject(new FieldDbError('photos_window_closed'));
+      }
+      const added = this.uploads.filter(
+        (x) => x.report_id === r!.id && x.batch_id && x.kind === 'photo',
+      ).length;
+      if (u.kind === 'photo' && added >= FILED_PHOTOS_MAX) {
+        return Promise.reject(new FieldDbError('photo_limit'));
+      }
+      u.report_id = r.id;
+      u.bytes = bytes ?? u.bytes;
+      const batch = this.batchState(u);
+      let jobId: number | null = null;
+      if (batch.ready && batch.captionUploadId) {
+        jobId = this.jobs.length + 1;
+        this.jobs.push({
+          id: jobId,
+          type: 'transcribe_upload',
+          payload: { uploadId: batch.captionUploadId, purpose: 'caption' },
+          dedupe_key: `transcribe_upload:${batch.captionUploadId}`,
+          status: 'queued',
+        });
+      }
+      return Promise.resolve({
+        reportId: r.id,
+        reportNo: r.report_no,
+        reportStatus: r.status,
+        created: false,
+        alreadyComplete: false,
+        jobId,
+        batch,
+      });
+    }
     if (r && (r.status === 'filed' || r.status === 'signed_off')) {
       return Promise.reject(new FieldDbError('report_filed'));
     }
@@ -491,6 +535,80 @@ export class FakeFieldStore implements FieldStore {
       },
     });
     return Promise.resolve({ revoked: true, notified });
+  }
+
+  private batchState(u: UploadRow) {
+    const members = this.uploads.filter((x) => x.batch_id === u.batch_id && x.report_id);
+    return {
+      id: u.batch_id!,
+      ready: members.length >= (u.batch_size ?? 1),
+      captionUploadId: members.find((x) => x.kind === 'audio')?.id ?? null,
+    };
+  }
+
+  /** field_attach_photos(): the batch as the next version (F9). */
+  attachPhotos(reportId: string, batchId: string, changeNote: string, caption: string | null) {
+    this.calls.push('attachPhotos');
+    const r = this.reports.find((x) => x.id === reportId);
+    if (!r || r.status === 'void') return Promise.reject(new FieldDbError('report_not_found'));
+    const members = this.uploads.filter((x) => x.batch_id === batchId);
+    if (members.length === 0) return Promise.reject(new FieldDbError('batch_not_found'));
+    if (members.some((x) => x.report_id !== reportId) || members.length < members[0]!.batch_size!) {
+      return Promise.reject(new FieldDbError('batch_incomplete'));
+    }
+    const photos = members.filter((x) => x.kind === 'photo');
+    const done = this.attached.find((a) => a.batchId === batchId);
+    if (done) return Promise.resolve({ version: done.version, alreadyAttached: true });
+    if (r.status !== 'filed' && r.status !== 'signed_off') {
+      return Promise.reject(new FieldDbError('wrong_state'));
+    }
+    const prev = this.versions.find((v) => v.report_id === r.id && v.version === r.current_version);
+    const data = (prev?.data ?? {}) as Record<string, unknown>;
+    const list = Array.isArray(data.photos) ? (data.photos as unknown[]) : [];
+    r.current_version += 1;
+    r.status = 'filed';
+    r.signed_off_by = null;
+    r.signed_off_at = null;
+    this.versions.push({
+      report_id: r.id,
+      version: r.current_version,
+      data: {
+        ...data,
+        photos: [
+          ...list,
+          ...photos.map((p) => ({ uploadId: p.id, ...(caption ? { caption } : {}) })),
+        ],
+      } as ReportVersionRow['data'],
+      summary: prev?.summary ?? null,
+      pdf_path: null,
+      author: 'reporter',
+      author_user_id: null,
+      author_message_id: null,
+      change_note: changeNote,
+      created_at: this.iso(),
+      via: 'web',
+    });
+    for (const p of photos) this.sources.push({ report_id: r.id, kind: 'photo', upload_id: p.id });
+    this.attached.push({ batchId, version: r.current_version, changeNote, caption });
+    this.jobs.push({
+      id: this.jobs.length + 1,
+      type: 'render_pdf',
+      payload: { reportId: r.id, version: r.current_version, emailRecipients: true, changeNote },
+      dedupe_key: jobKeys.renderPdf(r.id, r.current_version),
+      status: 'queued',
+    });
+    return Promise.resolve({ version: r.current_version, alreadyAttached: false });
+  }
+
+  filedPhotoState(reportId: string, exceptBatch?: string) {
+    const added = this.uploads.filter(
+      (x) =>
+        x.report_id === reportId && x.batch_id && x.kind === 'photo' && x.batch_id !== exceptBatch,
+    );
+    const pending = added.filter(
+      (x) => !this.sources.some((s) => s.report_id === reportId && s.upload_id === x.id),
+    );
+    return Promise.resolve({ added: added.length, pending: pending.length });
   }
 
   flagLateUpload(uploadId: string, reporterId: string): Promise<{ flagged: boolean }> {

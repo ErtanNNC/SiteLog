@@ -31,6 +31,7 @@ export * from './wa/replies.ts';
 export * from './copy/whatsapp.ts';
 export * from './copy/sms.ts';
 export * from './copy/questions.ts';
+export * from './copy/report-notes.ts';
 export * from './copy/ui/index.ts';
 export * from './sms/segments.ts';
 export * from './sms/transports.ts';

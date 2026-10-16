@@ -63,6 +63,8 @@ const PERMANENT: ReadonlySet<FieldApiErrorCode> = new Set<FieldApiErrorCode>([
   'report_filed',
   'day_closed',
   'wrong_state',
+  'photos_window_closed',
+  'photo_limit',
 ]);
 
 /** Field-api's upload row is gone or never got the file: the next try starts over. */
@@ -160,8 +162,10 @@ export async function uploadItem(
             kind: current.kind,
             mime: current.mime,
             bytes: current.bytes,
-            siteId: current.siteId,
-            date: current.date,
+            // F9: a photo for a filed report goes in that report's site and day.
+            ...(current.addTo
+              ? { addTo: current.addTo }
+              : { siteId: current.siteId, date: current.date }),
             ...(current.recordedAt ? { recordedAt: current.recordedAt } : {}),
           },
           s,

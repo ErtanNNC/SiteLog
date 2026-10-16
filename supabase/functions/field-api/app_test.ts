@@ -2006,3 +2006,220 @@ Deno.test('history: the Late badge and every site of the reporter, newest first'
     ['P9-3007-0001'],
   );
 });
+
+/** F9 (W2-04): a filed web report of SITE_A, Fri Oct 9, version 1 with no photos. */
+async function filedReport(h: Harness, code = CODES.marco, siteId = SITE_A) {
+  const u = await h.call('POST', 'uploads', {
+    code,
+    body: {
+      kind: 'audio',
+      mime: 'audio/webm',
+      bytes: 1,
+      ...(code === CODES.marco ? { siteId } : {}),
+    },
+  });
+  h.store.put(`audio/${u.json.path}`);
+  const done = await h.call('POST', `uploads/${u.json.uploadId}/complete`, { code });
+  const reportId = done.json.reportId as string;
+  const report = h.store.reports.find((r) => r.id === reportId)!;
+  report.status = 'filed';
+  report.filed_at = T0.toISOString();
+  h.store.versions.push({
+    report_id: reportId,
+    version: 1,
+    data: {
+      ...emptyReportData('2026-10-09', { reportLanguage: 'en', units: 'imperial' }),
+      summary: 'Deck pour',
+    } as never,
+    summary: 'Deck pour',
+    pdf_path: `${ORG}/${siteId}/${report.report_no}_v1.pdf`,
+    author: 'agent',
+    author_user_id: null,
+    author_message_id: null,
+    change_note: null,
+    created_at: T0.toISOString(),
+    via: null,
+  });
+  return reportId;
+}
+
+const BATCH_1 = '22222222-0000-4000-8000-000000000001';
+const BATCH_2 = '22222222-0000-4000-8000-000000000002';
+const BATCH_3 = '22222222-0000-4000-8000-000000000003';
+
+Deno.test(
+  'photos after filing (F9): two photos from the Filed screen make version 2, "2 photos added"',
+  async () => {
+    const h = setup();
+    await consented(h);
+    const reportId = await filedReport(h);
+
+    const before = await h.call('GET', `reports/${reportId}`);
+    assertEquals(before.json.addPhotos, {
+      canAdd: true,
+      remaining: 4,
+      // 23:59 the next day at the site (Chicago).
+      until: '2026-10-11T04:59:00.000Z',
+      pending: 0,
+    });
+    assertEquals(before.json.changeNote, null);
+
+    // The next morning: the day is no longer one the link reports, but the window is open.
+    h.clock.now = new Date('2026-10-10T15:00:00Z');
+    const addTo = { reportId, batchId: BATCH_1, photos: 2, caption: false };
+    const ids: string[] = [];
+    for (const _ of [1, 2]) {
+      const up = await h.call('POST', 'uploads', {
+        body: { kind: 'photo', mime: 'image/jpeg', bytes: 10, addTo },
+      });
+      assertEquals(up.status, 201);
+      assertEquals(up.json.path, `${ORG}/${SITE_A}/2026-10-09/${up.json.uploadId}.jpg`);
+      h.store.put(`photos/${up.json.path}`);
+      ids.push(up.json.uploadId as string);
+    }
+    const created = h.store.audits.filter(
+      (a) => a.action === 'upload.created' && (a.diff as { batch_id?: string }).batch_id,
+    );
+    assertEquals(created.length, 2);
+    assertEquals((created[0]!.diff as { after_filing: boolean }).after_filing, true);
+
+    const first = await h.call('POST', `uploads/${ids[0]}/complete`);
+    assertEquals(first.status, 200);
+    assertEquals(first.json.batch, { id: BATCH_1, ready: false, version: null });
+    assert(!h.store.calls.includes('attachPhotos'), 'no version before the batch is whole');
+    assertEquals((await h.call('GET', `reports/${reportId}`)).json.currentVersion, 1);
+
+    const second = await h.call('POST', `uploads/${ids[1]}/complete`);
+    assertEquals(second.json.batch, { id: BATCH_1, ready: true, version: 2 });
+    assertEquals(second.json.reportStatus, 'filed');
+    const v2 = h.store.versions.find((v) => v.report_id === reportId && v.version === 2)!;
+    assertEquals([v2.author, v2.via, v2.change_note], ['reporter', 'web', '2 photos added']);
+    assertEquals(
+      (v2.data as { photos: { uploadId: string }[] }).photos.map((p) => p.uploadId),
+      ids,
+    );
+    // Version 1 is untouched (versions are immutable).
+    const v1 = h.store.versions.find((v) => v.report_id === reportId && v.version === 1)!;
+    assertEquals((v1.data as { photos: unknown[] }).photos, []);
+    assert(
+      h.store.jobs.some((j) => j.dedupe_key === `render_pdf:${reportId}:2`),
+      'the _v2 PDF and the Updated email',
+    );
+    // A photo added after filing is not a late clip (§19 Q53 is for report material).
+    assertEquals(h.store.lateUploads, []);
+
+    const after = await h.call('GET', `reports/${reportId}`);
+    assertEquals(after.json.currentVersion, 2);
+    assertEquals(after.json.changeNote, '2 photos added');
+    assertEquals(after.json.status, 'filed');
+    assertEquals((after.json.addPhotos as { remaining: number; pending: number }).remaining, 2);
+
+    // A retried complete (its answer lost) answers the same version and makes no second one.
+    const retry = await h.call('POST', `uploads/${ids[1]}/complete`);
+    assertEquals(
+      [retry.json.alreadyComplete, retry.json.batch],
+      [true, { id: BATCH_1, ready: true, version: 2 }],
+    );
+    assertEquals(h.store.versions.filter((v) => v.report_id === reportId).length, 2);
+
+    // At most 4 after filing: two more fit, three do not.
+    const three = await h.call('POST', 'uploads', {
+      body: {
+        kind: 'photo',
+        mime: 'image/jpeg',
+        bytes: 10,
+        addTo: { reportId, batchId: BATCH_2, photos: 3, caption: false },
+      },
+    });
+    assertEquals([three.status, three.json.error, three.json.remaining], [409, 'photo_limit', 2]);
+
+    // After 23:59 the next day the window is closed.
+    h.clock.now = new Date('2026-10-11T05:00:00Z');
+    h.store.rates.clear();
+    const late = await h.call('POST', 'uploads', {
+      body: {
+        kind: 'photo',
+        mime: 'image/jpeg',
+        bytes: 10,
+        addTo: { reportId, batchId: BATCH_2, photos: 1, caption: false },
+      },
+    });
+    assertEquals([late.status, late.json.error], [409, 'photos_window_closed']);
+    assertEquals(
+      ((await h.call('GET', `reports/${reportId}`)).json.addPhotos as { canAdd: boolean }).canAdd,
+      false,
+    );
+  },
+);
+
+Deno.test(
+  'photos after filing (F9): a voice caption waits for its transcription; refusals',
+  async () => {
+    const h = setup();
+    await consented(h);
+    const reportId = await filedReport(h);
+    const addTo = { reportId, batchId: BATCH_3, photos: 1, caption: true };
+    const photo = await h.call('POST', 'uploads', {
+      body: { kind: 'photo', mime: 'image/jpeg', bytes: 10, addTo },
+    });
+    const clip = await h.call('POST', 'uploads', {
+      body: { kind: 'audio', mime: 'audio/webm', bytes: 10, addTo },
+    });
+    assertEquals([photo.status, clip.status], [201, 201]);
+    h.store.put(`photos/${photo.json.path}`);
+    h.store.put(`audio/${clip.json.path}`);
+    await h.call('POST', `uploads/${photo.json.uploadId}/complete`);
+    const done = await h.call('POST', `uploads/${clip.json.uploadId}/complete`);
+    // Whole, but the worker attaches it after the caption's transcription.
+    assertEquals(done.json.batch, { id: BATCH_3, ready: true, version: null });
+    assert(!h.store.calls.includes('attachPhotos'));
+    const job = h.store.jobs.find(
+      (j) => j.dedupe_key === `transcribe_upload:${clip.json.uploadId}`,
+    )!;
+    assertEquals(job.payload, { uploadId: clip.json.uploadId, purpose: 'caption' });
+    const view = await h.call('GET', `reports/${reportId}`);
+    assertEquals((view.json.addPhotos as { pending: number }).pending, 1);
+
+    // Refusals: no site or date with addTo, audio only with a caption, a report not filed.
+    const up = (body: Record<string, unknown>, code?: string) =>
+      h.call('POST', 'uploads', {
+        code,
+        body: { kind: 'photo', mime: 'image/jpeg', bytes: 10, ...body },
+      });
+    const batch = { reportId, batchId: BATCH_2, photos: 1, caption: false };
+    assertEquals((await up({ addTo: batch, siteId: SITE_A })).json.error, 'invalid_request');
+    assertEquals(
+      (await up({ addTo: batch, kind: 'audio', mime: 'audio/webm' })).json.error,
+      'invalid_request',
+    );
+    h.store.reports.find((r) => r.id === reportId)!.status = 'awaiting_confirmation';
+    assertEquals((await up({ addTo: batch })).json.error, 'wrong_state');
+    h.store.reports.find((r) => r.id === reportId)!.status = 'filed';
+    // Another reporter's report is not found; a daily link of another site does not reach it.
+    assertEquals((await up({ addTo: batch }, CODES.marcoDaily)).json.error, 'not_found');
+  },
+);
+
+Deno.test('photos after filing (F9): a daily link of that day adds; the parameter', async () => {
+  const h = setup();
+  await consented(h);
+  const reportId = await filedReport(h, CODES.marcoDaily, SITE_B);
+  const view = await h.call('GET', `reports/${reportId}`, { code: CODES.marcoDaily });
+  assertEquals((view.json.addPhotos as { canAdd: boolean }).canAdd, true);
+  const up = await h.call('POST', 'uploads', {
+    code: CODES.marcoDaily,
+    body: {
+      kind: 'photo',
+      mime: 'image/jpeg',
+      bytes: 10,
+      addTo: { reportId, batchId: BATCH_1, photos: 1, caption: false },
+    },
+  });
+  assertEquals(up.status, 201);
+  h.store.put(`photos/${up.json.path}`);
+  const done = await h.call('POST', `uploads/${up.json.uploadId}/complete`, {
+    code: CODES.marcoDaily,
+  });
+  assertEquals(done.json.batch, { id: BATCH_1, ready: true, version: 2 });
+  assertEquals(h.store.attached[0]!.changeNote, '1 photo added');
+});

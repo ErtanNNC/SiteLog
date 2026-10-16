@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { CONSENT_TYPES, CONTACT_PREFS, MESSAGE_CHANNELS, UPLOAD_KINDS } from './enums.ts';
-import { DEVICE_COOKIE_PREFIX, UPLOAD_MAX_BYTES, VERIFY_CODE_LENGTH } from './field-contract.ts';
+import {
+  DEVICE_COOKIE_PREFIX,
+  FILED_PHOTOS_MAX,
+  UPLOAD_MAX_BYTES,
+  VERIFY_CODE_LENGTH,
+} from './field-contract.ts';
 import { sha256Hex } from './links.ts';
 import { REPORTER_LOCALES } from './locale.ts';
 
@@ -48,16 +53,38 @@ export const ConsentRequestSchema = z.object({
  * in the site's time zone (one of `TodayResponse.allowedDates`: before 12:00 site time a personal
  * link may also name the previous working day, F5). Answers `{uploadId, bucket, path, signedUrl,
  * token}`.
+ *
+ * F9 (W2-04): `addTo` names a filed report to add photos to (the Filed screen's *Add more
+ * photos*): the report's site and date then stand (`siteId` and `date` are not sent), and the
+ * upload belongs to the batch `batchId` of `photos` photos (1–4) and, with `caption`, one voice
+ * caption (an `audio` upload). The batch becomes one new version when its last upload completes.
  */
-export const UploadRequestSchema = z.strictObject({
-  kind: z.enum(UPLOAD_KINDS),
-  mime: z.string().trim().min(3).max(100),
-  bytes: z.number().int().positive().max(UPLOAD_MAX_BYTES),
-  siteId: z.uuid().optional(),
-  date: isoDate.optional(),
-  /** The phone's clock when recording started (§6.3 uploads.recorded_at). */
-  recordedAt: z.iso.datetime({ offset: true }).optional(),
+export const AddToReportSchema = z.strictObject({
+  reportId: z.uuid(),
+  batchId: z.uuid(),
+  photos: z.number().int().min(1).max(FILED_PHOTOS_MAX),
+  caption: z.boolean(),
 });
+
+export const UploadRequestSchema = z
+  .strictObject({
+    kind: z.enum(UPLOAD_KINDS),
+    mime: z.string().trim().min(3).max(100),
+    bytes: z.number().int().positive().max(UPLOAD_MAX_BYTES),
+    siteId: z.uuid().optional(),
+    date: isoDate.optional(),
+    /** The phone's clock when recording started (§6.3 uploads.recorded_at). */
+    recordedAt: z.iso.datetime({ offset: true }).optional(),
+    addTo: AddToReportSchema.optional(),
+  })
+  .refine((b) => !b.addTo || (b.siteId === undefined && b.date === undefined), {
+    message: 'addTo takes the report’s site and date',
+    path: ['addTo'],
+  })
+  .refine((b) => !b.addTo || b.kind === 'photo' || b.addTo.caption, {
+    message: 'only a batch with a caption takes audio',
+    path: ['kind'],
+  });
 
 /**
  * `POST reports/:id/confirm` (F8): the draft the reporter saw: its version
@@ -143,6 +170,7 @@ export type ResolveRequest = z.infer<typeof ResolveRequestSchema>;
 export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 export type ConsentRequest = z.infer<typeof ConsentRequestSchema>;
 export type UploadRequest = z.infer<typeof UploadRequestSchema>;
+export type AddToReport = z.infer<typeof AddToReportSchema>;
 export type ConfirmRequest = z.infer<typeof ConfirmRequestSchema>;
 export type AnswerRequest = z.infer<typeof AnswerRequestSchema>;
 export type DayStatusRequest = z.infer<typeof DayStatusRequestSchema>;

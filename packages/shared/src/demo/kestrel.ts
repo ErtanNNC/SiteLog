@@ -1397,6 +1397,8 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
           caption: null,
           uploaded_by: null,
           purged_at: null,
+          batch_id: null,
+          batch_size: null,
         });
         for (let p = 0; p < photoCount; p++) {
           const pid = demoId(`msg:${s.key}:${c}:photo${p}`);
@@ -1422,6 +1424,8 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
                 : 'End of day',
             uploaded_by: null,
             purged_at: null,
+            batch_id: null,
+            batch_size: null,
           };
           uploads.push(u);
           photoUploads.push(u);
@@ -1593,6 +1597,8 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
           caption: null,
           uploaded_by: null,
           purged_at: null,
+          batch_id: null,
+          batch_size: null,
         });
         transcripts.push({
           ...V12_ROW_DEFAULTS.transcripts,

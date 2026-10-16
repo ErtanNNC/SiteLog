@@ -1,4 +1,10 @@
-import { jobKeys, type UploadRow } from '@sitelog/shared';
+import {
+  JOB_MAX_ATTEMPTS,
+  jobKeys,
+  photosAddedNote,
+  type JobRow,
+  type UploadRow,
+} from '@sitelog/shared';
 import { buildTranscriptionPrompt } from '../ai/transcribe';
 import { buildKeyterms, transcriptionLanguage } from '../ai/transcriber';
 import type { Ctx } from '../context';
@@ -30,14 +36,25 @@ import { PermanentJobError, type JobHandler } from './types';
  *
  * Latency and audio seconds go to the job's metrics (jobs.payload.metrics) and the `transcribed`
  * log line.
+ *
+ * `purpose: 'caption'` (F9, W2-04): the voice caption of photos added after filing (an upload of
+ * a batch). Its transcript is the photos' caption: once stored, the batch is attached as the
+ * filed report's next version (`field_attach_photos`, "2 photos added" in the report language);
+ * nothing is extracted. A caption that cannot be transcribed (on the last attempt, or a failure
+ * no retry fixes) does not hold the photos back: they go in without it.
  */
-export const transcribeUploadJob: JobHandler<'transcribe_upload'> = async (ctx, payload) => {
+export const transcribeUploadJob: JobHandler<'transcribe_upload'> = async (ctx, payload, job) => {
   const upload = await ctx.db.getUpload(payload.uploadId);
   if (!upload) throw new PermanentJobError(`upload ${payload.uploadId} not found`);
   if (upload.kind !== 'audio') throw new PermanentJobError(`upload ${upload.id} is not audio`);
   if (!upload.report_id)
     throw new PermanentJobError(`upload ${upload.id} is not attached to a report`);
   const log = ctx.log.child({ upload_id: upload.id, report_id: upload.report_id });
+
+  if (payload.purpose === 'caption' || upload.batch_id) {
+    await captionThenAttach(ctx, upload, job, log);
+    return;
+  }
 
   if (!(await ctx.db.getUploadTranscript(upload.id))) {
     if (upload.purged_at) throw new PermanentJobError(`upload ${upload.id} was purged`);
@@ -118,6 +135,47 @@ async function transcribe(ctx: Ctx, upload: UploadRow, log: Ctx['log']): Promise
     segments: result.segments.length,
     peaks: analysis?.peaks.length ?? 0,
     created,
+  });
+}
+
+/** F9: the caption's transcript (or none it could get), then the batch as the next version. */
+async function captionThenAttach(
+  ctx: Ctx,
+  upload: UploadRow,
+  job: Pick<JobRow, 'attempts'> | undefined,
+  log: Ctx['log'],
+): Promise<void> {
+  const batchId = upload.batch_id;
+  const reportId = upload.report_id!;
+  if (!batchId) throw new PermanentJobError(`caption upload ${upload.id} has no batch`);
+  let caption: string | null = null;
+  try {
+    let transcript = await ctx.db.getUploadTranscript(upload.id);
+    if (!transcript && !upload.purged_at) {
+      await transcribe(ctx, upload, log);
+      transcript = await ctx.db.getUploadTranscript(upload.id);
+    }
+    caption = transcript?.text.trim() || null;
+  } catch (err) {
+    const last = err instanceof PermanentJobError || (job?.attempts ?? 1) >= JOB_MAX_ATTEMPTS;
+    if (!last) throw err;
+    log.warn('caption not transcribed; adding the photos without it', { err });
+  }
+  const report = await ctx.db.getReport(reportId);
+  if (!report) throw new PermanentJobError(`report ${reportId} not found`);
+  const photos = await ctx.db.countBatchPhotos(batchId);
+  const result = await ctx.db.attachPhotos(
+    reportId,
+    batchId,
+    photosAddedNote(report.language, photos),
+    caption,
+  );
+  log.info('photos added after filing', {
+    batch_id: batchId,
+    photos,
+    caption: caption !== null,
+    version: result.version,
+    already_attached: result.alreadyAttached,
   });
 }
 

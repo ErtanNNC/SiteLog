@@ -701,6 +701,8 @@ export class DemoStore {
         caption: u.caption,
         uploaded_by: userId,
         purged_at: null,
+        batch_id: null,
+        batch_size: null,
       });
       this.data.sources.push({
         ...V12_ROW_DEFAULTS.report_sources,

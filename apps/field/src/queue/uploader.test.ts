@@ -105,6 +105,30 @@ describe('uploadItem (F5 step 3)', () => {
     ]);
   });
 
+  it('sends a photo for a filed report with its batch instead of a site and day (F9)', async () => {
+    const h = harness();
+    const addTo = { reportId: 'r1', batchId: 'b1', photos: 2, caption: false };
+    await uploadItem(
+      item({ kind: 'photo', mime: 'image/jpeg', recordedAt: null, addTo }),
+      { routes: h.routes, put: h.put },
+      h.persist,
+    );
+    expect(h.routes.createUpload).toHaveBeenCalledWith(
+      'K7Q2MX',
+      { kind: 'photo', mime: 'image/jpeg', bytes: 3, addTo },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('treats a closed photo window and the photo limit as final (F9)', async () => {
+    for (const error of ['photos_window_closed', 'photo_limit']) {
+      const h = harness();
+      h.routes.completeUpload.mockRejectedValueOnce(apiError(409, error));
+      const out = await uploadItem(item(), { routes: h.routes, put: h.put }, h.persist);
+      expect(out).toEqual({ ok: false, permanent: true, error });
+    }
+  });
+
   it('resumes a try cut off after the PUT: no new upload row, no second PUT', async () => {
     const h = harness();
     const out = await uploadItem(

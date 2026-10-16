@@ -5,6 +5,7 @@ import {
   FIELD_DB_ERRORS,
   FieldDbError,
   type AnswerResult,
+  type AttachPhotosResult,
   type CompleteUploadResult,
   type ConfirmResult,
   type DayStatusResult,
@@ -392,6 +393,39 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
           p_device_id: deviceId,
         }),
       );
+    },
+
+    async attachPhotos(reportId, batchId, changeNote, caption) {
+      return await rpc<AttachPhotosResult>(
+        admin.rpc('field_attach_photos', {
+          p_report_id: reportId,
+          p_batch_id: batchId,
+          p_change_note: changeNote,
+          p_caption: caption,
+        }),
+      );
+    },
+
+    async filedPhotoState(reportId, exceptBatch) {
+      const { data: rows } = await admin
+        .from('uploads')
+        .select('id, batch_id')
+        .eq('report_id', reportId)
+        .eq('kind', 'photo')
+        .not('batch_id', 'is', null)
+        .throwOnError();
+      const uploads = rows.filter((u) => u.batch_id !== exceptBatch);
+      if (uploads.length === 0) return { added: 0, pending: 0 };
+      const { data: sources } = await admin
+        .from('report_sources')
+        .select('upload_id')
+        .eq('report_id', reportId)
+        .in(
+          'upload_id',
+          uploads.map((u) => u.id),
+        )
+        .throwOnError();
+      return { added: uploads.length, pending: uploads.length - sources.length };
     },
 
     async flagLateUpload(uploadId, reporterId) {

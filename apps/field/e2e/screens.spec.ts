@@ -600,6 +600,8 @@ function pastReports(market: Market): {
     draftRev: 1,
     progress: { voiceNotes: 1, transcribed: 1, photos: 0 },
     pdfUrl: '/__storage/pdfs/RL-2041-0187_v2.pdf?token=e2e',
+    addPhotos: null,
+    changeNote: null,
   };
   return {
     history: [
@@ -757,6 +759,89 @@ test.describe('Past reports at 1440 px (W2-03)', () => {
     await page.goto('/r/K7Q2MX');
     await page.getByRole('link', { name: UI_RESOURCES.en.field.today.pastReports }).click();
     await expect(page.getByText('RL-2041-0187')).toBeVisible();
+    await expectFieldScreen(page);
+  });
+});
+
+/** A 1×1 PNG: what the photo picker hands the page in the Filed tests (F9). */
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+for (const run of RUNS) {
+  test.describe(`Filed: Add more photos (F9, W2-04) in ${run.lang}`, () => {
+    test.use({ locale: run.locale });
+
+    test('two photos from the Filed screen make version 2', async ({ page }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const market = run.market();
+      const filed: ReportView = {
+        ...pastReports(market).reports[PAST_ID]!,
+        date: market.date,
+        currentVersion: 1,
+        pdfUrl: '/__storage/pdfs/RL-2041-0187_v1.pdf?token=e2e',
+        addPhotos: { canAdd: true, remaining: 4, until: '2026-10-11T04:59:00.000Z', pending: 0 },
+      };
+      const api = await installFakeFieldApi(page, market, {
+        verified: true,
+        consented: true,
+        reports: { [PAST_ID]: filed },
+      });
+      await page.goto(`/r/${CODE}/report/${PAST_ID}`);
+      await expect(page.getByRole('heading', { level: 1, name: field.filed.title })).toBeVisible();
+      await expect(page.getByRole('link', { name: field.filed.pastReports })).toHaveAttribute(
+        'href',
+        '/history',
+      );
+      await expectFieldScreen(page);
+
+      await page.locator('input[type="file"]').setInputFiles([
+        { name: 'level4-a.png', mimeType: 'image/png', buffer: PNG },
+        { name: 'level4-b.png', mimeType: 'image/png', buffer: PNG },
+      ]);
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toContainText(field.filed.photos.chosen.replace('{{count}}', '2'));
+      await expect(dialog.getByRole('img')).toHaveCount(2);
+      await expectFieldScreen(page);
+      await dialog.getByRole('button', { name: field.filed.photos.send }).click();
+
+      await expect(
+        page.getByRole('status').filter({
+          hasText: field.filed.photos.added.replace('{{version}}', '2'),
+        }),
+      ).toBeVisible();
+      await expect(page.getByRole('link', { name: /_v2\.pdf/ })).toBeVisible();
+      const sent = api.calls
+        .filter((c) => c.path === 'uploads')
+        .map((c) => (c.body as { addTo: { batchId: string; photos: number } }).addTo);
+      expect(sent).toHaveLength(2);
+      expect(new Set(sent.map((a) => a.batchId)).size).toBe(1);
+      expect(sent[0]!.photos).toBe(2);
+      expect(Object.values(api.batches)[0]!.version).toBe(2);
+      await expectFieldScreen(page);
+    });
+  });
+}
+
+test.describe('Filed with Add more photos at 1440 px', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test('lays out the actions side by side', async ({ page }) => {
+    const field = UI_RESOURCES.en.field;
+    const market = kestrel('en-US');
+    await installFakeFieldApi(page, market, {
+      verified: true,
+      consented: true,
+      reports: {
+        [PAST_ID]: {
+          ...pastReports(market).reports[PAST_ID]!,
+          addPhotos: { canAdd: true, remaining: 4, until: '2026-10-11T04:59:00.000Z', pending: 0 },
+        },
+      },
+    });
+    await page.goto(`/r/${CODE}/report/${PAST_ID}`);
+    await expect(page.getByRole('button', { name: field.filed.addPhotos })).toBeVisible();
     await expectFieldScreen(page);
   });
 });
