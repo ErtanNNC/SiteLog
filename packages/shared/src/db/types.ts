@@ -649,6 +649,11 @@ export type UploadRow = {
    * never report material (no report source, not extracted). Null for every other upload.
    */
   question_id: string | null;
+  /**
+   * W2-10 (20261016000100, F8 *Fix by voice*): a correction clip names the draft it fixes; never
+   * report material (no report source, not extracted). Null for every other upload.
+   */
+  correction_report_id: string | null;
 };
 
 /** §6.3 calls (rows written from week 2): admin, pm and ops read them. */
@@ -704,6 +709,43 @@ export type TestClipRow = {
   read_at: string | null;
   /** The file and the words are gone (read, or 10 minutes). */
   deleted_at: string | null;
+};
+
+/**
+ * W2-10 (20261016000100; F8, §10.6): a fix of a web draft (spoken, typed or a stepper) and its
+ * preview. Service role only (field-api and the worker).
+ */
+export type DraftCorrectionStatus =
+  'listening' | 'ready' | 'unclear' | 'applied' | 'stale' | 'discarded';
+export type DraftCorrectionRow = {
+  id: string;
+  org_id: string;
+  report_id: string;
+  reporter_id: string;
+  via: 'voice' | 'text' | 'stepper';
+  /** The correction clip (`uploads.correction_report_id`), for a spoken fix. */
+  upload_id: string | null;
+  /** The typed words, for a typed fix. */
+  text: string | null;
+  status: DraftCorrectionStatus;
+  /** The draft the preview was made from: Save change applies it there only. */
+  base_version: number | null;
+  base_rev: number | null;
+  /** The draft with the fix applied in code (totals recomputed). */
+  data: Json | null;
+  /** The preview's lines (`CorrectionChange[]`). */
+  changes: Json | null;
+  /** The model's operations as code kept them. */
+  operations: Json | null;
+  /** What each changed value cites (§10.3): the clip (`voice_note`) or `reporter_edit`. */
+  source: Json | null;
+  change_note: string | null;
+  /** The model's question when it could not tell what to change (§10.6 needsClarification). */
+  clarification: string | null;
+  reason: string | null;
+  created_at: string;
+  settled_at: string | null;
+  applied_at: string | null;
 };
 
 export type SmsOptOutRow = {
@@ -1073,6 +1115,7 @@ export type Database = {
         | 'batch_id'
         | 'batch_size'
         | 'question_id'
+        | 'correction_report_id'
       >;
       calls: Table<
         CallRow,
@@ -1227,6 +1270,25 @@ export type Database = {
         | 'failed_at'
         | 'read_at'
         | 'deleted_at'
+      >;
+      draft_corrections: Table<
+        DraftCorrectionRow,
+        | 'id'
+        | 'upload_id'
+        | 'text'
+        | 'status'
+        | 'base_version'
+        | 'base_rev'
+        | 'data'
+        | 'changes'
+        | 'operations'
+        | 'source'
+        | 'change_note'
+        | 'clarification'
+        | 'reason'
+        | 'created_at'
+        | 'settled_at'
+        | 'applied_at'
       >;
       scheduler_state: Table<SchedulerStateRow, 'value' | 'updated_at'>;
       stripe_events: Table<StripeEventRow, 'received_at' | 'processed_at'>;
@@ -1389,6 +1451,40 @@ export type Database = {
           p_question_id: string;
           p_reporter_id: string;
           p_upload_id: string;
+        };
+        Returns: Json;
+      };
+      /** W2-10 (20261016000100): F8 Fix by voice, a correction of the draft (field-api only). */
+      field_request_correction: {
+        Args: {
+          p_report_id: string;
+          p_reporter_id: string;
+          p_upload_id?: string | null;
+          p_text?: string | null;
+        };
+        Returns: Json;
+      };
+      /** W2-10: the worker settles a correction (`ready` with the preview, `unclear`, `stale`). */
+      field_settle_correction: {
+        Args: { p_correction_id: string; p_outcome: string; p_detail?: Json };
+        Returns: Json;
+      };
+      /** W2-10: Save change, the preview written to the draft at its revision (field-api only). */
+      field_apply_correction: {
+        Args: { p_correction_id: string; p_report_id: string; p_reporter_id: string };
+        Returns: Json;
+      };
+      /** W2-10: a stepper's crew line written to the draft the reporter saw (field-api only). */
+      field_edit_draft: {
+        Args: {
+          p_report_id: string;
+          p_reporter_id: string;
+          p_version: number;
+          p_draft_rev: number;
+          p_base: Json;
+          p_data: Json;
+          p_changes: Json;
+          p_source: Json;
         };
         Returns: Json;
       };

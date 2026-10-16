@@ -1,3 +1,4 @@
+import { applyCorrectionJob } from './apply_correction';
 import { buildEvidencePack } from './build_evidence_pack';
 import { decideNext } from './decide_next';
 import { extractReport } from './extract_report';
@@ -42,4 +43,5 @@ export const registry: JobRegistry = {
   parse_answer: parseAnswerJob,
   transcribe_test_clip: transcribeTestClipJob,
   delete_test_clip: deleteTestClipJob,
+  apply_correction: applyCorrectionJob,
 };

@@ -431,6 +431,8 @@ export const copy = {
       reply: 'reply {{time}}',
       editedBy: 'edited by {{name}}',
       editedByOffice: 'edited by the office',
+      /** Spec §19 Q80 (W2-10): the reporter changed the value on the phone (a stepper, typed). */
+      reporterEdit: 'changed on the phone {{time}}',
       weather: 'weather data',
       playVoiceNote: 'Play voice note from {{ts}}',
       playCall: 'Play call from {{ts}}',

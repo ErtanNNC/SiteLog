@@ -110,6 +110,13 @@ export function SourceLink({
         </button>
       );
     }
+    case 'reporter_edit':
+      // Spec §19 Q80 (W2-10): a stepper or typed fix on the reporter's phone.
+      return (
+        <span className={plain} data-source="reporter_edit">
+          {t('source.links.reporterEdit', { time: formatTimeInTz(source.at, timezone) })}
+        </span>
+      );
     case 'weather_api':
       return (
         <span className={plain} data-source="weather_api">

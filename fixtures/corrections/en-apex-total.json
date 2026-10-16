@@ -1,0 +1,45 @@
+{
+  "id": "en-apex-total",
+  "description": "English, spoken: “Apex had seven guys, sixty hours all in.” The model also sets Apex's total to 60: code drops it and computes 7 × 8 h = 56 h (a total is never the model's).",
+  "voice": "correction-en-apex-total",
+  "language": "en",
+  "draft": "riverside-2026-10-09",
+  "recorded": {
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/manpower/0/workers",
+        "value": 7,
+        "reason": "seven guys"
+      },
+      {
+        "op": "replace",
+        "path": "/manpower/0/totalHours",
+        "value": 60,
+        "reason": "sixty hours all in"
+      }
+    ],
+    "changeNote": "Apex Concrete 6 → 7 workers, 60 h",
+    "needsClarification": null
+  },
+  "expected": {
+    "applies": true,
+    "crew": {
+      "company": "Apex Concrete",
+      "workers": 7,
+      "hoursPerWorker": 8,
+      "totalHours": 56
+    },
+    "changes": [
+      {
+        "kind": "crew",
+        "company": "Apex Concrete",
+        "change": "changed",
+        "workers": [6, 7],
+        "hoursPerWorker": [8, 8],
+        "totalHours": [48, 56]
+      }
+    ],
+    "droppedTotals": 1
+  }
+}

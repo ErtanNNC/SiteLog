@@ -65,9 +65,11 @@ export function SourceLinks({
               ? `call:${s.callId}:${s.start}`
               : s.type === 'office_edit'
                 ? `edit:${s.at}`
-                : s.type === 'weather_api'
-                  ? 'wx'
-                  : `answer:${s.questionId}`;
+                : s.type === 'reporter_edit'
+                  ? `reporter_edit:${s.at}`
+                  : s.type === 'weather_api'
+                    ? 'wx'
+                    : `answer:${s.questionId}`;
         const given = s.type === 'answer' ? answer(s.questionId) : null;
         if (seen.has(key)) return null;
         seen.add(key);

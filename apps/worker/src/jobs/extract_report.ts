@@ -1,4 +1,4 @@
-import { jobKeys, type JobRow, type ReportRow } from '@sitelog/shared';
+import { jobKeys, reapplyCrewFixes, type JobRow, type ReportRow } from '@sitelog/shared';
 import { runExtraction, runReportExtraction } from '../ai/extract';
 import type { Ctx } from '../context';
 import {
@@ -9,7 +9,13 @@ import {
 import { skippedForConsent } from '../pipeline/consent';
 import { currentData, isPlainPhoto, storeDraft } from '../pipeline/draft';
 import { learnTerms } from '../pipeline/glossary';
-import { currentDraftV2, isWebReport, reapplyAnswers, storeWebDraft } from '../pipeline/web';
+import {
+  appliedFixes,
+  currentDraftV2,
+  isWebReport,
+  reapplyAnswers,
+  storeWebDraft,
+} from '../pipeline/web';
 import { validateDraft } from '../pipeline/validate';
 import { allAudioTranscribed, sendProgressIfSlow } from '../pipeline/progress';
 import { PermanentJobError, type JobHandler } from './types';
@@ -178,7 +184,7 @@ async function extractWebReport(ctx: Ctx, report: ReportRow, job: JobRow): Promi
     site.settings,
     sources.filter((s) => s.kind === 'photo').length,
   ).gaps;
-  const { data, reapplied } = reapplyAnswers(
+  const answered = reapplyAnswers(
     result.data,
     await ctx.db.listQuestions(report.id),
     new Set(gaps.map((g) => g.path)),
@@ -187,6 +193,14 @@ async function extractWebReport(ctx: Ctx, report: ReportRow, job: JobRow): Promi
       workingHours: site.site.working_hours,
     },
   );
+  const reapplied = answered.reapplied;
+  // W2-10, spec §19 Q96: the reporter's fixes of crew numbers stand where the new draft brought
+  // back the number they replaced (a later clip that says otherwise wins).
+  const fixed = reapplyCrewFixes(
+    answered.data,
+    appliedFixes(await ctx.db.listAppliedCorrections(report.id)),
+  );
+  const data = fixed.data;
   if (!(await storeWebDraft(ctx, latest, data))) return; // filed meanwhile: nothing to write
   await ctx.db.logAudit({
     org_id: report.org_id,
@@ -201,6 +215,7 @@ async function extractWebReport(ctx: Ctx, report: ReportRow, job: JobRow): Promi
       discrepancies: result.discrepancies,
       dropped_sources: result.droppedSources,
       answers_reapplied: reapplied,
+      fixes_reapplied: fixed.reapplied,
       languages: result.data.languageDetected,
       merged: !!previousDraft,
     },

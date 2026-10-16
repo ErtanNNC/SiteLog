@@ -183,6 +183,8 @@ export const PRUNE: ReadonlyArray<readonly [table: string, where: (k: PruneScope
   ['jobs', jobsWhere],
   ['report_costs', (k) => `org_id = ${k.o} or report_id in ${k.P}`],
   ['questions', (k) => `report_id in ${k.P}`],
+  // F8 fixes of a draft (W2-10): with their report, or their reporter; before the uploads they cite.
+  ['draft_corrections', (k) => `report_id in ${k.P} or reporter_id in ${k.R} or org_id = ${k.o}`],
   ['report_sources', (k) => `report_id in ${k.P}`],
   ['manpower_entries', (k) => `report_id in ${k.P}`],
   ['work_items', (k) => `report_id in ${k.P}`],

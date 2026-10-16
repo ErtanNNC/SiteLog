@@ -354,6 +354,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         batch_size: null,
         ...u,
         question_id: u.question_id ?? null,
+        correction_report_id: u.correction_report_id ?? null,
       };
     },
     async countBatchPhotos(batchId) {
@@ -385,7 +386,8 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
             (u.kind ?? 'audio') === 'audio' &&
             !u.purged_at &&
             !u.batch_id &&
-            !u.question_id,
+            !u.question_id &&
+            !u.correction_report_id,
         )
         .sort(
           (a, b) =>
@@ -877,6 +879,16 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       if (patch.asked_at !== undefined) next.asked_at = toIso(patch.asked_at);
       if (patch.answered_at !== undefined) next.answered_at = toIso(patch.answered_at);
       d.questions.set(id, next);
+    },
+    // W2-10: field_settle_correction() is SQL; the apply_correction tests run on PGlite.
+    async getCorrection() {
+      return null;
+    },
+    settleCorrection() {
+      return Promise.reject(new Error('fake db: settleCorrection runs on PGlite only'));
+    },
+    async listAppliedCorrections() {
+      return [];
     },
     settleVoiceAnswer() {
       // field_settle_voice_answer() is SQL: the parse_answer tests run on PGlite (W2-09).

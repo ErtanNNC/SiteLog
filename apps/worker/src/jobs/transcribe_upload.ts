@@ -82,7 +82,7 @@ export async function transcribe(
   ctx: Ctx,
   upload: UploadRow,
   log: Ctx['log'],
-  purpose: 'report' | 'answer' = 'report',
+  purpose: 'report' | 'answer' | 'correction' = 'report',
 ): Promise<void> {
   const site = await ctx.db.siteContext(upload.site_id);
   if (!site) throw new PermanentJobError(`site ${upload.site_id} not found`);

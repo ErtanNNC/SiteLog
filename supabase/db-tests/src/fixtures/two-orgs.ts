@@ -74,6 +74,8 @@ function orgIds(prefix: 'aaaaaaaa' | 'bbbbbbbb') {
     consoleEmail: id(38),
     /** F4's test recording (W2-13, 20261016000070). */
     testClip: id(39),
+    /** A fix of the report's draft (W2-10, 20261016000100). */
+    correction: id(40),
     users: { admin: user(1), pm: user(2), ops: user(3), accounts: user(4) } as Record<Role, string>,
   };
 }
@@ -259,6 +261,16 @@ export async function seedTwoOrgs(db: PGlite): Promise<void> {
       await db.exec(`
         insert into test_clips (id, org_id, reporter_id, storage_path, mime) values
           ('${o.testClip}', '${o.org}', '${o.reporter}', 'test/${o.org}/${o.testClip}.webm', 'audio/webm');
+      `);
+  }
+  const corrections = await db.query<{ v: boolean }>(
+    `select to_regclass('public.draft_corrections') is not null as v`,
+  );
+  if (corrections.rows[0]!.v) {
+    for (const o of [ORG.A, ORG.B])
+      await db.exec(`
+        insert into draft_corrections (id, org_id, report_id, reporter_id, via, text) values
+          ('${o.correction}', '${o.org}', '${o.report}', '${o.reporter}', 'text', 'Apex had 7');
       `);
   }
   await db.exec(`

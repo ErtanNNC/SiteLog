@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  SourceSchema,
   applyAnswer,
   ensurePersonalLink,
   fieldLinkUrl,
@@ -13,6 +14,9 @@ import {
   type CompanyRow,
   type QuestionRow,
   type AnswerValue,
+  type AppliedFix,
+  type CorrectionChange,
+  type DraftCorrectionRow,
   type QuestionField,
   type QuestionSpec,
   type ReportRow,
@@ -187,6 +191,21 @@ export function reapplyAnswers(
     reapplied.push(q.id);
   }
   return { data: out, reapplied };
+}
+
+/**
+ * The fixes saved on a draft (W2-10, `draft_corrections` applied: spoken, typed or a stepper) as
+ * `reapplyCrewFixes` takes them (spec §19 Q96): their crew changes and the source they cited. A
+ * row without both is skipped. Pure.
+ */
+export function appliedFixes(
+  rows: ReadonlyArray<Pick<DraftCorrectionRow, 'changes' | 'source'>>,
+): AppliedFix[] {
+  return rows.flatMap((r) => {
+    const source = SourceSchema.safeParse(r.source);
+    if (!Array.isArray(r.changes) || !source.success) return [];
+    return [{ changes: r.changes as unknown as CorrectionChange[], source: source.data }];
+  });
 }
 
 /** questions.target carries the gap path. */

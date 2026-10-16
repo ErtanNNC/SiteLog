@@ -301,6 +301,14 @@ export const TABLES: Record<string, TableCase> = {
       `insert into test_clips (org_id, reporter_id, storage_path, mime) values ('${o.org}', '${o.reporter}', 'test/x.webm', 'audio/webm')`,
     set: 'snippet = snippet',
   },
+  draft_corrections: {
+    why: 'F8 fixes of a web draft and their previews (W2-10): field-api and the worker with the service role only; no client policy, no grant.',
+    allow: serviceOnly,
+    where: (o) => `report_id = '${o.report}'`,
+    insert: (o) =>
+      `insert into draft_corrections (org_id, report_id, reporter_id, via, text) values ('${o.org}', '${o.report}', '${o.reporter}', 'text', 'Apex had 7')`,
+    set: 'reason = reason',
+  },
   rate_limits: {
     why: 'field-api throttling (§6.5): service role only; no client policy, no grant.',
     allow: serviceOnly,
@@ -547,6 +555,30 @@ export const RPCS: Record<
     why: '§10.7: the worker only (service role): parse_answer settles a spoken answer.',
     allow: NONE,
     call: (o) => `select field_settle_voice_answer('${o.question}', '${o.upload}', 'unclear') as v`,
+  },
+  // W2-10 (20261016000100_draft_corrections.sql): F8 Fix by voice and the draft's steppers.
+  field_request_correction: {
+    why: '§6.5: field-api only (service role); a reporter fixes the draft through reports/:id/correction.',
+    allow: NONE,
+    call: (o) =>
+      `select field_request_correction('${o.report}', '${o.reporter}', null, 'Apex had 7') as v`,
+  },
+  field_settle_correction: {
+    why: '§10.6: the worker only (service role): apply_correction settles a fix into its preview.',
+    allow: NONE,
+    call: () => `select field_settle_correction(gen_random_uuid(), 'unclear') as v`,
+  },
+  field_apply_correction: {
+    why: '§6.5: field-api only (service role); Save change goes through reports/:id/correction/:cid/apply.',
+    allow: NONE,
+    call: (o) =>
+      `select field_apply_correction(gen_random_uuid(), '${o.report}', '${o.reporter}') as v`,
+  },
+  field_edit_draft: {
+    why: '§6.5: field-api only (service role); a stepper goes through reports/:id/edit.',
+    allow: NONE,
+    call: (o) =>
+      `select field_edit_draft('${o.report}', '${o.reporter}', 1, 1, '{}', '{"schemaVersion": 2}', '[]', '{}') as v`,
   },
   // W2-13 (20261016000070_test_clips.sql): F4's test recording.
   field_test_clip_create: {

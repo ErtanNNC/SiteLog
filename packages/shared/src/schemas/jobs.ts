@@ -76,6 +76,13 @@ export const JobPayloadSchemas = {
    */
   delete_test_clip: z.object({ testClipId: uuid }),
   /**
+   * §10.6 (W2-10, F8 *Fix by voice*; field_request_correction(), `correction:<id>`): the
+   * correction `correctionId` of the draft of `reportId`: transcribed (a clip), parsed by
+   * `apply_correction`, applied in code to the draft into a preview (`draft_corrections`). The
+   * draft changes only when the reporter saves the preview (`reports/:id/correction/:cid/apply`).
+   */
+  apply_correction: z.object({ reportId: uuid, correctionId: uuid }),
+  /**
    * §10.1 decide_next. `timeout` (W2-07, §7.2 web rules): a step of the web clock, enqueued
    * delayed by decide_next itself (`run_after`) and checked again when it runs:
    * - `answer`: the open question unanswered for 60 min → recorded unanswered, the draft is
@@ -277,6 +284,20 @@ export const jobKeys = {
    * answer clip. A clip is spoken once and answers one question; a second try is a new clip.
    */
   parseAnswer: (questionId: string, uploadId: string) => `answer:${questionId}:${uploadId}`,
+  /**
+   * A correction's preview (W2-10, §10.6; field_request_correction(), SQL): per correction, and a
+   * correction is made once (a second try is a new correction).
+   */
+  applyCorrection: (correctionId: string) => `correction:${correctionId}`,
+  /**
+   * decide_next after a fix saved on the draft (W2-10, §7.2 `awaiting_confirmation → processing`):
+   * a spoken or typed fix per correction (`field_apply_correction()`), a stepper per draft revision
+   * it changed (`field_edit_draft()`, `edit:v<version>:r<rev>`): each is saved once.
+   */
+  decideCorrection: (reportId: string, correctionId: string) =>
+    `decide:${reportId}:correction:${correctionId}`,
+  decideEdit: (reportId: string, version: number, draftRev: number) =>
+    `decide:${reportId}:edit:v${version}:r${draftRev}`,
   /**
    * The `question_ready` text (W1-12): the `notify` job's key and the Notifier's, per question, so
    * a retried decide_next never texts twice and a new question is a new text (D25). Since W2-07 a

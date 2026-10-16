@@ -204,7 +204,9 @@ export function downgradeSourceV2(source: Source, opts: DowngradeOptions = {}): 
       return { type: 'office_edit', userId: source.userId, at: source.at };
     case 'weather_api':
       return { type: 'weather_api' };
+    // Spec §19 Q80 (W2-10): v1 has no reporter edit either; the WhatsApp worker never writes one.
     case 'call':
+    case 'reporter_edit':
       return null;
   }
 }

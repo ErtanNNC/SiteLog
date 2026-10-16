@@ -95,6 +95,12 @@ const AUDITED: Record<string, string> = {
     'field_test_clip_complete (W2-13, F4): the transcription of one test recording; per clip, and a retried complete finds the key taken',
   "sql:'answer:' || q.id || ':' || u.id":
     'field_answer_question_voice (W2-09, F7 Other…): parse_answer per question and answer clip (jobKeys.parseAnswer); a clip is spoken once and names one question (uploads.question_id), a retry of the same clip returns the first call, and a second try is a new clip',
+  "sql:'correction:' || c.id":
+    'field_request_correction (W2-10, F8 Fix by voice): apply_correction per correction (jobKeys.applyCorrection); a correction is requested once (a retry of the same clip returns the first), and another try is a new correction',
+  "sql:'decide:' || r.id || ':correction:' || c.id":
+    'field_apply_correction (W2-10): decide_next after Save change, per correction; a correction is applied once (a retry answers applied without a job)',
+  "sql:'decide:' || r.id || ':edit:v' || p_version || ':r' || p_draft_rev":
+    'field_edit_draft (W2-10, the steppers): decide_next per draft revision the edit changed; an edit at a revision is written once (the revision then moves on, and a retry is stale)',
   "sql:'render_pdf:' || p_report_id || ':' || v_next":
     'per report version (office edits, sign-off; field_attach_photos, W2-04: the version a batch of photos made); versions are immutable',
   "sql:'render_pdf:' || p_report_id || ':' || r.current_version || ':signoff:' || (extract(epoch from now()) * 1000000)::bigint":

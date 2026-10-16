@@ -26,13 +26,27 @@ for that transcript.
 | `answer-tr-demirci-alti.json`       | TR       | Emre Yıldız (tr)             | The rebar crew of the Kartal report: six, a full day       |
 | `answer-en-unclear.json`            | EN       | Priya Raman (EN · HI → en)   | No answer in it: below 0.7, asked once more, then flagged  |
 
+### Corrections (W2-10, `kind: "correction"`)
+
+F8 _Fix by voice_: the clip a reporter says on the draft. Each is the fix of a case in
+`../corrections/` (the `apply_correction` golden set), whose recorded tool output the fake Claude
+returns for that transcript.
+
+| File                            | Language | Reporter                     | What it covers                                      |
+| ------------------------------- | -------- | ---------------------------- | --------------------------------------------------- |
+| `correction-en-apex-seven.json` | EN       | Marco Ruiz (ES · EN → multi) | "Apex had seven, not six." (W2-10's Done-when)      |
+| `correction-en-apex-total.json` | EN       | Marco Ruiz                   | The headcount and a total said: the total is code's |
+| `correction-en-which-crew.json` | EN       | Marco Ruiz                   | A number with no crew: the model asks which         |
+| `correction-es-apex-siete.json` | ES       | Marco Ruiz                   | The Apex fix in Spanish                             |
+| `correction-tr-usta-bes.json`   | TR       | Emre Yıldız (tr)             | The Usta Beton headcount of the Kartal draft        |
+
 ### Test recordings (W2-13, `kind: "test"`)
 
 F4's optional 20-second test on the Welcome screen: `test-en-check.json` (Priya, en),
 `test-es-en-check.json` (Marco, ES + EN → multi) and `test-tr-check.json` (Emre, tr). The fake
 transcriber answers a test clip with the one in its reporter's language; nothing is filed.
 
-Every file has a `kind` (`report` when absent, `answer`, `test`); the fake transcriber answers a
+Every file has a `kind` (`report` when absent, `answer`, `test`, `correction`); the fake transcriber answers a
 request with a fixture of the request's purpose (`TranscriptionRequest.purpose`), so a real
 Chromium recording of an answer gets an answer transcript in its reporter's language.
 

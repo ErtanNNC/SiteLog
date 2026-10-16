@@ -6,6 +6,7 @@ import type {
   ConversationRow,
   CountryRow,
   ConvoState,
+  DraftCorrectionRow,
   EvidencePackRow,
   FieldChannel,
   GlossaryTermRow,
@@ -100,6 +101,12 @@ export interface SettleVoiceAnswerInput {
   base?: Json;
   data?: Json;
   answer?: Json;
+}
+
+/** W2-10 (field_settle_correction(), 20261016000100): a correction's outcome. */
+export interface SettleCorrectionResult {
+  settled: boolean;
+  status: DraftCorrectionRow['status'];
 }
 
 export interface SettleVoiceAnswerResult {
@@ -569,6 +576,24 @@ export interface Db {
    */
   settleVoiceAnswer(input: SettleVoiceAnswerInput): Promise<SettleVoiceAnswerResult>;
 
+  /** W2-10 (F8 *Fix by voice*): a correction of a web draft and its preview. */
+  getCorrection(id: string): Promise<DraftCorrectionRow | null>;
+  /**
+   * W2-10 (field_settle_correction()): `ready` with the preview built in code (`detail`: data,
+   * changes, operations, source, changeNote, baseVersion, baseRev; refused `draft_changed` when
+   * the draft moved since), `unclear` (`reason`, `clarification`) or `stale`. `settled` false for
+   * a correction settled before.
+   */
+  settleCorrection(
+    id: string,
+    outcome: 'ready' | 'unclear' | 'stale',
+    detail: Record<string, unknown>,
+  ): Promise<SettleCorrectionResult>;
+  /** The fixes saved on a report's draft, oldest first (Q96: re-applied after a re-extraction). */
+  listAppliedCorrections(
+    reportId: string,
+  ): Promise<Array<Pick<DraftCorrectionRow, 'id' | 'via' | 'changes' | 'source' | 'applied_at'>>>;
+
   // web pipeline (W1-12)
   /**
    * Sets a report's status only while it is one of `from` (a report filed, voided or reopened by
@@ -1027,7 +1052,7 @@ export function createDb(sql: Sql): Db {
                exists (select 1 from transcripts t where t.upload_id = u.id) as transcribed
         from uploads u
         where u.report_id = ${reportId} and u.kind = 'audio' and u.purged_at is null
-          and u.batch_id is null and u.question_id is null
+          and u.batch_id is null and u.question_id is null and u.correction_report_id is null
         order by u.received_at nulls first, u.id`;
     },
     async countBatchPhotos(batchId) {
@@ -1422,6 +1447,24 @@ export function createDb(sql: Sql): Db {
           ${input.data === undefined ? null : sql.json(input.data as never)},
           ${input.answer === undefined ? null : sql.json(input.answer as never)}) as r`;
       return row!.r;
+    },
+
+    // corrections (W2-10) ----------------------------------------------------------------------
+    async getCorrection(id) {
+      return one(await sql<DraftCorrectionRow[]>`select * from draft_corrections where id = ${id}`);
+    },
+    async settleCorrection(id, outcome, detail) {
+      const [row] = await sql<Array<{ r: SettleCorrectionResult }>>`
+        select field_settle_correction(${id}, ${outcome}, ${sql.json(detail as never)}) as r`;
+      return row!.r;
+    },
+    async listAppliedCorrections(reportId) {
+      return sql<
+        Array<Pick<DraftCorrectionRow, 'id' | 'via' | 'changes' | 'source' | 'applied_at'>>
+      >`
+        select id, via, changes, source, applied_at from draft_corrections
+        where report_id = ${reportId} and status = 'applied'
+        order by applied_at, created_at`;
     },
 
     // web pipeline (W1-12) -------------------------------------------------------------------

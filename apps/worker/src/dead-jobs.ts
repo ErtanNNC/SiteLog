@@ -41,6 +41,7 @@ export const REPORT_JOB_TYPES: readonly JobTypeKey[] = [
   'decide_next',
   'parse_reply',
   'parse_answer',
+  'apply_correction',
   'file_report',
 ];
 

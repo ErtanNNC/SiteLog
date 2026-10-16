@@ -60,10 +60,22 @@ export const SourceSchema = z
     }),
     z.object({ type: z.literal('answer'), questionId: z.string() }),
     z.object({ type: z.literal('office_edit'), userId: z.string(), at: z.string() }),
+    /**
+     * Spec §19 Q80 (decided 2026-10-16; W2-10): the reporter changed the value themselves, by a
+     * stepper or a typed correction on the draft (`via` the channel: the web recorder; later SMS
+     * EDIT and calls), the reporter's twin of `office_edit`. A value changed by a spoken fix cites
+     * the clip instead (`voice_note`).
+     */
+    z.object({
+      type: z.literal('reporter_edit'),
+      reporterId: z.string(),
+      at: z.string(),
+      via: z.enum(['web', 'sms', 'call']),
+    }),
     z.object({ type: z.literal('weather_api') }),
   ])
   .describe(
-    'Where a value came from: voice note or call second, answer, office edit or weather API',
+    'Where a value came from: voice note or call second, answer, office or reporter edit, or weather API',
   );
 export type Source = z.infer<typeof SourceSchema>;
 

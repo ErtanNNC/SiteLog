@@ -1,0 +1,24 @@
+{
+  "id": "correction-en-apex-seven",
+  "description": "English. Marco Ruiz (ES · EN → multi) fixes the hero draft by voice (F8 Fix by voice, W2-10): Apex had seven, not six. The correction case fixtures/corrections/en-apex-seven (W2-10's Done-when).",
+  "kind": "correction",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Riverside Lofts — Block B",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["es", "en"]
+  },
+  "transcriptionLanguage": "multi",
+  "expectedLanguage": "en",
+  "goldenCase": null,
+  "durationS": 2.6,
+  "text": "Apex had seven, not six.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 2.3,
+      "text": "Apex had seven, not six."
+    }
+  ]
+}

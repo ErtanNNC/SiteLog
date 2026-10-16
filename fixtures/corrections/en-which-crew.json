@@ -1,0 +1,16 @@
+{
+  "id": "en-which-crew",
+  "description": "English, spoken: “Change it to three.” names no crew: the model asks which one (needsClarification) and returns no operations; nothing is applied.",
+  "voice": "correction-en-which-crew",
+  "language": "en",
+  "draft": "riverside-2026-10-09",
+  "recorded": {
+    "operations": [],
+    "changeNote": "",
+    "needsClarification": "Which crew had three — Ironclad Steel, or another one?"
+  },
+  "expected": {
+    "applies": false,
+    "reason": "clarification"
+  }
+}

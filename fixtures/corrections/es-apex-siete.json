@@ -1,0 +1,39 @@
+{
+  "id": "es-apex-siete",
+  "description": "Spanish, spoken: “Los de Apex eran siete, no seis.” on the hero draft → Apex Concrete 7 × 8 h = 56 h (the change note in the report's language, English).",
+  "voice": "correction-es-apex-siete",
+  "language": "es",
+  "draft": "riverside-2026-10-09",
+  "recorded": {
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/manpower/0/workers",
+        "value": 7,
+        "reason": "eran siete, no seis"
+      }
+    ],
+    "changeNote": "Apex Concrete 6 → 7 workers",
+    "needsClarification": null
+  },
+  "expected": {
+    "applies": true,
+    "crew": {
+      "company": "Apex Concrete",
+      "workers": 7,
+      "hoursPerWorker": 8,
+      "totalHours": 56
+    },
+    "changes": [
+      {
+        "kind": "crew",
+        "company": "Apex Concrete",
+        "change": "changed",
+        "workers": [6, 7],
+        "hoursPerWorker": [8, 8],
+        "totalHours": [48, 56]
+      }
+    ],
+    "droppedTotals": 0
+  }
+}

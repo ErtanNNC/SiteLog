@@ -704,6 +704,7 @@ export class DemoStore {
         batch_id: null,
         question_id: null,
         batch_size: null,
+        correction_report_id: null,
       });
       this.data.sources.push({
         ...V12_ROW_DEFAULTS.report_sources,

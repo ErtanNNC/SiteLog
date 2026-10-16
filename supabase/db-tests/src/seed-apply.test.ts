@@ -110,6 +110,8 @@ async function addOtherOrg(): Promise<void> {
     insert into field_devices (id, reporter_id, device_token_hash) values ('${other(24)}', '${REPORTER}', 'other-device');
     insert into test_clips (id, org_id, reporter_id, storage_path, mime)
       values ('${other(26)}', '${O}', '${REPORTER}', 'test/other/clip.webm', 'audio/webm');
+    insert into draft_corrections (id, org_id, report_id, reporter_id, via, text)
+      values ('${other(27)}', '${O}', '${RPT}', '${REPORTER}', 'text', 'Other fix');
     insert into report_costs (report_id, org_id, kind, filed_at, cost_cents)
       values ('${RPT}', '${O}', 'daily', '2026-10-09T23:00:00Z', 12);
     insert into audit_log (org_id, actor_type, action) values ('${O}', 'system', 'other.thing');

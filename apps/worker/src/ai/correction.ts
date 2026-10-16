@@ -6,6 +6,11 @@ import {
 } from '@sitelog/shared';
 import type { Logger } from '../log';
 import { callTool, type MessagesClient, type ToolCallResult } from './claude';
+import {
+  buildCorrectionUserMessageV2,
+  CORRECTION_SYSTEM_PROMPT_V2,
+  type CorrectionPromptInput,
+} from './prompts/correction';
 import { buildCorrectionUserMessage, CORRECTION_SYSTEM_PROMPT } from './prompts/replies';
 
 /** §10.6 — `apply_correction` tool. The patch is applied by code (shared applyPatch). */
@@ -35,6 +40,32 @@ export async function parseCorrection(
       model,
       system: [{ text: CORRECTION_SYSTEM_PROMPT, cache: true }],
       messages: [{ role: 'user', content: buildCorrectionUserMessage(req) }],
+      tool: { ...CORRECTION_TOOL, inputSchema: toolInputSchema(CorrectionResultSchema) },
+      schema: CorrectionResultSchema,
+      maxTokens: 4096,
+      effort: 'low',
+    },
+    log,
+  );
+}
+
+/**
+ * §10.6 v2 (W2-10): the channel-neutral correction of a v2 draft (the web recorder's *Fix by voice*
+ * and typed fixes). The model proposes operations; `applyCorrectionOps` (@sitelog/shared) applies
+ * them in code, recomputes totals and writes the sources. `callTool` redacts phone numbers first.
+ */
+export async function parseCorrectionV2(
+  client: MessagesClient,
+  model: string,
+  req: CorrectionPromptInput,
+  log?: Logger,
+): Promise<ToolCallResult<CorrectionResult>> {
+  return callTool(
+    client,
+    {
+      model,
+      system: [{ text: CORRECTION_SYSTEM_PROMPT_V2, cache: true }],
+      messages: [{ role: 'user', content: buildCorrectionUserMessageV2(req) }],
       tool: { ...CORRECTION_TOOL, inputSchema: toolInputSchema(CorrectionResultSchema) },
       schema: CorrectionResultSchema,
       maxTokens: 4096,

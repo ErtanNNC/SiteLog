@@ -237,6 +237,12 @@ export const JOB_TYPES = [
   'transcribe_test_clip',
   /** F4: the test recording and its words gone 10 minutes after it was made, read or not. */
   'delete_test_clip',
+  /**
+   * §10.6 (W2-10, F8 *Fix by voice*): a correction of the web draft (a short clip, or typed
+   * words): the clip transcribed, `apply_correction` (the model) proposes operations, code applies
+   * them and makes the preview; nothing changes the draft until the reporter saves it.
+   */
+  'apply_correction',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

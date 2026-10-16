@@ -1400,6 +1400,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
           batch_id: null,
           batch_size: null,
           question_id: null,
+          correction_report_id: null,
         });
         for (let p = 0; p < photoCount; p++) {
           const pid = demoId(`msg:${s.key}:${c}:photo${p}`);
@@ -1428,6 +1429,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
             batch_id: null,
             batch_size: null,
             question_id: null,
+            correction_report_id: null,
           };
           uploads.push(u);
           photoUploads.push(u);
@@ -1602,6 +1604,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
           batch_id: null,
           batch_size: null,
           question_id: null,
+          correction_report_id: null,
         });
         transcripts.push({
           ...V12_ROW_DEFAULTS.transcripts,
