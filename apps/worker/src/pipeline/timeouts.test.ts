@@ -57,7 +57,7 @@ describe('§7.2 timeouts (W2-07, the channel-neutral module)', () => {
     expect(due(AUTO_FILE_MS, false, 'auto_15min')).toMatchObject({ kind: 'file', trigger: 'auto' });
   });
 
-  it('re-sends `draft_ready` as the nudge until spec §19 Q78 is answered', () => {
+  it('re-sends `draft_ready` as the nudge (spec §19 Q78, decided as built)', () => {
     expect(TIMEOUT_POLICY_DEFAULTS).toEqual({ nudgeKey: 'draft_ready' });
   });
 });

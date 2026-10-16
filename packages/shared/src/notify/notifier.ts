@@ -66,7 +66,8 @@ import { attemptIsFinal, attemptNumber, planAttempt, type MessageAttempt } from 
  *   same dedupe key. Each attempt is its own row (`payload.attempt`), and the attempt the walk
  *   moves past is audited `notify.attempt_failed` with its reason before the next goes out. A
  *   retryable error retries the same channel (the job's backoff). `console` on a real org
- *   (`console_real_org`) stays W1-08's skip, with no fallback, until spec §19 Q84 is answered.
+ *   (`console_real_org`) stays W1-08's skip, with no fallback, until W2-15 builds spec §19 Q84
+ *   (decided 2026-10-16: a channel with no sender here leaves a real org's order; SMS carries it).
  * - A refused send (`SmsSendError`) marks the row `failed` or `undeliverable`, is audited and is
  *   thrown on, so a job retries what may pass later and records what never will. A provider that
  *   refuses because the number is on its own opt-out list (Twilio 21610, `optedOut`) also records
@@ -678,7 +679,7 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
       if (driver === 'console' && !org.isDemo) {
         // Nothing reaches the phone: the masked row records what would have gone out (the
         // staging Demo phone shows it), and the caller tells the office. No fallback: W1-08's
-        // rule stands until spec §19 Q84 is answered (W2-15).
+        // rule stands until W2-15 builds spec §19 Q84 (decided 2026-10-16).
         const id = plan.retry?.id ?? deps.randomUUID();
         await writeRow(input, id, 'failed', consoleRealOrgError(pack.code));
         return skip(recipient, key, 'no_channel', 'console_real_org', { message_id: id });

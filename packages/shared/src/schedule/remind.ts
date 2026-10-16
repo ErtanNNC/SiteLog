@@ -32,7 +32,8 @@ import { deadlineInstant } from './reminders.ts';
  * - the outbound trunk (spec §19 Q38: env, not the pack; none before M8), so no `call` before M8,
  *   and for a call the `auto_call` consent and the call window;
  * - weather: the heads-up only when the 12:00 or 16:30 snapshot observed weather;
- * - two owner questions, as parameters with the recommended defaults (`REMIND_POLICY_DEFAULTS`):
+ * - two owner questions, as parameters with the defaults the owner decided on 2026-10-16
+ *   (`REMIND_POLICY_DEFAULTS`):
  *   spec §19 Q76 (the daily link for call-preferring reporters while no call is placed) and Q77
  *   (ladder messages that fall outside the quiet hours, which are the org's call window, Q30).
  *
@@ -92,8 +93,8 @@ export type RemindAction =
   | { kind: 'none'; reason: RemindSkipReason };
 
 /**
- * The two owner questions as parameters (W2-05). The defaults are the plan's recommendations and
- * ship until the owner answers (spec §19 Q76, Q77; both open).
+ * The two owner questions as parameters (W2-05). The defaults are the plan's recommendations,
+ * decided 2026-10-16 by the owner as built (spec §19 Q76, Q77).
  */
 export interface RemindPolicy {
   /**

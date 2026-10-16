@@ -23,7 +23,7 @@ import {
  * W2-05: `remind()` (spec §4.5, §7.4, F11) over every combination of what it reads: the pack's
  * capabilities (two-way SMS, voice number, links in SMS, an outbound trunk), the reporter's
  * preference, the stage; then the flags, the weather, the consent, the owner parameters (§19 Q76,
- * Q77) and the quiet hours on DST days in both launch packs' time zones.
+ * Q77, decided as built) and the quiet hours on DST days in both launch packs' time zones.
  */
 
 const CHICAGO = 'America/Chicago';
@@ -86,7 +86,7 @@ function expected(
   if (pref === 'link') return msg(KEY[stage]);
   switch (stage) {
     case 'daily_link':
-      // "—" with calls (call_coming optional, M8); without a trunk, Q76's default: the daily link.
+      // "—" with calls (call_coming optional, M8); without a trunk, Q76 (decided): the daily link.
       return caps.trunk ? { kind: 'none', reason: 'call_reporter' } : msg('daily_link');
     case 'heads_up':
       return msg('weather_headsup');

@@ -144,7 +144,7 @@ const payloadGuard: NotifyGuard = async (ctx, payload) =>
 /**
  * The guards per key (W2-01): the reminder ladder's site-day check (W2-06), the web report's open
  * question and unconfirmed draft (W2-07: `question_ready`, `draft_ready` and the nudge, which is
- * `draft_ready` until spec §19 Q78). A key with no guard is still useful.
+ * `draft_ready`, spec §19 Q78 as decided). A key with no guard is still useful.
  */
 export const NOTIFY_FALLBACK_GUARDS: Partial<Record<NotifierKey, NotifyGuard>> = {
   daily_link: payloadGuard,

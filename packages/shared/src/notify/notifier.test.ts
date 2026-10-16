@@ -824,7 +824,7 @@ describe('Notifier fallback between channels (§19 Q22, W2-01)', () => {
     });
     expect(h.rows.get('m-1')).toMatchObject({ provider: 'console', status: 'delivered' });
     expect(h.rows.get('m-1')!.body).toContain('K7Q2MX');
-    // A real org whose pack has no sender for its first channel here: W1-08's skip, until §19 Q84.
+    // A real org whose pack has no sender for its first channel here: W1-08's skip, until W2-15 builds §19 Q84.
     const noSender = recipient({
       isDemo: false,
       pack: pack('US', { message_channels: ['whatsapp', 'sms'] }),

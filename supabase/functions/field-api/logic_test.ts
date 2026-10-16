@@ -356,7 +356,7 @@ Deno.test(
     assert(!linkMayAddPhotos(photos, S, '2026-10-08'));
     assert(!linkMayAddPhotos(photos, 'site-b', '2026-10-09'));
     assert(linkMayAddPhotos(photos, S, '2026-10-09', false));
-    // The default (Q89's recommendation): the web links of that day too.
+    // The default (Q89, decided as built): the web links of that day too.
     assert(linkMayAddPhotos(daily, S, '2026-10-09'));
     assert(!linkMayAddPhotos(daily, S, '2026-10-08'));
     assert(linkMayAddPhotos(personal, S, '2026-10-09'));

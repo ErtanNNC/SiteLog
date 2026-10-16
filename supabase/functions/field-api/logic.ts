@@ -287,10 +287,10 @@ export function lateClipAllowed(
 }
 
 /**
- * Spec §19 Q89 (open; this is the default): F9 gives a window for photos only to a photos link
- * texted after a call-filed report. With this on, a report filed on the web takes photos from the
- * Filed screen in the same window, through the reporter's personal link or a daily link of that
- * day; off, only photos links add photos after filing. field_complete_upload() checks the window
+ * Spec §19 Q89 (decided 2026-10-16: this default, as built): F9 gives a window for photos only to
+ * a photos link texted after a call-filed report. With this on, a report filed on the web takes
+ * photos from the Filed screen in the same window, through the reporter's personal link or a daily
+ * link of that day; off, only photos links add photos after filing. field_complete_upload() checks the window
  * and the limit again; which links may is decided here.
  */
 export const FILED_PHOTOS_ON_WEB_LINKS = true;

@@ -23,9 +23,10 @@ export const PROCESSING_DELAYED_MS = 10 * 60_000;
 export type FilingMode = OrgSettingsRow['filing_mode'];
 
 /**
- * Spec §19 Q78 (open) as a parameter: the copy key of the 30-minute nudge. §9.2 has no nudge key;
- * the default re-sends `draft_ready` ("Your report is ready to check: {link}"), one segment and no
- * new translation. A new key, if the owner picks one, is a copy-only change (SMS_KEYS, §9.2).
+ * Spec §19 Q78 (decided 2026-10-16: the default, as built) as a parameter: the copy key of the
+ * 30-minute nudge. §9.2 has no nudge key; the nudge re-sends `draft_ready` ("Your report is ready
+ * to check: {link}"), one segment and no new translation. A new key would be a copy-only change
+ * (SMS_KEYS, §9.2).
  */
 export interface TimeoutPolicy {
   nudgeKey: 'draft_ready';

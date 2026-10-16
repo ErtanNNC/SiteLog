@@ -484,8 +484,8 @@ export function planTickJobs(input: TickPlanInput): PlannedJob[] {
 export const OUTBOUND_TRUNK = false;
 
 /**
- * The owner parameters of the ladder (spec §19 Q76, Q77; both open): the recommended defaults
- * (`REMIND_POLICY_DEFAULTS`) until the owner answers.
+ * The owner parameters of the ladder (spec §19 Q76, Q77; decided 2026-10-16 as built): the
+ * recommended defaults (`REMIND_POLICY_DEFAULTS`).
  */
 export const LADDER_POLICY: RemindPolicy = REMIND_POLICY_DEFAULTS;
 

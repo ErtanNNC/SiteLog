@@ -141,7 +141,7 @@ export interface DayOffQuestionIds {
 }
 
 /**
- * Spec §19 Q79 (open) as a parameter: what *No work today* or *Site closed: weather* does when the
+ * Spec §19 Q79 (decided 2026-10-16: the default, as built) as a parameter: what *No work today* or *Site closed: weather* does when the
  * day's report has already started. `refuse` (the default, W1-07's rule): field-api answers 409
  * `report_in_progress` and the sheet asks the reporter to say it in the report; the voice note
  * keeps the stoppage with its sources. No other answer is built.

@@ -117,7 +117,7 @@ describe('dayOffReportData (F12, spec §19 Q41; W2-08)', () => {
     });
   });
 
-  it('keeps refusing the buttons while a report is live (spec §19 Q79 default)', () => {
+  it('keeps refusing the buttons while a report is live (spec §19 Q79, decided)', () => {
     expect(DAY_OFF_POLICY).toEqual({ liveReport: 'refuse' });
   });
 });
