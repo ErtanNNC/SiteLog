@@ -386,9 +386,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           for email in $SIGN_IN_AS; do
             body="$(EMAIL="$email" node -e 'console.log(JSON.stringify({type:"magiclink",email:process.env.EMAIL,redirect_to:process.env.PANEL_URL+"/auth/callback"}))')"
+            # The panel's client uses PKCE, which ignores the implicit tokens the action link's
+            # redirect puts in the URL hash: link straight to the callback with the token hash,
+            # which the panel verifies (verifyOtp).
             link="$(curl -fsS "https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1/admin/generate_link" \
               -H "apikey: $key" -H "Authorization: Bearer $key" -H 'Content-Type: application/json' \
-              -d "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);console.log(j.action_link||(j.properties&&j.properties.action_link)||"")})')"
+              -d "$body" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);const h=j.hashed_token||(j.properties&&j.properties.hashed_token)||"";console.log(h?process.env.PANEL_URL+"/auth/callback?token_hash="+encodeURIComponent(h)+"&type=magiclink":"")})')"
             if [ -z "$link" ]; then
               echo "::error::generate_link returned no action link for $email."
               exit 1
