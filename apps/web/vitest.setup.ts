@@ -1,7 +1,12 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach } from 'vitest';
 import { i18n } from './src/i18n/i18n';
+
+// The panel's suite runs 60+ jsdom files in parallel; on a loaded CI runner a page that saves
+// through the demo store and re-renders can take longer than Testing Library's 1 s default to
+// show its next screen (the setup wizard's step 3 failed that way). Waits stay bounded.
+configure({ asyncUtilTimeout: 5000 });
 
 afterEach(async () => {
   cleanup();
