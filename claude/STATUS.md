@@ -188,9 +188,31 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
 - **Q104:** NO WORK / WEATHER, bugün raporu açık olan en fazla 3 şantiye için cevaplanıyor; açık şantiye yoksa cevap gitmiyor.
 - **Q105:** anahtar kelimelerin İspanyolca ve Türkçe karşılıkları. YES, OK olarak okunmuyor, çünkü Twilio'da abonelik kelimesi.
 
-**Sırada:** W2-12 incelemesi, ardından W2-14 (web push; gerçek gönderim için VAPID anahtarları lazım, o zamana kadar sahte gönderici) ve W2-15/16 (Twilio üzerinden WhatsApp; anahtarlar gelene kadar sahte gönderici).
+**W2-12 incelemesinin 8 düzeltmesi ve W2-14 (web push) yapıldı (7ee3d98 sonrası 14 commit):**
 
-**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10, W2-11, W2-12, yeni migration'lar `…080` – `…160`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
+- **W2-12 düzeltmeleri:** her biri kendi testiyle.
+  - "Friedman", "Salih" gibi isimler artık gün olarak okunmuyor.
+  - EDIT'e cevap kaybolmuyor.
+  - Kaydedilen değişiklik, yapay zekânın yeniden yazdığı metin değil; kişinin kendi yazdığı kelimeler.
+  - İzin kontrolü numaranın bütün kayıtlarına bakıyor.
+  - Gün, her şantiyenin kendi saat diliminde okunuyor.
+  - Yeniden denemede SMS tekrar gitmiyor.
+- **W2-14, web push:** kişi saha uygulamasını telefona yükleyip Ayarlar'da "Bildirimler"i açarsa, soru, taslak, dosyalandı ve hatırlatma mesajları önce bildirim olarak gidiyor. Bildirim kesin olarak gidemezse mesaj SMS ile gidiyor. Bildirimi açmayan kişiler için hiçbir şey değişmiyor.
+  - Yeni migration'lar: `20261016000170` – `…190`.
+  - **Anahtar gerekiyor:** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`. Bunları `npx web-push generate-vapid-keys` komutuyla siz üretip worker ortamına koyacaksınız; açık anahtar ayrıca fonksiyonların secret'ı olacak. Anahtar gelene kadar demo şirketlerde bildirimler Demo telefonda görünüyor, gerçek şirketlerde mesaj SMS ile gidiyor.
+
+**Yeni sorular (önerimle kuruldu; aksini söylemezseniz böyle kalır):**
+
+- **Q107:** bildirim, kanal sırasında her zaman SMS'ten önce geliyor ve hiçbir zaman en sonda olmuyor. Yalnızca bildirimi açan kişiyi etkiliyor.
+- **Q108:** kişinin iki telefonu varsa, birinde bildirimi kapatmak diğerini etkilemiyor. Bildirim izni yalnızca son telefon da kapatınca geri alınıyor.
+- **Q109:** telefon kapalıysa bildirim 4 saat bekletiliyor.
+
+**Sırada:**
+
+- W2-14 incelemesi.
+- W2-15/16: Twilio üzerinden WhatsApp. Anahtarlar gelene kadar sahte gönderici kullanılacak.
+
+**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10 – W2-14, yeni migration'lar `…080` – `…190`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
 
 ## Hafta 2 (M6) — başladı
 
