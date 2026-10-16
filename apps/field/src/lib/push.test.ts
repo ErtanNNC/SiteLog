@@ -19,7 +19,7 @@ function env(over: Partial<PushEnv> & { standalone?: boolean; permission?: strin
             getSubscription: async () => null,
             subscribe: async (o) => ({
               toJSON: () => ({
-                endpoint: 'https://push.test/x',
+                endpoint: 'https://fcm.googleapis.com/fcm/send/x',
                 keys: { p256dh: 'k', auth: 'a' },
                 size: o.applicationServerKey.length,
               }),

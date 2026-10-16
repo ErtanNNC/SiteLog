@@ -16,7 +16,7 @@ function sub(id: string) {
   ecdh.generateKeys();
   return {
     id,
-    endpoint: `https://push.test/${id}`,
+    endpoint: `https://fcm.googleapis.com/fcm/send/${id}`,
     p256dh: ecdh.getPublicKey().toString('base64url'),
     auth: randomBytes(16).toString('base64url'),
   };
@@ -31,7 +31,11 @@ const MESSAGE: OutboundMessage = {
   vars: { link: 'https://go.sitelog.app/r/ABCDEF' },
 };
 
-function setup(subs: ReturnType<typeof sub>[], answer: (url: string) => number | Error) {
+function setup(
+  subs: ReturnType<typeof sub>[],
+  answer: (url: string) => number | Error,
+  requests: Array<{ url: string; init: RequestInit | undefined }> = [],
+) {
   const gone: Array<[string, number]> = [];
   const store: PushStore = {
     listLivePushSubscriptions: async () => subs,
@@ -40,7 +44,8 @@ function setup(subs: ReturnType<typeof sub>[], answer: (url: string) => number |
       return true;
     },
   };
-  const fetchImpl: typeof fetch = async (url) => {
+  const fetchImpl: typeof fetch = async (url, init) => {
+    requests.push({ url: String(url), init });
     const a = answer(String(url));
     if (a instanceof Error) throw a;
     return new Response(null, { status: a });
@@ -110,6 +115,25 @@ describe('web push transport (W2-14)', () => {
       expect(err.retryable, String(answer)).toBe(true);
       expect(gone).toEqual([]);
     }
+  });
+
+  it('never follows a redirect: a 3xx is refused (W2-14 review, §19 Q115)', async () => {
+    for (const status of [301, 302, 307, 308]) {
+      const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+      const { transport } = setup([sub('a')], () => status, requests);
+      const err = await refusal(transport.send(MESSAGE, {}));
+      expect(err.undeliverable, String(status)).toBe(true);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]!.init?.redirect).toBe('manual');
+    }
+  });
+
+  it('never posts to an endpoint off the known push services (W2-14 review, §19 Q115)', async () => {
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const evil = { ...sub('x'), endpoint: 'https://169.254.169.254/latest/meta-data' };
+    const { transport } = setup([evil, sub('b')], () => 201, requests);
+    await transport.send(MESSAGE, {});
+    expect(requests.map((r) => r.url)).toEqual(['https://fcm.googleapis.com/fcm/send/b']);
   });
 
   it('demo orgs reach console push without keys; real orgs need the pair and a subscription', async () => {

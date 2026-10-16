@@ -272,7 +272,7 @@ export async function seedTwoOrgs(db: PGlite): Promise<void> {
     for (const o of [ORG.A, ORG.B])
       await db.exec(`
         insert into push_subscriptions (id, org_id, reporter_id, endpoint, p256dh, auth) values
-          ('${o.pushSubscription}', '${o.org}', '${o.reporter}', 'https://push.test/${o.pushSubscription}', 'k', 'a');
+          ('${o.pushSubscription}', '${o.org}', '${o.reporter}', 'https://fcm.googleapis.com/fcm/send/${o.pushSubscription}', 'k', 'a');
       `);
   }
   const corrections = await db.query<{ v: boolean }>(

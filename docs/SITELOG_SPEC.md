@@ -919,8 +919,12 @@ create table push_subscriptions (                -- web push to the installed fi
   user_agent text,
   created_at timestamptz not null default now(),
   revoked_at timestamptz,                        -- never deleted: revoked with the reason
-  revoked_reason text check (revoked_reason in ('unsubscribed', 'signed_out', 'replaced', 'gone')),
-  check ((revoked_at is null) = (revoked_reason is null))
+  revoked_reason text check (revoked_reason in ('unsubscribed', 'signed_out', 'replaced', 'gone', 'endpoint_not_allowed')),
+  check ((revoked_at is null) = (revoked_reason is null)),
+  -- a live row names a known push service (§19 Q115): never a host of the client's choosing
+  constraint push_subscriptions_endpoint_host check (
+    revoked_at is not null
+    or endpoint ~* '^https://(fcm\.googleapis\.com|([a-z0-9-]+\.)+push\.services\.mozilla\.com|([a-z0-9-]+\.)+notify\.windows\.com|([a-z0-9-]+\.)+push\.apple\.com)(/[^[:space:]]*)?$')
 );
 create unique index push_subscriptions_live_endpoint
   on push_subscriptions (reporter_id, endpoint) where revoked_at is null;
@@ -2517,3 +2521,4 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 112 | What START does on WhatsApp (STOP there revokes the `whatsapp` consent, §19 Q40; §9.5 START re-subscribes texts) | Give the `whatsapp` consent back to a reporter who had given it and revoked it (`method 'whatsapp_keyword'`, the last wording's version), never a first opt-in, no reply · Nothing: WhatsApp comes back only through Settings | **Open; built on the recommendation (W2-16):** the first (`inbound_whatsapp_consent()`): START from the WhatsApp number is an explicit opt-in to that channel, and the first opt-in stays Field-02's (Q25). |
 | 113 | What a WhatsApp answer gets when code cannot apply it (low confidence, a number not stated, another field; §10.7's web rule asks once more, then flags) | The question's link again on WhatsApp (`question_ready`, as a reply), the question left open for the recorder and its timeout · Ask the question again in text on WhatsApp · Nothing | **Open; built on the recommendation (W2-16):** the first: the recorder shows the choices, and no question text is translated twice. Audited `report.answer_unclear`; a WhatsApp text with no open question is audited `whatsapp.answer_skipped` and gets no reply. |
 | 114 | Where the media of a WhatsApp message are kept (§19 Q85: "stored, never transcribed") | Their Twilio URLs and types on the message row (`payload.media`); Twilio keeps the files until deleted from the account · Copy each file into Storage (a worker job, retention like uploads) | **Open; built on the recommendation (W2-16):** the first, so nothing is downloaded that nobody asked for; copying into Storage is a follow-up if the office needs the files in SiteLog. |
+| 115 | Which push services a subscription may name (the worker posts each notification to the endpoint the browser handed over; any https host let a field client point the worker at an address of its choosing) | Only the known push services: `fcm.googleapis.com` (Chrome, Edge on Android, Samsung Internet, Opera), `*.push.services.mozilla.com` (Firefox), `*.notify.windows.com` (Edge on Windows), `web.push.apple.com` / `*.push.apple.com` (Safari); https, no user info, no port · Any https host | **Decided 2026-10-16 (the recommended default, W2-14 review): the first.** A browser on another push service cannot turn *Notifications* on (field-api answers 400; Settings shows its error) and keeps getting texts. Built: `PUSH_ENDPOINT_RE` (field-api's request schema), the `push_subscriptions_endpoint_host` check on a live row (`20261016000260`, which revoked any live row on another host, `endpoint_not_allowed`, audited `push.endpoint_not_allowed`), the worker's refusal without a request, and `redirect: 'manual'` (a 3xx is refused, never followed). |

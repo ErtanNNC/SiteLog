@@ -298,7 +298,7 @@ export const TABLES: Record<string, TableCase> = {
     allow: serviceOnly,
     where: (o) => `reporter_id = '${o.reporter}'`,
     insert: (o) =>
-      `insert into push_subscriptions (org_id, reporter_id, endpoint, p256dh, auth) values ('${o.org}', '${o.reporter}', 'https://push.test/' || gen_random_uuid(), 'k', 'a')`,
+      `insert into push_subscriptions (org_id, reporter_id, endpoint, p256dh, auth) values ('${o.org}', '${o.reporter}', 'https://fcm.googleapis.com/fcm/send/' || gen_random_uuid(), 'k', 'a')`,
     set: 'user_agent = user_agent',
   },
   test_clips: {
@@ -630,7 +630,7 @@ export const RPCS: Record<
     why: '§6.5: field-api only (service role).',
     allow: NONE,
     call: (o) =>
-      `select field_push_subscribe('${o.reporter}', null, 'https://push.test/x', 'k', 'a', null, 'v1', '{}'::jsonb) as v`,
+      `select field_push_subscribe('${o.reporter}', null, 'https://fcm.googleapis.com/fcm/send/x', 'k', 'a', null, 'v1', '{}'::jsonb) as v`,
   },
   field_push_unsubscribe: {
     why: '§6.5: field-api only (service role).',

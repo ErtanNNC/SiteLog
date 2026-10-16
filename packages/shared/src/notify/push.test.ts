@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { assertE164 } from '../format.ts';
-import { messageLink, PUSH_TITLE, pushPayload, pushResult, readPushData } from './push.ts';
+import { PushSubscribeRequestSchema } from '../field-api.ts';
+import {
+  isAllowedPushEndpoint,
+  messageLink,
+  PUSH_TITLE,
+  pushPayload,
+  pushResult,
+  readPushData,
+} from './push.ts';
 
 describe('web push payload (W2-14)', () => {
   it('carries the §9.2 text, the key as tag, the language and the link', () => {
@@ -51,5 +59,55 @@ describe('web push payload (W2-14)', () => {
     expect([404, 410].map(pushResult)).toEqual(['gone', 'gone']);
     expect([429, 500, 503].map(pushResult)).toEqual(['retry', 'retry', 'retry']);
     expect([400, 403, 413].map(pushResult)).toEqual(['refused', 'refused', 'refused']);
+  });
+});
+
+describe('push endpoint hosts (W2-14 review, spec §19 Q115)', () => {
+  const allowed = [
+    'https://fcm.googleapis.com/fcm/send/abc:APA91b',
+    'https://updates.push.services.mozilla.com/wpush/v2/gAAAA',
+    'https://wns2-par02p.notify.windows.com/w/?token=BQYAAAB',
+    'https://web.push.apple.com/QGuQyavXutnMH',
+    'https://api.push.apple.com/3/device/x',
+    'https://FCM.googleapis.com/fcm/send/upper',
+  ];
+  const refused = [
+    'https://push.example/x',
+    'https://169.254.169.254/latest/meta-data',
+    'https://localhost/x',
+    'http://fcm.googleapis.com/fcm/send/x',
+    'https://fcm.googleapis.com.evil.test/x',
+    'https://evilfcm.googleapis.com/x',
+    'https://fcm.googleapis.com:8443/x',
+    'https://user@fcm.googleapis.com/x',
+    'https://fcm.googleapis.com@evil.test/x',
+    'https://fcm.googleapis.com\\@evil.test/x',
+    'https://push.services.mozilla.com/x',
+    'https://notify.windows.com/x',
+    'https://push.apple.com/x',
+    'https://evil.test/web.push.apple.com',
+    'https://fcm.googleapis.com/a b',
+    `https://fcm.googleapis.com/${'a'.repeat(2048)}`,
+  ];
+
+  it.each(allowed)('allows %s', (endpoint) => {
+    expect(isAllowedPushEndpoint(endpoint)).toBe(true);
+  });
+
+  it.each(refused)('refuses %s', (endpoint) => {
+    expect(isAllowedPushEndpoint(endpoint)).toBe(false);
+  });
+
+  it('the subscribe request takes only those endpoints', () => {
+    const body = (endpoint: string) => ({
+      subscription: { endpoint, keys: { p256dh: 'BPk', auth: 'aa' } },
+      textVersion: 'field.push.v1',
+    });
+    for (const endpoint of allowed) {
+      expect(PushSubscribeRequestSchema.safeParse(body(endpoint)).success, endpoint).toBe(true);
+    }
+    for (const endpoint of refused) {
+      expect(PushSubscribeRequestSchema.safeParse(body(endpoint)).success, endpoint).toBe(false);
+    }
   });
 });

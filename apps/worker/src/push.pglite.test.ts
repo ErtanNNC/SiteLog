@@ -35,7 +35,8 @@ const fakeFetch: typeof fetch = async (url, init) => {
   service.calls.push({ url: String(url), init: init ?? {} });
   return new Response(null, {
     status: service.status,
-    headers: service.status === 201 ? { location: `https://push.test/m/${randomUUID()}` } : {},
+    headers:
+      service.status === 201 ? { location: `https://fcm.googleapis.com/m/${randomUUID()}` } : {},
   });
 };
 
@@ -64,7 +65,7 @@ function browserKeys() {
   };
 }
 
-async function subscribe(endpoint = `https://push.test/sub/${randomUUID()}`) {
+async function subscribe(endpoint = `https://fcm.googleapis.com/fcm/send/${randomUUID()}`) {
   const keys = browserKeys();
   const [row] = await pg.q<{ v: { subscription_id: string; consent_id: string | null } }>(
     `select field_push_subscribe($1, null, $2, $3, $4, 'test-agent', 'v1', '{}'::jsonb) as v`,
@@ -188,7 +189,7 @@ describe('web push (W2-14)', () => {
   it('a real org with a key pair: an encrypted request per subscription, the Location as id', async () => {
     await pg.q(`update orgs set is_demo = false where id = $1`, [ORG]);
     await pg.q(`update countries set sms_sender_id = '+18885550142' where code = 'US'`);
-    const endpoint = `https://push.test/sub/${randomUUID()}`;
+    const endpoint = `https://fcm.googleapis.com/fcm/send/${randomUUID()}`;
     await subscribe(endpoint);
     const payload = await draftReady('push-real');
     await notifyJob(ctxOf(testConfig(KEYS)), payload, {} as never);
@@ -199,7 +200,7 @@ describe('web push (W2-14)', () => {
       status: 'sent',
       phone_e164: null,
     });
-    expect(row!.provider_message_id).toMatch(/^https:\/\/push\.test\/m\//);
+    expect(row!.provider_message_id).toMatch(/^https:\/\/fcm\.googleapis\.com\/m\//);
     // A real org's row is masked; the notification itself carried the link (encrypted).
     expect(row!.body).not.toContain('ABCDEF');
     expect(service.calls).toHaveLength(1);

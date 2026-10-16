@@ -1,5 +1,6 @@
 import webpush from 'web-push';
 import {
+  isAllowedPushEndpoint,
   MessageSendError,
   PUSH_DRIVER,
   pushChannelSpec,
@@ -93,6 +94,9 @@ export function webPushTransport(deps: PushDeps): MessageTransport {
     sub: Subscription,
     body: string,
   ): Promise<{ status: number; id: string | null }> {
+    // Only the known push services (spec §19 Q115; the database's check on a live row): never a
+    // request to a host a client chose. Refused without a request.
+    if (!isAllowedPushEndpoint(sub.endpoint)) return { status: 0, id: null };
     const request = webpush.generateRequestDetails(
       { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
       body,
@@ -104,6 +108,9 @@ export function webPushTransport(deps: PushDeps): MessageTransport {
         Object.entries(request.headers).map(([name, value]) => [name, String(value)]),
       ),
       body: request.body ? new Uint8Array(request.body) : null,
+      // A push service answers; it never redirects. A 3xx is refused (`pushResult`), never followed
+      // to wherever it points.
+      redirect: 'manual',
     });
     // The service's id of the message (RFC 8030 §5: the Location of the push message resource).
     return { status: res.status, id: res.headers.get('location') };

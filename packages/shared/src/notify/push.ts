@@ -74,3 +74,30 @@ export function pushResult(status: number): PushResult {
   if (status === 429 || status >= 500) return 'retry';
   return 'refused';
 }
+
+/**
+ * The push services a subscription may name (W2-14 review, spec §19 Q115): the worker posts to the
+ * endpoint a browser handed over, so any other host would let a field client point the worker at
+ * an address of its choosing. Chrome, Edge on Android, Samsung Internet and Opera use FCM
+ * (`fcm.googleapis.com`), Firefox `*.push.services.mozilla.com`, Edge on Windows
+ * `*.notify.windows.com`, Safari `web.push.apple.com` (`*.push.apple.com`).
+ *
+ * The same pattern is the database's check on a live `push_subscriptions` row
+ * (20261016000260_push_endpoint_hosts.sql, `~*`): https, one of those hosts, no user info and no
+ * port, then a path or nothing.
+ */
+export const PUSH_ENDPOINT_HOSTS = [
+  'fcm.googleapis.com',
+  '*.push.services.mozilla.com',
+  '*.notify.windows.com',
+  'web.push.apple.com',
+  '*.push.apple.com',
+] as const;
+
+export const PUSH_ENDPOINT_RE =
+  /^https:\/\/(fcm\.googleapis\.com|([a-z0-9-]+\.)+push\.services\.mozilla\.com|([a-z0-9-]+\.)+notify\.windows\.com|([a-z0-9-]+\.)+push\.apple\.com)(\/[^\s]*)?$/i;
+
+/** A subscription endpoint on one of the known push services (`PUSH_ENDPOINT_HOSTS`). */
+export function isAllowedPushEndpoint(endpoint: string): boolean {
+  return endpoint.length <= 2048 && PUSH_ENDPOINT_RE.test(endpoint);
+}

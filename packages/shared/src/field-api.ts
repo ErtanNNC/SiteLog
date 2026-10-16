@@ -8,6 +8,7 @@ import {
   VERIFY_CODE_LENGTH,
 } from './field-contract.ts';
 import { sha256Hex } from './links.ts';
+import { PUSH_ENDPOINT_RE } from './notify/push.ts';
 import { REPORTER_LOCALES } from './locale.ts';
 
 /**
@@ -256,7 +257,9 @@ export const PushSubscribeRequestSchema = z.strictObject({
     endpoint: z
       .string()
       .max(2048)
-      .regex(/^https:\/\/[^\s]+$/, 'an https endpoint'),
+      // Only the known push services (W2-14 review, spec §19 Q115): never an address of the
+      // client's choosing for the worker to post to.
+      .regex(PUSH_ENDPOINT_RE, 'a push service endpoint'),
     expirationTime: z.number().nullable().optional(),
     keys: z.object({
       p256dh: z
