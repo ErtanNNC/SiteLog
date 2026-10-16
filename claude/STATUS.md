@@ -1,5 +1,7 @@
 # SiteLog · Durum
 
+**2026-10-16 (akşam):** Q107–Q114 ve Q116 da onaylandı; tek açık kalan Q40'ın avukat kısmı.
+
 **2026-10-16:** önerimle kurulup onayınızı bekleyen tüm sorular (Q94, Q96–Q105) onaylandı ve spec §19'da karar verilmiş olarak işaretlendi. Şu an onayınızı bekleyen açık bir soru yok; yalnızca anahtarlar ve sizin yapmanız gereken işler (aşağıda) duruyor.
 
 Güncelleme: 2026-10-15 22:30 UTC · dal `spec-v1.2` · PR #1 · son CI yeşil: a9cc55f (run 38740645053); **tüm hafta-1 işi CI'da yeşil: run 38796723632 (f1d46c4), e2e:supabase ve worker akışları dahil**
@@ -255,9 +257,36 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
 - **Anthropic ve Deepgram anahtarlarını preview ortamına eklediniz (2026-10-16).** Önizleme worker'ı bundan sonra kayıtları gerçek Deepgram ile yazıya döküyor ve raporu gerçek Claude ile çıkarıyor. Mesajlar yine yalnızca Demo telefonda görünüyor.
 - **Model seçimi (önerim):** rapor çıkarma için Claude Sonnet 5.5, kısa işler için (cevap okuma, SMS/WhatsApp mesajı anlama) Claude Haiku 5.5. Hazır test setleriyle (`pnpm eval`) karşılaştırıp sonuçları size sunacağım.
 
-**Sırada:** yeni kodu önizlemeye yüklemek, size yeni linkler göndermek; ardından model karşılaştırması.
+**İkinci telefon testi (2026-10-16 akşam): geçti.**
 
-**Önizleme ortamı:** 2026-10-16 sabahki testten sonraki değişiklikler (Q86, inceleme düzeltmeleri, W2-10 – W2-16, yeni migration'lar `…080` – `…260`) henüz önizlemeye yüklenmedi. Bir sonraki telefon testinden önce yükleyip size yeni linkleri göndereceğim.
+- Önizlemeye her şey yüklendi: migration'lar `…080` – `…260`, fonksiyonlar, demo verisi.
+- Worker ilk kez gerçek anahtarlarla çalıştı: kayıtlar Deepgram ile yazıya döküldü, rapor Claude ile çıkarıldı.
+- Siz baştan sona denediniz: "Her şey güzel çalışıyor."
+- Test sırasında çıkan ve düzeltilenler:
+  - Deepgram anahtarı geçersizdi; yenisini girdiniz.
+  - Anthropic anahtarı bir çalışma alanına bağlı değildi; çalışma alanına bağlı yeni bir anahtar girdiniz.
+  - Worker'ın zaman aşımı kontrolü önizlemede açılışta veritabanı hatası veriyordu; düzeltildi (96d30ce).
+  - Yanlış kod girildiğinde ekran hep "0 hak kaldı" diyordu; düzeltildi.
+  - Ayarlar'daki tercih seçimi kaydedilene kadar geri atlıyordu; düzeltildi.
+- CI yeşil (96d30ce); hafta 2'nin kabul testleri dahil.
+- **Tamamlandı olarak işaretlenenler:** W2-02 – W2-11 ve W2-13.
+- **Bekleyenler:**
+  - W2-12, SMS anahtar kelimeleri: iki yönlü SMS ve gerçek SMS göndericisi gerekiyor.
+  - W2-14, bildirim: VAPID anahtarları gerekiyor.
+  - W2-15/16, WhatsApp: Twilio WhatsApp göndericisi ve şablonlar gerekiyor.
+  - W2-17, kabul testi: iPhone ve Android'de test edilmesi gerekiyor.
+- **Anahtarların durumu:** Anthropic, Deepgram ve Twilio hesap anahtarları preview ortamında. Twilio SMS için gönderici numarası ve test şirketi bekleniyor; ne gerektiği aşağıda.
+
+**Sırada (ben):**
+
+- Model karşılaştırması: hazır test setleriyle Sonnet / Haiku / Opus; sonuçları size tablo halinde sunacağım.
+- Hafta 2'den kalan ve anahtar gerektirmeyen işler; ardından hafta 3 planı.
+
+**Sizden beklenen:**
+
+- Twilio: gönderici numarası, SMS'in gideceği kendi numaranız ve hesabın deneme hesabı olup olmadığı.
+- VAPID anahtarları (`npx web-push generate-vapid-keys`).
+- Twilio WhatsApp göndericisi ve Meta doğrulaması.
 
 ## Hafta 2 (M6) — başladı
 
