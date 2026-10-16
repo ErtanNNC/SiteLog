@@ -486,8 +486,13 @@ jobs:
         env:
           NODE_ENV: development
           EMAIL_PROVIDER: console
-          TRANSCRIBE_PROVIDER: fake
-          EXTRACT_PROVIDER: fake
+          # Real transcription and extraction once the owner puts the keys in the preview
+          # Environment's secrets (ANTHROPIC_API_KEY, DEEPGRAM_API_KEY); each provider stays the
+          # fake while its key is missing. Texts and email stay console either way.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          TRANSCRIBE_PROVIDER: ${{ secrets.DEEPGRAM_API_KEY != '' && 'deepgram' || 'fake' }}
+          EXTRACT_PROVIDER: ${{ secrets.ANTHROPIC_API_KEY != '' && 'claude' || 'fake' }}
           # Open-Meteo's free endpoint (no key; the worker's default is the commercial one).
           WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast
           WORKER_PORT: '8080'
@@ -545,7 +550,7 @@ jobs:
             echo
             echo "The worker runs in this job against \`$SUPABASE_PROJECT_REF\` until **$(date -u -d "@$until" '+%Y-%m-%d %H:%M UTC')** ($RUN_MINUTES minutes), then stops."
             echo
-            echo "- Transcription and extraction are fakes (no Anthropic or Deepgram key): a recording gets the fixtures/voice transcript of its reporter's language, and the extraction is that golden case's recorded tool output. An EN or ES reporter (Marco Ruiz, Dana Whitfield) gets the Riverside hero report, which asks one question: the Delta crew's headcount."
+            echo "- Transcription: **$TRANSCRIBE_PROVIDER**; extraction: **$EXTRACT_PROVIDER** (each is the real provider when its key is in the preview Environment's secrets, else the fake). With the fakes a recording gets the fixtures/voice transcript of its reporter's language and the golden case's recorded tool output; an EN or ES reporter (Marco Ruiz, Dana Whitfield) gets the Riverside hero report, which asks one question: the Delta crew's headcount."
             echo "- Texts and email are console only: they appear in the panel's **Demo phone** ([$PANEL_URL]($PANEL_URL)); nothing reaches a real phone or inbox."
             echo "- Field links in the texts point at \`$FIELD_APP_URL\`. The first text to a reporter in this run carries a new personal link (this run's own signing secret); the existing links keep working."
             echo "- No Supabase secret was set or changed."

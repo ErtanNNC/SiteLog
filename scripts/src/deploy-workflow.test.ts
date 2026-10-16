@@ -113,18 +113,21 @@ describe('deploy.yml', () => {
     // It never sets or changes a Supabase secret (not even in a comment's example).
     expect(job.text).not.toMatch(/secrets set/);
     expect(job.text).not.toMatch(/secrets (unset|list)/);
-    // Fakes and console only; never production.
+    // Console texts and email; never production. Transcription and extraction are real only
+    // when the preview Environment holds their key, else the fakes.
     for (const line of [
       'NODE_ENV: development',
       'EMAIL_PROVIDER: console',
-      'TRANSCRIBE_PROVIDER: fake',
-      'EXTRACT_PROVIDER: fake',
+      "TRANSCRIBE_PROVIDER: ${{ secrets.DEEPGRAM_API_KEY != '' && 'deepgram' || 'fake' }}",
+      "EXTRACT_PROVIDER: ${{ secrets.ANTHROPIC_API_KEY != '' && 'claude' || 'fake' }}",
+      'ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}',
+      'DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}',
       'WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast',
     ])
       expect(job.text).toContain(line);
-    expect(job.text).not.toMatch(
-      /ANTHROPIC_API_KEY|DEEPGRAM_API_KEY|TWILIO_|ILETIMERKEZI_|RESEND_/,
-    );
+    expect(job.text).not.toMatch(/TWILIO_|ILETIMERKEZI_|RESEND_|VAPID_/);
+    // The AI keys come only from the preview Environment's secrets, never written to GITHUB_ENV.
+    expect(job.text).not.toMatch(/(ANTHROPIC|DEEPGRAM)_API_KEY.*GITHUB_ENV/);
     expect(job.text).toContain('pnpm --filter @sitelog/worker exec tsx src/index.ts');
     // The link secret is made in the job, masked, and handed to the worker process only.
     const start = stepScript('preview-worker', 'Start the worker');
