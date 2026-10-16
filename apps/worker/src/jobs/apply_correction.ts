@@ -48,8 +48,26 @@ export const applyCorrectionJob: JobHandler<'apply_correction'> = async (ctx, pa
   if (!report || !correction || correction.report_id !== report.id)
     throw new PermanentJobError('apply_correction: report or correction not found');
   const log = ctx.log.child({ report_id: report.id, correction_id: correction.id });
+  /** W2-12: an SMS EDIT's text gets the preview (or why there is none) once settled. */
+  const queueSmsPreview = async (messageId: string) => {
+    await ctx.db.enqueueJob(
+      'sms_keyword',
+      { messageId, correctionId: correction.id },
+      { dedupeKey: jobKeys.smsEditPreview(messageId, correction.id) },
+    );
+  };
   if (correction.status !== 'listening') {
     log.info('apply_correction: settled before', { status: correction.status });
+    // A retry after the settle committed but the preview's job was not queued (the enqueue
+    // failed): queue it now. Its key makes this a no-op when it was queued (W2-12 review).
+    if (
+      correction.message_id &&
+      (correction.status === 'ready' ||
+        correction.status === 'unclear' ||
+        correction.status === 'stale')
+    ) {
+      await queueSmsPreview(correction.message_id);
+    }
     return;
   }
   const settle = async (
@@ -57,14 +75,7 @@ export const applyCorrectionJob: JobHandler<'apply_correction'> = async (ctx, pa
     detail: Record<string, unknown>,
   ): Promise<SettleCorrectionResult> => {
     const res = await ctx.db.settleCorrection(correction.id, outcome, detail);
-    if (correction.message_id) {
-      // W2-12: an SMS EDIT; its text gets the preview (or why there is none) once settled.
-      await ctx.db.enqueueJob(
-        'sms_keyword',
-        { messageId: correction.message_id, correctionId: correction.id },
-        { dedupeKey: jobKeys.smsEditPreview(correction.message_id, correction.id) },
-      );
-    }
+    if (correction.message_id) await queueSmsPreview(correction.message_id);
     log.info('correction settled', {
       outcome,
       reason: detail.reason ?? null,

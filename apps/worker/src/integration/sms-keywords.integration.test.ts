@@ -332,6 +332,27 @@ describe('SMS report keywords (W2-12) on the Demo phone of a two-way demo org', 
     ]);
   }, 60_000);
 
+  it('a retry after the settle queues the preview the first run could not (W2-12 review)', async () => {
+    const date = resolveDayReference('THU', new Date(), TZ)!;
+    await filedReport(date);
+    const id = await text('EDIT THU Apex was 8 not 6');
+    const [c] = await database.q<{ id: string }>(
+      `select id from draft_corrections where message_id = $1`,
+      [id],
+    );
+    // The settle committed, but the preview's job was never queued (its enqueue failed).
+    await database.q(`select field_settle_correction($1, 'unclear', '{"reason":"silent"}')`, [
+      c!.id,
+    ]);
+    const key = jobKeys.smsEditPreview(id, c!.id);
+    expect(await database.q(`select 1 from jobs where dedupe_key = $1`, [key])).toHaveLength(0);
+    // The retry of apply_correction finds it settled and queues the preview's job.
+    expect(await run(await byKey(`correction:${c!.id}`))).toEqual({ ok: true });
+    const since = await stamp();
+    expect(await run(await byKey(key))).toEqual({ ok: true });
+    expect((await replies(since)).map((r) => r.copy_key)).toEqual(['edit_unclear']);
+  }, 60_000);
+
   it('an EDIT with no day, or with a consent turned off, changes nothing and points to Past reports', async () => {
     const since = await stamp();
     const id = await text('EDIT Apex was 7');
