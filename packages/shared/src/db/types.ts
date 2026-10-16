@@ -1416,6 +1416,19 @@ export type Database = {
           p_title: string;
           p_body: string;
           p_data?: Json | null;
+          /** W2-06 (20261016000040): the reminders (R1, R2) that reached the reporter. */
+          p_reminders?: number;
+        };
+        Returns: boolean;
+      };
+      /** W2-06 (20261016000040): one ladder stage of a site-day and its notify jobs. */
+      claim_site_day_reminder: {
+        Args: {
+          p_site_day_id: string;
+          p_stage: string;
+          p_messages: Json;
+          p_skipped?: Json;
+          p_not_after?: string | null;
         };
         Returns: boolean;
       };

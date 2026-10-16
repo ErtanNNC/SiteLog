@@ -163,4 +163,24 @@ describe('email templates', () => {
     expect(all[1]!.text).toContain('Difference: +16 h');
     expect(all[3]!.subject).toContain('90% on time');
   });
+
+  it('report_missing names the reminders the ladder sent (§13, W2-06)', () => {
+    const base = {
+      orgName: 'K',
+      siteName: 'Elm St. Townhomes',
+      date: '2026-10-09',
+      reporterFirstName: 'Priya',
+      reporterPhone: null,
+      url: 'u',
+    };
+    expect(reportMissingEmail({ ...base, reminders: 2 }).text).toContain(
+      "Elm St. Townhomes — no report. Priya didn't answer 2 reminders.",
+    );
+    expect(reportMissingEmail({ ...base, reminders: 1 }).text).toContain(
+      "Priya didn't answer 1 reminder.",
+    );
+    expect(reportMissingEmail({ ...base, reminders: 0 }).text).toContain(
+      "Priya hasn't sent the report for",
+    );
+  });
 });

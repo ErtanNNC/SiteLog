@@ -69,6 +69,7 @@ export function lateFallback(
       vars: sentBy.vars,
       dedupeKey,
       afterMessageId: message.id,
+      ...(sentBy.guard ? { guard: sentBy.guard } : {}),
     },
     dedupeKey: jobKeys.notifyAfter(dedupeKey, message.id),
   };

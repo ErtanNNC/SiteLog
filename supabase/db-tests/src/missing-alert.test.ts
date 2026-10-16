@@ -6,7 +6,9 @@ import { asService, asUser, bootDatabase } from './harness.ts';
 /**
  * 20261015000061_mark_site_day_missing.sql: scheduler-tick's `→ missing` step (spec §19 Q55)
  * commits the status change, its audit, the office notice and the email job together, alerts only
- * on the call that made the day missing, and commits nothing when a step fails.
+ * on the call that made the day missing, and commits nothing when a step fails. Since
+ * 20261016000040 (W2-06) it leaves a non-working day alone and passes the reminders sent to the
+ * email job.
  */
 
 let db: PGlite;
@@ -79,7 +81,13 @@ describe('mark_site_day_missing', () => {
     expect(e.jobs).toEqual([
       {
         dedupe_key: `email:report_missing:${id}`,
-        payload: { kind: 'report_missing', siteDayId: id, siteId, orgId: DEMO_ORG_ID },
+        payload: {
+          kind: 'report_missing',
+          siteDayId: id,
+          siteId,
+          orgId: DEMO_ORG_ID,
+          reminders: 0,
+        },
       },
     ]);
 
@@ -92,7 +100,7 @@ describe('mark_site_day_missing', () => {
   });
 
   it('commits nothing when the alert fails, so the next tick retries', async () => {
-    const id = await pendingDay('2030-03-02');
+    const id = await pendingDay('2030-03-04');
     await svc(`delete from notifications where title = 'Site — no report'`);
     await expect(
       svc(`select mark_site_day_missing($1, now(), null, null)`, [id]), // title is not null
@@ -110,7 +118,7 @@ describe('mark_site_day_missing', () => {
   });
 
   it('leaves a day that is no longer pending alone', async () => {
-    const id = await pendingDay('2030-03-03');
+    const id = await pendingDay('2030-03-05');
     await svc(`update site_days set status = 'filed' where id = $1`, [id]);
     expect(await mark(id)).toBe(false);
     const e = await effects(id);
@@ -119,8 +127,29 @@ describe('mark_site_day_missing', () => {
     expect(e.jobs).toHaveLength(0);
   });
 
+  // W2-06 (docs/AUDIT_BACKLOG.md "Site-days created on non-working days…").
+  it('never escalates a site-day on a day the org does not work', async () => {
+    const id = await pendingDay('2030-03-09'); // a Saturday; the demo org works Mon–Fri
+    expect(await mark(id)).toBe(false);
+    const e = await effects(id);
+    expect(e.day).toEqual({ status: 'pending', reminder_stage: 0 });
+    expect(e.audits).toHaveLength(0);
+    expect(e.jobs).toHaveLength(0);
+  });
+
+  it('hands the reminders sent to the email job (§13 "didn’t answer {n} reminders")', async () => {
+    const id = await pendingDay('2030-03-11');
+    const [row] = await svc<{ ok: boolean }>(
+      `select mark_site_day_missing(p_site_day_id => $1, p_missing_at => now(),
+         p_title => 'Site — two reminders', p_body => 'b', p_reminders => 2) as ok`,
+      [id],
+    );
+    expect(row!.ok).toBe(true);
+    expect((await effects(id)).jobs[0]!.payload).toMatchObject({ reminders: 2 });
+  });
+
   it('is not callable by office users', async () => {
-    const id = await pendingDay('2030-03-04');
+    const id = await pendingDay('2030-03-06');
     await expect(
       asUser(db, DEMO_USERS[0]!.id, (q) =>
         q(`select mark_site_day_missing($1, now(), 't', 'b')`, [id]),
@@ -131,7 +160,7 @@ describe('mark_site_day_missing', () => {
   // 20261015000080: the notice's data for the panel, or none from the deployed caller.
   it('stores the notice data scheduler-tick passes, and none when it passes four arguments', async () => {
     const data = { key: 'missing_report', params: { site: 'Site', first: 'Priya' } };
-    const withData = await pendingDay('2030-03-05');
+    const withData = await pendingDay('2030-03-07');
     expect(
       (
         await svc<{ ok: boolean }>(
@@ -141,7 +170,7 @@ describe('mark_site_day_missing', () => {
         )
       )[0]!.ok,
     ).toBe(true);
-    const without = await pendingDay('2030-03-06');
+    const without = await pendingDay('2030-03-08');
     expect(
       (
         await svc<{ ok: boolean }>(

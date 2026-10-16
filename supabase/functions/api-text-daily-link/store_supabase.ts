@@ -1,5 +1,6 @@
 import { logAudit } from '../_shared/audit.ts';
 import { loadOrgPack } from '../_shared/countries.ts';
+import { supabaseDailyLinkStore } from '../_shared/daily_links.ts';
 import type { AppClient } from '../_shared/supabase.ts';
 import type { TextLinkStore } from './app.ts';
 
@@ -48,25 +49,7 @@ export function supabaseTextLinkStore(admin: AppClient): TextLinkStore {
       const { pack } = await loadOrgPack(admin, orgId);
       return pack.voiceNumber ?? null;
     },
-    async listDailyLinks(reporterId, siteId, reportDate) {
-      const { data } = await admin
-        .from('field_links')
-        .select('id, code_hash, expires_at')
-        .eq('reporter_id', reporterId)
-        .eq('site_id', siteId)
-        .eq('report_date', reportDate)
-        .eq('kind', 'daily')
-        .is('revoked_at', null)
-        .order('created_at', { ascending: false })
-        .throwOnError();
-      return data;
-    },
-    async insertDailyLink(row) {
-      const { error } = await admin.from('field_links').insert({ ...row, kind: 'daily' });
-      if (!error) return true;
-      if (error.code === '23505') return false;
-      throw error;
-    },
+    ...supabaseDailyLinkStore(admin),
     async audit(entry) {
       await logAudit(admin, {
         orgId: entry.orgId,

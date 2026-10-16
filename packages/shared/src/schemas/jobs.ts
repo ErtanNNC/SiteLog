@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { SMS_KEYS, TWO_WAY_SMS_KEYS } from '../copy/sms.ts';
-import { FIELD_CHANNELS, type JOB_TYPES } from '../enums.ts';
+import { FIELD_CHANNELS, SITE_DAY_STATUSES, type JOB_TYPES } from '../enums.ts';
 
 const uuid = z.string().uuid();
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -89,6 +89,11 @@ export const JobPayloadSchemas = {
     unknownContactId: uuid.optional(),
     to: z.array(z.string().email()).optional(),
     changeNote: z.string().optional(),
+    /**
+     * `report_missing` (W2-06): how many reminders (R1, R2) reached the reporter that day, from
+     * mark_site_day_missing(); absent or 0 = none, so the email words it without reminders (§19 Q55).
+     */
+    reminders: z.number().int().nonnegative().optional(),
   }),
   fetch_weather: z.object({ siteId: uuid, date: isoDate }),
   send_welcome: z.object({
@@ -128,6 +133,20 @@ export const JobPayloadSchemas = {
     vars: z.record(z.string(), z.union([z.string(), z.number()])).default({}),
     dedupeKey: z.string().min(1).max(200),
     afterMessageId: uuid.optional(),
+    /**
+     * The reminder ladder's re-check before sending (W2-06): the message goes out only while the
+     * site-day is in one of `statuses` (a day filed, `processing`, `no_work` or `weather_day` since
+     * the stage was claimed sends nothing, `notify.skipped` `stale_stage`), its reminders are not
+     * paused, and, when `notAfter` is set, before that instant (the call window's end, spec §19 Q77:
+     * `quiet_hours`). claim_site_day_reminder() writes it; the late fallback carries it on.
+     */
+    guard: z
+      .object({
+        siteDayId: uuid,
+        statuses: z.array(z.enum(SITE_DAY_STATUSES)).min(1),
+        notAfter: z.string().datetime({ offset: true }).optional(),
+      })
+      .optional(),
   }),
 } as const satisfies Record<(typeof JOB_TYPES)[number], z.ZodType>;
 

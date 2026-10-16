@@ -38,16 +38,48 @@ import type { JobHandler } from './types';
  * - The fallback after a late status callback (`afterMessageId`, enqueued by sms-webhook's
  *   `/status`, `lateFallback`) first runs the key's guard: a message no longer useful is dropped
  *   (audited `notify.fallback_dropped`); otherwise the Notifier's walk skips the failed attempt.
+ * - A reminder-ladder message (W2-06) carries a `guard`: before it is sent the site-day must still
+ *   wait for a report and the call window be open, or nothing goes out (`notify.skipped`,
+ *   `stale_stage` / `quiet_hours`, `ladderGuardVerdict`).
  */
 
 /** Whether a message is still worth sending when its fallback runs after a late callback. */
 export type NotifyGuard = (ctx: Ctx, payload: JobPayloads['notify']) => Promise<boolean>;
 
+/** Why a guarded message is no longer sent (audited `notify.skipped`). */
+export type GuardVerdict = 'stale_stage' | 'quiet_hours';
+
 /**
- * The guards per key (W2-01). None yet: W2-06 adds the reminder ladder's site-day check, W2-07
- * the open question and the unconfirmed draft. A key with no guard is still useful.
+ * The reminder ladder's re-check before sending (W2-06; the payload's `guard`, written by
+ * claim_site_day_reminder()): null while the message is still due; `stale_stage` when the site-day
+ * left the statuses the stage was claimed for (filed, `processing`, `no_work`, `weather_day`,
+ * `missing`) or its reminders were paused since (STOP, the office); `quiet_hours` once the call
+ * window has closed (spec §19 Q77, `notAfter`: a retry or a late worker does not text at 22:00).
  */
-export const NOTIFY_FALLBACK_GUARDS: Partial<Record<NotifierKey, NotifyGuard>> = {};
+export async function ladderGuardVerdict(
+  ctx: Ctx,
+  guard: NonNullable<JobPayloads['notify']['guard']>,
+): Promise<GuardVerdict | null> {
+  const day = await ctx.db.getSiteDay(guard.siteDayId);
+  if (!day || !guard.statuses.includes(day.status) || day.reminders_paused) return 'stale_stage';
+  if (guard.notAfter && ctx.now().getTime() >= Date.parse(guard.notAfter)) return 'quiet_hours';
+  return null;
+}
+
+/** The ladder keys' fallback guard: the same re-check (a payload without a guard passes). */
+const ladderGuard: NotifyGuard = async (ctx, payload) =>
+  !payload.guard || (await ladderGuardVerdict(ctx, payload.guard)) === null;
+
+/**
+ * The guards per key (W2-01): the reminder ladder's site-day check (W2-06); W2-07 adds the open
+ * question and the unconfirmed draft. A key with no guard is still useful.
+ */
+export const NOTIFY_FALLBACK_GUARDS: Partial<Record<NotifierKey, NotifyGuard>> = {
+  daily_link: ladderGuard,
+  weather_headsup: ladderGuard,
+  reminder_1: ladderGuard,
+  reminder_2: ladderGuard,
+};
 
 export function createNotifyJob(
   guards: Partial<Record<NotifierKey, NotifyGuard>> = NOTIFY_FALLBACK_GUARDS,
@@ -89,6 +121,26 @@ export function createNotifyJob(
           entity: 'message',
           entity_id: payload.afterMessageId,
           diff: { key: payload.key, dedupe_key: payload.dedupeKey, reason: 'guard' },
+        });
+        return;
+      }
+    } else if (payload.guard) {
+      // The ladder's re-check before the first send (W2-06): a stage claimed before the report
+      // came in, or a job that waited past the call window, sends nothing.
+      const verdict = await ladderGuardVerdict(ctx, payload.guard);
+      if (verdict) {
+        await ctx.db.logAudit({
+          org_id: reporter.org_id,
+          actor_type: 'system',
+          action: 'notify.skipped',
+          entity: 'reporter',
+          entity_id: reporter.id,
+          diff: {
+            copy_key: payload.key,
+            dedupe_key: payload.dedupeKey,
+            reason: verdict,
+            site_day_id: payload.guard.siteDayId,
+          },
         });
         return;
       }

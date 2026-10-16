@@ -7,8 +7,8 @@ import {
   type ContactPref,
   type MessageChannel,
 } from '../enums.ts';
-import { formatTimeInTz } from '../format.ts';
-import { deadlineInstant, type LadderTimes } from './reminders.ts';
+import { addDays, formatDateInTz, formatTimeInTz } from '../format.ts';
+import { deadlineInstant } from './reminders.ts';
 
 /**
  * §7.4 / F11 reminder decisions (spec §4.5 `remind(reporter, pack, stage)`: "pure decision
@@ -262,28 +262,37 @@ export function remind(
   return message(REMIND_STAGE_KEY[stage]);
 }
 
+/**
+ * When the quiet hours begin after `now`: the next instant the site's wall clock reads the
+ * window's end (today's, or tomorrow's once today's has passed). A ladder message queued inside
+ * the window carries it as its guard's `notAfter` (W2-06, §19 Q77 `skip`), so a job still waiting
+ * at that time (retries, a worker outage) sends nothing.
+ */
+export function windowEndAfter(now: Date, tz: string, window: QuietWindow): Date {
+  const today = formatDateInTz(now, tz);
+  const end = deadlineInstant(today, hhmm(window.end), tz);
+  return end.getTime() > now.getTime()
+    ? end
+    : deadlineInstant(addDays(today, 1), hhmm(window.end), tz);
+}
+
 /** When the daily link is due: `daily_link_time` (default 17:00) on the site-day's date, site time. */
 export function dailyLinkInstant(date: string, dailyLinkTime: string | null, tz: string): Date {
   return deadlineInstant(date, dailyLinkTime ?? DEFAULT_DAILY_LINK_TIME, tz);
 }
 
 /**
- * Whether the daily link is due now (W2-06): from `dailyLinkAt` until R1 is due (R1 carries the
- * link, so after an outage the tick sends R1, not both), while the day has not reached R1
- * (`reminder_stage` below 2). Whether it went out already is its dedupe key's business.
+ * Whether the daily link is due now (W2-06): from `dailyLinkAt` while the day has not reached R1
+ * (`reminder_stage` below 2). A tick that finds both due (the first tick after an outage, or a
+ * daily link time after R1's) sends the daily link first, then R1. Whether it went out already is
+ * its claim's business (once per site-day).
  */
 export function dailyLinkDue(input: {
   now: Date;
   dailyLinkAt: Date;
-  times: Pick<LadderTimes, 'reminder1At'>;
-  reminder1Enabled: boolean;
   currentStage: number;
 }): boolean {
-  const now = input.now.getTime();
-  if (now < input.dailyLinkAt.getTime()) return false;
-  if (input.currentStage >= 2) return false;
-  if (input.reminder1Enabled && now >= input.times.reminder1At.getTime()) return false;
-  return true;
+  return input.now.getTime() >= input.dailyLinkAt.getTime() && input.currentStage < 2;
 }
 
 /**

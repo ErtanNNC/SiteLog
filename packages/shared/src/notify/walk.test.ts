@@ -204,6 +204,20 @@ describe('lateFallback (a status callback after the send)', () => {
     expect(lateFallback(message, 'failed', sentBy).kind).toBe('enqueue');
   });
 
+  it('carries the reminder ladder’s guard, so the fallback re-checks the site-day (W2-06)', () => {
+    const guard = {
+      siteDayId: '00000000-0000-4000-8000-0000000000dd',
+      statuses: ['pending' as const, 'reminded' as const],
+      notAfter: '2026-10-13T01:00:00+00:00',
+    };
+    const fallback = lateFallback(
+      { ...message, copy_key: 'reminder_1', payload: { dedupe_key: 'notify:reminder_1:sd:r' } },
+      'undeliverable',
+      { ...sentBy, key: 'reminder_1', dedupeKey: 'notify:reminder_1:sd:r', guard },
+    );
+    expect(fallback.kind === 'enqueue' && fallback.payload.guard).toEqual(guard);
+  });
+
   it('nothing for a delivery, a row outside the Notifier, or one no notify job sent', () => {
     expect(lateFallback(message, 'delivered', sentBy)).toEqual({
       kind: 'none',

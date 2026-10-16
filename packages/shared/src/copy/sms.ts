@@ -1,7 +1,14 @@
-import type { Language } from '../locale.ts';
-import { smsEn, smsReplyHintEn } from './sms.en.ts';
-import { smsEs, smsReplyHintEs } from './sms.es.ts';
-import { smsTr } from './sms.tr.ts';
+import type { Language, UnitSystem } from '../locale.ts';
+import {
+  inToMm,
+  mphToKmh,
+  type SiteDayWeather,
+  weatherUnitLabels,
+  WEATHER_THRESHOLDS,
+} from '../weather/observed.ts';
+import { smsEn, smsReplyHintEn, smsWeatherPhraseEn } from './sms.en.ts';
+import { smsEs, smsReplyHintEs, smsWeatherPhraseEs } from './sms.es.ts';
+import { smsTr, smsWeatherPhraseTr } from './sms.tr.ts';
 
 /**
  * §9.2 SMS copy catalog. Keys are stable ids; the texts live in `sms.{en,es,tr}.ts`. WhatsApp
@@ -262,4 +269,63 @@ export function renderSms<K extends SmsKey>(
     }
     return String(value);
   });
+}
+
+/**
+ * The pieces of the heads-up's `{weather_phrase}` in one language (W2-06): rain in the morning,
+ * the afternoon or across the day with `{amount}`, gusts with `{speed}` (`gustsAfterRain` when
+ * joined after rain by `and`), the `fallback` when the snapshot names neither, and the decimal
+ * separator of the amount.
+ */
+export interface SmsWeatherPhrases {
+  rainMorning: string;
+  rainAfternoon: string;
+  rainDay: string;
+  gusts: string;
+  gustsAfterRain: string;
+  and: string;
+  fallback: string;
+  decimal: string;
+}
+
+export const SMS_WEATHER_PHRASES: Readonly<Record<SmsLocale, SmsWeatherPhrases>> = {
+  en: smsWeatherPhraseEn,
+  es: smsWeatherPhraseEs,
+  tr: smsWeatherPhraseTr,
+};
+
+/**
+ * The heads-up's `{weather_phrase}` in the reporter's language and the org's units (W2-06;
+ * `weatherPhrase` is its English, imperial original): rain when the working hours had more than
+ * the threshold, with when it fell and the day's total; gusts above the threshold in the working
+ * hours. The snapshot is imperial (`SiteDayWeather.units`); a metric org gets mm and km/h.
+ */
+export function renderWeatherPhrase(
+  w: SiteDayWeather,
+  locale: SmsLocale,
+  units: UnitSystem,
+): string {
+  if (!Object.hasOwn(SMS_WEATHER_PHRASES, locale)) {
+    throw new Error(`No SMS copy for locale "${locale}"`);
+  }
+  const c = SMS_WEATHER_PHRASES[locale];
+  const label = weatherUnitLabels(units);
+  const rainHours = w.hours.filter((h) => h.precipIn > 0.01);
+  let rain: string | null = null;
+  if (w.summary.precipWorkingHoursIn > WEATHER_THRESHOLDS.precipIn && rainHours.length) {
+    const first = Number(rainHours[0]!.time.slice(0, 2));
+    const last = Number(rainHours[rainHours.length - 1]!.time.slice(0, 2));
+    const template = last < 12 ? c.rainMorning : first >= 12 ? c.rainAfternoon : c.rainDay;
+    const value = units === 'metric' ? inToMm(w.summary.precipIn) : w.summary.precipIn;
+    const amount = `${value.toFixed(1).replace('.', c.decimal)} ${label.precip}`;
+    rain = template.replace('{amount}', amount);
+  }
+  let gusts: string | null = null;
+  if (w.summary.maxGustWorkingHoursMph > WEATHER_THRESHOLDS.gustMph) {
+    const mph = w.summary.maxGustWorkingHoursMph;
+    const speed = `${units === 'metric' ? mphToKmh(mph) : mph} ${label.wind}`;
+    gusts = (rain ? c.gustsAfterRain : c.gusts).replace('{speed}', speed);
+  }
+  if (rain && gusts) return `${rain}${c.and}${gusts}`;
+  return rain ?? gusts ?? c.fallback;
 }

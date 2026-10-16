@@ -79,7 +79,7 @@ export const noticeDataSchema = z.discriminatedUnion('key', [
     reporter: nameOrNull,
     reportNo: name,
   }),
-  // missing_report (scheduler-tick → mark_site_day_missing): `reminders` once the ladder runs (M6)
+  // missing_report (scheduler-tick → mark_site_day_missing): `reminders` when the ladder reached them (W2-06)
   notice('missing_report', {
     site: name,
     first: nameOrNull,

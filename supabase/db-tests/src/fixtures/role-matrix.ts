@@ -492,6 +492,12 @@ export const RPCS: Record<
     call: (o) =>
       `select field_device_verify_locked('${o.reporter}', null, '2026-10-09T23:00:00Z') as v`,
   },
+  // W2-06 (20261016000040_reminder_ladder.sql): scheduler-tick claims a ladder stage.
+  claim_site_day_reminder: {
+    why: '§6.5: scheduler-tick only (service role); a reminder is queued by the server, never a client.',
+    allow: NONE,
+    call: (o) => `select claim_site_day_reminder('${o.siteDay2}', 'reminder_1', '[]'::jsonb) as v`,
+  },
   // F9 (20261016000030_photos_after_filing.sql): photos added after filing become a version.
   field_attach_photos: {
     why: '§6.5: field-api and the worker only (service role); the office adds photos with create_report_version.',

@@ -1,13 +1,20 @@
 import {
   addDays,
+  type CountryPack,
+  dailyLinkDue,
+  dailyLinkInstant,
   deadlineInstant,
+  DEFAULT_CALL_WINDOW,
   type DueStage,
   firstName,
+  formatPhone,
+  formatTimeInTz,
   isActiveReporterStatus,
   isoWeekday,
   isWeatherObserved,
   isWorkingDay,
   type JobPayloads,
+  languageOf,
   type LadderSettings,
   ladderTimes,
   localDate,
@@ -16,13 +23,23 @@ import {
   type NoticeData,
   REMINDER_STAGE,
   reminderVars,
+  remind,
+  REMIND_POLICY_DEFAULTS,
+  type RemindAction,
+  type RemindKey,
+  type RemindPolicy,
+  type RemindStage,
   renderTemplateText,
+  renderWeatherPhrase,
+  SMS_WEATHER_PHRASES,
   type SiteDayStatus,
   type SiteDayWeather,
   templateButtons,
   type TemplateName,
+  type UnitSystem,
   weatherPhrase,
   weatherSlotDue,
+  windowEndAfter,
 } from '@sitelog/shared';
 import { isBillingBlocked } from '../_shared/billing.ts';
 
@@ -44,6 +61,11 @@ export interface OrgSettingsInput {
   missing_enabled: boolean;
   missing_offset_min: number;
   past_due_grace_days: number;
+  /** §6.3 field channels (20261013000007): null = the column default. */
+  daily_link_time?: string | null;
+  second_call_enabled?: boolean | null;
+  call_window_start?: string | null;
+  call_window_end?: string | null;
 }
 
 export interface OrgInput {
@@ -53,6 +75,8 @@ export interface OrgInput {
   /** When the org entered past_due (from audit_log), null when unknown. */
   past_due_since: string | null;
   settings: OrgSettingsInput;
+  /** `orgs.units`: the heads-up's weather phrase (W2-06); imperial when absent. */
+  units?: UnitSystem;
 }
 
 export interface SiteInput {
@@ -221,24 +245,34 @@ export function siteDayPatchForStage(stage: DueStage['stage']): SiteDayStagePatc
 }
 
 /**
- * The office's panel notice when a day becomes `missing` (§13 "Report missing: ops + admin";
- * spec §19 Q55, decided 2026-10-15). Worded without the ladder ("didn't answer 2 reminders" was
- * the v1.0 text): until M6 no reminder is sent, so it says only that nothing came in by the
- * deadline.
+ * The office's panel notice when a day becomes `missing` (§13 "Report missing: ops + admin").
+ * With reminders sent (W2-06), §13's wording: "{first} didn't answer {n} reminders"; with none
+ * (the ladder skipped every reporter, or no reporter is linked), spec §19 Q55's wording, which
+ * says only that nothing came in by the deadline.
  */
 export function missingNotification(
   siteName: string,
   reporterFirstName: string | null,
+  reminders = 0,
 ): {
   title: string;
   body: string;
   /** What the panel renders in the reader's language; title and body are the English fallback. */
   data: NoticeData;
 } {
+  const who = reporterFirstName ?? 'The site manager';
+  const body =
+    reminders > 0 && reporterFirstName
+      ? `${who} didn’t answer ${reminders} reminder${reminders === 1 ? '' : 's'}.`
+      : `${who} hasn’t sent today’s report, and the deadline has passed.`;
   return {
     title: `${siteName} — no report`,
-    body: `${reporterFirstName ?? 'The site manager'} hasn’t sent today’s report, and the deadline has passed.`,
-    data: noticeData('missing_report', { site: siteName, first: reporterFirstName }),
+    body,
+    data: noticeData('missing_report', {
+      site: siteName,
+      first: reporterFirstName,
+      ...(reminders > 0 ? { reminders } : {}),
+    }),
   };
 }
 
@@ -272,40 +306,6 @@ export interface ReporterRef {
   id: string;
   name: string;
   status: string;
-}
-
-export interface ConversationRef {
-  id: string;
-  reporter_id: string | null;
-}
-
-export interface ReminderTarget {
-  conversationId: string;
-  reporterId: string;
-  firstName: string;
-}
-
-/** The primary active reporter with a conversation, else any active linked reporter. */
-export function pickReminderTarget(
-  siteId: string,
-  links: readonly SiteReporterLink[],
-  reporters: readonly ReporterRef[],
-  conversations: readonly ConversationRef[],
-): ReminderTarget | null {
-  const reporterById = new Map(reporters.map((r) => [r.id, r]));
-  const conversationByReporter = new Map<string, string>();
-  for (const c of conversations) if (c.reporter_id) conversationByReporter.set(c.reporter_id, c.id);
-  const candidates = links
-    .filter((l) => l.site_id === siteId)
-    .sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
-  for (const link of candidates) {
-    const reporter = reporterById.get(link.reporter_id);
-    const conversationId = conversationByReporter.get(link.reporter_id);
-    if (reporter && isActiveReporterStatus(reporter.status) && conversationId) {
-      return { conversationId, reporterId: reporter.id, firstName: firstName(reporter.name) };
-    }
-  }
-  return null;
 }
 
 export interface WeatherJob {
@@ -353,15 +353,6 @@ export function retentionDue(lastRunDate: string | null, now: Date): string | nu
   return today;
 }
 
-/**
- * W1-10 (docs/PLAN_WEEK1.md, GAP §4.1 stage 5): the v1.0 reminder ladder (heads-up, R1 and R2 as
- * WhatsApp templates, and the missing alert that counts them) is stopped on this branch; it returns
- * on SMS through the Notifier in M6. `dueStage`, `reminderJob` and the stage helpers above stay for
- * that rebuild; the tick calls none of them. The §7.1 status step `→ missing` is not part of the
- * ladder and still runs (`planMissing`).
- */
-export const REMINDER_LADDER_RUNS = false;
-
 /** A today site-day the tick marks `missing` (§7.1), with what its audit row needs. */
 export interface MissingMark {
   siteDayId: string;
@@ -373,12 +364,13 @@ export interface MissingMark {
 }
 
 /**
- * §7.1 `pending|reminded → missing` without the ladder (W1-10): a today site-day with no report
- * whose deadline plus the org's missing offset (`missing_offset_min`, default 90) has passed, while
- * the org's missing step is on. The tick sets `reminder_stage` 4 and `status 'missing'`
- * (`siteDayPatchForStage(REMINDER_STAGE.missing)`), audits it and alerts the office (the
- * `missing_report` panel notice, `missingNotification`, and the `report_missing` email; spec §19
- * Q55); it sends no text. Paused reminders do not stop it, as before (the step is office-facing).
+ * §7.1 `pending|reminded → missing`: a today site-day with no report whose deadline plus the org's
+ * missing offset (`missing_offset_min`, default 90) has passed, while the org's missing step is on
+ * and the date is one of its working days (a site-day a stray upload or STOP made on a Saturday is
+ * never escalated; mark_site_day_missing() checks it again). The tick sets `reminder_stage` 4 and
+ * `status 'missing'` (`siteDayPatchForStage(REMINDER_STAGE.missing)`), audits it and alerts the
+ * office (the `missing_report` panel notice, `missingNotification`, and the `report_missing`
+ * email). Paused reminders do not stop it (the step is office-facing).
  */
 export function planMissing(input: {
   sites: readonly SiteInput[];
@@ -394,6 +386,7 @@ export function planMissing(input: {
     const site = siteById.get(sd.site_id);
     const org = site ? input.orgs.get(site.org_id) : undefined;
     if (!site || !org) continue;
+    if (!isWorkingDay(sd.date, org.settings.working_days)) continue;
     const ladder = ladderFromSettings(org.settings);
     if (ladder.missingEnabled === false) continue;
     const deadlineAt = new Date(sd.deadline_at);
@@ -445,7 +438,7 @@ export interface TickPlanInput {
 /**
  * The jobs one tick queues after creating today's site-days (§4.2): the §10.10 weather snapshots
  * (12:00, 16:30, 23:30 site time) for sites with a site-day today, the §13 weekly digest per org,
- * and the nightly retention job. No reminder (`REMINDER_LADDER_RUNS`).
+ * and the nightly retention job. The reminder ladder is `planLadder`.
  */
 export function planTickJobs(input: TickPlanInput): PlannedJob[] {
   const jobs: PlannedJob[] = [];
@@ -479,4 +472,266 @@ export function planTickJobs(input: TickPlanInput): PlannedJob[] {
     });
   }
   return jobs;
+}
+
+// ── The reminder ladder (W2-06; spec §7.1, §7.4, F11) ────────────────────────────────────────────
+
+/**
+ * Whether any pack places outbound calls (spec §19 Q38: the trunks are env; Q51): none before M8,
+ * so `remind()` answers a message (or nothing), never a call, and the consents for calls are not
+ * loaded.
+ */
+export const OUTBOUND_TRUNK = false;
+
+/**
+ * The owner parameters of the ladder (spec §19 Q76, Q77; both open): the recommended defaults
+ * (`REMIND_POLICY_DEFAULTS`) until the owner answers.
+ */
+export const LADDER_POLICY: RemindPolicy = REMIND_POLICY_DEFAULTS;
+
+/** A reporter of a site, as the ladder reads them (`reporters`). */
+export interface LadderReporter {
+  id: string;
+  org_id: string;
+  name: string;
+  status: string;
+  contact_pref: 'link' | 'call';
+  message_channel: 'sms' | 'whatsapp' | 'push' | null;
+  locale: string;
+}
+
+/** One reporter of a step and what `remind()` decided for them. */
+export interface LadderTarget {
+  reporter: LadderReporter;
+  action: RemindAction;
+}
+
+/** One stage of one site-day to claim now (`claim_site_day_reminder()`). */
+export interface LadderStep {
+  siteDayId: string;
+  siteId: string;
+  orgId: string;
+  date: string;
+  stage: RemindStage;
+  deadlineAt: Date;
+  missingAt: Date;
+  /** Every reporter of the site in its org, the primary first, with remind()'s answer. */
+  targets: LadderTarget[];
+  /**
+   * When the quiet hours begin (§19 Q77 `skip`): a `notify` job still waiting then sends nothing.
+   * null with `send`.
+   */
+  notAfter: Date | null;
+}
+
+/**
+ * The site's reporters in its org, the primary first, then the others (backups) in name order:
+ * every one of them hears the ladder for that site (W2-06; one message per site, so a reporter of
+ * two sites gets each site's, F14, and a phone in two orgs each org's, as two reporter rows).
+ * A link to a reporter of another org is ignored.
+ */
+export function siteLadderReporters(
+  site: Pick<SiteInput, 'id' | 'org_id'>,
+  links: readonly SiteReporterLink[],
+  reporters: ReadonlyMap<string, LadderReporter>,
+): LadderReporter[] {
+  return links
+    .filter((l) => l.site_id === site.id)
+    .flatMap((l) => {
+      const r = reporters.get(l.reporter_id);
+      return r && r.org_id === site.org_id ? [{ r, primary: l.is_primary }] : [];
+    })
+    .sort((a, b) => Number(b.primary) - Number(a.primary) || a.r.name.localeCompare(b.r.name))
+    .map((x) => x.r);
+}
+
+export interface LadderPlanInput {
+  /** Active sites of orgs billing does not block. */
+  sites: readonly SiteInput[];
+  orgs: ReadonlyMap<string, OrgInput>;
+  /** Each org's country pack, by org id. */
+  packs: ReadonlyMap<string, CountryPack>;
+  todaysSiteDays: readonly SiteDayInput[];
+  links: readonly SiteReporterLink[];
+  reporters: ReadonlyMap<string, LadderReporter>;
+  /** Site-days whose daily link stage is already claimed (its `site_day.reminder` audit row). */
+  dailyLinkDone: ReadonlySet<string>;
+  now: Date;
+  outboundTrunk?: boolean;
+  policy?: RemindPolicy;
+}
+
+/**
+ * The ladder steps due now (§7.4): for each today site-day still waiting for a report (`pending`
+ * or `reminded`), reminders not paused, on one of the org's working days, the daily link from
+ * `daily_link_time` until R1 has run (once: `dailyLinkDone`), and the latest due stage among the
+ * heads-up (weather observed), R1 and R2 (each once: `reminder_stage`; after an outage only the
+ * latest; none once the missing step is due, which is `planMissing`'s). The claim RPC checks
+ * every condition again in SQL, plus "no live report".
+ */
+export function planLadder(input: LadderPlanInput): LadderStep[] {
+  const policy = input.policy ?? LADDER_POLICY;
+  const siteById = new Map(input.sites.map((s) => [s.id, s]));
+  const steps: LadderStep[] = [];
+  for (const sd of input.todaysSiteDays) {
+    if (!LADDER_STATUSES.includes(sd.status) || sd.reminders_paused) continue;
+    const site = siteById.get(sd.site_id);
+    const org = site ? input.orgs.get(site.org_id) : undefined;
+    const pack = org ? input.packs.get(org.id) : undefined;
+    if (!site || !org || !pack) continue;
+    if (orgIsBlocked(org, input.now)) continue;
+    if (!isWorkingDay(sd.date, org.settings.working_days)) continue;
+    const deadlineAt = new Date(sd.deadline_at);
+    if (Number.isNaN(deadlineAt.getTime())) continue;
+    const ladder = ladderFromSettings(org.settings);
+    const times = ladderTimes(deadlineAt, ladder);
+    const weather = asSiteDayWeather(sd.weather);
+    const s = org.settings;
+    const callWindow = {
+      start: s.call_window_start ?? DEFAULT_CALL_WINDOW.start,
+      end: s.call_window_end ?? DEFAULT_CALL_WINDOW.end,
+    };
+    const reporters = siteLadderReporters(site, input.links, input.reporters);
+    const step = (stage: RemindStage): LadderStep => ({
+      siteDayId: sd.id,
+      siteId: site.id,
+      orgId: org.id,
+      date: sd.date,
+      stage,
+      deadlineAt,
+      missingAt: times.missingAt,
+      targets: reporters.map((r) => ({
+        reporter: r,
+        action: remind(
+          {
+            status: r.status,
+            contactPref: r.contact_pref,
+            messageChannel: r.message_channel,
+            // Only `auto_call` matters to remind(), and only with a trunk (none before M8).
+            consents: new Set(),
+          },
+          pack,
+          stage,
+          {
+            now: input.now,
+            tz: site.timezone,
+            settings: {
+              headsUpEnabled: s.heads_up_enabled,
+              reminder1Enabled: s.reminder1_enabled,
+              reminder2Enabled: s.reminder2_enabled,
+              secondCallEnabled: s.second_call_enabled ?? true,
+              callWindow,
+            },
+            weatherObserved: isWeatherObserved(weather),
+            outboundTrunk: input.outboundTrunk ?? OUTBOUND_TRUNK,
+            policy,
+          },
+        ),
+      })),
+      notAfter:
+        policy.quietHours === 'skip' ? windowEndAfter(input.now, site.timezone, callWindow) : null,
+    });
+
+    const due = dueStage(sd, ladder, input.now);
+    // Once the missing step is due the day is the office's: no text at all (planMissing).
+    if (due?.stage === REMINDER_STAGE.missing) continue;
+    if (
+      !input.dailyLinkDone.has(sd.id) &&
+      dailyLinkDue({
+        now: input.now,
+        dailyLinkAt: dailyLinkInstant(sd.date, s.daily_link_time ?? null, site.timezone),
+        currentStage: sd.reminder_stage,
+      })
+    ) {
+      steps.push(step('daily_link'));
+    }
+    if (due) steps.push(step(STAGE_NAMES[due.stage]));
+  }
+  return steps;
+}
+
+const STAGE_NAMES: Record<1 | 2 | 3, RemindStage> = {
+  1: 'heads_up',
+  2: 'reminder_1',
+  3: 'reminder_2',
+};
+
+/** What a ladder message's variables are built from (W2-06). */
+export interface LadderVarsInput {
+  siteName: string;
+  /** The reporter's daily link for the site and day (`ensureDailyLink`), for keys with `{link}`. */
+  link: string | null;
+  /** The pack's voice number (E.164) or null: `{number}` only when set (`renderSms` variants). */
+  voiceNumber: string | null;
+  deadlineAt: Date;
+  missingAt: Date;
+  tz: string;
+  weather: SiteDayWeather | null;
+  /** The reporter's locale (`reporters.locale`): the language of the weather phrase. */
+  locale: string;
+  units: UnitSystem;
+}
+
+/** The §9.2 variables of a ladder key (times are wall-clock at the site, "17:30"). */
+export function ladderVars(key: RemindKey, i: LadderVarsInput): Record<string, string> {
+  const number: Record<string, string> = i.voiceNumber
+    ? { number: formatPhone(i.voiceNumber) }
+    : {};
+  const link = (): string => {
+    if (!i.link) throw new Error(`ladder key ${key} needs a link`);
+    return i.link;
+  };
+  switch (key) {
+    case 'daily_link':
+      return { site: i.siteName, link: link(), ...number };
+    case 'weather_headsup': {
+      const language = languageOf(i.locale);
+      return {
+        deadline: formatTimeInTz(i.deadlineAt, i.tz),
+        weather_phrase: i.weather
+          ? renderWeatherPhrase(i.weather, language, i.units)
+          : SMS_WEATHER_PHRASES[language].fallback,
+      };
+    }
+    case 'reminder_1':
+      return { site: i.siteName, link: link() };
+    case 'reminder_2':
+      return { time: formatTimeInTz(i.missingAt, i.tz), link: link(), ...number };
+  }
+}
+
+/** Whether a ladder key carries `{link}` (all but the heads-up). */
+export function ladderKeyNeedsLink(key: RemindKey): boolean {
+  return key !== 'weather_headsup';
+}
+
+/**
+ * The claim's arguments for one step (`claim_site_day_reminder()`): a message per reporter whose
+ * action is a message (with its variables from `varsFor`), and every other reporter as skipped,
+ * with remind()'s reason. A call (M8; never before, `OUTBOUND_TRUNK`) is recorded as skipped
+ * `call_not_built` with its message, if any, still sent.
+ */
+export function claimArgs(
+  step: LadderStep,
+  varsFor: (target: LadderTarget, key: RemindKey) => Record<string, string>,
+): {
+  messages: Array<{ reporterId: string; key: RemindKey; vars: Record<string, string> }>;
+  skipped: Array<{ reporterId: string; reason: string }>;
+} {
+  const messages: Array<{ reporterId: string; key: RemindKey; vars: Record<string, string> }> = [];
+  const skipped: Array<{ reporterId: string; reason: string }> = [];
+  for (const t of step.targets) {
+    const a = t.action;
+    if (a.kind === 'message') {
+      messages.push({ reporterId: t.reporter.id, key: a.key, vars: varsFor(t, a.key) });
+    } else if (a.kind === 'call') {
+      skipped.push({ reporterId: t.reporter.id, reason: 'call_not_built' });
+      if (a.message) {
+        messages.push({ reporterId: t.reporter.id, key: a.message, vars: varsFor(t, a.message) });
+      }
+    } else {
+      skipped.push({ reporterId: t.reporter.id, reason: a.reason });
+    }
+  }
+  return { messages, skipped };
 }

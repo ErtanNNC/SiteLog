@@ -1,4 +1,4 @@
-import type { SmsCatalog, SmsKey } from './sms.ts';
+import type { SmsCatalog, SmsKey, SmsWeatherPhrases } from './sms.ts';
 
 /**
  * §9.2 SMS copy, Spanish (US reporters): mirrors the English texts in Latin American Spanish as
@@ -61,3 +61,15 @@ export const smsEs: SmsCatalog<SmsKey> = {
 
 /** The `welcome` reply clause for packs with two-way SMS (mirrors `smsReplyHintEn`). */
 export const smsReplyHintEs = ' - Responda STOP para darse de baja, HELP para ayuda';
+
+/** The heads-up's `{weather_phrase}` (mirrors `smsWeatherPhraseEn`; W2-06, for the Q63 review). */
+export const smsWeatherPhraseEs: SmsWeatherPhrases = {
+  rainMorning: 'Llovió esta mañana ({amount})',
+  rainAfternoon: 'Llovió esta tarde ({amount})',
+  rainDay: 'Llovió hoy ({amount})',
+  gusts: 'Rachas de hasta {speed}',
+  gustsAfterRain: 'rachas de hasta {speed}',
+  and: ' y ',
+  fallback: 'El clima afectó la obra hoy',
+  decimal: '.',
+};

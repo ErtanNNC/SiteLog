@@ -1,4 +1,4 @@
-import type { SmsCatalog, SmsKey } from './sms.ts';
+import type { SmsCatalog, SmsKey, SmsWeatherPhrases } from './sms.ts';
 
 /**
  * §9.2 SMS copy, English: verbatim from the spec table. A message with an "or call {number}"
@@ -55,3 +55,18 @@ export const smsEn: SmsCatalog<SmsKey> = {
 
 /** The `welcome` reply clause for packs with two-way SMS (§9.2), appended by `renderSms`. */
 export const smsReplyHintEn = ' - Reply STOP to opt out, HELP for help';
+
+/**
+ * The heads-up's `{weather_phrase}` (§9.2 `weather_headsup`; W2-06), from the site-day's weather
+ * snapshot (`renderWeatherPhrase`). GSM-7 only.
+ */
+export const smsWeatherPhraseEn: SmsWeatherPhrases = {
+  rainMorning: 'It rained this morning ({amount})',
+  rainAfternoon: 'It rained this afternoon ({amount})',
+  rainDay: 'It rained today ({amount})',
+  gusts: 'Gusts up to {speed}',
+  gustsAfterRain: 'gusts up to {speed}',
+  and: ' and ',
+  fallback: 'Weather hit the site today',
+  decimal: '.',
+};

@@ -359,26 +359,16 @@ describe('DST: the ladder in site time on both packs’ change days', () => {
 });
 
 describe('dailyLinkDue and the daily link key', () => {
-  const deadline = at('2026-10-09', '17:30');
-  const times = ladderTimes(deadline, DEFAULT_LADDER);
   const dailyLinkAt = dailyLinkInstant('2026-10-09', null, CHICAGO);
-  const due = (hhmm: string, currentStage = 0, reminder1Enabled = true) =>
-    dailyLinkDue({
-      now: at('2026-10-09', hhmm),
-      dailyLinkAt,
-      times,
-      reminder1Enabled,
-      currentStage,
-    });
+  const due = (hhmm: string, currentStage = 0) =>
+    dailyLinkDue({ now: at('2026-10-09', hhmm), dailyLinkAt, currentStage });
 
-  it('from daily_link_time until R1 is due', () => {
+  it('from daily_link_time while the day has not reached R1', () => {
     expect(due('16:59')).toBe(false);
     expect(due('17:00')).toBe(true);
-    expect(due('17:44')).toBe(true);
-    expect(due('17:45')).toBe(false); // R1 carries the link
-    expect(due('17:45', 0, false)).toBe(true); // no R1: the link still goes
+    expect(due('17:46')).toBe(true); // a tick that finds R1 due too sends both, the link first
     expect(due('17:10', 1)).toBe(true); // after the heads-up
-    expect(due('17:10', 2)).toBe(false);
+    expect(due('17:50', 2)).toBe(false);
   });
 
   it('is keyed per key, site-day and reporter', () => {

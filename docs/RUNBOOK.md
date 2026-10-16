@@ -159,6 +159,7 @@ supabase secrets set --project-ref abuanbyzttuqksdctqcp \
 - `STRIPE_PRICE_ID_SITE_US`: only together with Stripe on staging (the inventory found no `STRIPE_*` secret, so billing is off there); then set it, deploy, and unset the old `STRIPE_PRICE_ID_SITE` (GAP 9.1).
 - `DEEPGRAM_API_KEY` and `ANTHROPIC_API_KEY` are the worker's, not the functions': they go in its `.env` in step 7.
 - No pack sender id or voice number (`pnpm countries:set`) before the demo unless the owner approves one: every text stays on `console`.
+- `scheduler-tick` reads `LINK_SIGNING_SECRET`, `FIELD_APP_URL` and (optionally) `DAILY_LINK_TTL_HOURS` since W2-06 (the reminder ladder's daily links); the values above serve it. Never set `SCHEDULER_CLOCK_OVERRIDE` on a hosted project: it lets the tick take `?now=` (CI's e2e-supabase only).
 - Supabase Dashboard → Authentication → URL Configuration: Site URL `https://staging-sitelog.netlify.app`, Redirect URLs include `https://staging-sitelog.netlify.app/**`.
 - The `staging` GitHub Environment already holds what the panel and field jobs read (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `NETLIFY_AUTH_TOKEN`, `SUPABASE_PROJECT_REF`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_URL`); check them, since the web job stops on a missing or malformed anon key. `VITE_DEMO_PHONE_ALL_ORGS` is optional (the demo org's admin sees the Demo phone without it).
 - Verify: `supabase secrets list` shows the three names. Back out: `supabase secrets unset NAME`.

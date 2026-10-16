@@ -69,6 +69,8 @@ const AUDITED: Record<string, string> = {
   "sql:'transcribe_upload:' || u.id": 'field_complete_upload: one transcription per upload',
   "sql:'transcribe_upload:' || v_caption":
     'field_complete_upload (W2-04, F9): the voice caption of a batch of photos added after filing, transcribed once the batch is whole; per caption upload, and an upload completes once (a retry returns alreadyComplete)',
+  "sql:'notify:' || (m ->> 'key') || ':' || p_site_day_id || ':' || (m ->> 'reporterId')":
+    'claim_site_day_reminder (W2-06, the reminder ladder): the notify job and its Notifier key per ladder key, site-day and reporter (notify:daily_link:<site_day>:<reporter>, notify:reminder_1:…); enqueued in the transaction whose guarded claim runs that stage once (reminder_stage 1-3, the daily link by its audit row), so each reporter gets each stage of a day once and a retried tick finds the stage taken',
   "sql:'email:report_missing:' || p_site_day_id":
     'mark_site_day_missing (spec §19 Q55): per site-day, enqueued in the transaction whose guarded update made the day missing; a day becomes missing once (reminder_stage 4 stays)',
   "sql:'file:' || r.id || ':v' || p_version || ':r' || p_draft_rev":
@@ -268,39 +270,40 @@ describe('D16 key audit (W1-10): no caller reuses a dedupe key it needs again', 
   });
 });
 
-describe('scheduler-tick (W1-10): the WhatsApp reminder ladder is stopped', () => {
+describe('scheduler-tick (W2-06): the reminder ladder through the Notifier, never WhatsApp', () => {
   const source = readFileSync(
     join(ROOT, 'supabase', 'functions', 'scheduler-tick', 'index.ts'),
     'utf8',
   );
+  const claimSql = readFileSync(
+    join(ROOT, 'supabase', 'migrations', '20261016000040_reminder_ladder.sql'),
+    'utf8',
+  );
 
-  it('enqueues no template and no reminder', () => {
-    for (const banned of [
-      'send_template',
-      'send_message',
-      'reminderJob',
-      'claimStage',
-      'dueStage',
-    ]) {
+  it('enqueues no WhatsApp template and no reminder outside the claim', () => {
+    for (const banned of ['send_template', 'send_message', 'reminderJob', 'claimStage']) {
       expect(source.includes(banned), banned).toBe(false);
     }
-  });
-
-  it('enqueues only the jobs planTickJobs plans (weather, digest, retention)', () => {
     expect([...source.matchAll(/enqueueJob\(\s*admin,\s*'([a-z_]+)'/g)]).toEqual([]);
     expect(source).toContain('planTickJobs(');
+  });
+
+  it('claims each ladder stage with its notify jobs in one transaction (claim_site_day_reminder)', () => {
+    expect(source).toContain('planLadder(');
+    expect(source).toContain("rpc('claim_site_day_reminder'");
+    expect(claimSql).toContain("perform enqueue_job('notify'");
+    expect(claimSql).toContain("'site_day.reminder'");
+    expect(claimSql).toMatch(
+      /status in \('pending', 'reminded'\) and not reminders_paused\s+for update/,
+    );
   });
 
   it('marks a past-deadline day missing (§7.1) and alerts the office in one transaction (spec §19 Q55)', () => {
     expect(source).toContain('planMissing(');
     expect(source).toContain("rpc('mark_site_day_missing'");
     expect(source).toContain('missingNotification(');
-    const sql = readFileSync(
-      join(ROOT, 'supabase', 'migrations', '20261015000061_mark_site_day_missing.sql'),
-      'utf8',
-    );
-    expect(sql).toContain("'site_day.status_changed'");
-    expect(sql).toContain("'missing_report'");
-    expect(sql).toContain("'report_missing'");
+    expect(claimSql).toContain("'site_day.status_changed'");
+    expect(claimSql).toContain("'missing_report'");
+    expect(claimSql).toContain("'report_missing'");
   });
 });

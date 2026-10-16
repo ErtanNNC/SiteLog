@@ -215,10 +215,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Reminder-ladder claim overwrites a site-day that was filed or moved to processing after the tick read it
 
-`supabase/functions/scheduler-tick/index.ts:279` · correctness/race · Unverified
+`supabase/functions/scheduler-tick/index.ts:279` · correctness/race · Unverified · Closed in W2-06
 
 - **Problem:** Default deadline 17:30. At 17:45 a tick reads site-day X as 'pending'. While it works through other due sites, the reporter's voice note is ingested and the worker sets X to 'processing'. The tick's claimStage(X, 2) then sets status='reminded', so the manager gets 'No report yet for {site} today' just after reporting. Because X is back in LADDER_STATUSES, later ticks send R2 at 18:30 and at 19:00 set it to 'missing' and email the office, while the report waits in awaiting_confirmation (the confirm timeout is up to 2 h). Worse, if the report is filed between the read and the stage-4 claim, a f…
 - **Fix:** Guard the claim on status as well: `.in('status', LADDER_STATUSES)` (pending, reminded) in claimStage, so a site-day that left the ladder in the meantime is not touched. Alternatively do the claim in one SQL statement or RPC that checks both reminder_stage and status.
+- **Closed in W2-06:** The ladder is rebuilt on the Notifier and each stage is claimed by `claim_site_day_reminder()` (`20261016000040_reminder_ladder.sql`): one statement locks the site-day `where status in ('pending', 'reminded') and not reminders_paused … for update`, so a filing or an upload that commits first leaves the claim nothing to do (false, no job, no status change), and the stage, its audit and its `notify` jobs commit together. Tests: `supabase/db-tests/src/reminder-ladder.test.ts` ("never claims a day that left pending/reminded"), `supabase/db-tests/stack/reminder-claim.test.ts` (a claim racing a filing on real Postgres, both orders: one wins).
 
 ### Stripe Checkout never grants the 14-day trial: every org already has trial_ends_at from create_org
 
@@ -385,10 +386,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Reminders never reach a reporter whose phone is in two orgs (shared number)
 
-`supabase/functions/scheduler-tick/logic.ts:271` · spec-conformance · Confirmed 3/3
+`supabase/functions/scheduler-tick/logic.ts:271` · spec-conformance · Confirmed 3/3 · Closed in W2-06
 
 - **Problem:** Priya is site manager in org A, and org B adds the same phone for its site (allowed by F2/§19 #1). The conversation is attached to her org-A reporter. Org B's site never gets the heads-up, R1 or R2 ('scheduler.reminder.no_reporter'). At deadline+90 org B gets 'Priya didn't answer 2 reminders' and the site-day is marked missing without a single reminder sent.
 - **Fix:** The suggested direction is right; here it is in full. 1. In loadReminderTargets (scheduler-tick/index.ts:356-365), select `id, name, status, phone_e164` from reporters. Load conversations with `.in('phone_e164', [...new Set(reporters.map(r => r.phone_e164))])` instead of by reporter_id. 2. Add `phone_e164` to ReporterRef and ConversationRef. Change pickReminderTarget (logic.ts:263-271) to build `conversationByPhone` and look up `conversationByPhone.get(reporter.phone_e164)`. Return the linked reporter's own id and first name, so org B's alert names its own reporter. 3. Update logic_test.ts:345 to add a case with two reporter rows (two orgs) sharing one phone and one conversation, and check …
+- **Closed in W2-06:** The ladder no longer looks for a conversation: its targets are `site_reporters` → `reporters` of the site's own org (`siteLadderReporters`, primary first), and each message goes to a reporter id through the Notifier, which texts that row's phone. The same phone in two orgs is two reporter rows, so each org's sites remind it; `pickReminderTarget` is gone. Tests: `supabase/functions/scheduler-tick/logic_test.ts` ("a phone in two orgs gets each org's").
 
 ### 'stop' (or photos) on a non-working day creates a pending site-day that is escalated as missing
 
@@ -399,10 +401,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Ladder claim and reminder send are not guarded by the site-day status
 
-`supabase/functions/scheduler-tick/index.ts:283` · race-condition · Confirmed 3/3
+`supabase/functions/scheduler-tick/index.ts:283` · race-condition · Confirmed 3/3 · Closed in W2-06
 
 - **Problem:** At the 19:00 tick the site-day is read as 'reminded'. While the tick walks other sites, the worker files the late report and sets the site-day to 'filed'. claimStage then sets status 'missing', the office gets a missing alert and email, and the filed day shows Missing. Similarly, a voice note arriving during the 17:45 tick yields status 'reminded' over 'processing'. The ladder keeps running (R2 'Still nothing', missing escalation) while the report is in progress, and the reporter gets 'No report yet' right after 'Got it'.
 - **Fix:** (1) In claimStage, add `.in('status', LADDER_STATUSES as string[])` to the update, keeping `.lt('reminder_stage', stage)`, so a filed, processing, no_work or weather_day row is never claimed or overwritten. (2) In send_template.ts, when `payload.siteDayId && payload.stage !== undefined` (ladder jobs only; office-edit templates have no stage), reload the site-day before sending. Return without sending when its status is not 'pending' or 'reminded', or when `reminders_paused` is set. (3) In send_email report_missing, skip the email only when the site-day status is a final one (filed, weather_day or no_work) or is not 'missing'. Do not gate it on LADDER_STATUSES, because the status is legitima…
+- **Closed in W2-06:** (1) The claim checks the status in SQL (`claim_site_day_reminder()`, see "Reminder-ladder claim overwrites…"). (2) The send: every ladder `notify` job carries `guard {siteDayId, statuses, notAfter}`, and the worker re-reads the site-day before it sends (`ladderGuardVerdict`, `apps/worker/src/jobs/notify.ts`): not `pending`/`reminded` any more, or reminders paused → nothing sent, `notify.skipped` `stale_stage`; the late-callback fallback carries the guard and runs it again (`NOTIFY_FALLBACK_GUARDS`). (3) The `report_missing` email is enqueued only by `mark_site_day_missing()`'s guarded claim, as since spec §19 Q55. Tests: `apps/worker/src/jobs/ladder.pglite.test.ts`, `supabase/db-tests/src/reminder-ladder.test.ts`.
 
 ### Pausing then resuming a site in the same billing period double-charges it
 
@@ -575,10 +578,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Site-days created on non-working days are left 'pending' and get the reminder ladder and missing escalation
 
-`apps/worker/src/router/continue.ts:107` · time-zone/date · Unverified
+`apps/worker/src/router/continue.ts:107` · time-zone/date · Unverified · Closed in W2-06
 
 - **Problem:** Saturday 14:00: voice note 'edit Friday, Apex had seven not six'. startIntake(Saturday) creates a Saturday site-day and report, burning a report number. The short transcript classifies as edit_request, so voidReport puts the Saturday site-day back to 'pending'. 17:45: R1 'No report yet for Riverside today'. 18:30: R2. 19:00: missing email to ops and admin for a non-working day. A Saturday photo-only message, or 'stop', has the same effect.
 - **Fix:** When a non-working-day site-day ends without a report (void, photos-only, stop), set it to no_work or delete it. Alternatively make the ladder skip dates that are not working days.
+- **Closed in W2-06:** The ladder and the missing step skip a date that is not one of the org's working days, in the plan (`planLadder`, `planMissing`) and again in SQL (`claim_site_day_reminder()`, and `mark_site_day_missing()` since `20261016000040`), and the claim also refuses a day with a live report. A stray Saturday site-day stays `pending` and is never texted or escalated. Tests: `logic_test.ts` (planLadder guards, planMissing), `reminder-ladder.test.ts` ("nothing on a day the org does not work"), `missing-alert.test.ts` ("never escalates a site-day on a day the org does not work").
 
 ### Weather-day and no-work handlers overwrite or orphan an in-flight daily report
 
@@ -617,10 +621,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Reminder templates are sent without re-checking the site-day, including late retries after the report was filed
 
-`apps/worker/src/jobs/send_template.ts:15` · correctness · Unverified
+`apps/worker/src/jobs/send_template.ts:15` · correctness · Unverified · Closed in W2-06
 
 - **Problem:** R1 is enqueued at 17:45 and its sends fail with WhatsApp 5xx at 17:45:00 and 17:45:30. The reporter's note is filed at 17:50. The 17:57:30 retry succeeds and sends 'Hi Marco — no report yet for Riverside today…' after 'Filed.'. The same happens to a reporter who texted 'stop' after the job was enqueued.
 - **Fix:** For payloads with siteDayId and stage, load the site-day and skip unless its status is pending or reminded and (stage is 4 or reminders_paused is false).
+- **Closed in W2-06:** The ladder sends `notify` jobs (not WhatsApp templates), and the worker re-checks the guard on every run, so a retry after the report was filed sends nothing (`notify.skipped`, `stale_stage`), and a job still waiting after the call window closes sends nothing either (`quiet_hours`, spec §19 Q77). `send_template` is no longer enqueued by anything but the v1.0 router (step 22). Tests: `apps/worker/src/jobs/ladder.pglite.test.ts` ("a day filed after the claim sends nothing, also on a retry").
 
 ### Evidence-pack transcript excerpts match timestamps across different voice notes
 
@@ -673,10 +678,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Reminder targets are looked up by conversations.reporter_id, so a phone that is a reporter in two orgs gets reminders for only one of them
 
-`supabase/functions/scheduler-tick/logic.ts:264` · correctness/multi-org · Unverified
+`supabase/functions/scheduler-tick/logic.ts:264` · correctness/multi-org · Unverified · Closed in W2-06
 
 - **Problem:** Priya is site manager for org A (verified) and is invited by org B for site S with the same phone. The conversation row stays bound to (or moves to) one reporter id. For the other org's sites, scheduler-tick logs 'scheduler.reminder.no_reporter' every day: no heads-up, R1 or R2. At deadline +90 the office still gets the 'no report — didn't answer 2 reminders' alert even though no reminder was ever sent.
 - **Fix:** Resolve the reminder conversation by the reporter's phone instead of reporter_id: load reporters' phone_e164 and conversations `.in('phone_e164', phones)`, then map reporter → conversation by phone. The worker already routes inbound by phone and asks for the site when needed.
+- **Closed in W2-06:** As "Reminders never reach a reporter whose phone is in two orgs": targets by `site_reporters` and `reporters`, per reporter row, never by `conversations`.
 
 ### The in-app trial never expires: trialing orgs without a subscription are never blocked
 

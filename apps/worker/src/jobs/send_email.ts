@@ -139,6 +139,7 @@ export async function buildEmail(
         reporterFirstName: reporter ? firstName(reporter.name) : null,
         reporterPhone: reporter?.phone_e164 ?? null,
         url: `${appUrl}/sites/${site.site.id}`,
+        reminders: payload.reminders ?? 0,
       });
       return { to: payload.to ?? members.map((m) => m.email), rendered, orgId: site.org.id };
     }

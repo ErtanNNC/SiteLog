@@ -32,6 +32,8 @@ export const NOT_IN_ENV_EXAMPLE: Record<string, string> = {
   SWEEP_INTERVAL_MS: 'tuning, default 60 s',
   FFMPEG_PATH: 'defaults to ffmpeg-static',
   WORKER_DRY_RUN: 'tests only',
+  SCHEDULER_CLOCK_OVERRIDE:
+    "tests only: scheduler-tick takes `?now=` (CI's e2e-supabase functions env, the W2-06 ladder spec); never set on a hosted project",
 };
 
 /**

@@ -1,4 +1,4 @@
-import type { SharedSmsKey, SmsCatalog } from './sms.ts';
+import type { SharedSmsKey, SmsCatalog, SmsWeatherPhrases } from './sms.ts';
 
 /**
  * §9.2 SMS copy, Turkish: verbatim from the spec table. The TR pack's SMS is one-way (the
@@ -42,4 +42,19 @@ export const smsTr: SmsCatalog<SharedSmsKey> = {
   edit_applied: '{weekday} güncellendi: {change}. Sürüm {v} ofise gönderildi.',
   finish_report: 'Görüşme kayıttan önce bitti. Tek dokunuşla tamamlayın: {link}',
   site_paused: "{site} SiteLog'da duraklatıldı. Ofisten yeniden açmasını isteyin.",
+};
+
+/**
+ * The heads-up's `{weather_phrase}` (W2-06, for the Q63 review). No "â": every letter is in the
+ * GSM-7 Turkish single shift table, so a sender with it keeps the heads-up GSM-7.
+ */
+export const smsWeatherPhraseTr: SmsWeatherPhrases = {
+  rainMorning: 'Bu sabah yağmur yağdı ({amount})',
+  rainAfternoon: 'Öğleden sonra yağmur yağdı ({amount})',
+  rainDay: 'Bugün yağmur yağdı ({amount})',
+  gusts: 'Rüzgar hamleleri {speed} değerine ulaştı',
+  gustsAfterRain: 'rüzgar hamleleri {speed} değerine ulaştı',
+  and: ' ve ',
+  fallback: 'Bugün hava şantiyeyi etkiledi',
+  decimal: ',',
 };

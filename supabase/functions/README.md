@@ -217,8 +217,10 @@ Notes:
 - Deno ≥ 2.6 refuses npm versions published less than 24 h ago (minimum dependency age). If a
   freshly pinned version trips it, add `--minimum-dependency-age 0` to the command or wait a day.
 - Tests are pure (no network, no database): `scheduler-tick/logic_test.ts` covers site-day
-  creation on working days, every ladder stage firing exactly once, the DST fall-back on
-  Nov 1 2026 (America/Chicago), paused reminders and the billing grace period;
+  creation on working days, every ladder stage firing exactly once (`planLadder` over a whole
+  day), the guards, two orgs, multi-site reporters, quiet hours, both DST changes in
+  America/Chicago and the fixed offset of Europe/Istanbul, paused reminders and the billing grace
+  period;
   `api-export-payroll/csv_test.ts` covers CSV escaping and the payroll columns.
 
 ## Behaviour notes and assumptions
@@ -229,11 +231,17 @@ Notes:
   is `inbound:<wa_message_id>`. Unknown numbers get a conversation with `org_id = null`; the worker
   creates the `unknown_contacts` row (no `channel`, D13) after transcription (§F11). A phone that exists in several orgs
   gets `context.candidate_reporter_ids` and no `org_id` (§19 #1).
-- **scheduler-tick** runs the ladder only for site-days in `pending`/`reminded` (§7.1 has no
-  `processing → missing` transition: a report in flight is never "missing"). Stages are claimed
-  with `update … where reminder_stage < stage`, so overlapping ticks cannot double-send. Reminders
-  go to the primary **active** reporter's conversation (fallback: any active linked reporter);
-  with nobody active the stage is left alone and only the office alert fires. The past_due grace
+- **scheduler-tick** runs the ladder (W2-06) only for site-days in `pending`/`reminded` on the
+  org's working days (§7.1 has no `processing → missing` transition: a report in flight is never
+  "missing"). Each stage is claimed by `claim_site_day_reminder()` with its audit and its `notify`
+  jobs in one transaction (the status re-read under the row lock, no live report), so overlapping
+  ticks and a racing filing cannot double-send or overwrite. Every reporter of the site in its
+  org gets the stage (`site_reporters`, primary first; `remind()` skips an inactive one); each
+  message carries the reporter's daily link (`ensureDailyLink`, so the tick needs
+  `LINK_SIGNING_SECRET` and `FIELD_APP_URL`, as field-api does). With nobody to text the stage is
+  still claimed (audited) and the office alert fires at the missing step. `?now=` sets the tick's
+  clock only where `SCHEDULER_CLOCK_OVERRIDE=true` (the local stack and CI's e2e-supabase; never
+  a hosted project). The past_due grace
   period starts at the latest `billing.status_changed → past_due` audit row written by
   `stripe-webhook`; a past_due org without such a row is treated as still inside the grace period.
   The weekly digest covers the previous Mon–Sun week and is tracked per org in

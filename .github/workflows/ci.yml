@@ -116,7 +116,9 @@ jobs:
       # :4176, its e2e:supabase preview). STORAGE_PUBLIC_URL re-bases the signed upload URLs from
       # the Edge Runtime's internal http://kong:8000 to the API URL the browser reaches (W1-09).
       # sms-webhook checks X-Twilio-Signature with TWILIO_AUTH_TOKEN against SMS_WEBHOOK_URL. The
-      # rest are dummies so no function boots half-configured. No pack has a sender id here, so
+      # SCHEDULER_CLOCK_OVERRIDE lets scheduler-tick take `?now=` (the W2-06 ladder spec moves the
+      # clock; never set on a hosted project). The rest are dummies so no function boots
+      # half-configured. No pack has a sender id here, so
       # every text goes to the console driver: nothing reaches Meta, Stripe, Twilio or Anthropic.
       - name: Edge Function env
         run: |
@@ -131,6 +133,7 @@ jobs:
           WA_VERIFY_TOKEN=e2e-verify-token
           WA_APP_SECRET=e2e-app-secret
           SCHEDULER_SECRET=e2e-scheduler-secret
+          SCHEDULER_CLOCK_OVERRIDE=true
           STRIPE_SECRET_KEY=sk_test_e2e_dummy
           STRIPE_WEBHOOK_SECRET=whsec_e2e_dummy
           STRIPE_PRICE_ID_SITE_US=price_e2e_dummy

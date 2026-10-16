@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { countSmsSegments } from '../sms/segments.ts';
+import { weatherPhrase, type SiteDayWeather } from '../weather/observed.ts';
 import {
   isTwoWaySmsKey,
   MESSAGE_KEYS_WITH_LINK,
   messageKeyHasLink,
   renderSms,
+  renderWeatherPhrase,
   SMS_CATALOGS,
+  SMS_WEATHER_PHRASES,
   SMS_KEYS,
   SMS_REPLY_HINT,
   SMS_VARS,
@@ -552,5 +555,112 @@ describe('the pack variant: links in SMS (spec §4.6, §19 Q24)', () => {
     expect(renderSms('verify_code', 'tr', { code: '482913' }, { ...NO_LINKS, twoWay: false })).toBe(
       smsTemplate('verify_code', 'tr', ONE_WAY_NO_NUMBER).replace('{code}', '482913'),
     );
+  });
+});
+
+describe('renderWeatherPhrase: the heads-up’s {weather_phrase} (W2-06)', () => {
+  const day = (
+    hours: Array<[string, number, number]>,
+    precipWorkingHoursIn: number,
+    maxGustWorkingHoursMph: number,
+  ): SiteDayWeather => ({
+    date: '2026-10-12',
+    provider: 'Open-Meteo',
+    fetchedAt: '2026-10-12T21:30:00.000Z',
+    units: { precip: 'in', temp: 'F', wind: 'mph' },
+    hours: hours.map(([time, precipIn, gustMph]) => ({
+      time,
+      precipIn,
+      tempF: 60,
+      windMph: 10,
+      gustMph,
+    })),
+    summary: {
+      precipIn: hours.reduce((a, [, p]) => a + p, 0),
+      tempMinF: 55,
+      tempMaxF: 65,
+      windMph: 10,
+      gustMph: Math.max(...hours.map(([, , g]) => g)),
+      provider: 'Open-Meteo',
+      precipWorkingHoursIn,
+      maxGustWorkingHoursMph,
+    },
+  });
+  const morning = day(
+    [
+      ['08:00', 0.2, 14],
+      ['09:00', 0.2, 15],
+    ],
+    0.4,
+    15,
+  );
+  const afternoon = day([['13:00', 0.3, 14]], 0.3, 14);
+  const allDay = day(
+    [
+      ['09:00', 0.2, 31],
+      ['14:00', 0.3, 31],
+    ],
+    0.5,
+    31,
+  );
+  const windy = day([['10:00', 0, 34]], 0, 34);
+  const calm = day([['10:00', 0, 5]], 0, 5);
+  const all = [morning, afternoon, allDay, windy, calm];
+
+  it('English imperial is the v1.0 phrase, word for word', () => {
+    for (const w of all) expect(renderWeatherPhrase(w, 'en', 'imperial')).toBe(weatherPhrase(w));
+  });
+
+  it('Spanish and Turkish, in the org’s units', () => {
+    expect(renderWeatherPhrase(morning, 'es', 'imperial')).toBe('Llovió esta mañana (0.4 in)');
+    expect(renderWeatherPhrase(allDay, 'es', 'imperial')).toBe(
+      'Llovió hoy (0.5 in) y rachas de hasta 31 mph',
+    );
+    expect(renderWeatherPhrase(afternoon, 'tr', 'metric')).toBe(
+      'Öğleden sonra yağmur yağdı (7,6 mm)',
+    );
+    expect(renderWeatherPhrase(allDay, 'tr', 'metric')).toBe(
+      'Bugün yağmur yağdı (12,7 mm) ve rüzgar hamleleri 50 km/h değerine ulaştı',
+    );
+    expect(renderWeatherPhrase(windy, 'tr', 'metric')).toBe(
+      'Rüzgar hamleleri 55 km/h değerine ulaştı',
+    );
+    expect(renderWeatherPhrase(calm, 'tr', 'metric')).toBe('Bugün hava şantiyeyi etkiledi');
+    expect(renderWeatherPhrase(calm, 'en', 'metric')).toBe('Weather hit the site today');
+  });
+
+  it('every language has every piece', () => {
+    for (const locale of LOCALES) {
+      for (const [piece, text] of Object.entries(SMS_WEATHER_PHRASES[locale])) {
+        expect(text.length, `${locale}.${piece}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  // ES is UCS-2 already (the §9.2 text's "qué", and "ó" is not GSM-7), so its longest heads-up
+  // (rain and gusts) takes 3 segments; listed for the Q63 review.
+  const MAX_SEGMENTS = { en: 2, es: 3, tr: 2 } as const;
+
+  it('the rendered heads-up: EN GSM-7, TR GSM-7 with the Turkish shift table, within its segments', () => {
+    const opts = { hasVoiceNumber: false, twoWay: false, linksAllowed: true };
+    for (const w of all) {
+      for (const locale of LOCALES) {
+        const text = renderSms(
+          'weather_headsup',
+          locale,
+          {
+            deadline: '17:30',
+            weather_phrase: renderWeatherPhrase(w, locale, locale === 'tr' ? 'metric' : 'imperial'),
+          },
+          opts,
+        );
+        const seg = countSmsSegments(text);
+        if (locale === 'en') expect(seg.default.encoding, text).toBe('gsm7');
+        if (locale === 'tr') expect(seg.turkishShift.encoding, text).not.toBe('ucs2');
+        const segments = locale === 'tr' ? seg.turkishShift.segments : seg.default.segments;
+        expect(segments, text).toBeLessThanOrEqual(MAX_SEGMENTS[locale]);
+        expect(text).toContain('17:30');
+      }
+    }
   });
 });

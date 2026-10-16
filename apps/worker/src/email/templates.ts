@@ -214,13 +214,20 @@ export interface ReportMissingInput {
   reporterFirstName: string | null;
   reporterPhone: string | null;
   url: string;
+  /** The reminders (R1, R2) that reached the reporter (W2-06); 0 or absent = none. */
+  reminders?: number;
 }
 
 export function reportMissingEmail(i: ReportMissingInput): RenderedEmail {
   const who = i.reporterFirstName ?? 'The site manager';
   const subject = `${siteShort(i.siteName)} — no report · ${formatDateShort(i.date)}`;
-  // Spec §19 Q55: no reminder is sent until M6 brings the ladder back, so none is mentioned.
-  const line = `${i.siteName} — no report. ${who} hasn't sent the report for ${formatDateShort(i.date)}, and the deadline has passed.`;
+  // §13 "{first} didn't answer {n} reminders" when the ladder reached them (W2-06); with none
+  // (every reporter skipped, or nobody linked), spec §19 Q55's wording.
+  const n = i.reminders ?? 0;
+  const line =
+    n > 0
+      ? `${i.siteName} — no report. ${who} didn't answer ${n} reminder${n === 1 ? '' : 's'}.`
+      : `${i.siteName} — no report. ${who} hasn't sent the report for ${formatDateShort(i.date)}, and the deadline has passed.`;
   const call = i.reporterPhone
     ? `<p style="margin:12px 0 0 0"><a href="tel:${esc(i.reporterPhone)}" style="color:${T.level}">Call ${esc(who)}</a></p>`
     : '';
