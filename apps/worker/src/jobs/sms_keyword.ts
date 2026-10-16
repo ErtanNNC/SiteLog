@@ -340,14 +340,15 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
     return editUnclear(k, first, 'consent_revoked', { consents: revokedBy.get(first.id) });
 
   const days = await ctx.db.smsKeywordDays(ids);
-  const tz = days[0]?.timezone;
-  if (!tz) return editUnclear(k, first, 'no_site');
+  // The day is read in each site's own time zone ("yesterday" in Istanbul is not Chicago's), and a
+  // site's reports are looked up for its own date (W2-12 review).
+  const zones = [...new Set(days.map((d) => d.timezone))];
+  if (zones.length === 0) return editUnclear(k, first, 'no_site');
   const now = ctx.now();
-  const prepass = readSmsEdit(rest, now, tz);
   // §10.8: the fast model names the day as written; code resolves it. The change stored, cited
   // as `reporter_edit` and checked for numbers it does not state is the reporter's own words,
   // never the model's rewording of them (W2-12 review).
-  let modelDay: string | null = null;
+  let modelRef: string | null = null;
   if (ctx.ai.claude && revokedBy.size === 0) {
     const res = await classifyUtterance(
       ctx.ai.claude,
@@ -357,16 +358,28 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
     );
     ctx.metrics.add({ tokens: res.usage, estCostUsd: res.estCostUsd });
     if (res.data.intent === 'edit_request' || res.data.intent === 'fix') {
-      const ref = res.data.entities?.dayReference?.trim();
-      modelDay = ref ? resolveDayReference(ref.replace(/İ/gu, 'I'), now, tz) : null;
+      modelRef = res.data.entities?.dayReference?.trim().replace(/İ/gu, 'I') || null;
     }
   }
-  const date = modelDay ?? prepass.date;
-  const change = prepass.correction.trim();
-  if (!date) return editUnclear(k, first, 'no_day');
+  const byZone = zones
+    .map((tz) => {
+      const fromModel = modelRef ? resolveDayReference(modelRef, now, tz) : null;
+      return { tz, date: fromModel ?? readSmsEdit(rest, now, tz).date, fromModel: !!fromModel };
+    })
+    .filter((z): z is { tz: string; date: string; fromModel: boolean } => z.date !== null);
+  const change = readSmsEdit(rest, now, zones[0]!).correction.trim();
+  if (byZone.length === 0) return editUnclear(k, first, 'no_day');
+  const date = byZone[0]!.date;
+  const modelDay = byZone.some((z) => z.fromModel);
   if (!change) return editUnclear(k, first, 'no_change', { date });
 
-  const reports = await ctx.db.smsEditReports(ids, date);
+  const reports = (
+    await Promise.all(
+      byZone.map(async (z) =>
+        (await ctx.db.smsEditReports(ids, z.date)).filter((r) => r.timezone === z.tz),
+      ),
+    )
+  ).flat();
   const filed = reports.filter((r) => r.status === 'filed' || r.status === 'signed_off');
   if (filed.length === 0)
     return editUnclear(k, first, reports.length ? 'not_filed' : 'no_report', { date });
@@ -383,7 +396,7 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
       k,
       reporter,
       'consent_revoked',
-      { consents: revoked, date },
+      { consents: revoked, date: target.date },
       target.report_id,
     );
   }
@@ -400,7 +413,7 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
       outcome: 'correction_requested',
       report_id: target.report_id,
       correction_id: res.id,
-      date,
+      date: target.date,
       day_from: modelDay ? 'model' : 'code',
       replies: [],
     });
@@ -409,7 +422,7 @@ async function answerEdit(k: KeywordCtx): Promise<void> {
       String((err as Error).message),
     )?.[1] as EditMiss | undefined;
     if (!code) throw err;
-    return editUnclear(k, reporter, code, { date }, target.report_id);
+    return editUnclear(k, reporter, code, { date: target.date }, target.report_id);
   }
 }
 

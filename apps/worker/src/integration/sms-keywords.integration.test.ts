@@ -153,20 +153,20 @@ const crew = (date: string, workers: number): DailyReportData => ({
   ],
 });
 
-/** A filed web report of `date` at Riverside by Marco (version 1: Apex 6 × 8 h). */
-async function filedReport(date: string) {
-  await database.q(`delete from site_days where site_id = $1 and date = $2`, [RIVERSIDE, date]);
+/** A filed web report of `date` at Riverside (or `site`) by Marco (version 1: Apex 6 × 8 h). */
+async function filedReport(date: string, site = RIVERSIDE, tz = TZ) {
+  await database.q(`delete from site_days where site_id = $1 and date = $2`, [site, date]);
   const [day] = await database.q<{ id: string }>(
     `insert into site_days (site_id, date, status, deadline_at)
-     values ($1, $2, 'filed', ($2::date + time '17:30') at time zone '${TZ}') returning id`,
-    [RIVERSIDE, date],
+     values ($1, $2, 'filed', ($2::date + time '17:30') at time zone '${tz}') returning id`,
+    [site, date],
   );
   const [report] = await database.q<{ id: string }>(
     `insert into reports (org_id, site_id, site_day_id, report_no, status, kind, current_version,
                           reporter_id, received_at, filed_at, confirmed_at, confirmed_via, channel, language)
      values ($1, $2, $3, next_report_no($2), 'filed', 'daily', 1, $4, now(), now(), now(), 'web', 'web', 'en')
      returning id`,
-    [ORG, RIVERSIDE, day!.id, MARCO],
+    [ORG, site, day!.id, MARCO],
   );
   await database.q(
     `insert into report_versions (report_id, version, data, summary, author) values ($1, 1, $2, $3, 'agent')`,
@@ -363,6 +363,48 @@ describe('SMS report keywords (W2-12) on the Demo phone of a two-way demo org', 
       expect(c!.text).toBe('Apex 9 not 6');
     } finally {
       world.ctx.ai.claude = real;
+    }
+  }, 60_000);
+
+  it("reads an EDIT's day in each site's own time zone (W2-12 review)", async () => {
+    // A second site of Marco's (not his primary) whose date always differs from Chicago's now.
+    const chicagoHour = Number(
+      new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', hourCycle: 'h23' }).format(
+        new Date(),
+      ),
+    );
+    const zone = chicagoHour >= 5 ? 'Pacific/Kiritimati' : 'Etc/GMT+12';
+    const dateIn = (tz: string) =>
+      new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+    expect(dateIn(zone)).not.toBe(today());
+    const [atoll] = await database.q<{ id: string }>(
+      `insert into sites (org_id, name, project_code, timezone) values ($1, 'Zz Atoll', 'ZZ-1', $2)
+       returning id`,
+      [ORG, zone],
+    );
+    await database.q(
+      `insert into site_reporters (site_id, reporter_id, is_primary) values ($1, $2, false)`,
+      [atoll!.id, MARCO],
+    );
+    // Chicago's today has no report at Riverside (an earlier test may have filed one).
+    await database.q(`delete from site_days where site_id = $1 and date = $2`, [
+      RIVERSIDE,
+      today(),
+    ]);
+    try {
+      const reportId = await filedReport(dateIn(zone), atoll!.id, zone);
+      const id = await text('EDIT today Apex was 4 not 6');
+      const [c] = await database.q<{ report_id: string }>(
+        `select report_id from draft_corrections where message_id = $1`,
+        [id],
+      );
+      expect(c?.report_id).toBe(reportId);
+      expect((await answered(id))[0]!.diff).toMatchObject({
+        outcome: 'correction_requested',
+        date: dateIn(zone),
+      });
+    } finally {
+      await database.q(`update sites set status = 'archived' where id = $1`, [atoll!.id]);
     }
   }, 60_000);
 
