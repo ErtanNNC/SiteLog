@@ -1269,6 +1269,23 @@ export type Database = {
         };
         Returns: Json;
       };
+      /**
+       * W2-08 (20261016000050): day-status as a report (spec §19 Q41): the site-day, and for a
+       * weather day (or a no-work day with no_work_pdf) the report, its answered questions, version
+       * 1 and its file_report job. {siteDayId, status, changed, report: {id, reportNo} | null}.
+       */
+      field_report_day_off: {
+        Args: {
+          p_reporter_id: string;
+          p_site_id: string;
+          p_date: string;
+          p_status: string;
+          p_details: Json;
+          p_questions: Json;
+          p_data: Json;
+        };
+        Returns: Json;
+      };
       // A rolling window per key over rate_limits: {allowed, count, resetAt}.
       field_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_seconds: number };

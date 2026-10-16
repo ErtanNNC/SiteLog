@@ -10,6 +10,7 @@ import {
   ExpiredLinkRequestSchema,
   FIELD_LINK_HEADER,
   FILED_PHOTOS_MAX,
+  fieldReportKind,
   FIELD_RATE_LIMITS,
   HISTORY_DAYS,
   PreferencesRequestSchema,
@@ -79,6 +80,7 @@ import {
   allowedReportDates,
   clientIp,
   consentState,
+  dayOffPlan,
   deviceVerified,
   fieldCountryView,
   fieldSite,
@@ -605,7 +607,14 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       allowedDates,
       deadlineAt: new Date(deadlineAt).toISOString(),
       dayStatus: day?.status ?? 'pending',
-      report: report ? { id: report.id, reportNo: report.report_no, status: report.status } : null,
+      report: report
+        ? {
+            id: report.id,
+            reportNo: report.report_no,
+            status: report.status,
+            kind: fieldReportKind(report.kind),
+          }
+        : null,
     };
     return c.json(body);
   });
@@ -839,6 +848,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       id: report.id,
       reportNo: report.report_no,
       status: report.status,
+      kind: fieldReportKind(report.kind),
       siteId: site.id,
       siteName: site.name,
       date: day?.date ?? '',
@@ -1010,12 +1020,30 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     const body = await parseBody(c, DayStatusRequestSchema);
     const site = writeSite(ctx, body.siteId);
     const date = reportDate(ctx, site, body.date);
+    const details = body.details ?? {};
+    const settings = ctx.org.settings;
+    if (!settings) throw new Error(`org ${ctx.org.org.id} has no settings`);
+    // W2-08 (spec §19 Q41): the details as answered questions and a version built in code; the
+    // RPC makes the report (a weather day, or no work with no_work_pdf) and queues its filing.
+    // A day with a live report is refused there (§19 Q79's default, DAY_OFF_POLICY).
+    const plan = dayOffPlan({
+      status: body.status,
+      date,
+      site,
+      org: { locale: ctx.org.org.locale, units: ctx.org.org.units },
+      defaultShiftHours: Number(settings.default_shift_hours),
+      reporterLocale: ctx.reporter.locale,
+      details,
+      newId: () => crypto.randomUUID(),
+    });
     const res = await store.setDayStatus({
       reporterId: ctx.reporter.id,
       siteId: site.id,
       date,
       status: body.status,
-      details: body.details ?? {},
+      details,
+      questions: plan.questions,
+      data: plan.data,
     });
     return c.json(res satisfies DayStatusResponse);
   });

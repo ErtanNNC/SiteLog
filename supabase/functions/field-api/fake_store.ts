@@ -2,6 +2,7 @@ import type {
   ConsentRow,
   ConsentType,
   CountryRow,
+  DailyReportData,
   FieldDeviceRow,
   FieldLinkRow,
   OrgRow,
@@ -16,7 +17,7 @@ import type {
 } from '@sitelog/shared';
 import { FILED_PHOTOS_MAX, deadlineInstant, jobKeys, photosLinkExpiresAt } from '@sitelog/shared';
 import type { AuditEntry } from '../_shared/audit.ts';
-import type { StoredObject } from './logic.ts';
+import type { DayOffQuestion, StoredObject } from './logic.ts';
 import {
   FieldDbError,
   type AnswerInput,
@@ -637,32 +638,121 @@ export class FakeFieldStore implements FieldStore {
     return Promise.resolve({ flagged: true });
   }
 
+  /** field_report_day_off() (20261016000050, W2-08): the site-day, and the report it makes. */
   setDayStatus(input: {
     reporterId: string;
     siteId: string;
     date: string;
     status: 'no_work' | 'weather_day';
+    questions: DayOffQuestion[];
+    data: DailyReportData;
   }): Promise<DayStatusResult> {
     if (!this.onSite(input.reporterId, input.siteId)) {
       return Promise.reject(new FieldDbError('site_not_found'));
     }
     const day = this.siteDay(input.siteId, input.date);
     if (day.status === input.status) {
-      return Promise.resolve({ siteDayId: day.id, status: day.status, changed: false });
+      const made = this.reports.find((x) => x.id === day.report_id && x.kind === input.status);
+      return Promise.resolve({
+        siteDayId: day.id,
+        status: day.status,
+        changed: false,
+        report: made ? { id: made.id, reportNo: made.report_no } : null,
+      });
     }
-    const r = this.reports.find((x) => x.site_day_id === day.id && x.status !== 'void');
-    if (r) {
+    const live = this.reports.find((x) => x.site_day_id === day.id && x.status !== 'void');
+    if (live) {
       return Promise.reject(
         new FieldDbError(
-          r.status === 'filed' || r.status === 'signed_off' ? 'report_filed' : 'report_in_progress',
+          live.status === 'filed' || live.status === 'signed_off'
+            ? 'report_filed'
+            : 'report_in_progress',
         ),
       );
     }
     if (day.status !== 'pending' && day.status !== 'reminded') {
       return Promise.reject(new FieldDbError('wrong_state'));
     }
+    const site = this.sites.find((x) => x.id === input.siteId)!;
+    const settings = this.settings.find((x) => x.org_id === site.org_id) as
+      { no_work_pdf?: boolean } | undefined;
+    let made: ReportRow | null = null;
+    if (input.status === 'weather_day' || settings?.no_work_pdf) {
+      site.report_seq++;
+      const org = this.orgs.find((o) => o.id === site.org_id)!;
+      made = {
+        id: this.id('bbbbbbbb'),
+        org_id: site.org_id,
+        site_id: site.id,
+        site_day_id: day.id,
+        report_no: `${site.project_code}-${String(site.report_seq).padStart(4, '0')}`,
+        status: 'processing',
+        current_version: 1,
+        reporter_id: input.reporterId,
+        received_at: this.iso(),
+        confirmed_at: null,
+        filed_at: null,
+        signed_off_by: null,
+        signed_off_at: null,
+        needs_review: false,
+        review_reasons: [],
+        is_late: false,
+        kind: input.status,
+        created_at: this.iso(),
+        updated_at: this.iso(),
+        channel: 'web',
+        language: org.locale === 'tr-TR' ? 'tr' : 'en',
+        confirmed_via: null,
+      };
+      this.reports.push(made);
+      for (const q of input.questions) {
+        this.questions.push({
+          id: q.id,
+          report_id: made.id,
+          field: q.field,
+          target: q.target,
+          prompt: q.prompt,
+          options: null,
+          asked_message_id: null,
+          answered_message_id: null,
+          answer: q.answer,
+          asked_at: this.iso(),
+          answered_at: this.iso(),
+          created_at: this.iso(),
+          channel: 'web',
+          call_id: null,
+          answer_source: { type: 'answer', questionId: q.id },
+        });
+      }
+      this.versions.push({
+        report_id: made.id,
+        version: 1,
+        data: input.data as unknown as ReportVersionRow['data'],
+        summary: input.data.summary || null,
+        pdf_path: null,
+        author: 'reporter',
+        author_user_id: null,
+        author_message_id: null,
+        change_note: null,
+        created_at: this.iso(),
+        via: 'web',
+      });
+      this.jobs.push({
+        id: this.jobs.length + 1,
+        type: 'file_report',
+        payload: { reportId: made.id, trigger: input.status },
+        dedupe_key: `file:${made.id}:v1:${input.status}`,
+        status: 'queued',
+      });
+    }
     day.status = input.status;
-    return Promise.resolve({ siteDayId: day.id, status: input.status, changed: true });
+    if (made) day.report_id = made.id;
+    return Promise.resolve({
+      siteDayId: day.id,
+      status: input.status,
+      changed: true,
+      report: made ? { id: made.id, reportNo: made.report_no } : null,
+    });
   }
 
   /**

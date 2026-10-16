@@ -2,9 +2,13 @@ import {
   CONSENT_TYPES,
   DEVICE_COOKIE_MAX_AGE_S,
   REQUIRED_CONSENTS,
+  UI_RESOURCES,
   UPLOAD_MAX_BYTES,
   VERIFY_CODE_LENGTH,
   addDays,
+  dayOffReportData,
+  languageOf,
+  reportLanguageFor,
   consentSets,
   deadlineInstant,
   formatDeadline,
@@ -18,6 +22,10 @@ import {
   type ConsentRow,
   type ConsentType,
   type CountryPack,
+  type DailyReportData,
+  type DayOffDetails,
+  type OrgLocale,
+  type UnitSystem,
   type FieldApiErrorCode,
   type FieldCountryView,
   type FieldDeviceRow,
@@ -436,4 +444,73 @@ export function clientIp(headers: Headers): string | null {
 /** Seconds until `resetAt` (at least 1), for Retry-After. */
 export function retryAfterSeconds(resetAt: string, now: Date): number {
   return Math.max(1, Math.ceil((new Date(resetAt).getTime() - now.getTime()) / 1000));
+}
+
+/** One answered `questions` row of a recorder day-off (field_report_day_off(), W2-08). */
+export interface DayOffQuestion {
+  id: string;
+  field: 'weather.impact' | 'manpower.workers';
+  prompt: string;
+  target: { path: string };
+  answer: { text: string; parsed: Record<string, string | number>; via: 'web' };
+}
+
+/**
+ * What `POST day-status` writes (F12, spec §19 Q41; W2-08): the reporter's details as answered
+ * web questions, worded as the sheet asked them (the reporter's language, `field.today.daySheet`),
+ * and the version data built from them in code (`dayOffReportData`: lost hours and crew hours,
+ * each value citing its answer). A no-work day has no details and no questions.
+ */
+export function dayOffPlan(input: {
+  status: 'no_work' | 'weather_day';
+  date: string;
+  site: Pick<SiteRow, 'name' | 'working_hours'>;
+  org: { locale: OrgLocale; units: UnitSystem };
+  defaultShiftHours: number;
+  reporterLocale: string;
+  details: DayOffDetails;
+  newId: () => string;
+}): { questions: DayOffQuestion[]; data: DailyReportData } {
+  const sheet = UI_RESOURCES[languageOf(input.reporterLocale)].field.today.daySheet;
+  const questions: DayOffQuestion[] = [];
+  const ids = { since: null as string | null, workersBefore: null as string | null };
+  if (input.status === 'weather_day') {
+    const since = input.details.since;
+    if (since) {
+      ids.since = input.newId();
+      questions.push({
+        id: ids.since,
+        field: 'weather.impact',
+        prompt: sheet.since,
+        target: { path: 'weather.periods[0]' },
+        answer: {
+          text: since === 'never_started' ? sheet.never : since,
+          parsed: { since },
+          via: 'web',
+        },
+      });
+    }
+    const workers = input.details.workersBefore;
+    if (workers !== undefined && workers > 0) {
+      ids.workersBefore = input.newId();
+      questions.push({
+        id: ids.workersBefore,
+        field: 'manpower.workers',
+        prompt: sheet.workersBefore,
+        target: { path: 'manpower.workers:site_crew' },
+        answer: { text: String(workers), parsed: { workers }, via: 'web' },
+      });
+    }
+  }
+  const data = dayOffReportData({
+    kind: input.status,
+    date: input.date,
+    siteName: input.site.name,
+    org: { reportLanguage: reportLanguageFor(input.org.locale), units: input.org.units },
+    details: input.status === 'weather_day' ? input.details : {},
+    questionIds: ids,
+    workingHours: input.site.working_hours,
+    defaultShiftHours: input.defaultShiftHours,
+  });
+  return { questions, data };
 }

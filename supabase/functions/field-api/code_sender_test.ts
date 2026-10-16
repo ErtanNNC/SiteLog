@@ -36,6 +36,7 @@ function message(
       locale: 'en-US',
       timezone: 'America/Chicago',
       is_demo: opts.isDemo ?? true,
+      units: 'imperial',
     },
     pack: pack(country, opts.sender ? { sms_sender_id: opts.sender } : {}),
     reporter: {

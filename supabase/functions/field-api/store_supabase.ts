@@ -86,7 +86,7 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
     async getOrgContext(orgId) {
       const { data: org } = await admin
         .from('orgs')
-        .select('id, name, country, locale, timezone, is_demo')
+        .select('id, name, country, locale, timezone, is_demo, units')
         .eq('id', orgId)
         .maybeSingle()
         .throwOnError();
@@ -439,12 +439,14 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
 
     async setDayStatus(input) {
       return await rpc<DayStatusResult>(
-        admin.rpc('field_set_day_status', {
+        admin.rpc('field_report_day_off', {
           p_reporter_id: input.reporterId,
           p_site_id: input.siteId,
           p_date: input.date,
           p_status: input.status,
           p_details: input.details as Json,
+          p_questions: input.questions as unknown as Json,
+          p_data: input.data as unknown as Json,
         }),
       );
     },

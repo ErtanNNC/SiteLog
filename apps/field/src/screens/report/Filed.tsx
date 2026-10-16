@@ -208,7 +208,15 @@ export function Filed({
     }
   }
 
-  const body = withNodes(t('filed.body', { no: SLOT, name: firstName(reporterName) }), [
+  // W2-08: a weather-day or no-work record (F12) is not a daily report.
+  const bodyKey =
+    view.kind === 'weather_day'
+      ? 'filed.bodyWeather'
+      : view.kind === 'no_work'
+        ? 'filed.bodyNoWork'
+        : 'filed.body';
+  const weather = view.kind === 'weather_day';
+  const body = withNodes(t(bodyKey, { no: SLOT, name: firstName(reporterName) }), [
     <b key="no" className="font-mono font-semibold">
       {view.reportNo}
     </b>,
@@ -269,7 +277,14 @@ export function Filed({
         </p>
       ) : null}
 
-      <div className={`grid gap-2.5 ${photos?.canAdd && !adding ? 'grid-cols-2' : 'grid-cols-1'}`}>
+      {weather && photos?.canAdd && !adding && !added ? (
+        <p className="m-0 text-[15px] leading-[21px] text-steel">{t('filed.weatherPhotoHint')}</p>
+      ) : null}
+
+      {/* The weather day's longer label takes the full width (one line at 390 px). */}
+      <div
+        className={`grid gap-2.5 ${photos?.canAdd && !adding && !weather ? 'grid-cols-2' : 'grid-cols-1'}`}
+      >
         {photos?.canAdd && !adding ? (
           <>
             <input
@@ -284,7 +299,7 @@ export function Filed({
             />
             <OutlineButton onClick={() => picker.current?.click()}>
               <CameraIcon />
-              {t('filed.addPhotos')}
+              {t(weather ? 'filed.weatherPhoto' : 'filed.addPhotos')}
             </OutlineButton>
           </>
         ) : null}

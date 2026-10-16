@@ -469,6 +469,12 @@ export const RPCS: Record<
     call: (o) =>
       `select field_set_day_status('${o.reporter}', '${o.site}', '2026-12-01', 'no_work') as v`,
   },
+  field_report_day_off: {
+    why: '§6.5, W2-08: field-api only (service role); the office marks no work with mark_no_work().',
+    allow: NONE,
+    call: (o) =>
+      `select field_report_day_off('${o.reporter}', '${o.site}', '2026-12-02', 'no_work', '{}', '[]', '{}') as v`,
+  },
   field_rate_limit: {
     why: '§6.5: field-api only (service role).',
     allow: NONE,

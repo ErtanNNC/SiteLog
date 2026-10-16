@@ -189,6 +189,29 @@ describe('Filed: Add more photos (F9, W2-04)', () => {
     await act(() => i18n.changeLanguage('en'));
   });
 
+  it('W2-08: a weather-day report asks for a photo of the conditions (F12)', async () => {
+    const routes = fakeRoutes({
+      report: vi
+        .fn()
+        .mockResolvedValue(filedView({ addPhotos: ADD, siteId: SITE.id, kind: 'weather_day' })),
+    });
+    renderApp('/report/r1', { routes });
+    await screen.findByRole('heading', { level: 1, name: 'Filed.' });
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === 'P' &&
+          el.textContent === 'Weather day report RL-2041-0188 is with the office. Thanks, Marco.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('A photo of the conditions makes the delay record stronger.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Add a photo of the conditions' }),
+    ).toBeInTheDocument();
+  });
+
   it('sends the photos as one batch and shows the new version', async () => {
     const routes = fakeRoutes({
       report: vi

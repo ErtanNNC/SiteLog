@@ -122,6 +122,8 @@ export const uiEs: UiResources = {
       dateToday: 'Hoy',
       dateYesterday: 'Ayer, {{date}}',
       closed: 'El reporte de este día ya está. Desde aquí no se puede agregar más.',
+      weatherPhoto: 'Agregar una foto de las condiciones',
+      weatherPhotoHint: 'Una foto de las condiciones refuerza el registro del retraso.',
       daySheet: {
         noWorkTitle: '¿Hoy sin trabajo?',
         noWorkBody: 'La oficina verá “Hoy sin trabajo” para {{site}}.',
@@ -129,6 +131,7 @@ export const uiEs: UiResources = {
         weatherBody: 'La oficina verá “Día de clima” para {{site}}.',
         since: '¿Desde cuándo?',
         never: 'Nunca empezó',
+        sinceHint: 'Elige desde cuándo para confirmar.',
         workersBefore: '¿Cuántos había en la obra antes?',
         confirm: 'Confirmar',
         cancel: 'Cancelar',
@@ -315,12 +318,16 @@ export const uiEs: UiResources = {
     filed: {
       title: 'Registrado.',
       body: 'El reporte diario {{no}} ya está en la oficina. Gracias, {{name}}, eso es todo por hoy.',
+      bodyWeather: 'El reporte de día de clima {{no}} ya está en la oficina. Gracias, {{name}}.',
+      bodyNoWork: 'El reporte de día sin trabajo {{no}} ya está en la oficina. Gracias, {{name}}.',
       pdf: 'Abrir el PDF',
       pdfBadge: 'PDF',
       pdfPreparing: 'Preparando el PDF…',
       pdfLate: 'El PDF está en camino. La oficina ya tiene su reporte.',
       opensNewTab: '(se abre en una pestaña nueva)',
       addPhotos: 'Agregar más fotos',
+      weatherPhoto: 'Agregar una foto de las condiciones',
+      weatherPhotoHint: 'Una foto de las condiciones refuerza el registro del retraso.',
       pastReports: 'Reportes anteriores',
       hint: '¿Necesita un cambio más tarde? Abra {{pastReports}}.',
       photos: {

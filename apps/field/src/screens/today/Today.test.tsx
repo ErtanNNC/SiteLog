@@ -159,7 +159,7 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
       today: vi.fn().mockResolvedValue(
         todayResponse({
           dayStatus: 'processing',
-          report: { id: 'r1', reportNo: 'RL-2041-0188', status: 'processing' },
+          report: { id: 'r1', reportNo: 'RL-2041-0188', status: 'processing', kind: 'daily' },
         }),
       ),
     });
@@ -170,6 +170,53 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
       '/report/r1',
     );
     expect(screen.getByRole('link', { name: 'Record today’s report' })).toBeInTheDocument();
+  });
+
+  it('W2-08: a weather-day report closes the day and offers the photo of the conditions', async () => {
+    const routes = fakeRoutes({
+      today: vi.fn().mockResolvedValue(
+        todayResponse({
+          dayStatus: 'weather_day',
+          report: { id: 'r9', reportNo: 'RL-2041-0190', status: 'filed', kind: 'weather_day' },
+        }),
+      ),
+    });
+    renderApp('/today', { routes });
+    expect(await screen.findByText('Weather day')).toBeInTheDocument();
+    expect(
+      screen.getByText('A photo of the conditions makes the delay record stronger.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Add a photo of the conditions' })).toHaveAttribute(
+      'href',
+      '/report/r9',
+    );
+    expect(screen.queryByRole('link', { name: 'Record today’s report' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'No work today' })).toBeNull();
+  });
+
+  it('W2-08: the weather sheet needs since when before it confirms', async () => {
+    const dayStatus = vi.fn().mockResolvedValue({
+      siteDayId: 'sd1',
+      status: 'weather_day',
+      changed: true,
+      report: { id: 'r9', reportNo: 'RL-2041-0190' },
+    });
+    const routes = fakeRoutes({ today: vi.fn().mockResolvedValue(todayResponse()), dayStatus });
+    renderApp('/today', { routes });
+    fireEvent.click(await screen.findByRole('button', { name: 'Site closed: weather' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Site closed for weather?' });
+    const confirm = within(sheet).getByRole('button', { name: 'Confirm' });
+    expect(confirm).toBeDisabled();
+    expect(confirm).toHaveAccessibleDescription('Pick since when to confirm.');
+    fireEvent.click(within(sheet).getByRole('radio', { name: 'Never started' }));
+    expect(confirm).toBeEnabled();
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(dayStatus).toHaveBeenCalledWith(
+        'K7Q2MX',
+        expect.objectContaining({ status: 'weather_day', details: { since: 'never_started' } }),
+      ),
+    );
   });
 
   it('sends the phone back through the link when the device or consent is gone', async () => {
@@ -333,7 +380,7 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
         .mockResolvedValue(
           todayResponse({
             dayStatus: 'processing',
-            report: { id: 'r1', reportNo: 'RL-2041-0188', status: 'processing' },
+            report: { id: 'r1', reportNo: 'RL-2041-0188', status: 'processing', kind: 'daily' },
           }),
         ),
     });

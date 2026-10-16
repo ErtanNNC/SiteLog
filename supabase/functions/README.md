@@ -309,7 +309,9 @@ Notes:
   `field_complete_upload()` (numbers and inserts the site-day's report in one transaction,
   enqueues `transcribe_upload`, refuses while the report is being filed), `field_confirm_report()`
   (enqueues `file_report` for the confirmed version under the same site-day lock),
-  `field_set_day_status()` and `field_rate_limit()` (30 a minute per device, 5 code sends and 5
+  `field_report_day_off()` (W2-08: `day-status` sets the site-day and, for a weather day or a
+  no-work day with `no_work_pdf`, makes the report from the answers and queues its filing;
+  `field_set_day_status()` before it) and `field_rate_limit()` (30 a minute per device, 5 code sends and 5
   checks an hour per phone). `uploads/:id/complete` checks the stored object's type and size
   (Storage's object info) before it attaches it. Refusals are JSON `{error: <code>}` from
   `packages/shared/src/field-contract.ts`.

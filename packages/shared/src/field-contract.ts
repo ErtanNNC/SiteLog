@@ -280,7 +280,19 @@ export interface TodayResponse {
   deadlineAt: string;
   /** `pending` while the scheduler has not created the day yet. */
   dayStatus: SiteDayStatus;
-  report: { id: string; reportNo: string; status: ReportStatus } | null;
+  /**
+   * The day's live report. `kind` (W2-08): a `weather_day` or `no_work` report is the record the
+   * F12 buttons made (spec §19 Q41), so Today shows the day closed with it.
+   */
+  report: { id: string; reportNo: string; status: ReportStatus; kind: FieldReportKind } | null;
+}
+
+/** `reports.kind` (§6.3): a daily report, or the record of a weather day or a no-work day (F12). */
+export type FieldReportKind = 'daily' | 'weather_day' | 'no_work';
+
+/** `reports.kind` as the field app reads it (an unknown value reads as a daily report). */
+export function fieldReportKind(kind: string): FieldReportKind {
+  return kind === 'weather_day' || kind === 'no_work' ? kind : 'daily';
 }
 
 /**
@@ -322,6 +334,8 @@ export interface ReportView {
   id: string;
   reportNo: string;
   status: ReportStatus;
+  /** W2-08: a weather-day or no-work record (F12) shows its own Filed line. */
+  kind: FieldReportKind;
   siteId: string;
   siteName: string;
   date: string;
@@ -418,11 +432,16 @@ export type AnswerConfirmation =
   /** Safety, a photo, anything without a number to repeat: "Got it." */
   | { kind: 'noted' };
 
-/** `POST day-status`. */
+/**
+ * `POST day-status` (F12; W2-08, spec §19 Q41): the site-day's new status and, for a weather day
+ * (always) or a no-work day (when the org keeps a no-work PDF, `no_work_pdf`), the report it made,
+ * which the worker files (`file_report`, trigger `weather_day` / `no_work`); null otherwise.
+ */
 export interface DayStatusResponse {
   siteDayId: string;
   status: SiteDayStatus;
   changed: boolean;
+  report: { id: string; reportNo: string } | null;
 }
 
 /** `GET history` (F10 Past reports). */

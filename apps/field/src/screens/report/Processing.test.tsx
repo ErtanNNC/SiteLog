@@ -9,6 +9,7 @@ function view(patch: Partial<ReportView> = {}): ReportView {
     id: 'r1',
     reportNo: 'RL-2041-0188',
     status: 'processing',
+    kind: 'daily',
     siteId: 's1',
     siteName: 'Riverside Lofts — Block B',
     date: '2026-10-09',

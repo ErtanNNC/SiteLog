@@ -416,7 +416,20 @@ function TodayLoaded({
       {closed ? (
         <>
           <p className="m-0 text-[16px] leading-6 text-steel">{t('today.closed')}</p>
-          {today.report ? (
+          {today.report?.kind === 'weather_day' ? (
+            <>
+              {/* F12 "Add a photo of the conditions" (recommended): F9's Add more photos on the
+                  weather-day report's Filed screen, which makes the delay record claim-ready. */}
+              <p className="m-0 text-[16px] leading-6 text-steel">{t('today.weatherPhotoHint')}</p>
+              <Link
+                to={`/report/${today.report.id}`}
+                className="flex h-target items-center justify-center gap-2.5 rounded-card border-2 border-asphalt bg-white px-5 text-[16px] font-bold text-asphalt no-underline"
+              >
+                <CameraIcon />
+                {t('today.weatherPhoto')}
+              </Link>
+            </>
+          ) : today.report ? (
             <Link
               to={`/report/${today.report.id}`}
               className="flex h-target items-center justify-center rounded-card border-2 border-asphalt bg-white px-5 text-[16px] font-bold text-asphalt no-underline"

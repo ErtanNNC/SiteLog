@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
-import { UPLOAD_MAX_BYTES, uploadStoragePath } from '@sitelog/shared';
+import { UPLOAD_MAX_BYTES, dayOffReportData, uploadStoragePath } from '@sitelog/shared';
 import { asService, bootDatabase, probeAs } from './harness.ts';
 
 /**
@@ -584,6 +584,197 @@ describe('field_set_day_status (day-status, F12 buttons)', () => {
   });
 });
 
+describe('field_report_day_off (day-status as a report, W2-08, spec §19 Q41)', () => {
+  type DayOff = {
+    siteDayId: string;
+    status: string;
+    changed: boolean;
+    report: { id: string; reportNo: string } | null;
+  };
+  const QS = ID(700);
+  const QW = ID(701);
+  const questions = (since: string, workers?: number) => [
+    {
+      id: QS,
+      field: 'weather.impact',
+      prompt: 'Since when?',
+      target: { path: 'weather.periods[0]' },
+      answer: { text: since, parsed: { since }, via: 'web' },
+    },
+    ...(workers === undefined
+      ? []
+      : [
+          {
+            id: QW,
+            field: 'manpower.workers',
+            prompt: 'How many were on site before?',
+            target: { path: 'manpower.workers:Site crew' },
+            answer: { text: String(workers), parsed: { workers }, via: 'web' },
+          },
+        ]),
+  ];
+  const weatherData = dayOffReportData({
+    kind: 'weather_day',
+    date: '2026-12-14',
+    siteName: 'Pier 9',
+    org: { reportLanguage: 'en', units: 'imperial' },
+    details: { since: '09:00', workersBefore: 12 },
+    questionIds: { since: QS, workersBefore: QW },
+    workingHours: '07:00–15:30',
+    defaultShiftHours: 8,
+  });
+  const dayOff = (
+    date: string,
+    status: string,
+    qs: unknown[] = [],
+    data: unknown = weatherData,
+    reporter = MARCO,
+  ) =>
+    svc<{ r: DayOff }>(`select field_report_day_off($1, $2, $3, $4, $5, $6, $7) as r`, [
+      reporter,
+      SITE2,
+      date,
+      status,
+      JSON.stringify({ since: '09:00', workersBefore: 12 }),
+      JSON.stringify(qs),
+      JSON.stringify(data),
+    ]).then((rows) => rows[0]!.r);
+
+  it('Weather from 09:00 with 12 on site: a numbered web report, answered questions, version 1, its filing', async () => {
+    const res = await dayOff('2026-12-14', 'weather_day', questions('09:00', 12));
+    expect(res).toMatchObject({ status: 'weather_day', changed: true });
+    expect(res.report!.reportNo).toMatch(/^FT-2-\d{4}$/);
+    const day = await siteDay(SITE2, '2026-12-14');
+    expect(day).toMatchObject({ status: 'weather_day', report_id: res.report!.id });
+    const [r] = await svc(
+      `select status::text, kind, channel::text, language::text, reporter_id, current_version
+       from reports where id = $1`,
+      [res.report!.id],
+    );
+    expect(r).toEqual({
+      status: 'processing',
+      kind: 'weather_day',
+      channel: 'web',
+      language: 'en',
+      reporter_id: MARCO,
+      current_version: 1,
+    });
+    const qs = await svc(
+      `select id, field, channel::text, answered_at is not null as answered, answer_source
+       from questions where report_id = $1 order by field`,
+      [res.report!.id],
+    );
+    expect(qs).toEqual([
+      {
+        id: QW,
+        field: 'manpower.workers',
+        channel: 'web',
+        answered: true,
+        answer_source: { type: 'answer', questionId: QW },
+      },
+      {
+        id: QS,
+        field: 'weather.impact',
+        channel: 'web',
+        answered: true,
+        answer_source: { type: 'answer', questionId: QS },
+      },
+    ]);
+    const [job] = await svc(
+      `select payload, dedupe_key from jobs where type = 'file_report' and payload ->> 'reportId' = $1`,
+      [res.report!.id],
+    );
+    expect(job).toEqual({
+      payload: { reportId: res.report!.id, trigger: 'weather_day' },
+      dedupe_key: `file:${res.report!.id}:v1:weather_day`,
+    });
+    // Denormalised as the filing does: the lost hours code computed, sources the two answers.
+    await svc(`select denormalize_report_version($1, 1)`, [res.report!.id]);
+    const [ev] = await svc(
+      `select lost_hours::float as lost, full_day, start_local::text as start from weather_events where report_id = $1`,
+      [res.report!.id],
+    );
+    expect(ev).toEqual({ lost: 6.5, full_day: false, start: '09:00:00' });
+    const [crew] = await svc(
+      `select workers, hours::float as hours from manpower_entries where report_id = $1`,
+      [res.report!.id],
+    );
+    expect(crew).toEqual({ workers: 12, hours: 24 });
+    const sources = await svc(
+      `select kind::text, question_id from report_sources where report_id = $1 order by question_id`,
+      [res.report!.id],
+    );
+    expect(sources).toEqual([
+      { kind: 'answer', question_id: QS },
+      { kind: 'answer', question_id: QW },
+    ]);
+    const audits = await svc<{ action: string }>(
+      `select action from audit_log where entity_id in ($1, $2) order by id`,
+      [res.report!.id, res.siteDayId],
+    );
+    expect(audits.map((a) => a.action)).toEqual(['report.created', 'site_day.weather_day']);
+    // A retried tap answers the same report.
+    expect(await dayOff('2026-12-14', 'weather_day', questions('09:00', 12))).toEqual({
+      ...res,
+      changed: false,
+    });
+  });
+
+  it('No work: the site-day only, or a report when the org keeps a no-work PDF', async () => {
+    const empty = { schemaVersion: 2, summary: 'No work at Pier 9 today.' };
+    const plain = await dayOff('2026-12-15', 'no_work', [], empty);
+    expect(plain).toMatchObject({ status: 'no_work', changed: true, report: null });
+    expect(await siteDay(SITE2, '2026-12-15')).toMatchObject({
+      status: 'no_work',
+      report_id: null,
+    });
+    await svc(`update org_settings set no_work_pdf = true where org_id = $1`, [ORG]);
+    try {
+      const pdf = await dayOff('2026-12-16', 'no_work', [], empty);
+      expect(pdf.report).not.toBeNull();
+      const [r] = await svc(`select kind, status::text from reports where id = $1`, [
+        pdf.report!.id,
+      ]);
+      expect(r).toEqual({ kind: 'no_work', status: 'processing' });
+      expect(
+        await svc(`select 1 from jobs where dedupe_key = $1`, [
+          `file:${pdf.report!.id}:v1:no_work`,
+        ]),
+      ).toHaveLength(1);
+    } finally {
+      await svc(`update org_settings set no_work_pdf = false where org_id = $1`, [ORG]);
+    }
+  });
+
+  it('refuses a live report (Q79), a filed day, bad data and other sites', async () => {
+    await complete(
+      await upload({ reporter: MARCO, site: SITE2, org: ORG, date: '2026-12-17' }),
+      MARCO,
+    );
+    const fail = (
+      date: string,
+      data: unknown = weatherData,
+      qs: unknown[] = questions('09:00'),
+      reporter = MARCO,
+    ) =>
+      failure(`select field_report_day_off($1, $2, $3, 'weather_day', '{}', $4, $5)`, [
+        reporter,
+        SITE2,
+        date,
+        JSON.stringify(qs),
+        JSON.stringify(data),
+      ]);
+    expect(await fail('2026-12-17')).toBe('report_in_progress');
+    expect(await fail('2026-12-14', weatherData)).toBe(null); // already a weather day: unchanged
+    expect(await fail('2026-12-18', { schemaVersion: 1 })).toBe('invalid_day_off_data');
+    expect(
+      await fail('2026-12-18', weatherData, [{ ...questions('09:00')[0], field: 'safety' }]),
+    ).toBe('invalid_day_off_data');
+    expect(await fail('2026-12-18', weatherData, questions('09:00'), DANA)).toBe('site_not_found');
+    expect(await siteDay(SITE2, '2026-12-18')).toBeUndefined();
+  });
+});
+
 describe('field_confirm_report (reports/:id/confirm, F8)', () => {
   type Confirmed = { status: 'queued' | 'filed'; jobId: number | null; version: number };
   const confirm = (report: string, reporter: string, version: number | null, draftRev = 1) =>
@@ -1055,6 +1246,7 @@ describe('the field-api functions are the service role’s only', () => {
     'field_revoke_consent(uuid,consent_type,uuid)',
     'field_device_verify_locked(uuid,uuid,timestamp with time zone)',
     'field_attach_photos(uuid,uuid,text,text)',
+    'field_report_day_off(uuid,uuid,date,text,jsonb,jsonb,jsonb)',
   ];
 
   it('grants execute to service_role and to no API role', async () => {

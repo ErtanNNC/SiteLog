@@ -3,6 +3,7 @@ import type {
   DailyLinkStore,
   ConsentType,
   CountryRow,
+  DailyReportData,
   FieldDeviceRow,
   FieldLinkRow,
   Json,
@@ -20,7 +21,7 @@ import type {
   UploadRow,
 } from '@sitelog/shared';
 import type { AuditEntry } from '../_shared/audit.ts';
-import type { StoredObject } from './logic.ts';
+import type { DayOffQuestion, StoredObject } from './logic.ts';
 
 /**
  * Everything field-api reads and writes, behind one interface: `store_supabase.ts` implements it
@@ -31,7 +32,7 @@ import type { StoredObject } from './logic.ts';
 
 /** The org fields field-api needs, with its country pack row and settings. */
 export interface OrgContext {
-  org: Pick<OrgRow, 'id' | 'name' | 'country' | 'locale' | 'timezone' | 'is_demo'>;
+  org: Pick<OrgRow, 'id' | 'name' | 'country' | 'locale' | 'timezone' | 'is_demo' | 'units'>;
   country: CountryRow;
   settings: Pick<
     OrgSettingsRow,
@@ -106,11 +107,13 @@ export interface AnswerInput {
   newCompany: { name: string; manpowerIndex: number } | null;
 }
 
-/** field_set_day_status(). */
+/** field_report_day_off() (W2-08; field_set_day_status() before it). */
 export interface DayStatusResult {
   siteDayId: string;
   status: SiteDayStatus;
   changed: boolean;
+  /** The weather-day or no-work report it made (and the worker files), or null. */
+  report: { id: string; reportNo: string } | null;
 }
 
 /** An RPC refused the call; `code` is the exception message the SQL raises (a field-api error). */
@@ -289,12 +292,19 @@ export interface FieldStore extends DailyLinkStore {
    * completed photos of that batch are left out (a batch's own photos are not counted twice).
    */
   filedPhotoState(reportId: string, exceptBatch?: string): Promise<FiledPhotoState>;
+  /**
+   * field_report_day_off() (W2-08, spec §19 Q41): the site-day's status and, for a weather day (or
+   * a no-work day with `no_work_pdf`), the report with its answered questions, version 1 and its
+   * file_report job, in one transaction under the site-day lock.
+   */
   setDayStatus(input: {
     reporterId: string;
     siteId: string;
     date: string;
     status: 'no_work' | 'weather_day';
     details: Json;
+    questions: DayOffQuestion[];
+    data: DailyReportData;
   }): Promise<DayStatusResult>;
   /**
    * field_confirm_report(): reports/:id/confirm (F8) for that version at that draft revision

@@ -12,8 +12,10 @@ const SINCE = ['07:00', '09:00', '11:00'] as const;
 
 /**
  * The confirm sheet behind *No work today* and *Site closed: weather* (F12): what the office will
- * see for the site; for weather, since when and how many were on site before. What it writes is
- * the site-day status only (`day-status`, W1-07; spec §19 Q41).
+ * see for the site; for weather, since when (required: the lost hours are computed from it, never
+ * guessed) and how many were on site before. Since W2-08 (spec §19 Q41) `day-status` makes a
+ * weather-day report from the answers (a no-work report when the org keeps a no-work PDF), filed
+ * by the worker; a day whose report has started is refused (spec §19 Q79's default).
  */
 export function DaySheet({
   kind,
@@ -37,6 +39,8 @@ export function DaySheet({
   const [since, setSince] = useState<string | null>(null);
   const [workers, setWorkers] = useState('');
   const weather = kind === 'weather_day';
+  const hintId = useId();
+  const needsSince = weather && since === null;
 
   function confirm() {
     const details: NonNullable<DayStatusRequest['details']> = {};
@@ -86,6 +90,11 @@ export function DaySheet({
                 );
               })}
             </div>
+            {needsSince ? (
+              <span id={hintId} className="text-[14px] leading-5 text-dust">
+                {t('today.daySheet.sinceHint')}
+              </span>
+            ) : null}
           </div>
           <label htmlFor={workersId} className="text-[15px] font-semibold">
             {t('today.daySheet.workersBefore')}
@@ -110,7 +119,12 @@ export function DaySheet({
         <QuietButton onClick={onClose} disabled={busy} className="flex-1">
           {t('today.daySheet.cancel')}
         </QuietButton>
-        <SolidButton onClick={confirm} disabled={busy} className="flex-1">
+        <SolidButton
+          onClick={confirm}
+          disabled={busy || needsSince}
+          aria-describedby={needsSince ? hintId : undefined}
+          className="flex-1"
+        >
           {busy ? t('today.daySheet.saving') : t('today.daySheet.confirm')}
         </SolidButton>
       </div>

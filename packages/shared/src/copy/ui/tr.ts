@@ -1361,6 +1361,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       dateToday: 'Bugün',
       dateYesterday: 'Dün, {{date}}',
       closed: 'Bu günün raporu ulaştı. Buradan başka bir şey eklenemez.',
+      weatherPhoto: 'Hava koşullarının fotoğrafını ekle',
+      weatherPhotoHint: 'Hava koşullarının fotoğrafı gecikme kaydını güçlendirir.',
       daySheet: {
         noWorkTitle: 'Bugün çalışma yok mu?',
         noWorkBody: 'Ofis {{site}} için “Bugün çalışma yok” görecek.',
@@ -1368,6 +1370,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         weatherBody: 'Ofis {{site}} için “Hava günü” görecek.',
         since: 'Ne zamandan beri?',
         never: 'Hiç başlamadı',
+        sinceHint: 'Onaylamak için ne zamandan beri olduğunu seçin.',
         workersBefore: 'Öncesinde sahada kaç kişi vardı?',
         confirm: 'Onayla',
         cancel: 'Vazgeç',
@@ -1548,12 +1551,16 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     filed: {
       title: 'Kaydedildi.',
       body: 'Günlük Rapor {{no}} ofise iletildi. Teşekkürler {{name}}, bugünlük bu kadar.',
+      bodyWeather: 'Hava muhalefeti raporu {{no}} ofise iletildi. Teşekkürler {{name}}.',
+      bodyNoWork: 'Çalışma yapılmayan gün raporu {{no}} ofise iletildi. Teşekkürler {{name}}.',
       pdf: 'PDF’i aç',
       pdfBadge: 'PDF',
       pdfPreparing: 'PDF hazırlanıyor…',
       pdfLate: 'PDF yolda. Raporunuz ofise ulaştı.',
       opensNewTab: '(yeni sekmede açılır)',
       addPhotos: 'Daha fazla fotoğraf ekle',
+      weatherPhoto: 'Hava koşullarının fotoğrafını ekle',
+      weatherPhotoHint: 'Hava koşullarının fotoğrafı gecikme kaydını güçlendirir.',
       pastReports: 'Geçmiş raporlar',
       hint: 'Sonra bir değişiklik mi gerekiyor? {{pastReports}} bölümünü açın.',
       photos: {

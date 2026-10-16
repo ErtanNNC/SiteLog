@@ -12,6 +12,7 @@ import {
   reportWindowEnd,
   clientIp,
   consentState,
+  dayOffPlan,
   deviceVerified,
   fieldCountryView,
   fieldOrigins,
@@ -373,3 +374,42 @@ Deno.test('filedPhotosUntil: 23:59 the next day at the site (F9)', () => {
     '2026-10-10T20:59:00.000Z',
   );
 });
+
+Deno.test(
+  'dayOffPlan (W2-08): the details as answered questions in the reporter language, data in code',
+  () => {
+    let n = 0;
+    const plan = dayOffPlan({
+      status: 'weather_day',
+      date: '2026-10-13',
+      site: { name: 'Ataşehir', working_hours: '08:00–18:00' },
+      org: { locale: 'tr-TR', units: 'metric' },
+      defaultShiftHours: 9,
+      reporterLocale: 'es-US',
+      details: { since: 'never_started', workersBefore: 7 },
+      newId: () => `00000000-0000-4000-8000-00000000000${++n}`,
+    });
+    assertEquals(
+      plan.questions.map((q) => [q.field, q.prompt, q.answer.text]),
+      [
+        ['weather.impact', '¿Desde cuándo?', 'Nunca empezó'],
+        ['manpower.workers', '¿Cuántos había en la obra antes?', '7'],
+      ],
+    );
+    assertEquals(plan.data.reportLanguage, 'tr');
+    assertEquals(plan.data.weather.periods[0]!.lostHours, 9);
+    assertEquals(plan.data.manpower[0]!.totalHours, 0);
+    const noWork = dayOffPlan({
+      status: 'no_work',
+      date: '2026-10-13',
+      site: { name: 'Pier 9', working_hours: null },
+      org: { locale: 'en-US', units: 'imperial' },
+      defaultShiftHours: 8,
+      reporterLocale: 'en-US',
+      details: { since: '09:00' },
+      newId: () => 'x',
+    });
+    assertEquals(noWork.questions, []);
+    assertEquals(noWork.data.summary, 'No work at Pier 9 today.');
+  },
+);

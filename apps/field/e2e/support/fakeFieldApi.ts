@@ -196,6 +196,8 @@ export const OTP = '482913';
 export const REPORT_ID = '6f1c2b9e-0d4a-4c1e-9b7a-3e2f1d0c9b8a';
 export const REPORT_NO = 'RL-2041-0188';
 export const QUESTION_ID = '11111111-0000-4000-8000-00000000f101';
+/** The weather-day report `day-status` makes (W2-08). */
+export const DAY_OFF_REPORT_ID = '6f1c2b9e-0d4a-4c1e-9b7a-3e2f1d0c9b90';
 
 export interface FakeFieldApi {
   state: {
@@ -463,8 +465,14 @@ export async function installFakeFieldApi(
       const past = /^reports\/([^/]+)$/.exec(path);
       if (past && options.reports?.[past[1]!]) return json(route, 200, options.reports[past[1]!]);
       if (path === 'day-status') {
-        api.state.dayStatus = (body as { status: TodayResponse['dayStatus'] }).status;
-        return json(route, 200, { siteDayId: 'sd1', status: api.state.dayStatus, changed: true });
+        // W2-08 (spec §19 Q41): a weather day makes a report, which the worker files; no work
+        // (no no-work PDF here) the site-day only.
+        const status = (body as { status: 'no_work' | 'weather_day' }).status;
+        api.state.dayStatus = status;
+        const report =
+          status === 'weather_day' ? { id: DAY_OFF_REPORT_ID, reportNo: 'RL-2041-0190' } : null;
+        if (report) api.state.report = { ...report, status: 'filed', kind: 'weather_day' };
+        return json(route, 200, { siteDayId: 'sd1', status, changed: true, report });
       }
       if (path === 'uploads') {
         const uploadId = `00000000-0000-4000-8000-${String(++uploads).padStart(12, '0')}`;
@@ -534,7 +542,12 @@ export async function installFakeFieldApi(
         if (options.completeError) return refuse(options.completeError);
         api.completed.push(uploadId);
         api.state.dayStatus = 'processing';
-        api.state.report = { id: REPORT_ID, reportNo: REPORT_NO, status: 'processing' };
+        api.state.report = {
+          id: REPORT_ID,
+          reportNo: REPORT_NO,
+          status: 'processing',
+          kind: 'daily',
+        };
         const res: CompleteResponse = {
           reportId: REPORT_ID,
           reportNo: REPORT_NO,
@@ -577,6 +590,7 @@ export async function installFakeFieldApi(
           id: REPORT_ID,
           reportNo: REPORT_NO,
           status,
+          kind: 'daily',
           siteId: market.site.id,
           siteName: market.site.name,
           date: market.date,
@@ -598,7 +612,8 @@ export async function installFakeFieldApi(
               : null,
           changeNote: null,
         };
-        if (status === 'filed') api.state.report = { id: REPORT_ID, reportNo: REPORT_NO, status };
+        if (status === 'filed')
+          api.state.report = { id: REPORT_ID, reportNo: REPORT_NO, status, kind: 'daily' };
         return json(route, 200, res);
       }
       if (path === `reports/${REPORT_ID}/answer`) {

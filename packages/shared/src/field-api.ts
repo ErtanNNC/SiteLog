@@ -119,23 +119,29 @@ export const AnswerRequestSchema = z
   });
 
 /**
- * `POST day-status` (F12, the Today buttons): no work today, or site closed for weather. The F12
- * details are stored with the change; what they become (weather_events, lost hours) is spec §19
- * Q41.
+ * `POST day-status` (F12, the Today buttons): no work today, or site closed for weather. Since
+ * W2-08 (spec §19 Q41) the details become a report: answered questions, a version built in code
+ * (lost hours, crew hours) and its filing. A weather day needs "Since when?" (no lost hours are
+ * invented without it).
  */
-export const DayStatusRequestSchema = z.strictObject({
-  siteId: z.uuid(),
-  status: z.enum(['no_work', 'weather_day']),
-  date: isoDate.optional(),
-  details: z
-    .strictObject({
-      /** "Since when?": a time chip (`07:00`), or `never_started`. */
-      since: z.union([z.string().regex(/^\d{2}:\d{2}$/), z.literal('never_started')]).optional(),
-      /** "How many were on site before?" */
-      workersBefore: z.number().int().min(0).max(9999).optional(),
-    })
-    .optional(),
-});
+export const DayStatusRequestSchema = z
+  .strictObject({
+    siteId: z.uuid(),
+    status: z.enum(['no_work', 'weather_day']),
+    date: isoDate.optional(),
+    details: z
+      .strictObject({
+        /** "Since when?": a time chip (`07:00`), or `never_started`. */
+        since: z.union([z.string().regex(/^\d{2}:\d{2}$/), z.literal('never_started')]).optional(),
+        /** "How many were on site before?" */
+        workersBefore: z.number().int().min(0).max(9999).optional(),
+      })
+      .optional(),
+  })
+  .refine((b) => b.status !== 'weather_day' || b.details?.since !== undefined, {
+    message: 'a weather day needs details.since',
+    path: ['details', 'since'],
+  });
 
 /**
  * `PATCH preferences` (F15, Settings; W2-02): the report mode, the language (one of the pack's

@@ -3,6 +3,7 @@ import { UI_RESOURCES } from '@sitelog/shared/copy/ui/index.ts';
 import { expectFieldScreen, expectNoAxeViolations } from './support/checks.ts';
 import type { HistoryResponse, ReportView } from '@sitelog/shared/field-contract.ts';
 import {
+  DAY_OFF_REPORT_ID,
   demir,
   installFakeFieldApi,
   kestrel,
@@ -23,7 +24,9 @@ import {
  *   clip too short; a clip field-api refuses, Today's "Not sent" list; Today failing to load; the
  *   link errors (not found, expired, revoked, paused, failed); the site switcher;
  * - in EN: a question without answers to tap (D28) at 390 and 1440 px; the offline queue through
- *   a reload, sent in the background with Today updating by itself; the No work and Weather sheets;
+ *   a reload, sent in the background with Today updating by itself;
+ * - No work and Weather (F12, W2-08) in EN, ES and TR: the sheets, "Since when?" required, the
+ *   day closed and the weather day's photo of the conditions;
  * - Settings (F15, W2-02) in EN, ES and TR: the preference, texts off, the recording sheet, sign
  *   out back to the device check; in EN the language switch and recording off back to the consent,
  *   and the screen at 1440 px.
@@ -288,49 +291,66 @@ test.describe('offline (F5 step 3)', () => {
   });
 });
 
-test.describe('No work / Weather (F12, spec §19 Q41)', () => {
-  test.use({ locale: 'en-US' });
+for (const run of RUNS) {
+  test.describe(`No work / Weather (F12, spec §19 Q41; W2-08) in ${run.lang}`, () => {
+    test.use({ locale: run.locale });
 
-  test('confirms No work today in a sheet, and Today shows the day closed', async ({ page }) => {
-    const field = UI_RESOURCES.en.field;
-    const market = kestrel();
-    const api = await installFakeFieldApi(page, market, { verified: true, consented: true });
-    await page.goto(`/r/${CODE}`);
-    await page.getByRole('button', { name: field.today.noWork }).click();
-    const sheet = page.getByRole('dialog', { name: field.today.daySheet.noWorkTitle });
-    await expect(sheet).toBeVisible();
-    await expectFieldScreen(page);
-    await sheet.getByRole('button', { name: field.today.daySheet.confirm }).click();
-    await expect(sheet).toBeHidden();
-    const call = api.calls.find((c) => c.path === 'day-status')!;
-    expect(call.body).toEqual({ siteId: market.site.id, status: 'no_work', date: market.date });
-    await expect(page.getByText(field.today.status.noWork)).toBeVisible();
-    await expect(page.getByText(field.today.closed)).toBeVisible();
-    await expect(page.getByRole('link', { name: field.today.record })).toHaveCount(0);
-  });
-
-  test('asks since when and how many for a weather day', async ({ page }) => {
-    const field = UI_RESOURCES.en.field;
-    const market = kestrel();
-    const api = await installFakeFieldApi(page, market, { verified: true, consented: true });
-    await page.goto(`/r/${CODE}`);
-    await page.getByRole('button', { name: field.today.weather }).click();
-    const sheet = page.getByRole('dialog', { name: field.today.daySheet.weatherTitle });
-    await sheet.getByRole('radio', { name: '09:00' }).click();
-    await sheet.getByLabel(field.today.daySheet.workersBefore).fill('12');
-    await expectFieldScreen(page);
-    await sheet.getByRole('button', { name: field.today.daySheet.confirm }).click();
-    await expect(sheet).toBeHidden();
-    const call = api.calls.find((c) => c.path === 'day-status')!;
-    expect(call.body).toEqual({
-      siteId: market.site.id,
-      status: 'weather_day',
-      date: market.date,
-      details: { since: '09:00', workersBefore: 12 },
+    test('confirms No work today in a sheet, and Today shows the day closed', async ({ page }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const market = run.market();
+      const api = await installFakeFieldApi(page, market, { verified: true, consented: true });
+      await page.goto(`/r/${CODE}`);
+      await page.getByRole('button', { name: field.today.noWork }).click();
+      const sheet = page.getByRole('dialog', { name: field.today.daySheet.noWorkTitle });
+      await expect(sheet).toBeVisible();
+      await expectFieldScreen(page);
+      await sheet.getByRole('button', { name: field.today.daySheet.confirm }).click();
+      await expect(sheet).toBeHidden();
+      const call = api.calls.find((c) => c.path === 'day-status')!;
+      expect(call.body).toEqual({ siteId: market.site.id, status: 'no_work', date: market.date });
+      await expect(page.getByText(field.today.status.noWork)).toBeVisible();
+      await expect(page.getByText(field.today.closed)).toBeVisible();
+      await expect(page.getByRole('link', { name: field.today.record })).toHaveCount(0);
+      await expectFieldScreen(page);
     });
-    await expect(page.getByText(field.today.status.weatherDay)).toBeVisible();
+
+    test('asks since when (required) and how many, then offers the photo of the conditions', async ({
+      page,
+    }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const market = run.market();
+      const api = await installFakeFieldApi(page, market, { verified: true, consented: true });
+      await page.goto(`/r/${CODE}`);
+      await page.getByRole('button', { name: field.today.weather }).click();
+      const sheet = page.getByRole('dialog', { name: field.today.daySheet.weatherTitle });
+      const confirm = sheet.getByRole('button', { name: field.today.daySheet.confirm });
+      // No lost hours are guessed: Confirm waits for "Since when?".
+      await expect(confirm).toBeDisabled();
+      await expect(sheet.getByText(field.today.daySheet.sinceHint)).toBeVisible();
+      await sheet.getByRole('radio', { name: '09:00' }).click();
+      await sheet.getByLabel(field.today.daySheet.workersBefore).fill('12');
+      await expectFieldScreen(page);
+      await confirm.click();
+      await expect(sheet).toBeHidden();
+      const call = api.calls.find((c) => c.path === 'day-status')!;
+      expect(call.body).toEqual({
+        siteId: market.site.id,
+        status: 'weather_day',
+        date: market.date,
+        details: { since: '09:00', workersBefore: 12 },
+      });
+      await expect(page.getByText(field.today.status.weatherDay)).toBeVisible();
+      await expect(page.getByText(field.today.weatherPhotoHint)).toBeVisible();
+      await expect(page.getByRole('link', { name: field.today.weatherPhoto })).toHaveAttribute(
+        'href',
+        `/report/${DAY_OFF_REPORT_ID}`,
+      );
+      await expectFieldScreen(page);
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await expectFieldScreen(page);
+    });
   });
-});
+}
 
 for (const run of RUNS) {
   test.describe(`Settings (F15, W2-02) in ${run.lang}`, () => {
@@ -587,6 +607,7 @@ function pastReports(market: Market): {
     id: PAST_ID,
     reportNo: 'RL-2041-0187',
     status: 'filed',
+    kind: 'daily',
     siteId: market.site.id,
     siteName: market.site.name,
     date: '2026-10-08',

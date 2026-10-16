@@ -163,6 +163,7 @@ function setup(
     locale: 'en-US',
     timezone: 'America/Chicago',
     is_demo: opts.isDemo ?? true,
+    units: 'imperial',
   } as OrgRow);
   store.settings.push({
     org_id: ORG,
@@ -996,6 +997,71 @@ Deno.test(
         .error,
       'invalid_request',
     );
+  },
+);
+
+Deno.test(
+  'day-status (W2-08, spec §19 Q41): Weather from 09:00 with 12 on site makes a report with answered questions',
+  async () => {
+    const h = setup();
+    await consented(h);
+    const res = await h.call('POST', 'day-status', {
+      body: {
+        siteId: SITE_A,
+        status: 'weather_day',
+        details: { since: '09:00', workersBefore: 12 },
+      },
+    });
+    assertEquals([res.status, res.json.status, res.json.changed], [200, 'weather_day', true]);
+    const made = res.json.report as { id: string; reportNo: string };
+    const report = h.store.reports.find((r) => r.id === made.id)!;
+    assertEquals(
+      [report.kind, report.status, report.channel, made.reportNo],
+      ['weather_day', 'processing', 'web', report.report_no],
+    );
+    const questions = h.store.questions.filter((q) => q.report_id === report.id);
+    assertEquals(
+      questions.map((q) => [q.field, q.prompt, (q.answer as { text: string }).text]),
+      [
+        ['weather.impact', 'Since when?', '09:00'],
+        ['manpower.workers', 'How many were on site before?', '12'],
+      ],
+    );
+    const version = h.store.versions.find((v) => v.report_id === report.id)!;
+    const data = version.data as {
+      weather: { periods: { lostHours: number; source: unknown[] }[] };
+      manpower: { workers: number; totalHours: number; source: unknown[] }[];
+    };
+    // Computed in code: 09:00 → 15:30 is 6.5 h lost; 12 × 2 h worked = 24 h.
+    assertEquals(data.weather.periods[0]!.lostHours, 6.5);
+    assertEquals(data.weather.periods[0]!.source, [
+      { type: 'answer', questionId: questions[0]!.id },
+    ]);
+    assertEquals([data.manpower[0]!.workers, data.manpower[0]!.totalHours], [12, 24]);
+    assertEquals(
+      h.store.jobs.filter((j) => j.type === 'file_report').map((j) => j.payload),
+      [{ reportId: report.id, trigger: 'weather_day' }],
+    );
+    // Today shows the day closed with its weather-day report.
+    const today = await h.call('GET', `today?site=${SITE_A}`);
+    assertEquals(today.json.dayStatus, 'weather_day');
+    assertEquals((today.json.report as { kind: string }).kind, 'weather_day');
+    // A retried tap: the same report, nothing new.
+    const again = await h.call('POST', 'day-status', {
+      body: { siteId: SITE_A, status: 'weather_day', details: { since: '09:00' } },
+    });
+    assertEquals(
+      [again.json.changed, (again.json.report as { id: string }).id],
+      [false, report.id],
+    );
+    // A weather day needs "Since when?".
+    const noSince = await h.call('POST', 'day-status', {
+      body: { siteId: SITE_B, status: 'weather_day', details: { workersBefore: 3 } },
+    });
+    assertEquals([noSince.status, noSince.json.error], [400, 'invalid_request']);
+    // No work without a no-work PDF: the site-day only.
+    const nw = await h.call('POST', 'day-status', { body: { siteId: SITE_B, status: 'no_work' } });
+    assertEquals([nw.status, nw.json.status, nw.json.report], [200, 'no_work', null]);
   },
 );
 

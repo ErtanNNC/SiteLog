@@ -139,6 +139,9 @@ export const uiEn = {
       dateYesterday: 'Yesterday, {{date}}',
       /** The day is filed or closed: nothing more can be added here (edits are F10). */
       closed: 'This day’s report is in. Nothing more can be added from here.',
+      /** W2-08 (F12): a weather day's report is filed; its photo is F9's on the Filed screen. */
+      weatherPhoto: 'Add a photo of the conditions',
+      weatherPhotoHint: 'A photo of the conditions makes the delay record stronger.',
       /** The No work / Weather confirm sheet (F12; what it writes is spec §19 Q41). */
       daySheet: {
         noWorkTitle: 'No work today?',
@@ -147,6 +150,8 @@ export const uiEn = {
         weatherBody: 'The office will see “Weather day” for {{site}}.',
         since: 'Since when?',
         never: 'Never started',
+        /** W2-08: a weather day needs since when (no lost hours are invented without it). */
+        sinceHint: 'Pick since when to confirm.',
         workersBefore: 'How many were on site before?',
         confirm: 'Confirm',
         cancel: 'Cancel',
@@ -356,6 +361,9 @@ export const uiEn = {
       title: 'Filed.',
       /** `{{no}}` is set in bold mono; `{{name}}` is the reporter's first name. */
       body: 'Daily Report {{no}} is with the office. Thanks, {{name}} — that’s it for today.',
+      /** W2-08 (F12): the Filed line of a weather-day or no-work report. */
+      bodyWeather: 'Weather day report {{no}} is with the office. Thanks, {{name}}.',
+      bodyNoWork: 'No-work report {{no}} is with the office. Thanks, {{name}}.',
       pdf: 'Open the PDF',
       pdfBadge: 'PDF',
       /** render_pdf has not stored the file yet: the screen checks again. */
@@ -366,6 +374,8 @@ export const uiEn = {
       opensNewTab: '(opens in a new tab)',
       /** F9 (W2-04): spec §9.3 says *Add more photos*; the artboard's button says "Add photos". */
       addPhotos: 'Add more photos',
+      weatherPhoto: 'Add a photo of the conditions',
+      weatherPhotoHint: 'A photo of the conditions makes the delay record stronger.',
       pastReports: 'Past reports',
       /**
        * The edit hint; `{{pastReports}}` is set in bold. The artboard goes on "and say what to fix.
