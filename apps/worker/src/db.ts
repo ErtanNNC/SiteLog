@@ -1019,6 +1019,13 @@ export interface Db {
 
   // jobs
   claimJobs(worker: string, limit: number): Promise<JobRow[]>;
+  /**
+   * Milliseconds until the earliest queued job with a future `run_after` is due (a delayed job, a
+   * retry's backoff), or null when none waits. The runner sleeps no longer than this, so a delayed
+   * job runs on time without a NOTIFY (none is sent when its `run_after` passes). Optional: the
+   * fakes leave it out and the runner falls back to the poll.
+   */
+  msUntilNextJob?(): Promise<number | null>;
   completeJob(id: number): Promise<void>;
   failJob(id: number, error: string): Promise<void>;
   /**
@@ -2270,6 +2277,12 @@ export function createDb(sql: Sql): Db {
     // jobs --------------------------------------------------------------------------------
     async claimJobs(worker, limit) {
       return sql<JobRow[]>`select * from claim_jobs(${worker}, ${limit})`;
+    },
+    async msUntilNextJob() {
+      const [row] = await sql<{ ms: number | null }[]>`
+        select (extract(epoch from min(run_after) - now()) * 1000)::float8 as ms
+        from jobs where status = 'queued' and run_after > now()`;
+      return row?.ms ?? null;
     },
     async completeJob(id) {
       await sql`select complete_job(${id})`;

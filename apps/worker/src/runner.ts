@@ -294,6 +294,22 @@ export function createRunner(ctx: Ctx, opts: RunnerOptions): Runner {
     }
   }
 
+  /**
+   * The poll, or less when a delayed job (a console call's ring end, a retry's backoff) falls due
+   * first: its `run_after` passing sends no NOTIFY, so the loop wakes for it itself.
+   */
+  async function idleMs(): Promise<number> {
+    if (!ctx.db.msUntilNextJob) return opts.pollIntervalMs;
+    try {
+      const ms = await ctx.db.msUntilNextJob();
+      if (ms === null) return opts.pollIntervalMs;
+      return Math.min(opts.pollIntervalMs, Math.max(0, Math.ceil(ms)) + 50);
+    } catch (err) {
+      ctx.log.warn('next job lookup failed', { err });
+      return opts.pollIntervalMs;
+    }
+  }
+
   async function mainLoop(): Promise<void> {
     while (running) {
       let n: number;
@@ -304,7 +320,7 @@ export function createRunner(ctx: Ctx, opts: RunnerOptions): Runner {
         await sleep(Math.min(opts.pollIntervalMs * 5, 10_000));
         continue;
       }
-      if (n === 0 || active >= opts.concurrency) await idle(opts.pollIntervalMs);
+      if (n === 0 || active >= opts.concurrency) await idle(await idleMs());
     }
   }
 

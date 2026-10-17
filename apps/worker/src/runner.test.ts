@@ -35,4 +35,58 @@ describe('runner', () => {
       registry.weekly_digest = original;
     }
   });
+
+  it('wakes for a delayed job when it falls due instead of sleeping the whole poll', async () => {
+    const h = createHarness();
+    let claims = 0;
+    const claimJobs = h.db.claimJobs.bind(h.db);
+    h.db.claimJobs = async (worker, limit) => {
+      claims++;
+      return claimJobs(worker, limit);
+    };
+    // A delayed job (a console call's ring end) due in 100 ms; its run_after sends no NOTIFY.
+    h.db.msUntilNextJob = async () => 100;
+    const runner = createRunner(h.ctx, {
+      concurrency: 1,
+      pollIntervalMs: 60_000,
+      sweepIntervalMs: 60_000,
+      jobTimeoutMs: 5_000,
+      workerId: 'w-test',
+    });
+    try {
+      runner.start();
+      await new Promise((r) => setTimeout(r, 1_000));
+      // Without the lookup the loop claims once and sleeps the 60 s poll.
+      expect(claims).toBeGreaterThanOrEqual(3);
+    } finally {
+      await runner.stop();
+    }
+  });
+
+  it('falls back to the poll when there is no delayed job or the lookup fails', async () => {
+    const h = createHarness();
+    let claims = 0;
+    const claimJobs = h.db.claimJobs.bind(h.db);
+    h.db.claimJobs = async (worker, limit) => {
+      claims++;
+      return claimJobs(worker, limit);
+    };
+    h.db.msUntilNextJob = async () => {
+      throw new Error('database went away');
+    };
+    const runner = createRunner(h.ctx, {
+      concurrency: 1,
+      pollIntervalMs: 60_000,
+      sweepIntervalMs: 60_000,
+      jobTimeoutMs: 5_000,
+      workerId: 'w-test',
+    });
+    try {
+      runner.start();
+      await new Promise((r) => setTimeout(r, 500));
+      expect(claims).toBe(1);
+    } finally {
+      await runner.stop();
+    }
+  });
 });

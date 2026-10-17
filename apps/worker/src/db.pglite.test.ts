@@ -16,6 +16,7 @@ import {
 // migration and the demo seed. Imported by path so the worker image does not need that package.
 import { bootDatabase } from '../../../supabase/db-tests/src/harness.ts';
 import { DEMO_AUDIT_ID_BASE } from '@sitelog/shared/demo/rows.ts';
+import { DEMO_ORG_ID } from '@sitelog/shared/demo/kestrel.ts';
 import { STALE_LOCK_MS, testConfig } from './config';
 import type { Ctx } from './context';
 import { connectSql, createDb, type Db } from './db';
@@ -2242,5 +2243,25 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
       recipients: ['pm@kestrelbuild.example'],
       attachments: [{ filename: 'RL-2041-0187.pdf', bytes: 1234 }],
     });
+  });
+});
+
+describe('PostgresDb on PGlite: the next delayed job', () => {
+  it('tells the runner how long until the earliest delayed job falls due', async () => {
+    const before = await db.msUntilNextJob!();
+    const id = await db.enqueueJob(
+      'weekly_digest',
+      { orgId: DEMO_ORG_ID, weekStart: '2026-10-05' },
+      { delayMs: 90_000, dedupeKey: `next-job-${randomUUID()}` },
+    );
+    try {
+      const ms = await db.msUntilNextJob!();
+      expect(ms).not.toBeNull();
+      expect(ms!).toBeGreaterThan(0);
+      expect(ms!).toBeLessThanOrEqual(90_000);
+      expect(ms!).toBeLessThanOrEqual(before ?? Infinity);
+    } finally {
+      await sql`delete from jobs where id = ${id}`;
+    }
   });
 });
