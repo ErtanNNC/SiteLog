@@ -50,11 +50,11 @@ enable_confirmations = false
 # templates are an owner step (docs/RUNBOOK.md, "Auth email templates").
 [auth.email.template.magic_link]
 subject = "{{ if or (eq .Data.ui_locale \"tr-TR\") (eq .Data.ui_locale \"tr\") }}SiteLog giriş linkiniz{{ else }}Your SiteLog sign-in link{{ end }}"
-content_path = "./templates/magic_link.html"
+content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.invite]
 subject = "{{ if or (eq .Data.ui_locale \"tr-TR\") (eq .Data.ui_locale \"tr\") }}SiteLog’a davet edildiniz{{ else }}You are invited to SiteLog{{ end }}"
-content_path = "./templates/invite.html"
+content_path = "./supabase/templates/invite.html"
 
 # The local stack's mail catcher (Mailpit; the CLI keeps the section name `inbucket`): the sign-in
 # emails land at http://127.0.0.1:54324 (e2e/supabase/auth-email.spec.ts reads them there).

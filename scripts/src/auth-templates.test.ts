@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { colors } from '@sitelog/shared';
 
@@ -71,7 +71,10 @@ describe('Supabase Auth email templates (W4-09)', () => {
 
     it(`${name}: wired in supabase/config.toml with an EN/TR subject`, () => {
       const s = section(name);
-      expect(s).toContain(`content_path = "./templates/${name}.html"`);
+      // The CLI resolves content_path against the project root (the folder holding supabase/).
+      expect(s).toContain(`content_path = "./supabase/templates/${name}.html"`);
+      const path = /^content_path = "(.*)"$/m.exec(s)?.[1] ?? '';
+      expect(existsSync(resolve(ROOT, path)), path).toBe(true);
       const subject = /^subject = "(.*)"$/m.exec(s)?.[1]?.replace(/\\"/g, '"') ?? '';
       expect(subject.startsWith(TR_TEST)).toBe(true);
       expect(subject).toContain(`${want.subject[0]}{{ else }}${want.subject[1]}{{ end }}`);
