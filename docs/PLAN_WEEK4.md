@@ -83,7 +83,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-01 · Phone-country picker from libphonenumber's regions; the number-country warning
 
-- [ ] **W4-01 done** · today _partial_ (S)
+- [x] **W4-01 done** · today _done_ (CI green on 625c955) (S)
 - **Spec:** §4.6 ("the panel's phone-country picker lists it … until M10 derives the picker from libphonenumber's regions"), §16.2 M10, F2 step 2 and edge cases, §19 Q23 (decided: warn at invite when the number's country differs), §19 Q32 (decided: browser-region preselect with self-serve onboarding, M10), CLAUDE.md "Conventions" (`PHONE_COUNTRIES` exception until M10).
 - **Design:** none exported (Web-Setup, Web-Team are not in `docs/design/`; the current `PhoneInput` is the reference).
 - **Already in the repo:** `PhoneInput` with `PHONE_COUNTRIES` (12 entries, names in English, an example number each), `phoneValue`, `phoneCountryFor` (falls back to US), used by Setup's manager and backup phones and Team's invite; `libphonenumber-js/min` in shared (`normalizeE164`, `formatPhone`).
@@ -187,7 +187,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-07 · Turkish voice in code: spoken numbers, units and times; TR call fixtures
 
-- [ ] **W4-07 done** · today _partial_ (M)
+- [x] **W4-07 done** · today _done_ (CI green on 625c955) (M)
 - **Spec:** §9.4 ("numbers spoken naturally (… TR: 'yüz seksen dört saat')"; Opening (TR); turn-taking), §9.6, §9.7 (TR formal _siz_), §10.2 (`tr` STT), §16.2 M11 ("voice TR (STT/TTS voices, prompts, number reading)", "Azure `tr-TR` voice tuned (numbers, units, company names); TR calls via Talk now"), §19 Q1, Q196.
 - **Design:** `Field-10-Today-TR` (_Konuşmak mı istersiniz? Şimdi konuş_, "Asistan tarayıcıdan dinler, numara gerekmez"); the call screen (Field-08) is not exported.
 - **Already in the repo:** `voice.tr.ts` (every key), `readBack()` and `voiceNumber()` (TR "7,5"), the TR confirm words (`CALL_CONFIRM_WORDS`), Talk now in TR on the fake client, TR answer and correction clips, `kartal-2026-10-09-tr.json`; no TR call fixture, no spoken-form step.
@@ -202,7 +202,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-08 · Turkish starter glossary and the TR extraction set
 
-- [ ] **W4-08 done** · today _partial_ (M)
+- [x] **W4-08 done** · today _done_ (CI green on a072cfa) (M)
 - **Spec:** §16 ("onboarding a contractor is the setup wizard plus their company list, glossary seeds and PDF letterhead"), §16.2 M11 ("report language TR in extraction/writing, TR glossary seeds"), F21, §10.2 (key terms), §10.4, §10.13, §18.2 (Demir Yapı's four seeds).
 - **Design:** none exported (Web-Glossary; the W3-08 page is the reference).
 - **Already in the repo:** the glossary pipeline (`learnTerms`, `buildKeyterms`, `built_in` status treated as confirmed), the §18.2 seeds in the demo only, two TR golden transcripts.
