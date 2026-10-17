@@ -860,6 +860,9 @@ Deno.test(
       interruptions: 1,
       sttConfidence: 0.9,
       turns: 7,
+      // §19 Q226: the per-turn latencies and barge-in stop times, stored as they are.
+      latenciesMs: [700, 800, 1900],
+      bargeInMs: [240],
     };
     const dialogLog = [{ t: 0.5, speaker: 'agent', text: 'SiteLog, hi Kevin.' }];
     const end = await h.tool('end_call', callId, token, {
@@ -877,6 +880,7 @@ Deno.test(
     const row = h.store.callRows[0]!;
     assertEquals([row.outcome, row.status], ['fallback_recording', 'completed']);
     assertEquals(row.dialog_log, dialogLog);
+    assertEquals(row.metrics, metrics);
     const jobs = h.store.jobs.filter((j) => j.type === 'post_call_reconcile');
     assertEquals(
       jobs.map((j) => j.dedupe_key),

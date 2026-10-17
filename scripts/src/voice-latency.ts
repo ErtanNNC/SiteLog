@@ -19,11 +19,12 @@
  * the seeded demo calls have none). A row the W3-04 backstop ended (no `end_call`) has only
  * `metrics.backstop` and counts as a call without latency.
  *
- * The agent stores each call's percentiles, not its turns, so the group's figures are pooled per
- * call: "p50" is the median of the calls' p50s, "p95" the 95th percentile of the calls' p95s
- * (spec §19 Q226 asks for the per-turn samples, which this script already reads when a row holds
- * `latenciesMs`). Barge-in: the agent counts interruptions but records no stop time, so the
- * 300 ms target reads "not measured" until it does (§19 Q226; read from `bargeInMs` when present).
+ * Since §19 Q226 the agent also stores every turn's latency (`latenciesMs`) and each barge-in's
+ * stop time (`bargeInMs`: the reporter's speech start → the agent's audio stopped). A group whose
+ * measured calls all hold `latenciesMs` is pooled over turns; otherwise (a call ended before
+ * Q226) over calls: "p50" is the median of the calls' p50s, "p95" the 95th percentile of the
+ * calls' p95s. Barge-in pools every `bargeInMs` of the group and reads "not measured" when there
+ * is none (no barge-in on an interruptible line, or only calls from before Q226).
  */
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -304,11 +305,11 @@ export function formatSummary(args: LatencyArgs, groups: readonly GroupSummary[]
   else {
     if (total.latencyBasis === 'calls')
       out.push(
-        "Latency pooled per call (the median of the calls' p50s, the 95th percentile of their p95s): the agent stores no per-turn samples (spec §19 Q226).",
+        "Latency pooled per call (the median of the calls' p50s, the 95th percentile of their p95s): some calls hold no per-turn samples (ended before spec §19 Q226).",
       );
     if (total.verdicts.bargeIn === 'n/a')
       out.push(
-        'Barge-in: not measured. The agent counts interruptions but records no stop time (spec §19 Q226); check it by ear on the calls.',
+        'Barge-in: not measured. No call in this period holds a barge-in stop time (no barge-in on an interruptible line, or calls ended before spec §19 Q226); check it by ear on the calls.',
       );
     if (total.backstopOnly > 0)
       out.push(

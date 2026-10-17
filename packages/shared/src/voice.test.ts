@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
+  CALL_METRICS_MAX_SAMPLES,
+  CallMetricsSchema,
   CallPeaksSchema,
   deriveCallToken,
   DialogLogSchema,
@@ -344,6 +346,21 @@ describe('voice contract schemas', () => {
       EndCallRequestSchema.safeParse({ ...TOOL_EXAMPLES.end_call[0], outcome: 'hung_up' }).success,
     ).toBe(false);
     expect(GetContextResponseSchema.safeParse(TOOL_EXAMPLES.get_context[1]).success).toBe(true);
+  });
+
+  it('takes per-turn latencies and barge-in stop times, bounded, and old rows without them (§19 Q226)', () => {
+    const base = TOOL_EXAMPLES.end_call[0].metrics;
+    const ok = (extra: Record<string, unknown>) =>
+      CallMetricsSchema.safeParse({ ...base, ...extra }).success;
+    expect(ok({})).toBe(true);
+    expect(ok({ latenciesMs: [640, 910, 1200], bargeInMs: [180, 260] })).toBe(true);
+    expect(ok({ latenciesMs: [], bargeInMs: [] })).toBe(true);
+    const full = Array.from({ length: CALL_METRICS_MAX_SAMPLES }, () => 500);
+    expect(ok({ latenciesMs: full, bargeInMs: full })).toBe(true);
+    expect(ok({ latenciesMs: [...full, 500] })).toBe(false);
+    expect(ok({ bargeInMs: [-1] })).toBe(false);
+    expect(ok({ bargeInMs: [250.5] })).toBe(false);
+    expect(ok({ latenciesMs: null })).toBe(false);
   });
 });
 

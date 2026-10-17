@@ -13,7 +13,7 @@ import pytest
 from sitelog_voice.config import MissingSettingError, Settings
 from sitelog_voice.contract import CONTRACT_DIR, Contract, DraftState
 from sitelog_voice.field_api import DISCLOSURE_ROUTE, CallAuth, FieldApi
-from sitelog_voice.metrics import CallMetrics, TurnTimer
+from sitelog_voice.metrics import MAX_SAMPLES, CallMetrics, TurnTimer
 from sitelog_voice.session import (
     BARGE_IN_MIN_SPEECH_S,
     END_OF_TURN_LONG_S,
@@ -156,6 +156,59 @@ def test_turn_timer_latency_and_barge_in() -> None:
     out = m.to_contract()
     assert out["latencyP50Ms"] == 600 and out["latencyP95Ms"] == 800
     assert out["interruptions"] == 1
+    # §19 Q226: every turn's latency and the barge-in's stop time, whole ms.
+    assert out["latenciesMs"] == [800, 600]
+    assert out["bargeInMs"] == [100]
+
+
+def test_barge_in_stop_time_only_when_the_agent_stops_for_the_reporter() -> None:
+    m = CallMetrics()
+    timer = TurnTimer(m)
+    # The uninterruptible disclosure: talked over, played to the end; an interruption, no stop.
+    timer.agent_started(0.0, interruptible=False)
+    timer.reporter_started(2.0)
+    timer.agent_stopped(6.0)
+    timer.reporter_stopped(6.5)
+    # A cough too short to interrupt: the reporter stops first, the line plays on.
+    timer.agent_started(7.2)
+    timer.reporter_started(8.0)
+    timer.reporter_stopped(8.6)
+    timer.agent_stopped(11.0)
+    # A real barge-in: the audio stops 280 ms after the reporter's speech started.
+    timer.agent_started(20.0)
+    timer.reporter_started(21.0)
+    timer.agent_stopped(21.28)
+    timer.reporter_stopped(23.0)
+    # Speech that started before the agent's line is not a barge-in on it.
+    timer.reporter_started(30.0)
+    timer.agent_started(30.5)
+    timer.agent_stopped(31.0)
+    out = m.to_contract()
+    assert out["interruptions"] == 3
+    assert out["bargeInMs"] == [280]
+    assert out["latenciesMs"] == [700]  # 6.5 → 7.2; the other answers came after a silence
+
+
+def test_samples_are_capped_rounded_and_non_negative() -> None:
+    m = CallMetrics()
+    for i in range(MAX_SAMPLES + 50):
+        m.agent_answered(end_of_speech_s=0.0, first_audio_s=0.5 + i / 1000)
+    m.agent_answered(end_of_speech_s=5.0, first_audio_s=4.0)  # a clock going back: no sample
+    m.barge_in_stopped(speech_start_s=1.0, audio_stopped_s=1.2504)
+    m.barge_in_stopped(speech_start_s=1.0, audio_stopped_s=0.9)
+    out = m.to_contract()
+    assert len(out["latenciesMs"]) == MAX_SAMPLES
+    assert out["latenciesMs"][:3] == [500, 501, 502]
+    assert all(isinstance(v, int) and v >= 0 for v in out["latenciesMs"])
+    assert out["bargeInMs"] == [250]
+    # The percentiles still see every turn.
+    assert out["latencyP95Ms"] == 737  # beyond the first 200 samples
+
+
+def test_no_samples_are_empty_lists() -> None:
+    out = CallMetrics().to_contract()
+    assert out["latenciesMs"] == [] and out["bargeInMs"] == []
+    assert out["latencyP50Ms"] is None
 
 
 # ───────────────── the disclosure mark (§19 Q205: field-api's route) ─────────────────

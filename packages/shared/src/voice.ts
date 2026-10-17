@@ -235,6 +235,10 @@ export const DialogLogEntrySchema = z.strictObject({
 });
 export const DialogLogSchema = z.array(DialogLogEntrySchema).max(2000);
 
+/** §19 Q226: at most this many per-turn latencies and barge-in stop times per call. */
+export const CALL_METRICS_MAX_SAMPLES = 200;
+const msSamples = z.array(z.number().int().min(0)).max(CALL_METRICS_MAX_SAMPLES);
+
 /** `calls.metrics` (§6.3: latency p50/p95, interruptions, STT confidence; the SIP call id). */
 export const CallMetricsSchema = z.strictObject({
   latencyP50Ms: z.number().int().min(0).nullable(),
@@ -249,6 +253,16 @@ export const CallMetricsSchema = z.strictObject({
    * as `voicemail` and sends `missed_call`.
    */
   answeredBy: z.enum(['human', 'machine']).optional(),
+  /**
+   * §19 Q226 (F6 acceptance): every answered turn's latency in ms (the reporter's end of speech →
+   * the agent's first audio), the call's first 200; optional, so a row written before it parses.
+   */
+  latenciesMs: msSamples.optional(),
+  /**
+   * §19 Q226: per barge-in on an interruptible line, the reporter's speech start → the agent's
+   * audio stopped, in ms (F6: ≤ 300 ms); the call's first 200.
+   */
+  bargeInMs: msSamples.optional(),
 });
 
 /** One lane of waveform peaks: values 0 … 1, at most 2048 of them. */

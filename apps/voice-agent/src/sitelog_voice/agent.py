@@ -310,7 +310,7 @@ class ReportCall:
         def _agent(ev: Any) -> None:
             now = self.now()
             if ev.new_state == "speaking":
-                self.timer.agent_started(now)
+                self.timer.agent_started(now, interruptible=_interruptible(session))
             elif ev.old_state == "speaking":
                 self.timer.agent_stopped(now)
                 self.dialog.on(Event.AGENT_SPOKE, now)
@@ -539,6 +539,13 @@ class ReportCall:
 
 
 # ─────────────────────────────── the job ───────────────────────────────
+
+
+def _interruptible(session: AgentSession) -> bool:
+    """Whether the line the agent starts speaking can be barged in on (§19 Q226: only those
+    have a barge-in stop time); a line the session cannot name counts as interruptible."""
+    speech = getattr(session, "current_speech", None)
+    return bool(getattr(speech, "allow_interruptions", True)) if speech is not None else True
 
 
 def _room_call_id(room: rtc.Room) -> str | None:

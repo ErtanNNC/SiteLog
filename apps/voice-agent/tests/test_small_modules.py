@@ -67,6 +67,8 @@ def test_metrics_to_contract() -> None:
         "interruptions": 1,
         "sttConfidence": 0.85,
         "turns": 3,
+        "latenciesMs": [600, 900, 1400],
+        "bargeInMs": [],
     }
     default_contract().check("call_metrics", out)
     empty = CallMetrics(sip_call_id="SCL_abc").to_contract()

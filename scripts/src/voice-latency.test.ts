@@ -175,6 +175,24 @@ describe('summarizeRows', () => {
     expect(g.verdicts.bargeIn).toBe('over');
   });
 
+  it("reads the agent's end_call metrics with samples and prints no pooling notes (§19 Q226)", () => {
+    // The shape `metrics.py` sends since Q226 (always both lists, possibly empty).
+    const withSamples = summarizeRows([
+      row('pstn', 'en', { ...metrics(700, 900), latenciesMs: [600, 700, 900], bargeInMs: [210] }),
+      row('pstn', 'en', { ...metrics(800, 800), latenciesMs: [800], bargeInMs: [] }),
+    ]);
+    expect(withSamples.at(-1)).toMatchObject({
+      latencyBasis: 'turns',
+      bargeInP95Ms: 210,
+      verdicts: { bargeIn: 'ok' },
+    });
+    const text = formatSummary({ from: 'a', to: 'b', json: false, check: false }, withSamples).join(
+      '\n',
+    );
+    expect(text).not.toContain('Latency pooled per call');
+    expect(text).not.toContain('Barge-in: not measured');
+  });
+
   it('prints the table with the notes', () => {
     const text = formatSummary(
       { from: '2026-10-19', to: '2026-10-20', json: false, check: false },
