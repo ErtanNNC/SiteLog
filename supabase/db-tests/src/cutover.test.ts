@@ -10,6 +10,18 @@ import { DEMIR_ORG_ID } from '@sitelog/shared/demo/demir.ts';
 import { applyMigration, asUser, bootDatabase, migrationFiles } from './harness.ts';
 
 /**
+ * Today in that time zone, or the Friday before on a weekend: the demo orgs work Monday to
+ * Friday (`demoCalendar` refuses a weekend), so a CI run on a Saturday seeds Friday's demo.
+ */
+function lastWeekdayIn(tz: string): string {
+  const today = todayIn(tz);
+  const day = new Date(`${today}T12:00:00Z`);
+  const back = { 0: 2, 6: 1 }[day.getUTCDay()] ?? 0;
+  day.setUTCDate(day.getUTCDate() - back);
+  return day.toISOString().slice(0, 10);
+}
+
+/**
  * The W1-19 cut-over rehearsed on a database shaped like staging (`abuanbyzttuqksdctqcp`) as the
  * read-only inventory of 2026-10-13 found it (docs/GAP_ANALYSIS.md §8): the 16 v1.0 migrations,
  * one customer org (not the demo org) made by the v1.0 panel's create_org call, one `invited`
@@ -250,7 +262,7 @@ describe('the W1-19 cut-over on a staging-shaped database', () => {
       );
     const before = await snapshot();
     const sql = buildSeedSql({
-      date: todayIn(DEMO_TZ),
+      date: lastWeekdayIn(DEMO_TZ),
       clock: new Date().toISOString(),
       linkBase: 'https://sitelog-field-staging.example',
       globalRows: false,
