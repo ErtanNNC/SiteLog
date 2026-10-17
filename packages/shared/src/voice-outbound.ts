@@ -186,6 +186,50 @@ export function isOfficeCall(call: { direction: string; purpose: string | null }
 }
 
 /**
+ * Settings' _Call me now_ (W4-05; spec P12, §19 Q232's recommended default, §19 Q350): an admin's
+ * short scripted test call to a number typed in the sheet and attested as their own (never stored:
+ * the call row holds it only until the dial, every audit row has it masked), only where the org
+ * places calls. The agent says the disclosure, one line and goodbye, records nothing and offers no
+ * report tool. At most `maxPerHour` an org (its own budget beside the test message's) and one at a
+ * time; no call window (the admin asks for a call to their own phone, now). The SQL twin is
+ * `settings_test_call_start()` (20261017000530).
+ */
+export const SETTINGS_TEST_CALL_POLICY = {
+  roles: ['admin'],
+  maxPerHour: 5,
+  /** `calls.purpose` of a test call. */
+  purpose: 'settings_test',
+  /** A test call not dialled within this long is dropped (`stale`). */
+  staleAfterMin: 10,
+} as const;
+
+/** Why settings_test_call_start() placed no call (`{status: 'refused', reason}`). */
+export const SETTINGS_TEST_CALL_REFUSALS = [
+  'attestation_required',
+  'invalid_phone',
+  /** Neither a demo org nor a pack with an outbound trunk here. */
+  'no_trunk',
+  /** A test call of the org is queued, ringing or in progress. */
+  'call_live',
+  /** `maxPerHour` test calls in the last hour. */
+  'rate_limited',
+] as const;
+export type SettingsTestCallRefusal = (typeof SETTINGS_TEST_CALL_REFUSALS)[number];
+
+/** What settings_test_call_start() answers. */
+export type SettingsTestCallStart =
+  | { status: 'requested'; callId: string; telephony: TelephonyDriver }
+  | { status: 'refused'; reason: SettingsTestCallRefusal; retry_at?: string };
+
+/** The `place_call {phase: settings_test}` job of a test call. */
+export const settingsTestCallKey = (callId: string) => `call:settings_test:${callId}`;
+
+/** Whether a `calls` row is Settings' test call (W4-05): outbound, purpose `settings_test`. */
+export function isSettingsTestCall(call: { direction: string; purpose: string | null }): boolean {
+  return call.direction === 'outbound' && call.purpose === SETTINGS_TEST_CALL_POLICY.purpose;
+}
+
+/**
  * The reporter's own consents (§19 Q131, W4-04): the office's `auto_call` attestation allows only
  * the office's Call now, so it never counts as the reporter's consent where the reporter's own is
  * read (the recorder's Settings and Welcome, the call's context).

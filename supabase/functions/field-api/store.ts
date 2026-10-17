@@ -182,6 +182,11 @@ export interface VoiceCallStartResult {
   reporterId: string | null;
   orgId: string | null;
   siteId: string | null;
+  /**
+   * `calls.purpose` (W4-05: `settings_test` is Settings' Call me now, a test call with no
+   * reporter; 20261017000530). Absent from an older database's answer.
+   */
+  purpose?: string | null;
   /** The room's call had started already (the agent retried). */
   repeat: boolean;
 }

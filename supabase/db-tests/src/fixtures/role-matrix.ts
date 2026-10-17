@@ -864,6 +864,18 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select office_call_dial('${o.call}', 'console') as v`,
   },
+  // W4-05 (20261017000530_settings_test_call.sql): Settings' Call me now. The fixture orgs place
+  // no calls, so the admin's call answers `refused no_trunk` and writes nothing.
+  settings_test_call_start: {
+    why: '§2.2 "Org settings": admin (P12 Field channels, Call me now, §19 Q232, Q350).',
+    allow: ADMIN,
+    call: (o) => `select settings_test_call_start('${o.org}', '+15550100001', 'en', true) as v`,
+  },
+  settings_test_call_dial: {
+    why: '§10.1 place_call, §19 Q350: the worker only (service role).',
+    allow: NONE,
+    call: (o) => `select settings_test_call_dial('${o.call}', 'console') as v`,
+  },
 };
 
 export type Scope = 'own' | 'other';

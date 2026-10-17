@@ -35,6 +35,9 @@ const AUDITED: Record<string, string> = {
   // W4-04 (20261017000500_office_call_now.sql): Team's Call now
   "sql:'call:' || sd.id || ':' || r.id || ':office:' || v_n":
     "office_call_start() (§19 Q230, Q330): the nth office call of a site-day and reporter, n counted from that day's office `calls` rows under the reporter's lock, and the row is written in the same transaction, so the next Call now is n + 1 and a retried request finds its key taken",
+  // W4-05 (20261017000530_settings_test_call.sql): Settings' Call me now
+  "sql:'call:settings_test:' || v_id":
+    'settings_test_call_start() (§19 Q232, Q350): one place_call per test call, keyed by the call id the same transaction writes, so a retried request is a new call (and counts against the five an hour)',
   "sql:'call:' || c.site_day_id || ':' || c.reporter_id || ':callback'":
     'voice_schedule_callback() (§19 Q128): the one callback a reporter may ask for per site-day; a second request answers limit_reached',
   // apps/worker

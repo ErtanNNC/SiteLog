@@ -218,11 +218,20 @@ export const VoiceCallStartResponseSchema = z
      * was called (the disclosure and the F13 line are said in it).
      */
     locale: z.enum(REPORTER_LOCALES).optional(),
+    /**
+     * W4-05 (§19 Q232, Q350): Settings' _Call me now_, an admin's test call (no reporter). The
+     * agent says the disclosure, the test line with `company` and goodbye in `locale`, records
+     * nothing, calls no report tool and ends the call.
+     */
+    settingsTest: z.strictObject({ company: z.string().min(1).max(200) }).optional(),
   })
-  .refine((r) => (r.reporter === undefined) !== (r.unknown === undefined), {
-    message: 'reporter or unknown',
-  })
-  .describe('Exactly one of reporter or unknown.');
+  .refine(
+    (r) =>
+      [r.reporter, r.unknown, r.settingsTest].filter((x) => x !== undefined).length === 1 &&
+      (r.settingsTest === undefined || r.locale !== undefined),
+    { message: 'reporter, unknown or settingsTest (with its locale)' },
+  )
+  .describe('Exactly one of reporter, unknown or settingsTest; settingsTest comes with locale.');
 
 // ───────────────────────────── The call's bookkeeping shapes ─────────────────────────────
 

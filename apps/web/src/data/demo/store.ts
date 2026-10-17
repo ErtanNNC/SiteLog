@@ -95,6 +95,8 @@ import type {
   UpdateOrgInput,
   SendTestMessageInput,
   SendTestMessageResult,
+  CallMeNowInput,
+  CallMeNowResult,
   UpdateReporterContactInput,
   UpdateReporterInput,
   UpdateSitePatch,
@@ -114,7 +116,7 @@ import type {
 import { attemptNumber } from '@sitelog/shared/notify/walk.ts';
 import { settingsMessageChannels } from '@sitelog/shared/channels.ts';
 import { DEFAULT_CALL_WINDOW, insideWindow } from '@sitelog/shared/schedule/remind.ts';
-import { OFFICE_CALL_POLICY } from '@sitelog/shared/voice-outbound.ts';
+import { OFFICE_CALL_POLICY, SETTINGS_TEST_CALL_POLICY } from '@sitelog/shared/voice-outbound.ts';
 import type { OrgLocale } from '@sitelog/shared/locale.ts';
 
 /** Extra demo office user so `?as=ops` has someone to be (not part of the §18 seed). */
@@ -2104,6 +2106,44 @@ export class DemoStore {
     });
     this.emit({ table: 'all' });
     return { outcome: 'console', reason: 'demo' };
+  }
+
+  /**
+   * settings_test_call_start() for the in-memory demo (§19 Q232, Q350): a demo org's test call is
+   * the console's, so nothing rings and no call row is kept here; five an hour per org, each
+   * audited `settings.test_call` with the number masked, as the Supabase path.
+   */
+  callMeNow(input: CallMeNowInput, userId: string): CallMeNowResult {
+    const org = this.data.org;
+    if (!/^\+[1-9]\d{6,14}$/.test(input.phone))
+      throw new CodedError('invalid_phone', 'invalid_phone');
+    const now = Date.parse(this.nowIso());
+    const recent = this.data.audit.filter(
+      (a) =>
+        a.org_id === org.id &&
+        a.action === 'settings.test_call' &&
+        now - Date.parse(a.created_at) < 3_600_000,
+    );
+    if (recent.length >= SETTINGS_TEST_CALL_POLICY.maxPerHour)
+      throw new CodedError('rate_limited', 'rate_limited');
+    const digits = input.phone.replace(/\D/g, '');
+    const callId = localId('call');
+    this.audit({
+      org_id: org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'settings.test_call',
+      entity: 'org',
+      entity_id: org.id,
+      diff: {
+        to: `+${digits.slice(0, 4)}***${digits.slice(-3)}`,
+        telephony: 'console',
+        language: input.language,
+        call_id: callId,
+      },
+    });
+    this.emit({ table: 'all' });
+    return { callId, telephony: 'console' };
   }
 
   setLogo(file: { url: string; ext: 'png' | 'svg' } | null, userId: string): void {

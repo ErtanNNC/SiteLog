@@ -47,6 +47,20 @@
         "es-US",
         "tr-TR"
       ]
+    },
+    "settingsTest": {
+      "type": "object",
+      "properties": {
+        "company": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "company"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [
@@ -54,5 +68,5 @@
     "callToken"
   ],
   "additionalProperties": false,
-  "description": "Exactly one of reporter or unknown."
+  "description": "Exactly one of reporter, unknown or settingsTest; settingsTest comes with locale."
 }

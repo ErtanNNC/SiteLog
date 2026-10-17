@@ -187,6 +187,20 @@ export type SendTestMessageResult =
   | { outcome: 'console'; reason: 'demo' | 'no_sender' }
   | { outcome: 'failed'; driver: string };
 
+/** W4-05 (§19 Q232, Q350): Settings' "Call me now" (settings_test_call_start()). */
+export interface CallMeNowInput {
+  /** E.164, typed in the sheet; held only until the dial, never kept. */
+  phone: string;
+  language: Language;
+}
+
+/** A refusal is a `CodedError` with its reason (`SETTINGS_TEST_CALL_REFUSALS`). */
+export interface CallMeNowResult {
+  callId: string;
+  /** `console`: a demo org, nothing reaches a real phone. */
+  telephony: 'console' | 'livekit';
+}
+
 export interface CreateSiteInput {
   name: string;
   projectCode: string;
@@ -409,6 +423,8 @@ export interface DataSource {
   updateOrg(input: UpdateOrgInput): Promise<void>;
   /** W4-05 (§19 Q232): admin; 5 an hour per org (a `CodedError` `rate_limited` after). */
   sendTestMessage(input: SendTestMessageInput): Promise<SendTestMessageResult>;
+  /** W4-05 (§19 Q232, Q350): admin, where the org places calls; one at a time, 5 an hour. */
+  callMeNow(input: CallMeNowInput): Promise<CallMeNowResult>;
   createSite(input: CreateSiteInput): Promise<CreateSiteResult>;
   updateSite(siteId: string, patch: UpdateSitePatch): Promise<void>;
   /**

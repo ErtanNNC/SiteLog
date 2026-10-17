@@ -95,6 +95,9 @@
     "edit_pending": "I'm still working on the last change, one moment.",
     "consent_given": "Thank you.",
     "consent_repeat": "Sorry, is it OK if I record these calls and text you report links? Say yes or no.",
-    "tool_error": "Sorry, that didn't work on my side. Let's try again."
+    "tool_error": "Sorry, that didn't work on my side. Let's try again.",
+    "test_call_greeting": "Hi, it's the SiteLog assistant. This call is not recorded.",
+    "test_call_line": "This is a test call from SiteLog for {company}. Your phone is set up to receive SiteLog calls.",
+    "test_call_goodbye": "That's all for this test. Goodbye."
   }
 }

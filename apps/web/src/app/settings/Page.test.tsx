@@ -411,6 +411,72 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
       'Five test messages an hour. Try again later.',
     );
   });
+
+  it('Call me now (§19 Q232, Q350): a demo org’s test call is the console’s, audited masked, five an hour', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<SettingsPage />, opts(store, 'channels'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Call me now' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Call me now' });
+    expect(dialog).toHaveTextContent('Nothing is recorded and the number is not saved.');
+    // The US pack's field languages.
+    expect(within(dialog).getByLabelText('Language of the call')).toBeInTheDocument();
+    const call = within(dialog).getByRole('button', { name: 'Call me now' });
+    await userEvent.click(call);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Enter a valid mobile number.',
+    );
+    await userEvent.type(within(dialog).getByTestId('call-phone'), '(555) 014-3378');
+    await userEvent.click(call);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Tick the box to confirm it is your own number.',
+    );
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'This is my own number.' }));
+    await userEvent.click(call);
+    expect(await within(dialog).findByTestId('call-result')).toHaveTextContent(
+      'Demo company: the call was placed on SiteLog’s console, so no real phone rings.',
+    );
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'settings.test_call',
+      diff: { to: '+1555***378', telephony: 'console', language: 'en' },
+    });
+    expect(JSON.stringify(store.data.audit)).not.toContain('5550143378');
+    for (let i = 0; i < 4; i++) {
+      await userEvent.click(call);
+      await waitFor(() =>
+        expect(store.data.audit.filter((a) => a.action === 'settings.test_call')).toHaveLength(
+          i + 2,
+        ),
+      );
+    }
+    await userEvent.click(call);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Five test calls an hour. Try again later.',
+    );
+  });
+
+  it('has no Call me now where the org places no calls (the Calls card says why)', async () => {
+    const store = new DemoStore();
+    store.data.org.is_demo = false;
+    renderWithProviders(<SettingsPage />, opts(store, 'channels'));
+    expect(await screen.findByTestId('no-calls')).toHaveTextContent(
+      'SiteLog does not place calls in United States yet.',
+    );
+    expect(screen.getByRole('button', { name: 'Send me a test message' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Call me now' })).toBeNull();
+  });
+
+  it('Call me now in Turkish for Demir Yapı', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    const store = demirStore();
+    renderWithProviders(<SettingsPage />, {
+      ...opts(store, 'channels'),
+      auth: demirAuth(store),
+    });
+    await userEvent.click(await screen.findByRole('button', { name: 'Beni şimdi ara' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Beni şimdi ara' });
+    expect(dialog).toHaveTextContent('Hiçbir şey kaydedilmez, numara saklanmaz.');
+    expect(within(dialog).getByLabelText('Aramanın dili')).toBeInTheDocument();
+  });
 });
 
 describe('Settings → Reports & reminders on v1.2 and the report language (W4-05, §19 Q233)', () => {

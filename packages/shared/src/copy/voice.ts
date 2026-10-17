@@ -143,6 +143,11 @@ export const VOICE_KEYS = [
   // W3-12: a tool that failed on SiteLog's side, said instead of the error (§9.4: tool errors are
   // spoken as a short line, never raw).
   'tool_error',
+  // W4-05 (P12, §19 Q232, Q350): Settings' Call me now, the whole script of a test call: the
+  // disclosure (the assistant, and that nothing is recorded), one line with the company, goodbye.
+  'test_call_greeting',
+  'test_call_line',
+  'test_call_goodbye',
 ] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 

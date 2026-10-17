@@ -10,6 +10,7 @@ import {
   fieldLinkUrl,
   insideWindow,
   isOfficeCall,
+  isSettingsTestCall,
   ladderDedupeKey,
   missedCallNotifyKey,
   outboundCallKey,
@@ -35,7 +36,7 @@ import { PermanentJobError, type JobHandler } from './types';
 
 /**
  * §10.1 `place_call` (W3-17, M8; spec §7.4, F6 step 1, F11, §9.4 "Calls policy", §4.5
- * `Notifier.call`, §19 Q125–Q132). One job type, four phases:
+ * `Notifier.call`, §19 Q125–Q132). One job type, five phases:
  *
  * - **dial** (R1 and R2 from claim_site_day_reminder(), the one callback from
  *   voice_schedule_callback()): the guards in code (inside the org's call window at the site,
@@ -55,6 +56,8 @@ import { PermanentJobError, type JobHandler } from './types';
  *   text instead (R1; nothing for R2, whose text went, or a callback).
  * - **office** (W4-04, §19 Q230): Team's _Call now_, the row office_call_start() wrote with the
  *   office's attestation; dialled on the same telephony, never followed by a text.
+ * - **settings_test** (W4-05, §19 Q232, Q350): Settings' _Call me now_, an admin's short scripted
+ *   test call (no reporter); dialled on the same telephony, never followed by a text.
  *
  * Every skip is audited `call.skipped` with its reason; every text is a `notify` job (its key, its
  * guard: the day still waiting, the call window open), so a retry never texts twice.
@@ -63,8 +66,79 @@ export const placeCallJob: JobHandler<'place_call'> = async (ctx, payload) => {
   if (payload.phase === 'ring_end') return ringEnd(ctx, payload.callId);
   if (payload.phase === 'missed') return missed(ctx, payload.callId);
   if (payload.phase === 'office') return officeDial(ctx, payload.callId);
+  if (payload.phase === 'settings_test') return settingsTestDial(ctx, payload.callId);
   return dial(ctx, payload);
 };
+
+/**
+ * W4-05 (P12, §19 Q232, Q350): Settings' _Call me now_. settings_test_call_start() wrote the call
+ * (queued, no reporter, the admin's number held until now); the same telephony as the ladder
+ * dials it: `console` for a demo org (nothing leaves SiteLog; the ring ends unanswered after
+ * CONSOLE_CALL_RING_S), `livekit` on the pack's trunk with the pack's number as caller id. No
+ * call window (the admin asked for it, on their own phone) and never a text: a test call has no
+ * reporter. settings_test_call_dial() hands over the number and blanks it; a skip ends the call
+ * `failed` / `not_reached` with its reason, audited.
+ */
+async function settingsTestDial(ctx: Ctx, callId: string): Promise<void> {
+  const call = await ctx.db.getCall(callId);
+  if (!call) throw new PermanentJobError(`call ${callId} not found`);
+  if (!isSettingsTestCall(call)) throw new PermanentJobError(`call ${callId} is not a test call`);
+  if (call.ended_at || call.status !== 'queued') return;
+  if (!call.org_id) throw new PermanentJobError(`call ${callId} has no org`);
+  const org = await ctx.db.getOrg(call.org_id);
+  if (!org) throw new PermanentJobError(`org ${call.org_id} not found`);
+  const country = await ctx.db.getCountry(org.country);
+  if (!country) throw new PermanentJobError(`country pack ${org.country} not found`);
+  const pack = toCountryPack(country);
+  const log = ctx.log.child({ call_id: callId, stage: 'settings_test' });
+
+  const driver = telephonyFor({ isDemo: org.is_demo === true }, pack);
+  const telephony = driver ? (ctx.telephony ?? createTelephony(ctx.config)).get(driver) : null;
+  if (!driver || !telephony) {
+    const reason = driver ? 'telephony_unavailable' : 'no_trunk';
+    await ctx.db.settingsTestCallDial(callId, null, null, reason);
+    log.info('place_call: test call not placed', { reason });
+    return;
+  }
+  const go = await ctx.db.settingsTestCallDial(
+    callId,
+    driver,
+    driver === 'livekit' ? ctx.config.VOICE_MAX_CONCURRENT_CALLS : null,
+  );
+  if (go.status !== 'dial') {
+    log.info('place_call: test call not placed', {
+      status: go.status,
+      ...(go.status === 'skipped' ? { reason: go.reason } : {}),
+    });
+    return;
+  }
+
+  await ctx.db.outboundCallRinging(callId);
+  const result = await telephony.dial({
+    callId,
+    room: go.room,
+    to: go.to,
+    from: go.from,
+    trunkId: pack.outboundTrunkId,
+  });
+  log.info('place_call: test call dialled', {
+    telephony: driver,
+    result: result.kind,
+    ...(result.kind === 'unanswered' ? { status: result.status, reason: result.reason } : {}),
+  });
+  if (result.kind === 'ringing') {
+    await ctx.db.enqueueJob(
+      'place_call',
+      { phase: 'ring_end', callId },
+      { delayMs: result.settleAfterS * 1000, dedupeKey: ringEndJobKey(callId) },
+    );
+    return;
+  }
+  if (result.kind === 'unanswered') {
+    // Nobody to text: the admin sees how it went (or rings again).
+    await ctx.db.outboundCallUnanswered(callId, result.status, result.reason);
+  }
+}
 
 type DialPayload = Extract<JobPayloads['place_call'], { stage: OutboundCallStage }>;
 

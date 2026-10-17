@@ -14,7 +14,7 @@ import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { DEMO_ORG_LOCALE, DEMO_SITELOG_NUMBER, DEMO_TODAY } from '@sitelog/shared/demo/kestrel.ts';
 import { DEMO_CALL_AUDIO_SITES, demoCallAudioPath } from '@sitelog/shared/demo/calls.ts';
 import { demoId } from '@sitelog/shared/demo/ids.ts';
-import { OFFICE_CALL_POLICY } from '@sitelog/shared/voice-outbound.ts';
+import { OFFICE_CALL_POLICY, SETTINGS_TEST_CALL_POLICY } from '@sitelog/shared/voice-outbound.ts';
 import { billingPrice, type BillingPrice, type BillingStatus } from '@sitelog/shared/billing.ts';
 import { copy } from '@/copy/en';
 import { translate } from '@/i18n/useCopy';
@@ -62,6 +62,7 @@ import {
   type SourceUser,
   type UpdateOrgInput,
   type SendTestMessageInput,
+  type CallMeNowInput,
   type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
@@ -418,6 +419,14 @@ export class DemoSource implements DataSource {
   /** W4-05 (§19 Q232): a demo org's text is `console`: audited, nothing sent. */
   sendTestMessage(input: SendTestMessageInput) {
     return this.run(() => this.store.sendTestMessage(input, this.user.id));
+  }
+  /** W4-05 (§19 Q232, Q350): admin only; a demo org's test call is the console's. */
+  callMeNow(input: CallMeNowInput) {
+    return this.run(() => {
+      if (!(SETTINGS_TEST_CALL_POLICY.roles as readonly string[]).includes(this.user.role))
+        throw new Error(copy.errors.notAllowed);
+      return this.store.callMeNow(input, this.user.id);
+    });
   }
   /** The in-memory insert and invite are one step, so nothing can fail after the site exists. */
   createSite(input: CreateSiteInput) {

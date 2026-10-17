@@ -119,4 +119,8 @@ export const voiceEs: VoiceCatalog = {
   consent_repeat:
     'Perdón, ¿está bien que grabe estas llamadas y le envíe los enlaces de sus reportes por mensaje? Diga sí o no.',
   tool_error: 'Perdón, eso no funcionó de mi lado. Intentémoslo de nuevo.',
+  test_call_greeting: 'Hola, soy el asistente de SiteLog. Esta llamada no se graba.',
+  test_call_line:
+    'Esta es una llamada de prueba de SiteLog para {company}. Su teléfono está listo para recibir llamadas de SiteLog.',
+  test_call_goodbye: 'Eso es todo para esta prueba. Adiós.',
 };

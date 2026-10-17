@@ -980,6 +980,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     officeCallDial() {
       return Promise.reject(new Error('fake db: officeCallDial runs on PGlite only'));
     },
+    settingsTestCallDial() {
+      return Promise.reject(new Error('fake db: settingsTestCallDial runs on PGlite only'));
+    },
     reportNoPhotoCheck() {
       return Promise.reject(new Error('fake db: reportNoPhotoCheck runs on PGlite only'));
     },

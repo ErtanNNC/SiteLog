@@ -1,4 +1,4 @@
-import { MessageSquareText } from 'lucide-react';
+import { MessageSquareText, PhoneCall } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { fieldLanguagesOf, recordingNoticeFor } from '@sitelog/shared/copy/legal/index.ts';
@@ -35,7 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/Select';
 import { hhmm } from '@/data/assemble';
-import { useSendTestMessage } from '@/data/hooks';
+import { useCallMeNow, useSendTestMessage } from '@/data/hooks';
 import type { SendTestMessageResult } from '@/data/source';
 import type { SettingsData } from '@/data/types';
 import { useCopy, type CopyT } from '@/i18n/useCopy';
@@ -216,7 +216,7 @@ export function FieldChannelsSection({
 
       {pack ? <RecordingNoticeCard pack={pack} /> : null}
 
-      <TestCard org={org} pack={pack} country={country} />
+      <TestCard org={org} pack={pack} country={country} callsPlaced={callsPlaced} />
     </div>
   );
 }
@@ -323,27 +323,36 @@ function resultText(t: CopyT, r: SendTestMessageResult, country: string): string
     : t('settings.channels.testResults.noSender', { country });
 }
 
+/** The pack's field languages (the test text's and call's language choices), English without one. */
+function useFieldLanguages(pack: CountryPack | null): Language[] {
+  return useMemo(() => {
+    const own = pack ? fieldLanguagesOf(pack.fieldLocales) : [];
+    return own.length ? own : ['en'];
+  }, [pack]);
+}
+
 /**
  * §19 Q232: _Send me a test message_ to a number typed each time, which the admin attests is their
- * own (not stored); the pack's transport, five an hour. _Call me now_ is not built (W4-05 report):
- * it needs the agent's short scripted call.
+ * own (not stored); the pack's transport, five an hour. _Call me now_ (§19 Q350) only where the org
+ * places calls: the same sheet, a short scripted call (the disclosure, one line, goodbye), nothing
+ * recorded; elsewhere the Calls card already says why there is none.
  */
 function TestCard({
   org,
   pack,
   country,
+  callsPlaced,
 }: {
   org: SettingsData['org'];
   pack: CountryPack | null;
   country: string;
+  callsPlaced: boolean;
 }) {
   const { t, language } = useCopy();
   const send = useSendTestMessage();
   const phoneCountry = phoneCountryFor(org.country);
-  const languages: Language[] = useMemo(() => {
-    const own = pack ? fieldLanguagesOf(pack.fieldLocales) : [];
-    return own.length ? own : ['en'];
-  }, [pack]);
+  const languages = useFieldLanguages(pack);
+  const [callOpen, setCallOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [phone, setPhone] = useState<PhoneValue>(emptyPhone(phoneCountry));
   const [textLanguage, setTextLanguage] = useState<Language>(
@@ -389,16 +398,33 @@ function TestCard({
       hint={t('settings.channels.testHint')}
       data-testid="test-card"
     >
-      <Button
-        variant="ghost"
-        onClick={() => {
-          reset();
-          setOpen(true);
-        }}
-      >
-        <MessageSquareText aria-hidden="true" />
-        {t('settings.channels.testMessage')}
-      </Button>
+      <div className="flex flex-wrap gap-3">
+        <Button
+          variant="ghost"
+          onClick={() => {
+            reset();
+            setOpen(true);
+          }}
+        >
+          <MessageSquareText aria-hidden="true" />
+          {t('settings.channels.testMessage')}
+        </Button>
+        {callsPlaced ? (
+          <Button variant="ghost" onClick={() => setCallOpen(true)} data-testid="call-me-now">
+            <PhoneCall aria-hidden="true" />
+            {t('settings.channels.callMeNow')}
+          </Button>
+        ) : null}
+      </div>
+      {callsPlaced ? (
+        <CallMeNowDialog
+          open={callOpen}
+          onOpenChange={setCallOpen}
+          org={org}
+          languages={languages}
+          country={country}
+        />
+      ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
@@ -471,5 +497,154 @@ function TestCard({
         </DialogContent>
       </Dialog>
     </SettingsCard>
+  );
+}
+
+function callError(t: CopyT, code: string | null | undefined, country: string): string {
+  switch (code) {
+    case 'rate_limited':
+      return t('settings.channels.callResults.rateLimited');
+    case 'call_live':
+      return t('settings.channels.callResults.callLive');
+    case 'no_trunk':
+      return t('settings.channels.callResults.noTrunk', { country });
+    case 'invalid_phone':
+      return t('settings.channels.callResults.invalidPhone');
+    case 'attestation_required':
+      return t('settings.channels.callDialog.attestRequired');
+    default:
+      return t('errors.generic');
+  }
+}
+
+/**
+ * §19 Q232, Q350: _Call me now_, a short scripted test call to the admin's own number (typed each
+ * time, attested, never kept): the disclosure, one line, goodbye, nothing recorded. One at a time,
+ * five an hour per org (settings_test_call_start()); a demo org's call is the console's.
+ */
+function CallMeNowDialog({
+  open,
+  onOpenChange,
+  org,
+  languages,
+  country,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  org: SettingsData['org'];
+  languages: Language[];
+  country: string;
+}) {
+  const { t, language } = useCopy();
+  const callMe = useCallMeNow();
+  const phoneCountry = phoneCountryFor(org.country);
+  const [phone, setPhone] = useState<PhoneValue>(emptyPhone(phoneCountry));
+  const [callLanguage, setCallLanguage] = useState<Language>(
+    languages.includes(language) ? language : languages[0]!,
+  );
+  const [attested, setAttested] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  const change = (next: boolean) => {
+    if (next) {
+      setPhone(emptyPhone(phoneCountry));
+      setAttested(false);
+      setError(null);
+      setResult(null);
+    }
+    onOpenChange(next);
+  };
+
+  const submit = async () => {
+    setResult(null);
+    if (!phone.e164) return setError(t('settings.channels.callResults.invalidPhone'));
+    if (!attested) return setError(t('settings.channels.callDialog.attestRequired'));
+    setError(null);
+    try {
+      const r = await callMe.mutateAsync({ phone: phone.e164, language: callLanguage });
+      const text =
+        r.telephony === 'console'
+          ? t('settings.channels.callResults.demo')
+          : t('settings.channels.callResults.requested');
+      setResult(text);
+      toast.success(text);
+    } catch (err) {
+      setError(callError(t, errorCode(err), country));
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={change}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('settings.channels.callDialog.title')}</DialogTitle>
+          <DialogDescription>{t('settings.channels.callDialog.body')}</DialogDescription>
+        </DialogHeader>
+        <form
+          className="grid gap-4"
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
+          <PhoneInput
+            label={t('settings.channels.callDialog.phone')}
+            value={phone}
+            onChange={setPhone}
+            packCountry={org.country}
+            required
+            data-testid="call-phone"
+          />
+          {languages.length > 1 ? (
+            <div className="grid gap-1.5">
+              <Label htmlFor="call-language">{t('settings.channels.callDialog.language')}</Label>
+              <Select value={callLanguage} onValueChange={(v) => setCallLanguage(v as Language)}>
+                <SelectTrigger id="call-language">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {languages.map((l) => (
+                    <SelectItem key={l} value={l}>
+                      {t(`team.invite.languageNames.${l}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          <label
+            htmlFor="call-attest"
+            className="flex min-h-target cursor-pointer items-center gap-3 text-[15px]"
+          >
+            <Checkbox
+              id="call-attest"
+              checked={attested}
+              onCheckedChange={(v) => setAttested(v === true)}
+            />
+            {t('settings.channels.callDialog.attest')}
+          </label>
+          {error ? (
+            <p role="alert" className="text-caption font-medium text-missing">
+              {error}
+            </p>
+          ) : null}
+          {result ? (
+            <p role="status" className="text-[15px]" data-testid="call-result">
+              {result}
+            </p>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => change(false)}>
+              {t('common.close')}
+            </Button>
+            <Button type="submit" variant="primary" loading={callMe.isPending}>
+              {t('settings.channels.callDialog.call')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

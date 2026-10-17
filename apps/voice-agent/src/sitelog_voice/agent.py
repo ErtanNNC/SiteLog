@@ -7,7 +7,8 @@ Order of a call (§9.4 "How a call starts", §15.2 "disclosure in the first 5 s"
 1. `POST /voice/calls/start`: a SIP call passes the caller's number from the SIP participant (to
    field-api only; it never enters the model's context or a log line), a Talk now (web) or outbound
    call passes the call id from the room metadata. → the call id, the call token, the reporter's
-   first name and locale, or `unknown` (F13, W3-14).
+   first name and locale, or `unknown` (F13, W3-14), or `settingsTest` (W4-05: Settings' Call me
+   now, a short script of fixed lines with no model, no tool and no recording; then the end).
 2. `get_context` (sites, companies, key terms for STT, consents, `maxQuestions`), and whether the
    consent question comes first (§19 Q120).
 3. The session in the call language (`session.build_live_session`) with the recorder on the room's
@@ -62,10 +63,12 @@ from .session import (
 )
 from .special import (
     UNKNOWN_CALLER_MAX_RECORDING_S,
+    SettingsTestAgent,
     UnknownCallerAgent,
     consent_reply,
     needs_consent,
     next_step_line,
+    run_settings_test,
 )
 from .tools import NoHooks, ToolHooks, ToolResult, build_tools, post_fallback, send_end_call
 from .voicemail import GREETING_WAIT_S, OutboundGate
@@ -716,6 +719,14 @@ async def entrypoint(ctx: JobContext) -> None:
         finally:
             recorder.discard()
 
+    if started.settings_test is not None:
+        # W4-05 (§19 Q232, Q350): Settings' Call me now; no recorder is ever started.
+        recorder.discard()
+        await _settings_test_call(
+            ctx, settings, api, auth, started.locale or "en-US", started.settings_test.company
+        )
+        return
+
     if started.reporter is None:
         await _unknown_caller(
             ctx, settings, copy, api, auth, started.locale or "en-US", recorder, upload
@@ -791,6 +802,29 @@ async def _unknown_caller(
         ctx.shutdown(reason="unknown caller: 60 s")
 
     asyncio.get_running_loop().create_task(cap())
+
+
+async def _settings_test_call(
+    ctx: JobContext,
+    settings: Settings,
+    api: FieldApi,
+    auth: CallAuth,
+    locale: str,
+    company: str,
+) -> None:
+    """Settings' Call me now (W4-05, §19 Q232, Q350): after the callee's first words (or a short
+    silence), the disclosure, one line with the company and goodbye, uninterruptible; then
+    `end_call` and the room closes. No model, no tool, nothing recorded."""
+    session = build_live_session(settings, locale=locale, keyterms=[])
+    await session.start(agent=SettingsTestAgent(), room=ctx.room, record=False)
+    await _first_utterance(session, GREETING_WAIT_S)
+
+    async def say(line: str) -> None:
+        await session.say(line, allow_interruptions=False)
+
+    await run_settings_test(api, auth, locale, company, say)
+    session.shutdown(drain=True)
+    ctx.shutdown(reason="settings test call: done")
 
 
 def main() -> None:

@@ -1800,6 +1800,7 @@ export class FakeFieldStore implements FieldStore {
       reporterId: c.reporter_id,
       orgId: c.org_id,
       siteId: c.site_id,
+      purpose: c.purpose,
       repeat,
     });
     let c = this.callRows.find((x) => x.provider_call_id === input.room);
@@ -1821,6 +1822,22 @@ export class FakeFieldStore implements FieldStore {
       )
         return Promise.reject(new FieldDbError('call_conflict'));
       if (c.ended_at) return Promise.reject(new FieldDbError('call_ended'));
+    }
+    if (c && c.reporter_id === null) {
+      // W4-05 (20261017000530): Settings' test call starts with no reporter; nothing else does.
+      if (c.direction !== 'outbound' || c.purpose !== 'settings_test') {
+        return Promise.reject(new FieldDbError('call_conflict'));
+      }
+      Object.assign(c, {
+        provider_call_id: input.room,
+        status: c.status === 'queued' || c.status === 'ringing' ? 'in_progress' : c.status,
+        started_at: c.started_at ?? this.iso(),
+        answered_at: c.answered_at ?? this.iso(),
+        call_token_issued_at: this.iso(),
+        to_e164: null,
+      });
+      this.callAudit(c, 'call.started', { transport: c.transport, purpose: c.purpose });
+      return Promise.resolve(result(c, false));
     }
     if (c) {
       const row = c;

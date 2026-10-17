@@ -33,6 +33,7 @@ import {
   type ReviewGlossaryTermInput,
   type UpdateOrgInput,
   type SendTestMessageInput,
+  type CallMeNowInput,
   type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
@@ -491,6 +492,16 @@ export function useSaveReportLocale() {
 export function useSendTestMessage() {
   const s = useDataSource();
   return useSourceMutation((vars: SendTestMessageInput) => s.sendTestMessage(vars), {
+    silent: true,
+    quietErrors: true,
+    invalidate: false,
+  });
+}
+
+/** W4-05 (§19 Q232, Q350): Settings → Field channels, _Call me now_ (the caller words the result). */
+export function useCallMeNow() {
+  const s = useDataSource();
+  return useSourceMutation((vars: CallMeNowInput) => s.callMeNow(vars), {
     silent: true,
     quietErrors: true,
     invalidate: false,

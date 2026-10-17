@@ -418,6 +418,12 @@ export type OfficeCallDial =
   | { status: 'skipped'; reason: 'day_filed' | 'capacity' }
   | { status: 'gone'; callStatus: string };
 
+/** W4-05 (§19 Q232, Q350): what settings_test_call_dial() answered (`Db.settingsTestCallDial`). */
+export type SettingsTestCallDial =
+  | { status: 'dial'; callId: string; room: string; to: string; from: string | null }
+  | { status: 'skipped'; reason: string }
+  | { status: 'gone'; callStatus: string };
+
 export interface DigestStats {
   siteDays: number;
   filed: number;
@@ -842,6 +848,17 @@ export interface Db {
     telephony: TelephonyDriver,
     maxConcurrent: number | null,
   ): Promise<OfficeCallDial>;
+  /**
+   * W4-05 (§19 Q232, Q350): the last check before Settings' test call is dialled (still queued
+   * and fresh, the org placing calls, capacity on `livekit`); hands over the number and blanks it.
+   * With `skip`, ends the call `failed` / `not_reached` with that reason. Audited.
+   */
+  settingsTestCallDial(
+    callId: string,
+    telephony: TelephonyDriver | null,
+    maxConcurrent: number | null,
+    skip?: string | null,
+  ): Promise<SettingsTestCallDial>;
 
   // SMS report keywords (W2-12)
   /**
@@ -1972,6 +1989,11 @@ export function createDb(sql: Sql): Db {
     async officeCallDial(callId, telephony, maxConcurrent) {
       const [row] = await sql<Array<{ r: OfficeCallDial }>>`
         select office_call_dial(${callId}, ${telephony}, ${maxConcurrent}::int) as r`;
+      return row!.r;
+    },
+    async settingsTestCallDial(callId, telephony, maxConcurrent, skip = null) {
+      const [row] = await sql<Array<{ r: SettingsTestCallDial }>>`
+        select settings_test_call_dial(${callId}, ${telephony}, ${maxConcurrent}::int, ${skip}) as r`;
       return row!.r;
     },
     async outboundCallShare(orgId, from, to) {

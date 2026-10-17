@@ -11,12 +11,16 @@
   is their message: `leave_message` keeps a 160-character snippet for the office's Team alert, the
   agent says `unknown_goodbye` and the call ends. No tool of the report is offered; the recording
   is capped at `UNKNOWN_CALLER_MAX_RECORDING_S` (the recorder, W3-12, stops there).
+- **Settings' Call me now** (W4-05, §19 Q232, Q350): an admin's test call (`calls/start` answers
+  `settingsTest`): the disclosure, one line with the company, goodbye, then the end. No model,
+  no tool, no recorder.
 """
 
 from __future__ import annotations
 
+import contextlib
 import time
-from collections.abc import AsyncIterable, AsyncIterator, Callable
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from livekit.agents import Agent, ModelSettings, llm
@@ -201,3 +205,76 @@ class UnknownCallerAgent(Agent):
             metrics=CallMetrics(turns=len(self.heard)).to_contract(),
         )
         return goodbye
+
+
+# ───────────────────── W4-05: Settings' Call me now (§19 Q232, Q350) ─────────────────────
+
+
+def settings_test_lines(lang: Language, company: str, copy: VoiceCopy | None = None) -> list[str]:
+    """The whole script of a test call: the disclosure (the assistant, nothing recorded), the
+    test line with the company, goodbye. Fixed lines from code; no model says anything."""
+    copy = copy or default_copy()
+    return [
+        copy.line("test_call_greeting", lang),
+        copy.line("test_call_line", lang, company=company),
+        copy.line("test_call_goodbye", lang),
+    ]
+
+
+class SettingsTestAgent(Agent):
+    """Settings' _Call me now_ (W4-05): no model, no tool. Nothing the callee says is processed;
+    `run_settings_test` says the script."""
+
+    def __init__(self) -> None:
+        super().__init__(instructions="A test call: code says fixed lines; no model, no tools.")
+
+    def llm_node(
+        self,
+        chat_ctx: llm.ChatContext,
+        tools: list[llm.Tool],
+        model_settings: ModelSettings,
+    ) -> AsyncIterable[llm.ChatChunk | str | Any]:
+        return _nothing()
+
+
+async def _nothing() -> AsyncIterator[str]:
+    for _ in ():
+        yield ""
+
+
+async def run_settings_test(
+    api: FieldApi,
+    auth: CallAuth,
+    locale: str,
+    company: str,
+    say: Callable[[str], Awaitable[None]],
+    *,
+    copy: VoiceCopy | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> list[dict[str, Any]]:
+    """Says the test call's script, uninterruptible: the disclosure first (marked played, with no
+    recording notice version: nothing is recorded), the line, goodbye; then one `end_call`
+    (`abandoned`: nothing filed) with the agent's lines as its log. A hang-up (`say` raising
+    `RuntimeError`) ends the call the same way with what was said. Returns the log."""
+    from .copy import language_of
+
+    lang = language_of(locale)
+    started = clock()
+    log: list[dict[str, Any]] = []
+    for i, line in enumerate(settings_test_lines(lang, company, copy)):
+        at = round(min(max(clock() - started, 0.0), 3600.0), 2)
+        try:
+            await say(line)
+        except RuntimeError:
+            break  # hung up
+        log.append({"t": at, "speaker": "agent", "text": line})
+        if i == 0:
+            with contextlib.suppress(FieldApiError):
+                await api.mark_disclosure(auth)
+    await api.end_call(
+        auth,
+        outcome="abandoned",
+        dialog_log=log,
+        metrics=CallMetrics(turns=0).to_contract(),
+    )
+    return log

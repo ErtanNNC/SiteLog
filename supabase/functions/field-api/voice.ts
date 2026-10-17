@@ -12,7 +12,9 @@ import {
   GetContextRequestSchema,
   LoadReportRequestSchema,
   PickSiteRequestSchema,
+  REPORTER_LOCALES,
   REQUIRED_CONSENTS,
+  SETTINGS_TEST_CALL_POLICY,
   RecordAnswerRequestSchema,
   RecordAnswerResultSchema,
   UpdateDraftRequestSchema,
@@ -589,6 +591,22 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
       to: body.callId ? null : (body.to ?? null),
     });
     const callToken = await deriveCallToken(deps.callTokenSecret(), started.callId);
+    if (!started.reporterId && started.purpose === SETTINGS_TEST_CALL_POLICY.purpose) {
+      // W4-05 (§19 Q232, Q350): Settings' Call me now, the agent's short script in the call's
+      // language with the company's name; no reporter, nothing recorded.
+      const call = await store.getCall(started.callId);
+      const org = started.orgId ? await store.getOrgContext(started.orgId) : null;
+      if (!call || !org) throw new FieldError(404, 'call_not_found');
+      const locale = (REPORTER_LOCALES as readonly string[]).includes(call.language ?? '')
+        ? (call.language as ReporterLocale)
+        : ((org.country.field_locales[0] as ReporterLocale | undefined) ?? 'en-US');
+      return c.json({
+        callId: started.callId,
+        callToken,
+        settingsTest: { company: org.org.name },
+        locale,
+      } satisfies VoiceCallStartResponse);
+    }
     if (!started.reporterId) {
       // W3-14 (F13): the pack's language for the disclosure and the F13 line.
       const locale = special ? await special.unknownLocale(started.callId) : null;

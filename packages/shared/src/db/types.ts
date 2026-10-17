@@ -2377,6 +2377,26 @@ export type Database = {
         };
         Returns: Json;
       };
+      /** W4-05 (20261017000530, §19 Q232, Q350): Settings' Call me now (admin). */
+      settings_test_call_start: {
+        Args: {
+          p_org_id: string;
+          p_phone_e164: string;
+          p_language: string;
+          p_attested?: boolean;
+        };
+        Returns: Json;
+      };
+      /** W4-05: the worker's dial of a test call (service only). */
+      settings_test_call_dial: {
+        Args: {
+          p_call_id: string;
+          p_telephony: string;
+          p_max_concurrent?: number | null;
+          p_skip?: string | null;
+        };
+        Returns: Json;
+      };
       billing_provider_for_country: { Args: { p_country: string }; Returns: string };
       // Worker (service role) only.
       report_cost_inputs: {

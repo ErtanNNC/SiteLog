@@ -85,6 +85,13 @@ def test_response_refinement_reporter_or_unknown() -> None:
     c.check_response("calls_start", {"callId": CALL, "callToken": token, "unknown": True})
     with pytest.raises(ContractError, match="exactly one"):
         c.check_response("calls_start", {"callId": CALL, "callToken": token})
+    # W4-05 (§19 Q232, Q350): Settings' test call, with its locale, never beside a reporter.
+    test = {"callId": CALL, "callToken": token, "settingsTest": {"company": "Kestrel"}}
+    c.check_response("calls_start", {**test, "locale": "en-US"})
+    with pytest.raises(ContractError, match="with locale"):
+        c.check_response("calls_start", test)
+    with pytest.raises(ContractError, match="exactly one"):
+        c.check_response("calls_start", {**test, "locale": "en-US", "unknown": True})
 
 
 def test_contract_errors_never_quote_a_value() -> None:

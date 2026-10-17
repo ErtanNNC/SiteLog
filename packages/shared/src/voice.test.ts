@@ -305,6 +305,19 @@ describe('voice contract schemas', () => {
     expect(VoiceCallStartResponseSchema.safeParse({ callId: CALL, callToken: token }).success).toBe(
       false,
     );
+    // W4-05 (§19 Q232, Q350): Settings' test call, with its locale; never beside a reporter.
+    const test = {
+      callId: CALL,
+      callToken: token,
+      settingsTest: { company: 'Kestrel Build Group' },
+      locale: 'en-US',
+    };
+    expect(VoiceCallStartResponseSchema.parse(test)).toEqual(test);
+    const { locale: _l, ...noLocale } = test;
+    expect(VoiceCallStartResponseSchema.safeParse(noLocale).success).toBe(false);
+    expect(
+      VoiceCallStartResponseSchema.safeParse({ ...test, reporter: known.reporter }).success,
+    ).toBe(false);
     expect(
       VoiceCallStartResponseSchema.safeParse({
         ...known,

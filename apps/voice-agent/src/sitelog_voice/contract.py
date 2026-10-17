@@ -76,8 +76,12 @@ def _refine_calls_start_request(body: Mapping[str, Any]) -> str | None:
 
 
 def _refine_calls_start_response(body: Mapping[str, Any]) -> str | None:
-    if ("reporter" in body) == ("unknown" in body):
-        return "exactly one of reporter or unknown"
+    kinds = sum(1 for key in ("reporter", "unknown", "settingsTest") if key in body)
+    if kinds != 1:
+        return "exactly one of reporter, unknown or settingsTest"
+    # W4-05 (§19 Q232, Q350): Settings' test call is said in its locale.
+    if "settingsTest" in body and "locale" not in body:
+        return "settingsTest comes with locale"
     return None
 
 
@@ -193,6 +197,12 @@ class Reporter(_View):
     locale: Locale
 
 
+class SettingsTest(_View):
+    """W4-05 (§19 Q232, Q350): Settings' _Call me now_, an admin's test call (no reporter)."""
+
+    company: str
+
+
 class CallsStartResponse(_View):
     """`POST /voice/calls/start` → contract `calls_start_response`."""
 
@@ -200,8 +210,11 @@ class CallsStartResponse(_View):
     call_token: str
     reporter: Reporter | None = None
     unknown: Literal[True] | None = None
-    #: W3-14 (F13): an unknown caller's language, the first field locale of the called pack.
+    #: W3-14 (F13): an unknown caller's language, the first field locale of the called pack;
+    #: W4-05: a test call's language.
     locale: Locale | None = None
+    #: W4-05: the short scripted test call (disclosure, one line, goodbye; nothing recorded).
+    settings_test: SettingsTest | None = None
 
 
 class CallInfo(_View):
@@ -280,6 +293,7 @@ def is_pending(data: Any) -> bool:
 TYPED_VIEWS: dict[type[_View], tuple[str, tuple[str, ...]]] = {
     CallsStartResponse: ("calls_start_response", ()),
     Reporter: ("calls_start_response", ("properties", "reporter")),
+    SettingsTest: ("calls_start_response", ("properties", "settingsTest")),
     GetContextResponse: ("tool_get_context_response", ()),
     CallInfo: ("tool_get_context_response", ("properties", "call")),
     SiteInfo: ("tool_get_context_response", ("properties", "sites", "items")),

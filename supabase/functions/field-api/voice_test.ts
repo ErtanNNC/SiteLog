@@ -744,6 +744,90 @@ Deno.test(
 );
 
 Deno.test(
+  "Settings' Call me now starts with no reporter: the company and the call language only (W4-05)",
+  async () => {
+    const h = setup();
+    const id = '33333333-0000-4000-8000-000000000530';
+    const row = (over: Partial<CallRow>): CallRow => ({
+      id,
+      org_id: ORG,
+      reporter_id: null,
+      site_id: null,
+      report_id: null,
+      direction: 'outbound',
+      transport: 'pstn',
+      purpose: 'settings_test',
+      provider_call_id: `call-${id}`,
+      from_e164: VOICE_NUMBER,
+      to_e164: null,
+      status: 'ringing',
+      outcome: null,
+      disclosure_played: false,
+      disclosure_version: null,
+      started_at: T0.toISOString(),
+      answered_at: null,
+      ended_at: null,
+      duration_s: null,
+      recording_path: null,
+      peaks: null,
+      dialog_log: null,
+      metrics: { telephony: 'livekit', stage: 'settings_test' },
+      created_at: T0.toISOString(),
+      language: 'es-US',
+      call_token_issued_at: null,
+      attempt: null,
+      site_day_id: null,
+      fallback: null,
+      reconcile: null,
+      consent_declined_at: null,
+      ...over,
+    });
+    h.store.callRows.push(row({}));
+    const res = await h.call('voice/calls/start', {
+      room: `call-${id}`,
+      callId: id,
+      transport: 'pstn',
+    });
+    assertEquals(res.status, 200, res.text);
+    const answer = VoiceCallStartResponseSchema.parse(res.json);
+    assertEquals(
+      [answer.settingsTest, answer.locale, answer.reporter, answer.unknown],
+      [{ company: 'Kestrel Build Group' }, 'es-US', undefined, undefined],
+    );
+    assertNoPhone(res.text);
+    assertEquals(h.store.callRows[0]!.status, 'in_progress');
+    // The disclosure and the end work on its token; a report tool finds no reporter.
+    const token = res.json.callToken as string;
+    const marked = await h.call(`voice/calls/${id}/disclosure`, { callId: id }, { token });
+    assertEquals(marked.status, 200, marked.text);
+    const ctx = await h.tool('get_context', id, token);
+    assertEquals([ctx.status, ctx.json.error], [403, 'unknown_caller']);
+    const end = await h.tool('end_call', id, token, {
+      outcome: 'abandoned',
+      dialogLog: [{ t: 0, speaker: 'agent', text: 'Goodbye.' }],
+      metrics: {
+        latencyP50Ms: null,
+        latencyP95Ms: null,
+        interruptions: 0,
+        sttConfidence: null,
+        turns: 0,
+      },
+    });
+    assertEquals(end.status, 200, end.text);
+
+    // Any other outbound call without a reporter stays a conflict.
+    const other = '33333333-0000-4000-8000-000000000531';
+    h.store.callRows.push(row({ id: other, provider_call_id: null, purpose: 'reminder' }));
+    const refused = await h.call('voice/calls/start', {
+      room: `call-${other}`,
+      callId: other,
+      transport: 'pstn',
+    });
+    assertEquals([refused.status, refused.json.error], [409, 'call_conflict']);
+  },
+);
+
+Deno.test(
   'set_preference: audited as the reporter via voice, worded in the call language; "not today" waits for W3-17',
   async () => {
     const h = setup();

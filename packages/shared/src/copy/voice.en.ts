@@ -117,4 +117,8 @@ export const voiceEn: VoiceCatalog = {
   consent_repeat:
     'Sorry, is it OK if I record these calls and text you report links? Say yes or no.',
   tool_error: "Sorry, that didn't work on my side. Let's try again.",
+  test_call_greeting: "Hi, it's the SiteLog assistant. This call is not recorded.",
+  test_call_line:
+    'This is a test call from SiteLog for {company}. Your phone is set up to receive SiteLog calls.',
+  test_call_goodbye: "That's all for this test. Goodbye.",
 };

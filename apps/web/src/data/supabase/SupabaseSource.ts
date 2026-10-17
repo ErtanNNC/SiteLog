@@ -48,7 +48,11 @@ import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numberin
 import { invoiceUploadPath } from '@sitelog/shared/invoices.ts';
 import { mergeDemoPhoneCalls } from '../demoPhoneCalls';
 import { toCountryPack, type CountryPack } from '@sitelog/shared/countries.ts';
-import { OFFICE_CALL_POLICY, type OfficeCallStart } from '@sitelog/shared/voice-outbound.ts';
+import {
+  OFFICE_CALL_POLICY,
+  type OfficeCallStart,
+  type SettingsTestCallStart,
+} from '@sitelog/shared/voice-outbound.ts';
 import { TEAM_RPC_CODES } from '../types';
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
 import type { OrgLocale } from '@sitelog/shared/locale.ts';
@@ -123,6 +127,8 @@ import {
   type UpdateOrgInput,
   type SendTestMessageInput,
   type SendTestMessageResult,
+  type CallMeNowInput,
+  type CallMeNowResult,
   type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
@@ -2122,6 +2128,22 @@ export class SupabaseSource implements DataSource {
     });
   }
   /** W4-05 (§19 Q232): api-test-message; a 429 is a `CodedError` `rate_limited`. */
+  /**
+   * W4-05 (§19 Q232, Q350): settings_test_call_start(); a refusal is a CodedError with its reason
+   * (`rate_limited`, `call_live`, `no_trunk`, `invalid_phone`, `attestation_required`).
+   */
+  async callMeNow(input: CallMeNowInput): Promise<CallMeNowResult> {
+    const { data, error } = await this.sb.rpc('settings_test_call_start', {
+      p_org_id: this.orgId,
+      p_phone_e164: input.phone,
+      p_language: input.language,
+      p_attested: true,
+    });
+    if (error) throw new Error(error.message);
+    const res = data as unknown as SettingsTestCallStart;
+    if (res.status === 'refused') throw new CodedError(res.reason, res.reason);
+    return { callId: res.callId, telephony: res.telephony };
+  }
   async sendTestMessage(input: SendTestMessageInput): Promise<SendTestMessageResult> {
     return this.callFunction<SendTestMessageResult>('api-test-message', {
       orgId: this.orgId,

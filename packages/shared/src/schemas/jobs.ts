@@ -110,6 +110,8 @@ export const JobPayloadSchemas = {
     z.object({ phase: z.literal('missed'), callId: uuid }),
     /** W4-04 (§19 Q230): Team's Call now, the row office_call_start() wrote. */
     z.object({ phase: z.literal('office'), callId: uuid }),
+    /** W4-05 (§19 Q232, Q350): Settings' Call me now, the row settings_test_call_start() wrote. */
+    z.object({ phase: z.literal('settings_test'), callId: uuid }),
   ]),
   transcribe_audio: z.object({
     messageId: uuid,

@@ -85,6 +85,8 @@ const AUTHENTICATED_KEEPS = [
   'office_call_start(uuid,uuid,text,boolean)',
   // W4-05: the report language and units (§19 Q233).
   'update_org(uuid,text,text,text,text,text,text)',
+  // W4-05: Settings' Call me now (§19 Q232, Q350).
+  'settings_test_call_start(uuid,text,text,boolean)',
 ] as const;
 
 let db: PGlite;
