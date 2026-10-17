@@ -155,7 +155,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-05 · Settings: the Field channels tab and Reports & reminders on v1.2
 
-- [ ] **W4-05 done** · today _partial_ (L)
+- [x] **W4-05 done** · today _partial_ (L)
 - **Spec:** F22, P12 (Reports & reminders: the ladder cards "−35 heads-up · 17:00 daily link · +15 R1 'Text or call — per person' · +60 R2 · +90 missing", filing "Reporter confirms — on the recorder or by voice on the call"; **Field channels**: the pack read-only, daily link time, _Call people who prefer calls_, _Second call at reminder 2_, call window, default preference for new reporters, daily link expiry, recording notice per language read-only with its version, _Send me a test message_, _Call me now_ hidden without an outbound trunk), §4.6, §7.4, §19 Q30 (quiet hours = the call window), Q31, Q77, Q129.
 - **Design:** Web-Settings is not exported (P12's text and the current tabs are the reference).
 - **Already in the repo:** the tabs, `ReportsSection`, the guard, the `org_settings` columns, `countries` readable by every office user (RLS), the pack helpers (`packages/shared/src/countries.ts`), the voice copy's `recording_notice` per language.
