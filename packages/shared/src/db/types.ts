@@ -730,6 +730,24 @@ export type VoiceToolRequestRow = {
 };
 
 /**
+ * W3-04 (20261016000320): a LiveKit webhook event voice-events acted on, one row per event id (a
+ * redelivery runs nothing again). No body, identity or number. Service role only.
+ */
+export type LivekitEventRow = {
+  id: string;
+  event:
+    | 'room_started'
+    | 'participant_joined'
+    | 'track_published'
+    | 'participant_left'
+    | 'room_finished';
+  room: string;
+  call_id: string | null;
+  event_at: string;
+  received_at: string;
+};
+
+/**
  * A phone's STOP on a pack's SMS sender (20261014000007_sms_layer.sql, spec §6.3, §9.5): kept with
  * or without a reporter, so the next invite of the number on the pack starts opted out and the
  * Notifier sends it nothing. Service role only.
@@ -1224,6 +1242,7 @@ export type Database = {
         | 'fallback'
       >;
       voice_tool_requests: Table<VoiceToolRequestRow, 'status' | 'response' | 'created_at'>;
+      livekit_events: Table<LivekitEventRow, 'call_id' | 'received_at'>;
       report_versions: Table<
         ReportVersionRow,
         | 'summary'
@@ -1477,6 +1496,18 @@ export type Database = {
       };
       voice_call_end: {
         Args: { p_call_id: string; p_outcome: CallOutcome; p_dialog_log: Json; p_metrics: Json };
+        Returns: Json;
+      };
+      // W3-04 (20261016000320_voice_events.sql): voice-events, service role only.
+      voice_call_event: {
+        Args: {
+          p_event_id: string;
+          p_event: string;
+          p_room: string;
+          p_at: string;
+          p_status?: CallStatus | null;
+          p_detail?: Json;
+        };
         Returns: Json;
       };
       call_site_day: {

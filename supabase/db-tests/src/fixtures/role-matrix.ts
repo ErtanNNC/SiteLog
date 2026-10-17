@@ -325,6 +325,14 @@ export const TABLES: Record<string, TableCase> = {
       `insert into voice_tool_requests (call_id, request_key, tool) values ('${o.call}', 'matrix-new', 'end_call')`,
     set: 'response = response',
   },
+  livekit_events: {
+    why: 'LiveKit webhook events voice-events acted on (W3-04): the service role only; no client policy, no grant.',
+    allow: serviceOnly,
+    where: (o) => `call_id = '${o.call}'`,
+    insert: (o) =>
+      `insert into livekit_events (id, event, room, call_id, event_at) values ('EV_matrix_new', 'room_started', 'call-${o.call}', '${o.call}', now())`,
+    set: 'event_at = event_at',
+  },
   rate_limits: {
     why: 'field-api throttling (§6.5): service role only; no client policy, no grant.',
     allow: serviceOnly,
@@ -704,6 +712,13 @@ export const RPCS: Record<
     why: '§6.5: field-api and voice-events only (service role); office users never end a call.',
     allow: NONE,
     call: (o) => `select voice_call_end('${o.call}', 'abandoned', '[]', '{}') as v`,
+  },
+  // W3-04 (20261016000320_voice_events.sql): LiveKit's webhooks, through voice-events.
+  voice_call_event: {
+    why: '§4.2: voice-events only (service role), after the LiveKit signature check; no client moves a call.',
+    allow: NONE,
+    call: (o) =>
+      `select voice_call_event('EV_matrix', 'room_finished', 'call-${o.call}', now()) as v`,
   },
 };
 

@@ -1,0 +1,37 @@
+{
+  "event": "participant_joined",
+  "room": {
+    "sid": "RM_{{room_sid}}",
+    "name": "{{room}}",
+    "emptyTimeout": 300,
+    "departureTimeout": 20,
+    "creationTime": "{{ts}}",
+    "enabledCodecs": [
+      {
+        "mime": "audio/opus"
+      }
+    ],
+    "metadata": "",
+    "numParticipants": 1
+  },
+  "participant": {
+    "sid": "PA_agent{{room_sid}}",
+    "identity": "agent-AJ_{{room_sid}}",
+    "state": "ACTIVE",
+    "joinedAt": "{{ts+1}}",
+    "name": "sitelog-voice",
+    "version": 1,
+    "permission": {
+      "canSubscribe": true,
+      "canPublish": true,
+      "canPublishData": true,
+      "agent": true
+    },
+    "kind": "AGENT",
+    "attributes": {
+      "lk.agent.state": "listening"
+    }
+  },
+  "id": "{{id}}",
+  "createdAt": "{{ts+1}}"
+}

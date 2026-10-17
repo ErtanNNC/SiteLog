@@ -200,6 +200,8 @@ export const PRUNE: ReadonlyArray<readonly [table: string, where: (k: PruneScope
   ['push_subscriptions', (k) => `org_id = ${k.o} or reporter_id in ${k.R}`],
   // The voice agent's kept tool answers (W3-03): with their call.
   ['voice_tool_requests', (k) => `call_id in ${k.C}`],
+  // LiveKit events voice-events acted on (W3-04): with their call.
+  ['livekit_events', (k) => `call_id in ${k.C}`],
   [
     'calls',
     (k) => `org_id = ${k.o} or reporter_id in ${k.R} or site_id in ${k.S} or report_id in ${k.P}`,

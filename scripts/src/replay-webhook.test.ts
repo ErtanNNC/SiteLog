@@ -7,8 +7,13 @@ import {
   parseTwilioStatus,
   parseTwilioWhatsappInbound,
   verifyTwilioSignature,
+  verifyLiveKitWebhook,
+  LiveKitWebhookEventSchema,
+  toVoiceEvent,
 } from '@sitelog/shared';
 import {
+  isLiveKitFixture,
+  liveKitRequest,
   isTwilioFixture,
   parseArgs,
   substitute,
@@ -130,5 +135,72 @@ describe('replay-webhook Twilio mode (W1-08)', () => {
       sid: 'SM9',
       files: ['f.json'],
     });
+  });
+});
+
+describe('replay-webhook LiveKit mode (W3-04)', () => {
+  const FIXTURES = join(import.meta.dirname, '..', '..', 'fixtures', 'livekit');
+  const ROOM = 'call-0f0e0d0c-0000-4000-8000-0000000000f1';
+
+  it('signs every LiveKit fixture as voice-events checks it, filled for one room', async () => {
+    const files = readdirSync(FIXTURES).filter((f) => f.endsWith('.json'));
+    expect(files.length).toBeGreaterThanOrEqual(6);
+    const args = parseArgs(['--room', ROOM, '--phone', '15550142087'], {
+      LIVEKIT_API_KEY: 'APIlocal',
+      LIVEKIT_API_SECRET: 'local-secret',
+    });
+    expect(args).toMatchObject({ room: ROOM, livekitKey: 'APIlocal' });
+    const now = new Date();
+    for (const f of files) {
+      const raw = readFileSync(join(FIXTURES, f), 'utf8');
+      expect(isLiveKitFixture(JSON.parse(raw)), f).toBe(true);
+      expect(isTwilioFixture(JSON.parse(raw)), f).toBe(false);
+      const req = await liveKitRequest(raw, args, now);
+      const body = JSON.parse(req.body) as { room: { name: string }; createdAt: string };
+      expect(body.room.name).toBe(ROOM);
+      expect(Number(body.createdAt)).toBeLessThanOrEqual(now.getTime() / 1000);
+      expect(
+        await verifyLiveKitWebhook(req.body, req.authorization, {
+          apiKey: 'APIlocal',
+          apiSecret: 'local-secret',
+          now,
+        }),
+      ).toMatchObject({ ok: true });
+    }
+  });
+
+  it('maps the fixtures as voice-events does: the outbound call, no answer, busy', async () => {
+    const args = parseArgs(['--room', ROOM], {});
+    const status = async (f: string) => {
+      const req = await liveKitRequest(readFileSync(join(FIXTURES, f), 'utf8'), args);
+      const ev = toVoiceEvent(LiveKitWebhookEventSchema.parse(JSON.parse(req.body)), new Date());
+      expect(ev, f).not.toBeNull();
+      // No number or participant identity leaves toVoiceEvent (§10.12).
+      expect(JSON.stringify(ev), f).not.toMatch(/\+1555|\+1888|sip_/);
+      return [ev!.event, ev!.status];
+    };
+    const outbound = [1, 2, 3, 4, 5, 6].map(
+      (n) => readdirSync(FIXTURES).find((f) => f.startsWith(`outbound-0${n}-`)) ?? `missing ${n}`,
+    );
+    expect(await Promise.all(outbound.map(status))).toEqual([
+      ['room_started', null],
+      ['participant_joined', null],
+      ['participant_joined', 'ringing'],
+      ['track_published', 'in_progress'],
+      ['participant_left', 'completed'],
+      ['room_finished', null],
+    ]);
+    expect(await status('no-answer-02-sip-unavailable.json')).toEqual([
+      'participant_left',
+      'no_answer',
+    ]);
+    expect(await status('busy-sip-rejected.json')).toEqual(['participant_left', 'busy']);
+  });
+
+  it('defaults to a fresh room and a local key pair', () => {
+    const a = parseArgs([], {});
+    expect(a.room).toMatch(/^call-[0-9a-f-]{36}$/);
+    expect(a.livekitKey).toBe('devkey');
+    expect(a.voiceUrl).toMatch(/voice-events$/);
   });
 });

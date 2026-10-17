@@ -20,6 +20,7 @@ worker and the web panel use.
 | `field-api`                | link code + `sl_dev_*` device cookie (no JWT)     | The field app's only backend (W1-07, spec §6.5, Appendix B): link, device, consent, uploads   |
 | `field-api` `/voice/*`     | bearer `VOICE_AGENT_TOOL_SECRET` + `X-Call-Token` | W3-03: the voice agent's routes, server to server: call start, `get_context`, tools           |
 | `sms-webhook`              | `X-Twilio-Signature`; `/demo-reply`: JWT, admin   | Twilio inbound texts (§9.5 keywords, F13) and delivery status; the Demo phone's typed replies |
+| `voice-events`             | LiveKit's webhook JWT (`LIVEKIT_API_SECRET`)      | W3-04: call rooms' events → `calls` status (never backwards); backstop on an unended call     |
 
 Every function but `field-api` is `Deno.serve(withHandler(...))`: CORS preflight for the panel origin
 (`APP_URL`), Zod-validated input, typed `createClient<AppDatabase>` (service role), JSON logs via
@@ -86,6 +87,9 @@ supabase secrets set VAPID_PUBLIC_KEY=B...
 # voice routes answer 500 "not configured", the field app's routes are unaffected.
 supabase secrets set VOICE_AGENT_TOOL_SECRET=$(openssl rand -base64 32) \
   VOICE_CALL_TOKEN_SECRET=$(openssl rand -base64 32)
+# voice-events (W3-04): LiveKit signs its webhooks with the project's API key and secret (the JWT's
+# iss and HS256 key). Unset: voice-events answers 500 "not configured" and LiveKit retries.
+supabase secrets set LIVEKIT_API_KEY=API... LIVEKIT_API_SECRET=...
 ```
 
 Local development reads the same names from `supabase/functions/.env` (`supabase functions serve
@@ -116,6 +120,7 @@ supabase functions deploy stripe-webhook   --no-verify-jwt
 supabase functions deploy scheduler-tick   --no-verify-jwt
 supabase functions deploy field-api        --no-verify-jwt   # link code + device cookie
 supabase functions deploy sms-webhook      --no-verify-jwt   # Twilio signature; /demo-reply checks the JWT itself
+supabase functions deploy voice-events     --no-verify-jwt   # LiveKit's webhook JWT (W3-04)
 
 # panel API: gateway JWT check stays on; each function also resolves the user + org role
 supabase functions deploy api-invite-reporter
@@ -155,6 +160,12 @@ CLI accepts a `deno.json` wherever it accepts an `import_map.json` (it reads the
   as they are): the function stores the text, its audit and the worker's `sms_inbound` job in one
   transaction (`receive_sms_inbound()`), and the retries cover a failure before it commits. Delivery callbacks need nothing: each send names
   `{SMS_WEBHOOK_URL}/status`. Twilio's own STOP/HELP handling: spec §19 Q45 (when Twilio sends `OptOutType`, SiteLog records the change and sends no reply of its own; RUNBOOK §2).
+- **LiveKit** (Cloud project → Settings → Webhooks, W3-16 with the owner's approval): URL
+  `https://<project-ref>.supabase.co/functions/v1/voice-events`, signed with the project's API key
+  (the same `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` as the function's secrets). A test delivery
+  for a room that is not `call-{uuid}`, or an event the function does not act on, answers 200
+  `{received: true, ignored: true}` (the signature passed); 401 `invalid_signature` means the key
+  pair differs.
 - **pg_cron**: nothing to register; the Vault secrets above are enough.
 
 ## Local testing

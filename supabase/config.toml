@@ -91,6 +91,14 @@ verify_jwt = false
 import_map = "./functions/deno.json"
 entrypoint = "./functions/sms-webhook/index.ts"
 
+# LiveKit's webhooks for the call rooms (W3-04): LiveKit sends no Supabase JWT; each request carries
+# its own JWT signed with LIVEKIT_API_SECRET, which the function checks before reading anything.
+[functions.voice-events]
+enabled = true
+verify_jwt = false
+import_map = "./functions/deno.json"
+entrypoint = "./functions/voice-events/index.ts"
+
 [functions.api-invite-reporter]
 enabled = true
 verify_jwt = true

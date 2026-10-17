@@ -8,17 +8,31 @@
  *   pnpm replay-webhook -- --dry-run fixtures/webhooks/audio-note.json   # prints the normalised messages only
  *   pnpm replay-webhook -- fixtures/sms/inbound-help.json                # Twilio, signed with TWILIO_AUTH_TOKEN
  *   pnpm replay-webhook -- --sid SM123 fixtures/sms/status-delivered.json
+ *   pnpm replay-webhook -- --room call-<uuid> fixtures/livekit/outbound-0*.json   # LiveKit (W3-04)
  *
  * Meta placeholders: {{phone}} (WA id digits, --phone), {{ts}} (now, unix seconds), {{id}} (a fresh
  * wamid so dedupe does not swallow the replay). Twilio placeholders: {{phone}} (E.164, --phone),
  * {{to}} (the pack's sender id, --to), {{sid}} (a fresh message SID), {{message_sid}} (--sid).
  * Twilio requests are signed for the URL they are posted to (`--sms-url` or SMS_WEBHOOK_URL plus the
  * fixture's path), which must be the URL sms-webhook checks (its SMS_WEBHOOK_URL).
+ *
+ * LiveKit (voice-events, W3-04; a fixture with `event` and `id`, fixtures/livekit/README.md): signed
+ * as LiveKit signs a webhook (an HS256 JWT in `Authorization`, `iss` LIVEKIT_API_KEY, the body's
+ * `sha256`) with LIVEKIT_API_KEY / LIVEKIT_API_SECRET (a local pair: never a real project's) and
+ * posted to `--voice-url` or VOICE_EVENTS_URL. Placeholders: {{room}} (`--room`, one room for every
+ * file of the run, default a fresh `call-{uuid}` that matches no call), {{id}} (a fresh event id),
+ * {{ts}} / {{ts+N}} (three minutes ago, plus N seconds), {{phone}} (E.164, `--phone`), {{to}}
+ * (`--to`).
  */
 import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fillLiveKitFixture } from '@sitelog/shared/livekit/fixture.ts';
 import {
+  LiveKitWebhookEventSchema,
+  signLiveKitWebhook,
+  toVoiceEvent,
   metaSignature,
   normalizeWebhook,
   isTwilioWhatsappForm,
@@ -39,6 +53,11 @@ interface Args {
   token: string;
   to: string;
   sid: string;
+  /** LiveKit: voice-events' URL, the API key and secret it checks, and the call's room. */
+  voiceUrl: string;
+  livekitKey: string;
+  livekitSecret: string;
+  room: string;
 }
 
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): Args {
@@ -52,6 +71,10 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
     token: env.TWILIO_AUTH_TOKEN ?? 'dev-twilio-auth-token',
     to: env.REPLAY_SMS_TO ?? '+18885550142',
     sid: env.REPLAY_SMS_SID ?? '',
+    voiceUrl: env.VOICE_EVENTS_URL ?? 'http://127.0.0.1:54321/functions/v1/voice-events',
+    livekitKey: env.LIVEKIT_API_KEY || 'devkey',
+    livekitSecret: env.LIVEKIT_API_SECRET || 'dev-livekit-secret',
+    room: env.REPLAY_ROOM ?? `call-${randomUUID()}`,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -63,6 +86,8 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
     else if (a === '--token') args.token = argv[++i] ?? args.token;
     else if (a === '--to') args.to = argv[++i] ?? args.to;
     else if (a === '--sid') args.sid = argv[++i] ?? args.sid;
+    else if (a === '--voice-url') args.voiceUrl = argv[++i] ?? args.voiceUrl;
+    else if (a === '--room') args.room = argv[++i] ?? args.room;
     else if (a === '--')
       continue; // `pnpm replay-webhook -- …` passes the separator through
     else args.files.push(a);
@@ -114,6 +139,54 @@ export async function twilioRequest(
   return { url, body, signature: await twilioSignature(url, fixture.params, token) };
 }
 
+/** A LiveKit webhook fixture (fixtures/livekit): a `WebhookEvent` with its event name and id. */
+export function isLiveKitFixture(value: unknown): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as { event?: unknown }).event === 'string' &&
+    typeof (value as { id?: unknown }).id === 'string'
+  );
+}
+
+/** The signed request a LiveKit fixture becomes: its body and the `Authorization` token. */
+export async function liveKitRequest(
+  template: string,
+  args: Pick<Args, 'room' | 'phone' | 'to' | 'livekitKey' | 'livekitSecret'>,
+  now = new Date(),
+): Promise<{ body: string; authorization: string }> {
+  const body = fillLiveKitFixture(template, {
+    room: args.room,
+    ts: Math.floor(now.getTime() / 1000) - 180,
+    phone: `+${args.phone.replace(/\D/g, '')}`,
+    to: args.to,
+  });
+  const authorization = await signLiveKitWebhook(body, {
+    apiKey: args.livekitKey,
+    apiSecret: args.livekitSecret,
+    now,
+  });
+  return { body, authorization };
+}
+
+async function replayLiveKit(args: Args, file: string, template: string): Promise<boolean> {
+  const req = await liveKitRequest(template, args);
+  const ev = toVoiceEvent(LiveKitWebhookEventSchema.parse(JSON.parse(req.body)), new Date());
+  console.log(
+    `\n${file}: LiveKit ${ev ? `${ev.event} ${ev.room} ${ev.status ?? ''}` : '(ignored by voice-events)'}`,
+  );
+  if (args.dryRun) return true;
+  const started = Date.now();
+  const res = await fetch(args.voiceUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/webhook+json', Authorization: req.authorization },
+    body: req.body,
+  });
+  const text = await res.text();
+  console.log(`  → ${res.status} in ${Date.now() - started} ms ${text.slice(0, 200)}`);
+  return res.ok;
+}
+
 async function replayTwilio(args: Args, file: string, fixture: TwilioFixture): Promise<boolean> {
   const form = new URLSearchParams(fixture.params);
   // W2-16: a WhatsApp message comes on the same webhook with `whatsapp:` addresses.
@@ -160,7 +233,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.files.length === 0) {
     console.error(
-      'usage: replay-webhook [--url U] [--secret S] [--phone 1555…] [--sms-url U] [--token T] [--to SENDER] [--sid SM…] [--dry-run] <fixture.json>…',
+      'usage: replay-webhook [--url U] [--secret S] [--phone 1555…] [--sms-url U] [--token T] [--to SENDER] [--sid SM…] [--voice-url U] [--room call-…] [--dry-run] <fixture.json>…',
     );
     process.exit(2);
   }
@@ -169,6 +242,10 @@ async function main(): Promise<void> {
     // pnpm runs the script in scripts/; a path is relative to where `pnpm replay-webhook` ran.
     const raw = readFileSync(resolve(process.env.INIT_CWD ?? process.cwd(), file), 'utf8');
     const probe = JSON.parse(raw) as unknown;
+    if (isLiveKitFixture(probe)) {
+      if (!(await replayLiveKit(args, file, raw))) failures++;
+      continue;
+    }
     if (isTwilioFixture(probe)) {
       const fixture = JSON.parse(
         substituteTwilio(raw, { phone: args.phone, to: args.to, sid: args.sid }),

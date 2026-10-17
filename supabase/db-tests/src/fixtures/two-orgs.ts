@@ -296,6 +296,17 @@ export async function seedTwoOrgs(db: PGlite): Promise<void> {
           ('${o.call}', 'matrix-1', 'end_call', 200, '{"ok": true}');
       `);
   }
+  // W3-04: a LiveKit event voice-events stored, on each org's call.
+  const livekitEvents = await db.query<{ v: boolean }>(
+    `select to_regclass('public.livekit_events') is not null as v`,
+  );
+  if (livekitEvents.rows[0]!.v) {
+    for (const o of [ORG.A, ORG.B])
+      await db.exec(`
+        insert into livekit_events (id, event, room, call_id, event_at) values
+          ('EV_matrix_${o.call}', 'room_started', 'call-${o.call}', '${o.call}', now());
+      `);
+  }
   await db.exec(`
     insert into auth.users (id, email) values ('${SPARE_USER}', 'spare@matrix.test'), ('${OPERATOR}', 'operator@matrix.test');
     insert into platform_admins (user_id, note) values ('${OPERATOR}', 'matrix');
