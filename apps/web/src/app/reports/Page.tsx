@@ -218,7 +218,7 @@ export default function ReportsPage() {
         ? { reportIds: [...selected] }
         : { filters: { ...filters, page: 1 } },
       fileName: copy.pdfZip.fileName(
-        copy.pdfZip.labels.archive,
+        t('pdfZip.labels.archive'),
         formatDateInTz(source.now(), currentOrg?.timezone ?? 'UTC'),
       ),
     });

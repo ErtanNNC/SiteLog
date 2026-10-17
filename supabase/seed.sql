@@ -19,10 +19,10 @@ end $$;
 -- Office users ------------------------------------------------------------------------------------
 insert into auth.users (id, instance_id, email, aud, role, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token, email_change, email_change_token_new)
 values
-  ('3dee836a-fca5-4d0c-8572-5e8e0c3fb25a', '00000000-0000-0000-0000-000000000000', 'lena@kestrelbuild.example', 'authenticated', 'authenticated', crypt('sitelog-demo', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"name":"Lena Ortiz"}'::jsonb, now(), now(), '', '', '', ''),
-  ('0a704f27-7c9d-499d-8246-83736dc4e257', '00000000-0000-0000-0000-000000000000', 'sam@kestrelbuild.example', 'authenticated', 'authenticated', crypt('sitelog-demo', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"name":"Sam Kowalski"}'::jsonb, now(), now(), '', '', '', ''),
-  ('7c264d1c-6256-4ed6-80bb-f718bd40afac', '00000000-0000-0000-0000-000000000000', 'accounts@kestrelbuild.example', 'authenticated', 'authenticated', crypt('sitelog-demo', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"name":"Accounts"}'::jsonb, now(), now(), '', '', '', ''),
-  ('2f08556a-a238-4334-88d0-e44e3842c21a', '00000000-0000-0000-0000-000000000000', 'elif@demiryapi.example', 'authenticated', 'authenticated', crypt('sitelog-demo', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"name":"Elif Aydın"}'::jsonb, now(), now(), '', '', '', '')
+  ('3dee836a-fca5-4d0c-8572-5e8e0c3fb25a', '00000000-0000-0000-0000-000000000000', 'lena@kestrelbuild.example', 'authenticated', 'authenticated', crypt('sitelog-demo', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"name":"Lena Ortiz","ui_locale":"en-US"}'::jsonb, now(), now(), '', '', '', ''),
+  ('0a704f27-7c9d-499d-8246-83736dc4e257', '00000000-0000-0000-0000-000000000000', 'sam@kestrelbuild.example', 'authenticated', 'authenticated', crypt('sitelog-demo', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"name":"Sam Kowalski","ui_locale":"en-US"}'::jsonb, now(), now(), '', '', '', ''),
+  ('7c264d1c-6256-4ed6-80bb-f718bd40afac', '00000000-0000-0000-0000-000000000000', 'accounts@kestrelbuild.example', 'authenticated', 'authenticated', crypt('sitelog-demo', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"name":"Accounts","ui_locale":"en-US"}'::jsonb, now(), now(), '', '', '', ''),
+  ('2f08556a-a238-4334-88d0-e44e3842c21a', '00000000-0000-0000-0000-000000000000', 'elif@demiryapi.example', 'authenticated', 'authenticated', crypt('sitelog-demo', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"name":"Elif Aydın","ui_locale":"tr-TR"}'::jsonb, now(), now(), '', '', '', '')
 on conflict (id) do nothing;
 
 do $$

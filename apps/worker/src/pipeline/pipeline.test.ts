@@ -1491,7 +1491,7 @@ describe('send_email: evidence pack ready', () => {
       packId: 'pack-1',
       to: ['pm@kestrel.example'],
     });
-    expect(email!.rendered.html).toContain(`memory://exports/${path}?signed=1`);
+    expect(email!.messages[0]!.rendered.html).toContain(`memory://exports/${path}?signed=1`);
   });
 
   it("refuses to sign a path outside the pack's org and site (a row forged before 20261014000001)", async () => {

@@ -53,6 +53,8 @@ export interface FakeDbData {
     role: string;
     email: string;
     display_name: string | null;
+    /** The member's panel language (W4-09); absent = the org's. */
+    ui_locale?: 'en-US' | 'tr-TR' | null;
   }>;
   companies: Map<string, CompanyRow>;
   glossary: Map<string, GlossaryTermRow>;
@@ -578,7 +580,12 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async listMemberEmails(orgId, roles) {
       return d.members
         .filter((m) => m.org_id === orgId && roles.includes(m.role))
-        .map((m) => ({ email: m.email, user_id: m.user_id, display_name: m.display_name }));
+        .map((m) => ({
+          email: m.email,
+          user_id: m.user_id,
+          display_name: m.display_name,
+          ui_locale: m.ui_locale ?? null,
+        }));
     },
     async getUserContact(userId) {
       const m = d.members.find((x) => x.user_id === userId);

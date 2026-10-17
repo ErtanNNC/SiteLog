@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
@@ -6,6 +6,7 @@ import { emptyReportDataV1, type DailyReportData } from '@sitelog/shared/schemas
 import { DemoStore } from '@/data/demo/store';
 import type { ReportDetail } from '@/data/types';
 import type * as PhotosModule from '@/lib/photos';
+import { i18n } from '@/i18n/i18n';
 import { makeSource, renderWithProviders } from '@/test/render';
 import { toFormValues } from '../report/reportForm';
 import { newReportDraftKey } from './draft';
@@ -377,5 +378,43 @@ describe('NewReportPage', { timeout: 20_000 }, () => {
     expect(within(editor).getAllByRole('textbox')[0]!).toHaveValue('');
     expect(screen.getByTestId('new-report-date')).toHaveValue('2026-10-09');
     expect(window.sessionStorage.getItem(key)).toBeNull();
+  });
+
+  it('speaks Turkish in a Turkish panel (W4-09): labels, checks, the day-has-report notice', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    const user = userEvent.setup();
+    const store = renderNew();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Yeni rapor' })).toBeVisible();
+    expect(
+      screen.getByText('Bir şantiyenin günlük raporunu yazın. Kaydettiğiniz anda dosyalanır.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Şantiye', { selector: 'label' })).toBeInTheDocument();
+    expect(screen.getByText('Tarih', { selector: 'label' })).toBeInTheDocument();
+    const date = screen.getByTestId('new-report-date');
+    await user.clear(date);
+    await user.type(date, '2026-10-12');
+    await user.click(screen.getAllByRole('button', { name: 'Raporu dosyala' })[0]!);
+    expect(await screen.findByText('Şantiye seçin', { selector: '[role="alert"]' })).toBeVisible();
+    expect(screen.getByText('Gelecekteki bir tarih seçilemez.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Dosyalamadan önce bir özet yazın veya en az bir satır ekleyin.'),
+    ).toBeInTheDocument();
+
+    // A day that has a report: the notice and its link in Turkish.
+    const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
+    await user.click(screen.getByTestId('new-report-site'));
+    await user.click(await screen.findByRole('option', { name: new RegExp(riverside.name) }));
+    await user.clear(date);
+    await user.type(date, '2026-10-09');
+    await user.type(
+      within(screen.getByTestId('report-editor')).getAllByRole('textbox')[0]!,
+      'Tekrar deneme.',
+    );
+    await user.click(screen.getByTestId('file-report'));
+    const notice = await screen.findByTestId('day-has-report');
+    expect(notice).toHaveTextContent(
+      'Bu şantiye ve tarih için RL-2041-0187 zaten var, bu yüzden bu rapor dosyalanmadı.',
+    );
+    expect(within(notice).getByRole('link', { name: 'RL-2041-0187 raporunu aç' })).toBeVisible();
   });
 });

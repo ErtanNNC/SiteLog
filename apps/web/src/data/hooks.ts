@@ -272,7 +272,7 @@ function useSourceMutation<TVars, TResult>(
       }
     },
     onError: (err) => {
-      if (!opts.quietErrors) toast.error(errorMessage(err, copy.errors.generic));
+      if (!opts.quietErrors) toast.error(errorMessage(err, translate('errors.generic')));
     },
   });
 }
@@ -438,7 +438,7 @@ export function useTextDailyLink() {
       toast.error(
         isTextLinkErrorCode(code)
           ? translate(`overview.textLink.failed.${code}`)
-          : errorMessage(err, copy.errors.generic),
+          : errorMessage(err, translate('errors.generic')),
       );
     },
   });
@@ -523,7 +523,7 @@ export function useSetInvoiceStatus() {
           ? translate('hours.queried')
           : v.status === 'resolved'
             ? translate('hours.resolved')
-            : copy.toasts.saved,
+            : translate('toasts.saved'),
     },
   );
 }
@@ -698,14 +698,14 @@ export function useRemoveMember() {
 export function useUpdateOrg() {
   const s = useDataSource();
   return useSourceMutation((vars: UpdateOrgInput) => s.updateOrg(vars), {
-    success: copy.toasts.orgUpdated,
+    success: () => translate('toasts.orgUpdated'),
   });
 }
 
 export function useCreateSite() {
   const s = useDataSource();
   return useSourceMutation((vars: CreateSiteInput) => s.createSite(vars), {
-    success: (v) => copy.toasts.siteCreated(v.name),
+    success: (v) => translate('toasts.siteCreated', { site: v.name }),
   });
 }
 
@@ -713,7 +713,7 @@ export function useUpdateSite() {
   const s = useDataSource();
   return useSourceMutation(
     (vars: { siteId: string; patch: UpdateSitePatch }) => s.updateSite(vars.siteId, vars.patch),
-    { success: copy.toasts.siteUpdated },
+    { success: () => translate('toasts.siteUpdated') },
   );
 }
 
@@ -779,7 +779,7 @@ export function usePayrollCsv() {
   const s = useDataSource();
   return useSourceMutation(
     (vars: { week: string; siteId: string | null }) => s.payrollCsvUrl(vars.week, vars.siteId),
-    { success: copy.toasts.csvReady, invalidate: false },
+    { success: () => translate('toasts.csvReady'), invalidate: false },
   );
 }
 
@@ -792,18 +792,23 @@ export function usePdfZipExport() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (vars: { selection: PdfSelection; fileName: string }) => {
-      const id = toast.loading(copy.pdfZip.preparing);
+      const id = toast.loading(translate('pdfZip.preparing'));
       const local: string[] = [];
       try {
         const batch = await s.getPdfUrls(vars.selection);
-        if (batch.capped) toast.message(copy.pdfZip.capped(PDF_EXPORT_LIMIT, batch.total));
+        if (batch.capped)
+          toast.message(
+            translate('pdfZip.capped', { limit: PDF_EXPORT_LIMIT, total: batch.total }),
+          );
         // Reports without a stored PDF (typed in the panel, a failed upload, no worker yet): render
         // them here, one at a time, and store each so the next export has it.
         const files = [...batch.files];
         const made: string[] = [];
         let notMade = 0;
         for (const [i, r] of batch.missing.entries()) {
-          toast.loading(copy.pdfZip.making(i + 1, batch.missing.length), { id });
+          toast.loading(translate('pdfZip.making', { done: i + 1, total: batch.missing.length }), {
+            id,
+          });
           try {
             const pdf = await makeReportPdf(s, qc, r.reportId, null, { invalidate: false });
             if (pdf.stored) made.push(r.reportId);
@@ -815,25 +820,29 @@ export function usePdfZipExport() {
         }
         if (made.length) invalidateReportPdfs(s, qc, made);
         if (!files.length) {
-          toast.message(copy.pdfZip.none, { id });
+          toast.message(translate('pdfZip.none'), { id });
           return { zipped: 0 };
         }
         const names = pdfFileNames(files);
         const result = await zipFromUrls(
           files.map((f, i) => ({ name: names[i]!, url: f.url })),
-          { onProgress: (done, total) => toast.loading(copy.pdfZip.progress(done, total), { id }) },
+          {
+            onProgress: (done, total) =>
+              toast.loading(translate('pdfZip.progress', { done, total }), { id }),
+          },
         );
         if (!result.blob) {
-          toast.error(copy.pdfZip.failed, { id });
+          toast.error(translate('pdfZip.failed'), { id });
           return { zipped: 0 };
         }
         saveBlob(result.blob, vars.fileName);
         const skipped = result.failed.length + notMade;
-        if (skipped) toast.warning(copy.pdfZip.partial(result.added.length, skipped), { id });
-        else toast.success(copy.pdfZip.ready(result.added.length), { id });
-        return { zipped: result.added.length };
+        const count = result.added.length;
+        if (skipped) toast.warning(translate('pdfZip.partial', { count, skipped }), { id });
+        else toast.success(translate('pdfZip.ready', { count }), { id });
+        return { zipped: count };
       } catch (err) {
-        toast.error(errorMessage(err, copy.pdfZip.failed), { id });
+        toast.error(errorMessage(err, translate('pdfZip.failed')), { id });
         return { zipped: 0 };
       } finally {
         for (const url of local) URL.revokeObjectURL(url);
@@ -857,7 +866,7 @@ export function useOpenReportPdf() {
         if (!url) toast.message(translate('reports.pdfNotReady'));
       } catch (err) {
         vars.go(null);
-        toast.error(errorMessage(err, copy.errors.generic));
+        toast.error(errorMessage(err, translate('errors.generic')));
       }
     },
   });
@@ -889,7 +898,7 @@ function useStripeRedirect(kind: 'portal' | 'checkout') {
         toast.dismiss(id);
         window.location.assign(url);
       } catch (err) {
-        toast.error(errorMessage(err, copy.errors.generic), { id });
+        toast.error(errorMessage(err, translate('errors.generic')), { id });
       }
     },
   });

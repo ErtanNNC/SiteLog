@@ -150,6 +150,19 @@ describe('PostgresDb on PGlite: seed reads and type parsing', () => {
       'lena@kestrelbuild.example',
       'sam@kestrelbuild.example',
     ]);
+    // W4-09: each member's panel language, for the office emails (null = the org's).
+    expect(admins.map((m) => m.ui_locale)).toEqual([null, null]);
+    await q(`update org_members set ui_locale = 'tr-TR' where org_id = $1 and user_id = $2`, [
+      ORG,
+      LENA,
+    ]);
+    expect(
+      (await db.listMemberEmails(ORG, ['admin'])).find((m) => m.user_id === LENA)!.ui_locale,
+    ).toBe('tr-TR');
+    await q(`update org_members set ui_locale = null where org_id = $1 and user_id = $2`, [
+      ORG,
+      LENA,
+    ]);
     expect(await db.getUserContact(LENA)).toEqual({
       email: 'lena@kestrelbuild.example',
       display_name: 'Lena Ortiz',

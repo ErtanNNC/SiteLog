@@ -1,6 +1,7 @@
 import postgres, { type Sql, type TransactionSql } from 'postgres';
 import { JobPayloadSchemas } from '@sitelog/shared';
 import type {
+  OrgLocale,
   CallRow,
   CallSkipReason,
   CallStatus,
@@ -319,6 +320,14 @@ export interface QueueStats {
   dead: number;
 }
 
+/** An office member's address for §13's emails, with their panel language (W4-09). */
+export interface MemberEmail {
+  email: string;
+  user_id: string;
+  display_name: string | null;
+  ui_locale: OrgLocale | null;
+}
+
 export interface SiteContext {
   site: SiteRow;
   org: OrgRow;
@@ -617,10 +626,11 @@ export interface Db {
    */
   upsertGlossaryTerm(input: GlossaryUpsert): Promise<{ row: GlossaryTermRow; inserted: boolean }>;
   listSiteRecipients(siteId: string): Promise<string[]>;
-  listMemberEmails(
-    orgId: string,
-    roles: string[],
-  ): Promise<Array<{ email: string; user_id: string; display_name: string | null }>>;
+  /**
+   * The org's members of these roles with an email, and each one's panel language
+   * (`org_members.ui_locale`, null = the org's; W4-09: the office emails' language, §19 Q239).
+   */
+  listMemberEmails(orgId: string, roles: string[]): Promise<MemberEmail[]>;
   getUserContact(
     userId: string,
   ): Promise<{ email: string | null; display_name: string | null } | null>;
@@ -1593,8 +1603,8 @@ export function createDb(sql: Sql): Db {
       return rows.map((r) => r.email);
     },
     async listMemberEmails(orgId, roles) {
-      return sql<Array<{ email: string; user_id: string; display_name: string | null }>>`
-        select u.email, m.user_id, m.display_name from org_members m join auth.users u on u.id = m.user_id
+      return sql<MemberEmail[]>`
+        select u.email, m.user_id, m.display_name, m.ui_locale from org_members m join auth.users u on u.id = m.user_id
         where m.org_id = ${orgId} and m.role = any(${pgArray(roles)}::member_role[]) and u.email is not null order by u.email`;
     },
     async getUserContact(userId) {

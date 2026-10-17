@@ -152,20 +152,21 @@ for (const width of WIDTHS) {
       await expectNoViolations(page);
     });
 
-    // WCAG 3.1.2: what an English-only page portals to <body> is English too, not the shell's TR.
-    test('the Turkish shell: an English page’s select stays lang="en"', async ({ page }) => {
+    // WCAG 3.1.2: what a page portals to <body> carries the page's language. New report speaks
+    // Turkish since W4-09 (only /try and /ops stay English, Q240): its select's list is Turkish.
+    test('the Turkish shell: New report and its select are Turkish (W4-09)', async ({ page }) => {
       await chooseTurkish(page);
       await signInFast(page);
       const langOf = (l: Locator) =>
         l.evaluate((el) => el.closest('[lang]')?.getAttribute('lang') ?? null);
-      // New report is still English-only (Settings speaks Turkish since W4-05): its select's list.
       await page.goto('/reports/new');
-      const siteSelect = page.getByRole('combobox', { name: 'Site' });
+      await expect(h1(page, 'Yeni rapor')).toBeVisible();
+      const siteSelect = page.getByRole('combobox', { name: 'Şantiye' });
       await expect(siteSelect).toBeVisible();
       await siteSelect.click();
       const options = page.getByRole('listbox');
       await expect(options).toBeVisible();
-      expect(await langOf(options)).toBe('en');
+      expect(await langOf(options)).toBe('tr');
       // Axe runs once the list is closed: an open Radix select hides the rest of the page.
       await page.keyboard.press('Escape');
       await expect(options).toHaveCount(0);

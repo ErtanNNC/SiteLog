@@ -36,14 +36,26 @@ export function memberChangeRefusal(
  * F24 (W4-03): the invite's user metadata. `ui_locale` is the language of the invite email and of
  * the panel's first open (spec §19 Q239: Supabase's Auth templates choose EN or TR by it, W4-09):
  * the language the admin chose, else the org's ("the company's language", stored as null).
+ * W4-09: `invited_org_name` names the company in the invite email (`supabase/templates/invite.html`).
  */
 export function inviteMetadata(
   orgId: string,
   role: MemberRole,
   uiLocale: string | null,
   orgLocale: string,
-): { invited_org_id: string; invited_role: MemberRole; ui_locale: string } {
-  return { invited_org_id: orgId, invited_role: role, ui_locale: uiLocale ?? orgLocale };
+  orgName?: string | null,
+): {
+  invited_org_id: string;
+  invited_role: MemberRole;
+  ui_locale: string;
+  invited_org_name?: string;
+} {
+  return {
+    invited_org_id: orgId,
+    invited_role: role,
+    ui_locale: uiLocale ?? orgLocale,
+    ...(orgName ? { invited_org_name: orgName } : {}),
+  };
 }
 
 /** "priya.n@kestrel.build" → "priya.n" — placeholder until the user sets a display name. */

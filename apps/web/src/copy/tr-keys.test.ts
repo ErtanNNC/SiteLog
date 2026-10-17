@@ -163,6 +163,14 @@ const TRANSLATED = [
   'toasts.settingsSaved',
   'toasts.logoUpdated',
   'toasts.logoRemoved',
+  // W4-09: New report, the PDF zip export and the save toasts of the translated pages.
+  'newReport',
+  'pdfZip',
+  'errors.generic',
+  'toasts.orgUpdated',
+  'toasts.siteCreated',
+  'toasts.siteUpdated',
+  'toasts.csvReady',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

@@ -44,6 +44,24 @@ enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
 
+# W4-09 (spec §13, §19 Q239): the sign-in and invite emails in EN and TR, one file each, the body
+# chosen by the user's metadata `ui_locale` (the invite sets it, as does the sign-in page's language
+# switch for a new address). GoTrue renders the subject as a template too. The hosted project's
+# templates are an owner step (docs/RUNBOOK.md, "Auth email templates").
+[auth.email.template.magic_link]
+subject = "{{ if or (eq .Data.ui_locale \"tr-TR\") (eq .Data.ui_locale \"tr\") }}SiteLog giriş linkiniz{{ else }}Your SiteLog sign-in link{{ end }}"
+content_path = "./templates/magic_link.html"
+
+[auth.email.template.invite]
+subject = "{{ if or (eq .Data.ui_locale \"tr-TR\") (eq .Data.ui_locale \"tr\") }}SiteLog’a davet edildiniz{{ else }}You are invited to SiteLog{{ end }}"
+content_path = "./templates/invite.html"
+
+# The local stack's mail catcher (Mailpit; the CLI keeps the section name `inbucket`): the sign-in
+# emails land at http://127.0.0.1:54324 (e2e/supabase/auth-email.spec.ts reads them there).
+[inbucket]
+enabled = true
+port = 54324
+
 [edge_runtime]
 enabled = true
 policy = "oneshot"

@@ -84,6 +84,8 @@ export async function createReportVersion(
           reportId: report.id,
           version: next,
           changeNote: opts.changeNote,
+          // W4-09: the email goes to the signer, in their panel language.
+          signerId: signer,
         },
         { dedupeKey: `email:edited_after_signoff:${report.id}:${next}` },
       );

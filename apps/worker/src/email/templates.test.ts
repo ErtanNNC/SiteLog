@@ -184,3 +184,148 @@ describe('email templates', () => {
     );
   });
 });
+
+describe('office email templates in Turkish (W4-09, §19 Q239)', () => {
+  const TR = 'tr' as const;
+
+  it('report_missing: Turkish subject, line, chip and call link', () => {
+    const base = {
+      language: TR,
+      orgName: 'Demir Yapı A.Ş.',
+      siteName: 'Kartal Konutları — B Blok',
+      date: '2026-10-09',
+      reporterFirstName: 'Emre',
+      reporterPhone: '+905321234567',
+      url: 'u',
+    };
+    const e = reportMissingEmail({ ...base, reminders: 2 });
+    expect(e.subject).toBe('Kartal Konutları — rapor yok · Cum 9 Eki');
+    expect(e.text).toContain(
+      'Kartal Konutları — B Blok — rapor yok. Emre 2 hatırlatmaya yanıt vermedi.',
+    );
+    expect(e.text).toContain('Ara: Emre, +905321234567');
+    expect(e.text).toContain('SiteLog’da aç: u');
+    expect(e.html).toContain('Eksik');
+    expect(e.html).toContain('<title>Rapor yok</title>');
+    expect(reportMissingEmail({ ...base, reporterFirstName: null }).text).toContain(
+      'Şantiye şefi Cum 9 Eki raporunu göndermedi ve son saat geçti.',
+    );
+    for (const s of [e.html, e.text]) expect(s).not.toMatch(/no report|Missing|Open in SiteLog/);
+  });
+
+  it('invoice_query: Turkish hours and difference', () => {
+    const e = invoiceQueryEmail({
+      language: TR,
+      orgName: 'Demir Yapı A.Ş.',
+      companyName: 'Yıldız Elektrik',
+      invoiceNo: null,
+      periodStart: null,
+      periodEnd: null,
+      invoicedHours: 212,
+      reportedHours: 196,
+      url: 'u',
+    });
+    expect(e.subject).toBe('Saat sorgusu · Yıldız Elektrik');
+    expect(e.text).toContain(
+      'Demir Yapı A.Ş., faturayı fatura dönemine ait günlük şantiye raporlarıyla karşılaştırdı.',
+    );
+    expect(e.text).toContain('Faturalanan: 212 sa');
+    expect(e.text).toContain('Fark: +16 sa');
+    expect(e.html).toContain('SiteLog ile gönderildi.');
+  });
+
+  it('evidence_pack_ready: Turkish, and all sites when the pack has none', () => {
+    const e = evidencePackReadyEmail({
+      language: TR,
+      orgName: 'Demir Yapı A.Ş.',
+      siteName: null,
+      periodStart: '2026-10-01',
+      periodEnd: '2026-10-09',
+      downloadUrl: 'https://x/signed',
+      panelUrl: 'p',
+    });
+    expect(e.subject).toBe(
+      'Süre uzatımı kanıt dosyası hazır · Tüm şantiyeler · Per 1 Eki – Cum 9 Eki',
+    );
+    expect(e.text).toContain('İndir (7 gün geçerli): https://x/signed');
+    expect(e.text).toContain('Hava ve gecikmeler: p');
+    expect(e.html).toContain('Tüm şantiyeler için Per 1 Eki – Cum 9 Eki kanıt dosyası hazır.');
+    expect(e.html).toContain('Dosyayı indir');
+  });
+
+  it('weekly_digest: Turkish labels, percent and hours', () => {
+    const e = weeklyDigestEmail({
+      language: TR,
+      orgName: 'Demir Yapı A.Ş.',
+      weekStart: '2026-10-05',
+      weekEnd: '2026-10-11',
+      stats: {
+        siteDays: 30,
+        filed: 29,
+        onTime: 27,
+        weatherHoursBySite: [{ siteName: 'Kartal', hours: 3.5 }],
+        unsigned: [],
+        invoiceGaps: [{ companyName: 'Yıldız Elektrik', gap: 16 }],
+        outboundCalls: { callDays: 4, filedByCall: 3 },
+      },
+      url: 'u',
+    });
+    expect(e.subject).toBe('SiteLog haftalık · Pzt 5 Eki – Paz 11 Eki · %90 zamanında');
+    expect(e.text).toContain('Zamanında: %90 (30 şantiye gününden 27 tanesi; 29 dosyalandı)');
+    expect(e.text).toContain(
+      'Hatırlatma aramaları: %75 aramada dosyalandı (SiteLog’un aradığı 4 şantiye gününden 3 tanesi)',
+    );
+    expect(e.text).toContain('- Kartal: 3,5 sa');
+    expect(e.text).toContain('- Yıldız Elektrik: +16 sa');
+    expect(e.text).toContain('- Dosyalanan tüm raporlar onaylandı');
+    expect(e.html).toContain('Haftalık özet');
+  });
+
+  it('unknown_contact and report_edited_after_signoff in Turkish', () => {
+    const u = unknownContactEmail({
+      language: TR,
+      orgName: 'D',
+      phone: null,
+      snippet: null,
+      url: 'u',
+    });
+    expect(u.subject).toBe('Bilinmeyen bir numara rapor göndermeye çalıştı');
+    expect(u.text).toContain('Numara: bilinmeyen numara');
+    expect(u.text).toContain('Mesaj: (metin yok)');
+    expect(u.html).toContain('Ekip ve numaralar sayfasını aç');
+    const e = reportEditedAfterSignoffEmail({
+      language: TR,
+      orgName: 'D',
+      reportNo: 'KK-3307-0042',
+      changeNote: '',
+      version: 3,
+      url: 'u',
+    });
+    expect(e.subject).toBe('KK-3307-0042 onaydan sonra düzenlendi');
+    expect(e.text).toContain(
+      'KK-3307-0042, siz onayladıktan sonra düzenlendi. Sürüm 3 yeniden onaylanmalı.',
+    );
+    expect(e.text).toContain('Değişiklik: (not yok)');
+    expect(e.text).toContain('İncele: u');
+    expect(e.html).toContain('Raporu incele');
+    for (const x of [u, e]) {
+      expect(x.html).not.toMatch(EMOJI);
+      expect(x.html).toContain('SiteLog tarafından sesli bir rapordan oluşturuldu.');
+    }
+  });
+
+  it('English stays the default', () => {
+    const e = reportEditedAfterSignoffEmail({
+      orgName: 'K',
+      reportNo: 'RL-2041-0187',
+      changeNote: 'Apex 6 → 7',
+      version: 2,
+      url: 'u',
+    });
+    expect(e.text).toContain(
+      'RL-2041-0187 was edited after you signed it off. Version 2 needs a fresh sign-off.',
+    );
+    expect(e.text).toContain('Change: Apex 6 → 7');
+    expect(e.text).toContain('Review: u');
+  });
+});

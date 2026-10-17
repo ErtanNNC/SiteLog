@@ -1,5 +1,6 @@
 export * from './enums.ts';
 export * from './locale.ts';
+export * from './email-language.ts';
 export * from './format.ts';
 export * from './channels.ts';
 export * from './countries.ts';

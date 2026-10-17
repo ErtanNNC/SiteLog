@@ -511,6 +511,11 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       settingsSaved: 'Ayarlar kaydedildi.',
       logoUpdated: 'Logo güncellendi.',
       logoRemoved: 'Logo kaldırıldı.',
+      // W4-09: the save toasts of Sites, Crew hours and the company details.
+      orgUpdated: 'Şirket bilgileri kaydedildi.',
+      siteCreated: '{{site}} bağlandı.',
+      siteUpdated: 'Şantiye güncellendi.',
+      csvReady: 'Bordro CSV hazır.',
     },
     // W4-10: P13 Billing (spec §19 Q234–Q236), for the native-speaker read (Q63).
     billing: {
@@ -847,6 +852,42 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       previousPage: 'Önceki sayfa',
       nextPage: 'Sonraki sayfa',
       thing: 'raporlar',
+    },
+    // W4-09: New report (/reports/new), for the native-speaker read (Q63).
+    newReport: {
+      title: 'Yeni rapor',
+      subtitle: 'Bir şantiyenin günlük raporunu yazın. Kaydettiğiniz anda dosyalanır.',
+      breadcrumb: 'Raporlar',
+      site: 'Şantiye',
+      pickSite: 'Şantiye seçin',
+      date: 'Tarih',
+      noSites: 'Rapor yazmadan önce bir şantiye ekleyin.',
+      future: 'Gelecekteki bir tarih seçilemez.',
+      empty: 'Dosyalamadan önce bir özet yazın veya en az bir satır ekleyin.',
+      submit: 'Raporu dosyala',
+      cancel: 'Vazgeç',
+      filed: '{{no}} dosyalandı.',
+      exists:
+        'Bu şantiye ve tarih için {{no}} zaten var, bu yüzden bu rapor dosyalanmadı. Yazdıklarınız duruyor: {{no}} raporunu açıp Düzenle ile ekleyin ya da başka bir şantiye veya tarih seçin.',
+      openExisting: '{{no}} raporunu aç',
+      restored:
+        'Bu sekmede yazdığınız rapor geri getirildi. Fotoğraflar saklanmaz: yeniden ekleyin.',
+      startOver: 'Baştan başla',
+      pdfLater: 'Rapor dosyalandı. PDF henüz oluşturulamadı; raporu açıp PDF düğmesine basın.',
+    },
+    // W4-09: Today's PDFs / Export PDFs (.zip) on the Overview and Reports.
+    pdfZip: {
+      preparing: 'PDF’ler hazırlanıyor…',
+      progress: 'PDF’ler indiriliyor · {{done}} / {{total}}',
+      making: 'PDF’ler oluşturuluyor · {{done}} / {{total}}',
+      ready: '{{count}} PDF zip dosyasına eklendi.',
+      partial:
+        '{{count}} PDF zip dosyasına eklendi · {{skipped}} tanesi hazır değildi ya da indirilemedi.',
+      none: 'Bu raporların hiçbirinin henüz PDF’i yok.',
+      failed: 'Zip dosyası oluşturulamadı. Tekrar deneyin.',
+      capped:
+        '{{total}} raporun ilk {{limit}} tanesi dışa aktarılıyor. Geri kalanı için filtreleri daraltın.',
+      labels: { today: 'günlük-raporlar', archive: 'raporlar' },
     },
     report: {
       breadcrumb: 'Raporlar',

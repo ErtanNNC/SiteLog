@@ -1,0 +1,88 @@
+<!--
+  Supabase Auth: the invite email of a new office user (F24, `api-invite-office-user`), spec §13,
+  §19 Q239 (W4-09). One file, two bodies: Turkish when the invite's metadata `ui_locale` is Turkish
+  (`tr-TR`: the language the admin chose, else the org's; or `tr`), English otherwise. Go template;
+  GoTrue fills .ConfirmationURL and .Data (the invite's user_metadata: `ui_locale`,
+  `invited_org_name`, `invited_role`). Colours are the §14.1 tokens (packages/shared/src/tokens.ts);
+  text on signal is asphalt. Local stack: supabase/config.toml; hosted project: an owner step
+  (docs/RUNBOOK.md, "Auth email templates").
+-->
+{{ if or (eq .Data.ui_locale "tr-TR") (eq .Data.ui_locale "tr") }}
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>SiteLog’a davet edildiniz</title>
+  </head>
+  <body style="margin:0;padding:0;background:#efede7;font-family:Archivo,'Helvetica Neue',Helvetica,Arial,sans-serif;color:#16181b">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#efede7">
+      <tr>
+        <td align="center" style="padding:24px 12px">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#fbfaf7;border:1px solid #d9d5cc;border-radius:8px">
+            <tr>
+              <td style="padding:20px 28px;border-bottom:2px solid #16181b;font:800 18px/28px Archivo,Helvetica,Arial,sans-serif">SiteLog</td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px 8px 28px">
+                <h1 style="margin:0 0 16px 0;font:800 24px/30px Archivo,Helvetica,Arial,sans-serif">SiteLog’a davet edildiniz</h1>
+                <p style="margin:0;font:400 15px/22px Archivo,Helvetica,Arial,sans-serif">{{ with .Data.invited_org_name }}{{ . }} sizi SiteLog ofis paneline ekledi.{{ else }}Bir şirket sizi SiteLog ofis paneline ekledi.{{ end }} Günlük şantiye raporları, ekip saatleri ve hava kaynaklı gecikmeler orada. Daveti kabul edip giriş yapmak için düğmeye basın.</p>
+                <table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 8px 0">
+                  <tr>
+                    <td style="background:#ff6a13;border-radius:6px">
+                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:12px 20px;font:700 15px/20px Archivo,Helvetica,Arial,sans-serif;color:#16181b;text-decoration:none">Daveti kabul et</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:16px 0 0 0;font:400 13px/20px Archivo,Helvetica,Arial,sans-serif;color:#5c5850">Sonraki girişlerde şifre gerekmez: giriş sayfasında e-postanızı yazın, size bir link gönderelim.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 28px 22px 28px;border-top:1px solid #d9d5cc;font:500 12px/18px Archivo,Helvetica,Arial,sans-serif;color:#5c5850">Bu daveti beklemiyorsanız e-postayı yok sayabilirsiniz.</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+{{ else }}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>You are invited to SiteLog</title>
+  </head>
+  <body style="margin:0;padding:0;background:#efede7;font-family:Archivo,'Helvetica Neue',Helvetica,Arial,sans-serif;color:#16181b">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#efede7">
+      <tr>
+        <td align="center" style="padding:24px 12px">
+          <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#fbfaf7;border:1px solid #d9d5cc;border-radius:8px">
+            <tr>
+              <td style="padding:20px 28px;border-bottom:2px solid #16181b;font:800 18px/28px Archivo,Helvetica,Arial,sans-serif">SiteLog</td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px 8px 28px">
+                <h1 style="margin:0 0 16px 0;font:800 24px/30px Archivo,Helvetica,Arial,sans-serif">You are invited to SiteLog</h1>
+                <p style="margin:0;font:400 15px/22px Archivo,Helvetica,Arial,sans-serif">{{ with .Data.invited_org_name }}{{ . }} added you to its SiteLog office panel.{{ else }}A company added you to its SiteLog office panel.{{ end }} Daily site reports, crew hours and weather delays are there. Press the button to accept and sign in.</p>
+                <table role="presentation" cellspacing="0" cellpadding="0" style="margin:24px 0 8px 0">
+                  <tr>
+                    <td style="background:#ff6a13;border-radius:6px">
+                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:12px 20px;font:700 15px/20px Archivo,Helvetica,Arial,sans-serif;color:#16181b;text-decoration:none">Accept the invite</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:16px 0 0 0;font:400 13px/20px Archivo,Helvetica,Arial,sans-serif;color:#5c5850">No password to remember: next time, type your email on the sign-in page and we send you a link.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 28px 22px 28px;border-top:1px solid #d9d5cc;font:500 12px/18px Archivo,Helvetica,Arial,sans-serif;color:#5c5850">If you were not expecting this invite, you can ignore this email.</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+{{ end }}

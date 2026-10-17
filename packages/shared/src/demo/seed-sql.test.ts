@@ -48,7 +48,9 @@ describe('buildSeedSql (supabase/seed.sql and --apply)', () => {
       );
       expect(sql).toContain(`'{"sub":"${u.id}","email":"${u.email}"}'::jsonb`);
     }
-    expect(authInsert).toContain(`'{"name":"Elif Aydın"}'::jsonb`);
+    // W4-09: her sign-in emails' language, the org's (the Auth templates read `ui_locale`).
+    expect(authInsert).toContain(`'{"name":"Elif Aydın","ui_locale":"tr-TR"}'::jsonb`);
+    expect(authInsert).toContain(`'{"name":"Lena Ortiz","ui_locale":"en-US"}'::jsonb`);
     // Her membership is in Demir Yapı's block only, with the org's language (ui_locale null).
     const demirBlock = sql.slice(sql.indexOf(`-- Demir Yapı A.Ş. (${DEMIR_ORG_ID})`));
     expect(demirBlock).toContain(

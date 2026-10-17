@@ -255,7 +255,10 @@ export const JobPayloadSchemas = {
     unknownContactId: uuid.optional(),
     to: z.array(z.string().email()).optional(),
     changeNote: z.string().optional(),
-    /** `report_updated` (W2-11): the signer of the version it replaced, emailed too (§13). */
+    /**
+     * `report_updated` (W2-11): the signer of the version it replaced, emailed too (§13);
+     * `report_edited_after_signoff` (W4-09): the signer it goes to when `to` is absent.
+     */
     signerId: uuid.optional(),
     /**
      * `report_missing` (W2-06): how many reminders (R1, R2) reached the reporter that day, from

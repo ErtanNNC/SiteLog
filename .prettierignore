@@ -29,3 +29,5 @@ apps/voice-agent/.venv
 **/.pytest_cache
 **/.ruff_cache
 .claude/
+# Supabase Auth email templates: Go templates (EN and TR bodies in one file, W4-09), kept as written.
+supabase/templates

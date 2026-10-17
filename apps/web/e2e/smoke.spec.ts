@@ -369,9 +369,10 @@ test.describe('language switch', () => {
     await nav.getByRole('link', { name: /^Puantaj/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Ekip saatleri' })).toBeVisible();
     await expect(page.locator('main#main [lang="en"]')).toHaveCount(0);
-    // A page not translated yet (the typed report, P7a) stays English inside the Turkish shell.
+    // The typed report (P7a) speaks Turkish since W4-09: no English page inside the shell.
     await page.goto('/reports/new');
-    await expect(page.locator('main#main [lang="en"]').first()).toBeAttached();
+    await expect(page.getByRole('heading', { level: 1, name: 'Yeni rapor' })).toBeVisible();
+    await expect(page.locator('main#main [lang="en"]')).toHaveCount(0);
   });
 
   test('from the account menu on a deep page: EN → TR → EN keeps the route', async ({ page }) => {

@@ -75,7 +75,14 @@ const BCRYPT_HASH = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
 
 const banner = (title: string) => `-- ${title} ${'-'.repeat(Math.max(4, 96 - title.length))}`;
 
-function usersSql(users: DemoUser[], officePasswordHash: string | undefined): string {
+/**
+ * A demo office user with the language of their sign-in emails (W4-09, spec §19 Q239): the
+ * metadata `ui_locale` Supabase's Auth templates read, as an invite sets it (their own panel
+ * language, else the org's).
+ */
+type SeedUser = DemoUser & { uiLocale: string };
+
+function usersSql(users: SeedUser[], officePasswordHash: string | undefined): string {
   if (users.length === 0) return '-- auth.users: no rows\n';
   if (officePasswordHash !== undefined && !BCRYPT_HASH.test(officePasswordHash))
     throw new Error('seed:demo: officePasswordHash must be a bcrypt hash, never the password');
@@ -93,7 +100,7 @@ values
 ${users
   .map(
     (u) =>
-      `  (${lit(u.id)}, '00000000-0000-0000-0000-000000000000', ${lit(u.email)}, 'authenticated', 'authenticated', ${password}, now(), '{"provider":"email","providers":["email"]}'::jsonb, ${lit({ name: u.name })}, now(), now(), '', '', '', '')`,
+      `  (${lit(u.id)}, '00000000-0000-0000-0000-000000000000', ${lit(u.email)}, 'authenticated', 'authenticated', ${password}, now(), '{"provider":"email","providers":["email"]}'::jsonb, ${lit({ name: u.name, ui_locale: u.uiLocale })}, now(), now(), '', '', '', '')`,
   )
   .join(',\n')}
 ${conflict};
@@ -309,7 +316,12 @@ export function buildSeedSql(opts: DemoSeedOptions = {}): string {
   const orgs = demoOrgs(opts);
   for (const d of orgs)
     if (!d.org.is_demo) throw new Error(`seed:demo: ${d.org.name} is not a demo org (is_demo)`);
-  const users = orgs.flatMap((d) => d.users);
+  const users = orgs.flatMap((d) =>
+    d.users.map((u) => ({
+      ...u,
+      uiLocale: d.members.find((m) => m.user_id === u.id)?.ui_locale ?? d.org.locale,
+    })),
+  );
   const ids = orgs.map((d) => lit(d.org.id)).join(', ');
   const parts: string[] = [];
   parts.push(`-- SiteLog demo seed (§18), the demo orgs: ${orgs.map((d) => d.org.name).join(' · ')}

@@ -175,8 +175,9 @@ jobs:
           ILETIMERKEZI_API_KEY=e2e-iletimerkezi-key
           ILETIMERKEZI_API_HASH=e2e-iletimerkezi-hash
           ENV
+      # Mailpit stays on (W4-09): auth-email.spec.ts reads the Turkish magic link it catches.
       - name: Start Supabase (migrations + seed.sql)
-        run: supabase start -x studio,imgproxy,logflare,vector,supavisor,postgres-meta,mailpit
+        run: supabase start -x studio,imgproxy,logflare,vector,supavisor,postgres-meta
       # The shared Database type is hand-maintained; fail when it drifts from the migrated schema.
       - name: Shared DB types match the schema
         run: |
@@ -255,7 +256,8 @@ jobs:
       - name: M9 acceptance suite (W3-18, pnpm e2e:m9)
         run: pnpm e2e:m9
       # The `supabase` project: no worker runs, so the jobs these specs enqueue stay queued.
-      - name: Login · realtime · edit → v2 · sign-off · TR org · Demo phone
+      # W4-09: also the Turkish magic link read from Mailpit (auth-email.spec.ts, @m11).
+      - name: Login · realtime · edit → v2 · sign-off · TR org · Demo phone · TR sign-in email
         run: pnpm --filter @sitelog/web e2e:supabase --project=supabase --grep-invert @m9
       # The worker (W1-08) against the stack, keyless: console SMS and console email (both land in
       # the Demo phone), the fake transcriber (W1-11: a voice note gets a fixtures/voice

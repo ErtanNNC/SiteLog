@@ -5,9 +5,10 @@
  * D9: the shell, sign-in, `/auth/callback`, the Overview (W1-16), Sites and Site detail (W1-18),
  * the Reports archive and Report review (W1-17), Crew hours (W3-06), Weather & delays (W3-07), the
  * Site glossary (W3-08), Team & numbers (W4-03), Billing (W4-10), the setup wizard (W4-02),
- * Settings (W4-05), the not-found page and the placeholders speak the panel's language (EN/TR).
- * A page wrapped in `<EnglishOnly>` still reads `copy/en.ts` directly and renders in English inside
- * the translated shell; it loses the wrapper when it gets its Turkish.
+ * Settings (W4-05), New report (W4-09), the not-found page and the placeholders speak the panel's
+ * language (EN/TR). A page wrapped in `<EnglishOnly>` still reads `copy/en.ts` directly and renders
+ * in English inside the translated shell: since W4-09 only `/try` and `/ops` (spec §19 Q240,
+ * README "Deliberate deviations"; `routes.english-only.test.ts` holds it so).
  */
 import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
@@ -69,15 +70,7 @@ export function AppRoutes() {
             <Route path="/sites" element={guard('sites', <SitesPage />)} />
             <Route path="/sites/:siteId" element={guard('sites', <SiteDetailPage />)} />
             <Route path="/reports" element={guard('reports', <ReportsPage />)} />
-            <Route
-              path="/reports/new"
-              element={guard(
-                'reports',
-                <EnglishOnly>
-                  <NewReportPage />
-                </EnglishOnly>,
-              )}
-            />
+            <Route path="/reports/new" element={guard('reports', <NewReportPage />)} />
             <Route path="/reports/:reportId" element={guard('reports', <ReportDetailPage />)} />
             <Route path="/hours" element={guard('hours', <HoursPage />)} />
             <Route path="/weather" element={guard('weather', <WeatherPage />)} />

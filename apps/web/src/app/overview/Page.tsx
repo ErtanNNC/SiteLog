@@ -117,7 +117,7 @@ export default function OverviewPage() {
     pdfZip.mutate({
       selection: { reportIds: ids },
       fileName: copy.pdfZip.fileName(
-        copy.pdfZip.labels.today,
+        t('pdfZip.labels.today'),
         formatDateInTz(source.now(), data?.timezone ?? 'UTC'),
       ),
     });

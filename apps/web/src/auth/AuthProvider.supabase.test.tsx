@@ -10,7 +10,7 @@ import { useCopy } from '@/i18n/useCopy';
 import type * as EnvModule from '@/lib/env';
 import type { Db } from '@/lib/supabase';
 import { fakeOrgsDb } from '@/test/fakeOrgsDb';
-import { AuthProvider } from './AuthProvider';
+import { AuthProvider, useAuth } from './AuthProvider';
 import { RequireAuth } from './guards';
 
 /** Supabase mode with a fake auth client: the test drives onAuthStateChange itself. */
@@ -32,6 +32,7 @@ const h = vi.hoisted(() => {
       },
       setSession: async () => ({ error: null }),
       signOut: async () => ({ error: null }),
+      signInWithOtp: vi.fn(async (_req: unknown) => ({ error: null })),
     },
     fetchOrgs: vi.fn<(sb: unknown, userId: string) => Promise<OrgSummary[]>>(),
     realFetchOrgs: null as typeof SupabaseSourceModule.fetchOrgs | null,
@@ -133,6 +134,41 @@ describe('AuthProvider (Supabase mode)', () => {
 
     expect(screen.queryByText('Couldn’t load your companies.')).toBeNull();
     expect(screen.getByLabelText('Summary')).toHaveValue('Poured the slab');
+  });
+
+  it('sends the sign-in page’s language with the magic-link request (W4-09, §19 Q239)', async () => {
+    h.fetchOrgs.mockResolvedValue([ORG]);
+    function SignInButtons() {
+      const { signInWithEmail } = useAuth();
+      return (
+        <>
+          <button onClick={() => void signInWithEmail('elif@demiryapi.example')}>Elif</button>
+          <button onClick={() => void signInWithEmail('lena@example.com')}>Lena</button>
+        </>
+      );
+    }
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <SignInButtons />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await act(() => i18n.changeLanguage('tr'));
+    await userEvent.click(await screen.findByRole('button', { name: 'Elif' }));
+    await waitFor(() =>
+      expect(h.auth.signInWithOtp).toHaveBeenLastCalledWith({
+        email: 'elif@demiryapi.example',
+        options: expect.objectContaining({ data: { ui_locale: 'tr-TR' } }),
+      }),
+    );
+    await act(() => i18n.changeLanguage('en'));
+    await userEvent.click(screen.getByRole('button', { name: 'Lena' }));
+    await waitFor(() => expect(h.auth.signInWithOtp).toHaveBeenCalledTimes(2));
+    expect(h.auth.signInWithOtp).toHaveBeenLastCalledWith({
+      email: 'lena@example.com',
+      options: expect.objectContaining({ data: { ui_locale: 'en-US' } }),
+    });
   });
 
   it('still shows the error screen when the first org load for a user fails', async () => {

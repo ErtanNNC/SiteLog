@@ -63,7 +63,7 @@ describe('routes (§11.1)', () => {
     expect(screen.getByRole('navigation', { name: 'Rapor verenler' })).toBeInTheDocument();
     unmount();
 
-    // Settings speaks Turkish since W4-05; New report is still English-only (W4-09).
+    // Settings speaks Turkish since W4-05, New report since W4-09.
     const settings = renderWithProviders(<AppRoutes />, {
       as: 'admin',
       route: '/settings/channels',
@@ -71,9 +71,8 @@ describe('routes (§11.1)', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Ayarlar' })).toBeVisible();
     settings.unmount();
     renderWithProviders(<AppRoutes />, { as: 'admin', route: '/reports/new' });
-    const heading = await screen.findByRole('heading', { level: 1, name: 'New report' });
-    // The page (English, lang="en") inside the Turkish shell.
-    expect(heading.closest('[lang]')).toHaveAttribute('lang', 'en');
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Yeni rapor' });
+    expect(heading.closest('[lang="en"]')).toBeNull();
     expect(screen.getAllByRole('navigation', { name: 'Ana gezinme' }).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'İçeriğe geç' })).toHaveAttribute('href', '#main');
   });

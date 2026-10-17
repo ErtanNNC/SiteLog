@@ -8,6 +8,13 @@ Deno.test('the invite carries the UI language, the org’s when left to the comp
     ui_locale: 'tr-TR',
   });
   assertEquals(inviteMetadata('org', 'ops', null, 'tr-TR').ui_locale, 'tr-TR');
+  // W4-09: the invite email names the company (supabase/templates/invite.html).
+  assertEquals(inviteMetadata('org', 'ops', null, 'tr-TR', 'Demir Yapı A.Ş.'), {
+    invited_org_id: 'org',
+    invited_role: 'ops',
+    ui_locale: 'tr-TR',
+    invited_org_name: 'Demir Yapı A.Ş.',
+  });
 });
 
 const members = [

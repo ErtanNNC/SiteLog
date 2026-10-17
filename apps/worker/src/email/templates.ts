@@ -1,12 +1,11 @@
 import {
   colors,
   formatDate,
-  formatDateShort,
-  formatHours,
   formatHoursIn,
   type ReportLanguage,
   type ReportTotals,
 } from '@sitelog/shared';
+import { OFFICE_EMAIL_COPY } from './office-copy';
 import { REPORT_EMAIL_COPY, type ReportEmailCopy } from './report-copy';
 import type { DigestStats } from '../db';
 
@@ -207,7 +206,31 @@ export function reportFiledEmail(i: ReportFiledInput): RenderedEmail {
   };
 }
 
-export interface ReportMissingInput {
+/** BCP 47 locale for the email's language (dates, hours). */
+function localeOf(lang: ReportLanguage): 'en-US' | 'tr-TR' {
+  return lang === 'tr' ? 'tr-TR' : 'en-US';
+}
+
+/** "Fri Oct 9" · "Cum 9 Eki" */
+function shortDate(date: string, lang: ReportLanguage): string {
+  return formatDate(date, 'short', localeOf(lang));
+}
+
+/** "16 h" · "16 sa"; signed with + when asked. */
+function hoursIn(hours: number, lang: ReportLanguage, signed = false): string {
+  return `${signed && hours > 0 ? '+' : ''}${formatHoursIn(hours, localeOf(lang))}`;
+}
+
+/**
+ * The office emails take `language` (W4-09, spec §19 Q239): the reader's panel language
+ * (`OFFICE_EMAIL_LANGUAGE`, chosen per recipient by the send_email job), or for the invoice query
+ * the org's report language. Default EN. Copy: `./office-copy.ts`.
+ */
+export interface OfficeEmailLanguage {
+  language?: ReportLanguage;
+}
+
+export interface ReportMissingInput extends OfficeEmailLanguage {
   orgName: string;
   siteName: string;
   date: string;
@@ -219,40 +242,42 @@ export interface ReportMissingInput {
 }
 
 export function reportMissingEmail(i: ReportMissingInput): RenderedEmail {
-  const who = i.reporterFirstName ?? 'The site manager';
-  const subject = `${siteShort(i.siteName)} — no report · ${formatDateShort(i.date)}`;
+  const lang = i.language ?? 'en';
+  const c = OFFICE_EMAIL_COPY[lang];
+  const who = i.reporterFirstName ?? c.missing.someone;
+  const date = shortDate(i.date, lang);
+  const subject = c.missing.subject(siteShort(i.siteName), date);
   // §13 "{first} didn't answer {n} reminders" when the ladder reached them (W2-06); with none
   // (every reporter skipped, or nobody linked), spec §19 Q55's wording.
   const n = i.reminders ?? 0;
   const line =
-    n > 0
-      ? `${i.siteName} — no report. ${who} didn't answer ${n} reminder${n === 1 ? '' : 's'}.`
-      : `${i.siteName} — no report. ${who} hasn't sent the report for ${formatDateShort(i.date)}, and the deadline has passed.`;
+    n > 0 ? c.missing.reminded(i.siteName, who, n) : c.missing.notSent(i.siteName, who, date);
   const call = i.reporterPhone
-    ? `<p style="margin:12px 0 0 0"><a href="tel:${esc(i.reporterPhone)}" style="color:${T.level}">Call ${esc(who)}</a></p>`
+    ? `<p style="margin:12px 0 0 0"><a href="tel:${esc(i.reporterPhone)}" style="color:${T.level}">${esc(c.missing.call(who))}</a></p>`
     : '';
-  const bodyHtml = `<p style="margin:0 0 8px 0">${chip('Missing', T.chipMissBg, T.chipMissFg)}</p><p style="margin:0">${esc(line)}</p>${call}`;
+  const bodyHtml = `<p style="margin:0 0 8px 0">${chip(c.missing.chip, T.chipMissBg, T.chipMissFg)}</p><p style="margin:0">${esc(line)}</p>${call}`;
   const text = [
     subject,
     '',
     line,
-    ...(i.reporterPhone ? [`Call ${who}: ${i.reporterPhone}`] : []),
+    ...(i.reporterPhone ? [c.missing.callText(who, i.reporterPhone)] : []),
     '',
-    `Open in SiteLog: ${i.url}`,
+    `${c.open}: ${i.url}`,
   ].join('\n');
   return {
     subject,
     html: layout({
-      title: 'No report',
+      title: c.missing.title,
       eyebrow: i.orgName,
       bodyHtml,
-      cta: { label: 'Open in SiteLog', url: i.url },
+      cta: { label: c.open, url: i.url },
+      footerNote: REPORT_EMAIL_COPY[lang].footer,
     }),
     text,
   };
 }
 
-export interface InvoiceQueryInput {
+export interface InvoiceQueryInput extends OfficeEmailLanguage {
   orgName: string;
   companyName: string;
   invoiceNo: string | null;
@@ -263,48 +288,48 @@ export interface InvoiceQueryInput {
   url: string;
 }
 
+/** To the subcontractor, in the org's report language (§19 Q239). */
 export function invoiceQueryEmail(i: InvoiceQueryInput): RenderedEmail {
+  const lang = i.language ?? 'en';
+  const c = OFFICE_EMAIL_COPY[lang].invoice;
   const gap = Math.round((i.invoicedHours - i.reportedHours) * 100) / 100;
   const period =
     i.periodStart && i.periodEnd
-      ? `${formatDateShort(i.periodStart)} – ${formatDateShort(i.periodEnd)}`
-      : 'the invoice period';
-  const subject = `Hours query · ${i.companyName}${i.invoiceNo ? ` · ${i.invoiceNo}` : ''}`;
-  const bodyHtml = `<p style="margin:0 0 12px 0">${esc(i.orgName)} compared invoice ${esc(i.invoiceNo ?? '')} with the daily site reports for ${esc(period)}.</p>
+      ? `${shortDate(i.periodStart, lang)} – ${shortDate(i.periodEnd, lang)}`
+      : null;
+  const subject = c.subject(i.companyName, i.invoiceNo);
+  const intro = c.intro(i.orgName, i.invoiceNo, period);
+  const bodyHtml = `<p style="margin:0 0 12px 0">${esc(intro)}</p>
     ${kv([
-      ['Invoiced', `${formatHours(i.invoicedHours)}`],
-      ['Reported', `${formatHours(i.reportedHours)}`],
+      [c.invoiced, esc(hoursIn(i.invoicedHours, lang))],
+      [c.reported, esc(hoursIn(i.reportedHours, lang))],
       [
-        'Difference',
-        `<strong style="color:${gap > 0 ? T.missing : T.filed}">${gap > 0 ? '+' : ''}${formatHours(gap)}</strong>`,
+        c.difference,
+        `<strong style="color:${gap > 0 ? T.missing : T.filed}">${esc(hoursIn(gap, lang, true))}</strong>`,
       ],
     ])}
-    <p style="margin:0">Could you check the days where the hours differ? The daily reports with audio evidence are available on request.</p>`;
+    <p style="margin:0">${esc(c.ask)}</p>`;
   const text = [
     subject,
     '',
-    `${i.orgName} compared invoice ${i.invoiceNo ?? ''} with the daily site reports for ${period}.`,
-    `Invoiced: ${formatHours(i.invoicedHours)}`,
-    `Reported: ${formatHours(i.reportedHours)}`,
-    `Difference: ${gap > 0 ? '+' : ''}${formatHours(gap)}`,
+    intro,
+    `${c.invoiced}: ${hoursIn(i.invoicedHours, lang)}`,
+    `${c.reported}: ${hoursIn(i.reportedHours, lang)}`,
+    `${c.difference}: ${hoursIn(gap, lang, true)}`,
     '',
-    'Could you check the days where the hours differ?',
+    c.askShort,
   ].join('\n');
   return {
     subject,
-    html: layout({
-      title: 'Hours query',
-      eyebrow: i.orgName,
-      bodyHtml,
-      footerNote: 'Sent with SiteLog.',
-    }),
+    html: layout({ title: c.title, eyebrow: i.orgName, bodyHtml, footerNote: c.footer }),
     text,
   };
 }
 
-export interface EvidencePackReadyInput {
+export interface EvidencePackReadyInput extends OfficeEmailLanguage {
   orgName: string;
-  siteName: string;
+  /** null: a pack of all the org's sites. */
+  siteName: string | null;
   periodStart: string;
   periodEnd: string;
   downloadUrl: string;
@@ -312,29 +337,35 @@ export interface EvidencePackReadyInput {
 }
 
 export function evidencePackReadyEmail(i: EvidencePackReadyInput): RenderedEmail {
-  const subject = `EOT evidence pack ready · ${siteShort(i.siteName)} · ${formatDateShort(i.periodStart)} – ${formatDateShort(i.periodEnd)}`;
-  const bodyHtml = `<p style="margin:0 0 12px 0">The evidence pack for ${esc(i.siteName)}, ${esc(formatDateShort(i.periodStart))} – ${esc(formatDateShort(i.periodEnd))}, is ready.</p>
-    <p style="margin:0">The download link is valid for 7 days. Weather data: Open-Meteo.</p>`;
+  const lang = i.language ?? 'en';
+  const c = OFFICE_EMAIL_COPY[lang].pack;
+  const from = shortDate(i.periodStart, lang);
+  const to = shortDate(i.periodEnd, lang);
+  const siteName = i.siteName ?? c.allSites;
+  const subject = c.subject(siteShort(siteName), from, to);
+  const bodyHtml = `<p style="margin:0 0 12px 0">${esc(c.body(siteName, from, to))}</p>
+    <p style="margin:0">${esc(c.validity)}</p>`;
   const text = [
     subject,
     '',
-    `Download (valid 7 days): ${i.downloadUrl}`,
-    `Weather & delays: ${i.panelUrl}`,
-    'Weather data: Open-Meteo.',
+    `${c.download}: ${i.downloadUrl}`,
+    `${c.panel}: ${i.panelUrl}`,
+    c.weatherData,
   ].join('\n');
   return {
     subject,
     html: layout({
-      title: 'Evidence pack ready',
+      title: c.title,
       eyebrow: i.orgName,
       bodyHtml,
-      cta: { label: 'Download the pack', url: i.downloadUrl },
+      cta: { label: c.cta, url: i.downloadUrl },
+      footerNote: REPORT_EMAIL_COPY[lang].footer,
     }),
     text,
   };
 }
 
-export interface WeeklyDigestInput {
+export interface WeeklyDigestInput extends OfficeEmailLanguage {
   orgName: string;
   weekStart: string;
   weekEnd: string;
@@ -343,100 +374,91 @@ export interface WeeklyDigestInput {
 }
 
 export function weeklyDigestEmail(i: WeeklyDigestInput): RenderedEmail {
+  const lang = i.language ?? 'en';
+  const c = OFFICE_EMAIL_COPY[lang].digest;
   const s = i.stats;
   const onTimePct = s.siteDays ? Math.round((s.onTime / s.siteDays) * 100) : 0;
-  const subject = `SiteLog weekly · ${formatDateShort(i.weekStart)} – ${formatDateShort(i.weekEnd)} · ${onTimePct}% on time`;
-  const weather = s.weatherHoursBySite.length
-    ? s.weatherHoursBySite
-        .map((w) => `<li>${esc(w.siteName)}: ${esc(formatHours(w.hours))}</li>`)
-        .join('')
-    : '<li>No weather stoppages</li>';
-  const gaps = s.invoiceGaps.length
-    ? s.invoiceGaps
-        .map(
-          (g) =>
-            `<li>${esc(g.companyName)}: ${g.gap > 0 ? '+' : ''}${esc(formatHours(g.gap))}</li>`,
-        )
-        .join('')
-    : '<li>No open invoice gaps</li>';
-  const unsigned = s.unsigned.length
-    ? s.unsigned
-        .map(
-          (u) =>
-            `<li>${esc(u.reportNo)} · ${esc(u.siteName)} · ${esc(formatDateShort(u.date))}</li>`,
-        )
-        .join('')
-    : '<li>All filed reports are signed off</li>';
+  const subject = c.subject(shortDate(i.weekStart, lang), shortDate(i.weekEnd, lang), onTimePct);
+  const list = (items: string[], none: string) =>
+    (items.length ? items : [none]).map((x) => `<li>${esc(x)}</li>`).join('');
+  const weatherItems = s.weatherHoursBySite.map((w) => `${w.siteName}: ${hoursIn(w.hours, lang)}`);
+  const gapItems = s.invoiceGaps.map((g) => `${g.companyName}: ${hoursIn(g.gap, lang, true)}`);
+  const unsignedItems = s.unsigned.map(
+    (u) => `${u.reportNo} · ${u.siteName} · ${shortDate(u.date, lang)}`,
+  );
   // W3-17 (M8): only when SiteLog called a reporter this week.
   const calls = s.outboundCalls;
   const callsLine = calls
-    ? `${Math.round((calls.filedByCall / calls.callDays) * 100)}% filed on the call (${calls.filedByCall} of ${calls.callDays} site-days SiteLog called about)`
+    ? c.callsLine(
+        Math.round((calls.filedByCall / calls.callDays) * 100),
+        calls.filedByCall,
+        calls.callDays,
+      )
     : null;
+  const detail = c.onTimeDetail(s.onTime, s.siteDays, s.filed);
   const bodyHtml = `${kv([
-    [
-      'On time',
-      `<strong>${onTimePct}%</strong> (${s.onTime} of ${s.siteDays} site-days; ${s.filed} filed)`,
-    ],
-    ...(callsLine ? ([['Reminder calls', esc(callsLine)]] as Array<[string, string]>) : []),
+    [c.onTime, `<strong>${esc(c.percent(onTimePct))}</strong> ${esc(detail)}`],
+    ...(callsLine ? ([[c.calls, esc(callsLine)]] as Array<[string, string]>) : []),
   ])}
-    <p style="margin:8px 0 4px 0"><strong>Weather hours by site</strong></p><ul style="margin:0 0 12px 18px;padding:0">${weather}</ul>
-    <p style="margin:8px 0 4px 0"><strong>Invoice gaps</strong></p><ul style="margin:0 0 12px 18px;padding:0">${gaps}</ul>
-    <p style="margin:8px 0 4px 0"><strong>Unsigned reports</strong></p><ul style="margin:0 0 12px 18px;padding:0">${unsigned}</ul>`;
+    <p style="margin:8px 0 4px 0"><strong>${esc(c.weather)}</strong></p><ul style="margin:0 0 12px 18px;padding:0">${list(weatherItems, c.noWeather)}</ul>
+    <p style="margin:8px 0 4px 0"><strong>${esc(c.gaps)}</strong></p><ul style="margin:0 0 12px 18px;padding:0">${list(gapItems, c.noGaps)}</ul>
+    <p style="margin:8px 0 4px 0"><strong>${esc(c.unsigned)}</strong></p><ul style="margin:0 0 12px 18px;padding:0">${list(unsignedItems, c.allSigned)}</ul>`;
+  const bullets = (items: string[], none: string) =>
+    (items.length ? items : [none]).map((x) => `- ${x}`);
   const text = [
     subject,
     '',
-    `On time: ${onTimePct}% (${s.onTime} of ${s.siteDays} site-days; ${s.filed} filed)`,
-    ...(callsLine ? [`Reminder calls: ${callsLine}`] : []),
+    `${c.onTime}: ${c.percent(onTimePct)} ${detail}`,
+    ...(callsLine ? [`${c.calls}: ${callsLine}`] : []),
     '',
-    'Weather hours by site:',
-    ...(s.weatherHoursBySite.length
-      ? s.weatherHoursBySite.map((w) => `- ${w.siteName}: ${formatHours(w.hours)}`)
-      : ['- No weather stoppages']),
+    `${c.weather}:`,
+    ...bullets(weatherItems, c.noWeather),
     '',
-    'Invoice gaps:',
-    ...(s.invoiceGaps.length
-      ? s.invoiceGaps.map((g) => `- ${g.companyName}: ${g.gap > 0 ? '+' : ''}${formatHours(g.gap)}`)
-      : ['- No open invoice gaps']),
+    `${c.gaps}:`,
+    ...bullets(gapItems, c.noGaps),
     '',
-    'Unsigned reports:',
-    ...(s.unsigned.length
-      ? s.unsigned.map((u) => `- ${u.reportNo} · ${u.siteName} · ${formatDateShort(u.date)}`)
-      : ['- All filed reports are signed off']),
+    `${c.unsigned}:`,
+    ...bullets(unsignedItems, c.allSigned),
     '',
-    `Open SiteLog: ${i.url}`,
+    `${c.openSiteLog}: ${i.url}`,
   ].join('\n');
   return {
     subject,
     html: layout({
-      title: 'Weekly digest',
+      title: c.title,
       eyebrow: i.orgName,
       bodyHtml,
-      cta: { label: 'Open SiteLog', url: i.url },
+      cta: { label: c.openSiteLog, url: i.url },
+      footerNote: REPORT_EMAIL_COPY[lang].footer,
     }),
     text,
   };
 }
 
-export interface UnknownContactInput {
+export interface UnknownContactInput extends OfficeEmailLanguage {
   orgName: string;
-  phone: string;
+  /** null: the number is not known (the email still says someone tried). */
+  phone: string | null;
   snippet: string | null;
   url: string;
 }
 
 export function unknownContactEmail(i: UnknownContactInput): RenderedEmail {
-  const subject = 'Unknown number tried to report';
+  const lang = i.language ?? 'en';
+  const c = OFFICE_EMAIL_COPY[lang].unknown;
+  const subject = c.subject;
+  const phone = i.phone ?? c.unknownNumber;
   const bodyHtml = `${kv([
-    ['Number', esc(i.phone)],
-    ['Message', esc(i.snippet ?? '(no text)')],
-  ])}<p style="margin:0">Link the number to a site or ignore it on the Team page. Nothing was filed.</p>`;
+    [c.number, esc(phone)],
+    [c.message, esc(i.snippet ?? c.noText)],
+  ])}<p style="margin:0">${esc(c.body)}</p>`;
   const text = [
     subject,
     '',
-    `Number: ${i.phone}`,
-    `Message: ${i.snippet ?? '(no text)'}`,
+    `${c.number}: ${phone}`,
+    `${c.message}: ${i.snippet ?? c.noText}`,
     '',
-    'Nothing was filed. Link or ignore it on the Team page:',
+    c.textLine,
     i.url,
   ].join('\n');
   return {
@@ -445,13 +467,14 @@ export function unknownContactEmail(i: UnknownContactInput): RenderedEmail {
       title: subject,
       eyebrow: i.orgName,
       bodyHtml,
-      cta: { label: 'Open Team & numbers', url: i.url },
+      cta: { label: c.cta, url: i.url },
+      footerNote: REPORT_EMAIL_COPY[lang].footer,
     }),
     text,
   };
 }
 
-export interface ReportEditedAfterSignoffInput {
+export interface ReportEditedAfterSignoffInput extends OfficeEmailLanguage {
   orgName: string;
   reportNo: string;
   changeNote: string;
@@ -460,24 +483,22 @@ export interface ReportEditedAfterSignoffInput {
 }
 
 export function reportEditedAfterSignoffEmail(i: ReportEditedAfterSignoffInput): RenderedEmail {
-  const subject = `${i.reportNo} was edited after sign-off`;
-  const bodyHtml = `<p style="margin:0 0 12px 0">${esc(i.reportNo)} was edited after you signed it off. Version ${i.version} needs a fresh sign-off.</p>
-    <p style="margin:0;padding:10px 12px;background:${T.concrete};border-radius:6px"><strong>Change:</strong> ${esc(i.changeNote || '(no note)')}</p>`;
-  const text = [
-    subject,
-    '',
-    `${i.reportNo} was edited after you signed it off. Version ${i.version} needs a fresh sign-off.`,
-    `Change: ${i.changeNote || '(no note)'}`,
-    '',
-    `Review: ${i.url}`,
-  ].join('\n');
+  const lang = i.language ?? 'en';
+  const c = OFFICE_EMAIL_COPY[lang].edited;
+  const subject = c.subject(i.reportNo);
+  const body = c.body(i.reportNo, i.version);
+  const note = i.changeNote || c.noNote;
+  const bodyHtml = `<p style="margin:0 0 12px 0">${esc(body)}</p>
+    <p style="margin:0;padding:10px 12px;background:${T.concrete};border-radius:6px"><strong>${esc(c.change)}</strong> ${esc(note)}</p>`;
+  const text = [subject, '', body, `${c.change} ${note}`, '', `${c.review}: ${i.url}`].join('\n');
   return {
     subject,
     html: layout({
       title: subject,
       eyebrow: i.orgName,
       bodyHtml,
-      cta: { label: 'Review the report', url: i.url },
+      cta: { label: c.cta, url: i.url },
+      footerNote: REPORT_EMAIL_COPY[lang].footer,
     }),
     text,
   };

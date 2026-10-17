@@ -19,11 +19,13 @@ import { DemoSource } from '@/data/demo/DemoSource';
 import { demoUserFor, getDemoStore, type DemoLoginKey } from '@/data/demo/store';
 import { fetchOrgs } from '@/data/supabase/SupabaseSource';
 import type { OrgSummary } from '@/data/types';
+import { currentLanguage } from '@/i18n/i18n';
 import { applyOrgLanguage, memberDefaultLocale } from '@/i18n/useCopy';
 import { env, isDemo } from '@/lib/env';
 import { setSentryUser } from '@/lib/sentry';
 import { supabase } from '@/lib/supabase';
 import { storage } from '@/lib/utils';
+import { signInEmailData } from './emailLanguage';
 import { clearSession, DEMO_SESSION_KEY } from './session';
 
 export const CURRENT_ORG_KEY = 'sitelog.currentOrg';
@@ -270,7 +272,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!supabase) throw new Error('Supabase is not configured');
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: `${env.appUrl}/auth/callback` },
+        options: {
+          emailRedirectTo: `${env.appUrl}/auth/callback`,
+          // W4-09: the sign-in email's language (the page's EN/TR switch), §19 Q239.
+          data: signInEmailData(currentLanguage()),
+        },
       });
       // The AuthError itself: the sign-in page reads its `status` (429: too many emails).
       if (error) throw error;

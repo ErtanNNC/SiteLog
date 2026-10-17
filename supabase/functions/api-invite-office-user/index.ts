@@ -57,12 +57,12 @@ async function invite(admin: AppClient, caller: AuthedUser, body: z.output<typeo
   const redirectTo = `${requireEnv('APP_URL').replace(/\/+$/, '')}/auth/callback`;
   const { data: org } = await admin
     .from('orgs')
-    .select('locale')
+    .select('locale, name')
     .eq('id', body.orgId)
     .single()
     .throwOnError();
   const uiLocale = body.uiLocale ?? null;
-  const inviteData = inviteMetadata(body.orgId, body.role, uiLocale, org.locale);
+  const inviteData = inviteMetadata(body.orgId, body.role, uiLocale, org.locale, org.name);
 
   // New user: Supabase sends the invite email. Existing user: no invite is possible, so we only
   // add the membership; they sign in with their usual magic link (§F1) and land in the org.

@@ -1068,10 +1068,10 @@ export const copy = {
     empty: 'Write a summary or add at least one row before filing.',
     submit: 'File report',
     cancel: 'Cancel',
-    filed: (no: string) => `${no} filed.`,
-    exists: (no: string) =>
-      `${no} already covers this site and date, so this report was not filed. What you typed is still here: open ${no} and use Edit to add to it, or pick another site or date.`,
-    openExisting: (no: string) => `Open ${no}`,
+    filed: '{{no}} filed.',
+    exists:
+      '{{no}} already covers this site and date, so this report was not filed. What you typed is still here: open {{no}} and use Edit to add to it, or pick another site or date.',
+    openExisting: 'Open {{no}}',
     restored:
       'Restored the report you were typing in this tab. Photos are not kept: add them again.',
     startOver: 'Start over',
@@ -2746,7 +2746,7 @@ export const copy = {
     /** W4-10: the same toasts in the panel's language (Billing, Site settings). */
     sitePausedName: '{{site}} paused.',
     siteResumedName: '{{site}} resumed.',
-    siteCreated: (site: string) => `${site} connected.`,
+    siteCreated: '{{site}} connected.',
     siteUpdated: 'Site updated.',
     packRequested: 'Evidence pack requested.',
     csvReady: 'Payroll CSV ready.',
@@ -2757,17 +2757,18 @@ export const copy = {
     logoRemoved: 'Logo removed.',
   },
 
+  /** Today's PDFs / Export PDFs (.zip) on the Overview and Reports: the panel's language (W4-09). */
   pdfZip: {
     preparing: 'Preparing PDFs…',
-    progress: (done: number, total: number) => `Downloading PDFs · ${done} of ${total}`,
-    making: (done: number, total: number) => `Making PDFs · ${done} of ${total}`,
-    ready: (n: number) => `${plural(n, 'PDF')} zipped.`,
-    partial: (zipped: number, skipped: number) =>
-      `${plural(zipped, 'PDF')} zipped · ${skipped} not ready or failed to download.`,
+    progress: 'Downloading PDFs · {{done}} of {{total}}',
+    making: 'Making PDFs · {{done}} of {{total}}',
+    ready_one: '{{count}} PDF zipped.',
+    ready_other: '{{count}} PDFs zipped.',
+    partial_one: '{{count}} PDF zipped · {{skipped}} not ready or failed to download.',
+    partial_other: '{{count}} PDFs zipped · {{skipped}} not ready or failed to download.',
     none: 'None of these reports has a PDF yet.',
     failed: 'Couldn’t build the zip. Try again.',
-    capped: (limit: number, total: number) =>
-      `Exporting the first ${limit} of ${total} reports. Narrow the filters for the rest.`,
+    capped: 'Exporting the first {{limit}} of {{total}} reports. Narrow the filters for the rest.',
     fileName: (label: string, date: string) => `SiteLog_${label}_${date}.zip`,
     labels: { today: 'daily-reports', archive: 'reports' },
   },
