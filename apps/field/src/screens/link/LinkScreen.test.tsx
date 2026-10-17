@@ -69,7 +69,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
       name: 'Hi Marco — one minute before your first report',
     });
     // The code field is gone: focus is on the new screen's heading.
-    expect(welcome).toHaveFocus();
+    await waitFor(() => expect(welcome).toHaveFocus());
     expect(screen.getByText(/daily report for Kestrel Build Group/)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Privacy notice' })).toBeNull();
     // Upper-cased by CSS (`text-transform`, locale-aware through <html lang>), as on Field-02.
@@ -107,7 +107,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
 
     // F4's optional test recording (W2-13), first open only; skipped here.
     const test = await screen.findByRole('heading', { level: 1, name: 'Try a 20-second test' });
-    expect(test).toHaveFocus();
+    await waitFor(() => expect(test).toHaveFocus());
     expect(screen.getByText('Say anything — nothing gets filed.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Skip the test' }));
 
