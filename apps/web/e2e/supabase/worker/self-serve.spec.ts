@@ -282,20 +282,27 @@ for (const run of RUNS) {
       expect(welcome.provider).toBe(run.provider);
       expect(welcome.body).toContain(run.site);
       linkCode = /\/r\/([A-Za-z0-9]+)/.exec(welcome.body)![1]!;
-      const { data: reporter } = await admin()
-        .from('reporters')
-        .select('status, invited_at')
-        .eq('id', reporterId)
-        .single()
-        .throwOnError();
-      expect(reporter!.status).toBe('invited');
-      expect(reporter!.invited_at).not.toBeNull();
+      // The text reaches the stand-in before the worker marks the invite sent and queues the
+      // re-send, so both are polled.
+      const reporter = await until('the invite marked sent', async () => {
+        const { data } = await admin()
+          .from('reporters')
+          .select('status, invited_at')
+          .eq('id', reporterId)
+          .single()
+          .throwOnError();
+        return data?.invited_at ? data : null;
+      });
+      expect(reporter.status).toBe('invited');
       // Q241: the one automatic re-send waits 48 h for a reaction (the PGlite test runs it).
-      const { data: resend } = await admin()
-        .from('jobs')
-        .select('status')
-        .eq('dedupe_key', `welcome_resend:${reporterId}`)
-        .throwOnError();
+      const resend = await until('the queued re-send', async () => {
+        const { data } = await admin()
+          .from('jobs')
+          .select('status')
+          .eq('dedupe_key', `welcome_resend:${reporterId}`)
+          .throwOnError();
+        return data?.length ? data : null;
+      });
       expect(resend).toEqual([{ status: 'queued' }]);
     });
 
