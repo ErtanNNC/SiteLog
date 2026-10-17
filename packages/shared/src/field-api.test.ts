@@ -24,7 +24,7 @@ import { REPORT_POLL, reportPollDelay } from './field-contract.ts';
 /** The field-api contract (W1-07): what the field app sends and field-api accepts. */
 
 describe('field-api contract', () => {
-  it('keeps the spec numbers: 180-day cookie, 30/min per device, 5 sends and 5 checks an hour, 3 expired-link requests a day, 3 test recordings an hour', () => {
+  it('keeps the spec numbers: 180-day cookie, 30/min per device, 5 sends and 5 checks an hour, 3 expired-link requests a day, 3 test recordings and 3 Talk now calls an hour', () => {
     expect(DEVICE_COOKIE_MAX_AGE_S).toBe(180 * 86_400);
     expect(FIELD_RATE_LIMITS).toEqual({
       device: { limit: 30, windowSeconds: 60 },
@@ -32,6 +32,7 @@ describe('field-api contract', () => {
       codeVerify: { limit: 5, windowSeconds: 3600 },
       expiredLink: { limit: 3, windowSeconds: 86_400 },
       testClip: { limit: 3, windowSeconds: 3600 },
+      talkNow: { limit: 3, windowSeconds: 3600 },
     });
   });
 

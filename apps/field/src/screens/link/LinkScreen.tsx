@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams, type NavigateOptions } from 'react-router';
 import { normalizeLinkCode } from '@sitelog/shared/links.ts';
 import type { LinkExpiredBody } from '@sitelog/shared/field-contract.ts';
 import { apiErrorBody, apiErrorCode } from '@/api/field';
@@ -48,7 +48,8 @@ function linkError(err: unknown): LinkErrorKey | 'expired' | 'failed' {
  * and the installed app's `/` work without the SMS afterwards. `/r/:code/report/:id` (the `filed`
  * text's link, W1-15) does the same and then opens that report instead of Today;
  * `/r/:code/history[/:id]` (an SMS EDIT's confirm link and its fallback, W2-12) opens Past reports
- * or that report's view, where the texted change waits as a preview with **Save change**.
+ * or that report's view, where the texted change waits as a preview with **Save change**. A photos
+ * link (F9, W3-13) opens the photo-only screen (`/photos`) where the others open Today.
  */
 export function LinkScreen({ to = 'report' }: { to?: 'report' | 'history' } = {}) {
   const { code: raw = '', id } = useParams();
@@ -63,7 +64,14 @@ export function LinkScreen({ to = 'report' }: { to?: 'report' | 'history' } = {}
         ? `/report/${encodeURIComponent(id)}`
         : '/today';
   const api = useApi();
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
+  // W3-13 (F9): a photos link opens the photo-only screen instead of Today.
+  const photosLink = useRef(false);
+  const navigate = useCallback(
+    (to: string, opts?: NavigateOptions) =>
+      routerNavigate(to === '/today' && photosLink.current ? '/photos' : to, opts),
+    [routerNavigate],
+  );
   const { session, update } = useSession();
   const queue = useQueue();
   const { t, tc } = useFieldCopy();
@@ -78,6 +86,7 @@ export function LinkScreen({ to = 'report' }: { to?: 'report' | 'history' } = {}
     try {
       const res = await api.resolve(code);
       const next = sessionFromResolve(code, res, previous.current);
+      photosLink.current = next.link.kind === 'photos';
       update(next);
       if (next.needsDeviceCheck) setPhase({ kind: 'device', session: next });
       else if (next.needsConsent) setPhase({ kind: 'welcome', session: next });

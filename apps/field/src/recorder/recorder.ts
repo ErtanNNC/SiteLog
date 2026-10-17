@@ -151,7 +151,8 @@ function browserDeps(): Required<
   };
 }
 
-function permissionError(err: unknown): boolean {
+/** The microphone was refused (the browser's or the phone's setting); also the call screen's. */
+export function permissionError(err: unknown): boolean {
   const name = (err as { name?: string } | null)?.name;
   return name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError';
 }

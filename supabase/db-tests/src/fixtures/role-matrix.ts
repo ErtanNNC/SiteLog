@@ -735,6 +735,18 @@ export const RPCS: Record<
     call: (o) =>
       `select voice_turn_submit('${o.call}', 'update_draft', '${'c'.repeat(64)}', '{"segments": [{"start": 0, "end": 1, "text": "hi"}]}') as v`,
   },
+  // W3-13 (20261016000340_talk_now.sql): Talk now's call row, through field-api's voice/token.
+  field_talk_now_start: {
+    why: '§6.5, §9.4: field-api only (service role), after the link, the device and the consents; no client starts a call.',
+    allow: NONE,
+    call: (o) =>
+      `select field_talk_now_start('${o.reporter}', '${o.site}', '${o.fieldDevice}') as v`,
+  },
+  field_talk_now_failed: {
+    why: '§6.5: field-api only (service role), when the LiveKit room or dispatch failed.',
+    allow: NONE,
+    call: (o) => `select field_talk_now_failed('${o.call}', 'matrix') as v`,
+  },
 };
 
 export type Scope = 'own' | 'other';

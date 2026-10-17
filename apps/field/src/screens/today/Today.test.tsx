@@ -49,7 +49,7 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
     expect(screen.getByRole('button', { name: 'Add photos' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'No work today' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Site closed: weather' })).toBeInTheDocument();
-    // Talk now is behind VITE_FEATURE_TALK_NOW (off); no voice number in the pack: no call line.
+    // Talk now is not offered here (`talkNow` false); no voice number in the pack: no call line.
     expect(screen.queryByText(/Talk now/)).toBeNull();
     expect(screen.queryByRole('link', { name: /or call/ })).toBeNull();
     expect(document.title).toBe('Today · SiteLog');
@@ -462,5 +462,41 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
     expect(screen.getByRole('button', { name: 'Add photos' }).closest('[inert]')).not.toBeNull();
     fireEvent.click(within(sheet).getByRole('button', { name: 'Cancel' }));
     expect(document.querySelector('[inert]')).toBeNull();
+  });
+
+  it('offers Talk now when field-api says so (W3-13, §19 Q121) and opens the call for this site', async () => {
+    const routes = fakeRoutes({
+      today: vi.fn().mockResolvedValue(todayResponse({ talkNow: true })),
+    });
+    renderApp('/today', { routes });
+    const talk = await screen.findByRole('button', { name: 'Prefer to talk? Talk now' });
+    // Field-10: no voice number in the pack, so the line under it says none is needed.
+    expect(
+      screen.getByText('The assistant listens in the browser, no number needed'),
+    ).toBeInTheDocument();
+    // A reporter who prefers texts: the outline button under the day's actions (56 px).
+    expect(talk.className).toContain('h-target');
+    fireEvent.click(talk);
+    // The call screen (lazy): it asks for the microphone first.
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Speaking with the SiteLog assistant' }),
+    ).toBeInTheDocument();
+  });
+
+  it('makes Talk now the second-largest button for a reporter who prefers calls (§9.3)', async () => {
+    const routes = fakeRoutes({
+      today: vi.fn().mockResolvedValue(todayResponse({ talkNow: true })),
+    });
+    const session = demoSession();
+    renderApp('/today', {
+      routes,
+      session: { ...session, reporter: { ...session.reporter, contactPref: 'call' } },
+    });
+    const talk = await screen.findByRole('button', { name: 'Prefer to talk? Talk now' });
+    expect(talk.className).toContain('h-[72px]');
+    // Right under Record, before Add photos.
+    const add = screen.getByRole('button', { name: 'Add photos' });
+    expect(talk.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Prefer to talk? Talk now' })).toHaveLength(1);
   });
 });

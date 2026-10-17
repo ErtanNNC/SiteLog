@@ -30,6 +30,8 @@ export const uiEn = {
       history: 'Past reports',
       settings: 'Settings',
       expired: 'Link expired',
+      talk: 'Talk now',
+      photos: 'Add photos',
     },
     /** Any other path (the field host serves the app for every path). */
     notFound: {
@@ -517,6 +519,55 @@ export const uiEn = {
         added: 'Photos added. Version {{version}} is with the office.',
         failed: 'Couldn’t add the photos.',
       },
+    },
+    /**
+     * Talk now (W3-13; §9.3, §9.4, §19 Q121): the browser call with the assistant. Field-08 is not
+     * exported: status, the recording notice as text (the voice copy's line), a timer, mute and
+     * End call; no live captions in M7.
+     */
+    talk: {
+      title: 'Talk now',
+      assistant: 'Speaking with the SiteLog assistant',
+      status: {
+        microphone: 'Asking for the microphone…',
+        connecting: 'Connecting to the assistant…',
+        reconnecting: 'Connection lost — reconnecting…',
+        speaking: 'The assistant is speaking',
+        listening: 'The assistant is listening',
+        muted: 'Your microphone is off',
+        ended: 'Call ended. Checking your report…',
+      },
+      timerLabel: 'Call time',
+      noticeLabel: 'This call is recorded',
+      mute: 'Mute the microphone',
+      unmute: 'Turn the microphone on',
+      endCall: 'End call',
+      /** The browser blocked the assistant's audio until a tap (iOS). */
+      enableAudio: 'Tap to hear the assistant',
+      recordInstead: 'Record instead',
+      errors: {
+        rate_limited:
+          'You’ve started three calls this hour. Record your report instead, or try again later.',
+        talk_now_unavailable: 'Talk now isn’t available right now. Record your report instead.',
+        voice_unavailable:
+          'The assistant couldn’t be reached. Try again, or record your report instead.',
+        kind_not_allowed: 'This link is for photos only.',
+        connect: 'Couldn’t connect the call. Check your signal and try again.',
+        generic: 'Couldn’t start the call. Check your signal and try again.',
+      },
+    },
+    /**
+     * F9's photo-only screen (W3-13): a photos link (texted after a call-filed report) opens it, not
+     * Today. The sheet and its progress are the Filed screen's (`filed.photos`).
+     */
+    photosLink: {
+      title: 'Add photos',
+      /** `{{no}}` the report number, `{{site}}` its site, `{{date}}` its day. */
+      intro: 'Photos for report {{no}}, {{site}}, {{date}}.',
+      pick: 'Take or choose photos',
+      noReport: 'There’s no filed report for this day yet. Photos can be added once it’s filed.',
+      closed: 'This link can’t add more photos.',
+      failed: 'Couldn’t load the report. Check your signal and try again.',
     },
     /** The offline banner and the upload queue (F5 step 3). */
     offline: {

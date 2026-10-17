@@ -1,6 +1,3 @@
-/** Talk now (spec §9.3, week 2): shown only when the build sets `VITE_FEATURE_TALK_NOW=true`. */
-export const TALK_NOW_ENABLED = import.meta.env.VITE_FEATURE_TALK_NOW === 'true';
-
 /**
  * Whether SiteLog places automated calls for the reporter's pack: the Field-02 box *Call me at
  * report time (automated)* asks the `auto_call` consent only then (spec §19 Q33: no `auto_call`

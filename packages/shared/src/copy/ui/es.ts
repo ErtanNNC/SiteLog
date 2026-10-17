@@ -23,6 +23,8 @@ export const uiEs: UiResources = {
       history: 'Reportes anteriores',
       settings: 'Configuración',
       expired: 'Enlace vencido',
+      talk: 'Hable ahora',
+      photos: 'Agregar fotos',
     },
     notFound: {
       title: 'Página no encontrada',
@@ -455,6 +457,45 @@ export const uiEs: UiResources = {
         added: 'Fotos agregadas. La versión {{version}} ya está en la oficina.',
         failed: 'No se pudieron agregar las fotos.',
       },
+    },
+    talk: {
+      title: 'Hable ahora',
+      assistant: 'Hablando con el asistente de SiteLog',
+      status: {
+        microphone: 'Pidiendo el micrófono…',
+        connecting: 'Conectando con el asistente…',
+        reconnecting: 'Se perdió la conexión — reconectando…',
+        speaking: 'El asistente está hablando',
+        listening: 'El asistente le escucha',
+        muted: 'Su micrófono está apagado',
+        ended: 'Llamada terminada. Revisando su reporte…',
+      },
+      timerLabel: 'Tiempo de llamada',
+      noticeLabel: 'Esta llamada se graba',
+      mute: 'Silenciar el micrófono',
+      unmute: 'Encender el micrófono',
+      endCall: 'Terminar llamada',
+      enableAudio: 'Toque para oír al asistente',
+      recordInstead: 'Mejor grabar',
+      errors: {
+        rate_limited:
+          'Ya inició tres llamadas en esta hora. Grabe su reporte o vuelva a intentarlo más tarde.',
+        talk_now_unavailable: 'Hable ahora no está disponible en este momento. Grabe su reporte.',
+        voice_unavailable:
+          'No se pudo contactar al asistente. Inténtelo de nuevo o grabe su reporte.',
+        kind_not_allowed: 'Este enlace es solo para fotos.',
+        connect: 'No se pudo conectar la llamada. Revise su señal e inténtelo de nuevo.',
+        generic: 'No se pudo iniciar la llamada. Revise su señal e inténtelo de nuevo.',
+      },
+    },
+    photosLink: {
+      title: 'Agregar fotos',
+      intro: 'Fotos para el reporte {{no}}, {{site}}, {{date}}.',
+      pick: 'Tomar o elegir fotos',
+      noReport:
+        'Todavía no hay un reporte enviado para este día. Podrá agregar fotos cuando se envíe.',
+      closed: 'Este enlace ya no permite agregar fotos.',
+      failed: 'No se pudo cargar el reporte. Revise su señal e inténtelo de nuevo.',
     },
     offline: {
       banner: 'Sin señal — las grabaciones se guardan en su teléfono',

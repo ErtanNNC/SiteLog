@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, Navigate, useNavigate } from 'react-router';
 import type { TodayResponse } from '@sitelog/shared/field-contract.ts';
 import { formatDate, formatPhone, formatTimeInTz } from '@sitelog/shared/format.ts';
 import { apiErrorCode } from '@/api/field';
@@ -13,7 +13,6 @@ import { OfflineBanner } from '@/components/OfflineBanner';
 import { Screen } from '@/components/Screen';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { copyError, type CopyError } from '@/lib/errors';
-import { TALK_NOW_ENABLED } from '@/lib/features';
 import { useQueue, useQueueSnapshot } from '@/queue/useQueue';
 import { photoMime } from '@/recorder/photos';
 import { NoLink } from '@/screens/NoLink';
@@ -119,13 +118,16 @@ function HeadsetIcon() {
 /**
  * Today (F5 step 1; Field-03, Field-10): site, date and deadline in the site's time zone, the
  * status, the prompt list, the Record button (≥ 120 px), Add photos, No work / Weather through
- * `day-status`, Talk now behind `VITE_FEATURE_TALK_NOW`, and *Call {number}* only when the pack
- * has a voice number. Before 12:00 site time a personal link may report yesterday (F5, spec §19
- * Q43): `allowedDates` then offers the choice.
+ * `day-status`, **Talk now** when `today.talkNow` (W3-13, §19 Q121: LiveKit here and the org not
+ * billing-blocked; the second-largest button, under Record, for a reporter who prefers calls,
+ * §9.3), and *Call {number}* only when the pack has a voice number. Before 12:00 site time a
+ * personal link may report yesterday (F5, spec §19 Q43): `allowedDates` then offers the choice.
+ * A photos link opens F9's photo-only screen instead (W3-13).
  */
 export function Today() {
   const { session, patch } = useSession();
   if (!session) return <NoLink />;
+  if (session.link.kind === 'photos') return <Navigate to="/photos" replace />;
   return (
     <TodayLoaded
       code={session.code}
@@ -134,6 +136,7 @@ export function Today() {
       patch={patch}
       sites={session.sites}
       voiceNumber={session.country.voiceNumber}
+      prefersCalls={session.reporter.contactPref === 'call'}
     />
   );
 }
@@ -145,6 +148,7 @@ function TodayLoaded({
   patch,
   sites,
   voiceNumber,
+  prefersCalls,
 }: {
   code: string;
   siteId: string | null;
@@ -156,6 +160,7 @@ function TodayLoaded({
   }) => void;
   sites: TodayResponse['sites'];
   voiceNumber: string | null;
+  prefersCalls: boolean;
 }) {
   const api = useApi();
   const navigate = useNavigate();
@@ -345,6 +350,14 @@ function TodayLoaded({
 
   const status = todayStatus(today);
   const closed = dayClosed(today);
+  // W3-13 (§19 Q121): field-api says whether Talk now is offered here.
+  const talkNow = today.talkNow;
+  const startTalk = () => navigate('/talk', { state: { siteId: today.site.id } });
+  const talkNowHint = (
+    <span className="flex min-h-9 items-center justify-center text-center text-[14px] text-dust">
+      {t('today.talkNowHint')}
+    </span>
+  );
   const chosenDate = date && today.allowedDates.includes(date) ? date : today.date;
 
   return (
@@ -452,6 +465,21 @@ function TodayLoaded({
             <span className="text-[14px] text-dust">{t('today.usually')}</span>
           </div>
 
+          {/* §9.3: for a reporter who prefers calls, Talk now is the second-largest button. */}
+          {talkNow && prefersCalls ? (
+            <div className="flex flex-col gap-0.5">
+              <button
+                type="button"
+                onClick={startTalk}
+                className="flex h-[72px] items-center justify-center gap-2.5 rounded-card border-0 bg-asphalt px-5 text-[18px] font-bold text-chalk"
+              >
+                <HeadsetIcon />
+                {t('today.talkNow')}
+              </button>
+              {voiceNumber ? null : talkNowHint}
+            </div>
+          ) : null}
+
           {today.report ? (
             <Link
               to={`/report/${today.report.id}`}
@@ -497,25 +525,20 @@ function TodayLoaded({
             </div>
           )}
 
-          {TALK_NOW_ENABLED || voiceNumber ? (
+          {(talkNow && !prefersCalls) || voiceNumber ? (
             <div className="flex flex-col gap-0.5">
-              {TALK_NOW_ENABLED ? (
+              {talkNow && !prefersCalls ? (
                 <>
-                  {/* Week 2 (M7) wires it to `voice/token` and the browser call (Field-08); the
-                      flag stays false until then. */}
                   <button
                     type="button"
+                    onClick={startTalk}
                     className="flex h-target items-center justify-center gap-2.5 rounded-card border-2 border-asphalt bg-white text-[16px] font-bold text-asphalt"
                   >
                     <HeadsetIcon />
                     {t('today.talkNow')}
                   </button>
                   {/* Field-10: without a voice number the line under it says no number is needed. */}
-                  {voiceNumber ? null : (
-                    <span className="flex min-h-9 items-center justify-center text-center text-[14px] text-dust">
-                      {t('today.talkNowHint')}
-                    </span>
-                  )}
+                  {voiceNumber ? null : talkNowHint}
                 </>
               ) : null}
               {voiceNumber ? (

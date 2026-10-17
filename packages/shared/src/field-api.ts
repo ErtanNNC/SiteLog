@@ -191,6 +191,10 @@ export const EditRequestSchema = z.strictObject({
  * (lost hours, crew hours) and its filing. A weather day needs "Since when?" (no lost hours are
  * invented without it).
  */
+/** `POST voice/token` (W3-13, Talk now): the site the call is about (one of the link's active sites). */
+export const VoiceTokenRequestSchema = z.strictObject({ siteId: z.uuid() });
+export type VoiceTokenRequest = z.infer<typeof VoiceTokenRequestSchema>;
+
 export const DayStatusRequestSchema = z
   .strictObject({
     siteId: z.uuid(),

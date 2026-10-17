@@ -71,6 +71,7 @@ export function todayResponse(patch: Partial<TodayResponse> = {}): TodayResponse
     deadlineAt: '2026-10-09T22:30:00.000Z',
     dayStatus: 'pending',
     report: null,
+    talkNow: false,
     ...patch,
   };
 }
@@ -111,6 +112,7 @@ export function fakeRoutes(overrides: Partial<FieldRoutes> = {}): FieldRoutes {
     pushKey: vi.fn(refuse),
     pushSubscribe: vi.fn(refuse),
     pushUnsubscribe: vi.fn(refuse),
+    voiceToken: vi.fn(refuse),
     ...overrides,
   };
 }

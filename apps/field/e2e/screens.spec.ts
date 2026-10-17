@@ -139,7 +139,7 @@ for (const run of RUNS) {
         page.getByRole('heading', { level: 2, name: field.today.promptsTitle }),
       ).toBeVisible();
       await expect(page.getByText(field.today.tapToRecord)).toBeVisible();
-      // No voice number in week 1, and Talk now is off (VITE_FEATURE_TALK_NOW).
+      // No voice number in week 1, and Talk now is not offered (`talkNow` false).
       await expect(page.locator('a[href^="tel:"]')).toHaveCount(0);
       await expect(page.getByText(field.today.talkNow)).toHaveCount(0);
       const record = page.getByRole('link', { name: field.today.record });

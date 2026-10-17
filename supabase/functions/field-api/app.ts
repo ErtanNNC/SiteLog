@@ -133,6 +133,13 @@ import {
 } from './logic.ts';
 import { FieldDbError, type FieldStore, type OrgContext } from './store.ts';
 import { registerVoiceRoutes, voiceToolWaitMs } from './voice.ts';
+import {
+  registerTalkNowRoutes,
+  talkNowAvailable,
+  type LiveKitApi,
+  type TalkNowDeps,
+  type TalkNowStore,
+} from './talk_now.ts';
 
 /**
  * field-api (W1-07; spec §6.5, Appendix B, F4, F5, F12): the field app's only backend. Hono
@@ -204,6 +211,15 @@ export interface FieldApiDeps {
    * their worker turn before answering `pending` (default 12 s, at most 15 s).
    */
   voiceToolWaitMs?: () => number | undefined;
+  /**
+   * W3-13, Talk now (`talk_now.ts`): its store, LiveKit when configured here (null: no Talk now,
+   * `talkNow` false) and LIVEKIT_AGENT_NAME. Unset = no Talk now.
+   */
+  talkNow?: {
+    store: TalkNowStore;
+    livekit: () => LiveKitApi | null;
+    agentName?: () => string;
+  };
   now?: () => Date;
   /** Waiting between polls of a send claim (tests pass a fake). */
   sleep?: (ms: number) => Promise<void>;
@@ -243,6 +259,17 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
   const randomUUID = deps.randomUUID ?? (() => crypto.randomUUID());
 
   const app = new Hono<Env>().basePath('/field-api');
+  const talkNowDeps: TalkNowDeps | null = deps.talkNow
+    ? {
+        store: deps.talkNow.store,
+        livekit: deps.talkNow.livekit,
+        agentName: deps.talkNow.agentName ?? (() => 'sitelog-voice'),
+        now,
+      }
+    : null;
+  /** W3-13 (§19 Q121): `resolve` and `today` say whether Today offers Talk now. */
+  const talkNow = (orgId: string) =>
+    talkNowDeps ? talkNowAvailable(talkNowDeps, orgId) : Promise.resolve(false);
 
   // ── Every answer: no-store (registered first, so it wraps everything, errors included) ───────
   app.use('*', async (c, next) => {
@@ -469,6 +496,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
         .filter((s) => s.status !== 'archived')
         .map(fieldSite),
       country: fieldCountryView(ctx.pack),
+      talkNow: await talkNow(ctx.reporter.org_id),
     };
     return c.json(body);
   });
@@ -690,6 +718,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
             kind: fieldReportKind(report.kind),
           }
         : null,
+      talkNow: await talkNow(ctx.reporter.org_id),
     };
     return c.json(body);
   });
@@ -1863,6 +1892,20 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     deleteCookie(c, deviceCookieName(ctx.reporter.id), cookie);
     return c.json({ signedOut: true } satisfies SignOutResponse);
   });
+
+  // ── voice/token (W3-13): Talk now from the field app (talk_now.ts). Registered before the agent's
+  // /voice/* routes, whose bearer middleware (and refusal of a browser Origin) it must not meet.
+  if (talkNowDeps) {
+    registerTalkNowRoutes(app, talkNowDeps, {
+      authenticate: (c) => authenticate(c as Ctx, { consent: true }),
+      writeSite: (c, siteId) => writeSite((c as Ctx).get('field'), siteId),
+      rateLimit: (key, limit, windowSeconds) => store.rateLimit(key, limit, windowSeconds),
+    });
+  } else {
+    app.post('/voice/token', () => {
+      throw new FieldError(403, 'talk_now_unavailable');
+    });
+  }
 
   // ── /voice/* (W3-03): the voice agent's routes, server to server (voice.ts) ──────────────────
   registerVoiceRoutes(app, {

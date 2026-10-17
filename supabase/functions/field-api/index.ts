@@ -5,6 +5,7 @@ import { createFieldApp } from './app.ts';
 import { notifierCodeSender, notifierDailyLinkSender } from './code_sender.ts';
 import { fieldOrigins } from './logic.ts';
 import { supabaseFieldStore } from './store_supabase.ts';
+import { liveKitConfig, liveKitHttpApi, supabaseTalkNowStore } from './talk_now.ts';
 
 /**
  * field-api (W1-07): the field app's only backend (spec §6.5, Appendix B; README.md here).
@@ -44,6 +45,15 @@ function fieldApp() {
       voiceToolWaitMs: () => {
         const raw = optionalEnv('VOICE_TOOL_WAIT_MS');
         return raw ? Number(raw) : undefined;
+      },
+      // W3-13: Talk now when LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET are set here.
+      talkNow: {
+        store: supabaseTalkNowStore(admin),
+        livekit: () => {
+          const cfg = liveKitConfig(optionalEnv);
+          return cfg ? liveKitHttpApi(cfg) : null;
+        },
+        agentName: () => optionalEnv('LIVEKIT_AGENT_NAME') ?? 'sitelog-voice',
       },
     });
   }

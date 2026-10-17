@@ -22,6 +22,7 @@ import type {
   TodayResponse,
   UploadResponse,
   VerifyResponse,
+  VoiceTokenResponse,
 } from '@sitelog/shared/field-contract.ts';
 import type {
   AnswerRequest,
@@ -115,6 +116,9 @@ export function createFieldRoutes(api: FieldApiClient = fieldApi) {
         body,
         linkCode: code,
       }),
+    /** Talk now (W3-13): the call, its room and the participant token; 3 an hour per phone. */
+    voiceToken: (code: string, siteId: string, signal?: AbortSignal) =>
+      api.request<VoiceTokenResponse>('voice/token', { body: { siteId }, linkCode: code, signal }),
     dayStatus: (code: string, body: DayStatusRequest) =>
       api.request<DayStatusResponse>('day-status', { body, linkCode: code }),
     /** Past reports (F10, W2-03): the last 14 days of the link's sites. */

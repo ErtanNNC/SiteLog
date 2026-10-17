@@ -19,6 +19,7 @@ worker and the web panel use.
 | `api-billing`              | Supabase JWT, admin                               | Stripe checkout / portal / quantity sync / pause & resume site / invoices / status            |
 | `field-api`                | link code + `sl_dev_*` device cookie (no JWT)     | The field app's only backend (W1-07, spec §6.5, Appendix B): link, device, consent, uploads   |
 | `field-api` `/voice/*`     | bearer `VOICE_AGENT_TOOL_SECRET` + `X-Call-Token` | W3-03: the voice agent's routes, server to server: call start, `get_context`, tools           |
+| `field-api` `voice/token`  | link code + device cookie + consents              | W3-13: Talk now from the field app: the call row, its LiveKit room, the agent dispatch, token |
 | `sms-webhook`              | `X-Twilio-Signature`; `/demo-reply`: JWT, admin   | Twilio inbound texts (§9.5 keywords, F13) and delivery status; the Demo phone's typed replies |
 | `voice-events`             | LiveKit's webhook JWT (`LIVEKIT_API_SECRET`)      | W3-04: call rooms' events → `calls` status (never backwards); backstop on an unended call     |
 
@@ -30,7 +31,8 @@ lives in `logic.ts` / `csv.ts` modules next to `*_test.ts` files; `index.ts` onl
 `field-api` is a Hono app (GAP D6) mounted under `/field-api`: `app.ts` builds it from injected
 dependencies (`FieldStore`, the code sender, the secret, the clock), `store_supabase.ts` is the
 service-role store, `fake_store.ts` the in-memory one its Deno tests use, `logic.ts` the pure
-decisions. The field host proxies `/api/<route>` to it (D39, D43), so the device cookie stays
+decisions. `voice.ts` (W3-03) and `talk_now.ts` (W3-13, with its own store, the `LiveKitApi`
+interface and `fake_talk_now.ts` for its tests) are mounted from `app.ts`. The field host proxies `/api/<route>` to it (D39, D43), so the device cookie stays
 first-party and there is no CORS: a browser `Origin` must be `FIELD_APP_URL` or one of
 `CORS_EXTRA_ORIGINS`. Every answer is `Cache-Control: no-store`.
 
@@ -93,6 +95,11 @@ supabase secrets set LIVEKIT_API_KEY=API... LIVEKIT_API_SECRET=...
 # Optional (W3-09, §19 Q117): how long update_draft / record_answer wait for their worker turn
 # before answering `pending`; default 12000, at most 15000.
 # supabase secrets set VOICE_TOOL_WAIT_MS=12000
+# Talk now (W3-13): with LIVEKIT_URL and the same key pair, field-api answers talkNow in resolve and
+# today (for an org that is not billing-blocked, §19 Q121) and serves voice/token: it creates the
+# room call-{callId} and dispatches LIVEKIT_AGENT_NAME (default sitelog-voice) through LiveKit's
+# Twirp API with tokens it mints itself (talk_now.ts, WebCrypto, no SDK). Unset: talkNow false.
+supabase secrets set LIVEKIT_URL=wss://<project>.livekit.cloud LIVEKIT_AGENT_NAME=sitelog-voice
 ```
 
 Local development reads the same names from `supabase/functions/.env` (`supabase functions serve

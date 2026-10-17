@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { ReportView } from '@sitelog/shared/field-contract.ts';
 import { firstName, formatDate, formatDateInTz, formatTimeInTz } from '@sitelog/shared/format.ts';
@@ -9,11 +9,10 @@ import { OfflineBanner } from '@/components/OfflineBanner';
 import { Screen } from '@/components/Screen';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
 import { sendingErrorKey } from '@/lib/sendingErrors';
-import { useQueue, useQueueSnapshot } from '@/queue/useQueue';
-import { photoMime } from '@/recorder/photos';
-import type { Clip, RecorderDeps } from '@/recorder/recorder';
+import type { RecorderDeps } from '@/recorder/recorder';
 import { AddPhotosSheet } from './AddPhotosSheet';
 import { PdfCard } from './PdfCard';
+import { usePhotoBatch } from './usePhotoBatch';
 
 /**
  * field-api signs a filed report's PDF for 10 minutes (`reports/:id` `pdfUrl`): the screen fetches
@@ -80,12 +79,6 @@ function ClockIcon() {
   );
 }
 
-/** A batch the reporter sent from this screen: its id and the version the report was at. */
-interface SentBatch {
-  id: string;
-  fromVersion: number;
-}
-
 /**
  * Filed (F8, Field-07; W1-15, W2-04): the check, "Filed.", one line of thanks with the report
  * number, and the PDF, which opens through the view's freshly signed URL (also the target of the
@@ -123,12 +116,12 @@ export function Filed({
   recorderDeps?: RecorderDeps;
 }) {
   const { t, language } = useFieldCopy();
-  const queue = useQueue();
-  const snapshot = useQueueSnapshot();
   const picker = useRef<HTMLInputElement>(null);
-  const [picked, setPicked] = useState<{ files: File[]; dropped: number } | null>(null);
-  const [sent, setSent] = useState<SentBatch | null>(null);
-  const [sendError, setSendError] = useState<string | null>(null);
+  const { picked, closeSheet, onPicked, send, added, adding, errorKey } = usePhotoBatch({
+    code,
+    view,
+    onRefresh,
+  });
 
   useEffect(() => {
     if (!view.pdfUrl) return;
@@ -136,18 +129,7 @@ export function Filed({
     return () => clearTimeout(timer);
   }, [view.pdfUrl, onRefresh]);
 
-  // The batch's uploads: once every one is through, the report has its new version (or the
-  // caption's transcription will make it): check the report again.
-  const batchItems = sent ? snapshot.items.filter((i) => i.addTo?.batchId === sent.id) : [];
-  const batchDone = batchItems.length > 0 && batchItems.every((i) => i.status === 'done');
-  const batchFailed = batchItems.find((i) => i.status === 'failed') ?? null;
-  useEffect(() => {
-    if (batchDone) onRefresh();
-  }, [batchDone, onRefresh]);
-
   const photos = view.addPhotos;
-  const added = sent !== null && view.currentVersion > sent.fromVersion;
-  const adding = sent !== null && !added && !batchFailed;
   const tz = timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const until = photos
     ? `${formatDate(formatDateInTz(photos.until, tz), 'weekdayMonthDay', language)} ${formatTimeInTz(
@@ -155,58 +137,6 @@ export function Filed({
         tz,
       )}`
     : '';
-
-  function onPicked(e: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = '';
-    if (!photos || files.length === 0) return;
-    const usable = files.filter((f) => photoMime(f) !== null);
-    if (usable.length === 0) {
-      setSendError('media_type_not_allowed');
-      return;
-    }
-    setSendError(null);
-    const kept = usable.slice(0, photos.remaining);
-    setPicked({ files: kept, dropped: usable.length - kept.length });
-  }
-
-  async function send(caption: Clip | null) {
-    if (!picked) return;
-    const batchId = crypto.randomUUID();
-    const addTo = {
-      reportId: view.id,
-      batchId,
-      photos: picked.files.length,
-      caption: caption !== null,
-    };
-    const common = { code, siteId: view.siteId, date: view.date, addTo };
-    setPicked(null);
-    setSendError(null);
-    try {
-      for (const file of picked.files) {
-        await queue.enqueue({
-          ...common,
-          kind: 'photo',
-          mime: photoMime(file)!,
-          blob: file,
-          recordedAt: file.lastModified ? new Date(file.lastModified).toISOString() : null,
-        });
-      }
-      if (caption) {
-        await queue.enqueue({
-          ...common,
-          kind: 'audio',
-          mime: caption.mime,
-          blob: caption.blob,
-          recordedAt: caption.startedAt,
-        });
-      }
-      setSent({ id: batchId, fromVersion: view.currentVersion });
-    } catch (err) {
-      console.error('[field] could not queue the photos', err);
-      setSendError('generic');
-    }
-  }
 
   // W2-08: a weather-day or no-work record (F12) is not a daily report.
   const bodyKey =
@@ -231,7 +161,6 @@ export function Filed({
         ? t('filed.photos.late')
         : t((photos?.pending ?? 0) > 0 ? 'filed.photos.captioning' : 'filed.photos.adding')
       : null;
-  const errorKey = batchFailed ? batchFailed.error : sendError;
 
   return (
     <Screen title={t('filed.title')} dateLine={false} header={<Header siteName={view.siteName} />}>
@@ -326,7 +255,7 @@ export function Filed({
         remaining={photos?.remaining ?? 0}
         until={until}
         onSend={(caption) => void send(caption)}
-        onClose={() => setPicked(null)}
+        onClose={closeSheet}
         recorderDeps={recorderDeps}
       />
     </Screen>

@@ -1541,6 +1541,15 @@ export type Database = {
         };
         Returns: Json;
       };
+      // W3-13 (20261016000340_talk_now.sql): field-api's voice/token, service role only.
+      field_talk_now_start: {
+        Args: { p_reporter_id: string; p_site_id: string; p_device_id: string };
+        Returns: Json;
+      };
+      field_talk_now_failed: {
+        Args: { p_call_id: string; p_reason: string };
+        Returns: Json;
+      };
       call_site_day: {
         Args: { p_site_id: string; p_at: string };
         Returns: string;

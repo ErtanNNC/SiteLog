@@ -25,6 +25,11 @@ export const BUTTON_VARIANTS = {
   steel: 'border border-iron bg-steel text-chalk text-[16px] font-bold',
   /** Chalk with a Rebar border: an answer to tap (Field-05, 18 px bold). */
   choice: 'border border-rebar bg-chalk text-asphalt text-[18px] font-bold',
+  /**
+   * End call on the dark call screen (W3-13): White on Missing red, its words and icon carry the
+   * meaning (never the colour alone); not orange, which is the live state there.
+   */
+  end: 'border-0 bg-missing text-white text-[17px] font-bold',
   /** A text-only action that still fills a 56 px row (a resend link). */
   text: 'border-0 bg-transparent text-level text-[15px] font-semibold underline',
 } as const;

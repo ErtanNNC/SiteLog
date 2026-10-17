@@ -64,6 +64,8 @@ export const FIELD_RATE_LIMITS = {
   expiredLink: { limit: 3, windowSeconds: 24 * 60 * 60 },
   /** F4's test recording (W2-13): 3 an hour per device. */
   testClip: { limit: 3, windowSeconds: 60 * 60 },
+  /** Talk now (W3-13): 3 call starts an hour per device. */
+  talkNow: { limit: 3, windowSeconds: 60 * 60 },
 } as const;
 
 /** `history`: the last 14 days (F10 "Past reports"), in each site's time zone. */
@@ -172,6 +174,13 @@ export const FIELD_API_ERRORS = [
    */
   'texts_opted_out',
   'link_not_expired',
+  /**
+   * W3-13 (§19 Q121): Talk now is not offered here (no LiveKit in this environment, or the org is
+   * billing-blocked); `resolve` / `today` say so with `talkNow: false` first.
+   */
+  'talk_now_unavailable',
+  /** W3-13: LiveKit refused the room or the agent dispatch; the call was ended at once. */
+  'voice_unavailable',
   'rate_limited',
   'internal',
 ] as const;
@@ -259,6 +268,12 @@ export interface ResolveResponse {
   sites: FieldSite[];
   /** The org's country pack, the subset the field app needs (§4.6): never a sender or provider. */
   country: FieldCountryView;
+  /**
+   * W3-13 (§19 Q121): Today offers **Talk now**: this environment has LiveKit configured and the
+   * org is not billing-blocked. Every reporter sees it (the second-largest button for a reporter who
+   * prefers calls, §9.3).
+   */
+  talkNow: boolean;
 }
 
 /** The body of a 410 `link_expired`: enough for the Expired screen's language and call option. */
@@ -308,6 +323,21 @@ export interface TodayResponse {
    * F12 buttons made (spec §19 Q41), so Today shows the day closed with it.
    */
   report: { id: string; reportNo: string; status: ReportStatus; kind: FieldReportKind } | null;
+  /** W3-13 (§19 Q121): as `ResolveResponse.talkNow`, read again with each day. */
+  talkNow: boolean;
+}
+
+/**
+ * `POST voice/token {siteId}` (W3-13; §9.4, Appendix B): Talk now's call. `livekitUrl` is the
+ * LiveKit project's WebSocket URL, `token` the participant token of the room `call-{callId}` (its
+ * identity the call id, never the phone), minted server-side; the agent is dispatched to the room
+ * before this answers. 3 starts an hour per device (`FIELD_RATE_LIMITS.talkNow`).
+ */
+export interface VoiceTokenResponse {
+  livekitUrl: string;
+  token: string;
+  room: string;
+  callId: string;
 }
 
 /** `reports.kind` (§6.3): a daily report, or the record of a weather day or a no-work day (F12). */

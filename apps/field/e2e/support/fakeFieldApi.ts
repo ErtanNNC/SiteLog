@@ -16,6 +16,7 @@ import type {
   ResolveResponse,
   TodayResponse,
   UploadResponse,
+  VoiceTokenResponse,
 } from '@sitelog/shared/field-contract.ts';
 import type { ReporterLocale } from '@sitelog/shared/locale.ts';
 import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
@@ -289,6 +290,8 @@ export interface FakeFieldApi {
   /** W2-14: the subscription `push/subscribe` stored, null once unsubscribed. */
   pushSubscription: unknown;
   completed: string[];
+  /** W3-13: the `voice/token` requests (Talk now), with the call each made. */
+  talkCalls: { siteId: string; callId: string }[];
   /** What the fake refuses; change it between steps. */
   options: FakeOptions;
 }
@@ -348,6 +351,17 @@ export interface FakeOptions {
   push?: boolean;
   /** W2-15: the pack lists WhatsApp (*Message me on WhatsApp* on Welcome and in Settings). */
   whatsapp?: boolean;
+  /**
+   * W3-13: Talk now is offered (`talkNow` in resolve and today), and `voice/token` answers this
+   * `livekitUrl`: a `fake:scripted?…` script the app's fake VoiceClient plays (`src/voice/fake.ts`).
+   */
+  talkNow?: string;
+  /** W3-13: `voice/token` refuses (rate_limited …). */
+  talkNowError?: Refusal;
+  /** W3-13: the day's report once the call ended (what the agent filed or left as a draft). */
+  talkReport?: NonNullable<TodayResponse['report']>;
+  /** W3-13 (F9): `resolve` answers a photos link of `dailyLinkSite` (the call-filed report's day). */
+  photosLink?: boolean;
 }
 
 /** W2-14: the fake VAPID public key `push/key` answers (65 bytes, base64url). */
@@ -408,6 +422,7 @@ export async function installFakeFieldApi(
     consent: null,
     pushSubscription: null,
     completed: [],
+    talkCalls: [],
     options: { ...opts },
   };
   const options = api.options;
@@ -520,7 +535,7 @@ export async function installFakeFieldApi(
           org: market.org,
           link: options.dailyLinkSite
             ? {
-                kind: 'daily',
+                kind: options.photosLink ? 'photos' : 'daily',
                 siteId: options.dailyLinkSite,
                 reportDate: market.date,
                 expiresAt: '2026-10-12T22:00:00.000Z',
@@ -534,6 +549,7 @@ export async function installFakeFieldApi(
           country: options.whatsapp
             ? { ...market.country, messageChannels: ['push', 'whatsapp', 'sms'] }
             : market.country,
+          talkNow: options.talkNow !== undefined,
         };
         return json(route, 200, res);
       }
@@ -696,11 +712,34 @@ export async function installFakeFieldApi(
           deadlineAt: deadlines[site.id] ?? market.deadlineAt,
           dayStatus: api.state.dayStatus,
           report: api.state.report,
+          talkNow: options.talkNow !== undefined,
         };
         return json(route, 200, res);
       }
       if (path === 'history') {
         return json(route, 200, { reports: options.history ?? [] } satisfies HistoryResponse);
+      }
+      // W3-13: Talk now's call (the fake VoiceClient plays `options.talkNow`'s script).
+      if (path === 'voice/token') {
+        if (options.talkNow === undefined)
+          return refuse({ status: 403, error: 'talk_now_unavailable' });
+        if (options.photosLink) return refuse({ status: 400, error: 'kind_not_allowed' });
+        if (options.talkNowError) return refuse(options.talkNowError);
+        const siteId = (body as { siteId: string }).siteId;
+        const callId = `7a1c0000-0000-4000-8000-${String(api.talkCalls.length + 1).padStart(12, '0')}`;
+        api.talkCalls.push({ siteId, callId });
+        // What the call leaves: the agent filed the report (or saved a draft) before it ends.
+        if (options.talkReport) {
+          api.state.report = options.talkReport;
+          api.state.dayStatus = options.talkReport.status === 'filed' ? 'filed' : 'processing';
+        }
+        const res: VoiceTokenResponse = {
+          livekitUrl: options.talkNow,
+          token: 'fake-participant-token',
+          room: `call-${callId}`,
+          callId,
+        };
+        return json(route, 201, res);
       }
       const past = /^reports\/([^/]+)$/.exec(path);
       if (past && options.reports?.[past[1]!]) return json(route, 200, options.reports[past[1]!]);

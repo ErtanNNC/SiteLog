@@ -23,6 +23,7 @@ function resolved(patch: Partial<ResolveResponse> = {}): ResolveResponse {
     needsConsent: true,
     sites: [],
     country: US_COUNTRY,
+    talkNow: false,
     ...patch,
   };
 }
@@ -266,6 +267,29 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
     renderApp('/r/K7Q2MX', { session: null, routes });
     expect(await screen.findByText('Not sent yet')).toBeInTheDocument();
     expect(routes.sendCode).not.toHaveBeenCalled();
+  });
+
+  it('opens a photos link on the photo-only screen, not Today (F9, W3-13)', async () => {
+    const routes = fakeRoutes({
+      resolve: vi.fn().mockResolvedValue(
+        resolved({
+          needsDeviceCheck: false,
+          needsConsent: false,
+          sites: [SITE],
+          link: { kind: 'photos', siteId: SITE.id, reportDate: '2026-10-09', expiresAt: null },
+        }),
+      ),
+      today: vi.fn().mockResolvedValue(todayResponse()),
+    });
+    renderApp('/r/K7Q2MX', { session: null, routes });
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Add photos' }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        'There’s no filed report for this day yet. Photos can be added once it’s filed.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('speaks the reporter’s language once the link is resolved, and offers the pack’s locales', async () => {

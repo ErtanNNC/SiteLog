@@ -1570,6 +1570,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       history: 'Geçmiş raporlar',
       settings: 'Ayarlar',
       expired: 'Linkin süresi doldu',
+      talk: 'Şimdi konuş',
+      photos: 'Fotoğraf ekle',
     },
     notFound: {
       title: 'Sayfa bulunamadı',
@@ -1993,6 +1995,44 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         added: 'Fotoğraflar eklendi. Sürüm {{version}} ofiste.',
         failed: 'Fotoğraflar eklenemedi.',
       },
+    },
+    talk: {
+      title: 'Şimdi konuş',
+      assistant: 'SiteLog asistanıyla konuşuyorsunuz',
+      status: {
+        microphone: 'Mikrofon izni isteniyor…',
+        connecting: 'Asistana bağlanılıyor…',
+        reconnecting: 'Bağlantı koptu — yeniden bağlanılıyor…',
+        speaking: 'Asistan konuşuyor',
+        listening: 'Asistan sizi dinliyor',
+        muted: 'Mikrofonunuz kapalı',
+        ended: 'Görüşme bitti. Raporunuza bakılıyor…',
+      },
+      timerLabel: 'Görüşme süresi',
+      noticeLabel: 'Bu görüşme kaydediliyor',
+      mute: 'Mikrofonu kapat',
+      unmute: 'Mikrofonu aç',
+      endCall: 'Görüşmeyi bitir',
+      enableAudio: 'Asistanı duymak için dokunun',
+      recordInstead: 'Kayıtla devam et',
+      errors: {
+        rate_limited:
+          'Bu saat içinde üç görüşme başlattınız. Raporunuzu kaydedin ya da daha sonra yeniden deneyin.',
+        talk_now_unavailable: 'Şimdi konuş şu anda kullanılamıyor. Raporunuzu kaydedin.',
+        voice_unavailable: 'Asistana ulaşılamadı. Yeniden deneyin ya da raporunuzu kaydedin.',
+        kind_not_allowed: 'Bu link yalnızca fotoğraf içindir.',
+        connect: 'Görüşme bağlanamadı. Sinyalinizi kontrol edip yeniden deneyin.',
+        generic: 'Görüşme başlatılamadı. Sinyalinizi kontrol edip yeniden deneyin.',
+      },
+    },
+    photosLink: {
+      title: 'Fotoğraf ekle',
+      intro: '{{no}} numaralı rapor için fotoğraflar, {{site}}, {{date}}.',
+      pick: 'Fotoğraf çek ya da seç',
+      noReport:
+        'Bu gün için henüz gönderilmiş bir rapor yok. Rapor gönderilince fotoğraf eklenebilir.',
+      closed: 'Bu linkle artık fotoğraf eklenemez.',
+      failed: 'Rapor yüklenemedi. Sinyalinizi kontrol edip yeniden deneyin.',
     },
     offline: {
       banner: 'Sinyal yok — kayıtlar telefonunuza kaydediliyor',

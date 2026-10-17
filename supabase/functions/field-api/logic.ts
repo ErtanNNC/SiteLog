@@ -58,7 +58,7 @@ import {
 /** A refusal with its HTTP status and stable code (`FieldApiErrorBody`). */
 export class FieldError extends Error {
   constructor(
-    readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 429 | 500 | 503,
+    readonly status: 400 | 401 | 403 | 404 | 409 | 410 | 429 | 500 | 502 | 503,
     readonly code: FieldApiErrorCode | VoiceApiErrorCode,
     message?: string,
     readonly extra: Record<string, unknown> = {},
