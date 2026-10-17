@@ -118,7 +118,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-03 · Team on v1.2: statuses, preference and channel, devices, today's link, office users
 
-- [ ] **W4-03 done** · today _partial_ (L)
+- [x] **W4-03 done** · today _done_ (CI green on 0f01ee2) (L)
 - **Spec:** P10, F3 (statuses, 48 h), F13 step 3, F15 ("Office: Team page can change preference (and, from M10, the message channel) only with the reporter's agreement (logged as `office_attested`)"), F16 (lost phone), F24, §2.2 (admin, ops manage reporters), §19 Q21, Q40, Q94, Q131.
 - **Design:** Web-Team is not exported (P10's text and the current page are the reference; noted in the report).
 - **Already in the repo:** see "Where week 3 leaves us"; `api-text-daily-link` (Overview's _Text today's link_); field-api's own _Sign out this phone_ (the device and its push subscriptions revoked, W2-14); `reporters.message_channel` (W1-06a) with no client writing it.
@@ -171,7 +171,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-06 · The pack's legal texts: `/legal/<key>`, KVKK notices, the recording notice by key
 
-- [ ] **W4-06 done** · today _missing_ (M)
+- [x] **W4-06 done** · today _done_ (CI green on 0f01ee2) (M)
 - **Spec:** §4.6 `legal_keys`, §9.1 (privacy notices per pack, linked from the consent screen and the HELP text; the recording notice versioned), §9.4 (disclosure), §15.2 (KVKK: inform before recording, explicit consent where required, cross-border transfer), F4 step 3, §19 Q28 (decided: ids `<CC>.<doc>.v<n>`, filled by a data migration once counsel approves), Q50 (decided: a field-app page per key with the texts in the shared copy per language, offline, versioned; shipped in the same migration change that fills the key), Q40 (counsel's half).
 - **Design:** `Field-02-Welcome` (the _Privacy notice_ link under the notice); the `/legal` page has no artboard (built from Field-02's type and spacing).
 - **Already in the repo:** `legal_keys` with its schema (`packages/shared/src/countries.ts:52`), `resolve` returning the pack's keys, the Welcome screen's link shown only with a key (`apps/field/src/lib/legal.ts`), `consents.text_version` taking the pack's consent key when set, the agent's disclosure from `voice.recording_notice.v1`.
@@ -234,7 +234,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-10 · Billing on v1.2: price per org, trial end, past-due banner, TR as `manual`
 
-- [ ] **W4-10 done** · today _partial_ (L)
+- [x] **W4-10 done** · today _done_ (CI half green on 0f01ee2; Stripe test mode on the preview is the owner's (W4-15)) (L)
 - **Spec:** §1.3 (US $399, TR price to be set), F2 step 4 (billing from step 2; US Stripe, TR §19; 14-day trial), F23 (pause/resume from next cycle, invoices, payment method, past-due banner, 14-day grace), P13 ("Price and currency per org (outside the country pack until §19 Q30); US via Stripe; TR provider (§19)"), §13 Billing, §2.2 (billing admin only), §19 Q7, Q8, Q9, Q10, Q30, Q174.
 - **Design:** Web-Billing is not exported (P13's text and the current page are the reference).
 - **Already in the repo:** see "Where week 3 leaves us" (Checkout with the remaining trial, portal, sync, pause/resume, invoices, the webhook, the block).
@@ -260,7 +260,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-11 · İletimerkezi: delivery status and the TR SMS checks
 
-- [ ] **W4-11 done** · today _partial_ (M)
+- [x] **W4-11 done** · today _done_ (CI half green on 0f01ee2; the real phone from `SITELOG` is the owner's (W4-13)) (M)
 - **Spec:** §4.5 (statuses, fallback after `failed` / `undeliverable`, `message_failed`), §9.1 (Turkish encoding checked for the TR provider), §9.2 (one-way variants, ≤ 1 segment where possible), §15.2 TR (licensed provider, registered title, İYS check), §17 SMS (delivery receipts, one-way copy), README "İletimerkezi status", §19 Q15, Q20, Q49.
 - **Design:** `Field-01-SMS` (the thread; no TR thread is drawn, the §9.2 TR column is the text).
 - **Already in the repo:** the driver (send, refusals, `450` undeliverable), the segment counter with the Turkish shift table, `sms-copy-spec.test.ts`.
@@ -276,7 +276,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-12 · Self-serve onboarding end to end, and the welcome's 48 h re-send
 
-- [ ] **W4-12 done** · today _missing_ (M)
+- [x] **W4-12 done** · today _done_ (CI green on 0f01ee2: `e2e:onboarding` @m10 US and @m11 TR, link then Talk now; the live run with a real US sender is the owner's) (M)
 - **Spec:** §16.2 M10 Done when ("a new contractor self-onboards a site and gets the first report via link **and** via call without SiteLog staff"), F1, F2, F3 (the 48 h re-send), F4, F5, F6 (Talk now), §19 Q48 (a real org on `console` texts no one), Q116.
 - **Design:** `Web-Login`, `Field-01-SMS` … `Field-07-Filed` (the flow the test walks).
 - **Already in the repo:** sign-up open (`enable_signup = true`), `create_org`, the wizard, the welcome job, the field flow, Talk now and the call simulator, `apps/web/e2e/supabase/fresh-org.spec.ts` (a fresh org and a typed report, no reporter).
