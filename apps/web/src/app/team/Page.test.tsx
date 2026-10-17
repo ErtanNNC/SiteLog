@@ -160,7 +160,9 @@ describe('TeamPage (demo data)', () => {
     });
     await userEvent.click(await screen.findByRole('button', { name: 'Invite reporter' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByRole('combobox', { name: 'Country' })).toHaveTextContent('TR +90');
+    expect(
+      within(dialog).getByRole('button', { name: /^Country code: .+ \+90$/ }),
+    ).toHaveTextContent('TR +90');
     await userEvent.type(within(dialog).getByTestId('invite-phone'), '0532 000 0599');
     expect(dialog).toHaveTextContent('+90 532 000 05 99');
     expect(within(dialog).getByRole('checkbox', { name: 'Turkish' })).toBeInTheDocument();

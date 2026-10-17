@@ -3,7 +3,7 @@ import { reporterDefaultsFor, toCountryPack, type CountryPack } from '@sitelog/s
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { reportLanguageFor, type OrgLocale } from '@sitelog/shared/locale.ts';
-import { phoneCountryFor, type PhoneCountryCode } from '@/components/sitelog/PhoneInput';
+import { phoneCountryFor } from '@/components/sitelog/PhoneInput';
 import { copy } from '@/copy/en';
 import { supabase, type Db } from '@/lib/supabase';
 
@@ -54,6 +54,35 @@ export function useCountryPacks() {
   });
 }
 
+/** The browser's language tags, most preferred first (`navigator.languages`); none outside one. */
+export function browserLanguages(): readonly string[] {
+  if (typeof navigator === 'undefined') return [];
+  if (navigator.languages?.length) return navigator.languages;
+  return navigator.language ? [navigator.language] : [];
+}
+
+/**
+ * Spec §19 Q32 (M10, W4-01): before an org exists the wizard preselects the pack whose code is the
+ * browser's region: the first language tag that names a region with a pack (`tr-TR` → TR; `en`
+ * names none and is skipped; `de-DE` has no pack and is skipped). Null when none does (then US).
+ */
+export function browserPackCountry(
+  packs: readonly CountryPack[] | undefined,
+  languages: readonly string[] = browserLanguages(),
+): string | null {
+  const codes = new Set((packs ?? []).map((p) => p.code));
+  for (const tag of languages) {
+    let region: string | undefined;
+    try {
+      region = new Intl.Locale(tag).region;
+    } catch {
+      continue;
+    }
+    if (region && codes.has(region)) return region;
+  }
+  return null;
+}
+
 export function packFor(
   packs: readonly CountryPack[] | undefined,
   code: string,
@@ -85,7 +114,8 @@ export function reportLanguageName(locale: OrgLocale | undefined): string {
 
 /** A new site manager's defaults in a pack's country: its phone country and first field language. */
 export interface SiteDefaults {
-  phoneCountry: PhoneCountryCode;
+  /** A region libphonenumber knows: the pack's country, or US for one it does not know. */
+  phoneCountry: string;
   languages: string[];
 }
 

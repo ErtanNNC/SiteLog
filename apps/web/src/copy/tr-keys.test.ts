@@ -141,6 +141,9 @@ const TRANSLATED = [
   'common.showMore',
   'toasts.packRequested',
   'a11y.heatmapLegend',
+  // W4-01: the phone-country picker and number field (Setup, Team's invite).
+  'phone',
+  'common.required',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

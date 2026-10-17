@@ -171,10 +171,12 @@ for (const width of WIDTHS) {
       await expect(dialog).toBeVisible();
       expect(await langOf(dialog)).toBe('en');
       await expectNoViolations(page);
-      await dialog.getByRole('combobox', { name: 'Country' }).click();
-      const listbox = page.getByRole('listbox');
+      await dialog.getByRole('button', { name: /^Country code: / }).click();
+      const listbox = page.getByRole('listbox', { name: 'Country code' });
       await expect(listbox).toBeVisible();
       expect(await langOf(listbox)).toBe('en');
+      // W4-01: the searchable country-code picker (combobox over a listbox).
+      await expectNoViolations(page);
       await page.keyboard.press('Escape');
     });
 
@@ -595,7 +597,7 @@ test.describe('no sideways scroll on narrow phones', () => {
       const dialog = page.getByRole('dialog', { name: 'Invite reporter' });
       await expect44(dialog.getByRole('textbox', { name: 'Name' }), 'invite: name');
       await expect44(dialog.getByRole('textbox', { name: 'Mobile number' }), 'invite: phone');
-      await expect44(dialog.getByRole('combobox', { name: 'Country' }), 'invite: country');
+      await expect44(dialog.getByRole('button', { name: /^Country code: / }), 'invite: country');
       await expect44(dialog.getByRole('button', { name: 'Send welcome text' }), 'invite: send');
     });
   }

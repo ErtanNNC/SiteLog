@@ -49,7 +49,8 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
   const c = copy.team.invite;
   const invite = useInviteReporter();
   const { role: memberRole, currentOrg } = useAuth();
-  // The number's country starts as the org's (its country pack, spec §4.6).
+  // The number's country starts as the org's (its country pack, spec §4.6); another country's
+  // number is allowed, with Q23's warning (the org's pack still applies).
   const phoneCountry = phoneCountryFor(currentOrg?.country);
   // A reporter reports for a site; with none yet the dialog explains how to get one.
   const noSites = sites.length === 0;
@@ -77,7 +78,7 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
     if (noSites) return;
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = c.nameRequired;
-    if (!phone.e164) next.phone = c.phoneInvalid;
+    if (!phone.e164) next.phone = copy.phone.invalid;
     if (siteIds.length === 0) next.sites = c.sitesRequired;
     setErrors(next);
     if (Object.keys(next).length) return;
@@ -139,6 +140,7 @@ export function InviteReporterDialog({ open, onOpenChange, sites, defaultSiteIds
             label={c.phone}
             value={phone}
             onChange={setPhone}
+            packCountry={currentOrg?.country}
             error={errors.phone ?? null}
             required
             data-testid="invite-phone"

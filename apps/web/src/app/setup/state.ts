@@ -1,5 +1,4 @@
 import { storage } from '@/lib/utils';
-import type { PhoneCountryCode } from '@/components/sitelog/PhoneInput';
 import { FALLBACK_SITE_DEFAULTS, type SiteDefaults } from './countries';
 
 export const SETUP_STEPS = ['company', 'site', 'reports'] as const;
@@ -25,12 +24,13 @@ export interface SiteDraft {
   timezone: string;
   deadline: string;
   managerName: string;
-  managerCountry: PhoneCountryCode;
+  /** The manager's phone region (`PhoneInput`). */
+  managerCountry: string;
   managerPhone: string;
   languages: string[];
   hasBackup: boolean;
   backupName: string;
-  backupCountry: PhoneCountryCode;
+  backupCountry: string;
   backupPhone: string;
 }
 
@@ -55,9 +55,9 @@ export interface SetupProgress {
 export const DEFAULT_TZ = 'America/Chicago';
 
 /**
- * The wizard's preselected country: create_org's default and `orgs.country`'s column default
- * (spec §19 Q32: US preselected until self-serve onboarding). Saved progress from before the
- * country choice reads as this one.
+ * create_org's default and `orgs.country`'s column default: the wizard preselects it when the
+ * browser's region has no pack (spec §19 Q32, `browserPackCountry`). Saved progress from before
+ * the country choice reads as this one.
  */
 export const DEFAULT_COUNTRY = 'US';
 

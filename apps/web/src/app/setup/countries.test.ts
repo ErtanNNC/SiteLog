@@ -4,6 +4,7 @@ import type { CountryRow } from '@sitelog/shared/db/types.ts';
 import { copy } from '@/copy/en';
 import type { Db } from '@/lib/supabase';
 import {
+  browserPackCountry,
   countryName,
   DEMO_PACKS,
   FALLBACK_SITE_DEFAULTS,
@@ -118,10 +119,27 @@ describe('pack labels and defaults', () => {
   it('gives a new site manager the pack’s phone country and first field language', () => {
     expect(siteDefaultsFor(demoPack('US'))).toEqual({ phoneCountry: 'US', languages: ['en'] });
     expect(siteDefaultsFor(demoPack('TR'))).toEqual({ phoneCountry: 'TR', languages: ['tr'] });
-    // A pack whose country the phone picker does not list keeps a US number; Spanish first.
+    // A new pack needs no picker code (W4-01): any region libphonenumber knows is its own.
+    const nl = { ...demoPack('US'), code: 'NL' };
+    expect(siteDefaultsFor(nl)).toEqual({ phoneCountry: 'NL', languages: ['en'] });
+    // A synthetic row libphonenumber does not know keeps a US number; Spanish first.
     const zz = { ...demoPack('US'), code: 'ZZ', fieldLocales: ['es-US'] as const };
     expect(siteDefaultsFor(zz)).toEqual({ phoneCountry: 'US', languages: ['es'] });
     expect(siteDefaultsFor(undefined)).toBe(FALLBACK_SITE_DEFAULTS);
+  });
+
+  it('preselects the pack of the browser’s region before the org exists (spec §19 Q32)', () => {
+    expect(browserPackCountry(DEMO_PACKS, ['tr-TR', 'en-US'])).toBe('TR');
+    expect(browserPackCountry(DEMO_PACKS, ['en-US', 'tr-TR'])).toBe('US');
+    // A tag without a region, or a region without a pack, is skipped.
+    expect(browserPackCountry(DEMO_PACKS, ['tr', 'de-DE', 'en-TR'])).toBe('TR');
+    expect(browserPackCountry(DEMO_PACKS, ['de-DE', 'en'])).toBeNull();
+    expect(browserPackCountry(DEMO_PACKS, ['not a tag', 'es-US'])).toBe('US');
+    expect(browserPackCountry(DEMO_PACKS, [])).toBeNull();
+    expect(browserPackCountry(undefined, ['tr-TR'])).toBeNull();
+    // A new pack is a row: preselected with no code.
+    const xx = { ...demoPack('US'), code: 'NL' };
+    expect(browserPackCountry([...DEMO_PACKS, xx], ['nl-NL'])).toBe('NL');
   });
 
   it('lists every pack’s default time zone in the setup selects', () => {

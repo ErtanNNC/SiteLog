@@ -1696,6 +1696,23 @@ export const copy = {
     },
   },
 
+  /**
+   * `PhoneInput` (W4-01): the country-code picker (libphonenumber's regions, named by the browser
+   * in the panel's language) and the number field, in Setup and Team's invite.
+   */
+  phone: {
+    countryCode: 'Country code',
+    /** The picker button's accessible name: the region's name, then its visible "US +1" (2.5.3). */
+    countryButton: 'Country code: {{country}}, {{region}} +{{code}}',
+    search: 'Search countries',
+    searchPlaceholder: 'Country or +code',
+    noMatch: 'No country matches “{{query}}”.',
+    hint: 'Stored in international format, e.g. {{example}}',
+    invalid: 'Enter a valid mobile number for the chosen country.',
+    /** Spec §19 Q23: the org's pack applies to every reporter; a warning, never a block. */
+    foreign: 'This is a {{country}} number. SiteLog texts it from your {{pack}} number.',
+  },
+
   team: {
     title: 'Team & numbers',
     subtitle:
@@ -1788,10 +1805,6 @@ export const copy = {
       description:
         'Texts the reporter their personal link. They open it on their phone, confirm the number with a code and agree to recording.',
       namePlaceholder: 'Full name',
-      country: 'Country',
-      phonePlaceholder: '555 014 3378',
-      phoneHint: (example: string) => `Stored in international format, e.g. ${example}`,
-      phoneInvalid: 'Enter a valid mobile number for the chosen country.',
       nameRequired: 'Enter a name.',
       sitesRequired: 'Pick at least one site.',
       noSites: 'Add a site first. Each reporter reports for a site.',

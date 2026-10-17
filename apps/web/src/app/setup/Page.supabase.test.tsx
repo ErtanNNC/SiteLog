@@ -125,6 +125,30 @@ describe('SetupPage (no org yet, Supabase mode)', () => {
     );
   });
 
+  it('preselects the pack of a tr-TR browser’s region (spec §19 Q32, W4-01)', async () => {
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['tr-TR', 'en-US']);
+    h.countries.data = ROWS;
+    h.rpc.mockResolvedValue({ data: { id: 'org-tr' }, error: null });
+    renderNoOrg();
+    await userEvent.type(await screen.findByLabelText('Company name'), 'Yıldız İnşaat');
+    expect(screen.getByRole('combobox', { name: 'Country' })).toHaveTextContent(/\bTR$/);
+    await userEvent.click(screen.getByRole('button', { name: 'Continue to first site' }));
+    await waitFor(() =>
+      expect(h.rpc).toHaveBeenCalledWith(
+        'create_org',
+        expect.objectContaining({ p_country: 'TR', p_timezone: 'Europe/Istanbul' }),
+      ),
+    );
+  });
+
+  it('keeps US when the browser’s region has no pack', async () => {
+    vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['de-DE', 'de']);
+    h.countries.data = ROWS;
+    renderNoOrg();
+    await screen.findByLabelText('Company name');
+    expect(screen.getByRole('combobox', { name: 'Country' })).toHaveTextContent(/\bUS$/);
+  });
+
   it('lists a pack no code knows about: a new country is a new row (spec §4.6)', async () => {
     const zz: CountryRow = {
       ...ROWS[1]!,
@@ -156,7 +180,7 @@ describe('SetupPage (no org yet, Supabase mode)', () => {
         expect.objectContaining({ p_country: 'ZZ', p_timezone: 'UTC' }),
       ),
     );
-    // Its manager starts in Spanish; the phone picker has no ZZ, so a US number.
+    // Its manager starts in Spanish; libphonenumber has no region ZZ, so a US number.
     expect(
       storage.get<SetupProgress | null>(progressKey(ADMIN, 'org-zz'), null)!.site,
     ).toMatchObject({ managerCountry: 'US', languages: ['es'] });

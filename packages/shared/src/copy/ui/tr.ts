@@ -236,6 +236,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       hoursUnit: 'sa',
       filter: 'Filtre',
       showMore: 'Daha fazla göster',
+      required: 'zorunlu',
     },
     table: {
       empty: 'Henüz gösterilecek bir şey yok.',
@@ -1603,6 +1604,18 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         notStarted:
           '10 dakika geçti, başlamadı. Şirketiniz için kanıt dosyaları şu anda oluşturulmuyor. SiteLog destek ekibiyle iletişime geçin.',
       },
+    },
+    /** `PhoneInput` (W4-01): the country-code picker and the number field. */
+    phone: {
+      countryCode: 'Ülke kodu',
+      countryButton: 'Ülke kodu: {{country}}, {{region}} +{{code}}',
+      search: 'Ülke ara',
+      searchPlaceholder: 'Ülke veya +kod',
+      noMatch: '“{{query}}” ile eşleşen ülke yok.',
+      hint: 'Uluslararası biçimde kaydedilir, ör. {{example}}',
+      invalid: 'Seçilen ülke için geçerli bir cep telefonu numarası girin.',
+      foreign:
+        'Bu bir {{country}} numarası. SiteLog bu numaraya {{pack}} numaranızdan mesaj gönderir.',
     },
   },
   field: {

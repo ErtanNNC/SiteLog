@@ -262,7 +262,9 @@ describe('SetupPage (demo org)', () => {
       auth: { currentOrg: trOrg(source) },
     });
     expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Country' })).toHaveTextContent('TR +90');
+    expect(screen.getByRole('button', { name: /^Country code: .+ \+90$/ })).toHaveTextContent(
+      'TR +90',
+    );
     expect(screen.getByRole('checkbox', { name: 'Turkish' })).toHaveAttribute(
       'aria-checked',
       'true',

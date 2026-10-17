@@ -37,6 +37,7 @@ export function SiteStep({
   canGeocode,
   siteCount,
   reportLanguage,
+  packCountry,
 }: {
   draft: SiteDraft;
   onChange: (next: SiteDraft) => void;
@@ -52,6 +53,8 @@ export function SiteStep({
   siteCount: number;
   /** The org's report language, named ("Turkish"): `reportLanguageName` of its locale. */
   reportLanguage: string;
+  /** The org's pack country (`orgs.country`): its numbers first, another country's warned (Q23). */
+  packCountry: string;
 }) {
   const c = copy.setup.site;
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -113,9 +116,9 @@ export function SiteStep({
     if (co.error) next.coords = co.error;
     if (!draft.address.trim() && co.lat === null) next.address = c.addressRequired;
     if (!draft.managerName.trim()) next.managerName = c.managerNameRequired;
-    if (!manager.e164) next.managerPhone = copy.team.invite.phoneInvalid;
+    if (!manager.e164) next.managerPhone = copy.phone.invalid;
     if (draft.hasBackup && draft.backupPhone.trim() && !backup.e164)
-      next.backupPhone = copy.team.invite.phoneInvalid;
+      next.backupPhone = copy.phone.invalid;
     setErrors(next);
     if (Object.keys(next).length) return;
     onSubmit({ draft, lat: co.lat, lng: co.lng }, another);
@@ -294,6 +297,7 @@ export function SiteStep({
                 label={c.phone}
                 value={manager}
                 onChange={(v) => set({ managerCountry: v.country, managerPhone: v.raw })}
+                packCountry={packCountry}
                 error={errors.managerPhone ?? null}
                 required
                 data-testid="manager-phone"
@@ -358,6 +362,7 @@ export function SiteStep({
                     label={c.backupPhone}
                     value={backup}
                     onChange={(v) => set({ backupCountry: v.country, backupPhone: v.raw })}
+                    packCountry={packCountry}
                     error={errors.backupPhone ?? null}
                   />
                 </div>

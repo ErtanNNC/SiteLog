@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import { demoId } from '@sitelog/shared/demo/ids.ts';
+import { phoneRegions } from '@sitelog/shared/phone-regions.ts';
 
 /** A 48 × 36 PNG: the panel turns it into a JPEG before it is "uploaded". */
 const SITE_PHOTO = fileURLToPath(new URL('./fixtures/site-photo.png', import.meta.url));
@@ -255,7 +256,7 @@ test.describe('SiteLog panel (demo mode)', () => {
       await page.getByRole('button', { name: 'Continue to first site' }).click();
       await expect(page.getByRole('heading', { name: 'Site', exact: true })).toBeVisible();
       // Kestrel is a US org: a US number and English, Turkish offered.
-      await expect(page.getByRole('combobox', { name: 'Country' })).toHaveText(/US \+1/);
+      await expect(page.getByRole('button', { name: /^Country code: / })).toHaveText(/US \+1/);
       await expect(page.getByRole('checkbox', { name: 'English' })).toHaveAttribute(
         'aria-checked',
         'true',
@@ -265,6 +266,50 @@ test.describe('SiteLog panel (demo mode)', () => {
         'false',
       );
       await expect(page.getByText('Reports always come out in English.')).toBeVisible();
+    });
+  }
+
+  // W4-01: the phone-country picker lists libphonenumber's regions; spec §19 Q23's warning.
+  for (const width of [1440, 390]) {
+    test(`invite at ${width}px: every region in the picker, a Mexican number warns in Kestrel`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await signIn(page);
+      await expect(page.getByRole('heading', { name: 'Today across 6 sites' })).toBeVisible();
+      await page.goto('/team');
+      await page.getByRole('button', { name: 'Invite reporter' }).first().click();
+      const dialog = page.getByRole('dialog', { name: 'Invite reporter' });
+      const picker = dialog.getByRole('button', { name: /^Country code: / });
+      // Kestrel is a US org: its pack's country first and preselected.
+      await expect(picker).toHaveText(/US \+1/);
+      await picker.click();
+      const listbox = page.getByRole('listbox', { name: 'Country code' });
+      // Team is still English-only: the names are English (the panel's language on this page).
+      await expect(listbox.getByRole('option')).toHaveCount(phoneRegions('en').length);
+      await expect(listbox.getByRole('option').first()).toContainText('US +1');
+      await expect(listbox.getByRole('option', { name: /Germany/ })).toHaveCount(1);
+      // Search by name, then by calling code, and pick with the keyboard.
+      const search = page.getByRole('combobox', { name: 'Search countries' });
+      await expect(search).toBeFocused();
+      await search.fill('mexi');
+      await expect(listbox.getByRole('option')).toHaveCount(1);
+      await search.fill('+52');
+      await expect(listbox.getByRole('option')).toHaveText([/MX \+52\s*Mexico/]);
+      await page.keyboard.press('Enter');
+      await expect(listbox).toHaveCount(0);
+      await expect(picker).toBeFocused();
+      await expect(picker).toHaveText(/MX \+52/);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await dialog.getByTestId('invite-phone').fill('55 1234 5678');
+      await expect(dialog.getByTestId('invite-phone-foreign')).toHaveText(
+        'This is a Mexico number. SiteLog texts it from your United States number.',
+      );
+      // A warning, not an error: the number stands.
+      await expect(dialog.getByText('+52 55 1234 5678')).toBeVisible();
+      await expect(dialog.getByTestId('invite-phone')).not.toHaveAttribute('aria-invalid', 'true');
     });
   }
 

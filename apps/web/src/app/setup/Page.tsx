@@ -5,7 +5,7 @@ import type { CountryPack } from '@sitelog/shared/countries.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { RequireRole, ROUTE_ROLES } from '@/auth/guards';
 import { Logo } from '@/components/shell/Sidebar';
-import { phoneValue, type PhoneCountryCode } from '@/components/sitelog/PhoneInput';
+import { phoneValue } from '@/components/sitelog/PhoneInput';
 import { PageSkeleton } from '@/components/sitelog/Skeletons';
 import { ErrorState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
@@ -26,7 +26,13 @@ import { uploadOrgLogo } from '@/data/supabase/SupabaseSource';
 import type { OrgSettings } from '@/data/types';
 import { supabase } from '@/lib/supabase';
 import { CompanyStep } from './CompanyStep';
-import { packFor, reportLanguageName, siteDefaultsFor, useCountryPacks } from './countries';
+import {
+  browserPackCountry,
+  packFor,
+  reportLanguageName,
+  siteDefaultsFor,
+  useCountryPacks,
+} from './countries';
 import { Stepper } from './fields';
 import { ReportsStep } from './ReportsStep';
 import { SiteStep, type SiteSubmit } from './SiteStep';
@@ -77,19 +83,21 @@ export default function SetupPage() {
 }
 
 /**
- * The org's country (`orgs.country`), or the wizard's preselected one before the org exists. An
- * org summary without it (an older cached list) reads as the column default.
+ * The org's country (`orgs.country`), or the wizard's preselected one before the org exists: the
+ * pack of the browser's region, else US (spec §19 Q32). An org summary without it (an older cached
+ * list) reads as the column default.
  */
-function useOrgCountry(): string {
+function useOrgCountry(packs: readonly CountryPack[]): string {
   const { currentOrg } = useAuth();
-  return currentOrg?.country ?? DEFAULT_COUNTRY;
+  if (currentOrg) return currentOrg.country ?? DEFAULT_COUNTRY;
+  return browserPackCountry(packs) ?? DEFAULT_COUNTRY;
 }
 
 function useProgress(packs: readonly CountryPack[]) {
   const { user, currentOrg } = useAuth();
   const userId = user?.id ?? 'anon';
   const orgId = currentOrg?.id ?? null;
-  const country = useOrgCountry();
+  const country = useOrgCountry(packs);
   const [progress, setProgressState] = useState<SetupProgress>(() => {
     const pack = packFor(packs, country);
     const p = loadProgress(userId, orgId, {
@@ -275,7 +283,7 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
   const navigate = useNavigate();
   const { currentOrg, isDemo, refreshOrgs } = useAuth();
   const { progress, setProgress, userId, orgId } = useProgress(packs);
-  const orgCountry = useOrgCountry();
+  const orgCountry = useOrgCountry(packs);
   const orgPack = packFor(packs, orgCountry);
   const siteDefaults = siteDefaultsFor(orgPack);
   // §9.6: the org's report language, from its locale (its pack's default for an older summary).
@@ -510,6 +518,7 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
           canGeocode={!isDemo}
           siteCount={(setupState.data?.siteCount ?? 0) + 1}
           reportLanguage={reportLanguage}
+          packCountry={orgCountry}
         />
       ) : null}
       {step === 'reports'
@@ -542,6 +551,6 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
 }
 
 /** PhoneInput already validated; re-derive E.164 from the stored raw input. */
-function normalizedPhone(country: PhoneCountryCode, raw: string): string {
+function normalizedPhone(country: string, raw: string): string {
   return phoneValue(country, raw).e164 ?? raw;
 }
