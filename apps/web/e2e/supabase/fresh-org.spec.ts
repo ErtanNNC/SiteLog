@@ -249,7 +249,9 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
 });
 
 // Spec §19 Q32 (W4-01): a browser in tr-TR has Türkiye preselected before the org exists.
-test.describe('in a tr-TR browser', () => {
+// W4-16: the TR self-serve variant of the wizard belongs to the M11 suite (`pnpm e2e:m11`); with
+// the TR pack's sender set on CI's stack by then, the worker sends Emre's welcome to the stand-in.
+test.describe('in a tr-TR browser', { tag: ['@m11', '@F2'] }, () => {
   test.use({ locale: 'tr-TR' });
 
   // W4-02 (Done when): the wizard reads in Turkish (the browser's language before the org exists,

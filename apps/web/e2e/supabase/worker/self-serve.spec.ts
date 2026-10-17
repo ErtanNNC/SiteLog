@@ -30,8 +30,9 @@ import { admin, ANON_KEY, signInWithMagicLink, SUPABASE_URL } from '../support';
  *    recorded call's transcript (fixtures/calls), the read-back confirmed by the verbatim yes;
  * 5. the panel, signed in as the new user, lists both filed reports; both PDFs are stored.
  *
- * `@m10` is the US run, `@m11` the TR run (`pnpm e2e:onboarding`, CI's last e2e-supabase step,
- * after `pnpm countries:set` gives both packs a stand-in sender on that stack). Needs: the worker
+ * `@m10` is the US run, `@m11` the TR run (W4-16: in the M10 and M11 suites, `pnpm e2e:m10` and
+ * `pnpm e2e:m11`, CI's last two e2e-supabase steps, after `pnpm countries:set` gives both packs a
+ * stand-in sender on that stack; `pnpm e2e:onboarding` runs this file alone). Needs: the worker
  * on the stack with TRANSCRIBE_PROVIDER=fake, EXTRACT_PROVIDER=fake and the stand-in's env
  * (WORKER_HEALTH_URL), SMS_STAND_IN_URL, VOICE_AGENT_TOOL_SECRET as field-api has it, and the
  * functions' env with SMS_PROVIDER_STUB (CI's "Edge Function env"). Locally it skips without them.

@@ -20,6 +20,9 @@ import { ANON_KEY, APP_URL, SUPABASE_URL } from './e2e/supabase/support';
  * the M9 specs (`@m9`, one flow tag each: `@F19` hours, `@F20` the EOT pack, `@F21` the glossary)
  * are `pnpm e2e:m9`, the `supabase` project only, which CI runs before the worker starts so the
  * pack it requests stays queued. The other CI steps `--grep-invert` those tags.
+ * W4-16: the M10 and M11 acceptance suites are every spec tagged `@m10` / `@m11` in both projects
+ * (`pnpm e2e:m10`, `pnpm e2e:m11`, the field app's `@m11` specs after this config's), CI's last
+ * two steps, after the packs get the SMS stand-in's senders; the other steps leave both tags out.
  */
 const DIST = 'node_modules/.e2e/supabase';
 const PORT = new URL(APP_URL).port;

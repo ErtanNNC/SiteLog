@@ -121,7 +121,7 @@ jobs:
   e2e-supabase:
     name: E2E · local Supabase stack (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -246,6 +246,9 @@ jobs:
           pnpm --filter @sitelog/db exec vitest run --config vitest.stack.config.ts stack/field-api.test.ts stack/api-invite-reporter.test.ts -t "on the local stack"
       - name: Install Chromium
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
+      # W4-16: the M11 step reads Demir Yapı's filed PDF as text (pdftotext, as the check job).
+      - name: Install poppler-utils
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils
       # W3-18: the M9 acceptance suite (spec §16.2 M9 Done when), one command (`pnpm e2e:m9`):
       # every panel spec tagged `@m9`, one flow tag each (@F19 crew hours: BrightLine +16 h with
       # its voice-note evidence, an invoice gap's notice citing Northgate's call, the accounts
@@ -255,10 +258,11 @@ jobs:
       # The pack's < 2 min build is the worker's PGlite test (W3-07, the check job).
       - name: M9 acceptance suite (W3-18, pnpm e2e:m9)
         run: pnpm e2e:m9
-      # The `supabase` project: no worker runs, so the jobs these specs enqueue stay queued.
-      # W4-09: also the Turkish magic link read from Mailpit (auth-email.spec.ts, @m11).
-      - name: Login · realtime · edit → v2 · sign-off · TR org · Demo phone · TR sign-in email
-        run: pnpm --filter @sitelog/web e2e:supabase --project=supabase --grep-invert @m9
+      # The `supabase` project: no worker runs, so the jobs these specs enqueue stay queued. The
+      # M10 and M11 specs of this project (W4-16: Team, Settings, Billing; Demir Yapı and every
+      # page in Turkish, the TR wizard, the Turkish magic link) run in their suites at the end.
+      - name: Login · realtime · edit → v2 · sign-off · fresh org · Demo phone
+        run: pnpm --filter @sitelog/web e2e:supabase --project=supabase --grep-invert "@m9|@m10|@m11"
       # The worker (W1-08) against the stack, keyless: console SMS and console email (both land in
       # the Demo phone), the fake transcriber (W1-11: a voice note gets a fixtures/voice
       # transcript, no Deepgram key), the fake Claude (W2-09: extraction and parse_answer answer
@@ -355,7 +359,8 @@ jobs:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
         run: pnpm e2e:m6
       # W3-15: the call suite (spec §16.2 M7 and M8 Done when, text level), one command
-      # (`pnpm e2e:voice`): every scripted call of fixtures/calls/ run by `pnpm simulate:call`
+      # (`pnpm e2e:voice`; W4-16: less the Turkish scripts, `@m11`, which the M11 step runs):
+      # every scripted call of fixtures/calls/ run by `pnpm simulate:call`
       # through the real field-api /voice/* routes (the agent's bearer, VOICE_AGENT_TOOL_SECRET
       # above) and the worker above on its fake providers, each on an org of its own; tagged
       # `@m7` / `@m8` and one flow each (@F6 hero, fallback, hang-up; @F7 a question; @F8 a
@@ -375,26 +380,47 @@ jobs:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
           VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
         run: pnpm e2e:voice
-      # W4-12: self-serve onboarding (spec §16.2 M10 Done when; `pnpm e2e:onboarding`), last, as it
-      # gives both packs a sender id on this stack: the US pack the stand-in's toll-free number
-      # (Twilio), the TR pack the `SITELOG` title (İletimerkezi), through the audited
-      # set_country_endpoints(). Then a brand-new user per pack (`@m10` US, `@m11` TR) signs up,
-      # makes a real org, a site and the manager's invite; the welcome and the device code reach
-      # the stand-in through the real drivers; the manager files by link and, the next day, by
-      # Talk now (§19 Q246; the agent's requests to field-api's /voice/* routes); the panel lists
-      # both reports and their PDFs are stored. The worker and its fake providers are the ones above.
+      # W4-12 / W4-16: the M10 and M11 suites run last, as they need both packs to have a sender
+      # id on this stack: the US pack the stand-in's toll-free number (Twilio), the TR pack the
+      # `SITELOG` title (İletimerkezi), through the audited set_country_endpoints().
       - name: Stand-in senders for both packs (this stack)
         env:
           SUPABASE_DB_URL: ${{ env.DB_URL }}
         run: |
           pnpm countries:set -- --code US --sms-sender +18885550100
           pnpm countries:set -- --code TR --sms-sender SITELOG
-      - name: Self-serve onboarding (W4-12, pnpm e2e:onboarding)
+      # W4-16: the M10 acceptance suite (spec §16.2 M10 Done when; `pnpm e2e:m10`): every panel
+      # spec tagged `@m10`, one flow tag each. The `supabase` project: Team (@F15 an ops user moves
+      # Marco to WhatsApp with the attestation, @F16 Revoke devices and the code asked again,
+      # @F17 Text today's link from the row, @F24 an office user whose panel opens in Turkish),
+      # Settings (@F22 Field channels as the pack row says, the daily link and the default
+      # preference saved, the test message on the console), Billing (@F23 the org's price, the
+      # pm's no access, a new US customer's Pause / Resume and the trial-end banner). The `worker`
+      # project: W4-12's self-serve run for the US pack (a brand-new user signs up, makes the org,
+      # site and invite; the welcome and the device code reach the stand-in through Twilio's
+      # driver; the manager files by link, the next day by Talk now, §19 Q246), W4-04's Call now
+      # (@F3) and W4-05's Call me now (@F22), both on the console telephony.
+      - name: M10 acceptance suite (W4-16, pnpm e2e:m10)
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
           SMS_STAND_IN_URL: http://127.0.0.1:4010
           VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
-        run: pnpm e2e:onboarding
+        run: pnpm e2e:m10
+      # W4-16: the M11 acceptance suite (spec §16.2 M11 Done when; `pnpm e2e:m11`): every spec
+      # tagged `@m11`. The panel: Demir Yapı's shell, Sites, Site detail and manual Billing in
+      # Turkish, Elif's typed report and every page in Turkish with no English text block but
+      # `/ops` and `/try` (§19 Q240), the setup wizard in a tr-TR browser (the TR self-serve
+      # variant), the Turkish magic link from Mailpit, and W4-12's self-serve run for the TR pack
+      # (İletimerkezi's driver to the stand-in, then Talk now). The field app: Demir Yapı's link
+      # report by Emre in Turkish through the worker, its A4 PDF read with pdftotext, and the
+      # Turkish Kartal calls by Talk now through the call simulator (W4-07's scripts, filed in
+      # Turkish with an A4 PDF).
+      - name: M11 acceptance suite (W4-16, pnpm e2e:m11)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+          SMS_STAND_IN_URL: http://127.0.0.1:4010
+          VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
+        run: pnpm e2e:m11
       - name: Supabase logs
         if: failure()
         run: |

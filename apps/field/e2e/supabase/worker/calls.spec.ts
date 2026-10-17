@@ -12,7 +12,9 @@ import { expect, test } from '@playwright/test';
  * script on an org of its own, its tool answers checked against the recorded ones and the voice
  * contract, then the call's outcome and the report it filed (or did not). One test per script,
  * tagged with its milestone (`@m7` inbound calls and Talk now, `@m8` questions, corrections and
- * special intents) and its flow (`@F6` … `@F15`).
+ * special intents) and its flow (`@F6` … `@F15`). W4-16: the Turkish scripts (Kartal by Talk now,
+ * W4-07; `arrange.country` TR) also carry `@m11`: they run in `pnpm e2e:m11` (M11's TR calls and
+ * the TR PDF on A4), and `pnpm e2e:voice` leaves them out, so no script runs twice in CI.
  *
  * Needs (CI's e2e-supabase job sets them): the worker on the stack (WORKER_HEALTH_URL, as every
  * `worker` spec), the database URL (DB_URL or SUPABASE_DB_URL) and the API URL (API_URL), the
@@ -40,7 +42,12 @@ function listScripts(): Listed[] {
     .flatMap((f) => {
       const json = JSON.parse(readFileSync(resolve(CALLS, f), 'utf8')) as {
         id: string;
-        simulate?: { title: string; milestone: string; flow: string };
+        simulate?: {
+          title: string;
+          milestone: string;
+          flow: string;
+          arrange?: { country?: string };
+        };
       };
       const sim = json.simulate;
       return sim
@@ -49,7 +56,13 @@ function listScripts(): Listed[] {
               file: resolve(CALLS, f),
               id: json.id,
               title: sim.title,
-              tags: [`@${sim.milestone}`, `@${sim.flow}`],
+              // W4-16: a Turkish call (the TR pack's org) is also M11's "TR calls via Talk
+              // now": `pnpm e2e:m11` runs it, and `pnpm e2e:voice` leaves `@m11` out.
+              tags: [
+                `@${sim.milestone}`,
+                `@${sim.flow}`,
+                ...(sim.arrange?.country === 'TR' ? ['@m11'] : []),
+              ],
             },
           ]
         : [];

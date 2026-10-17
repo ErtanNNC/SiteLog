@@ -48,6 +48,19 @@ export async function rest<T = unknown>(
   return (text ? JSON.parse(text) : null) as T;
 }
 
+/** A Storage object as the service role (W4-16: a filed report's PDF), as bytes. */
+export async function storageObject(bucket: string, path: string): Promise<Buffer> {
+  if (!SERVICE_ROLE_KEY) {
+    throw new Error('SERVICE_ROLE_KEY is not set: export the output of `supabase status -o env`');
+  }
+  const res = await fetch(
+    `${API_URL}/storage/v1/object/${bucket}/${path.split('/').map(encodeURIComponent).join('/')}`,
+    { headers: { apikey: SERVICE_ROLE_KEY, authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+  );
+  if (!res.ok) throw new Error(`storage ${bucket}/${path}: HTTP ${res.status} ${await res.text()}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
 /**
  * A PostgREST `in.(…)` list, each value quoted and percent-encoded: PostgREST reads a raw `+` in
  * the query string as a space, so the phone numbers in the rate-limit keys need `%2B`.

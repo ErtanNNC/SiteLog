@@ -65,7 +65,10 @@ export function PayrollSection({ draft, update }: SectionProps) {
               className="flex h-target items-center gap-3 rounded-chip border border-rebar bg-chalk px-3"
             >
               <span className="w-6 font-mono text-[12px] text-dust">{i + 1}</span>
-              <span className="flex-1 font-mono text-data">{col}</span>
+              {/* The CSV column's name, the same in every language (W4-16: marked not to translate). */}
+              <span className="flex-1 font-mono text-data" translate="no">
+                {col}
+              </span>
               <Button
                 variant="subtle"
                 size="iconDense"
