@@ -1,7 +1,8 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DemoStore } from '@/data/demo/store';
+import { i18n } from '@/i18n/i18n';
 import { makeSource, renderWithProviders } from '@/test/render';
 import { InvoiceCheckAside } from './InvoiceCheckAside';
 import HoursPage from './Page';
@@ -197,7 +198,10 @@ describe('InvoiceCheckAside', () => {
     const row = hours.rows.find((r) => r.companyName === 'BrightLine Electric')!;
     const invoice = hours.invoices.find((i) => i.invoiceId === row.invoiceId)!;
     const first = invoice.evidence[0]!;
-    const typed = { ...invoice, evidence: [{ ...first, audioStart: null, messageId: null }] };
+    const typed = {
+      ...invoice,
+      evidence: [{ ...first, kind: 'report' as const, clipId: null, at: null, quote: null }],
+    };
     renderWithProviders(<InvoiceCheckAside invoice={typed} row={row} onClose={() => {}} />);
     const link = await screen.findByRole('link', { name: `Open report ${first.reportNo}` });
     expect(link).toHaveTextContent(first.reportNo);
@@ -207,5 +211,148 @@ describe('InvoiceCheckAside', () => {
     );
     expect(body).toContain('Site report evidence:');
     expect(body).not.toContain('voice notes');
+  });
+});
+
+// W3-06: Crew hours on v1.2 — Turkish, call evidence, accounts without report links.
+describe('HoursPage on v1.2 (W3-06)', () => {
+  const week = ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09'];
+  /** A second Apex invoice for W41 (the newer one is compared): Friday +8 h, Northgate's call day. */
+  function withApexGap(store = new DemoStore()) {
+    const apex = store.data.companies.find((c) => c.name === 'Apex Concrete')!;
+    store.data.invoices.push({
+      ...store.data.invoices.find((i) => i.invoice_no === 'AP-1097')!,
+      id: 'invoice-ap-1098',
+      invoice_no: 'AP-1098',
+      lines: week.map((date, i) => ({ date, hours: [88, 96, 96, 88, 112][i]! })),
+      total_hours: 480,
+      created_at: '2026-10-09T21:00:00.000Z',
+    });
+    return { store, apex };
+  }
+
+  it('reads in Turkish: hours in "sa", numbers, weekdays and the invoice check', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      renderWithProviders(<HoursPage />, { route: '/hours?week=2026-W41' });
+      expect(await screen.findByRole('heading', { name: 'Ekip saatleri' })).toBeInTheDocument();
+      expect(screen.getByTestId('week-label')).toHaveTextContent('5 EKİ – 9 EKİ, 2026');
+      expect(screen.getByTestId('kpi-sub-hours')).toHaveTextContent('1.804');
+      expect(screen.getByText('+24 sa · 2 taşeron')).toBeInTheDocument();
+      const table = screen.getByRole('table', { name: 'Ekip saatleri' });
+      for (const d of ['Pzt', 'Sal', 'Çar', 'Per', 'Cum'])
+        expect(within(table).getByRole('columnheader', { name: d })).toBeInTheDocument();
+      const bright = within(table).getByText('BrightLine Electric').closest('tr')!;
+      expect(within(bright).getByTestId('gap-cell')).toHaveTextContent('+16 sa');
+      expect(within(table).getAllByText('eşleşiyor').length).toBeGreaterThan(0);
+      await userEvent.click(
+        within(table).getByRole('button', {
+          name: 'BrightLine Electric firmasını faturasıyla karşılaştır',
+        }),
+      );
+      const aside = await screen.findByTestId('invoice-check');
+      expect(aside).toHaveTextContent('Fatura kontrolü');
+      expect(aside).toHaveTextContent('BL-3381 · 5 Eki – 9 Eki');
+      expect(within(aside).getByTestId('invoice-status')).toHaveTextContent('Açık');
+      expect(within(aside).getByRole('link', { name: /^RL-2041-0187 raporunu ses 0:19/ })).toBe(
+        within(aside)
+          .getAllByTestId('evidence-link')
+          .find((l) => l.textContent?.includes('0187')),
+      );
+      const body = decodeURIComponent(
+        within(aside).getByTestId('send-query').getAttribute('href')!.split('body=')[1]!,
+      );
+      expect(body).toContain('Toplam: faturalanan 212 sa, raporlanan 196 sa, fark +16');
+      expect(body).toContain('RL-2041-0187 · ses 0:19');
+      expect(screen.getByRole('button', { name: 'Fatura ekle' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Bordro CSV' })).toBeInTheDocument();
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
+  });
+
+  it('links each voice-note second to P7 at that second', async () => {
+    renderWithProviders(<HoursPage />, { route: '/hours?week=2026-W41' });
+    const table = await screen.findByRole('table', { name: 'Crew hours' });
+    await userEvent.click(
+      within(table).getByRole('button', { name: 'Compare BrightLine Electric with its invoice' }),
+    );
+    const aside = await screen.findByTestId('invoice-check');
+    const hero = within(aside).getByRole('link', {
+      name: 'Open report RL-2041-0187 at audio 0:19',
+    });
+    expect(hero.getAttribute('href')).toMatch(/^\/reports\/[^?]+\?clip=[^&]+&at=19$/);
+    expect(hero).toHaveAttribute('data-kind', 'voice_note');
+  });
+
+  it('shows a gap on Northgate’s call day with a call chip that opens P7 at the second', async () => {
+    const { store } = withApexGap();
+    renderWithProviders(<HoursPage />, { route: '/hours?week=2026-W41', store });
+    const table = await screen.findByRole('table', { name: 'Crew hours' });
+    const apexRow = within(table).getByText('Apex Concrete').closest('tr')!;
+    expect(within(apexRow).getByTestId('gap-cell')).toHaveTextContent('+8 h');
+    await userEvent.click(
+      within(table).getByRole('button', { name: 'Compare Apex Concrete with its invoice' }),
+    );
+    const aside = await screen.findByTestId('invoice-check');
+    const call = within(aside).getByRole('link', {
+      name: /^Open report NG-2210-\d+ at call 0:10$/,
+    });
+    const ngReport = store.data.reports.find((r) => r.report_no.startsWith('NG-2210-0069'))!;
+    const ngCall = store.data.calls.find((c) => c.report_id === ngReport.id)!;
+    expect(call).toHaveAttribute('href', `/reports/${ngReport.id}?clip=${ngCall.id}&at=10`);
+    expect(call).toHaveTextContent('call 0:10');
+    // The reporter's words at that second of the call (the demo's call transcript, W3-05).
+    const said = 'Apex, 3 guys, 8 hours, Ramp B. Shear wall formwork at Level 3, all done.';
+    expect(call.closest('li')).toHaveTextContent(`“${said}”`);
+    const body = decodeURIComponent(
+      within(aside).getByTestId('send-query').getAttribute('href')!.split('body=')[1]!,
+    );
+    expect(body).toContain(`NG-2210-0069 · call 0:10: “${said}”`);
+  });
+
+  it('gives an accounts user the call and voice-note seconds without links', async () => {
+    const { store } = withApexGap();
+    renderWithProviders(<HoursPage />, { route: '/hours?week=2026-W41', store, as: 'accounts' });
+    const table = await screen.findByRole('table', { name: 'Crew hours' });
+    // Ridgeway (unconfirmed): accounts cannot open the report or the glossary to confirm it.
+    const ridgeway = within(table).getByText('Ridgeway').closest('tr')!;
+    expect(within(ridgeway).queryByRole('link')).toBeNull();
+    expect(within(ridgeway).getByTestId('unconfirmed-ask')).toHaveAttribute(
+      'title',
+      'Heard in a report but not yet a known subcontractor. Ask an ops user to confirm it.',
+    );
+    await userEvent.click(
+      within(table).getByRole('button', { name: 'Compare Apex Concrete with its invoice' }),
+    );
+    const aside = await screen.findByTestId('invoice-check');
+    expect(within(aside).queryAllByTestId('evidence-link')).toHaveLength(0);
+    const chips = within(aside).getAllByTestId('evidence-report');
+    expect(chips.some((c) => c.dataset.kind === 'call' && /call 0:10/.test(c.textContent!))).toBe(
+      true,
+    );
+    const body = decodeURIComponent(
+      within(aside).getByTestId('send-query').getAttribute('href')!.split('body=')[1]!,
+    );
+    expect(body).not.toContain('/reports/');
+  });
+
+  it('posts one invoice_gap notice when an invoice is added with a gap', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<HoursPage />, { route: '/hours?week=2026-W41', store, as: 'accounts' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Add invoice' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Company' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Delta Mechanical' }));
+    await waitFor(() => expect(within(dialog).getByLabelText('Mon')).toHaveValue('72'));
+    await userEvent.type(within(dialog).getByLabelText('Invoice number'), 'DM-1001');
+    await userEvent.clear(within(dialog).getByLabelText('Fri'));
+    await userEvent.type(within(dialog).getByLabelText('Fri'), '88');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add invoice' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    const notices = store.data.notifications.filter(
+      (n) => n.kind === 'invoice_gap' && n.title.includes('Delta Mechanical'),
+    );
+    expect(notices.map((n) => n.title)).toEqual(['Invoice gap: Delta Mechanical +8 h']);
   });
 });

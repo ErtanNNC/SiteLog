@@ -2,14 +2,17 @@ import { expect, test, type Page } from '@playwright/test';
 import { demoId } from '@sitelog/shared/demo/ids.ts';
 
 const OUT = 'e2e/__screenshots__';
-const WIDTHS = [1440, 375] as const;
+// W1-16: phone screenshots at 390 px (CLAUDE.md: every screen works at 390 and 1440 px).
+const WIDTHS = [1440, 390] as const;
 
 // §18 demo ids are deterministic (packages/shared/src/demo/ids.ts).
 const RIVERSIDE_SITE = demoId('site:riverside');
 const HERO_REPORT = demoId('report:riverside:2026-10-09');
+// W3-05: Northgate's Oct 9 report came in on a call (two speaker lanes).
+const CALL_REPORT = demoId('report:northgate:2026-10-09');
 
 async function shoot(page: Page, name: string, width: number) {
-  await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}/${name}-${width}.png`, fullPage: true });
 }
@@ -23,7 +26,7 @@ async function signIn(page: Page) {
 
 for (const width of WIDTHS) {
   test(`screenshots at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.goto('/login');
     await expect(
       page.getByRole('heading', { name: 'End-of-day reports, spoken in three minutes.' }),
@@ -49,15 +52,19 @@ for (const width of WIDTHS) {
 
     await page.goto(`/reports/${HERO_REPORT}`);
     await expect(page.getByRole('heading', { name: 'Friday, Oct 9 — Riverside B' })).toBeVisible();
-    await expect(page.getByTestId('voice-player')).toBeVisible();
+    await expect(page.getByTestId('media-player').first()).toBeVisible();
     await shoot(page, 'report', width);
+
+    await page.goto(`/reports/${CALL_REPORT}`);
+    await expect(page.getByTestId('media-player')).toHaveAttribute('data-lanes', '2');
+    await shoot(page, 'report-call', width);
   });
 }
 
 // ── Hours · Weather · Team · Glossary · Settings · Billing · Setup (P2, P8–P13) ──
 for (const width of WIDTHS) {
   test(`setup pages screenshots at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await signIn(page);
 
     await page.goto('/hours');
@@ -106,5 +113,48 @@ for (const width of WIDTHS) {
     await page.getByTestId('manager-phone').fill('555 014 8001');
     await expect(page.getByTestId('welcome-preview')).toContainText('Hi Elena');
     await shoot(page, 'setup-site', width);
+  });
+}
+
+// W1-18: Sites and Site detail at 1440 and 390 px, in English and Turkish (spec P4, P5).
+for (const lang of ['en', 'tr'] as const) {
+  test(`sites screenshots (${lang})`, async ({ page }) => {
+    await page.addInitScript((tr) => {
+      window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' }));
+      if (tr) window.localStorage.setItem('sitelog.language', JSON.stringify('tr'));
+    }, lang === 'tr');
+    const widths = [1440, 390] as const;
+    for (const width of widths) {
+      const suffix = lang === 'tr' ? `tr-${width}` : `${width}`;
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.goto('/sites');
+      await expect(page.getByTestId('site-card').first()).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `${OUT}/sites-${suffix}.png`, fullPage: true });
+      await page.goto(`/sites/${RIVERSIDE_SITE}`);
+      await expect(page.getByTestId('latest-card')).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `${OUT}/site-${suffix}.png`, fullPage: true });
+    }
+  });
+}
+
+// W3-06: Crew hours with the invoice check open, at 1440 and 390 px, in English and Turkish (P8).
+for (const lang of ['en', 'tr'] as const) {
+  test(`hours screenshots (${lang})`, async ({ page }) => {
+    await page.addInitScript((tr) => {
+      window.localStorage.setItem('sitelog.demo.session', JSON.stringify({ key: 'admin' }));
+      if (tr) window.localStorage.setItem('sitelog.language', JSON.stringify('tr'));
+    }, lang === 'tr');
+    for (const width of WIDTHS) {
+      const suffix = lang === 'tr' ? `tr-${width}` : `${width}`;
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.goto('/hours?week=2026-W41');
+      await expect(page.getByTestId('hours-matrix')).toBeVisible({ timeout: 20_000 });
+      await page.locator('[data-company="BrightLine Electric"]').click();
+      await expect(page.getByTestId('invoice-check')).toBeVisible();
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `${OUT}/hours-${suffix}.png`, fullPage: true });
+    }
   });
 }

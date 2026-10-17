@@ -1,0 +1,19 @@
+{
+  "event": "room_started",
+  "room": {
+    "sid": "RM_{{room_sid}}",
+    "name": "sip_{{phone}}_Xq7Lm2Pz9Kd4",
+    "emptyTimeout": 300,
+    "departureTimeout": 20,
+    "creationTime": "{{ts}}",
+    "enabledCodecs": [
+      {
+        "mime": "audio/opus"
+      }
+    ],
+    "metadata": "",
+    "numParticipants": 0
+  },
+  "id": "{{id}}",
+  "createdAt": "{{ts}}"
+}

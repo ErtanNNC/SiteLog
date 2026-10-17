@@ -1,6 +1,7 @@
-import { formatHours, formatMonthDay } from '@sitelog/shared/format.ts';
-import { copy } from '@/copy/en';
+import { formatDate, formatHoursIn, parseIsoDate } from '@sitelog/shared/format.ts';
 import type { HeatmapCell, SiteOption } from '@/data/types';
+import { useCopy } from '@/i18n/useCopy';
+import { formatNumberIn } from '@/lib/localeFormat';
 import { useScrollRegion } from '@/lib/useScrollRegion';
 import { cn } from '@/lib/utils';
 
@@ -29,8 +30,18 @@ export interface HeatmapGridProps {
   className?: string;
 }
 
-/** Site × workday grid; orange ramp by hours lost; cell text shows the hours. */
+/**
+ * Site × workday grid; orange ramp by hours lost; cell text shows the hours. Labels, dates and
+ * hours in the panel's language (W3-07).
+ */
 export function HeatmapGrid({ sites, days, cells, maxHours, title, className }: HeatmapGridProps) {
+  const { t, language } = useCopy();
+  const cellLabel = (site: string, date: string, hours: number) =>
+    t('weather.heatmapCell', {
+      site,
+      date: formatDate(date, 'monthDay', language),
+      hours: formatHoursIn(hours, language),
+    });
   const lookup = new Map(cells.map((c) => [`${c.siteId}:${c.date}`, c.hours]));
   const max = Math.max(8, maxHours ?? 0);
   const scrollRegion = useScrollRegion(title);
@@ -40,11 +51,11 @@ export function HeatmapGrid({ sites, days, cells, maxHours, title, className }: 
         <thead>
           <tr>
             <th scope="col" className="eyebrow sticky left-0 bg-chalk pr-2 text-left text-dust">
-              {copy.hours.siteSelect}
+              {t('hours.siteSelect')}
             </th>
             {days.map((d) => (
               <th key={d} scope="col" className="eyebrow min-w-12 text-center text-dust">
-                {formatMonthDay(d).replace(/^\w+ /, '')}
+                {parseIsoDate(d).d}
               </th>
             ))}
           </tr>
@@ -69,10 +80,10 @@ export function HeatmapGrid({ sites, days, cells, maxHours, title, className }: 
                       RAMP[step],
                       step === 6 ? 'text-white' : h > 0 ? 'text-asphalt' : 'text-dust-light',
                     )}
-                    title={copy.weather.heatmapCell(s.name, formatMonthDay(d), formatHours(h))}
-                    aria-label={copy.weather.heatmapCell(s.name, formatMonthDay(d), formatHours(h))}
+                    title={cellLabel(s.name, d, h)}
+                    aria-label={cellLabel(s.name, d, h)}
                   >
-                    {h > 0 ? h : ''}
+                    {h > 0 ? formatNumberIn(h, language) : ''}
                   </td>
                 );
               })}
@@ -82,9 +93,9 @@ export function HeatmapGrid({ sites, days, cells, maxHours, title, className }: 
       </table>
       <div
         className="mt-2 flex items-center gap-1 text-[12px] text-dust"
-        aria-label={copy.a11y.heatmapLegend}
+        aria-label={t('a11y.heatmapLegend')}
       >
-        <span>0 h</span>
+        <span>{formatHoursIn(0, language)}</span>
         {RAMP.map((c, i) => (
           <span
             key={c}
@@ -92,7 +103,7 @@ export function HeatmapGrid({ sites, days, cells, maxHours, title, className }: 
             className={cn('h-3 w-5 rounded-[2px]', c, i === 0 && 'border border-rebar')}
           />
         ))}
-        <span>{formatHours(max)}</span>
+        <span>{formatHoursIn(max, language)}</span>
       </div>
     </div>
   );

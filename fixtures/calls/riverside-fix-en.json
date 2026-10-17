@@ -1,0 +1,313 @@
+{
+  "$comment": "W3-10 recorded call (W3-09's format, extended): `routes` also holds field-api's recorded answers to apply_correction and file_report, in order; `filing` lists every file_report request the call makes (the reporter's verbatim last words, the read-back's revision, and field-api's answer, §19 Q119), which field-api's Deno test replays through the confirm grammar and voice_file_report (`setDraftRev` moves the stored draft first, as a photo's re-extraction would); `corrections` are the words apply_correction sends. The worker's PGlite test (apps/worker/src/jobs/voice-filing.pglite.test.ts) checks the live pipeline answers what `routes` records (ids aside) and files once; the agent's pytest (tests/test_filing.py) replays the call on FakeFieldApi. W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind.",
+  "id": "riverside-fix-en",
+  "locale": "en-US",
+  "extraction": "call-riverside-2026-10-09-en",
+  "start": {
+    "request": {
+      "room": "call-c0110000-0000-4000-8000-000000000013",
+      "transport": "web",
+      "callId": "c0110000-0000-4000-8000-000000000013"
+    },
+    "response": {
+      "callId": "c0110000-0000-4000-8000-000000000013",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Marco",
+        "locale": "en-US"
+      }
+    }
+  },
+  "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "web",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Marco",
+          "locale": "en-US"
+        },
+        "company": "Kestrel Build Group",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5c",
+            "name": "Riverside Lofts — Block B",
+            "status": "reminded",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5c",
+        "companies": [
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex", "the Apex guys"]
+          },
+          {
+            "name": "BrightLine Electric",
+            "aliases": ["BrightLine"]
+          },
+          {
+            "name": "Delta Mechanical",
+            "aliases": ["Delta", "los de Delta"]
+          },
+          {
+            "name": "Ironclad Steel",
+            "aliases": ["Ironclad"]
+          },
+          {
+            "name": "Kestrel self-perform",
+            "aliases": ["our guys", "our crew"]
+          }
+        ],
+        "keyterms": ["Apex Concrete", "BrightLine Electric", "Delta Mechanical", "Ironclad Steel"],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 3
+      }
+    ],
+    "update_draft": [
+      {
+        "reportId": "a0a90000-0000-4000-8000-000000000001",
+        "draftRev": 1,
+        "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
+        "question": {
+          "id": "a0a90000-0000-4000-8000-000000000001",
+          "text": "Quick one — the Delta guys on Level two: was that four or five people, and the full day?",
+          "choices": ["four, full day", "five, full day"]
+        },
+        "readBack": null
+      }
+    ],
+    "record_answer": [
+      {
+        "status": "applied",
+        "confirmation": "Delta Mechanical: five workers, eight hours each — forty hours.",
+        "draft": {
+          "reportId": "a0a90000-0000-4000-8000-000000000001",
+          "draftRev": 2,
+          "missing": [],
+          "question": null,
+          "readBack": "Here's what I've got: twenty-three on site from five companies, one hundred eighty-four hours. Weather stopped work for three and a half hours. Done: Level four slab pour complete, Level three electrical rough-in about sixty percent, Level two ductwork, east wing, Exterior — south elevation CMU blockwork, Level two interior CMU blockwork, Level five deck rebar tying. Delivered: two loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?"
+        }
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ],
+    "apply_correction": [
+      {
+        "status": "applied",
+        "lines": ["Apex Concrete: seven workers, eight hours each — fifty-six hours."],
+        "readBack": "Apex Concrete: seven workers, eight hours each — fifty-six hours. Shall I file it?",
+        "draft": {
+          "reportId": "a0a90000-0000-4000-8000-000000000001",
+          "draftRev": 3,
+          "missing": [],
+          "question": null,
+          "readBack": "Here's what I've got: twenty-four on site from five companies, one hundred ninety-two hours. Weather stopped work for three and a half hours. Done: Level four slab pour complete, Level three electrical rough-in about sixty percent, Level two ductwork, east wing, Exterior — south elevation CMU blockwork, Level two interior CMU blockwork, Level five deck rebar tying. Delivered: two loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?"
+        }
+      }
+    ],
+    "file_report": [
+      {
+        "status": "filed",
+        "reportNo": "RL-0001",
+        "pdf": "pending"
+      }
+    ]
+  },
+  "reporterTurns": [
+    "Hi, it's Marco with the Friday report for Riverside Block B. Long day but a good one. Weather first: it rained from seven to ten thirty, we couldn't do block outside on the south facade. So masonry outside stood down about three and a half hours, we moved those guys inside to do the interior block on two. Then we poured the deck on four, like sixty-eight yards, finished around two thirty, Apex had six guys all day on that. BrightLine, five electricians full day on three, rough-in is about sixty percent now. The Delta guys were on two doing the ductwork in the east wing, all day too. Ironclad had three guys tying rebar for the five deck, full day, and they brought two loads of rebar around one o'clock. Our guys, four laborers all day, cleanup and helping the pour. Safety, we did the toolbox talk this morning on wet weather access, slippery decks, no incidents, nobody got hurt. Monday we need the concrete pump at seven for the five deck. That's it.",
+    "Five, all day.",
+    "No, Apex had seven, not six.",
+    "Yes, file it."
+  ],
+  "answers": ["Five, all day."],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Got it, one moment.",
+      "toolCalls": [
+        {
+          "name": "update_draft",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Quick one — the Delta guys on Level two: was that four or five people, and the full day?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "record_answer",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Delta Mechanical: five workers, eight hours each — forty hours. Here's what I've got: twenty-three on site from five companies, one hundred eighty-four hours. Weather stopped work for three and a half hours. Done: Level four slab pour complete, Level three electrical rough-in about sixty percent, Level two ductwork, east wing, Exterior — south elevation CMU blockwork, Level two interior CMU blockwork, Level five deck rebar tying. Delivered: two loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "apply_correction",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Apex Concrete: seven workers, eight hours each — fifty-six hours. Shall I file it?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "file_report",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Filed. I've sent you the PDF and a link to add photos. Have a good evening.",
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "filed"
+          }
+        }
+      ]
+    },
+    {}
+  ],
+  "corrections": ["No, Apex had seven, not six."],
+  "filing": [
+    {
+      "utterance": "Yes, file it.",
+      "draftRev": 3,
+      "answer": "filed"
+    }
+  ],
+  "simulate": {
+    "title": "A question and a correction on a call, then filed",
+    "milestone": "m8",
+    "flow": "F8",
+    "arrange": {
+      "reporter": {
+        "name": "Marco Ruiz",
+        "locale": "en-US",
+        "contactPref": "link"
+      },
+      "sites": [
+        {
+          "key": "riverside",
+          "name": "Riverside Lofts — Block B",
+          "projectCode": "RL"
+        }
+      ]
+    },
+    "steps": [
+      {
+        "route": "get_context",
+        "expect": {
+          "call": {
+            "direction": "inbound",
+            "transport": "web",
+            "purpose": "daily_report"
+          },
+          "reporter": {
+            "firstName": "Marco",
+            "locale": "en-US"
+          },
+          "company": "Kestrel Build Group",
+          "reportLanguage": "en",
+          "consents": {
+            "recording": true,
+            "dataProcessing": true,
+            "sms": true,
+            "autoCall": false
+          },
+          "maxQuestions": 3,
+          "sites": [
+            {
+              "name": "Riverside Lofts — Block B",
+              "deadline": "17:30"
+            }
+          ]
+        }
+      },
+      {
+        "route": "update_draft",
+        "body": {
+          "segments": "$segments"
+        }
+      },
+      {
+        "route": "record_answer",
+        "body": {
+          "questionId": "$draft.questionId",
+          "utterance": "Five, all day.",
+          "start": 95
+        }
+      },
+      {
+        "route": "apply_correction",
+        "body": {
+          "utterance": "No, Apex had seven, not six.",
+          "start": 110
+        }
+      },
+      {
+        "route": "file_report",
+        "body": {
+          "reportId": "$draft.reportId",
+          "draftRev": "$draft.draftRev",
+          "utterance": "Yes, file it."
+        }
+      },
+      {
+        "route": "end_call",
+        "body": {
+          "outcome": "filed"
+        }
+      }
+    ],
+    "expect": {
+      "call": {
+        "outcome": "filed"
+      },
+      "report": {
+        "site": "riverside",
+        "status": "filed",
+        "channel": "voice",
+        "confirmedVia": "voice",
+        "crewOnSite": 24,
+        "totalHours": 192
+      }
+    }
+  }
+}

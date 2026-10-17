@@ -1,0 +1,24 @@
+{
+  "id": "correction-en-apex-total",
+  "description": "English. Marco Ruiz fixes the Apex headcount and says a total too: the total is code's (7 × 8 = 56 h), never the 60 said. The correction case fixtures/corrections/en-apex-total.",
+  "kind": "correction",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Riverside Lofts — Block B",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["es", "en"]
+  },
+  "transcriptionLanguage": "multi",
+  "expectedLanguage": "en",
+  "goldenCase": null,
+  "durationS": 3.1,
+  "text": "Apex had seven guys, sixty hours all in.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 2.8,
+      "text": "Apex had seven guys, sixty hours all in."
+    }
+  ]
+}

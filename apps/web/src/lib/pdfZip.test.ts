@@ -18,15 +18,24 @@ async function bytesOf(blob: Blob): Promise<Uint8Array> {
 }
 
 describe('pdfFileNames', () => {
-  it('names files {reportNo}.pdf, replacing unsafe characters and numbering repeats', () => {
+  it('names files {reportNo}_{date}_v{version}.pdf (§12, D33), replacing unsafe characters and numbering repeats', () => {
+    const f = (reportNo: string, date = '2026-10-09', version = 1) => ({ reportNo, date, version });
     expect(
-      pdfFileNames(['RL-2041-0187', 'ES/0377:12', 'RL-2041-0187', 'rl-2041-0187', '']),
+      pdfFileNames([
+        f('RL-2041-0187', '2026-10-09', 2),
+        f('ES/0377:12'),
+        f('RL-2041-0187', '2026-10-09', 2),
+        f('rl-2041-0187', '2026-10-09', 2),
+        f('RL-2041-0187', '2026-10-09', 3),
+        f(''),
+      ]),
     ).toEqual([
-      'RL-2041-0187.pdf',
-      'ES_0377_12.pdf',
-      'RL-2041-0187 (2).pdf',
-      'rl-2041-0187 (3).pdf',
-      'report.pdf',
+      'RL-2041-0187_2026-10-09_v2.pdf',
+      'ES_0377_12_2026-10-09_v1.pdf',
+      'RL-2041-0187_2026-10-09_v2 (2).pdf',
+      'rl-2041-0187_2026-10-09_v2 (3).pdf',
+      'RL-2041-0187_2026-10-09_v3.pdf',
+      'report_2026-10-09_v1.pdf',
     ]);
   });
 });

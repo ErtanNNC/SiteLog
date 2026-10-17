@@ -1,5 +1,15 @@
 import { assertEquals } from '@std/assert';
-import { checkoutOrgId, isHandledEvent, subscriptionPatch } from './logic.ts';
+import { checkoutOrgId, isHandledEvent, paymentFailedChange, subscriptionPatch } from './logic.ts';
+
+Deno.test('invoice.payment_failed: past due with the payment_failed notice; canceled stays', () => {
+  const change = paymentFailedChange({ billing_status: 'active' });
+  assertEquals(change.patch, { billing_status: 'past_due' });
+  assertEquals(change.notice.kind, 'billing');
+  assertEquals(change.notice.targetPath, '/billing');
+  assertEquals(change.notice.data, { key: 'payment_failed', params: {} });
+  assertEquals(paymentFailedChange({ billing_status: 'canceled' }).patch, {});
+  assertEquals(isHandledEvent('invoice.payment_failed'), true);
+});
 
 Deno.test('checkoutOrgId prefers metadata over client_reference_id', () => {
   assertEquals(checkoutOrgId({ metadata: { orgId: 'o1' }, client_reference_id: 'o2' }), 'o1');
@@ -16,9 +26,9 @@ Deno.test('subscriptionPatch mirrors Stripe status, ids and trial end', () => {
       trial_end: 1_792_000_000,
     }),
     {
-      stripe_subscription_id: 'sub_1',
+      billing_subscription_id: 'sub_1',
       billing_status: 'trialing',
-      stripe_customer_id: 'cus_1',
+      billing_customer_id: 'cus_1',
       trial_ends_at: '2026-10-14T17:46:40.000Z',
     },
   );
@@ -30,9 +40,9 @@ Deno.test('subscriptionPatch mirrors Stripe status, ids and trial end', () => {
       trial_end: null,
     }),
     {
-      stripe_subscription_id: 'sub_1',
+      billing_subscription_id: 'sub_1',
       billing_status: 'past_due',
-      stripe_customer_id: 'cus_2',
+      billing_customer_id: 'cus_2',
     },
   );
   assertEquals(

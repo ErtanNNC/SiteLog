@@ -1,9 +1,19 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import { DemoStore } from '@/data/demo/store';
-import { renderWithProviders } from '@/test/render';
+import { i18n } from '@/i18n/i18n';
+import { makeAuthState, renderWithProviders } from '@/test/render';
 import SitesPage from './Page';
+
+/** The site card whose text names the site. */
+function card(grid: HTMLElement, name: string): HTMLElement {
+  const found = within(grid)
+    .getAllByTestId('site-card')
+    .find((c) => c.textContent?.includes(name));
+  if (!found) throw new Error(`No site card for ${name}`);
+  return found;
+}
 
 describe('SitesPage', () => {
   it('ends a populated grid with the "Connect another site" card', async () => {
@@ -61,5 +71,56 @@ describe('SitesPage', () => {
     expect(within(grid).getAllByTestId('site-card')).toHaveLength(1);
     expect(within(grid).getByText('Paused since Oct 1')).toBeInTheDocument();
     expect(screen.queryByText('No sites yet')).not.toBeInTheDocument();
+  });
+
+  it('Web-Sites: subtitle, preference icon, crew today and weather days (P4, W1-18)', async () => {
+    renderWithProviders(<SitesPage />, { route: '/sites' });
+    const grid = await screen.findByRole('list', { name: 'Sites' });
+    expect(
+      screen.getByText('6 active · each reports daily by text link or call'),
+    ).toBeInTheDocument();
+    const riverside = card(grid, 'Riverside Lofts');
+    expect(within(riverside).getByText('Marco Ruiz')).toBeInTheDocument();
+    expect(within(riverside).getByTestId('contact-pref')).toHaveAttribute('data-pref', 'link');
+    expect(within(riverside).getByText('Prefers text link')).toBeInTheDocument();
+    expect(within(riverside).getByText('2 weather days in Oct')).toBeInTheDocument();
+    expect(riverside.querySelector('a[href="tel:+15550143378"]')).not.toBeNull();
+    const hillcrest = card(grid, 'Hillcrest');
+    expect(within(hillcrest).getByTestId('contact-pref')).toHaveAttribute('data-pref', 'call');
+    expect(within(hillcrest).getByText('Prefers call')).toBeInTheDocument();
+    expect(within(grid).getByTestId('connect-site-card')).toHaveTextContent(
+      '$399 / month · no setup fee',
+    );
+  });
+
+  it('shows no price on the connect card where SiteLog set none yet (spec §19 Q9, Q234)', async () => {
+    const auth = makeAuthState('admin');
+    renderWithProviders(<SitesPage />, {
+      route: '/sites',
+      auth: { currentOrg: { ...auth.currentOrg!, country: 'TR', locale: 'tr-TR', price: null } },
+    });
+    const card = await screen.findByTestId('connect-site-card');
+    expect(card).toHaveTextContent('Connect another site');
+    expect(card).not.toHaveTextContent('/ month');
+  });
+
+  it('speaks Turkish when the panel does', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    try {
+      renderWithProviders(<SitesPage />, { route: '/sites' });
+      const grid = await screen.findByRole('list', { name: 'Şantiyeler' });
+      expect(
+        screen.getByText('6 aktif · her biri her gün mesajdaki linkle ya da telefonla rapor verir'),
+      ).toBeInTheDocument();
+      const riverside = card(grid, 'Riverside Lofts');
+      expect(within(riverside).getByText('Tercih: mesajla link')).toBeInTheDocument();
+      expect(within(riverside).getByText('2 hava engeli günü (Eki)')).toBeInTheDocument();
+      expect(within(grid).getByTestId('connect-site-card')).toHaveTextContent(
+        'Başka bir şantiye bağlayın',
+      );
+      expect(screen.getByRole('tab', { name: /İlgi gereken/ })).toBeInTheDocument();
+    } finally {
+      await act(() => i18n.changeLanguage('en'));
+    }
   });
 });

@@ -1,7 +1,10 @@
 {
   "languageDetected": ["en"],
   "summary": "ClearView Glazing set 14 curtain-wall panels on the north elevation. Delta Mechanical continued mechanical rough-in in the Level 1 imaging suite (headcount not stated). Summit Drywall hung board in the Level 2 patient wing. Kestrel laborers cleaned up and protected finished floors on Level 1. Overcast, no rain; no weather impact. Toolbox talk on silica and dust control; no incidents.",
-  "weather": { "conditionsText": "Overcast all day, no rain; no impact", "periods": [] },
+  "weather": {
+    "conditionsText": "Overcast all day, no rain; no impact",
+    "periods": []
+  },
   "manpower": [
     {
       "companyId": "00000000-0000-4000-8000-00000000d005",
@@ -16,8 +19,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "type": "voice_note",
+          "uploadId": "e0000006-0000-4000-8000-000000000601",
           "start": 6.1,
           "end": 13.4
         }
@@ -36,8 +39,8 @@
       "confidence": 0.6,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "type": "voice_note",
+          "uploadId": "e0000006-0000-4000-8000-000000000601",
           "start": 13.4,
           "end": 20
         }
@@ -56,8 +59,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "type": "voice_note",
+          "uploadId": "e0000006-0000-4000-8000-000000000601",
           "start": 20,
           "end": 26.2
         }
@@ -76,8 +79,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "type": "voice_note",
+          "uploadId": "e0000006-0000-4000-8000-000000000601",
           "start": 26.2,
           "end": 32.5
         }
@@ -89,11 +92,15 @@
       "area": "Exterior — north elevation",
       "activity": "Curtain wall glazing",
       "status": "in_progress",
-      "quantity": { "value": 14, "unit": "panels", "heardAs": "fourteen panels" },
+      "quantity": {
+        "value": 14,
+        "unit": "panels",
+        "heardAs": "fourteen panels"
+      },
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "type": "voice_note",
+          "uploadId": "e0000006-0000-4000-8000-000000000601",
           "start": 6.1,
           "end": 13.4
         }
@@ -105,8 +112,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "type": "voice_note",
+          "uploadId": "e0000006-0000-4000-8000-000000000601",
           "start": 13.4,
           "end": 20
         }
@@ -118,8 +125,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "type": "voice_note",
+          "uploadId": "e0000006-0000-4000-8000-000000000601",
           "start": 20,
           "end": 26.2
         }
@@ -131,8 +138,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000006-0000-4000-8000-000000000601",
+          "type": "voice_note",
+          "uploadId": "e0000006-0000-4000-8000-000000000601",
           "start": 26.2,
           "end": 32.5
         }
@@ -148,8 +155,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000006-0000-4000-8000-000000000601",
+        "type": "voice_note",
+        "uploadId": "e0000006-0000-4000-8000-000000000601",
         "start": 32.5,
         "end": 38
       }
@@ -163,19 +170,22 @@
     "manpower.hours:Delta Mechanical",
     "manpower.hours:Summit Drywall"
   ],
-  "lowConfidence": [{ "path": "manpower[1]", "reason": "\"A few\" is not a headcount" }],
+  "lowConfidence": [
+    {
+      "path": "manpower[1]",
+      "reason": "\"A few\" is not a headcount"
+    }
+  ],
   "proposedQuestions": [
     {
-      "field": "manpower.workers",
+      "field": "manpower.workers:Delta Mechanical",
       "question": "Quick check: you said 'a few of the Delta guys' were on Level 1. How many, and for how long?",
-      "options": ["3 · full day", "4 · full day"],
-      "target": { "companyNameHeard": "the Delta guys", "manpowerIndex": 1 }
+      "options": ["3 · full day", "4 · full day"]
     },
     {
-      "field": "manpower.hours",
+      "field": "manpower.hours:Summit Drywall",
       "question": "How long was Summit Drywall on site today?",
-      "options": ["Full day", "Half day"],
-      "target": { "companyNameHeard": "Summit", "manpowerIndex": 2 }
+      "options": ["Full day", "Half day"]
     }
   ]
 }

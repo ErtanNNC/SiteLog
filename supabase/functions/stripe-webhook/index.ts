@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { noticeData } from '@sitelog/shared/notifications.ts';
 import { logAudit } from '../_shared/audit.ts';
 import { idOf, statusAfterInvoicePaid } from '../_shared/billing.ts';
 import { requireEnv } from '../_shared/env.ts';
@@ -6,11 +7,18 @@ import { error, json, requireMethod, withHandler } from '../_shared/http.ts';
 import { errorMessage, logInfo, logWarn } from '../_shared/log.ts';
 import { notifyOrg } from '../_shared/notify.ts';
 import { adminClient, type AppClient, type TableRow } from '../_shared/supabase.ts';
-import { checkoutOrgId, isHandledEvent, subscriptionPatch, type OrgBillingPatch } from './logic.ts';
+import {
+  checkoutOrgId,
+  isHandledEvent,
+  paymentFailedChange,
+  subscriptionPatch,
+  type OrgBillingPatch,
+} from './logic.ts';
 
 /**
  * stripe-webhook (§F19 step 5, §13 billing) — public endpoint verified with Stripe-Signature.
- * Mirrors Stripe into orgs.billing_status / ids, alerts the org on payment failures and is
+ * Mirrors Stripe into orgs.billing_status and billing_customer_id / billing_subscription_id (the
+ * legacy stripe_* columns follow by trigger until step 23), alerts the org on payment failures and is
  * idempotent per event id (stripe_events table, migration 0007). Non-2xx responses make Stripe
  * retry, and an event whose processing failed is retried because processed_at stays null.
  */
@@ -86,9 +94,9 @@ async function handleEvent(stripe: Stripe, admin: AppClient, event: Stripe.Event
       const org = await findOrg(admin, { orgId: checkoutOrgId(session), customerId });
       if (!org) return orgNotFound(event, { customerId, subscriptionId });
       const patch: OrgBillingPatch = {};
-      if (customerId) patch.stripe_customer_id = customerId;
+      if (customerId) patch.billing_customer_id = customerId;
       if (subscriptionId) {
-        patch.stripe_subscription_id = subscriptionId;
+        patch.billing_subscription_id = subscriptionId;
         Object.assign(
           patch,
           subscriptionPatch(await stripe.subscriptions.retrieve(subscriptionId)),
@@ -113,14 +121,9 @@ async function handleEvent(stripe: Stripe, admin: AppClient, event: Stripe.Event
       const customerId = idOf(invoice.customer);
       const org = await findOrg(admin, { customerId });
       if (!org) return orgNotFound(event, { customerId });
-      await applyBillingChange(admin, org, { billing_status: 'past_due' }, event);
-      await notifyOrg(admin, {
-        orgId: org.id,
-        kind: 'billing',
-        title: 'Payment failed',
-        body: 'Stripe could not charge your card. Update the payment method in Billing to keep reports and reminders flowing.',
-        targetPath: '/billing',
-      });
+      const change = paymentFailedChange(org);
+      await applyBillingChange(admin, org, change.patch, event);
+      await notifyOrg(admin, { orgId: org.id, ...change.notice });
       return;
     }
     case 'invoice.paid': {
@@ -141,10 +144,10 @@ async function findOrg(
   admin: AppClient,
   keys: { orgId?: string | null; subscriptionId?: string | null; customerId?: string | null },
 ): Promise<Org | null> {
-  const lookups: Array<['id' | 'stripe_subscription_id' | 'stripe_customer_id', string]> = [];
+  const lookups: Array<['id' | 'billing_subscription_id' | 'billing_customer_id', string]> = [];
   if (keys.orgId) lookups.push(['id', keys.orgId]);
-  if (keys.subscriptionId) lookups.push(['stripe_subscription_id', keys.subscriptionId]);
-  if (keys.customerId) lookups.push(['stripe_customer_id', keys.customerId]);
+  if (keys.subscriptionId) lookups.push(['billing_subscription_id', keys.subscriptionId]);
+  if (keys.customerId) lookups.push(['billing_customer_id', keys.customerId]);
   for (const [column, value] of lookups) {
     const { data } = await admin
       .from('orgs')
@@ -198,6 +201,7 @@ async function applyBillingChange(
       title: 'Subscription canceled',
       body: 'Reminders and new site-days stop until the subscription is restarted from Billing.',
       targetPath: '/billing',
+      data: noticeData('subscription_canceled', {}),
     });
   }
   org.billing_status = to;

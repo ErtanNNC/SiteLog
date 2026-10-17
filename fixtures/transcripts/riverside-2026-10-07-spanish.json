@@ -9,6 +9,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-07",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "es-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Marco",
@@ -46,32 +50,132 @@
     }
   ],
   "glossary": [
-    { "heard": "the deck", "official": "Elevated concrete slab", "kind": "term" },
-    { "heard": "pour on four", "official": "Level 4 concrete pour", "kind": "area" },
-    { "heard": "block", "official": "Concrete masonry units (CMU)", "kind": "term" },
-    { "heard": "llovió", "official": "Rain", "kind": "term" },
-    { "heard": "andamio", "official": "Scaffold", "kind": "term" },
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" }
+    {
+      "heard": "the deck",
+      "official": "Elevated concrete slab",
+      "kind": "term"
+    },
+    {
+      "heard": "pour on four",
+      "official": "Level 4 concrete pour",
+      "kind": "area"
+    },
+    {
+      "heard": "block",
+      "official": "Concrete masonry units (CMU)",
+      "kind": "term"
+    },
+    {
+      "heard": "llovió",
+      "official": "Rain",
+      "kind": "term"
+    },
+    {
+      "heard": "andamio",
+      "official": "Scaffold",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-07",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-07T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 58, "windMph": 6, "gustMph": 14 },
-      { "time": "07:00", "precipIn": 0, "tempF": 62, "windMph": 7, "gustMph": 12 },
-      { "time": "08:00", "precipIn": 0, "tempF": 65, "windMph": 8, "gustMph": 10 },
-      { "time": "09:00", "precipIn": 0, "tempF": 68, "windMph": 6, "gustMph": 13 },
-      { "time": "10:00", "precipIn": 0, "tempF": 70, "windMph": 7, "gustMph": 11 },
-      { "time": "11:00", "precipIn": 0, "tempF": 71, "windMph": 8, "gustMph": 14 },
-      { "time": "12:00", "precipIn": 0, "tempF": 71, "windMph": 6, "gustMph": 12 },
-      { "time": "13:00", "precipIn": 0, "tempF": 70, "windMph": 7, "gustMph": 10 },
-      { "time": "14:00", "precipIn": 0, "tempF": 68, "windMph": 8, "gustMph": 13 },
-      { "time": "15:00", "precipIn": 0, "tempF": 65, "windMph": 6, "gustMph": 11 },
-      { "time": "16:00", "precipIn": 0, "tempF": 62, "windMph": 7, "gustMph": 14 },
-      { "time": "17:00", "precipIn": 0, "tempF": 58, "windMph": 8, "gustMph": 12 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 58,
+        "windMph": 6,
+        "gustMph": 14
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 65,
+        "windMph": 8,
+        "gustMph": 10
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 68,
+        "windMph": 6,
+        "gustMph": 13
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 70,
+        "windMph": 7,
+        "gustMph": 11
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 71,
+        "windMph": 8,
+        "gustMph": 14
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 71,
+        "windMph": 6,
+        "gustMph": 12
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 70,
+        "windMph": 7,
+        "gustMph": 10
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 68,
+        "windMph": 8,
+        "gustMph": 13
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 65,
+        "windMph": 6,
+        "gustMph": 11
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 7,
+        "gustMph": 14
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 58,
+        "windMph": 8,
+        "gustMph": 12
+      }
     ],
     "summary": {
       "precipIn": 0,
@@ -88,66 +192,65 @@
   "previousDraft": null,
   "photos": [
     {
-      "messageId": "e0000004-0000-4000-8000-000000000405",
+      "uploadId": "e0000004-0000-4000-8000-000000000405",
       "caption": "Muros del elevador",
       "takenAt": "2026-10-07T22:18:40Z"
     }
   ],
   "segments": [
     {
-      "messageId": "e0000004-0000-4000-8000-000000000401",
+      "uploadId": "e0000004-0000-4000-8000-000000000401",
       "start": 0,
       "end": 6.8,
       "text": "Buenas, reporte del miércoles, Riverside bloque B. Día seco, sin lluvia, todo normal."
     },
     {
-      "messageId": "e0000004-0000-4000-8000-000000000401",
+      "uploadId": "e0000004-0000-4000-8000-000000000401",
       "start": 6.8,
       "end": 14.9,
       "text": "Hoy hicimos el colado de los muros del cubo del elevador, como veinticuatro yardas, terminamos como a la una."
     },
     {
-      "messageId": "e0000004-0000-4000-8000-000000000401",
+      "uploadId": "e0000004-0000-4000-8000-000000000401",
       "start": 14.9,
       "end": 21.6,
       "text": "Apex con seis trabajadores todo el día en el colado."
     },
     {
-      "messageId": "e0000004-0000-4000-8000-000000000401",
+      "uploadId": "e0000004-0000-4000-8000-000000000401",
       "start": 21.6,
       "end": 29,
       "text": "BrightLine, cuatro electricistas en el nivel tres hasta las dos, siguen con la tubería, van como a la mitad."
     },
     {
-      "messageId": "e0000004-0000-4000-8000-000000000401",
+      "uploadId": "e0000004-0000-4000-8000-000000000401",
       "start": 29,
       "end": 35.2,
       "text": "Los de Delta, cinco, todo el día con los ductos en el nivel dos, ala oeste."
     },
     {
-      "messageId": "e0000004-0000-4000-8000-000000000401",
+      "uploadId": "e0000004-0000-4000-8000-000000000401",
       "start": 35.2,
       "end": 41.7,
       "text": "Ironclad, dos muchachos, medio día, amarrando varilla para la losa del cuatro."
     },
     {
-      "messageId": "e0000004-0000-4000-8000-000000000401",
+      "uploadId": "e0000004-0000-4000-8000-000000000401",
       "start": 41.7,
       "end": 48,
       "text": "Nuestros cuatro peones todo el día, limpieza y ayudando con el colado."
     },
     {
-      "messageId": "e0000004-0000-4000-8000-000000000401",
+      "uploadId": "e0000004-0000-4000-8000-000000000401",
       "start": 48,
       "end": 55.5,
       "text": "A las nueve llegó el andamio para la fachada norte, lo armamos mañana."
     },
     {
-      "messageId": "e0000004-0000-4000-8000-000000000401",
+      "uploadId": "e0000004-0000-4000-8000-000000000401",
       "start": 55.5,
       "end": 62,
       "text": "Plática de seguridad sobre andamios y arnés. Sin incidentes, nadie se lastimó. Mando una foto."
     }
-  ],
-  "texts": []
+  ]
 }

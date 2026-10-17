@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-07",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en"],
   "summary": "Roof trusses set on Units 1–4 (all 24). Roof sheathing delivered at 14:00 (60 sheets). Dry; no weather impact. Toolbox talk on fall protection for truss setting; no incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0,
-      "tempMinF": 54,
-      "tempMaxF": 70,
-      "windMph": 7,
-      "gustMph": 12,
+      "precip": 0,
+      "tempMin": 54,
+      "tempMax": 70,
+      "wind": 7,
+      "gust": 12,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Dry, no weather issues",
@@ -25,7 +29,14 @@
       "totalHours": 48,
       "hoursBasis": "full_day_default",
       "confidence": 0.95,
-      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "e0000016-0000-4000-8000-000000001601",
+          "start": 0,
+          "end": 17.2
+        }
+      ]
     }
   ],
   "workPerformed": [
@@ -33,8 +44,18 @@
       "area": "Units 1–4",
       "activity": "Roof truss setting",
       "status": "complete",
-      "quantity": { "value": 24, "unit": "trusses" },
-      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+      "quantity": {
+        "value": 24,
+        "unit": "trusses"
+      },
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "e0000016-0000-4000-8000-000000001601",
+          "start": 0,
+          "end": 17.2
+        }
+      ]
     }
   ],
   "deliveries": [
@@ -42,7 +63,14 @@
       "item": "Roof sheathing",
       "quantity": "60 sheets",
       "time": "14:00",
-      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "e0000016-0000-4000-8000-000000001601",
+          "start": 0,
+          "end": 17.2
+        }
+      ]
     }
   ],
   "equipment": [],
@@ -51,15 +79,30 @@
     "incidents": [],
     "noIncidentsStated": true,
     "visitors": [],
-    "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+    "source": [
+      {
+        "type": "voice_note",
+        "uploadId": "e0000016-0000-4000-8000-000000001601",
+        "start": 0,
+        "end": 17.2
+      }
+    ]
   },
   "issues": [],
   "nextWorkday": [
     {
       "item": "Roof sheathing on Units 1–4",
-      "source": [{ "type": "text", "messageId": "e0000016-0000-4000-8000-000000001601" }]
+      "source": [
+        {
+          "type": "voice_note",
+          "uploadId": "e0000016-0000-4000-8000-000000001601",
+          "start": 0,
+          "end": 17.2
+        }
+      ]
     }
   ],
+  "photos": [],
   "newTerms": [],
   "missingRequired": ["photo"],
   "lowConfidence": [],
@@ -69,8 +112,5 @@
       "question": "A photo of today's trusses would complete the report. Can you send one?",
       "options": ["Sending now", "No photo today"]
     }
-  ],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-07",
-  "photos": []
+  ]
 }

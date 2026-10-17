@@ -4,12 +4,10 @@ import { OFFICE_PHOTO_MAX, PHOTO_CAPTION_MAX } from '@sitelog/shared/report/phot
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { formatDateTimeShort, formatWhen } from '@/lib/format';
 import { PHOTO_ACCEPT } from '@/lib/photos';
 import type { PhotoDraft } from './usePhotoDraft';
-
-const c = copy.report.editMode.photos;
 
 /**
  * "Photos" in the report editor (New report and Edit): add photos (camera or library on a
@@ -34,6 +32,7 @@ export function PhotoPicker({
   /** While the report is being saved. */
   disabled?: boolean;
 }) {
+  const { t, language } = useCopy();
   const inputRef = useRef<HTMLInputElement>(null);
   const id = useId();
   const count = draft.items.length;
@@ -41,27 +40,33 @@ export function PhotoPicker({
   // Only worth saying (and marking) when some photos will not print.
   const pdfMax = pdfMaxPhotos != null && count > pdfMaxPhotos ? pdfMaxPhotos : null;
   const taken = (iso: string, tz: string) =>
-    reportDate ? formatWhen(iso, tz, reportDate) : formatDateTimeShort(iso, tz);
+    reportDate ? formatWhen(iso, tz, reportDate, language) : formatDateTimeShort(iso, tz);
 
   return (
     <Card data-testid="photo-picker">
       <CardHeader className="flex-wrap">
         {/* On a phone the count and the button move under the title instead of squeezing it. */}
         <div className="min-w-[14rem] flex-1">
-          <CardTitle id={`${id}-title`}>{c.title}</CardTitle>
+          <CardTitle id={`${id}-title`}>{t('report.editMode.photos.title')}</CardTitle>
           <p id={`${id}-hint`} className="mt-1 text-caption text-dust">
-            {full ? c.full(OFFICE_PHOTO_MAX) : c.hint}
+            {full
+              ? t('report.editMode.photos.full', { max: OFFICE_PHOTO_MAX })
+              : t('report.editMode.photos.hint')}
           </p>
           {pdfMax !== null ? (
             <p className="mt-1 text-caption text-dust" data-testid="photo-pdf-hint">
-              {c.pdfHint(pdfMax)}
+              {t('report.editMode.photos.pdfHint', { count: pdfMax })}
             </p>
           ) : null}
         </div>
         <div className="flex items-center gap-3">
           <span className="font-mono text-caption tabular text-dust" data-testid="photo-count">
-            <span aria-hidden="true">{c.count(count, OFFICE_PHOTO_MAX)}</span>
-            <span className="sr-only">{c.countLabel(count, OFFICE_PHOTO_MAX)}</span>
+            <span aria-hidden="true">
+              {t('report.editMode.photos.count', { n: count, max: OFFICE_PHOTO_MAX })}
+            </span>
+            <span className="sr-only">
+              {t('report.editMode.photos.countLabel', { count, max: OFFICE_PHOTO_MAX })}
+            </span>
           </span>
           <input
             ref={inputRef}
@@ -70,7 +75,7 @@ export function PhotoPicker({
             multiple
             className="sr-only"
             tabIndex={-1}
-            aria-label={c.add}
+            aria-label={t('report.editMode.photos.add')}
             data-testid="photo-input"
             disabled={disabled || full}
             onChange={(e) => {
@@ -87,7 +92,7 @@ export function PhotoPicker({
             aria-describedby={`${id}-hint`}
           >
             <ImagePlus aria-hidden="true" />
-            {c.add}
+            {t('report.editMode.photos.add')}
           </Button>
         </div>
       </CardHeader>
@@ -103,12 +108,12 @@ export function PhotoPicker({
               ))}
             </ul>
             <Button variant="link" size="sm" onClick={draft.dismissErrors}>
-              {c.dismiss}
+              {t('report.editMode.photos.dismiss')}
             </Button>
           </div>
         ) : null}
         {count === 0 ? (
-          <p className="text-caption text-dust">{c.empty}</p>
+          <p className="text-caption text-dust">{t('report.editMode.photos.empty')}</p>
         ) : (
           <ul
             className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
@@ -116,7 +121,7 @@ export function PhotoPicker({
           >
             {draft.items.map((p, i) => {
               const n = i + 1;
-              const alt = p.caption.trim() || c.alt(n);
+              const alt = p.caption.trim() || t('report.editMode.photos.alt', { n });
               return (
                 <li
                   key={p.key}
@@ -129,7 +134,7 @@ export function PhotoPicker({
                         className="absolute left-1 top-1 rounded-sm bg-chalk/90 px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.08em] text-asphalt"
                         data-testid="photo-in-pdf"
                       >
-                        {c.inPdf}
+                        {t('report.editMode.photos.inPdf')}
                       </span>
                     ) : null}
                     {p.previewUrl ? (
@@ -145,14 +150,16 @@ export function PhotoPicker({
                         role="status"
                       >
                         <LoaderCircle className="size-5 animate-sl-spin" aria-hidden="true" />
-                        <span className="text-caption">{c.preparing}</span>
+                        <span className="text-caption">
+                          {t('report.editMode.photos.preparing')}
+                        </span>
                       </div>
                     ) : (
                       <div
                         className="flex size-full items-center justify-center text-dust"
                         role="img"
                         aria-label={alt}
-                        title={copy.siteDetail.photosTab.noPreview}
+                        title={t('report.editMode.photos.noPreview')}
                       >
                         <Camera className="size-6 stroke-2" aria-hidden="true" />
                       </div>
@@ -161,7 +168,7 @@ export function PhotoPicker({
                       variant="subtle"
                       size="iconDense"
                       className="absolute right-1 top-1 bg-chalk/90 hover:bg-chalk"
-                      aria-label={c.remove(n)}
+                      aria-label={t('report.editMode.photos.remove', { n })}
                       onClick={() => draft.remove(p.key)}
                       disabled={disabled}
                     >
@@ -174,7 +181,7 @@ export function PhotoPicker({
                           variant="subtle"
                           size="iconDense"
                           className="absolute bottom-1 left-1 bg-chalk/90 hover:bg-chalk"
-                          aria-label={c.moveEarlier(n)}
+                          aria-label={t('report.editMode.photos.moveEarlier', { n })}
                           onClick={() => draft.move(p.key, -1)}
                           disabled={disabled || i === 0}
                         >
@@ -184,7 +191,7 @@ export function PhotoPicker({
                           variant="subtle"
                           size="iconDense"
                           className="absolute bottom-1 right-1 bg-chalk/90 hover:bg-chalk"
-                          aria-label={c.moveLater(n)}
+                          aria-label={t('report.editMode.photos.moveLater', { n })}
                           onClick={() => draft.move(p.key, 1)}
                           disabled={disabled || i === count - 1}
                         >
@@ -195,17 +202,17 @@ export function PhotoPicker({
                   </div>
                   <div className="space-y-1 p-2">
                     <Input
-                      aria-label={c.caption(n)}
-                      placeholder={c.captionPlaceholder}
+                      aria-label={t('report.editMode.photos.caption', { n })}
+                      placeholder={t('report.editMode.photos.captionPlaceholder')}
                       value={p.caption}
                       maxLength={PHOTO_CAPTION_MAX}
                       onChange={(e) => draft.setCaption(p.key, e.target.value)}
-                      className="h-10 px-2.5 text-[14px]"
+                      className="h-target-dense px-2.5 text-[14px]"
                       disabled={disabled}
                     />
                     {p.takenAt && timezone ? (
                       <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-dust">
-                        {c.taken(taken(p.takenAt, timezone))}
+                        {t('report.editMode.photos.taken', { when: taken(p.takenAt, timezone) })}
                       </p>
                     ) : null}
                   </div>

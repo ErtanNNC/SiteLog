@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData } from '../schemas/report.ts';
+import { emptyReportDataV1 } from '../schemas/report.ts';
 import { exampleDraftCard, formatDraftCard, workItemPhrase } from './draft-card.ts';
 
 describe('draft card', () => {
   it('renders the F7 layout', () => {
-    const d = emptyReportData('2026-10-09');
+    const d = emptyReportDataV1('2026-10-09');
     d.manpower = [
       {
         companyId: 'a',
@@ -117,7 +117,7 @@ describe('draft card', () => {
     );
   });
   it('shows pending values and stays short when sections are empty', () => {
-    const d = emptyReportData('2026-10-09');
+    const d = emptyReportDataV1('2026-10-09');
     d.manpower = [
       {
         companyId: null,

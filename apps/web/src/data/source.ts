@@ -4,24 +4,33 @@
  *  - supabase/SupabaseSource.ts — supabase-js queries, RPCs, edge functions, realtime
  */
 import type {
+  ContactPref,
   InvoiceStatus,
   MemberRole,
+  MessageChannel,
   ReporterRole,
   ReporterStatus,
   TermKind,
 } from '@sitelog/shared/enums.ts';
+import type { Language, OrgLocale, ReporterLocale, UnitSystem } from '@sitelog/shared/locale.ts';
 import type { OfficePhotoMime, OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
-import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
+import type { BillingAlert, BillingPrice, BillingStatus } from '@sitelog/shared/billing.ts';
 import type {
   BillingData,
   ChangeEvent,
+  DemoPhoneData,
+  DemoPhoneEmail,
+  DemoPhoneMessage,
   GlossaryData,
   HoursMatrix,
   NavBadges,
   NotificationItem,
   OpsData,
+  OpsOrgBilling,
   OrgSettingsPatch,
   OrgSummary,
+  OrglessContacts,
   OverviewData,
   ReportDetail,
   ReportFilters,
@@ -32,8 +41,10 @@ import type {
   SiteCard,
   SiteDetail,
   TeamData,
+  TextDailyLinkResult,
   WeatherLog,
 } from './types';
+import type { PanelLanguage } from '@/i18n/language';
 
 export interface SourceUser {
   id: string;
@@ -81,7 +92,35 @@ export interface InviteReporterInput {
   role: ReporterRole;
   siteIds: string[];
   languages: string[];
+  /** The language SiteLog uses with them (W4-03): one of the pack's field locales. */
+  locale?: ReporterLocale;
+  /** Preferred channel (F3, P10 invite dialog); default `link`. */
+  contactPref?: ContactPref;
 }
+
+/**
+ * Team → Edit (W4-03, F15 "Office", §19 Q243): preference, message channel and language in one
+ * audited change (`update_reporter_contact()`). `attested`: the reporter asked for a preference or
+ * channel change; required for those, not for a language change.
+ */
+export interface UpdateReporterContactInput {
+  reporterId: string;
+  contactPref: ContactPref;
+  /** null = the pack's order. */
+  messageChannel: MessageChannel | null;
+  locale: ReporterLocale;
+  attested: boolean;
+}
+
+/** Team → Call now (W4-04): the reporter, the site the call is about, the attestation. */
+export interface OfficeCallNowInput {
+  reporterId: string;
+  siteId: string;
+  attested: boolean;
+}
+
+/** The wording version of Team's "asked for texts again" attestation (§19 Q242). */
+export const TEAM_TEXTS_AGAIN_VERSION = 'team.texts_again.v1';
 
 /** Team → Edit reporter (§P10). The phone is not editable: disable and invite the new number. */
 export interface UpdateReporterInput {
@@ -101,6 +140,9 @@ export type PdfSelection = { reportIds: string[] } | { filters: ReportFilters };
 export interface PdfLink {
   reportId: string;
   reportNo: string;
+  /** The report's date (YYYY-MM-DD) and current version: the §12 file name (D33). */
+  date: string;
+  version: number;
   /** Signed URL (10 min) of the current version's PDF. */
   url: string;
 }
@@ -108,7 +150,7 @@ export interface PdfLink {
 export interface PdfLinkBatch {
   files: PdfLink[];
   /** Reports in the selection without a stored PDF yet (the export renders them in the browser). */
-  missing: Array<{ reportId: string; reportNo: string }>;
+  missing: Array<Omit<PdfLink, 'url'>>;
   /** Reports in the selection before the PDF_EXPORT_LIMIT cap. */
   total: number;
   /** True when `total` exceeded PDF_EXPORT_LIMIT and only the first ones were resolved. */
@@ -129,6 +171,35 @@ export interface UpdateOrgInput {
   timezone: string;
   address?: string | null;
   licenseNo?: string | null;
+  /** W4-05 (§19 Q233): the report language and units; omitted = unchanged. */
+  locale?: OrgLocale;
+  units?: UnitSystem;
+}
+
+/** W4-05 (§19 Q232): Settings' "Send me a test message" (api-test-message). */
+export interface SendTestMessageInput {
+  /** E.164, typed in the sheet; never stored. */
+  phone: string;
+  language: Language;
+}
+
+export type SendTestMessageResult =
+  | { outcome: 'sent'; driver: string }
+  | { outcome: 'console'; reason: 'demo' | 'no_sender' }
+  | { outcome: 'failed'; driver: string };
+
+/** W4-05 (§19 Q232, Q350): Settings' "Call me now" (settings_test_call_start()). */
+export interface CallMeNowInput {
+  /** E.164, typed in the sheet; held only until the dial, never kept. */
+  phone: string;
+  language: Language;
+}
+
+/** A refusal is a `CodedError` with its reason (`SETTINGS_TEST_CALL_REFUSALS`). */
+export interface CallMeNowResult {
+  callId: string;
+  /** `console`: a demo org, nothing reaches a real phone. */
+  telephony: 'console' | 'livekit';
 }
 
 export interface CreateSiteInput {
@@ -151,7 +222,7 @@ export interface CreateSiteInput {
  */
 export interface CreateSiteResult {
   siteId: string;
-  /** Message of a failed manager invite (WhatsApp welcome); null when it was sent or not asked. */
+  /** Message of a failed manager invite (the welcome text); null when it was queued or not asked. */
   inviteError: string | null;
   /** Message of a failed recipients save; null when saved or not asked. */
   recipientsError: string | null;
@@ -169,7 +240,11 @@ export interface CreateOfficeReportInput {
   siteId: string;
   /** YYYY-MM-DD in the site's time zone; today or earlier. */
   date: string;
-  data: DailyReportData;
+  /**
+   * Report data v2 (W1-12): create_office_report stamps the date, the org's report language and
+   * units (and keeps v1 data from a panel built before W1-12 as v1).
+   */
+  data: StoredReportData;
   /** Photos uploaded with uploadReportPhoto() for this site (at most OFFICE_PHOTO_MAX). */
   photos?: OfficePhotoUpload[];
 }
@@ -224,6 +299,11 @@ export interface DataSource {
   getGlossary(): Promise<GlossaryData>;
   getSettings(): Promise<SettingsData>;
   getBilling(): Promise<BillingData>;
+  /**
+   * The admin banner on every page (F23, §19 Q235): past due, a lapsed trial or a canceled
+   * subscription; null when billing is fine. Database only, no provider call.
+   */
+  getBillingAlert(): Promise<BillingAlert | null>;
   getNotifications(): Promise<NotificationItem[]>;
   getNavBadges(): Promise<NavBadges>;
   getSetupState(): Promise<SetupState>;
@@ -244,13 +324,18 @@ export interface DataSource {
   /**
    * create_report_version. `data.photos` lists the report's photos the new version keeps (with
    * their captions, in order); `photos` are new uploads, each placed at its `position` among them
-   * (none: after them).
+   * (none: after them). `data` has the shape of the version it edits (ReportDetail.storedData).
    */
   createReportVersion(
     reportId: string,
-    data: DailyReportData,
+    data: StoredReportData,
     changeNote: string,
     photos?: OfficePhotoUpload[],
+    /**
+     * The version the edit was opened on (W2-11 review, spec §19 Q106): a newer one refuses the
+     * edit with CodedError `version_changed` ("This report changed. Reload …").
+     */
+    baseVersion?: number,
   ): Promise<{ version: number }>;
   /**
    * create_office_report: returns the existing report when the site-day already has one (its
@@ -276,6 +361,17 @@ export interface DataSource {
    */
   saveReportPdf(input: SaveReportPdfInput): Promise<string>;
   markNoWork(siteDayId: string): Promise<void>;
+  /**
+   * F17 "Text today's link" (W1-16): today's daily link to the site's reporter through the
+   * Notifier (api-text-daily-link; the demo writes the console text). `requestId` makes one tap
+   * one text, however often the request is retried.
+   */
+  textDailyLink(
+    siteId: string,
+    requestId: string,
+    /** Team's row menu (W4-03) names the reporter; else the site's primary active one. */
+    reporterId?: string,
+  ): Promise<TextDailyLinkResult>;
   resolveUnknownCompany(input: ResolveUnknownCompanyInput): Promise<void>;
   reviewGlossaryTerm(input: ReviewGlossaryTermInput): Promise<void>;
   addGlossaryTerm(input: AddGlossaryTermInput): Promise<void>;
@@ -283,16 +379,42 @@ export interface DataSource {
   saveSiteRecipients(siteId: string, emails: string[]): Promise<void>;
   addInvoice(input: AddInvoiceInput): Promise<void>;
   setInvoiceStatus(invoiceId: string, status: InvoiceStatus): Promise<void>;
-  inviteReporter(input: InviteReporterInput): Promise<void>;
+  /**
+   * The reporter's status after the invite: `opted_out` when the number sent STOP before (no
+   * welcome text reaches it), else `invited` (or `active` for one already set up).
+   */
+  inviteReporter(input: InviteReporterInput): Promise<{ status: ReporterStatus }>;
   linkUnknownSender(input: LinkUnknownSenderInput): Promise<void>;
   ignoreUnknownSender(unknownSenderId: string): Promise<void>;
   /** Team row menu: Disable (→ `disabled`) or re-enable (→ `invited`). */
   setReporterStatus(reporterId: string, status: ReporterStatus): Promise<void>;
-  /** Team row menu: one re-send of `sitelog_welcome` (F3 edge case). */
+  /** Team row menu: one re-send of the welcome text (F3 edge case). */
   resendInvite(reporterId: string): Promise<void>;
   /** Team row menu → Edit: name, role, sites, languages in one audited change. */
   updateReporter(input: UpdateReporterInput): Promise<void>;
-  addOfficeUser(input: { email: string; role: MemberRole; name?: string }): Promise<void>;
+  /** Team → Edit (W4-03): preference, message channel, language (`update_reporter_contact()`). */
+  updateReporterContact(input: UpdateReporterContactInput): Promise<{ changed: boolean }>;
+  /** Team → Revoke devices (F16, §19 Q244): every device and push subscription revoked. */
+  revokeReporterDevices(reporterId: string): Promise<{ devices: number }>;
+  /**
+   * Team → Turn texts back on (§19 Q242): an admin, one-way packs only, a provider's opt-out,
+   * with the attestation (an `sms` consent `office_attested`).
+   */
+  clearReporterOptOut(reporterId: string, attested: boolean): Promise<void>;
+  /**
+   * Team → Call now (W4-04, F3, §19 Q230): admin and ops, where the org places calls; one call to
+   * the reporter about today's report at the site, with the office's attestation (an `auto_call`
+   * consent `office_attested`). A refusal throws a CodedError with its reason
+   * (`OFFICE_CALL_REFUSALS`).
+   */
+  officeCallNow(input: OfficeCallNowInput): Promise<{ callId: string }>;
+  addOfficeUser(input: {
+    email: string;
+    role: MemberRole;
+    name?: string;
+    /** F24: the panel language; null = the company's. */
+    uiLocale?: OrgLocale | null;
+  }): Promise<void>;
   changeMemberRole(userId: string, role: MemberRole): Promise<void>;
   removeMember(userId: string): Promise<void>;
   /**
@@ -300,6 +422,16 @@ export interface DataSource {
    * the no-org setup wizard (create_org), never through a source, which always has an org.
    */
   updateOrg(input: UpdateOrgInput): Promise<void>;
+  /** W4-05 (§19 Q232): admin; 5 an hour per org (a `CodedError` `rate_limited` after). */
+  sendTestMessage(input: SendTestMessageInput): Promise<SendTestMessageResult>;
+  /** W4-05 (§19 Q232, Q350): admin, where the org places calls; one at a time, 5 an hour. */
+  callMeNow(input: CallMeNowInput): Promise<CallMeNowResult>;
+  /**
+   * §19 Q340: the language the viewer chose on this device, written to their Auth user metadata
+   * (`ui_locale`, as `signInEmailData` writes it) so their next sign-in email follows it. Skipped
+   * when the metadata already says so (`updated: false`). Demo: nothing to write.
+   */
+  saveEmailLanguage(language: PanelLanguage): Promise<{ updated: boolean }>;
   createSite(input: CreateSiteInput): Promise<CreateSiteResult>;
   updateSite(siteId: string, patch: UpdateSitePatch): Promise<void>;
   /**
@@ -314,6 +446,26 @@ export interface DataSource {
   payrollCsvUrl(week: string, siteId?: string | null): Promise<string>;
   markNotificationsRead(ids: string[]): Promise<void>;
 
+  // ─── Demo phone (/dev/phone, §11.1): admins; the console texts and emails ───
+  /** The reporters and their newest text, the org's demo flag and its pack's two-way SMS. */
+  getDemoPhone(): Promise<DemoPhoneData>;
+  /** A reporter's thread, oldest first (SMS rows of the org). */
+  getDemoPhoneThread(reporterId: string): Promise<DemoPhoneMessage[]>;
+  /** What the console email provider would have sent for this org, newest first. */
+  getDemoPhoneEmails(): Promise<DemoPhoneEmail[]>;
+  /**
+   * Types a text as the reporter (demo orgs on two-way packs only): the same handler as an inbound
+   * SMS (sms-webhook `/demo-reply`), so STOP, START, HELP, CALL and TEXT act as on a phone.
+   */
+  sendDemoPhoneReply(
+    reporterId: string,
+    body: string,
+    /** W2-16: the Demo phone's WhatsApp thread (default the texts). */
+    channel?: 'sms' | 'whatsapp',
+  ): Promise<void>;
+  /** Live updates of the Demo phone's texts and emails (its own channel, not the org-wide one). */
+  subscribeDemoPhone(onChange: () => void): () => void;
+
   // ─── Platform ops (/ops, §15): SiteLog operators only, never an org role ───
   /** True when the signed-in user is in `platform_admins`; false (not an error) otherwise. */
   isPlatformAdmin(): Promise<boolean>;
@@ -323,6 +475,18 @@ export interface DataSource {
   retryDeadJob(jobId: number): Promise<void>;
   /** Dead job → discarded, kept for forensics (audited). */
   discardDeadJob(jobId: number): Promise<void>;
+  /** Org-less unknown contacts and the real orgs (spec §19 Q44; ops_* RPCs refuse non-operators). */
+  getOrglessContacts(): Promise<OrglessContacts>;
+  /** Gives an org-less contact to a real org, which then links or ignores it (audited). */
+  assignUnknownContact(contactId: string, orgId: string): Promise<void>;
+  /** Ignores an org-less contact (audited). */
+  ignoreOrglessContact(contactId: string): Promise<void>;
+  /** W4-10: every org's billing (`ops_org_billing()`). */
+  getOpsOrgBilling(): Promise<OpsOrgBilling[]>;
+  /** W4-10 (§19 Q234): sets or clears an org's price (`ops_set_org_price()`, audited). */
+  setOrgPrice(orgId: string, price: BillingPrice | null): Promise<void>;
+  /** W4-10 (§19 Q236): a manual org's billing status (`ops_set_org_billing_status()`, audited). */
+  setOrgBillingStatus(orgId: string, status: BillingStatus): Promise<void>;
 
   // ─── Realtime ───
   subscribe(onChange: (event: ChangeEvent) => void): () => void;

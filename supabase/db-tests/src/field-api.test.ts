@@ -1,0 +1,1440 @@
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { PGlite } from '@electric-sql/pglite';
+import { UPLOAD_MAX_BYTES, dayOffReportData, uploadStoragePath } from '@sitelog/shared';
+import { asService, bootDatabase, probeAs } from './harness.ts';
+
+/**
+ * 20261014000006_field_api.sql: the service-only RPCs behind field-api (W1-07).
+ *
+ * - field_complete_upload(): uploads/:id/complete numbers and inserts the site-day's report in one
+ *   transaction, attaches the upload and enqueues transcribe_upload; scoped to the reporter's
+ *   own uploads on their own sites.
+ * - field_set_day_status(): the F12 buttons (pending or reminded → no_work or weather_day).
+ * - field_rate_limit(): the rolling windows of rate_limits (spec §6.5, D26).
+ * - field_confirm_report(): reports/:id/confirm enqueues file_report for the confirmed version
+ *   under the site-day lock; field_complete_upload() then refuses audio and photos until filed.
+ * - The audio and photos buckets' type and size limits.
+ *
+ * PGlite is one session, so "concurrent" completes run one after the other here; the real race
+ * (two transactions at once) is supabase/db-tests/stack/field-api.test.ts.
+ */
+
+const ID = (n: number) => `eeeeeeee-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
+const ORG = ID(1);
+const SITE = ID(2);
+const SITE2 = ID(3);
+const MARCO = ID(4);
+const DANA = ID(5); // linked to SITE only
+const OUTSIDER = ID(6); // a reporter of another org
+const ORG_TR = ID(7);
+const SITE_TR = ID(8);
+const EMRE = ID(9);
+const OTHER_ORG = ID(10);
+const OTHER_SITE = ID(11);
+
+let db: PGlite;
+let uploadSeq = 100;
+
+async function svc<T = Record<string, unknown>>(sql: string, params: unknown[] = []) {
+  return (await asService(db, (q) => q<T>(sql, params))).rows;
+}
+
+/** An uploads row as field-api's `uploads` route writes it (path from uploadStoragePath()). */
+async function upload(input: {
+  reporter: string;
+  site: string;
+  org: string;
+  date: string;
+  kind?: 'audio' | 'photo';
+}): Promise<string> {
+  const id = ID(uploadSeq++);
+  const kind = input.kind ?? 'audio';
+  const path = uploadStoragePath(
+    input.org,
+    input.site,
+    input.date,
+    id,
+    kind === 'audio' ? 'webm' : 'jpg',
+  );
+  await svc(
+    `insert into uploads (id, reporter_id, site_id, kind, storage_path, mime, recorded_at)
+     values ($1, $2, $3, $4, $5, $6, '2026-10-09T22:30:00Z')`,
+    [id, input.reporter, input.site, kind, path, kind === 'audio' ? 'audio/webm' : 'image/jpeg'],
+  );
+  return id;
+}
+
+interface Completed {
+  reportId: string;
+  reportNo: string;
+  reportStatus: string;
+  created: boolean;
+  alreadyComplete: boolean;
+  jobId: number | null;
+}
+
+async function complete(uploadId: string, reporter: string, bytes: number | null = null) {
+  const rows = await svc<{ r: Completed }>(`select field_complete_upload($1, $2, $3) as r`, [
+    uploadId,
+    reporter,
+    bytes,
+  ]);
+  return rows[0]!.r;
+}
+
+/** The message of the exception a call raises (the code field-api maps), or null. */
+async function failure(sql: string, params: unknown[] = []): Promise<string | null> {
+  try {
+    await svc(sql, params);
+    return null;
+  } catch (err) {
+    return (err as Error).message;
+  }
+}
+
+const siteDay = async (site: string, date: string) =>
+  (
+    await svc<{ id: string; status: string; report_id: string | null }>(
+      `select id, status, report_id from site_days where site_id = $1 and date = $2`,
+      [site, date],
+    )
+  )[0];
+
+beforeAll(async () => {
+  db = await bootDatabase();
+  await db.exec(`
+    insert into orgs (id, name) values ('${ORG}', 'Field Test Build'), ('${OTHER_ORG}', 'Other Co');
+    insert into orgs (id, name, country, locale, units, currency, timezone)
+      values ('${ORG_TR}', 'Saha Test', 'TR', 'tr-TR', 'metric', 'TRY', 'Europe/Istanbul');
+    insert into sites (id, org_id, name, project_code, timezone, deadline) values
+      ('${SITE}', '${ORG}', 'Riverside', 'FT-1', 'America/Chicago', '17:30'),
+      ('${SITE2}', '${ORG}', 'Pier 9', 'FT-2', 'America/Chicago', null),
+      ('${OTHER_SITE}', '${OTHER_ORG}', 'Elsewhere', 'OT-1', 'America/Chicago', null),
+      ('${SITE_TR}', '${ORG_TR}', 'Ataşehir', 'TR-1', 'Europe/Istanbul', '18:00');
+    insert into reporters (id, org_id, name, phone_e164, status) values
+      ('${MARCO}', '${ORG}', 'Marco Ruiz', '+15550143378', 'active'),
+      ('${DANA}', '${ORG}', 'Dana Park', '+15550143379', 'active'),
+      ('${OUTSIDER}', '${OTHER_ORG}', 'Out Sider', '+15550143380', 'active'),
+      ('${EMRE}', '${ORG_TR}', 'Emre Yıldız', '+905321234567', 'active');
+    insert into site_reporters (site_id, reporter_id, is_primary) values
+      ('${SITE}', '${MARCO}', true), ('${SITE2}', '${MARCO}', true), ('${SITE}', '${DANA}', false),
+      ('${OTHER_SITE}', '${OUTSIDER}', true), ('${SITE_TR}', '${EMRE}', true);
+  `);
+});
+
+describe('field_complete_upload (uploads/:id/complete)', () => {
+  it('creates the site-day and the numbered report on the first voice note, and enqueues transcribe_upload', async () => {
+    const up = await upload({ reporter: MARCO, site: SITE, org: ORG, date: '2026-10-09' });
+    const res = await complete(up, MARCO, 2_400_000);
+    expect(res).toMatchObject({
+      reportNo: 'FT-1-0001',
+      reportStatus: 'processing',
+      created: true,
+      alreadyComplete: false,
+    });
+    expect(res.jobId).toEqual(expect.any(Number));
+
+    const [report] = await svc(
+      `select r.status, r.channel, r.language, r.kind, r.reporter_id, r.received_at is not null as received,
+              sd.date::text as date, sd.status as day_status, sd.deadline_at
+       from reports r join site_days sd on sd.id = r.site_day_id where r.id = $1`,
+      [res.reportId],
+    );
+    expect(report).toMatchObject({
+      status: 'processing',
+      channel: 'web',
+      language: 'en',
+      kind: 'daily',
+      reporter_id: MARCO,
+      received: true,
+      date: '2026-10-09',
+      day_status: 'processing',
+    });
+    // The site's deadline (17:30 Chicago, CDT) as create_office_report() computes it.
+    expect(new Date(report!.deadline_at as string).toISOString()).toBe('2026-10-09T22:30:00.000Z');
+
+    const [u] = await svc(`select report_id, bytes, received_at from uploads where id = $1`, [up]);
+    expect(u).toMatchObject({ report_id: res.reportId, bytes: 2_400_000 });
+    expect(
+      await svc(
+        `select kind, upload_id, taken_at is not null as taken from report_sources where report_id = $1`,
+        [res.reportId],
+      ),
+    ).toEqual([{ kind: 'voice_note', upload_id: up, taken: true }]);
+
+    const jobs = await svc(
+      `select id, type, payload, dedupe_key, status from jobs where type = 'transcribe_upload' and payload->>'uploadId' = $1`,
+      [up],
+    );
+    expect(jobs).toEqual([
+      {
+        id: res.jobId,
+        type: 'transcribe_upload',
+        payload: { uploadId: up },
+        dedupe_key: `transcribe_upload:${up}`,
+        status: 'queued',
+      },
+    ]);
+
+    const audit = await svc<{ action: string; actor_type: string; actor_id: string }>(
+      `select action, actor_type, actor_id from audit_log
+       where org_id = $1 and action in ('report.created', 'upload.completed', 'site_day.status_changed')
+       order by id`,
+      [ORG],
+    );
+    expect(audit).toEqual([
+      { action: 'report.created', actor_type: 'reporter', actor_id: MARCO },
+      { action: 'site_day.status_changed', actor_type: 'reporter', actor_id: MARCO },
+      { action: 'upload.completed', actor_type: 'reporter', actor_id: MARCO },
+    ]);
+  });
+
+  it('is idempotent: completing the same upload again returns the first result, with no new job', async () => {
+    const up = await upload({ reporter: MARCO, site: SITE2, org: ORG, date: '2026-10-09' });
+    const first = await complete(up, MARCO);
+    const again = await complete(up, MARCO);
+    expect(again).toMatchObject({
+      reportId: first.reportId,
+      reportNo: first.reportNo,
+      created: false,
+      alreadyComplete: true,
+      jobId: null,
+    });
+    const [{ n }] = (await svc<{ n: number }>(
+      `select count(*)::int as n from jobs where payload->>'uploadId' = $1`,
+      [up],
+    )) as [{ n: number }];
+    expect(n).toBe(1);
+  });
+
+  it('puts every upload of a site-day on one report: one number, one job per voice note', async () => {
+    const day = '2026-10-12';
+    const [{ seq: before }] = (await svc<{ seq: number }>(
+      `select report_seq as seq from sites where id = $1`,
+      [SITE],
+    )) as [{ seq: number }];
+    const a = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day });
+    const b = await upload({ reporter: DANA, site: SITE, org: ORG, date: day });
+    const c = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day, kind: 'photo' });
+    // Started together (PGlite runs them one after the other; the stack test races them).
+    const [ra, rb, rc] = await Promise.all([
+      complete(a, MARCO),
+      complete(b, DANA),
+      complete(c, MARCO),
+    ]);
+    expect(new Set([ra.reportId, rb.reportId, rc.reportId]).size).toBe(1);
+    expect([ra, rb, rc].filter((r) => r.created)).toHaveLength(1);
+    const [{ seq: after }] = (await svc<{ seq: number }>(
+      `select report_seq as seq from sites where id = $1`,
+      [SITE],
+    )) as [{ seq: number }];
+    expect(after).toBe(before + 1);
+    expect(rc.jobId).toBeNull(); // a photo is not transcribed
+    expect(
+      await svc(`select kind from report_sources where report_id = $1 order by kind`, [
+        ra.reportId,
+      ]),
+    ).toEqual([{ kind: 'photo' }, { kind: 'voice_note' }, { kind: 'voice_note' }]);
+    expect(
+      (
+        await svc(
+          `select count(*)::int as n from reports where site_day_id = (select id from site_days where site_id = $1 and date = $2)`,
+          [SITE, day],
+        )
+      )[0],
+    ).toEqual({ n: 1 });
+  });
+
+  it('numbers the reports of different site-days uniquely and in order', async () => {
+    const numbers: string[] = [];
+    for (const day of ['2026-10-13', '2026-10-14', '2026-10-15']) {
+      const up = await upload({ reporter: MARCO, site: SITE2, org: ORG, date: day });
+      numbers.push((await complete(up, MARCO)).reportNo);
+    }
+    expect(numbers).toEqual(['FT-2-0002', 'FT-2-0003', 'FT-2-0004']);
+  });
+
+  it('starts a photo-only report as collecting (no job, the day stays pending); a voice note then moves it to processing', async () => {
+    const day = '2026-10-16';
+    const photo = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day, kind: 'photo' });
+    const first = await complete(photo, MARCO);
+    expect(first).toMatchObject({ reportStatus: 'collecting', created: true, jobId: null });
+    expect((await siteDay(SITE, day))!.status).toBe('pending');
+
+    const voice = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day });
+    const second = await complete(voice, MARCO);
+    expect(second).toMatchObject({
+      reportId: first.reportId,
+      reportStatus: 'processing',
+      created: false,
+    });
+    expect(second.jobId).toEqual(expect.any(Number));
+    expect((await siteDay(SITE, day))!.status).toBe('processing');
+    expect(
+      await svc(
+        `select diff from audit_log where action = 'report.status_changed' and entity_id = $1`,
+        [first.reportId],
+      ),
+    ).toEqual([{ diff: { from: 'collecting', to: 'processing', upload_id: voice } }]);
+  });
+
+  it('puts a draft back to processing when more audio arrives (§7.2)', async () => {
+    const day = '2026-10-19';
+    const first = await complete(
+      await upload({ reporter: MARCO, site: SITE, org: ORG, date: day }),
+      MARCO,
+    );
+    await svc(`update reports set status = 'awaiting_confirmation' where id = $1`, [
+      first.reportId,
+    ]);
+    const more = await complete(
+      await upload({ reporter: MARCO, site: SITE, org: ORG, date: day }),
+      MARCO,
+    );
+    expect(more).toMatchObject({ reportId: first.reportId, reportStatus: 'processing' });
+  });
+
+  it('writes the org report language: tr for a tr-TR org', async () => {
+    const up = await upload({ reporter: EMRE, site: SITE_TR, org: ORG_TR, date: '2026-10-09' });
+    const res = await complete(up, EMRE);
+    expect(res.reportNo).toBe('TR-1-0001');
+    const [r] = await svc(`select language, channel from reports where id = $1`, [res.reportId]);
+    expect(r).toEqual({ language: 'tr', channel: 'web' });
+  });
+
+  it('refuses another reporter, an unlinked site and a path outside the site', async () => {
+    const mine = await upload({ reporter: MARCO, site: SITE2, org: ORG, date: '2026-10-20' });
+    // Dana is in the same org but did not upload it, and is not linked to Pier 9.
+    expect(await failure(`select field_complete_upload($1, $2)`, [mine, DANA])).toBe(
+      'upload_not_found',
+    );
+    expect(await failure(`select field_complete_upload($1, $2)`, [mine, OUTSIDER])).toBe(
+      'upload_not_found',
+    );
+    expect(await failure(`select field_complete_upload($1, $2)`, [ID(999), MARCO])).toBe(
+      'upload_not_found',
+    );
+
+    // An upload row on a site the reporter is no longer linked to.
+    const unlinked = await upload({ reporter: DANA, site: SITE2, org: ORG, date: '2026-10-20' });
+    expect(await failure(`select field_complete_upload($1, $2)`, [unlinked, DANA])).toBe(
+      'upload_not_found',
+    );
+
+    // A path that names another org's folder.
+    const id = ID(uploadSeq++);
+    await svc(
+      `insert into uploads (id, reporter_id, site_id, kind, storage_path) values ($1, $2, $3, 'audio', $4)`,
+      [id, MARCO, SITE, uploadStoragePath(OTHER_ORG, SITE, '2026-10-20', id, 'webm')],
+    );
+    expect(await failure(`select field_complete_upload($1, $2)`, [id, MARCO])).toBe(
+      'upload_path_mismatch',
+    );
+    // Nothing was created for any of them.
+    expect(await siteDay(SITE2, '2026-10-20')).toBeUndefined();
+  });
+
+  it('refuses a filed day (report_filed) and a closed one (day_closed)', async () => {
+    const filed = await complete(
+      await upload({ reporter: MARCO, site: SITE, org: ORG, date: '2026-10-21' }),
+      MARCO,
+    );
+    await svc(`update reports set status = 'filed', filed_at = now() where id = $1`, [
+      filed.reportId,
+    ]);
+    const late = await upload({ reporter: MARCO, site: SITE, org: ORG, date: '2026-10-21' });
+    expect(await failure(`select field_complete_upload($1, $2)`, [late, MARCO])).toBe(
+      'report_filed',
+    );
+    expect((await svc(`select report_id from uploads where id = $1`, [late]))[0]).toEqual({
+      report_id: null,
+    });
+
+    await svc(
+      `insert into site_days (site_id, date, status, deadline_at) values ($1, '2026-10-22', 'no_work', now())`,
+      [SITE],
+    );
+    const closed = await upload({ reporter: MARCO, site: SITE, org: ORG, date: '2026-10-22' });
+    expect(await failure(`select field_complete_upload($1, $2)`, [closed, MARCO])).toBe(
+      'day_closed',
+    );
+  });
+
+  it('refuses audio and photos while the report is being filed (report_filing), not after', async () => {
+    const day = '2026-10-26';
+    const first = await complete(
+      await upload({ reporter: MARCO, site: SITE, org: ORG, date: day }),
+      MARCO,
+    );
+    await svc(`update reports set status = 'awaiting_confirmation' where id = $1`, [
+      first.reportId,
+    ]);
+    await svc(
+      `insert into report_versions (report_id, version, data, author) values ($1, 1, '{"schemaVersion": 2}', 'agent')`,
+      [first.reportId],
+    );
+    await svc(`select field_confirm_report($1, $2, 1, 1)`, [first.reportId, MARCO]);
+    const voice = await upload({ reporter: DANA, site: SITE, org: ORG, date: day });
+    const photo = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day, kind: 'photo' });
+    expect(await failure(`select field_complete_upload($1, $2)`, [voice, DANA])).toBe(
+      'report_filing',
+    );
+    expect(await failure(`select field_complete_upload($1, $2)`, [photo, MARCO])).toBe(
+      'report_filing',
+    );
+    const [r] = await svc(`select status from reports where id = $1`, [first.reportId]);
+    expect(r).toEqual({ status: 'awaiting_confirmation' });
+    expect(
+      await svc(`select count(*)::int as n from uploads where report_id = $1`, [first.reportId]),
+    ).toEqual([{ n: 1 }]);
+    // The job ran and found nothing to file (a stale confirm): the draft takes audio again.
+    await svc(`update jobs set status = 'done' where dedupe_key = $1`, [
+      `file:${first.reportId}:v1:r1`,
+    ]);
+    expect(await complete(voice, DANA)).toMatchObject({
+      reportId: first.reportId,
+      reportStatus: 'processing',
+    });
+  });
+
+  it('counts a filing job queued before W1-10 (key file:<report>) as being filed', async () => {
+    const day = '2026-10-27';
+    const first = await complete(
+      await upload({ reporter: MARCO, site: SITE, org: ORG, date: day }),
+      MARCO,
+    );
+    await svc(
+      `select enqueue_job('file_report', jsonb_build_object('reportId', $1::text, 'trigger', 'timeout'), null, $2)`,
+      [first.reportId, `file:${first.reportId}`],
+    );
+    const voice = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day });
+    expect(await failure(`select field_complete_upload($1, $2)`, [voice, MARCO])).toBe(
+      'report_filing',
+    );
+    await svc(`delete from jobs where dedupe_key = $1`, [`file:${first.reportId}`]);
+  });
+
+  it('moves a missing day to processing on a late voice note', async () => {
+    await svc(
+      `insert into site_days (site_id, date, status, deadline_at) values ($1, '2026-10-23', 'missing', now() - interval '3 hours')`,
+      [SITE],
+    );
+    await complete(
+      await upload({ reporter: MARCO, site: SITE, org: ORG, date: '2026-10-23' }),
+      MARCO,
+    );
+    expect((await siteDay(SITE, '2026-10-23'))!.status).toBe('processing');
+  });
+});
+
+describe('field_flag_late_upload (spec §19 Q53: a late clip)', () => {
+  const flag = async (uploadId: string, reporter: string) =>
+    (
+      await svc<{ r: { flagged: boolean; notified?: boolean; reportId: string } }>(
+        `select field_flag_late_upload($1, $2) as r`,
+        [uploadId, reporter],
+      )
+    )[0]!.r;
+
+  it('marks the report and the day late, audits each upload once, and notifies the office once per report', async () => {
+    const day = '2026-10-26';
+    const first = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day });
+    const done = await complete(first, MARCO);
+    expect(await flag(first, MARCO)).toMatchObject({
+      flagged: true,
+      notified: true,
+      reportId: done.reportId,
+    });
+    expect(await flag(first, MARCO)).toMatchObject({ flagged: false });
+    const second = await upload({ reporter: MARCO, site: SITE, org: ORG, date: day });
+    await complete(second, MARCO);
+    expect(await flag(second, MARCO)).toMatchObject({ flagged: true, notified: false });
+
+    const [report] = await svc<{ is_late: boolean }>(`select is_late from reports where id = $1`, [
+      done.reportId,
+    ]);
+    expect(report!.is_late).toBe(true);
+    const [sd] = await svc<{ is_late: boolean }>(
+      `select is_late from site_days where site_id = $1 and date = $2`,
+      [SITE, day],
+    );
+    expect(sd!.is_late).toBe(true);
+    const audits = await svc<{
+      entity_id: string;
+      actor_type: string;
+      diff: { notified: boolean };
+    }>(
+      `select entity_id, actor_type, diff from audit_log where action = 'upload.accepted_late'
+       and diff ->> 'report_id' = $1 order by created_at, entity_id`,
+      [done.reportId],
+    );
+    expect(audits.map((a) => [a.entity_id, a.actor_type, a.diff.notified])).toEqual(
+      expect.arrayContaining([
+        [first, 'reporter', true],
+        [second, 'reporter', false],
+      ]),
+    );
+    expect(audits).toHaveLength(2);
+    const notices = await svc<{ kind: string; title: string; body: string; target_path: string }>(
+      `select kind, title, body, target_path from notifications where kind = 'late_upload'
+       and target_path = $1`,
+      [`/reports/${done.reportId}`],
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.title).toBe('Riverside — late voice note for Mon Oct 26');
+    expect(notices[0]!.body).toContain('Marco Ruiz recorded it on that day');
+    expect(notices[0]!.body).toContain(`report ${done.reportNo}, marked late`);
+    // 20261015000080: what the panel renders in the reader's language.
+    const [late] = await svc<{ data: unknown }>(
+      `select data from notifications where kind = 'late_upload' and target_path = $1`,
+      [`/reports/${done.reportId}`],
+    );
+    expect(late!.data).toEqual({
+      key: 'late_upload',
+      params: {
+        site: 'Riverside',
+        media: 'audio',
+        date: '2026-10-26',
+        reporter: 'Marco Ruiz',
+        reportNo: done.reportNo,
+      },
+    });
+  });
+
+  it('refuses an upload that is not completed, or another reporter’s', async () => {
+    const pending = await upload({ reporter: MARCO, site: SITE, org: ORG, date: '2026-10-27' });
+    expect(await failure(`select field_flag_late_upload($1, $2)`, [pending, MARCO])).toBe(
+      'upload_not_found',
+    );
+    await complete(pending, MARCO);
+    expect(await failure(`select field_flag_late_upload($1, $2)`, [pending, DANA])).toBe(
+      'upload_not_found',
+    );
+  });
+});
+
+describe('field_set_day_status (day-status, F12 buttons)', () => {
+  const call = (reporter: string, site: string, date: string, status: string, details = {}) =>
+    svc<{ r: { siteDayId: string; status: string; changed: boolean } }>(
+      `select field_set_day_status($1, $2, $3, $4, $5) as r`,
+      [reporter, site, date, status, JSON.stringify(details)],
+    ).then((rows) => rows[0]!.r);
+
+  it('creates the site-day when missing and sets no_work, audited with the details', async () => {
+    const res = await call(MARCO, SITE2, '2026-11-02', 'no_work', { note: 'holiday' });
+    expect(res).toMatchObject({ status: 'no_work', changed: true });
+    expect((await siteDay(SITE2, '2026-11-02'))!.status).toBe('no_work');
+    const [a] = await svc(
+      `select actor_type, actor_id, diff from audit_log where action = 'site_day.no_work' and entity_id = $1`,
+      [res.siteDayId],
+    );
+    expect(a).toEqual({
+      actor_type: 'reporter',
+      actor_id: MARCO,
+      diff: {
+        from: 'pending',
+        to: 'no_work',
+        date: '2026-11-02',
+        channel: 'web',
+        details: { note: 'holiday' },
+      },
+    });
+    // Again: no change, no second audit row.
+    expect(await call(MARCO, SITE2, '2026-11-02', 'no_work')).toMatchObject({ changed: false });
+    expect(
+      (
+        await svc(
+          `select count(*)::int as n from audit_log where action = 'site_day.no_work' and entity_id = $1`,
+          [res.siteDayId],
+        )
+      )[0],
+    ).toEqual({ n: 1 });
+  });
+
+  it('sets a reminded day to weather_day', async () => {
+    await svc(
+      `insert into site_days (site_id, date, status, deadline_at, reminder_stage) values ($1, '2026-11-03', 'reminded', now(), 2)`,
+      [SITE2],
+    );
+    expect(await call(MARCO, SITE2, '2026-11-03', 'weather_day')).toMatchObject({
+      status: 'weather_day',
+      changed: true,
+    });
+  });
+
+  it('refuses a day with a live report, a filed day, other states, other statuses and other sites', async () => {
+    const live = await complete(
+      await upload({ reporter: MARCO, site: SITE2, org: ORG, date: '2026-11-04' }),
+      MARCO,
+    );
+    const fail = (reporter: string, site: string, date: string, status: string) =>
+      failure(`select field_set_day_status($1, $2, $3, $4)`, [reporter, site, date, status]);
+    expect(await fail(MARCO, SITE2, '2026-11-04', 'no_work')).toBe('report_in_progress');
+    await svc(`update reports set status = 'filed' where id = $1`, [live.reportId]);
+    expect(await fail(MARCO, SITE2, '2026-11-04', 'weather_day')).toBe('report_filed');
+    await svc(
+      `insert into site_days (site_id, date, status, deadline_at) values ($1, '2026-11-05', 'missing', now())`,
+      [SITE2],
+    );
+    expect(await fail(MARCO, SITE2, '2026-11-05', 'no_work')).toBe('wrong_state');
+    expect(await fail(MARCO, SITE2, '2026-11-06', 'filed')).toBe('invalid_status');
+    expect(await fail(DANA, SITE2, '2026-11-06', 'no_work')).toBe('site_not_found');
+    expect(await fail(OUTSIDER, SITE, '2026-11-06', 'no_work')).toBe('site_not_found');
+    expect(await siteDay(SITE2, '2026-11-06')).toBeUndefined();
+  });
+});
+
+describe('field_report_day_off (day-status as a report, W2-08, spec §19 Q41)', () => {
+  type DayOff = {
+    siteDayId: string;
+    status: string;
+    changed: boolean;
+    report: { id: string; reportNo: string } | null;
+  };
+  const QS = ID(700);
+  const QW = ID(701);
+  const questions = (since: string, workers?: number) => [
+    {
+      id: QS,
+      field: 'weather.impact',
+      prompt: 'Since when?',
+      target: { path: 'weather.periods[0]' },
+      answer: { text: since, parsed: { since }, via: 'web' },
+    },
+    ...(workers === undefined
+      ? []
+      : [
+          {
+            id: QW,
+            field: 'manpower.workers',
+            prompt: 'How many were on site before?',
+            target: { path: 'manpower.workers:Site crew' },
+            answer: { text: String(workers), parsed: { workers }, via: 'web' },
+          },
+        ]),
+  ];
+  const weatherData = dayOffReportData({
+    kind: 'weather_day',
+    date: '2026-12-14',
+    siteName: 'Pier 9',
+    org: { reportLanguage: 'en', units: 'imperial' },
+    details: { since: '09:00', workersBefore: 12 },
+    questionIds: { since: QS, workersBefore: QW },
+    workingHours: '07:00–15:30',
+    defaultShiftHours: 8,
+  });
+  const dayOff = (
+    date: string,
+    status: string,
+    qs: unknown[] = [],
+    data: unknown = weatherData,
+    reporter = MARCO,
+  ) =>
+    svc<{ r: DayOff }>(`select field_report_day_off($1, $2, $3, $4, $5, $6, $7) as r`, [
+      reporter,
+      SITE2,
+      date,
+      status,
+      JSON.stringify({ since: '09:00', workersBefore: 12 }),
+      JSON.stringify(qs),
+      JSON.stringify(data),
+    ]).then((rows) => rows[0]!.r);
+
+  it('Weather from 09:00 with 12 on site: a numbered web report, answered questions, version 1, its filing', async () => {
+    const res = await dayOff('2026-12-14', 'weather_day', questions('09:00', 12));
+    expect(res).toMatchObject({ status: 'weather_day', changed: true });
+    expect(res.report!.reportNo).toMatch(/^FT-2-\d{4}$/);
+    const day = await siteDay(SITE2, '2026-12-14');
+    expect(day).toMatchObject({ status: 'weather_day', report_id: res.report!.id });
+    const [r] = await svc(
+      `select status::text, kind, channel::text, language::text, reporter_id, current_version
+       from reports where id = $1`,
+      [res.report!.id],
+    );
+    expect(r).toEqual({
+      status: 'processing',
+      kind: 'weather_day',
+      channel: 'web',
+      language: 'en',
+      reporter_id: MARCO,
+      current_version: 1,
+    });
+    const qs = await svc(
+      `select id, field, channel::text, answered_at is not null as answered, answer_source
+       from questions where report_id = $1 order by field`,
+      [res.report!.id],
+    );
+    expect(qs).toEqual([
+      {
+        id: QW,
+        field: 'manpower.workers',
+        channel: 'web',
+        answered: true,
+        answer_source: { type: 'answer', questionId: QW },
+      },
+      {
+        id: QS,
+        field: 'weather.impact',
+        channel: 'web',
+        answered: true,
+        answer_source: { type: 'answer', questionId: QS },
+      },
+    ]);
+    const [job] = await svc(
+      `select payload, dedupe_key from jobs where type = 'file_report' and payload ->> 'reportId' = $1`,
+      [res.report!.id],
+    );
+    expect(job).toEqual({
+      payload: { reportId: res.report!.id, trigger: 'weather_day' },
+      dedupe_key: `file:${res.report!.id}:v1:weather_day`,
+    });
+    // Denormalised as the filing does: the lost hours code computed, sources the two answers.
+    await svc(`select denormalize_report_version($1, 1)`, [res.report!.id]);
+    const [ev] = await svc(
+      `select lost_hours::float as lost, full_day, start_local::text as start from weather_events where report_id = $1`,
+      [res.report!.id],
+    );
+    expect(ev).toEqual({ lost: 6.5, full_day: false, start: '09:00:00' });
+    const [crew] = await svc(
+      `select workers, hours::float as hours from manpower_entries where report_id = $1`,
+      [res.report!.id],
+    );
+    expect(crew).toEqual({ workers: 12, hours: 24 });
+    const sources = await svc(
+      `select kind::text, question_id from report_sources where report_id = $1 order by question_id`,
+      [res.report!.id],
+    );
+    expect(sources).toEqual([
+      { kind: 'answer', question_id: QS },
+      { kind: 'answer', question_id: QW },
+    ]);
+    const audits = await svc<{ action: string }>(
+      `select action from audit_log where entity_id in ($1, $2) order by id`,
+      [res.report!.id, res.siteDayId],
+    );
+    expect(audits.map((a) => a.action)).toEqual(['report.created', 'site_day.weather_day']);
+    // A retried tap answers the same report.
+    expect(await dayOff('2026-12-14', 'weather_day', questions('09:00', 12))).toEqual({
+      ...res,
+      changed: false,
+    });
+  });
+
+  it('No work: the site-day only, or a report when the org keeps a no-work PDF', async () => {
+    const empty = { schemaVersion: 2, summary: 'No work at Pier 9 today.' };
+    const plain = await dayOff('2026-12-15', 'no_work', [], empty);
+    expect(plain).toMatchObject({ status: 'no_work', changed: true, report: null });
+    expect(await siteDay(SITE2, '2026-12-15')).toMatchObject({
+      status: 'no_work',
+      report_id: null,
+    });
+    await svc(`update org_settings set no_work_pdf = true where org_id = $1`, [ORG]);
+    try {
+      const pdf = await dayOff('2026-12-16', 'no_work', [], empty);
+      expect(pdf.report).not.toBeNull();
+      const [r] = await svc(`select kind, status::text from reports where id = $1`, [
+        pdf.report!.id,
+      ]);
+      expect(r).toEqual({ kind: 'no_work', status: 'processing' });
+      expect(
+        await svc(`select 1 from jobs where dedupe_key = $1`, [
+          `file:${pdf.report!.id}:v1:no_work`,
+        ]),
+      ).toHaveLength(1);
+    } finally {
+      await svc(`update org_settings set no_work_pdf = false where org_id = $1`, [ORG]);
+    }
+  });
+
+  it('refuses a live report (Q79), a filed day, bad data and other sites', async () => {
+    await complete(
+      await upload({ reporter: MARCO, site: SITE2, org: ORG, date: '2026-12-17' }),
+      MARCO,
+    );
+    const fail = (
+      date: string,
+      data: unknown = weatherData,
+      qs: unknown[] = questions('09:00'),
+      reporter = MARCO,
+    ) =>
+      failure(`select field_report_day_off($1, $2, $3, 'weather_day', '{}', $4, $5)`, [
+        reporter,
+        SITE2,
+        date,
+        JSON.stringify(qs),
+        JSON.stringify(data),
+      ]);
+    expect(await fail('2026-12-17')).toBe('report_in_progress');
+    expect(await fail('2026-12-14', weatherData)).toBe(null); // already a weather day: unchanged
+    expect(await fail('2026-12-18', { schemaVersion: 1 })).toBe('invalid_day_off_data');
+    expect(
+      await fail('2026-12-18', weatherData, [{ ...questions('09:00')[0], field: 'safety' }]),
+    ).toBe('invalid_day_off_data');
+    expect(await fail('2026-12-18', weatherData, questions('09:00'), DANA)).toBe('site_not_found');
+    expect(await siteDay(SITE2, '2026-12-18')).toBeUndefined();
+  });
+});
+
+describe('field_confirm_report (reports/:id/confirm, F8)', () => {
+  type Confirmed = { status: 'queued' | 'filed'; jobId: number | null; version: number };
+  const confirm = (report: string, reporter: string, version: number | null, draftRev = 1) =>
+    svc<{ r: Confirmed }>(`select field_confirm_report($1, $2, $3, $4) as r`, [
+      report,
+      reporter,
+      version,
+      draftRev,
+    ]).then((rows) => rows[0]!.r);
+  const draftRev = (report: string, version = 1) =>
+    svc<{ draft_rev: number }>(
+      `select draft_rev from report_versions where report_id = $1 and version = $2`,
+      [report, version],
+    ).then((rows) => rows[0]?.draft_rev);
+  const draft = async (date: string, site = SITE2) => {
+    const res = await complete(await upload({ reporter: MARCO, site, org: ORG, date }), MARCO);
+    await svc(`update reports set status = 'awaiting_confirmation' where id = $1`, [res.reportId]);
+    // The draft the worker wrote (the reporter confirms what the Draft screen showed).
+    await svc(
+      `insert into report_versions (report_id, version, data, author) values ($1, 1, '{"schemaVersion": 2}', 'agent')`,
+      [res.reportId],
+    );
+    return res.reportId;
+  };
+
+  it('enqueues file_report for the confirmed version, audited as the reporter; a second tap reuses it', async () => {
+    const report = await draft('2026-11-09');
+    const first = await confirm(report, MARCO, 1);
+    expect(first).toMatchObject({ status: 'queued', version: 1 });
+    const jobs = await svc(
+      `select id, payload, dedupe_key, status from jobs where type = 'file_report' and payload->>'reportId' = $1`,
+      [report],
+    );
+    expect(jobs).toEqual([
+      {
+        id: first.jobId,
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 1, via: 'web' },
+        dedupe_key: `file:${report}:v1:r1`,
+        status: 'queued',
+      },
+    ]);
+    expect(await confirm(report, MARCO, 1)).toEqual(first);
+    expect(
+      await svc(
+        `select actor_type, actor_id, diff from audit_log where action = 'report.confirm_requested' and entity_id = $1`,
+        [report],
+      ),
+    ).toEqual([
+      {
+        actor_type: 'reporter',
+        actor_id: MARCO,
+        diff: { job_id: first.jobId, version: 1, draft_rev: 1, channel: 'web' },
+      },
+    ]);
+  });
+
+  it('reuses a filing job the WhatsApp confirm or a timeout already queued', async () => {
+    const report = await draft('2026-11-10');
+    const [{ id }] = (await svc<{ id: number }>(
+      `select enqueue_job('file_report', jsonb_build_object('reportId', $1::text, 'trigger', 'timeout'), null, $2) as id`,
+      [report, `file:${report}:v1`],
+    )) as [{ id: number }];
+    expect(await confirm(report, MARCO, 1)).toEqual({ status: 'queued', jobId: id, version: 1 });
+    // One queued before W1-10 under the old key counts too.
+    await svc(`delete from jobs where id = $1`, [id]);
+    const [{ id: old }] = (await svc<{ id: number }>(
+      `select enqueue_job('file_report', jsonb_build_object('reportId', $1::text, 'trigger', 'timeout'), null, $2) as id`,
+      [report, `file:${report}`],
+    )) as [{ id: number }];
+    expect(await confirm(report, MARCO, 1)).toEqual({ status: 'queued', jobId: old, version: 1 });
+  });
+
+  it('files each draft version once (D16): a later draft gets its own job, a dead one runs again', async () => {
+    const report = await draft('2026-11-12');
+    const v1 = await confirm(report, MARCO, 1);
+    // The job ran but filed nothing (the draft moved on meanwhile), and version 2 is confirmed.
+    await svc(`update jobs set status = 'done' where id = $1`, [v1.jobId]);
+    await svc(
+      `insert into report_versions (report_id, version, data, author)
+       select report_id, 2, data, author from report_versions where report_id = $1 and version = 1`,
+      [report],
+    );
+    await svc(`update reports set current_version = 2 where id = $1`, [report]);
+    const v2 = await confirm(report, MARCO, 2);
+    expect(v2.jobId).not.toBe(v1.jobId);
+    expect(
+      await svc(`select dedupe_key, status::text from jobs where id = $1`, [v2.jobId]),
+    ).toEqual([{ dedupe_key: `file:${report}:v2:r1`, status: 'queued' }]);
+    // Version 2's job dies after six attempts; the reporter taps Confirm again: the same job runs.
+    await svc(`update jobs set status = 'dead', attempts = 6, finished_at = now() where id = $1`, [
+      v2.jobId,
+    ]);
+    expect(await confirm(report, MARCO, 2)).toEqual({
+      status: 'queued',
+      jobId: v2.jobId,
+      version: 2,
+    });
+    expect(
+      await svc(`select status::text, attempts, finished_at from jobs where id = $1`, [v2.jobId]),
+    ).toEqual([{ status: 'queued', attempts: 0, finished_at: null }]);
+    const audits = await svc<{ diff: Record<string, unknown> }>(
+      `select diff from audit_log where action = 'report.confirm_requested' and entity_id = $1 order by created_at, id`,
+      [report],
+    );
+    expect(audits.map((a) => a.diff.requeued ?? false)).toEqual([false, false, true]);
+  });
+
+  it('files a later confirm of the same version after a filing that finished without filing (D16 occurrence key)', async () => {
+    const report = await draft('2026-11-13');
+    const first = await confirm(report, MARCO, 1);
+    // The filing completed stale (`report.confirm_stale`: a WhatsApp voice note moved the report
+    // to processing meanwhile); the new draft overwrote v1 in place, so it is v1 again.
+    await svc(`update jobs set status = 'done', finished_at = now() where id = $1`, [first.jobId]);
+    const second = await confirm(report, MARCO, 1);
+    expect(second).toMatchObject({ status: 'queued', version: 1 });
+    expect(second.jobId).not.toBe(first.jobId);
+    // ops discards that one (`failed`): the next confirm is another occurrence again.
+    await svc(`update jobs set status = 'failed', finished_at = now() where id = $1`, [
+      second.jobId,
+    ]);
+    const third = await confirm(report, MARCO, 1);
+    expect([third.jobId === first.jobId, third.jobId === second.jobId]).toEqual([false, false]);
+    expect(
+      await svc(
+        `select dedupe_key, status::text, payload from jobs
+         where type = 'file_report' and payload->>'reportId' = $1 order by id`,
+        [report],
+      ),
+    ).toEqual([
+      {
+        dedupe_key: `file:${report}:v1:r1`,
+        status: 'done',
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 1, via: 'web' },
+      },
+      {
+        dedupe_key: `file:${report}:v1:r1:c2`,
+        status: 'failed',
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 1, via: 'web' },
+      },
+      {
+        dedupe_key: `file:${report}:v1:r1:c3`,
+        status: 'queued',
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 1, via: 'web' },
+      },
+    ]);
+    // A third tap while it is queued reuses it.
+    expect(await confirm(report, MARCO, 1)).toEqual(third);
+    // A taken occurrence key (a WhatsApp or timeout job, or an audit row purged) moves on.
+    await svc(`update jobs set status = 'done', finished_at = now() where id = $1`, [third.jobId]);
+    await svc(
+      `select enqueue_job('file_report', jsonb_build_object('reportId', $1::text), null, $2)`,
+      [report, `file:${report}:v1:r1:c4`],
+    );
+    await svc(`update jobs set status = 'done' where dedupe_key = $1`, [`file:${report}:v1:r1:c4`]);
+    const fourth = await confirm(report, MARCO, 1);
+    expect(
+      await svc(`select dedupe_key, status::text from jobs where id = $1`, [fourth.jobId]),
+    ).toEqual([{ dedupe_key: `file:${report}:v1:r1:c5`, status: 'queued' }]);
+  });
+
+  it('bumps the draft revision on every change of the draft data, and only then', async () => {
+    const report = await draft('2026-11-16');
+    expect(await draftRev(report)).toBe(1);
+    // A re-extraction overwrites the draft in place (the worker's upsert): a new revision.
+    await svc(
+      `update report_versions set data = data || '{"summary": "Late photo"}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report)).toBe(2);
+    // The same data again, a PDF path, or a caller naming a revision: no change.
+    await svc(`update report_versions set data = data where report_id = $1 and version = 1`, [
+      report,
+    ]);
+    await svc(
+      `update report_versions set pdf_path = 'x.pdf', draft_rev = 9 where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report)).toBe(2);
+    // A new version starts at 1, whatever the insert says.
+    await svc(
+      `insert into report_versions (report_id, version, data, author, draft_rev)
+       select report_id, 2, data, author, 7 from report_versions where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report, 2)).toBe(1);
+  });
+
+  it('keeps the revision when a version that is no longer a draft is written (20261015000090)', async () => {
+    const report = await draft('2026-11-19');
+    // Filing sets the report filed, then freezes the version in the same transaction: a field
+    // poll reading the report and then its version never sees the frozen data as a newer draft.
+    await svc(`update reports set status = 'filed', filed_at = now() where id = $1`, [report]);
+    await svc(
+      `update report_versions set data = data || '{"missingRequired": []}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report)).toBe(1);
+    for (const status of ['signed_off', 'void'])
+      await svc(`update reports set status = $2::report_status where id = $1`, [
+        report,
+        status,
+      ]).then(() =>
+        svc(
+          `update report_versions set data = data || jsonb_build_object('n', $2::text) where report_id = $1 and version = 1`,
+          [report, status],
+        ),
+      );
+    expect(await draftRev(report)).toBe(1);
+    // A draft again (only a test does that): its data changes count.
+    await svc(`update reports set status = 'awaiting_confirmation' where id = $1`, [report]);
+    await svc(
+      `update report_versions set data = data || '{"summary": "x"}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await draftRev(report)).toBe(2);
+  });
+
+  it('refuses a confirm of a draft that was re-extracted in place (draft_changed), and files the new one', async () => {
+    const report = await draft('2026-11-17');
+    const seen = await draftRev(report);
+    await svc(
+      `update report_versions set data = data || '{"summary": "Late photo"}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    expect(await failure(`select field_confirm_report($1, $2, 1, $3)`, [report, MARCO, seen])).toBe(
+      'draft_changed',
+    );
+    const now = await confirm(report, MARCO, 1, 2);
+    expect(await svc(`select dedupe_key, payload from jobs where id = $1`, [now.jobId])).toEqual([
+      {
+        dedupe_key: `file:${report}:v1:r2`,
+        payload: { reportId: report, trigger: 'confirm', version: 1, draftRev: 2, via: 'web' },
+      },
+    ]);
+  });
+
+  it('does not reuse a queued web confirm of an older revision: that one goes stale, this one files', async () => {
+    const report = await draft('2026-11-18');
+    const first = await confirm(report, MARCO, 1, 1);
+    // The draft changes while that filing waits (an extraction queued before the confirm).
+    await svc(
+      `update report_versions set data = data || '{"summary": "Late photo"}'::jsonb where report_id = $1 and version = 1`,
+      [report],
+    );
+    const second = await confirm(report, MARCO, 1, 2);
+    expect(second.jobId).not.toBe(first.jobId);
+    expect(
+      await svc(
+        `select dedupe_key, status::text from jobs where type = 'file_report' and payload->>'reportId' = $1 order by id`,
+        [report],
+      ),
+    ).toEqual([
+      { dedupe_key: `file:${report}:v1:r1`, status: 'queued' },
+      { dedupe_key: `file:${report}:v1:r2`, status: 'queued' },
+    ]);
+    // A second tap on the new draft reuses its own job.
+    expect(await confirm(report, MARCO, 1, 2)).toEqual(second);
+  });
+
+  it('refuses another state, a newer draft, another reporter and a void report; answers filed once filed', async () => {
+    const report = await draft('2026-11-11');
+    const fail = (reporter: string, version: number | null, id = report, rev: number | null = 1) =>
+      failure(`select field_confirm_report($1, $2, $3, $4)`, [id, reporter, version, rev]);
+    expect(await fail(MARCO, 2)).toBe('draft_changed');
+    expect(await fail(MARCO, null)).toBe('draft_changed');
+    expect(await fail(MARCO, 1, report, 2)).toBe('draft_changed');
+    expect(await fail(MARCO, 1, report, null)).toBe('draft_changed');
+    expect(await fail(DANA, 1)).toBe('report_not_found'); // not linked to Pier 9
+    expect(await fail(OUTSIDER, 1)).toBe('report_not_found');
+    expect(await fail(MARCO, 1, ID(998))).toBe('report_not_found');
+    await svc(`update reports set status = 'processing' where id = $1`, [report]);
+    expect(await fail(MARCO, 1)).toBe('wrong_state');
+    expect(
+      await svc(
+        `select count(*)::int as n from jobs where type = 'file_report' and payload->>'reportId' = $1`,
+        [report],
+      ),
+    ).toEqual([{ n: 0 }]);
+    await svc(`update reports set status = 'filed', filed_at = now() where id = $1`, [report]);
+    expect(await confirm(report, MARCO, 1)).toEqual({ status: 'filed', jobId: null, version: 1 });
+    await svc(`update reports set status = 'void' where id = $1`, [report]);
+    expect(await fail(MARCO, 1)).toBe('report_not_found');
+  });
+});
+
+describe('field_rate_limit (rate_limits, spec §6.5, D26)', () => {
+  const hit = (key: string, limit: number, seconds: number) =>
+    svc<{ r: { allowed: boolean; count: number; resetAt: string } }>(
+      `select field_rate_limit($1, $2, $3) as r`,
+      [key, limit, seconds],
+    ).then((rows) => rows[0]!.r);
+
+  it('allows `limit` hits in the window and refuses the next ones until it ends', async () => {
+    const results = [];
+    for (let i = 0; i < 7; i++) results.push(await hit('code:+15550143378', 5, 3600));
+    expect(results.map((r) => r.allowed)).toEqual([true, true, true, true, true, false, false]);
+    expect(results.map((r) => r.count)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    const [{ start }] = (await svc<{ start: string }>(
+      `select window_start as start from rate_limits where key = 'code:+15550143378'`,
+    )) as [{ start: string }];
+    expect(new Date(results[6]!.resetAt).getTime() - new Date(start).getTime()).toBe(3_600_000);
+  });
+
+  it('keeps keys apart', async () => {
+    expect(await hit('dev:a', 1, 60)).toMatchObject({ allowed: true, count: 1 });
+    expect(await hit('dev:b', 1, 60)).toMatchObject({ allowed: true, count: 1 });
+    expect(await hit('dev:a', 1, 60)).toMatchObject({ allowed: false, count: 2 });
+  });
+
+  it('opens a new window once the old one has ended, and drops the ended one', async () => {
+    await svc(
+      `insert into rate_limits (key, window_start, count) values ('code_send:+15550143379', now() - interval '61 minutes', 9)`,
+    );
+    expect(await hit('code_send:+15550143379', 5, 3600)).toMatchObject({ allowed: true, count: 1 });
+    expect(await svc(`select count from rate_limits where key = 'code_send:+15550143379'`)).toEqual(
+      [{ count: 1 }],
+    );
+  });
+
+  it('refuses a bad limit', async () => {
+    expect(await failure(`select field_rate_limit('x', 0, 60)`)).toBe('invalid rate limit');
+  });
+});
+
+describe('field_claim_send / field_release_send (W2-03: one sender of a Notifier key)', () => {
+  const claim = (key: string, ttl = 30) =>
+    svc<{ v: boolean }>(`select field_claim_send($1, $2) as v`, [key, ttl]).then((r) => r[0]!.v);
+  const release = (key: string) => svc(`select field_release_send($1)`, [key]);
+
+  it('one holder at a time; released, the next caller claims it', async () => {
+    expect(await claim('expired_daily_link:l1:2026-10-09')).toBe(true);
+    expect(await claim('expired_daily_link:l1:2026-10-09')).toBe(false);
+    expect(await claim('expired_daily_link:l2:2026-10-09')).toBe(true);
+    await release('expired_daily_link:l1:2026-10-09');
+    expect(await claim('expired_daily_link:l1:2026-10-09')).toBe(true);
+  });
+
+  it('takes over a claim older than its ttl (a crashed request)', async () => {
+    await svc(
+      `insert into rate_limits (key, window_start, count)
+       values ('send_claim:stale-key', now() - interval '31 seconds', 1)`,
+    );
+    expect(await claim('stale-key')).toBe(true);
+    expect(await claim('stale-key')).toBe(false);
+  });
+
+  it('refuses a bad ttl', async () => {
+    expect(await failure(`select field_claim_send('x', 0)`)).toBe('invalid send claim');
+  });
+});
+
+describe('field_revoke_consent (F15 Settings: Turn off; W2-02)', () => {
+  const revoke = async (reporter: string, type: string, device: string | null = ID(900)) =>
+    (
+      await svc<{ r: { revoked: boolean; notified: boolean } }>(
+        `select field_revoke_consent($1, $2::consent_type, $3) as r`,
+        [reporter, type, device],
+      )
+    )[0]!.r;
+
+  beforeAll(async () => {
+    await svc(
+      `insert into consents (reporter_id, type, method, text_version) values
+         ($1, 'sms', 'web_checkbox', 'field.consent.v1'),
+         ($1, 'recording', 'web_checkbox', 'field.consent.v1'),
+         ($1, 'data_processing', 'web_checkbox', 'field.consent.v1'),
+         ($2, 'sms', 'web_checkbox', 'field.consent.v1')`,
+      [DANA, EMRE],
+    );
+  });
+
+  it('revokes the type, audits it as the reporter, and tells nobody for texts', async () => {
+    expect(await revoke(DANA, 'sms')).toEqual({ revoked: true, notified: false });
+    const rows = await svc<{ type: string; revoked: boolean }>(
+      `select type, revoked_at is not null as revoked from consents where reporter_id = $1 order by type`,
+      [DANA],
+    );
+    expect(rows).toEqual([
+      { type: 'sms', revoked: true },
+      { type: 'recording', revoked: false },
+      { type: 'data_processing', revoked: false },
+    ]);
+    const [audit] = await svc<{
+      actor_type: string;
+      actor_id: string;
+      diff: Record<string, unknown>;
+    }>(
+      `select actor_type, actor_id, diff from audit_log where action = 'consent.revoked' and actor_id = $1`,
+      [DANA],
+    );
+    expect(audit).toMatchObject({
+      actor_type: 'reporter',
+      actor_id: DANA,
+      diff: { type: 'sms', method: 'web', device_id: ID(900), notified: false },
+    });
+    // The reporter's status is not the SMS STOP opt-out (§19 Q40).
+    expect(await svc(`select status from reporters where id = $1`, [DANA])).toEqual([
+      { status: 'active' },
+    ]);
+    // Nothing held any more: nothing changes, nothing audited.
+    expect(await revoke(DANA, 'sms')).toEqual({ revoked: false, notified: false });
+    expect(
+      await svc(
+        `select count(*)::int as n from audit_log where action = 'consent.revoked' and actor_id = $1`,
+        [DANA],
+      ),
+    ).toEqual([{ n: 1 }]);
+  });
+
+  it('a required consent tells the office (ops and admin) with the notice data', async () => {
+    expect(await revoke(DANA, 'recording')).toEqual({ revoked: true, notified: true });
+    const notices = await svc<{ kind: string; title: string; target_path: string; data: unknown }>(
+      `select kind, title, target_path, data from notifications where kind = 'reporter_consent_revoked'`,
+    );
+    expect(notices).toEqual([
+      {
+        kind: 'reporter_consent_revoked',
+        title: 'Dana Park turned off consent to the recording of their reports',
+        target_path: '/team',
+        data: { key: 'reporter_consent_revoked', params: { name: 'Dana Park', type: 'recording' } },
+      },
+    ]);
+    expect(
+      await svc(`select notification_audience('reporter_consent_revoked')::text as roles`),
+    ).toEqual([{ roles: '{admin,ops}' }]);
+  });
+
+  it('refuses an unknown reporter', async () => {
+    expect(await failure(`select field_revoke_consent($1, 'sms', null)`, [ID(999)])).toBe(
+      'reporter_not_found',
+    );
+  });
+});
+
+describe('field_grant_consent (Settings: Turn on texts; spec §19 Q86)', () => {
+  const grant = async (reporter: string, version = 'field.consent.v1', type = 'sms') =>
+    (
+      await svc<{ r: { granted: boolean; consent_id?: string } }>(
+        `select field_grant_consent($1, $2::consent_type, $3, $4, $5) as r`,
+        [reporter, type, version, ID(902), { device_id: ID(902), user_agent: 'test' }],
+      )
+    )[0]!.r;
+  const smsRows = (reporter: string) =>
+    svc<{ revoked: boolean; method: string; text_version: string }>(
+      `select revoked_at is not null as revoked, method, text_version from consents
+       where reporter_id = $1 and type = 'sms' order by given_at, revoked_at nulls last`,
+      [reporter],
+    );
+
+  it('records a fresh consent after a revoke, audited as the reporter from Settings', async () => {
+    // Dana turned texts off in the revoke tests above.
+    expect((await smsRows(DANA)).every((r) => r.revoked)).toBe(true);
+    const res = await grant(DANA, 'field.consent.v2');
+    expect(res).toMatchObject({ granted: true, consent_id: expect.any(String) });
+    const rows = await smsRows(DANA);
+    expect(rows.at(-1)).toEqual({
+      revoked: false,
+      method: 'web_checkbox',
+      text_version: 'field.consent.v2',
+    });
+    expect(rows.filter((r) => r.revoked)).toHaveLength(1); // the revoked row stays as it was
+    const audits = await svc<{ actor_type: string; entity_id: string; diff: unknown }>(
+      `select actor_type, entity_id, diff from audit_log
+       where action = 'consent.given' and actor_id = $1`,
+      [DANA],
+    );
+    expect(audits).toEqual([
+      {
+        actor_type: 'reporter',
+        entity_id: res.consent_id,
+        diff: {
+          type: 'sms',
+          method: 'web_checkbox',
+          text_version: 'field.consent.v2',
+          via: 'settings',
+          device_id: ID(902),
+        },
+      },
+    ]);
+    // Held already: nothing changes, nothing audited.
+    expect(await grant(DANA)).toEqual({ granted: false });
+    expect(await smsRows(DANA)).toHaveLength(2);
+  });
+
+  it('never overrides an opt-out: the phone on the pack, or the reporter row', async () => {
+    await svc(
+      `insert into sms_opt_outs (phone_e164, country, method) values ($1, 'US', 'sms_keyword')`,
+      ['+15550143380'],
+    );
+    expect(
+      await failure(`select field_grant_consent($1, 'sms', 'v1', null, null)`, [OUTSIDER]),
+    ).toBe('texts_opted_out');
+    await svc(`delete from sms_opt_outs where phone_e164 = $1`, ['+15550143380']);
+    await svc(`update reporters set status = 'opted_out', opted_out_at = now() where id = $1`, [
+      OUTSIDER,
+    ]);
+    expect(
+      await failure(`select field_grant_consent($1, 'sms', 'v1', null, null)`, [OUTSIDER]),
+    ).toBe('texts_opted_out');
+    expect(await smsRows(OUTSIDER)).toEqual([]);
+    expect(
+      await svc(
+        `select count(*)::int as n from audit_log where action = 'consent.given' and actor_id = $1`,
+        [OUTSIDER],
+      ),
+    ).toEqual([{ n: 0 }]);
+    await svc(`update reporters set status = 'active', opted_out_at = null where id = $1`, [
+      OUTSIDER,
+    ]);
+  });
+
+  it('reads the opt-out of the org’s own pack only', async () => {
+    // Emre (TR pack) revokes texts; a STOP of his number on the US sender does not bind the TR one.
+    await svc(`select field_revoke_consent($1, 'sms', null)`, [EMRE]);
+    await svc(
+      `insert into sms_opt_outs (phone_e164, country, method) values ($1, 'US', 'sms_keyword')`,
+      ['+905321234567'],
+    );
+    expect(await grant(EMRE)).toMatchObject({ granted: true });
+    await svc(`delete from sms_opt_outs where phone_e164 = $1`, ['+905321234567']);
+  });
+
+  it('takes the WhatsApp consent too, which an SMS opt-out never blocks (W2-15, §19 Q40)', async () => {
+    await svc(`update reporters set status = 'opted_out', opted_out_at = now() where id = $1`, [
+      OUTSIDER,
+    ]);
+    expect(await grant(OUTSIDER, 'field.consent.v1', 'whatsapp')).toMatchObject({
+      granted: true,
+    });
+    expect(await grant(OUTSIDER, 'field.consent.v1', 'whatsapp')).toEqual({ granted: false });
+    const [audit] = await svc<{ diff: Record<string, unknown> }>(
+      `select diff from audit_log where action = 'consent.given' and actor_id = $1`,
+      [OUTSIDER],
+    );
+    expect(audit!.diff).toMatchObject({ type: 'whatsapp', via: 'settings' });
+    await svc(`select field_revoke_consent($1, 'whatsapp', null)`, [OUTSIDER]);
+    await svc(`update reporters set status = 'active', opted_out_at = null where id = $1`, [
+      OUTSIDER,
+    ]);
+  });
+
+  it('takes the texts consent only, with a wording version, for a known reporter', async () => {
+    expect(
+      await failure(`select field_grant_consent($1, 'recording', 'v1', null, null)`, [MARCO]),
+    ).toBe('consent_not_offered');
+    expect(await failure(`select field_grant_consent($1, 'sms', ' ', null, null)`, [MARCO])).toBe(
+      'invalid_status',
+    );
+    expect(
+      await failure(`select field_grant_consent($1, 'sms', 'v1', null, null)`, [ID(999)]),
+    ).toBe('reporter_not_found');
+  });
+});
+
+describe('field_device_verify_locked (F16: 5 wrong codes lock the check; W2-03)', () => {
+  const lock = async (until: string, device: string | null = ID(901)) =>
+    (
+      await svc<{ r: { locked: boolean } }>(
+        `select field_device_verify_locked($1, $2, $3::timestamptz) as r`,
+        [MARCO, device, until],
+      )
+    )[0]!.r;
+
+  it('audits the lock on the device and tells ops and admin, once per window', async () => {
+    expect(await lock('2026-10-09T23:00:00Z')).toEqual({ locked: true });
+    expect(await lock('2026-10-09T23:00:00.000+00:00')).toEqual({ locked: false });
+    const notices = await svc<{ title: string; target_path: string; data: unknown }>(
+      `select title, target_path, data from notifications where kind = 'device_verify_locked'`,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      target_path: '/team',
+      data: { key: 'device_verify_locked', params: { name: expect.any(String) } },
+    });
+    const audits = await svc<{
+      actor_type: string;
+      entity: string;
+      entity_id: string;
+      diff: unknown;
+    }>(
+      `select actor_type, entity, entity_id, diff from audit_log
+       where action = 'device.verify_locked' and actor_id = $1`,
+      [MARCO],
+    );
+    expect(audits).toEqual([
+      {
+        actor_type: 'reporter',
+        entity: 'field_device',
+        entity_id: ID(901),
+        diff: { until: '2026-10-09T23:00:00+00:00', notified: true },
+      },
+    ]);
+    // The next window locks (and tells the office) again.
+    expect(await lock('2026-10-10T01:00:00Z')).toEqual({ locked: true });
+    expect(
+      await svc(`select notification_audience('device_verify_locked')::text as roles`),
+    ).toEqual([{ roles: '{admin,ops}' }]);
+  });
+
+  it('refuses an unknown reporter', async () => {
+    expect(await failure(`select field_device_verify_locked($1, null, now())`, [ID(999)])).toBe(
+      'reporter_not_found',
+    );
+  });
+});
+
+describe('the field-api functions are the service role’s only', () => {
+  const FUNCTIONS = [
+    'field_lock_site_day(uuid,date)',
+    'field_reporter_on_site(uuid,uuid)',
+    'field_complete_upload(uuid,uuid,integer)',
+    'field_set_day_status(uuid,uuid,date,text,jsonb)',
+    'field_rate_limit(text,integer,integer)',
+    'field_claim_send(text,integer)',
+    'field_release_send(text)',
+    'field_confirm_report(uuid,uuid,integer,integer)',
+    'field_flag_late_upload(uuid,uuid)',
+    'field_revoke_consent(uuid,consent_type,uuid)',
+    'field_grant_consent(uuid,consent_type,text,uuid,jsonb)',
+    'field_device_verify_locked(uuid,uuid,timestamp with time zone)',
+    'field_attach_photos(uuid,uuid,text,text)',
+    'field_report_day_off(uuid,uuid,date,text,jsonb,jsonb,jsonb)',
+  ];
+
+  it('grants execute to service_role and to no API role', async () => {
+    const rows = await svc<{ fn: string; anon: boolean; authenticated: boolean; service: boolean }>(
+      `select f as fn, has_function_privilege('anon', f, 'execute') as anon,
+              has_function_privilege('authenticated', f, 'execute') as authenticated,
+              has_function_privilege('service_role', f, 'execute') as service
+       from unnest($1::text[]) f order by 1`,
+      [FUNCTIONS],
+    );
+    expect(rows).toHaveLength(FUNCTIONS.length);
+    expect(rows.filter((r) => r.anon || r.authenticated || !r.service)).toEqual([]);
+  });
+
+  it('refuses an office user who calls one', async () => {
+    const res = await probeAs(
+      db,
+      { role: 'authenticated', userId: ID(500) },
+      `select field_set_day_status('${MARCO}', '${SITE}', '2026-12-01', 'no_work')`,
+    );
+    expect(res).toMatchObject({ ok: false, code: '42501' });
+  });
+});
+
+describe('upload bucket limits (storage)', () => {
+  it('takes audio/* only in audio, 50 MB a file in audio and photos; photos keeps any type until step 22', async () => {
+    const st = await bootDatabase({ storage: true });
+    const rows = (
+      await st.query<{ id: string; allowed_mime_types: string[] | null; file_size_limit: number }>(
+        `select id, allowed_mime_types, file_size_limit::int from storage.buckets
+         where id in ('audio', 'photos', 'pdfs') order by id`,
+      )
+    ).rows;
+    expect(rows).toEqual([
+      { id: 'audio', allowed_mime_types: ['audio/*'], file_size_limit: UPLOAD_MAX_BYTES },
+      { id: 'pdfs', allowed_mime_types: null, file_size_limit: null },
+      { id: 'photos', allowed_mime_types: null, file_size_limit: UPLOAD_MAX_BYTES },
+    ]);
+    await st.close();
+  });
+});

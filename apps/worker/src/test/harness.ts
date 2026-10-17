@@ -1,6 +1,8 @@
+import { NEVER_ABORTED } from '../abort';
 import { randomUUID } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
 import { PAYROLL_COLUMNS } from '@sitelog/shared';
+import { V12_ROW_DEFAULTS } from '@sitelog/shared';
 import type {
   CompanyRow,
   ConversationRow,
@@ -18,6 +20,9 @@ import type { MessagesClient } from '../ai/claude';
 import { testConfig } from '../config';
 import { createMetrics, type Ctx } from '../context';
 import { createMemoryProvider } from '../email/provider';
+import { createWorkerNotifier } from '../messaging';
+import type { SmsDriver, SmsTransport } from '@sitelog/shared';
+import { createFakeTranscriber } from '../ai/fake-transcriber';
 import { registry } from '../jobs/registry';
 import { silentLogger } from '../log';
 import type { FfmpegRunner } from '../media/ffmpeg';
@@ -138,6 +143,10 @@ export interface Harness {
   drain(types?: JobTypeKey[]): Promise<JobRow[]>;
   claude(client: MessagesClient | null): void;
   sentTexts(): string[];
+  /** What the SMS drivers were asked to send (no HTTP). */
+  sms: Array<{ driver: SmsDriver; to: string; body: string; sender?: string }>;
+  /** Make every SMS driver throw this (a provider refusal or outage) until called with null. */
+  failSms(err: Error | null): void;
 }
 
 /** Fri Oct 9 2026 17:31 America/Chicago (CDT, UTC-5). */
@@ -156,20 +165,37 @@ export function createHarness(
   const wa = createFakeWaClient();
   const email = createMemoryProvider();
   const storage = createMemoryStorage();
+  const config = testConfig({
+    LINK_SIGNING_SECRET: 'test-link-signing-secret',
+    FIELD_APP_URL: 'https://go.sitelog.app',
+  });
+  const sms: Harness['sms'] = [];
+  let smsFailure: Error | null = null;
+  const transport = (driver: SmsDriver): SmsTransport => ({
+    driver,
+    async send(to, body, o) {
+      if (smsFailure) throw smsFailure;
+      sms.push({ driver, to, body, sender: o.sender });
+      return { providerId: `${driver}:${sms.length}` };
+    },
+  });
   const ctx: Ctx = {
-    config: testConfig(),
+    config,
     db,
     wa,
     storage,
-    ai: { claude: opts.claude ?? null, openai: null },
+    ai: { claude: opts.claude ?? null, openai: null, transcriber: createFakeTranscriber() },
     email,
+    notifier: createWorkerNotifier(config, db, transport, () => now),
     ffmpeg: fakeFfmpeg,
     log: silentLogger,
     now: () => now,
     metrics: createMetrics(),
+    signal: NEVER_ABORTED,
   };
 
   const org: OrgRow = {
+    ...V12_ROW_DEFAULTS.orgs,
     id: ORG_ID,
     name: 'Kestrel Build Group',
     address: '1200 Industrial Pkwy, Austin, TX',
@@ -183,6 +209,7 @@ export function createHarness(
     created_at: '2026-03-01T00:00:00Z',
   };
   const settings: OrgSettingsRow = {
+    ...V12_ROW_DEFAULTS.org_settings,
     org_id: ORG_ID,
     default_deadline: '17:30:00',
     working_days: [1, 2, 3, 4, 5],
@@ -238,15 +265,17 @@ export function createHarness(
     role: ReporterRow['role'],
     languages: string[],
   ): ReporterRow => ({
+    ...V12_ROW_DEFAULTS.reporters,
     id,
     org_id: ORG_ID,
     name,
     phone_e164: phone,
     role,
     languages,
-    status: 'verified',
+    status: 'active',
     invited_at: '2026-03-01T00:00:00Z',
     verified_at: '2026-03-01T00:00:00Z',
+    activated_at: '2026-03-01T00:00:00Z',
     last_invite_error: null,
     created_at: '2026-03-01T00:00:00Z',
   });
@@ -316,6 +345,7 @@ export function createHarness(
     },
     async inbound(convo, input) {
       const row: MessageRow = {
+        ...V12_ROW_DEFAULTS.messages,
         id: randomUUID(),
         conversation_id: convo.id,
         org_id: null,
@@ -405,6 +435,10 @@ export function createHarness(
     },
     sentTexts() {
       return wa.sent.map((s) => s.body ?? '').filter(Boolean);
+    },
+    sms,
+    failSms(err) {
+      smsFailure = err;
     },
   };
   return h;

@@ -1,0 +1,24 @@
+{
+  "id": "correction-es-apex-siete",
+  "description": "Spanish. Marco Ruiz fixes the Apex headcount in Spanish: seven, not six. The correction case fixtures/corrections/es-apex-siete.",
+  "kind": "correction",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Riverside Lofts — Block B",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["es", "en"]
+  },
+  "transcriptionLanguage": "multi",
+  "expectedLanguage": "es",
+  "goldenCase": null,
+  "durationS": 2.8,
+  "text": "Los de Apex eran siete, no seis.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 2.5,
+      "text": "Los de Apex eran siete, no seis."
+    }
+  ]
+}

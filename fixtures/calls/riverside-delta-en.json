@@ -1,0 +1,166 @@
+{
+  "$comment": "W3-09 recorded call (W3-02's format, extended): start, routes (field-api's recorded answers per voice route, in order; the last repeats), reporterTurns (one session run each), agentTurns (the dialog model's recorded turns). `extraction` names the eval case (fixtures/transcripts, expected, tool-outputs) whose recorded tool output EXTRACT_PROVIDER=fake replays for this call's update_draft; `answers` are the reporter's words record_answer sends. The worker's PGlite test (apps/worker/src/jobs/voice-turn.pglite.test.ts) checks that the live pipeline answers what `routes` records (ids aside); the agent's pytest (tests/test_live_draft.py) replays the call on FakeFieldApi.",
+  "id": "riverside-delta-en",
+  "locale": "en-US",
+  "extraction": "call-riverside-2026-10-09-en",
+  "start": {
+    "request": {
+      "room": "call-c0110000-0000-4000-8000-000000000002",
+      "transport": "web",
+      "callId": "c0110000-0000-4000-8000-000000000002"
+    },
+    "response": {
+      "callId": "c0110000-0000-4000-8000-000000000002",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Marco",
+        "locale": "en-US"
+      }
+    }
+  },
+  "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "web",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Marco",
+          "locale": "en-US"
+        },
+        "company": "Kestrel Build Group",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5c",
+            "name": "Riverside Lofts — Block B",
+            "status": "reminded",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5c",
+        "companies": [
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex", "the Apex guys"]
+          },
+          {
+            "name": "BrightLine Electric",
+            "aliases": ["BrightLine"]
+          },
+          {
+            "name": "Delta Mechanical",
+            "aliases": ["Delta", "los de Delta"]
+          },
+          {
+            "name": "Ironclad Steel",
+            "aliases": ["Ironclad"]
+          },
+          {
+            "name": "Kestrel self-perform",
+            "aliases": ["our guys", "our crew"]
+          }
+        ],
+        "keyterms": ["Apex Concrete", "BrightLine Electric", "Delta Mechanical", "Ironclad Steel"],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 3
+      }
+    ],
+    "update_draft": [
+      {
+        "status": "pending",
+        "retryAfterMs": 1000
+      },
+      {
+        "reportId": "a0a90000-0000-4000-8000-000000000001",
+        "draftRev": 1,
+        "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
+        "question": {
+          "id": "a0a90000-0000-4000-8000-000000000001",
+          "text": "Quick one — the Delta guys on Level two: was that four or five people, and the full day?",
+          "choices": ["four, full day", "five, full day"]
+        },
+        "readBack": null
+      }
+    ],
+    "record_answer": [
+      {
+        "status": "applied",
+        "confirmation": "Delta Mechanical: five workers, eight hours each — forty hours.",
+        "draft": {
+          "reportId": "a0a90000-0000-4000-8000-000000000001",
+          "draftRev": 2,
+          "missing": [],
+          "question": null,
+          "readBack": "Here's what I've got: twenty-three on site from five companies, one hundred eighty-four hours. Weather stopped work for three and a half hours. Done: Level four slab pour complete, Level three electrical rough-in about sixty percent, Level two ductwork, east wing, Exterior — south elevation CMU blockwork, Level two interior CMU blockwork, Level five deck rebar tying. Delivered: two loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?"
+        }
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "reporterTurns": [
+    "Hi, it's Marco with the Friday report for Riverside Block B. Long day but a good one. Weather first: it rained from seven to ten thirty, we couldn't do block outside on the south facade. So masonry outside stood down about three and a half hours, we moved those guys inside to do the interior block on two. Then we poured the deck on four, like sixty-eight yards, finished around two thirty, Apex had six guys all day on that. BrightLine, five electricians full day on three, rough-in is about sixty percent now. The Delta guys were on two doing the ductwork in the east wing, all day too. Ironclad had three guys tying rebar for the five deck, full day, and they brought two loads of rebar around one o'clock. Our guys, four laborers all day, cleanup and helping the pour. Safety, we did the toolbox talk this morning on wet weather access, slippery decks, no incidents, nobody got hurt. Monday we need the concrete pump at seven for the five deck. That's it.",
+    "Five, all day."
+  ],
+  "answers": ["Five, all day."],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Got it, one moment.",
+      "toolCalls": [
+        {
+          "name": "update_draft",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Still working on it, one moment.",
+      "toolCalls": [
+        {
+          "name": "update_draft",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Quick one — the Delta guys on Level two: was that four or five people, and the full day?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "record_answer",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Delta Mechanical: five workers, eight hours each — forty hours. Here's what I've got: twenty-three on site from five companies, one hundred eighty-four hours. Weather stopped work for three and a half hours. Done: Level four slab pour complete, Level three electrical rough-in about sixty percent, Level two ductwork, east wing, Exterior — south elevation CMU blockwork, Level two interior CMU blockwork, Level five deck rebar tying. Delivered: two loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?"
+    }
+  ]
+}

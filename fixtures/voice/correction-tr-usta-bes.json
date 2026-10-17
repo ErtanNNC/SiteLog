@@ -1,0 +1,24 @@
+{
+  "id": "correction-tr-usta-bes",
+  "description": "Turkish. Emre Yıldız (tr) fixes the Usta Beton headcount of the Kartal draft: five, not four. The correction case fixtures/corrections/tr-usta-bes.",
+  "kind": "correction",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Kartal Konutları — B Blok",
+  "reporter": {
+    "locale": "tr-TR",
+    "languages": ["tr"]
+  },
+  "transcriptionLanguage": "tr",
+  "expectedLanguage": "tr",
+  "goldenCase": null,
+  "durationS": 2.9,
+  "text": "Usta Beton dört değil, beş kişiydi.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 2.6,
+      "text": "Usta Beton dört değil, beş kişiydi."
+    }
+  ]
+}

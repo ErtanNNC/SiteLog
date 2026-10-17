@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-08",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en"],
   "summary": "Mezzanine demolition in Bay 3 completed by the Kestrel crew (released at 14:00). Summit Drywall continued office wall framing in Bay 3. Two dock levelers delivered at 08:00; installation next week. Dry and calm. Toolbox talk on dust masks; no incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0,
-      "tempMinF": 53,
-      "tempMaxF": 64,
-      "windMph": 6,
-      "gustMph": 11,
+      "precip": 0,
+      "tempMin": 53,
+      "tempMax": 64,
+      "wind": 6,
+      "gust": 11,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Dry and calm",
@@ -27,8 +31,8 @@
       "confidence": 0.9,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "type": "voice_note",
+          "uploadId": "e0000025-0000-4000-8000-000000002501",
           "start": 5.5,
           "end": 12.8
         }
@@ -47,8 +51,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "type": "voice_note",
+          "uploadId": "e0000025-0000-4000-8000-000000002501",
           "start": 12.8,
           "end": 20
         }
@@ -62,8 +66,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "type": "voice_note",
+          "uploadId": "e0000025-0000-4000-8000-000000002501",
           "start": 5.5,
           "end": 12.8
         }
@@ -75,8 +79,8 @@
       "status": "complete",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "type": "voice_note",
+          "uploadId": "e0000025-0000-4000-8000-000000002501",
           "start": 12.8,
           "end": 20
         }
@@ -90,8 +94,8 @@
       "time": "08:00",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "type": "voice_note",
+          "uploadId": "e0000025-0000-4000-8000-000000002501",
           "start": 20,
           "end": 27.5
         }
@@ -106,8 +110,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000025-0000-4000-8000-000000002501",
+        "type": "voice_note",
+        "uploadId": "e0000025-0000-4000-8000-000000002501",
         "start": 27.5,
         "end": 33
       }
@@ -119,12 +123,19 @@
       "item": "Dock leveler installation next week",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000025-0000-4000-8000-000000002501",
+          "type": "voice_note",
+          "uploadId": "e0000025-0000-4000-8000-000000002501",
           "start": 20,
           "end": 27.5
         }
       ]
+    }
+  ],
+  "photos": [
+    {
+      "uploadId": "e0000025-0000-4000-8000-000000002505",
+      "caption": "Mezzanine gone",
+      "takenAt": "2026-10-08T21:40:00Z"
     }
   ],
   "newTerms": [],
@@ -132,19 +143,9 @@
   "lowConfidence": [],
   "proposedQuestions": [
     {
-      "field": "manpower.hours",
+      "field": "manpower.hours:Summit Drywall",
       "question": "How long was Summit Drywall on site today?",
-      "options": ["Full day", "Half day"],
-      "target": { "companyNameHeard": "Summit", "manpowerIndex": 0 }
-    }
-  ],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-08",
-  "photos": [
-    {
-      "messageId": "e0000025-0000-4000-8000-000000002505",
-      "caption": "Mezzanine gone",
-      "takenAt": "2026-10-08T21:40:00Z"
+      "options": ["Full day", "Half day"]
     }
   ]
 }

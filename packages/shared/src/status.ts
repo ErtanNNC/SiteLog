@@ -65,3 +65,26 @@ export function needsAttention(report: {
 }): boolean {
   return report.status === 'filed' && !!report.needsReview;
 }
+
+/**
+ * Whether the PDF of `version` prints the report's sign-off: only the current version of a
+ * signed-off report. `reports.status` and `signed_off_*` describe the current version, so an
+ * older version (rendered late by the worker, or opened in the panel with `?v=`) must not print a
+ * sign-off that version never had. Pure; the worker's and the panel's PDF inputs both use it.
+ */
+export function versionSignedOff(
+  report: { status: ReportStatus; currentVersion: number },
+  version: number,
+): boolean {
+  return report.status === 'signed_off' && version === report.currentVersion;
+}
+
+/** The status the PDF of `version` prints: an older version of a signed-off report was filed. */
+export function versionPdfStatus(
+  report: { status: ReportStatus; currentVersion: number },
+  version: number,
+): ReportStatus {
+  return report.status === 'signed_off' && !versionSignedOff(report, version)
+    ? 'filed'
+    : report.status;
+}

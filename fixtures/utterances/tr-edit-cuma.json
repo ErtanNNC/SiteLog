@@ -1,0 +1,21 @@
+{
+  "id": "tr-edit-cuma",
+  "description": "Turkish SMS EDIT (a two-way TR pack or WhatsApp later): the day is cuma (Friday).",
+  "channel": "sms",
+  "language": "tr",
+  "text": "DÜZELT cuma Demirci 5 kişiydi, 4 değil",
+  "recorded": {
+    "intent": "edit_request",
+    "confidence": 0.92,
+    "entities": {
+      "dayReference": "cuma",
+      "numbers": [5, 4]
+    },
+    "correctionText": "Demirci 5 kişiydi, 4 değil"
+  },
+  "expected": {
+    "intent": "edit_request",
+    "dayReference": "cuma",
+    "correctionText": "Demirci 5 kişiydi, 4 değil"
+  }
+}

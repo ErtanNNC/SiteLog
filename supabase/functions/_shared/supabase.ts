@@ -57,6 +57,7 @@ type ExtraFunctions = {
       p_body?: string | null;
       p_target_path?: string | null;
       p_user_id?: string | null;
+      p_data?: Json | null;
     };
     Returns: string;
   };

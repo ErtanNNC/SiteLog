@@ -9,50 +9,60 @@ import {
   LayoutDashboard,
   MessageSquareText,
   Settings,
+  Smartphone,
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { ROUTE_ROLES } from '@/auth/guards';
-import { copy } from '@/copy/en';
+import { canAccess, ROUTE_ROLES, type RouteKey } from '@/auth/guards';
 
 export interface NavItem {
-  key: keyof typeof ROUTE_ROLES;
+  key: RouteKey;
   to: string;
-  label: string;
+  /** The `nav.*` copy key of the label (`t()`, D9). */
+  label: NavLabelKey;
   icon: LucideIcon;
   group: 'main' | 'setup';
-  badge?: 'reportsToReview' | 'unknownSenders' | 'termsToReview';
+  badge?: NavBadge;
   badgeTone?: 'level' | 'signal';
   end?: boolean;
+  /**
+   * Active on every path under this prefix, not only on `to`: Settings opens `/settings/reports`
+   * but is the current item on every Settings tab. (`to` stays a tab: `/settings` is a redirect,
+   * which would unmount the page and drop an unsaved draft without the guard asking.)
+   */
+  activePrefix?: string;
   /** Only in demo mode (the field simulator needs the in-memory demo data). */
   demoOnly?: boolean;
 }
+
+export type NavLabelKey = `nav.${Exclude<RouteKey, 'setup'>}`;
+export type NavBadge = 'reportsToReview' | 'unknownSenders' | 'termsToReview';
 
 export const NAV_ITEMS: NavItem[] = [
   {
     key: 'overview',
     to: '/',
-    label: copy.nav.overview,
+    label: 'nav.overview',
     icon: LayoutDashboard,
     group: 'main',
     end: true,
   },
-  { key: 'sites', to: '/sites', label: copy.nav.sites, icon: HardHat, group: 'main' },
+  { key: 'sites', to: '/sites', label: 'nav.sites', icon: HardHat, group: 'main' },
   {
     key: 'reports',
     to: '/reports',
-    label: copy.nav.reports,
+    label: 'nav.reports',
     icon: FileText,
     group: 'main',
     badge: 'reportsToReview',
     badgeTone: 'level',
   },
-  { key: 'hours', to: '/hours', label: copy.nav.hours, icon: Clock, group: 'main' },
-  { key: 'weather', to: '/weather', label: copy.nav.weather, icon: CloudRain, group: 'main' },
+  { key: 'hours', to: '/hours', label: 'nav.hours', icon: Clock, group: 'main' },
+  { key: 'weather', to: '/weather', label: 'nav.weather', icon: CloudRain, group: 'main' },
   {
     key: 'try',
     to: '/try',
-    label: copy.nav.try,
+    label: 'nav.try',
     icon: MessageSquareText,
     group: 'main',
     demoOnly: true,
@@ -60,7 +70,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     key: 'team',
     to: '/team',
-    label: copy.nav.team,
+    label: 'nav.team',
     icon: Users,
     group: 'setup',
     badge: 'unknownSenders',
@@ -69,7 +79,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     key: 'glossary',
     to: '/glossary',
-    label: copy.nav.glossary,
+    label: 'nav.glossary',
     icon: BookOpen,
     group: 'setup',
     badge: 'termsToReview',
@@ -78,17 +88,37 @@ export const NAV_ITEMS: NavItem[] = [
   {
     key: 'settings',
     to: '/settings/reports',
-    label: copy.nav.settings,
+    activePrefix: '/settings/',
+    label: 'nav.settings',
     icon: Settings,
     group: 'setup',
   },
-  { key: 'billing', to: '/billing', label: copy.nav.billing, icon: CreditCard, group: 'setup' },
+  { key: 'billing', to: '/billing', label: 'nav.billing', icon: CreditCard, group: 'setup' },
+  // §11.1: admins, of a demo org (`orgs.is_demo`) or on staging (`VITE_DEMO_PHONE_ALL_ORGS`).
+  {
+    key: 'devPhone',
+    to: '/dev/phone',
+    label: 'nav.devPhone',
+    icon: Smartphone,
+    group: 'setup',
+  },
 ];
 
-/** Role-aware nav: hide Settings/Billing for non-admins; accounts users only see Crew hours. */
-export function navItemsFor(role: MemberRole | null, isDemo = false): NavItem[] {
+/**
+ * Role-aware nav: hide Settings/Billing for non-admins; accounts users only see Crew hours. The
+ * Demo phone shows only where it works (`demoPhone`: the panel's demo mode, a demo org, staging).
+ */
+export function navItemsFor(
+  role: MemberRole | null,
+  isDemo = false,
+  opts: { demoPhone?: boolean } = {},
+): NavItem[] {
   if (!role) return [];
+  const demoPhone = opts.demoPhone ?? isDemo;
   return NAV_ITEMS.filter(
-    (item) => ROUTE_ROLES[item.key]?.includes(role) && (!item.demoOnly || isDemo),
+    (item) =>
+      canAccess(role, ROUTE_ROLES[item.key]) &&
+      (!item.demoOnly || isDemo) &&
+      (item.key !== 'devPhone' || demoPhone),
   );
 }

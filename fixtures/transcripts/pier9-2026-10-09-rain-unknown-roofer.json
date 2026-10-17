@@ -1,7 +1,10 @@
 {
   "id": "pier9-2026-10-09-rain-unknown-roofer",
   "description": "Rain window 10:00–12:00 → 2 h lost on the roof (§18 Pier 9 Oct 9); unknown roofing sub \"Prairie Roofing\" (3, full day) flagged; next question: unknown company.",
-  "expectedQuestion": { "field": "company.unknown", "path": "company.unknown:Prairie Roofing" },
+  "expectedQuestion": {
+    "field": "company.unknown",
+    "path": "company.unknown:Prairie Roofing"
+  },
   "site": {
     "name": "Pier 9 Warehouse Retrofit",
     "projectCode": "P9-0932",
@@ -9,6 +12,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-09",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Tomasz",
@@ -34,29 +41,117 @@
     }
   ],
   "glossary": [
-    { "heard": "punch", "official": "Punch list items", "kind": "term" },
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
-    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-09",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-09T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 56, "windMph": 10, "gustMph": 20 },
-      { "time": "07:00", "precipIn": 0, "tempF": 58, "windMph": 11, "gustMph": 18 },
-      { "time": "08:00", "precipIn": 0, "tempF": 59, "windMph": 12, "gustMph": 16 },
-      { "time": "09:00", "precipIn": 0, "tempF": 61, "windMph": 10, "gustMph": 19 },
-      { "time": "10:00", "precipIn": 0.14, "tempF": 61, "windMph": 11, "gustMph": 17 },
-      { "time": "11:00", "precipIn": 0.19, "tempF": 62, "windMph": 12, "gustMph": 20 },
-      { "time": "12:00", "precipIn": 0, "tempF": 62, "windMph": 10, "gustMph": 18 },
-      { "time": "13:00", "precipIn": 0, "tempF": 61, "windMph": 11, "gustMph": 16 },
-      { "time": "14:00", "precipIn": 0, "tempF": 61, "windMph": 12, "gustMph": 19 },
-      { "time": "15:00", "precipIn": 0, "tempF": 59, "windMph": 10, "gustMph": 17 },
-      { "time": "16:00", "precipIn": 0, "tempF": 58, "windMph": 11, "gustMph": 20 },
-      { "time": "17:00", "precipIn": 0, "tempF": 56, "windMph": 12, "gustMph": 18 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 56,
+        "windMph": 10,
+        "gustMph": 20
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 58,
+        "windMph": 11,
+        "gustMph": 18
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 12,
+        "gustMph": 16
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 10,
+        "gustMph": 19
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0.14,
+        "tempF": 61,
+        "windMph": 11,
+        "gustMph": 17
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0.19,
+        "tempF": 62,
+        "windMph": 12,
+        "gustMph": 20
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 62,
+        "windMph": 10,
+        "gustMph": 18
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 11,
+        "gustMph": 16
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 12,
+        "gustMph": 19
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 10,
+        "gustMph": 17
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 58,
+        "windMph": 11,
+        "gustMph": 20
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 56,
+        "windMph": 12,
+        "gustMph": 18
+      }
     ],
     "summary": {
       "precipIn": 0.33,
@@ -73,48 +168,47 @@
   "previousDraft": null,
   "photos": [
     {
-      "messageId": "e0000008-0000-4000-8000-000000000805",
+      "uploadId": "e0000008-0000-4000-8000-000000000805",
       "caption": "Roof membrane",
       "takenAt": "2026-10-09T21:52:00Z"
     }
   ],
   "segments": [
     {
-      "messageId": "e0000008-0000-4000-8000-000000000801",
+      "uploadId": "e0000008-0000-4000-8000-000000000801",
       "start": 0,
       "end": 6.5,
       "text": "Pier 9, Friday report. Rain came through from ten to twelve."
     },
     {
-      "messageId": "e0000008-0000-4000-8000-000000000801",
+      "uploadId": "e0000008-0000-4000-8000-000000000801",
       "start": 6.5,
       "end": 13.8,
       "text": "The roofers had to come off the roof for those two hours, so the membrane repairs stopped and they helped inside in bay three."
     },
     {
-      "messageId": "e0000008-0000-4000-8000-000000000801",
+      "uploadId": "e0000008-0000-4000-8000-000000000801",
       "start": 13.8,
       "end": 20.5,
       "text": "That's Prairie Roofing, the new roofing sub, three guys, full day."
     },
     {
-      "messageId": "e0000008-0000-4000-8000-000000000801",
+      "uploadId": "e0000008-0000-4000-8000-000000000801",
       "start": 20.5,
       "end": 27,
       "text": "Summit had four on the office walls in bay three, full day, framing is done, they start board Monday."
     },
     {
-      "messageId": "e0000008-0000-4000-8000-000000000801",
+      "uploadId": "e0000008-0000-4000-8000-000000000801",
       "start": 27,
       "end": 33.4,
       "text": "Our guys, six, all day, cleanup after the mezzanine demo and prepping the dock pits in bay two."
     },
     {
-      "messageId": "e0000008-0000-4000-8000-000000000801",
+      "uploadId": "e0000008-0000-4000-8000-000000000801",
       "start": 33.4,
       "end": 39,
       "text": "Toolbox talk on roof access and fall protection, no incidents. Sending a photo of the roof."
     }
-  ],
-  "texts": []
+  ]
 }

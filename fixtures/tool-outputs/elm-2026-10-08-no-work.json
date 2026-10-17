@@ -1,20 +1,28 @@
 {
   "languageDetected": ["en"],
   "summary": "No work performed: the city closed the street for a water main tie-in and the site had no access. Crew returns tomorrow at 07:00 for roof sheathing on Units 1–4.",
-  "weather": { "conditionsText": "", "periods": [] },
+  "weather": {
+    "conditionsText": "",
+    "periods": []
+  },
   "manpower": [],
   "workPerformed": [],
   "deliveries": [],
   "equipment": [],
-  "safety": { "incidents": [], "noIncidentsStated": false, "visitors": [], "source": [] },
+  "safety": {
+    "incidents": [],
+    "noIncidentsStated": false,
+    "visitors": [],
+    "source": []
+  },
   "issues": [
     {
       "description": "No site access: street closed by the city for a water main tie-in",
       "impact": "No work performed; crew stayed home",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000017-0000-4000-8000-000000001701",
+          "type": "voice_note",
+          "uploadId": "e0000017-0000-4000-8000-000000001701",
           "start": 0,
           "end": 13.5
         }
@@ -26,8 +34,8 @@
       "item": "Crew back at 07:00 for roof sheathing on Units 1–4",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000017-0000-4000-8000-000000001701",
+          "type": "voice_note",
+          "uploadId": "e0000017-0000-4000-8000-000000001701",
           "start": 13.5,
           "end": 19
         }

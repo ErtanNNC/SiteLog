@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SiteLog — Site detail</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1D4ED8}a:hover{color:#1E3A8A}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #EFEDE7; color: #16181B; font-family: 'Archivo', 'Helvetica Neue', Helvetica, sans-serif">
+
+  <nav aria-label="Main" style="flex: 1 1 240px; box-sizing: border-box; background: #16181B; color: #FBFAF7; padding: 20px 14px; display: flex; flex-direction: column; gap: 22px">
+    <a href="Web-Overview.dc.html" style="display: flex; align-items: center; gap: 10px; padding: 4px 10px; color: #FBFAF7; text-decoration: none"><svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 0H46L64 18V56A8 8 0 0 1 56 64H8A8 8 0 0 1 0 56V8A8 8 0 0 1 8 0Z" fill="#FF6A13"/><path d="M46 0V12A6 6 0 0 0 52 18H64Z" fill="#B23A0B"/><g fill="#16181B"><rect x="14" y="20" width="35" height="3"/><rect x="21" y="20" width="5" height="30"/><rect x="12" y="38" width="5" height="12"/><rect x="30" y="30" width="5" height="20"/><rect x="39" y="36" width="5" height="14"/><rect x="48" y="42" width="5" height="8"/><rect x="10" y="50" width="44" height="3"/></g></svg><span style="font-size: 19px; font-weight: 800; font-stretch: 125%; letter-spacing: -0.03em">SiteLog</span></a>
+    <button type="button" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 48px; padding: 0 12px; background: #2A2E33; border: 1px solid #4A4F57; border-radius: 6px; color: #FBFAF7; font: 600 14px 'Archivo', sans-serif; text-align: left"><span style="display: flex; flex-direction: column"><span>Kestrel Build Group</span><span style="font-size: 12px; font-weight: 400; color: #A8A49B">6 active sites</span></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg></button>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <a href="Web-Overview.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 6px; color: #D9D5CC; text-decoration: none; font-size: 15px; font-weight: 500"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Overview</a>
+      <a href="Web-Sites.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 6px; background: #2A2E33; color: #FBFAF7; text-decoration: none; font-size: 15px; font-weight: 600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FF6A13" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V8l7-4 7 4v13M9 21v-6h6v6"/></svg>Sites</a>
+      <a href="Web-Reports.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 6px; color: #D9D5CC; text-decoration: none; font-size: 15px; font-weight: 500"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6v18h12V7z M14 3v4h4 M9 12h6 M9 16h6"/></svg>Reports<span style="margin-left: auto; padding: 1px 7px; border-radius: 4px; background: #1D4ED8; color: #FFFFFF; font-size: 12px; font-weight: 600">1</span></a>
+      <a href="Web-Hours.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 6px; color: #D9D5CC; text-decoration: none; font-size: 15px; font-weight: 500"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Crew hours</a>
+      <a href="Web-Weather.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 6px; color: #D9D5CC; text-decoration: none; font-size: 15px; font-weight: 500"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 15a4 4 0 1 1 1-7.9A5 5 0 0 1 18 9a3 3 0 0 1 0 6z M8 19l-1 2 M12 19l-1 2 M16 19l-1 2"/></svg>Weather &amp; delays</a>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <span style="padding: 0 12px 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; color: #A8A49B">SETUP</span>
+      <a href="Web-Team.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 6px; color: #D9D5CC; text-decoration: none; font-size: 15px; font-weight: 500"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0 M16 4.5a3.5 3.5 0 0 1 0 7 M18 14a5.5 5.5 0 0 1 3.5 6"/></svg>Team &amp; numbers</a>
+      <a href="Web-Glossary.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 6px; color: #D9D5CC; text-decoration: none; font-size: 15px; font-weight: 500"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z M5 17a3 3 0 0 1 3-3h11"/></svg>Site glossary</a>
+      <a href="Web-Settings.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 6px; color: #D9D5CC; text-decoration: none; font-size: 15px; font-weight: 500"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10 M18 6h2 M4 12h4 M12 12h8 M4 18h12 M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Settings</a>
+      <a href="Web-Billing.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 6px; color: #D9D5CC; text-decoration: none; font-size: 15px; font-weight: 500"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18 M7 15h4"/></svg>Billing</a>
+    </div>
+    <div style="margin-top: auto; display: flex; flex-direction: column; gap: 12px; padding: 14px 12px; border-top: 1px solid #2A2E33">
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #A8A49B"><span style="width: 8px; height: 8px; border-radius: 50%; background: #22A55B"></span>Agent ready · texts &amp; calls</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px">+1 (555) 014-2290</span>
+      <span style="display: flex; align-items: center; gap: 10px; font-size: 14px"><span style="width: 32px; height: 32px; border-radius: 50%; background: #4A4F57; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700">LO</span><span style="display: flex; flex-direction: column"><b style="font-weight: 600">Lena Ortiz</b><span style="font-size: 12px; color: #A8A49B">Operations</span></span></span>
+    </div>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 14px clamp(16px, 3vw, 32px); background: #FBFAF7; border-bottom: 1px solid #D9D5CC">
+      <nav aria-label="Breadcrumb" style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: #5C5850"><a href="Web-Sites.dc.html" style="color: #5C5850">Sites</a><span aria-hidden="true">/</span><span style="color: #16181B; font-weight: 600">Riverside Lofts — Block B</span></nav>
+      <button type="button" aria-label="Notifications" style="width: 44px; height: 44px; border: 1px solid #D9D5CC; border-radius: 6px; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16181B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z M10 21h4"/></svg></button>
+    </header>
+
+    <div style="width: 100%; max-width: 1240px; margin: 0 auto; padding: 28px clamp(16px, 3vw, 32px) 48px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+      <div style="display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 20px">
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <h1 style="margin: 0; font-size: 34px; line-height: 40px; font-weight: 800; font-stretch: 122%; letter-spacing: -0.02em">Riverside Lofts — Block B</h1>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 14px; color: #2A2E33">
+            <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace">RL-2041</span>
+            <span>Report deadline 17:30 CT</span>
+            <span style="display: flex; align-items: center; gap: 6px"><span style="width: 22px; height: 22px; border-radius: 50%; background: #E5E2DA; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700">MR</span>Marco Ruiz · <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace">+1 (555) 014-3378</span></span>
+            <span>Prefers text link · speaks ES &amp; EN</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px">
+          <button type="button" style="height: 44px; padding: 0 16px; border: 1px solid #C9C4B9; border-radius: 6px; background: #FBFAF7; color: #16181B; font: 600 14px 'Archivo', sans-serif">Site settings</button>
+          <button type="button" style="height: 44px; padding: 0 16px; border: 0; border-radius: 6px; background: #16181B; color: #FBFAF7; font: 600 14px 'Archivo', sans-serif; display: inline-flex; align-items: center; gap: 8px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>Call Marco</button>
+        </div>
+      </div>
+
+      <div role="tablist" aria-label="Site sections" style="display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid #D9D5CC">
+        <button type="button" role="tab" aria-selected="true" style="height: 44px; padding: 0 14px; border: 0; border-bottom: 3px solid #FF6A13; background: transparent; color: #16181B; font: 700 15px 'Archivo', sans-serif">Daily reports</button>
+        <button type="button" role="tab" aria-selected="false" style="height: 44px; padding: 0 14px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #5C5850; font: 500 15px 'Archivo', sans-serif">Crew &amp; subs</button>
+        <button type="button" role="tab" aria-selected="false" style="height: 44px; padding: 0 14px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #5C5850; font: 500 15px 'Archivo', sans-serif">Weather &amp; delays</button>
+        <button type="button" role="tab" aria-selected="false" style="height: 44px; padding: 0 14px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #5C5850; font: 500 15px 'Archivo', sans-serif">Photos · 31</button>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+        <section style="flex: 999 1 520px; min-width: 0; background: #FBFAF7; border: 1px solid #D9D5CC; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px">
+            <h2 style="margin: 0; font-size: 19px; font-weight: 700; font-stretch: 112%">October 2026</h2>
+            <div style="display: flex; gap: 6px"><button type="button" aria-label="Previous month" style="width: 40px; height: 40px; border: 1px solid #D9D5CC; border-radius: 6px; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16181B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><button type="button" aria-label="Next month" style="width: 40px; height: 40px; border: 1px solid #D9D5CC; border-radius: 6px; background: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16181B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button></div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: #5C5850; text-align: center"><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span></div>
+          <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px">
+            <span style="height: 72px"></span><span style="height: 72px"></span><span style="height: 72px"></span>
+            <a href="Web-Report.dc.html" style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #DCEFE2; color: #14532D; text-decoration: none; display: flex; flex-direction: column; justify-content: space-between"><b style="font-size: 14px">1</b><span style="font-size: 12px">22 crew</span></a>
+            <a href="Web-Report.dc.html" style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #DCEFE2; color: #14532D; text-decoration: none; display: flex; flex-direction: column; justify-content: space-between"><span style="display: flex; justify-content: space-between"><b style="font-size: 14px">2</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14532D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Weather delay"><path d="M7 15a4 4 0 1 1 1-7.9A5 5 0 0 1 18 9a3 3 0 0 1 0 6z M8 19l-1 2 M12 19l-1 2 M16 19l-1 2"/></svg></span><span style="font-size: 12px">20 crew</span></a>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #E5E2DA; color: #5C5850; font-size: 14px">3</span>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #E5E2DA; color: #5C5850; font-size: 14px">4</span>
+            <a href="Web-Report.dc.html" style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #DCEFE2; color: #14532D; text-decoration: none; display: flex; flex-direction: column; justify-content: space-between"><b style="font-size: 14px">5</b><span style="font-size: 12px">24 crew</span></a>
+            <a href="Web-Report.dc.html" style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #FFE7D4; color: #9A3412; text-decoration: none; display: flex; flex-direction: column; justify-content: space-between"><span style="display: flex; justify-content: space-between"><b style="font-size: 14px">6</b><span style="font-size: 11px; font-weight: 700">LATE</span></span><span style="font-size: 12px">21 crew</span></a>
+            <a href="Web-Report.dc.html" style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #DCEFE2; color: #14532D; text-decoration: none; display: flex; flex-direction: column; justify-content: space-between"><b style="font-size: 14px">7</b><span style="font-size: 12px">23 crew</span></a>
+            <a href="Web-Report.dc.html" style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #DCEFE2; color: #14532D; text-decoration: none; display: flex; flex-direction: column; justify-content: space-between"><b style="font-size: 14px">8</b><span style="font-size: 12px">23 crew</span></a>
+            <a href="Web-Report.dc.html" style="height: 72px; box-sizing: border-box; padding: 6px 8px; border-radius: 6px; background: #DCEFE2; color: #14532D; text-decoration: none; display: flex; flex-direction: column; justify-content: space-between; outline: 2px solid #16181B; outline-offset: 1px"><span style="display: flex; justify-content: space-between"><b style="font-size: 14px">9</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#14532D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Weather delay"><path d="M7 15a4 4 0 1 1 1-7.9A5 5 0 0 1 18 9a3 3 0 0 1 0 6z M8 19l-1 2 M12 19l-1 2 M16 19l-1 2"/></svg></span><span style="font-size: 12px">23 crew</span></a>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #E5E2DA; color: #5C5850; font-size: 14px">10</span>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #E5E2DA; color: #5C5850; font-size: 14px">11</span>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px dashed #C9C4B9; color: #5C5850; font-size: 14px">12</span>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px dashed #C9C4B9; color: #5C5850; font-size: 14px">13</span>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px dashed #C9C4B9; color: #5C5850; font-size: 14px">14</span>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px dashed #C9C4B9; color: #5C5850; font-size: 14px">15</span>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px dashed #C9C4B9; color: #5C5850; font-size: 14px">16</span>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #E5E2DA; color: #5C5850; font-size: 14px">17</span>
+            <span style="height: 72px; box-sizing: border-box; padding: 8px; border-radius: 6px; background: #E5E2DA; color: #5C5850; font-size: 14px">18</span>
+          </div>
+          <span style="font-size: 13px; color: #5C5850">Weekends greyed · tap a day to open its report · cloud = weather delay logged</span>
+        </section>
+
+        <aside style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+          <div style="background: #16181B; color: #FBFAF7; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+            <div style="display: flex; justify-content: space-between; align-items: center"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; color: #FF6A13">LATEST · FRI OCT 9</span><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 4px; background: #DCEFE2; color: #14532D; font-size: 12px; font-weight: 700">FILED 17:44</span></div>
+            <p style="margin: 0; font-size: 15px; line-height: 22px; text-wrap: pretty">Level 4 slab pour completed. Rain 07:00–10:30 halted exterior masonry for 3.5 h. Level 3 electrical rough-in approx. 60% complete.</p>
+            <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding-top: 12px; border-top: 1px solid #2A2E33">
+              <span style="display: flex; flex-direction: column"><b style="font-size: 22px; font-stretch: 115%">23</b><span style="font-size: 12px; color: #A8A49B">crew</span></span>
+              <span style="display: flex; flex-direction: column"><b style="font-size: 22px; font-stretch: 115%">184</b><span style="font-size: 12px; color: #A8A49B">hours</span></span>
+              <span style="display: flex; flex-direction: column"><b style="font-size: 22px; font-stretch: 115%; color: #FF6A13">3.5</b><span style="font-size: 12px; color: #A8A49B">h weather</span></span>
+            </div>
+            <a href="Web-Report.dc.html" style="height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #FF6A13; color: #16181B; font-size: 15px; font-weight: 700; text-decoration: none">Open report</a>
+          </div>
+          <div style="background: #FBFAF7; border: 1px solid #D9D5CC; border-radius: 8px; padding: 18px; display: flex; flex-direction: column; gap: 10px">
+            <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; color: #5C5850">OCTOBER SO FAR</span>
+            <div style="display: flex; justify-content: space-between; font-size: 14px"><span>Reports on time</span><b>6 of 7</b></div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px"><span>Weather-delay hours</span><b>7.0 h</b></div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px"><span>Labor hours</span><b>1,248 h</b></div>
+          </div>
+        </aside>
+      </div>
+
+      <section style="background: #FBFAF7; border: 1px solid #D9D5CC; border-radius: 8px; display: flex; flex-direction: column">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid #E6E2DA"><h2 style="margin: 0; font-size: 19px; font-weight: 700; font-stretch: 112%">Crew today, by company</h2><a href="Web-Hours.dc.html" style="font-size: 14px; font-weight: 600">Week view</a></div>
+        <div style="overflow-x: auto">
+          <table style="width: 100%; min-width: 620px; border-collapse: collapse; font-size: 14px">
+            <thead><tr style="text-align: left; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: #5C5850"><th style="padding: 10px 20px; font-weight: 500">COMPANY</th><th style="padding: 10px 12px; font-weight: 500">TRADE</th><th style="padding: 10px 12px; font-weight: 500">WHERE</th><th style="padding: 10px 12px; font-weight: 500; text-align: right">WORKERS</th><th style="padding: 10px 20px 10px 12px; font-weight: 500; text-align: right">HOURS</th></tr></thead>
+            <tbody>
+              <tr style="border-top: 1px solid #E6E2DA"><td style="padding: 12px 20px; font-weight: 600">Apex Concrete</td><td style="padding: 12px">Concrete</td><td style="padding: 12px">Level 4 slab</td><td style="padding: 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">6</td><td style="padding: 12px 20px 12px 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">48.0</td></tr>
+              <tr style="border-top: 1px solid #E6E2DA"><td style="padding: 12px 20px; font-weight: 600">BrightLine Electric</td><td style="padding: 12px">Electrical</td><td style="padding: 12px">Level 3 rough-in</td><td style="padding: 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">5</td><td style="padding: 12px 20px 12px 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">40.0</td></tr>
+              <tr style="border-top: 1px solid #E6E2DA"><td style="padding: 12px 20px; font-weight: 600">Delta Mechanical <span style="margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: #E0E7FB; color: #1E3A8A; font-size: 11px; font-weight: 700">CONFIRMED BY ANSWER</span></td><td style="padding: 12px">HVAC</td><td style="padding: 12px">Level 2 ductwork</td><td style="padding: 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">5</td><td style="padding: 12px 20px 12px 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">40.0</td></tr>
+              <tr style="border-top: 1px solid #E6E2DA"><td style="padding: 12px 20px; font-weight: 600">Ironclad Steel</td><td style="padding: 12px">Rebar delivery &amp; placing</td><td style="padding: 12px">Level 5 deck prep</td><td style="padding: 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">3</td><td style="padding: 12px 20px 12px 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">24.0</td></tr>
+              <tr style="border-top: 1px solid #E6E2DA"><td style="padding: 12px 20px; font-weight: 600">Kestrel self-perform</td><td style="padding: 12px">General labor</td><td style="padding: 12px">Site-wide</td><td style="padding: 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">4</td><td style="padding: 12px 20px 12px 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">32.0</td></tr>
+              <tr style="border-top: 2px solid #16181B; font-weight: 700"><td style="padding: 12px 20px" colspan="3">Total</td><td style="padding: 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">23</td><td style="padding: 12px 20px 12px 12px; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace">184.0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1540}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

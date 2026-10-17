@@ -1,7 +1,7 @@
 import {
   applyPatch,
   ButtonSets,
-  DailyReportDataSchema,
+  DailyReportDataV1Schema,
   isWithinEditWindow,
   localDate,
   recomputeManpowerTotals,
@@ -149,10 +149,10 @@ export async function applyEdit(
   }
   const patched = applyPatch(data, res.data.operations);
   const { entries } = recomputeManpowerTotals(patched.manpower);
-  const next = DailyReportDataSchema.parse({ ...patched, manpower: entries });
+  const next = DailyReportDataV1Schema.parse({ ...patched, manpower: entries });
   const result = await createReportVersion(ctx, report, next, {
     changeNote: res.data.changeNote,
-    author: 'reporter_reply',
+    author: 'reporter',
     authorMessageId: messageId,
     emailRecipients: true,
   });

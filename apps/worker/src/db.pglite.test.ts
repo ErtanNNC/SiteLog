@@ -3,13 +3,26 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
 import type { Sql } from 'postgres';
-import { emptyReportData, officePhotoStoragePath, type DailyReportData } from '@sitelog/shared';
+import {
+  emptyReportDataV1,
+  JOB_BACKOFF_SECONDS,
+  JOB_MAX_ATTEMPTS,
+  officePhotoStoragePath,
+  readReportData,
+  type DailyReportDataV1,
+  type StoredReportData,
+} from '@sitelog/shared';
 // The @sitelog/db harness (supabase/db-tests) boots PGlite with the Supabase stubs, every
 // migration and the demo seed. Imported by path so the worker image does not need that package.
 import { bootDatabase } from '../../../supabase/db-tests/src/harness.ts';
+import { DEMO_AUDIT_ID_BASE } from '@sitelog/shared/demo/rows.ts';
+import { DEMO_ORG_ID } from '@sitelog/shared/demo/kestrel.ts';
+import { STALE_LOCK_MS, testConfig } from './config';
 import type { Ctx } from './context';
 import { connectSql, createDb, type Db } from './db';
 import { silentLogger } from './log';
+import { createWorkerNotifier } from './messaging';
+import { learnTerms } from './pipeline/glossary';
 import { buildReportPdfInput } from './pdf/render';
 import { createMemoryStorage } from './storage';
 
@@ -81,7 +94,9 @@ describe('PostgresDb on PGlite: seed reads and type parsing', () => {
     const org = (await db.getOrg(ORG))!;
     expect(org.name).toBe('Kestrel Build Group');
     expect(org.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    expect((await db.listOrgs()).map((o) => o.id)).toEqual([ORG]);
+    // The two §18 demo orgs, oldest first: Kestrel Build Group, then Demir Yapı A.Ş. (W1-06).
+    const demir = await one<{ id: string }>(`select id from orgs where name = 'Demir Yapı A.Ş.'`);
+    expect((await db.listOrgs()).map((o) => o.id)).toEqual([ORG, demir.id]);
 
     const settings = (await db.getOrgSettings(ORG))!;
     expect(settings.working_days).toEqual([1, 2, 3, 4, 5]); // smallint[] → number[]
@@ -134,6 +149,19 @@ describe('PostgresDb on PGlite: seed reads and type parsing', () => {
     expect(admins.map((m) => m.email)).toEqual([
       'lena@kestrelbuild.example',
       'sam@kestrelbuild.example',
+    ]);
+    // W4-09: each member's panel language, for the office emails (null = the org's).
+    expect(admins.map((m) => m.ui_locale)).toEqual([null, null]);
+    await q(`update org_members set ui_locale = 'tr-TR' where org_id = $1 and user_id = $2`, [
+      ORG,
+      LENA,
+    ]);
+    expect(
+      (await db.listMemberEmails(ORG, ['admin'])).find((m) => m.user_id === LENA)!.ui_locale,
+    ).toBe('tr-TR');
+    await q(`update org_members set ui_locale = null where org_id = $1 and user_id = $2`, [
+      ORG,
+      LENA,
     ]);
     expect(await db.getUserContact(LENA)).toEqual({
       email: 'lena@kestrelbuild.example',
@@ -290,7 +318,16 @@ describe('PostgresDb on PGlite: conversations and messages', () => {
       ['welcome_sent', 'idle'],
       new Date('2026-10-08T00:00:00Z'),
     );
-    expect(old.map((c) => c.phone_e164)).toEqual(['+15550143390']);
+    // The seed's WhatsApp threads only serve /try (W1-06): each last changed at its reporter's
+    // invite, so all but Marco's (moved above) are older than Oct 8.
+    expect(old.map((c) => c.phone_e164).sort()).toEqual([
+      '+15550142087',
+      '+15550143390',
+      '+15550145521',
+      '+15550146604',
+      '+15550147719',
+      '+15550149932',
+    ]);
     await db.updateConversation(marco.id, { state: 'idle', context: {} });
   });
 
@@ -422,7 +459,7 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
   });
 
   it('upserts learned terms case-insensitively per scope', async () => {
-    const first = await db.upsertGlossaryTerm({
+    const { row: first, inserted: firstNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       scope_site_id: RIVERSIDE,
       heard: 'Losa',
@@ -432,8 +469,9 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       language: 'es',
     });
     expect(first).toMatchObject({ times_heard: 1, status: 'needs_review', official: null });
+    expect(firstNew).toBe(true);
     expect(first.last_seen_at).not.toBeNull();
-    const second = await db.upsertGlossaryTerm({
+    const { row: second, inserted: secondNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       scope_site_id: RIVERSIDE,
       heard: 'losa',
@@ -442,7 +480,8 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       status: 'auto_learned',
     });
     expect(second).toMatchObject({ id: first.id, times_heard: 2, official: 'Concrete slab' });
-    const third = await db.upsertGlossaryTerm({
+    expect(secondNew).toBe(false);
+    const { row: third, inserted: thirdNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       scope_site_id: RIVERSIDE,
       heard: 'LOSA',
@@ -451,8 +490,9 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       status: 'auto_learned',
     });
     expect(third).toMatchObject({ id: first.id, times_heard: 3, official: 'Concrete slab' });
+    expect(thirdNew).toBe(false);
     // Another scope (org-wide) and another kind are different terms.
-    const orgWide = await db.upsertGlossaryTerm({
+    const { row: orgWide, inserted: orgWideNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       heard: 'losa',
       official: null,
@@ -460,7 +500,8 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       status: 'needs_review',
     });
     expect(orgWide.id).not.toBe(first.id);
-    const asCompany = await db.upsertGlossaryTerm({
+    expect(orgWideNew).toBe(true);
+    const { row: asCompany, inserted: asCompanyNew } = await db.upsertGlossaryTerm({
       org_id: ORG,
       heard: 'losa',
       official: null,
@@ -469,13 +510,46 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       company_id: company['Apex Concrete']!,
     });
     expect(asCompany.id).not.toBe(orgWide.id);
+    expect(asCompanyNew).toBe(true);
     expect(asCompany.company_id).toBe(company['Apex Concrete']);
   });
 
-  it('records unknown senders', async () => {
-    const seeded = (await db.findPendingUnknownSender('+15550194410'))!;
+  it('a re-extraction does not raise times_heard or notify again (W3-08)', async () => {
+    const ctx = { db, log: silentLogger } as unknown as Ctx;
+    const term = {
+      heard: 'the Kowalski crew',
+      proposedOfficial: 'Kowalski',
+      kind: 'company' as const,
+      confidence: 0.6,
+    };
+    const notices = async () =>
+      (
+        await q<{ n: number }>(
+          `select count(*)::int as n from notifications where org_id = $1 and kind = 'glossary_review' and body like '%Kowalski%'`,
+          [ORG],
+        )
+      )[0]!.n;
+    const timesHeard = async () =>
+      (
+        await q<{ times_heard: number }>(
+          `select times_heard from glossary_terms where org_id = $1 and heard = $2`,
+          [ORG, term.heard],
+        )
+      ).map((r) => r.times_heard);
+    const input = { orgId: ORG, siteId: RIVERSIDE, terms: [term], companies: [], glossary: [] };
+    await learnTerms(ctx, input);
+    await learnTerms(ctx, { ...input, counted: [term] }); // the same report, extracted again
+    expect(await timesHeard()).toEqual([1]);
+    expect(await notices()).toBe(1);
+    await learnTerms(ctx, input); // another report
+    expect(await timesHeard()).toEqual([2]);
+    expect(await notices()).toBe(1);
+  });
+
+  it('records unknown contacts', async () => {
+    const seeded = (await db.findPendingUnknownContact('+15550194410'))!;
     expect(seeded.guessed_site_id).toBe(ELM);
-    expect((await db.getUnknownSender(seeded.id))!.snippet).toMatch(/^this is Luis/);
+    expect((await db.getUnknownContact(seeded.id))!.snippet).toMatch(/^this is Luis/);
 
     const convo = await db.ensureConversation('+15550000002', {});
     const msg = await db.insertOutboundMessage({
@@ -484,27 +558,44 @@ describe('PostgresDb on PGlite: glossary and unknown senders', () => {
       body: 'unknownNumber',
       status: 'sent',
     });
-    const row = await db.insertUnknownSender({
+    const row = await db.insertUnknownContact({
       org_id: null,
       phone_e164: '+15550000002',
-      first_message_id: msg.id,
+      channel: null,
+      message_id: msg.id,
       snippet: 'Hi, this is Dana from the Pier 9 site',
     });
-    expect(row).toMatchObject({ status: 'pending', org_id: null, guessed_site_id: null });
-    await db.updateUnknownSender(row.id, { org_id: ORG, guessed_site_id: OAKMONT });
-    expect(await db.getUnknownSender(row.id)).toMatchObject({
+    expect(row).toMatchObject({
+      status: 'pending',
+      org_id: null,
+      guessed_site_id: null,
+      channel: null,
+      call_id: null,
+      message_id: msg.id,
+    });
+    await db.updateUnknownContact(row.id, { org_id: ORG, guessed_site_id: OAKMONT });
+    expect(await db.getUnknownContact(row.id)).toMatchObject({
       org_id: ORG,
       guessed_site_id: OAKMONT,
     });
-    await q(`update unknown_senders set status = 'linked' where id = $1`, [row.id]);
-    expect(await db.findPendingUnknownSender('+15550000002')).toBeNull();
+    // A text from an unknown number (W1-08) carries its channel.
+    const sms = await db.insertUnknownContact({
+      org_id: null,
+      phone_e164: '+15550000003',
+      channel: 'sms',
+      message_id: null,
+      snippet: 'who do I report to',
+    });
+    expect(sms).toMatchObject({ channel: 'sms', message_id: null });
+    await q(`update unknown_contacts set status = 'linked' where id = $1`, [row.id]);
+    expect(await db.findPendingUnknownContact('+15550000002')).toBeNull();
   });
 });
 
 /** A complete draft for Riverside on Mon Oct 12 that touches every denormalised column. */
-function draftFor(date: string, audioId: string, photoId: string): DailyReportData {
+function draftFor(date: string, audioId: string, photoId: string): DailyReportDataV1 {
   return {
-    ...emptyReportData(date),
+    ...emptyReportDataV1(date),
     summary: 'Level 5 slab poured after a wet start; 11 on site.',
     languageDetected: ['es', 'en'],
     manpower: [
@@ -578,6 +669,41 @@ function draftFor(date: string, audioId: string, photoId: string): DailyReportDa
 }
 
 describe('PostgresDb on PGlite: site days, reports, versions', () => {
+  it('writes each report in its org’s report language (§9.6), or the one given', async () => {
+    const day = async (date: string) =>
+      (
+        await q<{ id: string }>(
+          `insert into site_days (site_id, date, deadline_at) values ($1, $2, now()) returning id`,
+          [RIVERSIDE, date],
+        )
+      )[0]!.id;
+    const input = (siteDayId: string, no: string) => ({
+      org_id: ORG,
+      site_id: RIVERSIDE,
+      site_day_id: siteDayId,
+      report_no: no,
+      reporter_id: MARCO,
+      received_at: new Date('2026-07-01T21:00:00Z'),
+      kind: 'daily' as const,
+    });
+    await q(`update orgs set locale = 'tr-TR' where id = $1`, [ORG]);
+    try {
+      const tr = await db.insertReport(input(await day('2026-07-01'), 'LANG-0001'));
+      expect(tr.language).toBe('tr');
+    } finally {
+      await q(`update orgs set locale = 'en-US' where id = $1`, [ORG]);
+    }
+    const given = await db.insertReport({
+      ...input(await day('2026-07-02'), 'LANG-0002'),
+      language: 'tr',
+    });
+    expect(given.language).toBe('tr');
+    await q(`delete from reports where report_no like 'LANG-%'`);
+    await q(`delete from site_days where site_id = $1 and date in ('2026-07-01', '2026-07-02')`, [
+      RIVERSIDE,
+    ]);
+  });
+
   let siteDayId = '';
   let reportId = '';
   let audioId = '';
@@ -649,6 +775,9 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
       received_at: '2026-10-12T21:00:00.000Z',
       review_reasons: [],
       needs_review: false,
+      // §6.3: the org's report language; a WhatsApp report has no channel (D13).
+      language: 'en',
+      channel: null,
     });
     await expect(
       db.insertReport({
@@ -711,7 +840,13 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
       summary: data.summary,
       author: 'agent',
     });
-    expect(v1).toMatchObject({ version: 1, author: 'agent', change_note: null, pdf_path: null });
+    expect(v1).toMatchObject({
+      version: 1,
+      author: 'agent',
+      change_note: null,
+      pdf_path: null,
+      draft_rev: 1,
+    });
     expect(v1.data).toEqual(data); // jsonb round-trip, including "yd³" and nulls
     const corrected = { ...data, summary: 'Corrected summary' };
     const v1b = await db.insertVersion({
@@ -723,13 +858,26 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
       author_message_id: audioId,
       change_note: 'reporter fix',
     });
+    // The draft is overwritten in place: its revision says it changed (20261015000070).
     expect(v1b).toMatchObject({
       summary: 'Corrected summary',
       author_message_id: audioId,
       change_note: 'reporter fix',
+      draft_rev: 2,
     });
+    // The same draft again changes nothing.
+    const v1c = await db.insertVersion({
+      report_id: reportId,
+      version: 1,
+      data: corrected,
+      summary: corrected.summary,
+      author: 'agent',
+      author_message_id: audioId,
+      change_note: 'reporter fix',
+    });
+    expect(v1c.draft_rev).toBe(2);
     await db.updateVersion(reportId, 1, { data, summary: data.summary, change_note: null });
-    expect((await db.getVersion(reportId, 1))!.data).toEqual(data);
+    expect((await db.getVersion(reportId, 1))!).toMatchObject({ data, draft_rev: 3 });
     expect(await db.getVersion(reportId, 2)).toBeNull();
     expect((await db.listVersions(reportId)).map((v) => v.version)).toEqual([1]);
     // Drafts are not denormalised: nothing in the aggregate tables yet.
@@ -897,8 +1045,8 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
   });
 
   it('create_report_version (office edit RPC) builds v2 on the worker-filed report', async () => {
-    const v1 = (await db.getVersion(reportId, 1))!.data as DailyReportData;
-    const edited: DailyReportData = {
+    const v1 = (await db.getVersion(reportId, 1))!.data as DailyReportDataV1;
+    const edited: DailyReportDataV1 = {
       ...v1,
       manpower: v1.manpower.map((m) =>
         m.companyName === 'Apex Concrete' ? { ...m, workers: 8, totalHours: 64 } : m,
@@ -955,7 +1103,7 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
         version: 2,
         data: v1,
         summary: v1.summary,
-        author: 'reporter_reply',
+        author: 'reporter',
         change_note: 'Apex 7 → 9 workers',
       }),
     ).rejects.toThrow('already exists and is immutable');
@@ -1001,6 +1149,100 @@ describe('PostgresDb on PGlite: site days, reports, versions', () => {
     expect(rows[0]).toEqual({ company_id: null, company_name: 'Apex Concrete' });
   });
 
+  // The filing race (20261015000090): the check of the draft, the filing write and the status
+  // are one transaction, the filing write is no new draft revision, and a draft write after
+  // filing is refused.
+  it('fileVersion files only the draft it was computed from, and nothing overwrites it', async () => {
+    const day = await db.getOrCreateSiteDay(
+      OAKMONT,
+      '2026-11-02',
+      new Date('2026-11-02T23:30:00Z'),
+    );
+    const report = await db.insertReport({
+      org_id: ORG,
+      site_id: OAKMONT,
+      site_day_id: day.id,
+      report_no: await db.nextReportNo(OAKMONT),
+      reporter_id: null,
+      received_at: '2026-11-02T21:30:00Z',
+      kind: 'daily',
+      status: 'awaiting_confirmation',
+    });
+    const data = draftFor('2026-11-02', audioId, photoId);
+    const draft = (summary: string) => ({
+      report_id: report.id,
+      version: 1,
+      data: { ...data, summary },
+      summary,
+      author: 'agent' as const,
+    });
+    expect((await db.storeDraftVersion(draft('Extracted')))!.draft_rev).toBe(1);
+    // A re-extraction after the filing read revision 1.
+    expect((await db.storeDraftVersion(draft('Re-extracted')))!.draft_rev).toBe(2);
+    const file = (draftRev: number, status: 'awaiting_confirmation' | 'processing') =>
+      db.fileVersion({
+        reportId: report.id,
+        siteDayId: day.id,
+        version: 1,
+        expect: { status, draftRev },
+        data: { ...data, summary: 'Frozen' },
+        summary: 'Frozen',
+        report: { status: 'filed', filed_at: new Date('2026-11-02T21:40:00Z') },
+        siteDay: { status: 'filed', report_id: report.id },
+        audit: {
+          org_id: ORG,
+          actor_type: 'agent',
+          action: 'report.filed',
+          entity: 'report',
+          entity_id: report.id,
+          diff: { version: 1 },
+        },
+      });
+    const state = async () => ({
+      status: (await db.getReport(report.id))!.status,
+      day: (await db.getSiteDay(day.id))!.status,
+      summary: (await db.getVersion(report.id, 1))!.summary,
+      rev: (await db.getVersion(report.id, 1))!.draft_rev,
+      manpower: (
+        await one<{ n: number }>(
+          `select count(*)::int as n from manpower_entries where report_id = $1`,
+          [report.id],
+        )
+      ).n,
+      filed: (
+        await one<{ n: number }>(
+          `select count(*)::int as n from audit_log where entity_id = $1 and action = 'report.filed'`,
+          [report.id],
+        )
+      ).n,
+    });
+    const untouched = await state();
+    expect(untouched).toMatchObject({ status: 'awaiting_confirmation', summary: 'Re-extracted' });
+    expect(await file(1, 'awaiting_confirmation')).toEqual({ filed: false });
+    expect(await file(2, 'processing')).toEqual({ filed: false });
+    expect(await state()).toEqual(untouched);
+
+    const res = await file(2, 'awaiting_confirmation');
+    expect(res.filed && res.report.status).toBe('filed');
+    const filed = await state();
+    // The frozen data keeps the draft's revision: a field poll never sees it as a newer draft.
+    expect(filed).toMatchObject({
+      status: 'filed',
+      day: 'filed',
+      summary: 'Frozen',
+      rev: 2,
+      filed: 1,
+    });
+    expect(filed.manpower).toBeGreaterThan(0);
+
+    // A re-extraction that read the report before filing: refused, the filed version stands.
+    expect(await db.storeDraftVersion(draft('Late re-extraction'))).toBeNull();
+    await expect(db.insertVersion(draft('Late WhatsApp draft'))).rejects.toThrow(
+      'already exists and is immutable',
+    );
+    expect(await state()).toEqual(filed);
+  });
+
   it('report numbers keep growing past 9999 instead of truncating', async () => {
     const { report_seq: before } = await one<{ report_seq: number }>(
       `select report_seq from sites where id = $1`,
@@ -1031,6 +1273,23 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
       body: null,
       user_id: null,
     });
+    expect(
+      (await one<{ data: unknown }>(`select data from notifications where id = $1`, [id])).data,
+    ).toBeNull();
+    // The notice's data (20261015000080): stored as jsonb for the panel to render.
+    const withData = await db.notifyOrg(
+      ORG,
+      'needs_review',
+      'RL-2041-0187 needs review',
+      'no_photo',
+      '/reports/x',
+      null,
+      { key: 'needs_review', params: { reportNo: 'RL-2041-0187', reasons: ['no_photo'] } },
+    );
+    expect(
+      (await one<{ data: unknown }>(`select data from notifications where id = $1`, [withData]))
+        .data,
+    ).toEqual({ key: 'needs_review', params: { reportNo: 'RL-2041-0187', reasons: ['no_photo'] } });
     const forLena = await db.notifyOrg(
       ORG,
       'pack_ready',
@@ -1059,7 +1318,11 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
       actor_id: string | null;
       diff: unknown;
       entity: string | null;
-    }>(`select actor_type, actor_id, diff, entity from audit_log order by id desc limit 2`);
+    }>(
+      // The seed's audit rows carry fixed ids above the sequence's (DEMO_AUDIT_ID_BASE, W1-06).
+      `select actor_type, actor_id, diff, entity from audit_log where id < $1 order by id desc limit 2`,
+      [DEMO_AUDIT_ID_BASE],
+    );
     expect(rows).toEqual([
       { actor_type: 'system', actor_id: null, diff: null, entity: null },
       {
@@ -1121,21 +1384,32 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
       reportId: 'r1',
       metrics: { tokens: { input: 1200, output: 300 }, estCostUsd: 0.0123, latencyMs: 4100 },
     });
-    // Once done, the key is free again.
+    // D16 (W1-10): a key names one job for good. Done, it still answers with that job and
+    // enqueues nothing; dead or failed, the same.
+    expect(
+      await db.enqueueJob('extract_report', { reportId: 'r1' }, { dedupeKey: 'extract:r1:2' }),
+    ).toBe(a);
+    expect(await db.queueStats()).toEqual({ queued: 1, running: 1, dead: 0 });
+    await q(`update jobs set status = 'dead' where id = $1`, [a]);
+    expect(
+      await db.enqueueJob('extract_report', { reportId: 'r1' }, { dedupeKey: 'extract:r1:2' }),
+    ).toBe(a);
+    // A key of another occurrence (the next source count) is a new job.
     const b = await db.enqueueJob(
       'extract_report',
       { reportId: 'r1' },
-      { dedupeKey: 'extract:r1:2' },
+      { dedupeKey: 'extract:r1:3' },
     );
     expect(b).not.toBe(a);
     expect(await db.getJob(999_999)).toBeNull();
     await q(`delete from jobs where id <> $1`, [later]);
   });
 
-  it('fails with the §10.1 backoff and goes dead after the 5th attempt', async () => {
+  it('fails with the §10.1 backoff (30 s · 2 min · 10 min · 30 min · 2 h) and goes dead after the 6th attempt (D17)', async () => {
     const id = await db.enqueueJob('transcribe_audio', { messageId: 'm1' });
-    const expected = [30, 120, 600, 1800];
-    for (let attempt = 1; attempt <= 5; attempt++) {
+    const expected = [...JOB_BACKOFF_SECONDS];
+    expect(expected).toEqual([30, 120, 600, 1800, 7200]);
+    for (let attempt = 1; attempt <= JOB_MAX_ATTEMPTS; attempt++) {
       const [job] = await db.claimJobs('worker-a', 1);
       expect(job).toMatchObject({ id, attempts: attempt });
       await db.failJob(id, `boom ${attempt} ` + 'x'.repeat(5000));
@@ -1151,7 +1425,7 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
       expect(row.last_error.length).toBe(4000);
       expect(row.last_error.startsWith(`boom ${attempt}`)).toBe(true);
       expect(row.locked_by).toBeNull();
-      if (attempt < 5) {
+      if (attempt < JOB_MAX_ATTEMPTS) {
         expect(row.status).toBe('queued');
         expect(row.delay).toBeGreaterThan(expected[attempt - 1]! - 5);
         expect(row.delay).toBeLessThanOrEqual(expected[attempt - 1]!);
@@ -1166,9 +1440,11 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
     await db.failJob(424242, 'unknown job is a no-op');
   });
 
-  it('returns the winning job when a concurrent enqueue of the same dedupe key races it', async () => {
+  it('returns the winning job when a concurrent enqueue of the same dedupe key races it (pre-W1-10 database)', async () => {
     // Simulate the race inside one session: the first insert of key 'race:1' fails exactly the way
-    // the loser of two concurrent enqueue_job calls does (unique_violation on the partial index).
+    // the loser of two concurrent enqueue_job calls did before W1-10 (unique_violation on the
+    // partial index). Since 20261015000001 enqueue_job() inserts `on conflict do nothing`, so this
+    // only matters to a worker deployed ahead of the migration.
     await pg.exec(`
       create sequence race_once;
       create function simulate_race() returns trigger language plpgsql as $f$
@@ -1195,14 +1471,44 @@ describe('PostgresDb on PGlite: notifications, audit, job queue', () => {
     }
   });
 
-  it('reclaims jobs stuck in running for more than 15 minutes', async () => {
+  it('refreshes locked_at of a job this worker still holds (the W1-10 heartbeat)', async () => {
+    await q(`delete from jobs`);
+    const id = await db.enqueueJob('render_pdf', { reportId: 'r', version: 1 });
+    await db.claimJobs('worker-a', 1);
+    await q(`update jobs set locked_at = now() - interval '9 minutes' where id = $1`, [id]);
+    expect(await db.heartbeatJob(id, 'worker-b')).toBe(false);
+    expect(await db.heartbeatJob(id, 'worker-a')).toBe(true);
+    const { age } = await one<{ age: number }>(
+      `select extract(epoch from now() - locked_at)::float8 as age from jobs where id = $1`,
+      [id],
+    );
+    expect(age).toBeLessThan(5);
+    // Kept fresh, the job is not reclaimed after the stale lock.
+    expect(await db.claimJobs('worker-b', 1)).toEqual([]);
+    await db.completeJob(id);
+    expect(await db.heartbeatJob(id, 'worker-a')).toBe(false);
+  });
+
+  it('reclaims jobs stuck in running for more than 10 minutes (GAP D18)', async () => {
     await q(`delete from jobs`);
     const id = await db.enqueueJob('render_pdf', { reportId: 'r', version: 1 });
     await db.claimJobs('worker-a', 1);
     expect(await db.claimJobs('worker-b', 1)).toEqual([]);
-    await q(`update jobs set locked_at = now() - interval '16 minutes' where id = $1`, [id]);
+    // Twice JOB_TIMEOUT_MS: a live worker fails its own job first; this is a dead worker's job.
+    await q(`update jobs set locked_at = now() - interval '9 minutes' where id = $1`, [id]);
+    expect(await db.claimJobs('worker-b', 1)).toEqual([]);
+    await q(`update jobs set locked_at = now() - interval '11 minutes' where id = $1`, [id]);
     const [again] = await db.claimJobs('worker-b', 1);
     expect(again).toMatchObject({ id, attempts: 2, locked_by: 'worker-b' });
+  });
+
+  it("reclaims after the worker's STALE_LOCK_MS, the interval claim_jobs() uses", async () => {
+    const [row] = await q<{ def: string }>(
+      `select pg_get_functiondef('claim_jobs(text, int)'::regprocedure) as def`,
+    );
+    const intervals = [...row!.def.matchAll(/interval '(\d+) minutes'/g)].map((m) => Number(m[1]));
+    expect(intervals.length).toBeGreaterThan(0);
+    expect(new Set(intervals)).toEqual(new Set([STALE_LOCK_MS / 60_000]));
   });
 });
 
@@ -1255,11 +1561,11 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
     const expired = await db.listExpiredMedia(before, 500);
     expect(expired.length).toBeGreaterThan(1);
     for (const m of expired) {
-      expect(['audio', 'image', 'document']).toContain(m.type);
+      expect(['audio', 'photos']).toContain(m.bucket);
       expect(m.storage_path).toBeTruthy();
       expect(m.created_at < '2026-10-12T21:00:10.000Z').toBe(true);
     }
-    const ids = expired.map((m) => m.message_id);
+    const ids = expired.map((m) => m.id);
     expect(ids).toContain(inDoc);
     expect(ids).not.toContain(outDoc);
     const times = expired.map((m) => m.created_at);
@@ -1267,22 +1573,118 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
     expect(await db.listExpiredMedia(before, 1)).toHaveLength(1);
 
     const audio = expired.find((m) => m.created_at === '2026-10-12T21:00:00.000Z')!;
-    expect(audio.type).toBe('audio');
-    expect(await db.getTranscript(audio.message_id)).not.toBeNull();
-    await db.purgeMessageMedia(audio.message_id, new Date('2026-11-12T03:00:00Z'));
-    const purged = (await db.getMessage(audio.message_id))!;
+    expect(audio.bucket).toBe('audio');
+    expect(await db.getTranscript(audio.id)).not.toBeNull();
+    await db.purgeMedia(audio.id, new Date('2026-11-12T03:00:00Z'));
+    const purged = (await db.getMessage(audio.id))!;
     expect(purged.storage_path).toBeNull();
     expect(purged.payload).toEqual({ voice: true, purged_at: '2026-11-12T03:00:00.000Z' });
-    expect(await db.getTranscript(audio.message_id)).toBeNull();
-    expect((await db.listExpiredMedia(before, 500)).map((m) => m.message_id)).not.toContain(
-      audio.message_id,
-    );
-    // A message without payload gets one.
-    const other = expired.find((m) => m.message_id !== audio.message_id)!;
-    await q(`update messages set payload = null where id = $1`, [other.message_id]);
-    await db.purgeMessageMedia(other.message_id, new Date('2026-11-12T03:00:00Z'));
-    expect((await db.getMessage(other.message_id))!.payload).toEqual({
+    expect(await db.getTranscript(audio.id)).toBeNull();
+    expect((await db.listExpiredMedia(before, 500)).map((m) => m.id)).not.toContain(audio.id);
+    // A message without payload gets one (the inbound document; the seed's media are uploads).
+    const other = expired.find((m) => m.id === inDoc)!;
+    await q(`update messages set payload = null where id = $1`, [other.id]);
+    await db.purgeMedia(other.id, new Date('2026-11-12T03:00:00Z'));
+    expect((await db.getMessage(other.id))!.payload).toEqual({
       purged_at: '2026-11-12T03:00:00.000Z',
+    });
+  });
+
+  it('expires an upload once, with its transcript, keeping the upload row and every source key', async () => {
+    const convo = (await db.getConversationByPhone(MARCO_PHONE))!;
+    const report = await one<{ id: string; site_id: string }>(
+      `select id, site_id from reports where status = 'filed' order by report_no limit 1`,
+    );
+    // A voice note the migration backfilled (upload with the message id) and an upload alone.
+    const [voice] = await q<{ id: string }>(
+      `insert into messages (conversation_id, direction, type, media_mime, storage_path, created_at)
+       values ($1, 'in', 'audio', 'audio/ogg', 'org/site/2020-01-01/old.ogg', '2020-01-01T10:00:00Z')
+       returning id`,
+      [convo.id],
+    );
+    await q(
+      `insert into uploads (id, report_id, site_id, kind, storage_path, mime, received_at)
+       values ($1, $2, $3, 'audio', 'org/site/2020-01-01/old.ogg', 'audio/ogg', '2020-01-01T10:00:00Z')`,
+      [voice!.id, report.id, report.site_id],
+    );
+    await q(
+      `insert into report_sources (report_id, message_id, upload_id, kind) values ($1, $2, $2, 'voice_note')`,
+      [report.id, voice!.id],
+    );
+    await q(
+      `insert into transcripts (message_id, upload_id, text, segments) values ($1, $1, 'old', '[]')`,
+      [voice!.id],
+    );
+    const [photo] = await q<{ id: string }>(
+      `insert into uploads (report_id, site_id, kind, storage_path, mime, received_at)
+       values ($1, $2, 'photo', 'org/site/office/old.jpg', 'image/jpeg', '2020-01-01T11:00:00Z')
+       returning id`,
+      [report.id, report.site_id],
+    );
+    await q(`insert into report_sources (report_id, upload_id, kind) values ($1, $2, 'photo')`, [
+      report.id,
+      photo!.id,
+    ]);
+
+    const expired = await db.listExpiredMedia(new Date('2020-02-01T00:00:00Z'), 50);
+    // Listed once each (the backfilled message is not listed beside its upload), oldest first.
+    expect(expired).toEqual([
+      {
+        id: voice!.id,
+        storage_path: 'org/site/2020-01-01/old.ogg',
+        bucket: 'audio',
+        created_at: '2020-01-01T10:00:00.000Z',
+      },
+      {
+        id: photo!.id,
+        storage_path: 'org/site/office/old.jpg',
+        bucket: 'photos',
+        created_at: '2020-01-01T11:00:00.000Z',
+      },
+    ]);
+    for (const m of expired) await db.purgeMedia(m.id, new Date('2026-11-12T03:00:00Z'));
+    // The upload rows stay, marked purged (storage_path keeps the deleted object's name).
+    expect(
+      await q(
+        `select id, storage_path, purged_at from uploads where id = any($1::uuid[]) order by received_at`,
+        [[voice!.id, photo!.id]],
+      ),
+    ).toEqual([
+      {
+        id: voice!.id,
+        storage_path: 'org/site/2020-01-01/old.ogg',
+        purged_at: new Date('2026-11-12T03:00:00Z'),
+      },
+      {
+        id: photo!.id,
+        storage_path: 'org/site/office/old.jpg',
+        purged_at: new Date('2026-11-12T03:00:00Z'),
+      },
+    ]);
+    expect(await db.getTranscript(voice!.id)).toBeNull();
+    expect((await db.getMessage(voice!.id))!.storage_path).toBeNull();
+    // The sources keep their keys (an office photo has no other) and read as files that are gone.
+    const kept = (await db.listReportSources(report.id)).filter((s) =>
+      [voice!.id, photo!.id].includes(s.media_id!),
+    );
+    expect(
+      kept
+        .map((s) => ({
+          kind: s.kind,
+          message_id: s.message_id,
+          upload_id: s.upload_id,
+          storage_path: s.storage_path,
+        }))
+        .sort((a, b) => a.kind.localeCompare(b.kind)),
+    ).toEqual([
+      { kind: 'photo', message_id: null, upload_id: photo!.id, storage_path: null },
+      { kind: 'voice_note', message_id: voice!.id, upload_id: voice!.id, storage_path: null },
+    ]);
+    expect(await db.listExpiredMedia(new Date('2020-02-01T00:00:00Z'), 50)).toEqual([]);
+    // A second purge (the retention job's retry after a failed delete) keeps the first time.
+    await db.purgeMedia(photo!.id, new Date('2026-12-12T03:00:00Z'));
+    expect(await one(`select purged_at from uploads where id = $1`, [photo!.id])).toEqual({
+      purged_at: new Date('2026-11-12T03:00:00Z'),
     });
   });
 
@@ -1319,7 +1721,7 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
     });
     await db.updateReporter(MARCO, { status: 'disabled' });
     expect(await db.listReportersByPhone(MARCO_PHONE)).toEqual([]);
-    await db.updateReporter(MARCO, { status: 'verified', last_invite_error: null });
+    await db.updateReporter(MARCO, { status: 'active', last_invite_error: null });
     const created = await db.insertCompany(ORG, 'Ridgeway', 'unconfirmed', 'Framing');
     expect(created).toMatchObject({ name: 'Ridgeway' });
     const fresh = await db.insertCompany(ORG, 'Northside Roofing', 'unconfirmed');
@@ -1348,8 +1750,8 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
       kind: 'daily',
     });
     expect(report.report_no).toBe('RL-2042-0001');
-    const data: DailyReportData = {
-      ...emptyReportData('2026-10-13'),
+    const data: DailyReportDataV1 = {
+      ...emptyReportDataV1('2026-10-13'),
       weather: {
         conditionsText: 'High wind PM',
         periods: [
@@ -1379,18 +1781,21 @@ describe('PostgresDb on PGlite: evidence packs and retention', () => {
 
 describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
   it('reads an office upload (no conversation) and prints it on the edited version only', async () => {
-    // A WhatsApp report with two stored photos.
+    // A reporter's report (stored v1 data, as the seed's history is) with two stored photos.
     const report = await one<{ id: string; site_id: string; current_version: number }>(
       `select r.id, r.site_id, r.current_version from reports r
+       join report_versions v on v.report_id = r.id and v.version = r.current_version
        where r.reporter_id is not null and r.status = 'filed'
-         and (select count(*) from report_sources rs join messages m on m.id = rs.message_id
-              where rs.report_id = r.id and rs.kind = 'photo' and m.storage_path is not null) = 2
-         and not exists (select 1 from report_sources rs join messages m on m.id = rs.message_id
-                         where rs.report_id = r.id and m.storage_path is null)
+         and v.data->>'schemaVersion' is distinct from '2'
+         and jsonb_array_length(v.data->'photos') = 2
+         and (select count(*) from report_sources rs join uploads u on u.id = rs.upload_id
+              where rs.report_id = r.id and rs.kind = 'photo' and u.purged_at is null) = 2
+         and not exists (select 1 from report_sources rs join uploads u on u.id = rs.upload_id
+                         where rs.report_id = r.id and u.purged_at is not null)
        order by r.report_no limit 1`,
     );
     const before = (await db.getVersion(report.id, report.current_version))!;
-    const beforeData = before.data as DailyReportData;
+    const beforeData = before.data as DailyReportDataV1;
     const [kept, dropped] = beforeData.photos;
     const upload = officePhotoStoragePath(ORG, report.site_id, randomUUID(), 'image/png');
 
@@ -1408,26 +1813,31 @@ describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
 
     const sources = await db.listReportSources(report.id);
     const office = sources.find((s) => s.storage_path === upload)!;
+    // An upload (D14), with no message: listReportSources reads its file from uploads.
     expect(office).toMatchObject({
       kind: 'photo',
       caption: 'From the office',
+      message_id: null,
       message_type: 'image',
       media_mime: 'image/png',
       body: 'From the office',
     });
-    const message = (await db.getMessage(office.message_id))!;
-    expect(message).toMatchObject({ conversation_id: null, org_id: ORG, direction: 'in' });
-    expect(await db.getConversation(message.conversation_id)).toBeNull();
+    expect(office.upload_id).toBe(office.media_id);
+    const [row] = await q<{ reporter_id: string | null; uploaded_by: string; report_id: string }>(
+      `select reporter_id, uploaded_by, report_id from uploads where id = $1`,
+      [office.media_id],
+    );
+    expect(row).toEqual({ reporter_id: null, uploaded_by: LENA, report_id: report.id });
     // Customer media: the retention job deletes it like a WhatsApp photo.
     expect(
-      (await db.listExpiredMedia(new Date('2099-01-01T00:00:00Z'), 5_000)).map((m) => m.message_id),
-    ).toContain(office.message_id);
+      (await db.listExpiredMedia(new Date('2099-01-01T00:00:00Z'), 5_000)).map((m) => m.id),
+    ).toContain(office.media_id);
     // Unattached uploads are listed from storage.objects; this database has no storage schema.
     expect(await db.listOrphanOfficePhotos(new Date('2099-01-01T00:00:00Z'), 10)).toEqual([]);
 
     const storage = createMemoryStorage();
     for (const s of sources.filter((x) => x.kind === 'photo'))
-      await storage.upload('photos', s.storage_path!, Buffer.from(s.message_id), 'image/jpeg');
+      await storage.upload('photos', s.storage_path!, Buffer.from(s.media_id!), 'image/jpeg');
     const ctx = {
       db,
       storage,
@@ -1441,7 +1851,7 @@ describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
         report: (await db.getReport(report.id))!,
         version: v,
         site,
-        data: v.data as DailyReportData,
+        data: readReportData(v.data as unknown as StoredReportData),
       });
       return input.photos.map((p) => [
         'data' in p ? Buffer.from(p.data).toString() : p.url,
@@ -1454,10 +1864,417 @@ describe('PostgresDb on PGlite: photos uploaded in the panel', () => {
     ]);
     expect(await printed(report.current_version + 1)).toEqual([
       [kept!.messageId, 'Kept'],
-      [office.message_id, 'From the office'],
+      [office.media_id, 'From the office'],
     ]);
-    await q(`delete from jobs where dedupe_key = $1`, [
-      `render_pdf:${report.id}:${report.current_version + 1}`,
+
+    // Retention deletes the office photo's file: the source keeps its upload, so the photo stays
+    // listed (without a file) and an unrelated office edit neither drops it nor counts it removed.
+    await db.purgeMedia(office.media_id!, new Date('2026-11-12T03:00:00Z'));
+    const purged = (await db.listReportSources(report.id)).find(
+      (s) => s.media_id === office.media_id,
+    );
+    expect(purged).toMatchObject({ kind: 'photo', upload_id: office.media_id, storage_path: null });
+    const edited = (await db.getVersion(report.id, report.current_version + 1))!;
+    await sql`select set_config('request.jwt.claim.sub', ${LENA}, false)`;
+    try {
+      await sql`select create_report_version(${report.id},
+        ${sql.json({ ...(edited.data as DailyReportDataV1), summary: 'Reworded' } as never)},
+        'Summary reworded', '[]'::jsonb)`;
+    } finally {
+      await sql`select set_config('request.jwt.claim.sub', '', false)`;
+    }
+    const after = (await db.getVersion(report.id, report.current_version + 2))!;
+    expect((after.data as DailyReportDataV1).photos).toEqual(
+      (edited.data as DailyReportDataV1).photos,
+    );
+    const [audit] = await q<{ diff: Record<string, unknown> }>(
+      `select diff from audit_log where entity_id = $1 and action = 'report.version_created'
+       order by created_at desc, id desc limit 1`,
+      [report.id],
+    );
+    expect(audit!.diff).toMatchObject({
+      version: report.current_version + 2,
+      photos: 2,
+      photos_added: 0,
+      photos_removed: 0,
+    });
+    // The PDF of the new version prints the photo that still has its file.
+    expect(await printed(report.current_version + 2)).toEqual([[kept!.messageId, 'Kept']]);
+    await q(`delete from jobs where dedupe_key = any($1::text[])`, [
+      [1, 2].map((n) => `render_pdf:${report.id}:${report.current_version + n}`),
     ]);
+  });
+});
+
+describe('PostgresDb on PGlite: messaging (W1-08)', () => {
+  it('reads the packs and a reporter’s consents', async () => {
+    const us = await db.getCountry('US');
+    expect(us).toMatchObject({ code: 'US', sms_provider: 'twilio', sms_sender_id: null });
+    expect((await db.listCountries()).map((c) => c.code)).toEqual(['TR', 'US']);
+    const consents = await db.listConsents(MARCO);
+    expect(consents.map((c) => c.type).sort()).toEqual(['data_processing', 'recording', 'sms']);
+    expect(consents.every((c) => c.revoked_at === null)).toBe(true);
+  });
+
+  it('the WhatsApp window opens only by a Twilio message to that sender (W2-15/16 review)', async () => {
+    const phone = '+15550149876';
+    const SENDER = '+15550100001';
+    // Inbound rows as sms-webhook's receive_inbound_message() writes them (`payload.to`).
+    const inbound = async (provider: string, to: string, at: string) => {
+      await sql`
+        insert into messages (id, phone_e164, channel, direction, provider, provider_message_id,
+          body, status, payload, created_at)
+        values (${randomUUID()}, ${phone}, 'whatsapp', 'in', ${provider}, ${randomUUID()},
+          'HELP', 'received', ${sql.json({ to })}, ${at})`;
+    };
+    // A Demo phone reply (console) and a message to another pack's sender: no window here.
+    await inbound('console', SENDER, '2026-10-09T10:00:00Z');
+    await inbound('twilio', '+905320000099', '2026-10-09T11:00:00Z');
+    expect(await db.lastInboundWhatsapp(phone, SENDER)).toBeNull();
+    await inbound('twilio', SENDER, '2026-10-09T09:00:00Z');
+    expect(await db.lastInboundWhatsapp(phone, SENDER)).toBe('2026-10-09T09:00:00.000Z');
+    expect(await db.lastInboundWhatsapp(phone, '+905320000099')).toBe('2026-10-09T11:00:00.000Z');
+  });
+
+  it('the Notifier over Postgres: a welcome on the demo org, its row, its retry and its audit', async () => {
+    const sent: string[] = [];
+    const notifier = createWorkerNotifier(testConfig(), db, (driver) => ({
+      driver,
+      async send(_to, body) {
+        sent.push(body);
+        return { providerId: `${driver}:${randomUUID()}` };
+      },
+    }));
+    const vars = {
+      first: 'Marco',
+      company: 'Kestrel Build Group',
+      site: 'Elm St. Townhomes',
+      deadline: '17:30',
+      link: 'https://go.sitelog.app/r/ABCDEF',
+    };
+    const out = await notifier.send(MARCO, 'welcome', vars, { dedupeKey: 'w108:test' });
+    expect(out.channel).toBe('sms');
+    const row = await one<Record<string, unknown>>(
+      `select org_id, reporter_id, phone_e164, channel, direction, provider, copy_key, body, status, payload
+       from messages where id = $1`,
+      [(out as { messageId: string }).messageId],
+    );
+    expect(row).toMatchObject({
+      org_id: ORG,
+      reporter_id: MARCO,
+      phone_e164: MARCO_PHONE,
+      channel: 'sms',
+      direction: 'out',
+      provider: 'console',
+      copy_key: 'welcome',
+      status: 'delivered',
+      payload: { dedupe_key: 'w108:test' },
+    });
+    // Kestrel is a demo org: the whole text, link and all, for the Demo phone.
+    expect(row.body).toContain('https://go.sitelog.app/r/ABCDEF');
+    expect(await notifier.send(MARCO, 'welcome', vars, { dedupeKey: 'w108:test' })).toEqual(out);
+    expect(sent).toHaveLength(1);
+    const audit = await q<{ action: string }>(
+      `select action from audit_log where entity_id = $1 and action = 'sms.sent'`,
+      [(out as { messageId: string }).messageId],
+    );
+    expect(audit).toHaveLength(1);
+  });
+
+  it('issues personal links once and refuses a taken hash', async () => {
+    const id = randomUUID();
+    expect(await db.insertPersonalLink({ id, code_hash: `w108-${id}`, reporter_id: MARCO })).toBe(
+      true,
+    );
+    expect(
+      await db.insertPersonalLink({
+        id: randomUUID(),
+        code_hash: `w108-${id}`,
+        reporter_id: MARCO,
+      }),
+    ).toBe(false);
+    const links = await db.listPersonalLinks(MARCO);
+    expect(links[0]).toEqual({ id, code_hash: `w108-${id}` });
+  });
+
+  it('reads a phone’s reporters per pack and scope, records opt-outs, marks a text handled', async () => {
+    // Kestrel (US, demo) holds Marco: a real sender never reaches him, the Demo phone does.
+    expect(await db.listInboundReporters(MARCO_PHONE, 'US', { realOnly: true })).toEqual([]);
+    const inOrg = await db.listInboundReporters(MARCO_PHONE, 'US', { orgId: ORG });
+    expect(inOrg).toHaveLength(1);
+    expect(inOrg[0]).toMatchObject({
+      id: MARCO,
+      orgId: ORG,
+      name: 'Marco Ruiz',
+      phone: MARCO_PHONE,
+      locale: 'en-US',
+      orgName: 'Kestrel Build Group',
+      orgIsDemo: true,
+      contactPref: 'link',
+    });
+    expect(await db.listInboundReporters(MARCO_PHONE, 'TR', { orgId: ORG })).toEqual([]);
+
+    expect(await db.isSmsOptedOut(MARCO_PHONE, 'US')).toBe(false);
+    await db.recordSmsOptOut({ phone_e164: MARCO_PHONE, country: 'US', method: 'sms_keyword' });
+    // A second record keeps the first (its method and time).
+    await db.recordSmsOptOut({
+      phone_e164: MARCO_PHONE,
+      country: 'US',
+      method: 'provider_opt_out',
+    });
+    expect(await db.isSmsOptedOut(MARCO_PHONE, 'US')).toBe(true);
+    expect(await db.isSmsOptedOut(MARCO_PHONE, 'TR')).toBe(false);
+    expect(
+      await one(`select method from sms_opt_outs where phone_e164 = $1 and country = 'US'`, [
+        MARCO_PHONE,
+      ]),
+    ).toEqual({ method: 'sms_keyword' });
+    await db.clearSmsOptOut(MARCO_PHONE, 'US');
+    expect(await db.isSmsOptedOut(MARCO_PHONE, 'US')).toBe(false);
+
+    // The reporter row follows a provider opt-out; a disabled one keeps its status.
+    await db.optOutReporter(MARCO, '2026-10-09T23:00:00Z');
+    expect(await one(`select status, opted_out_at from reporters where id = $1`, [MARCO])).toEqual({
+      status: 'opted_out',
+      opted_out_at: new Date('2026-10-09T23:00:00Z'),
+    });
+    await db.optOutReporter(MARCO, '2026-10-10T23:00:00Z');
+    expect(
+      (await one(`select opted_out_at from reporters where id = $1`, [MARCO])).opted_out_at,
+    ).toEqual(new Date('2026-10-09T23:00:00Z'));
+    await db.updateReporter(MARCO, { status: 'active', opted_out_at: null, contact_pref: 'call' });
+    expect(await one(`select status, contact_pref from reporters where id = $1`, [MARCO])).toEqual({
+      status: 'active',
+      contact_pref: 'call',
+    });
+    await db.updateReporter(MARCO, { contact_pref: 'link' });
+
+    // The inbound row's handled mark, beside what the webhook stored.
+    const id = randomUUID();
+    await q(
+      `insert into messages (id, org_id, reporter_id, phone_e164, channel, direction, provider, provider_message_id, body, status, payload)
+       values ($1, $2, $3, $4, 'sms', 'in', 'twilio', $5, 'STOP', 'received', '{"to":"+18885550142","pack":"US"}')`,
+      [id, ORG, MARCO, MARCO_PHONE, `SM${id}`],
+    );
+    await db.markSmsHandled(id, '2026-10-09T23:00:01.000Z');
+    expect((await one(`select payload from messages where id = $1`, [id])).payload).toEqual({
+      to: '+18885550142',
+      pack: 'US',
+      handled_at: '2026-10-09T23:00:01.000Z',
+    });
+    expect(await db.hasPendingUnknownContact('+15550194410', 'sms')).toBe(false);
+    const contact = await db.insertUnknownContact({
+      org_id: null,
+      phone_e164: '+15550194410',
+      channel: 'sms',
+      message_id: id,
+      snippet: 'hello?',
+    });
+    expect(contact.status).toBe('pending');
+    expect(await db.hasPendingUnknownContact('+15550194410', 'sms')).toBe(true);
+    expect(await db.hasPendingUnknownContact('+15550194410', 'sms')).toBe(true);
+    const [prior, ...more] = await db.listMessagesByDedupeKey(MARCO, 'w108:test');
+    expect(more).toEqual([]);
+    expect(prior).toMatchObject({
+      attempt: 1,
+      provider: 'console',
+      error: null,
+      status: 'delivered',
+      error_code: null,
+    });
+  });
+
+  it('the F13 row once per text; a retry of that text does not count its own row as pending', async () => {
+    const phone = '+15550194420';
+    const text = randomUUID();
+    await q(
+      `insert into messages (id, phone_e164, channel, direction, provider, provider_message_id, body, status)
+       values ($1, $2, 'sms', 'in', 'twilio', $3, 'who is this', 'received')`,
+      [text, phone, `SM${text}`],
+    );
+    const first = await db.insertSmsUnknownContact({
+      phone_e164: phone,
+      message_id: text,
+      snippet: 'who is this',
+      org_id: null,
+    });
+    expect(first.created).toBe(true);
+    expect(
+      await db.insertSmsUnknownContact({
+        phone_e164: phone,
+        message_id: text,
+        snippet: 'x',
+        org_id: null,
+      }),
+    ).toEqual({ id: first.id, created: false });
+    expect(
+      await one(`select org_id, channel, status, snippet from unknown_contacts where id = $1`, [
+        first.id,
+      ]),
+    ).toEqual({ org_id: null, channel: 'sms', status: 'pending', snippet: 'who is this' });
+    expect(await db.hasPendingUnknownContact(phone, 'sms')).toBe(true);
+    expect(await db.hasPendingUnknownContact(phone, 'sms', text)).toBe(false);
+    expect(await db.hasPendingUnknownContact(phone, 'sms', randomUUID())).toBe(true);
+    // Spec §19 Q44: once an org links the number, its next unknown text is that org's history.
+    const org = await one<{ country: string; is_demo: boolean }>(
+      `select country, is_demo from orgs where id = $1`,
+      [ORG],
+    );
+    expect(await db.linkedContactOrgs(phone, org.country)).toEqual([]);
+    await q(`update unknown_contacts set status = 'linked', org_id = $2 where id = $1`, [
+      first.id,
+      ORG,
+    ]);
+    expect(await db.linkedContactOrgs(phone, org.country)).toEqual(org.is_demo ? [] : [ORG]);
+    expect(await db.linkedContactOrgs(phone, 'XX')).toEqual([]);
+  });
+
+  it('keeps the provider code of a refused send with its dedupe key', async () => {
+    const id = randomUUID();
+    await db.insertSmsMessage({
+      id,
+      org_id: ORG,
+      reporter_id: MARCO,
+      phone_e164: MARCO_PHONE,
+      channel: 'sms',
+      direction: 'out',
+      provider: 'twilio',
+      provider_message_id: null,
+      copy_key: 'welcome',
+      body: 'Hi Marco',
+      status: 'queued',
+      error: null,
+      payload: { dedupe_key: 'w108:refused' },
+    });
+    await db.updateSmsMessage(id, {
+      status: 'undeliverable',
+      error: 'twilio 400 21610: unsubscribed',
+      payload: { dedupe_key: 'w108:refused', error_code: '21610' },
+    });
+    // A row written before W2-01 has no attempt number (the walk reads it as the first).
+    expect(await db.listMessagesByDedupeKey(MARCO, 'w108:refused')).toEqual([
+      {
+        id,
+        channel: 'sms',
+        status: 'undeliverable',
+        provider: 'twilio',
+        provider_message_id: null,
+        error: 'twilio 400 21610: unsubscribed',
+        error_code: '21610',
+        attempt: null,
+        tries: null,
+      },
+    ]);
+  });
+
+  it("a real sender reaches a real org's reporter, and a keyword's change commits with its audit and notice or not at all", async () => {
+    // A non-demo US org with a reporter on Marco's number (the Kestrel demo org has him too).
+    const real = (
+      await one<{ id: string }>(
+        `insert into orgs (name, country, is_demo) values ('Real Builders Inc', 'US', false) returning id`,
+      )
+    ).id;
+    try {
+      const dana = (
+        await one<{ id: string }>(
+          `insert into reporters (org_id, name, phone_e164, status, activated_at)
+           values ($1, 'Dana Whitfield', $2, 'active', now()) returning id`,
+          [real, MARCO_PHONE],
+        )
+      ).id;
+      const realOnly = await db.listInboundReporters(MARCO_PHONE, 'US', { realOnly: true });
+      expect(realOnly).toEqual([
+        expect.objectContaining({
+          id: dana,
+          orgId: real,
+          name: 'Dana Whitfield',
+          orgName: 'Real Builders Inc',
+          orgIsDemo: false,
+          status: 'active',
+        }),
+      ]);
+      expect(await db.listInboundReporters(MARCO_PHONE, 'US', { orgId: real })).toEqual(realOnly);
+      expect(
+        (await db.listInboundReporters(MARCO_PHONE, 'US', { orgId: ORG })).map((r) => r.id),
+      ).toEqual([MARCO]);
+
+      const change = (orgId: string) => ({
+        reporterId: dana,
+        patch: { status: 'opted_out' as const, opted_out_at: '2026-10-09T23:00:00.000Z' },
+        audit: {
+          org_id: real,
+          actor_type: 'reporter' as const,
+          actor_id: dana,
+          action: 'reporter.opted_out',
+          entity: 'reporter',
+          entity_id: dana,
+          diff: { method: 'sms_keyword', keyword: 'stop' },
+        },
+        notification: {
+          orgId,
+          kind: 'reporter_opted_out',
+          title: 'Dana Whitfield opted out of texts (STOP)',
+          body: 'Call them.',
+          targetPath: '/team',
+        },
+      });
+      const state = async () => ({
+        status: (
+          await one<{ status: string }>(`select status from reporters where id = $1`, [dana])
+        ).status,
+        audits: (
+          await q(
+            `select 1 from audit_log where entity_id = $1 and action = 'reporter.opted_out'`,
+            [dana],
+          )
+        ).length,
+        notices: (await q(`select 1 from notifications where org_id = $1`, [real])).length,
+      });
+      // The notice fails (an org that does not exist): the update and the audit roll back too.
+      await expect(db.applyInboundChange(change(randomUUID()))).rejects.toThrow();
+      expect(await state()).toEqual({ status: 'active', audits: 0, notices: 0 });
+      await db.applyInboundChange(change(real));
+      expect(await state()).toEqual({ status: 'opted_out', audits: 1, notices: 1 });
+    } finally {
+      await q(`delete from orgs where id = $1`, [real]);
+    }
+  });
+
+  it('files a console email for the Demo phone', async () => {
+    const id = await db.insertConsoleEmail({
+      org_id: ORG,
+      kind: 'report_filed',
+      recipients: ['pm@kestrelbuild.example'],
+      subject: 'Daily report · Riverside',
+      body_text: 'Filed.',
+      attachments: [{ filename: 'RL-2041-0187.pdf', bytes: 1234 }],
+    });
+    expect(
+      await one(`select kind, recipients, attachments from console_emails where id = $1`, [id]),
+    ).toEqual({
+      kind: 'report_filed',
+      recipients: ['pm@kestrelbuild.example'],
+      attachments: [{ filename: 'RL-2041-0187.pdf', bytes: 1234 }],
+    });
+  });
+});
+
+describe('PostgresDb on PGlite: the next delayed job', () => {
+  it('tells the runner how long until the earliest delayed job falls due', async () => {
+    const before = await db.msUntilNextJob!();
+    const id = await db.enqueueJob(
+      'weekly_digest',
+      { orgId: DEMO_ORG_ID, weekStart: '2026-10-05' },
+      { delayMs: 90_000, dedupeKey: `next-job-${randomUUID()}` },
+    );
+    try {
+      const ms = await db.msUntilNextJob!();
+      expect(ms).not.toBeNull();
+      expect(ms!).toBeGreaterThan(0);
+      expect(ms!).toBeLessThanOrEqual(90_000);
+      expect(ms!).toBeLessThanOrEqual(before ?? Infinity);
+    } finally {
+      await sql`delete from jobs where id = ${id}`;
+    }
   });
 });

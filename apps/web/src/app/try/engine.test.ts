@@ -308,7 +308,7 @@ describe('field simulator engine', () => {
     expect(report.current_version).toBe(2);
     expect(
       s.store.data.versions.find((v) => v.report_id === report.id && v.version === 2)?.author,
-    ).toBe('reporter_reply');
+    ).toBe('reporter');
   });
 
   it('photos first, then the typed report; the photo question is answered by a photo', () => {

@@ -1,11 +1,12 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
 import { DemoStore } from '@/data/demo/store';
 import type { ReportDetail } from '@/data/types';
 import type * as PhotosModule from '@/lib/photos';
+import { i18n } from '@/i18n/i18n';
 import { makeSource, renderWithProviders } from '@/test/render';
 import { toFormValues } from '../report/reportForm';
 import { newReportDraftKey } from './draft';
@@ -39,7 +40,9 @@ function renderNew(route = '/reports/new') {
   return store;
 }
 
-describe('NewReportPage', () => {
+// Each test types a whole report with userEvent and files it (browser PDF render included): slow on a
+// shared CI runner, so the file gets a longer limit than the 5 s default.
+describe('NewReportPage', { timeout: 20_000 }, () => {
   it('files a typed report for the chosen site and date as version 1 by the office', async () => {
     const user = userEvent.setup();
     const store = renderNew();
@@ -142,22 +145,31 @@ describe('NewReportPage', () => {
     );
     const report = store.data.reports.find((r) => r.site_id === elm.id && !r.reporter_id)!;
     expect(loading).toHaveBeenCalledWith('Uploading photos 1 of 1');
-    const message = store.data.messages.find((m) => m.org_id === store.data.org.id)!;
+    // An office upload (D14): no reporter, uploaded_by the user, no message.
+    const message = store.data.uploads.find((u) => u.report_id === report.id)!;
     expect(message).toMatchObject({
-      conversation_id: null,
-      type: 'image',
-      body: 'Unit 2 trusses',
-      media_mime: 'image/jpeg',
+      reporter_id: null,
+      kind: 'photo',
+      caption: 'Unit 2 trusses',
+      mime: 'image/jpeg',
       storage_path: expect.stringMatching(
         new RegExp(`^${store.data.org.id}/${elm.id}/office/[0-9a-f-]{36}\\.jpg$`),
       ),
     });
     expect(store.data.sources).toContainEqual(
-      expect.objectContaining({ report_id: report.id, message_id: message.id, kind: 'photo' }),
+      expect.objectContaining({
+        report_id: report.id,
+        upload_id: message.id,
+        message_id: null,
+        kind: 'photo',
+      }),
     );
     const v1 = store.data.versions.find((v) => v.report_id === report.id && v.version === 1)!;
-    expect((v1.data as unknown as DailyReportData).photos).toEqual([
-      { messageId: message.id, caption: 'Unit 2 trusses', takenAt: '2026-10-09T21:30:00.000Z' },
+    // Report data v2 (W1-12): the org's language and units stamped, photos keyed by upload.
+    const stored = v1.data as unknown as DailyReportData;
+    expect(stored).toMatchObject({ schemaVersion: 2, reportLanguage: 'en', units: 'imperial' });
+    expect(stored.photos).toEqual([
+      { uploadId: message.id, caption: 'Unit 2 trusses', takenAt: '2026-10-09T21:30:00.000Z' },
     ]);
     // The PDF was rendered from the filed version with the uploaded photo.
     await waitFor(() => expect(pdf.rendered).toHaveLength(1));
@@ -340,7 +352,7 @@ describe('NewReportPage', () => {
           v: 1,
           siteId: elm.id,
           date: '2026-10-08',
-          values: { ...toFormValues(emptyReportData('2026-10-09')), summary },
+          values: { ...toFormValues(emptyReportDataV1('2026-10-09')), summary },
         }),
       );
 
@@ -366,5 +378,43 @@ describe('NewReportPage', () => {
     expect(within(editor).getAllByRole('textbox')[0]!).toHaveValue('');
     expect(screen.getByTestId('new-report-date')).toHaveValue('2026-10-09');
     expect(window.sessionStorage.getItem(key)).toBeNull();
+  });
+
+  it('speaks Turkish in a Turkish panel (W4-09): labels, checks, the day-has-report notice', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    const user = userEvent.setup();
+    const store = renderNew();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Yeni rapor' })).toBeVisible();
+    expect(
+      screen.getByText('Bir şantiyenin günlük raporunu yazın. Kaydettiğiniz anda dosyalanır.'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Şantiye', { selector: 'label' })).toBeInTheDocument();
+    expect(screen.getByText('Tarih', { selector: 'label' })).toBeInTheDocument();
+    const date = screen.getByTestId('new-report-date');
+    await user.clear(date);
+    await user.type(date, '2026-10-12');
+    await user.click(screen.getAllByRole('button', { name: 'Raporu dosyala' })[0]!);
+    expect(await screen.findByText('Şantiye seçin', { selector: '[role="alert"]' })).toBeVisible();
+    expect(screen.getByText('Gelecekteki bir tarih seçilemez.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Dosyalamadan önce bir özet yazın veya en az bir satır ekleyin.'),
+    ).toBeInTheDocument();
+
+    // A day that has a report: the notice and its link in Turkish.
+    const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
+    await user.click(screen.getByTestId('new-report-site'));
+    await user.click(await screen.findByRole('option', { name: new RegExp(riverside.name) }));
+    await user.clear(date);
+    await user.type(date, '2026-10-09');
+    await user.type(
+      within(screen.getByTestId('report-editor')).getAllByRole('textbox')[0]!,
+      'Tekrar deneme.',
+    );
+    await user.click(screen.getByTestId('file-report'));
+    const notice = await screen.findByTestId('day-has-report');
+    expect(notice).toHaveTextContent(
+      'Bu şantiye ve tarih için RL-2041-0187 zaten var, bu yüzden bu rapor dosyalanmadı.',
+    );
+    expect(within(notice).getByRole('link', { name: 'RL-2041-0187 raporunu aç' })).toBeVisible();
   });
 });

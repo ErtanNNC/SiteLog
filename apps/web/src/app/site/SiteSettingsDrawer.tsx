@@ -1,9 +1,9 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router';
 import { z } from 'zod';
-import { formatMonthDay, formatPhone } from '@sitelog/shared/format.ts';
+import { formatDate, formatPhone } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { StatusChip } from '@/components/sitelog/StatusChip';
 import { Avatar } from '@/components/ui/Avatar';
@@ -35,10 +35,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
 import { usePauseSite, useResumeSite, useSaveSiteRecipients, useUpdateSite } from '@/data/hooks';
 import type { UpdateSitePatch } from '@/data/source';
 import type { SiteDetail } from '@/data/types';
+import { useCopy, type CopyT } from '@/i18n/useCopy';
 import { formatLanguages } from '@/lib/format';
 import { uniq } from '@/lib/utils';
 
@@ -61,31 +61,34 @@ const HHMM = /^\d{2}:\d{2}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const numeric = (v: string) => v === '' || !Number.isNaN(Number(v));
 
-const schema = z.object({
-  name: z.string().trim().min(1, copy.siteDetail.settings.nameRequired),
-  projectCode: z.string().trim().min(1, copy.siteDetail.settings.codeRequired),
-  address: z.string().trim(),
-  lat: z.string().trim().refine(numeric, copy.siteDetail.settings.latLngInvalid),
-  lng: z.string().trim().refine(numeric, copy.siteDetail.settings.latLngInvalid),
-  timezone: z.string().min(1),
-  deadline: z
-    .string()
-    .trim()
-    .refine((v) => v === '' || HHMM.test(v), copy.siteDetail.settings.timeInvalid),
-  workingHours: z.string().trim(),
-  recipients: z.string().superRefine((v, ctx) => {
-    for (const email of splitEmails(v)) {
-      if (!EMAIL.test(email)) {
-        ctx.addIssue({
-          code: 'custom',
-          message: copy.siteDetail.settings.recipientsInvalid(email),
-        });
-        return;
+/** The form's rules, with their messages in the panel's language (W1-18). */
+function schemaFor(t: CopyT) {
+  return z.object({
+    name: z.string().trim().min(1, t('siteDetail.settings.nameRequired')),
+    projectCode: z.string().trim().min(1, t('siteDetail.settings.codeRequired')),
+    address: z.string().trim(),
+    lat: z.string().trim().refine(numeric, t('siteDetail.settings.latLngInvalid')),
+    lng: z.string().trim().refine(numeric, t('siteDetail.settings.latLngInvalid')),
+    timezone: z.string().min(1),
+    deadline: z
+      .string()
+      .trim()
+      .refine((v) => v === '' || HHMM.test(v), t('siteDetail.settings.timeInvalid')),
+    workingHours: z.string().trim(),
+    recipients: z.string().superRefine((v, ctx) => {
+      for (const email of splitEmails(v)) {
+        if (!EMAIL.test(email)) {
+          ctx.addIssue({
+            code: 'custom',
+            message: t('siteDetail.settings.recipientsInvalid', { email }),
+          });
+          return;
+        }
       }
-    }
-  }),
-});
-type FormValues = z.infer<typeof schema>;
+    }),
+  });
+}
+type FormValues = z.infer<ReturnType<typeof schemaFor>>;
 
 function splitEmails(v: string): string[] {
   return uniq(
@@ -124,6 +127,8 @@ export function SiteSettingsDrawer({
   /** The deadline currently in effect ("17:30"), shown as the hint for the override field. */
   orgDeadline: string;
 }) {
+  const { t, language } = useCopy();
+  const schema = useMemo(() => schemaFor(t), [t]);
   const site = detail.site;
   // Only admins can pause or resume a site (RLS: sites_admin_update); for anyone else the
   // update would match no row and still report success.
@@ -176,11 +181,11 @@ export function SiteSettingsDrawer({
             <form onSubmit={(e) => void onSubmit(e)} className="flex min-h-full flex-col">
               <div className="border-b border-rebar px-6 py-5">
                 <DialogHeader>
-                  <DialogTitle>{copy.siteDetail.settings.title}</DialogTitle>
+                  <DialogTitle>{t('siteDetail.settings.title')}</DialogTitle>
                   <DialogDescription>
                     {site.name} · <span className="font-mono">{site.projectCode}</span>
                     {site.status === 'paused' && site.pausedAt
-                      ? ` · ${copy.siteDetail.settings.pausedNote(formatMonthDay(site.pausedAt.slice(0, 10)))}`
+                      ? ` · ${t('siteDetail.settings.pausedNote', { date: formatDate(site.pausedAt.slice(0, 10), 'monthDay', language) })}`
                       : ''}
                   </DialogDescription>
                 </DialogHeader>
@@ -192,7 +197,7 @@ export function SiteSettingsDrawer({
                   name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{copy.siteDetail.settings.name}</FormLabel>
+                      <FormLabel>{t('siteDetail.settings.name')}</FormLabel>
                       <FormControl>
                         <Input {...field} autoComplete="off" />
                       </FormControl>
@@ -205,7 +210,7 @@ export function SiteSettingsDrawer({
                   name="projectCode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{copy.siteDetail.settings.projectCode}</FormLabel>
+                      <FormLabel>{t('siteDetail.settings.projectCode')}</FormLabel>
                       <FormControl>
                         <Input {...field} className="font-mono" autoComplete="off" />
                       </FormControl>
@@ -218,11 +223,11 @@ export function SiteSettingsDrawer({
                   name="address"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{copy.siteDetail.settings.address}</FormLabel>
+                      <FormLabel>{t('siteDetail.settings.address')}</FormLabel>
                       <FormControl>
                         <Input {...field} autoComplete="street-address" />
                       </FormControl>
-                      <FormDescription>{copy.siteDetail.settings.addressHint}</FormDescription>
+                      <FormDescription>{t('siteDetail.settings.addressHint')}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -233,7 +238,7 @@ export function SiteSettingsDrawer({
                     name="lat"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{copy.siteDetail.settings.lat}</FormLabel>
+                        <FormLabel>{t('siteDetail.settings.lat')}</FormLabel>
                         <FormControl>
                           <Input {...field} inputMode="decimal" className="font-mono" />
                         </FormControl>
@@ -246,7 +251,7 @@ export function SiteSettingsDrawer({
                     name="lng"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{copy.siteDetail.settings.lng}</FormLabel>
+                        <FormLabel>{t('siteDetail.settings.lng')}</FormLabel>
                         <FormControl>
                           <Input {...field} inputMode="decimal" className="font-mono" />
                         </FormControl>
@@ -260,7 +265,7 @@ export function SiteSettingsDrawer({
                   name="timezone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{copy.siteDetail.settings.timezone}</FormLabel>
+                      <FormLabel>{t('siteDetail.settings.timezone')}</FormLabel>
                       <Select value={field.value} onValueChange={field.onChange}>
                         <FormControl>
                           <SelectTrigger>
@@ -285,12 +290,12 @@ export function SiteSettingsDrawer({
                     name="deadline"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{copy.siteDetail.settings.deadline}</FormLabel>
+                        <FormLabel>{t('siteDetail.settings.deadline')}</FormLabel>
                         <FormControl>
                           <Input {...field} placeholder={orgDeadline} className="font-mono" />
                         </FormControl>
                         <FormDescription>
-                          {copy.siteDetail.settings.deadlineHint(orgDeadline)}
+                          {t('siteDetail.settings.deadlineHint', { org: orgDeadline })}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -301,12 +306,12 @@ export function SiteSettingsDrawer({
                     name="workingHours"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{copy.siteDetail.settings.workingHours}</FormLabel>
+                        <FormLabel>{t('siteDetail.settings.workingHours')}</FormLabel>
                         <FormControl>
                           <Input {...field} placeholder="07:00–15:30" className="font-mono" />
                         </FormControl>
                         <FormDescription>
-                          {copy.siteDetail.settings.workingHoursHint}
+                          {t('siteDetail.settings.workingHoursHint')}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -314,11 +319,11 @@ export function SiteSettingsDrawer({
                   />
                 </div>
 
-                <section aria-label={copy.siteDetail.settings.reporters}>
-                  <h3 className="text-caption font-medium">{copy.siteDetail.settings.reporters}</h3>
+                <section aria-label={t('siteDetail.settings.reporters')}>
+                  <h3 className="text-caption font-medium">{t('siteDetail.settings.reporters')}</h3>
                   {detail.reporters.length === 0 ? (
                     <p className="mt-1 text-caption text-dust">
-                      {copy.siteDetail.settings.noReporters}
+                      {t('siteDetail.settings.noReporters')}
                     </p>
                   ) : (
                     <ul className="mt-2 divide-y divide-rebar rounded-card border border-rebar">
@@ -329,12 +334,12 @@ export function SiteSettingsDrawer({
                             <div className="flex flex-wrap items-center gap-1.5">
                               <span className="font-medium">{r.name}</span>
                               <Badge variant={r.isPrimary ? 'dark' : 'neutral'}>
-                                {r.isPrimary ? copy.siteDetail.primary : copy.siteDetail.backup}
+                                {r.isPrimary ? t('siteDetail.primary') : t('siteDetail.backup')}
                               </Badge>
                               {r.status === 'invited' ? (
                                 <StatusChip
                                   variant="pending"
-                                  label={copy.chips.inviteSent}
+                                  label={t('siteDetail.settings.inviteSent')}
                                   size="sm"
                                 />
                               ) : null}
@@ -348,9 +353,9 @@ export function SiteSettingsDrawer({
                     </ul>
                   )}
                   <p className="mt-1 text-caption text-dust">
-                    {copy.siteDetail.settings.reportersHint}{' '}
+                    {t('siteDetail.settings.reportersHint')}{' '}
                     <Link to="/team" className="text-level hover:underline">
-                      {copy.nav.team}
+                      {t('nav.team')}
                     </Link>
                   </p>
                 </section>
@@ -360,11 +365,11 @@ export function SiteSettingsDrawer({
                   name="recipients"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{copy.siteDetail.settings.recipients}</FormLabel>
+                      <FormLabel>{t('siteDetail.settings.recipients')}</FormLabel>
                       <FormControl>
                         <Textarea {...field} rows={3} spellCheck={false} />
                       </FormControl>
-                      <FormDescription>{copy.siteDetail.settings.recipientsHint}</FormDescription>
+                      <FormDescription>{t('siteDetail.settings.recipientsHint')}</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -379,7 +384,7 @@ export function SiteSettingsDrawer({
                         onClick={() => setConfirm('resume')}
                         loading={resumeSite.isPending}
                       >
-                        {copy.siteDetail.resumeSite}
+                        {t('siteDetail.resumeSite')}
                       </Button>
                     ) : (
                       <Button
@@ -388,7 +393,7 @@ export function SiteSettingsDrawer({
                         onClick={() => setConfirm('pause')}
                         loading={pauseSite.isPending}
                       >
-                        {copy.siteDetail.pauseSite}
+                        {t('siteDetail.pauseSite')}
                       </Button>
                     )}
                   </div>
@@ -397,10 +402,10 @@ export function SiteSettingsDrawer({
 
               <DialogFooter className="mt-0 border-t border-rebar px-6 py-4">
                 <Button variant="ghost" onClick={() => onOpenChange(false)}>
-                  {copy.common.cancel}
+                  {t('siteDetail.settings.cancel')}
                 </Button>
                 <Button type="submit" variant="primary" loading={saving}>
-                  {copy.common.saveChanges}
+                  {t('siteDetail.settings.save')}
                 </Button>
               </DialogFooter>
             </form>
@@ -413,18 +418,18 @@ export function SiteSettingsDrawer({
         onOpenChange={(o) => !o && setConfirm(null)}
         title={
           confirm === 'resume'
-            ? copy.siteDetail.settings.resumeTitle(site.name)
-            : copy.siteDetail.settings.pauseTitle(site.name)
+            ? t('siteDetail.settings.resumeTitle', { site: site.name })
+            : t('siteDetail.settings.pauseTitle', { site: site.name })
         }
         description={
           confirm === 'resume'
-            ? copy.siteDetail.settings.resumeBody
-            : copy.siteDetail.settings.pauseBody
+            ? t('siteDetail.settings.resumeBody')
+            : t('siteDetail.settings.pauseBody')
         }
         confirmLabel={
           confirm === 'resume'
-            ? copy.siteDetail.settings.resumeConfirm
-            : copy.siteDetail.settings.pauseConfirm
+            ? t('siteDetail.settings.resumeConfirm')
+            : t('siteDetail.settings.pauseConfirm')
         }
         destructive={confirm === 'pause'}
         loading={pauseSite.isPending || resumeSite.isPending}

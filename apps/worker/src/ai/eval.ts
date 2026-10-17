@@ -1,48 +1,93 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import {
   DailyReportDataSchema,
-  ExtractionOutputSchema,
-  ObservedWeatherSchema,
+  ObservedWeatherV1Schema,
   PhotoSchema,
   QUESTION_FIELDS,
+  REPORTER_LOCALES,
+  REPORT_LANGUAGES,
   REQUIRED_FIELD_KEYS,
+  ReportExtractionSchema,
+  UNIT_SYSTEMS,
+  callRequiredFields,
   pickNextQuestion,
   round2,
-  toObserved,
+  toObservedIn,
   validateReport,
   type DailyReportData,
-  type ExtractionOutput,
+  type ReportExtraction,
   type QuestionField,
   type RequiredFieldKey,
 } from '@sitelog/shared';
+import { runAnswerEval } from './answer-fixtures';
+import { runCorrectionEval } from './correction-fixtures';
+import {
+  evalModelFor,
+  isEvalSetSummary,
+  markdownSummary,
+  parseEvalSets,
+  summarizeEval,
+  summaryLine,
+  type EvalOutcome,
+  type EvalReport,
+  type EvalSet,
+  type EvalSetSummary,
+} from './eval-summary';
+import { runUtteranceEval } from './utterance-fixtures';
 import { createAnthropicClient, type MessagesClient } from './claude';
-import { runExtraction, type ExtractionInput } from './extract';
-import { buildExtractionUserMessage, buildOrgContextBlock } from './prompts/extraction';
+import { runReportExtraction, type ExtractionInputV2 } from './extract';
+import { buildOrgContextBlock } from './prompts/extraction';
+import { buildExtractionUserMessageV2, segmentMediaId } from './prompts/extraction.v2';
+import { loadDotenv } from '../dotenv';
 import { createLogger } from '../log';
 
 /**
- * §10.12 evaluation set: run extraction on every fixtures/transcripts/*.json (directory scan) and
- * compare with fixtures/expected/<id>.json.
+ * §10.12 evaluation set: run extraction v2 (W1-12: prompt v2, report data v2, the web recorder's
+ * input) on every fixtures/transcripts/*.json (directory scan) and compare with
+ * fixtures/expected/<id>.json. EN, ES, EN + ES and TR cases; a TR case is written in Turkish
+ * with metric units.
  *
  * Scored (see compareReport): manpower counts exact and hours exact per company, company resolution
  * (known vs unknown), weather lostHours ±0.5 and full-day flag, every non-null number has a source,
  * unknown companies flagged, incident severities, work quantities / percentages exact, languages,
- * the required gaps code derives (§10.5) and the question code would ask next, rejected glossary
- * mappings unused. Not scored: wording (summary, activities, areas, impacts), deliveries,
+ * the report language (the summary is written in REPORT_LANGUAGE), the required gaps code derives
+ * (§10.5) and the question code would ask next, rejected glossary mappings unused. Not scored: wording (summary, activities, areas, impacts), deliveries,
  * equipment, next-workday items, the model's own missingRequired / proposedQuestions text.
  *
- * Every case also has fixtures/tool-outputs/<id>.json: a recorded `submit_daily_report` input that
- * the worker tests replay without an API key (`--recorded` scores those offline).
+ * Every case also has fixtures/tool-outputs/<id>.json: a `submit_daily_report` input that the
+ * worker tests replay without an API key (`--recorded` scores those offline). From W1-12 these are
+ * NOT model recordings: no ANTHROPIC_API_KEY was available, so they are generated from the
+ * expected data (`recordedFromExpected`: the expected data without what code adds, with the
+ * `recordedNulls` a case names left null for code to derive) by `pnpm eval -- --write-recorded`,
+ * and a test holds them to that. They prove the pipeline around the model, not the model; a live
+ * `pnpm eval` with the key is the model's check.
  *
- *   pnpm eval                                 live run (skipped without ANTHROPIC_API_KEY)
+ *   pnpm eval                                 live run (skipped without ANTHROPIC_API_KEY; outside
+ *                                             production the key may sit in the root .env)
  *   pnpm eval -- --case riverside --case pier9 cases whose id contains one of the filters
  *   pnpm eval -- --recorded                   score the recorded tool outputs (no API calls)
+ *   pnpm eval -- --write-recorded             regenerate fixtures/tool-outputs from fixtures/expected
  *   pnpm eval -- --list                       list the cases
  *   pnpm eval -- --concurrency 4              parallel API calls (default 3)
+ *   pnpm eval -- --answers                    the parse_answer golden set (fixtures/answers, W2-09)
+ *   pnpm eval -- --corrections                the apply_correction golden set (fixtures/corrections, W2-10)
+ *                                             on CLAUDE_MODEL; with --recorded, offline
+ *   pnpm eval -- --utterances                 the classify_utterance golden set (fixtures/utterances,
+ *                                             W2-12) on the fast model; with --recorded, offline
+ *   pnpm eval -- --set <name>                 the same by name: extraction, answers, corrections, utterances
+ *   pnpm eval -- --set tr                     the extraction cases in Turkish only (W4-08; `all` leaves it out)
+ *   pnpm eval -- --json <file>                also write the set's summary and per-case results as JSON
+ *   pnpm eval -- --summarize <file>...        print the Markdown table of --json files (no API calls)
+ *
+ * The model comes from env as the worker picks it (`evalModelFor`): CLAUDE_MODEL for the
+ * extraction and apply_correction, CLAUDE_MODEL_FAST (else CLAUDE_MODEL) for parse_answer and
+ * classify_utterance; set both to one id to run every set on that model (.github/workflows/eval.yml).
+ * Every scored run ends with one `EVAL_SUMMARY {json}` line (eval-summary.ts): cases, passed, failed
+ * case ids, tokens, the estimated cost at src/ai/cost.ts rates and the wall time.
  *
  * Exit 1 when a case fails or a fixture is broken.
  */
@@ -54,12 +99,16 @@ export const FIXTURES_DIR = join(here, '..', '..', '..', '..', 'fixtures');
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-const SegmentSchema = z.strictObject({
-  messageId: z.string().min(1),
+const segmentText = {
   start: z.number().min(0),
   end: z.number().min(0),
   text: z.string().min(1),
-});
+};
+/** A voice note's segment (`uploadId`), or (W3-09) a call's reporter lane (`callId`). */
+const SegmentSchema = z.union([
+  z.strictObject({ uploadId: z.string().min(1), ...segmentText }),
+  z.strictObject({ callId: z.string().min(1), ...segmentText }),
+]);
 
 const SiteDayWeatherSchema = z.strictObject({
   date: z.string().regex(DATE),
@@ -75,7 +124,7 @@ const SiteDayWeatherSchema = z.strictObject({
       gustMph: z.number().min(0).nullable(),
     }),
   ),
-  summary: ObservedWeatherSchema.extend({
+  summary: ObservedWeatherV1Schema.extend({
     precipWorkingHoursIn: z.number().min(0),
     maxGustWorkingHoursMph: z.number().min(0),
   }),
@@ -93,6 +142,17 @@ export const EvalTranscriptSchema = z.strictObject({
   description: z.string().min(1),
   /** The question code asks next for the expected data (§10.5 step 4); null when nothing is asked. */
   expectedQuestion: ExpectedQuestionSchema.nullable(),
+  /**
+   * The v1.0 case was a typed WhatsApp report: the web recorder has none, so its text is one
+   * voice-note segment here; the WhatsApp worker's tests and the panel's simulator read it as text.
+   */
+  whatsappText: z.literal(true).optional(),
+  /** Paths the recorded tool output leaves null for code to derive (`recordedFromExpected`). */
+  recordedNulls: z.array(z.string().regex(/^manpower\[\d+\]\.hoursPerWorker$/)).optional(),
+  reportLanguage: z.enum(REPORT_LANGUAGES),
+  units: z.enum(UNIT_SYSTEMS),
+  reporterLocale: z.enum(REPORTER_LOCALES),
+  channel: z.enum(['web', 'call']),
   site: z.strictObject({
     name: z.string().min(1),
     projectCode: z.string().min(1),
@@ -124,13 +184,12 @@ export const EvalTranscriptSchema = z.strictObject({
       field: z.string().min(1),
       question: z.string(),
       answer: z.string(),
-      messageId: z.string().min(1),
+      questionId: z.string().min(1),
     }),
   ),
   previousDraft: DailyReportDataSchema.nullable(),
   photos: z.array(PhotoSchema),
   segments: z.array(SegmentSchema),
-  texts: z.array(z.strictObject({ messageId: z.string().min(1), text: z.string().min(1) })),
 });
 export type EvalTranscript = z.infer<typeof EvalTranscriptSchema>;
 
@@ -138,10 +197,12 @@ export interface EvalFixture {
   id: string;
   description: string;
   expectedQuestion: ExpectedQuestion | null;
-  input: ExtractionInput;
+  whatsappText: boolean;
+  recordedNulls: string[];
+  input: ExtractionInputV2;
   expected: DailyReportData;
-  /** Recorded `submit_daily_report` input (fixtures/tool-outputs/<id>.json). */
-  recorded: ExtractionOutput | null;
+  /** The `submit_daily_report` input the tests replay (fixtures/tool-outputs/<id>.json). */
+  recorded: ReportExtraction | null;
   /** The JSON as stored, to spot keys the schemas would silently drop. */
   raw: { expected: unknown; recorded: unknown };
 }
@@ -172,7 +233,11 @@ export function listFixtureIds(dir = FIXTURES_DIR): string[] {
 }
 
 /** Load and schema-check one case. Throws with the file and the Zod issues when a file is broken. */
-export function loadFixture(id: string, dir = FIXTURES_DIR): EvalFixture {
+export function loadFixture(
+  id: string,
+  dir = FIXTURES_DIR,
+  opts: { skipRecorded?: boolean } = {},
+): EvalFixture {
   const tPath = join(dir, 'transcripts', `${id}.json`);
   const t = EvalTranscriptSchema.safeParse(readJson(tPath));
   if (!t.success) throw new Error(`${tPath}: ${issuesOf(t.error)}`);
@@ -182,20 +247,29 @@ export function loadFixture(id: string, dir = FIXTURES_DIR): EvalFixture {
   const e = DailyReportDataSchema.safeParse(rawExpected);
   if (!e.success) throw new Error(`${ePath}: ${issuesOf(e.error)}`);
   const rPath = join(dir, 'tool-outputs', `${id}.json`);
-  let recorded: ExtractionOutput | null = null;
+  let recorded: ReportExtraction | null = null;
   let rawRecorded: unknown = null;
-  if (existsSync(rPath)) {
+  if (!opts.skipRecorded && existsSync(rPath)) {
     rawRecorded = readJson(rPath);
-    const r = ExtractionOutputSchema.safeParse(rawRecorded);
+    const r = ReportExtractionSchema.safeParse(rawRecorded);
     if (!r.success) throw new Error(`${rPath}: ${issuesOf(r.error)}`);
     recorded = r.data;
   }
-  const { id: fileId, description, expectedQuestion, ...input } = t.data;
+  const {
+    id: fileId,
+    description,
+    expectedQuestion,
+    whatsappText,
+    recordedNulls,
+    ...input
+  } = t.data;
   if (fileId !== id) throw new Error(`${tPath}: id "${fileId}" does not match the file name`);
   return {
     id,
     description,
     expectedQuestion,
+    whatsappText: whatsappText ?? false,
+    recordedNulls: recordedNulls ?? [],
     input,
     expected: e.data,
     recorded,
@@ -227,6 +301,7 @@ export const EVAL_FIELDS = [
   'safety',
   'numbers',
   'language',
+  'report_language',
   'required_gaps',
   'next_question',
   'glossary',
@@ -260,11 +335,13 @@ export interface CompareContext {
   maxQuestions?: number;
 }
 
-export function compareContextOf(input: ExtractionInput): CompareContext {
+export function compareContextOf(input: ExtractionInputV2): CompareContext {
+  const required = input.requiredFields.filter((f): f is RequiredFieldKey =>
+    (REQUIRED_FIELD_KEYS as readonly string[]).includes(f),
+  );
   return {
-    requiredFields: input.requiredFields.filter((f): f is RequiredFieldKey =>
-      (REQUIRED_FIELD_KEYS as readonly string[]).includes(f),
-    ),
+    // §10.5 step 2 (W3-09): a call never asks for the photo.
+    requiredFields: input.channel === 'call' ? callRequiredFields(required) : required,
     photoCount: input.photos.length,
     companies: input.companies,
     rejectedMappings: input.rejectedMappings,
@@ -351,6 +428,32 @@ function workNumbers(data: DailyReportData): number[] {
 
 function lang(code: string): string {
   return code.toLowerCase().slice(0, 2);
+}
+
+const LANGUAGE_MARKERS: Record<'en' | 'es' | 'tr', RegExp> = {
+  en: /\b(?:the|and|was|were|on|of|with|by|for|completed|no)\b/g,
+  es: /\b(?:el|los|las|del|con|fue|por|sin|para|se)\b/g,
+  tr: /(?:[çğışöüİ]|\b(?:ve|ile|bir|yapıldı|tarafından|olmadı|arasında|devam)\b)/g,
+};
+
+/**
+ * The language a report text is written in (en, es or tr), by its most frequent marker words and,
+ * for Turkish, letters: enough to tell a Turkish summary from an English one, which is what the
+ * report-language check needs (§10.13 "correct report language"). null for an empty text.
+ */
+export function textLanguage(text: string): 'en' | 'es' | 'tr' | null {
+  const t = text.toLowerCase();
+  if (!t.trim()) return null;
+  let best: 'en' | 'es' | 'tr' | null = null;
+  let score = 0;
+  for (const [l, re] of Object.entries(LANGUAGE_MARKERS) as Array<['en' | 'es' | 'tr', RegExp]>) {
+    const n = t.match(re)?.length ?? 0;
+    if (n > score) {
+      best = l;
+      score = n;
+    }
+  }
+  return best;
 }
 
 /** The question code would ask first for this data (§10.5 steps 2–5), as field + path. */
@@ -529,6 +632,17 @@ export function compareReport(
     field: 'language',
   });
 
+  // §10.13 "correct report language": REPORT_LANGUAGE, and the summary written in it.
+  const written = textLanguage(actual.summary);
+  checks.push({
+    name: 'report language',
+    ok:
+      actual.reportLanguage === expected.reportLanguage &&
+      (written === null || written === expected.reportLanguage),
+    detail: `got ${actual.reportLanguage} (summary ${written ?? 'empty'}), want ${expected.reportLanguage}`,
+    field: 'report_language',
+  });
+
   if (ctx) {
     const gapsA = requiredGapsOf(actual, ctx);
     const gapsE = requiredGapsOf(expected, ctx);
@@ -596,7 +710,14 @@ function droppedKeys(raw: unknown, parsed: unknown, path = ''): string[] {
   return [];
 }
 
-type AnySource = { type: string; messageId?: string; start?: number; end?: number };
+type AnySource = {
+  type: string;
+  uploadId?: string;
+  callId?: string;
+  questionId?: string;
+  start?: number;
+  end?: number;
+};
 
 /** Every `source` array anywhere in the data, with its JSON path. */
 function sourcesIn(value: unknown, path = ''): Array<{ path: string; source: AnySource }> {
@@ -610,33 +731,36 @@ function sourcesIn(value: unknown, path = ''): Array<{ path: string; source: Any
   });
 }
 
-function sourceProblems(label: string, data: unknown, input: ExtractionInput): string[] {
+function sourceProblems(label: string, data: unknown, input: ExtractionInputV2): string[] {
   const problems: string[] = [];
   const segs = new Map<string, Array<{ start: number; end: number }>>();
-  for (const s of input.segments) segs.set(s.messageId, [...(segs.get(s.messageId) ?? []), s]);
-  const texts = new Set(input.texts.map((t) => t.messageId));
-  const replies = new Set(input.previousAnswers.map((a) => a.messageId));
+  for (const s of input.segments) {
+    // A voice note by its upload, a call (W3-09) by its call: `voice:` / `call:` keep them apart.
+    const key = s.callId !== undefined ? `call:${s.callId}` : `voice:${s.uploadId}`;
+    segs.set(key, [...(segs.get(key) ?? []), s]);
+  }
+  const answers = new Set(input.previousAnswers.map((a) => a.questionId));
   const near = (a: number, b: number) => Math.abs(a - b) < 0.051;
   for (const { path, source: s } of sourcesIn(data)) {
     const at = `${label} ${path}`;
-    if (s.type === 'audio') {
-      const list = segs.get(s.messageId ?? '');
+    if (s.type === 'voice_note' || s.type === 'call') {
+      const id = s.type === 'call' ? s.callId : s.uploadId;
+      const list = segs.get(`${s.type === 'call' ? 'call' : 'voice'}:${id ?? ''}`);
       if (!list) {
-        problems.push(`${at}: audio messageId ${s.messageId} is not a voice note in the input`);
+        problems.push(`${at}: ${s.type} ${id} is not a ${s.type} in the input`);
         continue;
       }
       if (!list.some((x) => near(x.start, s.start ?? -1)))
-        problems.push(`${at}: start ${s.start} is not a segment start of ${s.messageId}`);
+        problems.push(`${at}: start ${s.start} is not a segment start of ${id}`);
       if (s.end !== undefined && !list.some((x) => near(x.end, s.end!)))
-        problems.push(`${at}: end ${s.end} is not a segment end of ${s.messageId}`);
+        problems.push(`${at}: end ${s.end} is not a segment end of ${id}`);
       if (s.end !== undefined && s.start !== undefined && s.end < s.start)
         problems.push(`${at}: end before start`);
-    } else if (s.type === 'text') {
-      if (!texts.has(s.messageId ?? ''))
-        problems.push(`${at}: text messageId ${s.messageId} is not a text message in the input`);
-    } else if (s.type === 'reply') {
-      if (!replies.has(s.messageId ?? ''))
-        problems.push(`${at}: reply messageId ${s.messageId} is not a previous answer`);
+    } else if (s.type === 'answer') {
+      if (!answers.has(s.questionId ?? ''))
+        problems.push(`${at}: answer questionId ${s.questionId} is not a previous answer`);
+    } else if (s.type !== 'weather_api') {
+      problems.push(`${at}: a ${s.type} source has no place in a web recorder report`);
     }
   }
   return problems;
@@ -656,20 +780,23 @@ export function fixtureProblems(f: EvalFixture): string[] {
   const { input, expected } = f;
 
   // Transcript
-  if (input.segments.length === 0 && input.texts.length === 0)
-    problems.push('transcript: no segments and no text messages');
-  const byMessage = new Map<string, Array<{ start: number; end: number }>>();
+  if (input.segments.length === 0) problems.push('transcript: no segments');
+  const byMedia = new Map<string, Array<{ start: number; end: number }>>();
   for (const s of input.segments) {
+    const id = segmentMediaId(s);
     if (!(s.end > s.start))
-      problems.push(`transcript: segment ${s.messageId}@${s.start} ends before it starts`);
-    const list = byMessage.get(s.messageId) ?? [];
+      problems.push(`transcript: segment ${id}@${s.start} ends before it starts`);
+    const list = byMedia.get(id) ?? [];
     const prev = list[list.length - 1];
     if (prev && s.start < prev.end - 0.051)
-      problems.push(`transcript: segment ${s.messageId}@${s.start} overlaps the previous one`);
+      problems.push(`transcript: segment ${id}@${s.start} overlaps the previous one`);
     list.push(s);
-    byMessage.set(s.messageId, list);
+    byMedia.set(id, list);
   }
-  const prompt = `${buildOrgContextBlock(input)}\n${buildExtractionUserMessage(input)}`;
+  // W3-09: a call case is live mode (`CHANNEL: call`) and its segments are the call's.
+  if ((input.channel === 'call') !== input.segments.some((s) => s.callId !== undefined))
+    problems.push('transcript: a call case has call segments, and only a call case has them');
+  const prompt = `${buildOrgContextBlock(input)}\n${buildExtractionUserMessageV2(input)}`;
   for (const p of findPhoneNumbers(prompt)) problems.push(`prompt: phone-number-like text "${p}"`);
   const companyIds = new Set(input.companies.map((c) => c.id));
 
@@ -678,9 +805,16 @@ export function fixtureProblems(f: EvalFixture): string[] {
     problems.push(`expected: unknown key ${k}`);
   if (expected.reportDate !== input.reportDate)
     problems.push(`expected: reportDate ${expected.reportDate} ≠ transcript ${input.reportDate}`);
+  if (expected.reportLanguage !== input.reportLanguage || expected.units !== input.units)
+    problems.push('expected: reportLanguage or units differ from the transcript (code sets them)');
+  if (
+    textLanguage(expected.summary) !== null &&
+    textLanguage(expected.summary) !== input.reportLanguage
+  )
+    problems.push(`expected: the summary is not written in ${input.reportLanguage}`);
   if (JSON.stringify(expected.photos) !== JSON.stringify(input.photos))
     problems.push('expected: photos differ from the transcript photos (code copies them)');
-  const obs = input.observedWeather ? toObserved(input.observedWeather) : undefined;
+  const obs = input.observedWeather ? toObservedIn(input.observedWeather, input.units) : undefined;
   if (JSON.stringify(expected.weather.observed) !== JSON.stringify(obs))
     problems.push('expected: weather.observed differs from the transcript observedWeather summary');
   expected.manpower.forEach((m, i) => {
@@ -717,8 +851,49 @@ export function fixtureProblems(f: EvalFixture): string[] {
     for (const k of droppedKeys(f.raw.recorded, f.recorded))
       problems.push(`tool-outputs: unknown key ${k}`);
     problems.push(...sourceProblems('tool-outputs', f.recorded, input));
+    if (JSON.stringify(f.raw.recorded) !== JSON.stringify(recordedFromExpected(f)))
+      problems.push(
+        'tool-outputs: not what --write-recorded generates from the expected data (run pnpm eval -- --write-recorded)',
+      );
   }
   return problems;
+}
+
+/**
+ * The tool output the tests replay, generated from the expected data (W1-12: no model recording
+ * without ANTHROPIC_API_KEY): the expected data without what code adds (`schemaVersion`,
+ * `reportDate`, `reportLanguage`, `units`, `photos`, `weather.observed`), with the case's
+ * `recordedNulls` left null so code has to derive them (a stated total, hours per worker from it).
+ */
+export function recordedFromExpected(
+  f: Pick<EvalFixture, 'expected' | 'recordedNulls'>,
+): ReportExtraction {
+  const {
+    schemaVersion: _v,
+    reportDate: _d,
+    reportLanguage: _l,
+    units: _u,
+    photos: _p,
+    ...rest
+  } = structuredClone(f.expected);
+  const { observed: _o, ...weather } = rest.weather;
+  const out: ReportExtraction = { ...rest, weather };
+  for (const path of f.recordedNulls) {
+    const i = Number(/^manpower\[(\d+)\]/.exec(path)?.[1]);
+    const m = out.manpower[i];
+    if (m) m.hoursPerWorker = null;
+  }
+  return out;
+}
+
+/** `pnpm eval -- --write-recorded`: fixtures/tool-outputs/<id>.json from the expected data. */
+export function writeRecorded(fixtures: EvalFixture[], dir = FIXTURES_DIR): void {
+  for (const f of fixtures) {
+    writeFileSync(
+      join(dir, 'tool-outputs', `${f.id}.json`),
+      `${JSON.stringify(recordedFromExpected(f), null, 2)}\n`,
+    );
+  }
 }
 
 // ───────────────────────────── Runs ─────────────────────────────
@@ -785,7 +960,7 @@ export async function scoreCase(
   model: string,
 ): Promise<EvalCase> {
   try {
-    const res = await runExtraction(
+    const res = await runReportExtraction(
       client,
       model,
       f.input,
@@ -878,18 +1053,38 @@ export function printTable(cases: EvalCase[]): string {
 export interface EvalOptions {
   cases: string[];
   recorded: boolean;
+  writeRecorded: boolean;
   list: boolean;
   help: boolean;
   concurrency: number;
+  /** W2-09: the parse_answer golden set (fixtures/answers) instead of the extraction cases. */
+  answers: boolean;
+  /** W2-10: the apply_correction golden set (fixtures/corrections) instead of the extraction cases. */
+  corrections: boolean;
+  /** W2-12: the classify_utterance golden set (fixtures/utterances) instead of the extraction cases. */
+  utterances: boolean;
+  /** `--set <name>`: the set by name (the flags above, or `extraction`). */
+  set: EvalSet | null;
+  /** `--json <file>`: write the summary and per-case results there. */
+  json: string | null;
+  /** `--summarize <file>...`: the Markdown table of earlier --json files. */
+  summarize: string[];
 }
 
 export function parseArgs(argv: string[]): EvalOptions {
   const opts: EvalOptions = {
     cases: [],
     recorded: false,
+    writeRecorded: false,
     list: false,
     help: false,
     concurrency: 3,
+    answers: false,
+    corrections: false,
+    utterances: false,
+    set: null,
+    json: null,
+    summarize: [],
   };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -910,8 +1105,37 @@ export function parseArgs(argv: string[]): EvalOptions {
       case '--recorded':
         opts.recorded = true;
         break;
+      case '--write-recorded':
+        opts.writeRecorded = true;
+        break;
       case '--list':
         opts.list = true;
+        break;
+      case '--answers':
+        opts.answers = true;
+        break;
+      case '--corrections':
+        opts.corrections = true;
+        break;
+      case '--utterances':
+        opts.utterances = true;
+        break;
+      case '--set': {
+        const sets = parseEvalSets(value());
+        if (sets.length !== 1) throw new Error('--set takes one set per run');
+        opts.set = sets[0]!;
+        break;
+      }
+      case '--json': {
+        const v = value();
+        if (!v || v.startsWith('--')) throw new Error('--json needs a file path');
+        opts.json = v;
+        break;
+      }
+      case '--summarize':
+        opts.summarize.push(...argv.slice(i + 1).filter((a) => a !== '--'));
+        if (opts.summarize.length === 0) throw new Error('--summarize needs at least one file');
+        i = argv.length;
         break;
       case '--concurrency': {
         const n = Number(value());
@@ -932,8 +1156,19 @@ export function parseArgs(argv: string[]): EvalOptions {
 const USAGE = `usage: pnpm eval [-- options]
   --case <id|part>   only cases whose id contains it (repeatable, or comma-separated)
   --recorded         score the recorded tool outputs offline (no API key needed)
+  --write-recorded   regenerate fixtures/tool-outputs from fixtures/expected (then prettier)
   --list             list the cases and exit
-  --concurrency <n>  parallel API calls in a live run (default 3)`;
+  --answers          the parse_answer golden set (fixtures/answers); with --recorded, offline
+  --corrections      the apply_correction golden set (fixtures/corrections); with --recorded, offline
+  --utterances       the classify_utterance golden set (fixtures/utterances); with --recorded, offline
+  --set <name>       the set by name: extraction, answers, corrections, utterances, or tr (the
+                     extraction cases in Turkish; all leaves it out)
+  --json <file>      also write the set's summary (cases, passed, failed ids, tokens, cost, time) as JSON
+  --summarize <f>... print the Markdown table of --json files and exit (no API calls)
+  --concurrency <n>  parallel API calls in a live run (default 3)
+
+Models: CLAUDE_MODEL (extraction, tr, corrections), CLAUDE_MODEL_FAST else CLAUDE_MODEL (answers,
+utterances).`;
 
 async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array<R>(items.length);
@@ -949,6 +1184,52 @@ async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): P
   return out;
 }
 
+/** The one set a run scores: `--set`, or one of `--answers`, `--corrections`, `--utterances`. */
+export function selectedSet(opts: EvalOptions): EvalSet {
+  const flagged: EvalSet[] = [];
+  if (opts.answers) flagged.push('answers');
+  if (opts.corrections) flagged.push('corrections');
+  if (opts.utterances) flagged.push('utterances');
+  if (opts.set) flagged.push(opts.set);
+  const sets = [...new Set(flagged)];
+  if (sets.length > 1) throw new Error(`one set per run (${sets.join(', ')} asked for)`);
+  return sets[0] ?? 'extraction';
+}
+
+/** Print the `EVAL_SUMMARY` line, write the --json file, and return the exit code (1 on a failure). */
+function finish(
+  opts: EvalOptions,
+  set: EvalSet,
+  model: string,
+  outcomes: EvalOutcome[],
+  startedAt: number,
+): number {
+  const summary = summarizeEval(set, model, opts.recorded, outcomes, performance.now() - startedAt);
+  console.log(summaryLine(summary));
+  if (opts.json) {
+    const report: EvalReport = { ...summary, results: outcomes };
+    mkdirSync(dirname(opts.json), { recursive: true });
+    writeFileSync(opts.json, `${JSON.stringify(report, null, 2)}\n`);
+  }
+  return summary.failed === 0 ? 0 : 1;
+}
+
+/** `--summarize`: the Markdown table of --json files (in the order given). */
+export function summarizeFiles(files: string[]): { markdown: string; problems: string[] } {
+  const summaries: EvalSetSummary[] = [];
+  const problems: string[] = [];
+  for (const f of files) {
+    try {
+      const v = readJson(f);
+      if (isEvalSetSummary(v)) summaries.push(v);
+      else problems.push(`${f}: not an eval summary`);
+    } catch (err) {
+      problems.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+  return { markdown: summaries.length ? markdownSummary(summaries) : '', problems };
+}
+
 export async function runEval(
   argv: string[] = [],
   env: Record<string, string | undefined> = process.env,
@@ -959,7 +1240,51 @@ export async function runEval(
     console.log(USAGE);
     return 0;
   }
-  const ids = listFixtureIds(dir).filter((id) => matchesFilter(id, opts.cases));
+  if (opts.summarize.length) {
+    const { markdown, problems } = summarizeFiles(opts.summarize);
+    if (markdown) console.log(markdown);
+    for (const p of problems) console.error(p);
+    return problems.length ? 1 : 0;
+  }
+  const set = selectedSet(opts);
+  if (set !== 'extraction' && set !== 'tr') {
+    const key = env.ANTHROPIC_API_KEY ?? '';
+    const model = evalModelFor(set, env);
+    const tool = {
+      answers: 'parse_answer',
+      corrections: 'apply_correction',
+      utterances: 'classify_utterance',
+    }[set];
+    if (!opts.recorded && (!key || !model)) {
+      // apply_correction never guesses its model (evalModelFor): it needs CLAUDE_MODEL too.
+      const needs =
+        set === 'corrections'
+          ? 'ANTHROPIC_API_KEY and CLAUDE_MODEL are needed'
+          : 'ANTHROPIC_API_KEY is not set';
+      console.log(
+        `skipped: ${needs} (--${set} --recorded scores the recorded ${tool} outputs offline)`,
+      );
+      return 0;
+    }
+    const run = {
+      answers: runAnswerEval,
+      corrections: runCorrectionEval,
+      utterances: runUtteranceEval,
+    }[set];
+    const startedAt = performance.now();
+    if (!opts.recorded) console.log(`running the ${tool} set on ${model}`);
+    const outcomes = await run({
+      recorded: opts.recorded,
+      client: opts.recorded ? null : createAnthropicClient(key),
+      model: model ?? '',
+      filter: opts.cases,
+    });
+    return finish(opts, set, model ?? '', outcomes, startedAt);
+  }
+  // `--set tr` (W4-08): the extraction cases whose report language is Turkish.
+  const ids = listFixtureIds(dir)
+    .filter((id) => matchesFilter(id, opts.cases))
+    .filter((id) => set !== 'tr' || isTurkishCase(id, dir));
   if (ids.length === 0) {
     console.error(`no cases match ${opts.cases.join(', ')}`);
     return 1;
@@ -967,6 +1292,12 @@ export async function runEval(
   if (opts.list) {
     for (const id of ids) console.log(`${id}  ${loadFixture(id, dir).description}`);
     console.log(`${ids.length} cases`);
+    return 0;
+  }
+  if (opts.writeRecorded) {
+    const fixtures = ids.map((id) => loadFixture(id, dir, { skipRecorded: true }));
+    writeRecorded(fixtures, dir);
+    console.log(`wrote ${fixtures.length} tool outputs from fixtures/expected`);
     return 0;
   }
   const apiKey = env.ANTHROPIC_API_KEY ?? '';
@@ -997,21 +1328,56 @@ export async function runEval(
   }
 
   let cases: EvalCase[];
+  const model = evalModelFor(set, env)!;
+  const startedAt = performance.now();
   if (opts.recorded) {
     console.log(`scoring ${fixtures.length} recorded tool outputs (offline)`);
     cases = await mapPool(fixtures, 8, scoreRecorded);
   } else {
-    const model = env.CLAUDE_MODEL || 'claude-sonnet-5-5';
     const client = createAnthropicClient(apiKey)!;
     console.log(`running ${fixtures.length} cases on ${model} (concurrency ${opts.concurrency})`);
     cases = await mapPool(fixtures, opts.concurrency, (f) => scoreCase(f, client, model));
   }
   console.log(printTable(cases));
-  return cases.every((c) => c.ok) ? 0 : 1;
+  return finish(opts, set, model, cases.map(outcomeOf), startedAt);
 }
 
-if (process.argv[1] && /eval\.(ts|js)$/.test(process.argv[1])) {
-  runEval(process.argv.slice(2)).then(
+/** A case of the `tr` set: its transcript's report language is Turkish (read loosely: a broken file is reported by the scoring). */
+export function isTurkishCase(id: string, dir = FIXTURES_DIR): boolean {
+  try {
+    const t = readJson(join(dir, 'transcripts', `${id}.json`)) as { reportLanguage?: unknown };
+    return t.reportLanguage === 'tr';
+  } catch {
+    return true;
+  }
+}
+
+/** An extraction case as a set outcome (the failed check names, the call's tokens). */
+export function outcomeOf(c: EvalCase): EvalOutcome {
+  return {
+    id: c.id,
+    ok: c.ok,
+    failedChecks: c.checks.filter((x) => !x.ok).map((x) => x.name),
+    usage: c.tokens,
+  };
+}
+
+/**
+ * The `pnpm eval` entry. `pnpm eval` runs in apps/worker, so it loads the development `.env` files
+ * first, as the worker does (`<cwd>/.env`, then the repository root's `.env`; src/dotenv.ts): a key
+ * kept in the root `.env` reaches the live run, and the shell still wins over both files.
+ */
+export async function evalMain(
+  argv: string[] = process.argv.slice(2),
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv; dir?: string } = {},
+): Promise<number> {
+  const env = opts.env ?? process.env;
+  await loadDotenv({ cwd: opts.cwd, env });
+  return runEval(argv, env, opts.dir);
+}
+
+if (process.argv[1] && /eval\.(ts|js)$/.test(process.argv[1]) && !process.env.VITEST) {
+  evalMain().then(
     (code) => process.exit(code),
     (err) => {
       console.error(err instanceof Error ? err.message : err);

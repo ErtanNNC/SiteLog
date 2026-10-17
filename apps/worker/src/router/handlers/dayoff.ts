@@ -2,7 +2,7 @@ import {
   applyAnswer,
   ButtonSets,
   deadlineInstant,
-  emptyReportData,
+  emptyReportDataV1,
   localDate,
   waCopy,
   weatherDayData,
@@ -10,7 +10,7 @@ import {
   type DayOffClassification,
   type ReportRow,
   type SiteRow,
-  type Source,
+  type SourceV1,
 } from '@sitelog/shared';
 import { classifyDayOff } from '../../ai/dayoff';
 import { currentData, storeDraft } from '../../pipeline/draft';
@@ -100,7 +100,7 @@ export async function logWeatherDay(
       date: localDate(new Date(sourceMessage.created_at), site.timezone),
     });
   }
-  const source: Source =
+  const source: SourceV1 =
     sourceMessage?.type === 'audio'
       ? { type: 'audio', messageId: sourceMessageId, start: 0 }
       : { type: 'reply', messageId: sourceMessageId };
@@ -155,7 +155,7 @@ export async function logNoWork(s: Session, site: SiteRow, date: string): Promis
   if (siteCtx.settings.no_work_pdf) {
     const ensured = await ensureReportForDay(s, site, date, 'no_work');
     if (ensured && !ensured.filedAlready) {
-      const data = emptyReportData(date);
+      const data = emptyReportDataV1(date);
       data.summary = `No work at ${site.name} — planned non-working day.`;
       data.weather.conditionsText = 'Not recorded (no work)';
       await storeDraft(ctx, ensured.report, data, { authorMessageId: s.message.id });
@@ -300,12 +300,13 @@ export async function handleWeatherFollowupAnswer(
     {
       defaultShiftHours: Number(site.settings.default_shift_hours),
       workingHours: site.site.working_hours,
-      messageId: s.message.id,
+      // v1 data (the WhatsApp worker, step 22): the reply message is the source.
+      source: { type: 'reply', messageId: s.message.id },
     },
   );
   await createReportVersion(ctx, report, applied.data, {
     changeNote: `Crew on site this morning: ${workers}`,
-    author: 'reporter_reply',
+    author: 'reporter',
     authorMessageId: s.message.id,
     emailRecipients: false,
   });

@@ -1,0 +1,20 @@
+{
+  "path": "",
+  "params": {
+    "SmsMessageSid": "{{sid}}",
+    "NumMedia": "1",
+    "ProfileName": "Site Manager",
+    "SmsSid": "{{sid}}",
+    "WaId": "{{wa_id}}",
+    "SmsStatus": "received",
+    "To": "whatsapp:{{to}}",
+    "NumSegments": "1",
+    "MessageSid": "{{sid}}",
+    "AccountSid": "AC00000000000000000000000000000000",
+    "From": "whatsapp:{{phone}}",
+    "ApiVersion": "2010-04-01",
+    "Body": "",
+    "MediaContentType0": "audio/ogg",
+    "MediaUrl0": "https://api.twilio.com/2010-04-01/Accounts/AC00000000000000000000000000000000/Messages/{{sid}}/Media/ME00000000000000000000000000000000"
+  }
+}

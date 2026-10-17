@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { MEMBER_ROLES } from '@sitelog/shared';
+import { MEMBER_ROLES, ORG_LOCALES } from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
-import { requireOrgRole, requireUser, type AuthedUser } from '../_shared/auth.ts';
+import { type AuthedUser, requireOrgRole, requireUser } from '../_shared/auth.ts';
 import { requireEnv } from '../_shared/env.ts';
 import {
   HttpError,
@@ -13,11 +13,13 @@ import {
 } from '../_shared/http.ts';
 import { logInfo, logWarn } from '../_shared/log.ts';
 import { adminClient, type AppClient } from '../_shared/supabase.ts';
-import { displayNameFromEmail, memberChangeRefusal } from './logic.ts';
+import { displayNameFromEmail, inviteMetadata, memberChangeRefusal } from './logic.ts';
 
 /**
  * api-invite-office-user (§F20, §P10) — admin of the org.
- * POST { orgId, email, role }                       → Supabase invite email + org_members row
+ * POST { orgId, email, role, uiLocale? }            → Supabase invite email + org_members row
+ *   (F24, W4-03: `uiLocale` en-US | tr-TR | null = the company's language, stored in
+ *   org_members.ui_locale; the invite's metadata carries it, or the org's, for the email)
  * POST { action: 'change_role', orgId, userId, role }
  * POST { action: 'remove', orgId, userId }         → never the last admin, never yourself
  */
@@ -27,6 +29,7 @@ const InviteSchema = z.object({
   orgId: z.uuid(),
   email: z.email().trim().toLowerCase(),
   role: z.enum(MEMBER_ROLES),
+  uiLocale: z.enum(ORG_LOCALES).nullable().optional(),
 });
 const ChangeRoleSchema = z.object({
   action: z.literal('change_role'),
@@ -52,7 +55,14 @@ Deno.serve(
 
 async function invite(admin: AppClient, caller: AuthedUser, body: z.output<typeof InviteSchema>) {
   const redirectTo = `${requireEnv('APP_URL').replace(/\/+$/, '')}/auth/callback`;
-  const inviteData = { invited_org_id: body.orgId, invited_role: body.role };
+  const { data: org } = await admin
+    .from('orgs')
+    .select('locale, name')
+    .eq('id', body.orgId)
+    .single()
+    .throwOnError();
+  const uiLocale = body.uiLocale ?? null;
+  const inviteData = inviteMetadata(body.orgId, body.role, uiLocale, org.locale, org.name);
 
   // New user: Supabase sends the invite email. Existing user: no invite is possible, so we only
   // add the membership; they sign in with their usual magic link (§F1) and land in the org.
@@ -98,6 +108,7 @@ async function invite(admin: AppClient, caller: AuthedUser, body: z.output<typeo
         user_id: userId,
         role: body.role,
         display_name: displayNameFromEmail(body.email),
+        ui_locale: uiLocale,
       },
       { onConflict: 'org_id,user_id', ignoreDuplicates: true },
     )
@@ -109,7 +120,7 @@ async function invite(admin: AppClient, caller: AuthedUser, body: z.output<typeo
     action: 'member.invited',
     entity: 'org_member',
     entityId: userId,
-    diff: { email: body.email, role: body.role, emailSent },
+    diff: { email: body.email, role: body.role, ui_locale: uiLocale, emailSent },
   });
   logInfo('member.invited', { orgId: body.orgId, userId, role: body.role, emailSent });
   return { ok: true, userId, role: body.role, emailSent, existingUser: !emailSent };

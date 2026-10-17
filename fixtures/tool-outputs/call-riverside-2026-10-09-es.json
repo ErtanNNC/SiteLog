@@ -1,0 +1,267 @@
+{
+  "languageDetected": ["es"],
+  "summary": "Level 4 slab pour completed (approx. 68 yd³). Rain from 07:00 to 10:30 stopped exterior masonry on the south elevation for 3.5 h; the crew moved to interior blockwork on Level 2. Level 3 electrical rough-in approximately 60% complete; Level 2 ductwork continued in the east wing. Two loads of rebar delivered by Ironclad Steel at about 13:00. Toolbox talk on wet-weather access; no incidents.",
+  "weather": {
+    "conditionsText": "Rain 07:00–10:30, dry afterwards",
+    "periods": [
+      {
+        "start": "07:00",
+        "end": "10:30",
+        "condition": "Rain",
+        "impact": "Exterior masonry on the south elevation stopped; crew moved to interior blockwork on Level 2",
+        "lostHours": 3.5,
+        "source": [
+          {
+            "type": "call",
+            "callId": "c0110000-0000-4000-8000-000000000003",
+            "start": 12.2,
+            "end": 24.9
+          }
+        ]
+      }
+    ]
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Level 4",
+      "workers": 6,
+      "hoursPerWorker": 8,
+      "totalHours": 48,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 24.9,
+          "end": 32.1
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d002",
+      "companyNameHeard": "BrightLine",
+      "companyName": "BrightLine Electric",
+      "trade": "Electrical",
+      "area": "Level 3",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 32.1,
+          "end": 39
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d003",
+      "companyNameHeard": "los de Delta",
+      "companyName": "Delta Mechanical",
+      "trade": "HVAC",
+      "area": "Level 2",
+      "workers": null,
+      "hoursPerWorker": 8,
+      "totalHours": null,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.85,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 39,
+          "end": 46.5
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d004",
+      "companyNameHeard": "Ironclad",
+      "companyName": "Ironclad Steel",
+      "trade": "Rebar",
+      "area": "Level 5 deck",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 46.5,
+          "end": 53.2
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "nuestros muchachos",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Level 4",
+      "workers": 4,
+      "hoursPerWorker": 8,
+      "totalHours": 32,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 53.2,
+          "end": 59.8
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 4",
+      "activity": "Slab pour",
+      "status": "complete",
+      "quantity": {
+        "value": 68,
+        "unit": "yd³",
+        "heardAs": "sesenta y ocho yardas"
+      },
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 24.9,
+          "end": 32.1
+        }
+      ]
+    },
+    {
+      "area": "Level 3",
+      "activity": "Electrical rough-in",
+      "status": "in_progress",
+      "percentComplete": 60,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 32.1,
+          "end": 39
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Ductwork, east wing",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 39,
+          "end": 46.5
+        }
+      ]
+    },
+    {
+      "area": "Exterior — south elevation",
+      "activity": "CMU blockwork",
+      "status": "stopped",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 12.2,
+          "end": 24.9
+        }
+      ]
+    },
+    {
+      "area": "Level 2",
+      "activity": "Interior CMU blockwork",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 18.4,
+          "end": 24.9
+        }
+      ]
+    },
+    {
+      "area": "Level 5 deck",
+      "activity": "Rebar tying",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 46.5,
+          "end": 53.2
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "Rebar",
+      "quantity": "2 loads",
+      "supplier": "Ironclad Steel",
+      "time": "13:00",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 46.5,
+          "end": 53.2
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Wet-weather access and slippery decks",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "call",
+        "callId": "c0110000-0000-4000-8000-000000000003",
+        "start": 59.8,
+        "end": 66
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [
+    {
+      "item": "Concrete pump Monday 07:00 for the Level 5 deck",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000003",
+          "start": 66,
+          "end": 73.5
+        }
+      ]
+    }
+  ],
+  "newTerms": [],
+  "missingRequired": ["manpower.workers:Delta Mechanical"],
+  "lowConfidence": [],
+  "proposedQuestions": [
+    {
+      "field": "manpower.workers:Delta Mechanical",
+      "question": "Una pregunta — los de Delta en el nivel 2: ¿eran cuatro o cinco, y todo el día?",
+      "options": ["4 · todo el día", "5 · todo el día"]
+    }
+  ]
+}

@@ -1,14 +1,22 @@
 /**
  * §11.1 route map. Pages live in src/app/<name>/Page.tsx and are lazy-loaded, so a page can be
  * swapped by replacing its file. Guards: RequireAuth (session + org) and RequireRole (§2.2).
+ *
+ * D9: the shell, sign-in, `/auth/callback`, the Overview (W1-16), Sites and Site detail (W1-18),
+ * the Reports archive and Report review (W1-17), Crew hours (W3-06), Weather & delays (W3-07), the
+ * Site glossary (W3-08), Team & numbers (W4-03), Billing (W4-10), the setup wizard (W4-02),
+ * Settings (W4-05), New report (W4-09), the not-found page and the placeholders speak the panel's
+ * language (EN/TR). A page wrapped in `<EnglishOnly>` still reads `copy/en.ts` directly and renders
+ * in English inside the translated shell: since W4-09 only `/try` and `/ops` (spec §19 Q240,
+ * README "Deliberate deviations"; `routes.english-only.test.ts` holds it so).
  */
 import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router';
 import { useAuth } from '@/auth/AuthProvider';
-import { RequireAuth, RequireRole, ROUTE_ROLES } from '@/auth/guards';
+import { RequireAuth, RequireRole, ROUTE_ROLES, type RouteKey } from '@/auth/guards';
 import { AppShell } from '@/components/shell/AppShell';
 import { PageSkeleton } from '@/components/sitelog/Skeletons';
-import { copy } from '@/copy/en';
+import { EnglishOnly } from '@/i18n/EnglishOnly';
 
 const page = (loader: () => Promise<{ default: ComponentType }>) => lazy(loader);
 
@@ -27,23 +35,25 @@ const TeamPage = page(() => import('./team/Page'));
 const GlossaryPage = page(() => import('./glossary/Page'));
 const SettingsPage = page(() => import('./settings/Page'));
 const BillingPage = page(() => import('./billing/Page'));
+const DevPhonePage = page(() => import('./dev-phone/Page'));
 const OpsPage = page(() => import('./ops/Page'));
 const TryPage = page(() => import('./try/Page'));
 const NotFoundPage = page(() => import('./not-found/Page'));
 
-function guard(key: keyof typeof ROUTE_ROLES, label: string, node: ReactNode) {
+/** The role guard of a shell page; its "No access" state names the page by its nav label. */
+function guard(key: Exclude<RouteKey, 'setup'>, node: ReactNode) {
   return (
-    <RequireRole roles={ROUTE_ROLES[key]!} page={label}>
+    <RequireRole roles={ROUTE_ROLES[key]} page={`nav.${key}`}>
       {node}
     </RequireRole>
   );
 }
 
-/** `/` — accounts users land on /hours (§11.1). */
+/** `/` — accounts users land on /hours (§11.1). The Overview speaks EN and TR (W1-16). */
 function Home() {
   const { role } = useAuth();
   if (role === 'accounts') return <Navigate to="/hours" replace />;
-  return guard('overview', copy.nav.overview, <OverviewPage />);
+  return guard('overview', <OverviewPage />);
 }
 
 export function AppRoutes() {
@@ -57,36 +67,38 @@ export function AppRoutes() {
           <Route path="/setup/:step" element={<SetupPage />} />
           <Route element={<AppShell />}>
             <Route index element={<Home />} />
-            <Route path="/sites" element={guard('sites', copy.nav.sites, <SitesPage />)} />
+            <Route path="/sites" element={guard('sites', <SitesPage />)} />
+            <Route path="/sites/:siteId" element={guard('sites', <SiteDetailPage />)} />
+            <Route path="/reports" element={guard('reports', <ReportsPage />)} />
+            <Route path="/reports/new" element={guard('reports', <NewReportPage />)} />
+            <Route path="/reports/:reportId" element={guard('reports', <ReportDetailPage />)} />
+            <Route path="/hours" element={guard('hours', <HoursPage />)} />
+            <Route path="/weather" element={guard('weather', <WeatherPage />)} />
             <Route
-              path="/sites/:siteId"
-              element={guard('sites', copy.nav.sites, <SiteDetailPage />)}
+              path="/try"
+              element={guard(
+                'try',
+                <EnglishOnly>
+                  <TryPage />
+                </EnglishOnly>,
+              )}
             />
-            <Route path="/reports" element={guard('reports', copy.nav.reports, <ReportsPage />)} />
-            <Route
-              path="/reports/new"
-              element={guard('reports', copy.nav.reports, <NewReportPage />)}
-            />
-            <Route
-              path="/reports/:reportId"
-              element={guard('reports', copy.nav.reports, <ReportDetailPage />)}
-            />
-            <Route path="/hours" element={guard('hours', copy.nav.hours, <HoursPage />)} />
-            <Route path="/weather" element={guard('weather', copy.nav.weather, <WeatherPage />)} />
-            <Route path="/try" element={guard('try', copy.nav.try, <TryPage />)} />
-            <Route path="/team" element={guard('team', copy.nav.team, <TeamPage />)} />
-            <Route
-              path="/glossary"
-              element={guard('glossary', copy.nav.glossary, <GlossaryPage />)}
-            />
+            <Route path="/team" element={guard('team', <TeamPage />)} />
+            <Route path="/glossary" element={guard('glossary', <GlossaryPage />)} />
             <Route path="/settings" element={<Navigate to="/settings/reports" replace />} />
-            <Route
-              path="/settings/:section"
-              element={guard('settings', copy.nav.settings, <SettingsPage />)}
-            />
-            <Route path="/billing" element={guard('billing', copy.nav.billing, <BillingPage />)} />
+            {/* `/settings/channels` (§11.1) is the Field channels tab, a placeholder until W1-08. */}
+            <Route path="/settings/:section" element={guard('settings', <SettingsPage />)} />
+            <Route path="/billing" element={guard('billing', <BillingPage />)} />
+            <Route path="/dev/phone" element={guard('devPhone', <DevPhonePage />)} />
             {/* SiteLog staff only (platform_admins), not an org role and not in the sidebar. */}
-            <Route path="/ops" element={<OpsPage />} />
+            <Route
+              path="/ops"
+              element={
+                <EnglishOnly>
+                  <OpsPage />
+                </EnglishOnly>
+              }
+            />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Route>

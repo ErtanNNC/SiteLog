@@ -9,6 +9,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-06",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Priya",
@@ -22,29 +26,117 @@
     }
   ],
   "glossary": [
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
-    { "heard": "punch", "official": "Punch list items", "kind": "term" },
-    { "heard": "yards", "official": "Cubic yards (yd³)", "kind": "unit" }
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-06",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-06T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 53, "windMph": 7, "gustMph": 14 },
-      { "time": "07:00", "precipIn": 0, "tempF": 57, "windMph": 8, "gustMph": 12 },
-      { "time": "08:00", "precipIn": 0, "tempF": 61, "windMph": 9, "gustMph": 10 },
-      { "time": "09:00", "precipIn": 0, "tempF": 64, "windMph": 7, "gustMph": 13 },
-      { "time": "10:00", "precipIn": 0, "tempF": 66, "windMph": 8, "gustMph": 11 },
-      { "time": "11:00", "precipIn": 0, "tempF": 67, "windMph": 9, "gustMph": 14 },
-      { "time": "12:00", "precipIn": 0, "tempF": 67, "windMph": 7, "gustMph": 12 },
-      { "time": "13:00", "precipIn": 0, "tempF": 66, "windMph": 8, "gustMph": 10 },
-      { "time": "14:00", "precipIn": 0, "tempF": 64, "windMph": 9, "gustMph": 13 },
-      { "time": "15:00", "precipIn": 0, "tempF": 61, "windMph": 7, "gustMph": 11 },
-      { "time": "16:00", "precipIn": 0, "tempF": 57, "windMph": 8, "gustMph": 14 },
-      { "time": "17:00", "precipIn": 0, "tempF": 53, "windMph": 9, "gustMph": 12 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 53,
+        "windMph": 7,
+        "gustMph": 14
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 57,
+        "windMph": 8,
+        "gustMph": 12
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 9,
+        "gustMph": 10
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 7,
+        "gustMph": 13
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 66,
+        "windMph": 8,
+        "gustMph": 11
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 67,
+        "windMph": 9,
+        "gustMph": 14
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 67,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 66,
+        "windMph": 8,
+        "gustMph": 10
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 64,
+        "windMph": 9,
+        "gustMph": 13
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 61,
+        "windMph": 7,
+        "gustMph": 11
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 57,
+        "windMph": 8,
+        "gustMph": 14
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 53,
+        "windMph": 9,
+        "gustMph": 12
+      }
     ],
     "summary": {
       "precipIn": 0,
@@ -60,15 +152,17 @@
   "previousAnswers": [],
   "previousDraft": null,
   "photos": [
-    { "messageId": "e0000015-0000-4000-8000-000000001505", "takenAt": "2026-10-06T21:47:00Z" }
+    {
+      "uploadId": "e0000015-0000-4000-8000-000000001505",
+      "takenAt": "2026-10-06T21:47:00Z"
+    }
   ],
   "segments": [
     {
-      "messageId": "e0000015-0000-4000-8000-000000001501",
+      "uploadId": "e0000015-0000-4000-8000-000000001501",
       "start": 0,
       "end": 8.6,
       "text": "Elm St. Six of our guys framing units one to four all day. Dry. No incidents. Photo coming."
     }
-  ],
-  "texts": []
+  ]
 }

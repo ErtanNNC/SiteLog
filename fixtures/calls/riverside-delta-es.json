@@ -1,0 +1,269 @@
+{
+  "$comment": "W3-09 recorded call (W3-02's format, extended): start, routes (field-api's recorded answers per voice route, in order; the last repeats), reporterTurns (one session run each), agentTurns (the dialog model's recorded turns). `extraction` names the eval case (fixtures/transcripts, expected, tool-outputs) whose recorded tool output EXTRACT_PROVIDER=fake replays for this call's update_draft; `answers` are the reporter's words record_answer sends. The worker's PGlite test (apps/worker/src/jobs/voice-turn.pglite.test.ts) checks that the live pipeline answers what `routes` records (ids aside); the agent's pytest (tests/test_live_draft.py) replays the call on FakeFieldApi. W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind.",
+  "id": "riverside-delta-es",
+  "locale": "es-US",
+  "extraction": "call-riverside-2026-10-09-es",
+  "start": {
+    "request": {
+      "room": "call-c0110000-0000-4000-8000-000000000003",
+      "transport": "web",
+      "callId": "c0110000-0000-4000-8000-000000000003"
+    },
+    "response": {
+      "callId": "c0110000-0000-4000-8000-000000000003",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Marco",
+        "locale": "es-US"
+      }
+    }
+  },
+  "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "web",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Marco",
+          "locale": "es-US"
+        },
+        "company": "Kestrel Build Group",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5c",
+            "name": "Riverside Lofts — Block B",
+            "status": "reminded",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5c",
+        "companies": [
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex", "the Apex guys"]
+          },
+          {
+            "name": "BrightLine Electric",
+            "aliases": ["BrightLine"]
+          },
+          {
+            "name": "Delta Mechanical",
+            "aliases": ["Delta", "los de Delta"]
+          },
+          {
+            "name": "Ironclad Steel",
+            "aliases": ["Ironclad"]
+          },
+          {
+            "name": "Kestrel self-perform",
+            "aliases": ["our guys", "our crew"]
+          }
+        ],
+        "keyterms": ["Apex Concrete", "BrightLine Electric", "Delta Mechanical", "Ironclad Steel"],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 3
+      }
+    ],
+    "update_draft": [
+      {
+        "reportId": "a0a90000-0000-4000-8000-000000000001",
+        "draftRev": 1,
+        "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
+        "question": {
+          "id": "a0a90000-0000-4000-8000-000000000001",
+          "text": "Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?",
+          "choices": ["cuatro, todo el día", "cinco, todo el día"]
+        },
+        "readBack": null
+      }
+    ],
+    "record_answer": [
+      {
+        "status": "not_understood",
+        "confirmation": "Perdón, no le entendí.",
+        "draft": {
+          "reportId": "a0a90000-0000-4000-8000-000000000001",
+          "draftRev": 1,
+          "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
+          "question": {
+            "id": "a0a90000-0000-4000-8000-000000000001",
+            "text": "Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?",
+            "choices": ["cuatro, todo el día", "cinco, todo el día"]
+          },
+          "readBack": null
+        }
+      },
+      {
+        "status": "skipped",
+        "confirmation": "No logré entenderlo, así que lo dejo para que la oficina lo revise.",
+        "draft": {
+          "reportId": "a0a90000-0000-4000-8000-000000000001",
+          "draftRev": 1,
+          "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
+          "question": null,
+          "readBack": "El clima detuvo el trabajo tres horas y media. Trabajos anotados: seis. Entregas anotadas: uno. Charla de seguridad. Sin incidentes. ¿Lo registro?"
+        }
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "reporterTurns": [
+    "Hola, habla Marco con el reporte del viernes de Riverside bloque B. Día largo pero bueno. Primero el clima: llovió desde las siete hasta las diez y media, no pudimos hacer block afuera en la fachada sur. Así que la mampostería de afuera paró unas tres horas y media, pasamos a esos muchachos adentro al block interior en el dos. Después colamos el deck del cuatro, como sesenta y ocho yardas, terminamos como a las dos y media, Apex tuvo seis muchachos todo el día en eso. BrightLine, cinco electricistas todo el día en el tres, la instalación eléctrica va como en un sesenta por ciento. Los de Delta estuvieron en el dos haciendo los ductos del ala este, todo el día también. Ironclad tuvo tres muchachos amarrando varilla para el deck del cinco, todo el día, y trajeron dos cargas de varilla como a la una. Nuestros muchachos, cuatro peones todo el día, limpieza y ayudando con el colado. Seguridad, hicimos la charla de seguridad en la mañana sobre acceso con lluvia y losas resbalosas, sin incidentes, nadie se lastimó. El lunes necesitamos la bomba de concreto a las siete para el deck del cinco. Eso es todo.",
+    "No sé, la verdad.",
+    "Mmm, no me acuerdo."
+  ],
+  "answers": ["No sé, la verdad.", "Mmm, no me acuerdo."],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Entendido, un momento.",
+      "toolCalls": [
+        {
+          "name": "update_draft",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "record_answer",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Perdón, no le entendí. Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "record_answer",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "No logré entenderlo, así que lo dejo para que la oficina lo revise. El clima detuvo el trabajo tres horas y media. Trabajos anotados: seis. Entregas anotadas: uno. Charla de seguridad. Sin incidentes. ¿Lo registro?"
+    }
+  ],
+  "simulate": {
+    "title": "Spanish question unclear twice, left for the office; the reporter hangs up",
+    "milestone": "m8",
+    "flow": "F7",
+    "arrange": {
+      "reporter": {
+        "name": "Marco Ruiz",
+        "locale": "es-US",
+        "contactPref": "link"
+      },
+      "sites": [
+        {
+          "key": "riverside",
+          "name": "Riverside Lofts — Block B",
+          "projectCode": "RL"
+        }
+      ]
+    },
+    "steps": [
+      {
+        "route": "get_context",
+        "expect": {
+          "call": {
+            "direction": "inbound",
+            "transport": "web",
+            "purpose": "daily_report"
+          },
+          "reporter": {
+            "firstName": "Marco",
+            "locale": "es-US"
+          },
+          "company": "Kestrel Build Group",
+          "reportLanguage": "en",
+          "consents": {
+            "recording": true,
+            "dataProcessing": true,
+            "sms": true,
+            "autoCall": false
+          },
+          "maxQuestions": 3,
+          "sites": [
+            {
+              "name": "Riverside Lofts — Block B",
+              "deadline": "17:30"
+            }
+          ]
+        }
+      },
+      {
+        "route": "update_draft",
+        "body": {
+          "segments": "$segments"
+        }
+      },
+      {
+        "route": "record_answer",
+        "body": {
+          "questionId": "$draft.questionId",
+          "utterance": "No sé, la verdad.",
+          "start": 80
+        }
+      },
+      {
+        "route": "record_answer",
+        "body": {
+          "questionId": "$draft.questionId",
+          "utterance": "Mmm, no me acuerdo.",
+          "start": 86
+        }
+      },
+      {
+        "route": "end_call",
+        "body": {
+          "outcome": "draft_saved"
+        }
+      }
+    ],
+    "expect": {
+      "call": {
+        "outcome": "draft_saved"
+      },
+      "report": {
+        "site": "riverside",
+        "status": "awaiting_confirmation",
+        "channel": "voice"
+      },
+      "messages": ["finish_report"]
+    }
+  }
+}

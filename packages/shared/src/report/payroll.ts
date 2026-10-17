@@ -36,3 +36,19 @@ export function normalizePayrollColumns(
   for (const col of PAYROLL_COLUMNS) if (!out.includes(col)) out.push(col);
   return out;
 }
+
+/** The first characters that make a spreadsheet read a cell as a formula (OWASP CSV injection). */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/**
+ * One CSV cell (RFC 4180): a text value that starts like a formula (`=`, `+`, `-`, `@`, tab or
+ * CR) gets a leading `'` so Excel, Sheets and LibreOffice show it as text (OWASP "CSV
+ * injection"); then a value with a quote, comma or line break is quoted. Numbers stay plain, so
+ * `workers` and `version` remain numbers. Used by api-export-payroll and the demo's CSV.
+ */
+export function csvCell(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  let s = String(value);
+  if (typeof value === 'string' && FORMULA_START.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}

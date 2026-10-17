@@ -1,27 +1,43 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { deadlineInstant, type DailyReportData, type ExtractionOutput } from '@sitelog/shared';
-import { postProcessExtraction, type ExtractionInput } from '../ai/extract';
-import { compareReport } from '../ai/eval';
-import { createHarness, scriptedClaude, SITE_OAKMONT, SITE_RIVERSIDE } from '../test/harness';
+import {
+  MASKED_CODE,
+  SmsSendError,
+  V12_ROW_DEFAULTS,
+  deadlineInstant,
+  deriveLinkCode,
+  evidencePackStoragePath,
+  linkCodeHash,
+  readReportData,
+  upgradeV1toV2,
+  type DailyReportDataV1,
+  type StoredReportData,
+} from '@sitelog/shared';
+import { buildEmail } from '../jobs/send_email';
+import { PermanentJobError } from '../jobs/types';
+import { buildReportPdfInput, versionSignedOff } from '../pdf/render';
+import { postProcessExtraction } from '../ai/extract';
+import { compareReport, loadFixture } from '../ai/eval';
+import { createWorkerNotifier } from '../messaging';
+import {
+  createHarness,
+  ORG_ID,
+  PHONE_MARCO,
+  scriptedClaude,
+  SITE_OAKMONT,
+  SITE_RIVERSIDE,
+} from '../test/harness';
+import { legacyExpected, legacyInput, legacyRecorded } from '../test/legacy-fixtures';
 import { composeExtractionInput } from './compose';
 import { currentData, draftCardFor, storeDraft } from './draft';
-import { fileReport } from './file';
+import { FILE_ATTEMPTS, fileReport } from './file';
+import { storeWebDraft } from './web';
 import { learnTerms } from './glossary';
 import { selectNextQuestion, validateDraft } from './validate';
 
-const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
-const load = <T>(dir: string, id: string) =>
-  JSON.parse(readFileSync(join(FIXTURES, dir, `${id}.json`), 'utf8')) as T;
-
 describe('pipeline: validate + question selection', () => {
   it('riverside: the only gap is the Delta headcount, asked with the model options', () => {
-    const input = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09'),
-      input,
-    );
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
     const v = validateDraft(data, { required_fields: input.requiredFields }, 2);
     expect(v.isComplete).toBe(false);
     expect(v.missingRequired).toEqual([
@@ -32,17 +48,17 @@ describe('pipeline: validate + question selection', () => {
     expect(q).toMatchObject({
       field: 'manpower.workers',
       path: 'manpower.workers:Delta Mechanical',
-      options: ['4 · full day', '5 · full day'],
+      options: [
+        { id: 'o1', label: '4 · full day' },
+        { id: 'o2', label: '5 · full day' },
+      ],
     });
     expect(q!.prompt).toContain('the Delta guys');
   });
 
   it('oakmont: unknown company is flagged for review and asked with "Add"', () => {
-    const input = load<ExtractionInput>('transcripts', 'oakmont-unknown-sub');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'oakmont-unknown-sub'),
-      input,
-    );
+    const input = legacyInput('oakmont-unknown-sub');
+    const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
     const v = validateDraft(data, { required_fields: input.requiredFields }, 1);
     expect(v.isComplete).toBe(true);
     expect(v.reviewReasons).toEqual(['unknown_company:Ridgeway']);
@@ -60,15 +76,15 @@ describe('pipeline: validate + question selection', () => {
       })),
     );
     expect(q).toMatchObject({ field: 'company.unknown' });
-    expect(q!.options[0]).toBe('Add "Ridgeway"');
+    expect(q!.options[0]!.label).toBe('Add "Ridgeway"');
   });
 
   it('expected fixtures pass the eval comparison against themselves and fail when numbers change', () => {
     for (const id of ['riverside-2026-10-09', 'oakmont-unknown-sub', 'hillcrest-weather-day']) {
-      const expected = load<DailyReportData>('expected', id);
+      const expected = loadFixture(id).expected;
       expect(compareReport(expected, expected).every((c) => c.ok)).toBe(true);
     }
-    const expected = load<DailyReportData>('expected', 'hillcrest-weather-day');
+    const expected = loadFixture('hillcrest-weather-day').expected;
     const wrong = structuredClone(expected);
     wrong.manpower[0]!.workers = 6;
     wrong.weather.periods[0]!.lostHours = 7;
@@ -79,11 +95,8 @@ describe('pipeline: validate + question selection', () => {
   });
 
   it('draft card matches the §F7 format', () => {
-    const input = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09'),
-      input,
-    );
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
     const h = createHarness();
     const card = draftCardFor(
       {
@@ -116,9 +129,7 @@ describe('pipeline: validate + question selection', () => {
 describe('pipeline: compose + extract job + filing', () => {
   it('composes the extraction input from sources, transcripts and answers, then stores the draft', async () => {
     const h = createHarness({
-      claude: scriptedClaude([
-        { input: load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09') },
-      ]),
+      claude: scriptedClaude([{ input: legacyRecorded('riverside-2026-10-09') }]),
     });
     const siteDay = await h.db.getOrCreateSiteDay(
       SITE_RIVERSIDE,
@@ -126,8 +137,10 @@ describe('pipeline: compose + extract job + filing', () => {
       deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
     );
     await h.db.updateSiteDay(siteDay.id, {
-      weather: load<ExtractionInput>('transcripts', 'riverside-2026-10-09')
-        .observedWeather as unknown as Record<string, unknown>,
+      weather: legacyInput('riverside-2026-10-09').observedWeather as unknown as Record<
+        string,
+        unknown
+      >,
     });
     const report = await h.db.insertReport({
       org_id: h.org.id,
@@ -151,7 +164,7 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'audio',
       taken_at: audio.created_at,
     });
-    const fixture = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
+    const fixture = legacyInput('riverside-2026-10-09');
     await h.db.upsertTranscript({
       message_id: audio.id,
       language: 'es+en',
@@ -201,9 +214,7 @@ describe('pipeline: compose + extract job + filing', () => {
 
   it('a photo arriving during extraction rides along without another model call; a caption re-extracts', async () => {
     for (const caption of [null, 'L4 pour done']) {
-      const scripted = scriptedClaude([
-        { input: load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09') },
-      ]);
+      const scripted = scriptedClaude([{ input: legacyRecorded('riverside-2026-10-09') }]);
       const h = createHarness();
       const siteDay = await h.db.getOrCreateSiteDay(
         SITE_RIVERSIDE,
@@ -226,7 +237,7 @@ describe('pipeline: compose + extract job + filing', () => {
         duration_s: 168,
       });
       await h.db.insertReportSource({ report_id: report.id, message_id: audio.id, kind: 'audio' });
-      const fixture = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
+      const fixture = legacyInput('riverside-2026-10-09');
       await h.db.upsertTranscript({
         message_id: audio.id,
         language: 'es+en',
@@ -302,7 +313,7 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'audio',
       taken_at: audio.created_at,
     });
-    const fixture = load<ExtractionInput>('transcripts', 'elm-2026-10-08-no-work');
+    const fixture = legacyInput('elm-2026-10-08-no-work');
     await h.db.upsertTranscript({
       message_id: audio.id,
       language: 'en',
@@ -310,7 +321,7 @@ describe('pipeline: compose + extract job + filing', () => {
       segments: fixture.segments.map((x) => ({ start: x.start, end: x.end, text: x.text })),
       model: 'whisper-1',
     });
-    await storeDraft(h.ctx, report, load<DailyReportData>('expected', 'elm-2026-10-08-no-work'));
+    await storeDraft(h.ctx, report, legacyExpected('elm-2026-10-08-no-work'));
 
     await h.runJob('decide_next', { reportId: report.id });
 
@@ -337,11 +348,8 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'daily',
       status: 'awaiting_confirmation',
     });
-    const input = load<ExtractionInput>('transcripts', 'oakmont-unknown-sub');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'oakmont-unknown-sub'),
-      input,
-    );
+    const input = legacyInput('oakmont-unknown-sub');
+    const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
     await storeDraft(h.ctx, report, data);
     await h.conversation(
       'awaiting_confirmation',
@@ -357,10 +365,231 @@ describe('pipeline: compose + extract job + filing', () => {
     expect(again.alreadyFiled).toBe(true);
     expect(h.db.data.denormalized).toHaveLength(1);
     expect(h.db.jobsOfType('render_pdf')).toHaveLength(1);
+    expect(h.db.jobsOfType('notify').map((j) => j.dedupe_key)).toEqual([
+      `notify:filed:${report.id}`,
+    ]);
     expect((await h.db.getSiteDay(siteDay.id))!.report_id).toBe(report.id);
+    // No `via` without a field-api confirm (the WhatsApp OK).
+    expect(first.report.confirmed_via).toBeNull();
+
+    // W1-15: a failure after `status = filed` lost the post-filing jobs: the retry enqueues them.
+    for (const [id, j] of h.db.data.jobs) if (j.type !== 'file_report') h.db.data.jobs.delete(id);
+    const retried = await fileReport(h.ctx, report.id, { trigger: 'confirm' });
+    expect(retried.alreadyFiled).toBe(true);
+    expect(h.db.jobsOfType('render_pdf')).toHaveLength(1);
+    expect(h.db.jobsOfType('notify')).toHaveLength(1);
+    expect(h.db.data.denormalized).toHaveLength(1);
+    // A day later (past every retry of the filing), or once signed off, a filing enqueues nothing.
+    for (const [id, j] of h.db.data.jobs) if (j.type !== 'file_report') h.db.data.jobs.delete(id);
+    h.setNow(new Date('2026-10-10T22:22:00Z'));
+    await fileReport(h.ctx, report.id, { trigger: 'timeout' });
+    await h.db.updateReport(report.id, { status: 'signed_off' });
+    h.setNow(new Date('2026-10-09T22:30:00Z'));
+    await fileReport(h.ctx, report.id, { trigger: 'confirm' });
+    expect(h.db.jobsOfType('render_pdf')).toHaveLength(0);
+    expect(h.db.jobsOfType('notify')).toHaveLength(0);
   });
 
-  it('render_pdf stores the PDF, sends it on WhatsApp with the edit hint and enqueues the email', async () => {
+  it('fileReport stores the confirm channel (§10.1 `file_report(report_id, via)`)', async () => {
+    const h = createHarness();
+    const siteDay = await h.db.getOrCreateSiteDay(
+      SITE_OAKMONT,
+      '2026-10-09',
+      deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+    );
+    const report = await h.db.insertReport({
+      org_id: h.org.id,
+      site_id: SITE_OAKMONT,
+      site_day_id: siteDay.id,
+      report_no: 'OM-1187-0123',
+      reporter_id: h.jorge.id,
+      received_at: '2026-10-09T22:00:00Z',
+      kind: 'daily',
+      status: 'awaiting_confirmation',
+    });
+    const input = legacyInput('oakmont-unknown-sub');
+    const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
+    await storeDraft(h.ctx, report, data);
+    h.setNow(new Date('2026-10-09T22:21:00Z'));
+    const filed = await fileReport(h.ctx, report.id, {
+      trigger: 'confirm',
+      version: 1,
+      via: 'web',
+    });
+    expect(filed.report).toMatchObject({ status: 'filed', confirmed_via: 'web' });
+    expect(h.db.data.audit.find((a) => a.action === 'report.filed')!.diff).toMatchObject({
+      via: 'web',
+    });
+    const [text] = h.db.jobsOfType('notify');
+    expect(text!.payload).toMatchObject({
+      reporterId: h.jorge.id,
+      key: 'filed',
+      vars: { report_no: 'OM-1187-0123' },
+    });
+  });
+
+  it('fileReport files a field-api confirm only at the confirmed version and state', async () => {
+    const h = createHarness();
+    const siteDay = await h.db.getOrCreateSiteDay(
+      SITE_OAKMONT,
+      '2026-10-09',
+      deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+    );
+    const report = await h.db.insertReport({
+      org_id: h.org.id,
+      site_id: SITE_OAKMONT,
+      site_day_id: siteDay.id,
+      report_no: 'OM-1187-0122',
+      reporter_id: h.jorge.id,
+      received_at: '2026-10-09T22:00:00Z',
+      kind: 'daily',
+      status: 'awaiting_confirmation',
+    });
+    const input = legacyInput('oakmont-unknown-sub');
+    const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
+    await storeDraft(h.ctx, report, data);
+    h.setNow(new Date('2026-10-09T22:21:00Z'));
+
+    // More audio arrived after the confirm (a second reporter, a queued offline clip).
+    await h.db.updateReport(report.id, { status: 'processing' });
+    const moved = await fileReport(h.ctx, report.id, { trigger: 'confirm', version: 1 });
+    expect([moved.stale, moved.alreadyFiled, moved.report.status]).toEqual([
+      true,
+      false,
+      'processing',
+    ]);
+    // A newer draft than the one confirmed.
+    await h.db.updateReport(report.id, { status: 'awaiting_confirmation' });
+    const newer = await fileReport(h.ctx, report.id, { trigger: 'confirm', version: 2 });
+    expect(newer.stale).toBe(true);
+    // The same version rewritten in place since the confirm (a late photo's re-extraction): the
+    // draft revision the reporter saw is gone.
+    expect((await h.db.getVersion(report.id, 1))!.draft_rev).toBe(1);
+    await storeDraft(h.ctx, report, { ...data, summary: 'With the late photo' });
+    expect((await h.db.getVersion(report.id, 1))!.draft_rev).toBe(2);
+    const rewritten = await fileReport(h.ctx, report.id, {
+      trigger: 'confirm',
+      version: 1,
+      draftRev: 1,
+    });
+    expect(rewritten.stale).toBe(true);
+    expect(h.db.jobsOfType('render_pdf')).toHaveLength(0);
+    const stale = h.db.data.audit.filter((a) => a.action === 'report.confirm_stale');
+    expect(stale).toHaveLength(3);
+    expect(stale[2]!.diff).toMatchObject({ confirmed_draft_rev: 1, draft_rev: 2 });
+    expect((await h.db.getReport(report.id))!.status).toBe('awaiting_confirmation');
+
+    // The confirmed version at the revision shown, still awaiting confirmation: filed.
+    const filed = await fileReport(h.ctx, report.id, {
+      trigger: 'confirm',
+      version: 1,
+      draftRev: 2,
+    });
+    expect([filed.stale, filed.report.status]).toEqual([undefined, 'filed']);
+  });
+
+  describe('fileReport against a concurrent re-extraction', () => {
+    async function draftReport(no: string) {
+      const h = createHarness();
+      const siteDay = await h.db.getOrCreateSiteDay(
+        SITE_OAKMONT,
+        '2026-10-09',
+        deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+      );
+      const report = await h.db.insertReport({
+        org_id: h.org.id,
+        site_id: SITE_OAKMONT,
+        site_day_id: siteDay.id,
+        report_no: no,
+        reporter_id: h.jorge.id,
+        received_at: '2026-10-09T22:00:00Z',
+        kind: 'daily',
+        status: 'awaiting_confirmation',
+      });
+      const input = legacyInput('oakmont-unknown-sub');
+      const { data } = postProcessExtraction(legacyRecorded('oakmont-unknown-sub'), input);
+      await storeDraft(h.ctx, report, data);
+      h.setNow(new Date('2026-10-09T22:21:00Z'));
+      const reExtracted: DailyReportDataV1 = { ...data, summary: 'Re-extracted with the photo' };
+      /** The re-extraction's draft write, once, just before the filing's commit. */
+      const raceOnce = (times = 1) => {
+        const commit = h.db.fileVersion.bind(h.db);
+        let left = times;
+        h.db.fileVersion = async (input) => {
+          if (left-- > 0) {
+            const current = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
+            await h.db.storeDraftVersion({
+              report_id: report.id,
+              version: 1,
+              data: { ...reExtracted, summary: `${current.summary}+` },
+              summary: null,
+              author: 'agent',
+            });
+          }
+          return commit(input);
+        };
+      };
+      return { h, report, raceOnce };
+    }
+
+    it('a confirm of the draft the re-extraction replaced files nothing', async () => {
+      const { h, report, raceOnce } = await draftReport('OM-1187-0130');
+      raceOnce();
+      const res = await fileReport(h.ctx, report.id, {
+        trigger: 'confirm',
+        version: 1,
+        draftRev: 1,
+        via: 'web',
+      });
+      expect(res.stale).toBe(true);
+      const v = (await h.db.getVersion(report.id, 1))!;
+      // The re-extracted draft stands, unfrozen and not overwritten.
+      expect(v.draft_rev).toBe(2);
+      expect((v.data as DailyReportDataV1).summary).toMatch(/\+$/);
+      expect((await h.db.getReport(report.id))!.status).toBe('awaiting_confirmation');
+      expect(h.db.data.audit.filter((a) => a.action === 'report.filed')).toHaveLength(0);
+      expect(h.db.data.denormalized).toHaveLength(0);
+      expect(h.db.jobsOfType('render_pdf')).toHaveLength(0);
+    });
+
+    it('a timeout files the new draft, and filing writes no new draft revision', async () => {
+      const { h, report, raceOnce } = await draftReport('OM-1187-0131');
+      raceOnce();
+      const res = await fileReport(h.ctx, report.id, { trigger: 'timeout' });
+      expect(res.report.status).toBe('filed');
+      const v = (await h.db.getVersion(report.id, 1))!;
+      expect((v.data as DailyReportDataV1).summary).toMatch(/\+$/);
+      expect(v.draft_rev).toBe(2);
+      expect(h.db.data.audit.filter((a) => a.action === 'report.filed')).toHaveLength(1);
+      expect(h.db.data.denormalized).toEqual([{ report_id: report.id, version: 1 }]);
+    });
+
+    it('gives up (the job retries) when the draft keeps changing', async () => {
+      const { h, report, raceOnce } = await draftReport('OM-1187-0132');
+      raceOnce(FILE_ATTEMPTS);
+      await expect(fileReport(h.ctx, report.id, { trigger: 'timeout' })).rejects.toThrow(
+        /changed during 3 filing attempts/,
+      );
+      expect((await h.db.getReport(report.id))!.status).toBe('awaiting_confirmation');
+      expect(h.db.data.audit.filter((a) => a.action === 'report.filed')).toHaveLength(0);
+    });
+
+    it('storeWebDraft never overwrites a filed report', async () => {
+      const { h, report } = await draftReport('OM-1187-0133');
+      await fileReport(h.ctx, report.id, { trigger: 'timeout' });
+      const before = (await h.db.getVersion(report.id, 1))!;
+      const stale = (await h.db.getReport(report.id))!;
+      const stored = await storeWebDraft(
+        h.ctx,
+        { ...stale, status: 'awaiting_confirmation' },
+        upgradeV1toV2(before.data as DailyReportDataV1),
+      );
+      expect(stored).toBe(false);
+      expect(await h.db.getVersion(report.id, 1)).toEqual(before);
+    });
+  });
+
+  it('render_pdf stores the PDF and enqueues the email, and sends nothing on WhatsApp (W1-15)', async () => {
     const h = createHarness();
     const siteDay = await h.db.getOrCreateSiteDay(
       SITE_RIVERSIDE,
@@ -377,11 +606,8 @@ describe('pipeline: compose + extract job + filing', () => {
       kind: 'daily',
       status: 'filed',
     });
-    const input = load<ExtractionInput>('transcripts', 'riverside-2026-10-09');
-    const { data } = postProcessExtraction(
-      load<ExtractionOutput>('tool-outputs', 'riverside-2026-10-09'),
-      input,
-    );
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
     await storeDraft(h.ctx, report, data);
     await h.db.updateReport(report.id, { filed_at: h.now, confirmed_at: h.now });
     await h.conversation('idle');
@@ -395,11 +621,10 @@ describe('pipeline: compose + extract job + filing', () => {
     expect(v.pdf_path).toBe(`${h.org.id}/${SITE_RIVERSIDE}/RL-2041-0187_v1.pdf`);
     const pdf = await h.storage.download('pdfs', v.pdf_path!);
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
-    expect(h.wa.sent.map((s) => s.kind)).toEqual(['document', 'text']);
-    expect(h.wa.sent[0]!.filename).toBe('RL-2041-0187_2026-10-09_v1.pdf');
-    expect(h.wa.sent[1]!.body).toBe(
-      'Need a change later? Reply "edit Friday" any time. The office gets a new version; the old one is kept.',
-    );
+    // The v1.0 flag is accepted and ignored: the reporter's text is the Notifier's `filed`.
+    expect(h.wa.sent).toEqual([]);
+    expect(h.db.jobsOfType('send_email')).toHaveLength(1);
+    expect(h.db.jobsOfType('send_email')[0]!.dedupe_key).toBe(`email:report_filed:${report.id}:1`);
     expect(h.db.jobsOfType('send_email')[0]!.payload).toMatchObject({
       kind: 'report_filed',
       reportId: report.id,
@@ -411,6 +636,138 @@ describe('pipeline: compose + extract job + filing', () => {
     expect(h.email.sent[0]!.subject).toBe(
       'Daily report · Riverside Lofts · Fri Oct 9 · RL-2041-0187',
     );
+    expect(h.email.sent[0]!.attachments![0]!.filename).toBe('RL-2041-0187_2026-10-09_v1.pdf');
+  }, 60_000);
+
+  it('render_pdf of a version that is no longer current: no sign-off it never had, and no email (W1-14)', async () => {
+    const h = createHarness();
+    const siteDay = await h.db.getOrCreateSiteDay(
+      SITE_RIVERSIDE,
+      '2026-10-09',
+      deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+    );
+    const report = await h.db.insertReport({
+      org_id: h.org.id,
+      site_id: SITE_RIVERSIDE,
+      site_day_id: siteDay.id,
+      report_no: 'RL-2041-0187',
+      reporter_id: h.marco.id,
+      received_at: '2026-10-09T22:31:00Z',
+      kind: 'daily',
+      status: 'filed',
+    });
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
+    await storeDraft(h.ctx, report, data);
+    await h.db.insertVersion({
+      report_id: report.id,
+      version: 2,
+      data: { ...data, summary: 'Office edit' },
+      summary: 'Office edit',
+      author: 'office_user',
+      change_note: 'Fixed the Delta headcount',
+    });
+    // v2 (an office edit) is current and signed off by Lena; v1's render_pdf job ran late.
+    const signedOff = await h.db.updateReport(report.id, {
+      filed_at: h.now,
+      confirmed_at: h.now,
+      current_version: 2,
+      status: 'signed_off',
+      signed_off_by: '00000000-0000-4000-8000-00000000e001',
+      signed_off_at: h.now,
+    });
+    const site = (await h.db.siteContext(SITE_RIVERSIDE))!;
+    const v1 = (await h.db.getVersion(report.id, 1))!;
+    const v2 = (await h.db.getVersion(report.id, 2))!;
+    expect(versionSignedOff(signedOff, v1)).toBe(false);
+    expect(versionSignedOff(signedOff, v2)).toBe(true);
+    const old = await buildReportPdfInput(h.ctx, {
+      report: signedOff,
+      version: v1,
+      site,
+      data: readReportData(v1.data as unknown as StoredReportData),
+    });
+    expect(old.report).toMatchObject({
+      version: 1,
+      status: 'filed',
+      signedOffAt: null,
+      signedOffByName: null,
+    });
+    const current = await buildReportPdfInput(h.ctx, {
+      report: signedOff,
+      version: v2,
+      site,
+      data: readReportData(v2.data as unknown as StoredReportData),
+    });
+    expect(current.report).toMatchObject({
+      version: 2,
+      status: 'signed_off',
+      signedOffByName: 'Lena Ortiz',
+    });
+    expect(current.report.signedOffAt).not.toBeNull();
+
+    // The late v1 job renders its file but emails nothing: v2's own render emails the office.
+    await h.runJob('render_pdf', { reportId: report.id, version: 1, emailRecipients: true });
+    expect((await h.db.getVersion(report.id, 1))!.pdf_path).toBe(
+      `${h.org.id}/${SITE_RIVERSIDE}/RL-2041-0187_v1.pdf`,
+    );
+    expect(h.db.jobsOfType('send_email')).toHaveLength(0);
+    await h.runJob('render_pdf', { reportId: report.id, version: 2, emailRecipients: true });
+    expect(h.db.jobsOfType('send_email').map((j) => j.dedupe_key)).toEqual([
+      `email:report_updated:${report.id}:2`,
+    ]);
+  }, 60_000);
+
+  it('render_pdf and the filed email read a version stored as v2 like the v1 it upgrades from', async () => {
+    const h = createHarness();
+    const siteDay = await h.db.getOrCreateSiteDay(
+      SITE_RIVERSIDE,
+      '2026-10-09',
+      deadlineInstant('2026-10-09', '17:30', 'America/Chicago'),
+    );
+    const report = await h.db.insertReport({
+      org_id: h.org.id,
+      site_id: SITE_RIVERSIDE,
+      site_day_id: siteDay.id,
+      report_no: 'RL-2041-0187',
+      reporter_id: h.marco.id,
+      received_at: '2026-10-09T22:31:00Z',
+      kind: 'daily',
+      status: 'filed',
+    });
+    const input = legacyInput('riverside-2026-10-09');
+    const { data } = postProcessExtraction(legacyRecorded('riverside-2026-10-09'), input);
+    await storeDraft(h.ctx, report, data);
+    const filed = await h.db.updateReport(report.id, { filed_at: h.now, confirmed_at: h.now });
+    const site = (await h.db.siteContext(SITE_RIVERSIDE))!;
+    const emailPayload = { kind: 'report_filed' as const, reportId: report.id, version: 1 };
+    const read = async () => {
+      const version = (await h.db.getVersion(report.id, 1))!;
+      const data = readReportData(version.data as unknown as StoredReportData);
+      return {
+        data,
+        pdf: await buildReportPdfInput(h.ctx, { report: filed, version, site, data }),
+        email: await buildEmail(h.ctx, emailPayload),
+      };
+    };
+    const fromV1 = await read();
+    expect(fromV1.data.schemaVersion).toBe(2); // the v2 view of the stored v1
+
+    // The same version stored as v2 (as W1-06 seeds it): every reader gives the same result.
+    const stored = (await h.db.getVersion(report.id, 1))!.data as unknown as DailyReportDataV1;
+    expect(stored.schemaVersion).toBe(1);
+    await h.db.updateVersion(report.id, 1, { data: upgradeV1toV2(stored) as never });
+    const fromV2 = await read();
+    expect(fromV2.data).toEqual(fromV1.data);
+    expect(fromV2.pdf).toEqual(fromV1.pdf);
+    expect(fromV2.email).toEqual(fromV1.email);
+
+    await h.conversation('idle');
+    await h.runJob('render_pdf', { reportId: report.id, version: 1, emailRecipients: true });
+    const v = (await h.db.getVersion(report.id, 1))!;
+    const pdf = await h.storage.download('pdfs', v.pdf_path!);
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    await h.drain(['send_email']);
     expect(h.email.sent[0]!.attachments![0]!.filename).toBe('RL-2041-0187_2026-10-09_v1.pdf');
   }, 60_000);
 
@@ -451,30 +808,540 @@ describe('pipeline: compose + extract job + filing', () => {
       Array.from(h.db.data.glossary.values()).find((g) => g.heard === 'colado')!.times_heard,
     ).toBe(2);
   });
+
+  it('counts a term once per report and notifies once per new term (W3-08)', async () => {
+    const h = createHarness();
+    const ridgeway = {
+      heard: 'the Ridgeway guys',
+      proposedOfficial: 'Ridgeway',
+      kind: 'company' as const,
+      confidence: 0.7,
+    };
+    const learn = (counted: (typeof ridgeway)[] | null) =>
+      learnTerms(h.ctx, {
+        orgId: h.org.id,
+        siteId: SITE_RIVERSIDE,
+        terms: [ridgeway],
+        companies: [],
+        glossary: [],
+        counted,
+      });
+    const heard = () =>
+      Array.from(h.db.data.glossary.values()).find((g) => g.heard === ridgeway.heard)!;
+    const notices = () => h.db.data.notifications.filter((n) => n.kind === 'glossary_review');
+
+    await learn(null); // the report's first extraction
+    expect(heard().times_heard).toBe(1);
+    expect(notices()).toHaveLength(1);
+    // A second voice note and an answer re-extract the same report: its previous draft had the term.
+    await learn([{ ...ridgeway, heard: ' The Ridgeway Guys ' }]);
+    await learn([ridgeway]);
+    expect(heard().times_heard).toBe(1);
+    expect(notices()).toHaveLength(1);
+    // Another report hears it again: counted, but it is already in the review queue.
+    await learn(null);
+    expect(heard().times_heard).toBe(2);
+    expect(notices()).toHaveLength(1);
+  });
 });
 
 describe('jobs: welcome, template, retention', () => {
-  it('send_welcome sends the approved template and opens welcome_sent', async () => {
+  it('send_welcome texts the welcome with the personal link: a demo org through console', async () => {
+    const h = createHarness();
+    h.db.data.orgs.get(h.org.id)!.is_demo = true;
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    marco.status = 'invited';
+    marco.invited_at = null;
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    // No WhatsApp any more (W1-08).
+    expect(h.wa.sent).toHaveLength(0);
+    const link = h.db.data.fieldLinks[0]!;
+    const code = await deriveLinkCode('test-link-signing-secret', link.id);
+    expect(link).toMatchObject({
+      reporter_id: h.marco.id,
+      kind: 'personal',
+      code_hash: linkCodeHash(code),
+    });
+    expect(h.sms).toEqual([
+      {
+        driver: 'console',
+        to: PHONE_MARCO,
+        body: `Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: https://go.sitelog.app/r/${code} - Reply STOP to opt out, HELP for help`,
+        sender: undefined,
+      },
+    ]);
+    const [message] = [...h.db.data.messages.values()];
+    expect(message).toMatchObject({
+      channel: 'sms',
+      direction: 'out',
+      copy_key: 'welcome',
+      provider: 'console',
+      status: 'delivered',
+      reporter_id: h.marco.id,
+      org_id: h.org.id,
+      body: h.sms[0]!.body,
+    });
+    expect(h.db.data.reporters.get(h.marco.id)!.invited_at).not.toBeNull();
+    expect(h.db.data.audit.map((a) => a.action)).toEqual([
+      'field_link.created',
+      'sms.sent',
+      'reporter.invited',
+    ]);
+    // A retry of the same job sends nothing more; a re-send reuses the same link.
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toHaveLength(1);
+    expect(h.db.data.fieldLinks).toHaveLength(1);
+  });
+
+  it("send_welcome on a real org: the pack's provider and sender, the link masked in messages", async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms[0]).toMatchObject({ driver: 'twilio', sender: '+18885550142', to: PHONE_MARCO });
+    expect(h.sms[0]!.body).toMatch(/https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{12} /);
+    const [message] = [...h.db.data.messages.values()];
+    expect(message!.provider).toBe('twilio');
+    expect(message!.status).toBe('sent');
+    expect(message!.body).toContain(`/r/${MASKED_CODE}`);
+  });
+
+  it('send_welcome sends nothing to a reporter who opted out, and says why', async () => {
+    const h = createHarness();
+    h.db.data.reporters.get(h.marco.id)!.status = 'opted_out';
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toHaveLength(0);
+    expect(h.db.data.audit.find((a) => a.action === 'notify.skipped')).toMatchObject({
+      diff: { copy_key: 'welcome', reason: 'opted_out' },
+    });
+    expect(h.db.data.audit.some((a) => a.action === 'reporter.invited')).toBe(false);
+    // §13 "Message undeliverable / opted out": the office is told, with the reason.
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_invite_failed',
+        title: 'Marco Ruiz: the welcome text was not sent',
+        body: expect.stringMatching(/opted out of texts/),
+        target_path: '/team',
+        // The panel renders this in the reader's language (20261015000080).
+        data: { key: 'welcome_not_sent', params: { name: 'Marco Ruiz', reason: 'opted_out' } },
+      }),
+    ]);
+  });
+
+  it('send_welcome: a number the provider refuses for good is flagged for the office', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.ctx.notifier = createWorkerNotifier(h.ctx.config, h.db, () => ({
+      driver: 'twilio',
+      send: () =>
+        Promise.reject(
+          new SmsSendError("twilio 400 21614: 'To' is not a mobile number", {
+            driver: 'twilio',
+            retryable: false,
+            undeliverable: true,
+            code: '21614',
+          }),
+        ),
+    }));
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.db.data.reporters.get(h.marco.id)!.last_invite_error).toMatch(/21614/);
+    expect(h.db.data.notifications[0]).toMatchObject({
+      kind: 'reporter_invite_failed',
+      target_path: '/team',
+    });
+    expect([...h.db.data.messages.values()][0]!.status).toBe('undeliverable');
+    expect(h.db.data.audit.at(-1)).toMatchObject({
+      action: 'reporter.invite_failed',
+      diff: { undeliverable: true },
+    });
+    // A provider outage is retried by the queue instead.
+    h.ctx.notifier = createWorkerNotifier(h.ctx.config, h.db, () => ({
+      driver: 'twilio',
+      send: () =>
+        Promise.reject(new SmsSendError('twilio 503', { driver: 'twilio', retryable: true })),
+    }));
+    await expect(
+      h.runJob('send_welcome', { reporterId: h.jorge.id, siteId: SITE_RIVERSIDE }),
+    ).rejects.toThrow(/503/);
+  });
+
+  it("send_welcome: an account fault (bad credentials, no credit) is never the number's fault", async () => {
+    // Twilio 21606: the From number is not a valid, SMS-capable number of the account.
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.ctx.notifier = createWorkerNotifier(h.ctx.config, h.db, () => ({
+      driver: 'twilio',
+      send: () =>
+        Promise.reject(
+          new SmsSendError("twilio 400 21606: The 'From' number is not valid", {
+            driver: 'twilio',
+            retryable: false,
+            code: '21606',
+          }),
+        ),
+    }));
+    await expect(
+      h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE }),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    expect(marco.last_invite_error).toBeNull();
+    expect(marco.invited_at).toBe('2026-03-01T00:00:00Z');
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_invite_failed',
+        title: 'Marco Ruiz: the welcome text failed at the SMS provider',
+        body: expect.stringMatching(/Texts are failing for this account \(twilio 400 21606/),
+      }),
+    ]);
+    expect(h.db.data.audit.at(-1)).toMatchObject({
+      action: 'sms.provider_fault',
+      diff: { code: '21606', driver: 'twilio', attempt: 1 },
+    });
+    expect([...h.db.data.messages.values()][0]!.status).toBe('failed');
+    // İletimerkezi out of credit: the same, for the TR pack.
+    const tr = createHarness();
+    tr.db.data.orgs.get(tr.org.id)!.country = 'TR';
+    tr.db.data.countries.find((c) => c.code === 'TR')!.sms_sender_id = 'SITELOG';
+    const jorge = tr.db.data.reporters.get(tr.jorge.id)!;
+    jorge.status = 'invited';
+    jorge.locale = 'tr-TR';
+    tr.ctx.notifier = createWorkerNotifier(tr.ctx.config, tr.db, () => ({
+      driver: 'iletimerkezi',
+      send: () =>
+        Promise.reject(
+          new SmsSendError('iletimerkezi 200 402: Bakiye yetersiz', {
+            driver: 'iletimerkezi',
+            retryable: false,
+            code: '402',
+          }),
+        ),
+    }));
+    await expect(
+      tr.runJob('send_welcome', { reporterId: tr.jorge.id, siteId: SITE_RIVERSIDE }),
+    ).rejects.toThrow(/402/);
+    expect(tr.db.data.reporters.get(tr.jorge.id)!.last_invite_error).toBeNull();
+    expect(tr.db.data.notifications[0]!.body).toMatch(/iletimerkezi 200 402/);
+  });
+
+  it('sms_inbound: a stored Twilio text runs the keywords, the reply and the handled mark', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    const inbound = (id: string, body: string, optOutType: string | null = null) => {
+      h.db.data.messages.set(id, {
+        ...V12_ROW_DEFAULTS.messages,
+        id,
+        conversation_id: null,
+        org_id: h.org.id,
+        direction: 'in',
+        wa_message_id: null,
+        type: null,
+        body,
+        payload: { to: '+18885550142', keyword: null, pack: 'US', opt_out_type: optOutType },
+        media_id: null,
+        media_mime: null,
+        storage_path: null,
+        duration_s: null,
+        template_name: null,
+        status: 'received',
+        error: null,
+        created_at: h.now.toISOString(),
+        reporter_id: h.marco.id,
+        phone_e164: PHONE_MARCO,
+        provider: 'twilio',
+        provider_message_id: `SM${id}`,
+        copy_key: null,
+        channel: 'sms',
+      });
+      return id;
+    };
+    await h.runJob('sms_inbound', {
+      messageId: inbound('00000000-0000-4000-8000-00000000f001', 'STOP'),
+    });
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    expect([marco.status, marco.opted_out_at]).toEqual(['opted_out', h.now.toISOString()]);
+    expect(h.db.data.smsOptOuts).toEqual([
+      expect.objectContaining({ phone_e164: PHONE_MARCO, country: 'US', method: 'sms_keyword' }),
+    ]);
+    expect(h.sms).toEqual([
+      {
+        driver: 'twilio',
+        to: PHONE_MARCO,
+        body: "You won't get more texts from SiteLog. Reply START to resume.",
+        sender: '+18885550142',
+      },
+    ]);
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({ kind: 'reporter_opted_out', target_path: '/team' }),
+    ]);
+    expect(h.db.data.audit.map((a) => [a.action, a.actor_type])).toEqual([
+      ['reporter.opted_out', 'reporter'],
+      ['sms.sent', 'system'],
+    ]);
+    const handled = h.db.data.messages.get('00000000-0000-4000-8000-00000000f001')!;
+    expect((handled.payload as { handled_at?: string }).handled_at).toBe(h.now.toISOString());
+    // A second run of the same job (a redelivery) does nothing more.
+    await h.runJob('sms_inbound', { messageId: '00000000-0000-4000-8000-00000000f001' });
+    expect(h.sms).toHaveLength(1);
+
+    // HELP: the personal link, created once, masked in the row (a real org).
+    await h.runJob('sms_inbound', {
+      messageId: inbound('00000000-0000-4000-8000-00000000f002', 'help'),
+    });
+    expect(h.db.data.fieldLinks).toHaveLength(1);
+    expect(h.sms[1]!.body).toMatch(/Your link: https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{12} /);
+    expect([...h.db.data.messages.values()].find((m) => m.copy_key === 'help')!.body).toContain(
+      MASKED_CODE,
+    );
+
+    // A row the webhook never wrote, or one the Demo phone handled inline, is a dead job.
+    await expect(
+      h.runJob('sms_inbound', { messageId: '00000000-0000-4000-8000-00000000f0ff' }),
+    ).rejects.toBeInstanceOf(PermanentJobError);
+    inbound('00000000-0000-4000-8000-00000000f003', 'STOP');
+    h.db.data.messages.get('00000000-0000-4000-8000-00000000f003')!.provider = 'console';
+    await expect(
+      h.runJob('sms_inbound', { messageId: '00000000-0000-4000-8000-00000000f003' }),
+    ).rejects.toThrow(/handled inline/);
+  });
+
+  it('sms_inbound: a STOP whose office notice fails is retried whole: one audit row, one notice', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    const id = '00000000-0000-4000-8000-00000000f201';
+    h.db.data.messages.set(id, {
+      ...V12_ROW_DEFAULTS.messages,
+      id,
+      conversation_id: null,
+      org_id: h.org.id,
+      direction: 'in',
+      wa_message_id: null,
+      type: null,
+      body: 'STOP',
+      payload: { to: '+18885550142', keyword: 'stop', pack: 'US', opt_out_type: null },
+      media_id: null,
+      media_mime: null,
+      storage_path: null,
+      duration_s: null,
+      template_name: null,
+      status: 'received',
+      error: null,
+      created_at: h.now.toISOString(),
+      reporter_id: h.marco.id,
+      phone_e164: PHONE_MARCO,
+      provider: 'twilio',
+      provider_message_id: `SM${id}`,
+      copy_key: null,
+      channel: 'sms',
+    });
+    // The notice insert fails once (a database blip): the change rolls back with it.
+    const notifyOrg = h.db.notifyOrg.bind(h.db);
+    let failures = 1;
+    h.db.notifyOrg = (...args) =>
+      failures-- > 0 ? Promise.reject(new Error('connection lost')) : notifyOrg(...args);
+    await expect(h.runJob('sms_inbound', { messageId: id })).rejects.toThrow(/connection lost/);
+    expect(h.db.data.reporters.get(h.marco.id)!.status).not.toBe('opted_out');
+    expect(h.db.data.audit.filter((a) => a.action === 'reporter.opted_out')).toEqual([]);
+    expect(h.sms).toEqual([]);
+    // The job's retry makes the change with its audit row and the office's notice.
+    await h.runJob('sms_inbound', { messageId: id });
+    expect(h.db.data.reporters.get(h.marco.id)!.status).toBe('opted_out');
+    expect(h.db.data.audit.filter((a) => a.action === 'reporter.opted_out')).toHaveLength(1);
+    expect(h.db.data.notifications.filter((n) => n.kind === 'reporter_opted_out')).toHaveLength(1);
+    expect(h.sms.map((m) => m.body)).toEqual([
+      "You won't get more texts from SiteLog. Reply START to resume.",
+    ]);
+  });
+
+  it('sms_inbound: a STOP Twilio handled itself (OptOutType) is recorded with no reply of ours (§19 Q45)', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    const id = '00000000-0000-4000-8000-00000000f301';
+    h.db.data.messages.set(id, {
+      ...V12_ROW_DEFAULTS.messages,
+      id,
+      conversation_id: null,
+      org_id: h.org.id,
+      direction: 'in',
+      wa_message_id: null,
+      type: null,
+      body: 'STOP',
+      payload: { to: '+18885550142', keyword: 'stop', pack: 'US', opt_out_type: 'STOP' },
+      media_id: null,
+      media_mime: null,
+      storage_path: null,
+      duration_s: null,
+      template_name: null,
+      status: 'received',
+      error: null,
+      created_at: h.now.toISOString(),
+      reporter_id: h.marco.id,
+      phone_e164: PHONE_MARCO,
+      provider: 'twilio',
+      provider_message_id: `SM${id}`,
+      copy_key: null,
+      channel: 'sms',
+    });
+    await h.runJob('sms_inbound', { messageId: id });
+    expect(h.db.data.reporters.get(h.marco.id)!.status).toBe('opted_out');
+    expect(h.db.data.smsOptOuts).toEqual([
+      expect.objectContaining({ phone_e164: PHONE_MARCO, country: 'US', method: 'sms_keyword' }),
+    ]);
+    expect(h.sms).toEqual([]);
+  });
+
+  it('sms_inbound: a STOP never waits for the link secret; only a HELP needs it', async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    Object.assign(h.ctx.config, { LINK_SIGNING_SECRET: '' });
+    const inbound = (id: string, body: string) => {
+      h.db.data.messages.set(id, {
+        ...V12_ROW_DEFAULTS.messages,
+        id,
+        conversation_id: null,
+        org_id: h.org.id,
+        direction: 'in',
+        wa_message_id: null,
+        type: null,
+        body,
+        payload: { to: '+18885550142', keyword: null, pack: 'US', opt_out_type: null },
+        media_id: null,
+        media_mime: null,
+        storage_path: null,
+        duration_s: null,
+        template_name: null,
+        status: 'received',
+        error: null,
+        created_at: h.now.toISOString(),
+        reporter_id: h.marco.id,
+        phone_e164: PHONE_MARCO,
+        provider: 'twilio',
+        provider_message_id: `SM${id}`,
+        copy_key: null,
+        channel: 'sms',
+      });
+      return id;
+    };
+    await h.runJob('sms_inbound', {
+      messageId: inbound('00000000-0000-4000-8000-00000000f101', 'STOP'),
+    });
+    expect(h.db.data.reporters.get(h.marco.id)!.status).toBe('opted_out');
+    expect(h.sms).toHaveLength(1);
+    // HELP carries the personal link: without the secret the job fails (retried, then Sentry)
+    // and the text stays unhandled for the next attempt.
+    const help = inbound('00000000-0000-4000-8000-00000000f102', 'HELP');
+    await expect(h.runJob('sms_inbound', { messageId: help })).rejects.toThrow(
+      /LINK_SIGNING_SECRET is not set/,
+    );
+    expect((h.db.data.messages.get(help)!.payload as { handled_at?: string }).handled_at).toBe(
+      undefined,
+    );
+  });
+
+  it("send_welcome: a number on the provider's opt-out list (Twilio 21610) is recorded as an opt-out", async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.ctx.notifier = createWorkerNotifier(
+      h.ctx.config,
+      h.db,
+      () => ({
+        driver: 'twilio',
+        send: () =>
+          Promise.reject(
+            new SmsSendError('twilio 400 21610: Attempt to send to unsubscribed recipient', {
+              driver: 'twilio',
+              retryable: false,
+              undeliverable: true,
+              optedOut: true,
+              code: '21610',
+            }),
+          ),
+      }),
+      () => h.now,
+    );
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    expect([marco.status, marco.opted_out_at, marco.last_invite_error]).toEqual([
+      'opted_out',
+      '2026-10-09T22:31:00.000Z',
+      null,
+    ]);
+    expect(h.db.data.smsOptOuts).toEqual([
+      expect.objectContaining({
+        phone_e164: PHONE_MARCO,
+        country: 'US',
+        method: 'provider_opt_out',
+      }),
+    ]);
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_opted_out',
+        title: 'Marco Ruiz opted out of texts',
+        body: expect.stringMatching(/opt-out list/),
+      }),
+    ]);
+    expect(h.db.data.audit.map((a) => a.action)).toEqual([
+      'field_link.created',
+      'sms.undeliverable',
+      'reporter.opted_out',
+      'reporter.invite_failed',
+    ]);
+    // The next welcome (a re-send) is skipped by the opt-out, with no provider call.
+    h.db.data.notifications.length = 0;
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.db.data.notifications[0]!.body).toMatch(/opted out of texts/);
+  });
+
+  it('send_welcome: a real org whose pack has no sender here reaches no phone and says so', async () => {
     const h = createHarness();
     h.db.data.reporters.get(h.marco.id)!.status = 'invited';
-    await h.runJob('send_welcome', { reporterId: h.marco.id, reinvite: false });
-    expect(h.wa.sent[0]!.kind).toBe('template');
-    const t = h.wa.sent[0]!.template as {
-      name: string;
-      components: Array<{ type: string; parameters: Array<{ text?: string; payload?: string }> }>;
-    };
-    expect(t.name).toBe('sitelog_welcome');
-    expect(t.components[0]!.parameters.map((p) => p.text)).toEqual([
-      'Marco',
-      'Kestrel Build Group',
-      'Riverside Lofts — Block B',
-      '17:30',
+    h.db.data.reporters.get(h.marco.id)!.invited_at = null;
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toEqual([]);
+    const [message] = [...h.db.data.messages.values()];
+    expect(message).toMatchObject({ provider: 'console', status: 'failed' });
+    expect(message!.body).toContain(MASKED_CODE);
+    const marco = h.db.data.reporters.get(h.marco.id)!;
+    // Not invited: the 48 h re-send clock never started.
+    expect([marco.status, marco.invited_at]).toEqual(['invited', null]);
+    expect(h.db.data.audit.some((a) => a.action === 'reporter.invited')).toBe(false);
+    expect(h.db.data.notifications).toEqual([
+      expect.objectContaining({
+        kind: 'reporter_invite_failed',
+        title: 'Marco Ruiz: the welcome text was not sent',
+        body: expect.stringMatching(/no SMS sender is set for its country pack/),
+      }),
     ]);
-    expect(t.components[1]!.parameters[0]!.payload).toBe('welcome:ok');
-    const convo = (await h.db.getConversationByPhone(h.marco.phone_e164))!;
-    expect(convo.state).toBe('welcome_sent');
-    expect(h.db.data.messages.size).toBe(1);
-    expect(Array.from(h.db.data.messages.values())[0]!.template_name).toBe('sitelog_welcome');
+  });
+
+  it('send_welcome: a reporter the office disabled meanwhile gets nothing and nobody is told', async () => {
+    const h = createHarness();
+    h.db.data.reporters.get(h.marco.id)!.status = 'disabled';
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toEqual([]);
+    expect(h.db.data.notifications).toEqual([]);
+    expect(h.db.data.audit).toEqual([]);
+    expect(h.db.data.fieldLinks).toEqual([]);
+  });
+
+  it("send_welcome: a phone that sent STOP on the pack's sender gets nothing, whatever the row says", async () => {
+    const h = createHarness();
+    h.db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
+    h.db.data.reporters.get(h.marco.id)!.status = 'invited';
+    h.db.data.smsOptOuts.push({
+      phone_e164: PHONE_MARCO,
+      country: 'US',
+      method: 'sms_keyword',
+      opted_out_at: '2026-10-01T00:00:00Z',
+    });
+    await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
+    expect(h.sms).toEqual([]);
+    expect(h.db.data.audit.find((a) => a.action === 'notify.skipped')).toMatchObject({
+      diff: { reason: 'opted_out', detail: 'phone_opted_out' },
+    });
+    expect(h.db.data.notifications[0]!.body).toMatch(/opted out of texts/);
   });
 
   it('send_template uses free-form inside the window and the template outside, bumping reminder_stage', async () => {
@@ -590,5 +1457,51 @@ describe('jobs: welcome, template, retention', () => {
     await h.runJob('retention_cleanup', {});
     expect(h.db.data.jobs.has(oldDone)).toBe(false);
     for (const id of [recentDone, oldDead, queued]) expect(h.db.data.jobs.has(id)).toBe(true);
+  });
+});
+
+describe('send_email: evidence pack ready', () => {
+  const pack = (pdf_path: string) => ({
+    id: 'pack-1',
+    org_id: ORG_ID,
+    site_id: SITE_OAKMONT,
+    period_start: '2026-10-01',
+    period_end: '2026-10-09',
+    status: 'ready' as const,
+    pdf_path,
+    sections: ['summary'],
+    error: null,
+    created_by: null,
+    created_at: '2026-10-09T20:00:00Z',
+    ready_at: '2026-10-09T20:05:00Z',
+  });
+
+  it('signs a pack stored under its own org and site', async () => {
+    const h = createHarness();
+    const path = evidencePackStoragePath(
+      ORG_ID,
+      SITE_OAKMONT,
+      '2026-10-01',
+      '2026-10-09',
+      'pack-1',
+    );
+    h.db.data.packs.set('pack-1', pack(path));
+    const email = await buildEmail(h.ctx, {
+      kind: 'evidence_pack_ready',
+      packId: 'pack-1',
+      to: ['pm@kestrel.example'],
+    });
+    expect(email!.messages[0]!.rendered.html).toContain(`memory://exports/${path}?signed=1`);
+  });
+
+  it("refuses to sign a path outside the pack's org and site (a row forged before 20261014000001)", async () => {
+    const h = createHarness();
+    h.db.data.packs.set(
+      'pack-1',
+      pack('bbbbbbbb-0000-4000-8000-000000000001/bbbbbbbb-0000-4000-8000-000000000003/eot.pdf'),
+    );
+    await expect(
+      buildEmail(h.ctx, { kind: 'evidence_pack_ready', packId: 'pack-1', to: ['pm@x.example'] }),
+    ).rejects.toThrow(/outside its org and site/);
   });
 });

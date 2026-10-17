@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import { JobPayloadSchemas } from '@sitelog/shared';
 import type {
+  NoticeData,
   CompanyRow,
+  ConsentRow,
+  PushSubscriptionRow,
+  ConsoleEmailRow,
   ConversationRow,
+  CountryRow,
   EvidencePackRow,
   GlossaryTermRow,
   JobRow,
@@ -17,11 +23,15 @@ import type {
   ReporterRow,
   SiteDayRow,
   SiteRow,
+  SmsOptOutRow,
   TranscriptRow,
-  UnknownSenderRow,
+  UnknownContactRow,
+  UploadRow,
   WeatherEventRow,
 } from '@sitelog/shared';
-import { formatReportNo } from '@sitelog/shared';
+import { backoffSeconds, formatReportNo, reportLanguageFor } from '@sitelog/shared';
+import { V12_ROW_DEFAULTS } from '@sitelog/shared';
+import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { median } from '../cost';
 import type { AuditInput, Db, ExpiredMedia, Json, ReportSourceWithMessage } from '../db';
 
@@ -43,19 +53,23 @@ export interface FakeDbData {
     role: string;
     email: string;
     display_name: string | null;
+    /** The member's panel language (W4-09); absent = the org's. */
+    ui_locale?: 'en-US' | 'tr-TR' | null;
   }>;
   companies: Map<string, CompanyRow>;
   glossary: Map<string, GlossaryTermRow>;
   conversations: Map<string, ConversationRow>;
   messages: Map<string, MessageRow>;
   transcripts: Map<string, TranscriptRow>;
-  unknownSenders: Map<string, UnknownSenderRow>;
+  unknownContacts: Map<string, UnknownContactRow>;
   siteDays: Map<string, SiteDayRow>;
   reports: Map<string, ReportRow>;
   versions: Map<string, ReportVersionRow>;
   sources: ReportSourceRow[];
   questions: Map<string, QuestionRow>;
   jobs: Map<number, JobRow>;
+  /** field_devices.last_seen_at per reporter (D25), set by tests. */
+  deviceSeen: Map<string, string>;
   audit: AuditInput[];
   notifications: Array<{
     org_id: string;
@@ -64,6 +78,7 @@ export interface FakeDbData {
     body: string | null;
     target_path: string | null;
     user_id: string | null;
+    data: NoticeData | null;
   }>;
   packs: Map<string, EvidencePackRow>;
   weatherEvents: WeatherEventRow[];
@@ -73,6 +88,37 @@ export interface FakeDbData {
   photoObjects: Array<{ name: string; created_at: string }>;
   /** report_costs (§15 cost guardrail). */
   reportCosts: Map<string, ReportCostRow>;
+  /** countries (the launch packs by default; tests set sender ids). */
+  countries: CountryRow[];
+  consents: ConsentRow[];
+  /** W2-14: web push subscriptions. */
+  pushSubscriptions: PushSubscriptionRow[];
+  /** sms_opt_outs (W1-08): a phone's STOP on a pack's sender, or the provider's opt-out list. */
+  smsOptOuts: SmsOptOutRow[];
+  fieldLinks: Array<{
+    id: string;
+    code_hash: string;
+    reporter_id: string;
+    kind: 'personal';
+    revoked_at: string | null;
+    created_at: string;
+    /** W4-12: when the link was last opened (`field_links.last_opened_at`). */
+    last_opened_at?: string | null;
+  }>;
+  consoleEmails: ConsoleEmailRow[];
+  /** uploads: whose they are (the dead-job notice, W1-10), and full rows for W1-11. */
+  uploads: Map<
+    string,
+    Pick<UploadRow, 'id' | 'report_id' | 'reporter_id' | 'site_id'> & Partial<UploadRow>
+  >;
+  /** field_attach_photos() calls (F9, W2-04): the batches attached and the versions they made. */
+  photoBatches: Array<{
+    reportId: string;
+    batchId: string;
+    changeNote: string;
+    caption: string | null;
+    version: number;
+  }>;
 }
 
 export interface FakeDb extends Db {
@@ -97,13 +143,14 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     conversations: new Map(),
     messages: new Map(),
     transcripts: new Map(),
-    unknownSenders: new Map(),
+    unknownContacts: new Map(),
     siteDays: new Map(),
     reports: new Map(),
     versions: new Map(),
     sources: [],
     questions: new Map(),
     jobs: new Map(),
+    deviceSeen: new Map(),
     audit: [],
     notifications: [],
     packs: new Map(),
@@ -112,6 +159,14 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     purged: [],
     photoObjects: [],
     reportCosts: new Map(),
+    countries: DEMO_COUNTRIES.map((c) => structuredClone(c)),
+    consents: [],
+    pushSubscriptions: [],
+    smsOptOuts: [],
+    fieldLinks: [],
+    consoleEmails: [],
+    uploads: new Map(),
+    photoBatches: [],
   };
   let jobSeq = 0;
   let taken = 0;
@@ -193,6 +248,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async insertOutboundMessage(input) {
       const row: MessageRow = {
+        ...V12_ROW_DEFAULTS.messages,
         id: randomUUID(),
         conversation_id: input.conversation_id,
         org_id: null,
@@ -225,7 +281,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
           m.direction === 'in' &&
           new Date(m.created_at) >= from &&
           new Date(m.created_at) <= to &&
-          (!types || types.includes(m.type)),
+          (!types || (m.type !== null && types.includes(m.type))),
       );
     },
 
@@ -233,10 +289,27 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return d.transcripts.get(messageId) ?? null;
     },
     async listTranscripts(ids) {
+      // Transcripts are keyed by message id here (the fake has no uploads).
       return ids.map((id) => d.transcripts.get(id)).filter((t): t is TranscriptRow => !!t);
+    },
+    async listCallTranscripts(ids) {
+      const all = [...d.transcripts.values()];
+      return ids.flatMap((id) => all.filter((t) => t.call_id === id));
+    },
+    // W3-09: calls and their live turns are SQL (voice_turn_submit()); the voice_turn job's tests
+    // run on PGlite.
+    async getCall() {
+      return null;
+    },
+    async getVoiceTurn() {
+      return null;
+    },
+    async settleVoiceTurn() {
+      return false;
     },
     async upsertTranscript(input) {
       const row: TranscriptRow = {
+        ...V12_ROW_DEFAULTS.transcripts,
         id: d.transcripts.get(input.message_id)?.id ?? randomUUID(),
         message_id: input.message_id,
         language: input.language,
@@ -249,6 +322,108 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return row;
     },
 
+    async getUploadTranscript(uploadId) {
+      // Upload transcripts share the map, keyed by the upload id (their media id).
+      const t = d.transcripts.get(uploadId);
+      return t && t.upload_id === uploadId ? t : null;
+    },
+    async saveUploadTranscript(input) {
+      const existing = d.transcripts.get(input.uploadId);
+      const transcript: TranscriptRow = existing ?? {
+        ...V12_ROW_DEFAULTS.transcripts,
+        id: randomUUID(),
+        message_id: null,
+        upload_id: input.uploadId,
+        language: input.language,
+        text: input.text,
+        segments: input.segments as TranscriptRow['segments'],
+        model: input.model,
+        created_at: iso(),
+      };
+      d.transcripts.set(input.uploadId, transcript);
+      const u = d.uploads.get(input.uploadId);
+      if (u) {
+        if (input.durationS !== null) u.duration_s = input.durationS;
+        if (input.peaks !== null) u.peaks = input.peaks;
+      }
+      if (!existing) {
+        const site = u ? d.sites.get(u.site_id) : undefined;
+        d.audit.push({
+          org_id: site?.org_id ?? '',
+          actor_type: 'agent',
+          action: 'transcript.created',
+          entity: 'upload',
+          entity_id: input.uploadId,
+          diff: input.audit as Json,
+        });
+      }
+      return { transcript, created: !existing };
+    },
+    async getUpload(id) {
+      const u = d.uploads.get(id);
+      if (!u) return null;
+      return {
+        kind: 'audio',
+        storage_path: '',
+        mime: null,
+        bytes: null,
+        duration_s: null,
+        peaks: null,
+        recorded_at: null,
+        received_at: null,
+        caption: null,
+        uploaded_by: null,
+        purged_at: null,
+        batch_id: null,
+        batch_size: null,
+        ...u,
+        question_id: u.question_id ?? null,
+        correction_report_id: u.correction_report_id ?? null,
+      };
+    },
+    async countBatchPhotos(batchId) {
+      return Array.from(d.uploads.values()).filter(
+        (u) => u.batch_id === batchId && u.kind === 'photo',
+      ).length;
+    },
+    async attachPhotos(reportId, batchId, changeNote, caption) {
+      const done = d.photoBatches.find((b) => b.batchId === batchId);
+      if (done) return { version: done.version, alreadyAttached: true };
+      const report = d.reports.get(reportId);
+      if (!report) throw new Error('report_not_found');
+      report.current_version += 1;
+      report.status = 'filed';
+      d.photoBatches.push({
+        reportId,
+        batchId,
+        changeNote,
+        caption,
+        version: report.current_version,
+      });
+      return { version: report.current_version, alreadyAttached: false };
+    },
+    async listReportVoiceUploads(reportId) {
+      return Array.from(d.uploads.values())
+        .filter(
+          (u) =>
+            u.report_id === reportId &&
+            (u.kind ?? 'audio') === 'audio' &&
+            !u.purged_at &&
+            !u.batch_id &&
+            !u.question_id &&
+            !u.correction_report_id,
+        )
+        .sort(
+          (a, b) =>
+            (a.received_at ?? '').localeCompare(b.received_at ?? '') || a.id.localeCompare(b.id),
+        )
+        .map((u) => ({
+          id: u.id,
+          received_at: u.received_at ?? null,
+          transcribed: d.transcripts.get(u.id)?.upload_id === u.id,
+        }));
+    },
+
     async listReportersByPhone(phone) {
       return Array.from(d.reporters.values()).filter(
         (r) => r.phone_e164 === phone && r.status !== 'disabled',
@@ -256,6 +431,38 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async getReporter(id) {
       return d.reporters.get(id) ?? null;
+    },
+    async optOutReporter(reporterId, at) {
+      const r = d.reporters.get(reporterId);
+      if (!r) return;
+      if (r.status !== 'disabled') r.status = 'opted_out';
+      r.opted_out_at = r.opted_out_at ?? at;
+    },
+    async listInboundReporters(phone, country, scope) {
+      return [...d.reporters.values()]
+        .filter((r) => r.phone_e164 === phone)
+        .map((r) => ({ r, org: d.orgs.get(r.org_id) }))
+        .filter(
+          ({ org }) =>
+            org !== undefined &&
+            org.country === country &&
+            ('realOnly' in scope ? !org.is_demo : org.id === scope.orgId),
+        )
+        .sort((a, b) => a.r.created_at.localeCompare(b.r.created_at))
+        .map(({ r, org }) => ({
+          id: r.id,
+          orgId: r.org_id,
+          status: r.status,
+          contactPref: r.contact_pref,
+          activatedAt: r.activated_at,
+          optedOutAt: r.opted_out_at,
+          createdAt: r.created_at,
+          name: r.name,
+          phone: r.phone_e164,
+          locale: r.locale,
+          orgName: org!.name,
+          orgIsDemo: org!.is_demo,
+        }));
     },
     async updateReporter(id, patch) {
       const row = d.reporters.get(id);
@@ -336,7 +543,8 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         (g) =>
           g.org_id === input.org_id &&
           g.heard.toLowerCase() === input.heard.toLowerCase() &&
-          g.kind === input.kind,
+          g.kind === input.kind &&
+          (g.scope_site_id ?? null) === (input.scope_site_id ?? null),
       );
       if (existing) {
         const next = {
@@ -346,7 +554,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
           official: existing.official ?? input.official,
         };
         d.glossary.set(existing.id, next);
-        return next;
+        return { row: next, inserted: false };
       }
       const row: GlossaryTermRow = {
         id: randomUUID(),
@@ -364,7 +572,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         last_seen_at: iso(),
       };
       d.glossary.set(row.id, row);
-      return row;
+      return { row, inserted: true };
     },
     async listSiteRecipients(siteId) {
       return d.recipients.filter((r) => r.site_id === siteId).map((r) => r.email);
@@ -372,7 +580,12 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async listMemberEmails(orgId, roles) {
       return d.members
         .filter((m) => m.org_id === orgId && roles.includes(m.role))
-        .map((m) => ({ email: m.email, user_id: m.user_id, display_name: m.display_name }));
+        .map((m) => ({
+          email: m.email,
+          user_id: m.user_id,
+          display_name: m.display_name,
+          ui_locale: m.ui_locale ?? null,
+        }));
     },
     async getUserContact(userId) {
       const m = d.members.find((x) => x.user_id === userId);
@@ -440,7 +653,10 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return d.reports.get(id) ?? null;
     },
     async insertReport(input) {
+      const org = d.orgs.get(input.org_id);
       const row: ReportRow = {
+        ...V12_ROW_DEFAULTS.reports,
+        language: input.language ?? reportLanguageFor(org?.locale ?? 'en-US'),
         id: randomUUID(),
         org_id: input.org_id,
         site_id: input.site_id,
@@ -525,7 +741,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       const report = d.reports.get(input.report_id);
       const isDraft =
         !report ||
-        ['collecting', 'awaiting_answer', 'awaiting_confirmation'].includes(report.status);
+        ['collecting', 'processing', 'awaiting_answer', 'awaiting_confirmation'].includes(
+          report.status,
+        );
       if (existing && report && !isDraft && input.version <= report.current_version) {
         // Same rule as the SQL: a current version of a filed report is immutable.
         throw new Error(
@@ -533,6 +751,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         );
       }
       const row: ReportVersionRow = {
+        ...V12_ROW_DEFAULTS.report_versions,
         report_id: input.report_id,
         version: input.version,
         data: input.data as ReportVersionRow['data'],
@@ -543,6 +762,8 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         author_message_id: input.author_message_id ?? existing?.author_message_id ?? null,
         change_note: input.change_note ?? null,
         created_at: existing?.created_at ?? iso(),
+        // As the trigger of 20261015000070: a new version starts at 1, a change of data bumps it.
+        draft_rev: existing ? nextDraftRev(existing, input.data, report) : 1,
       };
       d.versions.set(vkey(input.report_id, input.version), row);
       return row;
@@ -550,7 +771,47 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async updateVersion(reportId, version, patch) {
       const row = d.versions.get(vkey(reportId, version));
       if (!row) throw new Error('version not found');
-      d.versions.set(vkey(reportId, version), { ...row, ...(patch as Partial<ReportVersionRow>) });
+      const { draft_rev: _ignored, ...rest } = patch as Partial<ReportVersionRow>;
+      d.versions.set(vkey(reportId, version), {
+        ...row,
+        ...rest,
+        draft_rev:
+          'data' in rest
+            ? nextDraftRev(row, rest.data, d.reports.get(reportId))
+            : (row.draft_rev ?? 1),
+      });
+    },
+    async storeDraftVersion(input) {
+      const report = d.reports.get(input.report_id);
+      if (
+        !report ||
+        !FAKE_DRAFT_STATUSES.includes(report.status) ||
+        (report.current_version || 1) !== input.version
+      )
+        return null;
+      return db.insertVersion(input);
+    },
+    async fileVersion(input) {
+      // As the SQL: everything or nothing, after checking what the filing was computed from.
+      const report = d.reports.get(input.reportId);
+      const version = d.versions.get(vkey(input.reportId, input.version));
+      if (
+        !report ||
+        !version ||
+        report.status !== input.expect.status ||
+        (report.current_version || 1) !== input.version ||
+        (version.draft_rev ?? 1) !== input.expect.draftRev
+      )
+        return { filed: false };
+      const updated = await db.updateReport(input.reportId, input.report);
+      await db.updateVersion(input.reportId, input.version, {
+        data: input.data,
+        summary: input.summary,
+      });
+      await db.denormalizeVersion(input.reportId, input.version);
+      await db.updateSiteDay(input.siteDayId, input.siteDay);
+      await db.logAudit(input.audit);
+      return { filed: true, report: updated };
     },
     async denormalizeVersion(reportId, version) {
       d.denormalized.push({ report_id: reportId, version });
@@ -561,6 +822,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       )
         return;
       d.sources.push({
+        ...V12_ROW_DEFAULTS.report_sources,
         id: randomUUID(),
         report_id: input.report_id,
         message_id: input.message_id,
@@ -573,10 +835,11 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       return d.sources
         .filter((s) => s.report_id === reportId)
         .map((s): ReportSourceWithMessage | null => {
-          const m = d.messages.get(s.message_id);
+          const m = s.message_id ? d.messages.get(s.message_id) : undefined;
           if (!m) return null;
           return {
             ...s,
+            media_id: s.upload_id ?? s.message_id,
             message_type: m.type,
             storage_path: m.storage_path,
             duration_s: m.duration_s,
@@ -591,6 +854,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
 
     async insertQuestion(input) {
       const row: QuestionRow = {
+        ...V12_ROW_DEFAULTS.questions,
         id: randomUUID(),
         report_id: input.report_id,
         field: input.field,
@@ -603,9 +867,35 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         asked_at: toIso(input.asked_at),
         answered_at: null,
         created_at: iso(),
+        channel: input.channel ?? null,
+        call_id: input.call_id ?? null,
       };
       d.questions.set(row.id, row);
       return row;
+    },
+    async setReportStatus(id, to, from) {
+      const row = d.reports.get(id);
+      if (!row || !from.includes(row.status)) return false;
+      d.reports.set(id, { ...row, status: to, updated_at: iso() });
+      return true;
+    },
+    async reporterDeviceLastSeen(reporterId) {
+      return d.deviceSeen.get(reporterId) ?? null;
+    },
+    async listJobsByKeys(keys) {
+      return Array.from(d.jobs.values())
+        .filter((j) => j.dedupe_key !== null && keys.includes(j.dedupe_key))
+        .sort((a, b) => a.id - b.id)
+        .map((j) => ({ id: j.id, status: j.status, dedupe_key: j.dedupe_key }));
+    },
+    async hasActiveReportJob(type, reportId, exceptJobId) {
+      return Array.from(d.jobs.values()).some(
+        (j) =>
+          j.type === type &&
+          j.id !== exceptJobId &&
+          (j.status === 'queued' || j.status === 'running') &&
+          (j.payload as { reportId?: string } | null)?.reportId === reportId,
+      );
     },
     async getQuestion(id) {
       return d.questions.get(id) ?? null;
@@ -621,37 +911,384 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       if (patch.answered_at !== undefined) next.answered_at = toIso(patch.answered_at);
       d.questions.set(id, next);
     },
+    // W2-10: field_settle_correction() is SQL; the apply_correction tests run on PGlite.
+    async getCorrection() {
+      return null;
+    },
+    async getCorrectionByMessage() {
+      return null;
+    },
+    // W2-12: the SMS keyword job runs on PGlite (sms-keywords.integration.test.ts).
+    smsKeywordDays() {
+      return Promise.reject(new Error('fake db: smsKeywordDays runs on PGlite only'));
+    },
+    smsKeywordDrafts() {
+      return Promise.reject(new Error('fake db: smsKeywordDrafts runs on PGlite only'));
+    },
+    smsEditReports() {
+      return Promise.reject(new Error('fake db: smsEditReports runs on PGlite only'));
+    },
+    requestSmsCorrection() {
+      return Promise.reject(new Error('fake db: requestSmsCorrection runs on PGlite only'));
+    },
+    listDailyLinks() {
+      return Promise.reject(new Error('fake db: listDailyLinks runs on PGlite only'));
+    },
+    insertDailyLink() {
+      return Promise.reject(new Error('fake db: insertDailyLink runs on PGlite only'));
+    },
+    orgDailyLinkTtlHours() {
+      return Promise.reject(new Error('fake db: orgDailyLinkTtlHours runs on PGlite only'));
+    },
+    listPhotosLinks() {
+      return Promise.reject(new Error('fake db: listPhotosLinks runs on PGlite only'));
+    },
+    insertPhotosLink() {
+      return Promise.reject(new Error('fake db: insertPhotosLink runs on PGlite only'));
+    },
+    applyCallCorrection() {
+      return Promise.reject(new Error('fake db: applyCallCorrection runs on PGlite only'));
+    },
+    // W3-11: the post-call steps are SQL (20261016000360_post_call.sql); their tests run on PGlite.
+    postCallSettle() {
+      return Promise.reject(new Error('fake db: postCallSettle runs on PGlite only'));
+    },
+    postCallRecording() {
+      return Promise.reject(new Error('fake db: postCallRecording runs on PGlite only'));
+    },
+    postCallFallbackReport() {
+      return Promise.reject(new Error('fake db: postCallFallbackReport runs on PGlite only'));
+    },
+    postCallReconciled() {
+      return Promise.reject(new Error('fake db: postCallReconciled runs on PGlite only'));
+    },
+    postCallUnreconciled() {
+      return Promise.reject(new Error('fake db: postCallUnreconciled runs on PGlite only'));
+    },
+    outboundCallStart() {
+      return Promise.reject(new Error('fake db: outboundCallStart runs on PGlite only'));
+    },
+    outboundCallRinging() {
+      return Promise.reject(new Error('fake db: outboundCallRinging runs on PGlite only'));
+    },
+    outboundCallUnanswered() {
+      return Promise.reject(new Error('fake db: outboundCallUnanswered runs on PGlite only'));
+    },
+    outboundCallShare() {
+      return Promise.resolve([]);
+    },
+    officeCallDial() {
+      return Promise.reject(new Error('fake db: officeCallDial runs on PGlite only'));
+    },
+    settingsTestCallDial() {
+      return Promise.reject(new Error('fake db: settingsTestCallDial runs on PGlite only'));
+    },
+    reportNoPhotoCheck() {
+      return Promise.reject(new Error('fake db: reportNoPhotoCheck runs on PGlite only'));
+    },
+    settleCorrection() {
+      return Promise.reject(new Error('fake db: settleCorrection runs on PGlite only'));
+    },
+    async listAppliedCorrections() {
+      return [];
+    },
+    // W2-16: the WhatsApp answer path runs on PGlite only (field_answer_question()).
+    answerQuestionByWhatsapp() {
+      return Promise.reject(new Error('fake db: answerQuestionByWhatsapp runs on PGlite only'));
+    },
+    async openWebQuestions(reporterIds) {
+      const out: Array<{ report_id: string; question_id: string; reporter_id: string }> = [];
+      for (const q of d.questions.values()) {
+        const r = d.reports.get(q.report_id);
+        if (!r || !r.reporter_id || !reporterIds.includes(r.reporter_id)) continue;
+        if (r.status !== 'awaiting_answer' || q.channel !== 'web' || q.answered_at) continue;
+        out.push({ report_id: r.id, question_id: q.id, reporter_id: r.reporter_id });
+      }
+      return out.reverse();
+    },
+    async inboundWhatsappConsent(reporterId, grant, messageId) {
+      const rows = d.consents.filter((c) => c.reporter_id === reporterId && c.type === 'whatsapp');
+      const held = rows.filter((c) => c.revoked_at === null);
+      if (!grant) {
+        for (const c of held) c.revoked_at = new Date().toISOString();
+        return held.length > 0;
+      }
+      if (held.length > 0 || rows.length === 0) return false;
+      d.consents.push({
+        ...rows.at(-1)!,
+        id: crypto.randomUUID(),
+        method: 'whatsapp_keyword',
+        evidence: { message_id: messageId },
+        given_at: new Date().toISOString(),
+        revoked_at: null,
+      });
+      return true;
+    },
+    settleVoiceAnswer() {
+      // field_settle_voice_answer() is SQL: the parse_answer tests run on PGlite (W2-09).
+      return Promise.reject(new Error('fake db: settleVoiceAnswer runs on PGlite only'));
+    },
+    async timeOutQuestion(id, at) {
+      const row = d.questions.get(id);
+      if (!row || row.answered_at) return false;
+      d.questions.set(id, {
+        ...row,
+        answered_at: toIso(at)!,
+        answer: { unanswered: true, timeout: true },
+      });
+      return true;
+    },
 
-    async findPendingUnknownSender(phone) {
+    async findPendingUnknownContact(phone) {
       return (
-        Array.from(d.unknownSenders.values()).find(
+        Array.from(d.unknownContacts.values()).find(
           (u) => u.phone_e164 === phone && u.status === 'pending',
         ) ?? null
       );
     },
-    async getUnknownSender(id) {
-      return d.unknownSenders.get(id) ?? null;
+    async getUnknownContact(id) {
+      return d.unknownContacts.get(id) ?? null;
     },
-    async insertUnknownSender(input) {
-      const row: UnknownSenderRow = {
+    async insertUnknownContact(input) {
+      const row: UnknownContactRow = {
         id: randomUUID(),
         org_id: input.org_id,
         phone_e164: input.phone_e164,
-        first_message_id: input.first_message_id,
+        message_id: input.message_id,
         snippet: input.snippet,
         guessed_site_id: input.guessed_site_id ?? null,
         status: 'pending',
         created_at: iso(),
+        channel: input.channel,
+        call_id: null,
       };
-      d.unknownSenders.set(row.id, row);
+      d.unknownContacts.set(row.id, row);
       return row;
     },
-    async updateUnknownSender(id, patch) {
-      const row = d.unknownSenders.get(id);
-      if (row) d.unknownSenders.set(id, { ...row, ...patch });
+    async updateUnknownContact(id, patch) {
+      const row = d.unknownContacts.get(id);
+      if (row) d.unknownContacts.set(id, { ...row, ...patch });
     },
 
-    async notifyOrg(orgId, kind, title, body = null, targetPath = null, userId = null) {
+    async getCountry(code) {
+      return d.countries.find((c) => c.code === code) ?? null;
+    },
+    async listCountries() {
+      return [...d.countries].sort((a, b) => a.code.localeCompare(b.code));
+    },
+    async listConsents(reporterId) {
+      return d.consents
+        .filter((c) => c.reporter_id === reporterId)
+        .map((c) => ({ type: c.type, revoked_at: c.revoked_at }));
+    },
+    async listLivePushSubscriptions(reporterId) {
+      return d.pushSubscriptions
+        .filter((p) => p.reporter_id === reporterId && p.revoked_at === null)
+        .map(({ id, endpoint, p256dh, auth }) => ({ id, endpoint, p256dh, auth }));
+    },
+    async lastInboundWhatsapp(phone, sender) {
+      const ins = Array.from(d.messages.values())
+        .filter(
+          (m) =>
+            m.phone_e164 === phone &&
+            m.channel === 'whatsapp' &&
+            m.direction === 'in' &&
+            m.provider === 'twilio' &&
+            (m.payload as { to?: unknown } | null)?.to === sender,
+        )
+        .map((m) => m.created_at)
+        .sort();
+      return ins.at(-1) ?? null;
+    },
+    async pushSubscriptionGone(id, status) {
+      const row = d.pushSubscriptions.find((p) => p.id === id && p.revoked_at === null);
+      if (!row) return false;
+      row.revoked_at = new Date().toISOString();
+      row.revoked_reason = 'gone';
+      d.audit.push({
+        org_id: row.org_id,
+        actor_type: 'system',
+        actor_id: null,
+        action: 'push.subscription_gone',
+        entity: 'push_subscription',
+        entity_id: id,
+        diff: { reporter_id: row.reporter_id, status },
+      });
+      return true;
+    },
+    async insertSmsMessage(row) {
+      if (
+        row.provider_message_id &&
+        [...d.messages.values()].some((m) => m.provider_message_id === row.provider_message_id)
+      )
+        throw Object.assign(new Error('duplicate provider_message_id'), { code: '23505' });
+      d.messages.set(row.id, {
+        ...V12_ROW_DEFAULTS.messages,
+        id: row.id,
+        conversation_id: null,
+        org_id: row.org_id,
+        direction: row.direction,
+        wa_message_id: null,
+        type: null,
+        body: row.body,
+        payload: (row.payload ?? null) as MessageRow['payload'],
+        media_id: null,
+        media_mime: null,
+        storage_path: null,
+        duration_s: null,
+        template_name: null,
+        status: row.status,
+        error: row.error,
+        created_at: iso(),
+        reporter_id: row.reporter_id,
+        phone_e164: row.phone_e164,
+        provider: row.provider,
+        provider_message_id: row.provider_message_id,
+        copy_key: row.copy_key,
+        channel: row.channel,
+      });
+    },
+    async updateSmsMessage(id, patch) {
+      Object.assign(d.messages.get(id)!, patch);
+    },
+    async notifyJobByDedupeKey(dedupeKey) {
+      const job = [...d.jobs.values()]
+        .filter(
+          (j) =>
+            j.type === 'notify' &&
+            (j.payload as { dedupeKey?: unknown } | null)?.dedupeKey === dedupeKey,
+        )
+        .sort((a, b) => a.id - b.id)[0];
+      const parsed = JobPayloadSchemas.notify.safeParse(job?.payload);
+      return parsed.success ? parsed.data : null;
+    },
+    async providerFaultNotifiedSince(orgId, since) {
+      // The fake's audit rows carry no time: any notified fault of the org counts.
+      void since;
+      return d.audit.some(
+        (a) =>
+          a.org_id === orgId &&
+          a.action === 'sms.provider_fault' &&
+          (a.diff as { notified?: unknown } | null)?.notified === true,
+      );
+    },
+    async listMessagesByDedupeKey(reporterId, dedupeKey) {
+      return [...d.messages.values()]
+        .filter(
+          (x) =>
+            x.reporter_id === reporterId &&
+            (x.payload as { dedupe_key?: string } | null)?.dedupe_key === dedupeKey,
+        )
+        .map((m) => {
+          const payload = m.payload as { error_code?: string; attempt?: number } | null;
+          return {
+            id: m.id,
+            channel: m.channel,
+            status: m.status,
+            provider: m.provider,
+            provider_message_id: m.provider_message_id,
+            error: m.error,
+            error_code: payload?.error_code ?? null,
+            attempt: payload?.attempt ?? null,
+          };
+        });
+    },
+    async markSmsHandled(messageId, at) {
+      const m = d.messages.get(messageId);
+      if (!m) return;
+      m.payload = { ...((m.payload as Record<string, Json> | null) ?? {}), handled_at: at };
+    },
+    async hasPendingUnknownContact(phone, channel, excludeMessageId = null) {
+      return [...d.unknownContacts.values()].some(
+        (u) =>
+          u.phone_e164 === phone &&
+          u.channel === channel &&
+          u.status === 'pending' &&
+          (excludeMessageId === null || u.message_id !== excludeMessageId),
+      );
+    },
+    async linkedContactOrgs(phone, country) {
+      const orgs = new Set<string>();
+      for (const u of d.unknownContacts.values()) {
+        if (u.phone_e164 !== phone || u.status !== 'linked' || !u.org_id) continue;
+        const org = d.orgs.get(u.org_id);
+        if (org && org.country === country && !org.is_demo) orgs.add(u.org_id);
+      }
+      return [...orgs];
+    },
+    async insertSmsUnknownContact(row) {
+      const existing = [...d.unknownContacts.values()].find((u) => u.message_id === row.message_id);
+      if (existing) return { id: existing.id, created: false };
+      const contact = await db.insertUnknownContact({
+        org_id: row.org_id,
+        phone_e164: row.phone_e164,
+        channel: row.channel ?? 'sms',
+        message_id: row.message_id,
+        snippet: row.snippet,
+      });
+      return { id: contact.id, created: true };
+    },
+    async applyInboundChange(input) {
+      // One transaction: called through `db` (a test may make one of them throw), rolled back
+      // to the state before on any failure.
+      const before = d.reporters.get(input.reporterId);
+      const audited = d.audit.length;
+      const notified = d.notifications.length;
+      try {
+        await db.updateReporter(input.reporterId, input.patch);
+        await db.logAudit(input.audit);
+        const n = input.notification;
+        if (n) await db.notifyOrg(n.orgId, n.kind, n.title, n.body, n.targetPath, null, n.data);
+      } catch (err) {
+        if (before) d.reporters.set(input.reporterId, before);
+        d.audit.length = audited;
+        d.notifications.length = notified;
+        throw err;
+      }
+    },
+    async isSmsOptedOut(phone, country) {
+      return d.smsOptOuts.some((o) => o.phone_e164 === phone && o.country === country);
+    },
+    async recordSmsOptOut(row) {
+      if (d.smsOptOuts.some((o) => o.phone_e164 === row.phone_e164 && o.country === row.country))
+        return;
+      d.smsOptOuts.push({ ...row, opted_out_at: iso() });
+    },
+    async clearSmsOptOut(phone, country) {
+      d.smsOptOuts = d.smsOptOuts.filter((o) => !(o.phone_e164 === phone && o.country === country));
+    },
+    async hasOpenedLink(reporterId) {
+      return d.fieldLinks.some((l) => l.reporter_id === reporterId && !!l.last_opened_at);
+    },
+    async listPersonalLinks(reporterId) {
+      return d.fieldLinks
+        .filter((l) => l.reporter_id === reporterId && l.kind === 'personal' && !l.revoked_at)
+        .reverse()
+        .map(({ id, code_hash }) => ({ id, code_hash }));
+    },
+    async insertPersonalLink(row) {
+      if (d.fieldLinks.some((l) => l.code_hash === row.code_hash)) return false;
+      d.fieldLinks.push({ ...row, kind: 'personal', revoked_at: null, created_at: iso() });
+      return true;
+    },
+    async insertConsoleEmail(row) {
+      const key = row.dedupe_key ?? null;
+      const taken = key ? d.consoleEmails.find((e) => e.dedupe_key === key) : undefined;
+      if (taken) return taken.id;
+      const id = randomUUID();
+      d.consoleEmails.push({ ...row, dedupe_key: key, id, created_at: iso() });
+      return id;
+    },
+
+    async notifyOrg(
+      orgId,
+      kind,
+      title,
+      body = null,
+      targetPath = null,
+      userId = null,
+      data = null,
+    ) {
       d.notifications.push({
         org_id: orgId,
         kind,
@@ -659,6 +1296,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         body,
         target_path: targetPath,
         user_id: userId,
+        data,
       });
       return randomUUID();
     },
@@ -689,24 +1327,44 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async failJob(id, error) {
       const j = d.jobs.get(id);
       if (!j) return;
-      if (j.attempts >= 5)
-        Object.assign(j, { status: 'dead', last_error: error, finished_at: iso() });
+      // fail_job() (20261015000001, GAP D17): 30 s · 2 min · 10 min · 30 min · 2 h, dead after the 6th.
+      const wait = backoffSeconds(j.attempts);
+      if (wait === null)
+        Object.assign(j, {
+          status: 'dead',
+          last_error: error,
+          finished_at: iso(),
+          locked_at: null,
+          locked_by: null,
+        });
       else
         Object.assign(j, {
           status: 'queued',
           last_error: error,
-          run_after: new Date(now().getTime() + 30_000).toISOString(),
+          run_after: new Date(now().getTime() + wait * 1000).toISOString(),
+          locked_at: null,
+          locked_by: null,
         });
+    },
+    async heartbeatJob(id, worker) {
+      const j = d.jobs.get(id);
+      if (!j || j.status !== 'running' || j.locked_by !== worker) return false;
+      j.locked_at = iso();
+      return true;
     },
     async getJob(id) {
       return d.jobs.get(id) ?? null;
     },
+    async getUploadOwner(id) {
+      const u = d.uploads.get(id);
+      return u
+        ? { id: u.id, report_id: u.report_id, reporter_id: u.reporter_id, site_id: u.site_id }
+        : null;
+    },
     async enqueueJob(type, payload, opts = {}) {
       if (opts.dedupeKey) {
-        const existing = Array.from(d.jobs.values()).find(
-          (j) =>
-            j.dedupe_key === opts.dedupeKey && (j.status === 'queued' || j.status === 'running'),
-        );
+        // D16 (20261015000001): a key names one job for good, whatever its status.
+        const existing = Array.from(d.jobs.values()).find((j) => j.dedupe_key === opts.dedupeKey);
         if (existing) return existing.id;
       }
       const id = ++jobSeq;
@@ -716,7 +1374,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         payload: payload as JobRow['payload'],
         status: 'queued',
         attempts: 0,
-        run_after: toIso(opts.runAfter) ?? iso(),
+        run_after:
+          toIso(opts.runAfter) ??
+          (opts.delayMs ? new Date(Date.parse(iso()) + opts.delayMs).toISOString() : iso()),
         locked_at: null,
         locked_by: null,
         last_error: null,
@@ -774,7 +1434,21 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         const p = obj(m.payload);
         return p.reportId === reportId || (!!report && p.siteDayId === report.site_day_id);
       }).length;
-      return { aiUsd, jobCount, waTemplates };
+      // W2-15 (20261016000220): the Notifier's messages about the report, by channel.
+      const sent = Array.from(d.messages.values()).filter((m) => {
+        const p = obj(m.payload);
+        return (
+          m.direction === 'out' &&
+          p.report_id === reportId &&
+          m.provider !== 'console' &&
+          ['sent', 'delivered', 'read'].includes(m.status)
+        );
+      });
+      const smsMessages = sent.filter((m) => m.channel === 'sms').length;
+      const whatsappTemplates = sent.filter(
+        (m) => m.channel === 'whatsapp' && obj(m.payload).whatsapp_mode === 'template',
+      ).length;
+      return { aiUsd, jobCount, waTemplates, smsMessages, whatsappTemplates };
     },
     async reportCostBaseline({ kind, before, excludeReportId, days }) {
       const end = new Date(before).getTime();
@@ -827,14 +1501,27 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         .sort((a, b) => a.created_at.localeCompare(b.created_at))
         .slice(0, limit)
         .map((m): ExpiredMedia => ({
-          message_id: m.id,
+          id: m.id,
           storage_path: m.storage_path!,
-          type: m.type,
+          bucket: m.type === 'audio' ? 'audio' : 'photos',
           created_at: m.created_at,
         }));
     },
     async getInvoiceSummary() {
       return null;
+    },
+    // F4's test recordings are SQL (W2-13): the fake has none; the PGlite tests cover them.
+    async getTestClip() {
+      return null;
+    },
+    async saveTestClipResult() {
+      return false;
+    },
+    async deleteTestClip() {
+      return null;
+    },
+    async listExpiredTestClips() {
+      return [];
     },
     async listOrphanOfficePhotos(before, limit) {
       const stored = new Set(
@@ -860,7 +1547,11 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       for (const id of ids) d.jobs.delete(id);
       return ids.length;
     },
-    async purgeMessageMedia(messageId, purgedAt) {
+    async purgeUnknownCallers() {
+      // The fake keeps no unknown callers' calls (W3-14's SQL is tested on PGlite).
+      return [];
+    },
+    async purgeMedia(messageId, purgedAt) {
       const m = d.messages.get(messageId);
       if (m) {
         d.messages.set(messageId, {
@@ -888,4 +1579,25 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     async close() {},
   };
   return db;
+}
+
+const FAKE_DRAFT_STATUSES: readonly ReportRow['status'][] = [
+  'collecting',
+  'processing',
+  'awaiting_answer',
+  'awaiting_confirmation',
+];
+
+/**
+ * report_versions_draft_rev() (20261015000070, 20261015000090): the revision after a write of
+ * `data`; a version whose report is no longer a draft keeps its revision.
+ */
+function nextDraftRev(
+  row: ReportVersionRow,
+  data: unknown,
+  report: Pick<ReportRow, 'status'> | undefined,
+): number {
+  const rev = row.draft_rev ?? 1;
+  if (!report || !FAKE_DRAFT_STATUSES.includes(report.status)) return rev;
+  return JSON.stringify(row.data) === JSON.stringify(data) ? rev : rev + 1;
 }

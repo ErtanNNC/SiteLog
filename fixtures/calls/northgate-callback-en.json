@@ -1,0 +1,233 @@
+{
+  "$comment": "W3-15 scripted call (W3-02's format; W3-09 … W3-14's keys): start, routes (field-api's answers per route, in order; the last repeats), reporterTurns (one session run each), agentTurns (the dialog model's recorded turns). W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind. A callback request: field-api answers 400 `not_available` until a pack places outbound calls (§19 Q128, W3-17), so `queue` holds that refusal (a replay hands it to FakeFieldApi.queue) and the agent says code's line; then \"text me instead\" (F15) sets the preference to link.",
+  "id": "northgate-callback-en",
+  "locale": "en-US",
+  "start": {
+    "request": {
+      "room": "call-c0150000-0000-4000-8000-000000000005",
+      "transport": "pstn",
+      "from": "+15550142087",
+      "to": "+15550142290"
+    },
+    "response": {
+      "callId": "c0150000-0000-4000-8000-000000000005",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Kevin",
+        "locale": "en-US"
+      }
+    }
+  },
+  "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "pstn",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Kevin",
+          "locale": "en-US"
+        },
+        "company": "Kestrel Build Group",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b",
+            "name": "Northgate Parking Structure",
+            "status": null,
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b",
+        "companies": [
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex", "the Apex guys"]
+          },
+          {
+            "name": "BrightLine Electric",
+            "aliases": ["BrightLine"]
+          },
+          {
+            "name": "Delta Mechanical",
+            "aliases": ["Delta", "los de Delta"]
+          },
+          {
+            "name": "Ironclad Steel",
+            "aliases": ["Ironclad"]
+          },
+          {
+            "name": "Kestrel self-perform",
+            "aliases": ["our guys", "our crew"]
+          }
+        ],
+        "keyterms": ["Apex Concrete", "BrightLine Electric", "Delta Mechanical", "Ironclad Steel"],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 3
+      }
+    ],
+    "set_preference": [
+      {
+        "ok": true,
+        "confirmation": "OK, your daily report is now set to a link by text."
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "queue": [
+    {
+      "route": "schedule_callback",
+      "status": 400,
+      "body": {
+        "error": "not_available",
+        "message": "Callbacks come with outbound calls (W3-17)"
+      }
+    }
+  ],
+  "reporterTurns": [
+    "Hey, it's Kevin. Can you call me back in an hour? We're in the middle of a pour.",
+    "Then just text me the link from now on."
+  ],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "schedule_callback",
+          "args": {
+            "minutes": 60
+          }
+        }
+      ]
+    },
+    {
+      "text": "I can't call you back yet. Call again or use your link whenever you're ready."
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "set_preference",
+          "args": {
+            "contact_pref": "link"
+          }
+        }
+      ]
+    },
+    {
+      "text": "OK, your daily report is now set to a link by text. Goodbye.",
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "abandoned"
+          }
+        }
+      ]
+    },
+    {}
+  ],
+  "simulate": {
+    "title": "Call me back in an hour (not yet), then text me instead",
+    "milestone": "m8",
+    "flow": "F15",
+    "arrange": {
+      "reporter": {
+        "name": "Kevin O'Brien",
+        "locale": "en-US",
+        "contactPref": "call"
+      },
+      "sites": [
+        {
+          "key": "northgate",
+          "name": "Northgate Parking Structure",
+          "projectCode": "NG"
+        }
+      ]
+    },
+    "steps": [
+      {
+        "route": "get_context",
+        "expect": {
+          "call": {
+            "direction": "inbound",
+            "transport": "pstn",
+            "purpose": "daily_report"
+          },
+          "reporter": {
+            "firstName": "Kevin",
+            "locale": "en-US"
+          },
+          "company": "Kestrel Build Group",
+          "reportLanguage": "en",
+          "consents": {
+            "recording": true,
+            "dataProcessing": true,
+            "sms": true,
+            "autoCall": false
+          },
+          "maxQuestions": 3,
+          "sites": [
+            {
+              "name": "Northgate Parking Structure",
+              "deadline": "17:30"
+            }
+          ]
+        }
+      },
+      {
+        "route": "schedule_callback",
+        "body": {
+          "minutes": 60
+        },
+        "status": 400,
+        "error": "not_available"
+      },
+      {
+        "route": "set_preference",
+        "body": {
+          "contactPref": "link"
+        }
+      },
+      {
+        "route": "end_call",
+        "body": {
+          "outcome": "abandoned"
+        }
+      }
+    ],
+    "expect": {
+      "call": {
+        "outcome": "abandoned"
+      },
+      "reporter": {
+        "contactPref": "link"
+      },
+      "report": null
+    }
+  }
+}

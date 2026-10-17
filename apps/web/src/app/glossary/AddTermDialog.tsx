@@ -19,14 +19,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
 import { useAddGlossaryTerm } from '@/data/hooks';
 import type { SiteOption } from '@/data/types';
+import { useCopy } from '@/i18n/useCopy';
 
 const ALL = 'all';
-const LANGS = ['en', 'es', 'pl', 'hi', 'pt'] as const;
+const LANGS = ['en', 'es', 'tr', 'pl', 'hi', 'pt'] as const;
 
-/** "Add term": heard → official, kind, language, scope (F17). */
+/**
+ * "Add term": heard → official, kind, language, scope (F17), saved by the audited
+ * `add_glossary_term` (W3-08). The language starts as the panel's.
+ */
 export function AddTermDialog({
   open,
   onOpenChange,
@@ -36,12 +39,12 @@ export function AddTermDialog({
   onOpenChange: (open: boolean) => void;
   sites: SiteOption[];
 }) {
-  const c = copy.glossary.form;
+  const { t, language: panelLanguage } = useCopy();
   const add = useAddGlossaryTerm();
   const [heard, setHeard] = useState('');
   const [official, setOfficial] = useState('');
   const [kind, setKind] = useState<TermKind>('term');
-  const [language, setLanguage] = useState<string>('en');
+  const [language, setLanguage] = useState<string>(panelLanguage);
   const [scope, setScope] = useState(ALL);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -49,15 +52,15 @@ export function AddTermDialog({
     setHeard('');
     setOfficial('');
     setKind('term');
-    setLanguage('en');
+    setLanguage(panelLanguage);
     setScope(ALL);
     setErrors({});
   };
 
   const submit = () => {
     const next: Record<string, string> = {};
-    if (!heard.trim()) next.heard = c.heardRequired;
-    if (!official.trim()) next.official = c.officialRequired;
+    if (!heard.trim()) next.heard = t('glossary.form.heardRequired');
+    if (!official.trim()) next.official = t('glossary.form.officialRequired');
     setErrors(next);
     if (Object.keys(next).length) return;
     add.mutate(
@@ -87,8 +90,8 @@ export function AddTermDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{c.title}</DialogTitle>
-          <DialogDescription>{c.description}</DialogDescription>
+          <DialogTitle>{t('glossary.form.title')}</DialogTitle>
+          <DialogDescription>{t('glossary.form.description')}</DialogDescription>
         </DialogHeader>
         <form
           className="mt-4 grid gap-4"
@@ -99,12 +102,12 @@ export function AddTermDialog({
           }}
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="term-heard">{c.heard}</Label>
+            <Label htmlFor="term-heard">{t('glossary.form.heard')}</Label>
             <Input
               id="term-heard"
               value={heard}
               onChange={(e) => setHeard(e.target.value)}
-              placeholder={c.heardPlaceholder}
+              placeholder={t('glossary.form.heardPlaceholder')}
               aria-invalid={!!errors.heard}
             />
             {errors.heard ? (
@@ -114,12 +117,12 @@ export function AddTermDialog({
             ) : null}
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="term-official">{c.official}</Label>
+            <Label htmlFor="term-official">{t('glossary.form.official')}</Label>
             <Input
               id="term-official"
               value={official}
               onChange={(e) => setOfficial(e.target.value)}
-              placeholder={c.officialPlaceholder}
+              placeholder={t('glossary.form.officialPlaceholder')}
               aria-invalid={!!errors.official}
             />
             {errors.official ? (
@@ -130,7 +133,7 @@ export function AddTermDialog({
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="term-kind">{c.kind}</Label>
+              <Label htmlFor="term-kind">{t('glossary.form.kind')}</Label>
               <Select value={kind} onValueChange={(v) => setKind(v as TermKind)}>
                 <SelectTrigger id="term-kind">
                   <SelectValue />
@@ -138,14 +141,14 @@ export function AddTermDialog({
                 <SelectContent>
                   {TERM_KINDS.map((k) => (
                     <SelectItem key={k} value={k}>
-                      {copy.glossary.kinds[k]}
+                      {t(`glossary.kinds.${k}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="term-lang">{c.language}</Label>
+              <Label htmlFor="term-lang">{t('glossary.form.language')}</Label>
               <Select value={language} onValueChange={setLanguage}>
                 <SelectTrigger id="term-lang">
                   <SelectValue />
@@ -153,20 +156,20 @@ export function AddTermDialog({
                 <SelectContent>
                   {LANGS.map((l) => (
                     <SelectItem key={l} value={l}>
-                      {copy.glossary.languages[l]}
+                      {t(`glossary.languages.${l}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="term-scope">{c.scope}</Label>
+              <Label htmlFor="term-scope">{t('glossary.form.scope')}</Label>
               <Select value={scope} onValueChange={setScope}>
                 <SelectTrigger id="term-scope">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={ALL}>{c.allSites}</SelectItem>
+                  <SelectItem value={ALL}>{t('glossary.form.allSites')}</SelectItem>
                   {sites.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.name}
@@ -178,10 +181,10 @@ export function AddTermDialog({
           </div>
           <DialogFooter className="mt-2">
             <DialogClose asChild>
-              <Button variant="ghost">{copy.common.cancel}</Button>
+              <Button variant="ghost">{t('common.cancel')}</Button>
             </DialogClose>
             <Button type="submit" variant="primary" loading={add.isPending}>
-              {c.save}
+              {t('glossary.form.save')}
             </Button>
           </DialogFooter>
         </form>

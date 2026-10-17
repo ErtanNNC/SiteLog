@@ -1,13 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  ButtonIds,
-  deadlineInstant,
-  type DailyReportData,
-  type ExtractionOutput,
-} from '@sitelog/shared';
-import { postProcessExtraction, type ExtractionInput } from '../ai/extract';
+import { ButtonIds, deadlineInstant, type DailyReportDataV1 } from '@sitelog/shared';
+import { postProcessExtraction } from '../ai/extract';
 import { storeDraft } from '../pipeline/draft';
 import {
   buttonPayload,
@@ -20,16 +15,13 @@ import {
   SITE_RIVERSIDE,
   type Harness,
 } from '../test/harness';
+import { legacyInput, legacyRecorded } from '../test/legacy-fixtures';
 import { contextOf } from './context';
 import { runTimeoutSweep } from './timeouts';
 
 const FIXTURES = join(__dirname, '..', '..', '..', '..', 'fixtures');
-const riversideInput = JSON.parse(
-  readFileSync(join(FIXTURES, 'transcripts', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionInput;
-const riversideOutput = JSON.parse(
-  readFileSync(join(FIXTURES, 'tool-outputs', 'riverside-2026-10-09.json'), 'utf8'),
-) as ExtractionOutput;
+const riversideInput = legacyInput('riverside-2026-10-09');
+const riversideOutput = legacyRecorded('riverside-2026-10-09');
 const replies = JSON.parse(
   readFileSync(join(FIXTURES, 'tool-outputs', 'replies.json'), 'utf8'),
 ) as Record<string, Record<string, unknown>>;
@@ -38,7 +30,7 @@ const replies = JSON.parse(
 async function seedReport(
   h: Harness,
   status: 'awaiting_confirmation' | 'awaiting_answer' | 'filed' | 'signed_off',
-  data?: DailyReportData,
+  data?: DailyReportDataV1,
 ) {
   const date = '2026-10-09';
   const siteDay = await h.db.getOrCreateSiteDay(
@@ -110,8 +102,9 @@ describe('router: unknown number (F11)', () => {
     expect(h.sentTexts()).toEqual([
       "Hi — this number isn't set up with SiteLog yet, so nothing was filed. Ask your office to add your number.",
     ]);
-    const sender = await h.db.findPendingUnknownSender(PHONE_UNKNOWN);
+    const sender = await h.db.findPendingUnknownContact(PHONE_UNKNOWN);
     expect(sender?.snippet).toContain('Luis');
+    expect(sender).toMatchObject({ channel: null, call_id: null });
     expect(Array.from(h.db.data.reports.values())).toHaveLength(0);
     await h.send(convo, { type: 'text', body: 'hello?' });
     expect(h.wa.sent).toHaveLength(1);
@@ -122,10 +115,10 @@ describe('router: unknown number (F11)', () => {
     const convo = await h.conversation('new', {}, PHONE_UNKNOWN);
     await h.send(convo, { type: 'text', body: 'Riverside Lofts report: Apex had 6 guys' });
     expect(h.sentTexts()[0]).toContain("I've let the office know");
-    expect((await h.db.findPendingUnknownSender(PHONE_UNKNOWN))?.guessed_site_id).toBe(
+    expect((await h.db.findPendingUnknownContact(PHONE_UNKNOWN))?.guessed_site_id).toBe(
       SITE_RIVERSIDE,
     );
-    expect(h.db.data.notifications.map((n) => n.kind)).toContain('unknown_sender');
+    expect(h.db.data.notifications.map((n) => n.kind)).toContain('unknown_contact');
   });
 });
 
@@ -140,7 +133,10 @@ describe('router: welcome and test mode (F3, F4)', () => {
       body: 'Got it',
       payload: buttonPayload(ButtonIds.welcomeOk(), 'Got it'),
     });
-    expect((await h.db.getReporter(h.marco.id))!.status).toBe('verified');
+    expect((await h.db.getReporter(h.marco.id))!).toMatchObject({
+      status: 'active',
+      activated_at: expect.any(String) as unknown,
+    });
     expect((await h.db.getConversation(convo.id))!.state).toBe('test_mode');
     expect(h.sentTexts()[0]).toContain('Speak Spanish or English');
     expect(h.db.data.audit.map((a) => a.action)).toContain('reporter.verified');
@@ -358,7 +354,7 @@ describe('router: reminder buttons (F9, F10)', () => {
     expect(report.kind).toBe('weather_day');
     expect(report.status).toBe('filed');
     expect((await h.db.getSiteDay(day.id))!.status).toBe('weather_day');
-    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportData;
+    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
     expect(data.weather.periods[0]).toMatchObject({ fullDay: true, lostHours: 8 });
     expect(h.db.data.denormalized).toContainEqual({ report_id: report.id, version: 1 });
     // The follow-up photo goes into the delay record as a new version.
@@ -400,6 +396,10 @@ describe('router: draft confirmation and filing (F7)', () => {
     const fileJobs = h.db.jobsOfType('file_report');
     expect(fileJobs).toHaveLength(1);
     expect(fileJobs[0]!.payload).toMatchObject({ reportId: report.id, trigger: 'confirm' });
+    // D16: one filing per confirm message (drafts keep version 1 until filed).
+    expect(fileJobs[0]!.dedupe_key).toBe(
+      `file:${report.id}:v1:m${(fileJobs[0]!.payload as { confirmMessageId: string }).confirmMessageId}`,
+    );
     await h.drain(['file_report']);
     const filed = (await h.db.getReport(report.id))!;
     expect(filed.status).toBe('filed');
@@ -417,16 +417,50 @@ describe('router: draft confirmation and filing (F7)', () => {
     expect(render.payload).toMatchObject({
       reportId: report.id,
       version: 1,
-      sendToWhatsApp: true,
+      sendToWhatsApp: false,
       emailRecipients: true,
     });
     expect(render.dedupe_key).toBe(`render_pdf:${report.id}:1`);
-    expect(h.sentTexts()).toEqual([
-      "Filed. Daily Report RL-2041-0187 is with the office. Thanks, Marco — that's it for today.",
-    ]);
+    // W1-15: no WhatsApp "Filed." any more; the `filed` text goes through the Notifier.
+    expect(h.sentTexts()).toEqual([]);
+    const [filedText] = h.db.jobsOfType('notify');
+    expect(filedText!.dedupe_key).toBe(`notify:filed:${report.id}`);
+    expect(filedText!.payload).toMatchObject({
+      key: 'filed',
+      dedupeKey: `notify:filed:${report.id}`,
+      vars: { report_no: report.report_no },
+    });
+    expect((filedText!.payload as { vars: { pdf_link: string } }).vars.pdf_link).toMatch(
+      new RegExp(`^https://go\\.sitelog\\.app/r/[A-Z2-9]{12}/report/${report.id}$`),
+    );
     expect((await h.db.getConversation(convo.id))!.state).toBe('idle');
     expect(h.db.data.audit.map((a) => a.action)).toContain('report.filed');
-    expect(h.db.data.notifications.some((n) => n.kind === 'needs_review')).toBe(true);
+    const review = h.db.data.notifications.find((n) => n.kind === 'needs_review')!;
+    expect(review.data).toEqual({
+      key: 'needs_review',
+      params: { reportNo: report.report_no, reasons: expect.any(Array) },
+    });
+  });
+
+  it('a later confirm of the same draft version files after a filing that finished without filing (D16)', async () => {
+    const h = createHarness();
+    const { report, convo } = await seedReport(h, 'awaiting_confirmation');
+    const ctx = { active_report_id: report.id, draft_wa_message_id: 'wamid.draft' };
+    await h.db.updateConversation(convo.id, { state: 'awaiting_confirmation', context: ctx });
+    await h.send(convo, { type: 'text', body: 'ok' });
+    const [first] = h.db.jobsOfType('file_report');
+    // That filing finished without filing (a stale confirm), and the draft is back at v1.
+    first!.status = 'done';
+    await h.db.updateConversation(convo.id, { state: 'awaiting_confirmation', context: ctx });
+    await h.send(convo, { type: 'text', body: 'ok' });
+    const jobs = h.db.jobsOfType('file_report');
+    expect(jobs).toHaveLength(2);
+    expect(jobs[1]!.status).toBe('queued');
+    expect(jobs[1]!.dedupe_key).not.toBe(first!.dedupe_key);
+    expect(jobs.map((j) => j.dedupe_key!.startsWith(`file:${report.id}:v1:m`))).toEqual([
+      true,
+      true,
+    ]);
   });
 
   it('"ok" text and a thumbs-up reaction on the draft also file', async () => {
@@ -461,7 +495,7 @@ describe('router: draft confirmation and filing (F7)', () => {
       context: { active_report_id: report.id },
     });
     await h.send(convo, { type: 'text', body: 'Apex had 7 not 6' });
-    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportData;
+    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
     expect(data.manpower[0]).toMatchObject({
       companyName: 'Apex Concrete',
       workers: 7,
@@ -524,7 +558,7 @@ describe('router: questions (F6)', () => {
     const answered = (await h.db.getQuestion(q.id))!;
     expect(answered.answered_at).not.toBeNull();
     await h.drain(['decide_next']);
-    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportData;
+    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
     expect(data.manpower[2]).toMatchObject({
       workers: 5,
       totalHours: 40,
@@ -580,7 +614,11 @@ describe('router: questions (F6)', () => {
     expect(filed.review_reasons).toEqual(
       expect.arrayContaining(['unanswered:manpower.workers', 'unconfirmed']),
     );
-    expect(h.sentTexts()[3]).toContain('without your OK');
+    // W1-15: the `filed` text (Notifier) instead of the WhatsApp "filed without your OK".
+    expect(h.sentTexts()).toHaveLength(3);
+    expect(h.db.jobsOfType('notify').map((j) => j.dedupe_key)).toEqual([
+      `notify:filed:${report.id}`,
+    ]);
   });
 
   it('auto_15min files 15 minutes after the draft', async () => {
@@ -607,9 +645,9 @@ describe('router: edit after filing (F8)', () => {
     const updated = (await h.db.getReport(report.id))!;
     expect(updated.current_version).toBe(2);
     const v2 = (await h.db.getVersion(report.id, 2))!;
-    expect(v2.author).toBe('reporter_reply');
+    expect(v2.author).toBe('reporter');
     expect(v2.change_note).toBe('Apex Concrete 6 → 7 workers');
-    expect((v2.data as DailyReportData).manpower[0]!.totalHours).toBe(56);
+    expect((v2.data as DailyReportDataV1).manpower[0]!.totalHours).toBe(56);
     expect(h.sentTexts()).toEqual([
       'Updated Friday: Apex Concrete 6 → 7 workers. Version 2 sent to the office · version 1 kept in history.',
     ]);
@@ -687,7 +725,7 @@ describe('router: weather day by text (F10)', () => {
       "Logged as a weather day: crew released 11:00, cause rain. It's now in the delay record for extension claims.",
     );
     const report = Array.from(h.db.data.reports.values())[0]!;
-    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportData;
+    const data = (await h.db.getVersion(report.id, 1))!.data as DailyReportDataV1;
     expect(data.weather.periods[0]).toMatchObject({
       start: '11:00',
       end: '15:30',

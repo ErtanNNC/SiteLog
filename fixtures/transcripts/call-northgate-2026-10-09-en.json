@@ -1,0 +1,115 @@
+{
+  "id": "call-northgate-2026-10-09-en",
+  "description": "W3-09 live mode: §18.1's Northgate call (Kevin, Fri Oct 9): 14 workers from 2 companies, 100.0 h (3 × 8 + 8 × 8 + 3 × 4, totals in code), every value citing the call second; nothing missing on a call (the photo is never asked on a call), so the call reads back.",
+  "expectedQuestion": null,
+  "site": {
+    "name": "Northgate Parking Structure",
+    "projectCode": "NG-2210",
+    "timezone": "America/Chicago",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-09",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "call",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Kevin",
+  "companies": [
+    {
+      "id": "00000000-0000-4000-8000-00000000d001",
+      "name": "Apex Concrete",
+      "trade": "Concrete",
+      "aliases": ["Apex", "the Apex guys"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d004",
+      "name": "Ironclad Steel",
+      "trade": "Rebar",
+      "aliases": ["Ironclad"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-00000000d007",
+      "name": "Kestrel self-perform",
+      "trade": "General labor",
+      "aliases": ["our guys", "our crew"],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    {
+      "heard": "the deck",
+      "official": "Elevated concrete slab",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
+    {
+      "heard": "topped out",
+      "official": "Structural frame complete to roof level",
+      "kind": "term"
+    },
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    },
+    {
+      "heard": "yards",
+      "official": "Cubic yards (yd³)",
+      "kind": "unit"
+    }
+  ],
+  "rejectedMappings": [
+    {
+      "heard": "lift",
+      "official": "Lift (concrete placement height)"
+    }
+  ],
+  "observedWeather": null,
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [],
+  "segments": [
+    {
+      "callId": "c0110000-0000-4000-8000-000000000001",
+      "start": 7.2,
+      "end": 13.8,
+      "text": "Northgate, Friday. Dry all day, no weather problems."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000001",
+      "start": 13.8,
+      "end": 21.5,
+      "text": "Apex had three guys on ramp B all day, finishing the topping slab."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000001",
+      "start": 21.5,
+      "end": 29.6,
+      "text": "Eight of our crew full day on level three, precast erection, we set the last six double tees."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000001",
+      "start": 29.6,
+      "end": 36,
+      "text": "And three of ours did a half day on ramp B, four hours, stripping forms."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000001",
+      "start": 36,
+      "end": 42.5,
+      "text": "Toolbox talk on crane signals this morning, no incidents."
+    },
+    {
+      "callId": "c0110000-0000-4000-8000-000000000001",
+      "start": 42.5,
+      "end": 46,
+      "text": "That's it."
+    }
+  ]
+}

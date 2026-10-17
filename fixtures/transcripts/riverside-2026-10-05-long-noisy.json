@@ -9,6 +9,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-05",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "es-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Marco",
@@ -46,34 +50,142 @@
     }
   ],
   "glossary": [
-    { "heard": "the deck", "official": "Elevated concrete slab", "kind": "term" },
-    { "heard": "pour on four", "official": "Level 4 concrete pour", "kind": "area" },
-    { "heard": "block", "official": "Concrete masonry units (CMU)", "kind": "term" },
-    { "heard": "llovió", "official": "Rain", "kind": "term" },
-    { "heard": "andamio", "official": "Scaffold", "kind": "term" },
-    { "heard": "stood down", "official": "Work stoppage", "kind": "term" },
-    { "heard": "rough-in", "official": "MEP rough-in", "kind": "term" },
-    { "heard": "the Delta guys", "official": "Delta Mechanical", "kind": "company" }
+    {
+      "heard": "the deck",
+      "official": "Elevated concrete slab",
+      "kind": "term"
+    },
+    {
+      "heard": "pour on four",
+      "official": "Level 4 concrete pour",
+      "kind": "area"
+    },
+    {
+      "heard": "block",
+      "official": "Concrete masonry units (CMU)",
+      "kind": "term"
+    },
+    {
+      "heard": "llovió",
+      "official": "Rain",
+      "kind": "term"
+    },
+    {
+      "heard": "andamio",
+      "official": "Scaffold",
+      "kind": "term"
+    },
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    },
+    {
+      "heard": "rough-in",
+      "official": "MEP rough-in",
+      "kind": "term"
+    },
+    {
+      "heard": "the Delta guys",
+      "official": "Delta Mechanical",
+      "kind": "company"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-05",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-05T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "06:00", "precipIn": 0, "tempF": 54, "windMph": 11, "gustMph": 19 },
-      { "time": "07:00", "precipIn": 0, "tempF": 57, "windMph": 12, "gustMph": 17 },
-      { "time": "08:00", "precipIn": 0, "tempF": 60, "windMph": 13, "gustMph": 15 },
-      { "time": "09:00", "precipIn": 0, "tempF": 63, "windMph": 11, "gustMph": 18 },
-      { "time": "10:00", "precipIn": 0, "tempF": 65, "windMph": 12, "gustMph": 16 },
-      { "time": "11:00", "precipIn": 0, "tempF": 66, "windMph": 13, "gustMph": 19 },
-      { "time": "12:00", "precipIn": 0, "tempF": 66, "windMph": 11, "gustMph": 17 },
-      { "time": "13:00", "precipIn": 0, "tempF": 65, "windMph": 12, "gustMph": 15 },
-      { "time": "14:00", "precipIn": 0, "tempF": 63, "windMph": 13, "gustMph": 18 },
-      { "time": "15:00", "precipIn": 0, "tempF": 60, "windMph": 11, "gustMph": 16 },
-      { "time": "16:00", "precipIn": 0, "tempF": 57, "windMph": 12, "gustMph": 19 },
-      { "time": "17:00", "precipIn": 0, "tempF": 54, "windMph": 13, "gustMph": 17 }
+      {
+        "time": "06:00",
+        "precipIn": 0,
+        "tempF": 54,
+        "windMph": 11,
+        "gustMph": 19
+      },
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 57,
+        "windMph": 12,
+        "gustMph": 17
+      },
+      {
+        "time": "08:00",
+        "precipIn": 0,
+        "tempF": 60,
+        "windMph": 13,
+        "gustMph": 15
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 11,
+        "gustMph": 18
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0,
+        "tempF": 65,
+        "windMph": 12,
+        "gustMph": 16
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 66,
+        "windMph": 13,
+        "gustMph": 19
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0,
+        "tempF": 66,
+        "windMph": 11,
+        "gustMph": 17
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 65,
+        "windMph": 12,
+        "gustMph": 15
+      },
+      {
+        "time": "14:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 13,
+        "gustMph": 18
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 60,
+        "windMph": 11,
+        "gustMph": 16
+      },
+      {
+        "time": "16:00",
+        "precipIn": 0,
+        "tempF": 57,
+        "windMph": 12,
+        "gustMph": 19
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 54,
+        "windMph": 13,
+        "gustMph": 17
+      }
     ],
     "summary": {
       "precipIn": 0,
@@ -90,91 +202,93 @@
   "previousDraft": null,
   "photos": [
     {
-      "messageId": "e0000020-0000-4000-8000-000000002005",
+      "uploadId": "e0000020-0000-4000-8000-000000002005",
       "caption": "L4 shoring",
       "takenAt": "2026-10-05T22:35:00Z"
     },
-    { "messageId": "e0000020-0000-4000-8000-000000002006", "takenAt": "2026-10-05T22:35:12Z" }
+    {
+      "uploadId": "e0000020-0000-4000-8000-000000002006",
+      "takenAt": "2026-10-05T22:35:12Z"
+    }
   ],
   "segments": [
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 0,
       "end": 9.8,
       "text": "Okay, uh, Riverside, Monday. [noise] Sorry, the generator is right next to me. Okay."
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 9.8,
       "end": 21.4,
       "text": "So, um, today we, uh, Apex was, they were forming the, the deck on four, you know, the edge forms and the, uh, [inaudible] the shoring. Six guys. Full day."
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 21.4,
       "end": 33,
       "text": "And, uh, the, the Ironclad guys came, three of them, also on four, they started the bottom mat. All day."
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 33,
       "end": 41.5,
       "text": "[backup alarm] Yeah, so, BrightLine, BrightLine had, uh, five, no, four today, one was sick. Four. Full day on three."
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 41.5,
       "end": 55,
       "text": "They're, I think, like forty-five percent on the rough-in on three, maybe fifty, let's say forty-five."
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 55,
       "end": 66.2,
       "text": "Delta, the Delta guys, five, all day, ductwork on two, still the east wing, they're almost done with that wing. [noise]"
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 66.2,
       "end": 78,
       "text": "Nuestros muchachos, cuatro, todo el día, limpieza y subiendo material al cuatro. [inaudible]"
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 78,
       "end": 92.5,
       "text": "Weather was fine, a little wind, uh, nothing, no stoppage, nothing. [wind]"
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 92.5,
       "end": 101,
       "text": "[inaudible] No, the blue one, the blue one, by the hoist. Sorry. Okay, I'm back."
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 101,
       "end": 112.5,
       "text": "Oh, and the, uh, the block delivery, the CMU, came at, uh, around ten, ten thirty? Ten thirty. Eight pallets."
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 112.5,
       "end": 126.5,
       "text": "Safety, um, we did the toolbox talk on, uh, the shoring, working under the shoring on four. No incidents. Nobody hurt."
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 126.5,
       "end": 140.1,
       "text": "Uh, what else. [noise] Tomorrow, mañana, Ironclad keeps going with the mat on four, and, uh, the inspector for the four deck rebar is, I think, Thursday. I'll confirm."
     },
     {
-      "messageId": "e0000020-0000-4000-8000-000000002001",
+      "uploadId": "e0000020-0000-4000-8000-000000002001",
       "start": 140.1,
       "end": 148.5,
       "text": "Okay, that's it, sending photos. [inaudible]"
     }
-  ],
-  "texts": []
+  ]
 }

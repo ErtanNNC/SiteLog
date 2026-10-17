@@ -1,7 +1,10 @@
 {
   "id": "oakmont-unknown-sub",
   "description": "English, dry day, mentions 'the Ridgeway crew' which is not in COMPANIES → unknown company flagged.",
-  "expectedQuestion": { "field": "company.unknown", "path": "company.unknown:Ridgeway" },
+  "expectedQuestion": {
+    "field": "company.unknown",
+    "path": "company.unknown:Ridgeway"
+  },
   "site": {
     "name": "Oakmont Medical Center",
     "projectCode": "OM-1187",
@@ -9,6 +12,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-09",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Dana",
@@ -33,59 +40,69 @@
     }
   ],
   "glossary": [
-    { "heard": "mud", "official": "Joint compound", "kind": "term" },
-    { "heard": "punch", "official": "Punch list items", "kind": "term" }
+    {
+      "heard": "mud",
+      "official": "Joint compound",
+      "kind": "term"
+    },
+    {
+      "heard": "punch",
+      "official": "Punch list items",
+      "kind": "term"
+    }
   ],
   "rejectedMappings": [],
   "observedWeather": null,
   "previousAnswers": [],
   "previousDraft": null,
   "photos": [
-    { "messageId": "22222222-0000-4000-8000-000000000202", "takenAt": "2026-10-09T22:20:00Z" }
+    {
+      "uploadId": "22222222-0000-4000-8000-000000000202",
+      "takenAt": "2026-10-09T22:20:00Z"
+    }
   ],
   "segments": [
     {
-      "messageId": "22222222-0000-4000-8000-000000000201",
-      "start": 0.0,
+      "uploadId": "22222222-0000-4000-8000-000000000201",
+      "start": 0,
       "end": 5.5,
       "text": "Oakmont, Friday. Dry all day, sunny, no weather issues."
     },
     {
-      "messageId": "22222222-0000-4000-8000-000000000201",
+      "uploadId": "22222222-0000-4000-8000-000000000201",
       "start": 5.5,
-      "end": 12.0,
+      "end": 12,
       "text": "Summit had eight guys hanging board on the second floor east wing, full day, they're about seventy percent through that wing."
     },
     {
-      "messageId": "22222222-0000-4000-8000-000000000201",
-      "start": 12.0,
+      "uploadId": "22222222-0000-4000-8000-000000000201",
+      "start": 12,
       "end": 18.4,
       "text": "BrightLine four electricians, full day, pulling wire on the first floor."
     },
     {
-      "messageId": "22222222-0000-4000-8000-000000000201",
+      "uploadId": "22222222-0000-4000-8000-000000000201",
       "start": 18.4,
-      "end": 25.0,
+      "end": 25,
       "text": "And the Ridgeway crew showed up, six guys, they did the firestopping on the mechanical penetrations, they were here till three."
     },
     {
-      "messageId": "22222222-0000-4000-8000-000000000201",
-      "start": 25.0,
+      "uploadId": "22222222-0000-4000-8000-000000000201",
+      "start": 25,
       "end": 31.2,
       "text": "ClearView delivered the curtain wall units for the lobby, twelve units, no install yet."
     },
     {
-      "messageId": "22222222-0000-4000-8000-000000000201",
+      "uploadId": "22222222-0000-4000-8000-000000000201",
       "start": 31.2,
-      "end": 37.0,
+      "end": 37,
       "text": "Toolbox talk on ladder safety. One near miss, a board slid off the cart, nobody hurt, we talked about it."
     },
     {
-      "messageId": "22222222-0000-4000-8000-000000000201",
-      "start": 37.0,
-      "end": 41.0,
+      "uploadId": "22222222-0000-4000-8000-000000000201",
+      "start": 37,
+      "end": 41,
       "text": "Monday we start taping, mud on the east wing. One photo coming."
     }
-  ],
-  "texts": []
+  ]
 }

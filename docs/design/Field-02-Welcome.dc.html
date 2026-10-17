@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Field — First open: consent and channel choice</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1D4ED8}a:hover{color:#1E3A8A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; display: flex; flex-direction: column; background: #FBFAF7; color: #16181B; font-family: 'Archivo', 'Helvetica Neue', Helvetica, sans-serif; overflow: hidden">
+
+  <header style="height: 60px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: #16181B; color: #FBFAF7">
+    <svg width="28" height="28" viewBox="0 0 64 64" aria-hidden="true"><path d="M8 0H46L64 18V56A8 8 0 0 1 56 64H8A8 8 0 0 1 0 56V8A8 8 0 0 1 8 0Z" fill="#FF6A13"/><path d="M46 0V12A6 6 0 0 0 52 18H64Z" fill="#B23A0B"/><g fill="#16181B"><rect x="14" y="20" width="35" height="3"/><rect x="21" y="20" width="5" height="30"/><rect x="12" y="38" width="5" height="12"/><rect x="30" y="30" width="5" height="20"/><rect x="39" y="36" width="5" height="14"/><rect x="48" y="42" width="5" height="8"/><rect x="10" y="50" width="44" height="3"/></g></svg>
+    <span style="font-size: 19px; font-weight: 800; font-stretch: 125%; letter-spacing: -0.03em">SiteLog</span>
+  </header>
+
+  <main style="flex: 1; min-height: 0; overflow: hidden; padding: 20px 18px 12px; display: flex; flex-direction: column; gap: 16px">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; color: #5C5850">KESTREL BUILD GROUP · RIVERSIDE LOFTS B</span>
+      <h1 style="margin: 0; font-size: 26px; line-height: 30px; font-weight: 800; font-stretch: 118%; letter-spacing: -0.01em">Hi Marco — one minute before your first report</h1>
+    </div>
+
+    <p style="margin: 0; padding: 12px 14px; background: #EFEDE7; border-radius: 8px; font-size: 14px; line-height: 20px; color: #2A2E33">Your voice notes, photos and calls are recorded to write the daily report for Kestrel Build Group. The office sees them; recordings are kept for 2 years. <a href="Field-02-Welcome.dc.html">Privacy notice</a></p>
+
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <label style="display: flex; align-items: flex-start; gap: 12px; min-height: 44px; font-size: 15px; line-height: 21px"><input type="checkbox" checked style="width: 22px; height: 22px; margin: 0; flex: none; accent-color: #16181B">I agree to the recording and processing of my reports</label>
+      <label style="display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 15px"><input type="checkbox" checked style="width: 22px; height: 22px; margin: 0; flex: none; accent-color: #16181B">Text me the daily report link</label>
+      <label style="display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 15px"><input type="checkbox" style="width: 22px; height: 22px; margin: 0; flex: none; accent-color: #16181B">Call me at report time (automated)</label>
+    </div>
+
+    <fieldset style="margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 10px">
+      <legend style="padding: 0 0 10px; font-size: 16px; font-weight: 700">How do you want to report?</legend>
+      <label style="display: flex; align-items: center; gap: 14px; padding: 14px; border: 2px solid #16181B; border-radius: 8px; background: #FFFFFF">
+        <input type="radio" name="pref" checked style="width: 22px; height: 22px; margin: 0; flex: none; accent-color: #16181B">
+        <span style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 16px">Text link</b><span style="font-size: 14px; color: #5C5850">Tap the link, talk, done. Add photos.</span></span>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#16181B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left: auto; flex: none"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0 M12 18v3"/></svg>
+      </label>
+      <label style="display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid #C9C4B9; border-radius: 8px; background: #FFFFFF">
+        <input type="radio" name="pref" style="width: 22px; height: 22px; margin: 0; flex: none; accent-color: #16181B">
+        <span style="display: flex; flex-direction: column; gap: 2px"><b style="font-size: 16px">Phone call</b><span style="font-size: 14px; color: #5C5850">SiteLog calls you and listens.</span></span>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#16181B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-left: auto; flex: none"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>
+      </label>
+      <span style="font-size: 13px; color: #5C5850">You can always use the other one.</span>
+    </fieldset>
+
+    <div role="radiogroup" aria-label="Language" style="display: flex; gap: 8px">
+      <button type="button" role="radio" aria-checked="true" style="flex: 1; height: 44px; border: 0; border-radius: 6px; background: #16181B; color: #FBFAF7; font: 600 14px 'Archivo', sans-serif">English</button>
+      <button type="button" role="radio" aria-checked="false" style="flex: 1; height: 44px; border: 1px solid #C9C4B9; border-radius: 6px; background: #FFFFFF; color: #16181B; font: 600 14px 'Archivo', sans-serif">Español</button>
+      <button type="button" role="radio" aria-checked="false" style="flex: 1; height: 44px; border: 1px solid #C9C4B9; border-radius: 6px; background: #FFFFFF; color: #16181B; font: 600 14px 'Archivo', sans-serif">Türkçe</button>
+    </div>
+  </main>
+
+  <div style="flex: none; padding: 12px 18px 20px; background: #FBFAF7; border-top: 1px solid #E6E2DA">
+    <a href="Field-03-Today.dc.html" style="height: 56px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #FF6A13; color: #16181B; font-size: 17px; font-weight: 700; text-decoration: none">Continue</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

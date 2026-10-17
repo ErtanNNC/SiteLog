@@ -6,7 +6,9 @@
  *   pnpm --filter @sitelog/scripts db-types-drift -- /tmp/db.gen.ts
  *
  * Errors (exit 1): a table or view missing from the shared type, a column or RPC argument present
- * on one side only, a column whose types are incompatible in both directions. The shared type is
+ * on one side only, a column whose types are incompatible in both directions, an enum on one side
+ * only or with different labels (enums must match exactly; their order is checked by
+ * supabase/db-tests against packages/shared/src/enums.ts). The shared type is
  * allowed to be stricter than the generated one (literal unions for text checks, non-null view
  * columns, nullable RPC arguments), so one-way assignability is fine. SQL helper functions that
  * clients never call are reported as notes only.
@@ -35,6 +37,7 @@ export function compareDatabaseTypes(generatedFile: string): DriftReport {
       `export declare const gt: G['public']['Tables']; export declare const ot: O['public']['Tables'];`,
       `export declare const gv: G['public']['Views']; export declare const ov: O['public']['Views'];`,
       `export declare const gf: G['public']['Functions']; export declare const of: O['public']['Functions'];`,
+      `export declare const ge: G['public']['Enums']; export declare const oe: O['public']['Enums'];`,
     ].join('\n'),
   );
   const program = ts.createProgram([check], {
@@ -100,9 +103,23 @@ export function compareDatabaseTypes(generatedFile: string): DriftReport {
       if (gp && op) members(`${kind} ${name}.${part}`, gp, op);
     }
   };
+  /** Enums: the same names on both sides, and the same labels (assignable both ways). */
+  const enums = (g: ts.Type, o: ts.Type) => {
+    const G = props(g);
+    const O = props(o);
+    for (const [name, t] of G) {
+      const mine = O.get(name);
+      if (!mine) report.errors.push(`enum ${name}: missing in shared types`);
+      else if (!assignable(mine, t) || !assignable(t, mine))
+        report.errors.push(`enum ${name}: database ${str(t)} vs shared ${str(mine)}`);
+    }
+    for (const name of O.keys())
+      if (!G.has(name)) report.errors.push(`enum ${name}: in shared types, not in the database`);
+  };
   group('table', decl.gt!, decl.ot!, 'Row');
   group('view', decl.gv!, decl.ov!, 'Row');
   group('function', decl.gf!, decl.of!, 'Args');
+  enums(decl.ge!, decl.oe!);
   return report;
 }
 

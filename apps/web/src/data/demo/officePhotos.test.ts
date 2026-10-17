@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { emptyReportData, type DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { emptyReportDataV1, type DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
+import { storedV1 } from '@/test/storedData';
 import { DemoSource } from './DemoSource';
 import { DemoStore, demoUserFor } from './store';
 
 /**
  * Photos the office uploads in the panel, in demo mode: DemoStore mirrors
- * create_office_report / create_report_version with p_photos (20261013000005_office_photos.sql)
- * and DemoSource keeps the uploads as object URLs. Every view shows the photos the viewed
- * version lists.
+ * create_office_report / create_report_version with p_photos (20261013000005_office_photos.sql,
+ * stored as uploads since 20261014000002_backfill_uploads_compat.sql) and DemoSource keeps the
+ * uploads as object URLs. Every view shows the photos the viewed version lists.
  */
 const lena = demoUserFor('admin');
 
@@ -25,13 +26,13 @@ function setup() {
   return { store, source, elm, upload };
 }
 
-const typed = (summary = 'Framing on units 3 and 4.'): DailyReportData => ({
-  ...emptyReportData('2026-10-09'),
+const typed = (summary = 'Framing on units 3 and 4.'): DailyReportDataV1 => ({
+  ...emptyReportDataV1('2026-10-09'),
   summary,
 });
 
 describe('demo: photos on a report typed in the panel', () => {
-  it('files the uploads as org-level image messages + photo sources, listed by version 1', async () => {
+  it('files the uploads as office uploads + photo sources, listed by version 1', async () => {
     const { store, source, elm, upload } = setup();
     const a = await upload();
     const b = await upload();
@@ -56,31 +57,37 @@ describe('demo: photos on a report typed in the panel', () => {
     });
     expect(created).toBe(true);
 
-    const messages = store.data.messages.filter((m) => m.storage_path?.includes('/office/'));
-    expect(messages).toEqual([
+    // Uploads (D14), no messages: no reporter, uploaded_by the office user.
+    expect(store.data.messages.filter((m) => m.storage_path?.includes('/office/'))).toEqual([]);
+    const uploads = store.data.uploads.filter((u) => u.report_id === reportId);
+    expect(uploads).toEqual([
       expect.objectContaining({
-        conversation_id: null,
-        org_id: store.data.org.id,
-        direction: 'in',
-        type: 'image',
-        body: 'North wall',
-        media_mime: 'image/jpeg',
+        reporter_id: null,
+        uploaded_by: lena.id,
+        site_id: elm.id,
+        kind: 'photo',
+        caption: 'North wall',
+        mime: 'image/jpeg',
         storage_path: a.path,
-        status: 'received',
-        payload: { source: 'office_upload', uploaded_by: lena.id },
+        recorded_at: '2026-10-09T15:00:00.000Z',
       }),
-      expect.objectContaining({ body: null, storage_path: b.path }),
+      expect.objectContaining({ caption: null, storage_path: b.path }),
     ]);
     const sources = store.data.sources.filter((s) => s.report_id === reportId);
-    expect(sources.map((s) => [s.kind, s.caption, s.taken_at])).toEqual([
-      ['photo', 'North wall', '2026-10-09T15:00:00.000Z'],
-      ['photo', null, store.nowIso()],
+    expect(sources.map((s) => [s.kind, s.upload_id, s.message_id, s.caption, s.taken_at])).toEqual([
+      ['photo', uploads[0]!.id, null, 'North wall', '2026-10-09T15:00:00.000Z'],
+      ['photo', uploads[1]!.id, null, null, store.nowIso()],
     ]);
+    // Filed by the office, in the org's report language (D13).
+    expect(store.data.reports.find((r) => r.id === reportId)).toMatchObject({
+      channel: 'office',
+      language: 'en',
+    });
     const v1 = store.data.versions.find((v) => v.report_id === reportId)!
-      .data as unknown as DailyReportData;
+      .data as unknown as DailyReportDataV1;
     expect(v1.photos).toEqual([
-      { messageId: messages[0]!.id, caption: 'North wall', takenAt: '2026-10-09T15:00:00.000Z' },
-      { messageId: messages[1]!.id, takenAt: store.nowIso() },
+      { messageId: uploads[0]!.id, caption: 'North wall', takenAt: '2026-10-09T15:00:00.000Z' },
+      { messageId: uploads[1]!.id, takenAt: store.nowIso() },
     ]);
     expect(store.data.audit).toContainEqual(
       expect.objectContaining({
@@ -94,7 +101,7 @@ describe('demo: photos on a report typed in the panel', () => {
     const detail = await source.getReportDetail(reportId);
     expect(detail.photos).toEqual([
       {
-        messageId: messages[0]!.id,
+        messageId: uploads[0]!.id,
         storagePath: a.path,
         mime: 'image/jpeg',
         url: expect.stringMatching(/^blob:/),
@@ -115,6 +122,8 @@ describe('demo: photos on a report typed in the panel', () => {
     const { store, source, elm, upload } = setup();
     const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
     const before = store.data.reports.length;
+    const textsBefore = store.data.messages.length;
+    const uploadsBefore = store.data.uploads.length;
     const file = (photos: Parameters<DemoSource['createOfficeReport']>[0]['photos']) =>
       source.createOfficeReport({ siteId: elm.id, date: '2026-10-09', data: typed(), photos });
 
@@ -139,7 +148,8 @@ describe('demo: photos on a report typed in the panel', () => {
     );
     // Nothing was written by a refused call.
     expect(store.data.reports).toHaveLength(before);
-    expect(store.data.messages.some((m) => m.org_id)).toBe(false);
+    expect(store.data.messages).toHaveLength(textsBefore);
+    expect(store.data.uploads).toHaveLength(uploadsBefore);
 
     await file([{ path: ok.path, mime: 'image/jpeg' }]);
     const { reportId } = await source.createOfficeReport({
@@ -149,7 +159,7 @@ describe('demo: photos on a report typed in the panel', () => {
       data: typed(),
       photos: [],
     });
-    const v1 = (await source.getReportDetail(reportId)).data;
+    const v1 = storedV1(await source.getReportDetail(reportId));
     await expect(
       source.createReportVersion(reportId, v1, 'Again', [{ path: ok.path, mime: 'image/jpeg' }]),
     ).rejects.toThrow('photo already attached');
@@ -169,7 +179,7 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
         { path: b.path, mime: 'image/jpeg', caption: 'B', takenAt: '2026-10-09T15:00:00Z' },
       ],
     });
-    const v1 = (await source.getReportDetail(reportId)).data;
+    const v1 = storedV1(await source.getReportDetail(reportId));
     const [pa, pb] = v1.photos;
 
     // Drop A, re-caption B (its time stays the recorded one, whatever is sent), add C.
@@ -192,10 +202,8 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
       ['B, east side', '2026-10-09T15:00:00.000Z'],
       ['C', '2026-10-09T16:00:00.000Z'],
     ]);
-    expect(v2.data.photos.map((p) => p.messageId)).toEqual([
-      pb!.messageId,
-      v2.photos[1]!.messageId,
-    ]);
+    // The v2 view keeps each photo's message UUID as its uploadId.
+    expect(v2.data.photos.map((p) => p.uploadId)).toEqual([pb!.messageId, v2.photos[1]!.messageId]);
     expect(store.data.audit).toContainEqual(
       expect.objectContaining({
         action: 'report.version_created',
@@ -223,13 +231,78 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
     // photo is an edit of its own.
     await source.createReportVersion(
       reportId,
-      { ...v2.data, photos: [{ messageId: pa!.messageId, caption: '', takenAt: pa!.takenAt }] },
+      {
+        ...storedV1(v2),
+        photos: [{ messageId: pa!.messageId, caption: '', takenAt: pa!.takenAt }],
+      },
       'Back to A, no caption',
     );
     const v3 = await source.getReportDetail(reportId);
     expect(v3.photos.map((p) => [p.messageId, p.caption])).toEqual([[pa!.messageId, null]]);
-    await source.createReportVersion(reportId, { ...v3.data, photos: [] }, 'No photos');
+    await source.createReportVersion(reportId, { ...storedV1(v3), photos: [] }, 'No photos');
     expect((await source.getReportDetail(reportId)).photos).toEqual([]);
+  });
+
+  it('edits a v2 version as create_report_version does: uploadId entries in and out', async () => {
+    const { store, source, elm, upload } = setup();
+    const [a, b, c] = [await upload(), await upload(), await upload()];
+    const { reportId } = await source.createOfficeReport({
+      siteId: elm.id,
+      date: '2026-10-09',
+      data: typed(),
+      photos: [
+        { path: a.path, mime: 'image/jpeg', caption: 'A', takenAt: '2026-10-09T14:00:00Z' },
+        { path: b.path, mime: 'image/jpeg', caption: 'B', takenAt: '2026-10-09T15:00:00Z' },
+      ],
+    });
+    // A v2 version on top (as W1-06 seeds and W1-12 writes them): the v2 view of version 1.
+    const detail = await source.getReportDetail(reportId);
+    const report = store.data.reports.find((r) => r.id === reportId)!;
+    store.data.versions.push({
+      ...store.data.versions.find((v) => v.report_id === reportId)!,
+      version: 2,
+      data: detail.data as unknown as (typeof store.data.versions)[number]['data'],
+    });
+    report.current_version = 2;
+    const [pa, pb] = detail.data.photos;
+
+    const { version } = await source.createReportVersion(
+      reportId,
+      {
+        ...detail.data,
+        photos: [
+          { ...pb!, caption: 'B2' },
+          { uploadId: 'not-a-photo', takenAt: 'x' },
+        ],
+      },
+      'v2 edit',
+      [{ path: c.path, mime: 'image/jpeg', caption: 'C', position: 0 }],
+    );
+    expect(version).toBe(3);
+    const cId = store.data.uploads.find((u) => u.storage_path === c.path)!.id;
+    const v3 = store.data.versions.find((v) => v.report_id === reportId && v.version === 3)!
+      .data as unknown as { schemaVersion: number; photos: unknown[] };
+    expect(v3.schemaVersion).toBe(2);
+    expect(v3.photos).toEqual([
+      { uploadId: cId, caption: 'C', takenAt: store.nowIso() },
+      { uploadId: pb!.uploadId, caption: 'B2', takenAt: pb!.takenAt },
+    ]);
+    expect(store.data.audit).toContainEqual(
+      expect.objectContaining({
+        action: 'report.version_created',
+        diff: expect.objectContaining({
+          version: 3,
+          photos: 2,
+          photos_added: 1,
+          photos_removed: 1,
+        }),
+      }),
+    );
+    expect((await source.getReportDetail(reportId)).photos.map((p) => p.caption)).toEqual([
+      'C',
+      'B2',
+    ]);
+    expect(pa).toBeDefined();
   });
 
   it('places new uploads at their positions, as create_report_version does', async () => {
@@ -246,7 +319,7 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
     });
     const v1 = await source.getReportDetail(reportId);
     expect(v1.photos.map((p) => p.caption)).toEqual(['B', 'A']);
-    await source.createReportVersion(reportId, v1.data, 'Two more, one first', [
+    await source.createReportVersion(reportId, storedV1(v1), 'Two more, one first', [
       { path: c.path, mime: 'image/jpeg', caption: 'C' },
       { path: d.path, mime: 'image/jpeg', caption: 'D', position: 0 },
     ]);
@@ -257,7 +330,7 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
       'C',
     ]);
     await expect(
-      source.createReportVersion(reportId, v1.data, 'Bad', [
+      source.createReportVersion(reportId, storedV1(v1), 'Bad', [
         { path: (await upload()).path, mime: 'image/jpeg', position: -1 },
       ]),
     ).rejects.toThrow('invalid photo position');
@@ -273,27 +346,48 @@ describe('demo: an office edit keeps, re-captions, removes and adds photos', () 
     expect(await source.findDayReport(elm.id, '2026-08-01')).toBeNull();
   });
 
-  it('shows every photo source with the message text as caption for data without a photo list', async () => {
+  it('shows every photo source with the upload caption for data without a photo list', async () => {
     const { store, source } = setup();
-    const hero = store.data.reports.find((r) => r.report_no === 'RL-2041-0187')!;
-    const current = await source.getReportDetail(hero.id);
+    // A stored v1 report with two photos (Riverside, Fri Oct 2: rain in the morning).
+    const riverside = store.data.sites.find((s) => s.project_code === 'RL-2041')!;
+    const day = store.data.siteDays.find(
+      (d) => d.site_id === riverside.id && d.date === '2026-10-02',
+    )!;
+    const report = store.data.reports.find((r) => r.id === day.report_id)!;
+    const current = await source.getReportDetail(report.id);
+    expect(current.photos).toHaveLength(2);
     expect(current.photos.map((p) => p.caption)).toEqual(
       current.data.photos.map((p) => p.caption ?? null),
     );
     // Legacy data: no `photos` key at all.
     const row = store.data.versions.find(
-      (v) => v.report_id === hero.id && v.version === hero.current_version,
+      (v) => v.report_id === report.id && v.version === report.current_version,
     )!;
-    const { photos: _drop, ...legacy } = row.data as unknown as DailyReportData;
+    const { photos: _drop, ...legacy } = row.data as unknown as DailyReportDataV1;
     row.data = legacy as unknown as typeof row.data;
-    for (const s of store.data.sources) if (s.report_id === hero.id) s.caption = null;
-    const d = await source.getReportDetail(hero.id);
+    for (const s of store.data.sources) if (s.report_id === report.id) s.caption = null;
+    const d = await source.getReportDetail(report.id);
     const photoSources = store.data.sources.filter(
-      (s) => s.report_id === hero.id && s.kind === 'photo',
+      (s) => s.report_id === report.id && s.kind === 'photo',
     );
-    expect(d.photos.map((p) => p.messageId)).toEqual(photoSources.map((s) => s.message_id));
+    expect(d.photos.map((p) => p.messageId)).toEqual(photoSources.map((s) => s.upload_id));
     expect(d.photos.map((p) => p.caption)).toEqual(
-      photoSources.map((s) => store.data.messages.find((m) => m.id === s.message_id)!.body),
+      photoSources.map((s) => store.data.uploads.find((u) => u.id === s.upload_id)!.caption),
     );
+  });
+});
+
+describe('demo: an office edit names its base version (W2-11 review, §19 Q106)', () => {
+  it('refuses an edit opened on an older version, as create_report_version does', async () => {
+    const { store, source } = setup();
+    const report = store.data.reports.find((r) => r.status === 'filed' && r.current_version === 1)!;
+    const stored = typed('First edit.');
+    expect((await source.createReportVersion(report.id, stored, 'First', [], 1)).version).toBe(2);
+    const err = await source
+      .createReportVersion(report.id, typed('Stale edit.'), 'Stale', [], 1)
+      .catch((e: unknown) => e);
+    expect((err as { code?: string }).code).toBe('version_changed');
+    expect((err as Error).message).toBe('This report changed. Reload to see the latest version.');
+    expect(store.data.reports.find((r) => r.id === report.id)!.current_version).toBe(2);
   });
 });

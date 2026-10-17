@@ -9,8 +9,15 @@ import {
   type OfficePhotoMime,
   type OfficePhotoUpload,
 } from '@sitelog/shared/report/photos.ts';
-import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import { seesNotification } from '@sitelog/shared/notifications.ts';
+import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
+import { DEMO_ORG_LOCALE, DEMO_SITELOG_NUMBER, DEMO_TODAY } from '@sitelog/shared/demo/kestrel.ts';
+import { DEMO_CALL_AUDIO_SITES, demoCallAudioPath } from '@sitelog/shared/demo/calls.ts';
+import { demoId } from '@sitelog/shared/demo/ids.ts';
+import { OFFICE_CALL_POLICY, SETTINGS_TEST_CALL_POLICY } from '@sitelog/shared/voice-outbound.ts';
+import { billingPrice, type BillingPrice, type BillingStatus } from '@sitelog/shared/billing.ts';
 import { copy } from '@/copy/en';
+import { translate } from '@/i18n/useCopy';
 import { randomUuid } from '@/lib/photos';
 import { sleep } from '@/lib/utils';
 import {
@@ -45,6 +52,7 @@ import {
   type DataSource,
   type InviteReporterInput,
   type LinkUnknownSenderInput,
+  type OfficeCallNowInput,
   type PdfLinkBatch,
   type PdfSelection,
   type RequestEvidencePackInput,
@@ -53,12 +61,18 @@ import {
   type ReviewGlossaryTermInput,
   type SourceUser,
   type UpdateOrgInput,
+  type SendTestMessageInput,
+  type CallMeNowInput,
+  type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
   type UploadedPhoto,
 } from '../source';
 import type { ChangeEvent, OrgSettingsPatch, ReportFilters } from '../types';
 import { demoOpsFor } from './ops';
+import { demoOrgPack } from './demoPhone';
+import type { OrgLocale } from '@sitelog/shared/locale.ts';
+import type { PanelLanguage } from '@/i18n/language';
 import type { DemoStore } from './store';
 
 export interface DemoSourceOptions {
@@ -110,10 +124,19 @@ export class DemoSource implements DataSource {
 
   // ─── Reads ───
   getOrgs() {
-    return this.run(() => [orgSummary(this.store.rows(), this.ctx())]);
+    return this.run(() => [
+      {
+        ...orgSummary(this.store.rows(), this.ctx()),
+        locale: DEMO_ORG_LOCALE,
+        country: this.store.data.org.country,
+        sitelogNumbers: [DEMO_SITELOG_NUMBER],
+        demoOrg: this.store.data.org.is_demo,
+        price: billingPrice(this.store.data.org),
+      },
+    ]);
   }
   getOverview() {
-    return this.run(() => assembleOverview(this.store.rows(), this.ctx()));
+    return this.run(() => assembleOverview(this.rowsSeenByUser(), this.ctx()));
   }
   getSites() {
     return this.run(() => assembleSiteCards(this.store.rows(), this.ctx()));
@@ -142,6 +165,10 @@ export class DemoSource implements DataSource {
       const detail = assembleReportDetail(this.store.rows(), this.ctx(), reportId, version);
       detail.pdfUrl = this.pdfUrls.get(`${detail.report.id}:${detail.version}`) ?? null;
       detail.photos = detail.photos.map((p) => ({ ...p, url: this.photoUrl(p.storagePath) }));
+      detail.clips = detail.clips.map((c) => {
+        const url = demoCallAudioUrl(c.id);
+        return url ? { ...c, url, synthetic: true } : c;
+      });
       return detail;
     });
   }
@@ -152,26 +179,42 @@ export class DemoSource implements DataSource {
     return this.run(() => assembleWeather(this.store.rows(), this.ctx(), month, siteId));
   }
   getTeam() {
-    return this.run(() => assembleTeam(this.store.rows(), this.ctx()));
+    return this.run(() =>
+      assembleTeam(this.store.rows(), this.ctx(), {
+        pack: demoOrgPack(this.store.data),
+        states: this.store.teamStates(),
+      }),
+    );
   }
   getGlossary() {
     return this.run(() => assembleGlossary(this.store.rows()));
   }
   getSettings() {
     return this.run(() => {
-      const data = assembleSettings(this.store.rows());
+      const data = assembleSettings(this.store.rows(), demoOrgPack(this.store.data));
       data.org.logoUrl = this.store.logoUrl;
       return data;
     });
   }
+  getBillingAlert() {
+    return this.run(() => assembleBilling(this.store.rows(), this.ctx()).alert);
+  }
   getBilling() {
     return this.run(() => assembleBilling(this.store.rows(), this.ctx()));
   }
+  /** The rows with the notifications RLS shows this user on Supabase (§13 audiences). */
+  private rowsSeenByUser() {
+    const rows = this.store.rows();
+    return {
+      ...rows,
+      notifications: rows.notifications.filter((n) => seesNotification(n, this.user)),
+    };
+  }
   getNotifications() {
-    return this.run(() => assembleNotifications(this.store.rows(), this.ctx()));
+    return this.run(() => assembleNotifications(this.rowsSeenByUser(), this.ctx()));
   }
   getNavBadges() {
-    return this.run(() => assembleNavBadges(this.store.rows(), this.ctx()));
+    return this.run(() => assembleNavBadges(this.rowsSeenByUser(), this.ctx()));
   }
   getSetupState() {
     return this.run(() => assembleSetupState(this.store.rows()));
@@ -204,19 +247,26 @@ export class DemoSource implements DataSource {
       }
       const files: PdfLinkBatch['files'] = [];
       const missing: PdfLinkBatch['missing'] = [];
+      const dateOf = new Map(rows.siteDays.map((d) => [d.id, d.date]));
       for (const r of reports) {
         const url = this.pdfUrls.get(`${r.id}:${r.current_version}`);
-        if (url) files.push({ reportId: r.id, reportNo: r.report_no, url });
-        else missing.push({ reportId: r.id, reportNo: r.report_no });
+        const link = {
+          reportId: r.id,
+          reportNo: r.report_no,
+          date: dateOf.get(r.site_day_id) ?? '',
+          version: r.current_version,
+        };
+        if (url) files.push({ ...link, url });
+        else missing.push(link);
       }
       return { files, missing, total, capped: total > PDF_EXPORT_LIMIT };
     });
   }
   getBillingCheckoutUrl(): Promise<string> {
-    return Promise.reject(new Error(copy.billing.checkoutDemo));
+    return Promise.reject(new Error(translate('billing.checkoutDemo')));
   }
   getBillingPortalUrl(): Promise<string> {
-    return Promise.reject(new Error(copy.billing.portalDemo));
+    return Promise.reject(new Error(translate('billing.portalDemo')));
   }
 
   // ─── Mutations ───
@@ -228,12 +278,20 @@ export class DemoSource implements DataSource {
   }
   createReportVersion(
     reportId: string,
-    data: DailyReportData,
+    data: StoredReportData,
     changeNote: string,
     photos: OfficePhotoUpload[] = [],
+    baseVersion?: number,
   ) {
     return this.run(() => ({
-      version: this.store.createReportVersion(reportId, data, changeNote, this.user.id, photos),
+      version: this.store.createReportVersion(
+        reportId,
+        data,
+        changeNote,
+        this.user.id,
+        photos,
+        baseVersion,
+      ),
     }));
   }
   /** Demo: the photo lives in memory as an object URL, so the report and its PDF show it. */
@@ -265,6 +323,13 @@ export class DemoSource implements DataSource {
   markNoWork(siteDayId: string) {
     return this.run(() => this.store.markNoWork(siteDayId, this.user.id));
   }
+  textDailyLink(siteId: string, requestId: string, reporterId?: string) {
+    return this.run(() => {
+      // api-text-daily-link's roles: everyone who sees the Overview (spec §19 Q69).
+      if (!['admin', 'pm', 'ops'].includes(this.user.role)) throw new Error(copy.errors.notAllowed);
+      return this.store.textDailyLink(siteId, requestId, this.user.id, reporterId);
+    });
+  }
   resolveUnknownCompany(input: ResolveUnknownCompanyInput) {
     return this.run(() => this.store.resolveUnknownCompany(input, this.user.id));
   }
@@ -288,7 +353,8 @@ export class DemoSource implements DataSource {
   }
   inviteReporter(input: InviteReporterInput) {
     return this.run(() => {
-      this.store.inviteReporter(input, this.user.id);
+      const id = this.store.inviteReporter(input, this.user.id);
+      return { status: this.store.data.reporters.find((r) => r.id === id)!.status };
     });
   }
   linkUnknownSender(input: LinkUnknownSenderInput) {
@@ -306,7 +372,40 @@ export class DemoSource implements DataSource {
   updateReporter(input: UpdateReporterInput) {
     return this.run(() => this.store.updateReporter(input, this.user.id));
   }
-  addOfficeUser(input: { email: string; role: MemberRole; name?: string }) {
+  /** W4-03: admin and ops, as update_reporter_contact() (§2.2 "Manage reporters"). */
+  updateReporterContact(input: UpdateReporterContactInput) {
+    return this.run(() => {
+      if (!['admin', 'ops'].includes(this.user.role)) throw new Error(copy.errors.notAllowed);
+      return this.store.updateReporterContact(input, this.user.id);
+    });
+  }
+  revokeReporterDevices(reporterId: string) {
+    return this.run(() => {
+      if (!['admin', 'ops'].includes(this.user.role)) throw new Error(copy.errors.notAllowed);
+      return this.store.revokeReporterDevices(reporterId, this.user.id);
+    });
+  }
+  /** W4-04 (§19 Q230): admin and ops; the demo org places calls on the console telephony. */
+  officeCallNow(input: OfficeCallNowInput) {
+    return this.run(() => {
+      if (!(OFFICE_CALL_POLICY.roles as readonly string[]).includes(this.user.role))
+        throw new Error(copy.errors.notAllowed);
+      return this.store.officeCallNow(input, this.user.id);
+    });
+  }
+  /** §19 Q242: an admin only. */
+  clearReporterOptOut(reporterId: string, attested: boolean) {
+    return this.run(() => {
+      if (this.user.role !== 'admin') throw new Error(copy.errors.notAllowed);
+      return this.store.clearReporterOptOut(reporterId, attested, this.user.id);
+    });
+  }
+  addOfficeUser(input: {
+    email: string;
+    role: MemberRole;
+    name?: string;
+    uiLocale?: OrgLocale | null;
+  }) {
     return this.run(() => this.store.addOfficeUser(input, this.user.id));
   }
   changeMemberRole(userId: string, role: MemberRole) {
@@ -317,6 +416,22 @@ export class DemoSource implements DataSource {
   }
   updateOrg(input: UpdateOrgInput) {
     return this.run(() => this.store.updateOrg(input, this.user.id));
+  }
+  /** W4-05 (§19 Q232): a demo org's text is `console`: audited, nothing sent. */
+  sendTestMessage(input: SendTestMessageInput) {
+    return this.run(() => this.store.sendTestMessage(input, this.user.id));
+  }
+  /** W4-05 (§19 Q232, Q350): admin only; a demo org's test call is the console's. */
+  callMeNow(input: CallMeNowInput) {
+    return this.run(() => {
+      if (!(SETTINGS_TEST_CALL_POLICY.roles as readonly string[]).includes(this.user.role))
+        throw new Error(copy.errors.notAllowed);
+      return this.store.callMeNow(input, this.user.id);
+    });
+  }
+  /** §19 Q340: the demo signs in without Auth, so there is no user metadata to write. */
+  saveEmailLanguage(_language: PanelLanguage) {
+    return Promise.resolve({ updated: false });
   }
   /** The in-memory insert and invite are one step, so nothing can fail after the site exists. */
   createSite(input: CreateSiteInput) {
@@ -340,11 +455,18 @@ export class DemoSource implements DataSource {
       ),
     );
   }
+  /** Admin only, as RLS `sites_admin_update` on Supabase (§2.2 billing; W4-10). */
   pauseSite(siteId: string) {
-    return this.run(() => this.store.setSiteStatus(siteId, 'paused', this.user.id));
+    return this.run(() => {
+      if (this.user.role !== 'admin') throw new Error(copy.errors.notAllowed);
+      this.store.setSiteStatus(siteId, 'paused', this.user.id);
+    });
   }
   resumeSite(siteId: string) {
-    return this.run(() => this.store.setSiteStatus(siteId, 'active', this.user.id));
+    return this.run(() => {
+      if (this.user.role !== 'admin') throw new Error(copy.errors.notAllowed);
+      this.store.setSiteStatus(siteId, 'active', this.user.id);
+    });
   }
   requestEvidencePack(input: RequestEvidencePackInput) {
     return this.run(() => ({ packId: this.store.requestEvidencePack(input, this.user.id) }));
@@ -379,6 +501,42 @@ export class DemoSource implements DataSource {
   discardDeadJob(jobId: number) {
     return this.run(() => this.ops().discard(jobId, this.user.id));
   }
+  getOrglessContacts() {
+    return this.run(() => {
+      this.ops();
+      return this.store.orglessContacts();
+    });
+  }
+  assignUnknownContact(contactId: string, orgId: string) {
+    return this.run(() => {
+      this.ops();
+      this.store.assignUnknownContact(contactId, orgId, this.user.id);
+    });
+  }
+  ignoreOrglessContact(contactId: string) {
+    return this.run(() => {
+      this.ops();
+      this.store.ignoreOrglessContact(contactId, this.user.id);
+    });
+  }
+  getOpsOrgBilling() {
+    return this.run(() => {
+      this.ops();
+      return this.store.opsOrgBilling();
+    });
+  }
+  setOrgPrice(orgId: string, price: BillingPrice | null) {
+    return this.run(() => {
+      this.ops();
+      this.store.setOrgPrice(orgId, price, this.user.id);
+    });
+  }
+  setOrgBillingStatus(orgId: string, status: BillingStatus) {
+    return this.run(() => {
+      this.ops();
+      this.store.setOrgBillingStatus(orgId, status, this.user.id);
+    });
+  }
   /** Mirrors the ops_* RPCs: refused unless the user is a platform admin. */
   private ops() {
     if (!this.platformAdmin) throw new Error(copy.errors.notFound);
@@ -388,6 +546,23 @@ export class DemoSource implements DataSource {
   // ─── Realtime ───
   subscribe(onChange: (event: ChangeEvent) => void): () => void {
     return this.store.subscribe(onChange);
+  }
+
+  // ─── Demo phone ───
+  getDemoPhone() {
+    return this.run(() => this.store.demoPhone());
+  }
+  getDemoPhoneThread(reporterId: string) {
+    return this.run(() => this.store.demoPhoneThread(reporterId));
+  }
+  getDemoPhoneEmails() {
+    return this.run(() => [...this.store.consoleEmails].reverse());
+  }
+  sendDemoPhoneReply(reporterId: string, body: string, channel: 'sms' | 'whatsapp' = 'sms') {
+    return this.run(() => this.store.demoPhoneReply(reporterId, body, channel));
+  }
+  subscribeDemoPhone(onChange: () => void): () => void {
+    return this.store.subscribe(() => onChange());
   }
 
   simulateIncomingReport() {
@@ -408,4 +583,20 @@ export function demoPayrollCsv(
     store.data.settings.include_unconfirmed_in_payroll,
     store.data.settings.payroll_columns,
   );
+}
+
+/**
+ * The demo's synthetic call recordings (W3-05, `apps/web/public/demo/`, `pnpm demo:call-audio`):
+ * Northgate's and Hillcrest's Oct 9 calls play two-lane tones (no speech) laid out on their
+ * transcripts; every other demo clip keeps the silent stand-in.
+ */
+const DEMO_CALL_AUDIO = new Map<string, string>(
+  DEMO_CALL_AUDIO_SITES.map((site) => [
+    demoId(`call:${site}:${DEMO_TODAY}`),
+    `${import.meta.env.BASE_URL}${demoCallAudioPath(site)}`,
+  ]),
+);
+
+export function demoCallAudioUrl(clipId: string): string | null {
+  return DEMO_CALL_AUDIO.get(clipId) ?? null;
 }

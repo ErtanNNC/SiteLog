@@ -1,0 +1,316 @@
+{
+  "id": "kartal-2026-10-05-crew-gap-tr",
+  "description": "Turkish (W4-08): Kartal Konutları — B Blok (Demir Yapı, §18.2), Emre Yıldız (tr-TR); the glossary is the §18.2 seeds plus the Turkish starter terms (built_in, §19 Q238). A crew and hours gap: Volt Elektrik came but neither headcount nor hours are said (asked first), the own crew's hours are not said; \"perde\", \"şap\", \"TBM\" and \"KKD\" are starter terms. Nothing is invented: the unknown numbers stay null.",
+  "expectedQuestion": {
+    "field": "manpower.workers",
+    "path": "manpower.workers:Volt Elektrik"
+  },
+  "site": {
+    "name": "Kartal Konutları — B Blok",
+    "projectCode": "KK-1203",
+    "timezone": "Europe/Istanbul",
+    "workingHours": "07:00–15:30"
+  },
+  "reportDate": "2026-10-05",
+  "reportLanguage": "tr",
+  "units": "metric",
+  "reporterLocale": "tr-TR",
+  "channel": "web",
+  "defaultShiftHours": 8,
+  "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
+  "reporterFirstName": "Emre",
+  "companies": [
+    {
+      "id": "d1000000-0000-4000-8000-00000000c001",
+      "name": "Usta Beton",
+      "trade": "Beton",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c002",
+      "name": "Volt Elektrik",
+      "trade": "Elektrik",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c003",
+      "name": "Akış Mekanik",
+      "trade": "Mekanik",
+      "aliases": []
+    },
+    {
+      "id": "d1000000-0000-4000-8000-00000000c004",
+      "name": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "aliases": [],
+      "isSelfPerform": true
+    }
+  ],
+  "glossary": [
+    {
+      "heard": "döküm",
+      "official": "Beton dökümü",
+      "kind": "term"
+    },
+    {
+      "heard": "kalıp söktük",
+      "official": "Kalıp sökümü yapıldı",
+      "kind": "term"
+    },
+    {
+      "heard": "demirci ekibi",
+      "official": "Donatı ekibi",
+      "kind": "company"
+    },
+    {
+      "heard": "TBM",
+      "official": "İş güvenliği bilgilendirmesi",
+      "kind": "term"
+    },
+    {
+      "heard": "tool box",
+      "official": "İş güvenliği bilgilendirmesi",
+      "kind": "term"
+    },
+    {
+      "heard": "grobeton",
+      "official": "Grobeton (zayıf beton)",
+      "kind": "term"
+    },
+    {
+      "heard": "kür",
+      "official": "Beton kürü",
+      "kind": "term"
+    },
+    {
+      "heard": "vibre",
+      "official": "Beton vibrasyonu",
+      "kind": "term"
+    },
+    {
+      "heard": "pompa",
+      "official": "Beton pompası",
+      "kind": "term"
+    },
+    {
+      "heard": "mikser",
+      "official": "Transmikser",
+      "kind": "term"
+    },
+    {
+      "heard": "paspayı",
+      "official": "Beton paspayı",
+      "kind": "term"
+    },
+    {
+      "heard": "filiz",
+      "official": "Filiz donatısı",
+      "kind": "term"
+    },
+    {
+      "heard": "demir işleri",
+      "official": "Donatı işleri",
+      "kind": "term"
+    },
+    {
+      "heard": "perde",
+      "official": "Betonarme perde duvar",
+      "kind": "term"
+    },
+    {
+      "heard": "hafriyat",
+      "official": "Hafriyat (kazı) işleri",
+      "kind": "term"
+    },
+    {
+      "heard": "dolgu",
+      "official": "Dolgu işleri",
+      "kind": "term"
+    },
+    {
+      "heard": "beko",
+      "official": "Kazıcı yükleyici (beko loder)",
+      "kind": "term"
+    },
+    {
+      "heard": "şap",
+      "official": "Şap uygulaması",
+      "kind": "term"
+    },
+    {
+      "heard": "sıva",
+      "official": "Sıva işleri",
+      "kind": "term"
+    },
+    {
+      "heard": "alçı",
+      "official": "Alçı sıva",
+      "kind": "term"
+    },
+    {
+      "heard": "fayans",
+      "official": "Fayans kaplama",
+      "kind": "term"
+    },
+    {
+      "heard": "izolasyon",
+      "official": "Yalıtım işleri",
+      "kind": "term"
+    },
+    {
+      "heard": "mantolama",
+      "official": "Dış cephe ısı yalıtımı (mantolama)",
+      "kind": "term"
+    },
+    {
+      "heard": "İSG",
+      "official": "İş sağlığı ve güvenliği",
+      "kind": "term"
+    },
+    {
+      "heard": "KKD",
+      "official": "Kişisel koruyucu donanım",
+      "kind": "term"
+    },
+    {
+      "heard": "ramak kala",
+      "official": "Ramak kala olay",
+      "kind": "term"
+    },
+    {
+      "heard": "taşeron",
+      "official": "Alt yüklenici",
+      "kind": "term"
+    },
+    {
+      "heard": "puantaj",
+      "official": "Puantaj (personel devam kaydı)",
+      "kind": "term"
+    },
+    {
+      "heard": "fazla mesai",
+      "official": "Fazla mesai",
+      "kind": "term"
+    },
+    {
+      "heard": "küp",
+      "official": "m³",
+      "kind": "unit"
+    },
+    {
+      "heard": "metreküp",
+      "official": "m³",
+      "kind": "unit"
+    }
+  ],
+  "rejectedMappings": [],
+  "observedWeather": {
+    "date": "2026-10-05",
+    "provider": "Open-Meteo",
+    "fetchedAt": "2026-10-05T20:30:00Z",
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
+    "hours": [
+      {
+        "time": "07:00",
+        "precipIn": 0,
+        "tempF": 59,
+        "windMph": 6,
+        "gustMph": 10
+      },
+      {
+        "time": "09:00",
+        "precipIn": 0,
+        "tempF": 63,
+        "windMph": 7,
+        "gustMph": 12
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0,
+        "tempF": 68,
+        "windMph": 8,
+        "gustMph": 13
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0,
+        "tempF": 72,
+        "windMph": 9,
+        "gustMph": 15
+      },
+      {
+        "time": "15:00",
+        "precipIn": 0,
+        "tempF": 70,
+        "windMph": 8,
+        "gustMph": 14
+      },
+      {
+        "time": "17:00",
+        "precipIn": 0,
+        "tempF": 66,
+        "windMph": 6,
+        "gustMph": 11
+      }
+    ],
+    "summary": {
+      "precipIn": 0,
+      "tempMinF": 59,
+      "tempMaxF": 72,
+      "windMph": 7,
+      "gustMph": 15,
+      "provider": "Open-Meteo",
+      "precipWorkingHoursIn": 0,
+      "maxGustWorkingHoursMph": 15
+    }
+  },
+  "previousAnswers": [],
+  "previousDraft": null,
+  "photos": [
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000c5",
+      "caption": "5. kat perde kalıbı",
+      "takenAt": "2026-10-05T13:20:00Z"
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000c6",
+      "takenAt": "2026-10-05T13:20:40Z"
+    }
+  ],
+  "segments": [
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a5",
+      "start": 0.0,
+      "end": 6.0,
+      "text": "Kartal Konutları B Blok, beş ekim pazartesi. Hava güzeldi, yağmur yok."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a5",
+      "start": 6.0,
+      "end": 13.5,
+      "text": "Usta Beton beş kişi tam gün çalıştı, beşinci katta perdelerin kalıbını kurdular."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a5",
+      "start": 13.5,
+      "end": 21.0,
+      "text": "Volt Elektrik de geldi, üçüncü katta kablo çekti, kaç kişi olduklarını bilmiyorum, ne kadar kaldıklarını da görmedim."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a5",
+      "start": 21.0,
+      "end": 27.5,
+      "text": "Bizim öz ekip altı kişi, dördüncü katta şap attı."
+    },
+    {
+      "uploadId": "d1000000-0000-4000-8000-0000000000a5",
+      "start": 27.5,
+      "end": 34.0,
+      "text": "Sabah TBM yaptık, KKD kullanımını konuştuk. Kaza yok. İki fotoğraf gönderiyorum."
+    }
+  ]
+}

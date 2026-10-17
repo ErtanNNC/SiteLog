@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOpenMeteoUrl,
   isWeatherObserved,
+  toObservedIn,
+  weatherHoursIn,
+  weatherUnitLabels,
   summarizeHourly,
   weatherPhrase,
 } from './observed.ts';
@@ -58,5 +61,60 @@ describe('weather summary', () => {
     expect(url).toContain('precipitation_unit=inch');
     expect(url).toContain('timezone=America%2FChicago');
     expect(url).toContain('apikey=k');
+  });
+});
+
+describe('weather in the org units (W1-12, §10.11)', () => {
+  const w = {
+    date: '2026-10-09',
+    provider: 'Open-Meteo' as const,
+    fetchedAt: '2026-10-09T21:30:00Z',
+    units: { precip: 'in' as const, temp: 'F' as const, wind: 'mph' as const },
+    hours: [{ time: '07:00', precipIn: 0.12, tempF: 59, windMph: 9, gustMph: 16 }],
+    summary: {
+      precipIn: 0.4,
+      tempMinF: 58,
+      tempMaxF: 64,
+      windMph: 9,
+      gustMph: 17,
+      provider: 'Open-Meteo',
+      precipWorkingHoursIn: 0.35,
+      maxGustWorkingHoursMph: 17,
+    },
+  };
+  it('keeps imperial as fetched', () => {
+    expect(toObservedIn(w, 'imperial')).toEqual({
+      precip: 0.4,
+      tempMin: 58,
+      tempMax: 64,
+      wind: 9,
+      gust: 17,
+      provider: 'Open-Meteo',
+    });
+    expect(weatherHoursIn(w, 'imperial')[0]).toEqual({
+      time: '07:00',
+      precip: 0.12,
+      temp: 59,
+      wind: 9,
+      gust: 16,
+    });
+  });
+  it('converts to mm, °C and km/h for a metric org', () => {
+    expect(toObservedIn(w, 'metric')).toEqual({
+      precip: 10.2,
+      tempMin: 14,
+      tempMax: 18,
+      wind: 14,
+      gust: 27,
+      provider: 'Open-Meteo',
+    });
+    expect(weatherHoursIn(w, 'metric')[0]).toEqual({
+      time: '07:00',
+      precip: 3,
+      temp: 15,
+      wind: 14,
+      gust: 26,
+    });
+    expect(weatherUnitLabels('metric')).toEqual({ precip: 'mm', temp: 'C', wind: 'km/h' });
   });
 });

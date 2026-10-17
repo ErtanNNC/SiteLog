@@ -30,3 +30,16 @@ apps/worker/tmp/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Agent worktrees (local only)
+.claude/worktrees/
+
+# voice agent (Python, uv)
+apps/voice-agent/.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+
+# voice listening-test samples (pnpm voice:samples, W3-16)
+voice-samples/

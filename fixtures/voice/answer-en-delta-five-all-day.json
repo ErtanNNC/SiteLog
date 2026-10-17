@@ -1,0 +1,24 @@
+{
+  "id": "answer-en-delta-five-all-day",
+  "description": "English. Marco Ruiz (ES · EN → multi) answers the Delta headcount question of the hero report by voice (F7 Other…, W2-09): five, all day. The answer case fixtures/answers/en-delta-five-all-day.",
+  "kind": "answer",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Riverside Lofts — Block B",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["es", "en"]
+  },
+  "transcriptionLanguage": "multi",
+  "expectedLanguage": "en",
+  "goldenCase": null,
+  "durationS": 2.4,
+  "text": "Five, all day.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 2.1,
+      "text": "Five, all day."
+    }
+  ]
+}

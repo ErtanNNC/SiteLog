@@ -1,13 +1,17 @@
 {
+  "schemaVersion": 2,
+  "reportDate": "2026-10-05",
+  "reportLanguage": "en",
+  "units": "imperial",
   "languageDetected": ["en"],
   "summary": "Drizzle from 13:30 to 15:00 stopped roof membrane repairs for 1.5 h; the crew moved to cleanup in Bay 2. North roof patching approximately 60% complete; Bay 3 office framing approximately 50% complete. No incidents.",
   "weather": {
     "observed": {
-      "precipIn": 0.07,
-      "tempMinF": 55,
-      "tempMaxF": 63,
-      "windMph": 9,
-      "gustMph": 17,
+      "precip": 0.07,
+      "tempMin": 55,
+      "tempMax": 63,
+      "wind": 9,
+      "gust": 17,
       "provider": "Open-Meteo"
     },
     "conditionsText": "Dry morning; drizzle 13:30–15:00",
@@ -20,8 +24,8 @@
         "lostHours": 1.5,
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000009-0000-4000-8000-000000000901",
+            "type": "voice_note",
+            "uploadId": "e0000009-0000-4000-8000-000000000901",
             "start": 7.2,
             "end": 15
           }
@@ -43,8 +47,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 15,
           "end": 22.5
         }
@@ -63,8 +67,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 15,
           "end": 22.5
         }
@@ -79,14 +83,14 @@
       "percentComplete": 60,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 7.2,
           "end": 15
         },
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 22.5,
           "end": 29
         }
@@ -99,14 +103,14 @@
       "percentComplete": 50,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 15,
           "end": 22.5
         },
         {
-          "type": "audio",
-          "messageId": "e0000009-0000-4000-8000-000000000901",
+          "type": "voice_note",
+          "uploadId": "e0000009-0000-4000-8000-000000000901",
           "start": 22.5,
           "end": 29
         }
@@ -121,8 +125,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000009-0000-4000-8000-000000000901",
+        "type": "voice_note",
+        "uploadId": "e0000009-0000-4000-8000-000000000901",
         "start": 29,
         "end": 34.5
       }
@@ -130,18 +134,19 @@
   },
   "issues": [],
   "nextWorkday": [],
-  "newTerms": [],
-  "missingRequired": [],
-  "lowConfidence": [],
-  "proposedQuestions": [],
-  "schemaVersion": 1,
-  "reportDate": "2026-10-05",
   "photos": [
-    { "messageId": "e0000009-0000-4000-8000-000000000905", "takenAt": "2026-10-05T19:05:00Z" },
     {
-      "messageId": "e0000009-0000-4000-8000-000000000906",
+      "uploadId": "e0000009-0000-4000-8000-000000000905",
+      "takenAt": "2026-10-05T19:05:00Z"
+    },
+    {
+      "uploadId": "e0000009-0000-4000-8000-000000000906",
       "caption": "Roof north side",
       "takenAt": "2026-10-05T20:48:00Z"
     }
-  ]
+  ],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
 }

@@ -1,6 +1,6 @@
 import type { ChipVariant } from '@sitelog/shared/status.ts';
 import type { HTMLAttributes } from 'react';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 
 /**
@@ -29,8 +29,10 @@ export interface StatusChipProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 export function StatusChip({ variant, label, size = 'md', className, ...props }: StatusChipProps) {
+  const { t } = useCopy();
   const s = STYLES[variant];
-  const text = label ?? copy.chips[variant];
+  // The page's language: a page under <EnglishOnly> keeps English chips (D9).
+  const text = label ?? t(`chips.${variant}`);
   return (
     <span
       data-variant={variant}
@@ -40,7 +42,7 @@ export function StatusChip({ variant, label, size = 'md', className, ...props }:
         s.box,
         className,
       )}
-      aria-label={copy.a11y.statusChip(text)}
+      aria-label={t('a11y.statusChipLabel', { label: text })}
       {...props}
     >
       <span aria-hidden="true" className={cn('size-2 rounded-full', s.dot)} />
@@ -51,15 +53,16 @@ export function StatusChip({ variant, label, size = 'md', className, ...props }:
 
 /** Small "Late" / "Late 18:12" badge next to a chip (§7.1). */
 export function LateBadge({ time, className }: { time?: string | null; className?: string }) {
+  const { t } = useCopy();
   return (
     <span
       className={cn(
         'inline-flex h-6 items-center rounded-chip border border-missing/40 bg-transparent px-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-missing',
         className,
       )}
-      title={copy.a11y.lateBadge}
+      title={t('a11y.lateBadge')}
     >
-      {time ? copy.chips.lateAt(time) : copy.chips.late}
+      {time ? t('chips.lateAtTime', { time }) : t('chips.late')}
     </span>
   );
 }

@@ -1,0 +1,43 @@
+{
+  "id": "en-elm-2026-10-02",
+  "description": "English. Elm St. Townhomes (Kestrel, §18.1), Priya Raman (EN · HI → Deepgram language en). Partial-day rain-out, one self-perform crew, a delivery. The script of the golden case elm-2026-10-02-rain-morning.",
+  "audio": null,
+  "mime": "audio/webm;codecs=opus",
+  "site": "Elm St. Townhomes",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["en", "hi"]
+  },
+  "transcriptionLanguage": "en",
+  "expectedLanguage": "en",
+  "goldenCase": "elm-2026-10-02-rain-morning",
+  "durationS": 33,
+  "text": "Elm Street, Friday. Rain from seven to ten this morning, we couldn't frame in that, the subfloor was too slick. So three hours lost on the framing. The crew waited it out and sorted material in the garage bays. Our crew, six guys, full day. After ten they framed second-floor walls on units one to four, about forty percent of the second floor. The lumber package for the second floor came at eleven thirty, two flatbeds from the yard. No incidents, toolbox talk on slips and wet surfaces. Two photos.",
+  "segments": [
+    {
+      "start": 0,
+      "end": 6.8,
+      "text": "Elm Street, Friday. Rain from seven to ten this morning, we couldn't frame in that, the subfloor was too slick."
+    },
+    {
+      "start": 6.8,
+      "end": 12.5,
+      "text": "So three hours lost on the framing. The crew waited it out and sorted material in the garage bays."
+    },
+    {
+      "start": 12.5,
+      "end": 20.4,
+      "text": "Our crew, six guys, full day. After ten they framed second-floor walls on units one to four, about forty percent of the second floor."
+    },
+    {
+      "start": 20.4,
+      "end": 27,
+      "text": "The lumber package for the second floor came at eleven thirty, two flatbeds from the yard."
+    },
+    {
+      "start": 27,
+      "end": 33,
+      "text": "No incidents, toolbox talk on slips and wet surfaces. Two photos."
+    }
+  ]
+}

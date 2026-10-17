@@ -1,6 +1,7 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown } from 'lucide-react';
-import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from 'react';
+import { forwardRef, useContext, type ComponentPropsWithoutRef, type ComponentRef } from 'react';
+import { PinnedLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
 export const Select = SelectPrimitive.Root;
@@ -15,7 +16,7 @@ export const SelectTrigger = forwardRef<
     ref={ref}
     className={cn(
       'flex w-full items-center justify-between gap-2 rounded-chip border border-rebar bg-chalk px-3 text-[15px] text-asphalt data-[placeholder]:text-dust focus-visible:border-asphalt disabled:cursor-not-allowed disabled:opacity-50 [&>span]:truncate',
-      dense ? 'h-10' : 'h-11',
+      dense ? 'h-target-dense' : 'h-target',
       className,
     )}
     {...props}
@@ -31,23 +32,28 @@ SelectTrigger.displayName = 'SelectTrigger';
 export const SelectContent = forwardRef<
   ComponentRef<typeof SelectPrimitive.Content>,
   ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = 'popper', ...props }, ref) => (
-  <SelectPrimitive.Portal>
-    <SelectPrimitive.Content
-      ref={ref}
-      position={position}
-      className={cn(
-        'relative z-50 max-h-80 min-w-[8rem] overflow-hidden rounded-card border border-rebar bg-chalk text-asphalt',
-        position === 'popper' &&
-          'w-full min-w-[var(--radix-select-trigger-width)] data-[side=bottom]:translate-y-1',
-        className,
-      )}
-      {...props}
-    >
-      <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
-    </SelectPrimitive.Content>
-  </SelectPrimitive.Portal>
-));
+>(({ className, children, position = 'popper', ...props }, ref) => {
+  // Portaled to <body>: carry an English-only page's language with it (WCAG 3.1.2).
+  const pinned = useContext(PinnedLanguage);
+  return (
+    <SelectPrimitive.Portal>
+      <SelectPrimitive.Content
+        ref={ref}
+        lang={pinned ?? undefined}
+        position={position}
+        className={cn(
+          'relative z-50 max-h-80 min-w-[8rem] overflow-hidden rounded-card border border-rebar bg-chalk text-asphalt',
+          position === 'popper' &&
+            'w-full min-w-[var(--radix-select-trigger-width)] data-[side=bottom]:translate-y-1',
+          className,
+        )}
+        {...props}
+      >
+        <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
+      </SelectPrimitive.Content>
+    </SelectPrimitive.Portal>
+  );
+});
 SelectContent.displayName = 'SelectContent';
 
 export const SelectItem = forwardRef<
@@ -57,7 +63,7 @@ export const SelectItem = forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex min-h-10 w-full cursor-pointer select-none items-center rounded-chip py-2 pl-3 pr-9 text-[15px] outline-none data-[highlighted]:bg-concrete data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'relative flex min-h-target w-full cursor-pointer select-none items-center rounded-chip py-2 pl-3 pr-9 text-[15px] outline-none data-[highlighted]:bg-concrete data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
     {...props}

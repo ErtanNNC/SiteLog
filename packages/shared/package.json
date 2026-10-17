@@ -6,6 +6,7 @@
   "description": "SiteLog shared schemas, enums, types and pure helpers (Node, browser and Deno).",
   "exports": {
     ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css",
     "./*": "./src/*"
   },
   "scripts": {
@@ -16,6 +17,7 @@
   "dependencies": {
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
+    "libphonenumber-js": "1.13.14",
     "zod": "^4.6.6"
   },
   "devDependencies": {

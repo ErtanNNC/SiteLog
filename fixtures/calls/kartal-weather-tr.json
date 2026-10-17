@@ -1,0 +1,258 @@
+{
+  "$comment": "W3-09 recorded call (W3-02's format, extended): start, routes (field-api's recorded answers per voice route, in order; the last repeats), reporterTurns (one session run each), agentTurns (the dialog model's recorded turns). `extraction` names the eval case (fixtures/transcripts, expected, tool-outputs) whose recorded tool output EXTRACT_PROVIDER=fake replays for this call's update_draft; `answers` are the reporter's words record_answer sends. The worker's PGlite test (apps/worker/src/jobs/voice-turn.pglite.test.ts) checks that the live pipeline answers what `routes` records (ids aside); the agent's pytest (tests/test_live_draft.py) replays the call on FakeFieldApi. W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind. W4-07: a Turkish weather day by Talk now (F12): code's read-back of the day off (the stop at 11:00 said as on bir, the lost hours as dört buçuk), then the yes logs it and texts the photos link. field-api's Deno test (supabase/functions/field-api/voice_special_test.ts) answers these routes.",
+  "id": "kartal-weather-tr",
+  "locale": "tr-TR",
+  "start": {
+    "request": {
+      "room": "call-d1470000-0000-4000-8000-000000000004",
+      "transport": "web",
+      "callId": "d1470000-0000-4000-8000-000000000004"
+    },
+    "response": {
+      "callId": "d1470000-0000-4000-8000-000000000004",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Emre",
+        "locale": "tr-TR"
+      }
+    }
+  },
+  "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "web",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Emre",
+          "locale": "tr-TR"
+        },
+        "company": "Demir Yapı A.Ş.",
+        "reportLanguage": "tr",
+        "sites": [
+          {
+            "id": "d1000000-0000-4000-8000-00000000a001",
+            "name": "Kartal Konutları — B Blok",
+            "status": "reminded",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "d1000000-0000-4000-8000-00000000a001",
+        "companies": [
+          {
+            "name": "Usta Beton",
+            "aliases": []
+          },
+          {
+            "name": "Volt Elektrik",
+            "aliases": []
+          },
+          {
+            "name": "Akış Mekanik",
+            "aliases": []
+          },
+          {
+            "name": "Demir Yapı öz ekip",
+            "aliases": []
+          }
+        ],
+        "keyterms": [
+          "Kartal Konutları — B Blok",
+          "Usta Beton",
+          "Volt Elektrik",
+          "Akış Mekanik",
+          "Demir Yapı öz ekip",
+          "döküm",
+          "kalıp söktük",
+          "demirci ekibi",
+          "TBM",
+          "tool box"
+        ],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 3
+      }
+    ],
+    "set_day_status": [
+      {
+        "status": "confirm",
+        "confirmation": "Kartal Konutları — B Blok için hava nedeniyle kayıp gün: iş saat on bir itibarıyla durdu, öncesinde sahada on iki kişi vardı, dört buçuk saat kayıp. Kaydedeyim mi?",
+        "confirmKey": "4a7e0c5b4a7e0c5b4a7e0c5b4a7e0c5b4a7e0c5b4a7e0c5b4a7e0c5b4a7e0c5b"
+      },
+      {
+        "status": "ok",
+        "confirmation": "Kaydedildi: Kartal Konutları — B Blok için hava nedeniyle kayıp gün. Hava koşullarının bir fotoğrafı kaydı güçlendirir. Size bir link gönderdim."
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "reporterTurns": [
+    "Yağmur yüzünden iş durdu, saat on birde herkesi eve gönderdim, sahada on iki kişi vardı.",
+    "Evet."
+  ],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "set_day_status",
+          "args": {
+            "status": "weather_day",
+            "since": "11:00",
+            "workers_before": 12
+          }
+        }
+      ]
+    },
+    {
+      "text": "Kartal Konutları — B Blok için hava nedeniyle kayıp gün: iş saat on bir itibarıyla durdu, öncesinde sahada on iki kişi vardı, dört buçuk saat kayıp. Kaydedeyim mi?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "set_day_status",
+          "args": {
+            "status": "weather_day",
+            "since": "11:00",
+            "workers_before": 12
+          }
+        }
+      ]
+    },
+    {
+      "text": "Kaydedildi: Kartal Konutları — B Blok için hava nedeniyle kayıp gün. Hava koşullarının bir fotoğrafı kaydı güçlendirir. Size bir link gönderdim.",
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "weather_day"
+          }
+        }
+      ]
+    },
+    {}
+  ],
+  "simulate": {
+    "title": "Turkish weather day by Talk now: rained out at eleven, twelve on site",
+    "milestone": "m8",
+    "flow": "F12",
+    "arrange": {
+      "country": "TR",
+      "org": "Demir Yapı A.Ş.",
+      "reporter": {
+        "name": "Emre Yıldız",
+        "locale": "tr-TR",
+        "contactPref": "call"
+      },
+      "sites": [
+        {
+          "key": "kartal",
+          "name": "Kartal Konutları — B Blok",
+          "projectCode": "KK",
+          "timezone": "Europe/Istanbul"
+        }
+      ]
+    },
+    "steps": [
+      {
+        "route": "get_context",
+        "expect": {
+          "call": {
+            "direction": "inbound",
+            "transport": "web",
+            "purpose": "daily_report"
+          },
+          "reporter": {
+            "firstName": "Emre",
+            "locale": "tr-TR"
+          },
+          "company": "Demir Yapı A.Ş.",
+          "reportLanguage": "tr",
+          "consents": {
+            "recording": true,
+            "dataProcessing": true,
+            "sms": true,
+            "autoCall": false
+          },
+          "maxQuestions": 3,
+          "sites": [
+            {
+              "name": "Kartal Konutları — B Blok",
+              "deadline": "17:30"
+            }
+          ]
+        }
+      },
+      {
+        "route": "set_day_status",
+        "body": {
+          "status": "weather_day",
+          "details": {
+            "since": "11:00",
+            "workersBefore": 12
+          },
+          "start": 3
+        }
+      },
+      {
+        "route": "set_day_status",
+        "body": {
+          "status": "weather_day",
+          "details": {
+            "since": "11:00",
+            "workersBefore": 12
+          },
+          "start": 3,
+          "utterance": "Evet.",
+          "confirmKey": "$confirmKey"
+        }
+      },
+      {
+        "route": "end_call",
+        "body": {
+          "outcome": "weather_day"
+        }
+      }
+    ],
+    "expect": {
+      "call": {
+        "outcome": "weather_day"
+      },
+      "siteDay": {
+        "site": "kartal",
+        "status": "weather_day"
+      },
+      "report": {
+        "site": "kartal",
+        "status": "filed",
+        "channel": "voice",
+        "language": "tr"
+      },
+      "messages": ["photos_link"]
+    }
+  }
+}

@@ -31,6 +31,10 @@ export const AnswerValueSchema = z.object({
   hoursPerWorker: z.number().min(0).max(24).nullable().optional(),
   totalHours: z.number().min(0).nullable().optional(),
   fullDay: z.boolean().optional().describe('true when the manager said "full day" / "all day"'),
+  halfDay: z
+    .boolean()
+    .optional()
+    .describe('true when the manager said "half day": half of DEFAULT_SHIFT_HOURS'),
   endTime: z.string().optional().describe('HH:MM when the manager gave an end time ("till 3")'),
   impact: z.string().optional(),
   lostHours: z.number().min(0).nullable().optional(),
@@ -96,6 +100,49 @@ export const ClassifiedReplySchema = z.object({
     .describe('For fix / edit_request: the part of the message that describes the change'),
 });
 export type ClassifiedReply = z.infer<typeof ClassifiedReplySchema>;
+
+/**
+ * §10.8 `classify_utterance` intents: §9.5's, for call turns outside the main report (M7) and
+ * inbound SMS on two-way packs (W2-12: EDIT's day and change).
+ */
+export const UTTERANCE_INTENTS = [
+  'confirm',
+  'fix',
+  'no_work',
+  'weather_day',
+  'edit_request',
+  'callback',
+  'preference',
+  'opt_out',
+  'help',
+  'other',
+] as const;
+export type UtteranceIntent = (typeof UTTERANCE_INTENTS)[number];
+
+/** §10.8: one intent with its entities (day, numbers, minutes) and, for a change, its words. */
+export const UtteranceClassificationSchema = z.object({
+  intent: z.enum(UTTERANCE_INTENTS),
+  confidence: z.number().min(0).max(1),
+  entities: z
+    .object({
+      dayReference: z
+        .string()
+        .nullable()
+        .optional()
+        .describe(
+          'The day as written, e.g. "FRI", "Friday", "yesterday", "Oct 9", "viernes", "cuma"',
+        ),
+      numbers: z.array(z.number()).optional(),
+      minutes: z.number().nullable().optional().describe('Minutes, e.g. "call me in half an hour"'),
+    })
+    .optional(),
+  correctionText: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('For fix / edit_request: the words that describe the change, without the day'),
+});
+export type UtteranceClassification = z.infer<typeof UtteranceClassificationSchema>;
 
 /** §F10 — weather day / no work classification detail. */
 export const DayOffClassificationSchema = z.object({

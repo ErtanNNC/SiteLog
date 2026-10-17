@@ -8,6 +8,10 @@ import { admin, ANON_KEY, APP_URL, SUPABASE_URL } from './support';
  * admin, then one site with no reporter, then a report typed in the panel with a photo. Every
  * page must load (no "Couldn't load …"), the photo must be stored and listed by the version, and
  * the typed report's PDF (with the photo) must be stored for its version.
+ *
+ * The org is created with the deployed v1.0 panel's create_org call (four named arguments, no
+ * country): since W1-06a it resolves to create_org(p_country default 'US') and makes a US org.
+ * A second customer creates a TR org through the setup wizard's country choice (spec §4.6).
  */
 const SITE_PHOTO = fileURLToPath(new URL('../fixtures/site-photo.png', import.meta.url));
 test.describe.configure({ mode: 'serial' });
@@ -33,10 +37,10 @@ const PAGES: Array<[path: string, heading: RegExp]> = [
   ['/billing', /Billing/],
 ];
 
-async function signIn(page: Page) {
+async function signIn(page: Page, email = EMAIL) {
   const { data, error } = await admin().auth.admin.generateLink({
     type: 'magiclink',
-    email: EMAIL,
+    email,
     options: { redirectTo: `${APP_URL}/auth/callback` },
   });
   if (error) throw error;
@@ -69,9 +73,12 @@ test.beforeAll(async () => {
   user = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
   const signedIn = await user.auth.signInWithPassword({ email: EMAIL, password: PASSWORD });
   if (signedIn.error) throw signedIn.error;
+  // The deployed v1.0 panel's payload, as it still is on staging until W1-19.
   const org = await user.rpc('create_org', {
     p_name: 'Fresh Build Co',
     p_timezone: 'America/Chicago',
+    p_address: null,
+    p_license_no: null,
   });
   if (org.error) throw org.error;
   orgId = (org.data as { id?: string; org_id?: string }).id ?? '';
@@ -79,6 +86,23 @@ test.beforeAll(async () => {
     const { data } = await user.from('org_members').select('org_id').limit(1).single();
     orgId = (data as { org_id: string }).org_id;
   }
+});
+
+test('the v1.0 panel’s create_org call (no country) still makes a US org', async () => {
+  const { data, error } = await admin()
+    .from('orgs')
+    .select('country, locale, units, currency, timezone, org_settings(pdf_paper)')
+    .eq('id', orgId)
+    .single();
+  if (error) throw error;
+  expect(data).toEqual({
+    country: 'US',
+    locale: 'en-US',
+    units: 'imperial',
+    currency: 'USD',
+    timezone: 'America/Chicago',
+    org_settings: { pdf_paper: 'letter' },
+  });
 });
 
 test('a new org with no sites: every page loads', async ({ page }) => {
@@ -127,46 +151,59 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
   await expect(page.getByText(/Entered by .+ in SiteLog at/)).toBeVisible();
 
   const reportId = new URL(page.url()).pathname.split('/').at(-1)!;
-  // The photo: a JPEG in the private bucket, an org-level message, a photo source of the report
+  // The photo: a JPEG in the private bucket, an office upload (no reporter, uploaded by the
+  // signed-in user, no message: 20261014000002), a photo source of the report with its upload_id
   // and the one entry of version 1's data.photos; the report page shows it from a signed URL.
   const { data: sources, error: sourcesError } = await admin()
     .from('report_sources')
     .select(
-      'message_id, caption, taken_at, messages(storage_path, media_mime, org_id, conversation_id, body)',
+      'upload_id, message_id, caption, taken_at, uploads(storage_path, mime, site_id, reporter_id, uploaded_by, caption)',
     )
     .eq('report_id', reportId)
     .eq('kind', 'photo');
   if (sourcesError) throw sourcesError;
   expect(sources).toHaveLength(1);
   const source = sources![0] as unknown as {
-    message_id: string;
+    upload_id: string;
+    message_id: string | null;
     caption: string | null;
     taken_at: string;
-    messages: {
+    uploads: {
       storage_path: string;
-      media_mime: string;
-      org_id: string;
-      conversation_id: string | null;
-      body: string | null;
+      mime: string;
+      site_id: string;
+      reporter_id: string | null;
+      uploaded_by: string | null;
+      caption: string | null;
     };
   };
   expect(source.caption).toBe('Level 2 deck');
-  expect(source.messages).toMatchObject({
-    org_id: orgId,
-    conversation_id: null,
-    media_mime: 'image/jpeg',
-    body: 'Level 2 deck',
+  expect(source.message_id).toBeNull();
+  expect(source.uploads).toMatchObject({
+    site_id: siteId,
+    reporter_id: null,
+    uploaded_by: expect.any(String),
+    mime: 'image/jpeg',
+    caption: 'Level 2 deck',
   });
-  expect(source.messages.storage_path).toMatch(
+  expect(source.uploads.storage_path).toMatch(
     new RegExp(`^${orgId}/${siteId}/office/[0-9a-f-]{36}\\.jpg$`),
   );
   const { data: photoFile, error: photoError } = await admin()
     .storage.from('photos')
-    .download(source.messages.storage_path);
+    .download(source.uploads.storage_path);
   if (photoError) throw photoError;
   expect([...new Uint8Array((await photoFile.arrayBuffer()).slice(0, 3))]).toEqual([
     0xff, 0xd8, 0xff,
   ]);
+  // Filed by the office in the org's report language (D13).
+  const { data: filed, error: filedError } = await admin()
+    .from('reports')
+    .select('channel, language')
+    .eq('id', reportId)
+    .single();
+  if (filedError) throw filedError;
+  expect(filed).toEqual({ channel: 'office', language: 'en' });
   const { data: v1, error: v1Error } = await admin()
     .from('report_versions')
     .select('data')
@@ -174,8 +211,11 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
     .eq('version', 1)
     .single();
   if (v1Error) throw v1Error;
-  expect((v1 as { data: { photos: unknown[] } }).data.photos).toEqual([
-    { messageId: source.message_id, caption: 'Level 2 deck', takenAt: expect.any(String) },
+  // W1-12: the panel files schemaVersion 2, whose photos name their upload.
+  const typed = (v1 as { data: { schemaVersion: number; photos: unknown[] } }).data;
+  expect(typed.schemaVersion).toBe(2);
+  expect(typed.photos).toEqual([
+    { uploadId: source.upload_id, caption: 'Level 2 deck', takenAt: expect.any(String) },
   ]);
   const shown = page.getByTestId('section-photos').getByRole('img', { name: 'Level 2 deck' });
   await expect(shown).toBeVisible();
@@ -206,4 +246,123 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
   expect(pdf).toMatch(/\/Subtype\s*\/Image/);
 
   await visitAll(page);
+});
+
+// Spec §19 Q32 (W4-01): a browser in tr-TR has Türkiye preselected before the org exists.
+// W4-16: the TR self-serve variant of the wizard belongs to the M11 suite (`pnpm e2e:m11`); with
+// the TR pack's sender set on CI's stack by then, the worker sends Emre's welcome to the stand-in.
+test.describe('in a tr-TR browser', { tag: ['@m11', '@F2'] }, () => {
+  test.use({ locale: 'tr-TR' });
+
+  // W4-02 (Done when): the wizard reads in Turkish (the browser's language before the org exists,
+  // the org's after), and Kartal's manager Emre Yıldız is invited in Turkish with a call preference.
+  test('the setup wizard creates a TR org from its country pack, in Turkish (W1-06a, W4-02)', async ({
+    page,
+  }) => {
+    const email = `fresh-tr-${Date.now()}@sitelog.example`;
+    const created = await admin().auth.admin.createUser({ email, email_confirm: true });
+    if (created.error) throw created.error;
+    const userId = created.data.user.id;
+    await signIn(page, email);
+    await expect(page.getByRole('heading', { name: 'Şirketinizi kurun' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+    await page.getByLabel('Şirket adı').fill('Yıldız İnşaat A.Ş.');
+    // Preselected from the browser's region (Q32), by code: ICU names it "Türkiye" or "Turkey".
+    await expect(page.getByRole('combobox', { name: 'Ülke' })).toHaveText(/\bTR$/);
+    // Copy names (not the browser's); the zone is the select's alone.
+    const presets = page.getByTestId('country-presets');
+    for (const text of ['Türkçe', 'Metrik', 'A4', 'TRY'])
+      await expect(presets.getByText(text, { exact: true })).toBeVisible();
+    await expect(presets).not.toContainText('Europe/Istanbul');
+    await expect(page.getByRole('combobox', { name: 'Şirketin saat dilimi' })).toContainText(
+      'Europe/Istanbul',
+    );
+    await page.getByRole('button', { name: 'İlk şantiyeye geç' }).click();
+    await page.waitForURL(/\/setup\/site$/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: 'Şantiye', exact: true })).toBeVisible();
+    // The first site manager starts with a +90 number and Turkish, the pack's field language.
+    await expect(page.getByRole('button', { name: /^Ülke kodu: / })).toHaveText(/TR \+90/);
+    await expect(page.getByRole('checkbox', { name: 'Türkçe' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await expect(page.getByText('Raporlar her zaman Türkçe çıkar.')).toBeVisible();
+    await expect(page.getByTestId('mgr-locale')).toHaveText('Türkçe');
+
+    // Kartal with Emre Yıldız (Türkçe, a call): the TR welcome has no reply clause (one-way pack)
+    // and no "or call" (no voice number).
+    await page.getByLabel('Şantiye adı').fill('Kartal');
+    await page.getByLabel('Proje numarası').fill('KR-0001');
+    await page.getByRole('button', { name: 'Koordinatları elle gir' }).click();
+    await page.getByLabel('Enlem').fill('40.9067');
+    await page.getByLabel('Boylam').fill('29.1922');
+    await page.getByLabel('Ad', { exact: true }).fill('Emre Yıldız');
+    await page.getByTestId('manager-phone').fill('532 000 0599');
+    await page.getByRole('radio', { name: 'Arama' }).click();
+    await expect(page.getByText('Kayıt ekranındaki Şimdi konuş ile arar.')).toBeVisible();
+    const welcome = page.getByTestId('welcome-text');
+    await expect(welcome).toHaveAttribute('lang', 'tr');
+    await expect(welcome).toContainText(
+      'Merhaba Emre, ben SiteLog, Yıldız İnşaat A.Ş. için Kartal günlük rapor asistanıyım.',
+    );
+    await expect(welcome).not.toContainText('STOP');
+    await expect(welcome).not.toContainText('arayın');
+    await page.getByRole('button', { name: 'Karşılama mesajını gönder' }).click();
+    await expect(page.getByRole('heading', { name: 'Raporlar ve hatırlatmalar' })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // create_org preset everything from the TR row; on_org_created the paper.
+    const { data: member, error: memberError } = await admin()
+      .from('org_members')
+      .select('org_id, role')
+      .eq('user_id', userId)
+      .single();
+    if (memberError) throw memberError;
+    expect(member.role).toBe('admin');
+    const { data: org, error: orgError } = await admin()
+      .from('orgs')
+      .select('name, country, locale, units, currency, timezone, org_settings(pdf_paper)')
+      .eq('id', member.org_id)
+      .single();
+    if (orgError) throw orgError;
+    expect(org).toEqual({
+      name: 'Yıldız İnşaat A.Ş.',
+      country: 'TR',
+      locale: 'tr-TR',
+      units: 'metric',
+      currency: 'TRY',
+      timezone: 'Europe/Istanbul',
+      org_settings: { pdf_paper: 'a4' },
+    });
+    const { data: audit, error: auditError } = await admin()
+      .from('audit_log')
+      .select('diff')
+      .eq('org_id', member.org_id)
+      .eq('action', 'org.created')
+      .single();
+    if (auditError) throw auditError;
+    // W4-10 (§19 Q236): a TR org is billed manually until Q8, with no TRY price until Q9.
+    expect(audit.diff).toEqual({ country: 'TR', billing_provider: 'manual', price: null });
+    // W4-02: Emre is invited in Turkish with a call preference (api-invite-reporter).
+    const { data: emre, error: emreError } = await admin()
+      .from('reporters')
+      .select('name, phone_e164, locale, contact_pref, status')
+      .eq('org_id', member.org_id)
+      .single();
+    if (emreError) throw emreError;
+    expect(emre).toEqual({
+      name: 'Emre Yıldız',
+      phone_e164: '+905320000599',
+      locale: 'tr-TR',
+      contact_pref: 'call',
+      status: 'invited',
+    });
+
+    // Settings → PDF shows the preset A4 paper (in Turkish since W4-05: the org's tr-TR).
+    await page.goto('/settings/pdf');
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Settings|Ayarlar/);
+    await expect(page.getByRole('radio', { name: 'A4' })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Letter' })).not.toBeChecked();
+  });
 });

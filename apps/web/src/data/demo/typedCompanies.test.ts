@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  emptyReportData,
-  type DailyReportData,
+  emptyReportDataV1,
+  type DailyReportDataV1,
   type ManpowerEntry,
+  type ManpowerEntryV1,
 } from '@sitelog/shared/schemas/report.ts';
+import { upgradeV1toV2 } from '@sitelog/shared/report/upgrade.ts';
+import { storedV2 } from '@/test/storedData';
 import { unlinkedCompanyReasons } from '../assemble';
 import { DemoSource } from './DemoSource';
 import { DemoStore, demoUserFor } from './store';
@@ -29,7 +32,7 @@ function setup() {
 }
 
 /** A crew row as toReportData() builds it: "Add new…" rows carry companyId null. */
-function crew(companyId: string | null, name: string, workers = 4): ManpowerEntry {
+function crew(companyId: string | null, name: string, workers = 4): ManpowerEntryV1 {
   return {
     companyId,
     companyNameHeard: name,
@@ -43,8 +46,8 @@ function crew(companyId: string | null, name: string, workers = 4): ManpowerEntr
   };
 }
 
-function body(date: string, manpower: ManpowerEntry[]): DailyReportData {
-  return { ...emptyReportData(date), summary: 'Typed in the office.', manpower };
+function body(date: string, manpower: ManpowerEntryV1[]): DailyReportDataV1 {
+  return { ...emptyReportDataV1(date), summary: 'Typed in the office.', manpower };
 }
 
 const company = (store: DemoStore, name: string) =>
@@ -130,10 +133,16 @@ describe('demo: companies typed in the panel', () => {
     const { store, s } = setup();
     const oakmont = store.data.reports.find((r) => r.report_no === 'OM-1187-0133')!;
     expect(oakmont.review_reasons).toEqual(['unknown_company:Ridgeway']);
-    const cur = await s.getReportDetail(oakmont.id);
+    // Oakmont's Oct 9 report is stored as v1.2 data (W1-06): the edit writes v2 too.
+    const cur = storedV2(await s.getReportDetail(oakmont.id));
+    const northlineCrew: ManpowerEntry = {
+      ...crew(null, 'Northline Steel'),
+      source: [],
+      hoursBasis: 'office_edit',
+    };
     const { version } = await s.createReportVersion(
       oakmont.id,
-      { ...cur.data, manpower: [...cur.data.manpower, crew(null, 'Northline Steel')] },
+      { ...cur, manpower: [...cur.manpower, northlineCrew] },
       'Northline was on site too',
     );
     const next = await s.getReportDetail(oakmont.id, version);
@@ -150,14 +159,16 @@ describe('demo: companies typed in the panel', () => {
 
 describe('unlinkedCompanyReasons', () => {
   it('lists each unlinked crew company once that is not a review reason already', () => {
-    const data = body('2026-10-09', [
-      crew('c-apex', 'Apex Concrete'),
-      crew(null, 'Harbor Masonry'),
-      crew(null, 'harbor masonry'),
-      { ...crew(null, 'Ridgeway'), companyNameHeard: 'the Ridgeway crew' },
-      { ...crew(null, ''), companyNameHeard: 'Some crew' },
-      { ...crew(null, ''), companyNameHeard: ' ' },
-    ]);
+    const data = upgradeV1toV2(
+      body('2026-10-09', [
+        crew('c-apex', 'Apex Concrete'),
+        crew(null, 'Harbor Masonry'),
+        crew(null, 'harbor masonry'),
+        { ...crew(null, 'Ridgeway'), companyNameHeard: 'the Ridgeway crew' },
+        { ...crew(null, ''), companyNameHeard: 'Some crew' },
+        { ...crew(null, ''), companyNameHeard: ' ' },
+      ]),
+    );
     expect(unlinkedCompanyReasons(data, [])).toEqual([
       'unknown_company:Harbor Masonry',
       'unknown_company:Ridgeway',

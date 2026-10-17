@@ -1,9 +1,13 @@
 import { Check, ChevronsUpDown, LogOut, Radio, User } from 'lucide-react';
-import { NavLink, useNavigate } from 'react-router';
+import { useId } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { formatPhone } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
-import { copy } from '@/copy/en';
+import { saveEmailLanguage } from '@/auth/emailLanguage';
+import { useOptionalDataSource } from '@/data/DataProvider';
 import { useNavBadges, useSimulateIncomingReport } from '@/data/hooks';
+import { isPanelLanguage, PANEL_LANGUAGES } from '@/i18n/language';
+import { useCopy, useLanguage } from '@/i18n/useCopy';
 import { env } from '@/lib/env';
 import { cn } from '@/lib/utils';
 import { Avatar } from '../ui/Avatar';
@@ -22,6 +26,7 @@ import { navItemsFor } from './nav';
 import { assetUrl } from '@/lib/asset';
 
 export function Logo({ className }: { className?: string }) {
+  const { t } = useCopy();
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       <img
@@ -31,7 +36,7 @@ export function Logo({ className }: { className?: string }) {
         height={32}
         className="size-8 shrink-0"
       />
-      <span className="font-display text-[22px] leading-none text-chalk">{copy.app.name}</span>
+      <span className="font-display text-[22px] leading-none text-chalk">{t('app.name')}</span>
     </span>
   );
 }
@@ -45,47 +50,73 @@ export function Sidebar({
   className?: string;
 }) {
   const { user, orgs, currentOrg, role, setCurrentOrg, signOut, isDemo, demoKey } = useAuth();
+  const { t, tc } = useCopy();
+  const { language, setLanguage } = useLanguage();
+  const source = useOptionalDataSource();
+  const languageLabelId = useId();
   const badges = useNavBadges();
   const simulate = useSimulateIncomingReport();
   const navigate = useNavigate();
-  const items = navItemsFor(role, isDemo);
+  const items = navItemsFor(role, isDemo, {
+    demoPhone: isDemo || env.demoPhoneAllOrgs || currentOrg?.demoOrg === true,
+  });
   const main = items.filter((i) => i.group === 'main');
   const setup = items.filter((i) => i.group === 'setup');
+  const numbers = currentOrg?.sitelogNumbers ?? [];
+
+  const { pathname } = useLocation();
 
   const renderItem = (item: (typeof items)[number]) => {
     const count = item.badge ? (badges.data?.[item.badge] ?? 0) : 0;
+    const itemClass = (active: boolean) =>
+      cn(
+        'group flex h-target items-center gap-3 rounded-btn px-3 text-[15px] font-medium text-dust-light transition-colors hover:bg-steel/70 hover:text-chalk',
+        active && 'bg-steel text-white',
+      );
+    const body = (active: boolean) => (
+      <>
+        <item.icon
+          className={cn(
+            'size-6 shrink-0 stroke-2',
+            active ? 'text-signal' : 'text-dust-light group-hover:text-chalk',
+          )}
+          aria-hidden="true"
+        />
+        <span className="flex-1 truncate">{t(item.label)}</span>
+        {item.badge && count > 0 ? (
+          <CountBadge
+            count={count}
+            tone={item.badgeTone ?? 'signal'}
+            label={t(`nav.badges.${item.badge}`, { count })}
+          />
+        ) : null}
+      </>
+    );
+    // An item that opens one page of a section (Settings → /settings/reports) is active on all of it.
+    if (item.activePrefix) {
+      const active = pathname.startsWith(item.activePrefix);
+      return (
+        <li key={item.key}>
+          <Link
+            to={item.to}
+            onClick={onNavigate}
+            className={itemClass(active)}
+            aria-current={active ? 'page' : undefined}
+          >
+            {body(active)}
+          </Link>
+        </li>
+      );
+    }
     return (
       <li key={item.key}>
         <NavLink
           to={item.to}
           end={item.end}
           onClick={onNavigate}
-          className={({ isActive }) =>
-            cn(
-              'group flex h-11 items-center gap-3 rounded-btn px-3 text-[15px] font-medium text-dust-light transition-colors hover:bg-steel/70 hover:text-chalk',
-              isActive && 'bg-steel text-white',
-            )
-          }
+          className={({ isActive }) => itemClass(isActive)}
         >
-          {({ isActive }) => (
-            <>
-              <item.icon
-                className={cn(
-                  'size-6 shrink-0 stroke-2',
-                  isActive ? 'text-signal' : 'text-dust-light group-hover:text-chalk',
-                )}
-                aria-hidden="true"
-              />
-              <span className="flex-1 truncate">{item.label}</span>
-              {item.badge && count > 0 ? (
-                <CountBadge
-                  count={count}
-                  tone={item.badgeTone ?? 'signal'}
-                  label={copy.nav.badges[item.badge](count)}
-                />
-              ) : null}
-            </>
-          )}
+          {({ isActive }) => body(isActive)}
         </NavLink>
       </li>
     );
@@ -105,21 +136,22 @@ export function Sidebar({
             <button
               type="button"
               className="flex h-12 w-full items-center gap-2 rounded-btn border border-iron px-3 text-left hover:bg-steel"
-              aria-label={copy.shell.orgSwitcher.label}
             >
+              {/* WCAG 2.5.3 (label in name): the name is the visible text, then the purpose. */}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-semibold text-chalk">
                   {currentOrg?.name ?? '—'}
-                </span>
+                </span>{' '}
                 <span className="block truncate font-mono text-[12px] text-dust-light">
-                  {copy.shell.orgSwitcher.activeSites(currentOrg?.activeSites ?? 0)}
+                  {t('shell.orgSwitcher.activeSites', { count: currentOrg?.activeSites ?? 0 })}
                 </span>
+                <span className="sr-only">, {t('shell.orgSwitcher.label')}</span>
               </span>
               <ChevronsUpDown className="size-5 shrink-0 text-dust-light" aria-hidden="true" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[216px]">
-            <DropdownMenuLabel>{copy.shell.orgSwitcher.otherOrgs}</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('shell.orgSwitcher.otherOrgs')}</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={currentOrg?.id} onValueChange={(v) => setCurrentOrg(v)}>
               {orgs.map((o) => (
                 <DropdownMenuRadioItem key={o.id} value={o.id}>
@@ -133,81 +165,110 @@ export function Sidebar({
       </div>
 
       <nav
-        aria-label={copy.nav.mainNavigation}
+        aria-label={t('nav.mainNavigation')}
         className="mt-4 flex-1 overflow-y-auto px-3 scrollbar-thin"
       >
         <ul className="space-y-0.5">{main.map(renderItem)}</ul>
         {setup.length ? (
           <>
-            <div className="eyebrow mb-1 mt-6 px-3 text-dust-light">{copy.nav.setupLabel}</div>
+            <div className="eyebrow mb-1 mt-6 px-3 text-dust-light">{t('nav.setupLabel')}</div>
             <ul className="space-y-0.5">{setup.map(renderItem)}</ul>
           </>
         ) : null}
       </nav>
 
-      <div className="border-t border-iron px-3 py-3">
-        <div className="flex items-center gap-2 px-2 py-1 text-caption text-dust-light">
-          <span className="relative flex size-2.5 shrink-0">
+      <div className="border-t border-iron px-3 py-3" data-testid="sidebar-footer">
+        {/* §11.2 footer: the agent's status, then the org's SiteLog number(s) when it has one. */}
+        <div className="flex items-start gap-2 px-2 py-1 text-caption text-dust-light">
+          <span className="relative mt-1 flex size-2.5 shrink-0" aria-hidden="true">
             <span className="absolute inline-flex size-full rounded-full bg-filed opacity-60" />
             <span className="relative inline-flex size-2.5 rounded-full bg-filed" />
           </span>
-          <span className="truncate">{copy.shell.footer.listening}</span>
+          <span className="min-w-0">{t('shell.footer.agentReady')}</span>
         </div>
-        <div className="px-2 pb-2 font-mono text-[12px] tracking-[0.02em] text-chalk">
-          {formatPhone(env.waDisplayNumber)}
-        </div>
+        {numbers.length ? (
+          <ul
+            aria-label={t('shell.footer.sitelogNumbers')}
+            className="px-2 pb-2 font-mono text-[12px] tracking-[0.02em] text-chalk"
+            data-testid="sitelog-numbers"
+          >
+            {numbers.map((n) => (
+              <li key={n}>{formatPhone(n)}</li>
+            ))}
+          </ul>
+        ) : null}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
               className="flex h-14 w-full items-center gap-3 rounded-btn px-2 text-left hover:bg-steel"
-              aria-label={copy.shell.footer.userMenu}
             >
-              <Avatar name={user?.name ?? '?'} dark />
+              {/* The initials repeat the name that follows; the name is the visible text first. */}
+              <Avatar name={user?.name ?? '?'} dark aria-hidden="true" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-semibold text-chalk">
                   {user?.name}
-                </span>
+                </span>{' '}
                 <span className="block truncate text-caption text-dust-light">
-                  {user?.title ?? copy.team.officeRoles[role ?? 'ops']}
+                  {user?.title ?? t(`team.officeRoles.${role ?? 'ops'}`)}
                 </span>
-              </span>
+              </span>{' '}
               {isDemo ? (
                 <span
                   className="inline-flex h-6 items-center rounded-chip border border-signal px-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-signal"
-                  title={copy.shell.demo.chipTitle}
+                  title={t('shell.demo.chipTitle')}
                   data-testid="demo-chip"
                 >
-                  {copy.shell.demo.chip}
+                  {t('shell.demo.chip')}
                 </span>
               ) : null}
+              <span className="sr-only">, {t('shell.footer.userMenu')}</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="top" className="w-[216px]">
+            {/* §11.2 menu: Language EN/TR, Profile, Sign out. Switching keeps the route (§11.5). */}
+            <DropdownMenuLabel id={languageLabelId}>{tc('language')}</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={language}
+              onValueChange={(v) => {
+                if (!isPanelLanguage(v)) return;
+                setLanguage(v);
+                // §19 Q340: the next sign-in email follows the language chosen here.
+                saveEmailLanguage(source, v);
+              }}
+              aria-labelledby={languageLabelId}
+            >
+              {PANEL_LANGUAGES.map((lang) => (
+                <DropdownMenuRadioItem key={lang} value={lang} lang={lang}>
+                  {tc(`languageNames.${lang}`)}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => void navigate('/settings/reports')}
               disabled={role !== 'admin'}
             >
               <User aria-hidden="true" />
-              {copy.shell.footer.profile}
+              {t('shell.footer.profile')}
             </DropdownMenuItem>
             {isDemo ? (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel>{copy.shell.demo.menuTitle}</DropdownMenuLabel>
+                <DropdownMenuLabel>{t('shell.demo.menuTitle')}</DropdownMenuLabel>
                 <DropdownMenuItem
                   onSelect={() => simulate.mutate(undefined)}
                   data-testid="demo-simulate"
                 >
                   <Radio aria-hidden="true" />
                   <span className="flex-1">
-                    {copy.shell.demo.simulate}
+                    {t('shell.demo.simulate')}
                     <span className="block text-caption text-dust">
-                      {copy.shell.demo.simulateHint}
+                      {t('shell.demo.simulateHint')}
                     </span>
                   </span>
                 </DropdownMenuItem>
-                <DropdownMenuLabel>{copy.shell.demo.switchUser}</DropdownMenuLabel>
+                <DropdownMenuLabel>{t('shell.demo.switchUser')}</DropdownMenuLabel>
                 {(['admin', 'pm', 'ops', 'accounts'] as const).map((k) => (
                   <DropdownMenuItem key={k} onSelect={() => void navigate(`/login?as=${k}`)}>
                     {k === demoKey ? (
@@ -215,7 +276,7 @@ export function Sidebar({
                     ) : (
                       <span className="size-5" aria-hidden="true" />
                     )}
-                    {copy.shell.demo.users[k]}
+                    {t(`shell.demo.users.${k}`)}
                   </DropdownMenuItem>
                 ))}
               </>
@@ -223,7 +284,7 @@ export function Sidebar({
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => void signOut().then(() => navigate('/login'))}>
               <LogOut aria-hidden="true" />
-              {copy.shell.footer.signOut}
+              {t('shell.footer.signOut')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

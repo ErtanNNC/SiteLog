@@ -12,8 +12,8 @@
         "lostHours": 2,
         "source": [
           {
-            "type": "audio",
-            "messageId": "e0000008-0000-4000-8000-000000000801",
+            "type": "voice_note",
+            "uploadId": "e0000008-0000-4000-8000-000000000801",
             "start": 0,
             "end": 13.8
           }
@@ -35,8 +35,8 @@
       "confidence": 0.85,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 6.5,
           "end": 20.5
         }
@@ -55,8 +55,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 20.5,
           "end": 27
         }
@@ -75,8 +75,8 @@
       "confidence": 0.95,
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 27,
           "end": 33.4
         }
@@ -90,8 +90,8 @@
       "status": "stopped",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 6.5,
           "end": 13.8
         }
@@ -103,8 +103,8 @@
       "status": "complete",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 20.5,
           "end": 27
         }
@@ -116,8 +116,8 @@
       "status": "in_progress",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 27,
           "end": 33.4
         }
@@ -133,8 +133,8 @@
     "visitors": [],
     "source": [
       {
-        "type": "audio",
-        "messageId": "e0000008-0000-4000-8000-000000000801",
+        "type": "voice_note",
+        "uploadId": "e0000008-0000-4000-8000-000000000801",
         "start": 33.4,
         "end": 39
       }
@@ -146,8 +146,8 @@
       "item": "Summit Drywall to start hanging board in Bay 3 on Monday",
       "source": [
         {
-          "type": "audio",
-          "messageId": "e0000008-0000-4000-8000-000000000801",
+          "type": "voice_note",
+          "uploadId": "e0000008-0000-4000-8000-000000000801",
           "start": 20.5,
           "end": 27
         }
@@ -157,6 +157,7 @@
   "newTerms": [
     {
       "heard": "Prairie Roofing",
+      "heardLanguage": "en",
       "proposedOfficial": "Prairie Roofing",
       "kind": "company",
       "confidence": 0.8
@@ -166,10 +167,9 @@
   "lowConfidence": [],
   "proposedQuestions": [
     {
-      "field": "company.unknown",
+      "field": "company.unknown:Prairie Roofing",
       "question": "I heard \"Prairie Roofing\" — is that a new subcontractor?",
-      "options": ["Add as new sub"],
-      "target": { "companyNameHeard": "Prairie Roofing", "manpowerIndex": 0 }
+      "options": ["Add as new sub"]
     }
   ]
 }

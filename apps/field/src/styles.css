@@ -1,0 +1,61 @@
+/* SiteLog field app styles — spec §14, §14.6. Tailwind v4, CSS-first; the tokens (@theme) are the
+   panel's, from @sitelog/shared. Phone rules: Asphalt on Chalk, body 17–18 px, targets ≥ 56 px. */
+@import 'tailwindcss';
+
+@import '@sitelog/shared/tokens.css';
+
+/* Archivo and IBM Plex Mono from the build, not Google Fonts (see fonts.css). */
+@import './fonts.css';
+
+@theme {
+  /* §14.6: field body text is 17–18 px (the panel's body is 15 px). */
+  --text-field-body: 17px;
+  --text-field-body--line-height: 26px;
+  /* §14.6: primary actions ≥ 56 px tall, the Record button ≥ 120 px. */
+  --spacing-target: 56px;
+  --spacing-header: 60px;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: var(--text-field-body);
+    line-height: var(--text-field-body--line-height);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--color-chalk);
+    color: var(--color-asphalt);
+  }
+  /* Visible focus for keyboard users: 2 px Asphalt + 2 px offset; Chalk on dark surfaces. */
+  :focus-visible {
+    outline: 2px solid var(--color-asphalt);
+    outline-offset: 2px;
+  }
+  [data-on-dark] :focus-visible {
+    outline-color: var(--color-chalk);
+    outline-offset: -4px;
+  }
+  button,
+  [role='button'] {
+    cursor: pointer;
+  }
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+  a {
+    color: inherit;
+  }
+  ::selection {
+    background: var(--color-signal-tint);
+  }
+}

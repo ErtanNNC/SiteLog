@@ -1,4 +1,5 @@
 import { formatDuration, formatMonthDay, weekdayName } from '../format.ts';
+import { PROGRESS_COPY_EN, fillCopy, progressCrewLine } from '../report/progress.ts';
 
 /**
  * §9.3 — free-form message catalog (inside the 24 h service window).
@@ -18,13 +19,13 @@ export const waCopy = {
    */
   progressLines: (steps: string[]): string =>
     ['Writing your report…', ...steps.map((s) => `- ${s}`)].join('\n'),
-  progressTranscribed: (): string => 'Transcribed, site noise removed',
-  progressCrew: (n: number, k: number): string =>
-    `${n} on site, ${k} subcontractor${k === 1 ? '' : 's'}`,
+  /** The step phrases moved to the field copy (`field.processing.steps`, W1-09); read from there. */
+  progressTranscribed: (): string => PROGRESS_COPY_EN.transcribed,
+  progressCrew: (n: number, k: number): string => progressCrewLine(n, k),
   /** "Rain 07:00–10:30 logged as delay"; other conditions pass their own label ("High wind"). */
   progressRain: (start: string, end: string, condition = 'Rain'): string =>
-    `${condition} ${start}–${end} logged as delay`,
-  progressHours: (): string => 'Checking subcontractor hours…',
+    fillCopy(PROGRESS_COPY_EN.weather, { condition, start, end }),
+  progressHours: (): string => PROGRESS_COPY_EN.hours,
   questionGeneric: (question: string): string =>
     question.startsWith('Quick check') ? question : `Quick check: ${question}`,
   answerAckManpower: (company: string, workers: number, hoursPer: number, total: number): string =>

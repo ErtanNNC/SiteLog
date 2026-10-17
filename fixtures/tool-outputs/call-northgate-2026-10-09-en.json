@@ -1,0 +1,138 @@
+{
+  "languageDetected": ["en"],
+  "summary": "Level 3 precast erection completed with the last six double tees set; Ramp B topping slab finishing and form stripping continued. Dry, no weather impact. Toolbox talk on crane signals; no incidents.",
+  "weather": {
+    "conditionsText": "Dry",
+    "periods": []
+  },
+  "manpower": [
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d001",
+      "companyNameHeard": "Apex",
+      "companyName": "Apex Concrete",
+      "trade": "Concrete",
+      "area": "Ramp B",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000001",
+          "start": 13.8,
+          "end": 21.5
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "our crew",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Level 3",
+      "workers": 8,
+      "hoursPerWorker": 8,
+      "totalHours": 64,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000001",
+          "start": 21.5,
+          "end": 29.6
+        }
+      ]
+    },
+    {
+      "companyId": "00000000-0000-4000-8000-00000000d007",
+      "companyNameHeard": "three of ours",
+      "companyName": "Kestrel self-perform",
+      "trade": "General labor",
+      "area": "Ramp B",
+      "workers": 3,
+      "hoursPerWorker": 4,
+      "totalHours": 12,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000001",
+          "start": 29.6,
+          "end": 36
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "Level 3",
+      "activity": "Precast erection, last double tees set",
+      "status": "complete",
+      "quantity": {
+        "value": 6,
+        "unit": "double tees",
+        "heardAs": "the last six double tees"
+      },
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000001",
+          "start": 21.5,
+          "end": 29.6
+        }
+      ]
+    },
+    {
+      "area": "Ramp B",
+      "activity": "Topping slab finishing",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000001",
+          "start": 13.8,
+          "end": 21.5
+        }
+      ]
+    },
+    {
+      "area": "Ramp B",
+      "activity": "Form stripping",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0110000-0000-4000-8000-000000000001",
+          "start": 29.6,
+          "end": 36
+        }
+      ]
+    }
+  ],
+  "deliveries": [],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "Crane signals",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "call",
+        "callId": "c0110000-0000-4000-8000-000000000001",
+        "start": 36,
+        "end": 42.5
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

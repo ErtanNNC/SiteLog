@@ -29,7 +29,7 @@ export async function fetchSiteDayWeather(
   ctx: Ctx,
   siteId: string,
   date: string,
-  fetchImpl: FetchLike = (u) => fetch(u),
+  fetchImpl: FetchLike = (u) => fetch(u, { signal: ctx.signal }),
 ): Promise<SiteDayWeather | null> {
   const site = await ctx.db.getSite(siteId);
   if (!site) throw new Error(`site ${siteId} not found`);

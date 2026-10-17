@@ -22,6 +22,7 @@ import {
   type FieldPath,
   type FieldValues,
 } from 'react-hook-form';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { Label } from './Label';
 
@@ -116,10 +117,19 @@ export const FormDescription = forwardRef<
 });
 FormDescription.displayName = 'FormDescription';
 
+const COPY_KEY = /^[a-z][A-Za-z]*(\.[A-Za-z_]+)+$/;
+
 export const FormMessage = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLParagraphElement>>(
   ({ className, children, ...props }, ref) => {
     const { error, formMessageId } = useFormField();
-    const body = error ? String(error.message ?? '') : children;
+    const { t } = useCopy();
+    const message = error ? String(error.message ?? '') : '';
+    // A schema may give a copy key ("report.editMode.required", D9) instead of the words.
+    const body = error
+      ? COPY_KEY.test(message)
+        ? (t as unknown as (key: string) => string)(message)
+        : message
+      : children;
     if (!body) return null;
     return (
       <p

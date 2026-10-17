@@ -9,9 +9,16 @@ drives the WhatsApp conversation state machine (§7.2), renders PDFs, sends emai
 ```bash
 cp .env.example .env            # repo root; fill in SUPABASE_DB_URL at least
 pnpm install
-pnpm --filter @sitelog/worker dev          # tsx watch src/index.ts
-curl localhost:8080/health                 # { ok, version, uptimeS, queue: { queued, running, dead } }
+pnpm dev:worker                            # = pnpm --filter @sitelog/worker dev (tsx watch src/index.ts)
+curl localhost:8080/health                 # { ok, version, uptimeS, queue: { queued, running, dead }, active, listening }
 ```
+
+Outside production (`NODE_ENV` other than `production`) the worker loads `apps/worker/.env` and then
+the repository root's `.env` (`src/dotenv.ts`): variables already set in the shell win, then
+`apps/worker/.env`, then the root file. So one root `.env` serves the worker, and `apps/worker/.env`
+is only needed for worker-only overrides. In production neither file is read. `pnpm eval` loads the
+same files, so `ANTHROPIC_API_KEY` can live in the root `.env`; `pnpm loadtest` reads neither (it
+needs no key, and its `DATABASE_URL` should never come from a file by accident).
 
 Useful one-offs:
 
@@ -28,22 +35,24 @@ The Dockerfile installs the Debian package and sets `FFMPEG_PATH`.
 
 ## Environment variables
 
-| Variable                                                    | Default                                       | Used by                                                       |
-| ----------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------------- |
-| `SUPABASE_DB_URL`                                           | required                                      | job loop + repository (`postgres` client, service role)       |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                 | ''                                            | Storage buckets `audio`, `photos`, `pdfs`, `exports`, `logos` |
-| `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_GRAPH_VERSION` | '', '', `v21.0`                               | WhatsApp Cloud API (send, media)                              |
-| `OPENAI_API_KEY`, `TRANSCRIBE_MODEL`                        | '', `whisper-1`                               | transcription (`verbose_json` + segment timestamps)           |
-| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLAUDE_MODEL_FAST`    | '', `claude-sonnet-5-5`, = `CLAUDE_MODEL`     | extraction / corrections / answers / classification           |
-| `WEATHER_API_BASE`, `WEATHER_API_KEY`                       | Open-Meteo customer API, ''                   | `fetch_weather`                                               |
-| `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM`            | `resend`, '', `SiteLog <reports@sitelog.app>` | email (falls back to the `console` provider without a key)    |
-| `APP_URL`                                                   | `https://app.sitelog.app`                     | links in emails                                               |
-| `WORKER_CONCURRENCY`, `WORKER_PORT`, `WORKER_ID`            | 4, 8080, hostname-pid                         | runner + health server                                        |
-| `JOB_TIMEOUT_MS`, `POLL_INTERVAL_MS`, `SWEEP_INTERVAL_MS`   | 300000, 1000, 60000                           | per-job timeout, claim polling, timeout sweep                 |
-| `AUDIO_RETENTION_DAYS`                                      | 730                                           | `retention_cleanup`                                           |
-| `SENTRY_DSN`, `LOG_LEVEL`, `NODE_ENV`                       | '', `info`, `development`                     | monitoring, JSON logs                                         |
-| `FFMPEG_PATH`                                               | ''                                            | ffmpeg binary override                                        |
-| `WORKER_DRY_RUN`                                            | false                                         | in-memory storage (tests)                                     |
+| Variable                                                      | Default                                       | Used by                                                                                 |
+| ------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `SUPABASE_DB_URL`                                             | required                                      | job loop + repository (`postgres` client, service role)                                 |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                   | ''                                            | Storage buckets `audio`, `photos`, `pdfs`, `exports`, `logos`                           |
+| `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_GRAPH_VERSION`   | '', '', `v21.0`                               | WhatsApp Cloud API (send, media)                                                        |
+| `TRANSCRIBE_PROVIDER`, `DEEPGRAM_API_KEY`, `TRANSCRIBE_MODEL` | `deepgram`, '', '' (nova-3 / whisper-1)       | `transcribe_upload` (§10.2, W1-11); keyless outside production: the fixtures/voice fake |
+| `OPENAI_API_KEY`                                              | ''                                            | `TRANSCRIBE_PROVIDER=openai`; the WhatsApp voice notes (whisper-1) until step 22        |
+| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLAUDE_MODEL_FAST`      | '', `claude-sonnet-5-5`, = `CLAUDE_MODEL`     | extraction / corrections / answers / classification                                     |
+| `WEATHER_API_BASE`, `WEATHER_API_KEY`                         | Open-Meteo customer API, ''                   | `fetch_weather`                                                                         |
+| `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM`              | `resend`, '', `SiteLog <reports@sitelog.app>` | email (falls back to the `console` provider without a key)                              |
+| `APP_URL`                                                     | `https://app.sitelog.app`                     | links in emails                                                                         |
+| `WORKER_CONCURRENCY`, `WORKER_PORT`, `WORKER_ID`              | 4, 8080, hostname-pid                         | runner + health server                                                                  |
+| `JOB_TIMEOUT_MS`, `POLL_INTERVAL_MS`, `SWEEP_INTERVAL_MS`     | 300000, 5000, 60000                           | per-job timeout (at most 9 min), poll fallback, timeout sweep                           |
+| `SUPABASE_DB_LISTEN_URL`                                      | = `SUPABASE_DB_URL`                           | session-mode connection for LISTEN jobs (not port 6543)                                 |
+| `AUDIO_RETENTION_DAYS`                                        | 730                                           | `retention_cleanup`                                                                     |
+| `SENTRY_DSN`, `LOG_LEVEL`, `NODE_ENV`                         | '', `info`, `development`                     | monitoring, JSON logs                                                                   |
+| `FFMPEG_PATH`                                                 | ''                                            | ffmpeg binary override                                                                  |
+| `WORKER_DRY_RUN`                                              | false                                         | in-memory storage (tests)                                                               |
 
 Secrets that are only needed by some jobs default to empty so the worker boots in a partial
 environment; the job that needs a missing secret fails with a clear message (and retries).
@@ -59,25 +68,36 @@ environment; the job that needs a missing secret fails with a clear message (and
 | `parse_reply`                    | `{ messageId, reportId }`                                                              | Voice replies: classify (§10.8) → answer / fix / confirm / edit / day-off / more content.                                                                                                                                                                                                                               |
 | `file_report`                    | `{ reportId, trigger, confirmMessageId? }`                                             | Freeze the version, `denormalize_report_version`, `filed_at` / `confirmed_at` / `is_late`, site-day `filed`, review reasons + `notify_org('needs_review')`, enqueue `render_pdf`, send "Filed."                                                                                                                         |
 | `render_pdf`                     | `{ reportId, version, sendToWhatsApp, emailRecipients, changeNote?, notifyReporter? }` | `@react-pdf/renderer` → `pdfs/{org}/{site}/{report_no}_v{n}.pdf`; WhatsApp document + edit hint; enqueues `report_filed` / `report_updated` email; `notifyReporter` sends the office-edit template.                                                                                                                     |
-| `send_email`                     | `{ kind, … }`                                                                          | `report_filed`, `report_updated`, `report_missing`, `invoice_query`, `evidence_pack_ready`, `weekly_digest`, `unknown_sender`, `report_edited_after_signoff`.                                                                                                                                                           |
+| `send_email`                     | `{ kind, … }`                                                                          | `report_filed`, `report_updated`, `report_missing`, `invoice_query`, `evidence_pack_ready`, `weekly_digest`, `unknown_contact`, `report_edited_after_signoff`.                                                                                                                                                          |
 | `fetch_weather`                  | `{ siteId, date }`                                                                     | Open-Meteo hourly → `site_days.weather` (shared `summarizeHourly`).                                                                                                                                                                                                                                                     |
 | `send_welcome`                   | `{ reporterId, siteId?, reinvite }`                                                    | `sitelog_welcome` / `sitelog_reinvite` template; conversation → `welcome_sent`. 4xx from Meta (number not on WhatsApp) is recorded on the reporter and not retried.                                                                                                                                                     |
 | `send_template` / `send_message` | see shared `JobPayloadSchemas`                                                         | Scheduler-initiated templates (free-form inside the 24 h window) / free-form text.                                                                                                                                                                                                                                      |
 | `build_evidence_pack`            | `{ packId }`                                                                           | §F16 PDF → `exports` bucket → pack `ready` + email + notification.                                                                                                                                                                                                                                                      |
 | `retention_cleanup`              | `{ before? }`                                                                          | Deletes audio + photos (and their transcripts) older than `AUDIO_RETENTION_DAYS`; reports and PDFs are kept.                                                                                                                                                                                                            |
 | `weekly_digest`                  | `{ orgId, weekStart }`                                                                 | §13 digest to admin + pm.                                                                                                                                                                                                                                                                                               |
+| `notify`                         | `{ reporterId, key, vars, dedupeKey }`                                                 | One message to a field reporter through the Notifier (§10.1, D48; W1-10): the channel from the pack, the §9.2 text, the `messages` row; `dedupeKey` keeps a retry from texting twice. A refusal for good or a real org with no sender here tells the office (`message_failed`).                                         |
 
 ## Retries, timeouts, idempotency
 
 - Jobs are claimed with `claim_jobs(worker, limit)` (`FOR UPDATE SKIP LOCKED`; stuck `running` jobs
-  are reclaimed after 15 min) and finished with `complete_job` / `fail_job`. `fail_job` applies the
-  §10.1 backoff (30 s, 2 min, 10 min, 30 min, 2 h) and marks the job `dead` after 5 attempts. A dead
-  job is reported to Sentry and the reporter gets `error_retry` once per report (flag
-  `conversations.context.error_notified_for`).
+  are reclaimed after 10 min, `STALE_LOCK_MS` in `src/config.ts`) and finished with `complete_job` /
+  `fail_job`. The loop wakes on `NOTIFY jobs` (`src/listener.ts`: LISTEN on its own session
+  connection, `SUPABASE_DB_LISTEN_URL` or `SUPABASE_DB_URL`, reconnecting with backoff) and polls every
+  `POLL_INTERVAL_MS` (5 s) as the fallback (W1-10).
+- A job that outlives `JOB_TIMEOUT_MS` has its AbortSignal aborted (`Ctx.signal`; the boot-time
+  clients' HTTP calls abort with it through `src/abort.ts`) and is failed only once its handler has
+  settled; meanwhile its `locked_at` is refreshed every minute, so it never runs twice at once.
+  `fail_job` applies the §10.1 backoff (30 s, 2 min, 10 min, 30 min, 2 h) and marks the job `dead`
+  after the sixth failure (D17). A dead job goes to Sentry, is audited `job.dead`, and a
+  reporter-facing one becomes a panel notice for the office (`src/dead-jobs.ts`, spec §19 Q54).
 - Every job has a 5-minute timeout (`JOB_TIMEOUT_MS`). Metrics (`tokens`, `audioSeconds`,
   `latencyMs`, `estCostUsd`) are written to `jobs.payload.metrics`.
-- Enqueues use dedupe keys: `transcribe:<message>`, `extract:<report>:<sourceCount>`,
-  `decide:<report>:<cause>`, `file:<report>`, `render_pdf:<report>:<version>`, `email:<kind>:<report>:<version>`.
+- Enqueues use dedupe keys, each naming one job for good (D16: a taken key returns that job, done
+  or dead included): `transcribe:<message>`, `extract:<report>:<sourceCount>`,
+  `decide:<report>:<cause>`, `file:<report>:v<version>:<occurrence>` (a WhatsApp confirm
+  `m<message>`, a timeout `t<draft sent at>`; the web confirm `file:<report>:v<version>` then
+  `…:c<n>`), `render_pdf:<report>:<version>`,
+  `email:<kind>:<report>:<version>` (`scripts/src/job-keys.test.ts` audits every key).
   Inbound messages are routed once (`messages.status` becomes `read`); filing and rendering are
   no-ops when already done.
 - The 60-second sweep (`src/router/timeouts.ts`) implements §7.2 timeouts: `awaiting_answer` > 60 min
@@ -90,6 +110,7 @@ environment; the job that needs a missing secret fails with a clear message (and
 ```
 src/
   index.ts        boot: dotenv (dev), config, Sentry, health server, runner, SIGTERM
+  dotenv.ts       development .env loading: apps/worker/.env, then the root .env
   config.ts       zod-validated env
   db.ts           Db interface + postgres implementation (RPC wrappers)
   db.pglite.test.ts  the real db.ts against PGlite (all migrations + seed) via pglite-socket
@@ -139,11 +160,19 @@ added`), anything else is treated as an edit of that report (within the 14-day w
   on text styles, not the page (react-pdf drops render-prop text inside fixed elements otherwise).
 - **`render_pdf.notifyReporter`** (set by the `create_report_version` RPC) is read from the raw payload
   because the shared schema strips it.
+- **Report data versions**: the extraction, the pipeline and the router write `schemaVersion 1`
+  (`DailyReportDataV1`) until W1-12; `render_pdf`, `send_email` and the evidence pack read every
+  stored version through `readReportData()` (§10.3 v2, GAP D20).
+- **PDF text snapshots**: `src/pdf/snapshot.test.ts` compares `pdftotext -layout` of the §18 hero
+  sample with `src/pdf/__snapshots__/*.pdf.txt` (needs poppler-utils; CI installs it). The
+  snapshots collapse whitespace runs and drop blank lines, so a poppler upgrade that only moves
+  column padding does not fail them; words, order, lines and page breaks still count. After an
+  intended PDF change, run `npx vitest run src/pdf/snapshot.test.ts -u` here and review the diff.
 
 ## Fixtures and eval
 
 `fixtures/transcripts/*.json` are extraction inputs (`ExtractionInput`), `fixtures/expected/*.json` the
-expected `DailyReportData`, `fixtures/tool-outputs/*.json` recorded model outputs the tests use without
+expected `DailyReportDataV1`, `fixtures/tool-outputs/*.json` recorded model outputs the tests use without
 API keys, `fixtures/webhooks/*.json` Meta payloads for `scripts/replay-webhook`. `pnpm eval` runs the
 real extraction on every transcript and prints a results table (exit 1 on failure; "skipped" without
 `ANTHROPIC_API_KEY`).

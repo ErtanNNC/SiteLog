@@ -1,6 +1,7 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { Check } from 'lucide-react';
-import { forwardRef, type ComponentPropsWithoutRef, type ComponentRef } from 'react';
+import { forwardRef, useContext, type ComponentPropsWithoutRef, type ComponentRef } from 'react';
+import { PinnedLanguage } from '@/i18n/context';
 import { cn } from '@/lib/utils';
 
 /**
@@ -21,19 +22,24 @@ export const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 export const DropdownMenuContent = forwardRef<
   ComponentRef<typeof DropdownMenuPrimitive.Content>,
   ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 6, ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-50 min-w-[12rem] overflow-hidden rounded-card border border-rebar bg-chalk p-1 text-asphalt',
-        className,
-      )}
-      {...props}
-    />
-  </DropdownMenuPrimitive.Portal>
-));
+>(({ className, sideOffset = 6, ...props }, ref) => {
+  // Portaled to <body>: carry an English-only page's language with it (WCAG 3.1.2).
+  const pinned = useContext(PinnedLanguage);
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        ref={ref}
+        lang={pinned ?? undefined}
+        sideOffset={sideOffset}
+        className={cn(
+          'z-50 min-w-[12rem] overflow-hidden rounded-card border border-rebar bg-chalk p-1 text-asphalt',
+          className,
+        )}
+        {...props}
+      />
+    </DropdownMenuPrimitive.Portal>
+  );
+});
 DropdownMenuContent.displayName = 'DropdownMenuContent';
 
 export const DropdownMenuItem = forwardRef<
@@ -46,7 +52,7 @@ export const DropdownMenuItem = forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex min-h-10 cursor-pointer select-none items-center gap-2 rounded-chip px-3 py-2 text-[15px] outline-none transition-colors data-[highlighted]:bg-concrete data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-5 [&_svg]:shrink-0',
+      'relative flex min-h-target cursor-pointer select-none items-center gap-2 rounded-chip px-3 py-2 text-[15px] outline-none transition-colors data-[highlighted]:bg-concrete data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-5 [&_svg]:shrink-0',
       inset && 'pl-9',
       destructive && 'text-missing data-[highlighted]:bg-chip-miss-bg',
       className,
@@ -63,7 +69,7 @@ export const DropdownMenuRadioItem = forwardRef<
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      'relative flex min-h-10 cursor-pointer select-none items-center rounded-chip py-2 pl-9 pr-3 text-[15px] outline-none data-[highlighted]:bg-concrete',
+      'relative flex min-h-target cursor-pointer select-none items-center rounded-chip py-2 pl-9 pr-3 text-[15px] outline-none data-[highlighted]:bg-concrete',
       className,
     )}
     {...props}

@@ -9,6 +9,10 @@
     "workingHours": "07:00–15:30"
   },
   "reportDate": "2026-10-09",
+  "reportLanguage": "en",
+  "units": "imperial",
+  "reporterLocale": "en-US",
+  "channel": "web",
   "defaultShiftHours": 8,
   "requiredFields": ["manpower", "hours", "weather", "work_performed", "safety", "photo"],
   "reporterFirstName": "Aisha",
@@ -33,19 +37,59 @@
       "isSelfPerform": true
     }
   ],
-  "glossary": [{ "heard": "stood down", "official": "Work stoppage", "kind": "term" }],
+  "glossary": [
+    {
+      "heard": "stood down",
+      "official": "Work stoppage",
+      "kind": "term"
+    }
+  ],
   "rejectedMappings": [],
   "observedWeather": {
     "date": "2026-10-09",
     "provider": "Open-Meteo",
     "fetchedAt": "2026-10-09T21:30:00Z",
-    "units": { "precip": "in", "temp": "F", "wind": "mph" },
+    "units": {
+      "precip": "in",
+      "temp": "F",
+      "wind": "mph"
+    },
     "hours": [
-      { "time": "09:00", "precipIn": 0.02, "tempF": 60, "windMph": 10, "gustMph": 18 },
-      { "time": "10:00", "precipIn": 0.15, "tempF": 59, "windMph": 12, "gustMph": 22 },
-      { "time": "11:00", "precipIn": 0.3, "tempF": 58, "windMph": 14, "gustMph": 27 },
-      { "time": "12:00", "precipIn": 0.25, "tempF": 57, "windMph": 13, "gustMph": 24 },
-      { "time": "13:00", "precipIn": 0.1, "tempF": 57, "windMph": 11, "gustMph": 20 }
+      {
+        "time": "09:00",
+        "precipIn": 0.02,
+        "tempF": 60,
+        "windMph": 10,
+        "gustMph": 18
+      },
+      {
+        "time": "10:00",
+        "precipIn": 0.15,
+        "tempF": 59,
+        "windMph": 12,
+        "gustMph": 22
+      },
+      {
+        "time": "11:00",
+        "precipIn": 0.3,
+        "tempF": 58,
+        "windMph": 14,
+        "gustMph": 27
+      },
+      {
+        "time": "12:00",
+        "precipIn": 0.25,
+        "tempF": 57,
+        "windMph": 13,
+        "gustMph": 24
+      },
+      {
+        "time": "13:00",
+        "precipIn": 0.1,
+        "tempF": 57,
+        "windMph": 11,
+        "gustMph": 20
+      }
     ],
     "summary": {
       "precipIn": 0.82,
@@ -62,42 +106,41 @@
   "previousDraft": null,
   "photos": [
     {
-      "messageId": "33333333-0000-4000-8000-000000000302",
+      "uploadId": "33333333-0000-4000-8000-000000000302",
       "caption": "Footings flooded",
       "takenAt": "2026-10-09T16:05:00Z"
     }
   ],
   "segments": [
     {
-      "messageId": "33333333-0000-4000-8000-000000000301",
-      "start": 0.0,
-      "end": 7.0,
+      "uploadId": "33333333-0000-4000-8000-000000000301",
+      "start": 0,
+      "end": 7,
       "text": "Hillcrest, Friday. We got rained out. Started at seven, it was drizzling, then it came down hard around ten."
     },
     {
-      "messageId": "33333333-0000-4000-8000-000000000301",
-      "start": 7.0,
+      "uploadId": "33333333-0000-4000-8000-000000000301",
+      "start": 7,
       "end": 14.5,
       "text": "By eleven the footings were flooded so I sent everybody home at eleven. We lost the rest of the day, call it five hours."
     },
     {
-      "messageId": "33333333-0000-4000-8000-000000000301",
+      "uploadId": "33333333-0000-4000-8000-000000000301",
       "start": 14.5,
-      "end": 21.0,
+      "end": 21,
       "text": "Before that Apex had five guys setting forms on the north footings, they got maybe half of them set, and Ironclad two guys on rebar cages."
     },
     {
-      "messageId": "33333333-0000-4000-8000-000000000301",
-      "start": 21.0,
-      "end": 26.0,
+      "uploadId": "33333333-0000-4000-8000-000000000301",
+      "start": 21,
+      "end": 26,
       "text": "Our two laborers were pumping water most of the morning."
     },
     {
-      "messageId": "33333333-0000-4000-8000-000000000301",
-      "start": 26.0,
-      "end": 31.0,
+      "uploadId": "33333333-0000-4000-8000-000000000301",
+      "start": 26,
+      "end": 31,
       "text": "No incidents. Sending a photo of the footings so you can see the water. Nobody worked after eleven."
     }
-  ],
-  "texts": []
+  ]
 }

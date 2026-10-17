@@ -23,7 +23,8 @@ function cellsFor(month: string): CalendarCell[] {
       weatherAffected: date === '2026-10-02',
       lostHours: date === '2026-10-02' ? 3.5 : 0,
       reportId: filed ? `r-${date}` : null,
-      isLate: false,
+      isLate: date === '2026-10-06',
+      channel: filed ? (date === '2026-10-07' ? 'call' : 'link') : null,
     };
   });
 }
@@ -37,7 +38,7 @@ describe('CalendarMonth', () => {
     );
     expect(screen.getByText('October 2026')).toBeInTheDocument();
     expect(screen.getAllByRole('columnheader')).toHaveLength(7);
-    const today = screen.getByRole('gridcell', { name: 'Open report for Oct 9' });
+    const today = screen.getByRole('gridcell', { name: /^Open report for Oct 9 · / });
     expect(today).toHaveClass('border-asphalt');
     const sat = document.querySelector('[data-date="2026-10-03"]');
     expect(sat).toHaveClass('bg-concrete');
@@ -50,9 +51,39 @@ describe('CalendarMonth', () => {
         <CalendarMonth month="2026-10" cells={cellsFor('2026-10')} onSelect={onSelect} />
       </MemoryRouter>,
     );
-    await userEvent.click(screen.getByRole('gridcell', { name: 'Open report for Oct 2' }));
+    await userEvent.click(screen.getByRole('gridcell', { name: /^Open report for Oct 2 · / }));
     expect(onSelect).toHaveBeenCalledWith(
       expect.objectContaining({ date: '2026-10-02', reportId: 'r-2026-10-02' }),
     );
+  });
+
+  it('marks each filed day with its channel and late days with "Late" (P5, W1-18)', () => {
+    render(
+      <MemoryRouter>
+        <CalendarMonth month="2026-10" cells={cellsFor('2026-10')} />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole('gridcell', {
+        name: 'Open report for Oct 7 · Filed, 24 crew, Call',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('gridcell', {
+        name: 'Open report for Oct 6 · Filed, Late, 24 crew, Text link',
+      }),
+    ).toHaveClass('bg-chip-await-bg');
+    expect(document.querySelector('[data-date="2026-10-07"] [data-channel="call"]')).not.toBeNull();
+    expect(document.querySelector('[data-date="2026-10-08"] [data-channel="link"]')).not.toBeNull();
+    // No report, no dot.
+    expect(document.querySelector('[data-date="2026-10-12"] [data-channel]')).toBeNull();
+    const legend = screen.getByRole('list', { name: 'How each report came in' });
+    expect(legend).toHaveTextContent('Text link');
+    expect(legend).toHaveTextContent('Call');
+    expect(
+      screen.getByText(
+        'Weekends greyed · tap a day to open its report · cloud = weather delay logged',
+      ),
+    ).toBeInTheDocument();
   });
 });

@@ -1,17 +1,44 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router';
+import { buildDemirDemo, DEMIR_ORG_NAME } from '@sitelog/shared/demo/demir.ts';
+import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import { DemoStore, demoUserFor } from '@/data/demo/store';
+import { i18n } from '@/i18n/i18n';
 import { storage } from '@/lib/utils';
 import { makeSource, renderWithProviders } from '@/test/render';
 import SetupPage from './Page';
-import { progressKey } from './state';
+import { progressKey, type SetupProgress } from './state';
 
 const ADMIN = demoUserFor('admin').id;
 /** Wizard progress is kept per user and org. */
 const keyFor = (store: DemoStore) => progressKey(ADMIN, store.data.org.id);
+
+/** The demo store's org as a TR org (Demir Yapı's country and locale, spec §18.2). */
+function trOrg(source: ReturnType<typeof makeSource>) {
+  return {
+    id: source.orgId,
+    name: 'Demir Yapı A.Ş.',
+    timezone: 'Europe/Istanbul',
+    activeSites: 0,
+    role: 'admin' as const,
+    locale: 'tr-TR' as const,
+    country: 'TR',
+  };
+}
+
+/** Fills the site step with a manager and submits it; `phone` in the picker's country. */
+async function submitSite(code: string, manager: string, phone: string) {
+  await userEvent.type(await screen.findByLabelText('Site name'), `Site ${code}`);
+  await userEvent.type(screen.getByLabelText('Project number'), code);
+  await userEvent.type(screen.getByLabelText('Site address'), '1 Test St');
+  await userEvent.type(screen.getByLabelText('Name'), manager);
+  await userEvent.type(screen.getByTestId('manager-phone'), phone);
+  await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
+  expect(await screen.findByRole('heading', { name: 'Reports & reminders' })).toBeInTheDocument();
+}
 
 function Harness() {
   return (
@@ -61,22 +88,32 @@ describe('SetupPage (demo org)', () => {
       await userEvent.type(screen.getByLabelText('Name'), 'Elena Vasquez');
       await userEvent.type(screen.getByTestId('manager-phone'), '555 014 8001');
 
+      // W4-02: the §9.2 welcome as sent, by SMS, with the US pack's reply clause (two-way) and no
+      // "or call" (no voice number in the demo pack); the v1.0 template and its buttons are gone.
       const preview = screen.getByTestId('welcome-preview');
-      expect(preview).toHaveTextContent(
-        "Hi Elena — I'm SiteLog, the reporting assistant for Kestrel Build Group. You're set up as site manager for Harbor View Apartments. Each workday before 17:30",
+      expect(screen.getByTestId('welcome-text')).toHaveTextContent(
+        "Hi Elena, I'm SiteLog, the daily report assistant for Kestrel Build Group at Harbor View Apartments. Each workday before 17:30, tap your link and talk for ~3 min: https://go.sitelog.app/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
       );
-      expect(preview).toHaveTextContent('Got it');
-      expect(preview).toHaveTextContent('Wrong site');
-      expect(screen.getByText('$399')).toBeInTheDocument();
-      expect(screen.getByText('$0 setup · billed per active site')).toBeInTheDocument();
+      expect(screen.getByTestId('welcome-text')).toHaveAttribute('lang', 'en');
+      expect(preview).toHaveTextContent('SiteLog · text message');
+      expect(preview).not.toHaveTextContent('Got it');
+      expect(screen.queryByTestId('welcome-call-note')).not.toBeInTheDocument();
+      // The org's own price (W4-10, §19 Q234).
+      const pricing = screen.getByTestId('pricing-card');
+      expect(within(pricing).getByText('$399')).toBeInTheDocument();
+      expect(within(pricing).getByText('/ site / month')).toBeInTheDocument();
+      expect(within(pricing).getByText('$0 setup · billed per active site')).toBeInTheDocument();
+      // The preference and language default to Text link and the pack's first field locale.
+      expect(screen.getByRole('radio', { name: 'Text link' })).toBeChecked();
+      expect(screen.getByTestId('mgr-locale')).toHaveTextContent('English');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
       expect(
         await screen.findByRole('heading', { name: 'Reports & reminders' }),
       ).toBeInTheDocument();
       // The invite only queues the welcome; it goes out once a worker sends it.
       expect(success).toHaveBeenCalledWith(
-        'Site added. The WhatsApp welcome to Elena Vasquez is queued.',
+        'Site added. The welcome text to Elena Vasquez is queued.',
       );
       const site = store.data.sites.find((s) => s.project_code === 'HV-5120')!;
       expect(site).toMatchObject({
@@ -87,6 +124,7 @@ describe('SetupPage (demo org)', () => {
       });
       const elena = store.data.reporters.find((r) => r.name === 'Elena Vasquez')!;
       expect(elena.phone_e164).toBe('+15550148001');
+      expect(elena).toMatchObject({ locale: 'en-US', contact_pref: 'link', status: 'invited' });
       expect(store.data.siteReporters.find((sr) => sr.reporter_id === elena.id)).toMatchObject({
         site_id: site.id,
         is_primary: true,
@@ -124,11 +162,11 @@ describe('SetupPage (demo org)', () => {
       expect(await screen.findByDisplayValue('Pending site')).toBe(
         screen.getByLabelText('Site name'),
       );
-      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
       expect(screen.getByText('That project number is already in use.')).toBeInTheDocument();
       expect(screen.getByText('Enter the site manager’s name.')).toBeInTheDocument();
       expect(
-        screen.getByText('Enter a valid WhatsApp number for the chosen country.'),
+        screen.getByText('Enter a valid mobile number for the chosen country.'),
       ).toBeInTheDocument();
       expect(store.data.sites).toHaveLength(6);
     },
@@ -143,7 +181,7 @@ describe('SetupPage (demo org)', () => {
     await userEvent.type(screen.getByLabelText('Site address'), '12 West St, Chicago, IL');
     await userEvent.type(screen.getByLabelText('Name'), 'Omar Haddad');
     await userEvent.type(screen.getByTestId('manager-phone'), '5550149001');
-    await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
     expect(await screen.findByRole('heading', { name: 'Sites landing' })).toBeInTheDocument();
     await waitFor(() =>
       expect(store.data.sites.some((s) => s.project_code === 'WG-0100')).toBe(true),
@@ -202,6 +240,98 @@ describe('SetupPage (demo org)', () => {
     expect(refreshOrgs).toHaveBeenCalled();
   });
 
+  it('shows the org’s country locked on the company step (W1-06a, spec §19 Q31)', async () => {
+    const store = new DemoStore();
+    storage.set(keyFor(store), { done: {}, createdSites: [] });
+    renderWithProviders(<Harness />, { route: '/setup/company', store });
+    expect(await screen.findByLabelText('Company name')).toHaveValue('Kestrel Build Group');
+    const country = screen.getByRole('combobox', { name: 'Country' });
+    expect(country).toBeDisabled();
+    expect(country).toHaveTextContent(/\bUS$/);
+    expect(country).toHaveAccessibleDescription('The country can’t be changed after setup.');
+    expect(screen.queryByTestId('country-presets')).not.toBeInTheDocument();
+  });
+
+  it('shows the org’s country over one an older run saved, and saves it', async () => {
+    const store = new DemoStore();
+    // Progress saved before the org existed (or by an older build) names another country.
+    storage.set(keyFor(store), { done: {}, company: { country: 'TR' }, createdSites: [] });
+    renderWithProviders(<Harness />, { route: '/setup/company', store });
+    expect(await screen.findByLabelText('Company name')).toHaveValue('Kestrel Build Group');
+    const country = screen.getByRole('combobox', { name: 'Country' });
+    expect(country).toBeDisabled();
+    expect(country).toHaveTextContent(/\bUS$/);
+    await waitFor(() =>
+      expect(storage.get<SetupProgress | null>(keyFor(store), null)?.company.country).toBe('US'),
+    );
+  });
+
+  it('starts a TR org’s site manager with a +90 number and Turkish (its country pack)', async () => {
+    const store = new DemoStore();
+    const source = makeSource('admin', store);
+    storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+    renderWithProviders(<Harness />, {
+      route: '/setup/site',
+      source,
+      auth: { currentOrg: trOrg(source) },
+    });
+    expect(await screen.findByRole('heading', { name: 'Site' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Country code: .+ \+90$/ })).toHaveTextContent(
+      'TR +90',
+    );
+    expect(screen.getByRole('checkbox', { name: 'Turkish' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByRole('checkbox', { name: 'English' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    expect(screen.getByRole('combobox', { name: 'Site time zone' })).toHaveTextContent(
+      'Europe/Istanbul',
+    );
+    // A TR org's reports come out in Turkish (§9.6), whatever the manager speaks.
+    expect(screen.getByText('Reports always come out in Turkish.')).toBeInTheDocument();
+  });
+
+  it(
+    'creates a TR org’s manager speaking Turkish when no language is ticked',
+    { timeout: 30_000 },
+    async () => {
+      const store = new DemoStore();
+      const source = makeSource('admin', store);
+      storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+      renderWithProviders(<Harness />, {
+        route: '/setup/site',
+        source,
+        auth: { currentOrg: trOrg(source) },
+      });
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Turkish' }));
+      expect(screen.getByRole('checkbox', { name: 'Turkish' })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+      await submitSite('KK-1300', 'Emre Yıldız', '532 000 0599');
+      const emre = store.data.reporters.find((r) => r.name === 'Emre Yıldız')!;
+      expect(emre).toMatchObject({ phone_e164: '+905320000599', languages: ['tr'] });
+    },
+  );
+
+  it(
+    'creates a US org’s manager speaking English when no language is ticked',
+    { timeout: 30_000 },
+    async () => {
+      const store = new DemoStore();
+      storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+      renderWithProviders(<Harness />, { route: '/setup/site', store });
+      expect(await screen.findByText('Reports always come out in English.')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('checkbox', { name: 'English' }));
+      await submitSite('HV-5121', 'Elena Vasquez', '555 014 8001');
+      const elena = store.data.reporters.find((r) => r.name === 'Elena Vasquez')!;
+      expect(elena).toMatchObject({ phone_e164: '+15550148001', languages: ['en'] });
+    },
+  );
+
   it('is admin-only inside an org', async () => {
     const store = new DemoStore();
     renderWithProviders(<Harness />, { route: '/setup/site', store, as: 'pm' });
@@ -232,7 +362,7 @@ describe('SetupPage (demo org)', () => {
       await userEvent.type(screen.getByLabelText('Site address'), '400 Harbor Dr, Chicago, IL');
       await userEvent.type(screen.getByLabelText('Name'), 'Elena Vasquez');
       await userEvent.type(screen.getByTestId('manager-phone'), '555 014 8001');
-      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
 
       expect(
         await screen.findByRole('heading', { name: 'Reports & reminders' }),
@@ -243,16 +373,16 @@ describe('SetupPage (demo org)', () => {
         createdSites: [{ id: site.id, name: 'Harbor View Apartments', code: 'HV-5120' }],
       });
       expect(error).toHaveBeenCalledWith(
-        'The site was created, but the WhatsApp welcome to Elena Vasquez couldn’t be queued (api-invite-reporter failed (502)). Invite them from Team & numbers.',
+        'The site was created, but the welcome text to Elena Vasquez couldn’t be queued (api-invite-reporter failed (502)). Invite them from Team & numbers.',
       );
       expect(success).not.toHaveBeenCalledWith(
-        'Site added. The WhatsApp welcome to Elena Vasquez is queued.',
+        'Site added. The welcome text to Elena Vasquez is queued.',
       );
 
       // Back on the site step, the same project number is already taken (no second insert).
       await userEvent.click(screen.getByRole('button', { name: 'Back' }));
       await userEvent.type(await screen.findByLabelText('Project number'), 'HV-5120');
-      await userEvent.click(screen.getByRole('button', { name: 'Send WhatsApp welcome' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
       expect(screen.getByText('That project number is already in use.')).toBeInTheDocument();
       expect(store.data.sites.filter((s) => s.project_code === 'HV-5120')).toHaveLength(1);
     },
@@ -321,4 +451,212 @@ describe('SetupPage (no org yet)', () => {
       storage.get<{ company: { name: string } } | null>(progressKey(ADMIN), null)?.company.name,
     ).toBe('Fresh Build Co');
   });
+});
+
+/** Demir Yapı (§18.2), the TR pack's demo org: one-way SMS, no voice number, no price yet. */
+function demirStore(): DemoStore {
+  const kestrel = kestrelDemo();
+  return new DemoStore({ ...buildDemirDemo(), now: kestrel.now, billing: kestrel.billing });
+}
+
+function demirOrg(store: DemoStore) {
+  return {
+    id: store.data.org.id,
+    name: DEMIR_ORG_NAME,
+    timezone: 'Europe/Istanbul',
+    activeSites: 2,
+    role: 'admin' as const,
+    locale: 'tr-TR' as const,
+    country: 'TR',
+    price: null,
+  };
+}
+
+async function fillSite(code: string, labels: { name: string; code: string; address: string }) {
+  await userEvent.type(await screen.findByLabelText(labels.name), `Site ${code}`);
+  await userEvent.type(screen.getByLabelText(labels.code), code);
+  await userEvent.type(screen.getByLabelText(labels.address), '1 Test St');
+}
+
+const EN_LABELS = { name: 'Site name', code: 'Project number', address: 'Site address' };
+
+describe('SetupPage site step on v1.2 (W4-02)', () => {
+  afterEach(async () => {
+    await act(() => i18n.changeLanguage('en'));
+  });
+
+  it(
+    'sends the language and the preference; a call without a voice number uses Talk now (Q33)',
+    { timeout: 30_000 },
+    async () => {
+      const store = new DemoStore();
+      storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+      renderWithProviders(<Harness />, { route: '/setup/site', store });
+      await fillSite('HV-5122', EN_LABELS);
+      await userEvent.type(screen.getByLabelText('Name'), 'Luis Ortega');
+      await userEvent.type(screen.getByTestId('manager-phone'), '555 014 8002');
+      expect(screen.getByText('They can always use the other one.')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('radio', { name: 'Call' }));
+      // The US demo pack has no voice number: Talk now in the recorder (§19 Q33).
+      expect(screen.getByText('They will use Talk now in the recorder.')).toBeInTheDocument();
+      await userEvent.click(screen.getByTestId('mgr-locale'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Spanish' }));
+      // The preview follows the chosen language (es-US), with the Spanish reply clause.
+      const text = screen.getByTestId('welcome-text');
+      expect(text).toHaveTextContent(/^Hola Luis, soy SiteLog, el asistente de reportes diarios/);
+      expect(text).toHaveAttribute('lang', 'es');
+      // The backup reporter gets their own language and preference.
+      await userEvent.click(screen.getByRole('button', { name: 'Add a backup reporter' }));
+      await userEvent.type(screen.getByLabelText('Backup name'), 'Ana Ruiz');
+      await userEvent.type(screen.getByTestId('backup-phone'), '555 014 8003');
+      await userEvent.click(
+        within(screen.getByRole('radiogroup', { name: 'Backup’s preferred channel' })).getByRole(
+          'radio',
+          { name: 'Call' },
+        ),
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
+      expect(
+        await screen.findByRole('heading', { name: 'Reports & reminders' }),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(store.data.reporters.find((r) => r.name === 'Ana Ruiz')).toBeDefined(),
+      );
+      expect(store.data.reporters.find((r) => r.name === 'Luis Ortega')).toMatchObject({
+        locale: 'es-US',
+        contact_pref: 'call',
+        role: 'site_manager',
+      });
+      expect(store.data.reporters.find((r) => r.name === 'Ana Ruiz')).toMatchObject({
+        locale: 'en-US',
+        contact_pref: 'call',
+        role: 'backup',
+      });
+    },
+  );
+
+  it(
+    'refuses a landline for a text link and allows a call where SiteLog reaches it (Q229)',
+    { timeout: 30_000 },
+    async () => {
+      const store = new DemoStore();
+      const source = makeSource('admin', store);
+      storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+      // A demo org places its calls (console telephony): SiteLog can reach a landline by phone.
+      renderWithProviders(<Harness />, {
+        route: '/setup/site',
+        source,
+        auth: { currentOrg: trOrg(source) },
+      });
+      await fillSite('KK-1301', EN_LABELS);
+      await userEvent.type(screen.getByLabelText('Name'), 'Emre Yıldız');
+      await userEvent.type(screen.getByTestId('manager-phone'), '0212 222 33 44');
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
+      expect(
+        await screen.findByText(
+          'This is a landline number, which can’t get texts. Choose Call, or enter a mobile number.',
+        ),
+      ).toBeInTheDocument();
+      expect(store.data.sites.some((s) => s.project_code === 'KK-1301')).toBe(false);
+      await userEvent.click(screen.getByRole('radio', { name: 'Call' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
+      expect(
+        await screen.findByRole('heading', { name: 'Reports & reminders' }),
+      ).toBeInTheDocument();
+      expect(store.data.reporters.find((r) => r.name === 'Emre Yıldız')).toMatchObject({
+        phone_e164: '+902122223344',
+        contact_pref: 'call',
+      });
+    },
+  );
+
+  it('blocks a landline SiteLog can neither text nor call (Q229, F2)', async () => {
+    const store = new DemoStore();
+    const source = makeSource('admin', store);
+    storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
+    // A real TR org: no voice number, no outbound trunk.
+    renderWithProviders(<Harness />, {
+      route: '/setup/site',
+      source,
+      auth: { currentOrg: { ...trOrg(source), demoOrg: false }, isDemo: false },
+    });
+    await fillSite('KK-1302', EN_LABELS);
+    await userEvent.type(screen.getByLabelText('Name'), 'Emre Yıldız');
+    await userEvent.type(screen.getByTestId('manager-phone'), '0212 222 33 44');
+    await userEvent.click(screen.getByRole('radio', { name: 'Call' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
+    expect(
+      await screen.findByText(/^This is a landline number\. SiteLog can’t text it/),
+    ).toBeInTheDocument();
+    expect(store.data.sites.some((s) => s.project_code === 'KK-1302')).toBe(false);
+    // A mobile number goes through.
+    await userEvent.clear(screen.getByTestId('manager-phone'));
+    await userEvent.type(screen.getByTestId('manager-phone'), '532 000 0598');
+    await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
+    expect(await screen.findByRole('heading', { name: 'Reports & reminders' })).toBeInTheDocument();
+  });
+
+  it(
+    'runs in Turkish for a TR org: Emre, Türkçe and Call, the TR welcome, every step in Turkish',
+    { timeout: 30_000 },
+    async () => {
+      await act(() => i18n.changeLanguage('tr'));
+      const store = demirStore();
+      const source = makeSource('admin', store);
+      storage.set(progressKey(ADMIN, store.data.org.id), { done: {}, createdSites: [] });
+      renderWithProviders(<Harness />, {
+        route: '/setup/company',
+        source,
+        auth: { currentOrg: demirOrg(store) },
+      });
+      expect(await screen.findByRole('heading', { name: 'Şirketinizi kurun' })).toBeInTheDocument();
+      expect(screen.getByRole('list', { name: 'Şirketinizi kurun' })).toHaveTextContent(
+        'Adım 1 / 3',
+      );
+      expect(await screen.findByLabelText('Şirket adı')).toHaveValue(DEMIR_ORG_NAME);
+      expect(screen.getByRole('combobox', { name: 'Ülke' })).toHaveAccessibleDescription(
+        'Ülke kurulumdan sonra değiştirilemez.',
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'İlk şantiyeye geç' }));
+
+      expect(await screen.findByRole('heading', { name: 'Şantiye' })).toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText('Şantiye adı'), 'Kartal');
+      await userEvent.type(screen.getByLabelText('Proje numarası'), 'KK-1300');
+      await userEvent.type(screen.getByLabelText('Şantiye adresi'), 'Kartal, İstanbul');
+      await userEvent.type(screen.getByLabelText('Ad'), 'Emre Yıldız');
+      await userEvent.type(screen.getByTestId('manager-phone'), '532 000 0599');
+      expect(screen.getByTestId('mgr-locale')).toHaveTextContent('Türkçe');
+      await userEvent.click(screen.getByRole('radio', { name: 'Arama' }));
+      expect(screen.getByText('Kayıt ekranındaki Şimdi konuş ile arar.')).toBeInTheDocument();
+      // The TR welcome: one-way (no reply clause), no voice number (no "or call").
+      const text = screen.getByTestId('welcome-text');
+      expect(text).toHaveTextContent(
+        `Merhaba Emre, ben SiteLog, ${DEMIR_ORG_NAME} için Kartal günlük rapor asistanıyım. Her iş günü 17:30 öncesi linke dokunup ~3 dk anlatın: https://go.sitelog.app/r/MRZ4K7`,
+      );
+      expect(text).not.toHaveTextContent(/STOP|arayın/);
+      expect(text).toHaveAttribute('lang', 'tr');
+      expect(screen.getByText('Önizleme · Emre ne alacak')).toBeInTheDocument();
+      // No TRY price yet (§19 Q9): Billing's line instead of a number.
+      expect(screen.getByTestId('pricing-card')).toHaveTextContent(
+        'Şantiye başına fiyatınızı SiteLog belirler.',
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Karşılama mesajını gönder' }));
+
+      expect(
+        await screen.findByRole('heading', { name: 'Raporlar ve hatırlatmalar' }),
+      ).toBeInTheDocument();
+      // §18.2 seeds an Emre Yıldız already: the new one is found by his number.
+      expect(store.data.reporters.find((r) => r.phone_e164 === '+905320000599')).toMatchObject({
+        name: 'Emre Yıldız',
+        locale: 'tr-TR',
+        contact_pref: 'call',
+        status: 'invited',
+      });
+      expect(screen.getByRole('button', { name: 'Bitir' })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: 'E-posta ekle' }).length).toBeGreaterThan(0);
+      // Settings' section speaks Turkish since W4-05: no English island is left in the step.
+      expect(screen.getByRole('switch', { name: 'Hatırlatma 1' })).toBeInTheDocument();
+      expect(document.querySelector('main [lang="en"]')).toBeNull();
+    },
+  );
 });

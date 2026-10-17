@@ -6,7 +6,7 @@
 import type { RequiredFieldKey } from '@sitelog/shared/enums.ts';
 import { formatDateInTz, formatTimeInTz } from '@sitelog/shared/format.ts';
 import { ladderTimes } from '@sitelog/shared/schedule/reminders.ts';
-import type { DailyReportData } from '@sitelog/shared/schemas/report.ts';
+import type { DailyReportDataV1 } from '@sitelog/shared/schemas/report.ts';
 import { toObserved, type SiteDayWeather } from '@sitelog/shared/weather/observed.ts';
 import type { DemoStore } from '@/data/demo/store';
 import type { ChatMessage, SimContext, SimEffect, SimEvent, SimFiledSnapshot } from './engine';
@@ -122,7 +122,7 @@ function filedSnapshot(store: DemoStore, reportId: string | null): SimFiledSnaps
     id: r.id,
     reportNo: r.report_no,
     version: r.current_version,
-    data: structuredClone(v.data) as unknown as DailyReportData,
+    data: structuredClone(v.data) as unknown as DailyReportDataV1,
     filedAt: r.filed_at,
   };
 }
