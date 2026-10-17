@@ -654,8 +654,9 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
       });
       expect(screen.getByRole('button', { name: 'Bitir' })).toBeInTheDocument();
       expect(screen.getAllByRole('button', { name: 'E-posta ekle' }).length).toBeGreaterThan(0);
-      // Settings' section stays English until W4-05, marked as such (WCAG 3.1.2).
-      expect(document.querySelector('main [lang="en"]')).not.toBeNull();
+      // Settings' section speaks Turkish since W4-05: no English island is left in the step.
+      expect(screen.getByRole('switch', { name: 'Hatırlatma 1' })).toBeInTheDocument();
+      expect(document.querySelector('main [lang="en"]')).toBeNull();
     },
   );
 });

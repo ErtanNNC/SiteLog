@@ -27,5 +27,30 @@ export function supabaseDailyLinkStore(admin: AppClient): DailyLinkStore {
       if (error.code === '23505') return false;
       throw error;
     },
+    orgDailyLinkTtlHours: (siteId) => orgDailyLinkTtlHours(admin, siteId),
   };
+}
+
+/**
+ * W4-05 (§19 Q231): the site's org's `org_settings.daily_link_ttl_hours` (null: the environment's
+ * `DAILY_LINK_TTL_HOURS`), read before every new daily link (`ensureDailyLink`).
+ */
+export async function orgDailyLinkTtlHours(
+  admin: AppClient,
+  siteId: string,
+): Promise<number | null> {
+  const { data: site } = await admin
+    .from('sites')
+    .select('org_id')
+    .eq('id', siteId)
+    .maybeSingle()
+    .throwOnError();
+  if (!site) return null;
+  const { data } = await admin
+    .from('org_settings')
+    .select('daily_link_ttl_hours')
+    .eq('org_id', site.org_id)
+    .maybeSingle()
+    .throwOnError();
+  return data?.daily_link_ttl_hours ?? null;
 }

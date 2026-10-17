@@ -930,6 +930,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     insertDailyLink() {
       return Promise.reject(new Error('fake db: insertDailyLink runs on PGlite only'));
     },
+    orgDailyLinkTtlHours() {
+      return Promise.reject(new Error('fake db: orgDailyLinkTtlHours runs on PGlite only'));
+    },
     listPhotosLinks() {
       return Promise.reject(new Error('fake db: listPhotosLinks runs on PGlite only'));
     },

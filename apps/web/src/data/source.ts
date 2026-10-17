@@ -12,7 +12,7 @@ import type {
   ReporterStatus,
   TermKind,
 } from '@sitelog/shared/enums.ts';
-import type { OrgLocale, ReporterLocale } from '@sitelog/shared/locale.ts';
+import type { Language, OrgLocale, ReporterLocale, UnitSystem } from '@sitelog/shared/locale.ts';
 import type { OfficePhotoMime, OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
 import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import type { BillingAlert, BillingPrice, BillingStatus } from '@sitelog/shared/billing.ts';
@@ -170,7 +170,22 @@ export interface UpdateOrgInput {
   timezone: string;
   address?: string | null;
   licenseNo?: string | null;
+  /** W4-05 (§19 Q233): the report language and units; omitted = unchanged. */
+  locale?: OrgLocale;
+  units?: UnitSystem;
 }
+
+/** W4-05 (§19 Q232): Settings' "Send me a test message" (api-test-message). */
+export interface SendTestMessageInput {
+  /** E.164, typed in the sheet; never stored. */
+  phone: string;
+  language: Language;
+}
+
+export type SendTestMessageResult =
+  | { outcome: 'sent'; driver: string }
+  | { outcome: 'console'; reason: 'demo' | 'no_sender' }
+  | { outcome: 'failed'; driver: string };
 
 export interface CreateSiteInput {
   name: string;
@@ -392,6 +407,8 @@ export interface DataSource {
    * the no-org setup wizard (create_org), never through a source, which always has an org.
    */
   updateOrg(input: UpdateOrgInput): Promise<void>;
+  /** W4-05 (§19 Q232): admin; 5 an hour per org (a `CodedError` `rate_limited` after). */
+  sendTestMessage(input: SendTestMessageInput): Promise<SendTestMessageResult>;
   createSite(input: CreateSiteInput): Promise<CreateSiteResult>;
   updateSite(siteId: string, patch: UpdateSitePatch): Promise<void>;
   /**

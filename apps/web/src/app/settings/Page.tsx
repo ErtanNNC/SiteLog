@@ -4,39 +4,44 @@ import { Link, Navigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthProvider';
 import { TopBarControls } from '@/components/shell/TopBar';
-import { ComingNext } from '@/app/ComingNext';
 import { PageHeader } from '@/components/sitelog/PageHeader';
 import { PageSkeleton } from '@/components/sitelog/Skeletons';
 import { ErrorState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/Dialog';
-import { copy } from '@/copy/en';
 import { useSaveSettings, useSaveSiteRecipients, useSetOrgLogo, useSettings } from '@/data/hooks';
 import type { OrgSettings, OrgSettingsPatch } from '@/data/types';
-import { logoFileError } from '@/lib/logo';
+import type { CopyKey } from '@/i18n/keys';
+import { useCopy } from '@/i18n/useCopy';
+import { logoFileProblem } from '@/lib/logo';
 import { cn } from '@/lib/utils';
+import { FieldChannelsSection } from './FieldChannelsSection';
 import { PayrollSection } from './PayrollSection';
 import { PdfSection } from './PdfSection';
 import { RecipientsSection, type RecipientsDraft } from './RecipientsSection';
 import { ReportsSection } from './ReportsSection';
 import { useUnsavedGuard } from './useUnsavedGuard';
 
-/** P12 tabs, in the spec's order. `channels` (Field channels) is a placeholder until W1-08. */
+/** P12 tabs, in the spec's order. */
 const SECTIONS = ['reports', 'channels', 'pdf', 'recipients', 'payroll'] as const;
 type Section = (typeof SECTIONS)[number];
 
-const TAB_LABEL: Record<Section, string> = {
-  reports: copy.settings.tabs.reports,
-  channels: copy.settings.tabs.fieldChannels,
-  pdf: copy.settings.tabs.pdf,
-  recipients: copy.settings.tabs.recipients,
-  payroll: copy.settings.tabs.payroll,
-};
+const TAB_LABEL = {
+  reports: 'settings.tabs.reports',
+  channels: 'settings.tabs.fieldChannels',
+  pdf: 'settings.tabs.pdf',
+  recipients: 'settings.tabs.recipients',
+  payroll: 'settings.tabs.payroll',
+} as const satisfies Record<Section, CopyKey>;
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-/** P12 · Settings — section tabs + "Save changes" in the top bar, unsaved guard (§11.4, F18). */
+/**
+ * P12 · Settings — section tabs + "Save changes" in the top bar, unsaved guard (§11.4, F18, F22).
+ * EN/TR since W4-05.
+ */
 export default function SettingsPage() {
+  const { t } = useCopy();
   const { section: sectionParam } = useParams();
   const section = (SECTIONS as readonly string[]).includes(sectionParam ?? '')
     ? (sectionParam as Section)
@@ -54,6 +59,8 @@ export default function SettingsPage() {
   } | null>(null);
   const [draft, setDraft] = useState<OrgSettings | null>(null);
   const [recipients, setRecipients] = useState<RecipientsDraft>([]);
+  // A field whose text cannot be saved (the daily link expiry) holds Save until it is fixed.
+  const [invalid, setInvalid] = useState(false);
   // The picked (or removed) logo shows at once; the stored one (signed URL) takes over after
   // the settings refetch that follows a successful upload, so the preview never flickers.
   const [logoOverride, setLogoOverride] = useState<{ url: string | null; at: number } | null>(null);
@@ -95,10 +102,10 @@ export default function SettingsPage() {
   );
   const dirty = Object.keys(settingsPatch).length > 0 || changedRecipients.length > 0;
   const saving = saveSettings.isPending || saveRecipients.isPending;
-  const guard = useUnsavedGuard(dirty, '/settings');
+  const guard = useUnsavedGuard(dirty || invalid, '/settings');
 
   const save = async () => {
-    if (!draft || !dirty) return;
+    if (!draft || !dirty || invalid) return;
     try {
       if (Object.keys(settingsPatch).length) await saveSettings.mutateAsync(settingsPatch);
       for (const r of changedRecipients) {
@@ -112,7 +119,8 @@ export default function SettingsPage() {
 
   /** Logo upload / removal is saved right away (Storage + orgs.logo_path), not with "Save". */
   const onLogoChange = (file: File | null) => {
-    const error = file ? logoFileError(file) : null;
+    const problem = file ? logoFileProblem(file) : null;
+    const error = problem ? t(`settings.pdf.${problem}`) : null;
     setLogoError(error);
     if (error) return;
     setLogoOverride({ url: file ? URL.createObjectURL(file) : null, at: Date.now() });
@@ -120,7 +128,7 @@ export default function SettingsPage() {
       { file },
       {
         onSuccess: () => {
-          if (file && isDemo) toast.message(copy.settings.pdf.logoDemo);
+          if (file && isDemo) toast.message(t('settings.pdf.logoDemo'));
         },
         onError: () => setLogoOverride(null),
       },
@@ -131,54 +139,36 @@ export default function SettingsPage() {
 
   const controls = (
     <TopBarControls>
-      <nav aria-label={copy.settings.title} className="hidden lg:block">
+      <nav aria-label={t('settings.title')} className="hidden lg:block">
         <SectionTabs current={section} />
       </nav>
       <Button
         variant="primary"
         size="dense"
-        disabled={!dirty}
+        disabled={!dirty || invalid}
         loading={saving}
         onClick={() => void save()}
         data-testid="save-settings"
       >
         <Save aria-hidden="true" />
-        {copy.settings.save}
+        {t('settings.save')}
       </Button>
     </TopBarControls>
   );
-  // Every branch renders it: the guard stays armed while a draft is dirty (switching to the
-  // Field channels tab keeps it), so a guarded click must always have a dialog to open.
+  // Every branch renders it: the guard stays armed while a draft is dirty, so a guarded click
+  // must always have a dialog to open.
   const leaveDialog = (
     <ConfirmDialog
       open={!!guard.pending}
       onOpenChange={(o) => !o && guard.cancel()}
-      title={copy.settings.unsavedTitle}
-      description={copy.settings.unsavedBody}
-      confirmLabel={copy.settings.leave}
-      cancelLabel={copy.settings.stay}
+      title={t('settings.unsavedTitle')}
+      description={t('settings.unsavedBody')}
+      confirmLabel={t('settings.leave')}
+      cancelLabel={t('settings.stay')}
       destructive
       onConfirm={guard.proceed}
     />
   );
-
-  if (section === 'channels') {
-    return (
-      <>
-        {controls}
-        {leaveDialog}
-        <ComingNext
-          eyebrow={settings.data?.org.name}
-          title={copy.settings.title}
-          subtitle={TAB_LABEL.channels}
-        >
-          <div className="mb-5 lg:hidden">
-            <SectionTabs current={section} />
-          </div>
-        </ComingNext>
-      </>
-    );
-  }
 
   // A failed first load leaves no data to seed the draft from: show the error, not a skeleton.
   // (A failed refetch keeps the loaded data and the draft, so the page stays editable.)
@@ -188,7 +178,7 @@ export default function SettingsPage() {
         {controls}
         {leaveDialog}
         <ErrorState
-          thing={copy.nav.settings.toLowerCase()}
+          thing={t('settings.thing')}
           error={settings.error}
           onRetry={() => void settings.refetch()}
         />
@@ -210,19 +200,28 @@ export default function SettingsPage() {
       {controls}
       <PageHeader
         eyebrow={settings.data.org.name}
-        title={copy.settings.title}
-        subtitle={TAB_LABEL[section]}
+        title={t('settings.title')}
+        subtitle={t(TAB_LABEL[section])}
       />
       <div className="mb-5 lg:hidden">
         <SectionTabs current={section} />
       </div>
 
-      {section === 'reports' ? <ReportsSection draft={draft} update={update} /> : null}
+      {section === 'reports' ? <ReportsSection draft={draft} update={update} channelsLink /> : null}
+      {section === 'channels' ? (
+        <FieldChannelsSection
+          draft={draft}
+          update={update}
+          org={settings.data.org}
+          pack={settings.data.pack}
+          onInvalidChange={setInvalid}
+        />
+      ) : null}
       {section === 'pdf' ? (
         <PdfSection
           draft={draft}
           update={update}
-          orgName={settings.data.org.name}
+          org={settings.data.org}
           logoUrl={logoOverride ? logoOverride.url : settings.data.org.logoUrl}
           onLogoChange={onLogoChange}
           logoBusy={setLogo.isPending}
@@ -240,10 +239,11 @@ export default function SettingsPage() {
 }
 
 function SectionTabs({ current }: { current: Section }) {
+  const { t } = useCopy();
   return (
     <div
       role="tablist"
-      aria-label={copy.settings.title}
+      aria-label={t('settings.title')}
       className="inline-flex h-target max-w-full items-center gap-1 overflow-x-auto rounded-btn border border-rebar bg-chalk p-1 scrollbar-thin"
     >
       {SECTIONS.map((s) => (
@@ -257,7 +257,7 @@ function SectionTabs({ current }: { current: Section }) {
             s === current ? 'bg-asphalt text-chalk' : 'text-dust hover:text-asphalt',
           )}
         >
-          {TAB_LABEL[s]}
+          {t(TAB_LABEL[s])}
         </Link>
       ))}
     </div>

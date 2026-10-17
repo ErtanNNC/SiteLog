@@ -3002,7 +3002,7 @@ export function assembleGlossary(rows: RowSet): GlossaryData {
 
 // ───────────────────────────── Settings / billing / setup ─────────────────────────────
 
-export function assembleSettings(rows: RowSet): SettingsData {
+export function assembleSettings(rows: RowSet, pack: CountryPack | null = null): SettingsData {
   const { org_id: _o, updated_at: _u, ...settings } = rows.settings;
   return {
     org: {
@@ -3014,7 +3014,12 @@ export function assembleSettings(rows: RowSet): SettingsData {
       timezone: rows.org.timezone,
       logoPath: rows.org.logo_path,
       logoUrl: null,
+      country: rows.org.country,
+      isDemo: rows.org.is_demo,
+      locale: rows.org.locale,
+      units: rows.org.units,
     },
+    pack,
     settings,
     siteRecipients: rows.sites
       .filter((s) => s.status !== 'archived')

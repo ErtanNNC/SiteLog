@@ -31,6 +31,7 @@ import type { OrgSettingsRow } from '@sitelog/shared/db/types.ts';
 import type { CallProgress } from '@sitelog/shared/voice-outbound.ts';
 import type { BillingAlert, BillingPrice, BillingProviderName } from '@sitelog/shared/billing.ts';
 import type { OrgLocale, ReporterLocale, UnitSystem } from '@sitelog/shared/locale.ts';
+import type { CountryPack } from '@sitelog/shared/countries.ts';
 import type { CopyKey } from '@/i18n/keys';
 import type { NoticeText } from './notices';
 
@@ -1058,7 +1059,16 @@ export interface SettingsData {
     logoPath: string | null;
     /** Signed URL (Supabase) or in-memory object URL (demo) of the logo, for previews. */
     logoUrl: string | null;
+    /** W4-05: the org's country pack code (`orgs.country`). */
+    country: string;
+    /** A demo org: its texts and calls are `console` (the Demo phone). */
+    isDemo: boolean;
+    /** §19 Q233: the report language and units new report versions take. */
+    locale: OrgLocale;
+    units: UnitSystem;
   };
+  /** W4-05: the org's country pack, read-only on Settings → Field channels (null: not loaded). */
+  pack: CountryPack | null;
   settings: OrgSettings;
   siteRecipients: Array<{ siteId: string; siteName: string; emails: string[] }>;
 }

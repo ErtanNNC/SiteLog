@@ -32,6 +32,7 @@ import {
   type ResolveUnknownCompanyInput,
   type ReviewGlossaryTermInput,
   type UpdateOrgInput,
+  type SendTestMessageInput,
   type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
@@ -471,7 +472,28 @@ export function useAddGlossaryTerm() {
 export function useSaveSettings() {
   const s = useDataSource();
   return useSourceMutation((vars: OrgSettingsPatch) => s.saveSettings(vars), {
-    success: copy.toasts.settingsSaved,
+    success: () => translate('toasts.settingsSaved'),
+  });
+}
+
+/**
+ * W4-05 (§19 Q233): Settings → PDF template, the report language and units through update_org()
+ * (admin, audited), with the company details unchanged.
+ */
+export function useSaveReportLocale() {
+  const s = useDataSource();
+  return useSourceMutation((vars: UpdateOrgInput) => s.updateOrg(vars), {
+    success: () => translate('settings.pdf.reportLocaleSaved'),
+  });
+}
+
+/** W4-05 (§19 Q232): Settings → Field channels, _Send me a test message_ (the caller toasts). */
+export function useSendTestMessage() {
+  const s = useDataSource();
+  return useSourceMutation((vars: SendTestMessageInput) => s.sendTestMessage(vars), {
+    silent: true,
+    quietErrors: true,
+    invalidate: false,
   });
 }
 
@@ -479,7 +501,7 @@ export function useSaveSiteRecipients() {
   const s = useDataSource();
   return useSourceMutation(
     (vars: { siteId: string; emails: string[] }) => s.saveSiteRecipients(vars.siteId, vars.emails),
-    { success: copy.toasts.saved },
+    { success: () => translate('toasts.saved') },
   );
 }
 
@@ -739,7 +761,7 @@ export function useSetOrgLogo(opts: { quiet?: boolean } = {}) {
   return useSourceMutation(
     (vars: { file: File | null; orgId?: string }) => s.setOrgLogo(vars.file, vars.orgId),
     {
-      success: (v) => (v.file ? copy.toasts.logoUpdated : copy.toasts.logoRemoved),
+      success: (v) => translate(v.file ? 'toasts.logoUpdated' : 'toasts.logoRemoved'),
       silent: opts.quiet,
       quietErrors: opts.quiet,
     },

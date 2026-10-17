@@ -357,9 +357,9 @@ test.describe('in a tr-TR browser', () => {
       status: 'invited',
     });
 
-    // Settings → PDF shows the preset A4 paper.
+    // Settings → PDF shows the preset A4 paper (in Turkish since W4-05: the org's tr-TR).
     await page.goto('/settings/pdf');
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Settings/);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Settings|Ayarlar/);
     await expect(page.getByRole('radio', { name: 'A4' })).toBeChecked();
     await expect(page.getByRole('radio', { name: 'Letter' })).not.toBeChecked();
   });

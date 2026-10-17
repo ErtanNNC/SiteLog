@@ -207,7 +207,7 @@ jobs:
         # EOT specs).
         run: |
           container=supabase_edge_runtime_sitelog
-          for probe in GET:api-export-payroll:401 GET:api-evidence-pack:401 POST:api-invite-reporter:401 POST:api-link-unknown-contact:401 POST:api-text-daily-link:401 GET:field-api/today:401 POST:sms-webhook:403; do
+          for probe in GET:api-export-payroll:401 GET:api-evidence-pack:401 POST:api-invite-reporter:401 POST:api-link-unknown-contact:401 POST:api-text-daily-link:401 POST:api-test-message:401 GET:field-api/today:401 POST:sms-webhook:403; do
             IFS=: read -r method fn want <<< "$probe"
             code=000
             for attempt in 1 2 3 4 5 6; do

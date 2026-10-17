@@ -30,10 +30,10 @@ describe('routes (§11.1)', () => {
     ).toBeInTheDocument();
   });
 
-  it('/settings/channels is the Field channels tab, a placeholder for now', async () => {
+  it('/settings/channels is the Field channels tab (W4-05)', async () => {
     renderWithProviders(<AppRoutes />, { as: 'admin', route: '/settings/channels' });
     expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-    expect(screen.getByText('Coming next')).toBeInTheDocument();
+    expect(await screen.findByTestId('pack-card')).toBeInTheDocument();
     const tabs = screen.getAllByRole('tab', { name: 'Field channels' });
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
     expect(tabs[0]).toHaveAttribute('href', '/settings/channels');
@@ -63,10 +63,17 @@ describe('routes (§11.1)', () => {
     expect(screen.getByRole('navigation', { name: 'Rapor verenler' })).toBeInTheDocument();
     unmount();
 
-    renderWithProviders(<AppRoutes />, { as: 'admin', route: '/settings/channels' });
-    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+    // Settings speaks Turkish since W4-05; New report is still English-only (W4-09).
+    const settings = renderWithProviders(<AppRoutes />, {
+      as: 'admin',
+      route: '/settings/channels',
+    });
+    expect(await screen.findByRole('heading', { level: 1, name: 'Ayarlar' })).toBeVisible();
+    settings.unmount();
+    renderWithProviders(<AppRoutes />, { as: 'admin', route: '/reports/new' });
+    const heading = await screen.findByRole('heading', { level: 1, name: 'New report' });
     // The page (English, lang="en") inside the Turkish shell.
-    expect(screen.getByText('Coming next').closest('[lang]')).toHaveAttribute('lang', 'en');
+    expect(heading.closest('[lang]')).toHaveAttribute('lang', 'en');
     expect(screen.getAllByRole('navigation', { name: 'Ana gezinme' }).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'İçeriğe geç' })).toHaveAttribute('href', '#main');
   });

@@ -61,6 +61,7 @@ import {
   type ReviewGlossaryTermInput,
   type SourceUser,
   type UpdateOrgInput,
+  type SendTestMessageInput,
   type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
@@ -188,7 +189,7 @@ export class DemoSource implements DataSource {
   }
   getSettings() {
     return this.run(() => {
-      const data = assembleSettings(this.store.rows());
+      const data = assembleSettings(this.store.rows(), demoOrgPack(this.store.data));
       data.org.logoUrl = this.store.logoUrl;
       return data;
     });
@@ -413,6 +414,10 @@ export class DemoSource implements DataSource {
   }
   updateOrg(input: UpdateOrgInput) {
     return this.run(() => this.store.updateOrg(input, this.user.id));
+  }
+  /** W4-05 (§19 Q232): a demo org's text is `console`: audited, nothing sent. */
+  sendTestMessage(input: SendTestMessageInput) {
+    return this.run(() => this.store.sendTestMessage(input, this.user.id));
   }
   /** The in-memory insert and invite are one step, so nothing can fail after the site exists. */
   createSite(input: CreateSiteInput) {

@@ -974,6 +974,63 @@ Deno.test(
   },
 );
 
+Deno.test(
+  'planLadder W4-05: a changed call window (Settings → Field channels) moves the next R1 call',
+  () => {
+    const trunk = {
+      ...US,
+      voiceNumber: '+15550142290' as CountryPack['voiceNumber'],
+      outboundTrunkId: 'ST_abc123',
+    };
+    const withWindow = (start: string, end: string) =>
+      orgOf('org-1', {
+        settings: { ...settings, call_window_start: start, call_window_end: end },
+      });
+    const base = {
+      links: [{ site_id: 'site-1', reporter_id: 'kevin', is_primary: true }],
+      reporters: new Map([['kevin', rep('kevin', { contact_pref: 'call' })]]),
+      autoCall: new Set(['kevin']),
+      packs: new Map([['org-1', trunk]]),
+    };
+    const run = (w: World, onTick?: (now: Date, w: World) => void) =>
+      simulateLadder(w, '2026-10-12T22:00:00Z', '2026-10-12T23:35:00Z', onTick);
+
+    // The window ends at 17:30: no call at R1 (17:45) or R2, and the quiet hours skip their texts.
+    const early = run(
+      world({ ...base, orgs: new Map([['org-1', withWindow('07:00:00', '17:30:00')]]) }),
+    );
+    assertEquals(early.sent.map(line), ['17:00 kevin daily_link']);
+    assertEquals(
+      early.skipped.map((k) => `${k.stage} ${k.reason}`),
+      ['reminder_1 quiet_hours', 'reminder_2 quiet_hours'],
+    );
+
+    // The admin widens it to 20:00 at 17:10: the next tick reads it, and R1 is a call at 17:45.
+    const widened = run(
+      world({ ...base, orgs: new Map([['org-1', withWindow('07:00:00', '17:30:00')]]) }),
+      (now, w) => {
+        if (now.toISOString() === '2026-10-12T22:10:00.000Z')
+          w.orgs = new Map([['org-1', withWindow('07:00:00', '20:00:00')]]);
+      },
+    );
+    assertEquals(widened.sent.map(line), [
+      '17:00 kevin daily_link',
+      '17:45 kevin call (gives up 2026-10-12T23:15:00.000Z)',
+      '18:30 kevin reminder_2',
+      '18:30 kevin call (gives up 2026-10-13T00:00:00.000Z)',
+    ]);
+
+    // A window that opens at 18:00: R1 (17:45) is quiet, the first call moves to R2 (18:30).
+    const late = run(
+      world({ ...base, orgs: new Map([['org-1', withWindow('18:00:00', '20:00:00')]]) }),
+    );
+    assertEquals(late.sent.map(line), [
+      '18:30 kevin reminder_2',
+      '18:30 kevin call (gives up 2026-10-13T00:00:00.000Z)',
+    ]);
+  },
+);
+
 Deno.test('ladderVars: call_coming says the R1 time and carries the link (§19 Q130)', () => {
   const vars = ladderVars('call_coming', {
     siteName: 'Northgate',

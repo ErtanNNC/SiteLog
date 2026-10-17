@@ -125,6 +125,13 @@ verify_jwt = true
 import_map = "./functions/deno.json"
 entrypoint = "./functions/api-text-daily-link/index.ts"
 
+# W4-05: Settings' "Send me a test message" (P12, §19 Q232).
+[functions.api-test-message]
+enabled = true
+verify_jwt = true
+import_map = "./functions/deno.json"
+entrypoint = "./functions/api-test-message/index.ts"
+
 [functions.api-export-payroll]
 enabled = true
 verify_jwt = true

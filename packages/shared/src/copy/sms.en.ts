@@ -84,3 +84,10 @@ export const smsWeatherPhraseEn: SmsWeatherPhrases = {
  * notice (`SMS_HELP_PRIVACY`). GSM-7.
  */
 export const smsHelpPrivacyEn = ' - Privacy: {privacy_link}';
+
+/**
+ * W4-05 (spec §19 Q232): Settings' "Send me a test message", texted to the number an admin types
+ * (never a reporter). GSM-7, one segment.
+ */
+export const smsTestMessageEn =
+  'SiteLog test message for {company}. Your site managers get their texts from this sender. No reply needed.';

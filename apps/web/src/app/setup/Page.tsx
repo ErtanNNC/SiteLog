@@ -284,13 +284,17 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
   const { progress, setProgress, userId, orgId } = useProgress(packs);
   const orgCountry = useOrgCountry(packs);
   const orgPack = packFor(packs, orgCountry);
-  const siteDefaults = siteDefaultsFor(orgPack);
+  const settings = useSettings();
+  // W4-05 (§19 Q231): a new manager starts with the org's default preference.
+  const siteDefaults = {
+    ...siteDefaultsFor(orgPack),
+    ...(settings.data ? { contactPref: settings.data.settings.default_contact_pref } : {}),
+  };
   const { t, language } = useCopy();
   // W4-10 (§19 Q234): the org's own price, in the panel's language.
   const priceText = sitePriceFor(currentOrg?.price, language);
   const logo = useLogoPreview();
   const setupState = useSetupState();
-  const settings = useSettings();
   const updateOrg = useUpdateOrg();
   const createSite = useCreateSite();
   const inviteReporter = useInviteReporter();
@@ -304,9 +308,14 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
   if (settings.data && !draft) setDraft(structuredClone(settings.data.settings));
   if (settings.data && !companySeeded) {
     const org = settings.data.org;
+    const pref = settings.data.settings.default_contact_pref;
     setCompanySeeded(true);
     setProgress((p) => ({
       ...p,
+      // A site draft nobody has typed in yet takes the org's default preference (§19 Q231).
+      ...(!p.site.name && !p.site.managerName && !p.site.managerPhone
+        ? { site: { ...p.site, contactPref: pref, backupContactPref: pref } }
+        : {}),
       company: {
         name: org.name,
         address: org.address ?? '',

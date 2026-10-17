@@ -90,13 +90,16 @@ export function invitePhone(input: string, orgCountry: string): E164 | null {
  * the pack's field locales whose language the office ticked under "Speaks" (`reporterLocaleFor`:
  * a US reporter who speaks Spanish gets es-US and a Spanish welcome, F3 "in the reporter's
  * language"), else the pack's default (`reporterDefaultsFor`: its first field locale); and
- * `link` (the column default; a pack has no report-mode default). A locale the pack does not
+ * the org's default preference (`org_settings.default_contact_pref`, W4-05, §19 Q231; `link` by
+ * default; a pack has no report-mode default). A locale the pack does not
  * offer is refused. The request contract stays compatible: `languages`, `locale` and
  * `contactPref` are all optional.
  */
 export function inviteProfile(
   pack: CountryPack,
   body: { locale?: ReporterLocale; contactPref?: ContactPref; languages?: string[] },
+  /** W4-05 (§19 Q231): the org's `org_settings.default_contact_pref`, for a request without one. */
+  orgDefaultPref: ContactPref = 'link',
 ):
   | { ok: true; locale: ReporterLocale; languages: string[]; contactPref: ContactPref }
   | { ok: false; reason: string } {
@@ -112,7 +115,7 @@ export function inviteProfile(
     ok: true,
     locale,
     languages: body.languages ?? (body.locale ? [languageOf(locale)] : defaults.languages),
-    contactPref: body.contactPref ?? 'link',
+    contactPref: body.contactPref ?? orgDefaultPref,
   };
 }
 

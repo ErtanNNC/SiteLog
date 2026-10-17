@@ -93,6 +93,8 @@ import type {
   ResolveUnknownCompanyInput,
   ReviewGlossaryTermInput,
   UpdateOrgInput,
+  SendTestMessageInput,
+  SendTestMessageResult,
   UpdateReporterContactInput,
   UpdateReporterInput,
   UpdateSitePatch,
@@ -2049,6 +2051,9 @@ export class DemoStore {
       timezone: input.timezone.trim() || org.timezone,
       address: input.address?.trim() || null,
       license_no: input.licenseNo?.trim() || null,
+      // W4-05 (§19 Q233): the report language and units, unchanged when not given.
+      locale: input.locale ?? org.locale,
+      units: input.units ?? org.units,
     };
     const diff: Record<string, { from: string | null; to: string | null }> = {};
     for (const key of Object.keys(next) as Array<keyof typeof next>) {
@@ -2066,6 +2071,39 @@ export class DemoStore {
       diff,
     });
     this.emit({ table: 'all' });
+  }
+
+  /**
+   * api-test-message for a demo org (§19 Q232): `console`, nothing sent; five an hour per org,
+   * each audited `settings.test_message` with the number masked, as the Supabase path.
+   */
+  sendTestMessage(input: SendTestMessageInput, userId: string): SendTestMessageResult {
+    const org = this.data.org;
+    const now = Date.parse(this.nowIso());
+    const recent = this.data.audit.filter(
+      (a) =>
+        a.org_id === org.id &&
+        a.action === 'settings.test_message' &&
+        now - Date.parse(a.created_at) < 3_600_000,
+    );
+    if (recent.length >= 5) throw new CodedError('rate_limited', 'rate_limited');
+    const digits = input.phone.replace(/\D/g, '');
+    if (digits.length < 7) throw new CodedError('invalid_phone', 'invalid_phone');
+    this.audit({
+      org_id: org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'settings.test_message',
+      entity: 'org',
+      entity_id: org.id,
+      diff: {
+        to: `+${digits.slice(0, 4)}***${digits.slice(-3)}`,
+        driver: 'console',
+        language: input.language,
+      },
+    });
+    this.emit({ table: 'all' });
+    return { outcome: 'console', reason: 'demo' };
   }
 
   setLogo(file: { url: string; ext: 'png' | 'svg' } | null, userId: string): void {

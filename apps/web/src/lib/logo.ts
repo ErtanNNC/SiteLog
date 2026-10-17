@@ -5,7 +5,10 @@ export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 export const LOGO_TYPES: readonly string[] = ['image/png', 'image/svg+xml'];
 export const LOGO_ACCEPT = LOGO_TYPES.join(',');
 
-/** What is wrong with a logo file, as its `setup.company.*` copy key; null when it is fine. */
+/**
+ * What is wrong with a logo file, as its copy key (the same name under `setup.company.*` and
+ * `settings.pdf.*`); null when it is fine.
+ */
 export function logoFileProblem(
   file: Pick<File, 'type' | 'size'>,
 ): 'logoWrongType' | 'logoTooLarge' | null {

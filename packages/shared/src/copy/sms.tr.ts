@@ -87,3 +87,7 @@ export const smsWeatherPhraseTr: SmsWeatherPhrases = {
  * notice (`SMS_HELP_PRIVACY`). For the Q63 review.
  */
 export const smsHelpPrivacyTr = ' - Aydınlatma metni: {privacy_link}';
+
+/** W4-05 (spec §19 Q232): Settings' "Send me a test message". For the Q63 review. */
+export const smsTestMessageTr =
+  '{company} için SiteLog deneme mesajı. Şantiye şefleriniz mesajlarını bu göndericiden alır. Yanıt gerekmez.';

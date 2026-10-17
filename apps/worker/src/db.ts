@@ -866,6 +866,8 @@ export interface Db {
     report_date: string;
     expires_at: string;
   }): Promise<boolean>;
+  /** W4-05 (§19 Q231): the site's org's `daily_link_ttl_hours`; null = DAILY_LINK_TTL_HOURS. */
+  orgDailyLinkTtlHours(siteId: string): Promise<number | null>;
   /** W3-10 (F9): the reporter's photos links for a site and report date, not revoked, newest first. */
   listPhotosLinks(
     reporterId: string,
@@ -2041,6 +2043,12 @@ export function createDb(sql: Sql): Db {
                 ${row.report_date}::date, ${row.expires_at})
         on conflict (code_hash) do nothing returning id`;
       return rows.length > 0;
+    },
+    async orgDailyLinkTtlHours(siteId) {
+      const [row] = await sql<Array<{ ttl: number | null }>>`
+        select os.daily_link_ttl_hours as ttl from sites s
+        join org_settings os on os.org_id = s.org_id where s.id = ${siteId}`;
+      return row?.ttl ?? null;
     },
     async listPhotosLinks(reporterId, siteId, reportDate) {
       const rows = await sql<Array<{ id: string; code_hash: string; expires_at: Date | null }>>`

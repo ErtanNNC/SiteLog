@@ -20,7 +20,7 @@ function Probe({ id }: { id: string }) {
     <p data-testid={id} data-language={language}>
       {t('nav.sites')} | {t('shell.orgSwitcher.activeSites', { count: 1 })} |{' '}
       {t('shell.orgSwitcher.activeSites', { count: 6 })} | {t('states.noAccess', { page: 'X' })} |{' '}
-      {t('settings.title')} | {tc('language')}
+      {t('newReport.title')} | {tc('language')}
     </p>
   );
 }
@@ -31,7 +31,7 @@ describe('useCopy (D9)', () => {
   it('serves copy/en.ts as English, with counted phrases and variables', () => {
     render(<Probe id="p" />);
     expect(screen.getByTestId('p')).toHaveTextContent(
-      'Sites | 1 active site | 6 active sites | You don’t have access to X. Ask an admin. | Settings | Language',
+      'Sites | 1 active site | 6 active sites | You don’t have access to X. Ask an admin. | New report | Language',
     );
     expect(screen.getByTestId('p')).toHaveAttribute('data-language', 'en');
   });
@@ -39,9 +39,9 @@ describe('useCopy (D9)', () => {
   it('switches to Turkish everywhere at once, falling back to English per key', async () => {
     render(<Probe id="p" />);
     await act(() => i18n.changeLanguage('tr'));
-    // `settings.title` has no Turkish yet: it falls back to English, never to the raw key.
+    // `newReport.title` has no Turkish yet (W4-09): it falls back to English, never to the raw key.
     expect(screen.getByTestId('p')).toHaveTextContent(
-      'Şantiyeler | 1 aktif şantiye | 6 aktif şantiye | X sayfasına erişiminiz yok. Bir yöneticiye danışın. | Settings | Dil',
+      'Şantiyeler | 1 aktif şantiye | 6 aktif şantiye | X sayfasına erişiminiz yok. Bir yöneticiye danışın. | New report | Dil',
     );
     expect(document.documentElement.lang).toBe('tr');
     expect(translate('nav.reports')).toBe('Raporlar');

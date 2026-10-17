@@ -4,9 +4,8 @@
  *
  * D9: the shell, sign-in, `/auth/callback`, the Overview (W1-16), Sites and Site detail (W1-18),
  * the Reports archive and Report review (W1-17), Crew hours (W3-06), Weather & delays (W3-07), the
- * Site glossary (W3-08), Team & numbers (W4-03), Billing (W4-10), the setup wizard (W4-02; its
- * Reports step keeps Settings' section English until W4-05), the not-found page and the
- * placeholders speak the panel's language (EN/TR).
+ * Site glossary (W3-08), Team & numbers (W4-03), Billing (W4-10), the setup wizard (W4-02),
+ * Settings (W4-05), the not-found page and the placeholders speak the panel's language (EN/TR).
  * A page wrapped in `<EnglishOnly>` still reads `copy/en.ts` directly and renders in English inside
  * the translated shell; it loses the wrapper when it gets its Turkish.
  */
@@ -95,15 +94,7 @@ export function AppRoutes() {
             <Route path="/glossary" element={guard('glossary', <GlossaryPage />)} />
             <Route path="/settings" element={<Navigate to="/settings/reports" replace />} />
             {/* `/settings/channels` (§11.1) is the Field channels tab, a placeholder until W1-08. */}
-            <Route
-              path="/settings/:section"
-              element={guard(
-                'settings',
-                <EnglishOnly>
-                  <SettingsPage />
-                </EnglishOnly>,
-              )}
-            />
+            <Route path="/settings/:section" element={guard('settings', <SettingsPage />)} />
             <Route path="/billing" element={guard('billing', <BillingPage />)} />
             <Route path="/dev/phone" element={guard('devPhone', <DevPhonePage />)} />
             {/* SiteLog staff only (platform_admins), not an org role and not in the sidebar. */}

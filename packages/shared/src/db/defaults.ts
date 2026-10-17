@@ -35,6 +35,9 @@ export const V12_ROW_DEFAULTS = {
     second_call_enabled: true,
     call_window_start: '07:00:00',
     call_window_end: '20:00:00',
+    /** W4-05 (20261017000510, §19 Q231). */
+    default_contact_pref: 'link',
+    daily_link_ttl_hours: null,
   },
   reporters: {
     locale: 'en-US',

@@ -1,5 +1,6 @@
 import type { Json, TestClipView } from '@sitelog/shared';
 import { logAudit } from '../_shared/audit.ts';
+import { orgDailyLinkTtlHours } from '../_shared/daily_links.ts';
 import { phoneOptedOut } from '../_shared/messaging.ts';
 import type { AppClient } from '../_shared/supabase.ts';
 import {
@@ -212,6 +213,8 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       if (error.code === '23505') return false;
       throw error;
     },
+
+    orgDailyLinkTtlHours: (siteId) => orgDailyLinkTtlHours(admin, siteId),
 
     async listConsents(reporterId) {
       const { data } = await admin

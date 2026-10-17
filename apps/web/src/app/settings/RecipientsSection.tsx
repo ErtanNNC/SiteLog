@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -20,7 +20,7 @@ export function RecipientsSection({
   draft: RecipientsDraft;
   update: (next: RecipientsDraft) => void;
 }) {
-  const c = copy.settings.recipients;
+  const { t } = useCopy();
   const setEmails = (siteId: string, emails: string[]) =>
     update(draft.map((s) => (s.siteId === siteId ? { ...s, emails } : s)));
   const applyAll = (siteId: string) => {
@@ -34,11 +34,11 @@ export function RecipientsSection({
     return (
       <EmptyState
         icon={HardHat}
-        title={c.noSitesTitle}
-        body={c.noSitesBody}
+        title={t('settings.recipients.noSitesTitle')}
+        body={t('settings.recipients.noSitesBody')}
         action={
           <Button variant="primary" asChild>
-            <Link to="/setup/site">{copy.overview.connectFirstSite}</Link>
+            <Link to="/setup/site">{t('overview.connectFirstSite')}</Link>
           </Button>
         }
       />
@@ -47,7 +47,7 @@ export function RecipientsSection({
 
   return (
     <div className="grid gap-4">
-      <p className="text-caption text-dust">{c.hint}</p>
+      <p className="text-caption text-dust">{t('settings.recipients.hint')}</p>
       <div className="grid gap-4 md:grid-cols-2" data-testid="recipients">
         {draft.map((site) => (
           <SiteRecipients
@@ -77,14 +77,14 @@ function SiteRecipients({
   onChange: (emails: string[]) => void;
   onApplyAll?: () => void;
 }) {
-  const c = copy.settings.recipients;
+  const { t } = useCopy();
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const add = () => {
     const e = value.trim().toLowerCase();
     if (!e) return;
     if (!EMAIL.test(e)) {
-      setError(c.invalid);
+      setError(t('settings.recipients.invalid'));
       return;
     }
     setError(null);
@@ -101,17 +101,20 @@ function SiteRecipients({
             size="sm"
             onClick={onApplyAll}
             disabled={emails.length === 0}
-            title={c.applyAllHint(siteName)}
-            aria-label={`${c.applyAll} · ${siteName}`}
+            title={t('settings.recipients.applyAllFor', { site: siteName })}
+            aria-label={t('settings.recipients.applyAllSite', { site: siteName })}
           >
-            {c.applyAll}
+            {t('settings.recipients.applyAll')}
           </Button>
         ) : null}
       </CardHeader>
       <CardContent className="pt-3">
-        <ul className="flex flex-wrap gap-2" aria-label={`${c.perSite} · ${siteName}`}>
+        <ul
+          className="flex flex-wrap gap-2"
+          aria-label={t('settings.recipients.perSiteOf', { site: siteName })}
+        >
           {emails.length === 0 ? (
-            <li className="text-caption text-dust">{c.none}</li>
+            <li className="text-caption text-dust">{t('settings.recipients.none')}</li>
           ) : (
             emails.map((e) => (
               <li
@@ -123,7 +126,7 @@ function SiteRecipients({
                 <button
                   type="button"
                   className="ml-1 flex size-7 items-center justify-center rounded-chip text-dust hover:bg-rebar hover:text-asphalt"
-                  aria-label={c.remove(e)}
+                  aria-label={t('settings.recipients.removeEmail', { email: e })}
                   onClick={() => onChange(emails.filter((x) => x !== e))}
                 >
                   <X className="size-4" aria-hidden="true" />
@@ -141,20 +144,25 @@ function SiteRecipients({
           noValidate
         >
           <Label htmlFor={`rcpt-${siteId}`} className="sr-only">
-            {c.add} · {siteName}
+            {t('settings.recipients.addSite', { site: siteName })}
           </Label>
           <Input
             id={`rcpt-${siteId}`}
             type="email"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder={c.placeholder}
+            placeholder={t('settings.recipients.placeholder')}
             aria-invalid={!!error}
             className="h-target-dense"
           />
-          <Button type="submit" variant="ghost" size="dense" aria-label={`${c.add} · ${siteName}`}>
+          <Button
+            type="submit"
+            variant="ghost"
+            size="dense"
+            aria-label={t('settings.recipients.addSite', { site: siteName })}
+          >
             <Plus aria-hidden="true" />
-            {c.add}
+            {t('settings.recipients.add')}
           </Button>
         </form>
         {error ? (

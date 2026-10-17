@@ -1,6 +1,8 @@
 import { ImagePlus, Minus, Plus } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
+import type { OrgLocale, UnitSystem } from '@sitelog/shared/locale.ts';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/Dialog';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/Checkbox';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
@@ -11,14 +13,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
+import { useSaveReportLocale } from '@/data/hooks';
+import type { SettingsData } from '@/data/types';
+import { useCopy } from '@/i18n/useCopy';
 import { LOGO_ACCEPT } from '@/lib/logo';
 import { cn } from '@/lib/utils';
 import { SettingsCard, SwitchRow } from './fields';
 import type { SectionProps } from './ReportsSection';
 
 export interface PdfSectionProps extends SectionProps {
-  orgName: string;
+  org: SettingsData['org'];
   logoUrl: string | null;
   /** Uploads (File) or removes (null) the logo right away. */
   onLogoChange: (file: File | null) => void;
@@ -26,17 +30,20 @@ export interface PdfSectionProps extends SectionProps {
   logoError?: string | null;
 }
 
-/** PDF template: logo upload, letterhead lines, footer, paper size, live thumbnail (§12, §P12). */
+/**
+ * PDF template: logo upload, letterhead lines, footer, paper size, live thumbnail (§12, §P12), and
+ * the report language and units (§19 Q233, W4-05).
+ */
 export function PdfSection({
   draft,
   update,
-  orgName,
+  org,
   logoUrl,
   onLogoChange,
   logoBusy = false,
   logoError = null,
 }: PdfSectionProps) {
-  const c = copy.settings.pdf;
+  const { t } = useCopy();
   const fileRef = useRef<HTMLInputElement>(null);
   const lines = draft.letterhead_lines;
   const setLine = (i: number, v: string) =>
@@ -45,13 +52,13 @@ export function PdfSection({
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="grid gap-6">
-        <SettingsCard title={c.logo} hint={c.logoHint}>
+        <SettingsCard title={t('settings.pdf.logo')} hint={t('settings.pdf.logoHint')}>
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex size-20 items-center justify-center overflow-hidden rounded-card border border-rebar bg-concrete">
               {logoUrl ? (
                 <img
                   src={logoUrl}
-                  alt={copy.settings.pdf.logo}
+                  alt={t('settings.pdf.logo')}
                   className="max-h-full max-w-full object-contain"
                 />
               ) : (
@@ -64,7 +71,7 @@ export function PdfSection({
                 type="file"
                 accept={LOGO_ACCEPT}
                 className="sr-only"
-                aria-label={c.upload}
+                aria-label={t('settings.pdf.upload')}
                 aria-describedby={logoError ? 'pdf-logo-error' : undefined}
                 data-testid="logo-input"
                 onChange={(e) => {
@@ -79,7 +86,11 @@ export function PdfSection({
                 loading={logoBusy}
                 onClick={() => fileRef.current?.click()}
               >
-                {logoBusy ? c.logoUploading : logoUrl ? c.replace : c.upload}
+                {logoBusy
+                  ? t('settings.pdf.logoUploading')
+                  : logoUrl
+                    ? t('settings.pdf.replace')
+                    : t('settings.pdf.upload')}
               </Button>
               {logoUrl ? (
                 <Button
@@ -88,7 +99,7 @@ export function PdfSection({
                   disabled={logoBusy}
                   onClick={() => onLogoChange(null)}
                 >
-                  {c.removeLogo}
+                  {t('settings.pdf.removeLogo')}
                 </Button>
               ) : null}
             </div>
@@ -104,23 +115,23 @@ export function PdfSection({
           ) : null}
         </SettingsCard>
 
-        <SettingsCard title={c.letterhead} hint={c.letterheadHint}>
+        <SettingsCard title={t('settings.pdf.letterhead')} hint={t('settings.pdf.letterheadHint')}>
           <div className="grid gap-2" data-testid="letterhead-lines">
             {lines.map((l, i) => (
               <div key={i} className="flex items-center gap-2">
                 <Label htmlFor={`lh-${i}`} className="sr-only">
-                  {c.letterheadPlaceholder} {i + 1}
+                  {t('settings.pdf.letterheadLine', { n: i + 1 })}
                 </Label>
                 <Input
                   id={`lh-${i}`}
                   value={l}
                   onChange={(e) => setLine(i, e.target.value)}
-                  placeholder={c.letterheadPlaceholder}
+                  placeholder={t('settings.pdf.letterheadPlaceholder')}
                 />
                 <Button
                   variant="subtle"
                   size="iconDense"
-                  aria-label={`${c.removeLine} ${i + 1}`}
+                  aria-label={t('settings.pdf.removeLineN', { n: i + 1 })}
                   onClick={() => update({ letterhead_lines: lines.filter((_, j) => j !== i) })}
                 >
                   <Minus aria-hidden="true" />
@@ -135,23 +146,23 @@ export function PdfSection({
               onClick={() => update({ letterhead_lines: [...lines, ''] })}
             >
               <Plus aria-hidden="true" />
-              {c.addLine}
+              {t('settings.pdf.addLine')}
             </Button>
           </div>
         </SettingsCard>
 
-        <SettingsCard title={c.paper}>
+        <SettingsCard title={t('settings.pdf.paper')}>
           <div className="grid gap-5 md:grid-cols-2">
             <RadioGroup
               value={draft.pdf_paper}
               onValueChange={(v) => update({ pdf_paper: v })}
-              aria-label={c.paper}
+              aria-label={t('settings.pdf.paper')}
               className="grid-cols-2"
             >
               {(
                 [
-                  ['letter', c.letter, '8.5 × 11 in'],
-                  ['a4', c.a4, '210 × 297 mm'],
+                  ['letter', t('settings.pdf.letter'), '8.5 × 11 in'],
+                  ['a4', t('settings.pdf.a4'), '210 × 297 mm'],
                 ] as const
               ).map(([value, label, size]) => (
                 <label
@@ -170,7 +181,7 @@ export function PdfSection({
               ))}
             </RadioGroup>
             <div className="grid gap-1.5">
-              <Label htmlFor="pdf-photos">{c.photos}</Label>
+              <Label htmlFor="pdf-photos">{t('settings.pdf.photos')}</Label>
               <Select
                 value={String(draft.pdf_max_photos)}
                 onValueChange={(v) => update({ pdf_max_photos: Number(v) })}
@@ -186,25 +197,27 @@ export function PdfSection({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-caption text-dust">{c.photosHint}</p>
+              <p className="text-caption text-dust">{t('settings.pdf.photosHint')}</p>
             </div>
           </div>
           <div className="mt-5 border-t border-rebar pt-4">
             <SwitchRow
               id="pdf-footer"
-              label={c.footerToggle}
-              hint={c.footerText}
+              label={t('settings.pdf.footerToggle')}
+              hint={t('settings.pdf.footerText')}
               checked={draft.pdf_footer_enabled}
               onCheckedChange={(v) => update({ pdf_footer_enabled: v })}
             />
           </div>
         </SettingsCard>
+
+        <ReportLocaleCard org={org} />
       </div>
 
-      <aside aria-label={c.preview}>
-        <div className="eyebrow mb-2 text-dust">{c.preview}</div>
+      <aside aria-label={t('settings.pdf.preview')}>
+        <div className="eyebrow mb-2 text-dust">{t('settings.pdf.preview')}</div>
         <PdfThumbnail
-          orgName={orgName}
+          orgName={org.name}
           lines={lines}
           logoUrl={logoUrl}
           paper={draft.pdf_paper}
@@ -232,7 +245,7 @@ export function PdfThumbnail({
   footer: boolean;
   photos: number;
 }) {
-  const c = copy.settings.pdf;
+  const { t } = useCopy();
   return (
     <div
       className="mx-auto flex w-full max-w-[320px] flex-col border border-rebar bg-white p-4 text-asphalt"
@@ -256,13 +269,13 @@ export function PdfThumbnail({
           {logoUrl ? (
             <img src={logoUrl} alt="" className="max-h-full max-w-full object-contain" />
           ) : (
-            <span className="font-mono text-[6px] text-dust">{c.previewLogo}</span>
+            <span className="font-mono text-[6px] text-dust">{t('settings.pdf.previewLogo')}</span>
           )}
         </div>
       </div>
       <div className="mt-2 flex items-baseline justify-between">
-        <div className="font-display text-[10px]">{c.previewReport}</div>
-        <div className="font-mono text-[6px] text-dust">{c.previewNo}</div>
+        <div className="font-display text-[10px]">{t('settings.pdf.previewReport')}</div>
+        <div className="font-mono text-[6px] text-dust">{t('settings.pdf.previewNo')}</div>
       </div>
       <div className="mt-2 grid grid-cols-3 gap-1">
         {[0, 1, 2].map((i) => (
@@ -287,8 +300,102 @@ export function PdfThumbnail({
         </div>
       ) : null}
       <div className="mt-auto border-t border-rebar pt-1 text-[5px] leading-[8px] text-dust">
-        {footer ? c.footerText : ' '}
+        {footer ? t('settings.pdf.footerText') : ' '}
       </div>
     </div>
+  );
+}
+
+const REPORT_LOCALES: readonly OrgLocale[] = ['en-US', 'tr-TR'];
+const UNITS: readonly UnitSystem[] = ['imperial', 'metric'];
+const languageKey = (l: OrgLocale) => (l === 'tr-TR' ? 'tr' : 'en');
+
+/**
+ * §19 Q233 (W4-05): the org's report language and units (`update_org` p_locale / p_units, admin,
+ * audited `org.updated`), saved on their own after a confirm, not with "Save changes". New report
+ * versions take them; a filed version keeps its own (its data carries `reportLanguage`, `units`).
+ */
+function ReportLocaleCard({ org }: { org: SettingsData['org'] }) {
+  const { t } = useCopy();
+  const save = useSaveReportLocale();
+  const [locale, setLocale] = useState<OrgLocale>(org.locale);
+  const [units, setUnits] = useState<UnitSystem>(org.units);
+  const [confirming, setConfirming] = useState(false);
+  const changed = locale !== org.locale || units !== org.units;
+  const unitsLabel = (u: UnitSystem) => t(`settings.pdf.unitNames.${u}`);
+  return (
+    <SettingsCard
+      title={t('settings.pdf.reportLocale')}
+      hint={t('settings.pdf.reportLocaleHint')}
+      data-testid="report-locale"
+    >
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-1.5">
+          <Label htmlFor="report-language">{t('settings.pdf.reportLanguage')}</Label>
+          <Select value={locale} onValueChange={(v) => setLocale(v as OrgLocale)}>
+            <SelectTrigger id="report-language">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {REPORT_LOCALES.map((l) => (
+                <SelectItem key={l} value={l}>
+                  {t(`settings.pdf.reportLanguages.${languageKey(l)}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="report-units">{t('settings.pdf.units')}</Label>
+          <Select value={units} onValueChange={(v) => setUnits(v as UnitSystem)}>
+            <SelectTrigger id="report-units">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {UNITS.map((u) => (
+                <SelectItem key={u} value={u}>
+                  {unitsLabel(u)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <Button
+        variant="ghost"
+        className="mt-4"
+        disabled={!changed}
+        loading={save.isPending}
+        onClick={() => setConfirming(true)}
+      >
+        {t('settings.pdf.reportLocaleApply')}
+      </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={t('settings.pdf.reportLocaleConfirmTitle')}
+        description={t('settings.pdf.reportLocaleConfirmBody', {
+          language: t(`settings.pdf.reportLanguages.${languageKey(locale)}`),
+          units: unitsLabel(units),
+        })}
+        confirmLabel={t('settings.pdf.reportLocaleConfirm')}
+        loading={save.isPending}
+        onConfirm={async () => {
+          try {
+            await save.mutateAsync({
+              name: org.name,
+              timezone: org.timezone,
+              address: org.address,
+              licenseNo: org.licenseNo,
+              locale,
+              units,
+            });
+            setConfirming(false);
+          } catch {
+            /* the mutation hook already toasted */
+          }
+        }}
+      />
+    </SettingsCard>
   );
 }

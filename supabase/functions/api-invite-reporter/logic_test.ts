@@ -93,6 +93,15 @@ Deno.test(
       languages: ['es'],
       contactPref: 'call',
     });
+    // W4-05 (§19 Q231): without a preference in the request, the org's default; the request wins.
+    assertEquals(inviteProfile(us, {}, 'call'), {
+      ok: true,
+      locale: 'en-US',
+      languages: ['en'],
+      contactPref: 'call',
+    });
+    const asked = inviteProfile(us, { contactPref: 'link' }, 'call');
+    assertEquals(asked.ok ? asked.contactPref : null, 'link');
     assertEquals(inviteProfile(tr, { locale: 'es-US' }), {
       ok: false,
       reason: 'Locale es-US is not offered in TR (tr-TR, en-US)',

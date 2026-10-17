@@ -2,15 +2,13 @@ import { ArrowLeft, Check } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import type { OrgSettings } from '@/data/types';
-import { EnglishOnly } from '@/i18n/EnglishOnly';
 import { useCopy } from '@/i18n/useCopy';
 import { ReportsSection } from '../settings/ReportsSection';
 import { EmailChips } from './fields';
 
 /**
- * F2 step 3 · Reports & reminders. Its settings are Settings' own section, which is still English
- * (W4-05 converts Settings): it renders under `<EnglishOnly>` (marked `lang="en"`) inside the
- * translated wizard until then; the wrapper goes when `ReportsSection` reads `t()`.
+ * F2 step 3 · Reports & reminders. Its settings are Settings' own section (EN/TR since W4-05),
+ * without the daily link card's link to Field channels.
  */
 export function ReportsStep({
   draft,
@@ -36,9 +34,7 @@ export function ReportsStep({
         <h2 className="font-h2 text-h2">{t('setup.reports.title')}</h2>
         <p className="mt-1 text-[15px] text-dust">{t('setup.reports.subtitle')}</p>
       </div>
-      <EnglishOnly>
-        <ReportsSection draft={draft} update={update} />
-      </EnglishOnly>
+      <ReportsSection draft={draft} update={update} />
       <Card>
         <CardContent className="p-5">
           <h3 className="font-h2 text-h2">{t('setup.reports.recipients')}</h3>

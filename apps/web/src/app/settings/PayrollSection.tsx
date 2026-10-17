@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { SettingsCard, SwitchRow } from './fields';
 import type { SectionProps } from './ReportsSection';
 
@@ -19,7 +19,7 @@ import type { SectionProps } from './ReportsSection';
  * api-export-payroll for every CSV.
  */
 export function PayrollSection({ draft, update }: SectionProps) {
-  const c = copy.settings.payroll;
+  const { t } = useCopy();
   const columns = normalizePayrollColumns(draft.payroll_columns);
   const isDefault = columns.every((col, i) => col === PAYROLL_COLUMNS[i]);
   const move = (i: number, dir: -1 | 1) => {
@@ -31,9 +31,9 @@ export function PayrollSection({ draft, update }: SectionProps) {
   };
   return (
     <div className="grid gap-6">
-      <SettingsCard title={c.format} hint={c.formatHint}>
+      <SettingsCard title={t('settings.payroll.format')} hint={t('settings.payroll.formatHint')}>
         <div className="grid gap-1.5 md:max-w-xs">
-          <Label htmlFor="payroll-format">{c.format}</Label>
+          <Label htmlFor="payroll-format">{t('settings.payroll.format')}</Label>
           <Select
             value={draft.payroll_csv_format}
             onValueChange={(v) => update({ payroll_csv_format: v })}
@@ -42,22 +42,22 @@ export function PayrollSection({ draft, update }: SectionProps) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="generic">{c.formats.generic}</SelectItem>
+              <SelectItem value="generic">{t('settings.payroll.formats.generic')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="mt-5 border-t border-rebar pt-4">
           <SwitchRow
             id="payroll-unconfirmed"
-            label={c.includeUnconfirmed}
-            hint={c.includeUnconfirmedHint}
+            label={t('settings.payroll.includeUnconfirmed')}
+            hint={t('settings.payroll.includeUnconfirmedHint')}
             checked={draft.include_unconfirmed_in_payroll}
             onCheckedChange={(v) => update({ include_unconfirmed_in_payroll: v })}
           />
         </div>
       </SettingsCard>
 
-      <SettingsCard title={c.columns} hint={c.columnsHint}>
+      <SettingsCard title={t('settings.payroll.columns')} hint={t('settings.payroll.columnsHint')}>
         <ol className="grid gap-1" data-testid="payroll-columns">
           {columns.map((col, i) => (
             <li
@@ -69,7 +69,7 @@ export function PayrollSection({ draft, update }: SectionProps) {
               <Button
                 variant="subtle"
                 size="iconDense"
-                aria-label={c.moveUp(col)}
+                aria-label={t('settings.payroll.moveUpCol', { column: col })}
                 disabled={i === 0}
                 onClick={() => move(i, -1)}
               >
@@ -78,7 +78,7 @@ export function PayrollSection({ draft, update }: SectionProps) {
               <Button
                 variant="subtle"
                 size="iconDense"
-                aria-label={c.moveDown(col)}
+                aria-label={t('settings.payroll.moveDownCol', { column: col })}
                 disabled={i === columns.length - 1}
                 onClick={() => move(i, 1)}
               >
@@ -95,7 +95,7 @@ export function PayrollSection({ draft, update }: SectionProps) {
           onClick={() => update({ payroll_columns: [...PAYROLL_COLUMNS] })}
         >
           <RotateCcw aria-hidden="true" />
-          {c.reset}
+          {t('settings.payroll.reset')}
         </Button>
       </SettingsCard>
     </div>

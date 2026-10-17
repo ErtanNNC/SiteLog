@@ -36,7 +36,7 @@ import { canResend, invitePhone, inviteProfile, lineCheckRefusal, linkRows } fro
  * derived from the row id under LINK_SIGNING_SECRET, `ensurePersonalLink`, so the worker can text
  * it); no WhatsApp conversation is attached any more. The phone is read with the org's country as
  * its default region; `locale` comes from the "Speaks" languages or the org's pack and
- * `contactPref` defaults to `link` when omitted, so the deployed panel's request (no locale, no
+ * `contactPref` defaults to the org's `default_contact_pref` (W4-05) when omitted, so the deployed panel's request (no locale, no
  * preference) keeps working. A number that sent STOP on the pack's sender (`sms_opt_outs`, spec
  * §9.5), or a disabled reporter who did (`opted_out_at`), is created or re-enabled `opted_out`:
  * the welcome job then skips it and tells the office why (§13). The answer never holds the link
@@ -81,7 +81,16 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
   const phone = invitePhone(body.phone, org.country);
   if (!phone)
     throw new HttpError(400, 'Phone must be a valid international number, e.g. +1 555 014 3378');
-  const profile = inviteProfile(pack, body);
+  // W4-05 (§19 Q231): a request without a preference takes the org's default for new reporters.
+  const { data: orgSettings } = body.contactPref
+    ? { data: null }
+    : await admin
+        .from('org_settings')
+        .select('default_contact_pref')
+        .eq('org_id', body.orgId)
+        .maybeSingle()
+        .throwOnError();
+  const profile = inviteProfile(pack, body, orgSettings?.default_contact_pref ?? 'link');
   if (!profile.ok) throw new HttpError(400, profile.reason);
   const firstSiteId = body.siteIds[0];
   if (!firstSiteId) throw new HttpError(400, 'At least one site is required');

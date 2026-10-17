@@ -186,6 +186,19 @@ export function dailyLinkExpiresAt(
   return new Date(now.getTime() + hours * 3_600_000).toISOString();
 }
 
+/** The hours an org may set as its daily link expiry (`org_settings.daily_link_ttl_hours`, §19 Q231). */
+export const DAILY_LINK_TTL_HOURS_RANGE = { min: 1, max: 168 } as const;
+
+/** A whole number of hours inside `DAILY_LINK_TTL_HOURS_RANGE` (the column's check). */
+export function isDailyLinkTtlHours(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= DAILY_LINK_TTL_HOURS_RANGE.min &&
+    value <= DAILY_LINK_TTL_HOURS_RANGE.max
+  );
+}
+
 /** A daily link row as `ensureDailyLink` reads it. */
 export interface DailyLinkRow {
   id: string;
@@ -206,6 +219,12 @@ export interface DailyLinkStore {
     report_date: string;
     expires_at: string;
   }): Promise<boolean>;
+  /**
+   * W4-05 (§19 Q231): the site's org's `org_settings.daily_link_ttl_hours`, or null for the
+   * environment's `DAILY_LINK_TTL_HOURS`. Every database store has it; a store without it (tests)
+   * keeps the caller's `expiresAt`.
+   */
+  orgDailyLinkTtlHours?(siteId: string): Promise<number | null>;
 }
 
 /**
@@ -213,7 +232,9 @@ export interface DailyLinkStore {
  * F17 "Text today's link"), and its code: the newest live one (not expired at `now`) whose code can
  * be derived again (`deriveLinkCode`, as personal links), else a new row expiring at `expiresAt`.
  * So texting today's link twice sends the same link, and a link the ladder sends later is the one
- * the office already texted.
+ * the office already texted. A new link lives the org's `daily_link_ttl_hours` when it is set
+ * (§19 Q231, `store.orgDailyLinkTtlHours`), else until the caller's `expiresAt` (the environment's
+ * `DAILY_LINK_TTL_HOURS`).
  */
 export async function ensureDailyLink(
   store: DailyLinkStore,
@@ -221,6 +242,10 @@ export async function ensureDailyLink(
   input: { reporterId: string; siteId: string; reportDate: string; expiresAt: string; now: Date },
   newId: () => string,
 ): Promise<{ id: string; code: string; created: boolean; expiresAt: string }> {
+  const orgTtl = store.orgDailyLinkTtlHours ? await store.orgDailyLinkTtlHours(input.siteId) : null;
+  if (isDailyLinkTtlHours(orgTtl)) {
+    input = { ...input, expiresAt: dailyLinkExpiresAt(input.now, orgTtl) };
+  }
   return ensureDatedLink(
     'daily',
     {

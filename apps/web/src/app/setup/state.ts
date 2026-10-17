@@ -92,13 +92,13 @@ export function emptySite(
     managerPhone: '',
     languages: [...defaults.languages],
     locale: defaults.locale,
-    contactPref: 'link',
+    contactPref: defaults.contactPref ?? 'link',
     hasBackup: false,
     backupName: '',
     backupCountry: defaults.phoneCountry,
     backupPhone: '',
     backupLocale: defaults.locale,
-    backupContactPref: 'link',
+    backupContactPref: defaults.contactPref ?? 'link',
   };
 }
 

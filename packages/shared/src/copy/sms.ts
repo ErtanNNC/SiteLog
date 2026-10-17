@@ -6,9 +6,21 @@ import {
   weatherUnitLabels,
   WEATHER_THRESHOLDS,
 } from '../weather/observed.ts';
-import { smsEn, smsHelpPrivacyEn, smsReplyHintEn, smsWeatherPhraseEn } from './sms.en.ts';
-import { smsEs, smsHelpPrivacyEs, smsReplyHintEs, smsWeatherPhraseEs } from './sms.es.ts';
-import { smsHelpPrivacyTr, smsTr, smsWeatherPhraseTr } from './sms.tr.ts';
+import {
+  smsEn,
+  smsHelpPrivacyEn,
+  smsReplyHintEn,
+  smsTestMessageEn,
+  smsWeatherPhraseEn,
+} from './sms.en.ts';
+import {
+  smsEs,
+  smsHelpPrivacyEs,
+  smsReplyHintEs,
+  smsTestMessageEs,
+  smsWeatherPhraseEs,
+} from './sms.es.ts';
+import { smsHelpPrivacyTr, smsTestMessageTr, smsTr, smsWeatherPhraseTr } from './sms.tr.ts';
 
 /**
  * §9.2 SMS copy catalog. Keys are stable ids; the texts live in `sms.{en,es,tr}.ts`. WhatsApp
@@ -226,6 +238,23 @@ export const SMS_HELP_PRIVACY: Readonly<Record<SmsLocale, string>> = {
   es: smsHelpPrivacyEs,
   tr: smsHelpPrivacyTr,
 };
+
+/**
+ * W4-05 (spec §19 Q232): Settings' "Send me a test message" (`test_message`), texted by
+ * api-test-message to a number the admin types and attests is their own, through the pack's
+ * transport. Not a Notifier key: it reaches no reporter, so no consent, channel order or
+ * `messages` row applies (the claim is audited with the number masked).
+ */
+export const SMS_TEST_MESSAGE: Readonly<Record<SmsLocale, string>> = {
+  en: smsTestMessageEn,
+  es: smsTestMessageEs,
+  tr: smsTestMessageTr,
+};
+
+/** The test message in a language, with the company's name. */
+export function renderTestMessage(locale: SmsLocale, company: string): string {
+  return SMS_TEST_MESSAGE[locale].replace('{company}', company.trim() || 'SiteLog');
+}
 
 export function isTwoWaySmsKey(key: SmsKey): key is TwoWaySmsKey {
   return (TWO_WAY_SMS_KEYS as readonly string[]).includes(key);

@@ -342,6 +342,7 @@ async function dailyLink(ctx: Ctx, scope: CallScope): Promise<string> {
   const link = await ensureDailyLink(
     {
       listDailyLinks: (r, s, d) => ctx.db.listDailyLinks(r, s, d),
+      orgDailyLinkTtlHours: (siteId) => ctx.db.orgDailyLinkTtlHours(siteId),
       insertDailyLink: (row) => ctx.db.insertDailyLink(row),
     },
     secret,

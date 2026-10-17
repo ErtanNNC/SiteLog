@@ -6,6 +6,7 @@ import {
   dailyLinkExpiresAt,
   deriveLinkCode,
   ensureDailyLink,
+  isDailyLinkTtlHours,
   ensurePersonalLink,
   fieldLinkUrl,
   fieldHistoryLinkUrl,
@@ -274,5 +275,44 @@ describe('daily links (W1-16, "Text today\'s link")', () => {
         () => 'x',
       ),
     ).rejects.toThrow(/daily link/);
+  });
+
+  it('W4-05 (§19 Q231): a new link lives the org’s daily_link_ttl_hours before the env value', async () => {
+    const asked: string[] = [];
+    const withTtl = (ttl: number | null) => {
+      const { rows, store } = memoryStore();
+      store.orgDailyLinkTtlHours = async (siteId) => {
+        asked.push(siteId);
+        return ttl;
+      };
+      return { rows, store };
+    };
+    const input = {
+      reporterId: 'r1',
+      siteId: 's1',
+      reportDate: '2026-10-09',
+      expiresAt: dailyLinkExpiresAt(NOW, 72),
+      now: NOW,
+    };
+    const day = withTtl(24);
+    const link = await ensureDailyLink(day.store, SECRET, input, () => 'org-ttl');
+    expect(link.expiresAt).toBe('2026-10-11T00:05:00.000Z');
+    expect(day.rows[0]!.expires_at).toBe('2026-10-11T00:05:00.000Z');
+    expect(asked).toEqual(['s1']);
+    // null (and a value the column would refuse) keeps the environment's expiry.
+    for (const ttl of [null, 0, 500]) {
+      const env = withTtl(ttl);
+      expect((await ensureDailyLink(env.store, SECRET, input, () => `env-${ttl}`)).expiresAt).toBe(
+        '2026-10-13T00:05:00.000Z',
+      );
+    }
+    expect([0, 1, 168, 169, 1.5, null].map(isDailyLinkTtlHours)).toEqual([
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+    ]);
   });
 });

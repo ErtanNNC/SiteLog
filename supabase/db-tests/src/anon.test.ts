@@ -83,6 +83,8 @@ const AUTHENTICATED_KEEPS = [
   'team_reporter_states(uuid)',
   // W4-04: Team's Call now.
   'office_call_start(uuid,uuid,text,boolean)',
+  // W4-05: the report language and units (§19 Q233).
+  'update_org(uuid,text,text,text,text,text,text)',
 ] as const;
 
 let db: PGlite;

@@ -47,7 +47,7 @@ import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/share
 import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numbering.ts';
 import { invoiceUploadPath } from '@sitelog/shared/invoices.ts';
 import { mergeDemoPhoneCalls } from '../demoPhoneCalls';
-import { toCountryPack } from '@sitelog/shared/countries.ts';
+import { toCountryPack, type CountryPack } from '@sitelog/shared/countries.ts';
 import { OFFICE_CALL_POLICY, type OfficeCallStart } from '@sitelog/shared/voice-outbound.ts';
 import { TEAM_RPC_CODES } from '../types';
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
@@ -121,6 +121,8 @@ import {
   type SaveReportPdfInput,
   type SourceUser,
   type UpdateOrgInput,
+  type SendTestMessageInput,
+  type SendTestMessageResult,
   type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
@@ -1370,7 +1372,21 @@ export class SupabaseSource implements DataSource {
   }
 
   async getSettings() {
-    const data = assembleSettings(this.rowsFrom(await this.core()));
+    const core = await this.core();
+    // W4-05: the org's pack for Settings → Field channels (countries is readable by every office
+    // user); a row this build cannot parse leaves the card empty rather than failing the page.
+    const country = await this.sb
+      .from('countries')
+      .select('*')
+      .eq('code', core.org.country)
+      .maybeSingle();
+    let pack: CountryPack | null = null;
+    try {
+      pack = country.data ? toCountryPack(country.data as CountryRow) : null;
+    } catch (err) {
+      console.warn(`[settings] country pack ${core.org.country} is not understood`, err);
+    }
+    const data = assembleSettings(this.rowsFrom(core), pack);
     data.org.logoUrl = await this.signedUrl('logos', data.org.logoPath);
     return data;
   }
@@ -2101,6 +2117,17 @@ export class SupabaseSource implements DataSource {
       p_timezone: input.timezone,
       p_address: input.address ?? null,
       p_license_no: input.licenseNo ?? null,
+      ...(input.locale ? { p_locale: input.locale } : {}),
+      ...(input.units ? { p_units: input.units } : {}),
+    });
+  }
+  /** W4-05 (§19 Q232): api-test-message; a 429 is a `CodedError` `rate_limited`. */
+  async sendTestMessage(input: SendTestMessageInput): Promise<SendTestMessageResult> {
+    return this.callFunction<SendTestMessageResult>('api-test-message', {
+      orgId: this.orgId,
+      phone: input.phone,
+      language: input.language,
+      attested: true,
     });
   }
   async createSite(input: CreateSiteInput): Promise<CreateSiteResult> {

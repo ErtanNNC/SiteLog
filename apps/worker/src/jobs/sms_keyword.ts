@@ -260,6 +260,7 @@ async function answerDayOff(k: KeywordCtx, keyword: 'no_work' | 'weather'): Prom
     const link = await ensureDailyLink(
       {
         listDailyLinks: (r, s, d) => k.ctx.db.listDailyLinks(r, s, d),
+        orgDailyLinkTtlHours: (siteId) => k.ctx.db.orgDailyLinkTtlHours(siteId),
         insertDailyLink: (row) => k.ctx.db.insertDailyLink(row),
       },
       secret,

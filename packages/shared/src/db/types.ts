@@ -211,6 +211,10 @@ export type OrgSettingsRow = {
   second_call_enabled: boolean | null;
   call_window_start: string | null;
   call_window_end: string | null;
+  /** W4-05 (20261017000510, §19 Q231): the preference Setup and Invite preselect. */
+  default_contact_pref: ContactPref;
+  /** W4-05 (§19 Q231): hours a new daily link lives, 1–168; null = `DAILY_LINK_TTL_HOURS`. */
+  daily_link_ttl_hours: number | null;
 };
 
 export type SiteRow = {
@@ -2183,6 +2187,7 @@ export type Database = {
         Returns: Json;
       };
       // Company details of an existing org (20261013000004_update_org.sql): admin, audited.
+      // W4-05 (20261017000510, §19 Q233): the report language and units too.
       update_org: {
         Args: {
           p_org_id: string;
@@ -2190,6 +2195,8 @@ export type Database = {
           p_timezone?: string | null;
           p_address?: string | null;
           p_license_no?: string | null;
+          p_locale?: string | null;
+          p_units?: string | null;
         };
         Returns: Json;
       };
@@ -2359,6 +2366,17 @@ export type Database = {
         Returns: Json;
       };
       ops_set_org_billing_status: { Args: { p_org_id: string; p_status: string }; Returns: Json };
+      /** W4-05 (20261017000510, §19 Q232): api-test-message's claim, 5 an hour per org. */
+      settings_test_message_claim: {
+        Args: {
+          p_org_id: string;
+          p_user_id: string;
+          p_phone_masked: string;
+          p_driver: string;
+          p_language: string;
+        };
+        Returns: Json;
+      };
       billing_provider_for_country: { Args: { p_country: string }; Returns: string };
       // Worker (service role) only.
       report_cost_inputs: {

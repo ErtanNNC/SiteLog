@@ -157,6 +157,12 @@ const TRANSLATED = [
   'common.back',
   'common.optional',
   'toasts.orgCreated',
+  // W4-05: Settings, its tabs, dialogs and save toasts.
+  'settings',
+  'toasts.saved',
+  'toasts.settingsSaved',
+  'toasts.logoUpdated',
+  'toasts.logoRemoved',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

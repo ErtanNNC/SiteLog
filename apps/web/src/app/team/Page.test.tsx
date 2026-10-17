@@ -319,6 +319,15 @@ describe('TeamPage (demo data)', () => {
     expect(store.data.unknownContacts[0]!.status).toBe('ignored');
   });
 
+  it('starts Invite with the org’s default preference (W4-05, §19 Q231)', async () => {
+    const store = new DemoStore();
+    store.data.settings.default_contact_pref = 'call';
+    renderWithProviders(<TeamPage />, { route: '/team', store });
+    await userEvent.click(await screen.findByRole('button', { name: 'Invite reporter' }));
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => expect(within(dialog).getByRole('radio', { name: 'Call' })).toBeChecked());
+  });
+
   it('invites a reporter with the language SiteLog uses and the preferred channel', async () => {
     const store = new DemoStore();
     renderWithProviders(<TeamPage />, { route: '/team', store });

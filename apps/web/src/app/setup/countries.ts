@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { reporterDefaultsFor, toCountryPack, type CountryPack } from '@sitelog/shared/countries.ts';
+import type { ContactPref } from '@sitelog/shared/enums.ts';
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { reportLanguageFor, type OrgLocale, type ReporterLocale } from '@sitelog/shared/locale.ts';
@@ -123,6 +124,8 @@ export interface SiteDefaults {
   phoneCountry: string;
   languages: string[];
   locale: ReporterLocale;
+  /** W4-05 (§19 Q231): the org's `default_contact_pref`; omitted = `link`. */
+  contactPref?: ContactPref;
 }
 
 /** Without a pack (none loaded): today's defaults, a US number in English. */

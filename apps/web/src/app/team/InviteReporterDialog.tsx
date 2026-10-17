@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { useInviteReporter } from '@/data/hooks';
+import { useInviteReporter, useSettings } from '@/data/hooks';
 import type { SiteOption, TeamPack } from '@/data/types';
 import { useCopy } from '@/i18n/useCopy';
 import { reportLanguageFor } from '@sitelog/shared/locale.ts';
@@ -76,7 +76,11 @@ export function InviteReporterDialog({
   const [siteIds, setSiteIds] = useState<string[]>(defaultSiteIds);
   const [languages, setLanguages] = useState<string[]>(['en']);
   const [locale, setLocale] = useState<ReporterLocale>(locales[0]!);
-  const [contactPref, setContactPref] = useState<ContactPref>('link');
+  // W4-05 (§19 Q231): the org's default preference for new reporters.
+  const orgDefaultPref = useSettings().data?.settings.default_contact_pref ?? 'link';
+  // null until the user picks one: the default follows the settings once they load.
+  const [chosenPref, setContactPref] = useState<ContactPref | null>(null);
+  const contactPref = chosenPref ?? orgDefaultPref;
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const reset = () => {
@@ -86,7 +90,7 @@ export function InviteReporterDialog({
     setSiteIds(defaultSiteIds);
     setLanguages(['en']);
     setLocale(locales[0]!);
-    setContactPref('link');
+    setContactPref(null);
     setErrors({});
   };
 

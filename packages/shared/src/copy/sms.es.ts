@@ -87,3 +87,7 @@ export const smsWeatherPhraseEs: SmsWeatherPhrases = {
  * notice (`SMS_HELP_PRIVACY`). For the Q63 review.
  */
 export const smsHelpPrivacyEs = ' - Privacidad: {privacy_link}';
+
+/** W4-05 (spec §19 Q232): Settings' "Send me a test message". For the Q63 review. */
+export const smsTestMessageEs =
+  'Mensaje de prueba de SiteLog para {company}. Sus jefes de obra reciben los mensajes de este remitente. No hace falta responder.';

@@ -98,7 +98,7 @@ const ROUTES: RouteCase[] = [
   {
     name: 'settings-channels',
     path: '/settings/channels',
-    ready: (p) => p.getByRole('heading', { name: 'Coming next' }),
+    ready: (p) => p.getByTestId('pack-card'),
   },
   { name: 'dev-phone', path: '/dev/phone', ready: (p) => h1(p, 'Demo phone') },
   { name: 'ops', path: '/ops', ready: (p) => p.getByTestId('ops-kpis') },
@@ -158,11 +158,11 @@ for (const width of WIDTHS) {
       await signInFast(page);
       const langOf = (l: Locator) =>
         l.evaluate((el) => el.closest('[lang]')?.getAttribute('lang') ?? null);
-      // Settings is still English-only (Team speaks Turkish since W4-03): its select's list.
-      await page.goto('/settings/payroll');
-      const format = page.getByRole('combobox', { name: 'Format' });
-      await expect(format).toBeVisible();
-      await format.click();
+      // New report is still English-only (Settings speaks Turkish since W4-05): its select's list.
+      await page.goto('/reports/new');
+      const siteSelect = page.getByRole('combobox', { name: 'Site' });
+      await expect(siteSelect).toBeVisible();
+      await siteSelect.click();
       const options = page.getByRole('listbox');
       await expect(options).toBeVisible();
       expect(await langOf(options)).toBe('en');
@@ -645,7 +645,7 @@ test.describe('no sideways scroll on narrow phones', () => {
       const pages: Array<[string, (p: Page) => Locator]> = [
         ['/', (p) => h1(p, tr ? 'Bugün 6 şantiyede' : 'Today across 6 sites')],
         ['/dev/phone', (p) => h1(p, tr ? 'Demo telefon' : 'Demo phone')],
-        ['/settings/channels', (p) => p.getByRole('heading', { name: 'Coming next' })],
+        ['/settings/channels', (p) => p.getByTestId('pack-card')],
         // Pages with controls in the top bar: below 768 px they get a row of their own.
         ['/settings/reports', (p) => p.getByTestId('ladder')],
         ['/weather', (p) => p.getByTestId('delay-log')],

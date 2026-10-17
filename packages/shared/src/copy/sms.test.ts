@@ -6,6 +6,7 @@ import {
   MESSAGE_KEYS_WITH_LINK,
   messageKeyHasLink,
   renderSms,
+  renderTestMessage,
   renderWeatherPhrase,
   SMS_CATALOGS,
   SMS_WEATHER_PHRASES,
@@ -667,5 +668,28 @@ describe('renderWeatherPhrase: the heads-up’s {weather_phrase} (W2-06)', () =>
         expect(text).toContain('17:30');
       }
     }
+  });
+});
+
+describe('test_message (W4-05, spec §19 Q232)', () => {
+  it('names the company in EN, ES and TR, GSM-7 in EN and ES, at most two segments', () => {
+    const company = 'Kestrel Build Group LLC';
+    expect(renderTestMessage('en', company)).toBe(
+      'SiteLog test message for Kestrel Build Group LLC. Your site managers get their texts from this sender. No reply needed.',
+    );
+    expect(renderTestMessage('tr', 'Demir Yapı A.Ş.')).toBe(
+      'Demir Yapı A.Ş. için SiteLog deneme mesajı. Şantiye şefleriniz mesajlarını bu göndericiden alır. Yanıt gerekmez.',
+    );
+    expect(renderTestMessage('es', company)).toContain('Kestrel Build Group LLC');
+    for (const lang of ['en', 'es'] as const) {
+      const seg = countSmsSegments(renderTestMessage(lang, company));
+      expect(seg.default.encoding, lang).toBe('gsm7');
+    }
+    for (const lang of ['en', 'es', 'tr'] as const) {
+      expect(
+        countSmsSegments(renderTestMessage(lang, company)).turkishShift.segments,
+      ).toBeLessThanOrEqual(2);
+    }
+    expect(renderTestMessage('en', '  ')).toContain('for SiteLog.');
   });
 });
