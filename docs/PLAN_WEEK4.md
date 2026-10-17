@@ -101,7 +101,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-02 · Setup wizard on v1.2: preferred channel, language, the real welcome preview, line check
 
-- [ ] **W4-02 done** · today _partial_ (M)
+- [x] **W4-02 done** · today _partial_ (M)
 - **Spec:** F2, P2, §9.2 `welcome` (the pack's variant: `two_way_sms`, `voice_number`), §14.6 (the neutral bubble), §19 Q25 (the welcome always by SMS), Q31, Q32, Q33 (call preference without a voice number), Q38 (a landline gets _Phone call_ only where SiteLog can reach it), §1.3, §16.2 M10.
 - **Design:** Web-Setup is not exported (P2 calls step 2 "designed"; the current wizard is the reference, noted in the report); `Field-01-SMS` for the welcome text as the manager receives it (the copy comes from §9.2, which wins over the artboard's punctuation, §19 Q15).
 - **Already in the repo:** the three steps, the company presets, geocoding, the backup reporter, _Add another site_, the reports step; `api-invite-reporter` with `locale` and `contactPref`; `renderSms` / `smsTemplate` for the §9.2 text with the pack's variant (`packages/shared/src/copy/sms.ts`).
@@ -139,7 +139,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-04 · Team's _Call now_ with the office's attestation (F3)
 
-- [ ] **W4-04 done** · today _missing_ (M)
+- [x] **W4-04 done** · today _missing_ (M)
 - **Spec:** F3 edge cases ("office can switch the reporter to _Phone call_ and place a first call from the panel (button "Call now", only with office attestation that the person agreed — stored as `office_attested`)"), P10 row menu, §9.4 calls policy, §15.2 (TCPA: prior express consent), §19 Q131 (decided: `office_attested` allows only an office-started _Call now_, never the ladder), Q128, Q132, Q215.
 - **Design:** none exported (Web-Team; the call itself is the agent's, W3-12).
 - **Already in the repo:** `place_call` (dial → ring end / missed), `outbound_call_start()` with the ladder's guards, `Telephony` `livekit` / `console`, `placesCalls()`, the Demo phone's call thread, the `auto_call` consent type with method `office_attested`.
