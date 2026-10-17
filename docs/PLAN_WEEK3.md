@@ -228,7 +228,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-09 · Live draft on a call: `update_draft` and spoken questions
 
-- [ ] **W3-09 done** · today _partial_ (L) · built (`20261016000330_voice_turns.sql`, `apps/worker/src/jobs/voice_turn.ts`, field-api `update_draft` / `record_answer`, `fixtures/calls/*`); ticks when CI runs the Deno tests (`edge-functions`), the worker's PGlite test and `voice-agent` green
+- [x] **W3-09 done** · today _done_ (CI green on 2fc8157: `edge-functions`, worker PGlite, `voice-agent`) (L) · built (`20261016000330_voice_turns.sql`, `apps/worker/src/jobs/voice_turn.ts`, field-api `update_draft` / `record_answer`, `fixtures/calls/*`); ticks when CI runs the Deno tests (`edge-functions`), the worker's PGlite test and `voice-agent` green
 - **Spec:** §4.3 B step 3, §10.4 live mode ("same tool and prompt on the transcript so far"; `CHANNEL=call`), §10.5 (call: choices spoken, photo never asked on a call: `no_photo` later), F7 (call), §9.4 `update_draft` / `record_answer`, §10.7.
 - **Already in the repo:** extraction v2 (`runReportExtraction`, prompt and source note), `decide_next`'s pure decision, question selection with options, `parse_answer` (fast model, `answerRefusal`), `applyAnswer`, `EXTRACT_PROVIDER=fake`.
 - **Build:**
@@ -244,7 +244,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-10 · Read-back, the spoken yes, fixes and filing on a call
 
-- [ ] **W3-10 done** · today _partial_ (L) · built (`20261016000350_voice_filing.sql`, `packages/shared/src/voice-confirm.ts`, `readBack()`, field-api `file_report` / `apply_correction`, `fixtures/calls/{northgate-file-en,northgate-stale-en,riverside-fix-en}`); ticks when CI runs the Deno tests (`edge-functions`), the worker's PGlite tests and `voice-agent` green
+- [x] **W3-10 done** · today _done_ (CI green on 2fc8157: `edge-functions`, worker PGlite, `voice-agent`) (L) · built (`20261016000350_voice_filing.sql`, `packages/shared/src/voice-confirm.ts`, `readBack()`, field-api `file_report` / `apply_correction`, `fixtures/calls/{northgate-file-en,northgate-stale-en,riverside-fix-en}`); ticks when CI runs the Deno tests (`edge-functions`), the worker's PGlite tests and `voice-agent` green
 - **Spec:** F6 step 5–7, F8 (call), §7.2 (`awaiting_confirmation → filed` on "yes (call)"), §9.4 rule 5 ("only call file_report after an explicit yes"), §9.5 `confirm` words, §10.6, §10.12 ("only code files a report, after an explicit confirmation"), F9 step 1 (photos link), §13 (`filed` + `photos_link` after calls), CLAUDE.md (the model never decides to file).
 - **Already in the repo:** `file_report` (via, `confirmed_via`, `render_pdf`, `notify(filed)`), `draft_rev` and the confirm by revision, `apply_correction` v2 (`applyCorrectionOps`, totals recomputed, numbers stated), the photos link kind and `photosLinkExpiresAt`.
 - **Build:**

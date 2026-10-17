@@ -253,6 +253,10 @@ LiveKit webhooks (W3-04, set up with W3-16): set the function secrets `LIVEKIT_A
 
 Talk now (W3-13): with the owner's approval, `supabase secrets set LIVEKIT_URL=wss://<project>.livekit.cloud LIVEKIT_AGENT_NAME=sitelog-voice` (and the key pair, already set for `voice-events`). Then `resolve` / `today` answer `talkNow: true` for orgs that are not billing-blocked. Check on a phone: Today → Talk now → microphone → the call screen → End call opens the draft or Filed.
 
+After a call (W3-11): each ended call of a known caller runs one `post_call_reconcile` job. It retries while the recording is not uploaded, for up to an hour (`VOICE_RECORDING_GRACE_S`); after that, a filed call without a recording is marked `call_unreconciled`. `calls.reconcile` shows the outcome (equal, mismatch or unreconciled). A dead post-call job of a filed call adds `call_unreconciled` instead of `processing_failed`. Requeuing it (`requeue_dead_job`) is safe: every step is keyed or settles once. A call whose consent was declined (`calls.consent_declined_at`, W3-14) is skipped and its recording deleted. The worker reads the `calls` bucket with the service role. The reconcile uses `DEEPGRAM_API_KEY` (batch) and `ANTHROPIC_API_KEY` with `CLAUDE_MODEL`.
+
+Special requests on a call (W3-14): an unknown caller's recordings are in the `calls` bucket under `unknown/`; nobody in the office can read them; `retention_cleanup` deletes them with the snippet after 30 days unless the number is linked. `reporters.no_calls_until` holds "not today"; outbound calls honour it from W3-17.
+
 ### Country packs per environment (GAP D47, W1-06a)
 
 Everything country-specific is a row of `countries` (spec §4.6): languages, units, paper, currency, default time zone, message channel order, SMS and WhatsApp provider, SMS sender type, two-way SMS, links in SMS, legal keys. Two kinds of value:
