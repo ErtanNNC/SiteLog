@@ -1,5 +1,37 @@
 # SiteLog · Durum
 
+**2026-10-17 (sabah):**
+
+- **Hafta 3'te yapılıp gönderilenler** (yerel kontrollerin hepsi temiz):
+  - W3-09: arama sırasında canlı taslak. CI'da yeşil, kutusu işaretlendi.
+  - W3-10: raporu sesle okuma, sözlü "evet" ve aramada dosyalama. CI'da yeşil, kutusu işaretlendi.
+  - W3-11: aramadan sonraki iş (1a1c7d1). CI'da yeşil. Şunları kapsıyor:
+    - "evet"ten önce kapatılan arama web'de devam eder (`finish_report`);
+    - yedek kayıt;
+    - kayıt ile onaylanan rapor karşılaştırılır, farklar ofise not düşülür (`call_mismatch`);
+    - arama raporunda saat 23:59'a kadar fotoğraf yoksa `no_photo` işaretlenir.
+  - W3-13: "Talk now" ve fotoğraf linki ekranı.
+  - W3-14: aramada özel istekler (21efe43), CI bekleniyor. Şunları kapsıyor:
+    - iş yok veya yağmur günü;
+    - geçmiş raporu değiştirme;
+    - "bugün arama";
+    - ilk aramada sesli onay;
+    - bilinmeyen arayan.
+- **Şu an çalışıyor:**
+  - W3-12: Python sesli asistanın canlı parçaları.
+  - W3-15: 10 senaryolu arama simülatörü ve test takımı.
+- **Yeni açık sorular Q182–Q201** (W3-11 ve W3-14'ten) spec §19'da, her birinde önerdiğim varsayılan var ve kod onunla kuruldu. Bakmak isterseniz özellikle şunlar:
+  - Q193: STOP göndermiş bir telefondan aramada "evet" denirse SMS onayı kaydedilmesin. Öneri bu; şu anki kod kaydediyor ama opt-out yine de korunuyor.
+  - Q199: Akşam 19:00'dan sonra (gün "eksik" olduktan sonra) aramada "bugün iş yok" denirse ne olacak? Şu an reddediliyor. Bu sizin kararınız.
+- **Sizden bekleyenler (değişmedi):**
+  - Q140 onayı: staging'deki sözlük çiftlerini silmek.
+  - Q181: İspanyolca okuma, US lansmanından önce.
+  - Twilio, SIP ve US numarası.
+  - Avukat metinleri.
+  - LiveKit ve Azure.
+  - Push testi için demo olmayan bir test şirketi.
+- **Önizleme worker'ı durmuş durumda.** Test etmek isterseniz söyleyin, yeniden başlatırım.
+
 **2026-10-16 (gece, devam):**
 
 - **Q117–Q134 onaylandı** (sizin "onay bekleyen tüm işlemleri onaylıyorum" mesajınız). Spec §19'da karar verildi olarak işaretli.
