@@ -243,9 +243,10 @@ export function sqlSimStack(opts: StackOptions): SimStack {
           })) as DailyReportData['manpower'],
           safety: { incidents: [], noIncidentsStated: true, visitors: [], source: [] },
         };
+        // `::text::jsonb`: postgres.js would JSON-encode the JSON text again for a jsonb parameter.
         await q(
           `insert into report_versions (report_id, version, data, summary, author)
-           values ($1, 1, $2::jsonb, $3, 'agent')`,
+           values ($1, 1, $2::text::jsonb, $3, 'agent')`,
           [report!.id, JSON.stringify(data), data.summary],
         );
       }

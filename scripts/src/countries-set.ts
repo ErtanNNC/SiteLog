@@ -271,7 +271,11 @@ export function describeEndpoints(row: PackEndpoints): string {
 const COLUMNS =
   'code, sms_provider, sms_sender_type, sms_sender_id, voice_number, field_locales, whatsapp_provider, whatsapp_sender_id, whatsapp_templates';
 export const SELECT_PACK_SQL = `select ${COLUMNS} from countries where code = $1 for update`;
-export const SET_ENDPOINTS_SQL = `select ${COLUMNS} from set_country_endpoints($1, $2, $3, $4, $5::jsonb)`;
+/**
+ * `$5::text::jsonb`, not `$5::jsonb`: postgres.js serialises a parameter the server types as jsonb
+ * with `JSON.stringify`, so the templates' JSON text would be stored as one JSON string.
+ */
+export const SET_ENDPOINTS_SQL = `select ${COLUMNS} from set_country_endpoints($1, $2, $3, $4, $5::text::jsonb)`;
 
 /** A transaction's query function (postgres.js `sql.unsafe` in the script, a fake in tests). */
 export type Query = (text: string, params: unknown[]) => Promise<readonly unknown[]>;
