@@ -171,8 +171,16 @@ test.describe('Sign-in email after a language switch (§19 Q340)', { tag: ['@m11
     await page.getByRole('menuitem', { name: 'Çıkış yap' }).click();
     await page.waitForURL((url) => url.pathname === '/login');
     await page.getByLabel('İş e-postası').fill(SEED.admin.email);
-    await page.getByRole('button', { name: 'Bana giriş linki gönder' }).click();
-    await expect(page.getByTestId('login-sent')).toContainText(SEED.admin.email);
+    // GoTrue refuses a second email to the same user within its minimum interval (429
+    // over_email_send_rate_limit), and the sign-in above just sent one: ask again until it passes.
+    await expect(async () => {
+      if (!(await page.getByTestId('login-sent').isVisible())) {
+        await page.getByRole('button', { name: 'Bana giriş linki gönder' }).click();
+      }
+      await expect(page.getByTestId('login-sent')).toContainText(SEED.admin.email, {
+        timeout: 3_000,
+      });
+    }).toPass({ timeout: 30_000, intervals: [1_000, 2_000] });
 
     let mail: CaughtMail | null = null;
     await expect
