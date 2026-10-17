@@ -69,6 +69,8 @@ import {
 } from '@sitelog/shared/report/media.ts';
 import { copy } from '@/copy/en';
 import { captureError } from '@/lib/sentry';
+import { signInEmailData } from '@/auth/emailLanguage';
+import type { PanelLanguage } from '@/i18n/language';
 import {
   billingAlert,
   billingPrice,
@@ -2143,6 +2145,23 @@ export class SupabaseSource implements DataSource {
     const res = data as unknown as SettingsTestCallStart;
     if (res.status === 'refused') throw new CodedError(res.reason, res.reason);
     return { callId: res.callId, telephony: res.telephony };
+  }
+  /**
+   * §19 Q340: GoTrue keeps `signInWithOtp`'s `data` only for a new user, so the panel writes the
+   * chosen language into the user's metadata itself (`auth.updateUser`), once per change: the
+   * session's metadata already saying so writes nothing.
+   */
+  async saveEmailLanguage(language: PanelLanguage): Promise<{ updated: boolean }> {
+    const data = signInEmailData(language);
+    const { data: current, error: sessionError } = await this.sb.auth.getSession();
+    if (sessionError) throw sessionError;
+    const session = current.session;
+    if (!session) return { updated: false };
+    const meta = (session.user.user_metadata ?? {}) as Record<string, unknown>;
+    if (meta.ui_locale === data.ui_locale) return { updated: false };
+    const { error } = await this.sb.auth.updateUser({ data });
+    if (error) throw error;
+    return { updated: true };
   }
   async sendTestMessage(input: SendTestMessageInput): Promise<SendTestMessageResult> {
     return this.callFunction<SendTestMessageResult>('api-test-message', {

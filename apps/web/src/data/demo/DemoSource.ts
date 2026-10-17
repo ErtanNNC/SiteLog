@@ -72,6 +72,7 @@ import type { ChangeEvent, OrgSettingsPatch, ReportFilters } from '../types';
 import { demoOpsFor } from './ops';
 import { demoOrgPack } from './demoPhone';
 import type { OrgLocale } from '@sitelog/shared/locale.ts';
+import type { PanelLanguage } from '@/i18n/language';
 import type { DemoStore } from './store';
 
 export interface DemoSourceOptions {
@@ -427,6 +428,10 @@ export class DemoSource implements DataSource {
         throw new Error(copy.errors.notAllowed);
       return this.store.callMeNow(input, this.user.id);
     });
+  }
+  /** §19 Q340: the demo signs in without Auth, so there is no user metadata to write. */
+  saveEmailLanguage(_language: PanelLanguage) {
+    return Promise.resolve({ updated: false });
   }
   /** The in-memory insert and invite are one step, so nothing can fail after the site exists. */
   createSite(input: CreateSiteInput) {

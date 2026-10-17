@@ -1,9 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes, useLocation } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LANGUAGE_KEY } from '@/i18n/language';
-import { makeAuthState, renderWithProviders } from '@/test/render';
+import { makeAuthState, makeSource, renderWithProviders } from '@/test/render';
 import { Sidebar } from './Sidebar';
 
 function Where() {
@@ -161,5 +161,46 @@ describe('Sidebar', () => {
     await userEvent.click(within(diller).getByRole('menuitemradio', { name: 'English' }));
     expect(await screen.findByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument();
     expect(screen.getByTestId('where')).toHaveTextContent(route);
+  });
+
+  it('writes the chosen language to the Auth metadata for the next sign-in email (§19 Q340)', async () => {
+    const source = makeSource('admin');
+    // A Supabase-backed panel: the demo itself writes nothing.
+    Object.defineProperty(source, 'mode', { value: 'supabase' });
+    const save = vi
+      .spyOn(source, 'saveEmailLanguage')
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValue({ updated: true });
+    renderWithProviders(<Sidebar />, { as: 'admin', source });
+
+    await userEvent.click(screen.getByRole('button', { name: /Account menu$/ }));
+    const languages = await screen.findByRole('group', { name: 'Language' });
+    await userEvent.click(within(languages).getByRole('menuitemradio', { name: 'Türkçe' }));
+    // A failed write leaves the switch applied.
+    expect(await screen.findByRole('navigation', { name: 'Ana gezinme' })).toBeInTheDocument();
+    expect(save).toHaveBeenLastCalledWith('tr');
+
+    await userEvent.click(screen.getByRole('button', { name: /Hesap menüsü$/ }));
+    const diller = await screen.findByRole('group', { name: 'Dil' });
+    await userEvent.click(within(diller).getByRole('menuitemradio', { name: 'English' }));
+    expect(await screen.findByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument();
+    expect(save).toHaveBeenLastCalledWith('en');
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it('writes no Auth metadata in the demo', async () => {
+    const source = makeSource('admin');
+    const save = vi.spyOn(source, 'saveEmailLanguage');
+    renderWithProviders(<Sidebar />, { as: 'admin', source });
+    await userEvent.click(screen.getByRole('button', { name: /Account menu$/ }));
+    const languages = await screen.findByRole('group', { name: 'Language' });
+    await userEvent.click(within(languages).getByRole('menuitemradio', { name: 'Türkçe' }));
+    expect(await screen.findByRole('navigation', { name: 'Ana gezinme' })).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: /Hesap menüsü$/ }));
+    const diller = await screen.findByRole('group', { name: 'Dil' });
+    await userEvent.click(within(diller).getByRole('menuitemradio', { name: 'English' }));
+    expect(await screen.findByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument();
   });
 });

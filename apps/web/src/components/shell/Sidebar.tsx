@@ -3,6 +3,8 @@ import { useId } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { formatPhone } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
+import { saveEmailLanguage } from '@/auth/emailLanguage';
+import { useOptionalDataSource } from '@/data/DataProvider';
 import { useNavBadges, useSimulateIncomingReport } from '@/data/hooks';
 import { isPanelLanguage, PANEL_LANGUAGES } from '@/i18n/language';
 import { useCopy, useLanguage } from '@/i18n/useCopy';
@@ -50,6 +52,7 @@ export function Sidebar({
   const { user, orgs, currentOrg, role, setCurrentOrg, signOut, isDemo, demoKey } = useAuth();
   const { t, tc } = useCopy();
   const { language, setLanguage } = useLanguage();
+  const source = useOptionalDataSource();
   const languageLabelId = useId();
   const badges = useNavBadges();
   const simulate = useSimulateIncomingReport();
@@ -228,7 +231,10 @@ export function Sidebar({
             <DropdownMenuRadioGroup
               value={language}
               onValueChange={(v) => {
-                if (isPanelLanguage(v)) setLanguage(v);
+                if (!isPanelLanguage(v)) return;
+                setLanguage(v);
+                // §19 Q340: the next sign-in email follows the language chosen here.
+                saveEmailLanguage(source, v);
               }}
               aria-labelledby={languageLabelId}
             >

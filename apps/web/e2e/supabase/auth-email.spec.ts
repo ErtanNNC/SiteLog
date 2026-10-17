@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { admin } from './support';
+import { admin, SEED, signInWithMagicLink } from './support';
 
 /**
  * W4-09 (spec §13 "Magic link … Sign-in button (EN/TR)", §19 Q239; M11 Done when: "a magic link
@@ -18,6 +18,7 @@ const MAIL_URL = (
 ).replace(/\/+$/, '');
 
 interface CaughtMail {
+  id: string;
   subject: string;
   html: string;
   text: string;
@@ -43,7 +44,7 @@ async function latestMailTo(address: string): Promise<CaughtMail | null> {
       HTML?: string;
       Text?: string;
     } | null;
-    return m ? { subject: m.Subject ?? '', html: m.HTML ?? '', text: m.Text ?? '' } : null;
+    return m ? { id, subject: m.Subject ?? '', html: m.HTML ?? '', text: m.Text ?? '' } : null;
   }
   // Inbucket: the mailbox is the local part.
   const box = address.split('@')[0]!;
@@ -56,8 +57,14 @@ async function latestMailTo(address: string): Promise<CaughtMail | null> {
     `${MAIL_URL}/api/v1/mailbox/${encodeURIComponent(box)}/${encodeURIComponent(last.id)}`,
   )) as { subject?: string; body?: { html?: string; text?: string } } | null;
   return m
-    ? { subject: m.subject ?? '', html: m.body?.html ?? '', text: m.body?.text ?? '' }
+    ? { id: last.id, subject: m.subject ?? '', html: m.body?.html ?? '', text: m.body?.text ?? '' }
     : null;
+}
+
+async function mailCatcherReachable(): Promise<boolean> {
+  return fetch(`${MAIL_URL}/`)
+    .then((r) => r.status < 500)
+    .catch(() => false);
 }
 
 test.describe('Sign-in email in the reader’s language (W4-09)', { tag: ['@m11', '@F1'] }, () => {
@@ -71,9 +78,7 @@ test.describe('Sign-in email in the reader’s language (W4-09)', { tag: ['@m11'
   });
 
   test('a magic link requested with the switch on Türkçe arrives in Turkish', async ({ page }) => {
-    const reachable = await fetch(`${MAIL_URL}/`)
-      .then((r) => r.status < 500)
-      .catch(() => false);
+    const reachable = await mailCatcherReachable();
     test.skip(
       !reachable && !process.env.CI,
       `No mail catcher at ${MAIL_URL}: start the stack with Mailpit (not -x mailpit)`,
@@ -112,5 +117,75 @@ test.describe('Sign-in email in the reader’s language (W4-09)', { tag: ['@m11'
     expect(caught!.html).not.toContain('Sign in to SiteLog');
     // The button carries GoTrue's verify link back to the panel.
     expect(caught!.html).toMatch(/\/auth\/v1\/verify\?token=/);
+  });
+});
+
+/**
+ * §19 Q340: GoTrue ignores `signInWithOtp`'s data for an existing user, so the panel writes the
+ * language chosen in the account menu into the user's metadata; the next sign-in email follows.
+ * The seeded admin's metadata is `en-US` and is put back afterwards.
+ */
+test.describe('Sign-in email after a language switch (§19 Q340)', { tag: ['@m11', '@F1'] }, () => {
+  async function lena() {
+    const { data } = await admin().auth.admin.listUsers({ page: 1, perPage: 1000 });
+    return data.users.find((u) => u.email === SEED.admin.email);
+  }
+
+  test.afterAll(async () => {
+    const user = await lena();
+    if (user) {
+      await admin().auth.admin.updateUserById(user.id, {
+        user_metadata: { ...user.user_metadata, ui_locale: 'en-US' },
+      });
+    }
+  });
+
+  test('an existing user who switched to Türkçe gets the next magic link in Turkish', async ({
+    page,
+  }) => {
+    const reachable = await mailCatcherReachable();
+    test.skip(
+      !reachable && !process.env.CI,
+      `No mail catcher at ${MAIL_URL}: start the stack with Mailpit (not -x mailpit)`,
+    );
+    const before = await lena();
+    expect(before?.user_metadata).toMatchObject({ ui_locale: 'en-US' });
+    const previousMail = (await latestMailTo(SEED.admin.email))?.id ?? null;
+
+    await signInWithMagicLink(page);
+    await page
+      .getByRole('button', { name: /Account menu$/ })
+      .first()
+      .click();
+    await page
+      .getByRole('group', { name: 'Language' })
+      .getByRole('menuitemradio', { name: 'Türkçe' })
+      .click();
+    await expect(page.getByRole('navigation', { name: 'Ana gezinme' }).first()).toBeVisible();
+    await expect.poll(async () => (await lena())?.user_metadata?.ui_locale).toBe('tr-TR');
+
+    await page
+      .getByRole('button', { name: /Hesap menüsü$/ })
+      .first()
+      .click();
+    await page.getByRole('menuitem', { name: 'Çıkış yap' }).click();
+    await page.waitForURL((url) => url.pathname === '/login');
+    await page.getByLabel('İş e-postası').fill(SEED.admin.email);
+    await page.getByRole('button', { name: 'Bana giriş linki gönder' }).click();
+    await expect(page.getByTestId('login-sent')).toContainText(SEED.admin.email);
+
+    let mail: CaughtMail | null = null;
+    await expect
+      .poll(
+        async () => {
+          mail = await latestMailTo(SEED.admin.email);
+          return mail && mail.id !== previousMail ? mail.subject : '';
+        },
+        { timeout: 30_000, intervals: [500, 1000, 2000] },
+      )
+      .toBe('SiteLog giriş linkiniz');
+    const caught = mail as CaughtMail | null;
+    expect(caught!.html).toContain('lang="tr"');
+    expect(caught!.html).not.toContain('Sign in to SiteLog');
   });
 });

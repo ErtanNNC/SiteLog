@@ -44,6 +44,7 @@ import type {
   TextDailyLinkResult,
   WeatherLog,
 } from './types';
+import type { PanelLanguage } from '@/i18n/language';
 
 export interface SourceUser {
   id: string;
@@ -425,6 +426,12 @@ export interface DataSource {
   sendTestMessage(input: SendTestMessageInput): Promise<SendTestMessageResult>;
   /** W4-05 (§19 Q232, Q350): admin, where the org places calls; one at a time, 5 an hour. */
   callMeNow(input: CallMeNowInput): Promise<CallMeNowResult>;
+  /**
+   * §19 Q340: the language the viewer chose on this device, written to their Auth user metadata
+   * (`ui_locale`, as `signInEmailData` writes it) so their next sign-in email follows it. Skipped
+   * when the metadata already says so (`updated: false`). Demo: nothing to write.
+   */
+  saveEmailLanguage(language: PanelLanguage): Promise<{ updated: boolean }>;
   createSite(input: CreateSiteInput): Promise<CreateSiteResult>;
   updateSite(siteId: string, patch: UpdateSitePatch): Promise<void>;
   /**
