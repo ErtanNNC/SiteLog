@@ -1,6 +1,22 @@
 # SiteLog — Field channels (decision record)
 
-**Status:** Decided · **Date:** 2026-10-13, amended 2026-10-14 · **Implemented in:** SITELOG_SPEC.md v1.2 (§0, §3, §4.4–§4.6, §5.1, §5.2, §6.2, §6.3, §7, §8 F3–F24, §9, §15, §19) and the Design canvas page "Field: text link & call"
+**Status:** Decided · **Date:** 2026-10-13, amended 2026-10-14; Q20 comparison 2026-10-17 · **Implemented in:** SITELOG_SPEC.md v1.2 (§0, §3, §4.4–§4.6, §5.1, §5.2, §6.2, §6.3, §7, §8 F3–F24, §9, §15, §19) and the Design canvas page "Field: text link & call"
+
+## Amendment 2026-10-17 — Q20 revisited: TR SMS on İletimerkezi or a Twilio alphanumeric sender (for the owner; W4-13)
+
+**Status:** comparison for the owner, no change. Spec §19 Q20 (decided 2026-10-15: keep İletimerkezi, "revisit at M11 with Twilio's TR registration rules and prices") stands until the owner decides otherwise; the TR pack's provider then changes only by a forward migration (`countries.sms_provider` for `TR` from `iletimerkezi` to `twilio`; the sender type stays `alphanumeric`), followed by `pnpm countries:set -- --code TR --sms-sender SITELOG` per database once Twilio has the title registered. WhatsApp for TR is on Twilio either way.
+
+Both options send one-way from the alphanumeric title `SITELOG` (an alphanumeric sender takes no replies; the pack's check refuses `two_way_sms` with it), so two-way SMS does not separate them; it stays off for TR and interaction happens on the recorder or the call. They differ on four points. **Registration:** İletimerkezi registers the BTK-approved title through the account after the e-Devlet subscription approval (spec §5.2: about 1–2 business days); for Twilio, whether a Turkish alphanumeric sender must be pre-registered, who registers it with the Turkish operators, what documents it needs and how long it takes are Twilio's Turkey rules, which the owner gets from Twilio (not verifiable from this repo). **Price:** no figures here; the owner asks both for a current quote per Turkey SMS segment, any monthly or sender fee, minimum purchase or credit packages and how unused credit expires. Compare on cost per month, not per segment: segments × price, where a sender that uses the Turkish single shift table sends `welcome`, `weather_headsup` and `reminder_2` as 2 segments and every other key as 1 (`sms-tr-budget.test.ts`), and one without it (as the repo counts Twilio, `countSmsSegments`' `default`) pays 2 instead of 1 for the keys §19 Q15 lists as "1 / 2" (the daily link, the reminders and the weather heads-up among them) and 3 for `welcome`; whether each actually uses the table is a question to both (Q15's open half). **Delivery reports:** Twilio's status callbacks are built (sms-webhook `/status`, `applyLateStatus`), so TR texts on Twilio would reach `delivered` / `undelivered` with no new work; İletimerkezi's poller is built (W4-11) but reads nothing until its report endpoint is confirmed with the account (§19 Q280). **İYS and compliance:** with Q49's recommendation (informational) neither needs İYS fields; if counsel says commercial, İletimerkezi's fields are parameterised but unconfirmed (Q281) and Twilio's path to İYS is unknown, a question for Twilio. Recommendation: keep İletimerkezi (the Q20 decision) unless Twilio's quote and Turkey registration terms come out clearly better, since its only built-in advantage, delivery callbacks, closes for İletimerkezi once Q280 is answered; one vendor for SMS and WhatsApp is the argument for Twilio.
+
+| Criterion | İletimerkezi (as built, TR pack) | Twilio alphanumeric sender for TR |
+|---|---|---|
+| Registration of `SITELOG` | e-Devlet subscription approval, then the title through the account (spec §5.2: 1–2 business days) | Twilio's Turkey sender rules: pre-registration, documents, lead time — confirm with Twilio |
+| Price | Owner gets a current quote (per segment, packages, fees) | Owner gets a current quote (per segment, fees) |
+| Segments per Turkish text | Budgeted with the Turkish shift table: `welcome`, `weather_headsup`, `reminder_2` 2, the rest 1 (confirm the table is used, Q15) | Counted without the table: Q15's "1 / 2" keys 2, `welcome` 3 (confirm with Twilio) |
+| Two-way | No (alphanumeric) | No (alphanumeric) |
+| Delivery reports | Poller built (W4-11); endpoint unconfirmed (Q280), rows stay `sent` until then | Status callbacks built (sms-webhook `/status`) |
+| İYS (Q49, Q281) | Informational: none; commercial: fields parameterised, unconfirmed | Informational: none; commercial: unknown, ask Twilio |
+| Change needed in SiteLog | None | One migration (`sms_provider`), `countries:set` per database |
 
 ## Amendment 2026-10-14 — country packs and message channels (owner decision; consequences in GAP D47–D49)
 

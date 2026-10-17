@@ -347,6 +347,111 @@ The sign-in (magic link) and invite emails come from Supabase Auth, not the work
 - **Local stack:** `supabase start` reads the files from `config.toml`; the emails land in Mailpit at `http://127.0.0.1:54324` (`apps/web/e2e/supabase/auth-email.spec.ts`, `@m11`, reads the Turkish one there). Restart the stack after editing a template.
 - **Hosted projects (preview, staging, production): an owner step, with the owner's approval for each project.** `config.toml` is not deployed by `supabase db push` or the Deploy workflow. In the dashboard, Authentication → Emails → Templates: for **Magic Link** and for **Invite user**, paste the subject line from `config.toml` (the text between the quotes, with `\"` as `"`) and the whole HTML file as the body, and save. Send one test magic link to an address on the project's team with the panel's switch on Türkçe (a new address) and check the Turkish body. Supabase's default SMTP only mails the project's team members; real users need the project's own SMTP (Resend) set first.
 
+### TR go-live (W4-13)
+
+The owner's steps to send the TR pack's texts for real, from İletimerkezi with the `SITELOG` title, on the **preview** project first. Every step marked **owner-approved** touches a hosted system (İletimerkezi, a Supabase project, a worker against it, a real phone) and waits for the owner's approval, one step at a time; staging and production only after the owner says so. Nothing here runs in CI. Credentials go into the places named below (Supabase secrets, the worker's env file outside the repo), never into the repo or a chat. Where a step depends on İletimerkezi's own rules or API it says _confirm with İletimerkezi_: this repo has no account, no documentation and no real send (spec §19 Q280), so what it assumes is listed to be checked, not taken as fact. Background: spec §5.2 "Demo setup" step 7, §15.2 TR, §19 Q15, Q20, Q49, Q237, Q280, Q281.
+
+**Before you start.** The preview project has this branch's migrations and functions (Deploy → environment `preview`, target `supabase`) and the field app pointing at it (`phone-setup`). `select code, sms_provider, sms_sender_type, sms_sender_id, two_way_sms from countries where code = 'TR';` (read only) shows `iletimerkezi`, `alphanumeric`, no sender and `false`. Counsel has answered §19 Q49 (the İYS message type), or the owner accepts its recommendation (informational) for the test. The Done when's KVKK link on the Welcome screen also needs the TR legal keys (W4-06's catalogue, this ticket's legal-keys migration with counsel's texts): the texts can go live without it, but the ticket is not done until it is in.
+
+1. **İletimerkezi account** (owner-approved). Open a corporate account at İletimerkezi in the name of the entity that will send (_confirm with İletimerkezi_ the documents they need). New accounts come with test credits (spec §5.2: 100); the `APITEST` sender replaces the text with a fixed message, so it tests the API flow only, not SiteLog's texts.
+2. **e-Devlet subscription approval** (owner-approved). Approve the account's subscription in e-Devlet as İletimerkezi asks for a new corporate sender (spec §5.2 step 7); lead time as İletimerkezi states.
+3. **The `SITELOG` title (originator)** (owner-approved). Request the alphanumeric title `SITELOG` through the account (spec §5.2: about 1–2 business days). Ask at the same time which İYS message type the account is set up for, and set it to counsel's answer to §19 Q49 (the recommendation: informational, bilgilendirme). If counsel says commercial, stop: the order's İYS fields (§19 Q281) and the İYS consent check are not built for production. **Never set the sender in a database before the title is approved** (step 7): from that moment every non-demo TR org on that database texts from it.
+4. **Questions for İletimerkezi** (owner, with the account; the answers go into spec §19 Q15 and Q280):
+   - **The delivery report** (§19 Q280): the endpoint, its request and its answer for one order and number (delivered, undelivered, waiting); its status codes and which of them mean the number versus the account; how soon a report is ready and how long it is kept; the rate limit on report reads; whether the account offers a delivery-report push (callback) URL and how it is signed. A push URL is §19 Q280's second option (a new `sms-webhook` route, a developer ticket), not this runbook.
+   - **The send request** as the driver assumes it (`createIletimerkeziSmsTransport` in `packages/shared/src/sms/transports.ts`): `POST /v1/send-sms/json` with `request.authentication {key, hash}` and `request.order {sender, sendDateTime, message {text, receipents {number[]}}}` (their spelling "receipents"), the number without `+`, the answer's `response.status.code` (`200` accepted) and `response.order.id`, and status code `450` as an unroutable number (`ILETIMERKEZI_UNDELIVERABLE_CODES`). Is each still current?
+   - **The Turkish character table** (§19 Q15): does İletimerkezi send Turkish text with the Turkish national language single shift table (3GPP TS 23.038), so that ç, ğ, Ğ, ı, İ, ş and Ş stay GSM-7 as escape pairs (155 septets in a single segment, 149 per part), or as UCS-2 (70 / 67 characters)? Does it substitute or transliterate any character? The driver sends the text as is, and the TR texts are budgeted with the shift table (`packages/shared/src/sms/segments.ts`, `packages/shared/src/copy/sms-tr-budget.test.ts`: `welcome`, `weather_headsup` and `reminder_2` 2 segments, every other key 1; `reminder_2` is UCS-2 either way for the "â" of "hâlâ"). Without the table, the 1-segment keys that hold Turkish letters cost 2 and `welcome` 3 (§19 Q15's counts for a pack with no voice number). Then check it on step 9's welcome: the credits İletimerkezi charges for it.
+5. **The report endpoint** (developer, after step 4; a code change in its own commit, nothing hosted). Fill `ILETIMERKEZI_REPORT_ENDPOINT` in `packages/shared/src/sms/iletimerkezi-report.ts` (`path`, `body(orderId, creds)`, `parse(json)` into `IletimerkeziReport`) from İletimerkezi's answer, with a test for each answer they gave (delivered, undelivered, not ready, unknown) beside the fixture endpoint's; correct the send request and the `450` code in the driver if step 4 says so; record the answers in spec §19 Q280 and Q15 and close README "İletimerkezi status". Until this lands the worker's `sms_status` job reads nothing and live İletimerkezi rows stay `sent`, so the Done when's `delivered` cannot be seen. Deploy it (preview functions and the worker) before step 9.
+6. **Credentials as secrets** (owner-approved). Take the API key and hash from the account's API settings. The names are the ones the code reads (`.env.example`, `apps/worker/src/config.ts`, `supabase/functions/_shared/messaging.ts`). The functions send device codes (`field-api`), invites (`api-invite-reporter`), _Text today's link_ (`api-text-daily-link`), _Send me a test message_ (`api-test-message`) and the rest through the same drivers:
+
+   ```sh
+   supabase secrets set --project-ref <preview ref> \
+     ILETIMERKEZI_API_KEY='<key>' ILETIMERKEZI_API_HASH='<hash>'
+   # ILETIMERKEZI_IYS stays unset (= informational, §19 Q49's recommendation) unless counsel says otherwise
+   ```
+
+   The worker sends the welcome, the daily link and the reminders and runs the `sms_status` poll. The `preview-worker` Deploy target carries no SMS credentials, so run the worker from a developer machine against the preview project (as in "Voice: M7 live", "Before you start"), with these in its env file outside the repo (or `apps/worker/.env`, never committed):
+
+   ```sh
+   ILETIMERKEZI_API_KEY=<key>
+   ILETIMERKEZI_API_HASH=<hash>
+   ILETIMERKEZI_STATUS=poll        # the default; off leaves every row `sent`
+   # ILETIMERKEZI_IYS unset (informational)
+   ```
+
+   Never set `SMS_PROVIDER_STUB`, `ILETIMERKEZI_API_BASE` or `TWILIO_API_BASE` on a hosted project or on a worker against one: they point the drivers at the local stand-in (W4-12; the worker refuses `SMS_PROVIDER_STUB` under `NODE_ENV=production`). `ILETIMERKEZI_IYS` takes only empty, `informational` or `commercial`; a typo refuses the driver instead of sending the wrong type. Back out: `supabase secrets unset --project-ref <preview ref> ILETIMERKEZI_API_KEY ILETIMERKEZI_API_HASH` and remove them from the worker's file, after step 7's back-out (with a sender set and no credentials, TR texts fail on a configuration error).
+
+7. **The sender on the preview project** (owner-approved; only after step 3's approval):
+
+   ```sh
+   SUPABASE_DB_URL='<preview connection string>' pnpm countries:set -- --code TR --sms-sender SITELOG --yes
+   ```
+
+   It prints the target and the pack before and after and writes one `country.endpoints_set` audit row. Restart the worker: its boot line `sms transport per country pack` must show `iletimerkezi` for TR. Demo orgs (Demir Yapı) stay on `console` whatever the pack holds. Back out: `pnpm countries:set -- --code TR --clear-sms-sender --yes` on the same database; real TR orgs are back on `console` (texts written `failed`, nothing sent).
+
+8. **A non-demo TR test org** (owner-approved). On the preview panel, sign up with an address that receives the project's mail (Supabase's default SMTP mails only the project's team members; "Auth email templates" above), run the setup wizard with country **Turkey** (the TR pack: tr-TR, the panel in Turkish, billing `manual` until §19 Q8), add one site, and in Team invite one reporter with the owner's Turkish mobile number. Optionally first Settings → Field channels → _Send me a test message_ to that number (admin, five an hour per org): it goes from `SITELOG` through the functions' driver and proves the functions' secrets alone.
+9. **The real phone** (owner-approved; the Done when). On the TR phone:
+   - The welcome arrives from `SITELOG`, in Turkish with its letters intact, one-way (the pack's `two_way_sms` is false: a reply reaches no one). Note the credits charged for it (step 4's table: 2 with the shift table).
+   - Open the link, verify the device with the code (also from `SITELOG`), give the consent. The Welcome screen links the KVKK notice by its key once the TR legal keys are in.
+   - The daily link: wait for the site's daily link time, or Team → _Text today's link_ (once the reporter has consented). It arrives from `SITELOG`.
+   - The rows (preview SQL editor, read only):
+
+     ```sql
+     select created_at, copy_key, provider, provider_message_id, status, error
+       from messages where provider = 'iletimerkezi' order by created_at desc limit 10;
+     ```
+
+     Each send is `sent` with `iletimerkezi:<order>`, then `delivered` at a poll (+2 min, +15 min or +2 h after the send; W4-11), once step 5 is in. An `undelivered` row walks to the next channel or tells the office once (`message_failed`). A row still `sent` after +2 h has an `sms.status_unresolved` audit row: compare the order in İletimerkezi's panel with step 5's parser.
+
+   Record the date, the message ids (never the number) and the credits in the ticket report.
+
+10. **Optional: the TR WhatsApp sender and templates** (owner-approved, after step 9). The TR pack's order is `push → whatsapp → sms`, so with a TR WhatsApp sender set, real TR orgs' texts go by WhatsApp first and SMS becomes the fallback: do it only after the SMS check. The steps are "Country packs per environment" → **WhatsApp (W2-15)** above with `--code TR`: a Twilio WhatsApp sender on a Turkish number (Meta business verification, lead time days to weeks); `pnpm countries:set -- --code TR --print-whatsapp-templates`; each key submitted in Turkish and English (the pack's field languages) as a Utility template; once approved, `--whatsapp-sender +90… --whatsapp-templates tr-templates.json --yes`; the sender's webhooks to `sms-webhook`. Counsel's §15.2 review covers the transfer to Meta and Twilio. Back out: `--clear-whatsapp-sender --yes`.
+
+**Staging and production** later repeat steps 6, 7 and (for WhatsApp) 10 per project, each owner-approved; the account, the title and step 5's endpoint are shared.
+
+### Billing (W4-15)
+
+Stripe **test mode** on the **preview** project, then the F23 cycle on a non-demo test org. Every step that touches Stripe or a hosted Supabase project is **owner-approved**, one at a time. Keys go into Supabase secrets and the worker's env file outside the repo, never into the repo or a chat. Test-mode secret keys start `sk_test_`; no live key goes on the preview project. Background: spec F2 step 4, F23, P13, §13 Billing, §19 Q7, Q10, Q234, Q235, Q270; §2 step 9 above; `supabase/functions/README.md`.
+
+What the code does, for reading the run: Checkout subscribes one unit per active site at the Stripe price `STRIPE_PRICE_ID_SITE_US` and keeps the rest of the org's 14-day trial (`trial_end` = the org's `trial_ends_at`); it refuses (409 `price_mismatch`) when that price's amount or currency is not the org's (`orgs.price_per_site_minor` + `price_currency`, USD 39900 from `billing_default_prices`). Adding or resuming a site raises the quantity with proration; pausing or archiving lowers it without a credit, from the next invoice (§19 Q10). The panel syncs the quantity at once, and the worker's `billing_sync` job retries it two minutes later. `stripe-webhook` verifies `Stripe-Signature`, processes each event id once (`stripe_events`) and maps Stripe into `orgs.billing_*`. A `manual` org (TR until §19 Q8) has no Checkout or portal: the run uses a US org.
+
+1. **Stripe account in test mode** (owner-approved). Sign in to the Stripe Dashboard and switch to test mode. Live-mode business details wait for step 9.
+2. **Product and price** (owner-approved). Product catalogue → a product (for example "SiteLog site") with one **recurring, monthly, per-unit** price of **USD 399.00** (standard pricing, licensed quantity; not metered, not tiered). Its amount must equal the org's price, 39900 in USD minor units, or Checkout answers 409 `price_mismatch`. The price id (`price_…`) is `STRIPE_PRICE_ID_SITE_US`.
+3. **Customer portal** (owner-approved). Settings → Billing → Customer portal (test mode): allow updating the payment method and viewing invoices. Leave quantity changes off: SiteLog sets the quantity from the active sites, and its next sync overwrites a change made in the portal. Whether customers may cancel there is the owner's choice: a cancellation arrives as `customer.subscription.deleted`, the org becomes `canceled`, and reminders and calls stop at once.
+4. **Webhook endpoint** (owner-approved). Developers → Webhooks → add the endpoint `https://<preview ref>.supabase.co/functions/v1/stripe-webhook` (deployed by the Deploy workflow's `supabase` target with `verify_jwt = false` from `supabase/config.toml`) with exactly the events the function handles (`HANDLED_EVENTS`, `supabase/functions/stripe-webhook/logic.ts`):
+   - `checkout.session.completed`
+   - `customer.subscription.created`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+   - `invoice.payment_failed`
+   - `invoice.paid`
+
+   Any other event is answered 200 and ignored (`stripe.webhook.ignored`). The endpoint's signing secret (`whsec_…`) is `STRIPE_WEBHOOK_SECRET`.
+
+5. **Secrets** (owner-approved). On the preview project:
+
+   ```sh
+   supabase secrets list --project-ref <preview ref>     # names only: APP_URL must be the panel origin you test from
+   supabase secrets set --project-ref <preview ref> \
+     STRIPE_SECRET_KEY='sk_test_…' STRIPE_WEBHOOK_SECRET='whsec_…' STRIPE_PRICE_ID_SITE_US='price_…'
+   ```
+
+   `api-billing` and `stripe-webhook` read `STRIPE_SECRET_KEY`, `stripe-webhook` also `STRIPE_WEBHOOK_SECRET`, Checkout `STRIPE_PRICE_ID_SITE_US`; `APP_URL` gives Checkout's and the portal's return URLs (`/billing?checkout=success|canceled`, `/billing`) and is the `api-*` functions' CORS origin. If an old `STRIPE_PRICE_ID_SITE` is set, unset it once the new one is in (GAP 9.1). Give the worker the same `STRIPE_SECRET_KEY` in its env file (a worker from a developer machine against the preview project; the `preview-worker` Deploy target has no Stripe key, so its `billing_sync` only logs and the panel's sync is the only one). Then send a test event to the endpoint from the Dashboard: 200 means the signature passed; 400 `Invalid signature` means `STRIPE_WEBHOOK_SECRET` is not this endpoint's. Back out: `supabase secrets unset --project-ref <preview ref> STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID_SITE_US` and disable the endpoint.
+
+6. **A non-demo US test org** (owner-approved). On the preview panel, sign up with an address that receives the project's mail, run the wizard with country **United States** (billing `stripe`, USD 399.00 per site, a 14-day trial) and add one site. Billing shows the trial and one site at $399.00. Note the org id (`select id, name, billing_provider, billing_status, trial_ends_at from orgs where not is_demo order by created_at desc limit 3;`, read only).
+7. **Short grace on the test org** (owner-approved, preview SQL editor, this org only; not audited, so note it in the ticket report): `update org_settings set past_due_grace_days = 0 where org_id = '<test org>';` (default 14). Set it back to 14 after the run.
+8. **The run** (W4-15 box 2; tick each in the ticket report with the Stripe object ids, never card numbers or email addresses):
+   - [ ] **Checkout keeps the trial.** As the org's admin, Billing → _Add payment details_ → Stripe Checkout; pay with Stripe's success test card (Stripe's testing page). Back on Billing, "Subscription started". In Stripe the subscription is `trialing`, quantity 1, its trial ending at the org's `trial_ends_at`; in SiteLog the org is `trialing` with `billing_customer_id` and `billing_subscription_id` set (`checkout.session.completed`, `customer.subscription.created`), audited.
+   - [ ] **Add site → quantity +1.** Add a second site. The subscription item's quantity is 2 at once (the panel's sync) or two minutes later (the worker's `billing_sync`, audited `billing.quantity_synced`), with a proration on the upcoming invoice; Billing lists two sites.
+   - [ ] **Pause → next cycle.** Billing → _Sites on this plan_ → _Pause_ (admin only; Site detail's _Site settings_ too). Quantity 1, no proration credit: the lower amount applies from the next invoice. Audited `site.paused`; the site's reminders stop.
+   - [ ] **Resume.** _Resume_ the site: quantity 2 again, prorated like an added site. Audited `site.resumed`.
+   - [ ] **The portal.** Billing → _Update payment method_ opens Stripe's customer portal for this customer: the payment method can be changed and the invoices are listed; its return link comes back to `/billing`.
+   - [ ] **Failed card → past due → banner → block.** In the portal, replace the card with Stripe's test card that attaches but is declined on charge (Stripe's testing page, declined payments; take the number from there). End the subscription's trial now from the Dashboard so Stripe invoices at once (confirm the Dashboard's current wording for it). Expect `invoice.payment_failed`: the org goes `past_due` (audited, the event type in the diff), the office gets the "Payment failed" notice (EN/TR), and the admin banner shows on every page. With step 7's zero grace the org is blocked at once: the banner says reminders and calls are paused, scheduler-tick stops the org's reminders, and the field app's Today offers no Talk now. With the default 14 days the block comes after the grace.
+   - [ ] **Back to good** (optional). Put the success card back and pay the open invoice in the portal: `invoice.paid` moves the org to `active` and the banner goes.
+
+   Afterwards: every delivery in the Dashboard's webhook log is 200; the function logs show no `stripe.webhook.bad_signature` or `stripe.webhook.org_not_found`; an event resent from the Dashboard answers `duplicate: true`.
+
+9. **Live mode is a separate owner step, before the US pilot.** Not part of this run: Stripe's live-mode activation (the business and bank details Stripe asks for), the live product and USD 399.00 per-unit price, the live portal configuration, a live webhook endpoint on the **production** project with its own `whsec_…`, and the live `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_PRICE_ID_SITE_US` as that project's secrets and its worker's, each owner-approved. Test-mode and live-mode objects do not mix: a test price id with a live key (or the reverse) fails Checkout. TR billing waits for §19 Q8 and Q9: TR orgs stay `manual` until then (W4-15 box 3).
+
 ### Before the worker runs (typed reports)
 
 Until WhatsApp and the AI keys are live, offices type reports in the panel (Reports → **New report**). `create_office_report()` files them and the panel renders each version's PDF in the browser (`@sitelog/pdf`, the same document as the worker), uploads it to `pdfs/` and records it with `attach_version_pdf()`; nothing is emailed. Office edits still enqueue `render_pdf` jobs (with the report-updated email). Before starting the worker for the first time, discard the backlog so customers do not get weeks-old update emails (at the W1-19 cut-over with `supabase/ops/discard-backlog.sql`, which does the same with an audit row, step 2 above):
