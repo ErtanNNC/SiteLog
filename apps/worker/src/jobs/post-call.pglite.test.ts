@@ -607,3 +607,28 @@ describe('W3-11: no_photo at 23:59 for a call report (§10.5 step 2)', () => {
     expect(notices.some((n) => n.data.params.reasons.includes('no_photo'))).toBe(true);
   });
 });
+
+describe('W3-14: a call whose reporter said no to the consent question (§19 Q120)', () => {
+  it('processes nothing: no transcript, no reconcile, no hand-over; the recording is deleted', async () => {
+    const call = await newCall('2030-07-09T21:00:00Z');
+    await uploadRecording(call, fakeAudio('call-riverside-en', 75));
+    await pg.q(`select voice_record_consent($1, 'no', 4, 'voice.consent.v1')`, [call]);
+    await endCall(call, 'abandoned');
+    await pg.q(`update calls set ended_at = now() - interval '2 hours' where id = $1`, [call]);
+    await runPostCall(call);
+    const [c] = await pg.q<{ outcome: string; reconcile: unknown; peaks: unknown }>(
+      `select outcome::text, reconcile, peaks from calls where id = $1`,
+      [call],
+    );
+    expect(c).toEqual({ outcome: 'abandoned', reconcile: null, peaks: null });
+    expect(await pg.q(`select 1 from transcripts where call_id = $1`, [call])).toEqual([]);
+    await expect(storage.download('calls', `${ORG}/${call}.ogg`)).rejects.toThrow();
+    expect(
+      await pg.q(
+        `select 1 from jobs where type = 'decide_next' and payload -> 'afterCall' ->> 'callId' = $1`,
+        [call],
+      ),
+    ).toEqual([]);
+    expect(await texts(call)).toEqual([]);
+  });
+});

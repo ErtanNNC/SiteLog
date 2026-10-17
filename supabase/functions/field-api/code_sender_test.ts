@@ -62,6 +62,7 @@ function message(
       activated_at: null,
       opted_out_at: null,
       message_channel: null,
+      no_calls_until: null,
       ...over,
     },
     consents: { held: new Set(opts.held ?? []), revoked: new Set(opts.revoked ?? []) },

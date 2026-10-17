@@ -100,6 +100,7 @@ function reporter(
     activated_at: null,
     opted_out_at: null,
     message_channel: null,
+    no_calls_until: null,
     ...extra,
   };
 }

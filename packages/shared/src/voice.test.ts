@@ -129,6 +129,21 @@ const TOOL_EXAMPLES: { [T in (typeof VOICE_TOOLS)[number]]: [VoiceToolRequest<T>
     { callId: CALL, siteId: SITE },
     { siteId: SITE, name: 'Northgate' },
   ],
+  // W3-14 (F10 call): the yes to "Save it?" after a filed report's change was read back.
+  save_change: [
+    { callId: CALL, reportId: REPORT, correctionId: QUESTION, utterance: 'yes' },
+    { status: 'saved', version: 2, confirmation: 'Saved. Version 2 goes to the office.' },
+  ],
+  // W3-14 (F3 call, §19 Q120).
+  record_consent: [
+    { callId: CALL, utterance: 'yes', at: 6.5 },
+    { status: 'given', confirmation: 'Thank you.', linkSent: false },
+  ],
+  // W3-14 (F13, §19 Q124).
+  leave_message: [
+    { callId: CALL, utterance: "It's Sam from Apex at Northgate.", start: 9 },
+    { ok: true, confirmation: "Thanks, I'll pass it to the office. Goodbye." },
+  ],
 };
 
 describe('live turns (W3-09, §19 Q117)', () => {

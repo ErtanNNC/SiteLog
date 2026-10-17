@@ -110,3 +110,80 @@ export function isCallConfirm(utterance: string): boolean {
   }
   return confirmed;
 }
+
+// ───────────────────────────── The spoken "no" (W3-14) ─────────────────────────────
+
+/**
+ * W3-14 (F3 on a call, spec §19 Q120): the consent question's "no", per language, as
+ * `normalizeCallUtterance` writes it. A decline is read like a confirm: the whole utterance is
+ * decline phrases (with polite words or thanks around them), nothing else. Anything that is
+ * neither a whole confirm nor a whole decline is not understood, and the agent asks once more
+ * (`consent_repeat`).
+ */
+export const CALL_DECLINE_WORDS = {
+  en: [
+    'no',
+    'nope',
+    'nah',
+    'not ok',
+    'not okay',
+    'i dont',
+    'i do not',
+    'id rather not',
+    'rather not',
+    'dont',
+    'do not',
+    'dont record',
+    'do not record',
+  ],
+  es: ['no', 'prefiero que no', 'no quiero', 'no grabe', 'mejor no'],
+  tr: ['hayir', 'istemiyorum', 'olmaz', 'kaydetmeyin', 'uygun degil'],
+} as const satisfies Record<'en' | 'es' | 'tr', readonly string[]>;
+
+/** Words a "no" may carry besides the polite ones ("no thanks", "no, gracias", "hayır, teşekkürler"). */
+export const CALL_DECLINE_THANKS = [
+  'thanks',
+  'thank you',
+  'gracias',
+  'tesekkurler',
+  'tesekkur ederim',
+] as const;
+
+const DECLINE_PHRASES: ReadonlyArray<{ words: string[]; decline: boolean }> = [
+  ...Object.values(CALL_DECLINE_WORDS)
+    .flat()
+    .map((p) => ({ words: p.split(' '), decline: true })),
+  ...[...CALL_CONFIRM_POLITE, ...CALL_DECLINE_THANKS].map((p) => ({
+    words: p.split(' '),
+    decline: false,
+  })),
+].sort((a, b) => b.words.length - a.words.length);
+
+/**
+ * True when the whole utterance is a "no" (§19 Q120): one or more decline phrases, with polite
+ * words or thanks around them, and nothing else ("no thanks", "hayır", "no, gracias"). "no, yes",
+ * "yes", thanks alone and "no but the hours…" are not a decline.
+ */
+export function isCallDecline(utterance: string): boolean {
+  const words = normalizeCallUtterance(utterance).split(' ').filter(Boolean);
+  if (words.length === 0 || words.length > CALL_CONFIRM_MAX_WORDS) return false;
+  let declined = false;
+  let i = 0;
+  while (i < words.length) {
+    const match = DECLINE_PHRASES.find((p) => p.words.every((w, k) => words[i + k] === w));
+    if (!match) return false;
+    declined ||= match.decline;
+    i += match.words.length;
+  }
+  return declined;
+}
+
+/**
+ * A yes-or-no answer as code reads it (W3-14: the consent question, §19 Q120): a whole confirm
+ * (`isCallConfirm`), a whole decline, or neither. Never a model's verdict.
+ */
+export function callYesNo(utterance: string): 'yes' | 'no' | 'unclear' {
+  if (isCallConfirm(utterance)) return 'yes';
+  if (isCallDecline(utterance)) return 'no';
+  return 'unclear';
+}

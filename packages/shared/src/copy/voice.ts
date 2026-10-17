@@ -106,6 +106,36 @@ export const VOICE_KEYS = [
   'correction_crew_removed',
   'correction_unclear',
   'correction_nothing',
+  // W3-14: the special requests on a call (F6, §9.4 rule 6). F12: code reads the day off back with
+  // its lost hours (from code, never the model) and logs it only after the spoken yes (§19 Q136's
+  // "No work today?"); a day whose report is under way is said in the report (§19 Q79).
+  'day_off_confirm_no_work',
+  'day_off_confirm_weather',
+  'day_off_confirm_weather_crew',
+  'day_off_confirm_never',
+  'day_off_confirm_never_crew',
+  'day_off_confirm_repeat',
+  'day_off_logged_no_work',
+  'day_off_logged_weather',
+  'day_off_in_progress',
+  'day_off_filed',
+  'day_off_site_paused',
+  // "Call me back" before outbound calls exist (W3-17), and F15's "not today" (§19 Q129).
+  'callback_unavailable',
+  'pref_not_today_ok',
+  // F10 on a call: load_report's other answers, the change read back with "Save it?", the save.
+  'edit_ask',
+  'edit_save_ask',
+  'edit_save_repeat',
+  'edit_saved',
+  'edit_changed_meanwhile',
+  'edit_locked',
+  'edit_not_found',
+  'edit_ambiguous',
+  'edit_pending',
+  // F3 on a call (§19 Q120): the yes recorded; the question again after an unclear answer.
+  'consent_given',
+  'consent_repeat',
 ] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 
@@ -139,6 +169,7 @@ export const VOICE_SPEC_VERBATIM_KEYS = [
   'weather_photo_link',
   'unknown_caller',
   'goodbye_filed',
+  'edit_locked',
 ] as const satisfies readonly VoiceKey[];
 
 /** The `{name}` placeholders of a text, in order of first appearance. */

@@ -129,6 +129,10 @@ const AUDITED: Record<string, string> = {
     'field_answer_question_voice (W2-09, F7 Other…): parse_answer per question and answer clip (jobKeys.parseAnswer); a clip is spoken once and names one question (uploads.question_id), a retry of the same clip returns the first call, and a second try is a new clip',
   "sql:'correction:' || c.id":
     'field_request_correction (W2-10, F8 Fix by voice): apply_correction per correction (jobKeys.applyCorrection); a correction is requested once (a retry of the same clip returns the first), and another try is a new correction',
+  "sql:'correction:' || d.id":
+    'voice_request_filed_correction (W3-14, F10 on a call): apply_correction per correction (jobKeys.applyCorrection); the same words of the same call again return the first correction, and another change is a new correction',
+  'call_declined_link:{}':
+    'the Notifier key of the daily link a declined first call texts (W3-14, §19 Q120): per call, so a retried record_consent texts once',
   "sql:'decide:' || r.id || ':correction:' || c.id":
     'field_apply_correction (W2-10): decide_next after Save change, per correction; a correction is applied once (a retry answers applied without a job)',
   "sql:'decide:' || r.id || ':edit:v' || p_version || ':r' || p_draft_rev":

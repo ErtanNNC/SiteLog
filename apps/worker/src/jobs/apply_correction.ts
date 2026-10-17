@@ -35,6 +35,10 @@ import { PermanentJobError, type JobHandler } from './types';
  * signed-off) report's current version; Save change makes version n+1 from its preview
  * (field_save_filed_correction()), never this job. A report no longer filed makes it `stale`.
  *
+ * W3-14 (F10 on a call): a correction with `call_id` was said on a call about a filed report
+ * (voice_request_filed_correction()); its words cite the call's seconds (`{type: 'call'}`), and
+ * field-api reads the preview back on the call ("Save it?").
+ *
  * W2-12 (F10 by SMS): a correction with `message_id` came from an SMS EDIT
  * (sms_request_filed_correction()); its typed words cite `reporter_edit` via 'sms', and once it is
  * settled the `sms_keyword` job texts the preview back with its confirm link
@@ -188,6 +192,14 @@ async function correctionWords(
   reportId: string,
   log: Parameters<JobHandler<'apply_correction'>>[0]['log'],
 ): Promise<{ text: string; source: Source } | null> {
+  // W3-14 (F10 on a call): the words said on the call, citing the call's seconds (set at request,
+  // voice_request_filed_correction()).
+  if (correction.call_id) {
+    const text = correction.text?.trim() ?? '';
+    const source = correction.source as Source | null;
+    if (!text || source?.type !== 'call' || source.callId !== correction.call_id) return null;
+    return { text, source };
+  }
   if (correction.via === 'text') {
     const text = correction.text?.trim() ?? '';
     if (!text) return null;

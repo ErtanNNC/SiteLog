@@ -133,6 +133,7 @@ import {
 } from './logic.ts';
 import { FieldDbError, type FieldStore, type OrgContext } from './store.ts';
 import { registerVoiceRoutes, voiceToolWaitMs } from './voice.ts';
+import type { VoiceSpecialStore } from './voice_special.ts';
 import {
   registerTalkNowRoutes,
   talkNowAvailable,
@@ -220,6 +221,11 @@ export interface FieldApiDeps {
     livekit: () => LiveKitApi | null;
     agentName?: () => string;
   };
+  /**
+   * W3-14: the special requests on a call, consent on a call and unknown callers
+   * (`voice_special.ts`), on their own store. Unset = not served.
+   */
+  voiceSpecial?: { store: VoiceSpecialStore };
   now?: () => Date;
   /** Waiting between polls of a send claim (tests pass a fake). */
   sleep?: (ms: number) => Promise<void>;
@@ -1925,6 +1931,19 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
     // W3-09 (§19 Q117): how long a live tool waits for its worker turn.
     toolWaitMs: () => voiceToolWaitMs(deps.voiceToolWaitMs?.()),
     sleep: deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms))),
+    // W3-14 (voice_special.ts): the daily link a declined first call texts (§19 Q120).
+    ...(deps.voiceSpecial
+      ? {
+          special: {
+            store: deps.voiceSpecial.store,
+            sendDailyLink: deps.sendDailyLink,
+            fieldAppUrl: deps.fieldAppUrl,
+            linkSigningSecret: deps.linkSigningSecret,
+            dailyLinkTtlHours: deps.dailyLinkTtlHours,
+            randomUUID,
+          },
+        }
+      : {}),
   });
 
   return app;

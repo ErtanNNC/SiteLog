@@ -543,3 +543,78 @@ describe('W2-11: Change something on a filed report (F10), version 2, _v2, Updat
     ]);
   }, 60_000);
 });
+
+describe('W3-14: F10 on a call (load_report, apply_correction, the yes, version 2 via voice)', () => {
+  it('"Apex had seven, not six" said on a call → preview citing the call → saved after the yes', async () => {
+    let date = recentDate(0);
+    for (let n = 0; n < 14; n++) {
+      date = recentDate(n);
+      const used = await database.q(
+        `select 1 from site_days where site_id = $1 and date = $2::date`,
+        [RIVERSIDE, date],
+      );
+      if (used.length === 0) break;
+    }
+    await database.q(`update consents set revoked_at = null where reporter_id = $1`, [MARCO]);
+    const reportId = await heroDraft(date);
+    const { rev } = await draftOf(reportId);
+    await database.q(`select field_confirm_report($1, $2, 1, $3)`, [reportId, MARCO, rev]);
+    await runQueued('file_report', reportId);
+    expect(await status(reportId)).toBe('filed');
+
+    // A later call of Marco's (field-api's apply_correction with the reportId load_report found).
+    const [call] = await database.q<{ id: string }>(
+      `insert into calls (org_id, reporter_id, site_id, direction, transport, status, started_at,
+                          answered_at, call_token_issued_at, language)
+       values ($1, $2, $3, 'inbound', 'web', 'in_progress', now(), now(), now(), 'en-US')
+       returning id`,
+      [ORG, MARCO, RIVERSIDE],
+    );
+    const [req] = await database.q<{ r: { id: string; jobId: number } }>(
+      `select voice_request_filed_correction($1, $2, 'Apex had seven, not six.', 41.5, 43.8) as r`,
+      [call!.id, reportId],
+    );
+    expect(await run(req!.r.jobId)).toEqual({ ok: true });
+    const preview = await correction(req!.r.id);
+    expect(preview.status).toBe('ready');
+    const changes = preview.changes as Parameters<typeof correctionNote>[0];
+    expect(correctionNote(changes, 'en')).toBe('Apex Concrete 6 → 7 workers, 48 → 56 h');
+    // Nothing changed before the yes.
+    expect(apex((await draftOf(reportId)).data)).toMatchObject({ workers: 6, totalHours: 48 });
+
+    const [refused] = await database.q<{ r: { status: string } }>(
+      `select voice_save_filed_correction($1, $2, 'sounds good I guess', false, 'x') as r`,
+      [call!.id, req!.r.id],
+    );
+    expect(refused!.r.status).toBe('not_confirmed');
+    const [saved] = await database.q<{ r: { status: string; version: number } }>(
+      `select voice_save_filed_correction($1, $2, 'Yes.', true, $3, $4) as r`,
+      [
+        call!.id,
+        req!.r.id,
+        correctionNote(changes, 'en'),
+        JSON.stringify({
+          weekday: formatDate(date, 'weekday', 'en'),
+          change: correctionNote(changes, 'en', { sms: true }),
+        }),
+      ],
+    );
+    expect(saved!.r).toMatchObject({ status: 'applied', version: 2 });
+    const v2 = await draftOf(reportId);
+    expect(apex(v2.data)).toMatchObject({ workers: 7, hoursPerWorker: 8, totalHours: 56 });
+    expect(apex(v2.data).source).toContainEqual({
+      type: 'call',
+      callId: call!.id,
+      start: 41.5,
+      end: 43.8,
+    });
+    const [ver] = await database.q<{ via: string; author_reporter_id: string }>(
+      `select via::text, author_reporter_id from report_versions where report_id = $1 and version = 2`,
+      [reportId],
+    );
+    expect(ver).toEqual({ via: 'voice', author_reporter_id: MARCO });
+    expect(
+      await database.q(`select 1 from jobs where dedupe_key = $1`, [`render_pdf:${reportId}:2`]),
+    ).toHaveLength(1);
+  }, 60_000);
+});

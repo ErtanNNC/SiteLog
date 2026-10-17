@@ -213,6 +213,8 @@ export type ReporterRow = {
   opted_out_at: string | null;
   /** Preferred message channel (20261014000005); null = the country pack's order (§4.5). */
   message_channel: MessageChannel | null;
+  /** §19 Q129 (W3-14): no automated calls until this instant ("not today"). */
+  no_calls_until: string | null;
 };
 
 export type SiteReporterRow = {
@@ -727,6 +729,8 @@ export type CallRow = {
    * unreconciled, at, mismatches?, precise?, compared?, reason?}`; null until it ran.
    */
   reconcile: Json | null;
+  /** §19 Q120 (W3-14): the reporter said no to the consent question on this call. */
+  consent_declined_at: string | null;
 };
 
 /**
@@ -879,6 +883,8 @@ export type DraftCorrectionRow = {
    * `reporter_edit` via 'sms', and its settled preview is texted back with a link to confirm.
    */
   message_id: string | null;
+  /** W3-14 (F10 call): the call a change of a filed report was said on. */
+  call_id: string | null;
 };
 
 export type SmsOptOutRow = {
@@ -1120,6 +1126,7 @@ export type Database = {
         | 'activated_at'
         | 'opted_out_at'
         | 'message_channel'
+        | 'no_calls_until'
       >;
       consents: Table<ConsentRow, 'id' | 'evidence' | 'given_at' | 'revoked_at'>;
       field_links: Table<
@@ -1282,6 +1289,7 @@ export type Database = {
         | 'site_day_id'
         | 'fallback'
         | 'reconcile'
+        | 'consent_declined_at'
       >;
       voice_tool_requests: Table<VoiceToolRequestRow, 'status' | 'response' | 'created_at'>;
       livekit_events: Table<LivekitEventRow, 'call_id' | 'received_at'>;
@@ -1454,6 +1462,7 @@ export type Database = {
         | 'after_filing'
         | 'version_created'
         | 'message_id'
+        | 'call_id'
       >;
       scheduler_state: Table<SchedulerStateRow, 'value' | 'updated_at'>;
       stripe_events: Table<StripeEventRow, 'received_at' | 'processed_at'>;
@@ -1644,6 +1653,60 @@ export type Database = {
       report_no_photo_check: {
         Args: { p_report_id: string; p_title: string; p_body: string; p_data: Json };
         Returns: Json;
+      };
+      // W3-14 (20261016000370_voice_special_intents.sql), service role only: the special requests
+      // on a call (F12, F10, F15), the consent asked on a call (F3, §19 Q120) and unknown callers
+      // (F13, §19 Q124); purge_unknown_callers for the worker's retention_cleanup.
+      voice_report_day_off: {
+        Args: {
+          p_call_id: string;
+          p_status: string;
+          p_details: Json;
+          p_data: Json;
+          p_utterance: string;
+        };
+        Returns: Json;
+      };
+      voice_request_filed_correction: {
+        Args: {
+          p_call_id: string;
+          p_report_id: string;
+          p_text: string;
+          p_start: number;
+          p_end?: number | null;
+        };
+        Returns: Json;
+      };
+      voice_save_filed_correction: {
+        Args: {
+          p_call_id: string;
+          p_correction_id: string;
+          p_utterance: string;
+          p_confirmed: boolean;
+          p_change_note: string;
+          p_message?: Json | null;
+        };
+        Returns: Json;
+      };
+      voice_record_consent: {
+        Args: { p_call_id: string; p_answer: string; p_at: number; p_text_version: string };
+        Returns: Json;
+      };
+      voice_no_calls_today: {
+        Args: { p_call_id: string };
+        Returns: Json;
+      };
+      voice_unknown_caller: {
+        Args: { p_call_id: string; p_snippet: string };
+        Returns: Json;
+      };
+      voice_unknown_recording: {
+        Args: { p_call_id: string };
+        Returns: Json;
+      };
+      purge_unknown_callers: {
+        Args: { p_before: string; p_limit?: number };
+        Returns: { contact_id: string; call_id: string | null; recording_path: string | null }[];
       };
       // Settings (F15, 20261016000010_field_settings.sql), service role only: consent/revoke sets
       // revoked_at, audits consent.revoked and tells the office of a required consent.

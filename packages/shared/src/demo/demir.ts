@@ -180,6 +180,7 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
     opted_out_at: null,
     // null = the country pack's order (§4.5); a preference comes with week 2.
     message_channel: null,
+    no_calls_until: null,
   }));
 
   const siteReporters = SITES.map((s) => ({

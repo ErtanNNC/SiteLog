@@ -61,6 +61,7 @@ import {
 import { formatIssues, timingSafeEqual } from '../_shared/http.ts';
 import { FieldError, consentState, filedChangeable, siteDeadline } from './logic.ts';
 import type { FieldStore, OrgContext, VoiceTurnState } from './store.ts';
+import { registerVoiceSpecialRoutes, type VoiceSpecialDeps } from './voice_special.ts';
 
 /**
  * field-api's voice routes (W3-03; spec §6.5, §9.4, Appendix B "field-api voice routes"): what the
@@ -80,7 +81,9 @@ import type { FieldStore, OrgContext, VoiceTurnState } from './store.ts';
  * answers 202 `pending` and the agent, after a short line, asks again with the same words, which
  * are the same turn. W3-10 adds `apply_correction` (a worker turn too) and `file_report` (code's
  * confirm grammar, the read-back's revision, one filing job per revision, then the wait for the
- * filing). `set_day_status` and `schedule_callback` are W3-14's and are not served yet (404).
+ * filing). W3-14's routes (`set_day_status`, `schedule_callback`, `save_change`,
+ * `record_consent`, `leave_message`, F10's preview, "not today", an unknown caller's recording)
+ * live in `voice_special.ts`, mounted here with these helpers.
  */
 
 export interface VoiceDeps {
@@ -96,6 +99,8 @@ export interface VoiceDeps {
   toolWaitMs: () => number;
   /** Waiting between polls of a turn (tests pass a fake). */
   sleep: (ms: number) => Promise<void>;
+  /** W3-14: the special requests on a call (`voice_special.ts`); unset = not served. */
+  special?: VoiceSpecialDeps;
 }
 
 /** How often a waiting live tool reads its turn (W3-09). */
@@ -143,6 +148,24 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
     if (!bearer || !timingSafeEqual(bearer, secret)) throw new FieldError(401, 'unauthorized');
     await next();
   });
+
+  // W3-14: the special requests, consent on a call and unknown callers (voice_special.ts), with
+  // this module's helpers (the call token, the scope, `once()`).
+  const special = deps.special
+    ? registerVoiceSpecialRoutes(app, deps.special, {
+        store,
+        now,
+        toolWaitMs: deps.toolWaitMs,
+        sleep: deps.sleep,
+        publicSignedUrl: deps.publicSignedUrl,
+        pollMs: VOICE_TURN_POLL_MS,
+        pending: PENDING,
+        authorizedCall,
+        once,
+        callScope,
+        parseBody: parseVoiceBody,
+      })
+    : null;
 
   /**
    * The call named in the body, if the token is its token: started, not ended (unless `ended` lets
@@ -342,9 +365,10 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
   app.post('/voice/tools/apply_correction', async (c) => {
     const body = await parseVoiceBody(c, ApplyCorrectionRequestSchema);
     const call = await authorizedCall(c, body.callId);
-    // F10 on a call (a filed report `load_report` found) is W3-14's.
+    // F10 on a call (a filed report `load_report` found): W3-14's preview and `save_change`.
     if (body.reportId !== undefined && body.reportId !== call.report_id) {
-      throw new FieldError(400, 'not_available', 'Changing another report comes with W3-14');
+      if (!special) throw new FieldError(400, 'not_available');
+      return special.applyFiledCorrection(c, call, body);
     }
     const input = {
       utterance: body.utterance,
@@ -527,10 +551,13 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
     });
     const callToken = await deriveCallToken(deps.callTokenSecret(), started.callId);
     if (!started.reporterId) {
+      // W3-14 (F13): the pack's language for the disclosure and the F13 line.
+      const locale = special ? await special.unknownLocale(started.callId) : null;
       return c.json({
         callId: started.callId,
         callToken,
         unknown: true,
+        ...(locale ? { locale } : {}),
       } satisfies VoiceCallStartResponse);
     }
     const reporter = await store.getReporter(started.reporterId);
@@ -553,11 +580,15 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
       throw new FieldError(400, 'invalid_request', 'The path and the body name different calls');
     }
     const call = await authorizedCall(c, body.callId, 'recording');
+    // F13 (§19 Q124): an unknown caller's ≤ 60 s, outside every org's folder (W3-14).
+    if (!call.reporter_id && special) return special.unknownRecording(c, call, body);
     return once(c, call, 'recording_upload', async () => {
       const scope = await callScope(call);
       // §19 Q120: a caller who said no (or never said yes) leaves no recording.
       const held = consentState(await store.listConsents(scope.reporter.id)).held;
-      if (!held.has('recording')) throw new FieldError(403, 'consent_required');
+      if (!held.has('recording') || call.consent_declined_at) {
+        throw new FieldError(403, 'consent_required');
+      }
       // One path per call: a second upload replaces the first, never adds one.
       const path = callRecordingPath(scope.org.org.id, call.id);
       await store.voiceCallRecording(call.id, path);
@@ -670,9 +701,14 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
     body: z.infer<typeof SetPreferenceRequestSchema>,
   ): Promise<{ status: 200; body: unknown }> {
     const scope = await callScope(call);
-    // §19 Q129 ("not today") needs `reporters.no_calls_until`, which W3-17 adds with the calls.
+    // §19 Q129 ("not today", W3-14): `reporters.no_calls_until`, the end of today (org time).
+    let notToday: string | null = null;
     if (body.noCallsToday) {
-      throw new FieldError(400, 'not_available', '"Not today" comes with outbound calls (W3-17)');
+      if (!special) throw new FieldError(400, 'not_available');
+      notToday = await special.noCallsToday(call, scope.language);
+    }
+    if (body.contactPref === undefined) {
+      return { status: 200, body: { ok: true, confirmation: notToday } };
     }
     const pref = body.contactPref as ContactPref;
     const before = scope.reporter.contact_pref;
@@ -693,9 +729,10 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
         },
       });
     }
+    const said = preferenceConfirmation(pref, scope.language);
     return {
       status: 200,
-      body: { ok: true, confirmation: preferenceConfirmation(pref, scope.language) },
+      body: { ok: true, confirmation: notToday ? `${said} ${notToday}` : said },
     };
   }
 

@@ -38,6 +38,25 @@
         }
       },
       "additionalProperties": false
+    },
+    "start": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 3600
+    },
+    "end": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 3600
+    },
+    "utterance": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "confirmKey": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     }
   },
   "required": [
@@ -45,5 +64,5 @@
     "status"
   ],
   "additionalProperties": false,
-  "description": "A weather_day needs details.since."
+  "description": "A weather_day needs details.since; utterance and confirmKey go together (the answer to the read-back)."
 }

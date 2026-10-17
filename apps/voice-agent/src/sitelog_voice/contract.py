@@ -79,6 +79,9 @@ def _refine_calls_start_response(body: Mapping[str, Any]) -> str | None:
 def _refine_set_day_status_request(body: Mapping[str, Any]) -> str | None:
     if body.get("status") == "weather_day" and "since" not in (body.get("details") or {}):
         return "a weather_day needs details.since"
+    # W3-14: the answer to the read-back comes with the read-back's key.
+    if ("utterance" in body) != ("confirmKey" in body):
+        return "utterance and confirmKey go together"
     return None
 
 
@@ -192,6 +195,8 @@ class CallsStartResponse(_View):
     call_token: str
     reporter: Reporter | None = None
     unknown: Literal[True] | None = None
+    #: W3-14 (F13): an unknown caller's language, the first field locale of the called pack.
+    locale: Locale | None = None
 
 
 class CallInfo(_View):

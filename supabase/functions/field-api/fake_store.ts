@@ -1353,6 +1353,7 @@ export class FakeFieldStore implements FieldStore {
       after_filing: afterFiling,
       version_created: null,
       message_id: null,
+      call_id: null,
     };
     this.corrections.push(row);
     const job: FakeJob = {
@@ -1834,6 +1835,7 @@ export class FakeFieldStore implements FieldStore {
       site_day_id: site ? this.siteDayOf(site.id) : null,
       fallback: null,
       reconcile: null,
+      consent_declined_at: null,
     };
     this.callRows.push(row);
     this.callAudit(row, 'call.started', { unknown: !rep, orgs: callers.length });

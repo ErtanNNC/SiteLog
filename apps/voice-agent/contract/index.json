@@ -101,6 +101,27 @@
       "request": "tool_pick_site_request",
       "response": "tool_pick_site_response",
       "callToken": true
+    },
+    "save_change": {
+      "method": "POST",
+      "path": "/voice/tools/save_change",
+      "request": "tool_save_change_request",
+      "response": "tool_save_change_response",
+      "callToken": true
+    },
+    "record_consent": {
+      "method": "POST",
+      "path": "/voice/tools/record_consent",
+      "request": "tool_record_consent_request",
+      "response": "tool_record_consent_response",
+      "callToken": true
+    },
+    "leave_message": {
+      "method": "POST",
+      "path": "/voice/tools/leave_message",
+      "request": "tool_leave_message_request",
+      "response": "tool_leave_message_response",
+      "callToken": true
     }
   },
   "errors": [
@@ -119,6 +140,11 @@
     "reporter_disabled",
     "consent_required",
     "not_available",
+    "report_locked",
+    "correction_pending",
+    "correction_not_ready",
+    "site_inactive",
+    "recording_too_long",
     "rate_limited",
     "site_required",
     "report_closed",

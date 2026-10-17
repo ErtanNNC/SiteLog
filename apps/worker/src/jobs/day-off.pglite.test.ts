@@ -24,7 +24,10 @@ let SITE = '';
 let ORG = '';
 
 function ctxAt(now: Date): Ctx {
-  const config = testConfig();
+  const config = testConfig({
+    LINK_SIGNING_SECRET: 'day-off-link-secret',
+    FIELD_APP_URL: 'https://go.sitelog.test',
+  });
   return {
     config,
     db: pg.db,
@@ -202,5 +205,56 @@ describe('W2-08: No work and Weather as reports, filed by the worker', () => {
       [`notify:reminder_1:${d!.id}:${MARCO}`],
     );
     expect(skip!.diff.reason).toBe('stale_stage');
+  });
+});
+
+describe('W3-14: a weather day logged on a call (F12 call)', () => {
+  it('is filed with trigger weather_day, no filed text, and the photos link texted', async () => {
+    const call = randomUUID();
+    await pg.q(
+      `insert into calls (id, org_id, reporter_id, site_id, direction, transport, provider_call_id,
+                          status, started_at, answered_at, call_token_issued_at, language)
+       values ($1, $2, $3, $4, 'inbound', 'web', $5, 'in_progress', $6, $6, $6, 'en-US')`,
+      [call, ORG, MARCO, SITE, `call-${call}`, '2030-06-10T17:00:00Z'],
+    );
+    const data = dayOffReportData({
+      kind: 'weather_day',
+      date: '2030-06-10',
+      siteName: 'Riverside Lofts',
+      org: { reportLanguage: 'en', units: 'imperial' },
+      details: { since: '11:00', workersBefore: 12 },
+      questionIds: { since: null, workersBefore: null },
+      workingHours: '07:00–15:30',
+      defaultShiftHours: 8,
+      detailSource: { type: 'call', callId: call, start: 4.5, end: 9 },
+    });
+    const [row] = await pg.q<{ r: { report: { id: string } } }>(
+      `select voice_report_day_off($1, 'weather_day', $2::jsonb, $3::jsonb, 'Yes.') as r`,
+      [call, JSON.stringify({ since: '11:00', workersBefore: 12 }), JSON.stringify(data)],
+    );
+    const reportId = row!.r.report.id;
+    await fileReportJob(
+      ctxAt(new Date('2030-06-10T17:05:00Z')),
+      await fileJob(reportId),
+      {} as never,
+    );
+    const [r] = await pg.q<{ status: string; channel: string }>(
+      `select status::text, channel::text from reports where id = $1`,
+      [reportId],
+    );
+    expect(r).toEqual({ status: 'filed', channel: 'voice' });
+    const [ev] = await pg.q<{ lost: number }>(
+      `select lost_hours::float as lost from weather_events where report_id = $1`,
+      [reportId],
+    );
+    expect(ev).toEqual({ lost: 4.5 });
+    expect(
+      await pg.q(`select 1 from jobs where dedupe_key = $1`, [`notify:filed:${reportId}`]),
+    ).toEqual([]);
+    const [link] = await pg.q<{ payload: JobPayloads['notify'] }>(
+      `select payload from jobs where dedupe_key = $1`,
+      [`notify:photos_link:${reportId}`],
+    );
+    expect(link!.payload).toMatchObject({ reporterId: MARCO, key: 'photos_link' });
   });
 });

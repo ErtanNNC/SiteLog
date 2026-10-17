@@ -1046,6 +1046,12 @@ export interface Db {
   purgeMedia(id: string, purgedAt: Date): Promise<void>;
   /** Deletes `done` jobs finished before `before` (dead / failed ones stay for /ops). */
   purgeFinishedJobs(before: Date, limit: number): Promise<number>;
+  /**
+   * §19 Q124 (W3-14, purge_unknown_callers()): unknown callers' contacts made before `before`
+   * that the office did not link are deleted, with their call's dialog log and recording path;
+   * the recording paths (in the `calls` bucket) come back for the storage delete.
+   */
+  purgeUnknownCallers(before: Date, limit: number): Promise<{ recordingPath: string | null }[]>;
   digestStats(orgId: string, weekStart: string, weekEnd: string): Promise<DigestStats>;
 
   /** Close the connection pool (no-op for fakes). */
@@ -2408,6 +2414,11 @@ export function createDb(sql: Sql): Db {
           order by id limit ${limit}
         ) returning id`;
       return rows.length;
+    },
+    async purgeUnknownCallers(before, limit) {
+      const rows = await sql<Array<{ recording_path: string | null }>>`
+        select recording_path from purge_unknown_callers(${before.toISOString()}::timestamptz, ${limit})`;
+      return rows.map((r) => ({ recordingPath: r.recording_path }));
     },
     async purgeMedia(id, purgedAt) {
       await sql.begin(async (tx) => {

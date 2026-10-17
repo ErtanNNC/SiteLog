@@ -6,6 +6,7 @@ import { notifierCodeSender, notifierDailyLinkSender } from './code_sender.ts';
 import { fieldOrigins } from './logic.ts';
 import { supabaseFieldStore } from './store_supabase.ts';
 import { liveKitConfig, liveKitHttpApi, supabaseTalkNowStore } from './talk_now.ts';
+import { supabaseVoiceSpecialStore } from './voice_special.ts';
 
 /**
  * field-api (W1-07): the field app's only backend (spec §6.5, Appendix B; README.md here).
@@ -46,6 +47,8 @@ function fieldApp() {
         const raw = optionalEnv('VOICE_TOOL_WAIT_MS');
         return raw ? Number(raw) : undefined;
       },
+      // W3-14: the special requests on a call, consent on a call, unknown callers.
+      voiceSpecial: { store: supabaseVoiceSpecialStore(admin) },
       // W3-13: Talk now when LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET are set here.
       talkNow: {
         store: supabaseTalkNowStore(admin),

@@ -174,6 +174,11 @@ export const VoiceCallStartResponseSchema = z
     callToken: CallTokenSchema,
     reporter: VoiceReporterSchema.optional(),
     unknown: z.literal(true).optional(),
+    /**
+     * W3-14 (F13): an unknown caller's language, the first field locale of the pack whose number
+     * was called (the disclosure and the F13 line are said in it).
+     */
+    locale: z.enum(REPORTER_LOCALES).optional(),
   })
   .refine((r) => (r.reporter === undefined) !== (r.unknown === undefined), {
     message: 'reporter or unknown',
@@ -377,8 +382,13 @@ export const ApplyCorrectionResultSchema = z.strictObject({
    * "Shall I file it?" after the change's read-back is its confirm; a new draft revision).
    * `not_understood`: the change could not be read or code refused it; nothing changed.
    * `nothing_to_change`: the draft already says it.
+   * W3-14 (F10 call, a `reportId` from `load_report`): `preview`: code made the change of the filed
+   * report as a preview (W2-11's, from its current version); nothing is saved until the reporter
+   * says yes to "Save it?" (`save_change` with `correctionId`). `draft` is then null.
    */
-  status: z.enum(['applied', 'not_understood', 'nothing_to_change']),
+  status: z.enum(['applied', 'not_understood', 'nothing_to_change', 'preview']),
+  /** W3-14: the preview `save_change` names (status `preview` only). */
+  correctionId: uuid.optional(),
   /**
    * The lines to say, worded by code in the call language: the changed lines (numbers from code)
    * when applied; "I couldn't make that change. What should I change?" when not understood.
@@ -423,7 +433,20 @@ export const FileReportResponseSchema = z.discriminatedUnion('status', [
   VoiceTurnPendingSchema,
 ]);
 
-/** `set_day_status` (§9.4, F12 on a call): no work today, or a weather day with its details. */
+/** A day-off read-back's key (W3-14): SHA-256 hex of the call, the status and the details. */
+const confirmKey = z.string().regex(/^[0-9a-f]{64}$/, 'confirm key');
+
+/**
+ * `set_day_status` (§9.4, F12 on a call): no work today, or a weather day with its details.
+ *
+ * W3-14 (CLAUDE.md: the model never decides to file; a day off files a report): in two steps.
+ * Without `utterance` code reads the day off back (`confirm`: "Weather day at Hillcrest: work
+ * stopped at 11:00, 12 on site before, 4.5 hours lost. Shall I log it?", the lost hours from code)
+ * and hands a `confirmKey`; the reporter's verbatim answer then comes back as `utterance` with that
+ * key and the same details, and code logs the day only when the whole answer is a §9.5 confirm
+ * (`isCallConfirm`, §19 Q119's grammar) and the key is the read-back's. `start`/`end`: the call
+ * seconds the reporter said the details at (the source of each value, `{type: 'call'}`).
+ */
 export const SetDayStatusRequestSchema = z
   .strictObject({
     ...toolBase,
@@ -434,16 +457,43 @@ export const SetDayStatusRequestSchema = z
         workersBefore: z.number().int().min(0).max(9999).optional(),
       })
       .optional(),
+    start: callSeconds.optional(),
+    end: callSeconds.optional(),
+    /** W3-14: the reporter's verbatim answer to the read-back (with `confirmKey`). */
+    utterance: utterance.optional(),
+    confirmKey: confirmKey.optional(),
   })
   .refine((b) => b.status !== 'weather_day' || b.details?.since !== undefined, {
     message: 'a weather day needs details.since',
     path: ['details', 'since'],
   })
-  .describe('A weather_day needs details.since.');
+  .refine((b) => (b.utterance === undefined) === (b.confirmKey === undefined), {
+    message: 'utterance and confirmKey go together',
+    path: ['confirmKey'],
+  })
+  .describe(
+    'A weather_day needs details.since; utterance and confirmKey go together (the answer to the read-back).',
+  );
 export const SetDayStatusResponseSchema = z.strictObject({
-  status: z.enum(['ok', 'report_in_progress', 'site_paused']),
+  /**
+   * W3-14: `confirm`: say `confirmation` (the read-back ending in "Shall I log it?") and send the
+   * reporter's answer with `confirmKey`. `not_confirmed`: not a clear yes, asked again
+   * (`day_off_confirm_repeat`; the same key). `ok`: logged (a weather day: the photos link was
+   * texted). `report_in_progress` (§19 Q79: say it in the report), `report_filed`, `site_paused`:
+   * nothing logged.
+   */
+  status: z.enum([
+    'confirm',
+    'not_confirmed',
+    'ok',
+    'report_in_progress',
+    'report_filed',
+    'site_paused',
+  ]),
   /** The sentence to say, in the call language. */
   confirmation: z.string().min(1).max(400),
+  /** W3-14: the read-back's key (`confirm`, `not_confirmed`). */
+  confirmKey: confirmKey.optional(),
 });
 
 /**
@@ -508,6 +558,69 @@ export const LoadReportResponseSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.enum(['not_found', 'ambiguous', 'locked']) }),
 ]);
 
+/**
+ * W3-14 `save_change` (F10 on a call, an addition to §9.4's table like `pick_site`): the
+ * reporter's verbatim answer to "Save it?" after a filed report's change was read back
+ * (`apply_correction` → `preview`). Code saves version n+1 only when the whole answer is a §9.5
+ * confirm (`isCallConfirm`) and the report is still the version the preview was made from.
+ */
+export const SaveChangeRequestSchema = z.strictObject({
+  ...toolBase,
+  reportId: uuid,
+  correctionId: uuid,
+  utterance,
+});
+export const SaveChangeResponseSchema = z.strictObject({
+  /**
+   * `saved`: version n+1 made (the PDF, the "Updated" email and the `edit_applied` text follow).
+   * `not_confirmed`: not a clear yes ("Save it? Say yes or no."). `draft_changed`: the report has a
+   * newer version than the preview's ("…say the change again").
+   */
+  status: z.enum(['saved', 'not_confirmed', 'draft_changed']),
+  version: z.number().int().min(2).optional(),
+  /** The sentence to say, in the call language. */
+  confirmation: z.string().min(1).max(400),
+});
+
+/**
+ * W3-14 `record_consent` (F3 on a call, §19 Q120; an addition to §9.4's table): the reporter's
+ * verbatim answer to `consent_ask`, said after the disclosure, with its call second. Code reads it
+ * (`callYesNo`): yes stores `recording`, `data_processing` and `sms` (`voice_yes`, the call id
+ * and second as evidence) and activates the reporter; no stores nothing more, deletes the call's
+ * recording and texts the link only if `sms` was given before; anything else is asked again.
+ */
+export const RecordConsentRequestSchema = z.strictObject({
+  ...toolBase,
+  utterance,
+  at: callSeconds,
+});
+export const RecordConsentResponseSchema = z.strictObject({
+  status: z.enum(['given', 'declined', 'not_understood']),
+  /**
+   * The line to say: `consent_given`; `consent_declined` / `consent_declined_link` (then end the
+   * call `abandoned`); `consent_repeat`.
+   */
+  confirmation: z.string().min(1).max(400),
+  /** `declined`: the personal link was texted (only with an `sms` consent given before). */
+  linkSent: z.boolean(),
+});
+
+/**
+ * W3-14 `leave_message` (F13, §19 Q124; an addition to §9.4's table): what an unknown caller said
+ * after `unknown_caller` (name, company, site), as heard. Code keeps a 160-character snippet on
+ * `unknown_contacts` (channel `voice`, the call) for the office's Team alert; never a report.
+ */
+export const LeaveMessageRequestSchema = z.strictObject({
+  ...toolBase,
+  utterance,
+  start: callSeconds,
+});
+export const LeaveMessageResponseSchema = z.strictObject({
+  ok: z.literal(true),
+  /** `unknown_goodbye`, in the pack's language. */
+  confirmation: z.string().min(1).max(400),
+});
+
 /** `start_fallback_recording` (§9.4 rule 9, F6 failure handling; W3-11). */
 export const StartFallbackRecordingRequestSchema = z.strictObject({
   ...toolBase,
@@ -527,7 +640,10 @@ export const EndCallResponseSchema = z.strictObject({ ok: z.literal(true) });
 
 // ───────────────────────────── The routes and the generated files ─────────────────────────────
 
-/** The tools of §9.4's table, in its order, plus `pick_site` (W3-03, F14). */
+/**
+ * The tools of §9.4's table, in its order, plus `pick_site` (W3-03, F14) and W3-14's
+ * `save_change` (F10), `record_consent` (F3) and `leave_message` (F13).
+ */
 export const VOICE_TOOLS = [
   'get_context',
   'update_draft',
@@ -541,6 +657,9 @@ export const VOICE_TOOLS = [
   'start_fallback_recording',
   'end_call',
   'pick_site',
+  'save_change',
+  'record_consent',
+  'leave_message',
 ] as const;
 export type VoiceTool = (typeof VOICE_TOOLS)[number];
 
@@ -567,6 +686,9 @@ export const VOICE_TOOL_SCHEMAS = {
   },
   end_call: { request: EndCallRequestSchema, response: EndCallResponseSchema },
   pick_site: { request: PickSiteRequestSchema, response: PickSiteResponseSchema },
+  save_change: { request: SaveChangeRequestSchema, response: SaveChangeResponseSchema },
+  record_consent: { request: RecordConsentRequestSchema, response: RecordConsentResponseSchema },
+  leave_message: { request: LeaveMessageRequestSchema, response: LeaveMessageResponseSchema },
 } as const satisfies Record<VoiceTool, { request: z.ZodType; response: z.ZodType }>;
 
 /** A voice route: method, path under `FIELD_API_URL`, and its contract files. */
@@ -663,14 +785,30 @@ export const VOICE_API_ERRORS = [
   'call_conflict',
   /** The `to` of a SIP start is no pack's voice number (404). */
   'voice_number_unknown',
-  /** A tool on an unknown caller's call (F13; W3-14 handles them) (403). */
+  /**
+   * A tool on an unknown caller's call (F13) (403): every tool but `leave_message` and `end_call`;
+   * and `leave_message` on a known caller's call.
+   */
   'unknown_caller',
   /** A site, report or reporter outside the call's reporter and sites (403). */
   'out_of_scope',
   'reporter_disabled',
   'consent_required',
-  /** `noCallsToday` before §19 Q129's column exists (W3-17) (400). */
+  /**
+   * `schedule_callback` while no pack places outbound calls (W3-14 until W3-17, §19 Q128); a
+   * filed report's change on a call before W3-14 (400).
+   */
   'not_available',
+  /** W3-14 (F10 call): a filed report older than the 14 days (§19 Q81) (409). */
+  'report_locked',
+  /** W3-14 (F10 call): a change of that report is still being read (409; ask again shortly). */
+  'correction_pending',
+  /** W3-14 (F10 call): `save_change` for a preview that is not ready (409). */
+  'correction_not_ready',
+  /** W3-14 (F10 call): the report's site is paused or archived (§19 Q99) (409). */
+  'site_inactive',
+  /** W3-14 (F13, §19 Q124): an unknown caller's recording longer than 60 s (400). */
+  'recording_too_long',
   'rate_limited',
   /** W3-09: a live tool before the call's site is known (`pick_site` first, F14) (409). */
   'site_required',
@@ -764,6 +902,9 @@ export type VoiceDraftState = z.infer<typeof VoiceDraftStateSchema>;
 export type VoiceTurnPending = z.infer<typeof VoiceTurnPendingSchema>;
 export type RecordAnswerResult = z.infer<typeof RecordAnswerResultSchema>;
 export type ApplyCorrectionResult = z.infer<typeof ApplyCorrectionResultSchema>;
+export type SetDayStatusResponse = z.infer<typeof SetDayStatusResponseSchema>;
+export type SaveChangeResponse = z.infer<typeof SaveChangeResponseSchema>;
+export type RecordConsentResponse = z.infer<typeof RecordConsentResponseSchema>;
 export type FileReportResponse = z.infer<typeof FileReportResponseSchema>;
 export type DialogLogEntry = z.infer<typeof DialogLogEntrySchema>;
 export type CallMetrics = z.infer<typeof CallMetricsSchema>;

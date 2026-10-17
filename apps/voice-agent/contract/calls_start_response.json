@@ -39,6 +39,14 @@
     "unknown": {
       "type": "boolean",
       "const": true
+    },
+    "locale": {
+      "type": "string",
+      "enum": [
+        "en-US",
+        "es-US",
+        "tr-TR"
+      ]
     }
   },
   "required": [

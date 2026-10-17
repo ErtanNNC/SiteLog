@@ -1,0 +1,129 @@
+{
+  "$comment": "W3-14 recorded call (W3-02's format): start, field-api's recorded answers per route (in order; the last repeats), the reporter's turns (one run each) and the dialog model's recorded turns. The agent's pytest (apps/voice-agent/tests/test_special_intents.py) replays it on FakeFieldApi; field-api's Deno test (supabase/functions/field-api/voice_special_test.ts) checks the same answers against the routes. W3-15 extends the set.",
+  "id": "hillcrest-weather-en",
+  "locale": "en-US",
+  "start": {
+    "request": {
+      "room": "call-c0140000-0000-4000-8000-000000000001",
+      "transport": "pstn",
+      "from": "+15550149932",
+      "to": "+15550142290"
+    },
+    "response": {
+      "callId": "c0140000-0000-4000-8000-000000000001",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Aisha",
+        "locale": "en-US"
+      }
+    }
+  },
+  "routes": {
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "pstn",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Aisha",
+          "locale": "en-US"
+        },
+        "company": "Kestrel Build Group",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "22222222-0000-4000-8000-0000000000a5",
+            "name": "Hillcrest School Extension",
+            "status": "pending",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "22222222-0000-4000-8000-0000000000a5",
+        "companies": [
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex"]
+          }
+        ],
+        "keyterms": ["Apex Concrete"],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 2
+      }
+    ],
+    "set_day_status": [
+      {
+        "status": "confirm",
+        "confirmation": "Weather day at Hillcrest School Extension: work stopped at 11:00, 12 on site before, 4.5 hours lost. Shall I log it?",
+        "confirmKey": "3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a"
+      },
+      {
+        "status": "ok",
+        "confirmation": "Logged: weather day at Hillcrest School Extension. A photo of the conditions makes the record stronger — I've sent you a link."
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "reporterTurns": ["We got rained out, sent everyone home at eleven, twelve on site.", "Yes."],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "set_day_status",
+          "args": {
+            "status": "weather_day",
+            "since": "11:00",
+            "workers_before": 12
+          }
+        }
+      ]
+    },
+    {
+      "text": "Weather day at Hillcrest School Extension: work stopped at 11:00, 12 on site before, 4.5 hours lost. Shall I log it?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "set_day_status",
+          "args": {
+            "status": "weather_day",
+            "since": "11:00",
+            "workers_before": 12
+          }
+        }
+      ]
+    },
+    {
+      "text": "Logged: weather day at Hillcrest School Extension. A photo of the conditions makes the record stronger — I've sent you a link.",
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "weather_day"
+          }
+        }
+      ]
+    },
+    {}
+  ]
+}

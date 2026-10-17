@@ -1492,6 +1492,10 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       for (const id of ids) d.jobs.delete(id);
       return ids.length;
     },
+    async purgeUnknownCallers() {
+      // The fake keeps no unknown callers' calls (W3-14's SQL is tested on PGlite).
+      return [];
+    },
     async purgeMedia(messageId, purgedAt) {
       const m = d.messages.get(messageId);
       if (m) {

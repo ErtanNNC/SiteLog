@@ -170,6 +170,11 @@ export function dayOffReportData(input: {
   questionIds: DayOffQuestionIds;
   workingHours: string | null;
   defaultShiftHours: number;
+  /**
+   * W3-14 (F12 on a call): what the reporter said, `{type: 'call', callId, start, end}`: the
+   * source of every detail besides (or, with no question rows, instead of) the answered questions.
+   */
+  detailSource?: Source;
 }): DailyReportData {
   const text = dayOffText(input.org.reportLanguage);
   const data = emptyReportData(input.date, input.org);
@@ -181,9 +186,13 @@ export function dayOffReportData(input: {
   const since = input.details.since;
   if (!since) throw new Error('a weather day needs since (F12 "Since when?")');
   const neverStarted = since === 'never_started';
-  const sinceSource: Source[] = input.questionIds.since
-    ? [{ type: 'answer', questionId: input.questionIds.since }]
-    : [];
+  const said: Source[] = input.detailSource ? [input.detailSource] : [];
+  const sinceSource: Source[] = [
+    ...(input.questionIds.since
+      ? [{ type: 'answer' as const, questionId: input.questionIds.since }]
+      : []),
+    ...said,
+  ];
   const hours = weatherDayHours({
     releasedAt: neverStarted ? null : since,
     fullDay: neverStarted,

@@ -76,6 +76,20 @@ export const postCallReconcileJob: JobHandler<'post_call_reconcile'> = async (ct
     log.info('post-call: unknown caller, nothing to do');
     return;
   }
+  // W3-14 (F3 on a call, §19 Q120): the reporter said no to the consent question. Nothing of the
+  // call is processed (no recording to the transcriber, no reconcile, no hand-over to the web);
+  // a recording that arrived anyway is deleted. The call keeps the outcome the agent ended it with.
+  if (call.consent_declined_at) {
+    if (call.recording_path) {
+      try {
+        await ctx.storage.remove('calls', [call.recording_path]);
+      } catch (err) {
+        log.warn('post-call: the declined call’s recording was not deleted', { err });
+      }
+    }
+    log.info('post-call: consent declined on the call; nothing processed');
+    return;
+  }
 
   // 1. The hang-up (§19 Q122): no recording needed.
   const report = call.report_id ? await ctx.db.getReport(call.report_id) : null;

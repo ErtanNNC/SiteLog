@@ -32,7 +32,7 @@ lives in `logic.ts` / `csv.ts` modules next to `*_test.ts` files; `index.ts` onl
 dependencies (`FieldStore`, the code sender, the secret, the clock), `store_supabase.ts` is the
 service-role store, `fake_store.ts` the in-memory one its Deno tests use, `logic.ts` the pure
 decisions. `voice.ts` (W3-03) and `talk_now.ts` (W3-13, with its own store, the `LiveKitApi`
-interface and `fake_talk_now.ts` for its tests) are mounted from `app.ts`. The field host proxies `/api/<route>` to it (D39, D43), so the device cookie stays
+interface and `fake_talk_now.ts` for its tests) are mounted from `app.ts`; `voice_special.ts` (W3-14) from `voice.ts`. The field host proxies `/api/<route>` to it (D39, D43), so the device cookie stays
 first-party and there is no CORS: a browser `Origin` must be `FIELD_APP_URL` or one of
 `CORS_EXTRA_ORIGINS`. Every answer is `Cache-Control: no-store`.
 
@@ -341,7 +341,7 @@ Notes:
   status and deadline, companies, `buildKeyterms` with the caller's own terms, §19 Q143; the
   consents and wording versions), `pick_site` (F14; a number in two orgs moves the call to that
   site's reporter), `set_preference` (audited as the reporter, `channel: voice`; `noCallsToday`
-  400 `not_available` until W3-17), `load_report` (F10, 14 days, code's totals in the summary),
+  from W3-14), `load_report` (F10, 14 days, code's totals in the summary),
   `start_fallback_recording`, `end_call` (one `post_call_reconcile` job, `post_call:<call>`) and
   `calls/:id/recording` (a signed upload to `calls/{org}/{call}.ogg`, until an hour after the end;
   needs the `recording` consent). A write with `X-Request-Id` runs once per call
@@ -364,6 +364,17 @@ Notes:
   audited with the words); otherwise `not_confirmed` or `draft_changed` with the draft read back
   again. The route waits for the worker's filing (`VOICE_TOOL_WAIT_MS`): `filed`, or 202
   `pending`; asked again it finds the same filing, and after it every request answers `filed`.
+  W3-14 (`voice_special.ts`, its own `VoiceSpecialStore` on the RPCs of 20261016000370, mounted
+  by `voice.ts` with its helpers; `fake_voice_special.ts` for the Deno tests): `set_day_status`
+  in two steps (code's read-back with the lost hours and a `confirmKey`, then the reporter's
+  verbatim yes → `voice_report_day_off()`; §19 Q79's `report_in_progress`), `apply_correction`
+  with a `reportId` from `load_report` (F10: W2-11's preview citing the call seconds, read back
+  with "Save it?") and `save_change` (version n+1 via `voice` after the yes), `noCallsToday`
+  (`reporters.no_calls_until`, §19 Q129), `schedule_callback` (400 `not_available` until W3-17),
+  `record_consent` (§19 Q120, `callYesNo`; a no refuses and deletes the recording and texts the
+  daily link only with an earlier `sms` consent) and, for an unknown caller (F13, §19 Q124),
+  `leave_message` (a 160-character snippet on `unknown_contacts`), the recording ≤ 60 s at
+  `calls/unknown/{call}.ogg` and `calls/start`'s `locale`.
 - **field-api** (W1-07). `resolve` takes the link code in its body, every other route in the
   `X-Link-Code` header; a new device gets the reporter's cookie `sl_dev_<8 hex>` (one per
   reporter; httpOnly, Secure, SameSite=Lax, Path=/, 180 days) from `device/send-code`, and

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { CALL_CONFIRM_WORDS, isCallConfirm, normalizeCallUtterance } from './voice-confirm.ts';
+import {
+  CALL_CONFIRM_WORDS,
+  CALL_DECLINE_WORDS,
+  callYesNo,
+  isCallConfirm,
+  isCallDecline,
+  normalizeCallUtterance,
+} from './voice-confirm.ts';
 
 /**
  * W3-10 (§19 Q119): the confirm grammar that lets code file a call report. The whole utterance,
@@ -77,5 +84,39 @@ describe('isCallConfirm (§9.5 confirm, §19 Q119)', () => {
   it('lists every phrase in its normalised form', () => {
     for (const phrase of Object.values(CALL_CONFIRM_WORDS).flat())
       expect(normalizeCallUtterance(phrase)).toBe(phrase);
+  });
+});
+
+/** W3-14 (F3 on a call, §19 Q120): the consent question's yes, no, or neither (asked again). */
+describe('callYesNo (§19 Q120)', () => {
+  it.each([
+    ['yes', 'yes'],
+    ['Yes, that is fine', 'unclear'],
+    ['Sí, por favor.', 'yes'],
+    ['Evet.', 'yes'],
+    ['no', 'no'],
+    ['No thanks.', 'no'],
+    ['No, gracias.', 'no'],
+    ['Hayır, teşekkürler.', 'no'],
+    ['istemiyorum', 'no'],
+    ["I'd rather not", 'no'],
+    ['Do not record.', 'no'],
+    ['Uygun değil.', 'no'],
+    ['thanks', 'unclear'],
+    ['no yes', 'unclear'],
+    ['no but call me later', 'unclear'],
+    ['what is this', 'unclear'],
+    ['the office said yes', 'unclear'],
+    ['', 'unclear'],
+  ])('%j → %s', (utterance, answer) => {
+    expect(callYesNo(utterance)).toBe(answer);
+  });
+
+  it('a decline never reads as a yes, and the lists are normalised', () => {
+    for (const phrase of Object.values(CALL_DECLINE_WORDS).flat()) {
+      expect(normalizeCallUtterance(phrase)).toBe(phrase);
+      expect(isCallConfirm(phrase)).toBe(false);
+      expect(isCallDecline(phrase)).toBe(true);
+    }
   });
 });

@@ -17,6 +17,7 @@ fallback, metrics from the session's events). Tests run `ReportAgent` in text mo
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -32,6 +33,12 @@ from .field_api import FieldApi
 from .observability import init_sentry, setup_logging
 from .redact import redact_phones
 from .session import CallState, build_live_session, system_prompt
+from .special import (
+    UNKNOWN_CALLER_MAX_RECORDING_S,
+    UnknownCallerAgent,
+    consent_reply,
+    needs_consent,
+)
 from .tools import build_tools
 
 log = logging.getLogger("sitelog_voice.agent")
@@ -79,6 +86,10 @@ class ReportAgent(Agent):
         model_settings: ModelSettings,
     ) -> AsyncIterable[llm.ChatChunk | str | Any]:
         self._record_new_turns(chat_ctx)
+        if self.state.consent_needed:
+            # F3 on a call (§19 Q120, W3-14): the answer to the consent question goes to code,
+            # never to the model; nothing of the reporter reaches a model before their yes.
+            return consent_reply(self.state)
         return Agent.default.llm_node(self, redacted_context(chat_ctx), tools, model_settings)
 
 
@@ -126,6 +137,14 @@ def opening_line(state: CallState, copy: VoiceCopy, *, first_name: str) -> str:
         elif len(ctx.sites) == 1:
             site = ctx.sites[0].name
     entry = "opening_talk_now" if ctx and ctx.call.transport == "web" else "opening_inbound"
+    if state.consent_needed:
+        # F3 (§19 Q120, W3-14): the disclosure, then the consent question; no report before it.
+        return " ".join(
+            [
+                copy.line("opening_inbound_pick_site", state.language, first=first_name),
+                copy.line("consent_ask", state.language),
+            ]
+        )
     if ctx and ctx.call.direction == "outbound" and site:
         return copy.line(
             "opening_outbound", state.language, first=first_name, company=ctx.company, site=site
@@ -169,28 +188,38 @@ async def entrypoint(ctx: JobContext) -> None:
     log.info("call started", extra={"call_id": auth.call_id, "transport": transport})
 
     if started.reporter is None:
-        # F13 (unknown caller, §19 Q124: the line, ≤ 60 s recorded, a snippet for the office) is
-        # W3-14. Until then the call is closed without processing anything the caller says.
-        await api.end_call(
-            auth,
-            outcome="abandoned",
-            dialog_log=[],
-            metrics={
-                "latencyP50Ms": None,
-                "latencyP95Ms": None,
-                "interruptions": 0,
-                "sttConfidence": None,
-                "turns": 0,
-            },
+        # F13 (§19 Q124, W3-14): the disclosure and the F13 line in the pack's language, the
+        # caller's message (its snippet for the office), goodbye; at most 60 s.
+        locale = started.locale or "en-US"
+        unknown = UnknownCallerAgent(api, auth, locale)
+        session = build_live_session(settings, locale=locale, keyterms=[])
+        await session.start(agent=unknown, room=room)
+        lang = unknown.language
+        opening = " ".join(
+            [
+                copy.line("unknown_greeting", lang),
+                copy.line("recording_notice", lang),
+                copy.line("unknown_caller", lang),
+            ]
         )
-        await api.aclose()
-        ctx.shutdown(reason="unknown caller (F13 comes with W3-14)")
+        unknown.said(opening, 0.0)
+        await session.say(opening, allow_interruptions=False)
+
+        async def cap() -> None:
+            await asyncio.sleep(UNKNOWN_CALLER_MAX_RECORDING_S)
+            line = await unknown.leave_message()
+            if line:
+                await session.say(line, allow_interruptions=False)
+            ctx.shutdown(reason="unknown caller: 60 s")
+
+        asyncio.get_running_loop().create_task(cap())
         return
 
     state = CallState(
         api=api, auth=auth, locale=started.reporter.locale, started_at=time.monotonic()
     )
     state.context = await api.get_context(auth)
+    state.consent_needed = needs_consent(state)
     session = build_live_session(settings, locale=state.locale, keyterms=state.context.keyterms)
     agent = ReportAgent(state)
     await session.start(agent=agent, room=room)

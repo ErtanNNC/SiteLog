@@ -87,4 +87,35 @@ export const voiceTr: VoiceCatalog = {
   correction_crew_removed: '{company} rapordan çıkarıldı.',
   correction_unclear: 'Özür dilerim, bu değişikliği yapamadım. Neyi değiştireyim?',
   correction_nothing: 'Raporda zaten böyle.',
+  day_off_confirm_no_work: '{site} için bugün çalışma yok mu? Evet ya da hayır deyin.',
+  day_off_confirm_weather:
+    '{site} için hava nedeniyle kayıp gün: iş saat {time} itibarıyla durdu, {hours} saat kayıp. Kaydedeyim mi?',
+  day_off_confirm_weather_crew:
+    '{site} için hava nedeniyle kayıp gün: iş saat {time} itibarıyla durdu, öncesinde sahada {workers} kişi vardı, {hours} saat kayıp. Kaydedeyim mi?',
+  day_off_confirm_never:
+    '{site} için hava nedeniyle kayıp gün: ekip hiç başlamadı, {hours} saat kayıp. Kaydedeyim mi?',
+  day_off_confirm_never_crew:
+    '{site} için hava nedeniyle kayıp gün: {workers} kişilik ekip hiç başlamadı, {hours} saat kayıp. Kaydedeyim mi?',
+  day_off_confirm_repeat: 'Kaydedeyim mi? Evet ya da hayır deyin.',
+  day_off_logged_no_work: 'Kaydedildi: {site} için bugün çalışma yok.',
+  day_off_logged_weather: 'Kaydedildi: {site} için hava nedeniyle kayıp gün.',
+  day_off_in_progress:
+    'Bugünün raporu zaten başladı, bunu raporda söyleyin: işi ne durdurdu ve ne kadar sürdü.',
+  day_off_filed: '{site} için bugünün raporu zaten kaydedildi.',
+  day_off_site_paused: "{site} SiteLog'da duraklatılmış. Ofisten yeniden başlatmasını isteyin.",
+  callback_unavailable:
+    'Sizi henüz geri arayamıyorum. Hazır olduğunuzda tekrar arayın ya da linkinizi kullanın.',
+  pref_not_today_ok: 'Tamam, bugün sizi bir daha aramayacağım.',
+  edit_ask: 'Neyi değiştireyim?',
+  edit_save_ask: 'Kaydedeyim mi?',
+  edit_save_repeat: 'Kaydedeyim mi? Evet ya da hayır deyin.',
+  edit_saved: 'Kaydedildi. Sürüm {version} ofise gidiyor.',
+  edit_changed_meanwhile: 'Biz konuşurken rapor değişti. Değişikliği tekrar söyleyin.',
+  edit_locked: 'Bu rapor kilitli. Değiştirmesi için ofise başvurun.',
+  edit_not_found: 'O gün için kaydedilmiş bir rapor bulamadım.',
+  edit_ambiguous: 'O gün iki rapor var. Hangi şantiye?',
+  edit_pending: 'Hâlâ son değişiklik üzerinde çalışıyorum, bir saniye.',
+  consent_given: 'Teşekkür ederim.',
+  consent_repeat:
+    'Kusura bakmayın, bu görüşmeleri kaydetmem ve size rapor linklerini mesajla göndermem uygun mu? Evet ya da hayır deyin.',
 };

@@ -84,6 +84,23 @@ class CallState:
     loaded_report_id: str | None = None
     #: field-api answered `file_report` with `filed` (only then may the call end as `filed`).
     filed: bool = False
+    #: W3-14 (F12 call): the day off read back and waiting for the reporter's yes: its status,
+    #: details, field-api's `confirmKey` and how many reporter turns had been heard when it was
+    #: read back (a later turn is the answer).
+    day_off: dict[str, Any] | None = None
+    #: W3-14: the day off field-api logged (`no_work` / `weather_day`); the only such outcomes.
+    day_logged: str | None = None
+    #: W3-14 (F10 call): the change of a filed report read back with "Save it?": report and
+    #: correction ids, and the reporter turns heard by then.
+    pending_change: dict[str, Any] | None = None
+    #: W3-14 (F10 call): field-api saved a change (only then may the call end `edit_applied`).
+    edit_saved: bool = False
+    #: W3-14 (F3 call, §19 Q120): the consent question is open; every turn goes to code until the
+    #: reporter's yes or no. `consent_tries` counts unclear answers.
+    consent_needed: bool = False
+    consent_tries: int = 0
+    #: W3-14: the reporter said no to the consent question (the dialog log keeps no reporter line).
+    consent_declined: bool = False
     #: The outcome `end_call` sent; None while the call runs.
     ended: str | None = None
     dialog: Dialog = field(default_factory=Dialog)
@@ -111,6 +128,14 @@ class CallState:
         if tool:
             entry["tool"] = tool
         self.log.append(entry)
+
+    def end_log(self) -> list[dict[str, Any]]:
+        """The dialog log `end_call` sends: after a "no" to the consent question nothing the
+        reporter said is kept (§19 Q120), only the agent's lines."""
+        log = self.log[-2000:]
+        if self.consent_declined:
+            return [e for e in log if e["speaker"] == "agent"]
+        return log
 
     def segments_payload(self) -> list[dict[str, Any]]:
         return [{"start": s.start, "end": s.end, "text": s.text} for s in self.segments]

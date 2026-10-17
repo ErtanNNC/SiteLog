@@ -40,6 +40,8 @@ export const V12_ROW_DEFAULTS = {
     activated_at: null,
     opted_out_at: null,
     message_channel: null,
+    /** §19 Q129 (W3-14, 20261016000370). */
+    no_calls_until: null,
   },
   messages: {
     reporter_id: null,

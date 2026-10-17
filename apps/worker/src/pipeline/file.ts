@@ -335,6 +335,11 @@ export async function ensurePostFiling(
         },
       );
   }
+  // W3-14 (F12 call): "A photo of the conditions makes the record stronger — I've sent you a
+  // link": a weather day logged on a call gets the photos link (no `filed` text, as on the web).
+  if (report.kind === 'weather_day' && report.channel === 'voice' && report.reporter_id) {
+    await enqueuePhotosLink(ctx, report, site);
+  }
   if (report.kind !== 'daily' || opts.silent || !report.reporter_id) return;
   const { base, code } = await personalLinkCode(ctx, report.reporter_id, report.org_id);
   await ctx.db.enqueueJob(

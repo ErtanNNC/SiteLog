@@ -46,6 +46,7 @@ import {
   type ReporterLocale,
   type ReporterRow,
   type SiteRow,
+  type Source,
 } from '@sitelog/shared';
 
 /**
@@ -569,11 +570,16 @@ export function dayOffPlan(input: {
   reporterLocale: string;
   details: DayOffDetails;
   newId: () => string;
+  /**
+   * W3-14 (F12 on a call): the details were said on a call. No question rows; every value cites
+   * the call's seconds (`{type: 'call', callId, start, end}`).
+   */
+  callSource?: Source;
 }): { questions: DayOffQuestion[]; data: DailyReportData } {
   const sheet = UI_RESOURCES[languageOf(input.reporterLocale)].field.today.daySheet;
   const questions: DayOffQuestion[] = [];
   const ids = { since: null as string | null, workersBefore: null as string | null };
-  if (input.status === 'weather_day') {
+  if (input.status === 'weather_day' && !input.callSource) {
     const since = input.details.since;
     if (since) {
       ids.since = input.newId();
@@ -610,6 +616,7 @@ export function dayOffPlan(input: {
     questionIds: ids,
     workingHours: input.site.working_hours,
     defaultShiftHours: input.defaultShiftHours,
+    ...(input.callSource ? { detailSource: input.callSource } : {}),
   });
   return { questions, data };
 }

@@ -103,6 +103,7 @@ function reporter(
     activated_at: '2026-10-01T15:00:00Z',
     opted_out_at: null,
     message_channel: null,
+    no_calls_until: null,
     ...extra,
   };
 }
@@ -648,6 +649,7 @@ Deno.test(
       site_day_id: null,
       fallback: null,
       reconcile: null,
+      consent_declined_at: null,
     } satisfies CallRow);
     // Before the start, no tool works even with the right token.
     const early = await h.tool('get_context', id, await deriveCallToken(TOKEN_SECRET, id));

@@ -1,0 +1,176 @@
+{
+  "$comment": "W3-14 recorded call (W3-02's format): start, field-api's recorded answers per route (in order; the last repeats), the reporter's turns (one run each) and the dialog model's recorded turns. The agent's pytest (apps/voice-agent/tests/test_special_intents.py) replays it on FakeFieldApi; field-api's Deno test (supabase/functions/field-api/voice_special_test.ts) checks the same answers against the routes. W3-15 extends the set.",
+  "id": "friday-edit-en",
+  "locale": "en-US",
+  "start": {
+    "request": {
+      "room": "call-c0140000-0000-4000-8000-000000000002",
+      "transport": "web",
+      "callId": "c0140000-0000-4000-8000-000000000002"
+    },
+    "response": {
+      "callId": "c0140000-0000-4000-8000-000000000002",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Kevin",
+        "locale": "en-US"
+      }
+    }
+  },
+  "routes": {
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "web",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Kevin",
+          "locale": "en-US"
+        },
+        "company": "Kestrel Build Group",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "22222222-0000-4000-8000-0000000000a1",
+            "name": "Northgate Parking Structure",
+            "status": "pending",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "22222222-0000-4000-8000-0000000000a1",
+        "companies": [
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex"]
+          }
+        ],
+        "keyterms": ["Apex Concrete"],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 2
+      }
+    ],
+    "load_report": [
+      {
+        "status": "found",
+        "reportId": "44444444-0000-4000-8000-000000000001",
+        "date": "2026-10-09",
+        "reportNo": "NG-0068",
+        "summary": "Friday's report, NG-0068: 6 on site, 48 hours."
+      }
+    ],
+    "apply_correction": [
+      {
+        "status": "pending",
+        "retryAfterMs": 1000
+      },
+      {
+        "status": "preview",
+        "correctionId": "cccccccc-0000-4000-8000-000000000001",
+        "lines": ["Apex Concrete: 7 workers, 8 hours each — 56 hours."],
+        "readBack": "Apex Concrete: 7 workers, 8 hours each — 56 hours. Save it?",
+        "draft": null
+      }
+    ],
+    "save_change": [
+      {
+        "status": "not_confirmed",
+        "confirmation": "Save it? Say yes or no."
+      },
+      {
+        "status": "saved",
+        "version": 2,
+        "confirmation": "Saved. Version 2 goes to the office."
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "reporterTurns": [
+    "I need to change Friday's report.",
+    "Apex was seven, not six.",
+    "I guess",
+    "Yes."
+  ],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        },
+        {
+          "name": "load_report",
+          "args": {
+            "day_reference": "Friday"
+          }
+        }
+      ]
+    },
+    {
+      "text": "Friday's report, NG-0068: 6 on site, 48 hours. What should I change?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "apply_correction",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Still working on it, one moment.",
+      "toolCalls": [
+        {
+          "name": "apply_correction",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Apex Concrete: 7 workers, 8 hours each — 56 hours. Save it?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "save_change",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Save it? Say yes or no."
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "save_change",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Saved. Version 2 goes to the office. Goodbye.",
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "edit_applied"
+          }
+        }
+      ]
+    },
+    {}
+  ]
+}

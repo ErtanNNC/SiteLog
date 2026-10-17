@@ -1,4 +1,4 @@
-import { TEST_CLIP_TTL_S } from '@sitelog/shared';
+import { TEST_CLIP_TTL_S, UNKNOWN_CALLER_RETENTION_DAYS } from '@sitelog/shared';
 import { expireTestClips } from './test_clip';
 import type { JobHandler } from './types';
 
@@ -65,6 +65,28 @@ export const retentionCleanup: JobHandler<'retention_cleanup'> = async (ctx, pay
     ctx,
     new Date(ctx.now().getTime() - TEST_CLIP_TTL_S * 1000),
   );
+  // §19 Q124 (W3-14): an unknown caller's snippet and ≤ 60 s recording go after 30 days unless
+  // the office linked the number.
+  const unknownBefore = new Date(ctx.now().getTime() - UNKNOWN_CALLER_RETENTION_DAYS * 86_400_000);
+  let unknownCallersPurged = 0;
+  for (let round = 0; round < 20; round++) {
+    const rows = await ctx.db.purgeUnknownCallers(unknownBefore, RETENTION_BATCH);
+    unknownCallersPurged += rows.length;
+    const paths = rows.flatMap((r) => (r.recordingPath ? [r.recordingPath] : []));
+    if (paths.length > 0) {
+      try {
+        await ctx.storage.remove('calls', paths);
+      } catch (err) {
+        // The rows no longer name them; a missing object is no harm, a failed delete is logged.
+        failed += paths.length;
+        ctx.log.warn('retention: removing unknown callers’ recordings failed', {
+          err,
+          count: paths.length,
+        });
+      }
+    }
+    if (rows.length < RETENTION_BATCH) break;
+  }
   // The queue table only grows otherwise (load test): drop done jobs after JOB_RETENTION_DAYS.
   const jobsBefore = new Date(ctx.now().getTime() - JOB_RETENTION_DAYS * 86_400_000);
   let jobsDeleted = 0;
@@ -84,6 +106,7 @@ export const retentionCleanup: JobHandler<'retention_cleanup'> = async (ctx, pay
       failed,
       orphan_photos_removed: orphansRemoved,
       test_clips_removed: testClipsRemoved,
+      unknown_callers_purged: unknownCallersPurged,
       jobs_deleted: jobsDeleted,
     },
   });
@@ -92,6 +115,7 @@ export const retentionCleanup: JobHandler<'retention_cleanup'> = async (ctx, pay
     failed,
     orphanPhotosRemoved: orphansRemoved,
     testClipsRemoved,
+    unknownCallersPurged,
     jobsDeleted,
   });
   ctx.log.info('retention cleanup done', {

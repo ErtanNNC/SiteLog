@@ -6,14 +6,15 @@ import pytest
 from pytest_socket import SocketBlockedError
 
 from sitelog_voice.contract import default_contract
-from sitelog_voice.tools import TOOL_NAMES
+from sitelog_voice.tools import CODE_ROUTES, TOOL_NAMES
 
 
 def test_every_tool_has_a_contract_route() -> None:
     routes = default_contract().routes
     assert set(TOOL_NAMES) <= set(routes)
-    # calls/start and the recording upload are code's, never the model's.
-    assert set(routes) - set(TOOL_NAMES) == {"calls_start", "recording_upload"}
+    # calls/start, the recording upload, the consent answer and an unknown caller's message
+    # (W3-14) are code's, never the model's.
+    assert set(routes) - set(TOOL_NAMES) == {"calls_start", "recording_upload", *CODE_ROUTES}
 
 
 @pytest.mark.filterwarnings("ignore:A test tried to use socket")

@@ -1,0 +1,77 @@
+{
+  "$comment": "W3-14 recorded call (W3-02's format): start, field-api's recorded answers per route (in order; the last repeats), the reporter's turns (one run each) and the dialog model's recorded turns. The agent's pytest (apps/voice-agent/tests/test_special_intents.py) replays it on FakeFieldApi; field-api's Deno test (supabase/functions/field-api/voice_special_test.ts) checks the same answers against the routes. W3-15 extends the set.",
+  "id": "first-call-decline-en",
+  "locale": "en-US",
+  "start": {
+    "request": {
+      "room": "call-c0140000-0000-4000-8000-000000000004",
+      "transport": "pstn",
+      "from": "+15550177001",
+      "to": "+15550142290"
+    },
+    "response": {
+      "callId": "c0140000-0000-4000-8000-000000000004",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Dana",
+        "locale": "en-US"
+      }
+    }
+  },
+  "routes": {
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "pstn",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Dana",
+          "locale": "en-US"
+        },
+        "company": "Kestrel Build Group",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "22222222-0000-4000-8000-0000000000a5",
+            "name": "Hillcrest School Extension",
+            "status": "pending",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "22222222-0000-4000-8000-0000000000a5",
+        "companies": [
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex"]
+          }
+        ],
+        "keyterms": ["Apex Concrete"],
+        "consents": {
+          "recording": false,
+          "dataProcessing": false,
+          "sms": false,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 2
+      }
+    ],
+    "record_consent": [
+      {
+        "status": "declined",
+        "confirmation": "Understood. Nothing from this call is kept. I'll text you your link so you can report on the web. Goodbye.",
+        "linkSent": true
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
+  },
+  "reporterTurns": ["No, thanks."],
+  "agentTurns": []
+}

@@ -7,8 +7,11 @@
     "status": {
       "type": "string",
       "enum": [
+        "confirm",
+        "not_confirmed",
         "ok",
         "report_in_progress",
+        "report_filed",
         "site_paused"
       ]
     },
@@ -16,6 +19,10 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 400
+    },
+    "confirmKey": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
     }
   },
   "required": [

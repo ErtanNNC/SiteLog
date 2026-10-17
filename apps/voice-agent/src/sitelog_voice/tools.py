@@ -166,10 +166,28 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
             fields: dict[str, Any] = {"utterance": last.text, "start": last.start, "end": last.end}
             if state.loaded_report_id:
                 fields["reportId"] = state.loaded_report_id
-            data = await api.tool("apply_correction", auth, **fields)
+            try:
+                data = await api.tool("apply_correction", auth, **fields)
+            except FieldApiError as exc:
+                # W3-14 (F10 call): code's lines for a locked report and a change still running.
+                line = {"report_locked": "edit_locked", "correction_pending": "edit_pending"}.get(
+                    exc.code
+                )
+                if line is None:
+                    raise
+                return {"status": exc.code, "say": copy.line(line, state.language)}
             if is_pending(data):
                 # W3-10: a worker turn like update_draft; the same words again are the same turn.
                 return {"status": "pending"}
+            if data["status"] == "preview":
+                # W3-14 (F10 call): the filed report's change, read back with "Save it?"; only the
+                # reporter's yes to it saves (save_change).
+                state.pending_change = {
+                    "reportId": fields["reportId"],
+                    "correctionId": data["correctionId"],
+                    "heard": len(state.segments),
+                }
+                return {"status": "preview", "readBack": data["readBack"]}
             if data.get("draft") is not None:
                 draft = DraftState.model_validate(data["draft"])
                 state.draft = draft
@@ -234,7 +252,9 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
         since: str | None = None,
         workers_before: int | None = None,
     ) -> ToolResult:
-        """Record a day with no work, or a weather day (work stopped by weather).
+        """Record a day with no work, or a weather day (work stopped by weather). In two steps:
+        the first call returns a read-back (`status: confirm`) to say as it is; after the reporter
+        answers, call it again with the same details: code logs the day only on their yes.
 
         Args:
             status: no_work or weather_day.
@@ -242,14 +262,56 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
             workers_before: for a weather day, how many workers were on site before it stopped.
         """
         details: dict[str, Any] = {}
-        if since is not None:
-            details["since"] = since
-        if workers_before is not None:
-            details["workersBefore"] = workers_before
+        if status == "weather_day":
+            if since is not None:
+                details["since"] = since
+            if workers_before is not None:
+                details["workersBefore"] = workers_before
         fields: dict[str, Any] = {"status": status}
         if details:
             fields["details"] = details
-        return await _guard("set_day_status", lambda: api.tool("set_day_status", auth, **fields))
+        last = state.last_utterance
+        if last is not None:
+            fields["start"] = last.start
+            if last.end > last.start:
+                fields["end"] = last.end
+        pending = state.day_off
+        # The reporter's turn after the read-back of these same details is the answer to it: code
+        # (field-api) decides whether it is a yes. Never the model's word for it (§19 Q119).
+        if (
+            pending is not None
+            and pending["status"] == status
+            and pending["details"] == details
+            and last is not None
+            and len(state.segments) > pending["heard"]
+        ):
+            fields["utterance"] = last.text
+            fields["confirmKey"] = pending["key"]
+            # The details' source is when they were said, not the yes.
+            fields["start"] = pending["start"]
+            fields.pop("end", None)
+            if pending.get("end") is not None:
+                fields["end"] = pending["end"]
+
+        async def run() -> ToolResult:
+            data = await api.tool("set_day_status", auth, **fields)
+            answer = data["status"]
+            if answer in ("confirm", "not_confirmed"):
+                state.day_off = {
+                    "status": status,
+                    "details": details,
+                    "key": data["confirmKey"],
+                    "heard": len(state.segments),
+                    "start": fields.get("start", 0),
+                    "end": fields.get("end"),
+                }
+            else:
+                state.day_off = None
+            if answer == "ok":
+                state.day_logged = status
+            return {"status": answer, "say": data["confirmation"]}
+
+        return await _guard("set_day_status", run)
 
     @function_tool
     async def schedule_callback(minutes: int) -> ToolResult:
@@ -258,9 +320,20 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
         Args:
             minutes: in how many minutes (5 to 720).
         """
-        return await _guard(
-            "schedule_callback", lambda: api.tool("schedule_callback", auth, minutes=minutes)
-        )
+
+        async def run() -> ToolResult:
+            try:
+                return await api.tool("schedule_callback", auth, minutes=minutes)
+            except FieldApiError as exc:
+                if exc.code != "not_available":
+                    raise
+                # §19 Q128: no pack places outbound calls yet (W3-17); code's line, not a promise.
+                return {
+                    "status": "not_available",
+                    "say": copy.line("callback_unavailable", state.language),
+                }
+
+        return await _guard("schedule_callback", run)
 
     @function_tool
     async def set_preference(
@@ -293,10 +366,50 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
 
         async def run() -> ToolResult:
             data = await api.tool("load_report", auth, dayReference=day_reference[:100])
-            state.loaded_report_id = data.get("reportId") if data["status"] == "found" else None
-            return data
+            found = data["status"] == "found"
+            state.loaded_report_id = data.get("reportId") if found else None
+            state.pending_change = None
+            # W3-14 (F10 call): code's lines: the summary and "What should I change?", or why not.
+            lang = state.language
+            if found:
+                say = f"{data['summary']} {copy.line('edit_ask', lang)}"
+            else:
+                say = copy.line(
+                    {"locked": "edit_locked", "ambiguous": "edit_ambiguous"}.get(
+                        data["status"], "edit_not_found"
+                    ),
+                    lang,
+                )
+            return {**data, "say": say}
 
         return await _guard("load_report", run)
+
+    @function_tool
+    async def save_change() -> ToolResult:
+        """Save the change of another day's report after it was read back. Call it only right
+        after the reporter answered "Save it?". Their own words decide (code checks them): say
+        the `say` line it returns."""
+        pending = state.pending_change
+        last = state.last_utterance
+        if pending is None or last is None or len(state.segments) <= pending["heard"]:
+            return {"status": "read_back_first"}
+
+        async def run() -> ToolResult:
+            data = await api.tool(
+                "save_change",
+                auth,
+                reportId=pending["reportId"],
+                correctionId=pending["correctionId"],
+                utterance=last.text,
+            )
+            if data["status"] == "saved":
+                state.edit_saved = True
+                state.pending_change = None
+            elif data["status"] == "draft_changed":
+                state.pending_change = None
+            return {"status": data["status"], "say": data["confirmation"]}
+
+        return await _guard("save_change", run)
 
     @function_tool
     async def start_fallback_recording(
@@ -332,12 +445,20 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
         """
         if outcome == "filed" and not state.filed:
             outcome = "draft_saved"  # only field-api's `filed` answer files (§19 Q119)
+        # W3-14: a day off or a saved change only when field-api did it.
+        if outcome in ("no_work", "weather_day") and state.day_logged != outcome:
+            outcome = "draft_saved" if state.draft else "abandoned"
+        if outcome == "edit_applied" and not state.edit_saved:
+            outcome = "abandoned"
+        # §19 Q128: no callback is placed before W3-17.
+        if outcome == "callback_requested":
+            outcome = "draft_saved" if state.draft else "abandoned"
 
         async def run() -> ToolResult:
             await api.end_call(
                 auth,
                 outcome=outcome,
-                dialog_log=state.log[-2000:],
+                dialog_log=state.end_log(),
                 metrics=state.metrics.to_contract(),
             )
             state.ended = outcome
@@ -356,6 +477,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
         schedule_callback,
         set_preference,
         load_report,
+        save_change,
         start_fallback_recording,
         end_call,
     ]
@@ -373,6 +495,11 @@ TOOL_NAMES = (
     "schedule_callback",
     "set_preference",
     "load_report",
+    "save_change",
     "start_fallback_recording",
     "end_call",
 )
+
+#: W3-14: the contract routes code calls itself, never the model: the consent question's answer
+#: (F3, §19 Q120) and an unknown caller's message (F13).
+CODE_ROUTES = ("record_consent", "leave_message")
