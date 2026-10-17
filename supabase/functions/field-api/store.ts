@@ -243,9 +243,10 @@ export interface VoiceStore {
   /**
    * W3-12 follow-up (§19 Q205): the recording notice was played to the end
    * (`voice_call_update(p_disclosure_played => true)`; once played, always played; audited
-   * `call.updated` when it changed).
+   * `call.updated` when it changed), with the recording notice version played (W4-06,
+   * `calls.disclosure_version`, kept once set).
    */
-  voiceCallDisclosure(callId: string): Promise<{ changed: boolean }>;
+  voiceCallDisclosure(callId: string, version: string | null): Promise<{ changed: boolean }>;
   voiceCallRecording(callId: string, path: string): Promise<void>;
   voiceCallEnd(input: {
     callId: string;

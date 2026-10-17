@@ -746,6 +746,11 @@ export type CallRow = {
   status: CallStatus;
   outcome: CallOutcome | null;
   disclosure_played: boolean | null;
+  /**
+   * W4-06 (20261017000460): the recording notice version played, set with `disclosure_played`
+   * (the pack's `legal_keys.recording_notice`, else `voice.recording_notice.v1`).
+   */
+  disclosure_version: string | null;
   started_at: string | null;
   answered_at: string | null;
   ended_at: string | null;
@@ -1336,6 +1341,7 @@ export type Database = {
         | 'status'
         | 'outcome'
         | 'disclosure_played'
+        | 'disclosure_version'
         | 'started_at'
         | 'answered_at'
         | 'ended_at'
@@ -1638,6 +1644,7 @@ export type Database = {
           p_status?: CallStatus | null;
           p_disclosure_played?: boolean | null;
           p_answered_at?: string | null;
+          p_disclosure_version?: string | null;
         };
         Returns: Json;
       };

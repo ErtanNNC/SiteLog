@@ -179,6 +179,7 @@ function setup() {
       status: 'queued',
       outcome: null,
       disclosure_played: false,
+      disclosure_version: null,
       started_at: null,
       answered_at: null,
       ended_at: null,

@@ -114,7 +114,7 @@ async def replay_call(
                     await session.start(unknown)
                     unknown.said(opening, 0.0)
                     await session.say(opening, allow_interruptions=False)
-                    await api.mark_disclosure(auth)
+                    await api.mark_disclosure(auth, default_copy().own_notice_version)
                     before = len(fake.calls)
                     for turn in turns:
                         await session.run(user_input=turn)

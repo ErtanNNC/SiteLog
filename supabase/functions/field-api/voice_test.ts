@@ -695,6 +695,7 @@ Deno.test(
       status: 'queued',
       outcome: null,
       disclosure_played: false,
+      disclosure_version: null,
       started_at: null,
       answered_at: null,
       ended_at: null,
@@ -1033,6 +1034,52 @@ Deno.test('the pack legal keys name the wording versions the call stores', async
     ['us.recording.2026-11', 'us.consent.2026-11'],
   );
 });
+
+Deno.test(
+  'disclosure (W4-06): keeps the recording notice version said, the pack key or the agent’s own',
+  async () => {
+    const h = setup({ country: { legal_keys: { recording_notice: 'US.recording_notice.v2' } } });
+    const { callId, token } = await h.sip(32, KEVIN_PHONE);
+    const path = `voice/calls/${callId}/disclosure`;
+    // Any other text is refused, and nothing is marked.
+    const other = await h.call(
+      path,
+      { callId, noticeVersion: 'US.recording_notice.v1' },
+      { token },
+    );
+    assertEquals([other.status, other.json.error], [400, 'invalid_request']);
+    assertEquals(h.store.callRows[0]!.disclosure_played, false);
+    const ok = await h.call(path, { callId, noticeVersion: 'US.recording_notice.v2' }, { token });
+    assertEquals([ok.status, ok.json], [200, { ok: true }]);
+    assertEquals(
+      [h.store.callRows[0]!.disclosure_played, h.store.callRows[0]!.disclosure_version],
+      [true, 'US.recording_notice.v2'],
+    );
+    assertEquals(
+      h.store.audits
+        .filter((a) => a.entityId === callId && a.action === 'call.updated')
+        .map((a) => a.diff),
+      [{ disclosure_played: true, disclosure_version: 'US.recording_notice.v2' }],
+    );
+
+    // A pack without a key: only the agent's own; an unknown caller's call the same.
+    const plain = setup();
+    const call = await plain.sip(33, KEVIN_PHONE);
+    const keyed = await plain.call(
+      `voice/calls/${call.callId}/disclosure`,
+      { callId: call.callId, noticeVersion: 'US.recording_notice.v2' },
+      { token: call.token },
+    );
+    assertEquals(keyed.status, 400);
+    const own = await plain.call(
+      `voice/calls/${call.callId}/disclosure`,
+      { callId: call.callId, noticeVersion: 'voice.recording_notice.v1' },
+      { token: call.token },
+    );
+    assertEquals(own.status, 200);
+    assertEquals(plain.store.callRows[0]!.disclosure_version, 'voice.recording_notice.v1');
+  },
+);
 
 Deno.test(
   'retries: a named request runs once per call; its retry gets the kept answer',

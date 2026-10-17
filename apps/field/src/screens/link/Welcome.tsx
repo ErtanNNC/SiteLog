@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link } from 'react-router';
 import type { ConsentType, ContactPref } from '@sitelog/shared/enums.ts';
 import {
   FIELD_CONSENT_TEXT_VERSION,
@@ -106,9 +107,10 @@ export function Welcome({
         <p className="m-0 rounded-card bg-concrete px-3.5 py-3 text-[15px] leading-[21px] text-steel">
           {t('welcome.notice', { company: org.name })}{' '}
           {privacyKey ? (
-            <a href={privacyNoticeHref(privacyKey)} className="text-level">
+            // W4-06 (§19 Q50): the app's own page, in the app (it works offline; Back returns here).
+            <Link to={privacyNoticeHref(privacyKey)} className="text-level underline">
               {t('welcome.privacy')}
-            </a>
+            </Link>
           ) : null}
         </p>
 

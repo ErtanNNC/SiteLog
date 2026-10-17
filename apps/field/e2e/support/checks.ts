@@ -25,11 +25,12 @@ export async function expectNoSidewaysScroll(page: Page) {
 }
 
 /**
- * §14.6: field targets are at least 56 px both ways. Links inside a sentence (the privacy notice)
- * are exempt (WCAG 2.5.8 "inline"); none is on a screen this checks.
+ * §14.6: field targets are at least 56 px both ways. Links inside a sentence (the Welcome screen's
+ * privacy notice, W4-06) are exempt (WCAG 2.5.8 "inline"): a link inside a paragraph is skipped.
  */
 export async function expectFieldTargets(page: Page) {
   for (const target of await page.locator('a[href], button').all()) {
+    if (await target.evaluate((el) => el.tagName === 'A' && el.closest('p') !== null)) continue;
     const box = await target.boundingBox();
     expect(box, await target.evaluate((el) => el.outerHTML)).not.toBeNull();
     const html = await target.evaluate((el) => el.outerHTML.slice(0, 160));

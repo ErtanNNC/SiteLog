@@ -62,6 +62,7 @@ import { upgradeV1toV2 } from '../report/upgrade.ts';
 import { smsRenderOptions } from '../channels.ts';
 import { renderSms, type RenderSmsOptions, type SmsKey } from '../copy/sms.ts';
 import { starterGlossaryRows } from '../glossary/starter.ts';
+import { VOICE_RECORDING_NOTICE_VERSION } from '../voice.ts';
 import { demoId, demoRand } from './ids.ts';
 import { DEMO_CANONICAL_TODAY, DEMO_LIVE_START, demoCalendar } from './calendar.ts';
 import { demoPack } from './countries.ts';
@@ -1205,6 +1206,8 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       status: input.status,
       outcome: input.outcome,
       disclosure_played: answered,
+      // W4-06: the US pack names no recording notice, so an answered call said the agent's own.
+      disclosure_version: answered ? VOICE_RECORDING_NOTICE_VERSION : null,
       started_at: input.startedAt,
       answered_at: answered ? input.startedAt : null,
       ended_at: plusSeconds(input.startedAt, input.durationS ?? input.ringS ?? 0),

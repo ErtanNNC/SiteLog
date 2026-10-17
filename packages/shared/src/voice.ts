@@ -322,8 +322,19 @@ export const VoiceRecordingUploadResponseSchema = z.strictObject({
  * opening with the recording notice played to the end. field-api sets the call's
  * `disclosure_played` (`voice_call_update`, once played always played, audited when it changed);
  * the post-call job (W3-11) processes a call's recording only after it. Idempotent.
+ *
+ * W4-06: `noticeVersion` is the recording notice the agent said: the pack's
+ * `legal_keys.recording_notice` (`get_context`'s `recordingNoticeVersion`) when its text has the
+ * call language, else `voice.recording_notice.v1`. field-api accepts only those two and keeps it
+ * as `calls.disclosure_version`; an agent that sends none leaves the column null.
  */
-export const VoiceDisclosureRequestSchema = z.strictObject({ ...toolBase });
+export const VoiceDisclosureRequestSchema = z.strictObject({
+  ...toolBase,
+  noticeVersion: z
+    .string()
+    .regex(/^[A-Za-z0-9_.-]{1,64}$/)
+    .optional(),
+});
 export const VoiceDisclosureResponseSchema = z.strictObject({ ok: z.literal(true) });
 
 // ───────────────────────────── POST /voice/tools/* (§9.4's table) ─────────────────────────────

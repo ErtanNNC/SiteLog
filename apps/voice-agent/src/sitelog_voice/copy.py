@@ -28,6 +28,10 @@ _PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
 #: and filled from its own line, so a pack's own notice (§19 Q28 `legal_keys`) replaces it once.
 RECORDING_NOTICE_KEY = "recording_notice"
 
+#: W4-06: the packs' recording notices by key and language (`copy/legal.json`, written by
+#: `pnpm voice:contract` from packages/shared `copy/legal`).
+LEGAL_FILE = "legal.json"
+
 
 def language_of(locale: str) -> Language:
     """`en-US` → `en`, `es-US` → `es`, `tr-TR` → `tr`."""
@@ -45,6 +49,12 @@ class VoiceCopy:
             if data.get("language") != lang:
                 raise ValueError(f"copy/{lang}.json names language {data.get('language')!r}")
             self._lines[lang] = dict(data["lines"])
+        legal = json.loads((directory / LEGAL_FILE).read_text(encoding="utf-8"))
+        #: The version of the agent's own notice (`voice.recording_notice.v1`).
+        self.own_notice_version: str = legal["fallback"]
+        self._notices: dict[str, dict[str, str]] = {
+            key: dict(lines) for key, lines in legal["recordingNotices"].items()
+        }
 
     def keys(self, lang: Language = "en") -> set[str]:
         return set(self._lines[lang])
@@ -54,6 +64,17 @@ class VoiceCopy:
             return self._lines[lang][key]
         except KeyError:
             raise KeyError(f"no voice line {key!r} in {lang}") from None
+
+    def recording_notice(self, key: str | None, lang: Language) -> tuple[str, str]:
+        """The recording notice to say in `lang` and its version (W4-06, §9.4 "Disclosure", §19
+        Q28): the pack's (`get_context`'s `recordingNoticeVersion`) when the legal copy has its
+        sentence in `lang`, else the copy's own line and `voice.recording_notice.v1`. The version
+        goes to field-api with the disclosure mark (`calls.disclosure_version`)."""
+        if key:
+            text = self._notices.get(key, {}).get(lang)
+            if text and text.strip():
+                return text, key
+        return self.raw(RECORDING_NOTICE_KEY, lang), self.own_notice_version
 
     @staticmethod
     def placeholders(text: str) -> set[str]:

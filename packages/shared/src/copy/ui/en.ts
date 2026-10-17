@@ -32,8 +32,22 @@ export const uiEn = {
       expired: 'Link expired',
       talk: 'Talk now',
       photos: 'Add photos',
+      legal: 'Legal text',
     },
     /** Any other path (the field host serves the app for every path). */
+    /**
+     * W4-06 (§19 Q50): a pack's legal text, `/legal/<key>` (the privacy notice, the recording
+     * notice, the consent wording); the text itself is `copy/legal`, by key and language.
+     */
+    legal: {
+      version: 'Version {{version}} · {{date}}',
+      otherLanguage: 'This text isn’t available in your language yet.',
+      unknown: {
+        title: 'Text not found',
+        body: 'This text isn’t available here. Ask the office for the latest link.',
+      },
+      back: 'Back',
+    },
     notFound: {
       title: 'Page not found',
       body: 'That page doesn’t exist, or the link was mistyped.',
@@ -655,6 +669,8 @@ export const uiEn = {
         push: 'Notifications on this phone',
       },
       consentsTitle: 'What you agreed to',
+      /** W4-06: the pack's legal texts (§19 Q50), each by its title. */
+      legalTitle: 'Privacy and recording',
       consents: {
         recording: 'Recording of my voice notes, photos and calls',
         data_processing: 'Processing of my reports for {{company}}',

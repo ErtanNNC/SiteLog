@@ -6,7 +6,8 @@
  * reports (`/history`, and `/history/:id` for one report) and the expired link (F16); W2-12 the
  * SMS EDIT's links `/r/:code/history[/:id]` (the link check, then Past reports or that report,
  * where the texted change waits as a preview with Save change); W3-13 Talk now's call screen
- * (`/talk`, its own lazy chunk) and F9's photo-only screen of a photos link (`/photos`).
+ * (`/talk`, its own lazy chunk) and F9's photo-only screen of a photos link (`/photos`); W4-06 a
+ * pack's legal text (`/legal/:key`, §19 Q50).
  * `screen` is the route's key in the `field.routes` copy.
  *
  * Plain data (no React), so the Playwright smoke test reads the same list.
@@ -25,6 +26,7 @@ export const FIELD_ROUTES = [
   { path: '/history/:id', screen: 'history', example: '/history/7d2f4c1e' },
   { path: '/settings', screen: 'settings', example: '/settings' },
   { path: '/expired', screen: 'expired', example: '/expired' },
+  { path: '/legal/:key', screen: 'legal', example: '/legal/ZZ.privacy_notice.v1' },
 ] as const;
 
 export type FieldScreen = (typeof FIELD_ROUTES)[number]['screen'];

@@ -6,9 +6,9 @@ import {
   weatherUnitLabels,
   WEATHER_THRESHOLDS,
 } from '../weather/observed.ts';
-import { smsEn, smsReplyHintEn, smsWeatherPhraseEn } from './sms.en.ts';
-import { smsEs, smsReplyHintEs, smsWeatherPhraseEs } from './sms.es.ts';
-import { smsTr, smsWeatherPhraseTr } from './sms.tr.ts';
+import { smsEn, smsHelpPrivacyEn, smsReplyHintEn, smsWeatherPhraseEn } from './sms.en.ts';
+import { smsEs, smsHelpPrivacyEs, smsReplyHintEs, smsWeatherPhraseEs } from './sms.es.ts';
+import { smsHelpPrivacyTr, smsTr, smsWeatherPhraseTr } from './sms.tr.ts';
 
 /**
  * §9.2 SMS copy catalog. Keys are stable ids; the texts live in `sms.{en,es,tr}.ts`. WhatsApp
@@ -174,7 +174,7 @@ export type SmsVarValue = string | number;
  */
 export type SmsVars<K extends SmsKey> = {
   [P in Exclude<SmsVarName<K>, 'number'>]: SmsVarValue;
-} & { number?: SmsVarValue };
+} & { number?: SmsVarValue } & (K extends 'help' ? { privacy_link?: SmsVarValue } : unknown);
 
 /**
  * The variant of a message, from the org's country pack (`smsRenderOptions(pack)` in
@@ -213,6 +213,18 @@ export const SMS_CATALOGS: {
 export const SMS_REPLY_HINT: Readonly<Partial<Record<SmsLocale, string>>> = {
   en: smsReplyHintEn,
   es: smsReplyHintEs,
+};
+
+/**
+ * W4-06 (spec §9.1 "linked from the consent screen and the SMS HELP text"): the HELP reply's
+ * privacy clause, `{privacy_link}` the pack's privacy notice page (`legalPageUrl`). `renderSms`
+ * appends it to `help` only when the caller passes `privacy_link`, which `sms/inbound.ts` does
+ * only when the pack names a `legal_keys.privacy_notice`; with none the text is as before.
+ */
+export const SMS_HELP_PRIVACY: Readonly<Record<SmsLocale, string>> = {
+  en: smsHelpPrivacyEn,
+  es: smsHelpPrivacyEs,
+  tr: smsHelpPrivacyTr,
 };
 
 export function isTwoWaySmsKey(key: SmsKey): key is TwoWaySmsKey {
@@ -295,8 +307,9 @@ export function smsCopyGaps(
 /**
  * Render a §9.2 message. Fails loudly (throws) where `smsTemplate` does, and on a variable the
  * text needs that is missing, null or empty. Extra variables are ignored (a caller may always pass
- * `number`). Values are inserted as given; the only addition is the welcome's reply clause on a
- * two-way pack, so a one-way pack's text never gains a reply prompt.
+ * `number`). Values are inserted as given; the only additions are the welcome's reply clause on a
+ * two-way pack, so a one-way pack's text never gains a reply prompt, and HELP's privacy clause
+ * when `privacy_link` is given (W4-06, `SMS_HELP_PRIVACY`).
  */
 export function renderSms<K extends SmsKey>(
   key: K,
@@ -304,8 +317,13 @@ export function renderSms<K extends SmsKey>(
   vars: SmsVars<K>,
   opts: RenderSmsOptions,
 ): string {
-  const template = smsTemplate(key, locale, opts);
   const values = vars as Readonly<Record<string, SmsVarValue | null | undefined>>;
+  const privacy = key === 'help' ? values.privacy_link : undefined;
+  const template =
+    smsTemplate(key, locale, opts) +
+    (privacy !== undefined && privacy !== null && String(privacy).trim() !== ''
+      ? SMS_HELP_PRIVACY[locale]
+      : '');
   return template.replace(/\{([a-z0-9_]+)\}/g, (_match, name: string) => {
     const value = values[name];
     if (value === undefined || value === null || String(value).trim() === '') {

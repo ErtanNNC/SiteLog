@@ -183,8 +183,13 @@ def redacted_context(chat_ctx: llm.ChatContext) -> llm.ChatContext:
 
 
 def opening_line(state: CallState, copy: VoiceCopy, *, first_name: str) -> str:
-    """The first thing the call says: the opening with the disclosure in it (§9.4, §15.2)."""
+    """The first thing the call says: the opening with the disclosure in it (§9.4, §15.2). The
+    disclosure is the pack's recording notice when it names one in the call language (W4-06, §19
+    Q28), else the copy's own; `state.notice_version` keeps which."""
     ctx = state.context
+    notice, state.notice_version = copy.recording_notice(
+        ctx.recording_notice_version if ctx else None, state.language
+    )
     site = None
     if ctx is not None:
         if ctx.site_id is not None:
@@ -196,23 +201,38 @@ def opening_line(state: CallState, copy: VoiceCopy, *, first_name: str) -> str:
         # F3 (§19 Q120, W3-14): the disclosure, then the consent question; no report before it.
         return " ".join(
             [
-                copy.line("opening_inbound_pick_site", state.language, first=first_name),
+                copy.line(
+                    "opening_inbound_pick_site",
+                    state.language,
+                    first=first_name,
+                    recording_notice=notice,
+                ),
                 copy.line("consent_ask", state.language),
             ]
         )
     if ctx and ctx.call.direction == "outbound" and site:
         return copy.line(
-            "opening_outbound", state.language, first=first_name, company=ctx.company, site=site
+            "opening_outbound",
+            state.language,
+            first=first_name,
+            company=ctx.company,
+            site=site,
+            recording_notice=notice,
         )
     if site is None:
         # F14: the disclosure, then "Which site is this for — Riverside or Pier 9?".
         return " ".join(
             [
-                copy.line("opening_inbound_pick_site", state.language, first=first_name),
+                copy.line(
+                    "opening_inbound_pick_site",
+                    state.language,
+                    first=first_name,
+                    recording_notice=notice,
+                ),
                 next_step_line(state, copy),
             ]
         )
-    return copy.line(entry, state.language, first=first_name, site=site)
+    return copy.line(entry, state.language, first=first_name, site=site, recording_notice=notice)
 
 
 def unknown_opening(lang: Language, copy: VoiceCopy) -> str:
@@ -376,7 +396,7 @@ class ReportCall:
         self.state.disclosure_played = True
         self.dialog.on(Event.DISCLOSURE_PLAYED, self.now())
         try:
-            await self.state.api.mark_disclosure(self.state.auth)
+            await self.state.api.mark_disclosure(self.state.auth, self.state.notice_version)
         except FieldApiError as exc:
             log.warning(
                 "disclosure not marked",
@@ -759,7 +779,7 @@ async def _unknown_caller(
     except RuntimeError:
         return  # hung up during the disclosure
     with contextlib.suppress(FieldApiError):
-        await api.mark_disclosure(auth)
+        await api.mark_disclosure(auth, copy.own_notice_version)
 
     async def cap() -> None:
         await asyncio.sleep(UNKNOWN_CALLER_MAX_RECORDING_S)

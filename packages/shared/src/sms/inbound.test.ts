@@ -21,6 +21,7 @@ import {
   type InboundSmsNotification,
   type InboundSmsStore,
 } from './inbound.ts';
+import { countSmsSegments } from './segments.ts';
 import { SmsSendError } from './transports.ts';
 import { createWhatsappRegistration } from '../whatsapp/transport.ts';
 
@@ -395,6 +396,24 @@ describe('processInboundSms (W1-08)', () => {
     await h.run('help', { messageId: 'm-in-2' });
     expect(h.links).toHaveLength(1);
     expect(h.sent[1]!.body).toBe(h.sent[0]!.body);
+  });
+
+  it('HELP: the privacy notice page once the pack names one (W4-06, §9.1), within 2 segments', async () => {
+    const h = harness();
+    await h.run('HELP', {
+      pack: pack('US', {
+        sms_sender_id: '+18885550142',
+        legal_keys: { privacy_notice: 'ZZ.privacy_notice.v1' },
+      }),
+    });
+    const code = await deriveLinkCode(SECRET, h.links[0]!.id);
+    const body = h.sent[0]!.body;
+    expect(body).toBe(
+      `SiteLog daily reports for Real Builders. Your link: https://go.sitelog.app/r/${code} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply. - Privacy: https://go.sitelog.app/legal/ZZ.privacy_notice.v1`,
+    );
+    expect(countSmsSegments(body).default.segments).toBeLessThanOrEqual(2);
+    // The stored row masks the personal link, never the privacy page.
+    expect([...h.rows.values()][0]!.body).toContain('/legal/ZZ.privacy_notice.v1');
   });
 
   it('F13: an unknown number gets the auto-reply and an unknown contact, once; never for STOP', async () => {

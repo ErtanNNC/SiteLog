@@ -81,3 +81,9 @@ export const smsWeatherPhraseTr: SmsWeatherPhrases = {
   fallback: 'Bugün hava şantiyeyi etkiledi',
   decimal: ',',
 };
+
+/**
+ * W4-06 (spec §9.1): HELP's privacy clause, appended by `renderSms` when the pack names a privacy
+ * notice (`SMS_HELP_PRIVACY`). For the Q63 review.
+ */
+export const smsHelpPrivacyTr = ' - Aydınlatma metni: {privacy_link}';

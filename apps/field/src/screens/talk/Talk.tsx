@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
-import { VOICE_CATALOGS } from '@sitelog/shared/copy/voice.ts';
+import { recordingNoticeFor } from '@sitelog/shared/copy/legal/index.ts';
 import type { FieldApiErrorCode } from '@sitelog/shared/field-contract.ts';
 import { apiErrorCode } from '@/api/field';
 import { useApi } from '@/api/useApi';
@@ -111,7 +111,8 @@ function MicIcon({ off }: { off: boolean }) {
  * it, and Record instead), then `voice/token` and the call through a `VoiceClient` (LiveKit, or the
  * scripted fake for a fake field-api), lazy-loaded with this screen. In the call: "Speaking with the
  * SiteLog assistant", the line's status (connecting, the assistant speaking or listening,
- * reconnecting), the recording notice as text (the voice copy's line in the reporter's language), a
+ * reconnecting), the recording notice as text (the pack's `legal_keys.recording_notice` when it has
+ * this language, W4-06, else the voice copy's line; the sentence the agent says first), a
  * timer, Mute and **End call** (56 px); no captions in M7. After the call it reads the day again:
  * a report → its screen (Filed, or the draft after a hang-up), else Today.
  */
@@ -125,18 +126,29 @@ export function Talk(deps: TalkDeps = {}) {
   const siteId = state.siteId ?? session.siteId ?? currentSite(session)?.id ?? null;
   const site = session.sites.find((s) => s.id === siteId);
   if (!siteId) return <Navigate to="/today" replace />;
-  return <TalkCall code={session.code} siteId={siteId} siteName={site?.name} deps={deps} />;
+  return (
+    <TalkCall
+      code={session.code}
+      siteId={siteId}
+      siteName={site?.name}
+      noticeKey={session.country.legalKeys.recordingNotice}
+      deps={deps}
+    />
+  );
 }
 
 function TalkCall({
   code,
   siteId,
   siteName,
+  noticeKey,
   deps,
 }: {
   code: string;
   siteId: string;
   siteName: string | undefined;
+  /** W4-06: the pack's `legal_keys.recording_notice`, if it names one. */
+  noticeKey: string | undefined;
   deps: TalkDeps;
 }) {
   const api = useApi();
@@ -365,7 +377,9 @@ function TalkCall({
             : speaking
               ? t('talk.status.speaking')
               : t('talk.status.listening');
-  const notice = VOICE_CATALOGS[language].recording_notice;
+  // W4-06 (§19 Q28): the pack's recording notice when it names one in this language, else the
+  // voice copy's own: the sentence the agent says first.
+  const notice = recordingNoticeFor(noticeKey, language).text;
 
   return (
     <Screen key="call" title={t('talk.title')} header={header} dark dateLine={false}>

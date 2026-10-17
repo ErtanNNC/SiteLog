@@ -1950,6 +1950,16 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       expired: 'Linkin süresi doldu',
       talk: 'Şimdi konuş',
       photos: 'Fotoğraf ekle',
+      legal: 'Yasal metin',
+    },
+    legal: {
+      version: 'Sürüm {{version}} · {{date}}',
+      otherLanguage: 'Bu metin henüz sizin dilinizde yok.',
+      unknown: {
+        title: 'Metin bulunamadı',
+        body: 'Bu metin burada yok. Ofisten en son linki isteyin.',
+      },
+      back: 'Geri',
     },
     notFound: {
       title: 'Sayfa bulunamadı',
@@ -2484,6 +2494,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         push: 'Bu telefonda bildirim',
       },
       consentsTitle: 'Verdiğiniz onaylar',
+      legalTitle: 'Gizlilik ve kayıt',
       consents: {
         recording: 'Sesli notlarımın, fotoğraflarımın ve aramalarımın kaydedilmesi',
         data_processing: 'Raporlarımın {{company}} için işlenmesi',

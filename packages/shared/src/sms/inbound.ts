@@ -1,4 +1,5 @@
 import { MessageSendError, replyAllowed, type ReplyChannel } from '../channels.ts';
+import { legalPageUrl } from '../copy/legal/index.ts';
 import type { TwoWaySmsKey } from '../copy/sms.ts';
 import type { CountryPack } from '../countries.ts';
 import type { ContactPref, ReporterStatus } from '../enums.ts';
@@ -384,7 +385,10 @@ export async function processInboundSms(
   };
 }
 
-/** The reply's variables: the personal link and the org for HELP, nothing for the others. */
+/**
+ * The reply's variables: the personal link and the org for HELP (and the pack's privacy notice page
+ * when it names one, W4-06), nothing for the others.
+ */
 async function replyVars(
   deps: InboundSmsDeps,
   key: TwoWaySmsKey,
@@ -416,9 +420,12 @@ async function replyVars(
     });
   }
   if (key === 'whatsapp_use_link') return { link: fieldLinkUrl(deps.fieldAppUrl(), link.code) };
+  const privacy = pack.legalKeys.privacyNotice;
   return {
     company: reporter.orgName,
     link: fieldLinkUrl(deps.fieldAppUrl(), link.code),
     ...(pack.voiceNumber ? { number: formatPhone(pack.voiceNumber) } : {}),
+    // W4-06 (§9.1): the pack's privacy notice page, once the pack names one.
+    ...(privacy ? { privacy_link: legalPageUrl(deps.fieldAppUrl(), privacy) } : {}),
   };
 }

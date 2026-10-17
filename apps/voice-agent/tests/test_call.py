@@ -322,3 +322,25 @@ async def test_a_turkish_call_in_text_mode() -> None:
     assert "Turkish (tr-TR)" in prompt
     assert "Turkish (tr-TR)" in run.llm.request_texts()[0]
     assert [e.body["outcome"] for e in run.fake.seen("end_call")] == ["draft_saved"]
+
+
+async def test_the_pack_recording_notice_opens_the_call_and_its_version_is_marked() -> None:
+    """W4-06 (§19 Q28): a pack naming a recording notice: the opening says its sentence in the call
+    language, and the disclosure mark carries its version (`calls.disclosure_version`)."""
+    fixture = copylib.deepcopy(load_call_fixture("northgate-call-en"))
+    fixture["routes"]["get_context"][0]["recordingNoticeVersion"] = "ZZ.recording_notice.v1"
+    keyed, version = COPY.recording_notice("ZZ.recording_notice.v1", "en")
+    assert version == "ZZ.recording_notice.v1"
+    async with live_call(fixture, []) as live:
+        opening = live.call.state.log[0]["text"]
+        assert keyed in opening
+        assert COPY.raw("recording_notice", "en") not in opening
+        (mark,) = live.fake.seen("disclosure")
+        assert mark.body["noticeVersion"] == "ZZ.recording_notice.v1"
+
+
+async def test_without_a_pack_notice_the_own_version_is_marked() -> None:
+    fixture = load_call_fixture("northgate-call-en")
+    async with live_call(fixture, []) as live:
+        (mark,) = live.fake.seen("disclosure")
+        assert mark.body["noticeVersion"] == "voice.recording_notice.v1"

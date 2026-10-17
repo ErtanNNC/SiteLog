@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { recordingNoticeFor } from '@sitelog/shared/copy/legal/index.ts';
 import { VOICE_CATALOGS } from '@sitelog/shared/copy/voice.ts';
 import type { VoiceTokenResponse } from '@sitelog/shared/field-contract.ts';
 import { ApiProvider } from '@/api/ApiContext';
@@ -246,5 +247,29 @@ describe('Talk now (W3-13, §9.4, §19 Q121)', () => {
       expect(await screen.findByText(VOICE_CATALOGS[lang].recording_notice)).toBeInTheDocument();
       view.unmount();
     }
+  });
+
+  it('shows the pack’s recording notice when it names one (W4-06, §19 Q28)', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    const { client } = controlledClient();
+    const routes = fakeRoutes({ voiceToken: vi.fn().mockResolvedValue(TOKEN) });
+    const session = demoSession();
+    renderTalk(
+      routes,
+      { getUserMedia: () => Promise.resolve(stream()), loadClient: () => Promise.resolve(client) },
+      {
+        ...session,
+        reporter: { ...session.reporter, locale: 'tr-TR' },
+        country: {
+          ...session.country,
+          fieldLocales: ['tr-TR', 'en-US'],
+          legalKeys: { recordingNotice: 'ZZ.recording_notice.v1' },
+        },
+      },
+    );
+    const keyed = recordingNoticeFor('ZZ.recording_notice.v1', 'tr');
+    expect(keyed.version).toBe('ZZ.recording_notice.v1');
+    expect(await screen.findByText(keyed.text)).toBeInTheDocument();
+    expect(screen.queryByText(VOICE_CATALOGS.tr.recording_notice)).toBeNull();
   });
 });

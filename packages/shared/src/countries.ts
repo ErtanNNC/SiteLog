@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fieldLanguagesOf, legalKeyGaps } from './copy/legal/index.ts';
 import { smsCopyGaps } from './copy/sms.ts';
 import type { CountryRow } from './db/types.ts';
 import { MessageChannelSchema, type MessageChannel } from './enums.ts';
@@ -50,8 +51,9 @@ export const DEFAULT_WHATSAPP_PROVIDER: WhatsappProvider = 'twilio';
 
 /**
  * The legal text slots of a pack (`countries.legal_keys`): the privacy notice and the recording
- * notice (§9.1) and the consent wording (§6.3 `consents.text_version`). Ids and texts are not
- * given yet (spec §19 Q28): every launch pack has `{}`.
+ * notice (§9.1) and the consent wording (§6.3 `consents.text_version`), each a versioned id
+ * `<CC>.<slot>.v<n>` whose texts are `copy/legal` (W4-06, spec §19 Q28, Q50). Counsel's texts are
+ * not given yet: every launch pack has `{}` until W4-13's data migration.
  */
 export const LegalKeysSchema = z.strictObject({
   privacy_notice: z.string().min(1).optional(),
@@ -327,13 +329,19 @@ export function reporterLocaleFor(
 }
 
 /**
- * The SMS copy a pack lacks (spec §4.6: a new country is only a row when its languages have their
- * copy), as `<field locale>.<key>[.<variant>]`: every shared key in each of its field locales, and
- * with two-way SMS also the two-way keys and the welcome's reply hint. Empty = the pack has all
- * the copy it can be sent; supabase/db-tests checks it for every `countries` row.
+ * The copy a pack lacks (spec §4.6: a new country is only a row when its languages have their
+ * copy): the SMS copy as `<field locale>.<key>[.<variant>]` (every shared key in each of its field
+ * locales, and with two-way SMS also the two-way keys and the welcome's reply hint), and since
+ * W4-06 the legal texts its `legal_keys` name as `legal.<slot>.<problem>` (`legalKeyGaps`: a text
+ * in each field language, never a placeholder). Empty = the pack has all the copy it can be sent;
+ * supabase/db-tests checks it for every `countries` row.
  */
 export function packCopyGaps(pack: CountryPack): string[] {
-  return pack.fieldLocales.flatMap((locale) =>
+  const sms = pack.fieldLocales.flatMap((locale) =>
     smsCopyGaps(languageOf(locale), { twoWay: pack.twoWaySms }).map((gap) => `${locale}.${gap}`),
   );
+  const legal = legalKeyGaps(pack.legalKeys, fieldLanguagesOf(pack.fieldLocales), {
+    country: pack.code,
+  }).map((gap) => `legal.${gap}`);
+  return [...sms, ...legal];
 }

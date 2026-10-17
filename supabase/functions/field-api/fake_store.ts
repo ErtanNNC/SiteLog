@@ -1862,6 +1862,7 @@ export class FakeFieldStore implements FieldStore {
       status: 'in_progress',
       outcome: null,
       disclosure_played: false,
+      disclosure_version: null,
       started_at: this.iso(),
       answered_at: this.iso(),
       ended_at: null,
@@ -1922,12 +1923,17 @@ export class FakeFieldStore implements FieldStore {
     this.callAudit(c, 'call.fallback_started', { reason, at });
     return Promise.resolve({ marked: true });
   }
-  voiceCallDisclosure(callId: string) {
+  voiceCallDisclosure(callId: string, version: string | null) {
     const c = this.callRows.find((x) => x.id === callId);
     if (!c) return Promise.reject(new FieldDbError('call_not_found'));
-    if (c.disclosure_played) return Promise.resolve({ changed: false });
+    const diff: { [key: string]: Json } = {};
+    if (!c.disclosure_played) diff.disclosure_played = true;
+    // W4-06: the version played, with the mark, kept once set (voice_call_update).
+    if (c.disclosure_version == null && version !== null) diff.disclosure_version = version;
+    if (Object.keys(diff).length === 0) return Promise.resolve({ changed: false });
     c.disclosure_played = true;
-    this.callAudit(c, 'call.updated', { disclosure_played: true });
+    if (diff.disclosure_version) c.disclosure_version = version;
+    this.callAudit(c, 'call.updated', diff);
     return Promise.resolve({ changed: true });
   }
   voiceCallRecording(callId: string, path: string) {

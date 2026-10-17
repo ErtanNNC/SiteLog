@@ -14,7 +14,9 @@ describe('pnpm voice:contract', () => {
     const a = voiceContractFiles();
     const b = voiceContractFiles();
     expect([...a]).toEqual([...b]);
-    expect(a.size).toBe(Object.keys(VOICE_CONTRACT).length + 1 + 3 + 1);
+    // The schemas, index.json, the three languages, spoken.json (W4-07) and legal.json (W4-06).
+    expect(a.size).toBe(Object.keys(VOICE_CONTRACT).length + 1 + 3 + 1 + 1);
+    expect(a.has('apps/voice-agent/copy/legal.json')).toBe(true);
     for (const content of a.values()) {
       expect(content.endsWith('\n')).toBe(true);
       expect(() => JSON.parse(content)).not.toThrow();

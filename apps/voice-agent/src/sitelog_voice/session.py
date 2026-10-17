@@ -126,6 +126,9 @@ class CallState:
     #: W3-12 (§9.4 "Recording", §15.2): the opening with the recording notice was played to the
     #: end. No tool that processes the reporter's speech runs before it (`tools.SPEECH_TOOLS`).
     disclosure_played: bool = False
+    #: W4-06 (§19 Q28): the recording notice version the opening says (the pack's, else the
+    #: agent's own), sent with the disclosure mark (`calls.disclosure_version`).
+    notice_version: str | None = None
     #: W3-12 (F6 failure handling): the simple recording mode; the dialog model is not asked again.
     fallback: bool = False
     #: The outcome `end_call` sent; None while the call runs.

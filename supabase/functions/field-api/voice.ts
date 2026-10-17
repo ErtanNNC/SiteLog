@@ -27,6 +27,7 @@ import {
   VOICE_CALL_MAX_S,
   VOICE_CALL_TOKEN_HEADER,
   VOICE_RECORDING_GRACE_S,
+  VOICE_RECORDING_NOTICE_VERSION,
   VOICE_REQUEST_ID_HEADER,
   VOICE_REQUEST_ID_RE,
   VOICE_TOOL_RATE_LIMIT,
@@ -615,15 +616,25 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
   // The agent's word that the opening with the recording notice played to the end: the call's
   // `disclosure_played` (once played, always played; audited `call.updated` when it changed), which
   // the post-call job (W3-11) requires before it processes the recording. An unknown caller's call
-  // too (F13 plays the notice as well); a repeat changes nothing.
+  // too (F13 plays the notice as well); a repeat changes nothing. W4-06: with the version said
+  // (`noticeVersion`, kept as `calls.disclosure_version`).
   app.post('/voice/calls/:id/disclosure', async (c) => {
     const body = await parseVoiceBody(c, VoiceDisclosureRequestSchema);
     if (body.callId !== c.req.param('id')) {
       throw new FieldError(400, 'invalid_request', 'The path and the body name different calls');
     }
     const call = await authorizedCall(c, body.callId);
+    // W4-06: the notice the agent said is the pack's recording notice or the agent's own, never
+    // any other text (`calls.disclosure_version`); an unknown caller's call only the agent's own.
+    const version = body.noticeVersion ?? null;
+    if (version !== null && version !== VOICE_RECORDING_NOTICE_VERSION) {
+      const org = call.org_id ? await store.getOrgContext(call.org_id) : null;
+      if (version !== org?.country.legal_keys.recording_notice?.trim()) {
+        throw new FieldError(400, 'invalid_request', 'Not this call’s recording notice');
+      }
+    }
     return once(c, call, 'disclosure', async () => {
-      await store.voiceCallDisclosure(call.id);
+      await store.voiceCallDisclosure(call.id, version);
       return { status: 200, body: { ok: true } };
     });
   });

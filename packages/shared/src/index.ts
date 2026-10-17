@@ -47,6 +47,7 @@ export * from './sms/replies.ts';
 export * from './copy/whatsapp.ts';
 export * from './copy/sms.ts';
 export * from './copy/voice.ts';
+export * from './copy/legal/index.ts';
 export * from './copy/questions.ts';
 export * from './copy/report-notes.ts';
 export * from './copy/ui/index.ts';

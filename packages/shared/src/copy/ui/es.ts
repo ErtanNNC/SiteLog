@@ -25,6 +25,16 @@ export const uiEs: UiResources = {
       expired: 'Enlace vencido',
       talk: 'Hable ahora',
       photos: 'Agregar fotos',
+      legal: 'Texto legal',
+    },
+    legal: {
+      version: 'Versión {{version}} · {{date}}',
+      otherLanguage: 'Este texto aún no está disponible en su idioma.',
+      unknown: {
+        title: 'Texto no encontrado',
+        body: 'Este texto no está disponible aquí. Pida a la oficina el enlace más reciente.',
+      },
+      back: 'Volver',
     },
     notFound: {
       title: 'Página no encontrada',
@@ -571,6 +581,7 @@ export const uiEs: UiResources = {
         push: 'Notificaciones en este teléfono',
       },
       consentsTitle: 'Lo que aceptó',
+      legalTitle: 'Privacidad y grabación',
       consents: {
         recording: 'Grabación de mis notas de voz, fotos y llamadas',
         data_processing: 'Procesamiento de mis reportes para {{company}}',

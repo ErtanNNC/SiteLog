@@ -618,6 +618,37 @@ describe('who reads the packs (§6.5)', () => {
   });
 });
 
+describe('the pack check reads legal_keys (W4-06, §19 Q28, Q50)', () => {
+  const packOf = async (code: string) =>
+    toCountryPack(
+      (
+        await svc<{ row: CountryRow }>(
+          `select to_jsonb(c) as row from countries c where code = $1`,
+          [code],
+        )
+      )[0]!.row,
+    );
+
+  it('fails a pack naming a key without its text, or a test-only placeholder', async () => {
+    await rolledBack(async () => {
+      await svc(
+        `update countries set legal_keys = '{"privacy_notice": "TR.privacy_notice.v1"}' where code = 'TR'`,
+      );
+      expect(packCopyGaps(await packOf('TR'))).toEqual(['legal.privacy_notice.missing']);
+      // The W4-06 test-only texts exist in every language, but are no real pack's.
+      await svc(
+        `update countries set legal_keys = '{"recording_notice": "ZZ.recording_notice.v1"}' where code = 'US'`,
+      );
+      expect(packCopyGaps(await packOf('US'))).toEqual([
+        'legal.recording_notice.key',
+        'legal.recording_notice.placeholder',
+      ]);
+    });
+    // Both launch packs name no key until counsel's texts (W4-13).
+    for (const code of ['US', 'TR']) expect(packCopyGaps(await packOf(code)), code).toEqual([]);
+  });
+});
+
 describe('a new country is a new row (ZZ)', () => {
   it('create_org presets from a pack no code knows about', async () => {
     await rolledBack(async () => {

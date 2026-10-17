@@ -7,7 +7,8 @@ import {
   type PreferencesResponse,
 } from '@sitelog/shared/field-contract.ts';
 import type { PreferencesRequest } from '@sitelog/shared/field-api.ts';
-import { languageOf, type ReporterLocale } from '@sitelog/shared/locale.ts';
+import { legalPagePath, legalText } from '@sitelog/shared/copy/legal/index.ts';
+import { languageOf, type Language, type ReporterLocale } from '@sitelog/shared/locale.ts';
 import { apiErrorCode } from '@/api/field';
 import { useApi } from '@/api/useApi';
 import { OutlineButton, QuietButton, SolidButton } from '@/components/Buttons';
@@ -86,7 +87,7 @@ function SettingsLoaded({
 }) {
   const api = useApi();
   const navigate = useNavigate();
-  const { t, tc } = useFieldCopy();
+  const { t, tc, language } = useFieldCopy();
   const { code, country, org } = session;
   const [prefs, setPrefs] = useState<PreferencesResponse | null>(null);
   const [failed, setFailed] = useState(false);
@@ -111,6 +112,7 @@ function SettingsLoaded({
     consents: useId(),
     push: useId(),
     notToday: useId(),
+    legal: useId(),
     sheet: useId(),
   };
 
@@ -324,6 +326,21 @@ function SettingsLoaded({
     : t('settings.textsStopped.office');
   // W3-17 (§19 Q129): "Don't call me today" holds until the end of today.
   const notToday = prefs.noCallsUntil !== null && Date.parse(prefs.noCallsUntil) > openedAt;
+  // W4-06 (§19 Q50): the texts the pack names, each by its title (none while `legal_keys` is {}).
+  const legalDocs = [
+    country.legalKeys.privacyNotice,
+    country.legalKeys.recordingNotice,
+    country.legalKeys.consent,
+  ].flatMap((key) => {
+    const found = key
+      ? legalText(
+          key,
+          language,
+          locales.map((l) => languageOf(l) as Language),
+        )
+      : null;
+    return key && found ? [{ key, title: found.text.title, lang: found.language }] : [];
+  });
 
   return (
     <Screen title={title} dateLine={false}>
@@ -563,6 +580,27 @@ function SettingsLoaded({
               {pushProblem === 'failed' ? t('settings.push.failed') : t('settings.push.blocked')}
             </p>
           ) : null}
+        </section>
+      ) : null}
+
+      {legalDocs.length > 0 ? (
+        <section aria-labelledby={ids.legal} className="flex flex-col">
+          <h2 id={ids.legal} className={h2}>
+            {t('settings.legalTitle')}
+          </h2>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {legalDocs.map((doc) => (
+              <li key={doc.key}>
+                <Link
+                  to={legalPagePath(doc.key)}
+                  lang={doc.lang}
+                  className="flex min-h-target items-center rounded-card border border-rebar bg-white px-3.5 py-2 text-[16px] leading-[22px] text-asphalt underline"
+                >
+                  {doc.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 

@@ -228,13 +228,17 @@ class FieldApi:
         """Any other tool route: `{callId, **fields}`, the answer as the contract's JSON."""
         return await self.request(name, {"callId": auth.call_id, **fields}, auth)
 
-    async def mark_disclosure(self, auth: CallAuth) -> bool:
+    async def mark_disclosure(self, auth: CallAuth, notice_version: str | None = None) -> bool:
         """`calls.disclosure_played` (§9.4 "Recording", §19 Q163, W3-12): the recording notice was
         played to the end. Sent when the contract has the route (`DISCLOSURE_ROUTE`, §19 Q205;
-        field-api's since the W3-12 follow-up); returns whether field-api was told."""
+        field-api's since the W3-12 follow-up); returns whether field-api was told. W4-06: with
+        the version said (`noticeVersion`, `calls.disclosure_version`) when given."""
         if DISCLOSURE_ROUTE not in self._contract.routes:
             return False
-        await self.request(DISCLOSURE_ROUTE, {"callId": auth.call_id}, auth)
+        body: dict[str, Any] = {"callId": auth.call_id}
+        if notice_version:
+            body["noticeVersion"] = notice_version
+        await self.request(DISCLOSURE_ROUTE, body, auth)
         return True
 
     async def put_signed(self, url: str, data: bytes, *, mime: str) -> None:

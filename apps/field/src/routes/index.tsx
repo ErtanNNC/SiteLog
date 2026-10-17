@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router';
 import { Expired } from '@/screens/expired/Expired';
 import { History } from '@/screens/history/History';
 import { HistoryReport } from '@/screens/history/HistoryReport';
+import { Legal } from '@/screens/legal/Legal';
 import { LinkScreen } from '@/screens/link/LinkScreen';
 import { Photos } from '@/screens/photos/Photos';
 import { ReportScreen } from '@/screens/report/ReportScreen';
@@ -44,6 +45,7 @@ export function FieldRoutes() {
       <Route path="/history/:id" element={<HistoryReport />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/expired" element={<Expired />} />
+      <Route path="/legal/:key" element={<Legal />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

@@ -78,3 +78,9 @@ export const smsWeatherPhraseEn: SmsWeatherPhrases = {
   fallback: 'Weather hit the site today',
   decimal: '.',
 };
+
+/**
+ * W4-06 (spec §9.1): HELP's privacy clause, appended by `renderSms` when the pack names a privacy
+ * notice (`SMS_HELP_PRIVACY`). GSM-7.
+ */
+export const smsHelpPrivacyEn = ' - Privacy: {privacy_link}';
