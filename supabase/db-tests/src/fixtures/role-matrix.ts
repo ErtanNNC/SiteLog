@@ -747,6 +747,12 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select field_talk_now_failed('${o.call}', 'matrix') as v`,
   },
+  // W3-10 (20261016000350_voice_filing.sql): file_report on a call, through field-api.
+  voice_file_report: {
+    why: '§6.5, §19 Q119: field-api only (service role) for the voice agent; code decides the yes.',
+    allow: NONE,
+    call: (o) => `select voice_file_report('${o.call}', '${o.report}', 1, 'yes', true) as v`,
+  },
 };
 
 export type Scope = 'own' | 'other';

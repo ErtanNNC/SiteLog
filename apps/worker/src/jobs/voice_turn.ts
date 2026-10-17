@@ -1,5 +1,11 @@
 import {
   QUESTION_FIELDS,
+  applyCorrectionOps,
+  correctionNote,
+  readReportData,
+  voiceCorrectionLines,
+  type ApplyCorrectionResult,
+  type StoredReportData,
   answerConfirmation,
   applyAnswer,
   callRequiredFields,
@@ -27,6 +33,7 @@ import {
   type VoiceTurnRow,
 } from '@sitelog/shared';
 import { answerRefusal, parseAnswerWithModel } from '../ai/answer';
+import { parseCorrectionV2 } from '../ai/correction';
 import { runReportExtraction } from '../ai/extract';
 import type { Ctx } from '../context';
 import type { Json, SiteContext } from '../db';
@@ -93,7 +100,9 @@ export const voiceTurnJob: JobHandler<'voice_turn'> = async (ctx, payload) => {
       outcome =
         turn.kind === 'update_draft'
           ? await updateDraft(ctx, turn, scope, log)
-          : await recordAnswer(ctx, turn, scope, log);
+          : turn.kind === 'record_answer'
+            ? await recordAnswer(ctx, turn, scope, log)
+            : await applyCorrectionOnCall(ctx, turn, scope, log);
   } catch (err) {
     // Never the words or a phone number in the log: the error's name and message only.
     log.error('voice turn failed', {
@@ -625,6 +634,153 @@ async function recordAnswer(
     draft: state,
   };
   return { result: result as unknown as Json };
+}
+
+// ───────────────────────────── apply_correction (F8 on a call) ─────────────────────────────
+
+/**
+ * F8 on a call (W3-10; §9.4 rule 5, §10.6): "No, Apex had seven, not six" after the read-back.
+ * `apply_correction` (the model; the words are data) proposes operations on the call's draft;
+ * code applies them (`applyCorrectionOps`: only what a fix may change, totals recomputed, every
+ * number one the words state, each changed value citing the call second) and writes the draft at
+ * once: on a call the spoken "Shall I file it?" after the change's read-back is the preview's
+ * confirm (§7.2's `awaiting_confirmation → processing → read back` happens inside the turn). The
+ * fix is recorded applied (`draft_corrections`, via voice) so a later re-extraction keeps it
+ * (§19 Q96). Then the call's decision again (a new gap is asked; else the read-back of the change
+ * only, then "Shall I file it?"). The model never files and never writes the draft.
+ *
+ * A run after a failed one finds the fix it applied (the same call second) and does not apply it
+ * twice.
+ */
+async function applyCorrectionOnCall(
+  ctx: Ctx,
+  turn: VoiceTurnRow,
+  scope: TurnScope,
+  log: Logger,
+): Promise<{ result: Json } | { error: TurnError }> {
+  const { call, report, site, reporter, language } = scope;
+  const input = turn.input as { utterance: string; start: number; end?: number };
+  const said: Source = {
+    type: 'call',
+    callId: call.id,
+    start: input.start,
+    ...(input.end !== undefined ? { end: input.end } : {}),
+  };
+  const done =
+    (status: ApplyCorrectionResult['status'], lines: string[], readBackText: string | null) =>
+    async (data: DailyReportData): Promise<{ result: Json }> => {
+      const fresh = (await ctx.db.getReport(report.id)) ?? report;
+      const draft = await decideOnCall(ctx, scope, fresh, data);
+      const result: ApplyCorrectionResult = {
+        status,
+        lines,
+        readBack: draft.question ? null : readBackText,
+        draft,
+      };
+      return { result: result as unknown as Json };
+    };
+
+  const earlier = appliedFixes(await ctx.db.listAppliedCorrections(report.id)).find(
+    (f) =>
+      f.source.type === 'call' && f.source.callId === call.id && f.source.start === input.start,
+  );
+  if (earlier) {
+    const lines = voiceCorrectionLines(earlier.changes, language);
+    return done(
+      'applied',
+      lines,
+      [...lines, renderVoice('confirm_ask', language)].join(' '),
+    )(await draftOf(ctx, report));
+  }
+
+  const version = await ctx.db.getVersion(report.id, report.current_version || 1);
+  if (!version?.data) throw new Error(`report ${report.id} has no draft`);
+  const draft = readReportData(version.data as StoredReportData);
+  if (!ctx.ai.claude) throw new Error('ANTHROPIC_API_KEY is required for apply_correction');
+  const companies = site.companies.map((c) => ({ id: c.id, name: c.name, aliases: c.aliases }));
+  const defaultShiftHours = Number(site.settings.default_shift_hours);
+  const parsed = await parseCorrectionV2(
+    ctx.ai.claude,
+    ctx.config.CLAUDE_MODEL,
+    {
+      data: draft,
+      correctionText: input.utterance,
+      via: 'voice',
+      defaultShiftHours,
+      companies,
+      reporterLanguage: language,
+    },
+    log,
+  );
+  ctx.metrics.add({ tokens: parsed.usage, estCostUsd: parsed.estCostUsd });
+  const refuse = async (reason: string) => {
+    await ctx.db.logAudit({
+      org_id: report.org_id,
+      actor_type: 'agent',
+      action: 'report.correction_unclear',
+      entity: 'report',
+      entity_id: report.id,
+      diff: { reason, via: 'voice', call_id: call.id, turn_id: turn.id },
+    });
+    return done('not_understood', [renderVoice('correction_unclear', language)], null)(draft);
+  };
+  if (parsed.data.needsClarification) return refuse('clarification');
+  const applied = applyCorrectionOps(draft, parsed.data.operations, {
+    source: said,
+    text: input.utterance,
+    defaultShiftHours,
+    companies,
+  });
+  if (!applied.ok) {
+    if (applied.reason === 'no_change')
+      return done('nothing_to_change', [renderVoice('correction_nothing', language)], null)(draft);
+    return refuse(applied.reason);
+  }
+  if (applied.changes.length === 0)
+    return done('nothing_to_change', [renderVoice('correction_nothing', language)], null)(draft);
+  const stored = await ctx.db.applyCallCorrection({
+    reportId: report.id,
+    reporterId: reporter.id,
+    orgId: report.org_id,
+    baseVersion: version.version,
+    baseRev: version.draft_rev ?? 1,
+    data: applied.data,
+    text: input.utterance,
+    changes: applied.changes,
+    operations: applied.operations,
+    source: said,
+    changeNote: correctionNote(applied.changes, applied.data.reportLanguage),
+  });
+  // The draft moved under the parse (a photo's re-extraction) or the yes went through: the turn
+  // fails, and the agent's next request runs it again on the draft as it is then.
+  if (!stored.applied) {
+    const latest = await ctx.db.getReport(report.id);
+    if (!latest || CLOSED.includes(latest.status)) return { error: 'report_closed' };
+    throw new Error('the draft changed while the correction was read');
+  }
+  await ctx.db.logAudit({
+    org_id: report.org_id,
+    actor_type: 'reporter',
+    actor_id: reporter.id,
+    action: 'report.draft_corrected',
+    entity: 'report',
+    entity_id: report.id,
+    diff: {
+      correction_id: stored.correctionId,
+      via: 'voice',
+      call_id: call.id,
+      turn_id: turn.id,
+      changes: applied.changes,
+      dropped_totals: applied.droppedTotals,
+      draft_rev: stored.draftRev,
+    },
+  });
+  const lines = voiceCorrectionLines(applied.changes, language);
+  return done(
+    'applied',
+    lines,
+    [...lines, renderVoice('confirm_ask', language)].join(' '),
+  )(applied.data);
 }
 
 async function unclearResult(

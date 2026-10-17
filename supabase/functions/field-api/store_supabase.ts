@@ -18,6 +18,7 @@ import {
   type RateLimitResult,
   type ReportWithDate,
   type VoiceCallEndResult,
+  type VoiceFileReportResult,
   type VoiceTurnSubmitResult,
   type VoiceCallStartResult,
 } from './store.ts';
@@ -103,7 +104,9 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
         admin.from('countries').select('*').eq('code', org.country).single().throwOnError(),
         admin
           .from('org_settings')
-          .select('default_deadline, working_days, default_shift_hours, max_questions_per_report')
+          .select(
+            'default_deadline, working_days, default_shift_hours, max_questions_per_report, required_fields',
+          )
           .eq('org_id', orgId)
           .maybeSingle()
           .throwOnError(),
@@ -819,6 +822,18 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
           p_kind: kind,
           p_key: key,
           p_input: input,
+        }),
+      );
+    },
+
+    async voiceFileReport(input) {
+      return await rpc<VoiceFileReportResult>(
+        admin.rpc('voice_file_report', {
+          p_call_id: input.callId,
+          p_report_id: input.reportId,
+          p_draft_rev: input.draftRev,
+          p_utterance: input.utterance,
+          p_confirmed: input.confirmed,
         }),
       );
     },

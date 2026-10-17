@@ -93,6 +93,12 @@ const AUDITED: Record<string, string> = {
     'field_confirm_report: the first web confirm of a draft version at a draft revision (report_versions.draft_rev, bumped on every change of the draft; a dead job is re-queued)',
   "sql:'file:' || r.id || ':v' || p_version || ':r' || p_draft_rev || ':c' || v_n":
     'field_confirm_report: a later confirm of that draft after its job finished without filing (n past the confirm_requested count; a taken n moves on)',
+  "sql:'file:' || r.id || ':v' || r.current_version || ':r' || p_draft_rev || ':call:' || c.id":
+    'voice_file_report (W3-10, §19 Q119): the filing of a call yes at the revision read back; per draft revision and call, and a retry while it runs finds the queued job first (§19 Q151)',
+  "sql:v_key || ':c' || v_n":
+    'voice_file_report: a later yes of that revision after its job finished without filing (n past the confirm_requested count; a taken n moves on)',
+  'jobKeys.photosLink':
+    'notify:photos_link:<report> (file_report after a call, W3-10, F9): the notify job and its Notifier key; a report is filed once, so a retried or repeated filing never texts twice',
   "sql:'file:' || r.id || ':v1:' || p_status":
     'field_report_day_off (W2-08, F12): the filing of the weather-day or no-work report the recorder made; per report, which the transaction that enqueues it creates (a retried tap finds the day already in that status and creates nothing)',
   "sql:'sms_inbound:' || p_provider_message_id":

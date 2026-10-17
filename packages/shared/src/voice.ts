@@ -108,8 +108,8 @@ export const VoiceTurnPendingSchema = z.strictObject({
 export const VOICE_TOOL_WAIT_DEFAULT_MS = 12_000;
 export const VOICE_TOOL_WAIT_MAX_MS = 15_000;
 
-/** The live tools that run as a worker turn (W3-09). `apply_correction` joins them in W3-10. */
-export const VOICE_TURN_KINDS = ['update_draft', 'record_answer'] as const;
+/** The live tools that run as a worker turn (W3-09; W3-10 adds `apply_correction`). */
+export const VOICE_TURN_KINDS = ['update_draft', 'record_answer', 'apply_correction'] as const;
 export type VoiceTurnKind = (typeof VOICE_TURN_KINDS)[number];
 
 /**
@@ -371,14 +371,27 @@ export const ApplyCorrectionRequestSchema = z.strictObject({
   /** The report `load_report` found (F10); omitted for the call's own draft. */
   reportId: uuid.optional(),
 });
-export const ApplyCorrectionResponseSchema = z.strictObject({
+export const ApplyCorrectionResultSchema = z.strictObject({
+  /**
+   * W3-10 (F8 call): `applied`: code applied the change to the call's draft at once (the spoken
+   * "Shall I file it?" after the change's read-back is its confirm; a new draft revision).
+   * `not_understood`: the change could not be read or code refused it; nothing changed.
+   * `nothing_to_change`: the draft already says it.
+   */
   status: z.enum(['applied', 'not_understood', 'nothing_to_change']),
-  /** The changed lines, worded by code in the call language. */
+  /**
+   * The lines to say, worded by code in the call language: the changed lines (numbers from code)
+   * when applied; "I couldn't make that change. What should I change?" when not understood.
+   */
   lines: z.array(z.string().min(1).max(400)).max(20),
-  /** The read-back of the change only (§9.4 rule 5); null when nothing changed. */
+  /** The read-back of the change only, then "Shall I file it?" (§9.4 rule 5); null otherwise. */
   readBack: z.string().min(1).max(800).nullable(),
+  /** The call's draft after the turn (its `draftRev` is what `file_report` names next). */
   draft: VoiceDraftStateSchema.nullable(),
 });
+export const ApplyCorrectionResponseSchema = z
+  .union([ApplyCorrectionResultSchema, VoiceTurnPendingSchema])
+  .describe('The change settled, or (HTTP 202) status pending: ask again with the same words.');
 
 /**
  * `file_report` (§9.4, F8; §19 Q119): the reporter's verbatim last utterance and the revision the
@@ -402,6 +415,12 @@ export const FileReportResponseSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('not_confirmed') }),
   /** A newer draft than the one read back: read back again. */
   z.strictObject({ status: z.literal('draft_changed'), draft: VoiceDraftStateSchema }),
+  /**
+   * W3-10 (HTTP 202): the filing runs past field-api's wait (`VOICE_TOOL_WAIT_MS`); say a short
+   * line and call file_report again with the same words and revision: a draft revision is filed
+   * by one filing job, never twice (§19 Q151).
+   */
+  VoiceTurnPendingSchema,
 ]);
 
 /** `set_day_status` (§9.4, F12 on a call): no work today, or a weather day with its details. */
@@ -659,6 +678,8 @@ export const VOICE_API_ERRORS = [
   'report_closed',
   /** W3-09: `record_answer` for a question that is not the call's open question (409). */
   'question_closed',
+  /** W3-10: `apply_correction` before the call's first `update_draft` made its draft (409). */
+  'draft_required',
   /** W3-09: the worker could not run the turn (503; the agent's one retry runs it again). */
   'turn_failed',
   /** The first request with this `X-Request-Id` is still running (409). */
@@ -742,6 +763,8 @@ export type VoiceCallStartResponse = z.infer<typeof VoiceCallStartResponseSchema
 export type VoiceDraftState = z.infer<typeof VoiceDraftStateSchema>;
 export type VoiceTurnPending = z.infer<typeof VoiceTurnPendingSchema>;
 export type RecordAnswerResult = z.infer<typeof RecordAnswerResultSchema>;
+export type ApplyCorrectionResult = z.infer<typeof ApplyCorrectionResultSchema>;
+export type FileReportResponse = z.infer<typeof FileReportResponseSchema>;
 export type DialogLogEntry = z.infer<typeof DialogLogEntrySchema>;
 export type CallMetrics = z.infer<typeof CallMetricsSchema>;
 export type CallPeaks = z.infer<typeof CallPeaksSchema>;

@@ -45,7 +45,11 @@ export interface OrgContext {
   country: CountryRow;
   settings: Pick<
     OrgSettingsRow,
-    'default_deadline' | 'working_days' | 'default_shift_hours' | 'max_questions_per_report'
+    | 'default_deadline'
+    | 'working_days'
+    | 'default_shift_hours'
+    | 'max_questions_per_report'
+    | 'required_fields'
   > | null;
 }
 
@@ -199,6 +203,12 @@ export interface VoiceTurnSubmitResult extends VoiceTurnState {
   repeat: boolean;
 }
 
+/** voice_file_report() (W3-10). */
+export type VoiceFileReportResult =
+  | { status: 'filed' | 'not_confirmed'; reportNo: string }
+  | { status: 'queued'; reportNo: string; jobId: number }
+  | { status: 'draft_changed'; reportNo: string; draftRev: number | null; reportStatus: string };
+
 /** voice_call_end(): `ended` false on a repeat; the post_call_reconcile job of a known caller. */
 export interface VoiceCallEndResult {
   ended: boolean;
@@ -272,6 +282,17 @@ export interface VoiceStore {
   ): Promise<VoiceTurnSubmitResult>;
   /** A turn's status and answer, while field-api waits for the worker (W3-09). */
   getVoiceTurn(id: string): Promise<VoiceTurnState | null>;
+  /**
+   * voice_file_report() (20261016000350, W3-10, §19 Q119): `confirmed` is code's verdict on the
+   * reporter's words (`isCallConfirm`); the filing of the read-back's revision, queued once.
+   */
+  voiceFileReport(input: {
+    callId: string;
+    reportId: string;
+    draftRev: number;
+    utterance: string;
+    confirmed: boolean;
+  }): Promise<VoiceFileReportResult>;
   /** Frees a claimed key whose request failed, so a retry runs it again. */
   releaseToolRequest(callId: string, key: string): Promise<void>;
   /** The orgs' companies (names and aliases), for the agent and its speech hints. */
@@ -339,6 +360,9 @@ export const FIELD_DB_ERRORS = [
   'unknown_caller',
   'site_required',
   'report_closed',
+  // W3-10 (20261016000350_voice_filing.sql)
+  'draft_required',
+  'out_of_scope',
 ] as const;
 
 export interface ReportMediaCounts {

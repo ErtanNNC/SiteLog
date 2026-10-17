@@ -112,7 +112,7 @@
           "draftRev": 1,
           "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
           "question": null,
-          "readBack": "El clima detuvo el trabajo 3.5 horas. ¿Lo registro?"
+          "readBack": "El clima detuvo el trabajo 3.5 horas. Trabajos anotados: 6. Entregas anotadas: 1. Charla de seguridad. Sin incidentes. ¿Lo registro?"
         }
       }
     ],
@@ -169,7 +169,7 @@
       ]
     },
     {
-      "text": "No logré entenderlo, así que lo dejo para que la oficina lo revise. El clima detuvo el trabajo 3.5 horas. ¿Lo registro?"
+      "text": "No logré entenderlo, así que lo dejo para que la oficina lo revise. El clima detuvo el trabajo 3.5 horas. Trabajos anotados: 6. Entregas anotadas: 1. Charla de seguridad. Sin incidentes. ¿Lo registro?"
     }
   ]
 }

@@ -134,6 +134,25 @@
         "draft"
       ],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "pending"
+        },
+        "retryAfterMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15000
+        }
+      },
+      "required": [
+        "status",
+        "retryAfterMs"
+      ],
+      "additionalProperties": false
     }
   ]
 }

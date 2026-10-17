@@ -1,0 +1,193 @@
+{
+  "$comment": "W3-10 recorded call (W3-09's format, extended): `routes` also holds field-api's recorded answers to apply_correction and file_report, in order; `filing` lists every file_report request the call makes (the reporter's verbatim last words, the read-back's revision, and field-api's answer, §19 Q119), which field-api's Deno test replays through the confirm grammar and voice_file_report (`setDraftRev` moves the stored draft first, as a photo's re-extraction would); `corrections` are the words apply_correction sends. The worker's PGlite test (apps/worker/src/jobs/voice-filing.pglite.test.ts) checks the live pipeline answers what `routes` records (ids aside) and files once; the agent's pytest (tests/test_filing.py) replays the call on FakeFieldApi.",
+  "id": "northgate-file-en",
+  "locale": "en-US",
+  "extraction": "call-northgate-2026-10-09-en",
+  "start": {
+    "request": {
+      "room": "call-c0110000-0000-4000-8000-000000000011",
+      "transport": "web",
+      "callId": "c0110000-0000-4000-8000-000000000011"
+    },
+    "response": {
+      "callId": "c0110000-0000-4000-8000-000000000011",
+      "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
+      "reporter": {
+        "firstName": "Kevin",
+        "locale": "en-US"
+      }
+    }
+  },
+  "routes": {
+    "get_context": [
+      {
+        "call": {
+          "direction": "inbound",
+          "transport": "web",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Kevin",
+          "locale": "en-US"
+        },
+        "company": "Kestrel Build Group",
+        "reportLanguage": "en",
+        "sites": [
+          {
+            "id": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b",
+            "name": "Northgate Parking Structure",
+            "status": "reminded",
+            "deadline": "17:30"
+          }
+        ],
+        "siteId": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b",
+        "companies": [
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex", "the Apex guys"]
+          },
+          {
+            "name": "BrightLine Electric",
+            "aliases": ["BrightLine"]
+          },
+          {
+            "name": "Delta Mechanical",
+            "aliases": ["Delta", "los de Delta"]
+          },
+          {
+            "name": "Ironclad Steel",
+            "aliases": ["Ironclad"]
+          },
+          {
+            "name": "Kestrel self-perform",
+            "aliases": ["our guys", "our crew"]
+          }
+        ],
+        "keyterms": ["Apex Concrete", "BrightLine Electric", "Delta Mechanical", "Ironclad Steel"],
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
+        "recordingNoticeVersion": "voice.recording_notice.v1",
+        "consentTextVersion": "voice.consent.v1",
+        "maxQuestions": 3
+      }
+    ],
+    "update_draft": [
+      {
+        "reportId": "a0a90000-0000-4000-8000-000000000001",
+        "draftRev": 1,
+        "missing": [],
+        "question": null,
+        "readBack": "Here's what I've got: 14 on site from 2 companies, 100 hours. Done: Level 3 precast erection, last double tees set complete, Ramp B topping slab finishing, Ramp B form stripping. Toolbox talk. No incidents. Shall I file it?"
+      }
+    ],
+    "end_call": [
+      {
+        "ok": true
+      }
+    ],
+    "file_report": [
+      {
+        "status": "not_confirmed"
+      },
+      {
+        "status": "pending",
+        "retryAfterMs": 1000
+      },
+      {
+        "status": "filed",
+        "reportNo": "NG-0001",
+        "pdf": "pending"
+      }
+    ]
+  },
+  "reporterTurns": [
+    "Northgate, Friday. Dry all day, no weather problems. Apex had three guys on ramp B all day, finishing the topping slab. Eight of our crew full day on level three, precast erection, we set the last six double tees. And three of ours did a half day on ramp B, four hours, stripping forms. Toolbox talk on crane signals this morning, no incidents. That's it.",
+    "Sounds good, I guess.",
+    "Yes, file it."
+  ],
+  "answers": [],
+  "agentTurns": [
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Got it, one moment.",
+      "toolCalls": [
+        {
+          "name": "update_draft",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Here's what I've got: 14 on site from 2 companies, 100 hours. Done: Level 3 precast erection, last double tees set complete, Ramp B topping slab finishing, Ramp B form stripping. Toolbox talk. No incidents. Shall I file it?"
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "file_report",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Shall I file it? Say yes or no."
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "file_report",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Still working on it, one moment.",
+      "toolCalls": [
+        {
+          "name": "file_report",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "text": "Filed. I've sent you the PDF and a link to add photos. Have a good evening.",
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "filed"
+          }
+        }
+      ]
+    },
+    {}
+  ],
+  "filing": [
+    {
+      "utterance": "Sounds good, I guess.",
+      "draftRev": 1,
+      "answer": "not_confirmed"
+    },
+    {
+      "utterance": "Yes, file it.",
+      "draftRev": 1,
+      "answer": "pending"
+    },
+    {
+      "utterance": "Yes, file it.",
+      "draftRev": 1,
+      "answer": "filed"
+    }
+  ],
+  "corrections": []
+}

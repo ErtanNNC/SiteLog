@@ -1,12 +1,20 @@
+import { uiEn } from './copy/ui/en.ts';
+import { uiEs } from './copy/ui/es.ts';
+import { uiTr } from './copy/ui/tr.ts';
 import { renderVoice } from './copy/voice.ts';
-import type { ContactPref, RequiredFieldKey } from './enums.ts';
+import { REQUIRED_FIELD_KEYS, type ContactPref, type RequiredFieldKey } from './enums.ts';
 import type { AnswerConfirmation } from './field-contract.ts';
 import type { Language } from './locale.ts';
 import { computeTotals } from './report/hours.ts';
 import { readReportData } from './report/upgrade.ts';
-import type { QuestionSpec } from './report/validate.ts';
+import type { CorrectionChange, CorrectionSection } from './report/correction.ts';
+import { validateReport, type QuestionSpec } from './report/validate.ts';
 import type { DailyReportData, StoredReportData } from './schemas/report.ts';
-import { VOICE_CONSENT_TEXT_VERSION, VOICE_RECORDING_NOTICE_VERSION } from './voice.ts';
+import {
+  VOICE_CONSENT_TEXT_VERSION,
+  VOICE_RECORDING_NOTICE_VERSION,
+  type VoiceDraftState,
+} from './voice.ts';
 
 /**
  * Pure pieces of field-api's `/voice/tools/*` answers (W3-03; spec §9.4, Appendix B): the words a
@@ -155,21 +163,50 @@ export function voiceAnswerConfirmation(c: AnswerConfirmation, language: Languag
   }
 }
 
+/** §19 Q118: the read-back is cut at about 75 words (≤ 30 seconds spoken). */
+export const READ_BACK_MAX_WORDS = 75;
+
+/** A draft string the read-back speaks is at most this long (a longer line is left out). */
+const READ_BACK_ITEM_MAX = 120;
+
+const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length;
+
+/**
+ * A draft string inside a sentence ("Level 4 slab pour"): its first letter in lower case, unless
+ * the first word is an acronym or a name written in capitals ("CMU blockwork" stays).
+ */
+function lowerFirst(text: string, language: Language): string {
+  const [first = '', second = ''] = Array.from(text);
+  if (!first || second.toLocaleUpperCase(INTL_LOCALE[language]) === second) return text;
+  return first.toLocaleLowerCase(INTL_LOCALE[language]) + text.slice(first.length);
+}
+
 /**
  * The call's read-back (§19 Q118: code writes it, in the call language, numbers first): the crew
- * count, the companies and the total hours, then the hours weather stopped work, then "Shall I
- * file it?". Every number is `computeTotals`' (recomputed, never the stored totals). A crew line
- * without its headcount or hours leaves the crew sentence out rather than speak a partial total.
+ * count, the companies and the total hours, then the hours weather stopped work, then the draft's
+ * own work, delivery and safety lines, then "Shall I file it?". Every number is `computeTotals`'
+ * (recomputed, never the stored totals). A crew line without its headcount or hours leaves the
+ * crew sentence out rather than speak a partial total.
  *
- * W3-09 builds the numbers; W3-10 adds the draft's own work, delivery and safety lines, the
- * ~75-word cut and the golden texts (EN/ES/TR) on this function. Pure.
+ * - The numbers (crew, weather) and the question are always said; the work, deliveries and
+ *   safety follow while the whole stays within `READ_BACK_MAX_WORDS` (an item that does not fit
+ *   ends its list; a list with no item that fits is left out).
+ * - Work: "{area} {activity}", "complete" for finished work, "about N percent" for a percentage
+ *   the reporter said. Deliveries: "{quantity} of {item} from {supplier}" as said. Safety: the
+ *   toolbox talk, "no incidents" only when the reporter said so, else the incidents' count.
+ * - §19 Q161 (recommended default): the work and delivery lines are the draft's own words, in the
+ *   report language; when the call language differs (an ES call on an EN report) only their
+ *   counts are said, in the call language, until a translation step exists. Safety is code's own
+ *   copy, said in the call language either way.
+ *
+ * Pure.
  */
 export function readBack(data: DailyReportData, language: Language): string {
   const { totals } = computeTotals(data);
   const n = (x: number) => voiceNumber(x, language);
-  const parts: string[] = [];
+  const head: string[] = [];
   if (totals.crewOnSite > 0 && totals.headcountKnown && totals.hoursKnown) {
-    parts.push(
+    head.push(
       totals.companies === 1
         ? renderVoice('readback_crew_one_company', language, {
             workers: n(totals.crewOnSite),
@@ -183,7 +220,173 @@ export function readBack(data: DailyReportData, language: Language): string {
     );
   }
   if (totals.lostHours > 0)
-    parts.push(renderVoice('readback_weather', language, { hours: n(totals.lostHours) }));
-  parts.push(renderVoice('confirm_ask', language));
-  return parts.join(' ');
+    head.push(renderVoice('readback_weather', language, { hours: n(totals.lostHours) }));
+  const ask = renderVoice('confirm_ask', language);
+  let budget = READ_BACK_MAX_WORDS - wordCount(ask) - head.reduce((s, p) => s + wordCount(p), 0);
+  const body: string[] = [];
+  const add = (sentence: string | null): void => {
+    if (!sentence) return;
+    const w = wordCount(sentence);
+    if (w > budget) return;
+    body.push(sentence);
+    budget -= w;
+  };
+  /** As many items as fit, in order, in the list's sentence; null when none fits. */
+  const list = (
+    key: 'readback_work' | 'readback_deliveries',
+    items: readonly string[],
+  ): string | null => {
+    const kept: string[] = [];
+    let best: string | null = null;
+    for (const item of items) {
+      if (item.length > READ_BACK_ITEM_MAX) break;
+      const candidate = renderVoice(key, language, { items: [...kept, item].join(', ') });
+      if (wordCount(candidate) > budget) break;
+      kept.push(item);
+      best = candidate;
+    }
+    return best;
+  };
+  const sameLanguage = data.reportLanguage === language;
+
+  const work = data.workPerformed.map((w) => {
+    const area = w.area.trim();
+    const activity = w.activity.trim();
+    const item = area ? `${area} ${lowerFirst(activity, language)}` : activity;
+    if (w.percentComplete !== undefined && w.status !== 'complete')
+      return renderVoice('readback_work_percent', language, {
+        item,
+        percent: n(w.percentComplete),
+      });
+    if (w.status === 'complete') return renderVoice('readback_work_complete', language, { item });
+    return item;
+  });
+  if (work.length > 0)
+    add(
+      sameLanguage
+        ? list('readback_work', work)
+        : renderVoice('readback_work_count', language, { count: n(work.length) }),
+    );
+
+  const deliveries = data.deliveries.map((d) => {
+    const quantity = d.quantity?.trim();
+    const supplier = d.supplier?.trim();
+    const item = quantity
+      ? renderVoice('readback_delivery_quantity', language, {
+          quantity,
+          item: lowerFirst(d.item.trim(), language),
+        })
+      : d.item.trim();
+    return supplier ? renderVoice('readback_delivery_from', language, { item, supplier }) : item;
+  });
+  if (deliveries.length > 0)
+    add(
+      sameLanguage
+        ? list('readback_deliveries', deliveries)
+        : renderVoice('readback_deliveries_count', language, { count: n(deliveries.length) }),
+    );
+
+  const safety: string[] = [];
+  if (data.safety.toolboxTalk?.trim()) safety.push(renderVoice('readback_toolbox', language));
+  const incidents = data.safety.incidents.length;
+  if (incidents === 1) safety.push(renderVoice('readback_incident_one', language));
+  else if (incidents > 1)
+    safety.push(renderVoice('readback_incidents', language, { count: n(incidents) }));
+  else if (data.safety.noIncidentsStated)
+    safety.push(renderVoice('readback_no_incidents', language));
+  if (safety.length > 0) add(safety.join(' '));
+
+  return [...head, ...body, ask].join(' ');
+}
+
+/**
+ * F8 on a call (§9.4 rule 5: "read back only the changed part and ask again"): the changed lines
+ * of a correction as the agent says them, in the call language, from code's numbers (the
+ * preview's `CorrectionChange`, new values only): a crew as F7's confirmation ("Apex Concrete: 7
+ * workers, 8 hours each — 56 hours."), a crew taken off, the weather's lost hours, or another
+ * section by its name ("Changed: Delivered."). Pure.
+ */
+export function voiceCorrectionLines(
+  changes: readonly CorrectionChange[],
+  language: Language,
+): string[] {
+  const n = (x: number) => voiceNumber(x, language);
+  return changes.map((c) => {
+    switch (c.kind) {
+      case 'crew': {
+        if (c.change === 'removed')
+          return renderVoice('correction_crew_removed', language, { company: c.company });
+        const [, workers] = c.workers;
+        const [, each] = c.hoursPerWorker;
+        const [, total] = c.totalHours;
+        if (workers !== null && each !== null && total !== null)
+          return renderVoice('answer_crew', language, {
+            company: c.company,
+            workers: n(workers),
+            hours_each: n(each),
+            hours: n(total),
+          });
+        if (workers !== null)
+          return renderVoice('answer_crew_workers', language, {
+            company: c.company,
+            workers: n(workers),
+          });
+        return renderVoice('readback_change', language, { change: c.company });
+      }
+      case 'lost_hours': {
+        const lost = c.lostHours[1] ?? 0;
+        return lost > 0
+          ? renderVoice('answer_weather', language, { hours: n(lost) })
+          : renderVoice('answer_no_stoppage', language);
+      }
+      case 'section':
+        return renderVoice('readback_change', language, {
+          change: SECTION_NAMES[language][c.section],
+        });
+    }
+  });
+}
+
+/** The draft's section names as the field app's fix preview says them (EN/ES/TR UI copy). */
+const SECTION_NAMES: Readonly<Record<Language, Readonly<Record<CorrectionSection, string>>>> = {
+  en: uiEn.field.draft.fix.sections,
+  es: uiEs.field.draft.fix.sections,
+  tr: uiTr.field.draft.fix.sections,
+};
+
+/**
+ * A call's draft state (`VoiceDraftStateSchema`) built by code from what is stored: what
+ * field-api answers when `file_report` names a revision the draft has left (`draft_changed`,
+ * §19 Q119), so the agent reads back the draft as it is now. The call's open question when there
+ * is one (spoken as `spokenQuestion` words it), else the read-back of a draft awaiting
+ * confirmation; `missing` is code's validation with the org's required fields, the photo left out
+ * (never asked on a call), as the worker's `voice_turn` answers it. Pure.
+ */
+export function voiceDraftStateOf(input: {
+  reportId: string;
+  draftRev: number;
+  data: DailyReportData;
+  /** `org_settings.required_fields` (unknown keys are ignored). */
+  requiredFields: readonly string[];
+  /** The open question this call asked, if any. */
+  question: { id: string; prompt: string; options: Array<{ id: string; label: string }> } | null;
+  /** Whether the report awaits confirmation (a read-back is due). */
+  awaitingConfirmation: boolean;
+  language: Language;
+}): VoiceDraftState {
+  const known = new Set<string>(REQUIRED_FIELD_KEYS);
+  const required = callRequiredFields(
+    input.requiredFields.filter((f): f is RequiredFieldKey => known.has(f)),
+  );
+  const missing = validateReport(input.data, { requiredFields: required })
+    .missingRequired.slice(0, 20)
+    .map((m) => m.slice(0, 100));
+  return {
+    reportId: input.reportId,
+    draftRev: input.draftRev,
+    missing,
+    question: input.question ? { id: input.question.id, ...spokenQuestion(input.question) } : null,
+    readBack:
+      !input.question && input.awaitingConfirmation ? readBack(input.data, input.language) : null,
+  };
 }

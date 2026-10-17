@@ -123,6 +123,7 @@
     "site_required",
     "report_closed",
     "question_closed",
+    "draft_required",
     "turn_failed",
     "request_in_progress",
     "request_conflict",

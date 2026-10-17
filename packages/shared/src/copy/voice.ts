@@ -88,6 +88,24 @@ export const VOICE_KEYS = [
   'answer_noted',
   'answer_again',
   'answer_skipped',
+  // W3-10: the read-back's own lines (§19 Q118: the draft's work, deliveries and safety after the
+  // numbers; Q161: counts only when the call language is not the report's) and the change read
+  // back after a correction on the call (F8 call).
+  'readback_work',
+  'readback_work_complete',
+  'readback_work_percent',
+  'readback_work_count',
+  'readback_deliveries',
+  'readback_delivery_quantity',
+  'readback_delivery_from',
+  'readback_deliveries_count',
+  'readback_toolbox',
+  'readback_no_incidents',
+  'readback_incident_one',
+  'readback_incidents',
+  'correction_crew_removed',
+  'correction_unclear',
+  'correction_nothing',
 ] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 

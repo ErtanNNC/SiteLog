@@ -730,7 +730,7 @@ export type VoiceToolRequestRow = {
 };
 
 /** W3-09: the live tools that run in the worker as a turn (`voice_turns.kind`). */
-export type VoiceTurnKindDb = 'update_draft' | 'record_answer';
+export type VoiceTurnKindDb = 'update_draft' | 'record_answer' | 'apply_correction';
 export type VoiceTurnStatus = 'pending' | 'done' | 'failed';
 
 /**
@@ -744,7 +744,7 @@ export type VoiceTurnRow = {
   report_id: string;
   kind: VoiceTurnKindDb;
   turn_key: string;
-  /** The tool's words: `{segments}` or `{questionId, utterance, start, end?}`. */
+  /** The tool's words: `{segments}`, `{questionId, utterance, start, end?}` or (W3-10) `{utterance, start, end?}`. */
   input: Json;
   status: VoiceTurnStatus;
   /** The tool's answer (`VoiceDraftState`, `RecordAnswerResult`) once done. */
@@ -1562,6 +1562,18 @@ export type Database = {
       // (the report and its call source, the live transcript, the worker job).
       voice_turn_submit: {
         Args: { p_call_id: string; p_kind: string; p_key: string; p_input: Json };
+        Returns: Json;
+      };
+      // W3-10 (20261016000350_voice_filing.sql), service role only: file_report on a call (the
+      // spoken yes, decided in code, and the read-back's revision; one filing job per revision).
+      voice_file_report: {
+        Args: {
+          p_call_id: string;
+          p_report_id: string;
+          p_draft_rev: number;
+          p_utterance: string;
+          p_confirmed: boolean;
+        };
         Returns: Json;
       };
       // Settings (F15, 20261016000010_field_settings.sql), service role only: consent/revoke sets

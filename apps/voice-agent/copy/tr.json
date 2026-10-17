@@ -53,6 +53,21 @@
     "answer_company_mapped": "Not aldım: {company}.",
     "answer_noted": "Not aldım.",
     "answer_again": "Kusura bakmayın, anlayamadım.",
-    "answer_skipped": "Bunu anlayamadım, ofisin kontrol etmesi için bırakıyorum."
+    "answer_skipped": "Bunu anlayamadım, ofisin kontrol etmesi için bırakıyorum.",
+    "readback_work": "Yapılanlar: {items}.",
+    "readback_work_complete": "{item} tamamlandı",
+    "readback_work_percent": "{item} yaklaşık yüzde {percent}",
+    "readback_work_count": "Not edilen iş: {count}.",
+    "readback_deliveries": "Teslimatlar: {items}.",
+    "readback_delivery_quantity": "{quantity} {item}",
+    "readback_delivery_from": "{supplier} firmasından {item}",
+    "readback_deliveries_count": "Not edilen teslimat: {count}.",
+    "readback_toolbox": "İş güvenliği konuşması yapıldı.",
+    "readback_no_incidents": "Kaza ya da olay yok.",
+    "readback_incident_one": "Bir olay bildirildi.",
+    "readback_incidents": "{count} olay bildirildi.",
+    "correction_crew_removed": "{company} rapordan çıkarıldı.",
+    "correction_unclear": "Özür dilerim, bu değişikliği yapamadım. Neyi değiştireyim?",
+    "correction_nothing": "Raporda zaten böyle."
   }
 }

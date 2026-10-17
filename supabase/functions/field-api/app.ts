@@ -2022,6 +2022,9 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   unknown_caller: [403, 'unknown_caller'],
   site_required: [409, 'site_required'],
   report_closed: [409, 'report_closed'],
+  // W3-10: corrections and filing on a call (20261016000350_voice_filing.sql).
+  draft_required: [409, 'draft_required'],
+  out_of_scope: [403, 'out_of_scope'],
 };
 
 function errorResponse(c: Context, err: unknown, now: Date): Response {

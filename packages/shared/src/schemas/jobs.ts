@@ -265,14 +265,15 @@ export const JobPayloadSchemas = {
 /**
  * The report a `notify` job's message is about (W2-15: `messages.payload.report_id`, the report's
  * per-channel messaging cost): its web report guard's, else the report named by its dedupe key
- * (`jobKeys.filed`, `draftReady`, `draftNudge`, `editApplied`, and their `:after:` fallbacks).
+ * (`jobKeys.filed`, `photosLink`, `draftReady`, `draftNudge`, `editApplied`, and their `:after:`
+ * fallbacks).
  */
 export function notifyReportId(
   payload: Pick<JobPayloads['notify'], 'dedupeKey' | 'reportGuard'>,
 ): string | null {
   if (payload.reportGuard) return payload.reportGuard.reportId;
   const m =
-    /^notify:(?:filed|draft_ready|draft_nudge|edit_applied):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::|$)/i.exec(
+    /^notify:(?:filed|photos_link|draft_ready|draft_nudge|edit_applied):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::|$)/i.exec(
       payload.dedupeKey,
     );
   return m ? m[1]!.toLowerCase() : null;
@@ -406,6 +407,12 @@ export const jobKeys = {
    * Notifier's. A report is filed once, so a retried or repeated filing never texts twice.
    */
   filed: (reportId: string) => `notify:filed:${reportId}`,
+  /**
+   * W3-10 (F9 step 1, §13): the `photos_link` text after a report filed on a call, with its
+   * `photos` link: the `notify` job's key and the Notifier's. A report is filed once, so a retried
+   * or repeated filing never texts it twice.
+   */
+  photosLink: (reportId: string) => `notify:photos_link:${reportId}`,
   /**
    * The `notify` job that carries a message to its next channel after a late `failed` /
    * `undeliverable` status callback on one attempt (W2-01, spec §19 Q22): per logical message and

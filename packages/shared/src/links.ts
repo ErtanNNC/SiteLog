@@ -213,9 +213,77 @@ export async function ensureDailyLink(
   input: { reporterId: string; siteId: string; reportDate: string; expiresAt: string; now: Date },
   newId: () => string,
 ): Promise<{ id: string; code: string; created: boolean; expiresAt: string }> {
-  const live = (
-    await store.listDailyLinks(input.reporterId, input.siteId, input.reportDate)
-  ).filter((l) => l.expires_at === null || Date.parse(l.expires_at) > input.now.getTime());
+  return ensureDatedLink(
+    'daily',
+    {
+      list: (r, s, d) => store.listDailyLinks(r, s, d),
+      insert: (row) => store.insertDailyLink(row),
+    },
+    secret,
+    input,
+    newId,
+  );
+}
+
+/** What `ensurePhotosLink` reads and writes (the worker, after a call-filed report). */
+export interface PhotosLinkStore {
+  /** The reporter's photos links for that site and report date that are not revoked, newest first. */
+  listPhotosLinks(reporterId: string, siteId: string, reportDate: string): Promise<DailyLinkRow[]>;
+  /** Inserts a `kind 'photos'` row; false when its code_hash is taken (unique), nothing written. */
+  insertPhotosLink(row: {
+    id: string;
+    code_hash: string;
+    reporter_id: string;
+    site_id: string;
+    report_date: string;
+    expires_at: string;
+  }): Promise<boolean>;
+}
+
+/**
+ * W3-10 (F9 step 1): the reporter's photos link for a call-filed report's site and date
+ * (`field_links` kind `photos`, until 23:59 the day after, `photosLinkExpiresAt`), and its code:
+ * the newest live one whose code can be derived again (`deriveLinkCode`), else a new row. So a
+ * retried filing texts the same link.
+ */
+export async function ensurePhotosLink(
+  store: PhotosLinkStore,
+  secret: string,
+  input: { reporterId: string; siteId: string; reportDate: string; expiresAt: string; now: Date },
+  newId: () => string,
+): Promise<{ id: string; code: string; created: boolean; expiresAt: string }> {
+  return ensureDatedLink(
+    'photos',
+    {
+      list: (r, s, d) => store.listPhotosLinks(r, s, d),
+      insert: (row) => store.insertPhotosLink(row),
+    },
+    secret,
+    input,
+    newId,
+  );
+}
+
+async function ensureDatedLink(
+  kind: 'daily' | 'photos',
+  store: {
+    list(reporterId: string, siteId: string, reportDate: string): Promise<DailyLinkRow[]>;
+    insert(row: {
+      id: string;
+      code_hash: string;
+      reporter_id: string;
+      site_id: string;
+      report_date: string;
+      expires_at: string;
+    }): Promise<boolean>;
+  },
+  secret: string,
+  input: { reporterId: string; siteId: string; reportDate: string; expiresAt: string; now: Date },
+  newId: () => string,
+): Promise<{ id: string; code: string; created: boolean; expiresAt: string }> {
+  const live = (await store.list(input.reporterId, input.siteId, input.reportDate)).filter(
+    (l) => l.expires_at === null || Date.parse(l.expires_at) > input.now.getTime(),
+  );
   for (const link of live) {
     const code = await deriveLinkCode(secret, link.id);
     if (linkCodeHash(code) === link.code_hash)
@@ -224,7 +292,7 @@ export async function ensureDailyLink(
   for (let attempt = 0; attempt < 3; attempt++) {
     const id = newId();
     const code = await deriveLinkCode(secret, id);
-    const inserted = await store.insertDailyLink({
+    const inserted = await store.insert({
       id,
       code_hash: linkCodeHash(code),
       reporter_id: input.reporterId,
@@ -234,7 +302,7 @@ export async function ensureDailyLink(
     });
     if (inserted) return { id, code, created: true, expiresAt: input.expiresAt };
   }
-  throw new Error(`Could not issue a daily link for reporter ${input.reporterId}`);
+  throw new Error(`Could not issue a ${kind} link for reporter ${input.reporterId}`);
 }
 
 // ───────────────────────────── SHA-256 (FIPS 180-4) ─────────────────────────────

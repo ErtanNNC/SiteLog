@@ -927,6 +927,15 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     insertDailyLink() {
       return Promise.reject(new Error('fake db: insertDailyLink runs on PGlite only'));
     },
+    listPhotosLinks() {
+      return Promise.reject(new Error('fake db: listPhotosLinks runs on PGlite only'));
+    },
+    insertPhotosLink() {
+      return Promise.reject(new Error('fake db: insertPhotosLink runs on PGlite only'));
+    },
+    applyCallCorrection() {
+      return Promise.reject(new Error('fake db: applyCallCorrection runs on PGlite only'));
+    },
     settleCorrection() {
       return Promise.reject(new Error('fake db: settleCorrection runs on PGlite only'));
     },

@@ -1,5 +1,8 @@
 import {
+  ensurePhotosLink,
+  fieldLinkUrl,
   fieldReportLinkUrl,
+  photosLinkExpiresAt,
   jobKeys,
   noticeData,
   type DailyReportDataV1,
@@ -8,6 +11,7 @@ import {
   type ReportVersionRow,
   type SiteDayStatus,
 } from '@sitelog/shared';
+import { randomUUID } from 'node:crypto';
 import type { Ctx } from '../context';
 import { recordReportCostSafely } from '../cost';
 import type { SiteContext } from '../db';
@@ -324,5 +328,60 @@ export async function ensurePostFiling(
       dedupeKey: jobKeys.filed(report.id),
     },
     { dedupeKey: jobKeys.filed(report.id) },
+  );
+  // W3-10 (F9 step 1, §13): after a report filed on a call, the photos link (`kind 'photos'`,
+  // until 23:59 the day after, site time) in its own `photos_link` text, after `filed`.
+  if (report.confirmed_via === 'voice') await enqueuePhotosLink(ctx, report, site);
+}
+
+/**
+ * The `photos_link` text of a call-filed report (F9): the reporter's photos link for the report's
+ * site and date (`ensurePhotosLink`: a retried filing derives the same link) through the Notifier,
+ * which checks the consents; one per report (`notify:photos_link:{report}`).
+ */
+async function enqueuePhotosLink(ctx: Ctx, report: ReportRow, site: SiteContext): Promise<void> {
+  if (!report.reporter_id) return;
+  if (!ctx.config.LINK_SIGNING_SECRET) throw new Error('LINK_SIGNING_SECRET is not set');
+  if (!ctx.config.FIELD_APP_URL) throw new Error('FIELD_APP_URL is not set');
+  const day = await ctx.db.getSiteDay(report.site_day_id);
+  if (!day) throw new Error(`site_day ${report.site_day_id} not found`);
+  const link = await ensurePhotosLink(
+    {
+      listPhotosLinks: (r, s, d) => ctx.db.listPhotosLinks(r, s, d),
+      insertPhotosLink: (row) => ctx.db.insertPhotosLink(row),
+    },
+    ctx.config.LINK_SIGNING_SECRET,
+    {
+      reporterId: report.reporter_id,
+      siteId: report.site_id,
+      reportDate: day.date,
+      expiresAt: photosLinkExpiresAt(day.date, site.site.timezone),
+      now: ctx.now(),
+    },
+    randomUUID,
+  );
+  if (link.created)
+    await ctx.db.logAudit({
+      org_id: report.org_id,
+      actor_type: 'system',
+      action: 'field_link.created',
+      entity: 'reporter',
+      entity_id: report.reporter_id,
+      diff: {
+        kind: 'photos',
+        site_id: report.site_id,
+        report_date: day.date,
+        report_id: report.id,
+      },
+    });
+  await ctx.db.enqueueJob(
+    'notify',
+    {
+      reporterId: report.reporter_id,
+      key: 'photos_link',
+      vars: { link: fieldLinkUrl(ctx.config.FIELD_APP_URL, link.code) },
+      dedupeKey: jobKeys.photosLink(report.id),
+    },
+    { dedupeKey: jobKeys.photosLink(report.id) },
   );
 }

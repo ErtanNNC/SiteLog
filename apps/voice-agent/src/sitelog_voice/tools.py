@@ -26,6 +26,7 @@ from livekit.agents import function_tool
 from livekit.agents.llm import FunctionTool
 
 from .contract import ContractError, DraftState, TurnPending, is_pending
+from .copy import default_copy
 from .field_api import FieldApiError
 from .redact import redact_phones
 from .session import CallState
@@ -68,6 +69,7 @@ async def _guard(name: str, call: Callable[[], Awaitable[ToolResult]]) -> ToolRe
 def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionTool]:
     """The tools of one call, bound to its state. `now()` is seconds since the call connected."""
     api, auth = state.api, state.auth
+    copy = default_copy()
 
     @function_tool
     async def get_context() -> ToolResult:
@@ -154,7 +156,8 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
     @function_tool
     async def apply_correction() -> ToolResult:
         """Apply the change the reporter just asked for (to today's draft, or to the report
-        load_report found). Returns a read-back of the change only."""
+        load_report found). Say the `readBack` it returns (the change only, then "Shall I file
+        it?"); `not_understood`: say its line. `pending`: say a short line, call it again."""
         last = state.last_utterance
         if last is None:
             return {"status": "nothing_heard"}
@@ -164,9 +167,17 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
             if state.loaded_report_id:
                 fields["reportId"] = state.loaded_report_id
             data = await api.tool("apply_correction", auth, **fields)
-            draft = DraftState.model_validate(data["draft"])
-            state.draft = draft
-            state.read_back_rev = draft.draft_rev
+            if is_pending(data):
+                # W3-10: a worker turn like update_draft; the same words again are the same turn.
+                return {"status": "pending"}
+            if data.get("draft") is not None:
+                draft = DraftState.model_validate(data["draft"])
+                state.draft = draft
+                # §9.4 rule 5: the change alone is read back, then "Shall I file it?"; the yes
+                # after it names this revision.
+                state.read_back_rev = (
+                    draft.draft_rev if data.get("readBack") or draft.read_back else None
+                )
             return {
                 "status": data["status"],
                 "lines": data.get("lines", []),
@@ -178,7 +189,8 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
     @function_tool
     async def file_report() -> ToolResult:
         """File the report. Call it only right after the reporter said yes to "Shall I file it?".
-        The reporter's own words decide; if they were not a clear yes, ask again."""
+        The reporter's own words decide (code checks them): say the `say` line it returns;
+        `draft_changed`: read back the new `readBack`; `pending`: a short line, then call again."""
         last = state.last_utterance
         if state.draft is None or state.read_back_rev is None or last is None:
             return {"status": "read_back_first"}
@@ -192,10 +204,24 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                 draftRev=state.read_back_rev,
                 utterance=last.text,
             )
-            if data["status"] == "draft_changed":
-                state.draft = DraftState.model_validate(data["draft"])
-                state.read_back_rev = None
-            return {k: v for k, v in data.items() if k != "draft"}
+            status = data["status"]
+            if status == "draft_changed":
+                # The draft moved since the read-back: read the new one back, then ask again.
+                changed = DraftState.model_validate(data["draft"])
+                state.draft = changed
+                state.read_back_rev = changed.draft_rev if changed.read_back else None
+                return {"status": status, **_draft_view(changed)}
+            if status == "not_confirmed":
+                # §19 Q119: not a clear yes; code's line, never the model's guess.
+                return {"status": status, "say": copy.line("confirm_repeat", state.language)}
+            if status == "filed":
+                # F6 step 7: the goodbye says the PDF and the photos link were sent.
+                return {
+                    "status": status,
+                    "reportNo": data["reportNo"],
+                    "say": copy.line("goodbye_filed", state.language),
+                }
+            return {"status": status}  # pending: say a short line, call file_report again
 
         result = await _guard("file_report", run)
         if result.get("status") == "filed":

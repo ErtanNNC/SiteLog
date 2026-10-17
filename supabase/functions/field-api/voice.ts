@@ -1,7 +1,14 @@
 import type { Context, Hono } from 'hono';
 import type { z } from 'zod';
 import {
+  ApplyCorrectionRequestSchema,
+  ApplyCorrectionResultSchema,
   EndCallRequestSchema,
+  FileReportRequestSchema,
+  isCallConfirm,
+  voiceDraftStateOf,
+  readReportData,
+  type FileReportResponse,
   GetContextRequestSchema,
   LoadReportRequestSchema,
   PickSiteRequestSchema,
@@ -71,8 +78,9 @@ import type { FieldStore, OrgContext, VoiceTurnState } from './store.ts';
  * submits a turn (voice_turn_submit(): the report, its call source and live transcript, a
  * priority `voice_turn` job) and waits for its answer up to VOICE_TOOL_WAIT_MS; past the wait it
  * answers 202 `pending` and the agent, after a short line, asks again with the same words, which
- * are the same turn. The other model-backed tools (`apply_correction`, `file_report`,
- * `set_day_status`, `schedule_callback`) are W3-10 … W3-14's and are not served yet (404).
+ * are the same turn. W3-10 adds `apply_correction` (a worker turn too) and `file_report` (code's
+ * confirm grammar, the read-back's revision, one filing job per revision, then the wait for the
+ * filing). `set_day_status` and `schedule_callback` are W3-14's and are not served yet (404).
  */
 
 export interface VoiceDeps {
@@ -288,7 +296,12 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
           throw new FieldError(503, 'turn_failed', 'The turn could not run; ask again');
       }
     }
-    const schema = kind === 'update_draft' ? VoiceDraftStateSchema : RecordAnswerResultSchema;
+    const schema =
+      kind === 'update_draft'
+        ? VoiceDraftStateSchema
+        : kind === 'record_answer'
+          ? RecordAnswerResultSchema
+          : ApplyCorrectionResultSchema;
     const answer = schema.safeParse(state.result);
     if (!answer.success) {
       // A worker answer outside the contract is the worker's fault; never handed to the agent.
@@ -324,6 +337,135 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
       waitForFirst: true,
     });
   });
+
+  // ── POST /voice/tools/apply_correction (F8 on a call; W3-10) ─────────────────────────────────
+  app.post('/voice/tools/apply_correction', async (c) => {
+    const body = await parseVoiceBody(c, ApplyCorrectionRequestSchema);
+    const call = await authorizedCall(c, body.callId);
+    // F10 on a call (a filed report `load_report` found) is W3-14's.
+    if (body.reportId !== undefined && body.reportId !== call.report_id) {
+      throw new FieldError(400, 'not_available', 'Changing another report comes with W3-14');
+    }
+    const input = {
+      utterance: body.utterance,
+      start: body.start,
+      ...(body.end !== undefined ? { end: body.end } : {}),
+    };
+    return once(
+      c,
+      call,
+      'apply_correction',
+      () => liveTurn(call, 'apply_correction', input as Json),
+      { waitForFirst: true },
+    );
+  });
+
+  // ── POST /voice/tools/file_report (F8 on a call; W3-10, §19 Q119, Q151) ─────────────────────
+  app.post('/voice/tools/file_report', async (c) => {
+    const body = await parseVoiceBody(c, FileReportRequestSchema);
+    const call = await authorizedCall(c, body.callId);
+    return once(c, call, 'file_report', () => fileOnCall(call, body), { waitForFirst: true });
+  });
+
+  /**
+   * §19 Q119: code files only when the reporter's verbatim last words are a §9.5 confirm
+   * (`isCallConfirm`: the whole utterance, no model) and the draft is still the revision that was
+   * read back. voice_file_report() queues one filing job of that revision (a retry, or the agent
+   * asking again, finds it); field-api then waits for the worker to file (≤ VOICE_TOOL_WAIT_MS)
+   * and answers `filed`, or 202 `pending`: the agent asks again with the same words, which waits
+   * for the same filing, and once filed every request answers `filed` (§19 Q151). The `filed`
+   * text and, after a call, the `photos_link` text go through the Notifier from the filing.
+   */
+  async function fileOnCall(
+    call: CallRow,
+    body: z.infer<typeof FileReportRequestSchema>,
+  ): Promise<{ status: 200 | 202; body: FileReportResponse }> {
+    const scope = await callScope(call);
+    const held = consentState(await store.listConsents(scope.reporter.id)).held;
+    if (!REQUIRED_CONSENTS.every((t) => held.has(t))) {
+      throw new FieldError(403, 'consent_required');
+    }
+    const res = await store.voiceFileReport({
+      callId: call.id,
+      reportId: body.reportId,
+      draftRev: body.draftRev,
+      utterance: body.utterance,
+      confirmed: isCallConfirm(body.utterance),
+    });
+    const filed = (reportNo: string) => ({
+      status: 200 as const,
+      body: { status: 'filed' as const, reportNo, pdf: 'pending' as const },
+    });
+    switch (res.status) {
+      case 'filed':
+        return filed(res.reportNo);
+      case 'not_confirmed':
+        return { status: 200, body: { status: 'not_confirmed' } };
+      case 'draft_changed':
+        return {
+          status: 200,
+          body: { status: 'draft_changed', draft: await draftNow(scope, body.reportId) },
+        };
+      case 'queued': {
+        const polls = Math.ceil(deps.toolWaitMs() / VOICE_TURN_POLL_MS);
+        for (let i = 0; i < polls; i++) {
+          await deps.sleep(VOICE_TURN_POLL_MS);
+          const report = await store.getReport(body.reportId);
+          if (!report) break;
+          if (report.status === 'filed' || report.status === 'signed_off')
+            return filed(report.report_no);
+          if (report.status !== 'awaiting_confirmation') break;
+        }
+        // Not filed within the wait: still queued or running (the agent asks again), or the
+        // filing went stale (the draft moved under it): read the new draft back.
+        const report = await store.getReport(body.reportId);
+        const version = report
+          ? await store.getVersion(report.id, report.current_version || 1)
+          : null;
+        if (
+          report &&
+          (report.status !== 'awaiting_confirmation' || (version?.draft_rev ?? 1) !== body.draftRev)
+        ) {
+          return {
+            status: 200,
+            body: { status: 'draft_changed', draft: await draftNow(scope, body.reportId) },
+          };
+        }
+        return { status: 202, body: PENDING };
+      }
+    }
+  }
+
+  /** The call's draft as stored now, worded as the worker's turns word it (`draft_changed`). */
+  async function draftNow(scope: CallScope, reportId: string) {
+    const report = await store.getReport(reportId);
+    if (!report) throw new FieldError(409, 'report_closed');
+    const version = await store.getVersion(report.id, report.current_version || 1);
+    if (!version?.data)
+      throw new FieldError(503, 'turn_failed', 'The draft is not ready; ask again');
+    const open = await store.getOpenQuestion(report.id);
+    const question =
+      open && open.call_id === scope.call.id
+        ? {
+            id: open.id,
+            prompt: open.prompt,
+            options: (Array.isArray(open.options) ? open.options : []).flatMap((o, i) =>
+              o && typeof o === 'object' && !Array.isArray(o) && typeof o.label === 'string'
+                ? [{ id: typeof o.id === 'string' ? o.id : `o${i + 1}`, label: o.label }]
+                : [],
+            ),
+          }
+        : null;
+    return voiceDraftStateOf({
+      reportId: report.id,
+      draftRev: version.draft_rev ?? 1,
+      data: readReportData(version.data as unknown as StoredReportData),
+      requiredFields: scope.org.settings?.required_fields ?? [],
+      question,
+      awaitingConfirmation: report.status === 'awaiting_confirmation',
+      language: scope.language,
+    });
+  }
 
   /** The call's reporter, org and sites; an unknown caller's call has none (F13: 403). */
   async function callScope(call: CallRow): Promise<CallScope> {

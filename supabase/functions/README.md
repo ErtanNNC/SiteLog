@@ -356,6 +356,14 @@ Notes:
   consents), 409 `site_required` (F14 first), `report_closed`, `question_closed`; a turn the worker
   failed 503 `turn_failed` (the agent's retry runs it again). A retry whose first copy still runs
   waits for its answer instead of 409 (§19 Q151).
+  W3-10: `apply_correction` is a third live turn (the change applied to the call's draft at once,
+  its read-back alone answered; 409 `draft_required` before the call's first draft, 400
+  `not_available` for another report until W3-14). `file_report` files only when `isCallConfirm`
+  reads the verbatim words as a whole §9.5 confirm and the revision is the one read back
+  (`voice_file_report()`, 20261016000350: one `file_report` job per revision, `via 'voice'`,
+  audited with the words); otherwise `not_confirmed` or `draft_changed` with the draft read back
+  again. The route waits for the worker's filing (`VOICE_TOOL_WAIT_MS`): `filed`, or 202
+  `pending`; asked again it finds the same filing, and after it every request answers `filed`.
 - **field-api** (W1-07). `resolve` takes the link code in its body, every other route in the
   `X-Link-Code` header; a new device gets the reporter's cookie `sl_dev_<8 hex>` (one per
   reporter; httpOnly, Secure, SameSite=Lax, Path=/, 180 days) from `device/send-code`, and

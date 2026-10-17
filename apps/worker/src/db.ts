@@ -2,6 +2,9 @@ import postgres, { type Sql, type TransactionSql } from 'postgres';
 import type {
   CallRow,
   CompanyRow,
+  CorrectionChange,
+  DailyReportData,
+  Source,
   ConsentRow,
   PushSubscriptionRow,
   VoiceTurnRow,
@@ -665,6 +668,26 @@ export interface Db {
   listAppliedCorrections(
     reportId: string,
   ): Promise<Array<Pick<DraftCorrectionRow, 'id' | 'via' | 'changes' | 'source' | 'applied_at'>>>;
+  /**
+   * W3-10 (F8 on a call): a change said on the call, applied at once. In one transaction under
+   * the site-day and report locks: the report still open and not being filed, its draft still at
+   * `baseVersion` / `baseRev`, then the draft written (a new revision) and the fix recorded as
+   * applied (`draft_corrections`, via `voice`, its words; re-applied after a later re-extraction,
+   * Q96). False when the draft moved (nothing written).
+   */
+  applyCallCorrection(input: {
+    reportId: string;
+    reporterId: string;
+    orgId: string;
+    baseVersion: number;
+    baseRev: number;
+    data: DailyReportData;
+    text: string;
+    changes: CorrectionChange[];
+    operations: unknown[];
+    source: Source;
+    changeNote: string | null;
+  }): Promise<{ applied: boolean; correctionId: string | null; draftRev: number | null }>;
 
   // SMS report keywords (W2-12)
   /**
@@ -692,6 +715,21 @@ export interface Db {
   ): Promise<Array<{ id: string; code_hash: string; expires_at: string | null }>>;
   /** false when the code hash is taken (unique); nothing written then. */
   insertDailyLink(row: {
+    id: string;
+    code_hash: string;
+    reporter_id: string;
+    site_id: string;
+    report_date: string;
+    expires_at: string;
+  }): Promise<boolean>;
+  /** W3-10 (F9): the reporter's photos links for a site and report date, not revoked, newest first. */
+  listPhotosLinks(
+    reporterId: string,
+    siteId: string,
+    reportDate: string,
+  ): Promise<Array<{ id: string; code_hash: string; expires_at: string | null }>>;
+  /** false when the code hash is taken (unique); nothing written then. */
+  insertPhotosLink(row: {
     id: string;
     code_hash: string;
     reporter_id: string;
@@ -1650,6 +1688,42 @@ export function createDb(sql: Sql): Db {
         where report_id = ${reportId} and status = 'applied' and not after_filing
         order by applied_at, created_at`;
     },
+    async applyCallCorrection(input) {
+      return sql.begin(async (tx) => {
+        const none = { applied: false, correctionId: null, draftRev: null };
+        await tx`select 1 from site_days where id = (select site_day_id from reports where id = ${input.reportId}) for update`;
+        const [r] = await tx<Array<Pick<ReportRow, 'status' | 'current_version'>>>`
+          select status, current_version from reports where id = ${input.reportId} for update`;
+        if (
+          !r ||
+          !DRAFT_STATUSES.includes(r.status) ||
+          (r.current_version || 1) !== input.baseVersion
+        )
+          return none;
+        const [filing] = await tx<Array<{ id: number }>>`
+          select id from jobs where type = 'file_report' and payload ->> 'reportId' = ${input.reportId}
+            and status in ('queued', 'running') limit 1`;
+        if (filing) return none;
+        const [v] = await tx<Array<{ draft_rev: number }>>`
+          select draft_rev from report_versions
+          where report_id = ${input.reportId} and version = ${input.baseVersion} for update`;
+        if (!v || v.draft_rev !== input.baseRev) return none;
+        const [written] = await tx<Array<{ draft_rev: number }>>`
+          update report_versions set data = ${tx.json(input.data as never)}, summary = ${input.data.summary || null}
+          where report_id = ${input.reportId} and version = ${input.baseVersion}
+          returning draft_rev`;
+        const [c] = await tx<Array<{ id: string }>>`
+          insert into draft_corrections (org_id, report_id, reporter_id, via, text, status,
+                                         base_version, base_rev, data, changes, operations, source,
+                                         change_note, settled_at, applied_at)
+          values (${input.orgId}, ${input.reportId}, ${input.reporterId}, 'voice', ${input.text},
+                  'applied', ${input.baseVersion}, ${input.baseRev}, ${tx.json(input.data as never)},
+                  ${tx.json(input.changes as never)}, ${tx.json(input.operations as never)},
+                  ${tx.json(input.source as never)}, ${input.changeNote}, now(), now())
+          returning id`;
+        return { applied: true, correctionId: c!.id, draftRev: written!.draft_rev };
+      });
+    },
 
     // SMS report keywords (W2-12) -------------------------------------------------------------
     async smsKeywordDays(reporterIds) {
@@ -1716,6 +1790,25 @@ export function createDb(sql: Sql): Db {
       const rows = await sql<Array<{ id: string }>>`
         insert into field_links (id, code_hash, reporter_id, kind, site_id, report_date, expires_at)
         values (${row.id}, ${row.code_hash}, ${row.reporter_id}, 'daily', ${row.site_id},
+                ${row.report_date}::date, ${row.expires_at})
+        on conflict (code_hash) do nothing returning id`;
+      return rows.length > 0;
+    },
+    async listPhotosLinks(reporterId, siteId, reportDate) {
+      const rows = await sql<Array<{ id: string; code_hash: string; expires_at: Date | null }>>`
+        select id, code_hash, expires_at from field_links
+        where reporter_id = ${reporterId} and kind = 'photos' and site_id = ${siteId}
+          and report_date = ${reportDate}::date and revoked_at is null
+        order by created_at desc`;
+      return rows.map((r) => ({
+        ...r,
+        expires_at: r.expires_at === null ? null : new Date(r.expires_at).toISOString(),
+      }));
+    },
+    async insertPhotosLink(row) {
+      const rows = await sql<Array<{ id: string }>>`
+        insert into field_links (id, code_hash, reporter_id, kind, site_id, report_date, expires_at)
+        values (${row.id}, ${row.code_hash}, ${row.reporter_id}, 'photos', ${row.site_id},
                 ${row.report_date}::date, ${row.expires_at})
         on conflict (code_hash) do nothing returning id`;
       return rows.length > 0;

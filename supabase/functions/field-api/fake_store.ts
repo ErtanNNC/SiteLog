@@ -53,6 +53,7 @@ import {
   type VoiceCallEndResult,
   type VoiceCallStartResult,
   type VoiceTurnState,
+  type VoiceFileReportResult,
   type VoiceTurnSubmitResult,
 } from './store.ts';
 
@@ -1972,6 +1973,9 @@ export class FakeFieldStore implements FieldStore {
       }
       return Promise.resolve(answer(found, true));
     }
+    // W3-10: a change needs the call's draft first.
+    if (kind === 'apply_correction' && !c.report_id)
+      return Promise.reject(new FieldDbError('draft_required'));
     c.report_id ??= this.id('aaaaaaaa');
     const turn: FakeVoiceTurn = {
       id: this.id('bbbbbbbb'),
@@ -1989,6 +1993,77 @@ export class FakeFieldStore implements FieldStore {
     this.onVoiceTurn?.(turn);
     return Promise.resolve(answer(turn, false));
   }
+  /** W3-10: voice_file_report(), as 20261016000350 has it (one filing job per revision). */
+  voiceFileReport(input: {
+    callId: string;
+    reportId: string;
+    draftRev: number;
+    utterance: string;
+    confirmed: boolean;
+  }): Promise<VoiceFileReportResult> {
+    this.calls.push('voiceFileReport');
+    const c = this.callRows.find((x) => x.id === input.callId);
+    if (!c) return Promise.reject(new FieldDbError('call_not_found'));
+    if (c.ended_at) return Promise.reject(new FieldDbError('call_ended'));
+    if (!c.reporter_id) return Promise.reject(new FieldDbError('unknown_caller'));
+    if (c.report_id !== input.reportId) return Promise.reject(new FieldDbError('out_of_scope'));
+    const r = this.reports.find((x) => x.id === input.reportId);
+    if (!r || r.status === 'void') return Promise.reject(new FieldDbError('report_closed'));
+    const reportNo = r.report_no;
+    if (r.status === 'filed' || r.status === 'signed_off')
+      return Promise.resolve({ status: 'filed', reportNo });
+    const v = this.versions.find((x) => x.report_id === r.id && x.version === r.current_version);
+    const rev = v ? (v.draft_rev ?? 1) : null;
+    if (!input.confirmed) {
+      this.audits.push({
+        orgId: r.org_id,
+        actorType: 'reporter',
+        actorId: c.reporter_id,
+        action: 'call.file_refused',
+        entity: 'call',
+        entityId: c.id,
+        diff: { reason: 'not_confirmed', utterance: input.utterance.slice(0, 200) },
+      });
+      return Promise.resolve({ status: 'not_confirmed', reportNo });
+    }
+    if (r.status !== 'awaiting_confirmation' || rev !== input.draftRev)
+      return Promise.resolve({
+        status: 'draft_changed',
+        reportNo,
+        draftRev: rev,
+        reportStatus: r.status,
+      });
+    const existing = this.filingJob(r.id, { version: r.current_version, draftRev: input.draftRev });
+    if (existing) return Promise.resolve({ status: 'queued', reportNo, jobId: existing.id });
+    const job: FakeJob = {
+      id: this.jobs.length + 1,
+      type: 'file_report',
+      payload: {
+        reportId: r.id,
+        trigger: 'confirm',
+        version: r.current_version,
+        draftRev: input.draftRev,
+        via: 'voice',
+      },
+      dedupe_key: `file:${r.id}:v${r.current_version}:r${input.draftRev}:call:${c.id}`,
+      status: 'queued',
+    };
+    this.jobs.push(job);
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: c.reporter_id,
+      action: 'report.confirm_requested',
+      entity: 'report',
+      entityId: r.id,
+      diff: { job_id: job.id, channel: 'voice', call_id: c.id, draft_rev: input.draftRev },
+    });
+    this.onFileJob?.(job);
+    return Promise.resolve({ status: 'queued', reportNo, jobId: job.id });
+  }
+  /** The tests' worker for a call's filing job (W3-10); may file the report at once or later. */
+  onFileJob: ((job: FakeJob) => void) | null = null;
+
   getVoiceTurn(id: string): Promise<VoiceTurnState | null> {
     const t = this.voiceTurns.find((x) => x.id === id);
     return Promise.resolve(t ? { status: t.status, result: t.result, error: t.error } : null);

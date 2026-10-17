@@ -178,7 +178,7 @@ describe('W3-09: update_draft on a call (live mode)', () => {
     expect(state.question).toBeNull();
     expect(state.missing).toEqual([]);
     expect(state.readBack).toBe(
-      "Here's what I've got: 14 on site from 2 companies, 100 hours. Shall I file it?",
+      "Here's what I've got: 14 on site from 2 companies, 100 hours. Done: Level 3 precast erection, last double tees set complete, Ramp B topping slab finishing, Ramp B form stripping. Toolbox talk. No incidents. Shall I file it?",
     );
     expect(state.reportId).toBe(reportId);
     // The recorded call the agent's tests replay answers what the pipeline answers.
@@ -331,7 +331,7 @@ describe('W3-09: spoken questions and record_answer (F7 on a call)', () => {
     expect(result.confirmation).toBe('Delta Mechanical: 5 workers, 8 hours each — 40 hours.');
     expect(result.draft.question).toBeNull();
     expect(result.draft.readBack).toBe(
-      "Here's what I've got: 23 on site from 5 companies, 184 hours. Weather stopped work for 3.5 hours. Shall I file it?",
+      "Here's what I've got: 23 on site from 5 companies, 184 hours. Weather stopped work for 3.5 hours. Done: Level 4 slab pour complete, Level 3 electrical rough-in about 60 percent, Level 2 ductwork, east wing, Exterior — south elevation CMU blockwork, Level 2 interior CMU blockwork, Level 5 deck rebar tying. Delivered: 2 loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?",
     );
     expect(withoutIds(result)).toEqual(withoutIds(recorded.record_answer![0]));
     const data = await draftOf(draft.reportId);
@@ -394,7 +394,9 @@ describe('W3-09: spoken questions and record_answer (F7 on a call)', () => {
     expect(twice.draft.question).toBeNull();
     // The headcount stays unknown: no crew total is spoken, only the weather and the question
     // (US Spanish writes 3.5).
-    expect(twice.draft.readBack).toBe('El clima detuvo el trabajo 3.5 horas. ¿Lo registro?');
+    expect(twice.draft.readBack).toBe(
+      'El clima detuvo el trabajo 3.5 horas. Trabajos anotados: 6. Entregas anotadas: 1. Charla de seguridad. Sin incidentes. ¿Lo registro?',
+    );
     expect(twice.draft.missing).toEqual([
       'manpower.workers:Delta Mechanical',
       'manpower.hours:Delta Mechanical',
