@@ -157,7 +157,9 @@ describe('replay-webhook LiveKit mode (W3-04)', () => {
       expect(isTwilioFixture(JSON.parse(raw)), f).toBe(false);
       const req = await liveKitRequest(raw, args, now);
       const body = JSON.parse(req.body) as { room: { name: string }; createdAt: string };
-      expect(body.room.name).toBe(ROOM);
+      // An inbound phone call's room is named by the dispatch rule (§19 Q227).
+      if (f.startsWith('inbound-')) expect(body.room.name).toMatch(/^sip_\+15550142087_/);
+      else expect(body.room.name).toBe(ROOM);
       expect(Number(body.createdAt)).toBeLessThanOrEqual(now.getTime() / 1000);
       expect(
         await verifyLiveKitWebhook(req.body, req.authorization, {
@@ -195,6 +197,27 @@ describe('replay-webhook LiveKit mode (W3-04)', () => {
       'no_answer',
     ]);
     expect(await status('busy-sip-rejected.json')).toEqual(['participant_left', 'busy']);
+  });
+
+  it('keys the inbound phone call fixtures by the room sid, never the room name (Q227)', async () => {
+    const args = parseArgs(['--room-sid', 'RM_Q227replay1', '--phone', '15550142087'], {});
+    expect(args.roomSid).toBe('Q227replay1');
+    const seen: unknown[] = [];
+    for (const f of readdirSync(FIXTURES)
+      .filter((x) => x.startsWith('inbound-'))
+      .sort()) {
+      const req = await liveKitRequest(readFileSync(join(FIXTURES, f), 'utf8'), args);
+      const ev = toVoiceEvent(LiveKitWebhookEventSchema.parse(JSON.parse(req.body)), new Date());
+      expect(ev?.room, f).toBe('RM_Q227replay1');
+      expect(JSON.stringify(ev), f).not.toMatch(/1555|sip_|Xq7Lm2Pz9Kd4/);
+      seen.push([ev!.event, ev!.status]);
+    }
+    expect(seen).toEqual([
+      ['room_started', null],
+      ['participant_joined', 'in_progress'],
+      ['participant_left', 'completed'],
+      ['room_finished', null],
+    ]);
   });
 
   it('defaults to a fresh room and a local key pair', () => {

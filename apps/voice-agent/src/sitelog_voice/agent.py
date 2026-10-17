@@ -1,4 +1,6 @@
-"""The voice agent's entrypoint (spec §4.2, §9.4): one LiveKit job per call room `call-{uuid}`.
+"""The voice agent's entrypoint (spec §4.2, §9.4): one LiveKit job per call room (`call-{uuid}`
+for Talk now and outbound calls; an inbound phone call's room is named by the SIP dispatch rule and
+keyed by its sid, §19 Q227).
 
 Order of a call (§9.4 "How a call starts", §15.2 "disclosure in the first 5 s"):
 
@@ -46,7 +48,7 @@ from .copy import Language, VoiceCopy, default_copy
 from .dialog import Action, CallTool, Dialog, EndCall, Event, Limits, Say, State
 from .dialog import tool_events as dialog_tool_events
 from .dialog import turn_events as dialog_turn_events
-from .field_api import CallAuth, FieldApi, FieldApiError
+from .field_api import CallAuth, FieldApi, FieldApiError, room_key
 from .metrics import TurnTimer
 from .observability import init_sentry, setup_logging
 from .recording import CallRecorder, tone_frames, upload_recording
@@ -549,6 +551,22 @@ def _room_call_id(room: rtc.Room) -> str | None:
     return call_id if isinstance(call_id, str) else None
 
 
+#: How long the agent waits for the room's sid (it comes with the connection, or just after it).
+ROOM_SID_WAIT_S = 10.0
+
+
+async def _room_key(room: rtc.Room) -> str:
+    """The room's key for `calls/start` (§19 Q227): `call-{uuid}`, or the room's sid when the SIP
+    dispatch rule named the room (its name carries the caller's number and is never sent, logged
+    or kept)."""
+    key = room_key(room.name, None)
+    if key is None:
+        key = room_key(None, await asyncio.wait_for(room.sid, ROOM_SID_WAIT_S))
+    if key is None:
+        raise RuntimeError("the room has neither a call name nor a sid")
+    return key
+
+
 def _room_is_outbound(room: rtc.Room) -> bool:
     """An outbound call's room (W3-17): `{"direction": "outbound"}` in its metadata."""
     try:
@@ -620,6 +638,8 @@ server = AgentServer()
 async def entrypoint(ctx: JobContext) -> None:
     settings = load_settings()
     copy = default_copy()
+    # The job process's handlers (§19 Q227: LiveKit's own log lines carry the room name).
+    setup_logging()
     await ctx.connect()
     room = ctx.room
     call_id = _room_call_id(room)
@@ -646,7 +666,11 @@ async def entrypoint(ctx: JobContext) -> None:
         timeout_s=settings.field_api_timeout_s,
     )
     auth, started = await api.calls_start(
-        room=room.name, transport=transport, from_e164=from_e164, to_e164=to_e164, call_id=call_id
+        room=await _room_key(room),
+        transport=transport,
+        from_e164=from_e164,
+        to_e164=to_e164,
+        call_id=call_id,
     )
     from_e164 = to_e164 = None  # stored by field-api; the agent keeps no copy
     log.info("call started", extra={"call_id": auth.call_id, "transport": transport})

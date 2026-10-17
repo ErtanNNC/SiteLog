@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { CallStatus } from '../enums.ts';
-import { VOICE_ROOM_RE } from '../voice.ts';
+import { voiceRoomKey } from '../voice.ts';
 
 /**
  * LiveKit webhooks (W3-04; spec §4.2 `voice-events`, §5.1, §7.3): the signature check, the event
@@ -264,6 +264,10 @@ export function sipCallStatus(
 export interface VoiceEvent {
   eventId: string;
   event: VoiceEventName;
+  /**
+   * The room's key (`voiceRoomKey`): `call-{uuid}`, or the room's sid for a room the SIP dispatch
+   * rule named (§19 Q227). Never a dispatch rule's room name (it carries the caller's number).
+   */
   room: string;
   /** The event's time (`createdAt`, unix seconds), else the receipt time. */
   at: string;
@@ -277,13 +281,15 @@ export interface VoiceEvent {
 
 /**
  * A webhook event as `voice-events` handles it, or null when there is nothing to do: an event it
- * does not act on, or a room that is not a call's (`call-{uuid}`).
+ * does not act on, or a room with neither a `call-{uuid}` name nor a sid. A room SiteLog did not
+ * name (an inbound phone call's, named by the SIP dispatch rule: §19 Q227) is keyed by its sid
+ * (`RM_…`); its name is dropped here and goes nowhere.
  */
 export function toVoiceEvent(raw: LiveKitWebhookEvent, receivedAt: Date): VoiceEvent | null {
   if (!(VOICE_EVENT_NAMES as readonly string[]).includes(raw.event)) return null;
   const event = raw.event as VoiceEventName;
-  const room = raw.room?.name;
-  if (!room || !VOICE_ROOM_RE.test(room)) return null;
+  const room = voiceRoomKey(raw.room?.name, raw.room?.sid);
+  if (!room) return null;
   const seconds = raw.createdAt === undefined ? NaN : Number(raw.createdAt);
   const at = Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : receivedAt;
   const p = event === 'room_started' || event === 'room_finished' ? undefined : raw.participant;

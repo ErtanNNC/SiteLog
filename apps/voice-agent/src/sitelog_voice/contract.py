@@ -67,6 +67,11 @@ def _refine_calls_start_request(body: Mapping[str, Any]) -> str | None:
         return "a web call passes callId"
     if "callId" not in body and ("from" not in body or "to" not in body):
         return "every call passes callId, or from and to"
+    # §19 Q227: a room sid (`RM_…`) only for an inbound phone call.
+    room = body.get("room")
+    sid = isinstance(room, str) and room.startswith("RM_")
+    if sid and (body.get("transport") != "pstn" or "callId" in body):
+        return "a room sid only with transport pstn and no callId"
     return None
 
 

@@ -8,7 +8,7 @@ import pytest
 
 from sitelog_voice.contract import default_contract
 from sitelog_voice.metrics import CallMetrics, percentile
-from sitelog_voice.observability import PhoneRedactingFilter, before_send
+from sitelog_voice.observability import PhoneRedactingFilter, before_send, setup_logging
 from sitelog_voice.recording import interleave_stereo, split_stereo
 from sitelog_voice.redact import contains_phone, redact_phones
 from sitelog_voice.voicemail import classify_first_utterance
@@ -113,6 +113,48 @@ def test_log_filter_redacts_phone_numbers() -> None:
     )
     PhoneRedactingFilter().filter(record)
     assert record.getMessage() == "caller [phone] said 7"
+
+
+def test_log_filter_redacts_a_dispatch_rule_room_name_in_extra() -> None:
+    # §19 Q227: LiveKit Agents logs `extra={"room": room.name}`; a dispatch rule's room name
+    # carries the caller's number.
+    logger = logging.getLogger("livekit.agents")
+    record = logger.makeRecord(
+        "livekit.agents",
+        logging.INFO,
+        __file__,
+        1,
+        "received job request",
+        (),
+        None,
+        extra={"room": "sip_+15550142087_Xq7Lm2Pz9Kd4", "room_id": "RM_abc", "n": 3},
+    )
+    PhoneRedactingFilter().filter(record)
+    assert record.room == "sip_[phone]_Xq7Lm2Pz9Kd4"  # type: ignore[attr-defined]
+    assert record.room_id == "RM_abc"  # type: ignore[attr-defined]
+    assert record.n == 3  # type: ignore[attr-defined]
+    no_plus = logger.makeRecord(
+        "livekit.agents",
+        logging.INFO,
+        __file__,
+        1,
+        "x",
+        (),
+        None,
+        extra={"room": "sip_15550142087_Xq7Lm2Pz9Kd4"},
+    )
+    PhoneRedactingFilter().filter(no_plus)
+    assert "15550142087" not in no_plus.room  # type: ignore[attr-defined]
+
+
+def test_setup_logging_scrubs_livekit_records_at_their_logger() -> None:
+    setup_logging()
+    assert any(
+        isinstance(f, PhoneRedactingFilter) for f in logging.getLogger("livekit.agents").filters
+    )
+    setup_logging()
+    filters = logging.getLogger("livekit.agents").filters
+    assert sum(isinstance(f, PhoneRedactingFilter) for f in filters) == 1
 
 
 def test_sentry_before_send_drops_bodies_and_redacts() -> None:

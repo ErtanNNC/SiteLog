@@ -10,7 +10,9 @@ import type { VoiceEventsStore } from './store.ts';
 
 /**
  * voice-events (W3-04; spec §4.2, §5.1, §7.3; verify_jwt = false): LiveKit's webhooks for the
- * call rooms (`call-{uuid}`).
+ * call rooms, keyed by their name when it is `call-{uuid}` (Talk now, outbound) and else by their
+ * sid (`RM_…`: an inbound phone call's room, named by the SIP dispatch rule with the caller's
+ * number in it; §19 Q227). That name is dropped by `toVoiceEvent` and never stored or logged.
  *
  *   POST /voice-events   LiveKit's webhook (application/webhook+json). The `Authorization` JWT is
  *                        checked first (HS256 with LIVEKIT_API_SECRET, `iss` LIVEKIT_API_KEY, its

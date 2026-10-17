@@ -6,7 +6,7 @@
   "properties": {
     "room": {
       "type": "string",
-      "pattern": "^call-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      "pattern": "^(?:call-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|RM_[A-Za-z0-9]{1,64})$"
     },
     "from": {
       "type": "string",
@@ -34,5 +34,5 @@
     "transport"
   ],
   "additionalProperties": false,
-  "description": "A web call passes callId; every other call passes callId, or from and to."
+  "description": "A web call passes callId; every other call passes callId, or from and to. A room sid (RM_…) only with transport pstn and no callId."
 }

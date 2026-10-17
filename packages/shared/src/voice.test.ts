@@ -12,11 +12,13 @@ import {
   SetPreferenceRequestSchema,
   verifyCallToken,
   VOICE_CONTRACT,
+  VOICE_ROOM_KEY_RE,
   VOICE_TOOL_SCHEMAS,
   VOICE_ROUTES,
   VOICE_TOOLS,
   VoiceCallStartRequestSchema,
   VoiceCallStartResponseSchema,
+  voiceRoomKey,
   voiceTurnKey,
   type VoiceToolRequest,
 } from './voice.ts';
@@ -243,6 +245,47 @@ describe('voice contract schemas', () => {
       VoiceCallStartRequestSchema.safeParse({ room, from: '5550143378', transport: 'pstn' })
         .success,
     ).toBe(false);
+  });
+
+  it('starts an inbound phone call by its room sid, never by a dispatch rule room name (Q227)', () => {
+    const sip = { from: '+15550143378', to: '+15550142290', transport: 'pstn' } as const;
+    expect(VoiceCallStartRequestSchema.safeParse({ room: 'RM_8kQzv3WbN2xa', ...sip }).success).toBe(
+      true,
+    );
+    // The dispatch rule's room name carries the caller's number: never accepted.
+    expect(
+      VoiceCallStartRequestSchema.safeParse({
+        room: 'call-_+15550143378_8kQzv3WbN2xa',
+        ...sip,
+      }).success,
+    ).toBe(false);
+    // A sid names only an inbound phone call's room: Talk now and outbound keep call-{callId}.
+    expect(
+      VoiceCallStartRequestSchema.safeParse({
+        room: 'RM_8kQzv3WbN2xa',
+        callId: CALL,
+        transport: 'web',
+      }).success,
+    ).toBe(false);
+    expect(
+      VoiceCallStartRequestSchema.safeParse({
+        room: 'RM_8kQzv3WbN2xa',
+        callId: CALL,
+        transport: 'pstn',
+      }).success,
+    ).toBe(false);
+    expect(VoiceCallStartRequestSchema.safeParse({ room: 'RM_', ...sip }).success).toBe(false);
+  });
+
+  it('keys a room by its call-{uuid} name, else its sid, never another name (Q227)', () => {
+    expect(voiceRoomKey(`call-${CALL}`, 'RM_abc123')).toBe(`call-${CALL}`);
+    expect(voiceRoomKey('call-_+15550143378_8kQzv3WbN2xa', 'RM_abc123')).toBe('RM_abc123');
+    expect(voiceRoomKey('sip_+15550143378_8kQzv3WbN2xa', undefined)).toBeNull();
+    expect(voiceRoomKey(undefined, 'PA_abc')).toBeNull();
+    expect(VOICE_ROOM_KEY_RE.test(`call-${CALL}`) && VOICE_ROOM_KEY_RE.test('RM_abc123')).toBe(
+      true,
+    );
+    expect(VOICE_ROOM_KEY_RE.test('call-_+15550143378_x')).toBe(false);
   });
 
   it('answers a reporter or unknown, never a phone number', () => {

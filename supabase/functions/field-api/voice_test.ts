@@ -480,6 +480,52 @@ Deno.test(
 );
 
 Deno.test(
+  'calls/start (§19 Q227): an inbound phone call by its room sid, never the dispatch rule room name',
+  async () => {
+    const h = setup();
+    const body = { from: KEVIN_PHONE, to: VOICE_NUMBER, transport: 'pstn' };
+    const res = await h.call('voice/calls/start', { room: 'RM_Q227sipRoom1', ...body });
+    assertEquals(res.status, 200, res.text);
+    assertEquals(res.json.reporter, { firstName: 'Kevin', locale: 'en-US' });
+    assertNoPhone(res.text);
+    const row = h.store.callRows.find((r) => r.id === res.json.callId)!;
+    assertEquals(
+      [row.provider_call_id, row.from_e164, row.reporter_id, row.site_id],
+      ['RM_Q227sipRoom1', KEVIN_PHONE, KEVIN, NORTHGATE],
+    );
+    assertEquals(res.json.callToken, await deriveCallToken(TOKEN_SECRET, row.id));
+    // The agent's retry: the same call and token, one row.
+    const again = await h.call('voice/calls/start', { room: 'RM_Q227sipRoom1', ...body });
+    assertEquals([again.json.callId, again.json.callToken], [res.json.callId, res.json.callToken]);
+    assertEquals(h.store.callRows.length, 1);
+    // A tool works on it like any call.
+    const ctx = await h.tool('get_context', res.json.callId, res.json.callToken);
+    assertEquals(ctx.status, 200, ctx.text);
+    // The dispatch rule's room name carries the caller's number: refused, nothing stored.
+    const named = await h.call('voice/calls/start', {
+      room: `sip_${KEVIN_PHONE}_Xq7Lm2Pz9Kd4`,
+      ...body,
+    });
+    assertEquals([named.status, named.json.error], [400, 'invalid_request']);
+    assertNoPhone(named.text);
+    // A sid keys only an inbound phone call: Talk now and outbound calls keep call-{callId}.
+    const webSid = await h.call('voice/calls/start', {
+      room: 'RM_Q227sipRoom2',
+      callId: idOf(room(9)),
+      transport: 'web',
+    });
+    assertEquals([webSid.status, webSid.json.error], [400, 'invalid_request']);
+    const outSid = await h.call('voice/calls/start', {
+      room: 'RM_Q227sipRoom2',
+      callId: idOf(room(9)),
+      transport: 'pstn',
+    });
+    assertEquals([outSid.status, outSid.json.error], [400, 'invalid_request']);
+    assertEquals(h.store.callRows.length, 1);
+  },
+);
+
+Deno.test(
   'an unknown caller: unknown, a token, no reporter, and no tool but end_call (F13)',
   async () => {
     const h = setup();

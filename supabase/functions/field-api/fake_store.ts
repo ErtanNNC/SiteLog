@@ -1847,7 +1847,8 @@ export class FakeFieldStore implements FieldStore {
       site = pairs[0]!.s;
     }
     const row: CallRow = {
-      id: input.room.slice(5),
+      // A `call-{uuid}` room gives its uuid; a room sid (§19 Q227) a new id.
+      id: input.room.startsWith('call-') ? input.room.slice(5) : crypto.randomUUID(),
       org_id: rep?.org_id ?? null,
       reporter_id: rep?.id ?? null,
       site_id: site?.id ?? null,

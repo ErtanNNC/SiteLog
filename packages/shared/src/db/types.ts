@@ -704,6 +704,10 @@ export type CallRow = {
   transport: CallTransport;
   /** 'daily_report' | 'reminder' | 'callback' | 'edit' */
   purpose: string | null;
+  /**
+   * The LiveKit room key (§19 Q227, 20261016000390): the room name `call-{uuid}` (Talk now,
+   * outbound), or an inbound phone call's room sid `RM_…` (never a dispatch rule's room name).
+   */
   provider_call_id: string | null;
   from_e164: string | null;
   to_e164: string | null;
@@ -791,6 +795,7 @@ export type LivekitEventRow = {
     | 'track_published'
     | 'participant_left'
     | 'room_finished';
+  /** The room key: `call-{uuid}` or a room sid `RM_…` (§19 Q227, 20261016000390). */
   room: string;
   call_id: string | null;
   event_at: string;

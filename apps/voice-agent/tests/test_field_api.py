@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from sitelog_voice.contract import ContractError
-from sitelog_voice.field_api import CallAuth, FieldApi, FieldApiError
+from sitelog_voice.field_api import CallAuth, FieldApi, FieldApiError, room_key
 from tests.fakes.field_api import BASE_URL, SECRET, FakeFieldApi, derive_call_token
 
 CALL = "5b1f0c3e-8a2d-4c6e-9f10-2b3c4d5e6f70"
@@ -170,3 +170,61 @@ async def test_an_answer_off_contract_is_refused() -> None:
 def test_needs_a_secret() -> None:
     with pytest.raises(ValueError):
         FieldApi(base_url=BASE_URL, tool_secret="")
+
+
+# ── §19 Q227: an inbound phone call's room is keyed by its sid ──
+
+
+def test_room_key_is_the_call_name_else_the_sid_never_a_dispatch_rule_name() -> None:
+    assert room_key(ROOM, "RM_abc123") == ROOM
+    assert room_key("sip_+15550142087_Xq7Lm2Pz9Kd4", "RM_Q227room") == "RM_Q227room"
+    assert room_key("call-_+15550142087_Xq7Lm2Pz9Kd4", None) is None
+    assert room_key(None, "PA_abc") is None
+    assert room_key("", "") is None
+
+
+async def test_calls_start_by_room_sid(api: FieldApi, fake_api: FakeFieldApi) -> None:
+    await api.calls_start(
+        room="RM_Q227room", transport="pstn", from_e164="+15550142087", to_e164="+15550142290"
+    )
+    (seen,) = fake_api.seen("calls_start")
+    assert seen.body["room"] == "RM_Q227room"
+
+
+async def test_the_contract_refuses_a_dispatch_rule_room_name_before_sending(
+    api: FieldApi, fake_api: FakeFieldApi
+) -> None:
+    with pytest.raises(ContractError):
+        await api.calls_start(
+            room="sip_+15550142087_Xq7Lm2Pz9Kd4",
+            transport="pstn",
+            from_e164="+15550142087",
+            to_e164="+15550142290",
+        )
+    # A sid keys only an inbound phone call: Talk now names its call-{callId} room.
+    with pytest.raises(ContractError):
+        await api.calls_start(room="RM_Q227room", transport="web", call_id=CALL)
+    assert fake_api.seen("calls_start") == []
+
+
+class _Room:
+    """A room as `_room_key` reads it: the name, and the sid LiveKit hands over asynchronously."""
+
+    def __init__(self, name: str, sid: str) -> None:
+        self.name = name
+        self._sid = sid
+
+    @property
+    async def sid(self) -> str:
+        return self._sid
+
+
+async def test_the_agent_sends_the_sid_of_a_dispatch_rule_room_and_the_name_of_a_call_room() -> (
+    None
+):
+    from sitelog_voice.agent import _room_key  # pyright: ignore[reportPrivateUsage]
+
+    assert await _room_key(_Room("sip_+15550142087_Xq7Lm2Pz9Kd4", "RM_Q227room")) == "RM_Q227room"  # type: ignore[arg-type]
+    assert await _room_key(_Room(ROOM, "RM_Q227room")) == ROOM  # type: ignore[arg-type]
+    with pytest.raises(RuntimeError):
+        await _room_key(_Room("sip_+15550142087_Xq7Lm2Pz9Kd4", "bad"))  # type: ignore[arg-type]

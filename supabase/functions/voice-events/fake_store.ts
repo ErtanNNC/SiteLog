@@ -3,7 +3,7 @@ import type { VoiceEventsStore } from './store.ts';
 
 /**
  * In-memory voice-events store for the Deno tests: the same rules as `voice_call_event()`
- * (20261016000320_voice_events.sql), whose PGlite tests check the SQL itself
+ * (20261016000320_voice_events.sql; the room key of 20261016000390_inbound_call_rooms.sql), whose PGlite tests check the SQL itself
  * (`supabase/db-tests/src/voice-events.test.ts`).
  */
 
@@ -55,6 +55,8 @@ export function fakeVoiceEventsStore() {
   function find(room: string): FakeCall | undefined {
     const byRoom = [...calls.values()].find((c) => c.room === room);
     if (byRoom) return byRoom;
+    // Only a `call-{uuid}` room names a row by its uuid; a room sid (§19 Q227) only by `room`.
+    if (!room.startsWith('call-')) return undefined;
     const c = calls.get(room.slice(5));
     return c && c.room === null ? c : undefined;
   }

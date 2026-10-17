@@ -9,6 +9,7 @@
  *   pnpm replay-webhook -- fixtures/sms/inbound-help.json                # Twilio, signed with TWILIO_AUTH_TOKEN
  *   pnpm replay-webhook -- --sid SM123 fixtures/sms/status-delivered.json
  *   pnpm replay-webhook -- --room call-<uuid> fixtures/livekit/outbound-0*.json   # LiveKit (W3-04)
+ *   pnpm replay-webhook -- --room-sid <sid> fixtures/livekit/inbound-0*.json      # §19 Q227
  *
  * Meta placeholders: {{phone}} (WA id digits, --phone), {{ts}} (now, unix seconds), {{id}} (a fresh
  * wamid so dedupe does not swallow the replay). Twilio placeholders: {{phone}} (E.164, --phone),
@@ -20,7 +21,9 @@
  * as LiveKit signs a webhook (an HS256 JWT in `Authorization`, `iss` LIVEKIT_API_KEY, the body's
  * `sha256`) with LIVEKIT_API_KEY / LIVEKIT_API_SECRET (a local pair: never a real project's) and
  * posted to `--voice-url` or VOICE_EVENTS_URL. Placeholders: {{room}} (`--room`, one room for every
- * file of the run, default a fresh `call-{uuid}` that matches no call), {{id}} (a fresh event id),
+ * file of the run, default a fresh `call-{uuid}` that matches no call), {{room_sid}} (`--room-sid`,
+ * the room sid after `RM_`; default derived from the room: an inbound phone call's room, named by
+ * the dispatch rule, is keyed by it, §19 Q227), {{id}} (a fresh event id),
  * {{ts}} / {{ts+N}} (three minutes ago, plus N seconds), {{phone}} (E.164, `--phone`), {{to}}
  * (`--to`).
  */
@@ -58,6 +61,8 @@ interface Args {
   livekitKey: string;
   livekitSecret: string;
   room: string;
+  /** The room sid after `RM_` (§19 Q227); unset: derived from the room. */
+  roomSid?: string;
 }
 
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env): Args {
@@ -88,6 +93,7 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv = process.env):
     else if (a === '--sid') args.sid = argv[++i] ?? args.sid;
     else if (a === '--voice-url') args.voiceUrl = argv[++i] ?? args.voiceUrl;
     else if (a === '--room') args.room = argv[++i] ?? args.room;
+    else if (a === '--room-sid') args.roomSid = (argv[++i] ?? '').replace(/^RM_/, '') || undefined;
     else if (a === '--')
       continue; // `pnpm replay-webhook -- …` passes the separator through
     else args.files.push(a);
@@ -152,11 +158,12 @@ export function isLiveKitFixture(value: unknown): boolean {
 /** The signed request a LiveKit fixture becomes: its body and the `Authorization` token. */
 export async function liveKitRequest(
   template: string,
-  args: Pick<Args, 'room' | 'phone' | 'to' | 'livekitKey' | 'livekitSecret'>,
+  args: Pick<Args, 'room' | 'roomSid' | 'phone' | 'to' | 'livekitKey' | 'livekitSecret'>,
   now = new Date(),
 ): Promise<{ body: string; authorization: string }> {
   const body = fillLiveKitFixture(template, {
     room: args.room,
+    ...(args.roomSid ? { roomSid: args.roomSid } : {}),
     ts: Math.floor(now.getTime() / 1000) - 180,
     phone: `+${args.phone.replace(/\D/g, '')}`,
     to: args.to,
@@ -233,7 +240,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.files.length === 0) {
     console.error(
-      'usage: replay-webhook [--url U] [--secret S] [--phone 1555…] [--sms-url U] [--token T] [--to SENDER] [--sid SM…] [--voice-url U] [--room call-…] [--dry-run] <fixture.json>…',
+      'usage: replay-webhook [--url U] [--secret S] [--phone 1555…] [--sms-url U] [--token T] [--to SENDER] [--sid SM…] [--voice-url U] [--room call-…] [--room-sid RM_…] [--dry-run] <fixture.json>…',
     );
     process.exit(2);
   }

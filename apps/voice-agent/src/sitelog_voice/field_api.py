@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -55,6 +56,23 @@ class FieldApiError(RuntimeError):
     @property
     def retryable(self) -> bool:
         return self.status is None or self.status >= 500
+
+
+#: The room SiteLog names for a call: `call-{uuid}` (Talk now, outbound calls; §19 Q157).
+CALL_ROOM_RE = re.compile(r"^call-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+#: A LiveKit room sid (§19 Q227).
+ROOM_SID_RE = re.compile(r"^RM_[A-Za-z0-9]{1,64}$")
+
+
+def room_key(name: str | None, sid: str | None) -> str | None:
+    """The room's key for `calls/start` (§19 Q227; `voiceRoomKey` in packages/shared): the name
+    when it is `call-{uuid}`, else the sid. An inbound phone call's room is named by LiveKit's SIP
+    dispatch rule (`{prefix}_{caller number}_{random}`): that name never leaves the agent."""
+    if name and CALL_ROOM_RE.match(name):
+        return name
+    if sid and ROOM_SID_RE.match(sid):
+        return sid
+    return None
 
 
 @dataclass
@@ -175,9 +193,10 @@ class FieldApi:
         to_e164: str | None = None,
         call_id: str | None = None,
     ) -> tuple[CallAuth, CallsStartResponse]:
-        """The agent's first request in a room. `from_e164` goes to field-api only (stored server
-        side, §9.4) and is never kept on the agent beyond this call; `to_e164` is the pack's number
-        the caller dialled (field-api finds the pack by it, W3-03)."""
+        """The agent's first request in a room. `room` is the room's key (`room_key`: `call-{uuid}`,
+        or an inbound phone call's room sid, §19 Q227). `from_e164` goes to field-api only (stored
+        server side, §9.4) and is never kept on the agent beyond this call; `to_e164` is the pack's
+        number the caller dialled (field-api finds the pack by it, W3-03)."""
         body: dict[str, Any] = {"room": room, "transport": transport}
         if from_e164 is not None:
             body["from"] = from_e164

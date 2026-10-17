@@ -13,6 +13,10 @@ import noAnswer01SipDialing from '../../../fixtures/livekit/no-answer-01-sip-dia
 import noAnswer02SipUnavailable from '../../../fixtures/livekit/no-answer-02-sip-unavailable.json' with { type: 'json' };
 import noAnswer03RoomFinished from '../../../fixtures/livekit/no-answer-03-room-finished.json' with { type: 'json' };
 import busySipRejected from '../../../fixtures/livekit/busy-sip-rejected.json' with { type: 'json' };
+import inbound01RoomStarted from '../../../fixtures/livekit/inbound-01-room-started.json' with { type: 'json' };
+import inbound02SipJoined from '../../../fixtures/livekit/inbound-02-sip-joined.json' with { type: 'json' };
+import inbound03SipHangup from '../../../fixtures/livekit/inbound-03-sip-hangup.json' with { type: 'json' };
+import inbound04RoomFinished from '../../../fixtures/livekit/inbound-04-room-finished.json' with { type: 'json' };
 
 /**
  * voice-events (W3-04) on the recorded LiveKit events of `fixtures/livekit/`, signed with a test
@@ -41,13 +45,21 @@ const FIXTURES: Record<string, unknown> = {
   'no-answer-02-sip-unavailable.json': noAnswer02SipUnavailable,
   'no-answer-03-room-finished.json': noAnswer03RoomFinished,
   'busy-sip-rejected.json': busySipRejected,
+  'inbound-01-room-started.json': inbound01RoomStarted,
+  'inbound-02-sip-joined.json': inbound02SipJoined,
+  'inbound-03-sip-hangup.json': inbound03SipHangup,
+  'inbound-04-room-finished.json': inbound04RoomFinished,
 };
 
-function fixture(name: string, opts: { room?: string; id?: string } = {}): string {
+function fixture(
+  name: string,
+  opts: { room?: string; roomSid?: string; id?: string } = {},
+): string {
   const template = FIXTURES[name];
   if (!template) throw new Error(`no fixture ${name}`);
   return fillLiveKitFixture(JSON.stringify(template), {
     room: opts.room ?? ROOM,
+    ...(opts.roomSid ? { roomSid: opts.roomSid } : {}),
     ts: T0.getTime() / 1000,
     phone: PHONE,
     to: '+18885550100',
@@ -319,6 +331,65 @@ Deno.test('an inbound call: the row named by the room uuid before its room is se
   assertEquals(h.fake.jobs.size, 0);
 });
 
+const INBOUND = [
+  'inbound-01-room-started.json',
+  'inbound-02-sip-joined.json',
+  'inbound-03-sip-hangup.json',
+  'inbound-04-room-finished.json',
+];
+
+Deno.test(
+  'an inbound phone call (§19 Q227): the room the dispatch rule named, found by its sid',
+  async () => {
+    const h = harness();
+    // calls/start keyed the call by the room's sid (the agent sent `RM_…`, never the name).
+    const call = h.fake.addCall({
+      id: CALL,
+      room: 'RM_Q227inbound1',
+      reporterId: REPORTER,
+      status: 'in_progress',
+    });
+    call.answeredAt = T0;
+    const lines: string[] = [];
+    const log = console.log;
+    console.log = (...args: unknown[]) => lines.push(args.join(' '));
+    try {
+      for (const name of INBOUND) {
+        const body = fixture(name, { roomSid: 'Q227inbound1' });
+        assert(body.includes(`sip_${PHONE}_`), 'the fixture room carries the number');
+        const res = await h.post(body);
+        assertEquals(res.status, 200, name);
+        assertEquals(res.json.callId, CALL, name);
+      }
+    } finally {
+      console.log = log;
+    }
+    assertEquals([call.status, call.outcome], ['completed', 'abandoned']);
+    assertEquals(h.fake.jobs.size, 1);
+    // The room name (the caller's number, the random suffix) is never logged nor audited.
+    assert(lines.some((l) => l.includes('RM_Q227inbound1')));
+    for (const text of [...lines, JSON.stringify(h.fake.audits)]) {
+      assert(!text.includes('5550142087') && !text.includes('Xq7Lm2Pz9Kd4'), text);
+    }
+  },
+);
+
+Deno.test('a dispatch rule room with no call yet is acknowledged by its sid only', async () => {
+  const h = harness();
+  // A Talk now row named by a uuid is never found by a room sid.
+  h.fake.addCall({ id: CALL, room: null, reporterId: REPORTER, status: 'queued' });
+  const res = await h.post(fixture('inbound-01-room-started.json', { roomSid: 'Q227none' }));
+  assertEquals([res.status, res.json.callId, res.json.ignored], [200, null, undefined]);
+  // A room with neither a call-{uuid} name nor a sid: ignored.
+  const noSid = JSON.stringify({
+    event: 'room_finished',
+    id: 'EV_nosid',
+    createdAt: String(T0.getTime() / 1000),
+    room: { name: `sip_${PHONE}_Xq7Lm2Pz9Kd4` },
+  });
+  assertEquals((await h.post(noSid)).json, { received: true, ignored: true });
+});
+
 Deno.test('a room with no call row, another room or another event: acknowledged', async () => {
   const h = harness();
   const none = await h.post(fixture('outbound-06-room-finished.json'));
@@ -347,5 +418,5 @@ Deno.test('a signed body that is not an event is 400; a GET is 405', async () =>
 });
 
 Deno.test('the fixtures exist and fill', () => {
-  for (const name of OUTBOUND) assertExists(JSON.parse(fixture(name)).event);
+  for (const name of [...OUTBOUND, ...INBOUND]) assertExists(JSON.parse(fixture(name)).event);
 });

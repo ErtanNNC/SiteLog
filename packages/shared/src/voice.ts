@@ -40,8 +40,36 @@ export const VOICE_CALL_TOKEN_HEADER = 'X-Call-Token';
 export const VOICE_REQUEST_ID_HEADER = 'X-Request-Id';
 export const VOICE_REQUEST_ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 
-/** A LiveKit room of a call: `call-{uuid}` (§9.4 "How a call starts"; `calls.provider_call_id`). */
+/**
+ * The LiveKit room SiteLog names for a call: `call-{uuid}` (§9.4 "How a call starts"; Talk now
+ * and outbound calls, §19 Q157).
+ */
 export const VOICE_ROOM_RE = /^call-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * §19 Q227: a LiveKit room sid (`RM_` and LiveKit's random id). An inbound phone call's room is
+ * named by the SIP dispatch rule (an individual rule: `{prefix}_{caller number}_{random}`), so the
+ * call is keyed by the room's sid instead, which carries no phone number.
+ */
+export const VOICE_ROOM_SID_RE = /^RM_[A-Za-z0-9]{1,64}$/;
+
+/**
+ * The key of a call's room (`calls.provider_call_id`, `livekit_events.room`): its name when SiteLog
+ * named it (`call-{uuid}`), else its sid (§19 Q227). One pattern, so the JSON contract carries it.
+ */
+export const VOICE_ROOM_KEY_RE =
+  /^(?:call-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|RM_[A-Za-z0-9]{1,64})$/;
+
+/**
+ * A room's key (§19 Q227): the name when it is `call-{uuid}`, else the sid when it is one, else
+ * null (not a call's room). The name of any other room is never returned: a dispatch rule's room
+ * name carries the caller's number. Pure.
+ */
+export function voiceRoomKey(name: string | undefined, sid: string | undefined): string | null {
+  if (name && VOICE_ROOM_RE.test(name)) return name;
+  if (sid && VOICE_ROOM_SID_RE.test(sid)) return sid;
+  return null;
+}
 
 /** The consent wording version a call stores until the pack's `legal_keys.consent` is set (§19 Q28, Q120). */
 export const VOICE_CONSENT_TEXT_VERSION = 'voice.consent.v1';
@@ -144,10 +172,15 @@ function canonicalJson(value: unknown): string {
  * it called (`to`, `sip.trunkPhoneNumber`; W3-03), and the reporter is found by `from` in the real
  * orgs of the pack whose voice number is `to` (§4.6, §19 Q44); a Talk now call (`web`) and an
  * outbound call pass the `callId` the call row already has.
+ *
+ * `room` is the room's key (`voiceRoomKey`): `call-{uuid}`, the name SiteLog gives Talk now and
+ * outbound rooms, or, for an inbound phone call in a room the dispatch rule named (§19 Q227), the
+ * room's sid `RM_…` (never the dispatch rule's room name, which carries the caller's number). A
+ * sid comes only with `transport 'pstn'` and no `callId`.
  */
 export const VoiceCallStartRequestSchema = z
   .strictObject({
-    room: z.string().regex(VOICE_ROOM_RE, 'call-{uuid}'),
+    room: z.string().regex(VOICE_ROOM_KEY_RE, 'call-{uuid} or RM_…'),
     from: e164.optional(),
     /** The pack's voice number the caller dialled (W3-03: the pack is found by it, §4.6). */
     to: e164.optional(),
@@ -162,7 +195,13 @@ export const VoiceCallStartRequestSchema = z
     message: 'callId, or from and to',
     path: ['from'],
   })
-  .describe('A web call passes callId; every other call passes callId, or from and to.');
+  .refine((b) => VOICE_ROOM_RE.test(b.room) || (b.transport === 'pstn' && !b.callId), {
+    message: 'a room sid only for an inbound phone call (pstn, no callId)',
+    path: ['room'],
+  })
+  .describe(
+    'A web call passes callId; every other call passes callId, or from and to. A room sid (RM_…) only with transport pstn and no callId.',
+  );
 
 /**
  * The answer: the call, its token, and the reporter's first name and locale; or `unknown: true`

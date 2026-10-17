@@ -140,10 +140,25 @@ describe('toVoiceEvent', () => {
     expect(ev).toMatchObject({ at: NOW.toISOString(), status: null, detail: {} });
   });
 
+  it('keys a dispatch rule room by its sid and drops its name (Q227)', () => {
+    const raw = JSON.parse(sipLeft) as { room: { name: string; sid: string } };
+    raw.room = { name: 'call-_+15550142087_8kQzv3WbN2xa', sid: 'RM_Q227sid00001' };
+    const ev = toVoiceEvent(LiveKitWebhookEventSchema.parse(raw), NOW)!;
+    expect(ev.room).toBe('RM_Q227sid00001');
+    expect(ev.status).toBe('completed');
+    expect(JSON.stringify(ev)).not.toMatch(/1555|1888|sip_|8kQzv3WbN2xa/);
+  });
+
   it('ignores a room that is not a call, and an event it does not act on', () => {
     const base = { id: 'EV_x', createdAt: '1760648400' };
     expect(
       toVoiceEvent({ ...base, event: 'room_finished', room: { name: 'demo-room' } }, NOW),
+    ).toBeNull();
+    expect(
+      toVoiceEvent(
+        { ...base, event: 'room_finished', room: { name: 'demo-room', sid: 'not a sid' } },
+        NOW,
+      ),
     ).toBeNull();
     expect(toVoiceEvent({ ...base, event: 'egress_ended', room: { name: ROOM } }, NOW)).toBeNull();
   });
