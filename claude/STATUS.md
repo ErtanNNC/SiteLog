@@ -33,9 +33,9 @@
 
 - **Q270:** Fiyatı Stripe fiyatından farklı olan şirkete ödeme sayfası açılmıyor. Böyle bir şirket için Stripe'ta ayrı fiyat açılmalı.
 - **Q280:** İletimerkezi teslim raporunun adresi. Hesap açılınca dokümanından doldurulacak; o zamana kadar kontrol kapalı.
-- **Q290:** Ülke paketinin kendi onay metni varsa Karşılama ekranında o metin gösteriliyor.
-- **Q300:** Ofis karşılamayı elle yeniden gönderdiyse, otomatik tekrar gönderim ondan 48 saat sonraya kayıyor.
-- **Q330:** "Şimdi ara" aynı kişi için günde kaç kez kullanılabilir? Şu an sınır yok, yalnız aynı anda tek arama var.
+- **Q290:** Ülke paketinin avukat onay metni geldiğinde Karşılama ekranındaki kutunun yazısı o metin mi olsun? Önerim evet; metin gelene kadar uygulamanın kendi yazısı duruyor.
+- **Q300:** Ofis karşılamayı son 48 saatte elle yeniden gönderdiyse otomatik tekrar gönderim atlanıyor (iki gün içinde iki mesaj spam gibi görünür).
+- **Q330:** "Şimdi ara" aynı kişi ve şantiye için günde en fazla 3 kez kullanılabiliyor, sonra "sınıra ulaşıldı".
 - **Q340:** Giriş e-postasının dili, kullanıcı oluşturulurken belirleniyor. Önerim: kullanıcı panelde dilini değiştirince bu da güncellensin (henüz yapılmadı).
 
 **Sizden beklenenler değişmedi:** 08:00 UTC notundaki 6 madde. En acil olanlar:
