@@ -7,6 +7,7 @@ import type { MessagesClient } from './claude';
 import { estimateClaudeCostUsd } from './cost';
 import { parseArgs, runEval, selectedSet } from './eval';
 import {
+  EVAL_ALL_SETS,
   EVAL_SETS,
   evalModelFor,
   formatDuration,
@@ -88,8 +89,14 @@ describe('summarizeEval', () => {
 
 describe('parseEvalSets and the CLI flags', () => {
   it('reads set names, "all" and rejects unknown ones', () => {
-    expect(parseEvalSets('all')).toEqual([...EVAL_SETS]);
-    expect(parseEvalSets('')).toEqual([...EVAL_SETS]);
+    expect(parseEvalSets('all')).toEqual([...EVAL_ALL_SETS]);
+    expect(parseEvalSets('')).toEqual([...EVAL_ALL_SETS]);
+    // W4-08: tr is the Turkish slice of extraction, by name only.
+    expect(EVAL_ALL_SETS).toEqual(['extraction', 'answers', 'corrections', 'utterances']);
+    expect(parseEvalSets('TR')).toEqual(['tr']);
+    expect(evalModelFor('tr', { CLAUDE_MODEL: 'model-x', CLAUDE_MODEL_FAST: 'model-fast' })).toBe(
+      'model-x',
+    );
     expect(parseEvalSets('utterances, Answers')).toEqual(['answers', 'utterances']);
     expect(() => parseEvalSets('extraction,nope')).toThrow(/unknown eval set: nope/);
   });
@@ -253,6 +260,32 @@ describe('pnpm eval: summary line, --json and --summarize', () => {
     expect(await runEval(['--summarize', ...files], {})).toBe(0);
     const md = String(log.mock.calls[0]![0]);
     for (const set of EVAL_SETS) expect(md).toContain(`| \`recorded\` | ${set} |`);
+  });
+
+  it('--set tr scores the Turkish extraction cases only (W4-08)', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const file = join(tmp, 'out', 'tr-only.json');
+    expect(await runEval(['--set', 'tr', '--recorded', '--json', file], {})).toBe(0);
+    const report = JSON.parse(readFileSync(file, 'utf8')) as EvalSetSummary & {
+      results: Array<{ id: string }>;
+    };
+    expect(report).toMatchObject({ set: 'tr', model: 'recorded', failed: 0 });
+    expect(report.cases).toBeGreaterThanOrEqual(6);
+    expect(report.results.map((r) => r.id)).toEqual(
+      expect.arrayContaining([
+        'kartal-2026-10-09-tr',
+        'atasehir-2026-10-08-rain-tr',
+        'kartal-2026-10-05-crew-gap-tr',
+        'atasehir-2026-10-06-delivery-m3-tr',
+        'kartal-2026-10-07-incident-tr',
+        'atasehir-2026-10-02-correction-tr',
+      ]),
+    );
+    expect(report.results.every((r) => r.id.endsWith('-tr'))).toBe(true);
+    // Without a key a live tr run skips, as extraction does.
+    log.mockClear();
+    expect(await runEval(['--set', 'tr'], {})).toBe(0);
+    expect(String(log.mock.calls[0]![0])).toMatch(/^skipped: ANTHROPIC_API_KEY is not set/);
   });
 
   it('--utterances skips without a key, and --summarize fails on a file that is not a summary', async () => {

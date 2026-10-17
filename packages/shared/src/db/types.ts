@@ -2070,6 +2070,18 @@ export type Database = {
         };
         Returns: Json;
       };
+      // W4-08 (20261017000410): the starter glossary (§19 Q238), service role only. The lists of a
+      // report language (the rows of packages/shared/src/glossary/starter.{en,tr}.ts), and the
+      // org's seed (on_org_created runs it): the starter terms it has no row for, `built_in`;
+      // returns the number added, audited `glossary.starter_seeded`.
+      starter_glossary_terms: {
+        Args: { p_language: string };
+        Returns: Array<{ heard: string; official: string; kind: TermKind }>;
+      };
+      seed_starter_glossary: {
+        Args: { p_org_id: string };
+        Returns: number;
+      };
       // D16 (20261015000001): `insert … on conflict (dedupe_key) do nothing`; a taken key returns its
       // job's id, whatever its status.
       enqueue_job: {

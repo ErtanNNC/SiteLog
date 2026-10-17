@@ -217,6 +217,14 @@ describe('eval.yml Check inputs, run under bash', () => {
     expect(r.status).toBe(1);
     expect(r.log).toContain('unknown golden set: nope');
   });
+
+  it('takes tr (the Turkish extraction cases, W4-08) by name; all leaves it out', () => {
+    const r = runStep(check, { MODELS_INPUT: 'm', SETS_INPUT: 'TR, answers' });
+    expect(r.status, r.log).toBe(0);
+    expect(r.envFile.EVAL_SETS).toBe('tr,answers');
+    const all = runStep(check, { MODELS_INPUT: 'm', SETS_INPUT: 'all,tr' });
+    expect(all.envFile.EVAL_SETS).toBe('extraction,answers,corrections,utterances');
+  });
 });
 
 describe('eval.yml Run the golden sets, run under bash with a stand-in for pnpm', () => {

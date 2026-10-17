@@ -7,6 +7,7 @@ import { buildKestrelDemo, DEMO_USERS } from './kestrel.ts';
 import { demoPack } from './countries.ts';
 import { demoId } from './ids.ts';
 import { linkCodeHash } from '../links.ts';
+import { STARTER_GLOSSARY_TR } from '../glossary/starter.tr.ts';
 
 const demir = buildDemirDemo();
 
@@ -53,17 +54,35 @@ describe('Demir Yapı A.Ş. (§18.2)', () => {
     ]);
     // "TBM / tool box" is two phrases a reporter says: terms match the heard phrase exactly. The
     // crew word is kind `company` (spec §19 Q138's recommended default).
-    expect(
-      demir.glossary.map((g) => [g.heard, g.official, g.kind, g.language, g.org_id, g.status]),
-    ).toEqual([
-      ['döküm', 'Beton dökümü', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
-      ['kalıp söktük', 'Kalıp sökümü yapıldı', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
-      ['demirci ekibi', 'Donatı ekibi', 'company', 'tr', DEMIR_ORG_ID, 'confirmed'],
-      ['TBM', 'İş güvenliği bilgilendirmesi', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
-      ['tool box', 'İş güvenliği bilgilendirmesi', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
-    ]);
+    const seeds = demir.glossary.filter((g) => g.status !== 'built_in');
+    expect(seeds.map((g) => [g.heard, g.official, g.kind, g.language, g.org_id, g.status])).toEqual(
+      [
+        ['döküm', 'Beton dökümü', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
+        ['kalıp söktük', 'Kalıp sökümü yapıldı', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
+        ['demirci ekibi', 'Donatı ekibi', 'company', 'tr', DEMIR_ORG_ID, 'confirmed'],
+        ['TBM', 'İş güvenliği bilgilendirmesi', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
+        ['tool box', 'İş güvenliği bilgilendirmesi', 'term', 'tr', DEMIR_ORG_ID, 'confirmed'],
+      ],
+    );
     expect(DEMIR_GLOSSARY).toHaveLength(5);
-    expect(new Set(demir.glossary.map((g) => g.id)).size).toBe(5);
+    expect(new Set(seeds.map((g) => g.id)).size).toBe(5);
+  });
+
+  it('has the Turkish starter glossary as built_in, less the phrases the §18.2 seeds hold (Q238)', () => {
+    const builtIn = demir.glossary.filter((g) => g.status === 'built_in');
+    const seeded = new Set(DEMIR_GLOSSARY.map(([heard, , kind]) => `${kind}:${heard}`));
+    expect(builtIn.map((g) => [g.heard, g.official, g.kind])).toEqual(
+      STARTER_GLOSSARY_TR.filter((t) => !seeded.has(`${t.kind}:${t.heard}`)).map((t) => [
+        t.heard,
+        t.official,
+        t.kind,
+      ]),
+    );
+    // "döküm", "TBM" and "tool box" are §18.2 seeds already (confirmed), so the org has them once.
+    expect(builtIn).toHaveLength(STARTER_GLOSSARY_TR.length - 3);
+    for (const g of builtIn)
+      expect(g).toMatchObject({ org_id: DEMIR_ORG_ID, language: 'tr', times_heard: 0 });
+    expect(new Set(demir.glossary.map((g) => g.id)).size).toBe(demir.glossary.length);
   });
 
   it('invents nothing §18.2 does not give: no reports', () => {

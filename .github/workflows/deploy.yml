@@ -53,7 +53,7 @@ on:
         type: string
         default: ''
       eval_sets:
-        description: 'Target eval only: extraction, answers, corrections, utterances, or all'
+        description: 'Target eval only: extraction, answers, corrections, utterances, tr, or all (every set but tr)'
         type: string
         default: all
 

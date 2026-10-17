@@ -61,6 +61,7 @@ import { PAYROLL_COLUMNS } from '../report/payroll.ts';
 import { upgradeV1toV2 } from '../report/upgrade.ts';
 import { smsRenderOptions } from '../channels.ts';
 import { renderSms, type RenderSmsOptions, type SmsKey } from '../copy/sms.ts';
+import { starterGlossaryRows } from '../glossary/starter.ts';
 import { demoId, demoRand } from './ids.ts';
 import { DEMO_CANONICAL_TODAY, DEMO_LIVE_START, demoCalendar } from './calendar.ts';
 import { demoPack } from './countries.ts';
@@ -1009,6 +1010,18 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       last_seen_at: null,
     });
   }
+
+  // §19 Q238 (W4-08): the English starter glossary the org got when it was created, as
+  // seed_starter_glossary() writes it (built_in), less the phrases the org's own rows hold.
+  glossary.push(
+    ...starterGlossaryRows({
+      orgId: ORG,
+      language: 'en',
+      existing: glossary.filter((g) => g.org_id === ORG),
+      at: t('2026-03-02', '09:00'),
+      id: (term) => demoId(`starter:${term.kind}:${term.heard}`),
+    }),
+  );
 
   // WhatsApp threads only for the panel's /try simulator (D29); no messages, nothing sent.
   const conversations: ConversationRow[] = reporters.map((r) => ({

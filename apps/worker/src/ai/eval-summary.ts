@@ -7,8 +7,14 @@ import { estimateClaudeCostUsd, type TokenUsage } from './cost';
  * the eval workflow (.github/workflows/eval.yml) writes to the job summary from the `--json` files.
  */
 
-export const EVAL_SETS = ['extraction', 'answers', 'corrections', 'utterances'] as const;
+export const EVAL_SETS = ['extraction', 'answers', 'corrections', 'utterances', 'tr'] as const;
 export type EvalSet = (typeof EVAL_SETS)[number];
+
+/**
+ * What `all` runs: every set except `tr` (W4-08), the extraction cases whose report language is
+ * Turkish, which `extraction` already scores; `--set tr` runs them alone (the TR pilot's check).
+ */
+export const EVAL_ALL_SETS: readonly EvalSet[] = EVAL_SETS.filter((s) => s !== 'tr');
 
 /** What the worker would use when CLAUDE_MODEL is unset (src/config.ts's default). */
 export const EVAL_DEFAULT_MODEL = 'claude-sonnet-5-5';
@@ -24,6 +30,7 @@ export function evalModelFor(set: EvalSet, env: Record<string, string | undefine
   const fast = env.CLAUDE_MODEL_FAST?.trim() || '';
   switch (set) {
     case 'extraction':
+    case 'tr':
       return full || EVAL_DEFAULT_MODEL;
     case 'corrections':
       return full || null;
@@ -102,13 +109,13 @@ export function summaryLine(s: EvalSetSummary): string {
   return `${SUMMARY_PREFIX}${JSON.stringify(s)}`;
 }
 
-/** "extraction" or "answers,corrections" or "all" → the sets, in EVAL_SETS order. */
+/** "extraction" or "answers,corrections" or "all" (EVAL_ALL_SETS) → the sets, in EVAL_SETS order. */
 export function parseEvalSets(value: string): EvalSet[] {
   const names = value
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
-  if (names.length === 0 || names.includes('all')) return [...EVAL_SETS];
+  if (names.length === 0 || names.includes('all')) return [...EVAL_ALL_SETS];
   for (const n of names)
     if (!(EVAL_SETS as readonly string[]).includes(n))
       throw new Error(`unknown eval set: ${n} (one of ${EVAL_SETS.join(', ')}, all)`);

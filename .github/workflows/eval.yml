@@ -25,7 +25,7 @@ on:
         type: string
         default: claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5
       sets:
-        description: Comma-separated golden sets (extraction, answers, corrections, utterances), or all
+        description: Comma-separated golden sets (extraction, answers, corrections, utterances, tr), or all (every set but tr)
         type: string
         default: all
   # Deploy (target eval) calls this file: a workflow_dispatch needs the file on the default branch,
@@ -37,7 +37,7 @@ on:
         type: string
         default: claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5
       sets:
-        description: Comma-separated golden sets (extraction, answers, corrections, utterances), or all
+        description: Comma-separated golden sets (extraction, answers, corrections, utterances, tr), or all (every set but tr)
         type: string
         default: all
 
@@ -81,6 +81,8 @@ jobs:
             exit 1
           fi
           all="extraction,answers,corrections,utterances"
+          # tr: the extraction cases in Turkish (W4-08), already part of extraction, so not in all.
+          known="$all,tr"
           sets=""
           IFS=',' read -ra items <<< "${SETS_INPUT:-all}"
           for s in "${items[@]}"; do
@@ -90,10 +92,10 @@ jobs:
               sets="$all"
               break
             fi
-            case ",$all," in
+            case ",$known," in
               *",$s,"*) ;;
               *)
-                echo "::error::unknown golden set: $s (one of $all, or all)"
+                echo "::error::unknown golden set: $s (one of $known, or all)"
                 exit 1
                 ;;
             esac

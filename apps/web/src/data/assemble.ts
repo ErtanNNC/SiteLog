@@ -2866,6 +2866,7 @@ export function assembleGlossary(rows: RowSet): GlossaryData {
     firstSeenAt: t.first_seen_at,
     lastSeenAt: t.last_seen_at,
     isBuiltIn: t.org_id === null || t.status === 'built_in',
+    isGlobal: t.org_id === null,
   }));
   terms.sort((a, b) => b.timesHeard - a.timesHeard || a.heard.localeCompare(b.heard));
   return {

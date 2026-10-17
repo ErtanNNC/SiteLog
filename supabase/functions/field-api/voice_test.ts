@@ -229,6 +229,18 @@ function setup(opts: Opts = {}) {
       status: 'confirmed',
       times_heard: 2,
     },
+    // W4-08 (§19 Q238): a starter term the org got when it was created, never heard yet.
+    {
+      org_id: ORG,
+      scope_site_id: null,
+      scope_reporter_id: null,
+      heard: 'the iron',
+      official: 'Reinforcing steel (rebar)',
+      language: 'en',
+      kind: 'term',
+      status: 'built_in',
+      times_heard: 0,
+    },
   );
   const app = createFieldApp({
     store,
@@ -336,14 +348,16 @@ Deno.test(
       ['voice.recording_notice.v1', 'voice.consent.v1'],
     );
     assertEquals(body.maxQuestions, 2);
-    // Key terms (buildKeyterms, W3-08): the site, the companies and aliases, the site's area, and
-    // Kevin's own term (§19 Q143), never Marco's or another site's.
+    // Key terms (buildKeyterms, W3-08): the site, the companies and aliases, the site's area,
+    // Kevin's own term (§19 Q143), never Marco's or another site's, and the org's built-in
+    // starter terms (W4-08, §19 Q238).
     for (const t of [
       'Northgate Parking Structure',
       'Apex Concrete',
       'the Apex guys',
       'Ramp B',
       'PT deck',
+      'the iron',
     ]) {
       assert(body.keyterms.includes(t), t);
     }

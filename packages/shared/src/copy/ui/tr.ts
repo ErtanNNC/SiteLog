@@ -1463,6 +1463,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         scope: 'Kapsam',
         times: 'Sayı',
         source: 'Kaynak',
+        actions: 'İşlemler',
       },
       scope: { org: 'Tüm şantiyeler' },
       search: 'Terim ara',
@@ -1503,6 +1504,14 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       mapToPlaceholder: 'Bir firma seçin',
       mapConfirm: 'Eşleştir',
       noResults: '“{{q}}” ile eşleşen terim yok.',
+      /** W4-08 (§19 Q238): SiteLog'un hazır başlangıç terimleri. */
+      builtIn: {
+        changeTitle: 'Yerleşik terimi değiştir',
+        changeDescription:
+          '“{{heard}}” raporlarda nasıl yazılsın? Kaydettiğinizde terim firmanızın onaylı terimi olur.',
+        changeTerm: '“{{heard}}” terimini değiştir',
+        rejectTerm: '“{{heard}}” terimini reddet',
+      },
     },
     /** P9 / F20 kanıt etiketleri (W3-07). */
     evidence: {

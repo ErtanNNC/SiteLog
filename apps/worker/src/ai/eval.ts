@@ -79,6 +79,7 @@ import { createLogger } from '../log';
  *   pnpm eval -- --utterances                 the classify_utterance golden set (fixtures/utterances,
  *                                             W2-12) on the fast model; with --recorded, offline
  *   pnpm eval -- --set <name>                 the same by name: extraction, answers, corrections, utterances
+ *   pnpm eval -- --set tr                     the extraction cases in Turkish only (W4-08; `all` leaves it out)
  *   pnpm eval -- --json <file>                also write the set's summary and per-case results as JSON
  *   pnpm eval -- --summarize <file>...        print the Markdown table of --json files (no API calls)
  *
@@ -1160,12 +1161,13 @@ const USAGE = `usage: pnpm eval [-- options]
   --answers          the parse_answer golden set (fixtures/answers); with --recorded, offline
   --corrections      the apply_correction golden set (fixtures/corrections); with --recorded, offline
   --utterances       the classify_utterance golden set (fixtures/utterances); with --recorded, offline
-  --set <name>       the set by name: extraction, answers, corrections or utterances
+  --set <name>       the set by name: extraction, answers, corrections, utterances, or tr (the
+                     extraction cases in Turkish; all leaves it out)
   --json <file>      also write the set's summary (cases, passed, failed ids, tokens, cost, time) as JSON
   --summarize <f>... print the Markdown table of --json files and exit (no API calls)
   --concurrency <n>  parallel API calls in a live run (default 3)
 
-Models: CLAUDE_MODEL (extraction, corrections), CLAUDE_MODEL_FAST else CLAUDE_MODEL (answers,
+Models: CLAUDE_MODEL (extraction, tr, corrections), CLAUDE_MODEL_FAST else CLAUDE_MODEL (answers,
 utterances).`;
 
 async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>): Promise<R[]> {
@@ -1245,7 +1247,7 @@ export async function runEval(
     return problems.length ? 1 : 0;
   }
   const set = selectedSet(opts);
-  if (set !== 'extraction') {
+  if (set !== 'extraction' && set !== 'tr') {
     const key = env.ANTHROPIC_API_KEY ?? '';
     const model = evalModelFor(set, env);
     const tool = {
@@ -1279,7 +1281,10 @@ export async function runEval(
     });
     return finish(opts, set, model ?? '', outcomes, startedAt);
   }
-  const ids = listFixtureIds(dir).filter((id) => matchesFilter(id, opts.cases));
+  // `--set tr` (W4-08): the extraction cases whose report language is Turkish.
+  const ids = listFixtureIds(dir)
+    .filter((id) => matchesFilter(id, opts.cases))
+    .filter((id) => set !== 'tr' || isTurkishCase(id, dir));
   if (ids.length === 0) {
     console.error(`no cases match ${opts.cases.join(', ')}`);
     return 1;
@@ -1323,7 +1328,7 @@ export async function runEval(
   }
 
   let cases: EvalCase[];
-  const model = evalModelFor('extraction', env)!;
+  const model = evalModelFor(set, env)!;
   const startedAt = performance.now();
   if (opts.recorded) {
     console.log(`scoring ${fixtures.length} recorded tool outputs (offline)`);
@@ -1334,7 +1339,17 @@ export async function runEval(
     cases = await mapPool(fixtures, opts.concurrency, (f) => scoreCase(f, client, model));
   }
   console.log(printTable(cases));
-  return finish(opts, 'extraction', model, cases.map(outcomeOf), startedAt);
+  return finish(opts, set, model, cases.map(outcomeOf), startedAt);
+}
+
+/** A case of the `tr` set: its transcript's report language is Turkish (read loosely: a broken file is reported by the scoring). */
+export function isTurkishCase(id: string, dir = FIXTURES_DIR): boolean {
+  try {
+    const t = readJson(join(dir, 'transcripts', `${id}.json`)) as { reportLanguage?: unknown };
+    return t.reportLanguage === 'tr';
+  } catch {
+    return true;
+  }
 }
 
 /** An extraction case as a set outcome (the failed check names, the call's tokens). */

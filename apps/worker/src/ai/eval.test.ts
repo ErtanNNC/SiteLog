@@ -61,7 +61,8 @@ describe('golden eval set (§10.12)', () => {
     expect(new Set(all.map((f) => `${f.input.reportLanguage}/${f.input.units}`))).toEqual(
       new Set(['en/imperial', 'tr/metric']),
     );
-    expect(all.filter((f) => f.input.reportLanguage === 'tr').length).toBeGreaterThanOrEqual(2);
+    // W4-08: the two W1-12 cases plus a crew and hours gap, a delivery in m³, an incident and a correction.
+    expect(all.filter((f) => f.input.reportLanguage === 'tr').length).toBeGreaterThanOrEqual(6);
     const asked = new Set(all.map((f) => f.expectedQuestion?.field ?? 'none'));
     for (const field of [
       'none',

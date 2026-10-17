@@ -127,6 +127,44 @@ describe('GlossaryPage (demo data)', () => {
     await waitFor(() => expect(within(table).getByText('“the slab”')).toBeInTheDocument());
   });
 
+  it('changes and rejects a built-in starter term from its row (W4-08, §19 Q238)', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<GlossaryPage />, { route: '/glossary', store });
+    const table = await screen.findByRole('table', { name: 'All terms' });
+    const iron = within(table).getByText('“the iron”').closest('tr')!;
+    expect(within(iron).getByText('Built-in')).toBeInTheDocument();
+    // SiteLog's global terms (org_id null) are read-only: no row actions.
+    const llovio = within(table).getByText('“llovió”').closest('tr')!;
+    expect(within(llovio).queryByRole('button')).not.toBeInTheDocument();
+
+    await userEvent.click(within(iron).getByRole('button', { name: 'Change “the iron”' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Change built-in term' });
+    const input = within(dialog).getByLabelText('Official term');
+    expect(input).toHaveValue('Reinforcing steel (rebar)');
+    await userEvent.clear(input);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Enter the official term.');
+    await userEvent.type(input, 'Rebar');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(store.data.glossary.find((t) => t.heard === 'the iron')).toMatchObject({
+      status: 'confirmed',
+      official: 'Rebar',
+    });
+    const changed = within(table).getByText('“the iron”').closest('tr')!;
+    expect(within(changed).getByText('Confirmed')).toBeInTheDocument();
+    expect(within(changed).queryByRole('button')).not.toBeInTheDocument();
+
+    const ppe = within(table).getByText('“PPE”').closest('tr')!;
+    await userEvent.click(within(ppe).getByRole('button', { name: 'Reject “PPE”' }));
+    await waitFor(() => expect(within(table).queryByText('“PPE”')).not.toBeInTheDocument());
+    expect(store.data.glossary.find((t) => t.heard === 'PPE')!.status).toBe('rejected');
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'glossary.reviewed',
+      diff: expect.objectContaining({ action: 'reject' }),
+    });
+  });
+
   it('reads in Turkish: approving a Turkish crew word puts it in the Turkish tab', async () => {
     await act(() => i18n.changeLanguage('tr'));
     try {

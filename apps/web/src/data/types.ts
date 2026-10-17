@@ -924,6 +924,8 @@ export interface GlossaryTerm {
   firstSeenAt: string;
   lastSeenAt: string | null;
   isBuiltIn: boolean;
+  /** SiteLog's global term (`org_id` null): read-only for the office. */
+  isGlobal: boolean;
 }
 
 export interface GlossaryData {

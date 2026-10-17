@@ -259,8 +259,9 @@ describe('transcribe_upload (W1-11): a fixture upload → transcript, peaks, ext
     });
     expect((await run(tr.jobId!)).ok).toBe(true);
     expect(fake.calls.at(-1)).toMatchObject({ language: 'tr', mime: 'audio/mp4' });
+    // The §18.2 seeds and the org's Turkish starter terms (built_in, W4-08, §19 Q238).
     expect(fake.calls.at(-1)!.keyterms).toEqual(
-      expect.arrayContaining(['Usta Beton', 'döküm', 'kalıp söktük']),
+      expect.arrayContaining(['Usta Beton', 'döküm', 'kalıp söktük', 'metreküp', 'ramak kala']),
     );
     const [t] = await database.q<{ language: string; text: string }>(
       `select language, text from transcripts where upload_id = $1`,

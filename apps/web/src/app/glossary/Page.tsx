@@ -22,6 +22,7 @@ import type { CompanyOption, GlossaryTerm } from '@/data/types';
 import { useCopy, type CopyT } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { AddTermDialog } from './AddTermDialog';
+import { ChangeTermDialog } from './ChangeTermDialog';
 
 type Tab = 'all' | 'companies' | 'spanish' | 'turkish';
 
@@ -79,7 +80,8 @@ function heardLine(t: CopyT, term: GlossaryTerm): string {
  * P11 · Site glossary — review queue cards + all-terms table (§11.4, F17, F21), EN/TR (W3-08).
  * Tabs All · Companies · Spanish · Turkish. Every write is an audited RPC: the review card's
  * Approve, Change, Reject, Add as subcontractor and Map to… (`review_glossary_term`), and Add term
- * (`add_glossary_term`).
+ * (`add_glossary_term`). The org's built-in starter terms (W4-08, §19 Q238) carry Change and Reject
+ * in their table row, through the same `review_glossary_term`.
  */
 export default function GlossaryPage() {
   const { t } = useCopy();
@@ -87,6 +89,7 @@ export default function GlossaryPage() {
   const [tab, setTab] = useState<Tab>('all');
   const [q, setQ] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [changing, setChanging] = useState<GlossaryTerm | null>(null);
 
   const data = glossary.data;
   const needle = q.trim().toLocaleLowerCase();
@@ -142,6 +145,15 @@ export default function GlossaryPage() {
       key: 'source',
       header: t('glossary.columns.source'),
       cell: (term) => <SourceChip status={term.status} t={t} />,
+    },
+    {
+      // W4-08 (§19 Q238): the org's built-in starter terms are changed or rejected here.
+      key: 'actions',
+      header: <span className="sr-only">{t('glossary.columns.actions')}</span>,
+      cell: (term) =>
+        term.status === 'built_in' && !term.isGlobal ? (
+          <BuiltInActions term={term} onChange={() => setChanging(term)} />
+        ) : null,
     },
   ];
 
@@ -236,7 +248,40 @@ export default function GlossaryPage() {
       </Card>
 
       <AddTermDialog open={addOpen} onOpenChange={setAddOpen} sites={data.sites} />
+      <ChangeTermDialog
+        term={changing}
+        onOpenChange={(open) => {
+          if (!open) setChanging(null);
+        }}
+      />
     </>
+  );
+}
+
+/** A built-in starter term's row actions: Change (a dialog) and Reject, both `review_glossary_term`. */
+function BuiltInActions({ term, onChange }: { term: GlossaryTerm; onChange: () => void }) {
+  const { t } = useCopy();
+  const review = useReviewGlossaryTerm();
+  return (
+    <div className="flex justify-end gap-2" data-testid="built-in-actions">
+      <Button
+        variant="ghost"
+        size="dense"
+        onClick={onChange}
+        aria-label={t('glossary.builtIn.changeTerm', { heard: term.heard })}
+      >
+        {t('glossary.change')}
+      </Button>
+      <Button
+        variant="destructive"
+        size="dense"
+        loading={review.isPending}
+        onClick={() => review.mutate({ termId: term.id, action: 'reject' })}
+        aria-label={t('glossary.builtIn.rejectTerm', { heard: term.heard })}
+      >
+        {t('glossary.reject')}
+      </Button>
+    </div>
   );
 }
 

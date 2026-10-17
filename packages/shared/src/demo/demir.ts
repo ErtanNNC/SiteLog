@@ -39,6 +39,7 @@ import { renderSms } from '../copy/sms.ts';
 import { demoCalendar } from './calendar.ts';
 import { demoPack } from './countries.ts';
 import { demoId } from './ids.ts';
+import { starterGlossaryRows } from '../glossary/starter.ts';
 import {
   DEMO_LINK_BASE,
   demoConsents,
@@ -215,6 +216,17 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
     first_seen_at: setup('09:00'),
     last_seen_at: null,
   }));
+  // §19 Q238 (W4-08): the Turkish starter glossary the org got when it was created, as
+  // seed_starter_glossary() writes it (built_in), less the phrases the §18.2 seeds already hold.
+  glossary.push(
+    ...starterGlossaryRows({
+      orgId: ORG,
+      language: 'tr',
+      existing: glossary,
+      at: setup('09:00'),
+      id: (term) => demoId(`demir:starter:${term.kind}:${term.heard}`),
+    }),
+  );
 
   // The admin joins when the org is set up (her panel language: the org's, ui_locale null).
   const members: OrgMemberRow[] = DEMIR_USERS.map((u) => ({

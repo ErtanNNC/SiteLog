@@ -1850,6 +1850,7 @@ export const copy = {
       scope: 'Scope',
       times: 'Times',
       source: 'Source',
+      actions: 'Actions',
     },
     scope: { org: 'All sites' },
     search: 'Search terms',
@@ -1888,6 +1889,14 @@ export const copy = {
     mapToPlaceholder: 'Choose a company',
     mapConfirm: 'Map',
     noResults: 'No terms match “{{q}}”.',
+    /** W4-08 (§19 Q238): SiteLog's starter terms. */
+    builtIn: {
+      changeTitle: 'Change built-in term',
+      changeDescription:
+        'How should reports write “{{heard}}”? Saving makes it your company’s confirmed term.',
+      changeTerm: 'Change “{{heard}}”',
+      rejectTerm: 'Reject “{{heard}}”',
+    },
   },
 
   settings: {
