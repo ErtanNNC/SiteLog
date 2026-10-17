@@ -8,6 +8,7 @@
     "date-fns-tz": "npm:date-fns-tz@3.2.0",
     "libphonenumber-js": "npm:libphonenumber-js@1.13.14",
     "libphonenumber-js/min": "npm:libphonenumber-js@1.13.14/min",
+    "libphonenumber-js/max": "npm:libphonenumber-js@1.13.14/max",
     "libphonenumber-js/mobile/examples": "npm:libphonenumber-js@1.13.14/mobile/examples",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.117.3",
     "stripe": "npm:stripe@23.0.0",

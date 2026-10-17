@@ -1,3 +1,5 @@
+import type { ContactPref } from '@sitelog/shared/enums.ts';
+import type { ReporterLocale } from '@sitelog/shared/locale.ts';
 import { storage } from '@/lib/utils';
 import { FALLBACK_SITE_DEFAULTS, type SiteDefaults } from './countries';
 
@@ -28,10 +30,16 @@ export interface SiteDraft {
   managerCountry: string;
   managerPhone: string;
   languages: string[];
+  /** W4-02 (F2): the language SiteLog uses with the manager, one of the pack's field locales. */
+  locale: ReporterLocale;
+  /** W4-02 (F2): the manager's preferred channel, Text link or Call. */
+  contactPref: ContactPref;
   hasBackup: boolean;
   backupName: string;
   backupCountry: string;
   backupPhone: string;
+  backupLocale: ReporterLocale;
+  backupContactPref: ContactPref;
 }
 
 export interface ReportsDraft {
@@ -83,10 +91,14 @@ export function emptySite(
     managerCountry: defaults.phoneCountry,
     managerPhone: '',
     languages: [...defaults.languages],
+    locale: defaults.locale,
+    contactPref: 'link',
     hasBackup: false,
     backupName: '',
     backupCountry: defaults.phoneCountry,
     backupPhone: '',
+    backupLocale: defaults.locale,
+    backupContactPref: 'link',
   };
 }
 

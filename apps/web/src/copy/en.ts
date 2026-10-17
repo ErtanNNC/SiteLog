@@ -2242,15 +2242,22 @@ export const copy = {
     },
   },
 
+  /**
+   * P2 Setup wizard (F2; W4-02): read through `t()`, Turkish in `UI_RESOURCES.tr.panel.setup`.
+   * The site step reuses Team's invite fields (`team.invite.language`, `preference`, `team.locales`,
+   * `team.prefers`); the welcome preview is the §9.2 SMS itself (`renderSms`), not copy here.
+   */
   setup: {
     title: 'Set up your company',
-    header: (company: string) => `${company} · setup`,
+    header: '{{company}} · setup',
     saveLater: 'Save and finish later',
     steps: { company: 'Company', site: 'First site & manager', reports: 'Reports & reminders' },
-    stepOf: (n: number, total: number) => `Step ${n} of ${total}`,
+    stepOf: 'Step {{n}} of {{total}}',
     stepState: { done: 'Done', current: 'Current step', upcoming: 'Upcoming' },
     addSiteTitle: 'Add a site',
-    addSiteSubtitle: 'Each site reports daily by WhatsApp. $399 / month, no setup fee.',
+    addSiteSubtitle: 'Each site reports daily by text link or call. No setup fee.',
+    addSiteSubtitlePrice:
+      'Each site reports daily by text link or call. {{price}} / month, no setup fee.',
     company: {
       title: 'Your company',
       subtitle: 'What goes on the PDFs and the welcome text.',
@@ -2281,7 +2288,7 @@ export const copy = {
       countryList: 'the country list',
       noCountries: 'No country is set up in this SiteLog database yet.',
       presets: {
-        title: (country: string) => `Set by ${country}`,
+        title: 'Set by {{country}}',
         reportLanguage: 'Report language',
         units: 'Units',
         paper: 'Paper',
@@ -2307,7 +2314,7 @@ export const copy = {
       addressPlaceholder: 'Street, city, state',
       addressHint: 'Used to pull local weather data for every report and delay entry.',
       addressRequired: 'Enter the address or set the coordinates.',
-      geocoded: (lat: string, lng: string) => `Located · ${lat}, ${lng}`,
+      geocoded: 'Located · {{lat}}, {{lng}}',
       geocoding: 'Looking up the address…',
       notGeocoded:
         'Couldn’t locate that address. Enter the coordinates or weather data stays unavailable until the location is set.',
@@ -2329,34 +2336,42 @@ export const copy = {
       removeBackup: 'Remove backup',
       backupName: 'Backup name',
       backupPhone: 'Backup mobile number',
+      /** The backup's own language and preference (W4-02), as the manager's. */
+      backupLanguage: 'Language SiteLog uses with the backup',
+      backupPreference: 'Backup’s preferred channel',
       addAnother: 'Add another site',
       send: 'Send welcome text',
-      sent: (name: string) => `Site added. The welcome text to ${name} is queued.`,
-      inviteFailed: (name: string, reason: string) =>
-        `The site was created, but the welcome text to ${name} couldn’t be queued (${reason}). Invite them from Team & numbers.`,
+      sent: 'Site added. The welcome text to {{name}} is queued.',
+      inviteFailed:
+        'The site was created, but the welcome text to {{name}} couldn’t be queued ({{reason}}). Invite them from Team & numbers.',
       recipientsFailed:
         'The site was created, but its report recipients weren’t saved. Set them in Settings → Recipients.',
-      another: (n: number) => `${plural(n, 'site')} added so far`,
+      another_one: '{{count}} site added so far',
+      another_other: '{{count}} sites added so far',
+      /** F2 / §19 Q229 (W4-02): a number libphonenumber knows to be a landline. */
+      lineCheck: {
+        landline_text:
+          'This is a landline number, which can’t get texts. Choose Call, or enter a mobile number.',
+        landline_unreachable:
+          'This is a landline number. SiteLog can’t text it, and Talk now needs the personal link and a code, both sent by text. Enter a mobile number.',
+      },
       preview: {
-        title: (name: string) => `Preview · what ${name} receives`,
-        from: 'SiteLog',
-        buttons: ['Got it', 'Wrong site'],
-        followUp:
-          'Speak Spanish or English — the report always comes out in English. Try a 20-second test note now; nothing gets filed.',
+        title: 'Preview · what {{name}} receives',
+        from: 'SiteLog · text message',
+        /** §19 Q25: the welcome always goes by SMS; the link in the preview is not theirs. */
+        sampleLink: 'The link is a sample. Each person gets their own.',
+        callAnyTime: 'They can also call {{number}} any time.',
+        unavailable: 'No preview: texts in this country can’t carry a link.',
         placeholderName: 'your site manager',
         placeholderSite: 'the site',
       },
       pricing: {
-        price: '$399',
-        perMonth: '/ month',
-        setup: '$0 setup',
-        billed: 'billed per active site',
-        /** Until W4-02 reads the card from the org's price (`billingPrice()`, §19 Q234). */
-        sitesTimes: (n: number) => `${plural(n, 'active site')} × $399`,
-        points: [
-          'Cancel or pause any site at any time',
-          'First invoice at the start of next month',
-        ],
+        perSiteMonth: '/ site / month',
+        setupBilled: '{{zero}} setup · billed per active site',
+        pointPause: 'Cancel or pause any site at any time',
+        pointInvoice: 'First invoice at the start of next month',
+        sitesTimes_one: '{{count}} active site × {{price}}',
+        sitesTimes_other: '{{count}} active sites × {{price}}',
       },
     },
     reports: {
@@ -2364,6 +2379,12 @@ export const copy = {
       subtitle: 'Defaults for every site. Change them later in Settings.',
       recipients: 'Report recipients',
       recipientsHint: 'Filed PDFs go to these addresses. You can set per-site lists later.',
+      /** The recipients' chips and add box (as Settings → Recipients words them). */
+      addEmail: 'Add email',
+      emailPlaceholder: 'name@company.com',
+      removeEmail: 'Remove {{email}}',
+      emailInvalid: 'Enter a valid email.',
+      noRecipients: 'No recipients yet.',
       finish: 'Finish',
       finished: 'All set. Reports arrive after the deadline.',
     },
@@ -2567,7 +2588,7 @@ export const copy = {
     packRequested: 'Evidence pack requested.',
     csvReady: 'Payroll CSV ready.',
     companyResolved: 'Company resolved. New version saved.',
-    orgCreated: (name: string) => `${name} created.`,
+    orgCreated: '{{name}} created.',
     orgUpdated: 'Company details saved.',
     logoUpdated: 'Logo updated.',
     logoRemoved: 'Logo removed.',

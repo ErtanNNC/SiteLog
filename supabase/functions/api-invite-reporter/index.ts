@@ -22,7 +22,7 @@ import {
 import { enqueueJob } from '../_shared/jobs.ts';
 import { logInfo } from '../_shared/log.ts';
 import { adminClient, type AppClient, type TableRow } from '../_shared/supabase.ts';
-import { canResend, invitePhone, inviteProfile, linkRows } from './logic.ts';
+import { canResend, invitePhone, inviteProfile, lineCheckRefusal, linkRows } from './logic.ts';
 
 /**
  * api-invite-reporter (§F2 step 2, §F3, §P10) — admin|ops.
@@ -40,7 +40,9 @@ import { canResend, invitePhone, inviteProfile, linkRows } from './logic.ts';
  * preference) keeps working. A number that sent STOP on the pack's sender (`sms_opt_outs`, spec
  * §9.5), or a disabled reporter who did (`opted_out_at`), is created or re-enabled `opted_out`:
  * the welcome job then skips it and tells the office why (§13). The answer never holds the link
- * code.
+ * code. W4-02 (§19 Q229 `delivery`): a number libphonenumber knows to be a fixed line is refused
+ * (422 `landline_text` for a text link; `landline_unreachable` where SiteLog cannot reach it by
+ * phone either), before anything is written.
  */
 
 const InviteSchema = z.object({
@@ -106,6 +108,14 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     .eq('phone_e164', phone)
     .maybeSingle()
     .throwOnError();
+  // F2's line check (§19 Q229): on the preference the reporter ends up with, before any write.
+  const refusal = lineCheckRefusal(
+    phone,
+    body.contactPref ?? existing?.contact_pref ?? profile.contactPref,
+    org,
+    pack,
+  );
+  if (refusal) throw new HttpError(422, refusal.message, { code: refusal.problem });
   let reporter: Reporter;
   if (existing) {
     reporter = existing;

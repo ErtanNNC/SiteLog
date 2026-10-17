@@ -2,10 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { reporterDefaultsFor, toCountryPack, type CountryPack } from '@sitelog/shared/countries.ts';
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
-import { reportLanguageFor, type OrgLocale } from '@sitelog/shared/locale.ts';
+import { reportLanguageFor, type OrgLocale, type ReporterLocale } from '@sitelog/shared/locale.ts';
 import { phoneCountryFor } from '@/components/sitelog/PhoneInput';
-import { copy } from '@/copy/en';
+import type { PanelLanguage } from '@/i18n/language';
+import { translate, type CopyT } from '@/i18n/useCopy';
 import { supabase, type Db } from '@/lib/supabase';
+import { languageLabel } from '../team/labels';
 
 /**
  * The setup wizard's country packs (spec §4.6, GAP D47). The `countries` table is the one source
@@ -37,7 +39,7 @@ export async function loadCountryPacks(db: Db | null): Promise<CountryPack[]> {
       console.warn(`[setup] country pack ${row.code} is not understood by this panel`, err);
     }
   }
-  if (packs.length === 0) throw new Error(copy.setup.company.noCountries);
+  if (packs.length === 0) throw new Error(translate('setup.company.noCountries'));
   return packs;
 }
 
@@ -91,12 +93,12 @@ export function packFor(
 }
 
 /**
- * "TR" → "Türkiye" in English (the Setup page is English-only); the code if the browser has none.
- * ICU decides the name ("Türkiye" or "Turkey"), so the selects show the code beside it.
+ * "TR" → "Türkiye" in the panel's language (W4-02); the code if the browser has none. ICU decides
+ * the name ("Türkiye" or "Turkey"), so the selects show the code beside it.
  */
-export function countryName(code: string): string {
+export function countryName(code: string, language: PanelLanguage = 'en'): string {
   try {
-    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code;
+    return new Intl.DisplayNames([language], { type: 'region' }).of(code) ?? code;
   } catch {
     return code;
   }
@@ -104,28 +106,38 @@ export function countryName(code: string): string {
 
 /**
  * The report language an org locale sets (§9.6: `orgs.locale`, a pack's `defaultLocale`), named
- * in English as the reporter language chips name it: "Turkish". Report languages are code
- * (`REPORT_LANGUAGES`), so their names are copy, not the browser's. Without a locale (an older
- * cached org summary) the column default, English.
+ * in the panel's language as the reporter language chips name it: "Turkish", "Türkçe". Report
+ * languages are code (`REPORT_LANGUAGES`), so their names are copy, not the browser's. Without a
+ * locale (an older cached org summary) the column default, English.
  */
-export function reportLanguageName(locale: OrgLocale | undefined): string {
-  return copy.team.invite.languageNames[reportLanguageFor(locale ?? 'en-US')];
+export function reportLanguageName(t: CopyT, locale: OrgLocale | undefined): string {
+  return languageLabel(t, reportLanguageFor(locale ?? 'en-US'));
 }
 
-/** A new site manager's defaults in a pack's country: its phone country and first field language. */
+/**
+ * A new site manager's defaults in a pack's country: its phone country, first field language and
+ * the language SiteLog uses with them (the pack's first field locale, F2; W4-02).
+ */
 export interface SiteDefaults {
   /** A region libphonenumber knows: the pack's country, or US for one it does not know. */
   phoneCountry: string;
   languages: string[];
+  locale: ReporterLocale;
 }
 
 /** Without a pack (none loaded): today's defaults, a US number in English. */
-export const FALLBACK_SITE_DEFAULTS: SiteDefaults = { phoneCountry: 'US', languages: ['en'] };
+export const FALLBACK_SITE_DEFAULTS: SiteDefaults = {
+  phoneCountry: 'US',
+  languages: ['en'],
+  locale: 'en-US',
+};
 
 export function siteDefaultsFor(pack: CountryPack | undefined): SiteDefaults {
   if (!pack) return FALLBACK_SITE_DEFAULTS;
+  const defaults = reporterDefaultsFor(pack);
   return {
     phoneCountry: phoneCountryFor(pack.code, FALLBACK_SITE_DEFAULTS.phoneCountry),
-    languages: [...reporterDefaultsFor(pack).languages],
+    languages: [...defaults.languages],
+    locale: defaults.locale,
   };
 }

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEMO_COUNTRIES, demoPack } from '@sitelog/shared/demo/countries.ts';
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
 import { copy } from '@/copy/en';
+import { i18n } from '@/i18n/i18n';
+import { translate } from '@/i18n/useCopy';
 import type { Db } from '@/lib/supabase';
 import {
   browserPackCountry,
@@ -106,25 +108,44 @@ describe('pack labels and defaults', () => {
     }
     // Not a region code at all: the code itself.
     expect(countryName('not-a-region')).toBe('not-a-region');
+    // W4-02: in the panel's language (the browser's names).
+    expect(countryName('DE', 'tr')).toBe(
+      new Intl.DisplayNames(['tr'], { type: 'region' }).of('DE'),
+    );
+    expect(countryName('DE', 'tr')).not.toBe(countryName('DE', 'en'));
   });
 
-  it('names the report language of an org locale (§9.6) from copy, as the language chips do', () => {
-    expect(reportLanguageName(demoPack('US').defaultLocale)).toBe('English');
-    expect(reportLanguageName(demoPack('TR').defaultLocale)).toBe('Turkish');
-    expect(reportLanguageName('tr-TR')).toBe(copy.team.invite.languageNames.tr);
+  it('names the report language of an org locale (§9.6) from copy, as the language chips do', async () => {
+    expect(reportLanguageName(translate, demoPack('US').defaultLocale)).toBe('English');
+    expect(reportLanguageName(translate, demoPack('TR').defaultLocale)).toBe('Turkish');
+    expect(reportLanguageName(translate, 'tr-TR')).toBe(copy.team.invite.languageNames.tr);
     // An org summary without its locale (an older cached list): the column default.
-    expect(reportLanguageName(undefined)).toBe('English');
+    expect(reportLanguageName(translate, undefined)).toBe('English');
+    await i18n.changeLanguage('tr');
+    try {
+      expect(reportLanguageName(translate, 'tr-TR')).toBe('Türkçe');
+    } finally {
+      await i18n.changeLanguage('en');
+    }
   });
 
-  it('gives a new site manager the pack’s phone country and first field language', () => {
-    expect(siteDefaultsFor(demoPack('US'))).toEqual({ phoneCountry: 'US', languages: ['en'] });
-    expect(siteDefaultsFor(demoPack('TR'))).toEqual({ phoneCountry: 'TR', languages: ['tr'] });
+  it('gives a new site manager the pack’s phone country, first field language and locale', () => {
+    expect(siteDefaultsFor(demoPack('US'))).toEqual({
+      phoneCountry: 'US',
+      languages: ['en'],
+      locale: 'en-US',
+    });
+    expect(siteDefaultsFor(demoPack('TR'))).toEqual({
+      phoneCountry: 'TR',
+      languages: ['tr'],
+      locale: 'tr-TR',
+    });
     // A new pack needs no picker code (W4-01): any region libphonenumber knows is its own.
     const nl = { ...demoPack('US'), code: 'NL' };
-    expect(siteDefaultsFor(nl)).toEqual({ phoneCountry: 'NL', languages: ['en'] });
+    expect(siteDefaultsFor(nl)).toEqual({ phoneCountry: 'NL', languages: ['en'], locale: 'en-US' });
     // A synthetic row libphonenumber does not know keeps a US number; Spanish first.
     const zz = { ...demoPack('US'), code: 'ZZ', fieldLocales: ['es-US'] as const };
-    expect(siteDefaultsFor(zz)).toEqual({ phoneCountry: 'US', languages: ['es'] });
+    expect(siteDefaultsFor(zz)).toEqual({ phoneCountry: 'US', languages: ['es'], locale: 'es-US' });
     expect(siteDefaultsFor(undefined)).toBe(FALLBACK_SITE_DEFAULTS);
   });
 

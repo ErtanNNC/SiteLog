@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { Link, Navigate, useNavigate, useParams } from 'react-router';
 import { toast } from 'sonner';
 import type { CountryPack } from '@sitelog/shared/countries.ts';
+import { reachableByPhone } from '@sitelog/shared/line-check.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { RequireRole, ROUTE_ROLES } from '@/auth/guards';
 import { Logo } from '@/components/shell/Sidebar';
@@ -9,7 +10,7 @@ import { phoneValue } from '@/components/sitelog/PhoneInput';
 import { PageSkeleton } from '@/components/sitelog/Skeletons';
 import { ErrorState } from '@/components/sitelog/States';
 import { Button } from '@/components/ui/Button';
-import { copy } from '@/copy/en';
+import { translate, useCopy } from '@/i18n/useCopy';
 import { useOptionalDataSource } from '@/data/DataProvider';
 import {
   useCreateSite,
@@ -25,14 +26,9 @@ import type { CreateSiteResult, UpdateOrgInput } from '@/data/source';
 import { uploadOrgLogo } from '@/data/supabase/SupabaseSource';
 import type { OrgSettings } from '@/data/types';
 import { supabase } from '@/lib/supabase';
+import { sitePriceFor } from '../sites/price';
 import { CompanyStep } from './CompanyStep';
-import {
-  browserPackCountry,
-  packFor,
-  reportLanguageName,
-  siteDefaultsFor,
-  useCountryPacks,
-} from './countries';
+import { browserPackCountry, packFor, siteDefaultsFor, useCountryPacks } from './countries';
 import { Stepper } from './fields';
 import { ReportsStep } from './ReportsStep';
 import { SiteStep, type SiteSubmit } from './SiteStep';
@@ -62,6 +58,7 @@ import {
 export default function SetupPage() {
   const source = useOptionalDataSource();
   const packs = useCountryPacks();
+  const { t } = useCopy();
   if (source && (packs.data || packs.isError)) {
     return (
       <RequireRole roles={ROUTE_ROLES.setup} page="setup.pageName">
@@ -72,9 +69,9 @@ export default function SetupPage() {
   if (packs.data) return <NoOrgWizard packs={packs.data} />;
   if (!packs.isError) return <PageSkeleton fullscreen />;
   return (
-    <SetupLayout step="company" done={{}} title={copy.setup.title}>
+    <SetupLayout step="company" done={{}} title={t('setup.title')}>
       <ErrorState
-        thing={copy.setup.company.countryList}
+        thing={t('setup.company.countryList')}
         error={packs.error}
         onRetry={() => void packs.refetch()}
       />
@@ -155,6 +152,7 @@ function SetupLayout({
   children: ReactNode;
 }) {
   const { currentOrg, signOut } = useAuth();
+  const { t } = useCopy();
   const navigate = useNavigate();
   /**
    * In an org the panel is the way out. Without one every page leads back here, so leaving means
@@ -162,11 +160,11 @@ function SetupLayout({
    */
   const leave = async () => {
     if (currentOrg) {
-      toast.success(copy.setup.savedLater);
+      toast.success(t('setup.savedLater'));
       void navigate('/');
       return;
     }
-    toast.success(copy.setup.savedLaterSignedOut);
+    toast.success(t('setup.savedLaterSignedOut'));
     await signOut().catch(() => undefined);
     void navigate('/login', { replace: true });
   };
@@ -179,7 +177,7 @@ function SetupLayout({
             className="hidden truncate text-caption text-dust-light sm:inline"
             data-testid="setup-header"
           >
-            {copy.setup.header(currentOrg?.name ?? copy.setup.title)}
+            {t('setup.header', { company: currentOrg?.name ?? t('setup.title') })}
           </span>
         </div>
         <Button
@@ -188,12 +186,12 @@ function SetupLayout({
           className="border-iron bg-transparent text-chalk hover:bg-steel"
           onClick={() => void leave()}
         >
-          {copy.setup.saveLater}
+          {t('setup.saveLater')}
         </Button>
       </header>
       <main className="mx-auto max-w-[1240px] px-4 py-7 md:px-8">
         <div className="mb-6">
-          <div className="eyebrow mb-1 text-dust">{copy.setup.title}</div>
+          <div className="eyebrow mb-1 text-dust">{t('setup.title')}</div>
           <h1 className="font-display text-[28px] leading-[34px] md:text-h1">{title}</h1>
           {subtitle ? <p className="mt-1 text-[15px] text-dust">{subtitle}</p> : null}
         </div>
@@ -209,6 +207,7 @@ function SetupLayout({
 /** Supabase user without an org: only the company step is possible until `create_org` runs. */
 function NoOrgWizard({ packs }: { packs: readonly CountryPack[] }) {
   const { refreshOrgs } = useAuth();
+  const { t } = useCopy();
   const { progress, setProgress, userId } = useProgress(packs);
   const company = progress.company;
   const logo = useLogoPreview();
@@ -218,7 +217,7 @@ function NoOrgWizard({ packs }: { packs: readonly CountryPack[] }) {
   if (step && step !== 'company') return <Navigate to="/setup/company" replace />;
   const create = async () => {
     if (!supabase) {
-      toast.error(copy.errors.generic);
+      toast.error(t('errors.generic'));
       return;
     }
     setBusy(true);
@@ -233,7 +232,7 @@ function NoOrgWizard({ packs }: { packs: readonly CountryPack[] }) {
       } as never);
       if (error) throw new Error(createOrgError(error));
       const id = (data as { id?: string } | null)?.id;
-      if (!id) throw new Error(copy.errors.generic);
+      if (!id) throw new Error(t('errors.generic'));
       // The wizard continues in the new org, whose progress is kept under its own key.
       clearProgress(userId, null);
       saveProgress(userId, id, {
@@ -245,20 +244,20 @@ function NoOrgWizard({ packs }: { packs: readonly CountryPack[] }) {
       });
       if (logo.file) {
         await uploadOrgLogo(supabase, id, logo.file).catch(() =>
-          toast.error(copy.setup.company.logoUploadFailed),
+          toast.error(t('setup.company.logoUploadFailed')),
         );
       }
       await refreshOrgs();
-      toast.success(copy.toasts.orgCreated(company.name.trim()));
+      toast.success(t('toasts.orgCreated', { name: company.name.trim() }));
       void navigate('/setup/site', { replace: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : copy.errors.generic);
+      toast.error(err instanceof Error ? err.message : t('errors.generic'));
     } finally {
       setBusy(false);
     }
   };
   return (
-    <SetupLayout step="company" done={progress.done} title={copy.setup.title}>
+    <SetupLayout step="company" done={progress.done} title={t('setup.title')}>
       <CompanyStep
         draft={company}
         onChange={(next) => setProgress((p) => ({ ...p, company: next }))}
@@ -274,7 +273,7 @@ function NoOrgWizard({ packs }: { packs: readonly CountryPack[] }) {
 
 /** create_org's errors for the toast: an unknown country (22023) gets the copy, others as sent. */
 function createOrgError(error: { code?: string; message: string }): string {
-  if (error.code === '22023') return copy.setup.company.errors.unknownCountry;
+  if (error.code === '22023') return translate('setup.company.errors.unknownCountry');
   return error.message;
 }
 
@@ -286,8 +285,9 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
   const orgCountry = useOrgCountry(packs);
   const orgPack = packFor(packs, orgCountry);
   const siteDefaults = siteDefaultsFor(orgPack);
-  // §9.6: the org's report language, from its locale (its pack's default for an older summary).
-  const reportLanguage = reportLanguageName(currentOrg?.locale ?? orgPack?.defaultLocale);
+  const { t, language } = useCopy();
+  // W4-10 (§19 Q234): the org's own price, in the panel's language.
+  const priceText = sitePriceFor(currentOrg?.price, language);
   const logo = useLogoPreview();
   const setupState = useSetupState();
   const settings = useSettings();
@@ -368,7 +368,7 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
     if (logo.file) {
       await setLogo
         .mutateAsync({ file: logo.file })
-        .catch(() => toast.error(copy.setup.company.logoSaveFailed));
+        .catch(() => toast.error(t('setup.company.logoSaveFailed')));
     }
     // The org switcher and the setup header show the company name from the auth org list.
     if (changed) await refreshOrgs().catch(() => undefined);
@@ -398,6 +398,8 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
           role: 'site_manager',
           siteIds: [],
           languages,
+          locale: s.locale,
+          contactPref: s.contactPref,
         },
       });
     } catch {
@@ -414,10 +416,10 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
         site: emptySite(p.company.timezone, siteDefaults),
       }));
     }
-    if (created.recipientsError) toast.error(copy.setup.site.recipientsFailed);
+    if (created.recipientsError) toast.error(t('setup.site.recipientsFailed'));
     let invited = !created.inviteError;
     if (created.inviteError) {
-      toast.error(copy.setup.site.inviteFailed(manager, created.inviteError));
+      toast.error(t('setup.site.inviteFailed', { name: manager, reason: created.inviteError }));
     }
     if (s.hasBackup && s.backupName.trim() && s.backupPhone.trim()) {
       try {
@@ -427,12 +429,14 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
           role: 'backup',
           siteIds: [siteId],
           languages,
+          locale: s.backupLocale,
+          contactPref: s.backupContactPref,
         });
       } catch {
         invited = false; // toasted by the mutation hook
       }
     }
-    if (invited) toast.success(copy.setup.site.sent(manager));
+    if (invited) toast.success(t('setup.site.sent', { name: manager }));
     // Only the org switcher's site count depends on it.
     await refreshOrgs().catch(() => undefined);
     if (addSiteMode) {
@@ -466,7 +470,7 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
         }
       }
       clearProgress(userId, orgId);
-      toast.success(copy.setup.reports.finished);
+      toast.success(t('setup.reports.finished'));
       await refreshOrgs().catch(() => undefined);
       void navigate('/', { replace: true });
     } catch {
@@ -474,13 +478,17 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
     }
   };
 
-  const title = addSiteMode ? copy.setup.addSiteTitle : copy.setup.title;
-  const subtitle = addSiteMode ? copy.setup.addSiteSubtitle : undefined;
+  const title = addSiteMode ? t('setup.addSiteTitle') : t('setup.title');
+  const subtitle = addSiteMode
+    ? priceText
+      ? t('setup.addSiteSubtitlePrice', { price: priceText })
+      : t('setup.addSiteSubtitle')
+    : undefined;
   // Only a failed first load (nothing to edit); a failed refetch keeps the loaded data.
   const settingsError =
     settings.isError && !settings.data ? (
       <ErrorState
-        thing={copy.nav.settings.toLowerCase()}
+        thing={t('nav.settings').toLocaleLowerCase(language)}
         error={settings.error}
         onRetry={() => void settings.refetch()}
       />
@@ -517,8 +525,15 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
           createdCount={progress.createdSites.length}
           canGeocode={!isDemo}
           siteCount={(setupState.data?.siteCount ?? 0) + 1}
-          reportLanguage={reportLanguage}
+          orgLocale={currentOrg?.locale}
           packCountry={orgCountry}
+          pack={orgPack}
+          reachable={
+            orgPack
+              ? reachableByPhone({ isDemo: isDemo || currentOrg?.demoOrg === true }, orgPack)
+              : false
+          }
+          price={currentOrg?.price}
         />
       ) : null}
       {step === 'reports'
@@ -542,7 +557,7 @@ function Wizard({ packs }: { packs: readonly CountryPack[] }) {
       {step === 'company' && currentOrg ? (
         <p className="mt-4 text-caption text-dust">
           <Link to="/" className="text-level underline-offset-4 hover:underline">
-            {copy.states.goHome}
+            {t('states.goHome')}
           </Link>
         </p>
       ) : null}

@@ -11,8 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
-import { LOGO_ACCEPT, logoFileError } from '@/lib/logo';
+import { useCopy } from '@/i18n/useCopy';
+import { LOGO_ACCEPT, logoFileProblem } from '@/lib/logo';
 import { countryName, packFor, reportLanguageName } from './countries';
 import { Field, TimezoneSelect } from './fields';
 import type { CompanyDraft } from './state';
@@ -21,8 +21,8 @@ import type { CompanyDraft } from './state';
  * F2 step 1 · Company (spec §4.6): the country is one of the country packs, and picking it
  * presets the time zone select (until the user picks a zone) and, at create_org, the report
  * language, units, paper and currency shown under it. An existing org's country is locked:
- * `update_org` cannot change it (spec §19 Q31). Countries are listed by their English name (the
- * browser's), each with its code.
+ * `update_org` cannot change it (spec §19 Q31). Countries are listed by their name in the panel's
+ * language (the browser's, W4-02), each with its code.
  */
 export function CompanyStep({
   draft,
@@ -45,7 +45,7 @@ export function CompanyStep({
   /** The org exists: its country is shown, not chosen. */
   countryLocked?: boolean;
 }) {
-  const c = copy.setup.company;
+  const { t, language } = useCopy();
   const fileRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const set = (patch: Partial<CompanyDraft>) => onChange({ ...draft, ...patch });
@@ -55,7 +55,7 @@ export function CompanyStep({
   // any more shows as no choice.
   const codes = packs
     .map((p) => p.code)
-    .sort((a, b) => countryName(a).localeCompare(countryName(b), 'en'));
+    .sort((a, b) => countryName(a, language).localeCompare(countryName(b, language), language));
   if (countryLocked && draft.country && !codes.includes(draft.country)) codes.push(draft.country);
   const shown = codes.includes(draft.country) ? draft.country : '';
 
@@ -71,8 +71,8 @@ export function CompanyStep({
 
   const submit = () => {
     const next: Record<string, string> = {};
-    if (!draft.name.trim()) next.name = c.nameRequired;
-    if (!countryLocked && !pack) next.country = c.countryRequired;
+    if (!draft.name.trim()) next.name = t('setup.company.nameRequired');
+    if (!countryLocked && !pack) next.country = t('setup.company.countryRequired');
     setErrors(next);
     if (Object.keys(next).length) return;
     onContinue();
@@ -81,8 +81,8 @@ export function CompanyStep({
   return (
     <Card>
       <CardContent className="p-6 md:p-8">
-        <h2 className="font-h2 text-h2">{c.title}</h2>
-        <p className="mt-1 text-[15px] text-dust">{c.subtitle}</p>
+        <h2 className="font-h2 text-h2">{t('setup.company.title')}</h2>
+        <p className="mt-1 text-[15px] text-dust">{t('setup.company.subtitle')}</p>
         <form
           className="mt-6 grid gap-5"
           noValidate
@@ -91,12 +91,12 @@ export function CompanyStep({
             submit();
           }}
         >
-          <Field id="co-name" label={c.name} error={errors.name}>
+          <Field id="co-name" label={t('setup.company.name')} error={errors.name}>
             <Input
               id="co-name"
               value={draft.name}
               onChange={(e) => set({ name: e.target.value })}
-              placeholder={c.namePlaceholder}
+              placeholder={t('setup.company.namePlaceholder')}
               autoComplete="organization"
               aria-invalid={!!errors.name}
             />
@@ -104,8 +104,10 @@ export function CompanyStep({
           <div className="grid gap-5 md:grid-cols-2">
             <Field
               id="co-country"
-              label={c.country}
-              hint={countryLocked ? c.countryLocked : c.countryHint}
+              label={t('setup.company.country')}
+              hint={
+                countryLocked ? t('setup.company.countryLocked') : t('setup.company.countryHint')
+              }
               error={errors.country}
             >
               <Select value={shown} onValueChange={chooseCountry} disabled={countryLocked} required>
@@ -114,20 +116,20 @@ export function CompanyStep({
                   aria-describedby="co-country-hint"
                   aria-invalid={!!errors.country}
                 >
-                  <SelectValue placeholder={c.countryPlaceholder}>
+                  <SelectValue placeholder={t('setup.company.countryPlaceholder')}>
                     {shown ? <CountryLabel code={shown} /> : null}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {codes.map((code) => (
-                    <SelectItem key={code} value={code} textValue={countryName(code)}>
+                    <SelectItem key={code} value={code} textValue={countryName(code, language)}>
                       <CountryLabel code={code} />
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
-            <Field id="co-tz" label={c.timezone}>
+            <Field id="co-tz" label={t('setup.company.timezone')}>
               <TimezoneSelect
                 id="co-tz"
                 value={draft.timezone}
@@ -137,16 +139,16 @@ export function CompanyStep({
           </div>
           {!countryLocked && pack ? <CountryPresets pack={pack} /> : null}
           <div className="grid gap-5 md:grid-cols-2">
-            <Field id="co-address" label={c.address} optional>
+            <Field id="co-address" label={t('setup.company.address')} optional>
               <Input
                 id="co-address"
                 value={draft.address}
                 onChange={(e) => set({ address: e.target.value })}
-                placeholder={c.addressPlaceholder}
+                placeholder={t('setup.company.addressPlaceholder')}
                 autoComplete="street-address"
               />
             </Field>
-            <Field id="co-license" label={c.licenseNo} optional>
+            <Field id="co-license" label={t('setup.company.licenseNo')} optional>
               <Input
                 id="co-license"
                 value={draft.licenseNo}
@@ -156,13 +158,19 @@ export function CompanyStep({
             </Field>
           </div>
           <div className="grid gap-5 md:grid-cols-2">
-            <Field id="co-logo" label={c.logo} hint={c.logoHint} error={errors.logo} optional>
+            <Field
+              id="co-logo"
+              label={t('setup.company.logo')}
+              hint={t('setup.company.logoHint')}
+              error={errors.logo}
+              optional
+            >
               <div className="flex items-center gap-4">
                 <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-card border border-rebar bg-concrete">
                   {logoUrl ? (
                     <img
                       src={logoUrl}
-                      alt={c.logo}
+                      alt={t('setup.company.logo')}
                       className="max-h-full max-w-full object-contain"
                     />
                   ) : (
@@ -179,9 +187,9 @@ export function CompanyStep({
                     const f = e.target.files?.[0] ?? null;
                     e.target.value = '';
                     if (!f) return;
-                    const error = logoFileError(f);
-                    if (error) {
-                      setErrors((er) => ({ ...er, logo: error }));
+                    const problem = logoFileProblem(f);
+                    if (problem) {
+                      setErrors((er) => ({ ...er, logo: t(`setup.company.${problem}`) }));
                       return;
                     }
                     setErrors(({ logo: _l, ...rest }) => rest);
@@ -190,11 +198,11 @@ export function CompanyStep({
                 />
                 <div className="flex flex-wrap gap-2">
                   <Button variant="ghost" size="dense" onClick={() => fileRef.current?.click()}>
-                    {logoUrl ? c.replace : c.upload}
+                    {logoUrl ? t('setup.company.replace') : t('setup.company.upload')}
                   </Button>
                   {logoUrl ? (
                     <Button variant="destructive" size="dense" onClick={() => onLogoChange(null)}>
-                      {c.removeLogo}
+                      {t('setup.company.removeLogo')}
                     </Button>
                   ) : null}
                 </div>
@@ -203,7 +211,7 @@ export function CompanyStep({
           </div>
           <div className="flex justify-end border-t border-rebar pt-5">
             <Button type="submit" variant="primary" loading={busy}>
-              {c.next}
+              {t('setup.company.next')}
               <ArrowRight aria-hidden="true" />
             </Button>
           </div>
@@ -215,9 +223,11 @@ export function CompanyStep({
 
 /** "Türkiye TR": the browser's name for the country, then its code (the name varies by ICU). */
 function CountryLabel({ code }: { code: string }) {
+  const { language } = useCopy();
   return (
     <>
-      {countryName(code)} <span className="ml-1 font-mono text-[12px] text-dust">{code}</span>
+      {countryName(code, language)}{' '}
+      <span className="ml-1 font-mono text-[12px] text-dust">{code}</span>
     </>
   );
 }
@@ -228,12 +238,15 @@ function CountryLabel({ code }: { code: string }) {
  * until the user picks another.
  */
 function CountryPresets({ pack }: { pack: CountryPack }) {
-  const c = copy.setup.company;
+  const { t, language } = useCopy();
   const items: Array<{ label: string; value: string; mono?: boolean }> = [
-    { label: c.presets.reportLanguage, value: reportLanguageName(pack.defaultLocale) },
-    { label: c.presets.units, value: c.unitNames[pack.units] },
-    { label: c.presets.paper, value: c.paperNames[pack.paper] },
-    { label: c.presets.currency, value: pack.currency, mono: true },
+    {
+      label: t('setup.company.presets.reportLanguage'),
+      value: reportLanguageName(t, pack.defaultLocale),
+    },
+    { label: t('setup.company.presets.units'), value: t(`setup.company.unitNames.${pack.units}`) },
+    { label: t('setup.company.presets.paper'), value: t(`setup.company.paperNames.${pack.paper}`) },
+    { label: t('setup.company.presets.currency'), value: pack.currency, mono: true },
   ];
   return (
     <section
@@ -242,9 +255,9 @@ function CountryPresets({ pack }: { pack: CountryPack }) {
       className="rounded-card border border-rebar p-4"
       data-testid="country-presets"
     >
-      {/* Not an uppercase eyebrow: on an English page "Türkiye" would lose its dotted İ. */}
+      {/* Not an uppercase eyebrow: "Türkiye" would lose its dotted İ. */}
       <h3 id="co-presets-title" className="text-[15px] font-semibold">
-        {c.presets.title(countryName(pack.code))}
+        {t('setup.company.presets.title', { country: countryName(pack.code, language) })}
       </h3>
       <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
         {items.map((item) => (

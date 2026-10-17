@@ -84,7 +84,7 @@ describe('CompanyStep · country (spec §4.6, F2 step 1)', () => {
     const options = await screen.findAllByRole('option');
     expect(options.map((o) => o.textContent?.slice(-2))).toEqual(['TR', 'GB', 'US']);
     expect(options.map((o) => o.textContent?.slice(0, -3))).toEqual(
-      ['TR', 'GB', 'US'].map(countryName),
+      ['TR', 'GB', 'US'].map((c) => countryName(c)),
     );
     await userEvent.keyboard('{Escape}');
   });

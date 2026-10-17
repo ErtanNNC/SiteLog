@@ -1,6 +1,7 @@
 import { assertEquals } from '@std/assert';
 import { demoPack } from '@sitelog/shared/demo/countries.ts';
-import { canResend, invitePhone, inviteProfile, linkRows } from './logic.ts';
+import type { E164 } from '@sitelog/shared';
+import { canResend, invitePhone, inviteProfile, lineCheckRefusal, linkRows } from './logic.ts';
 
 Deno.test('canResend: one re-send, 48 h after the first invite, only while still invited', () => {
   const now = new Date('2026-10-12T12:00:00Z');
@@ -98,3 +99,19 @@ Deno.test(
     });
   },
 );
+
+Deno.test('lineCheckRefusal: a landline per §19 Q229 (W4-02)', () => {
+  const tr = demoPack('TR'); // no voice number, no outbound trunk
+  const landline = '+902122223344' as E164;
+  const mobile = '+905321234567' as E164;
+  const real = { is_demo: false };
+  assertEquals(lineCheckRefusal(mobile, 'link', real, tr), null);
+  assertEquals(lineCheckRefusal(landline, 'link', real, tr)?.problem, 'landline_unreachable');
+  assertEquals(lineCheckRefusal(landline, 'call', real, tr)?.problem, 'landline_unreachable');
+  // With a number to call in, a landline may prefer a call, never a text link.
+  const withNumber = { ...tr, voiceNumber: '+908501234567' as E164 };
+  assertEquals(lineCheckRefusal(landline, 'call', real, withNumber), null);
+  assertEquals(lineCheckRefusal(landline, 'link', real, withNumber)?.problem, 'landline_text');
+  // A demo org places its calls on the console telephony.
+  assertEquals(lineCheckRefusal(landline, 'call', { is_demo: true }, tr), null);
+});

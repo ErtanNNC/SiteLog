@@ -252,34 +252,63 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
 test.describe('in a tr-TR browser', () => {
   test.use({ locale: 'tr-TR' });
 
-  test('the setup wizard creates a TR org from its country pack (W1-06a)', async ({ page }) => {
+  // W4-02 (Done when): the wizard reads in Turkish (the browser's language before the org exists,
+  // the org's after), and Kartal's manager Emre Yıldız is invited in Turkish with a call preference.
+  test('the setup wizard creates a TR org from its country pack, in Turkish (W1-06a, W4-02)', async ({
+    page,
+  }) => {
     const email = `fresh-tr-${Date.now()}@sitelog.example`;
     const created = await admin().auth.admin.createUser({ email, email_confirm: true });
     if (created.error) throw created.error;
     const userId = created.data.user.id;
     await signIn(page, email);
-    await expect(page.getByRole('heading', { name: 'Set up your company' })).toBeVisible();
-    await page.getByLabel('Company name').fill('Yıldız İnşaat A.Ş.');
+    await expect(page.getByRole('heading', { name: 'Şirketinizi kurun' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+    await page.getByLabel('Şirket adı').fill('Yıldız İnşaat A.Ş.');
     // Preselected from the browser's region (Q32), by code: ICU names it "Türkiye" or "Turkey".
-    await expect(page.getByRole('combobox', { name: 'Country' })).toHaveText(/\bTR$/);
+    await expect(page.getByRole('combobox', { name: 'Ülke' })).toHaveText(/\bTR$/);
     // Copy names (not the browser's); the zone is the select's alone.
     const presets = page.getByTestId('country-presets');
-    for (const text of ['Turkish', 'Metric', 'A4', 'TRY'])
+    for (const text of ['Türkçe', 'Metrik', 'A4', 'TRY'])
       await expect(presets.getByText(text, { exact: true })).toBeVisible();
     await expect(presets).not.toContainText('Europe/Istanbul');
-    await expect(page.getByRole('combobox', { name: 'Company time zone' })).toContainText(
+    await expect(page.getByRole('combobox', { name: 'Şirketin saat dilimi' })).toContainText(
       'Europe/Istanbul',
     );
-    await page.getByRole('button', { name: 'Continue to first site' }).click();
+    await page.getByRole('button', { name: 'İlk şantiyeye geç' }).click();
     await page.waitForURL(/\/setup\/site$/, { timeout: 30_000 });
-    await expect(page.getByRole('heading', { name: 'Site', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Şantiye', exact: true })).toBeVisible();
     // The first site manager starts with a +90 number and Turkish, the pack's field language.
-    await expect(page.getByRole('button', { name: /^Country code: / })).toHaveText(/TR \+90/);
-    await expect(page.getByRole('checkbox', { name: 'Turkish' })).toHaveAttribute(
+    await expect(page.getByRole('button', { name: /^Ülke kodu: / })).toHaveText(/TR \+90/);
+    await expect(page.getByRole('checkbox', { name: 'Türkçe' })).toHaveAttribute(
       'aria-checked',
       'true',
     );
-    await expect(page.getByText('Reports always come out in Turkish.')).toBeVisible();
+    await expect(page.getByText('Raporlar her zaman Türkçe çıkar.')).toBeVisible();
+    await expect(page.getByTestId('mgr-locale')).toHaveText('Türkçe');
+
+    // Kartal with Emre Yıldız (Türkçe, a call): the TR welcome has no reply clause (one-way pack)
+    // and no "or call" (no voice number).
+    await page.getByLabel('Şantiye adı').fill('Kartal');
+    await page.getByLabel('Proje numarası').fill('KR-0001');
+    await page.getByRole('button', { name: 'Koordinatları elle gir' }).click();
+    await page.getByLabel('Enlem').fill('40.9067');
+    await page.getByLabel('Boylam').fill('29.1922');
+    await page.getByLabel('Ad', { exact: true }).fill('Emre Yıldız');
+    await page.getByTestId('manager-phone').fill('532 000 0599');
+    await page.getByRole('radio', { name: 'Arama' }).click();
+    await expect(page.getByText('Kayıt ekranındaki Şimdi konuş ile arar.')).toBeVisible();
+    const welcome = page.getByTestId('welcome-text');
+    await expect(welcome).toHaveAttribute('lang', 'tr');
+    await expect(welcome).toContainText(
+      'Merhaba Emre, ben SiteLog, Yıldız İnşaat A.Ş. için Kartal günlük rapor asistanıyım.',
+    );
+    await expect(welcome).not.toContainText('STOP');
+    await expect(welcome).not.toContainText('arayın');
+    await page.getByRole('button', { name: 'Karşılama mesajını gönder' }).click();
+    await expect(page.getByRole('heading', { name: 'Raporlar ve hatırlatmalar' })).toBeVisible({
+      timeout: 30_000,
+    });
 
     // create_org preset everything from the TR row; on_org_created the paper.
     const { data: member, error: memberError } = await admin()
@@ -313,6 +342,20 @@ test.describe('in a tr-TR browser', () => {
     if (auditError) throw auditError;
     // W4-10 (§19 Q236): a TR org is billed manually until Q8, with no TRY price until Q9.
     expect(audit.diff).toEqual({ country: 'TR', billing_provider: 'manual', price: null });
+    // W4-02: Emre is invited in Turkish with a call preference (api-invite-reporter).
+    const { data: emre, error: emreError } = await admin()
+      .from('reporters')
+      .select('name, phone_e164, locale, contact_pref, status')
+      .eq('org_id', member.org_id)
+      .single();
+    if (emreError) throw emreError;
+    expect(emre).toEqual({
+      name: 'Emre Yıldız',
+      phone_e164: '+905320000599',
+      locale: 'tr-TR',
+      contact_pref: 'call',
+      status: 'invited',
+    });
 
     // Settings → PDF shows the preset A4 paper.
     await page.goto('/settings/pdf');

@@ -153,9 +153,7 @@ for (const width of WIDTHS) {
     });
 
     // WCAG 3.1.2: what an English-only page portals to <body> is English too, not the shell's TR.
-    test('the Turkish shell: an English page’s select and picker stay lang="en"', async ({
-      page,
-    }) => {
+    test('the Turkish shell: an English page’s select stays lang="en"', async ({ page }) => {
       await chooseTurkish(page);
       await signInFast(page);
       const langOf = (l: Locator) =>
@@ -172,17 +170,38 @@ for (const width of WIDTHS) {
       await page.keyboard.press('Escape');
       await expect(options).toHaveCount(0);
       await expectNoViolations(page);
-      // The setup wizard's site step (English until W4-02): W4-01's country-code picker.
+      // No English-only page has W4-01's country-code picker any more (Setup speaks Turkish since
+      // W4-02, Team since W4-03): its Turkish case is the setup wizard's test below.
+    });
+
+    // W4-02: the setup wizard in Turkish, its site step with W4-01's picker open, the preference,
+    // the language select and the welcome preview (the SMS in its own language, lang="tr" here).
+    test('the setup wizard in Turkish (W4-02)', async ({ page }) => {
+      await chooseTurkish(page);
+      await signInFast(page);
+      const langOf = (l: Locator) =>
+        l.evaluate((el) => el.closest('[lang]')?.getAttribute('lang') ?? null);
+      await page.goto('/setup/company');
+      await expect(h1(page, 'Şirketinizi kurun')).toBeVisible();
+      await expect(page.getByLabel('Şirket adı')).toHaveValue('Kestrel Build Group');
+      await expectNoViolations(page);
       await page.goto('/setup/site');
-      const country = page.getByRole('button', { name: /^Country code: / }).first();
-      await expect(country).toBeVisible();
+      await expect(page.getByLabel('Şantiye adı')).toBeVisible();
+      await page.getByLabel('Ad', { exact: true }).fill('Elena Vasquez');
+      await page.getByRole('radio', { name: 'Arama' }).click();
+      await expect(page.getByTestId('welcome-text')).toHaveAttribute('lang', 'en');
+      await expectNoViolations(page);
+      const country = page.getByRole('button', { name: /^Ülke kodu: / }).first();
       await country.click();
-      const listbox = page.getByRole('listbox', { name: 'Country code' });
+      const listbox = page.getByRole('listbox', { name: 'Ülke kodu' });
       await expect(listbox).toBeVisible();
-      expect(await langOf(listbox)).toBe('en');
-      // W4-01: the searchable country-code picker (combobox over a listbox).
+      expect(await langOf(listbox)).toBe('tr');
       await expectNoViolations(page);
       await page.keyboard.press('Escape');
+      // No horizontal scroll at either width.
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
     });
 
     test('accounts user: crew hours', async ({ page }) => {

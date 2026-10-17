@@ -152,6 +152,11 @@ const TRANSLATED = [
   'billing',
   'toasts.sitePausedName',
   'toasts.siteResumedName',
+  // W4-02: the setup wizard (its Reports step renders Settings' section, converted by W4-05).
+  'setup',
+  'common.back',
+  'common.optional',
+  'toasts.orgCreated',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

@@ -4,7 +4,8 @@
  *
  * D9: the shell, sign-in, `/auth/callback`, the Overview (W1-16), Sites and Site detail (W1-18),
  * the Reports archive and Report review (W1-17), Crew hours (W3-06), Weather & delays (W3-07), the
- * Site glossary (W3-08), Team & numbers (W4-03), Billing (W4-10), the not-found page and the
+ * Site glossary (W3-08), Team & numbers (W4-03), Billing (W4-10), the setup wizard (W4-02; its
+ * Reports step keeps Settings' section English until W4-05), the not-found page and the
  * placeholders speak the panel's language (EN/TR).
  * A page wrapped in `<EnglishOnly>` still reads `copy/en.ts` directly and renders in English inside
  * the translated shell; it loses the wrapper when it gets its Turkish.
@@ -62,22 +63,8 @@ export function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route element={<RequireAuth />}>
-          <Route
-            path="/setup"
-            element={
-              <EnglishOnly>
-                <SetupPage />
-              </EnglishOnly>
-            }
-          />
-          <Route
-            path="/setup/:step"
-            element={
-              <EnglishOnly>
-                <SetupPage />
-              </EnglishOnly>
-            }
-          />
+          <Route path="/setup" element={<SetupPage />} />
+          <Route path="/setup/:step" element={<SetupPage />} />
           <Route element={<AppShell />}>
             <Route index element={<Home />} />
             <Route path="/sites" element={guard('sites', <SitesPage />)} />
