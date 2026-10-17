@@ -26,6 +26,7 @@ import {
   type CreateSiteInput,
   type InviteReporterInput,
   type LinkUnknownSenderInput,
+  type OfficeCallNowInput,
   type PdfSelection,
   type RequestEvidencePackInput,
   type ResolveUnknownCompanyInput,
@@ -44,6 +45,7 @@ import {
   type TextDailyLinkErrorCode,
 } from './types';
 import type { OrgLocale } from '@sitelog/shared/locale.ts';
+import { OFFICE_CALL_REFUSALS, type OfficeCallRefusal } from '@sitelog/shared/voice-outbound.ts';
 
 interface Opts {
   enabled?: boolean;
@@ -615,6 +617,35 @@ export function useClearReporterOptOut() {
       s.clearReporterOptOut(vars.reporterId, vars.attested),
     (v) => translate('team.toasts.optOutCleared', { name: v.name }),
   );
+}
+
+/**
+ * Team → Call now (W4-04, §19 Q230). A refusal comes back with its reason
+ * (`OFFICE_CALL_REFUSALS`), worded by `team.callNow.refused.*`.
+ */
+export function useOfficeCallNow() {
+  const s = useDataSource();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: OfficeCallNowInput & { name: string }) =>
+      s.officeCallNow({
+        reporterId: vars.reporterId,
+        siteId: vars.siteId,
+        attested: vars.attested,
+      }),
+    onSuccess: (_r, vars) => {
+      void qc.invalidateQueries({ queryKey: [s.orgId] });
+      toast.success(translate('team.toasts.callRequested', { name: vars.name }));
+    },
+    onError: (err) => {
+      const code = errorCode(err);
+      toast.error(
+        code && (OFFICE_CALL_REFUSALS as readonly string[]).includes(code)
+          ? translate(`team.callNow.refused.${code as OfficeCallRefusal}`)
+          : teamError(err),
+      );
+    },
+  });
 }
 
 export function useAddOfficeUser() {

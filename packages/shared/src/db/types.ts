@@ -2219,6 +2219,21 @@ export type Database = {
         Args: { p_reporter_id: string; p_text_version: string; p_attested?: boolean };
         Returns: Json;
       };
+      // W4-04 (20261017000500_office_call_now.sql): Team's Call now (admin, ops); the worker's
+      // last check before it dials one (service only).
+      office_call_start: {
+        Args: {
+          p_reporter_id: string;
+          p_site_id: string;
+          p_text_version: string;
+          p_attested?: boolean;
+        };
+        Returns: Json;
+      };
+      office_call_dial: {
+        Args: { p_call_id: string; p_telephony: string; p_max_concurrent?: number | null };
+        Returns: Json;
+      };
       team_reporter_states: {
         Args: { p_org_id: string };
         Returns: Array<{

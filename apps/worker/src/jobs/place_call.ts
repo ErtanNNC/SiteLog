@@ -9,6 +9,7 @@ import {
   ensureDailyLink,
   fieldLinkUrl,
   insideWindow,
+  isOfficeCall,
   ladderDedupeKey,
   missedCallNotifyKey,
   outboundCallKey,
@@ -34,7 +35,7 @@ import { PermanentJobError, type JobHandler } from './types';
 
 /**
  * §10.1 `place_call` (W3-17, M8; spec §7.4, F6 step 1, F11, §9.4 "Calls policy", §4.5
- * `Notifier.call`, §19 Q125–Q132). One job type, three phases:
+ * `Notifier.call`, §19 Q125–Q132). One job type, four phases:
  *
  * - **dial** (R1 and R2 from claim_site_day_reminder(), the one callback from
  *   voice_schedule_callback()): the guards in code (inside the org's call window at the site,
@@ -52,6 +53,8 @@ import { PermanentJobError, type JobHandler } from './types';
  * - **missed**: a call not reached gets `missed_call` ("Missed you … Call {number} or tap {link}",
  *   F6 step 1, F11) through the Notifier; a dial that failed before ringing gets the stage's own
  *   text instead (R1; nothing for R2, whose text went, or a callback).
+ * - **office** (W4-04, §19 Q230): Team's _Call now_, the row office_call_start() wrote with the
+ *   office's attestation; dialled on the same telephony, never followed by a text.
  *
  * Every skip is audited `call.skipped` with its reason; every text is a `notify` job (its key, its
  * guard: the day still waiting, the call window open), so a retry never texts twice.
@@ -59,6 +62,7 @@ import { PermanentJobError, type JobHandler } from './types';
 export const placeCallJob: JobHandler<'place_call'> = async (ctx, payload) => {
   if (payload.phase === 'ring_end') return ringEnd(ctx, payload.callId);
   if (payload.phase === 'missed') return missed(ctx, payload.callId);
+  if (payload.phase === 'office') return officeDial(ctx, payload.callId);
   return dial(ctx, payload);
 };
 
@@ -179,6 +183,86 @@ async function dial(ctx: Ctx, payload: DialPayload): Promise<void> {
   if (result.kind === 'unanswered') {
     const ended = await ctx.db.outboundCallUnanswered(start.callId, result.status, result.reason);
     if (ended.ended) await afterNotReached(ctx, start.callId, result.status);
+  }
+}
+
+/**
+ * W4-04 (F3, §19 Q230): Team's _Call now_. office_call_start() wrote the call (queued, the
+ * office's attestation beside it); here the same telephony as the ladder dials it: inside the
+ * call window (§9.4), the org still placing calls, then office_call_dial() (still queued, the day
+ * not filed, capacity on LiveKit). A call not placed ends `failed` / `not_reached` with its
+ * reason (audited `call.skipped`), and no call of the office's ever leaves a text: Team shows how
+ * it went.
+ */
+async function officeDial(ctx: Ctx, callId: string): Promise<void> {
+  const call = await ctx.db.getCall(callId);
+  if (!call) throw new PermanentJobError(`call ${callId} not found`);
+  if (!isOfficeCall(call)) throw new PermanentJobError(`call ${callId} is not an office call`);
+  if (call.ended_at || call.status !== 'queued') return;
+  if (!call.reporter_id || !call.site_day_id)
+    throw new PermanentJobError(`call ${callId} has no reporter or site-day`);
+  const scope = await scopeOf(ctx, call.reporter_id, call.site_day_id);
+  const log = ctx.log.child({ call_id: callId, stage: 'office' });
+
+  const notPlaced = async (reason: CallSkipReason | 'day_filed') => {
+    await ctx.db.logAudit({
+      org_id: scope.org.id,
+      actor_type: 'system',
+      action: 'call.skipped',
+      entity: 'reporter',
+      entity_id: scope.reporter.id,
+      diff: { stage: 'office', reason, site_day_id: scope.siteDay.id, call_id: callId },
+    });
+  };
+
+  if (!insideWindow(ctx.now(), scope.site.timezone, callWindowOf(scope.settings))) {
+    await ctx.db.outboundCallUnanswered(callId, 'failed', 'outside_window');
+    await notPlaced('outside_window');
+    return;
+  }
+  const driver = telephonyFor({ isDemo: scope.org.is_demo }, scope.pack);
+  const telephony = driver ? (ctx.telephony ?? createTelephony(ctx.config)).get(driver) : null;
+  if (!driver || !telephony) {
+    const reason = driver ? 'telephony_unavailable' : 'no_trunk';
+    await ctx.db.outboundCallUnanswered(callId, 'failed', reason);
+    await notPlaced(reason);
+    return;
+  }
+  const go = await ctx.db.officeCallDial(
+    callId,
+    driver,
+    driver === 'livekit' ? ctx.config.VOICE_MAX_CONCURRENT_CALLS : null,
+  );
+  if (go.status === 'gone') return;
+  if (go.status === 'skipped') {
+    await notPlaced(go.reason);
+    return;
+  }
+
+  await ctx.db.outboundCallRinging(callId);
+  const result = await telephony.dial({
+    callId,
+    room: go.room,
+    to: go.to,
+    from: go.from,
+    trunkId: scope.pack.outboundTrunkId,
+  });
+  log.info('place_call: office call dialled', {
+    telephony: driver,
+    result: result.kind,
+    ...(result.kind === 'unanswered' ? { status: result.status, reason: result.reason } : {}),
+  });
+  if (result.kind === 'ringing') {
+    await ctx.db.enqueueJob(
+      'place_call',
+      { phase: 'ring_end', callId },
+      { delayMs: result.settleAfterS * 1000, dedupeKey: ringEndJobKey(callId) },
+    );
+    return;
+  }
+  if (result.kind === 'unanswered') {
+    // §19 Q230: no missed_call text and no stage text; the office sees "Not reached".
+    await ctx.db.outboundCallUnanswered(callId, result.status, result.reason);
   }
 }
 
@@ -317,6 +401,8 @@ async function missed(ctx: Ctx, callId: string): Promise<void> {
 async function afterNotReached(ctx: Ctx, callId: string, status: UnansweredStatus): Promise<void> {
   const call = await ctx.db.getCall(callId);
   if (!call?.reporter_id || !call.site_day_id) return;
+  // W4-04 (§19 Q230): an office Call now leaves no text; Team shows the outcome.
+  if (isOfficeCall(call)) return;
   const scope = await scopeOf(ctx, call.reporter_id, call.site_day_id);
   if (afterUnanswered(status) === 'stage_message') {
     if (call.attempt === 1) await stageText(ctx, scope);

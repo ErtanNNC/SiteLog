@@ -1353,6 +1353,41 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         attest: '{{first}} yeniden mesaj almak istedi',
         confirm: 'Mesajları yeniden aç',
       },
+      callNow: {
+        title: '{{name}} şimdi aransın mı?',
+        body: 'SiteLog asistanı {{first}} kişisini {{site}} için bugünkü rapor hakkında şimdi arar. {{first}} önce görüşmenin kaydedildiğini duyar.',
+        attest: '{{first}}, günlük rapor için SiteLog’un aramasını kabul etti',
+        attestHint:
+          'Adınızla birlikte kayda geçer. Yalnızca bu aramaya izin verir: hatırlatma aramaları için {{first}} kişisinin kayıt uygulamasında kendi onayı gerekir.',
+        noText:
+          '{{first}} açmazsa SiteLog mesaj göndermez. Aramanın nasıl geçtiğini burada görürsünüz.',
+        confirm: 'Şimdi ara',
+        refused: {
+          attestation_required: 'Önce kutuyu işaretleyin: kişi aranmayı kabul etmiş olmalı.',
+          no_trunk: 'SiteLog şirketiniz için henüz arama yapamıyor.',
+          reporter_inactive: 'Bu raporcu devre dışı ya da mesajları durdurmuş. SiteLog onu aramaz.',
+          calls_turned_off:
+            'Otomatik aramaları kayıt uygulamasında kendisi kapattı. Yalnızca kendisi yeniden açabilir.',
+          no_calls_today: 'Bugün aranmak istemediğini bildirdi.',
+          site_not_active: 'Şantiye duraklatılmış ya da arşivlenmiş.',
+          outside_window: 'SiteLog’un bu şantiyede arama yaptığı saatlerin dışındayız.',
+          day_filed: 'Bu şantiyenin bugünkü raporu zaten kaydedildi.',
+          call_live: 'Kendisiyle zaten bir arama sürüyor.',
+          limit_reached: 'Ofis onu bugün izin verilen sayıda aradı.',
+        },
+      },
+      callToday: {
+        office: 'Ofis araması',
+        reminder: 'Hatırlatma araması',
+        line: '{{kind}} · {{progress}} · {{time}}',
+      },
+      callProgress: {
+        requested: 'İstendi',
+        ringing: 'Çalıyor',
+        answered: 'Açıldı',
+        not_reached: 'Ulaşılamadı',
+        failed: 'Arama yapılamadı',
+      },
       optOutStartOnly:
         'Mesajları yalnızca {{first}} yeniden açabilir: mesajlarımızdan birine START yazarak.',
       reporters: 'Saha raporcuları',
@@ -1373,6 +1408,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         textLinkAt: 'Günün linkini gönder · {{site}}',
         revokeDevices: 'Cihazları iptal et',
         clearOptOut: 'Mesajları yeniden aç',
+        callNow: 'Şimdi ara',
+        callNowAt: 'Şimdi ara · {{site}}',
         enable: 'Etkinleştir',
         disable: 'Devre dışı bırak',
       },
@@ -1454,6 +1491,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         devicesRevoked:
           '{{name}} tüm telefonlarda oturumu kapatıldı. Bir sonraki açılışta kod istenir.',
         optOutCleared: '{{name}} için mesajlar yeniden açıldı.',
+        callRequested: '{{name}} şimdi aranıyor. Aramanın durumu satırında görünür.',
         memberAdded: 'Davet {{email}} adresine gönderildi.',
         memberUpdated: 'Rol güncellendi.',
         memberRemoved: 'Kullanıcı kaldırıldı.',
@@ -1597,6 +1635,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       callPurpose: {
         reminder: 'Hatırlatma araması',
         callback: 'Geri arama',
+        daily_report: 'Ofisten arama',
       },
       statusLabel: 'Durum',
       status: {

@@ -28,6 +28,7 @@ import type {
 } from '@sitelog/shared/schemas/report.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import type { OrgSettingsRow } from '@sitelog/shared/db/types.ts';
+import type { CallProgress } from '@sitelog/shared/voice-outbound.ts';
 import type { BillingAlert, BillingPrice, BillingProviderName } from '@sitelog/shared/billing.ts';
 import type { OrgLocale, ReporterLocale, UnitSystem } from '@sitelog/shared/locale.ts';
 import type { CopyKey } from '@/i18n/keys';
@@ -370,6 +371,8 @@ export interface SiteDetail {
   };
   crewToday: { date: string; rows: CrewRow[]; totalWorkers: number; totalHours: number } | null;
   photoCount: number;
+  /** W4-04: the latest outbound call today to the site's primary reporter at this site. */
+  callToday?: CallToday | null;
   /** Photos tab (P5): every photo attached to this site's reports, newest first. */
   photos?: SitePhoto[];
 }
@@ -943,6 +946,23 @@ export interface TeamReporter {
   channelUnreachable: boolean;
   /** §19 Q241 (W4-12): the latest welcome was the automatic re-send. */
   autoResent: boolean;
+  /** W4-04: their latest outbound call today (the office's Call now or the ladder's), from `calls`. */
+  callToday: CallToday | null;
+}
+
+/**
+ * W4-04 (F3, §19 Q230): a reporter's latest outbound call today, as Team and Site detail show its
+ * progress (requested, ringing, answered, not reached, failed).
+ */
+export interface CallToday {
+  id: string;
+  progress: CallProgress;
+  /** When it was requested (UTC). */
+  at: string;
+  /** The office's Call now (`daily_report`), not the ladder's call. */
+  byOffice: boolean;
+  /** Queued, ringing or in progress: Call now waits until it ends. */
+  live: boolean;
 }
 
 /** Team's RPC refusals the panel words itself (`team.errors.*`, W4-03): CodedError codes. */
@@ -990,6 +1010,8 @@ export interface TeamData {
   pack: TeamPack;
   /** The org's locale: an office user's "company's language" (F24). */
   orgLocale: OrgLocale;
+  /** §19 Q51, Q132 (`placesCalls`): a demo org, or a pack with an outbound trunk here. */
+  placesCalls: boolean;
 }
 
 // ───────────────────────────── P11 Glossary ─────────────────────────────

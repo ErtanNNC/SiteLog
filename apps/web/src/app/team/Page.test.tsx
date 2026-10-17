@@ -535,6 +535,123 @@ describe('TeamPage in Turkish (Demir Yapı, the TR pack)', () => {
   });
 });
 
+describe('Call now (W4-04, F3, §19 Q230)', () => {
+  it('Lena attests and calls Priya: the consent is office_attested, the row shows the call', async () => {
+    const success = vi.spyOn(toast, 'success');
+    const store = new DemoStore();
+    const priya = store.data.reporters.find((r) => r.name === 'Priya Raman')!;
+    renderWithProviders(<TeamPage />, { route: '/team', store });
+    await openMenu('Priya Raman', 'Call now');
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Call Priya Raman now?');
+    expect(dialog).toHaveTextContent(
+      'SiteLog’s assistant calls Priya now about today’s report at Elm St. Townhomes.',
+    );
+    expect(dialog).toHaveTextContent('If Priya doesn’t answer, SiteLog sends no text.');
+    const confirm = within(dialog).getByRole('button', { name: 'Call now' });
+    expect(confirm).toBeDisabled();
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'Priya agreed to get calls from SiteLog for the daily report',
+      }),
+    );
+    await userEvent.click(confirm);
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(
+        'Calling Priya Raman now. The progress shows in their row.',
+      ),
+    );
+    const consent = store.data.consents.find(
+      (c) => c.reporter_id === priya.id && c.type === 'auto_call',
+    );
+    expect(consent).toMatchObject({
+      method: 'office_attested',
+      text_version: 'team.call_now.v1',
+      evidence: { user_id: demoUserFor('admin').id, via: 'office' },
+    });
+    const call = store.data.calls.find((c) => c.reporter_id === priya.id);
+    expect(call).toMatchObject({ purpose: 'daily_report', status: 'ringing', attempt: null });
+    expect(store.data.audit.map((a) => a.action)).toEqual(
+      expect.arrayContaining(['consent.given', 'call.requested']),
+    );
+    const line = await within(await findRow('Priya Raman')).findByTestId('call-today');
+    expect(line).toHaveTextContent('Office call · Ringing · 19:05');
+    // A live call: Call now waits until it ends.
+    const table = screen.getByRole('table', { name: 'Field reporters' });
+    await userEvent.click(within(table).getByRole('button', { name: /Priya Raman/ }));
+    expect(await screen.findByRole('menuitem', { name: 'Call now' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    store.dispose();
+  });
+
+  it('words a refusal: today’s report is already filed (Aisha, Hillcrest weather day)', async () => {
+    const error = vi.spyOn(toast, 'error');
+    const store = new DemoStore();
+    renderWithProviders(<TeamPage />, { route: '/team', store, as: 'ops' });
+    await openMenu('Aisha Bello', 'Call now');
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('checkbox'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Call now' }));
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith('Today’s report for this site is already filed.'),
+    );
+    expect(store.data.consents.some((c) => c.method === 'office_attested')).toBe(false);
+  });
+
+  it('is not offered to a project manager, nor where the org places no calls', async () => {
+    const pm = new DemoStore();
+    const { unmount } = renderWithProviders(<TeamPage />, {
+      route: '/team',
+      store: pm,
+      as: 'pm',
+    });
+    await userEvent.click(
+      within(await screen.findByRole('table', { name: 'Field reporters' })).getByRole('button', {
+        name: /Priya Raman/,
+      }),
+    );
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Call now' })).toBeNull();
+    unmount();
+
+    const real = new DemoStore();
+    real.data.org.is_demo = false;
+    renderWithProviders(<TeamPage />, { route: '/team', store: real });
+    await userEvent.click(
+      within(await screen.findByRole('table', { name: 'Field reporters' })).getByRole('button', {
+        name: /Priya Raman/,
+      }),
+    );
+    expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Call now' })).toBeNull();
+  });
+
+  it('reads in Turkish, and outside the call window says so (Demir Yapı at 03:05)', async () => {
+    await act(() => i18n.changeLanguage('tr'));
+    const error = vi.spyOn(toast, 'error');
+    const store = demirStore();
+    renderWithProviders(<TeamPage />, { route: '/team', store, auth: demirAuth(store) });
+    const row = await findRow('Emre Yıldız');
+    await userEvent.click(within(row).getByRole('button', { name: 'Emre Yıldız için menü' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /^Şimdi ara/ }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('Emre Yıldız şimdi aransın mı?');
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'Emre, günlük rapor için SiteLog’un aramasını kabul etti',
+      }),
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Şimdi ara' }));
+    await waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        'SiteLog’un bu şantiyede arama yaptığı saatlerin dışındayız.',
+      ),
+    );
+  });
+});
+
 async function findRow(name: string) {
   const table = await screen.findByRole('table', { name: /Field reporters|Saha raporcuları/ });
   return within(table).getByText(name).closest('tr')!;

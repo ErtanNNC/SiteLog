@@ -64,3 +64,17 @@ describe('site detail workdays so far', () => {
     expect(latest).toBeNull();
   });
 });
+
+/** W4-04: Site detail shows today's outbound call to the primary reporter (§18.1 Hillcrest). */
+describe('site detail call today', () => {
+  it('reads Aisha’s unanswered R1 call at Hillcrest from calls', async () => {
+    const store = new DemoStore();
+    const u = demoUserFor('admin');
+    const source = new DemoSource(store, { id: u.id, email: u.email, name: u.name, role: u.role });
+    const hillcrest = store.data.sites.find((s) => s.name === 'Hillcrest School Extension')!;
+    const detail = await source.getSiteDetail(hillcrest.id, '2026-10');
+    expect(detail.callToday).toMatchObject({ progress: 'not_reached', byOffice: false });
+    const riverside = store.data.sites.find((s) => s.name.startsWith('Riverside'))!;
+    expect((await source.getSiteDetail(riverside.id, '2026-10')).callToday).toBeNull();
+  });
+});

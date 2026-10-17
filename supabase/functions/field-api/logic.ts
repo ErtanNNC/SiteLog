@@ -19,6 +19,7 @@ import {
   nextWorkingDay,
   photosLinkExpiresAt,
   previousWorkingDay,
+  reporterOwnConsents,
   settingsMessageChannels,
   type AnswerConfirmation,
   type AnswerValue,
@@ -136,12 +137,15 @@ export async function verifyCodeHash(
   return toHex(new Uint8Array(mac));
 }
 
-/** The consent types a reporter holds (unrevoked) and those given and revoked with none since. */
+/**
+ * The consent types a reporter holds (unrevoked) and those given and revoked with none since. The
+ * office's `auto_call` attestation (W4-04) is not the reporter's own consent (§19 Q131): left out.
+ */
 export function consentState(rows: readonly ConsentRow[]): {
   held: Set<ConsentType>;
   revoked: Set<ConsentType>;
 } {
-  return consentSets(rows);
+  return consentSets(reporterOwnConsents(rows));
 }
 
 /** F4 step 3: the Welcome & consent screen until the required consents are held. */
@@ -162,11 +166,13 @@ export function settingsView(
     no_calls_until?: string | null;
   },
   pack: Pick<CountryPack, 'messageChannels'>,
-  consents: readonly Pick<ConsentRow, 'type' | 'revoked_at'>[],
+  rows: readonly (Pick<ConsentRow, 'type' | 'revoked_at'> & { method?: string | null })[],
   optedOut: boolean,
   push: { keySet: boolean; deviceSubscribed: boolean } = { keySet: false, deviceSubscribed: false },
   placesCalls = false,
 ): PreferencesResponse {
+  // W4-04 (§19 Q131): the office's attestation is not the reporter's *Automated calls*.
+  const consents = reporterOwnConsents(rows);
   const { held } = consentSets(consents);
   const shown = new Set(consents.map((c) => c.type));
   if (pack.messageChannels.includes('sms')) shown.add('sms');

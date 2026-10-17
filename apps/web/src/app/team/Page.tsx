@@ -2,6 +2,7 @@ import { AlertTriangle, Link2, MoreHorizontal, PhoneOff, UserPlus, Users } from 
 import { useState } from 'react';
 import { MEMBER_ROLES, type MemberRole } from '@sitelog/shared/enums.ts';
 import { firstName, formatPhone, formatTimeInTz } from '@sitelog/shared/format.ts';
+import { OFFICE_CALL_POLICY } from '@sitelog/shared/voice-outbound.ts';
 import { useAuth } from '@/auth/AuthProvider';
 import { DataTable, type Column } from '@/components/sitelog/DataTable';
 import { PageHeader } from '@/components/sitelog/PageHeader';
@@ -41,6 +42,8 @@ import type {
 import { useCopy, type CopyT } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { AddOfficeUserDialog } from './AddOfficeUserDialog';
+import { CallNowDialog, type CallNowTarget } from './CallNowDialog';
+import { CallTodayLine } from './CallTodayLine';
 import { EditReporterDialog } from './EditReporterDialog';
 import { InviteReporterDialog } from './InviteReporterDialog';
 import { LinkSenderDialog } from './LinkSenderDialog';
@@ -124,10 +127,14 @@ export default function TeamPage() {
   const [editing, setEditing] = useState<TeamReporter | null>(null);
   const [revoking, setRevoking] = useState<TeamReporter | null>(null);
   const [clearing, setClearing] = useState<TeamReporter | null>(null);
+  const [calling, setCalling] = useState<CallNowTarget | null>(null);
 
   const data = team.data;
   const adminCount = data?.officeUsers.filter((u) => u.role === 'admin').length ?? 0;
   const speaks = (codes: string[]) => codes.map((c) => languageLabel(t, c)).join(' · ');
+  // §19 Q230: admin and ops, only where the org places calls (a demo org, or a trunk here).
+  const canCall =
+    !!data?.placesCalls && !!role && (OFFICE_CALL_POLICY.roles as readonly string[]).includes(role);
 
   const columns: Column<TeamReporter>[] = data
     ? [
@@ -231,6 +238,7 @@ export default function TeamPage() {
                   {note}
                 </span>
               ))}
+              {r.callToday ? <CallTodayLine call={r.callToday} tz={tz} t={t} /> : null}
             </div>
           ),
         },
@@ -255,6 +263,8 @@ export default function TeamPage() {
               }
               onRevoke={() => setRevoking(r)}
               onClearOptOut={() => setClearing(r)}
+              canCall={canCall}
+              onCallNow={(site) => setCalling({ reporter: r, site })}
               onEnable={() =>
                 setStatus.mutate({ reporterId: r.id, status: 'invited', name: r.name })
               }
@@ -495,6 +505,11 @@ export default function TeamPage() {
         onOpenChange={(o) => !o && setLinking(null)}
         sites={data.sites}
       />
+      <CallNowDialog
+        key={`call:${calling?.reporter.id ?? 'none'}:${calling?.site.id ?? ''}`}
+        target={calling}
+        onOpenChange={(o) => !o && setCalling(null)}
+      />
       <OptOutDialog
         key={`optout:${clearing?.id ?? 'none'}`}
         reporter={clearing}
@@ -564,33 +579,40 @@ export default function TeamPage() {
 
 /**
  * P10 row menu (W4-03): Edit · Re-send welcome · Text today's link (one per site when they have
- * several) · Revoke devices · Turn texts back on (an admin, one-way packs, §19 Q242) · Disable.
- * Call now (F3, the office's attestation) is W4-04's.
+ * several) · Call now (W4-04, F3: admin and ops where the org places calls; one per site when they
+ * have several; not for a disabled or opted-out reporter or while a call to them is live) ·
+ * Revoke devices · Turn texts back on (an admin, one-way packs, §19 Q242) · Disable.
  */
 function ReporterMenu({
   r,
   t,
   canClearOptOut,
+  canCall,
   onEdit,
   onResend,
   onTextLink,
   onRevoke,
   onClearOptOut,
+  onCallNow,
   onEnable,
   onDisable,
 }: {
   r: TeamReporter;
   t: CopyT;
   canClearOptOut: boolean;
+  canCall: boolean;
   onEdit: () => void;
   onResend: () => void;
   onTextLink: (siteId: string) => void;
   onRevoke: () => void;
   onClearOptOut: () => void;
+  onCallNow: (site: { id: string; name: string }) => void;
   onEnable: () => void;
   onDisable: () => void;
 }) {
   const active = r.chipStatus === 'active';
+  const callable =
+    r.status !== 'disabled' && r.status !== 'opted_out' && !(r.callToday?.live ?? false);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -619,6 +641,23 @@ function ReporterMenu({
             </DropdownMenuItem>
           ))
         )}
+        {canCall
+          ? r.sites.length <= 1
+            ? r.sites[0] && (
+                <DropdownMenuItem disabled={!callable} onSelect={() => onCallNow(r.sites[0]!)}>
+                  {t('team.rowMenu.callNow')}
+                </DropdownMenuItem>
+              )
+            : r.sites.map((s) => (
+                <DropdownMenuItem
+                  key={`call:${s.id}`}
+                  disabled={!callable}
+                  onSelect={() => onCallNow(s)}
+                >
+                  {t('team.rowMenu.callNowAt', { site: s.shortName })}
+                </DropdownMenuItem>
+              ))
+          : null}
         <DropdownMenuItem onSelect={onRevoke}>{t('team.rowMenu.revokeDevices')}</DropdownMenuItem>
         {canClearOptOut ? (
           <DropdownMenuItem onSelect={onClearOptOut}>

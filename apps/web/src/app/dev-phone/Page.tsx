@@ -437,7 +437,10 @@ function CallEntry({
         {' · '}
         <span className="sr-only">{t('devPhone.channelLabel')} </span>
         {t('devPhone.channels.call')}
-        {call.purpose === 'reminder' || call.purpose === 'callback'
+        {/* W4-04: the office's Call now is `daily_report` ("Call from the office"). */}
+        {call.purpose === 'reminder' ||
+        call.purpose === 'callback' ||
+        call.purpose === 'daily_report'
           ? ` · ${t(`devPhone.callPurpose.${call.purpose}`)}`
           : ''}
       </p>

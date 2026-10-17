@@ -598,6 +598,7 @@ export const copy = {
     callPurpose: {
       reminder: 'Reminder call',
       callback: 'Callback',
+      daily_report: 'Call from the office',
     },
     statusLabel: 'Status',
     status: {
@@ -1836,6 +1837,48 @@ export const copy = {
       attest: '{{first}} asked to get texts again',
       confirm: 'Turn texts back on',
     },
+    /**
+     * W4-04 (F3, §19 Q230): Call now. The attestation sentence is Q230's, stored with its
+     * version (`team.call_now.v1`) as an `auto_call` consent `office_attested`.
+     */
+    callNow: {
+      title: 'Call {{name}} now?',
+      body: 'SiteLog’s assistant calls {{first}} now about today’s report at {{site}}. {{first}} first hears that the call is recorded.',
+      attest: '{{first}} agreed to get calls from SiteLog for the daily report',
+      attestHint:
+        'Saved in the log with your name. It allows this call only: reminder calls still need {{first}}’s own agreement in the recorder.',
+      noText: 'If {{first}} doesn’t answer, SiteLog sends no text. You see how it went here.',
+      confirm: 'Call now',
+      /** office_call_start()'s refusals (`OFFICE_CALL_REFUSALS`). */
+      refused: {
+        attestation_required: 'Tick the box first: the person must have agreed to get calls.',
+        no_trunk: 'SiteLog can’t place calls for your company yet.',
+        reporter_inactive:
+          'This reporter is disabled or opted out of texts. SiteLog doesn’t call them.',
+        calls_turned_off:
+          'They turned automated calls off in the recorder. Only they can turn them back on.',
+        no_calls_today: 'They asked not to be called today.',
+        site_not_active: 'The site is paused or archived.',
+        outside_window: 'It is outside the hours SiteLog calls at this site.',
+        day_filed: 'Today’s report for this site is already filed.',
+        call_live: 'A call to them is already under way.',
+        limit_reached: 'The office has called them as often as allowed today.',
+      },
+    },
+    /** W4-04: the latest outbound call today, under the status (never by colour alone). */
+    callToday: {
+      office: 'Office call',
+      reminder: 'Reminder call',
+      line: '{{kind}} · {{progress}} · {{time}}',
+    },
+    /** A call's progress from `calls.status` (`callProgress`). */
+    callProgress: {
+      requested: 'Requested',
+      ringing: 'Ringing',
+      answered: 'Answered',
+      not_reached: 'Not reached',
+      failed: 'Couldn’t be placed',
+    },
     /** Why Team offers no way back on a two-way pack (START by the person only). */
     optOutStartOnly:
       'Only {{first}} can turn texts back on, by replying START to one of our texts.',
@@ -1857,6 +1900,8 @@ export const copy = {
       textLinkAt: 'Text today’s link · {{site}}',
       revokeDevices: 'Revoke devices',
       clearOptOut: 'Turn texts back on',
+      callNow: 'Call now',
+      callNowAt: 'Call now · {{site}}',
       enable: 'Enable',
       disable: 'Disable',
     },
@@ -1935,6 +1980,7 @@ export const copy = {
       updated: '{{name}} updated.',
       devicesRevoked: '{{name}} is signed out on every phone. The next open asks for a code.',
       optOutCleared: 'Texts turned back on for {{name}}.',
+      callRequested: 'Calling {{name}} now. The progress shows in their row.',
       memberAdded: 'Invite sent to {{email}}.',
       memberUpdated: 'Role updated.',
       memberRemoved: 'User removed.',

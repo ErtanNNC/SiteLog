@@ -6,6 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
  * statuses in English and Turkish at 1440 and 390 px with axe WCAG 2.2 AA and no sideways scroll;
  * an ops user moves Marco to WhatsApp with the attestation; Revoke devices; Text today's link to
  * Priya lands in the Demo phone; an office user invited with Turkish as their panel language.
+ * W4-04: Call now at 1440 and 390 px (the attestation sheet with axe, the row's progress, the call
+ * in Priya's Demo phone thread).
  * Demir Yapı in Turkish is the page test's (src/app/team/Page.test.tsx); the demo signs in to
  * Kestrel only.
  */
@@ -146,3 +148,53 @@ test('revoke devices, text Priya today’s link (the Demo phone shows it), add a
     "Today's report for Elm St. Townhomes",
   );
 });
+
+for (const width of [1440, 390] as const) {
+  test(`Call now (W4-04, F3): Lena attests and calls Priya at ${width}px; the Demo phone rings`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await signInFast(page, 'en');
+    await page.goto('/team');
+    const table = page.getByRole('table', { name: 'Field reporters' });
+    await table.getByRole('button', { name: 'Menu for Priya Raman' }).click();
+    await page.getByRole('menuitem', { name: 'Call now' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Call Priya Raman now?' });
+    await expect(dialog).toContainText('If Priya doesn’t answer, SiteLog sends no text.');
+    const confirm = dialog.getByRole('button', { name: 'Call now' });
+    await expect(confirm).toBeDisabled();
+    expect(await overflow(page), '/team call now').toBeLessThanOrEqual(0);
+    await expectNoViolations(page);
+    // The attestation (§19 Q230) is the only way to the button; 44 px targets.
+    await dialog
+      .getByRole('checkbox', {
+        name: 'Priya agreed to get calls from SiteLog for the daily report',
+      })
+      .click();
+    const size = await confirm.boundingBox();
+    expect(size!.height).toBeGreaterThanOrEqual(44);
+    await confirm.click();
+    await expect(dialog).toHaveCount(0);
+    const priya = table.getByRole('row').filter({ hasText: 'Priya Raman' });
+    await expect(priya.getByTestId('call-today')).toHaveText('Office call · Ringing · 19:05');
+    await expectNoViolations(page);
+
+    // In-app navigation keeps the demo's memory (at 390 px the sidebar is a menu, so the router
+    // is moved directly): the call rings in Priya's Demo phone thread.
+    await page.evaluate(() => {
+      window.history.pushState({}, '', '/dev/phone');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await expect(page.getByRole('heading', { name: 'Demo phone', level: 1 })).toBeVisible();
+    const priyaPhone = page.getByRole('button', { name: /Priya Raman/ });
+    await expect(priyaPhone).toBeVisible();
+    // The page settles its queries first; select her thread once it holds.
+    await expect(async () => {
+      await priyaPhone.click();
+      await expect(page.getByTestId('demo-phone-call').last()).toContainText(
+        'Call from the office',
+        { timeout: 2_000 },
+      );
+    }).toPass({ timeout: 20_000 });
+  });
+}

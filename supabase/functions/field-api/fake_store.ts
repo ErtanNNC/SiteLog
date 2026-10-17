@@ -829,8 +829,15 @@ export class FakeFieldStore implements FieldStore {
     ) {
       return Promise.reject(new FieldDbError('texts_opted_out'));
     }
+    // W4-04 (§19 Q131): the office's auto_call attestation is not the reporter's own consent.
     if (
-      this.consents.some((c) => c.reporter_id === reporterId && c.type === type && !c.revoked_at)
+      this.consents.some(
+        (c) =>
+          c.reporter_id === reporterId &&
+          c.type === type &&
+          !c.revoked_at &&
+          !(c.type === 'auto_call' && c.method === 'office_attested'),
+      )
     ) {
       return Promise.resolve({ granted: false });
     }

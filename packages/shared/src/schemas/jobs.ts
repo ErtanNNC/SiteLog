@@ -81,6 +81,8 @@ export const JobPayloadSchemas = {
    * window's end, `giveUpAt` the end of the capacity wait (§19 Q127), `wait` the nth wait.
    * `ring_end`: a console call's ring is over (`call_ring:<call>`). `missed`: a call not reached
    * gets `missed_call` (`call_missed:<call>`, voice_call_end() for a voicemail greeting too).
+   * `office` (W4-04): Team's Call now, queued by office_call_start()
+   * (`call:<site_day>:<reporter>:office:<n>`); never a `missed_call` text (§19 Q230).
    */
   /**
    * §4.5, §19 Q237 (W4-11): poll `poll` (1-based) of an İletimerkezi text's delivery report, run at
@@ -106,6 +108,8 @@ export const JobPayloadSchemas = {
     }),
     z.object({ phase: z.literal('ring_end'), callId: uuid }),
     z.object({ phase: z.literal('missed'), callId: uuid }),
+    /** W4-04 (§19 Q230): Team's Call now, the row office_call_start() wrote. */
+    z.object({ phase: z.literal('office'), callId: uuid }),
   ]),
   transcribe_audio: z.object({
     messageId: uuid,

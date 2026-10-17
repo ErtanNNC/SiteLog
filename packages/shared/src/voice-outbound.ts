@@ -125,6 +125,96 @@ export function skipSendsMessage(reason: CallSkipReason): boolean {
   ].includes(reason);
 }
 
+/**
+ * Team's _Call now_ (W4-04; spec F3 edge cases, P10, §19 Q230, Q330; the recommended defaults
+ * until the owner answers): admin and ops, only where the org places calls, after the office's
+ * attestation that the person agreed to get calls from SiteLog for the daily report, stored as an
+ * `auto_call` consent `office_attested` (the office user and `attestVersion`). One call (purpose
+ * `daily_report`) inside the site's call window, refused when the day is filed or a call to the
+ * reporter is live; outside §19 Q128's ladder attempts (`calls.attempt` null) and at most
+ * `maxPerDay` a site-day and reporter (§19 Q330); no `missed_call` text when it is not reached
+ * (the office sees the outcome on Team). The ladder never uses the attestation (§19 Q131). The
+ * SQL twin is `office_call_start()` (20261017000500).
+ */
+export const OFFICE_CALL_POLICY = {
+  roles: ['admin', 'ops'],
+  maxPerDay: 3,
+  /** The attestation's wording version (`consents.text_version`). */
+  attestVersion: 'team.call_now.v1',
+  missedCallText: false,
+} as const;
+
+/** Why office_call_start() placed no call (`{status: 'refused', reason}`); the panel words each. */
+export const OFFICE_CALL_REFUSALS = [
+  'attestation_required',
+  /** Neither a demo org nor a pack with an outbound trunk here. */
+  'no_trunk',
+  /** Disabled, or opted out of texts. */
+  'reporter_inactive',
+  /** The reporter turned automated calls off themselves (their own `auto_call` revoked). */
+  'calls_turned_off',
+  /** §19 Q129: "Don't call me today". */
+  'no_calls_today',
+  'site_not_active',
+  /** §9.4: outside the org's call window at the site. */
+  'outside_window',
+  /** Today's report is filed (or a weather day, or no work). */
+  'day_filed',
+  /** A call to the reporter is queued, ringing or in progress. */
+  'call_live',
+  /** §19 Q330: `maxPerDay` office calls today already. */
+  'limit_reached',
+] as const;
+export type OfficeCallRefusal = (typeof OFFICE_CALL_REFUSALS)[number];
+
+/** What office_call_start() answers. */
+export type OfficeCallStart =
+  | { status: 'requested'; callId: string; consentId: string; siteDayId: string }
+  | { status: 'refused'; reason: OfficeCallRefusal };
+
+/** The `place_call {phase: office}` job of the nth office call of a site-day and reporter. */
+export function officeCallKey(siteDayId: string, reporterId: string, n: number): string {
+  return `call:${siteDayId}:${reporterId}:office:${n}`;
+}
+
+/**
+ * Whether a `calls` row is an office _Call now_ (W4-04): an outbound call about the daily report
+ * (the ladder's are `reminder`, the callback's `callback`).
+ */
+export function isOfficeCall(call: { direction: string; purpose: string | null }): boolean {
+  return call.direction === 'outbound' && call.purpose === 'daily_report';
+}
+
+/**
+ * The reporter's own consents (§19 Q131, W4-04): the office's `auto_call` attestation allows only
+ * the office's Call now, so it never counts as the reporter's consent where the reporter's own is
+ * read (the recorder's Settings and Welcome, the call's context).
+ */
+export function reporterOwnConsents<T extends { type: string; method?: string | null }>(
+  rows: readonly T[],
+): T[] {
+  return rows.filter((r) => !(r.type === 'auto_call' && r.method === 'office_attested'));
+}
+
+/** How Team and Site detail word a call's progress (W4-04), from `calls.status`. */
+export type CallProgress = 'requested' | 'ringing' | 'answered' | 'not_reached' | 'failed';
+
+export function callProgress(status: CallStatus): CallProgress {
+  switch (status) {
+    case 'queued':
+      return 'requested';
+    case 'ringing':
+      return 'ringing';
+    case 'in_progress':
+    case 'completed':
+      return 'answered';
+    case 'failed':
+      return 'failed';
+    default:
+      return 'not_reached';
+  }
+}
+
 /** How a dial that never reached the reporter ended (`calls.status`). */
 export type UnansweredStatus = Extract<CallStatus, 'no_answer' | 'busy' | 'failed' | 'voicemail'>;
 

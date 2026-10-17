@@ -88,6 +88,7 @@ import type {
   CreateSiteInput,
   InviteReporterInput,
   LinkUnknownSenderInput,
+  OfficeCallNowInput,
   RequestEvidencePackInput,
   ResolveUnknownCompanyInput,
   ReviewGlossaryTermInput,
@@ -110,6 +111,8 @@ import type {
 } from '../types';
 import { attemptNumber } from '@sitelog/shared/notify/walk.ts';
 import { settingsMessageChannels } from '@sitelog/shared/channels.ts';
+import { DEFAULT_CALL_WINDOW, insideWindow } from '@sitelog/shared/schedule/remind.ts';
+import { OFFICE_CALL_POLICY } from '@sitelog/shared/voice-outbound.ts';
 import type { OrgLocale } from '@sitelog/shared/locale.ts';
 
 /** Extra demo office user so `?as=ops` has someone to be (not part of the §18 seed). */
@@ -162,6 +165,9 @@ function photoEntryId(p: PhotoEntry | null | undefined): string {
   const id = typeof p?.uploadId === 'string' ? p.uploadId : p?.messageId;
   return typeof id === 'string' ? id.toLowerCase() : '';
 }
+
+/** A demo office call rings the Demo phone this long before it counts as not answered (§19 Q132). */
+export const OFFICE_RING_MS = 30_000;
 
 export class DemoStore {
   readonly data: DemoDataset;
@@ -1801,6 +1807,176 @@ export class DemoStore {
       });
     }
     this.emit({ table: 'all' });
+  }
+
+  /**
+   * Mirror of office_call_start() (20261017000500, W4-04, §19 Q230): the guards in its order, the
+   * attestation as an `auto_call` consent `office_attested`, the call row, both audited. A demo
+   * org's call is the console's: it rings the Demo phone at once and, unanswered, ends
+   * `no_answer` / `not_reached` after OFFICE_RING_MS, with no text (no `missed_call`).
+   */
+  officeCallNow(input: OfficeCallNowInput, userId: string): { callId: string } {
+    const d = this.data;
+    const r = d.reporters.find((x) => x.id === input.reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    const site = d.sites.find((x) => x.id === input.siteId);
+    if (!site || !d.siteReporters.some((sr) => sr.site_id === site.id && sr.reporter_id === r.id))
+      throw new Error(copy.errors.notFound);
+    const refuse = (reason: string) => {
+      throw new CodedError(reason, reason);
+    };
+    const now = this.now;
+    if (!input.attested) refuse('attestation_required');
+    if (r.status === 'disabled' || r.status === 'opted_out') refuse('reporter_inactive');
+    const own = d.consents
+      .filter(
+        (c) => c.reporter_id === r.id && c.type === 'auto_call' && c.method !== 'office_attested',
+      )
+      .sort((a, b) => (a.given_at < b.given_at ? 1 : -1))[0];
+    if (own?.revoked_at) refuse('calls_turned_off');
+    if (r.no_calls_until && Date.parse(r.no_calls_until) > now.getTime()) refuse('no_calls_today');
+    if (site.status !== 'active') refuse('site_not_active');
+    const window = {
+      start: d.settings.call_window_start ?? DEFAULT_CALL_WINDOW.start,
+      end: d.settings.call_window_end ?? DEFAULT_CALL_WINDOW.end,
+    };
+    if (!insideWindow(now, site.timezone, window)) refuse('outside_window');
+    const today = formatDateInTz(now, site.timezone);
+    const day = d.siteDays.find((x) => x.site_id === site.id && x.date === today);
+    if (
+      day &&
+      (['filed', 'weather_day', 'no_work'].includes(day.status) ||
+        d.reports.some(
+          (x) => x.site_day_id === day.id && (x.status === 'filed' || x.status === 'signed_off'),
+        ))
+    )
+      refuse('day_filed');
+    if (
+      d.calls.some(
+        (c) =>
+          c.reporter_id === r.id &&
+          !c.ended_at &&
+          ['queued', 'ringing', 'in_progress'].includes(c.status),
+      )
+    )
+      refuse('call_live');
+    const n = d.calls.filter(
+      (c) =>
+        c.reporter_id === r.id &&
+        c.site_id === site.id &&
+        c.direction === 'outbound' &&
+        c.purpose === 'daily_report' &&
+        c.created_at !== null &&
+        formatDateInTz(new Date(c.created_at), site.timezone) === today,
+    ).length;
+    if (n >= OFFICE_CALL_POLICY.maxPerDay) refuse('limit_reached');
+
+    const callId = localId('call');
+    const consentId = localId('consent');
+    d.consents.push({
+      id: consentId,
+      reporter_id: r.id,
+      type: 'auto_call',
+      method: 'office_attested',
+      text_version: OFFICE_CALL_POLICY.attestVersion,
+      evidence: { user_id: userId, via: 'office', at: this.nowIso(), call_id: callId },
+      given_at: this.nowIso(),
+      revoked_at: null,
+    });
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'consent.given',
+      entity: 'consent',
+      entity_id: consentId,
+      diff: {
+        type: 'auto_call',
+        method: 'office_attested',
+        text_version: OFFICE_CALL_POLICY.attestVersion,
+        via: 'office',
+        reporter_id: r.id,
+        call_id: callId,
+      },
+    });
+    d.calls.push({
+      id: callId,
+      org_id: d.org.id,
+      reporter_id: r.id,
+      site_id: site.id,
+      report_id: null,
+      direction: 'outbound',
+      transport: 'pstn',
+      purpose: 'daily_report',
+      provider_call_id: `call-${callId}`,
+      from_e164: demoOrgPack(d).voiceNumber,
+      to_e164: r.phone_e164,
+      // The console telephony rings the Demo phone at once (§19 Q132).
+      status: 'ringing',
+      outcome: null,
+      disclosure_played: false,
+      disclosure_version: null,
+      started_at: this.nowIso(),
+      answered_at: null,
+      ended_at: null,
+      duration_s: null,
+      recording_path: null,
+      peaks: null,
+      dialog_log: null,
+      metrics: { telephony: 'console', stage: 'office', via: 'office', requested_by: userId },
+      created_at: this.nowIso(),
+      language: r.locale,
+      call_token_issued_at: null,
+      attempt: null,
+      site_day_id: day?.id ?? null,
+      fallback: null,
+      reconcile: null,
+      consent_declined_at: null,
+    });
+    this.audit({
+      org_id: d.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'call.requested',
+      entity: 'call',
+      entity_id: callId,
+      diff: {
+        direction: 'outbound',
+        purpose: 'daily_report',
+        stage: 'office',
+        via: 'office',
+        office_call: n + 1,
+        telephony: 'console',
+        site_id: site.id,
+        reporter_id: r.id,
+      },
+    });
+    this.emit({ table: 'all' });
+    const t = setTimeout(() => {
+      const c = this.data.calls.find((x) => x.id === callId);
+      if (!c || c.ended_at || c.status !== 'ringing') return;
+      c.status = 'no_answer';
+      c.outcome = 'not_reached';
+      c.ended_at = this.nowIso();
+      c.duration_s = 0;
+      this.audit({
+        org_id: d.org.id,
+        actor_type: 'system',
+        actor_id: null,
+        action: 'call.ended',
+        entity: 'call',
+        entity_id: callId,
+        diff: {
+          outcome: 'not_reached',
+          status: 'no_answer',
+          direction: 'outbound',
+          stage: 'office',
+        },
+      });
+      this.emit({ table: 'all' });
+    }, OFFICE_RING_MS);
+    this.timers.push(t);
+    return { callId };
   }
 
   /** Mirror of update_reporter() (20261012000001_web_gaps.sql). The phone never changes. */

@@ -851,6 +851,19 @@ export const RPCS: Record<
     allow: ADMIN_OPS,
     call: (o) => `select count(*) as v from team_reporter_states('${o.org}')`,
   },
+  // W4-04 (20261017000500_office_call_now.sql): Team's Call now. The fixture orgs place no calls
+  // (not demo, no trunk), so an allowed role's call answers `refused no_trunk` and writes nothing.
+  office_call_start: {
+    why: '§2.2 "Manage reporters": admin, ops (F3 Call now with the office\'s attestation, §19 Q230).',
+    allow: ADMIN_OPS,
+    call: (o) =>
+      `select office_call_start('${o.reporter}', '${o.site}', 'team.call_now.v1', true) as v`,
+  },
+  office_call_dial: {
+    why: '§10.1 place_call, §19 Q230: the worker only (service role).',
+    allow: NONE,
+    call: (o) => `select office_call_dial('${o.call}', 'console') as v`,
+  },
 };
 
 export type Scope = 'own' | 'other';

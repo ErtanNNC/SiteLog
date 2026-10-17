@@ -967,6 +967,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     outboundCallShare() {
       return Promise.resolve([]);
     },
+    officeCallDial() {
+      return Promise.reject(new Error('fake db: officeCallDial runs on PGlite only'));
+    },
     reportNoPhotoCheck() {
       return Promise.reject(new Error('fake db: reportNoPhotoCheck runs on PGlite only'));
     },

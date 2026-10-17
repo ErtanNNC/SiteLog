@@ -111,6 +111,13 @@ export interface UpdateReporterContactInput {
   attested: boolean;
 }
 
+/** Team → Call now (W4-04): the reporter, the site the call is about, the attestation. */
+export interface OfficeCallNowInput {
+  reporterId: string;
+  siteId: string;
+  attested: boolean;
+}
+
 /** The wording version of Team's "asked for texts again" attestation (§19 Q242). */
 export const TEAM_TEXTS_AGAIN_VERSION = 'team.texts_again.v1';
 
@@ -364,6 +371,13 @@ export interface DataSource {
    * with the attestation (an `sms` consent `office_attested`).
    */
   clearReporterOptOut(reporterId: string, attested: boolean): Promise<void>;
+  /**
+   * Team → Call now (W4-04, F3, §19 Q230): admin and ops, where the org places calls; one call to
+   * the reporter about today's report at the site, with the office's attestation (an `auto_call`
+   * consent `office_attested`). A refusal throws a CodedError with its reason
+   * (`OFFICE_CALL_REFUSALS`).
+   */
+  officeCallNow(input: OfficeCallNowInput): Promise<{ callId: string }>;
   addOfficeUser(input: {
     email: string;
     role: MemberRole;

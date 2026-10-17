@@ -21,6 +21,7 @@ import type { CrewBadge, CrewRow, SiteDetail } from '@/data/types';
 import { useCopy, type CopyT } from '@/i18n/useCopy';
 import { formatNumberIn, joinLanguageCodes, zoneShortName } from '@/lib/localeFormat';
 import { cn } from '@/lib/utils';
+import { CallTodayLine } from '../team/CallTodayLine';
 import { CrewTab } from './CrewTab';
 import { PhotosTab } from './PhotosTab';
 import { SiteSettingsDrawer } from './SiteSettingsDrawer';
@@ -131,6 +132,10 @@ export default function SiteDetailPage() {
                 <PrefIcon className="size-4" aria-hidden="true" />
                 {[t(`sites.prefers.${primary.contactPref}`), speaks].filter(Boolean).join(' · ')}
               </span>
+            ) : null}
+            {/* W4-04: today's outbound call to them (the office's Call now or the ladder's). */}
+            {primary && data.callToday ? (
+              <CallTodayLine call={data.callToday} tz={site.timezone} t={t} />
             ) : null}
             {site.status === 'paused' && site.pausedAt ? (
               <StatusChip variant="no_work" label={t('sites.paused')} size="sm" />

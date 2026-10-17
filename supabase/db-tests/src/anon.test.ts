@@ -81,6 +81,8 @@ const AUTHENTICATED_KEEPS = [
   'revoke_reporter_devices(uuid)',
   'clear_reporter_opt_out(uuid,text,boolean)',
   'team_reporter_states(uuid)',
+  // W4-04: Team's Call now.
+  'office_call_start(uuid,uuid,text,boolean)',
 ] as const;
 
 let db: PGlite;

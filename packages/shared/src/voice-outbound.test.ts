@@ -4,6 +4,11 @@ import { JobPayloadSchemas } from './schemas/jobs.ts';
 import {
   afterUnanswered,
   CALL_SKIP_REASONS,
+  callProgress,
+  isOfficeCall,
+  OFFICE_CALL_POLICY,
+  officeCallKey,
+  reporterOwnConsents,
   missedCallJobKey,
   noCallsToday,
   OUTBOUND_CALL_ATTEMPT,
@@ -106,6 +111,9 @@ describe('the place_call payloads', () => {
     );
     expect(schema.safeParse({ phase: 'ring_end', callId: id }).success).toBe(true);
     expect(schema.safeParse({ phase: 'missed', callId: id }).success).toBe(true);
+    // W4-04: Team's Call now.
+    expect(schema.safeParse({ phase: 'office', callId: id }).success).toBe(true);
+    expect(schema.safeParse({ phase: 'office' }).success).toBe(false);
     expect(schema.safeParse({ reporterId: id, siteDayId: id, stage: 'heads_up' }).success).toBe(
       false,
     );
@@ -153,5 +161,45 @@ describe('LiveKit Twirp helpers', () => {
       max_call_duration: '720s',
     });
     expect(JSON.stringify(body.participant_metadata)).not.toContain('+1555');
+  });
+});
+
+/** W4-04: Team's Call now (§19 Q131, Q230, Q330). */
+describe('the office’s Call now', () => {
+  it('is admin and ops, three a site-day, never a missed_call text', () => {
+    expect(OFFICE_CALL_POLICY).toMatchObject({
+      roles: ['admin', 'ops'],
+      maxPerDay: 3,
+      attestVersion: 'team.call_now.v1',
+      missedCallText: false,
+    });
+    expect(officeCallKey('sd', 'r', 2)).toBe('call:sd:r:office:2');
+  });
+
+  it('is an outbound daily_report call; the ladder’s and the callback are not', () => {
+    expect(isOfficeCall({ direction: 'outbound', purpose: 'daily_report' })).toBe(true);
+    expect(isOfficeCall({ direction: 'outbound', purpose: 'reminder' })).toBe(false);
+    expect(isOfficeCall({ direction: 'outbound', purpose: 'callback' })).toBe(false);
+    expect(isOfficeCall({ direction: 'inbound', purpose: 'daily_report' })).toBe(false);
+  });
+
+  it('words a call’s progress from its status', () => {
+    expect(callProgress('queued')).toBe('requested');
+    expect(callProgress('ringing')).toBe('ringing');
+    expect(callProgress('in_progress')).toBe('answered');
+    expect(callProgress('completed')).toBe('answered');
+    expect(callProgress('no_answer')).toBe('not_reached');
+    expect(callProgress('busy')).toBe('not_reached');
+    expect(callProgress('voicemail')).toBe('not_reached');
+    expect(callProgress('failed')).toBe('failed');
+  });
+
+  it('leaves the office’s auto_call attestation out of the reporter’s own consents', () => {
+    const rows = [
+      { type: 'auto_call', method: 'office_attested' },
+      { type: 'auto_call', method: 'web_checkbox' },
+      { type: 'sms', method: 'office_attested' },
+    ];
+    expect(reporterOwnConsents(rows)).toEqual([rows[1], rows[2]]);
   });
 });

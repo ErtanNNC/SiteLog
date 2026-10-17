@@ -14,6 +14,7 @@ import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { DEMO_ORG_LOCALE, DEMO_SITELOG_NUMBER, DEMO_TODAY } from '@sitelog/shared/demo/kestrel.ts';
 import { DEMO_CALL_AUDIO_SITES, demoCallAudioPath } from '@sitelog/shared/demo/calls.ts';
 import { demoId } from '@sitelog/shared/demo/ids.ts';
+import { OFFICE_CALL_POLICY } from '@sitelog/shared/voice-outbound.ts';
 import { billingPrice, type BillingPrice, type BillingStatus } from '@sitelog/shared/billing.ts';
 import { copy } from '@/copy/en';
 import { translate } from '@/i18n/useCopy';
@@ -51,6 +52,7 @@ import {
   type DataSource,
   type InviteReporterInput,
   type LinkUnknownSenderInput,
+  type OfficeCallNowInput,
   type PdfLinkBatch,
   type PdfSelection,
   type RequestEvidencePackInput,
@@ -378,6 +380,14 @@ export class DemoSource implements DataSource {
     return this.run(() => {
       if (!['admin', 'ops'].includes(this.user.role)) throw new Error(copy.errors.notAllowed);
       return this.store.revokeReporterDevices(reporterId, this.user.id);
+    });
+  }
+  /** W4-04 (§19 Q230): admin and ops; the demo org places calls on the console telephony. */
+  officeCallNow(input: OfficeCallNowInput) {
+    return this.run(() => {
+      if (!(OFFICE_CALL_POLICY.roles as readonly string[]).includes(this.user.role))
+        throw new Error(copy.errors.notAllowed);
+      return this.store.officeCallNow(input, this.user.id);
     });
   }
   /** §19 Q242: an admin only. */

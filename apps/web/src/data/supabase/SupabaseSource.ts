@@ -48,6 +48,7 @@ import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numberin
 import { invoiceUploadPath } from '@sitelog/shared/invoices.ts';
 import { mergeDemoPhoneCalls } from '../demoPhoneCalls';
 import { toCountryPack } from '@sitelog/shared/countries.ts';
+import { OFFICE_CALL_POLICY, type OfficeCallStart } from '@sitelog/shared/voice-outbound.ts';
 import { TEAM_RPC_CODES } from '../types';
 import type { CountryRow } from '@sitelog/shared/db/types.ts';
 import type { OrgLocale } from '@sitelog/shared/locale.ts';
@@ -110,6 +111,7 @@ import {
   type DataSource,
   type InviteReporterInput,
   type LinkUnknownSenderInput,
+  type OfficeCallNowInput,
   type PdfLink,
   type PdfLinkBatch,
   type PdfSelection,
@@ -640,8 +642,10 @@ export class SupabaseSource implements DataSource {
         ),
         this.sitePhotos(siteId, reports, siteDays),
       ]);
+    const calls = await this.recentOutboundCalls(siteId);
     const rows: RowSet = {
       ...this.rowsFrom(core),
+      calls,
       siteDays: [...siteDays, ...photos.siteDays],
       reports: [...reports, ...photos.reports],
       versions,
@@ -1325,14 +1329,16 @@ export class SupabaseSource implements DataSource {
         .eq('status', 'pending')
         .then(unwrap),
     ]);
-    const [country, states] = await Promise.all([
+    const [country, states, calls] = await Promise.all([
       this.sb.from('countries').select('*').eq('code', core.org.country).single().then(unwrapOne),
       this.rpc('team_reporter_states', { p_org_id: this.orgId }),
+      this.recentOutboundCalls(),
     ]);
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays,
       unknownContacts: unknownContacts as UnknownContactRow[],
+      calls,
     };
     return assembleTeam(rows, this.ctx(), {
       pack: toCountryPack(country as CountryRow),
@@ -2013,6 +2019,37 @@ export class SupabaseSource implements DataSource {
       p_text_version: TEAM_TEXTS_AGAIN_VERSION,
       p_attested: attested,
     });
+  }
+  /** Team → Call now (W4-04): office_call_start(); a refusal is a CodedError with its reason. */
+  async officeCallNow(input: OfficeCallNowInput) {
+    const { data, error } = await this.sb.rpc('office_call_start', {
+      p_reporter_id: input.reporterId,
+      p_site_id: input.siteId,
+      p_text_version: OFFICE_CALL_POLICY.attestVersion,
+      p_attested: input.attested,
+    });
+    if (error) throw new Error(error.message);
+    const res = data as unknown as OfficeCallStart;
+    if (res.status === 'refused') throw new CodedError(res.reason, res.reason);
+    return { callId: res.callId };
+  }
+  /**
+   * W4-04: the org's outbound calls of the last 36 hours (Team's and Site detail's call progress
+   * picks today's in the site's or org's time zone). RLS: admin, pm, ops.
+   */
+  private async recentOutboundCalls(siteId?: string): Promise<CallRow[]> {
+    let q = this.sb
+      .from('calls')
+      .select('id, reporter_id, site_id, direction, purpose, status, outcome, attempt, created_at')
+      .eq('org_id', this.orgId)
+      .eq('direction', 'outbound')
+      .gte('created_at', new Date(this.now().getTime() - 36 * 3_600_000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (siteId) q = q.eq('site_id', siteId);
+    const res = await q;
+    // Team still shows without the progress when calls cannot be read (an accounts user, say).
+    return res.error ? [] : ((res.data ?? []) as unknown as CallRow[]);
   }
   /** Team's RPCs raise their refusal as the message (`attestation_required`, …): a CodedError. */
   private async teamRpc<K extends keyof Database['public']['Functions']>(

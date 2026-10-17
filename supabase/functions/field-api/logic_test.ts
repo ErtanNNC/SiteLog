@@ -407,6 +407,32 @@ Deno.test(
   },
 );
 
+Deno.test('W4-04 (§19 Q131): the office’s auto_call attestation is not the reporter’s own', () => {
+  const us = toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!);
+  const rows = [
+    { type: 'recording', revoked_at: null, method: 'web_checkbox' },
+    { type: 'data_processing', revoked_at: null, method: 'web_checkbox' },
+    { type: 'auto_call', revoked_at: null, method: 'office_attested' },
+  ] as const;
+  const reporter = { contact_pref: 'call', locale: 'en-US', message_channel: null } as const;
+  const view = settingsView(reporter, us, rows, false, undefined, true);
+  assertEquals(
+    view.consents.find((c) => c.type === 'auto_call'),
+    { type: 'auto_call', held: false },
+  );
+  const state = consentState(
+    rows.map((r) => ({
+      ...r,
+      id: crypto.randomUUID(),
+      reporter_id: 'r',
+      text_version: 'v1',
+      evidence: null,
+      given_at: '2026-10-17T00:00:00Z',
+    })) as ConsentRow[],
+  );
+  assertEquals([...state.held].sort(), ['data_processing', 'recording']);
+});
+
 Deno.test('settingsView: push is the toggle, offered with the pack and a key pair (W2-14)', () => {
   const us = {
     ...toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!),

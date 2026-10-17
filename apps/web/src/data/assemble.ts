@@ -109,6 +109,7 @@ import type { OrgLocale, ReporterLocale, UnitSystem } from '@sitelog/shared/loca
 import { settingsMessageChannels } from '@sitelog/shared/channels.ts';
 import type { CountryPack } from '@sitelog/shared/countries.ts';
 import { attemptIsFinal, attemptWasSent } from '@sitelog/shared/notify/walk.ts';
+import { callProgress, isOfficeCall, placesCalls } from '@sitelog/shared/voice-outbound.ts';
 import { copy } from '@/copy/en';
 import { copyRef } from '@/i18n/copyRef';
 import { groupBy, isRecord, sum, uniq } from '@/lib/utils';
@@ -119,6 +120,7 @@ import type {
   BillingData,
   CalendarCell,
   CalendarChannel,
+  CallToday,
   Chip,
   CompanyOption,
   CrewRow,
@@ -1448,6 +1450,12 @@ export function assembleSiteDetail(
     monthStats,
     crewToday,
     photoCount: photos.length,
+    callToday: (() => {
+      const primary = reporters.find((r) => r.isPrimary) ?? reporters[0];
+      return primary
+        ? callTodayOf(rows.calls ?? [], primary.id, site.timezone, ctx.now, siteId)
+        : null;
+    })(),
     photos,
   };
 }
@@ -2789,6 +2797,43 @@ export function welcomeUndeliverable(attempts: readonly WelcomeAttempt[]): boole
 /** The consent a message channel needs (§4.5; `MessageChannelSpec.consent`). */
 const CHANNEL_CONSENT = { sms: 'sms', whatsapp: 'whatsapp', push: 'push' } as const;
 
+/**
+ * W4-04 (F3, §19 Q230): the reporter's latest outbound call today (in `tz`), optionally at one
+ * site, as Team and Site detail show its progress. `calls` holds the rows the source loaded.
+ */
+export function callTodayOf(
+  calls: readonly Pick<
+    CallRow,
+    'id' | 'reporter_id' | 'site_id' | 'direction' | 'purpose' | 'status' | 'created_at'
+  >[],
+  reporterId: string,
+  tz: string,
+  now: Date,
+  siteId?: string,
+): CallToday | null {
+  const today = formatDateInTz(now, tz);
+  const latest = calls
+    .filter(
+      (c) =>
+        c.reporter_id === reporterId &&
+        c.direction === 'outbound' &&
+        (siteId === undefined || c.site_id === siteId) &&
+        !!c.created_at &&
+        formatDateInTz(new Date(c.created_at), tz) === today,
+    )
+    .sort((a, b) =>
+      a.created_at! < b.created_at! ? 1 : a.created_at! > b.created_at! ? -1 : 0,
+    )[0];
+  if (!latest) return null;
+  return {
+    id: latest.id,
+    progress: callProgress(latest.status),
+    at: latest.created_at!,
+    byOffice: isOfficeCall(latest),
+    live: ['queued', 'ringing', 'in_progress'].includes(latest.status),
+  };
+}
+
 /** §19 Q241 (W4-12): the automatic re-send's dedupe key. */
 const AUTO_RESEND_KEY = 'welcome_resend:';
 
@@ -2874,6 +2919,7 @@ export function assembleTeam(
       autoResent:
         chipStatus === 'invite_sent' &&
         welcome.some((a) => a.dedupe_key?.startsWith(AUTO_RESEND_KEY) === true),
+      callToday: callTodayOf(rows.calls ?? [], r.id, rows.org.timezone, ctx.now),
     };
   });
   reporters.sort((a, b) => a.name.localeCompare(b.name));
@@ -2905,6 +2951,7 @@ export function assembleTeam(
       hasVoiceNumber: extra.pack.voiceNumber !== null,
     },
     orgLocale: rows.org.locale as OrgLocale,
+    placesCalls: placesCalls({ isDemo: rows.org.is_demo === true }, extra.pack),
   };
 }
 
