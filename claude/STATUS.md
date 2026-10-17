@@ -1,36 +1,72 @@
 # SiteLog · Durum
 
-**2026-10-17 (sabah):**
+**2026-10-17 (sabah, 05:10 UTC):**
 
-- **Hafta 3'te yapılıp gönderilenler** (yerel kontrollerin hepsi temiz):
-  - W3-09: arama sırasında canlı taslak. CI'da yeşil, kutusu işaretlendi.
-  - W3-10: raporu sesle okuma, sözlü "evet" ve aramada dosyalama. CI'da yeşil, kutusu işaretlendi.
-  - W3-11: aramadan sonraki iş (1a1c7d1). CI'da yeşil. Şunları kapsıyor:
-    - "evet"ten önce kapatılan arama web'de devam eder (`finish_report`);
-    - yedek kayıt;
-    - kayıt ile onaylanan rapor karşılaştırılır, farklar ofise not düşülür (`call_mismatch`);
-    - arama raporunda saat 23:59'a kadar fotoğraf yoksa `no_photo` işaretlenir.
-  - W3-13: "Talk now" ve fotoğraf linki ekranı.
-  - W3-14: aramada özel istekler (21efe43), CI bekleniyor. Şunları kapsıyor:
-    - iş yok veya yağmur günü;
-    - geçmiş raporu değiştirme;
-    - "bugün arama";
-    - ilk aramada sesli onay;
-    - bilinmeyen arayan.
-- **Şu an çalışıyor:**
-  - W3-12: Python sesli asistanın canlı parçaları.
-  - W3-15: 10 senaryolu arama simülatörü ve test takımı.
-- **Yeni açık sorular Q182–Q201** (W3-11 ve W3-14'ten) spec §19'da, her birinde önerdiğim varsayılan var ve kod onunla kuruldu. Bakmak isterseniz özellikle şunlar:
-  - Q193: STOP göndermiş bir telefondan aramada "evet" denirse SMS onayı kaydedilmesin. Öneri bu; şu anki kod kaydediyor ama opt-out yine de korunuyor.
-  - Q199: Akşam 19:00'dan sonra (gün "eksik" olduktan sonra) aramada "bugün iş yok" denirse ne olacak? Şu an reddediliyor. Bu sizin kararınız.
-- **Sizden bekleyenler (değişmedi):**
-  - Q140 onayı: staging'deki sözlük çiftlerini silmek.
-  - Q181: İspanyolca okuma, US lansmanından önce.
-  - Twilio, SIP ve US numarası.
-  - Avukat metinleri.
-  - LiveKit ve Azure.
-  - Push testi için demo olmayan bir test şirketi.
-- **Önizleme worker'ı durmuş durumda.** Test etmek isterseniz söyleyin, yeniden başlatırım.
+**Kısaca:** Hafta 3'ün kodla yapılabilen kısmı neredeyse bitti. Kalanlar büyük ölçüde sizin hesaplarınıza (LiveKit, Twilio, Azure) ve canlı testlerinize bağlı.
+
+**Yapıldı ve gönderildi** (yerel kontrollerin hepsi temiz):
+
+| İş    | Ne yapıyor                                             | Durum                         |
+| ----- | ------------------------------------------------------ | ----------------------------- |
+| W3-09 | Arama sırasında rapor taslağı canlı oluşuyor           | CI yeşil, bitti               |
+| W3-10 | Asistan raporu okuyor; "evet" denmeden dosyalanmıyor   | CI yeşil, bitti               |
+| W3-11 | Aramadan sonraki iş (aşağıda)                          | CI yeşil; canlı test kaldı    |
+| W3-12 | Python sesli asistan tam akış (aşağıda)                | CI yeşil; canlı test kaldı    |
+| W3-13 | Saha uygulamasında "Talk now" ve fotoğraf linki ekranı | CI yeşil; telefon testi kaldı |
+| W3-14 | Aramada özel istekler (aşağıda)                        | CI yeşil, bitti               |
+| W3-15 | 11 senaryolu arama simülatörü (aşağıda)                | gönderildi, CI çalışıyor      |
+
+- **W3-11, aramadan sonraki iş:**
+  - "Evet"ten önce kapatılan arama web'de devam eder.
+  - Kayıt yeniden dinlenip onaylanan raporla karşılaştırılır; fark varsa ofise not düşer.
+  - Fotoğraf yoksa 23:59'da işaretlenir.
+- **W3-12, Python sesli asistan:**
+  - Açılışta kayıt bildirimi okunur.
+  - Konuşma durumları takip edilir.
+  - Sessizlikte ve süre dolunca (10. dakikada uyarı, 12. dakikada bitiş) asistan bunu ele alır.
+  - İki kez anlaşılmazsa basit kayıt moduna geçer.
+  - Arama iki kanallı kaydedilir.
+  - Testler 92'den 246'ya çıktı.
+- **W3-14, aramada özel istekler:**
+  - "Bugün iş yok" ya da yağmur günü.
+  - Geçmiş raporu değiştirme.
+  - "Bugün arama".
+  - İlk aramada sesli onay.
+  - Bilinmeyen arayan.
+- **W3-15, arama simülatörü:**
+  - Senaryolar İngilizce ve İspanyolca; telefonla aramayı da "Talk now"u da kapsıyor.
+  - Bu test takımı gerçek bir veritabanına karşı ilk kez CI'da koşuyor; bir düzeltme turu çıkabilir.
+- **Q205 düzeltildi:** asistan artık "kayıt bildirimi okundu" bilgisini sunucuya iletiyor. Bu olmadan canlı arama kayıtları hiç işlenmeyecekti.
+
+**Şu an çalışıyor:**
+
+- **W3-17, giden hatırlatma aramaları.** Gerçek hat olmadan, sahte (konsol) hatla kuruluyor:
+  - Demo şirketin araması Demo phone'da çalar.
+  - Açılmayan aramadan sonra "cevapsız arama" mesajı gider, ardından ikinci arama yapılır.
+  - Ayarlara "Bugün arama" ve "otomatik arama onayı" satırları ekleniyor.
+  - Gerçek arama sizin Twilio hattınızı bekliyor.
+- **W3-16'nın kod kısmı:**
+  - Gecikme ölçüm komutu (`pnpm voice:latency`).
+  - Ses örneği üretme aracı.
+  - LiveKit kurulumu için adım adım talimatlar.
+- **Sonra W3-18:** hafta 3'ün kabul testleri ve demo notları.
+
+**Açık sorular Q182–Q214** spec §19'da. Hepsinde önerdiğim varsayılan var, kod onunla kuruldu. Bakmanızı önerdiklerim:
+
+- **Q193:** STOP göndermiş bir telefondan aramada "evet" denirse SMS onayı kaydedilmesin. Öneri bu. Şu anki kod kaydediyor, ama mesaj engeli yine de geçerli.
+- **Q199:** Akşam 19:00'dan sonra, gün "eksik" olduktan sonra, aramada "bugün iş yok" denirse ne olsun? Şu an reddediliyor. Bu sizin kararınız.
+- **Q206:** Deepgram'ın, ses verisini kendi modelini geliştirmek için kullanmasından çıkmak (opt-out). Gizlilik için önerilir. Fiyat farkı olabilir; lütfen kontrol edin.
+
+**Sizden bekleyenler** (en uzun sürenler önce):
+
+1. **Twilio** hesap yükseltmesi, SIP trunk, sesli arama yapabilen bir US numarası, Trust Hub ve SHAKEN/STIR. Giden aramalar (W3-17) için.
+2. **Avukattan metinler:** otomatik arama onayı (TCPA), kayıt bildirimi ve KVKK.
+3. **LiveKit Cloud projesi ve Azure Speech.** Canlı aramalar (W3-16) bunları bekliyor. Talimatlar W3-16'nın kod kısmıyla RUNBOOK'a eklenecek.
+4. **Q140 onayı:** staging'deki sözlük çiftlerinin silinmesi.
+5. **Q181:** İspanyolca okuma metinleri, US lansmanından önce.
+6. **Bildirim testi için demo olmayan bir test şirketi:** telefon numarası, panel e-postası ve ülke (US/TR).
+
+**Önizleme worker'ı durmuş durumda.** Test etmek isterseniz söyleyin, yeniden başlatırım.
 
 **2026-10-16 (gece, devam):**
 
