@@ -311,7 +311,8 @@ test.describe('in a tr-TR browser', () => {
       .eq('action', 'org.created')
       .single();
     if (auditError) throw auditError;
-    expect(audit.diff).toEqual({ country: 'TR' });
+    // W4-10 (§19 Q236): a TR org is billed manually until Q8, with no TRY price until Q9.
+    expect(audit.diff).toEqual({ country: 'TR', billing_provider: 'manual', price: null });
 
     // Settings → PDF shows the preset A4 paper.
     await page.goto('/settings/pdf');
