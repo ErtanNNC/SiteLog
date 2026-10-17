@@ -32,6 +32,7 @@ export * from './report/progress.ts';
 export * from './report/photos.ts';
 export * from './report/media.ts';
 export * from './report/evidence-pack.ts';
+export * from './report/reconcile.ts';
 export * from './wa/buttons.ts';
 export * from './messaging/window.ts';
 export * from './wa/templates.ts';

@@ -58,6 +58,14 @@ export const V12_ROW_DEFAULTS = {
   reports: { channel: null, language: 'en', confirmed_via: null },
   report_versions: { via: null },
   /** created_at: null as on the rows from before the migration; new rows get now(). */
-  report_sources: { upload_id: null, call_id: null, question_id: null, created_at: null },
+  report_sources: {
+    upload_id: null,
+    call_id: null,
+    question_id: null,
+    created_at: null,
+    value_path: null,
+    start_s: null,
+    end_s: null,
+  },
   questions: { channel: null, call_id: null, answer_source: null, voice_answers: [] },
 } as const satisfies { [T in keyof Rows]?: Partial<Rows[T]['Row']> };

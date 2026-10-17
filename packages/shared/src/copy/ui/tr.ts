@@ -352,6 +352,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           missing: 'Eksik: {{field}}',
           no_photo: 'Aramadan sonra fotoğraf gelmedi',
           call_mismatch: 'Arama kaydı onaylanan rapordan farklı: {{field}}',
+          call_unreconciled: 'Arama kaydı raporla karşılaştırılamadı',
           other: '{{reason}}',
         },
         invoice_gap: {
@@ -766,6 +767,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           'Arama kaydı {{path}} için {{heard}} diyor, onaylanan rapor {{confirmed}} — kontrol edin',
         call_mismatch_of: '{{what}}: {{line}}',
         no_photo: 'Bu rapor için fotoğraf gelmedi',
+        call_unreconciled:
+          'Arama kaydı raporla karşılaştırılamadı; saniyeleri canlı zaman damgalarıdır.',
         playAt: '{{ts}} noktasından çal',
         addAsSub: 'Taşeron olarak ekle',
         mapTo: 'Mevcut firmayla eşleştir',

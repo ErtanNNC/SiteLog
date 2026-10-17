@@ -16,7 +16,7 @@ import {
   reapplyAnswers,
   storeWebDraft,
 } from '../pipeline/web';
-import { validateDraft } from '../pipeline/validate';
+import { hasCallSource, validateDraft } from '../pipeline/validate';
 import { allAudioTranscribed, sendProgressIfSlow } from '../pipeline/progress';
 import { PermanentJobError, type JobHandler } from './types';
 
@@ -184,6 +184,7 @@ async function extractWebReport(ctx: Ctx, report: ReportRow, job: JobRow): Promi
     result.data,
     site.settings,
     sources.filter((s) => s.kind === 'photo').length,
+    { callReport: hasCallSource(sources) },
   ).gaps;
   const answered = reapplyAnswers(
     result.data,

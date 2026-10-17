@@ -1204,6 +1204,7 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       attempt: null,
       site_day_id: null,
       fallback: null,
+      reconcile: null,
     };
   };
 

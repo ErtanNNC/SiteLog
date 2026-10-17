@@ -62,6 +62,16 @@ export const JobPayloadSchemas = {
    * run after a failed one).
    */
   voice_turn: z.object({ turnId: uuid, reportId: uuid }),
+  /**
+   * §10.1, §10.9 (W3-11): everything after a call, once per call (`post_call:<call>`, queued by
+   * voice_call_end() and voice-events' backstop for a known caller).
+   */
+  post_call_reconcile: z.object({ callId: uuid }),
+  /**
+   * §10.5 step 2 (W3-11): at 23:59 site time of the report's day, a report with a call source and
+   * no photo is flagged `no_photo` (queued delayed at filing, `no_photo:<report>`).
+   */
+  no_photo_check: z.object({ reportId: uuid }),
   transcribe_audio: z.object({
     messageId: uuid,
     reportId: uuid.optional(),
@@ -120,6 +130,15 @@ export const JobPayloadSchemas = {
           draftRev: z.number().int().min(1),
         }),
       ])
+      .optional(),
+    /**
+     * W3-11 (§7.2 "Call: hang-up before confirmation", §19 Q122): the call ended before the yes
+     * and its draft continues on the web: the reporter's text is `finish_report` (one per call,
+     * `jobKeys.finishReport`) instead of `question_ready` / `draft_ready`, and the §7.2 web clocks
+     * run from the hang-up (`endedAt`).
+     */
+    afterCall: z
+      .object({ callId: uuid, endedAt: z.string().datetime({ offset: true }) })
       .optional(),
   }),
   parse_reply: z.object({ messageId: uuid, reportId: uuid }),
@@ -413,6 +432,31 @@ export const jobKeys = {
    * or repeated filing never texts it twice.
    */
   photosLink: (reportId: string) => `notify:photos_link:${reportId}`,
+  /**
+   * W3-11: the one job after a call (`post_call_reconcile`), the key voice_call_end() and
+   * voice-events' backstop use (SQL): a call ends once.
+   */
+  postCall: (callId: string) => `post_call:${callId}`,
+  /**
+   * W3-11 (§19 Q122): the decide_next that continues a call's draft on the web after the hang-up,
+   * per report and call: a call ends once.
+   */
+  decideAfterCall: (reportId: string, callId: string) => `decide:${reportId}:call:${callId}`,
+  /**
+   * W3-11 (§19 Q122): the `finish_report` text after a hang-up before the yes: the `notify` job's
+   * key and the Notifier's, one per call.
+   */
+  finishReport: (callId: string) => `notify:finish_report:${callId}`,
+  /**
+   * W3-11 (F6 failure handling): the extraction of a fallback recording (post_call_fallback_report(),
+   * SQL), per report and call: a call's recording is made into the report once.
+   */
+  extractCall: (reportId: string, callId: string) => `extract:${reportId}:call:${callId}`,
+  /**
+   * W3-11 (§10.5 step 2): the 23:59 photo check of a report with a call source, per report: a
+   * report is filed once (a re-filing finds the key taken).
+   */
+  noPhoto: (reportId: string) => `no_photo:${reportId}`,
   /**
    * The `notify` job that carries a message to its next channel after a late `failed` /
    * `undeliverable` status callback on one attempt (W2-01, spec §19 Q22): per logical message and

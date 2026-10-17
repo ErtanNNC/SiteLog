@@ -46,7 +46,16 @@ F4's optional 20-second test on the Welcome screen: `test-en-check.json` (Priya,
 `test-es-en-check.json` (Marco, ES + EN → multi) and `test-tr-check.json` (Emre, tr). The fake
 transcriber answers a test clip with the one in its reporter's language; nothing is filed.
 
-Every file has a `kind` (`report` when absent, `answer`, `test`, `correction`); the fake transcriber answers a
+### Call recordings (W3-11, `kind: "call"`)
+
+The reporter lane (left channel) of a call's dual-channel recording, as the post-call job
+(`post_call_reconcile`) sends it to batch transcription after the call: `call-riverside-en.json`
+(Marco, ES + EN → multi), the Riverside report said on the phone, the script of the golden case
+`call-riverside-2026-10-09-en`. The fake transcriber answers a call lane with it; the worker's
+PGlite test (`apps/worker/src/jobs/post-call.pglite.test.ts`) reconciles it against the filed
+report.
+
+Every file has a `kind` (`report` when absent, `answer`, `test`, `correction`, `call`); the fake transcriber answers a
 request with a fixture of the request's purpose (`TranscriptionRequest.purpose`), so a real
 Chromium recording of an answer gets an answer transcript in its reporter's language.
 

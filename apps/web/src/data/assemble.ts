@@ -77,6 +77,7 @@ import {
   upgradeObservedV1,
   upgradePhotosV1,
 } from '@sitelog/shared/report/upgrade.ts';
+import { withPreciseCallSeconds } from '@sitelog/shared/report/reconcile.ts';
 import { isWorkingDay } from '@sitelog/shared/schedule/day.ts';
 import { readCallPeaks } from '@sitelog/shared/voice.ts';
 import {
@@ -2150,13 +2151,16 @@ export function assembleReportDetail(
   const version =
     selected && versions.some((v) => v.version === selected) ? selected : report.current_version;
   const vRow = versions.find((v) => v.version === version);
-  const data = versionData(vRow);
-  if (!vRow || !data) throw new Error(copy.errors.notFound);
+  const stored = versionData(vRow);
+  if (!vRow || !stored) throw new Error(copy.errors.notFound);
   const previousData = versionData(versions.find((v) => v.version === version - 1));
 
   const sources = rows.sources
     .filter((s) => s.report_id === report.id)
     .sort((a, b) => byTime({ at: a.taken_at ?? '~' }, { at: b.taken_at ?? '~' }));
+  // W3-11 (§10.9): the precise seconds the post-call reconcile wrote replace the live seconds a
+  // value cites, so P7 plays the call where the recording says it.
+  const data = withPreciseCallSeconds(stored, sources);
   const media = mediaIndex(rows);
   const clips = reportClips(rows, report, data, sources, media);
   // The first voice note (WhatsApp `audio` or v1.2 `voice_note`), for the PDF's evidence summary.

@@ -228,6 +228,60 @@ describe('ReportDetailPage: call_mismatch with both values (§19 Q74, Q123)', ()
   });
 });
 
+describe('ReportDetailPage: after the post-call reconcile (W3-11, §19 Q123, Q152, Q153)', () => {
+  it('plays a value from the precise seconds the reconcile wrote', async () => {
+    const { store, report, call } = northgate();
+    store.data.sources.push({
+      ...V12_ROW_DEFAULTS.report_sources,
+      id: 'precise-apex',
+      report_id: report.id,
+      message_id: null,
+      kind: 'call',
+      caption: null,
+      taken_at: null,
+      call_id: call.id,
+      value_path: 'manpower[0]',
+      start_s: 42.4,
+      end_s: 48,
+    });
+    render(store, report.id);
+    const manpower = await screen.findByRole('table', { name: 'Manpower' });
+    const apex = within(manpower).getByText('Apex Concrete').closest('tr')!;
+    expect(within(apex).queryByRole('button', { name: /^call 0:10/ })).toBeNull();
+    await userEvent.click(within(apex).getByRole('button', { name: /^call 0:42/ }));
+    expect(
+      within(screen.getByTestId('media-player')).getByTestId('player-position'),
+    ).toHaveAttribute('aria-valuetext', expect.stringMatching(/^0:4\d$/));
+  });
+
+  it('words call_unreconciled, and a crew on one side only with the generic line (Q152)', async () => {
+    const { store, report } = northgate();
+    report.needs_review = true;
+    report.review_reasons = ['call_unreconciled', 'call_mismatch:manpower[3]:Delta Mechanical 5:'];
+    render(store, report.id);
+    const banner = await screen.findByRole('region', { name: /reasons? to review|İncelenecek/ });
+    expect(banner).toHaveTextContent(
+      'The call recording could not be checked against the report; its seconds are live timestamps.',
+    );
+    expect(banner).toHaveTextContent(
+      'The call recording and the confirmed report differ on manpower[3] — check',
+    );
+  });
+
+  it('says call_unreconciled in Turkish', async () => {
+    await turkish();
+    const { store, report } = northgate();
+    report.needs_review = true;
+    report.review_reasons = ['call_unreconciled'];
+    render(store, report.id);
+    expect(
+      await screen.findByRole('region', { name: /reasons? to review|İncelenecek/ }),
+    ).toHaveTextContent(
+      'Arama kaydı raporla karşılaştırılamadı; saniyeleri canlı zaman damgalarıdır.',
+    );
+  });
+});
+
 describe('ReportDetailPage: a spoken answer’s clip (§19 Q93)', () => {
   it('plays the clip from “answer 17:41” and shows it under the answer in Activity', async () => {
     const store = new DemoStore();

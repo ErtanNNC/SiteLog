@@ -111,6 +111,8 @@ export function reasonText(
       return callMismatchText(parseCallMismatch(reason)!, detail, t, language);
     case 'no_photo':
       return t('report.reasons.no_photo');
+    case 'call_unreconciled':
+      return t('report.reasons.call_unreconciled');
     default:
       return reason;
   }

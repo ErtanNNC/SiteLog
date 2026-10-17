@@ -16,7 +16,16 @@ const SAMPLES: Record<NoticeKey, NoticeData['params']> = {
   },
   missing_report: { site: 'Elm St. Townhomes', first: 'Priya' },
   report_edited: { reportNo: 'RL-2041-0187' },
-  needs_review: { reportNo: 'OMC-0001', reasons: ['unknown_company:Ridgeway', 'no_photo'] },
+  needs_review: {
+    reportNo: 'OMC-0001',
+    // W3-11: the post-call reconcile's reasons too.
+    reasons: [
+      'unknown_company:Ridgeway',
+      'no_photo',
+      'call_mismatch:manpower[2].workers:5:4',
+      'call_unreconciled',
+    ],
+  },
   glossary_review: { count: 3 },
   pack_ready: { site: 'Riverside', from: '2026-09-01', to: '2026-09-30' },
   processing_delayed: { reportNo: 'RL-2041-0187' },
@@ -107,7 +116,7 @@ describe('noticeText: panel notices in the reader’s language', () => {
       render({ key: 'needs_review', params: SAMPLES.needs_review } as NoticeData, 'en'),
     ).toEqual({
       title: 'OMC-0001 needs review',
-      body: 'Unknown subcontractor “Ridgeway”, No photo arrived after the call',
+      body: 'Unknown subcontractor “Ridgeway”, No photo arrived after the call, The call recording differs from the confirmed report: manpower[2].workers, The call recording could not be checked against the report',
     });
     expect(render({ key: 'invoice_gap', params: SAMPLES.invoice_gap } as NoticeData, 'en')).toEqual(
       {

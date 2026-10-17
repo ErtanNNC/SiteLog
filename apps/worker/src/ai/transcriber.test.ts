@@ -251,6 +251,11 @@ describe('fixtures/voice and the fake transcriber', () => {
       'answer-en-delta-five-all-day',
       'answer-tr-demirci-alti',
     ]);
+    // W3-11: a call's reporter lane after the call gets the call recording's transcript.
+    expect((await fake.transcribe(req({ language: 'multi', purpose: 'call' }))).text).toMatch(
+      /^Hi, it's Marco with the Friday report for Riverside Block B/,
+    );
+    expect(fake.calls.at(-1)!.fixtureId).toBe('call-riverside-en');
     const aborted = new AbortController();
     aborted.abort(new Error('timed out'));
     await expect(fake.transcribe(req({ signal: aborted.signal }))).rejects.toThrow(/timed out/);

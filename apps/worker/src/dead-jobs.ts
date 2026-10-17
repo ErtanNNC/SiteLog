@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/node';
 import {
+  CALL_UNRECONCILED,
   JOB_MAX_ATTEMPTS,
   noticeData,
   type JobRow,
@@ -7,6 +8,7 @@ import {
   type NoticeData,
 } from '@sitelog/shared';
 import type { Ctx } from './context';
+import { reviewNotice } from './jobs/post_call';
 import { rawPayload } from './jobs/types';
 
 /**
@@ -46,6 +48,9 @@ export const REPORT_JOB_TYPES: readonly JobTypeKey[] = [
   'parse_answer',
   'apply_correction',
   'file_report',
+  // W3-11: a call's report not filed yet (a fallback recording, a hang-up); a filed one gets
+  // `call_unreconciled` instead (`onDeadJob`).
+  'post_call_reconcile',
 ];
 
 export interface DeadJobSubject {
@@ -72,6 +77,14 @@ export async function deadJobSubject(ctx: Ctx, job: JobRow): Promise<DeadJobSubj
   let reporterId = str('reporterId');
   let reportId = str('reportId');
 
+  // W3-11: a post-call job names its call; the call names its report and reporter.
+  const callId = str('callId');
+  if (callId) {
+    const call = await ctx.db.getCall(callId);
+    reportId ??= call?.report_id ?? null;
+    reporterId ??= call?.reporter_id ?? null;
+    out.orgId ??= call?.org_id ?? null;
+  }
   const uploadId = str('uploadId');
   if (uploadId) {
     const u = await ctx.db.getUploadOwner(uploadId);
@@ -157,7 +170,10 @@ export async function onDeadJob(ctx: Ctx, job: JobRow, err: unknown): Promise<vo
   });
   try {
     const subject = await deadJobSubject(ctx, job);
-    const notice = subject.orgId ? deadJobNotice(job, subject) : null;
+    // §19 Q123: a filed call whose reconcile died: `call_unreconciled` and the review notice
+    // (its sources keep the live seconds), not a processing failure.
+    const unreconciled = await unreconciledCall(ctx, job);
+    const notice = subject.orgId && !unreconciled ? deadJobNotice(job, subject) : null;
     if (notice && subject.orgId) {
       await ctx.db.notifyOrg(
         subject.orgId,
@@ -185,11 +201,32 @@ export async function onDeadJob(ctx: Ctx, job: JobRow, err: unknown): Promise<vo
         job_id: job.id,
         type: job.type,
         attempts: job.attempts,
-        notified: notice?.kind ?? null,
+        notified: notice?.kind ?? (unreconciled ? CALL_UNRECONCILED : null),
       },
     });
   } catch (noticeErr) {
     ctx.log.warn('dead-job notice failed', { err: noticeErr });
     Sentry.captureException(noticeErr);
   }
+}
+
+/**
+ * W3-11 (§19 Q123): a dead `post_call_reconcile` of a call whose report is filed: the reconcile
+ * could not run, so the report gets `call_unreconciled` (post_call_unreconciled(), once, with the
+ * §13 review notice). True when that was the case.
+ */
+async function unreconciledCall(ctx: Ctx, job: JobRow): Promise<boolean> {
+  if (job.type !== 'post_call_reconcile') return false;
+  const callId = rawPayload(job).callId;
+  if (typeof callId !== 'string') return false;
+  const call = await ctx.db.getCall(callId);
+  const report = call?.report_id ? await ctx.db.getReport(call.report_id) : null;
+  if (!call || !report || (report.status !== 'filed' && report.status !== 'signed_off'))
+    return false;
+  await ctx.db.postCallUnreconciled({
+    callId: call.id,
+    reason: 'job_dead',
+    notice: reviewNotice(report.report_no, [CALL_UNRECONCILED]),
+  });
+  return true;
 }

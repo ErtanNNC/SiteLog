@@ -118,6 +118,7 @@ export class FakeTalkNowStore implements TalkNowStore {
       attempt: null,
       site_day_id: null,
       fallback: null,
+      reconcile: null,
     };
     s.callRows.push(row);
     s.audits.push({

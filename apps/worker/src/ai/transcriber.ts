@@ -34,10 +34,11 @@ export interface TranscriptionRequest {
   signal?: AbortSignal;
   /**
    * What the clip is (W2-09, W2-13, W2-10): a report's voice note (the default), a spoken answer
-   * to a question, the Welcome screen's test, or a fix of the draft (*Fix by voice*). Providers ignore it; the fake answers with a fixture
-   * of that kind.
+   * to a question, the Welcome screen's test, a fix of the draft (*Fix by voice*), or (W3-11) a
+   * call's reporter lane after the call. Providers ignore it; the fake answers with a fixture of
+   * that kind.
    */
-  purpose?: 'report' | 'answer' | 'test' | 'correction';
+  purpose?: 'report' | 'answer' | 'test' | 'correction' | 'call';
 }
 
 export interface Transcription {

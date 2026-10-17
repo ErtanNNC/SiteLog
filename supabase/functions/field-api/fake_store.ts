@@ -1833,6 +1833,7 @@ export class FakeFieldStore implements FieldStore {
       attempt: null,
       site_day_id: site ? this.siteDayOf(site.id) : null,
       fallback: null,
+      reconcile: null,
     };
     this.callRows.push(row);
     this.callAudit(row, 'call.started', { unknown: !rep, orgs: callers.length });

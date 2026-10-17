@@ -731,6 +731,8 @@ export const copy = {
         missing: 'Missing: {{field}}',
         no_photo: 'No photo arrived after the call',
         call_mismatch: 'The call recording differs from the confirmed report: {{field}}',
+        /** §19 Q123, Q153 (W3-11): the post-call reconcile could not run. */
+        call_unreconciled: 'The call recording could not be checked against the report',
         other: '{{reason}}',
       },
       invoice_gap: {
@@ -1273,6 +1275,9 @@ export const copy = {
       /** The crew or weather period the values are of, before the line. */
       call_mismatch_of: '{{what}}: {{line}}',
       no_photo: 'No photo came in for this report',
+      /** §19 Q123, Q153 (W3-11): the post-call reconcile could not run. */
+      call_unreconciled:
+        'The call recording could not be checked against the report; its seconds are live timestamps.',
       playAt: 'Play at {{ts}}',
       addAsSub: 'Add as subcontractor',
       mapTo: 'Map to existing',

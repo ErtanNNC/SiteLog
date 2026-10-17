@@ -265,6 +265,18 @@ export const JOB_TYPES = [
    * (`voice_turns`). The highest priority: someone is on the phone.
    */
   'voice_turn',
+  /**
+   * §10.1, §10.9 (W3-11): after a call (`post_call:<call>`, voice_call_end() and voice-events'
+   * backstop queue it): the hang-up's web flow (§19 Q122), the recording's two-lane peaks and
+   * duration, the reporter lane batch-transcribed, a fallback recording made into a report, and a
+   * filed call reconciled against the confirmed version (§19 Q123).
+   */
+  'post_call_reconcile',
+  /**
+   * §10.5 step 2 (W3-11): a report with a call source and no photo by 23:59 site time gets
+   * `no_photo`; queued delayed at filing (`no_photo:<report>`).
+   */
+  'no_photo_check',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

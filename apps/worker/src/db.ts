@@ -31,6 +31,7 @@ import type {
   ReportCostRow,
   ReportRow,
   NoticeData,
+  PreciseCallSeconds,
   ReportSourceRow,
   ReportStatus,
   ReportVersionRow,
@@ -430,6 +431,22 @@ export interface SmsEditReport {
   date: string;
 }
 
+/** W3-11: what post_call_settle() did (see `Db.postCallSettle`). */
+export interface PostCallSettle {
+  action: 'continue' | 'voided' | 'kept' | 'none' | 'closed' | 'filing';
+  outcome: CallRow['outcome'];
+  reportId: string | null;
+  status: string | null;
+  handed?: number;
+}
+
+/** The §13 review notice a flag sends with it (`needs_review`; the English fallback and data). */
+export interface ReviewNotice {
+  title: string;
+  body: string;
+  data: NoticeData;
+}
+
 export interface Db {
   // conversations
   /** null for a message without a conversation (a photo uploaded in the panel). */
@@ -688,6 +705,65 @@ export interface Db {
     source: Source;
     changeNote: string | null;
   }): Promise<{ applied: boolean; correctionId: string | null; draftRev: number | null }>;
+
+  // After a call (W3-11, 20261016000360_post_call.sql) ----------------------------------------
+  /**
+   * §19 Q122: a call that ended before the yes. With a report value in its draft (`hasValue`):
+   * outcome `draft_saved`, the call's open question handed to the web (`continue`); else
+   * `abandoned`, and a report the call alone made is voided with its site-day back to its status
+   * before the call (`voided`), or left as it was when it has other sources (`kept`). `closed` /
+   * `filing`: the report is filed or being filed; `none`: the call drafted nothing.
+   */
+  postCallSettle(callId: string, hasValue: boolean): Promise<PostCallSettle>;
+  /**
+   * The recording's two-lane peaks and duration and the reporter lane's batch transcript, which
+   * replaces the live row (§19 Q162); each part only when given. Audited.
+   */
+  postCallRecording(input: {
+    callId: string;
+    peaks: { reporter: number[]; agent: number[] } | null;
+    durationS: number | null;
+    transcript: {
+      language: string | null;
+      text: string;
+      segments: Array<{ start: number; end: number; speaker: 'reporter'; text: string }>;
+      model: string;
+    } | null;
+  }): Promise<{ stored: boolean; replaced: string | null }>;
+  /**
+   * F6 failure handling: the fallback recording as a voice note of today's report of the call's
+   * site (created or merged), `extract_report` queued (`extract:<report>:call:<call>`).
+   */
+  postCallFallbackReport(callId: string): Promise<{
+    status: 'queued' | 'site_required' | 'report_closed';
+    reportId?: string | null;
+    jobId?: number;
+    created?: boolean;
+  }>;
+  /**
+   * §10.9: the reconcile's outcome on the filed report: precise seconds as `report_sources` rows,
+   * the `call_mismatch` reasons with the §13 notice (only the reasons not already there), and
+   * `calls.reconcile`. A second call for the same call changes nothing (`repeat`).
+   */
+  postCallReconciled(input: {
+    callId: string;
+    reportId: string;
+    reasons: string[];
+    precise: PreciseCallSeconds[];
+    result: Json;
+    notice: ReviewNotice;
+  }): Promise<{ repeat: boolean; status: string; added: string[]; precise?: number }>;
+  /** §19 Q123: a reconcile that cannot run: `call_unreconciled` on the filed report, once. */
+  postCallUnreconciled(input: {
+    callId: string;
+    reason: string;
+    notice: ReviewNotice;
+  }): Promise<{ changed: boolean; status: string; added?: string[] }>;
+  /** §10.5 step 2: `no_photo` on a report with a call source and no photo, once. */
+  reportNoPhotoCheck(
+    reportId: string,
+    notice: ReviewNotice,
+  ): Promise<{ flagged: boolean; reason: string }>;
 
   // SMS report keywords (W2-12)
   /**
@@ -1723,6 +1799,47 @@ export function createDb(sql: Sql): Db {
           returning id`;
         return { applied: true, correctionId: c!.id, draftRev: written!.draft_rev };
       });
+    },
+
+    // After a call (W3-11) ---------------------------------------------------------------------
+    async postCallSettle(callId, hasValue) {
+      const [row] = await sql<Array<{ r: PostCallSettle }>>`
+        select post_call_settle(${callId}, ${hasValue}) as r`;
+      return row!.r;
+    },
+    async postCallRecording(input) {
+      const [row] = await sql<Array<{ r: { stored: boolean; replaced: string | null } }>>`
+        select post_call_recording(${input.callId},
+          ${input.peaks ? sql.json(input.peaks as never) : null}::jsonb,
+          ${input.durationS}::numeric,
+          ${input.transcript ? sql.json(input.transcript as never) : null}::jsonb) as r`;
+      return row!.r;
+    },
+    async postCallFallbackReport(callId) {
+      const [row] = await sql<
+        Array<{ r: Awaited<ReturnType<Db['postCallFallbackReport']>> }>
+      >`select post_call_fallback_report(${callId}) as r`;
+      return row!.r;
+    },
+    async postCallReconciled(input) {
+      const [row] = await sql<Array<{ r: Awaited<ReturnType<Db['postCallReconciled']>> }>>`
+        select post_call_reconciled(${input.callId}, ${input.reportId},
+          ${pgArray(input.reasons)}::text[], ${sql.json(input.precise as never)}::jsonb,
+          ${sql.json(input.result as never)}::jsonb, ${input.notice.title}, ${input.notice.body},
+          ${sql.json(input.notice.data as never)}::jsonb) as r`;
+      return row!.r;
+    },
+    async postCallUnreconciled(input) {
+      const [row] = await sql<Array<{ r: Awaited<ReturnType<Db['postCallUnreconciled']>> }>>`
+        select post_call_unreconciled(${input.callId}, ${input.reason}, ${input.notice.title},
+          ${input.notice.body}, ${sql.json(input.notice.data as never)}::jsonb) as r`;
+      return row!.r;
+    },
+    async reportNoPhotoCheck(reportId, notice) {
+      const [row] = await sql<Array<{ r: { flagged: boolean; reason: string } }>>`
+        select report_no_photo_check(${reportId}, ${notice.title}, ${notice.body},
+          ${sql.json(notice.data as never)}::jsonb) as r`;
+      return row!.r;
     },
 
     // SMS report keywords (W2-12) -------------------------------------------------------------

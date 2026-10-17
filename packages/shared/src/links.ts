@@ -34,6 +34,14 @@ export function photosLinkExpiresAt(reportDate: string, tz: string): string {
   return fromZonedTime(`${addDays(reportDate, 1)}T23:59:00`, tz).toISOString();
 }
 
+/**
+ * §10.5 step 2 (W3-11): when a call report with no photo is flagged `no_photo`: 23:59 of the
+ * report's date, local time in the site's time zone, as an ISO instant.
+ */
+export function noPhotoCheckAt(reportDate: string, tz: string): string {
+  return fromZonedTime(`${reportDate}T23:59:00`, tz).toISOString();
+}
+
 /** The characters of a link code: no 0/O, 1/I/L or U, so a code read aloud or retyped survives. */
 export const LINK_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
 

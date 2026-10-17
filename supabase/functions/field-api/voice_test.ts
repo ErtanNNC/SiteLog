@@ -647,6 +647,7 @@ Deno.test(
       attempt: null,
       site_day_id: null,
       fallback: null,
+      reconcile: null,
     } satisfies CallRow);
     // Before the start, no tool works even with the right token.
     const early = await h.tool('get_context', id, await deriveCallToken(TOKEN_SECRET, id));

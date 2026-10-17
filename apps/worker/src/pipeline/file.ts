@@ -4,6 +4,7 @@ import {
   fieldReportLinkUrl,
   photosLinkExpiresAt,
   jobKeys,
+  noPhotoCheckAt,
   noticeData,
   type DailyReportDataV1,
   type FieldChannel,
@@ -15,7 +16,7 @@ import { randomUUID } from 'node:crypto';
 import type { Ctx } from '../context';
 import { recordReportCostSafely } from '../cost';
 import type { SiteContext } from '../db';
-import { reviewReasons, validateDraft } from './validate';
+import { hasCallSource, requiredFieldsOf, reviewReasons, validateDraft } from './validate';
 import { personalLinkCode } from './web';
 import { contextOf } from '../router/context';
 
@@ -174,9 +175,11 @@ async function fileOnce(ctx: Ctx, reportId: string, opts: FileOptions): Promise<
 
   // Review reasons: validation gaps + unanswered questions + trigger-specific extras + earlier flags.
   const photoCount = sources.filter((s) => s.kind === 'photo').length;
+  // W3-11 (§10.5 step 2): a call report's photo is deferred: no `missing:photo` at filing; the
+  // photos link and the 23:59 check (`no_photo`) follow.
   const validation =
     report.kind === 'daily'
-      ? validateDraft(data, site.settings, photoCount)
+      ? validateDraft(data, site.settings, photoCount, { callReport: hasCallSource(sources) })
       : { gaps: [], missingRequired: [], lowConfidence: [], reviewReasons: [], isComplete: true };
   const extras = [...(opts.extraReasons ?? []), ...report.review_reasons];
   if (opts.trigger === 'timeout') extras.push('unconfirmed');
@@ -317,6 +320,21 @@ export async function ensurePostFiling(
       { dedupeKey: jobKeys.renderPdf(report.id, versionNo) },
     );
   }
+  const callReport =
+    report.kind === 'daily' && hasCallSource(await ctx.db.listReportSources(report.id));
+  // W3-11 (§10.5 step 2): a call report with no photo by 23:59 site time gets `no_photo`.
+  if (callReport && requiredFieldsOf(site.settings).includes('photo')) {
+    const day = await ctx.db.getSiteDay(report.site_day_id);
+    if (day)
+      await ctx.db.enqueueJob(
+        'no_photo_check',
+        { reportId: report.id },
+        {
+          dedupeKey: jobKeys.noPhoto(report.id),
+          runAfter: noPhotoCheckAt(day.date, site.site.timezone),
+        },
+      );
+  }
   if (report.kind !== 'daily' || opts.silent || !report.reporter_id) return;
   const { base, code } = await personalLinkCode(ctx, report.reporter_id, report.org_id);
   await ctx.db.enqueueJob(
@@ -330,8 +348,10 @@ export async function ensurePostFiling(
     { dedupeKey: jobKeys.filed(report.id) },
   );
   // W3-10 (F9 step 1, §13): after a report filed on a call, the photos link (`kind 'photos'`,
-  // until 23:59 the day after, site time) in its own `photos_link` text, after `filed`.
-  if (report.confirmed_via === 'voice') await enqueuePhotosLink(ctx, report, site);
+  // until 23:59 the day after, site time) in its own `photos_link` text, after `filed`. W3-11
+  // (§19 Q176): any report with a call source, so also a hang-up filed on the web or by the 2 h
+  // timeout, and a fallback recording.
+  if (callReport || report.confirmed_via === 'voice') await enqueuePhotosLink(ctx, report, site);
 }
 
 /**

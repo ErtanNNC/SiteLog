@@ -22,11 +22,11 @@ export const VoiceFixtureSchema = z
     description: z.string().min(1),
     /**
      * What the clip is (W2-09, W2-13, W2-10): a report's voice note (default), a spoken answer to
-     * a question (F7 *Other…*), the Welcome screen's test recording (F4), or a fix of the draft
-     * (F8 *Fix by voice*). The fake transcriber answers a request with a fixture of the request's
-     * purpose.
+     * a question (F7 *Other…*), the Welcome screen's test recording (F4), a fix of the draft
+     * (F8 *Fix by voice*), or (W3-11) the reporter lane of a call's recording. The fake
+     * transcriber answers a request with a fixture of the request's purpose.
      */
-    kind: z.enum(['report', 'answer', 'test', 'correction']).default('report'),
+    kind: z.enum(['report', 'answer', 'test', 'correction', 'call']).default('report'),
     /** The recording beside this file (`<id>.webm`, `.m4a`, …); null until one is recorded. */
     audio: z.string().nullable(),
     mime: z.string().startsWith('audio/'),

@@ -452,6 +452,15 @@ export type ReportSourceRow = {
   question_id: string | null;
   /** null on rows from before 20261013000007. */
   created_at: string | null;
+  /**
+   * W3-11 (20261016000360, §10.9): the value of the confirmed version whose precise call seconds
+   * this row holds (`manpower[1]`, `weather.periods[0]`), written by the post-call reconcile; null
+   * on every other row (the call's own source row included).
+   */
+  value_path: string | null;
+  /** W3-11: the precise seconds into the call (the batch transcript's), with `value_path`. */
+  start_s: number | null;
+  end_s: number | null;
 };
 
 export type ManpowerEntryRow = {
@@ -713,6 +722,11 @@ export type CallRow = {
   site_day_id: string | null;
   /** W3-03 (§9.4 rule 9): the simple recording mode started, `{reason, at}`. */
   fallback: Json | null;
+  /**
+   * W3-11 (20261016000360, §10.9, §19 Q123): the post-call reconcile, `{status: equal | mismatch |
+   * unreconciled, at, mismatches?, precise?, compared?, reason?}`; null until it ran.
+   */
+  reconcile: Json | null;
 };
 
 /**
@@ -1267,6 +1281,7 @@ export type Database = {
         | 'attempt'
         | 'site_day_id'
         | 'fallback'
+        | 'reconcile'
       >;
       voice_tool_requests: Table<VoiceToolRequestRow, 'status' | 'response' | 'created_at'>;
       livekit_events: Table<LivekitEventRow, 'call_id' | 'received_at'>;
@@ -1288,7 +1303,16 @@ export type Database = {
       >;
       report_sources: Table<
         ReportSourceRow,
-        'id' | 'caption' | 'taken_at' | 'upload_id' | 'call_id' | 'question_id' | 'created_at'
+        | 'id'
+        | 'caption'
+        | 'taken_at'
+        | 'upload_id'
+        | 'call_id'
+        | 'question_id'
+        | 'created_at'
+        | 'value_path'
+        | 'start_s'
+        | 'end_s'
       >;
       manpower_entries: Table<
         ManpowerEntryRow,
@@ -1574,6 +1598,51 @@ export type Database = {
           p_utterance: string;
           p_confirmed: boolean;
         };
+        Returns: Json;
+      };
+      // W3-11 (20261016000360_post_call.sql), service role only: the worker's post-call job.
+      post_call_settle: {
+        Args: { p_call_id: string; p_has_value: boolean };
+        Returns: Json;
+      };
+      post_call_recording: {
+        Args: {
+          p_call_id: string;
+          p_peaks: Json | null;
+          p_duration_s: number | null;
+          p_transcript: Json | null;
+        };
+        Returns: Json;
+      };
+      post_call_fallback_report: {
+        Args: { p_call_id: string };
+        Returns: Json;
+      };
+      post_call_reconciled: {
+        Args: {
+          p_call_id: string;
+          p_report_id: string;
+          p_reasons: string[];
+          p_precise: Json;
+          p_result: Json;
+          p_title: string;
+          p_body: string;
+          p_data: Json;
+        };
+        Returns: Json;
+      };
+      post_call_unreconciled: {
+        Args: {
+          p_call_id: string;
+          p_reason: string;
+          p_title: string;
+          p_body: string;
+          p_data: Json;
+        };
+        Returns: Json;
+      };
+      report_no_photo_check: {
+        Args: { p_report_id: string; p_title: string; p_body: string; p_data: Json };
         Returns: Json;
       };
       // Settings (F15, 20261016000010_field_settings.sql), service role only: consent/revoke sets

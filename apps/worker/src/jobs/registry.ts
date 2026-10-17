@@ -5,9 +5,11 @@ import { extractReport } from './extract_report';
 import { fetchWeather } from './fetch_weather';
 import { fileReportJob } from './file_report';
 import { inboundMessage } from './inbound_message';
+import { noPhotoCheckJob } from './no_photo_check';
 import { notifyJob } from './notify';
 import { parseAnswerJob } from './parse_answer';
 import { parseReply } from './parse_reply';
+import { postCallReconcileJob } from './post_call';
 import { renderPdf } from './render_pdf';
 import { retentionCleanup } from './retention_cleanup';
 import { sendEmail } from './send_email';
@@ -50,4 +52,6 @@ export const registry: JobRegistry = {
   apply_correction: applyCorrectionJob,
   whatsapp_answer: whatsappAnswerJob,
   voice_turn: voiceTurnJob,
+  post_call_reconcile: postCallReconcileJob,
+  no_photo_check: noPhotoCheckJob,
 };

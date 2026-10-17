@@ -42,7 +42,7 @@ import {
   type ProcessingConsent,
 } from './consent';
 import { fileReport } from './file';
-import { selectNextQuestion, validateDraft } from './validate';
+import { hasCallSource, selectNextQuestion, validateDraft } from './validate';
 
 /**
  * The web recorder's pipeline after extraction (W1-12; spec §7.2, §10.1 `decide_next`, §10.5):
@@ -270,13 +270,25 @@ export function deviceActive(lastSeen: string | null, now: Date): boolean {
   return now.getTime() - new Date(lastSeen).getTime() < DEVICE_ACTIVE_MS;
 }
 
-/** §10.1 decide_next for a web report: state changes, the §7.2 clock, then at most one text. */
+/** W3-11: the hang-up a decide_next continues on the web (`decide_next.afterCall`, §19 Q122). */
+export type AfterCall = NonNullable<JobPayloads['decide_next']['afterCall']>;
+
+/**
+ * §10.1 decide_next for a web report: state changes, the §7.2 clock, then at most one text.
+ *
+ * `afterCall` (W3-11, §7.2 "Call: hang-up before confirmation", §19 Q122): the call ended before
+ * the yes and its draft continues here: the text is `finish_report` (one per call,
+ * `jobKeys.finishReport`) with the reporter's personal link, which opens the open question or the
+ * draft, and the clocks run from the hang-up (`endedAt`): the question's 60 minutes, or the nudge
+ * at +30 min and the filing at +2 h (`unconfirmed`).
+ */
 export async function decideNextWeb(
   ctx: Ctx,
   report: ReportRow,
   job: JobRow,
   timeout?: JobPayloads['decide_next']['timeout'],
   policy: TimeoutPolicy = TIMEOUT_POLICY_DEFAULTS,
+  afterCall?: AfterCall,
 ): Promise<void> {
   if (timeout?.step === 'file') return fileTimeoutWeb(ctx, report, timeout);
   // A newer extraction (another voice note, a photo on the draft) decides after it. An answer
@@ -308,8 +320,15 @@ export async function decideNextWeb(
     if (!(await storeWebDraft(ctx, report, data))) return;
   }
   const photoCount = sources.filter((s) => s.kind === 'photo').length;
-  const validation = validateDraft(data, site.settings, photoCount);
+  // W3-11 (§10.5 step 2): a call report's photo is never asked; the photos link and the 23:59
+  // check take care of it.
+  const validation = validateDraft(data, site.settings, photoCount, {
+    callReport: hasCallSource(sources),
+  });
   const now = ctx.now();
+  // The hang-up's clocks start at the hang-up (§19 Q122), however late this job runs.
+  const hungUp = afterCall ? new Date(afterCall.endedAt) : null;
+  const clockFrom = hungUp && hungUp.getTime() < now.getTime() ? hungUp : now;
   // §7.2 / F7: the open question unanswered for 60 min → recorded unanswered, then the draft.
   const timedOut =
     timeout?.step === 'answer'
@@ -406,14 +425,15 @@ export async function decideNextWeb(
     await startConfirmationClock(ctx, report, reporter?.id ?? null, site.settings, {
       version,
       draftRev,
-      shownAt: now,
+      shownAt: clockFrom,
+      elapsedMs: now.getTime() - clockFrom.getTime(),
       policy,
       exceptJobId: job.id,
     });
   } else {
     const question = plan.kind === 'wait' ? plan.question : await ctx.db.getQuestion(questionId!);
     guard = { reportId: report.id, status: 'awaiting_answer', questionId: questionId! };
-    if (question) await startAnswerClock(ctx, report, question, job.id);
+    if (question) await startAnswerClock(ctx, report, question, job.id, hungUp);
   }
 
   if (!reporter) return;
@@ -425,8 +445,9 @@ export async function decideNextWeb(
     });
     return;
   }
-  const notice: Notice =
-    plan.kind === 'draft'
+  const notice: Notice = afterCall
+    ? { key: 'finish_report', dedupeKey: jobKeys.finishReport(afterCall.callId) }
+    : plan.kind === 'draft'
       ? { key: 'draft_ready', dedupeKey: jobKeys.draftReady(report.id, job.id) }
       : { key: 'question_ready', dedupeKey: jobKeys.questionReady(questionId!) };
   const lastSeen = await ctx.db.reporterDeviceLastSeen(reporter.id);
@@ -465,9 +486,12 @@ export async function decideNextWeb(
 
 type NotifyReportGuard = NonNullable<JobPayloads['notify']['reportGuard']>;
 
-/** One `question_ready` / `draft_ready` text and the key of its `notify` job and the Notifier's. */
+/**
+ * One `question_ready` / `draft_ready` text (or, after a hang-up, `finish_report`, W3-11) and the
+ * key of its `notify` job and the Notifier's.
+ */
 interface Notice {
-  key: 'question_ready' | 'draft_ready';
+  key: 'question_ready' | 'draft_ready' | 'finish_report';
   dedupeKey: string;
 }
 
@@ -543,8 +567,11 @@ async function startAnswerClock(
   report: ReportRow,
   question: QuestionRow,
   exceptJobId: number | null,
+  /** W3-11: a question asked on a call runs its 60 minutes from the hang-up (§19 Q122). */
+  hungUp: Date | null = null,
 ) {
-  const askedAt = new Date(question.asked_at ?? question.created_at);
+  const asked = new Date(question.asked_at ?? question.created_at);
+  const askedAt = hungUp && hungUp.getTime() > asked.getTime() ? hungUp : asked;
   await armAnswerTimer(
     ctx,
     report,
@@ -615,11 +642,18 @@ async function startConfirmationClock(
     version: number;
     draftRev: number;
     shownAt: Date;
+    /**
+     * W3-11: how long ago `shownAt` was (a hang-up's clock, §19 Q122): the steps are that much
+     * sooner. Delays stay measured on the queue's clock.
+     */
+    elapsedMs?: number;
     policy: TimeoutPolicy;
     exceptJobId: number | null;
   },
 ): Promise<void> {
   const { version, draftRev } = draft;
+  const delayOf = (at: Date) =>
+    Math.max(0, at.getTime() - draft.shownAt.getTime() - Math.max(0, draft.elapsedMs ?? 0));
   // The filing timer leads: while it is live the clock stands (a retried decide_next); once it
   // finished without filing (it fired while more audio was processed and the re-extraction
   // wrote the same draft), the draft shown again gets a new clock, nudge included.
@@ -641,7 +675,7 @@ async function startConfirmationClock(
           reportId: report.id,
           timeout: { step: 'file', trigger: step.trigger, version, draftRev },
         },
-        { dedupeKey: timerKey, delayMs: step.at.getTime() - draft.shownAt.getTime() },
+        { dedupeKey: timerKey, delayMs: delayOf(step.at) },
       );
     } else if (reporterId) {
       const { base, code } = await personalLinkCode(ctx, reporterId, report.org_id);
@@ -661,7 +695,7 @@ async function startConfirmationClock(
             quietHours: true,
           },
         },
-        { dedupeKey: nudgeKey, delayMs: step.at.getTime() - draft.shownAt.getTime() },
+        { dedupeKey: nudgeKey, delayMs: delayOf(step.at) },
       );
     }
   }

@@ -936,6 +936,25 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     applyCallCorrection() {
       return Promise.reject(new Error('fake db: applyCallCorrection runs on PGlite only'));
     },
+    // W3-11: the post-call steps are SQL (20261016000360_post_call.sql); their tests run on PGlite.
+    postCallSettle() {
+      return Promise.reject(new Error('fake db: postCallSettle runs on PGlite only'));
+    },
+    postCallRecording() {
+      return Promise.reject(new Error('fake db: postCallRecording runs on PGlite only'));
+    },
+    postCallFallbackReport() {
+      return Promise.reject(new Error('fake db: postCallFallbackReport runs on PGlite only'));
+    },
+    postCallReconciled() {
+      return Promise.reject(new Error('fake db: postCallReconciled runs on PGlite only'));
+    },
+    postCallUnreconciled() {
+      return Promise.reject(new Error('fake db: postCallUnreconciled runs on PGlite only'));
+    },
+    reportNoPhotoCheck() {
+      return Promise.reject(new Error('fake db: reportNoPhotoCheck runs on PGlite only'));
+    },
     settleCorrection() {
       return Promise.reject(new Error('fake db: settleCorrection runs on PGlite only'));
     },

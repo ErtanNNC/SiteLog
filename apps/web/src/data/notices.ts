@@ -37,6 +37,9 @@ export function reviewReasonRef(reason: string): CopyRef {
       // `call_mismatch:<path>:<heard>:<confirmed>` since W3-11 (§19 Q123): the line names the
       // path; P7 words both values.
       return copyRef('overview.attention.reasons.call_mismatch', { field: rest[0] ?? '' });
+    case 'call_unreconciled':
+      // §19 Q123, Q153 (W3-11): the post-call reconcile could not run.
+      return copyRef('overview.attention.reasons.call_unreconciled');
     default:
       return copyRef('overview.attention.reasons.other', { reason });
   }

@@ -1,0 +1,69 @@
+{
+  "id": "call-riverside-en",
+  "description": "English. The reporter lane (left channel) of the Riverside call recording (fixtures/calls/riverside-delta-en), as the post-call job sends it to batch transcription (W3-11, §10.2 Calls): the hero report said on the phone, the Delta crew with no headcount. The golden case call-riverside-2026-10-09-en.",
+  "kind": "call",
+  "audio": null,
+  "mime": "audio/wav",
+  "site": "Riverside Lofts — Block B",
+  "reporter": {
+    "locale": "en-US",
+    "languages": ["es", "en"]
+  },
+  "transcriptionLanguage": "multi",
+  "expectedLanguage": "en",
+  "goldenCase": "call-riverside-2026-10-09-en",
+  "durationS": 75,
+  "text": "Hi, it's Marco with the Friday report for Riverside Block B. Long day but a good one. Weather first: it rained from seven to ten thirty, we couldn't do block outside on the south facade. So masonry outside stood down about three and a half hours, we moved those guys inside to do the interior block on two. Then we poured the deck on four, like sixty-eight yards, finished around two thirty, Apex had six guys all day on that. BrightLine, five electricians full day on three, rough-in is about sixty percent now. The Delta guys were on two doing the ductwork in the east wing, all day too. Ironclad had three guys tying rebar for the five deck, full day, and they brought two loads of rebar around one o'clock. Our guys, four laborers all day, cleanup and helping the pour. Safety, we did the toolbox talk this morning on wet weather access, slippery decks, no incidents, nobody got hurt. Monday we need the concrete pump at seven for the five deck. That's it.",
+  "segments": [
+    {
+      "start": 6,
+      "end": 12.2,
+      "text": "Hi, it's Marco with the Friday report for Riverside Block B. Long day but a good one."
+    },
+    {
+      "start": 12.2,
+      "end": 18.4,
+      "text": "Weather first: it rained from seven to ten thirty, we couldn't do block outside on the south facade."
+    },
+    {
+      "start": 18.4,
+      "end": 24.9,
+      "text": "So masonry outside stood down about three and a half hours, we moved those guys inside to do the interior block on two."
+    },
+    {
+      "start": 24.9,
+      "end": 32.1,
+      "text": "Then we poured the deck on four, like sixty-eight yards, finished around two thirty, Apex had six guys all day on that."
+    },
+    {
+      "start": 32.1,
+      "end": 39,
+      "text": "BrightLine, five electricians full day on three, rough-in is about sixty percent now."
+    },
+    {
+      "start": 39,
+      "end": 46.5,
+      "text": "The Delta guys were on two doing the ductwork in the east wing, all day too."
+    },
+    {
+      "start": 46.5,
+      "end": 53.2,
+      "text": "Ironclad had three guys tying rebar for the five deck, full day, and they brought two loads of rebar around one o'clock."
+    },
+    {
+      "start": 53.2,
+      "end": 59.8,
+      "text": "Our guys, four laborers all day, cleanup and helping the pour."
+    },
+    {
+      "start": 59.8,
+      "end": 66,
+      "text": "Safety, we did the toolbox talk this morning on wet weather access, slippery decks, no incidents, nobody got hurt."
+    },
+    {
+      "start": 66,
+      "end": 73.5,
+      "text": "Monday we need the concrete pump at seven for the five deck. That's it."
+    }
+  ]
+}

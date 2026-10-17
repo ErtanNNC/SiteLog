@@ -209,6 +209,102 @@ export async function analyzeAudio(
   return { durationS: pcmDurationSeconds(stdout), peaks: computePeaks(stdout, buckets) };
 }
 
+// ───────────────────────────── Call recordings (W3-11) ─────────────────────────────
+
+/** A call's two lanes (§9.4 "Recording": reporter left, agent right), about 600 peaks each. */
+export const CALL_PEAK_BUCKETS = UPLOAD_PEAK_BUCKETS;
+/** The reporter lane sent to batch transcription: mono 16 kHz 16-bit WAV (no codec needed). */
+export const LANE_SAMPLE_RATE = 16000;
+
+/** Decode to signed 16-bit interleaved stereo PCM on stdout (a mono file is upmixed). */
+export function decodeStereoPcmArgs(input: string, sampleRate = PCM_SAMPLE_RATE): string[] {
+  return [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-i',
+    input,
+    '-vn',
+    '-ac',
+    '2',
+    '-ar',
+    String(sampleRate),
+    '-f',
+    's16le',
+    '-acodec',
+    'pcm_s16le',
+    'pipe:1',
+  ];
+}
+
+/**
+ * One channel of a stereo recording as a mono 16 kHz WAV: channel 0 is the reporter (left),
+ * channel 1 the agent (right), as the voice agent writes it (W3-02 `recording.py`).
+ */
+export function extractLaneArgs(input: string, output: string, channel: 0 | 1): string[] {
+  return [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-y',
+    '-i',
+    input,
+    '-vn',
+    '-af',
+    `pan=mono|c0=c${channel}`,
+    '-ar',
+    String(LANE_SAMPLE_RATE),
+    '-acodec',
+    'pcm_s16le',
+    '-f',
+    'wav',
+    output,
+  ];
+}
+
+/** Interleaved stereo s16le → the two channels as mono s16le buffers. Pure. */
+export function splitStereoPcm(pcm: Buffer): { left: Buffer; right: Buffer } {
+  const frames = Math.floor(pcm.length / 4);
+  const left = Buffer.alloc(frames * 2);
+  const right = Buffer.alloc(frames * 2);
+  for (let i = 0; i < frames; i++) {
+    left.writeInt16LE(pcm.readInt16LE(i * 4), i * 2);
+    right.writeInt16LE(pcm.readInt16LE(i * 4 + 2), i * 2);
+  }
+  return { left, right };
+}
+
+export interface CallAnalysis {
+  durationS: number;
+  /** `calls.peaks` (W3-01, `CallPeaksSchema`): each lane normalised on its own. */
+  peaks: { reporter: number[]; agent: number[] };
+}
+
+/** Decode a call recording once: its duration and the two lanes' peaks. */
+export async function analyzeCall(
+  run: FfmpegRunner,
+  inputPath: string,
+  buckets = CALL_PEAK_BUCKETS,
+): Promise<CallAnalysis> {
+  const { stdout } = await run(decodeStereoPcmArgs(inputPath));
+  const { left, right } = splitStereoPcm(stdout);
+  return {
+    durationS: pcmDurationSeconds(left),
+    peaks: { reporter: computePeaks(left, buckets), agent: computePeaks(right, buckets) },
+  };
+}
+
+/** The reporter lane of a call recording as WAV bytes (§10.2 "Calls": batch-transcribed). */
+export async function reporterLane(
+  run: FfmpegRunner,
+  dir: string,
+  inputPath: string,
+): Promise<Buffer> {
+  const out = join(dir, 'reporter.wav');
+  await run(extractLaneArgs(inputPath, out, 0));
+  return readFile(out);
+}
+
 export async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(join(tmpdir(), 'sitelog-'));
   try {

@@ -99,6 +99,14 @@ const AUDITED: Record<string, string> = {
     'voice_file_report: a later yes of that revision after its job finished without filing (n past the confirm_requested count; a taken n moves on)',
   'jobKeys.photosLink':
     'notify:photos_link:<report> (file_report after a call, W3-10, F9): the notify job and its Notifier key; a report is filed once, so a retried or repeated filing never texts twice',
+  'jobKeys.decideAfterCall':
+    'decide:<report>:call:<call> (post_call_reconcile, W3-11, §19 Q122): the decide_next that continues a hung-up call on the web (or, the call having said nothing for a report with other sources, the plain web flow); a call ends once, so its post-call job and a retry of it queue one',
+  'jobKeys.finishReport':
+    'notify:finish_report:<call> (decide_next after a hang-up, W3-11, §19 Q122): the notify job and its Notifier key; one finish_report text per call, so a retried or repeated decide_next never texts twice, and a second call the same day is a new call and a new key',
+  'jobKeys.noPhoto':
+    'no_photo:<report> (file_report of a report with a call source, W3-11, §10.5 step 2): the 23:59 photo check; a report is filed once, so a retried or repeated filing finds the key taken',
+  "sql:'extract:' || r.id || ':call:' || c.id":
+    'post_call_fallback_report (W3-11, F6): the extraction of a fallback recording made into the report; per report and call, and a call ends (and its recording is made into the report) once',
   "sql:'file:' || r.id || ':v1:' || p_status":
     'field_report_day_off (W2-08, F12): the filing of the weather-day or no-work report the recorder made; per report, which the transaction that enqueues it creates (a retried tap finds the day already in that status and creates nothing)',
   "sql:'sms_inbound:' || p_provider_message_id":

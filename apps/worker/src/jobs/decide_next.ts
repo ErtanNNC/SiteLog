@@ -18,7 +18,8 @@ export const decideNext: JobHandler<'decide_next'> = async (ctx, payload, job) =
   if (!report) throw new PermanentJobError(`report ${payload.reportId} not found`);
   if (report.status === 'filed' || report.status === 'signed_off' || report.status === 'void')
     return;
-  if (isWebReport(report)) return decideNextWeb(ctx, report, job, payload.timeout);
+  if (isWebReport(report))
+    return decideNextWeb(ctx, report, job, payload.timeout, undefined, payload.afterCall);
   const draft = await currentData(ctx, report);
   if (!draft) throw new PermanentJobError(`report ${report.id} has no draft`);
   if (report.kind !== 'daily') {

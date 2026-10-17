@@ -7,7 +7,8 @@ import { abortableFetch } from './abort';
  * evidencePackStoragePath) and always start with `{org_id}/`.
  */
 
-export type Bucket = 'audio' | 'photos' | 'pdfs' | 'exports' | 'logos';
+/** `calls` (W3-11): the voice agent's dual-channel recordings, `{org}/{call}.ogg` (§9.4). */
+export type Bucket = 'audio' | 'photos' | 'pdfs' | 'exports' | 'logos' | 'calls';
 
 export const SIGNED_URL_TTL_S = 10 * 60;
 

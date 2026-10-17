@@ -753,6 +753,38 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select voice_file_report('${o.call}', '${o.report}', 1, 'yes', true) as v`,
   },
+  // W3-11 (20261016000360_post_call.sql): the worker's post-call job and its 23:59 photo check.
+  post_call_settle: {
+    why: '§10.1, §19 Q122: the worker only (service role); no client ends or voids a call report.',
+    allow: NONE,
+    call: (o) => `select post_call_settle('${o.call}', true) as v`,
+  },
+  post_call_recording: {
+    why: '§10.2, §19 Q162: the worker only (service role), after the disclosure and the consents.',
+    allow: NONE,
+    call: (o) => `select post_call_recording('${o.call}', null, 1, null) as v`,
+  },
+  post_call_fallback_report: {
+    why: 'F6: the worker only (service role); the fallback recording becomes report material there.',
+    allow: NONE,
+    call: (o) => `select post_call_fallback_report('${o.call}') as v`,
+  },
+  post_call_reconciled: {
+    why: '§10.9, §19 Q123: the worker only (service role); review reasons come from code’s compare.',
+    allow: NONE,
+    call: (o) =>
+      `select post_call_reconciled('${o.call}', '${o.report}', '{}', '[]', '{}', 't', 'b', '{}') as v`,
+  },
+  post_call_unreconciled: {
+    why: '§19 Q123: the worker only (service role).',
+    allow: NONE,
+    call: (o) => `select post_call_unreconciled('${o.call}', 'job_dead', 't', 'b', '{}') as v`,
+  },
+  report_no_photo_check: {
+    why: '§10.5 step 2: the worker only (service role), at 23:59 site time.',
+    allow: NONE,
+    call: (o) => `select report_no_photo_check('${o.report}', 't', 'b', '{}') as v`,
+  },
 };
 
 export type Scope = 'own' | 'other';
