@@ -199,6 +199,8 @@ One edge function and its helper; five shared modules plus the WhatsApp copy; th
 
 Open §19 questions raised in week 3 (Q135–Q227) each shipped a default (summary in `docs/PLAN_WEEK3.md`, "Week 3 open questions").
 
+**Week 4 (M10 setup, team, settings, billing; M11 Turkish market): `docs/PLAN_WEEK4.md`, W4-01 … W4-16 (planned 2026-10-17 at `fa630b2`).** The gap check against M10 and M11 is in that plan ("Where week 3 leaves us" and each ticket's "Already in the repo"). In short: Setup, Team, Settings, Billing and New report still render inside `<EnglishOnly>` and carry v1.0 WhatsApp wording (the welcome preview is the `sitelog_welcome` template, Team's phone column and "Verified" chip, Settings' hints, "$399" in the copy); Settings' Field channels tab is a placeholder; the phone picker is the fixed `PHONE_COUNTRIES` list; the price is a constant in code and a lapsed trial blocks nothing; there is no TR billing provider (§19 Q8, Q9 open), no `/legal/<key>` page (Q50), no İletimerkezi delivery status, no Turkish call fixture or spoken-form rules, no starter glossary for a new org, and the office emails other than the report email are English only. New open questions Q229–Q246 are in spec §19, each with the default the tickets ship.
+
 ### W1-01 · Monorepo and tooling — partial · effort S
 
 **Done**
