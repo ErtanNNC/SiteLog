@@ -23,6 +23,7 @@
     "e2e": "pnpm --filter @sitelog/web e2e && pnpm --filter @sitelog/field e2e",
     "e2e:supabase": "pnpm --filter @sitelog/web e2e:supabase && pnpm --filter @sitelog/field e2e:supabase",
     "e2e:m6": "pnpm --filter @sitelog/web e2e:supabase --grep @m6 && pnpm --filter @sitelog/field e2e:supabase --grep @m6",
+    "e2e:voice": "pnpm --filter @sitelog/field e2e:supabase --project=worker --grep \"@m7|@m8\"",
     "eval": "pnpm --filter @sitelog/worker eval",
     "transcribe:fixture": "pnpm --filter @sitelog/worker transcribe:fixture",
     "loadtest": "pnpm --filter @sitelog/worker loadtest",
@@ -34,6 +35,7 @@
     "voice:contract": "pnpm --filter @sitelog/scripts voice-contract",
     "voice:test": "cd apps/voice-agent && uv run --locked ruff check && uv run --locked ruff format --check && uv run --locked pyright && uv run --locked pytest -m 'not live'",
     "voice:console": "cd apps/voice-agent && lk agent console",
+    "simulate:call": "pnpm --filter @sitelog/scripts simulate-call",
     "brand": "pnpm --filter @sitelog/web brand && pnpm --filter @sitelog/field brand",
     "check": "pnpm typecheck && pnpm lint && pnpm test"
   },

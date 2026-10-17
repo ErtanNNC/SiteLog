@@ -141,8 +141,10 @@ jobs:
       # the Edge Runtime's internal http://kong:8000 to the API URL the browser reaches (W1-09).
       # sms-webhook checks X-Twilio-Signature with TWILIO_AUTH_TOKEN against SMS_WEBHOOK_URL. The
       # SCHEDULER_CLOCK_OVERRIDE lets scheduler-tick take `?now=` (the W2-06 ladder spec moves the
-      # clock; never set on a hosted project). The rest are dummies so no function boots
-      # half-configured. No pack has a sender id here, so
+      # clock; never set on a hosted project). VOICE_AGENT_TOOL_SECRET is the voice agent's bearer
+      # on field-api's /voice/* routes (the W3-15 call suite sends it as the agent would) and
+      # VOICE_CALL_TOKEN_SECRET signs the per-call tokens (field-api only); both test values. The
+      # rest are dummies so no function boots half-configured. No pack has a sender id here, so
       # every text goes to the console driver: nothing reaches Meta, Stripe, Twilio or Anthropic.
       - name: Edge Function env
         run: |
@@ -158,6 +160,8 @@ jobs:
           WA_APP_SECRET=e2e-app-secret
           SCHEDULER_SECRET=e2e-scheduler-secret
           SCHEDULER_CLOCK_OVERRIDE=true
+          VOICE_AGENT_TOOL_SECRET=e2e-voice-agent-tool-secret-not-for-production
+          VOICE_CALL_TOKEN_SECRET=e2e-voice-call-token-secret-not-for-production
           STRIPE_SECRET_KEY=sk_test_e2e_dummy
           STRIPE_WEBHOOK_SECRET=whsec_e2e_dummy
           STRIPE_PRICE_ID_SITE_US=price_e2e_dummy
@@ -286,11 +290,11 @@ jobs:
       # The field app's `worker` project outside the M6 suite (W2-04: photos after filing → v2, the
       # `_v2` PDF and the Updated email). The rest of apps/field/e2e/supabase/ (W1-09's link →
       # record → upload, W1-13's question → draft → filed, W2-09 … W2-13) is tagged `@m6` and runs
-      # in the M6 step below.
+      # in the M6 step below; the call suite (`@m7`, `@m8`, W3-15) in the last step.
       - name: Field app · photos after filing (worker)
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
-        run: pnpm --filter @sitelog/field e2e:supabase --project=worker --grep-invert @m6 --pass-with-no-tests
+        run: pnpm --filter @sitelog/field e2e:supabase --project=worker --grep-invert "@m6|@m7|@m8" --pass-with-no-tests
       # W2-17: the M6 acceptance suite (spec §16.2 M6 Done when), one command (`pnpm e2e:m6`): every
       # spec tagged `@m6`, one tag per flow (@F4 new phone, consent, preference, test clip; @F5
       # record, upload, offline; @F7 buttons, Other by voice and by number; @F8 fix by voice and
@@ -306,6 +310,25 @@ jobs:
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
         run: pnpm e2e:m6
+      # W3-15: the call suite (spec §16.2 M7 and M8 Done when, text level), one command
+      # (`pnpm e2e:voice`): every scripted call of fixtures/calls/ run by `pnpm simulate:call`
+      # through the real field-api /voice/* routes (the agent's bearer, VOICE_AGENT_TOOL_SECRET
+      # above) and the worker above on its fake providers, each on an org of its own; tagged
+      # `@m7` / `@m8` and one flow each (@F6 hero, fallback, hang-up; @F7 a question; @F8 a
+      # correction; @F10 Friday changed; @F12 weather day and no work; @F13 an unknown caller;
+      # @F14 two sites; @F15 text me instead). The SIP scripts dial the US pack's voice number,
+      # set here with the audited set_country_endpoints() (this stack only, after the M6 step,
+      # whose R2 text would otherwise name it). The voice agent's half (the same fixtures in
+      # pytest) is the voice-agent job.
+      - name: US voice number for the SIP scripts (this stack)
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+        run: pnpm countries:set -- --code US --voice +15550142290
+      - name: Call suite (W3-15, pnpm e2e:voice)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+          VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
+        run: pnpm e2e:voice
       - name: Supabase logs
         if: failure()
         run: |

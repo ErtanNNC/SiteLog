@@ -1,5 +1,5 @@
 {
-  "$comment": "W3-10 recorded call (W3-09's format, extended): `routes` also holds field-api's recorded answers to apply_correction and file_report, in order; `filing` lists every file_report request the call makes (the reporter's verbatim last words, the read-back's revision, and field-api's answer, §19 Q119), which field-api's Deno test replays through the confirm grammar and voice_file_report (`setDraftRev` moves the stored draft first, as a photo's re-extraction would); `corrections` are the words apply_correction sends. The worker's PGlite test (apps/worker/src/jobs/voice-filing.pglite.test.ts) checks the live pipeline answers what `routes` records (ids aside) and files once; the agent's pytest (tests/test_filing.py) replays the call on FakeFieldApi.",
+  "$comment": "W3-10 recorded call (W3-09's format, extended): `routes` also holds field-api's recorded answers to apply_correction and file_report, in order; `filing` lists every file_report request the call makes (the reporter's verbatim last words, the read-back's revision, and field-api's answer, §19 Q119), which field-api's Deno test replays through the confirm grammar and voice_file_report (`setDraftRev` moves the stored draft first, as a photo's re-extraction would); `corrections` are the words apply_correction sends. The worker's PGlite test (apps/worker/src/jobs/voice-filing.pglite.test.ts) checks the live pipeline answers what `routes` records (ids aside) and files once; the agent's pytest (tests/test_filing.py) replays the call on FakeFieldApi. W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind.",
   "id": "riverside-fix-en",
   "locale": "en-US",
   "extraction": "call-riverside-2026-10-09-en",
@@ -206,5 +206,103 @@
       "draftRev": 3,
       "answer": "filed"
     }
-  ]
+  ],
+  "simulate": {
+    "title": "A question and a correction on a call, then filed",
+    "milestone": "m8",
+    "flow": "F8",
+    "arrange": {
+      "reporter": {
+        "name": "Marco Ruiz",
+        "locale": "en-US",
+        "contactPref": "link"
+      },
+      "sites": [
+        {
+          "key": "riverside",
+          "name": "Riverside Lofts — Block B",
+          "projectCode": "RL"
+        }
+      ]
+    },
+    "steps": [
+      {
+        "route": "get_context",
+        "expect": {
+          "call": {
+            "direction": "inbound",
+            "transport": "web",
+            "purpose": "daily_report"
+          },
+          "reporter": {
+            "firstName": "Marco",
+            "locale": "en-US"
+          },
+          "company": "Kestrel Build Group",
+          "reportLanguage": "en",
+          "consents": {
+            "recording": true,
+            "dataProcessing": true,
+            "sms": true,
+            "autoCall": false
+          },
+          "maxQuestions": 3,
+          "sites": [
+            {
+              "name": "Riverside Lofts — Block B",
+              "deadline": "17:30"
+            }
+          ]
+        }
+      },
+      {
+        "route": "update_draft",
+        "body": {
+          "segments": "$segments"
+        }
+      },
+      {
+        "route": "record_answer",
+        "body": {
+          "questionId": "$draft.questionId",
+          "utterance": "Five, all day.",
+          "start": 95
+        }
+      },
+      {
+        "route": "apply_correction",
+        "body": {
+          "utterance": "No, Apex had seven, not six.",
+          "start": 110
+        }
+      },
+      {
+        "route": "file_report",
+        "body": {
+          "reportId": "$draft.reportId",
+          "draftRev": "$draft.draftRev",
+          "utterance": "Yes, file it."
+        }
+      },
+      {
+        "route": "end_call",
+        "body": {
+          "outcome": "filed"
+        }
+      }
+    ],
+    "expect": {
+      "call": {
+        "outcome": "filed"
+      },
+      "report": {
+        "site": "riverside",
+        "status": "filed",
+        "channel": "voice",
+        "confirmedVia": "voice",
+        "crewOnSite": 24,
+        "totalHours": 192
+      }
+    }
+  }
 }

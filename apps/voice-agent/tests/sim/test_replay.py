@@ -130,6 +130,7 @@ def test_answers_go_to_questions_this_call_asked(run: Replay) -> None:
 def test_the_script_ran_to_its_end_and_the_call_ended_once(run: Replay) -> None:
     assert run.llm.remaining == 0
     assert len(run.fake.seen("end_call")) == 1
-    assert all(c.status < 400 for c in run.fake.calls), [
-        (c.route, c.status) for c in run.fake.calls
-    ]
+    # Every refusal is one the script queued (W3-15's `queue`), each served once; nothing else.
+    refused = sorted((c.route, c.status) for c in run.fake.calls if c.status >= 400)
+    queued = sorted((q["route"], q["status"]) for q in run.fixture.get("queue", []))
+    assert refused == queued, [(c.route, c.status) for c in run.fake.calls]

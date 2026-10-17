@@ -1,5 +1,5 @@
 {
-  "$comment": "W3-14 recorded call (W3-02's format): start, field-api's recorded answers per route (in order; the last repeats), the reporter's turns (one run each) and the dialog model's recorded turns. The agent's pytest (apps/voice-agent/tests/test_special_intents.py) replays it on FakeFieldApi; field-api's Deno test (supabase/functions/field-api/voice_special_test.ts) checks the same answers against the routes. W3-15 extends the set.",
+  "$comment": "W3-14 recorded call (W3-02's format): start, field-api's recorded answers per route (in order; the last repeats), the reporter's turns (one run each) and the dialog model's recorded turns. The agent's pytest (apps/voice-agent/tests/test_special_intents.py) replays it on FakeFieldApi; field-api's Deno test (supabase/functions/field-api/voice_special_test.ts) checks the same answers against the routes. W3-15 extends the set. W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind.",
   "id": "friday-edit-en",
   "locale": "en-US",
   "start": {
@@ -172,5 +172,120 @@
       ]
     },
     {}
-  ]
+  ],
+  "simulate": {
+    "title": "Change Friday's report on a call: Apex was seven, version 2",
+    "milestone": "m8",
+    "flow": "F10",
+    "arrange": {
+      "reporter": {
+        "name": "Kevin O'Brien",
+        "locale": "en-US",
+        "contactPref": "call"
+      },
+      "sites": [
+        {
+          "key": "northgate",
+          "name": "Northgate Parking Structure",
+          "projectCode": "NG"
+        }
+      ],
+      "maxQuestions": 2,
+      "filedReports": [
+        {
+          "site": "northgate",
+          "day": "Friday",
+          "reportNo": "NG-0068",
+          "crew": [
+            {
+              "company": "Apex Concrete",
+              "workers": 6,
+              "hoursPerWorker": 8
+            }
+          ]
+        }
+      ]
+    },
+    "steps": [
+      {
+        "route": "get_context",
+        "expect": {
+          "call": {
+            "direction": "inbound",
+            "transport": "web",
+            "purpose": "daily_report"
+          },
+          "reporter": {
+            "firstName": "Kevin",
+            "locale": "en-US"
+          },
+          "company": "Kestrel Build Group",
+          "reportLanguage": "en",
+          "consents": {
+            "recording": true,
+            "dataProcessing": true,
+            "sms": true,
+            "autoCall": false
+          },
+          "maxQuestions": 2,
+          "sites": [
+            {
+              "name": "Northgate Parking Structure",
+              "deadline": "17:30"
+            }
+          ]
+        }
+      },
+      {
+        "route": "load_report",
+        "body": {
+          "dayReference": "Friday"
+        }
+      },
+      {
+        "route": "apply_correction",
+        "body": {
+          "utterance": "Apex was seven, not six.",
+          "start": 12,
+          "reportId": "$loaded.reportId"
+        }
+      },
+      {
+        "route": "save_change",
+        "body": {
+          "reportId": "$loaded.reportId",
+          "correctionId": "$correctionId",
+          "utterance": "I guess"
+        }
+      },
+      {
+        "route": "save_change",
+        "body": {
+          "reportId": "$loaded.reportId",
+          "correctionId": "$correctionId",
+          "utterance": "Yes."
+        }
+      },
+      {
+        "route": "end_call",
+        "body": {
+          "outcome": "edit_applied"
+        }
+      }
+    ],
+    "expect": {
+      "call": {
+        "outcome": "edit_applied"
+      },
+      "report": {
+        "site": "northgate",
+        "day": "Friday",
+        "status": "filed",
+        "version": 2,
+        "crewOnSite": 7,
+        "totalHours": 56
+      },
+      "messages": ["edit_applied"]
+    }
+  }
 }

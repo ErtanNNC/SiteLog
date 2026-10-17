@@ -5,7 +5,8 @@ the room: `calls/start` with the fixture's request, then for a known reporter `R
 (`get_context`, the consent check), a text-mode `AgentSession(llm=FakeLLM(agentTurns))`, the
 disclosure first (`ReportCall.begin`), one session run per reporter turn, and the hang-up when the
 script ends without `end_call`; for an unknown caller (F13) the `UnknownCallerAgent` with its
-opening. Nothing needs a key or a network: `FakeFieldApi` answers from the fixture's `routes`.
+opening. Nothing needs a key or a network: `FakeFieldApi` answers from the fixture's `routes`,
+and first with the refusals of its `queue` (W3-15: `[{route, status, body}]`).
 """
 
 from __future__ import annotations
@@ -94,7 +95,11 @@ async def replay_call(
     limits: Limits | None = None,
     fake: FakeFieldApi | None = None,
 ) -> Replay:
-    fake = fake or FakeFieldApi(fixture)
+    if fake is None:
+        fake = FakeFieldApi(fixture)
+        # W3-15: field-api's refusals the script records (`queue`), served before `routes`.
+        for refusal in fixture.get("queue", []):
+            fake.queue(refusal["route"], refusal["status"], refusal["body"])
     fake_llm = FakeLLM(fixture.get("agentTurns", []))
     turns: list[str] = fixture.get("reporterTurns", [])
     with _capture_logs() as logs, fake:

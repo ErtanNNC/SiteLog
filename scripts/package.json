@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Dev scripts: webhook replay, demo seed generation, country pack endpoints, the cut-over pre-flight.",
+  "description": "Dev scripts: webhook replay, demo seed generation, country pack endpoints, the cut-over pre-flight, the scripted call simulator.",
   "scripts": {
     "replay-webhook": "tsx src/replay-webhook.ts",
     "seed-demo": "tsx src/seed-demo.ts",
@@ -12,6 +12,7 @@
     "db-types-drift": "tsx src/db-types-drift.ts",
     "voice-contract": "tsx src/voice-contract.ts",
     "demo-call-audio": "tsx src/demo-call-audio.ts",
+    "simulate-call": "tsx src/simulate-call.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
