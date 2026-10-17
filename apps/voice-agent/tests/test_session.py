@@ -1,5 +1,5 @@
 """W3-12: the live session per call language, the settled outcome, the turn metrics, and the
-disclosure mark at field-api (built ahead of its route)."""
+disclosure mark at field-api (§19 Q205)."""
 
 from __future__ import annotations
 
@@ -158,34 +158,15 @@ def test_turn_timer_latency_and_barge_in() -> None:
     assert out["interruptions"] == 1
 
 
-# ───────────────── the disclosure mark (§19 Q205: field-api's half to come) ─────────────────
+# ───────────────── the disclosure mark (§19 Q205: field-api's route) ─────────────────
 
 
-async def test_mark_disclosure_waits_for_its_route(tmp_path: Path) -> None:
+async def test_mark_disclosure_is_sent_with_the_call_token_on_the_real_contract() -> None:
     fixture = load_call_fixture("northgate-call-en")
     call_id = fixture["start"]["request"]["callId"]
-    # Today's contract has no such route: nothing is sent.
-    with FakeFieldApi(fixture) as fake:
-        api = FieldApi(base_url=BASE_URL, tool_secret=SECRET, timeout_s=2, retry_delay_s=0)
-        auth, _ = await api.calls_start(room=f"call-{call_id}", transport="web", call_id=call_id)
-        assert await api.mark_disclosure(auth) is False
-        await api.aclose()
-    assert [c.route for c in fake.calls] == ["calls_start"]
-
-    # A contract with the route (as `pnpm voice:contract` would write it): sent with the token.
-    shutil.copytree(CONTRACT_DIR, tmp_path / "contract")
-    index_path = tmp_path / "contract" / "index.json"
-    index = json.loads(index_path.read_text())
-    index["routes"][DISCLOSURE_ROUTE] = {
-        "method": "POST",
-        "path": "/voice/calls/{callId}/disclosure",
-        "request": "tool_get_context_request",
-        "response": "tool_end_call_response",
-        "callToken": True,
-    }
-    index_path.write_text(json.dumps(index))
-    contract = Contract(tmp_path / "contract")
-    fixture = {**fixture, "routes": {**fixture["routes"], DISCLOSURE_ROUTE: [{"ok": True}]}}
+    contract = Contract(CONTRACT_DIR)
+    assert contract.route(DISCLOSURE_ROUTE).path == "/voice/calls/{callId}/disclosure"
+    assert contract.route(DISCLOSURE_ROUTE).call_token
     with FakeFieldApi(fixture, contract=contract) as fake:
         api = FieldApi(
             base_url=BASE_URL, tool_secret=SECRET, timeout_s=2, retry_delay_s=0, contract=contract
@@ -194,5 +175,26 @@ async def test_mark_disclosure_waits_for_its_route(tmp_path: Path) -> None:
         assert await api.mark_disclosure(auth) is True
         await api.aclose()
     (mark,) = fake.seen(DISCLOSURE_ROUTE)
+    assert mark.status == 200
     assert mark.body == {"callId": call_id}
     assert mark.headers["x-call-token"]
+
+
+async def test_mark_disclosure_waits_for_its_route_on_an_older_contract(tmp_path: Path) -> None:
+    fixture = load_call_fixture("northgate-call-en")
+    call_id = fixture["start"]["request"]["callId"]
+    # A contract written before the route existed: nothing is sent.
+    shutil.copytree(CONTRACT_DIR, tmp_path / "contract")
+    index_path = tmp_path / "contract" / "index.json"
+    index = json.loads(index_path.read_text())
+    del index["routes"][DISCLOSURE_ROUTE]
+    index_path.write_text(json.dumps(index))
+    contract = Contract(tmp_path / "contract")
+    with FakeFieldApi(fixture, contract=contract) as fake:
+        api = FieldApi(
+            base_url=BASE_URL, tool_secret=SECRET, timeout_s=2, retry_delay_s=0, contract=contract
+        )
+        auth, _ = await api.calls_start(room=f"call-{call_id}", transport="web", call_id=call_id)
+        assert await api.mark_disclosure(auth) is False
+        await api.aclose()
+    assert [c.route for c in fake.calls] == ["calls_start"]

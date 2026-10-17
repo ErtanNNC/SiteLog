@@ -861,6 +861,61 @@ Deno.test(
   },
 );
 
+Deno.test(
+  'disclosure (§19 Q205): the notice played marks the call once, audited; token and path checked',
+  async () => {
+    const h = setup();
+    const { callId, token } = await h.sip(30, KEVIN_PHONE);
+    const path = `voice/calls/${callId}/disclosure`;
+    // Without the call's token, or naming another call in the body: refused, nothing marked.
+    const noToken = await h.call(path, { callId });
+    assertEquals([noToken.status, noToken.json.error], [401, 'call_token_invalid']);
+    const other = await h.call(path, { callId: crypto.randomUUID() }, { token });
+    assertEquals([other.status, other.json.error], [400, 'invalid_request']);
+    const noBearer = await h.call(path, { callId }, { token, bearer: null });
+    assertEquals(noBearer.status, 401);
+    assertEquals(h.store.callRows[0]!.disclosure_played, false);
+
+    const first = await h.call(path, { callId }, { token });
+    assertEquals([first.status, first.json], [200, { ok: true }]);
+    assertEquals(h.store.callRows[0]!.disclosure_played, true);
+    // Idempotent: a repeat answers the same and audits nothing more.
+    const again = await h.call(path, { callId }, { token });
+    assertEquals([again.status, again.json], [200, { ok: true }]);
+    const marks = h.store.audits.filter(
+      (a) => a.entity === 'call' && a.entityId === callId && a.action === 'call.updated',
+    );
+    assertEquals(
+      marks.map((a) => a.diff),
+      [{ disclosure_played: true }],
+    );
+
+    // An unknown caller hears the notice too (F13).
+    const unknown = await h.sip(31, '+15550199001');
+    const u = await h.call(
+      `voice/calls/${unknown.callId}/disclosure`,
+      { callId: unknown.callId },
+      { token: unknown.token },
+    );
+    assertEquals([u.status, u.json], [200, { ok: true }]);
+
+    // After the end of the call: refused.
+    await h.tool('end_call', callId, token, {
+      outcome: 'abandoned',
+      dialogLog: [],
+      metrics: {
+        latencyP50Ms: null,
+        latencyP95Ms: null,
+        interruptions: 0,
+        sttConfidence: null,
+        turns: 0,
+      },
+    });
+    const late = await h.call(path, { callId }, { token });
+    assertEquals([late.status, late.json.error], [409, 'call_ended']);
+  },
+);
+
 Deno.test('recording: refused without the recording consent (§19 Q120)', async () => {
   const h = setup();
   const { callId, token } = await h.sip(16, MARCO_PHONE);

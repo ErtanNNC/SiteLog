@@ -42,7 +42,7 @@ async def test_recorded_call_replays_on_the_contract(name: str) -> None:
     # Every route the fixture records was asked for, in its order, and answered 2xx. The call
     # code reads the context before the session starts (W3-12), the model may read it again; the
     # script ends without a goodbye, so the hang-up saves the draft (§19 Q122).
-    expected = ["calls_start"]
+    expected = ["calls_start", "disclosure"]  # the notice played (§19 Q205)
     expected += ["update_draft"] * len(fixture["routes"]["update_draft"])
     expected += ["record_answer"] * len(fixture["routes"].get("record_answer", []))
     expected += ["end_call"]

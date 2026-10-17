@@ -256,6 +256,17 @@ export const VoiceRecordingUploadResponseSchema = z.strictObject({
   token: z.string().min(1).max(2000),
 });
 
+// ───────────────────────────── POST /voice/calls/:id/disclosure ─────────────────────────────
+
+/**
+ * `POST /voice/calls/:id/disclosure` (§9.4 "Recording", §19 Q163, Q205; the W3-12 follow-up): the
+ * opening with the recording notice played to the end. field-api sets the call's
+ * `disclosure_played` (`voice_call_update`, once played always played, audited when it changed);
+ * the post-call job (W3-11) processes a call's recording only after it. Idempotent.
+ */
+export const VoiceDisclosureRequestSchema = z.strictObject({ ...toolBase });
+export const VoiceDisclosureResponseSchema = z.strictObject({ ok: z.literal(true) });
+
 // ───────────────────────────── POST /voice/tools/* (§9.4's table) ─────────────────────────────
 
 /** `get_context`: who is calling about what (§9.4; F14 lists ≤ 3 sites by name). */
@@ -710,6 +721,13 @@ export const VOICE_ROUTES: Record<string, VoiceRoute> = {
     response: 'calls_start_response',
     callToken: false,
   },
+  disclosure: {
+    method: 'POST',
+    path: '/voice/calls/{callId}/disclosure',
+    request: 'disclosure_request',
+    response: 'disclosure_response',
+    callToken: true,
+  },
   recording_upload: {
     method: 'POST',
     path: '/voice/calls/{callId}/recording',
@@ -738,6 +756,8 @@ export const VOICE_ROUTES: Record<string, VoiceRoute> = {
 export const VOICE_CONTRACT: Record<string, z.ZodType> = {
   calls_start_request: VoiceCallStartRequestSchema,
   calls_start_response: VoiceCallStartResponseSchema,
+  disclosure_request: VoiceDisclosureRequestSchema,
+  disclosure_response: VoiceDisclosureResponseSchema,
   recording_upload_request: VoiceRecordingUploadRequestSchema,
   recording_upload_response: VoiceRecordingUploadResponseSchema,
   dialog_log: DialogLogSchema,

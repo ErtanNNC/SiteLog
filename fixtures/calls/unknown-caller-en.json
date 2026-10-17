@@ -17,6 +17,11 @@
     }
   },
   "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
     "leave_message": [
       {
         "ok": true,

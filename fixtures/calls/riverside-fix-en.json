@@ -19,6 +19,11 @@
     }
   },
   "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
     "get_context": [
       {
         "call": {

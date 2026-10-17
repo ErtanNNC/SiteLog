@@ -13,6 +13,7 @@ import {
   verifyCallToken,
   VOICE_CONTRACT,
   VOICE_TOOL_SCHEMAS,
+  VOICE_ROUTES,
   VOICE_TOOLS,
   VoiceCallStartRequestSchema,
   VoiceCallStartResponseSchema,
@@ -359,8 +360,16 @@ describe('deriveCallToken', () => {
 
 describe('VOICE_CONTRACT', () => {
   it('converts every schema to JSON Schema', () => {
-    // 8 shapes, W3-09's turn_pending, and a request and an answer per tool.
-    expect(Object.keys(VOICE_CONTRACT).length).toBe(9 + VOICE_TOOLS.length * 2);
+    // 8 shapes, W3-09's turn_pending, the disclosure mark's request and answer (§19 Q205), and a
+    // request and an answer per tool.
+    expect(Object.keys(VOICE_CONTRACT).length).toBe(11 + VOICE_TOOLS.length * 2);
+    expect(VOICE_ROUTES.disclosure).toEqual({
+      method: 'POST',
+      path: '/voice/calls/{callId}/disclosure',
+      request: 'disclosure_request',
+      response: 'disclosure_response',
+      callToken: true,
+    });
     for (const [name, schema] of Object.entries(VOICE_CONTRACT)) {
       expect(() => z.toJSONSchema(schema), name).not.toThrow();
     }

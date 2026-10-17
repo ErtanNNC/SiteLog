@@ -11,6 +11,13 @@
       "response": "calls_start_response",
       "callToken": false
     },
+    "disclosure": {
+      "method": "POST",
+      "path": "/voice/calls/{callId}/disclosure",
+      "request": "disclosure_request",
+      "response": "disclosure_response",
+      "callToken": true
+    },
     "recording_upload": {
       "method": "POST",
       "path": "/voice/calls/{callId}/recording",

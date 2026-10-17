@@ -1,5 +1,5 @@
 {
-  "$comment": "W3-15 scripted call (W3-02's format; W3-09 … W3-14's keys): start, routes (field-api's answers per route, in order; the last repeats), reporterTurns (one session run each), agentTurns (the dialog model's recorded turns). W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind. Two turns the dialog could not understand: the model calls start_fallback_recording (§9.4 rule 9); from then on code speaks (the F6 line and the tone) and no reporter turn reaches the model; the hang-up ends the call `fallback_recording` (W3-12's ReportCall). At text level there is no recording, so the post-call job leaves no report (`call.fallback_unused`); the recording's voice note is the audio-level run's (`--live`).",
+  "$comment": "W3-15 scripted call (W3-02's format; W3-09 … W3-14's keys): start, routes (field-api's answers per route, in order; the last repeats), reporterTurns (one session run each), agentTurns (the dialog model's recorded turns). W3-15: `simulate` is this call as `pnpm simulate:call` runs it on a local stack (scripts/src/call-sim): the org it arranges, the requests the agent sends in order (`$…` values from the call so far; `recorded` = the route's next recorded answer above, pending ones skipped, ids aside) and what the call leaves behind. Two turns the dialog could not understand: the model calls start_fallback_recording (§9.4 rule 9); from then on code speaks (the F6 line and the tone) and no reporter turn reaches the model; the hang-up ends the call `fallback_recording` (W3-12's ReportCall). At text level there is no recording: the post-call job waits for it (the disclosure was marked, §19 Q205) and no report is made; the recording's voice note is the audio-level run's (`--live`).",
   "id": "northgate-fallback-en",
   "locale": "en-US",
   "start": {
@@ -18,6 +18,11 @@
     }
   },
   "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
     "get_context": [
       {
         "call": {
@@ -181,7 +186,7 @@
         "fallback": true
       },
       "report": null,
-      "audits": ["call.fallback_started", "call.ended", "call.fallback_unused"]
+      "audits": ["call.updated", "call.fallback_started", "call.ended"]
     }
   }
 }

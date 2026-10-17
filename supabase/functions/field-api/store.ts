@@ -240,6 +240,12 @@ export interface VoiceStore {
     reporterId: string,
   ): Promise<{ siteId: string; changed: boolean }>;
   voiceCallFallback(callId: string, reason: string, at: number): Promise<{ marked: boolean }>;
+  /**
+   * W3-12 follow-up (§19 Q205): the recording notice was played to the end
+   * (`voice_call_update(p_disclosure_played => true)`; once played, always played; audited
+   * `call.updated` when it changed).
+   */
+  voiceCallDisclosure(callId: string): Promise<{ changed: boolean }>;
   voiceCallRecording(callId: string, path: string): Promise<void>;
   voiceCallEnd(input: {
     callId: string;

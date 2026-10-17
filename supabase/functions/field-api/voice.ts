@@ -31,6 +31,7 @@ import {
   VOICE_REQUEST_ID_RE,
   VOICE_TOOL_RATE_LIMIT,
   VoiceCallStartRequestSchema,
+  VoiceDisclosureRequestSchema,
   VoiceRecordingUploadRequestSchema,
   buildKeyterms,
   callRecordingPath,
@@ -571,6 +572,23 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
       },
     };
     return c.json(answer);
+  });
+
+  // ── POST /voice/calls/:id/disclosure (§9.4 "Recording", §19 Q163, Q205) ───────────────────────
+  // The agent's word that the opening with the recording notice played to the end: the call's
+  // `disclosure_played` (once played, always played; audited `call.updated` when it changed), which
+  // the post-call job (W3-11) requires before it processes the recording. An unknown caller's call
+  // too (F13 plays the notice as well); a repeat changes nothing.
+  app.post('/voice/calls/:id/disclosure', async (c) => {
+    const body = await parseVoiceBody(c, VoiceDisclosureRequestSchema);
+    if (body.callId !== c.req.param('id')) {
+      throw new FieldError(400, 'invalid_request', 'The path and the body name different calls');
+    }
+    const call = await authorizedCall(c, body.callId);
+    return once(c, call, 'disclosure', async () => {
+      await store.voiceCallDisclosure(call.id);
+      return { status: 200, body: { ok: true } };
+    });
   });
 
   // ── POST /voice/calls/:id/recording ──────────────────────────────────────────────────────────

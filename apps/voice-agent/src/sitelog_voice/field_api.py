@@ -35,8 +35,8 @@ log = logging.getLogger("sitelog_voice.field_api")
 #: Back-off before the single retry.
 RETRY_DELAY_S = 0.25
 
-#: The route that would set `calls.disclosure_played` from the agent (§19 Q205). The contract has
-#: no such route yet: `mark_disclosure` sends it as soon as `pnpm voice:contract` writes one.
+#: The route that sets `calls.disclosure_played` from the agent (§19 Q205, `POST
+#: /voice/calls/{callId}/disclosure`); `mark_disclosure` skips it on a contract without it.
 DISCLOSURE_ROUTE = "disclosure"
 
 
@@ -211,8 +211,8 @@ class FieldApi:
 
     async def mark_disclosure(self, auth: CallAuth) -> bool:
         """`calls.disclosure_played` (§9.4 "Recording", §19 Q163, W3-12): the recording notice was
-        played to the end. Sent only when the contract has the route (`DISCLOSURE_ROUTE`, §19
-        Q205: field-api's half is not built yet); returns whether field-api was told."""
+        played to the end. Sent when the contract has the route (`DISCLOSURE_ROUTE`, §19 Q205;
+        field-api's since the W3-12 follow-up); returns whether field-api was told."""
         if DISCLOSURE_ROUTE not in self._contract.routes:
             return False
         await self.request(DISCLOSURE_ROUTE, {"callId": auth.call_id}, auth)

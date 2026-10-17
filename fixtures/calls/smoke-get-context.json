@@ -12,14 +12,29 @@
     "response": {
       "callId": "5b1f0c3e-8a2d-4c6e-9f10-2b3c4d5e6f70",
       "callToken": "derived-by-the-fake-AAAAAAAAAAAAAAAAAAAAAAAA",
-      "reporter": { "firstName": "Kevin", "locale": "en-US" }
+      "reporter": {
+        "firstName": "Kevin",
+        "locale": "en-US"
+      }
     }
   },
   "routes": {
+    "disclosure": [
+      {
+        "ok": true
+      }
+    ],
     "get_context": [
       {
-        "call": { "direction": "inbound", "transport": "pstn", "purpose": "daily_report" },
-        "reporter": { "firstName": "Kevin", "locale": "en-US" },
+        "call": {
+          "direction": "inbound",
+          "transport": "pstn",
+          "purpose": "daily_report"
+        },
+        "reporter": {
+          "firstName": "Kevin",
+          "locale": "en-US"
+        },
         "company": "Kestrel Builders",
         "reportLanguage": "en",
         "sites": [
@@ -32,24 +47,57 @@
         ],
         "siteId": "7c2e4a10-3b5d-4f6a-8e9b-0c1d2e3f4a5b",
         "companies": [
-          { "name": "Delta Precast", "aliases": ["Delta"] },
-          { "name": "Apex Concrete", "aliases": ["Apex"] }
+          {
+            "name": "Delta Precast",
+            "aliases": ["Delta"]
+          },
+          {
+            "name": "Apex Concrete",
+            "aliases": ["Apex"]
+          }
         ],
         "keyterms": ["Delta Precast", "Apex Concrete", "post-tension"],
-        "consents": { "recording": true, "dataProcessing": true, "sms": true, "autoCall": false },
+        "consents": {
+          "recording": true,
+          "dataProcessing": true,
+          "sms": true,
+          "autoCall": false
+        },
         "recordingNoticeVersion": "voice.recording_notice.v1",
         "consentTextVersion": "voice.consent.v1",
         "maxQuestions": 2
       }
     ],
-    "end_call": [{ "ok": true }]
+    "end_call": [
+      {
+        "ok": true
+      }
+    ]
   },
   "reporterTurns": [
     "Hi, it's Kevin at Northgate. Actually I'll call back later, my number is 555 014 2087."
   ],
   "agentTurns": [
-    { "toolCalls": [{ "name": "get_context", "args": {} }] },
-    { "toolCalls": [{ "name": "end_call", "args": { "outcome": "abandoned" } }] },
-    { "text": "Goodbye." }
+    {
+      "toolCalls": [
+        {
+          "name": "get_context",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "toolCalls": [
+        {
+          "name": "end_call",
+          "args": {
+            "outcome": "abandoned"
+          }
+        }
+      ]
+    },
+    {
+      "text": "Goodbye."
+    }
   ]
 }

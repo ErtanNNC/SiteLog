@@ -1880,6 +1880,14 @@ export class FakeFieldStore implements FieldStore {
     this.callAudit(c, 'call.fallback_started', { reason, at });
     return Promise.resolve({ marked: true });
   }
+  voiceCallDisclosure(callId: string) {
+    const c = this.callRows.find((x) => x.id === callId);
+    if (!c) return Promise.reject(new FieldDbError('call_not_found'));
+    if (c.disclosure_played) return Promise.resolve({ changed: false });
+    c.disclosure_played = true;
+    this.callAudit(c, 'call.updated', { disclosure_played: true });
+    return Promise.resolve({ changed: true });
+  }
   voiceCallRecording(callId: string, path: string) {
     const c = this.callRows.find((x) => x.id === callId);
     if (!c) return Promise.reject(new FieldDbError('call_not_found'));

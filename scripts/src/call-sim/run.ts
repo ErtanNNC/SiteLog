@@ -1,6 +1,6 @@
 /**
  * W3-15: runs one scripted call against field-api's `/voice/*` routes, as the voice agent would
- * at text level: `calls/start`, then each step of the script in order (a `pending` answer asked
+ * at text level: `calls/start`, the disclosure mark (§19 Q205), then each step of the script in order (a `pending` answer asked
  * again with the same body, as the agent does), each request and answer checked against the
  * voice contract (`VOICE_TOOL_SCHEMAS`) and the script's expected answer, then the stack's checks
  * of what the call left behind. Network and database are behind `VoiceHttp` and `SimStack`, so
@@ -12,6 +12,7 @@ import {
   VOICE_TOOL_SCHEMAS,
   VoiceCallStartRequestSchema,
   VoiceCallStartResponseSchema,
+  VoiceDisclosureResponseSchema,
   VoiceDraftStateSchema,
   type VoiceTool,
 } from '@sitelog/shared';
@@ -202,6 +203,22 @@ export async function runCallScript(script: SimScript, deps: RunDeps): Promise<S
     fail(line);
 
   const recorded = recordedAnswers(script);
+
+  // As the agent: once the opening with the recording notice has played, field-api is told
+  // (§19 Q205), before any request that processes speech. The post-call job (W3-11) then waits
+  // for the call's recording, which a text-level run never uploads (the audio level's, `--live`).
+  const disclosure = await deps.http.post(routePath('disclosure', callId), { callId }, callToken);
+  const marked = VoiceDisclosureResponseSchema.safeParse(disclosure.body);
+  if (disclosure.status !== 200 || !marked.success) {
+    fail(`disclosure: HTTP ${disclosure.status} ${JSON.stringify(disclosure.body)}`);
+    return result;
+  }
+  for (const line of diffRecorded(
+    recorded('disclosure') ?? { ok: true },
+    marked.data,
+    'disclosure',
+  ))
+    fail(line);
   const vars: Vars = {
     draft: null,
     loadedReportId: null,

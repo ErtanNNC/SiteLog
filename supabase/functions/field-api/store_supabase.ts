@@ -769,6 +769,13 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       );
     },
 
+    async voiceCallDisclosure(callId) {
+      const r = await rpc<{ changed: boolean }>(
+        admin.rpc('voice_call_update', { p_call_id: callId, p_disclosure_played: true }),
+      );
+      return { changed: !!r.changed };
+    },
+
     async voiceCallRecording(callId, path) {
       await rpc(admin.rpc('voice_call_recording', { p_call_id: callId, p_path: path }));
     },

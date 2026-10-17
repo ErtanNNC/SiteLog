@@ -5,8 +5,7 @@ import {
   EndCallRequestSchema,
   VOICE_API_ERRORS,
   VOICE_ROUTES,
-  VOICE_TOOL_SCHEMAS,
-  type VoiceTool,
+  VOICE_CONTRACT,
 } from '@sitelog/shared';
 import { diffRecorded, isPending, matchSubset } from './call-sim/match.ts';
 import {
@@ -51,7 +50,9 @@ function recordedHttp(
   const errors = [...script.queue];
   const seen: Array<{ route: string; body: Record<string, unknown> }> = [];
   const routeOf = (path: string) =>
-    Object.entries(VOICE_ROUTES).find(([, r]) => r.path === path)?.[0] ?? path;
+    Object.entries(VOICE_ROUTES).find(([, r]) =>
+      new RegExp(`^${r.path.replace('{callId}', '[0-9a-f-]{36}')}$`).test(path),
+    )?.[0] ?? path;
   return {
     seen,
     async post(path, body) {
@@ -155,10 +156,10 @@ describe('the scripted calls (fixtures/calls)', () => {
   it("every recorded answer is the contract's; every queued refusal a field-api error", () => {
     for (const s of scripts) {
       for (const [route, answers] of Object.entries(s.routes)) {
-        const schemas = VOICE_TOOL_SCHEMAS[route as VoiceTool];
-        expect(schemas, `${s.id} ${route}`).toBeDefined();
+        const response = VOICE_CONTRACT[VOICE_ROUTES[route]?.response ?? ''];
+        expect(response, `${s.id} ${route}`).toBeDefined();
         for (const a of answers) {
-          const r = schemas.response.safeParse(a);
+          const r = response!.safeParse(a);
           expect(r.success, `${s.id} ${route}: ${JSON.stringify(r.error?.issues)}`).toBe(true);
         }
       }

@@ -31,7 +31,8 @@ from tests.conftest import CALL_FIXTURES
 from tests.harness import Replay, replay_call
 
 FIXTURES = sorted(CALL_FIXTURES.glob("*.json"))
-SPEECH_ROUTES_OK_BEFORE_DISCLOSURE = {"calls_start", "get_context"}
+# The disclosure mark itself (§19 Q205) is the last of them: sent once the notice has played.
+SPEECH_ROUTES_OK_BEFORE_DISCLOSURE = {"calls_start", "get_context", "disclosure"}
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -57,8 +58,11 @@ def test_disclosure_first(run: Replay) -> None:
     assert log and log[0]["speaker"] == "agent" and notice in log[0]["text"]
     if run.state is not None:
         assert run.state.disclosure_played
-    early = {c.route for c in run.fake.calls[: run.requests_before_disclosure]}
-    assert early <= SPEECH_ROUTES_OK_BEFORE_DISCLOSURE
+    early = [c.route for c in run.fake.calls[: run.requests_before_disclosure]]
+    assert set(early) <= SPEECH_ROUTES_OK_BEFORE_DISCLOSURE
+    # field-api was told once, after the notice (§19 Q205): the last request before any speech.
+    assert early[-1] == "disclosure"
+    assert [c.status for c in run.fake.seen("disclosure")] == [200]
 
 
 def test_no_phone_number_reaches_the_model_or_the_logs(run: Replay) -> None:

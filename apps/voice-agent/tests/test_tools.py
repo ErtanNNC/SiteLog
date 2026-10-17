@@ -12,9 +12,14 @@ from sitelog_voice.tools import CODE_ROUTES, TOOL_NAMES
 def test_every_tool_has_a_contract_route() -> None:
     routes = default_contract().routes
     assert set(TOOL_NAMES) <= set(routes)
-    # calls/start, the recording upload, the consent answer and an unknown caller's message
-    # (W3-14) are code's, never the model's.
-    assert set(routes) - set(TOOL_NAMES) == {"calls_start", "recording_upload", *CODE_ROUTES}
+    # calls/start, the disclosure mark (§19 Q205), the recording upload, the consent answer and
+    # an unknown caller's message (W3-14) are code's, never the model's.
+    assert set(routes) - set(TOOL_NAMES) == {
+        "calls_start",
+        "disclosure",
+        "recording_upload",
+        *CODE_ROUTES,
+    }
 
 
 @pytest.mark.filterwarnings("ignore:A test tried to use socket")
