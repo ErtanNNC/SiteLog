@@ -226,10 +226,11 @@ Deno.test(
     assertEquals(first.status, 200, first.text);
     const read = SetDayStatusResponseSchema.parse(first.json);
     assertEquals(read.status, 'confirm');
-    // 07:00–15:30, stopped at 11:00: 4.5 h lost, from code (never the model).
+    // 07:00–15:30, stopped at 11:00: 4.5 h lost, from code (never the model), said in words
+    // (W4-07, §19 Q245).
     assertEquals(
       read.confirmation,
-      'Weather day at Hillcrest School Extension: work stopped at 11:00, 12 on site before, 4.5 hours lost. Shall I log it?',
+      'Weather day at Hillcrest School Extension: work stopped at eleven a.m., twelve on site before, four and a half hours lost. Shall I log it?',
     );
     assert(read.confirmKey);
     assertEquals(h.store.reports.length, 0);
@@ -451,8 +452,8 @@ Deno.test(
     assertEquals(p, {
       status: 'preview',
       correctionId: row.id,
-      lines: ['Apex Concrete: 7 workers, 8 hours each — 56 hours.'],
-      readBack: 'Apex Concrete: 7 workers, 8 hours each — 56 hours. Save it?',
+      lines: ['Apex Concrete: seven workers, eight hours each — fifty-six hours.'],
+      readBack: 'Apex Concrete: seven workers, eight hours each — fifty-six hours. Save it?',
       draft: null,
     });
     assertEquals(h.store.corrections.length, 1);
@@ -479,7 +480,7 @@ Deno.test(
     assertEquals(SaveChangeResponseSchema.parse(yes.json), {
       status: 'saved',
       version: 2,
-      confirmation: 'Saved. Version 2 goes to the office.',
+      confirmation: 'Saved. Version two goes to the office.',
     });
     const v2 = h.store.versions.find((v) => v.report_id === R && v.version === 2)!;
     assertEquals([v2.author, v2.via, v2.author_reporter_id], ['reporter', 'voice', KEVIN]);

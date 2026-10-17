@@ -14,7 +14,7 @@ describe('pnpm voice:contract', () => {
     const a = voiceContractFiles();
     const b = voiceContractFiles();
     expect([...a]).toEqual([...b]);
-    expect(a.size).toBe(Object.keys(VOICE_CONTRACT).length + 1 + 3);
+    expect(a.size).toBe(Object.keys(VOICE_CONTRACT).length + 1 + 3 + 1);
     for (const content of a.values()) {
       expect(content.endsWith('\n')).toBe(true);
       expect(() => JSON.parse(content)).not.toThrow();

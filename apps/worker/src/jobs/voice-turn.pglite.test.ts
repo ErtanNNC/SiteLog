@@ -7,6 +7,7 @@ import {
   VoiceDraftStateSchema,
   computeTotals,
   readReportData,
+  speakableVoiceAnswer,
   voiceTurnKey,
   type DailyReportData,
   type JobRow,
@@ -68,6 +69,14 @@ function recordedCall(id: string): { routes: Record<string, unknown[]> } {
   return JSON.parse(readFileSync(join(FIXTURES_DIR, 'calls', `${id}.json`), 'utf8')) as {
     routes: Record<string, unknown[]>;
   };
+}
+
+/**
+ * What field-api hands the agent of a worker answer: its lines in their spoken form, in the call
+ * language (W4-07, §19 Q245), so a recorded call (field-api's answers) matches it.
+ */
+function handedOn(value: unknown, language: 'en' | 'es' | 'tr'): unknown {
+  return withoutIds(speakableVoiceAnswer(value, language));
 }
 
 /** A draft state or an answer without its ids and revision: what a recorded call must match. */
@@ -182,7 +191,7 @@ describe('W3-09: update_draft on a call (live mode)', () => {
     );
     expect(state.reportId).toBe(reportId);
     // The recorded call the agent's tests replay answers what the pipeline answers.
-    expect(withoutIds(state)).toEqual(
+    expect(handedOn(state, 'en')).toEqual(
       withoutIds(recordedCall('northgate-call-en').routes.update_draft![0]),
     );
 
@@ -312,7 +321,7 @@ describe('W3-09: spoken questions and record_answer (F7 on a call)', () => {
     ]);
     expect(state.readBack).toBeNull();
     const recorded = recordedCall('riverside-delta-en').routes;
-    expect(withoutIds(state)).toEqual(withoutIds(recorded.update_draft![1]));
+    expect(handedOn(state, 'en')).toEqual(withoutIds(recorded.update_draft![1]));
     expect(await reportStatus(draft.reportId)).toBe('awaiting_answer');
     const [q] = await pg.q<{ channel: string; call_id: string }>(
       `select channel::text, call_id from questions where id = $1`,
@@ -333,7 +342,7 @@ describe('W3-09: spoken questions and record_answer (F7 on a call)', () => {
     expect(result.draft.readBack).toBe(
       "Here's what I've got: 23 on site from 5 companies, 184 hours. Weather stopped work for 3.5 hours. Done: Level 4 slab pour complete, Level 3 electrical rough-in about 60 percent, Level 2 ductwork, east wing, Exterior — south elevation CMU blockwork, Level 2 interior CMU blockwork, Level 5 deck rebar tying. Delivered: 2 loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?",
     );
-    expect(withoutIds(result)).toEqual(withoutIds(recorded.record_answer![0]));
+    expect(handedOn(result, 'en')).toEqual(withoutIds(recorded.record_answer![0]));
     const data = await draftOf(draft.reportId);
     const delta = data.manpower.find((m) => m.companyName === 'Delta Mechanical')!;
     expect([delta.workers, delta.hoursPerWorker, delta.totalHours]).toEqual([5, 8, 40]);
@@ -364,7 +373,7 @@ describe('W3-09: spoken questions and record_answer (F7 on a call)', () => {
     });
     const qid = state.question!.id;
     const recorded = recordedCall('riverside-delta-es').routes;
-    expect(withoutIds(state)).toEqual(withoutIds(recorded.update_draft![0]));
+    expect(handedOn(state, 'es')).toEqual(withoutIds(recorded.update_draft![0]));
 
     const first = await turn(call, 'record_answer', {
       questionId: qid,
@@ -377,7 +386,7 @@ describe('W3-09: spoken questions and record_answer (F7 on a call)', () => {
       confirmation: 'Perdón, no le entendí.',
     });
     expect(once.draft.question?.id).toBe(qid);
-    expect(withoutIds(once)).toEqual(withoutIds(recorded.record_answer![0]));
+    expect(handedOn(once, 'es')).toEqual(withoutIds(recorded.record_answer![0]));
     expect(await reportStatus(draft.reportId)).toBe('awaiting_answer');
 
     const second = await turn(call, 'record_answer', {
@@ -387,7 +396,7 @@ describe('W3-09: spoken questions and record_answer (F7 on a call)', () => {
     });
     const twice = RecordAnswerResultSchema.parse(second.result);
     expect(twice.status).toBe('skipped');
-    expect(withoutIds(twice)).toEqual(withoutIds(recorded.record_answer![1]));
+    expect(handedOn(twice, 'es')).toEqual(withoutIds(recorded.record_answer![1]));
     expect(twice.confirmation).toBe(
       'No logré entenderlo, así que lo dejo para que la oficina lo revise.',
     );

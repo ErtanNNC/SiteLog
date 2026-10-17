@@ -5,6 +5,9 @@
  *   apps/voice-agent/contract/<name>.json   JSON Schema of every voice schema (`VOICE_CONTRACT`)
  *   apps/voice-agent/contract/index.json    the routes (`VOICE_ROUTES`) and the call token header
  *   apps/voice-agent/copy/<language>.json   the spoken lines (`VOICE_CATALOGS`, EN/ES/TR)
+ *   apps/voice-agent/copy/spoken.json       W4-07 (§19 Q245): the spoken-form policy, its lists
+ *                                           (units, pronunciations, …) and every golden case of
+ *                                           `speakable` the agent's port must say the same
  *
  * The files are checked in; the agent validates its requests and the answers against them (W3-02).
  * `pnpm voice:contract -- --check` writes nothing and exits 1 when a file differs, is missing or
@@ -18,6 +21,12 @@ import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import {
   LANGUAGES,
+  SPOKEN_ES_FEMININE,
+  SPOKEN_FORM,
+  SPOKEN_FORM_CASES,
+  SPOKEN_PRONUNCIATIONS,
+  SPOKEN_TR_ORDINAL_NOUNS,
+  SPOKEN_UNITS,
   VOICE_API_ERRORS,
   VOICE_CALL_TOKEN_HEADER,
   VOICE_CATALOGS,
@@ -70,6 +79,23 @@ export function voiceContractFiles(): Map<string, string> {
       json({ $comment: COMMENT, language, lines }),
     );
   }
+  // W4-07 (§19 Q245): what `speakable()` knows, for the agent's port (sitelog_voice/spoken.py).
+  files.set(
+    `${VOICE_AGENT_DIR}/copy/spoken.json`,
+    json({
+      $comment: COMMENT,
+      policy: SPOKEN_FORM,
+      pronunciations: SPOKEN_PRONUNCIATIONS,
+      units: SPOKEN_UNITS,
+      esFeminine: SPOKEN_ES_FEMININE,
+      trOrdinalNouns: SPOKEN_TR_ORDINAL_NOUNS,
+      cases: SPOKEN_FORM_CASES.map(([language, written, spoken]) => ({
+        language,
+        written,
+        spoken,
+      })),
+    }),
+  );
   return files;
 }
 

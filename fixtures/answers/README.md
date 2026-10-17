@@ -16,6 +16,7 @@ One JSON per spoken answer to a clarification question (F7 _Other…_). Each fil
 | `en-delta-five-all-day.json` | EN       | "Five, all day." → 5 × 8 h = 40 h (W2-09's Done-when)           |
 | `es-delta-cinco.json`        | ES       | "Eran cinco, todo el día." → 5 × 8 h = 40 h                     |
 | `tr-demirci-alti.json`       | TR       | "Demirciler altı kişiydi, tam gün çalıştılar." → 6 × 8 h = 48 h |
+| `tr-akis-alti.json`          | TR       | W4-07, on a call: "Altı kişi, tam gün." → 6 × 8 h = 48 h        |
 | `en-unclear.json`            | EN       | No answer in it: confidence 0.15, not applied, asked once more  |
 
 ## Not model recordings

@@ -184,6 +184,8 @@ describe('fixtures/voice and the fake transcriber', () => {
       'answer-en-unclear',
       'answer-es-delta-cinco',
       'answer-tr-demirci-alti',
+      // W4-07: the answer of the TR call (fixtures/answers/tr-akis-alti).
+      'answer-tr-kartal-akis-alti',
     ]);
     // W2-13: the Welcome screen's test recording in EN, ES + EN and TR.
     expect(

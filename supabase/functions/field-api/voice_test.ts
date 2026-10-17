@@ -10,6 +10,7 @@ import {
   GetContextResponseSchema,
   LoadReportResponseSchema,
   RecordAnswerResponseSchema,
+  speakableVoiceAnswer,
   UpdateDraftResponseSchema,
   voiceTurnKey,
   type Json,
@@ -838,7 +839,9 @@ Deno.test(
       reportId: R1,
       date: '2026-10-08',
       reportNo: 'NG-2210-0068',
-      summary: "Thursday's report, NG-2210-0068: 6 on site, 48 hours.",
+      // W4-07 (§19 Q245): the report number in groups, the numbers in words.
+      summary:
+        "Thursday's report, NG two thousand two hundred ten, zero zero sixty-eight: six on site, forty-eight hours.",
     });
     const none = await h.tool('load_report', callId, token, { dayReference: 'Tuesday' });
     assertEquals(none.json, { status: 'not_found' });
@@ -1215,7 +1218,16 @@ Deno.test(
     const res = await h.tool('update_draft', callId, token, { segments: SEGMENTS });
     assertEquals(res.status, 200, res.text);
     const state = UpdateDraftResponseSchema.parse(res.json);
-    assertEquals(state, draftState(h.store.voiceTurns[0]!.reportId));
+    // W4-07 (§19 Q245): the worker's lines handed on in their spoken form, nothing else changed.
+    assertEquals(state, {
+      ...draftState(h.store.voiceTurns[0]!.reportId),
+      question: {
+        id: QUESTION,
+        text: 'Quick one — the Delta guys on Level two: was that four or five people, and the full day?',
+        choices: ['four, full day', 'five, full day'],
+      },
+    });
+    assertEquals(state, speakableVoiceAnswer(draftState(h.store.voiceTurns[0]!.reportId), 'en'));
     assertNoPhone(res.text);
     // One turn, keyed by the words (the same words are the same turn, voice_turn_submit()).
     assertEquals(h.store.voiceTurns.length, 1);
@@ -1399,7 +1411,7 @@ Deno.test(
     const body = RecordAnswerResponseSchema.parse(res.json);
     assertEquals(body, {
       status: 'applied',
-      confirmation: 'Delta Mechanical: 5 workers, 8 hours each — 40 hours.',
+      confirmation: 'Delta Mechanical: five workers, eight hours each — forty hours.',
       draft: draftState(h.store.voiceTurns[0]!.reportId, {
         question: null,
         missing: [],
@@ -1551,7 +1563,7 @@ Deno.test(
     assertEquals(body.draft.question, null);
     assertEquals(
       body.draft.readBack,
-      "Here's what I've got: 3 on site from one company, 24 hours. Shall I file it?",
+      "Here's what I've got: three on site from one company, twenty-four hours. Shall I file it?",
     );
     assertEquals(filingJobs(h, c.reportId).length, 0);
     assertEquals((await c.file('Yes.', 2)).json.status, 'filed');
@@ -1619,7 +1631,13 @@ Deno.test(
       end: 63,
     });
     assertEquals(res.status, 200, res.text);
-    assertEquals(ApplyCorrectionResponseSchema.parse(res.json) as unknown, result);
+    assertEquals(
+      ApplyCorrectionResponseSchema.parse(res.json) as unknown,
+      speakableVoiceAnswer(result, 'en'),
+    );
+    assertEquals(res.json.lines, [
+      'Apex Concrete: seven workers, eight hours each — fifty-six hours.',
+    ]);
     const turn = h.store.voiceTurns[0]!;
     assertEquals(
       [turn.kind, turn.input],

@@ -67,7 +67,7 @@
     "set_day_status": [
       {
         "status": "confirm",
-        "confirmation": "Weather day at Hillcrest School Extension: work stopped at 11:00, 12 on site before, 4.5 hours lost. Shall I log it?",
+        "confirmation": "Weather day at Hillcrest School Extension: work stopped at eleven a.m., twelve on site before, four and a half hours lost. Shall I log it?",
         "confirmKey": "3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a3f1e0c5a"
       },
       {
@@ -104,7 +104,7 @@
       ]
     },
     {
-      "text": "Weather day at Hillcrest School Extension: work stopped at 11:00, 12 on site before, 4.5 hours lost. Shall I log it?"
+      "text": "Weather day at Hillcrest School Extension: work stopped at eleven a.m., twelve on site before, four and a half hours lost. Shall I log it?"
     },
     {
       "toolCalls": [

@@ -43,6 +43,7 @@ import {
   preferenceConfirmation,
   reportLanguageFor,
   resolveDayReference,
+  speakableVoiceAnswer,
   verifyCallToken,
   voiceTextVersions,
   type CallRow,
@@ -85,6 +86,11 @@ import { registerVoiceSpecialRoutes, type VoiceSpecialDeps } from './voice_speci
  * filing). W3-14's routes (`set_day_status`, `schedule_callback`, `save_change`,
  * `record_consent`, `leave_message`, F10's preview, "not today", an unknown caller's recording)
  * live in `voice_special.ts`, mounted here with these helpers.
+ *
+ * W4-07 (§19 Q245, `SPOKEN_FORM`): every line a tool answer hands the agent (the read-back, the
+ * question and its choices, `lines`, `confirmation`, `summary`) leaves in its spoken form
+ * (`speakableVoiceAnswer`, in the call language): one middleware on `/voice/tools/*`, so the
+ * worker's turns, a kept answer replayed (`once`) and W3-14's lines are said the same way.
  */
 
 export interface VoiceDeps {
@@ -103,6 +109,9 @@ export interface VoiceDeps {
   /** W3-14: the special requests on a call (`voice_special.ts`); unset = not served. */
   special?: VoiceSpecialDeps;
 }
+
+/** The context key of the call a tool answer is for (W4-07's spoken-form middleware). */
+const SPOKEN_CALL = 'voiceSpokenCall';
 
 /** How often a waiting live tool reads its turn (W3-09). */
 export const VOICE_TURN_POLL_MS = 150;
@@ -150,6 +159,32 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
     await next();
   });
 
+  // ── W4-07 (§19 Q245): the lines of a tool answer in their spoken form ─────────────────────────
+  app.use('/voice/tools/*', async (c, next) => {
+    await next();
+    const call = c.get(SPOKEN_CALL) as CallRow | undefined;
+    const res = c.res;
+    if (!call || res.status < 200 || res.status >= 300) return;
+    if (!(res.headers.get('content-type') ?? '').includes('application/json')) return;
+    const body: unknown = await res.clone().json();
+    const spoken = speakableVoiceAnswer(body, await callLanguage(call));
+    const headers = new Headers(res.headers);
+    headers.delete('content-length');
+    c.res = undefined;
+    c.res = new Response(JSON.stringify(spoken), { status: res.status, headers });
+  });
+
+  /** The call language: the call's, else its reporter's locale, else the called pack's (F13). */
+  async function callLanguage(call: CallRow): Promise<Language> {
+    if (call.language) return languageOf(call.language);
+    if (call.reporter_id) {
+      const reporter = await store.getReporter(call.reporter_id);
+      if (reporter) return languageOf(reporter.locale);
+    }
+    const locale = special ? await special.unknownLocale(call.id) : null;
+    return locale ? languageOf(locale) : 'en';
+  }
+
   // W3-14: the special requests, consent on a call and unknown callers (voice_special.ts), with
   // this module's helpers (the call token, the scope, `once()`).
   const special = deps.special
@@ -186,6 +221,8 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
     if (!ok) throw new FieldError(401, 'call_token_invalid');
     const call = await store.getCall(callId);
     if (!call) throw new FieldError(404, 'call_not_found');
+    // W4-07: the call whose language the tool answer's lines are said in (the middleware above).
+    c.set(SPOKEN_CALL, call);
     const { limit, windowSeconds } = VOICE_TOOL_RATE_LIMIT;
     const rl = await store.rateLimit(`call:${call.id}`, limit, windowSeconds);
     if (!rl.allowed) {

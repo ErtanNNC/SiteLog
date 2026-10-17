@@ -21,6 +21,8 @@ describe('fixtures/answers (W2-09)', () => {
       ['en', true],
       ['en', false],
       ['es', true],
+      // W4-07: the TR call's answer (fixtures/calls/kartal-question-tr).
+      ['tr', true],
       ['tr', true],
     ]);
     for (const c of cases) {
@@ -177,7 +179,7 @@ describe('fixtures/answers (W2-09)', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
       expect(await runEval(['--answers', '--recorded'], {})).toBe(0);
-      expect(log.mock.calls.flat().join('\n')).toMatch(/4\/4 parse_answer cases passed/);
+      expect(log.mock.calls.flat().join('\n')).toMatch(/5\/5 parse_answer cases passed/);
       expect(await runEval(['--answers'], {})).toBe(0);
       expect(log.mock.calls.flat().join('\n')).toMatch(/skipped: ANTHROPIC_API_KEY is not set/);
     } finally {

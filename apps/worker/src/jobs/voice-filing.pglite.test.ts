@@ -11,6 +11,7 @@ import {
   isCallConfirm,
   jobKeys,
   readReportData,
+  speakableVoiceAnswer,
   voiceTurnKey,
   type DailyReportData,
   type JobPayloads,
@@ -187,7 +188,10 @@ describe('W3-10: a correction and the spoken yes on a call (riverside-fix-en)', 
     });
     reportId = draft.reportId;
     const state = VoiceDraftStateSchema.parse(draft.result);
-    expect(withoutIds(state)).toEqual(withoutIds(recorded.routes.update_draft![0]));
+    // field-api hands the lines on in their spoken form (W4-07, §19 Q245).
+    expect(withoutIds(speakableVoiceAnswer(state, 'en'))).toEqual(
+      withoutIds(recorded.routes.update_draft![0]),
+    );
     const answer = await turn(call, 'record_answer', {
       questionId: state.question!.id,
       utterance: recorded.answers[0],
@@ -204,7 +208,9 @@ describe('W3-10: a correction and the spoken yes on a call (riverside-fix-en)', 
     });
     expect(fix.status).toBe('done');
     const result = ApplyCorrectionResultSchema.parse(fix.result);
-    expect(withoutIds(result)).toEqual(withoutIds(recorded.routes.apply_correction![0]));
+    expect(withoutIds(speakableVoiceAnswer(result, 'en'))).toEqual(
+      withoutIds(recorded.routes.apply_correction![0]),
+    );
     expect(result.readBack).toBe(
       'Apex Concrete: 7 workers, 8 hours each — 56 hours. Shall I file it?',
     );

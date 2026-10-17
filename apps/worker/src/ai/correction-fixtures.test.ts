@@ -27,6 +27,8 @@ describe('fixtures/corrections (W2-10)', () => {
       ['en-apex-total', 'en', true],
       ['en-which-crew', 'en', false],
       ['es-apex-siete', 'es', true],
+      // W4-07: the TR call's correction (fixtures/calls/kartal-fix-tr).
+      ['tr-usta-alti', 'tr', true],
       ['tr-usta-bes', 'tr', true],
     ]);
     for (const c of cases) {
@@ -124,7 +126,7 @@ describe('fixtures/corrections (W2-10)', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
       expect(await runEval(['--corrections', '--recorded'], {})).toBe(0);
-      expect(log.mock.calls.flat().join('\n')).toMatch(/5\/5 apply_correction cases passed/);
+      expect(log.mock.calls.flat().join('\n')).toMatch(/6\/6 apply_correction cases passed/);
       expect(await runEval(['--corrections'], {})).toBe(0);
       expect(log.mock.calls.flat().join('\n')).toMatch(
         /skipped: ANTHROPIC_API_KEY and CLAUDE_MODEL/,

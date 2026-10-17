@@ -11,7 +11,8 @@
  * Each candidate voice reads the same lines the agent says, rendered by code exactly as on a call:
  * the disclosure (the inbound opening with the recording notice, `copy/voice.*.ts`), two read-backs
  * (`readBack()` on §18's drafts: the Riverside hero report and a rained-out day; TR the Kartal and
- * Ataşehir drafts; an ES call of an EN report says the counts, §19 Q161), and the filed goodbye. Every line is rendered twice: 24 kHz
+ * Ataşehir drafts; an ES call of an EN report says the counts, §19 Q161), and the filed goodbye,
+ * each in its spoken form (W4-07, §19 Q245: numbers, units and times as words). Every line is rendered twice: 24 kHz
  * (what Talk now plays) and 8 kHz (what a phone line carries), 16-bit mono WAV, named
  * `<out>/<lang>/<voice>/<line>-<rate>.wav`, with `<out>/lines.txt` listing the texts.
  *
@@ -33,6 +34,7 @@ import type { Language } from '@sitelog/shared/locale.ts';
 import { renderVoice } from '@sitelog/shared/copy/voice.ts';
 import { readReportData } from '@sitelog/shared/report/upgrade.ts';
 import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
+import { speakable } from '@sitelog/shared/spoken.ts';
 import { readBack } from '@sitelog/shared/voice-tools.ts';
 import { DEMO_TODAY, buildKestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import type { DailyReportData } from '@sitelog/shared';
@@ -196,13 +198,17 @@ export function loadDraft(id: string, dir = EXPECTED_DIR): DailyReportData {
   );
 }
 
-/** The lines of one language, as code renders them on a call. Pure but for the drafts given. */
+/**
+ * The lines of one language, as code renders them on a call: in their spoken form (W4-07, §19
+ * Q245 `SPOKEN_FORM`: numbers, units and times as words), as field-api and the agent hand them to
+ * the TTS. Pure but for the drafts given.
+ */
 export function sampleLines(
   lang: Language,
   drafts: { report: DailyReportData; weather: DailyReportData },
 ): SampleLine[] {
   const who = SAMPLE_PEOPLE[lang];
-  return [
+  const lines: SampleLine[] = [
     {
       key: 'disclosure',
       text: renderVoice('opening_inbound', lang, {
@@ -215,6 +221,7 @@ export function sampleLines(
     { key: 'readback_weather', text: readBack(drafts.weather, lang) },
     { key: 'goodbye_filed', text: renderVoice('goodbye_filed', lang) },
   ];
+  return lines.map((l) => ({ ...l, text: speakable(l.text, lang) }));
 }
 
 export function linesFor(lang: Language, dir = EXPECTED_DIR): SampleLine[] {

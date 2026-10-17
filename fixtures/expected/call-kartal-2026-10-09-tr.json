@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 2,
+  "reportDate": "2026-10-09",
+  "reportLanguage": "tr",
+  "units": "metric",
+  "languageDetected": ["tr"],
+  "summary": "3. kat döşeme betonu dökümü Usta Beton tarafından tamamlandı (yaklaşık 45 m³). 10:00–11:30 arasındaki yağmur dış cephe sıvasını 1,5 saat durdurdu. Volt Elektrik 2. katta elektrik tesisatı çekti; 1. katta kalıp sökümü yapıldı. Kaya Demir'den 2 tır inşaat demiri teslim edildi. İskele güvenliği konulu iş güvenliği bilgilendirmesi yapıldı; kaza olmadı.",
+  "weather": {
+    "observed": {
+      "precip": 4.3,
+      "tempMin": 14,
+      "tempMax": 18,
+      "wind": 13,
+      "gust": 29,
+      "provider": "Open-Meteo"
+    },
+    "conditionsText": "Yağmur 10:00–11:30, sonrasında kuru",
+    "periods": [
+      {
+        "start": "10:00",
+        "end": "11:30",
+        "condition": "Yağmur",
+        "impact": "Dış cephede sıva işleri durdu",
+        "lostHours": 1.5,
+        "source": [
+          {
+            "type": "call",
+            "callId": "c0470000-0000-4000-8000-000000000001",
+            "start": 11.5,
+            "end": 19
+          }
+        ]
+      }
+    ]
+  },
+  "manpower": [
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c001",
+      "companyNameHeard": "Usta Beton",
+      "companyName": "Usta Beton",
+      "trade": "Beton",
+      "area": "3. Kat",
+      "workers": 5,
+      "hoursPerWorker": 8,
+      "totalHours": 40,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0470000-0000-4000-8000-000000000001",
+          "start": 19,
+          "end": 27.5
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c002",
+      "companyNameHeard": "Volt Elektrik",
+      "companyName": "Volt Elektrik",
+      "trade": "Elektrik",
+      "area": "2. Kat",
+      "workers": 3,
+      "hoursPerWorker": 8,
+      "totalHours": 24,
+      "hoursBasis": "full_day_default",
+      "confidence": 0.95,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0470000-0000-4000-8000-000000000001",
+          "start": 27.5,
+          "end": 33
+        }
+      ]
+    },
+    {
+      "companyId": "d1000000-0000-4000-8000-00000000c004",
+      "companyNameHeard": "Bizim öz ekip",
+      "companyName": "Demir Yapı öz ekip",
+      "trade": "Genel işçilik",
+      "area": "1. Kat",
+      "workers": 4,
+      "hoursPerWorker": 6.5,
+      "totalHours": 26,
+      "hoursBasis": "stated",
+      "confidence": 0.9,
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0470000-0000-4000-8000-000000000001",
+          "start": 33,
+          "end": 40
+        }
+      ]
+    }
+  ],
+  "workPerformed": [
+    {
+      "area": "3. Kat",
+      "activity": "Döşeme betonu dökümü",
+      "status": "complete",
+      "quantity": {
+        "value": 45,
+        "unit": "m³",
+        "heardAs": "kırk beş metreküp"
+      },
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0470000-0000-4000-8000-000000000001",
+          "start": 19,
+          "end": 27.5
+        }
+      ]
+    },
+    {
+      "area": "2. Kat",
+      "activity": "Elektrik tesisatı",
+      "status": "in_progress",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0470000-0000-4000-8000-000000000001",
+          "start": 27.5,
+          "end": 33
+        }
+      ]
+    },
+    {
+      "area": "1. Kat",
+      "activity": "Kalıp sökümü",
+      "status": "complete",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0470000-0000-4000-8000-000000000001",
+          "start": 33,
+          "end": 40
+        }
+      ]
+    }
+  ],
+  "deliveries": [
+    {
+      "item": "İnşaat demiri",
+      "quantity": "2 tır",
+      "supplier": "Kaya Demir",
+      "time": "12:00",
+      "source": [
+        {
+          "type": "call",
+          "callId": "c0470000-0000-4000-8000-000000000001",
+          "start": 40,
+          "end": 46.5
+        }
+      ]
+    }
+  ],
+  "equipment": [],
+  "safety": {
+    "toolboxTalk": "İskele güvenliği",
+    "incidents": [],
+    "noIncidentsStated": true,
+    "visitors": [],
+    "source": [
+      {
+        "type": "call",
+        "callId": "c0470000-0000-4000-8000-000000000001",
+        "start": 46.5,
+        "end": 52
+      }
+    ]
+  },
+  "issues": [],
+  "nextWorkday": [],
+  "photos": [],
+  "newTerms": [],
+  "missingRequired": [],
+  "lowConfidence": [],
+  "proposedQuestions": []
+}

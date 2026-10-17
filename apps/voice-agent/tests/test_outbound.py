@@ -166,7 +166,7 @@ def _callback_fixture() -> dict[str, Any]:
         {"toolCalls": [{"name": "get_context", "args": {}}]},
         {"toolCalls": [{"name": "schedule_callback", "args": {"minutes": 30}}]},
         {
-            "text": "OK, I'll call you back at 18:15. Goodbye.",
+            "text": "OK, I'll call you back at six fifteen p.m. Goodbye.",
             "toolCalls": [{"name": "end_call", "args": {"outcome": "callback_requested"}}],
         },
         {},
@@ -181,10 +181,10 @@ async def test_a_queued_callback_ends_callback_requested_with_codes_time() -> No
     assert replay.state is not None and replay.state.callback_requested is True
     [end] = replay.fake.seen("end_call")
     assert end.body["outcome"] == "callback_requested"
-    # Code's goodbye with field-api's time (the tool's `say`).
+    # Code's goodbye with field-api's time (the tool's `say`), the time in words (W4-07).
     assert (
         default_copy().line("goodbye_callback_requested", "en", time="18:15")
-        == "OK, I'll call you back at 18:15. Goodbye."
+        == "OK, I'll call you back at six fifteen p.m. Goodbye."
     )
 
 

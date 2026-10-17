@@ -88,8 +88,8 @@
         "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
         "question": {
           "id": "a0a90000-0000-4000-8000-000000000001",
-          "text": "Una pregunta — los de Delta en el nivel 2: ¿eran cuatro o cinco, y todo el día?",
-          "choices": ["4, todo el día", "5, todo el día"]
+          "text": "Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?",
+          "choices": ["cuatro, todo el día", "cinco, todo el día"]
         },
         "readBack": null
       }
@@ -97,13 +97,13 @@
     "record_answer": [
       {
         "status": "applied",
-        "confirmation": "Delta Mechanical: 5 trabajadores, 8 horas cada uno — 40 horas.",
+        "confirmation": "Delta Mechanical: cinco trabajadores, ocho horas cada uno — cuarenta horas.",
         "draft": {
           "reportId": "a0a90000-0000-4000-8000-000000000001",
           "draftRev": 2,
           "missing": [],
           "question": null,
-          "readBack": "Esto es lo que tengo: 23 en la obra de 5 empresas, 184 horas. El clima detuvo el trabajo 3.5 horas. Trabajos anotados: 6. Entregas anotadas: 1. Charla de seguridad. Sin incidentes. ¿Lo registro?"
+          "readBack": "Esto es lo que tengo: veintitrés en la obra de cinco empresas, ciento ochenta y cuatro horas. El clima detuvo el trabajo tres horas y media. Trabajos anotados: seis. Entregas anotadas: uno. Charla de seguridad. Sin incidentes. ¿Lo registro?"
         }
       }
     ],
@@ -138,7 +138,7 @@
       ]
     },
     {
-      "text": "Una pregunta — los de Delta en el nivel 2: ¿eran cuatro o cinco, y todo el día?"
+      "text": "Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?"
     },
     {
       "toolCalls": [
@@ -149,7 +149,7 @@
       ]
     },
     {
-      "text": "Delta Mechanical: 5 trabajadores, 8 horas cada uno — 40 horas. Esto es lo que tengo: 23 en la obra de 5 empresas, 184 horas. El clima detuvo el trabajo 3.5 horas. Trabajos anotados: 6. Entregas anotadas: 1. Charla de seguridad. Sin incidentes. ¿Lo registro?"
+      "text": "Delta Mechanical: cinco trabajadores, ocho horas cada uno — cuarenta horas. Esto es lo que tengo: veintitrés en la obra de cinco empresas, ciento ochenta y cuatro horas. El clima detuvo el trabajo tres horas y media. Trabajos anotados: seis. Entregas anotadas: uno. Charla de seguridad. Sin incidentes. ¿Lo registro?"
     },
     {}
   ],

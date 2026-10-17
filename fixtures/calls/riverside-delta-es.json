@@ -87,8 +87,8 @@
         "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
         "question": {
           "id": "a0a90000-0000-4000-8000-000000000001",
-          "text": "Una pregunta — los de Delta en el nivel 2: ¿eran cuatro o cinco, y todo el día?",
-          "choices": ["4, todo el día", "5, todo el día"]
+          "text": "Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?",
+          "choices": ["cuatro, todo el día", "cinco, todo el día"]
         },
         "readBack": null
       }
@@ -103,8 +103,8 @@
           "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
           "question": {
             "id": "a0a90000-0000-4000-8000-000000000001",
-            "text": "Una pregunta — los de Delta en el nivel 2: ¿eran cuatro o cinco, y todo el día?",
-            "choices": ["4, todo el día", "5, todo el día"]
+            "text": "Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?",
+            "choices": ["cuatro, todo el día", "cinco, todo el día"]
           },
           "readBack": null
         }
@@ -117,7 +117,7 @@
           "draftRev": 1,
           "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
           "question": null,
-          "readBack": "El clima detuvo el trabajo 3.5 horas. Trabajos anotados: 6. Entregas anotadas: 1. Charla de seguridad. Sin incidentes. ¿Lo registro?"
+          "readBack": "El clima detuvo el trabajo tres horas y media. Trabajos anotados: seis. Entregas anotadas: uno. Charla de seguridad. Sin incidentes. ¿Lo registro?"
         }
       }
     ],
@@ -152,7 +152,7 @@
       ]
     },
     {
-      "text": "Una pregunta — los de Delta en el nivel 2: ¿eran cuatro o cinco, y todo el día?"
+      "text": "Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?"
     },
     {
       "toolCalls": [
@@ -163,7 +163,7 @@
       ]
     },
     {
-      "text": "Perdón, no le entendí. Una pregunta — los de Delta en el nivel 2: ¿eran cuatro o cinco, y todo el día?"
+      "text": "Perdón, no le entendí. Una pregunta — los de Delta en el nivel dos: ¿eran cuatro o cinco, y todo el día?"
     },
     {
       "toolCalls": [
@@ -174,7 +174,7 @@
       ]
     },
     {
-      "text": "No logré entenderlo, así que lo dejo para que la oficina lo revise. El clima detuvo el trabajo 3.5 horas. Trabajos anotados: 6. Entregas anotadas: 1. Charla de seguridad. Sin incidentes. ¿Lo registro?"
+      "text": "No logré entenderlo, así que lo dejo para que la oficina lo revise. El clima detuvo el trabajo tres horas y media. Trabajos anotados: seis. Entregas anotadas: uno. Charla de seguridad. Sin incidentes. ¿Lo registro?"
     }
   ],
   "simulate": {

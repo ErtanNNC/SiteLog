@@ -24,6 +24,7 @@ for that transcript.
 | `answer-en-delta-five-all-day.json` | EN       | Marco Ruiz (ES · EN → multi) | "Five, all day." to the Delta question (W2-09's Done-when) |
 | `answer-es-delta-cinco.json`        | ES       | Marco Ruiz                   | The same answer in Spanish                                 |
 | `answer-tr-demirci-alti.json`       | TR       | Emre Yıldız (tr)             | The rebar crew of the Kartal report: six, a full day       |
+| `answer-tr-kartal-akis-alti.json`   | TR       | Emre Yıldız (tr)             | W4-07, the Kartal call: Akış Mekanik six, a full day       |
 | `answer-en-unclear.json`            | EN       | Priya Raman (EN · HI → en)   | No answer in it: below 0.7, asked once more, then flagged  |
 
 ### Corrections (W2-10, `kind: "correction"`)
@@ -32,13 +33,14 @@ F8 _Fix by voice_: the clip a reporter says on the draft. Each is the fix of a c
 `../corrections/` (the `apply_correction` golden set), whose recorded tool output the fake Claude
 returns for that transcript.
 
-| File                            | Language | Reporter                     | What it covers                                      |
-| ------------------------------- | -------- | ---------------------------- | --------------------------------------------------- |
-| `correction-en-apex-seven.json` | EN       | Marco Ruiz (ES · EN → multi) | "Apex had seven, not six." (W2-10's Done-when)      |
-| `correction-en-apex-total.json` | EN       | Marco Ruiz                   | The headcount and a total said: the total is code's |
-| `correction-en-which-crew.json` | EN       | Marco Ruiz                   | A number with no crew: the model asks which         |
-| `correction-es-apex-siete.json` | ES       | Marco Ruiz                   | The Apex fix in Spanish                             |
-| `correction-tr-usta-bes.json`   | TR       | Emre Yıldız (tr)             | The Usta Beton headcount of the Kartal draft        |
+| File                                | Language | Reporter                     | What it covers                                      |
+| ----------------------------------- | -------- | ---------------------------- | --------------------------------------------------- |
+| `correction-en-apex-seven.json`     | EN       | Marco Ruiz (ES · EN → multi) | "Apex had seven, not six." (W2-10's Done-when)      |
+| `correction-en-apex-total.json`     | EN       | Marco Ruiz                   | The headcount and a total said: the total is code's |
+| `correction-en-which-crew.json`     | EN       | Marco Ruiz                   | A number with no crew: the model asks which         |
+| `correction-es-apex-siete.json`     | ES       | Marco Ruiz                   | The Apex fix in Spanish                             |
+| `correction-tr-usta-bes.json`       | TR       | Emre Yıldız (tr)             | The Usta Beton headcount of the Kartal draft        |
+| `correction-tr-usta-call-alti.json` | TR       | Emre Yıldız (tr)             | W4-07, the Kartal call: Usta Beton six, not five    |
 
 ### Test recordings (W2-13, `kind: "test"`)
 

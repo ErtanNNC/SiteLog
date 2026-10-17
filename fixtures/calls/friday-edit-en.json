@@ -69,7 +69,7 @@
         "reportId": "44444444-0000-4000-8000-000000000001",
         "date": "2026-10-09",
         "reportNo": "NG-0068",
-        "summary": "Friday's report, NG-0068: 6 on site, 48 hours."
+        "summary": "Friday's report, NG zero zero sixty-eight: six on site, forty-eight hours."
       }
     ],
     "apply_correction": [
@@ -80,8 +80,8 @@
       {
         "status": "preview",
         "correctionId": "cccccccc-0000-4000-8000-000000000001",
-        "lines": ["Apex Concrete: 7 workers, 8 hours each — 56 hours."],
-        "readBack": "Apex Concrete: 7 workers, 8 hours each — 56 hours. Save it?",
+        "lines": ["Apex Concrete: seven workers, eight hours each — fifty-six hours."],
+        "readBack": "Apex Concrete: seven workers, eight hours each — fifty-six hours. Save it?",
         "draft": null
       }
     ],
@@ -93,7 +93,7 @@
       {
         "status": "saved",
         "version": 2,
-        "confirmation": "Saved. Version 2 goes to the office."
+        "confirmation": "Saved. Version two goes to the office."
       }
     ],
     "end_call": [
@@ -124,7 +124,7 @@
       ]
     },
     {
-      "text": "Friday's report, NG-0068: 6 on site, 48 hours. What should I change?"
+      "text": "Friday's report, NG zero zero sixty-eight: six on site, forty-eight hours. What should I change?"
     },
     {
       "toolCalls": [
@@ -144,7 +144,7 @@
       ]
     },
     {
-      "text": "Apex Concrete: 7 workers, 8 hours each — 56 hours. Save it?"
+      "text": "Apex Concrete: seven workers, eight hours each — fifty-six hours. Save it?"
     },
     {
       "toolCalls": [
@@ -166,7 +166,7 @@
       ]
     },
     {
-      "text": "Saved. Version 2 goes to the office. Goodbye.",
+      "text": "Saved. Version two goes to the office. Goodbye.",
       "toolCalls": [
         {
           "name": "end_call",

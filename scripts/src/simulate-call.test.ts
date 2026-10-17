@@ -107,8 +107,8 @@ describe('the scripted calls (fixtures/calls)', () => {
     }
   });
 
-  it('cover EN and ES, the number and Talk now, M7 and M8, and every flow of the suite', () => {
-    expect(new Set(scripts.map((s) => s.locale.slice(0, 2)))).toEqual(new Set(['en', 'es']));
+  it('cover EN, ES and TR, the number and Talk now, M7 and M8, and every flow of the suite', () => {
+    expect(new Set(scripts.map((s) => s.locale.slice(0, 2)))).toEqual(new Set(['en', 'es', 'tr']));
     expect(new Set(scripts.map((s) => s.start.request.transport))).toEqual(
       new Set(['pstn', 'web']),
     );
@@ -120,6 +120,41 @@ describe('the scripted calls (fixtures/calls)', () => {
         scripts.some((s) => s.locale === 'es-US' && s.start.request.transport === transport),
         transport,
       ).toBe(true);
+  });
+
+  it("W4-07: Demir Yapı's Kartal report in Turkish by Talk now (hero, question, correction, weather day)", () => {
+    const tr = scripts.filter((s) => s.locale === 'tr-TR');
+    expect(tr.map((s) => s.id).sort()).toEqual([
+      'kartal-fix-tr',
+      'kartal-hero-tr',
+      'kartal-question-tr',
+      'kartal-weather-tr',
+    ]);
+    for (const s of tr) {
+      expect(s.start.request.transport, s.id).toBe('web');
+      expect(s.simulate.arrange).toMatchObject({ country: 'TR', org: 'Demir Yapı A.Ş.' });
+      expect(s.simulate.arrange.sites[0]!.timezone).toBe('Europe/Istanbul');
+      expect(s.simulate.expect.report?.language, s.id).toBe('tr');
+    }
+    // Filed by Talk now in Turkish: its PDF Turkish, A4 and metric.
+    const hero = tr.find((s) => s.id === 'kartal-hero-tr')!;
+    expect(hero.simulate.expect.report).toMatchObject({
+      status: 'filed',
+      confirmedVia: 'voice',
+      units: 'metric',
+      pdfPaper: 'a4',
+    });
+    // Every line field-api answers is said in words (§19 Q245): no digit in a spoken field.
+    const spoken = (v: unknown, key = ''): string[] =>
+      Array.isArray(v)
+        ? v.flatMap((x) => spoken(x, key))
+        : v && typeof v === 'object'
+          ? Object.entries(v).flatMap(([k, x]) => spoken(x, k))
+          : typeof v === 'string' &&
+              ['readBack', 'text', 'choices', 'lines', 'confirmation', 'summary'].includes(key)
+            ? [v]
+            : [];
+    for (const s of tr) for (const line of spoken(s.routes)) expect(line, s.id).not.toMatch(/\d/);
   });
 
   it("cover the ticket's ten kinds of call", () => {
@@ -216,7 +251,7 @@ describe('runCallScript', () => {
     const r = await run(hero, http);
     expect(r.failures).toHaveLength(1);
     expect(r.failures[0]).toMatch(
-      /^step 2 update_draft\.readBack: expected "Here's what I've got: 14/,
+      /^step 2 update_draft\.readBack: expected "Here's what I've got: fourteen/,
     );
     expect(r.steps.map((s) => s.route)).toEqual(['get_context', 'update_draft']);
   });
@@ -472,6 +507,97 @@ describe('sqlSimStack.check', () => {
       'call.outcome: expected abandoned, got draft_saved',
       'report: expected none, got awaiting_confirmation',
       'reporter.contactPref: expected link, got call',
+    ]);
+  });
+});
+
+describe('W4-07: a Turkish org on the stack', () => {
+  const hero = scripts.find((s) => s.id === 'kartal-hero-tr')!;
+
+  it('arrange makes a TR org (tr-TR, metric, TRY, Istanbul) with the §18.2 roster and a +90 reporter', async () => {
+    const seen: Array<{ text: string; params: unknown[] }> = [];
+    const q = (async (text: string, params: unknown[] = []) => {
+      seen.push({ text, params });
+      if (text.includes('insert into orgs')) return [{ id: 'org-tr' }];
+      if (text.includes('insert into companies')) return [{ id: `co-${String(params[1])}` }];
+      if (text.includes('insert into sites')) return [{ id: 'site-kartal' }];
+      if (text.includes('insert into reporters')) return [{ id: 'rep-emre' }];
+      if (text.includes('field_talk_now_start'))
+        return [{ r: { callId: 'c-1', room: 'call-c-1' } }];
+      return [];
+    }) as Query;
+    const arranged = await sqlSimStack({ q }).arrange(hero);
+    expect(arranged.start).toEqual({ room: 'call-c-1', transport: 'web', callId: 'c-1' });
+    const org = seen.find((x) => x.text.includes('insert into orgs'))!;
+    expect(org.params).toEqual([
+      'Demir Yapı A.Ş.',
+      'TR',
+      'tr-TR',
+      'metric',
+      'TRY',
+      'Europe/Istanbul',
+    ]);
+    expect(
+      seen.filter((x) => x.text.includes('insert into companies')).map((x) => x.params[1]),
+    ).toEqual(['Usta Beton', 'Volt Elektrik', 'Akış Mekanik', 'Demir Yapı öz ekip']);
+    const site = seen.find((x) => x.text.includes('insert into sites'))!;
+    expect(site.params.slice(1)).toEqual(['Kartal Konutları — B Blok', 'KK', 'Europe/Istanbul']);
+    const reporter = seen.find((x) => x.text.includes('insert into reporters'))!;
+    expect(reporter.params[1]).toBe('Emre Yıldız');
+    expect(reporter.params[2]).toMatch(/^\+90532\d{7}$/);
+    expect(reporter.params.slice(3, 5)).toEqual(['tr-TR', ['tr']]);
+  });
+
+  it("checks the report's language, units and the paper of its PDF", async () => {
+    const report = (over: Record<string, unknown>) => ({
+      status: 'filed',
+      channel: 'voice',
+      confirmed_via: 'voice',
+      current_version: 1,
+      data: null,
+      language: 'tr',
+      pdf_path: 'org/site/KK-0001_v1.pdf',
+      pdf_paper: 'a4',
+      ...over,
+    });
+    const q = (row: Record<string, unknown>) =>
+      (async (text: string) => {
+        if (text.includes('from calls where id'))
+          return [
+            {
+              outcome: 'filed',
+              fallback: null,
+              reporter_id: 'r',
+              started_at: '2026-10-16T09:00:00Z',
+              ended_at: '2026-10-16T09:03:00Z',
+            },
+          ];
+        if (text.includes('from reports r join site_days')) return [row];
+        if (text.includes('from messages'))
+          return [{ copy_key: 'filed' }, { copy_key: 'photos_link' }];
+        return [];
+      }) as Query;
+    const script: SimScript = {
+      ...hero,
+      simulate: {
+        ...hero.simulate,
+        expect: {
+          ...hero.simulate.expect,
+          report: { site: 'kartal', day: 'today', language: 'tr', pdfPaper: 'a4' },
+        },
+      },
+    };
+    const arranged: Arranged = {
+      orgId: 'o',
+      reporterId: 'r',
+      siteIds: { kartal: 's' },
+      start: hero.start.request as Arranged['start'],
+    };
+    const check = (row: Record<string, unknown>) =>
+      sqlSimStack({ q: q(row), waitMs: 0 }).check(script, { callId: 'c', arranged });
+    expect(await check(report({}))).toEqual([]);
+    expect(await check(report({ language: 'en', pdf_path: null, pdf_paper: 'letter' }))).toEqual([
+      'report.language: expected tr, got en; report.pdf: not rendered yet; report.pdfPaper: expected a4, got letter',
     ]);
   });
 });

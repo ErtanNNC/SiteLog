@@ -15,6 +15,7 @@ One JSON per fix of a draft said on the recorder (F8 _Fix by voice_). Each file 
 | `en-apex-seven.json` | EN       | "Apex had seven, not six." → 7 × 8 h = 56 h (W2-10's Done-when)                   |
 | `es-apex-siete.json` | ES       | "Los de Apex eran siete, no seis." → 7 × 8 h = 56 h                               |
 | `tr-usta-bes.json`   | TR       | "Usta Beton dört değil, beş kişiydi." → 5 × 8 saat = 40 saat                      |
+| `tr-usta-alti.json`  | TR       | W4-07, on a call: "Usta Beton beş değil, altı kişiydi." → 6 × 8 saat = 48 saat    |
 | `en-which-crew.json` | EN       | "Change it to three." names no crew: the model asks which one, nothing is applied |
 | `en-apex-total.json` | EN       | The model also sets Apex's total to 60: code drops it, 7 × 8 h = 56 h; or it asks |
 

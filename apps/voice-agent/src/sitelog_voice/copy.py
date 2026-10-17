@@ -4,7 +4,8 @@ Every fixed line the agent says is copy (CLAUDE.md "No hard-coded UI strings"; p
 openings, the disclosure, fillers, the §7.3 silence and time lines, the F6 fallback line, the
 read-back pieces (§19 Q118), the filing question (Q119), the F3 consent sentence (Q120), the F13
 lines and one goodbye per outcome. This module only looks lines up and fills placeholders; it
-never writes a sentence of its own.
+never writes a sentence of its own. W4-07 (§19 Q245): a filled line comes back in its spoken form
+(`spoken.speakable`: times, numbers and units as words), so the TTS never reads a symbol.
 """
 
 from __future__ import annotations
@@ -66,12 +67,15 @@ class VoiceCopy:
         recording_notice: str | None = None,
         **params: str | int | float,
     ) -> str:
-        """The line `key` in `lang` with its placeholders filled.
+        """The line `key` in `lang` with its placeholders filled, in its spoken form.
 
         `{recording_notice}` is the copy's own disclosure unless the pack's notice is passed.
         Every other placeholder must be given, and nothing extra (a typo would otherwise drop a
-        value silently).
+        value silently). The filled line goes through `speakable` (W4-07): a time, a number or a
+        unit in a value ("17:30", a site called "Blok 2") is said as words.
         """
+        from .spoken import speakable  # spoken reads its lists next to this module's copy
+
         text = self.raw(key, lang)
         needed = self.placeholders(text) - {RECORDING_NOTICE_KEY}
         given = set(params)
@@ -82,7 +86,7 @@ class VoiceCopy:
         values: dict[str, str] = {k: str(v) for k, v in params.items()}
         if RECORDING_NOTICE_KEY in self.placeholders(text):
             values[RECORDING_NOTICE_KEY] = recording_notice or self.raw(RECORDING_NOTICE_KEY, lang)
-        return _PLACEHOLDER.sub(lambda m: values[m.group(1)], text)
+        return speakable(_PLACEHOLDER.sub(lambda m: values[m.group(1)], text), lang)
 
 
 @cache

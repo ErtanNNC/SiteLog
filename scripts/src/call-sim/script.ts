@@ -58,6 +58,12 @@ const FiledReportSchema = z.strictObject({
 const ArrangeSchema = z.strictObject({
   /** `unknown`: a number no reporter has (F13). */
   caller: z.enum(['reporter', 'unknown']).default('reporter'),
+  /**
+   * W4-07: the org's country pack (`orgs.country`), which presets its locale, units, currency,
+   * time zone and paper (US: Letter, imperial; TR: A4, metric, tr-TR) and its company roster:
+   * §18.1's for US, §18.2's (Demir Yapı) for TR.
+   */
+  country: z.enum(['US', 'TR']).default('US'),
   /** The org's name (`get_context.company`). */
   org: z.string().min(1).default('Kestrel Build Group'),
   reporter: z
@@ -102,6 +108,11 @@ const ReportExpectSchema = z.strictObject({
   /** The current version's totals, recomputed in code (`computeTotals`). */
   crewOnSite: z.number().int().min(0).optional(),
   totalHours: z.number().min(0).optional(),
+  /** W4-07: `reports.language` and the current version's units (a TR report: tr, metric). */
+  language: z.enum(['en', 'tr']).optional(),
+  units: z.enum(['imperial', 'metric']).optional(),
+  /** W4-07: the current version's PDF is rendered, on the org's paper (`org_settings.pdf_paper`). */
+  pdfPaper: z.enum(['letter', 'a4']).optional(),
 });
 
 const ExpectSchema = z.strictObject({

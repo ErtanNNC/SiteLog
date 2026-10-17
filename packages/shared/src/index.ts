@@ -11,6 +11,7 @@ export * from './voice-tools.ts';
 export * from './voice-confirm.ts';
 export * from './voice-special.ts';
 export * from './voice-outbound.ts';
+export * from './spoken.ts';
 export * from './tokens.ts';
 export * from './status.ts';
 export * from './notifications.ts';

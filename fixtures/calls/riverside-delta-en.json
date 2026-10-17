@@ -91,8 +91,8 @@
         "missing": ["manpower.workers:Delta Mechanical", "manpower.hours:Delta Mechanical"],
         "question": {
           "id": "a0a90000-0000-4000-8000-000000000001",
-          "text": "Quick one — the Delta guys on Level 2: was that four or five people, and the full day?",
-          "choices": ["4, full day", "5, full day"]
+          "text": "Quick one — the Delta guys on Level two: was that four or five people, and the full day?",
+          "choices": ["four, full day", "five, full day"]
         },
         "readBack": null
       }
@@ -100,13 +100,13 @@
     "record_answer": [
       {
         "status": "applied",
-        "confirmation": "Delta Mechanical: 5 workers, 8 hours each — 40 hours.",
+        "confirmation": "Delta Mechanical: five workers, eight hours each — forty hours.",
         "draft": {
           "reportId": "a0a90000-0000-4000-8000-000000000001",
           "draftRev": 2,
           "missing": [],
           "question": null,
-          "readBack": "Here's what I've got: 23 on site from 5 companies, 184 hours. Weather stopped work for 3.5 hours. Done: Level 4 slab pour complete, Level 3 electrical rough-in about 60 percent, Level 2 ductwork, east wing, Exterior — south elevation CMU blockwork, Level 2 interior CMU blockwork, Level 5 deck rebar tying. Delivered: 2 loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?"
+          "readBack": "Here's what I've got: twenty-three on site from five companies, one hundred eighty-four hours. Weather stopped work for three and a half hours. Done: Level four slab pour complete, Level three electrical rough-in about sixty percent, Level two ductwork, east wing, Exterior — south elevation CMU blockwork, Level two interior CMU blockwork, Level five deck rebar tying. Delivered: two loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?"
         }
       }
     ],
@@ -149,7 +149,7 @@
       ]
     },
     {
-      "text": "Quick one — the Delta guys on Level 2: was that four or five people, and the full day?"
+      "text": "Quick one — the Delta guys on Level two: was that four or five people, and the full day?"
     },
     {
       "toolCalls": [
@@ -160,7 +160,7 @@
       ]
     },
     {
-      "text": "Delta Mechanical: 5 workers, 8 hours each — 40 hours. Here's what I've got: 23 on site from 5 companies, 184 hours. Weather stopped work for 3.5 hours. Done: Level 4 slab pour complete, Level 3 electrical rough-in about 60 percent, Level 2 ductwork, east wing, Exterior — south elevation CMU blockwork, Level 2 interior CMU blockwork, Level 5 deck rebar tying. Delivered: 2 loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?"
+      "text": "Delta Mechanical: five workers, eight hours each — forty hours. Here's what I've got: twenty-three on site from five companies, one hundred eighty-four hours. Weather stopped work for three and a half hours. Done: Level four slab pour complete, Level three electrical rough-in about sixty percent, Level two ductwork, east wing, Exterior — south elevation CMU blockwork, Level two interior CMU blockwork, Level five deck rebar tying. Delivered: two loads of rebar from Ironclad Steel. Toolbox talk. No incidents. Shall I file it?"
     }
   ]
 }

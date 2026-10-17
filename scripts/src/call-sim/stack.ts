@@ -26,6 +26,7 @@ import {
   type DailyReportData,
   type StoredReportData,
 } from '@sitelog/shared';
+import { buildDemirDemo } from '@sitelog/shared/demo/demir.ts';
 import { kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
 import { isLocalDbHost } from '../countries-set.ts';
 import type { Arranged, SimStack, VoiceHttp } from './run.ts';
@@ -92,9 +93,24 @@ export function transcriptSegments(
   };
 }
 
-/** A fresh +1 555 01xx-style number nobody on the stack has. */
-function randomPhone(): string {
-  return `+1555${String(Math.floor(Math.random() * 9_000_000) + 1_000_000)}`;
+/** A fresh +1 555 01xx-style number nobody on the stack has (TR: a fictional +90 532 000 …). */
+function randomPhone(country: 'US' | 'TR' = 'US'): string {
+  const n = String(Math.floor(Math.random() * 9_000_000) + 1_000_000);
+  return country === 'TR' ? `+90532${n}` : `+1555${n}`;
+}
+
+/**
+ * W4-07: what a script's org is made of per country pack: the pack's presets (as the setup wizard
+ * creates an org; `on_org_created()` sets the paper from the pack) and the roster the recorded
+ * answers were made on (§18.1 Kestrel for US, §18.2 Demir Yapı for TR).
+ */
+const ORG_PRESETS = {
+  US: { locale: 'en-US', units: 'imperial', currency: 'USD', timezone: 'America/Chicago' },
+  TR: { locale: 'tr-TR', units: 'metric', currency: 'TRY', timezone: 'Europe/Istanbul' },
+} as const;
+
+function rosterOf(country: 'US' | 'TR') {
+  return country === 'TR' ? buildDemirDemo().companies : kestrelDemo().companies;
 }
 
 export interface StackOptions {
@@ -151,10 +167,11 @@ export function sqlSimStack(opts: StackOptions): SimStack {
       }
 
       const reporter = a.reporter!;
+      const preset = ORG_PRESETS[a.country];
       const [org] = await q<{ id: string }>(
         `insert into orgs (name, is_demo, country, locale, units, currency, timezone)
-         values ($1, false, 'US', 'en-US', 'imperial', 'USD', 'America/Chicago') returning id`,
-        [a.org],
+         values ($1, false, $2, $3, $4, $5, $6) returning id`,
+        [a.org, a.country, preset.locale, preset.units, preset.currency, preset.timezone],
       );
       const orgId = org!.id;
       // Every day a working day, so a script runs the same on a weekend (as the M6 specs do).
@@ -163,10 +180,11 @@ export function sqlSimStack(opts: StackOptions): SimStack {
           where org_id = $1`,
         [orgId, a.maxQuestions],
       );
-      // The §18.1 roster in place of the one a new org gets (its own "<name> self-perform").
+      // The §18.1 (§18.2 for TR) roster in place of the one a new org gets (its own
+      // "<name> self-perform").
       await q(`delete from companies where org_id = $1`, [orgId]);
       const companyIds: Record<string, string> = {};
-      for (const c of kestrelDemo().companies) {
+      for (const c of rosterOf(a.country)) {
         const [row] = await q<{ id: string }>(
           `insert into companies (org_id, name, trade, aliases, is_self_perform, status)
            values ($1, $2, $3, $4, $5, $6) returning id`,
@@ -182,7 +200,7 @@ export function sqlSimStack(opts: StackOptions): SimStack {
         );
         siteIds[s.key] = row!.id;
       }
-      const phone = randomPhone();
+      const phone = randomPhone(a.country);
       const [rep] = await q<{ id: string }>(
         `insert into reporters (org_id, name, phone_e164, status, locale, languages, contact_pref, activated_at)
          values ($1, $2, $3, 'active', $4, $5, $6, now()) returning id`,
@@ -327,10 +345,15 @@ export function sqlSimStack(opts: StackOptions): SimStack {
               confirmed_via: string | null;
               current_version: number;
               data: StoredReportData | null;
+              language: string | null;
+              pdf_path: string | null;
+              pdf_paper: string | null;
             }>(
-              `select r.status::text, r.channel::text, r.confirmed_via::text, r.current_version, v.data
+              `select r.status::text, r.channel::text, r.confirmed_via::text, r.current_version, v.data,
+                      r.language, v.pdf_path, s.pdf_paper
                  from reports r join site_days d on d.id = r.site_day_id
                  left join report_versions v on v.report_id = r.id and v.version = greatest(r.current_version, 1)
+                 left join org_settings s on s.org_id = r.org_id
                 where d.site_id = $1 and d.date = $2::date and r.status <> 'void'
                 order by r.created_at desc limit 1`,
               [siteId, date],
@@ -349,6 +372,13 @@ export function sqlSimStack(opts: StackOptions): SimStack {
               const totals = r.data ? computeTotals(readReportData(r.data)).totals : null;
               eq('report.crewOnSite', want.crewOnSite, totals?.crewOnSite);
               eq('report.totalHours', want.totalHours, totals?.totalHours);
+            }
+            eq('report.language', want.language, r.language);
+            if (want.units !== undefined)
+              eq('report.units', want.units, r.data ? readReportData(r.data).units : null);
+            if (want.pdfPaper !== undefined) {
+              if (!r.pdf_path) out.push('report.pdf: not rendered yet');
+              eq('report.pdfPaper', want.pdfPaper, r.pdf_paper);
             }
             return out.length ? out.join('; ') : null;
           }),

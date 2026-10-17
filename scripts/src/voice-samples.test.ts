@@ -34,9 +34,9 @@ describe('the lines each language reads', () => {
       "SiteLog, hi Marco. This call is recorded to write your daily report. Go ahead with today's report for Riverside Lofts — Block B.",
     );
     expect(lines[1]!.text).toMatch(
-      /^Here's what I've got: 23 on site from 5 companies, 184 hours\. Weather stopped work for 3\.5 hours\..*Shall I file it\?$/,
+      /^Here's what I've got: twenty-three on site from five companies, one hundred eighty-four hours\. Weather stopped work for three and a half hours\..*Shall I file it\?$/,
     );
-    expect(lines[2]!.text).toContain('Weather stopped work for 5 hours.');
+    expect(lines[2]!.text).toContain('Weather stopped work for five hours.');
     expect(lines[3]!.text).toBe(renderVoice('goodbye_filed', 'en'));
   });
 
@@ -45,20 +45,21 @@ describe('the lines each language reads', () => {
     expect(lines[0]!.text).toContain(renderVoice('recording_notice', 'es'));
     expect(lines[0]!.text).toContain('Marco');
     expect(lines[1]!.text).toMatch(
-      /^Esto es lo que tengo: 23 en la obra de 5 empresas, 184 horas\./,
+      /^Esto es lo que tengo: veintitrés en la obra de cinco empresas, ciento ochenta y cuatro horas\./,
     );
-    expect(lines[1]!.text).toContain('Trabajos anotados: 3.');
+    expect(lines[1]!.text).toContain('Trabajos anotados: tres.');
     expect(lines[1]!.text).not.toContain('slab pour');
     expect(lines[3]!.text).toBe(renderVoice('goodbye_filed', 'es'));
   });
 
-  it('TR: Turkish copy and numbers, Turkish characters kept', () => {
+  it('TR: Turkish copy, numbers said as words (W4-07), Turkish characters kept', () => {
     const lines = linesFor('tr');
     expect(lines[0]!.text).toContain('Emre');
     expect(lines[0]!.text).toContain(renderVoice('recording_notice', 'tr'));
     expect(lines[0]!.text).toContain('Kartal Konutları — B Blok');
     expect(lines[1]!.text).toMatch(/Kaydedeyim mi\?$/);
-    expect(lines[2]!.text).toContain('3,5 saat');
+    expect(lines[2]!.text).toContain('üç buçuk saat');
+    for (const l of lines) expect(l.text, l.key).not.toMatch(/\d/);
     expect(lines.every((l) => l.text.length > 0)).toBe(true);
   });
 });
