@@ -1,5 +1,39 @@
 # SiteLog · Durum
 
+**2026-10-17 (08:00 UTC) — Hafta 4 başladı.**
+
+- **Hafta 4 planı yazıldı:** `docs/PLAN_WEEK4.md` (171dfc9). İçinde W4-01 … W4-16 var: M10 (kurulum, ekip, ayarlar, faturalama) ve M11 (Türkiye pazarı).
+- **Plan yazılırken bulunan eksikler:**
+  - Kurulum, Ekip, Ayarlar ve Faturalama sayfaları hâlâ yalnız İngilizce.
+  - Kurulumdaki karşılama mesajı önizlemesi hâlâ eski WhatsApp şablonunu gösteriyor.
+  - Ayarlar'daki "Saha kanalları" sekmesi boş.
+  - Fiyat kodda sabit yazılı.
+  - Deneme süresi bitince hiçbir şey kilitlenmiyor.
+- **Şu an çalışanlar:**
+  - W4-01: telefon ülke seçici, artık tüm ülkeleri listeleyecek.
+  - W4-07: Türkçe sesli asistanın sayıları, birimleri ve saatleri doğru söylemesi; örneğin "metreküp", "on yedi otuz".
+  - W4-08: yeni şirketlere hazır gelen Türkçe başlangıç sözlüğü ve Türkçe test seti.
+- **CI:** hafta 3'ün ardından Q227 ve Q226 da yeşil (fa630b2).
+- **Yeni açık sorular Q229–Q246.** Hepsinde önerdiğim varsayılan var ve kod onunla kurulacak; listeyi `docs/PLAN_WEEK4.md` "Owner decisions" bölümünde bulabilirsiniz. Önemli olanlar:
+  - **Q234:** Fiyat şirket başına tutulsun, yalnız SiteLog ekibi değiştirebilsin.
+  - **Q235:** Deneme süresi biter ve kart girilmemişse, ödemesi gecikmiş şirket gibi işlem yapılsın: önce uyarı, sonra hatırlatmalar durur.
+  - **Q236:** Q8 karara bağlanana kadar Türk şirketleri "manuel" faturalansın, yani faturayı SiteLog doğrudan kessin.
+  - **Q230:** Ekip sayfasındaki "Şimdi ara" düğmesi yalnız yönetici ve operasyon kullanıcılarında olsun ve önce ofisin onayını istesin.
+- **Sizden, hafta 4 için (bugün başlayın, uzun sürüyor):**
+  1. İletimerkezi hesabı, e-Devlet aboneliği ve `SITELOG` başlığı. Türkçe karakter tablosunu ve teslim raporlarını da sorun.
+  2. Avukattan:
+     - KVKK aydınlatma metni, kayıt bildirimi ve onay metni, TR ve EN;
+     - yurt dışına aktarım dayanağı;
+     - İYS (Q49);
+     - Türkiye'de verinin nerede tutulacağı (Q12);
+     - US gizlilik, kayıt ve otomatik arama metinleri.
+  3. Türkiye'de fatura kesecek şirket ve sağlayıcı (Q8), ayrıca TR fiyatı (Q9).
+  4. Henüz yapılmadıysa US numarası için Twilio toll-free doğrulaması.
+  5. Hafta ortasına kadar:
+     - Stripe test modu: hesap, site başına $399 fiyat, preview projesine webhook ve secret'lar;
+     - preview projesinin giriş e-postası şablonları için onay.
+  6. Tasarımlar: Web-Setup, Web-Team, Web-Settings ve Web-Billing dışa aktarılsın. Ya da spec ve mevcut sayfaların referans olduğunu onaylayın.
+
 **2026-10-17 (07:30 UTC) — Hafta 3'ün kodu bitti.**
 
 **Kısaca:** W3-01 … W3-18'in koddan yapılabilen her şeyi yapıldı ve CI'da yeşil. Kalanlar sizin hesaplarınıza ve telefon testlerinize bağlı.
