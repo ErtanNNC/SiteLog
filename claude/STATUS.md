@@ -19,7 +19,7 @@
 
 **Push edildi, CI bekleniyor:**
 
-- **W4-09:** panelin kalan sayfaları Türkçe. Yalnız `/ops` ve `/try` İngilizce kaldı.
+- **W4-09 (CI yeşil):** panelin kalan sayfaları Türkçe. Yalnız `/ops` ve `/try` İngilizce kaldı.
   - Ofis e-postaları her okuyucunun panel dilinde gidiyor.
   - Giriş ve davet e-postalarının Türkçe metni var.
   - **Bulunan hata:** "imzadan sonra değiştirildi" e-postası daha önce kimseye gitmiyordu. Düzeltildi.

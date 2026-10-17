@@ -218,7 +218,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-09 · The panel in Turkish: the pages left, office emails, sign-in emails
 
-- [ ] **W4-09 done** · today _partial_ (M)
+- [x] **W4-09 done** · today _partial_ (M)
 - **Spec:** §11.2 (i18n EN/TR; UI language `org_members.ui_locale`, else the org locale), §13 (report emails in the report language; "Magic link | Email | Office user | Sign-in button (EN/TR)"; panel notices in the reader's language, as built), §15.1 (Panel EN/TR), §16.2 M11 ("Panel TR strings"), CLAUDE.md ("pages not translated yet render inside `<EnglishOnly>` until a ticket converts them").
 - **Design:** `Web-Login` (the EN/TR switch); the other pages as their tickets say.
 - **Already in the repo:** see "Where week 3 leaves us"; `EnglishOnly` (`apps/web/src/i18n/EnglishOnly.tsx`), the key check (`tr-keys.test.ts`), the TR report email (W1-15), notices by `data` (§13 as built).
