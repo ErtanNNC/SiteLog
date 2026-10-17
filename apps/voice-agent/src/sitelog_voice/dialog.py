@@ -14,13 +14,21 @@ Filing is never the model's decision (CLAUDE.md, §19 Q119): `filed` is reached 
 on `Event.CONFIRMED`, which the agent raises after field-api's `file_report` answered `filed`
 (code there checks the verbatim utterance against §9.5's confirm words).
 
-W3-02 lays the machine and its table down; W3-12 drives it from `agent.py`.
+While a tool waits on field-api (a live draft turn can take up to 15 s, §19 Q117) the silence
+clock stops: the reporter is waiting for the agent, not the other way round; after `filler_s` the
+agent says `still_working` once per wait (§19 Q202).
+
+W3-02 laid the machine and its table down; W3-12 drives it from `agent.py` (`ReportCall`): the
+session's speech events, the reporter's turns (`turn_events`, §19 Q203's STT confidence) and the
+tools' answers (`tool_events`) become events; `tick` runs every half second.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
 
 class State(StrEnum):
@@ -85,7 +93,8 @@ TRANSITIONS: dict[State, dict[Event, State]] = {
     State.FALLBACK_RECORDING: {Event.HANG_UP: State.GOODBYE},
 }
 
-#: States in which the reporter is expected to talk (the silence clock runs).
+#: States in which the reporter is expected to talk (the silence clock runs). `special` too: a day
+#: off or a change of another day is read back and waits for the reporter's yes (W3-14).
 LISTENING_STATES = frozenset(
     {
         State.IDENTIFY,
@@ -94,12 +103,15 @@ LISTENING_STATES = frozenset(
         State.CLARIFYING,
         State.CONFIRM,
         State.FIXING,
+        State.SPECIAL,
     }
 )
 #: States the §7.3 diagram sends to the simple recording mode on two failures or an agent error.
-#: The diagram draws the edge from `listening`; a failure while clarifying or confirming is the same
-#: call going wrong, so they share it.
-FALLBACK_FROM = frozenset({State.LISTENING, State.CLARIFYING, State.CONFIRM, State.FIXING})
+#: The diagram draws the edge from `listening`; a failure while clarifying, confirming or in a
+#: special request is the same call going wrong, so they share it.
+FALLBACK_FROM = frozenset(
+    {State.LISTENING, State.CLARIFYING, State.CONFIRM, State.FIXING, State.SPECIAL}
+)
 TERMINAL = frozenset({State.GOODBYE, State.NOT_REACHED})
 
 
@@ -112,6 +124,11 @@ class Limits:
     silence_s: float = 8.0
     backchannel_s: float = 3.0
     max_failed_understandings: int = 2
+    #: §19 Q202: a tool still waiting this long gets code's `still_working` (once per wait).
+    filler_s: float = 4.0
+    #: §19 Q203: a final reporter turn whose STT confidence is below this is not understood (F6
+    #: "STT confidence low twice" → the simple recording mode).
+    low_stt_confidence: float = 0.6
 
 
 @dataclass(frozen=True)
@@ -145,6 +162,9 @@ class Dialog:
     backchannelled: bool = False
     warned: bool = False
     failed_understandings: int = 0
+    #: When the tool now running started (None: no tool waits), and whether its filler was said.
+    waiting_since: float | None = None
+    filler_said: bool = False
     history: list[tuple[float, State, Event, State]] = field(default_factory=list)
 
     # ─────────────────────────── events ───────────────────────────
@@ -197,6 +217,28 @@ class Dialog:
             actions.append(EndCall("fallback_recording"))
         return actions
 
+    def enter_fallback(self, now: float) -> bool:
+        """The model itself offered the simple recording mode (§9.4 rule 9). False when the call
+        is past it (filed, ending) or already recording."""
+        if self.state in TERMINAL or self.state in (State.FILED, State.FALLBACK_RECORDING):
+            return False
+        self._go(State.FALLBACK_RECORDING, Event.NOT_UNDERSTOOD, now)
+        return True
+
+    def close(self, now: float) -> None:
+        """`end_call` ran (the model's goodbye, or code's): the call is over, no timer runs."""
+        if self.state not in TERMINAL:
+            self._go(State.GOODBYE, Event.HANG_UP, now)
+
+    def tool_started(self, now: float) -> None:
+        self.waiting_since = now
+        self.filler_said = False
+
+    def tool_finished(self, now: float) -> None:
+        self.waiting_since = None
+        # The agent answers next; the silence clock starts again when it has spoken.
+        self.last_activity = now
+
     # ─────────────────────────── timers ───────────────────────────
 
     def tick(self, now: float) -> list[Action]:
@@ -214,6 +256,12 @@ class Dialog:
         if not self.warned and now >= self.limits.warning_s:
             self.warned = True
             actions.append(Say("time_warning"))
+        if self.waiting_since is not None:
+            # A tool is working: no silence prompt, one filler after `filler_s`.
+            if not self.filler_said and now - self.waiting_since >= self.limits.filler_s:
+                self.filler_said = True
+                actions.append(Say("still_working"))
+            return actions
         if self.state in LISTENING_STATES:
             quiet = now - self.last_activity
             if quiet >= self.limits.silence_s:
@@ -258,3 +306,71 @@ def _hang_up_outcome(state: State) -> str:
 
 def _goodbye_key(outcome: str) -> str:
     return f"goodbye_{outcome}"
+
+
+# ─────────────────────── what the agent hears and what the tools answer ───────────────────────
+
+
+def turn_events(text: str, confidence: float | None, limits: Limits | None = None) -> list[Event]:
+    """A final reporter turn: speech, and whether it was understood (§19 Q203). Text mode and a
+    provider that gives no confidence count a non-empty turn as understood."""
+    limits = limits or Limits()
+    if not text.strip():
+        return [Event.SPEECH, Event.NOT_UNDERSTOOD]
+    if confidence is not None and confidence < limits.low_stt_confidence:
+        return [Event.SPEECH, Event.NOT_UNDERSTOOD]
+    return [Event.SPEECH, Event.UNDERSTOOD]
+
+
+#: Tools whose answer is one of the §7.3 "special" requests (the diagram's examples: "no work
+#: today", "rained out", "call me later", "edit Friday").
+SPECIAL_TOOLS = frozenset({"set_day_status", "schedule_callback", "load_report"})
+
+#: Tool statuses that change nothing on the call (still working, refused by the agent itself).
+_NO_STEP = frozenset({"error", "pending", "disclosure_first", "nothing_heard", "read_back_first"})
+
+
+def tool_events(tool: str, result: Mapping[str, Any], state: State) -> list[Event]:
+    """The §7.3 events a tool's answer (as the model gets it) means in `state`, in order.
+
+    Pure. The dialog ignores an event its state has no edge for, so the sequences below walk from
+    wherever the call is to where the answer puts it (an answer heard, then the draft's next step;
+    a change applied, then the read-back)."""
+    status = result.get("status")
+    if status in _NO_STEP:
+        return []
+    if tool == "pick_site":
+        return [Event.SITE_PICKED] if "siteId" in result else []
+    if tool in SPECIAL_TOOLS:
+        return [Event.SPECIAL_INTENT] if state is State.LISTENING else []
+    if tool == "file_report":
+        if status == "filed":
+            return [Event.READ_BACK_DONE, Event.CONFIRMED]
+        if status == "draft_changed":
+            return _to_read_back(state, change=True)
+        return []
+    if tool in ("update_draft", "record_answer", "apply_correction"):
+        events: list[Event] = []
+        if state is State.CLARIFYING and tool == "record_answer":
+            events.append(Event.ANSWER_HEARD)
+            state = State.LISTENING
+        if result.get("readBack"):
+            return events + _to_read_back(state, change=tool == "apply_correction")
+        if result.get("question"):
+            return [*events, Event.MISSING_ITEM]
+        return events
+    return []
+
+
+def _to_read_back(state: State, *, change: bool) -> list[Event]:
+    if state is State.LISTENING:
+        return [Event.NOTHING_MISSING, Event.READ_BACK_DONE]
+    if state is State.CLARIFYING:
+        return [Event.ANSWER_HEARD, Event.NOTHING_MISSING, Event.READ_BACK_DONE]
+    if state is State.READ_BACK:
+        return [Event.READ_BACK_DONE]
+    if state is State.CONFIRM and change:
+        return [Event.CHANGE_REQUESTED, Event.CHANGE_APPLIED, Event.READ_BACK_DONE]
+    if state is State.FIXING:
+        return [Event.CHANGE_APPLIED, Event.READ_BACK_DONE]
+    return []

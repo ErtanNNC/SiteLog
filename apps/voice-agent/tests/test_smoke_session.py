@@ -34,6 +34,7 @@ async def test_text_mode_call_gets_context_and_ends(
     )
     assert started.reporter is not None
     state = CallState(api=api, auth=auth, locale=started.reporter.locale)
+    state.disclosure_played = True  # a bare agent: the call (ReportCall) plays it, W3-12
     fake_llm = FakeLLM(smoke_fixture["agentTurns"])
     clock = iter(float(i) for i in range(1000))
 
@@ -81,6 +82,7 @@ async def test_end_call_cannot_claim_filed(
         room=start["room"], transport="pstn", from_e164=start["from"], to_e164=start["to"]
     )
     state = CallState(api=api, auth=auth, locale="en-US")
+    state.disclosure_played = True
     turns = [
         {"toolCalls": [{"name": "file_report", "args": {}}]},
         {"toolCalls": [{"name": "end_call", "args": {"outcome": "filed"}}]},

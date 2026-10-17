@@ -17,38 +17,21 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from livekit.agents import AgentSession
 
-from sitelog_voice.agent import ReportAgent
-from sitelog_voice.field_api import FieldApi
 from sitelog_voice.redact import contains_phone
 from sitelog_voice.session import CallState
 from tests.conftest import load_call_fixture
-from tests.fakes.field_api import BASE_URL, SECRET, FakeFieldApi
+from tests.fakes.field_api import FakeFieldApi
 from tests.fakes.llm import FakeLLM
+from tests.harness import replay_call
 
 FIXTURES = ["northgate-call-en", "riverside-delta-en", "riverside-delta-es"]
 
 
 async def _replay(fixture: dict[str, Any]) -> tuple[FakeFieldApi, CallState, FakeLLM]:
-    start = fixture["start"]["request"]
-    with FakeFieldApi(fixture) as fake:
-        api = FieldApi(base_url=BASE_URL, tool_secret=SECRET, timeout_s=2, retry_delay_s=0)
-        try:
-            auth, started = await api.calls_start(
-                room=start["room"], transport=start["transport"], call_id=start["callId"]
-            )
-            assert started.reporter is not None
-            state = CallState(api=api, auth=auth, locale=started.reporter.locale)
-            fake_llm = FakeLLM(fixture["agentTurns"])
-            clock = iter(float(i) for i in range(0, 10_000, 5))
-            async with AgentSession(llm=fake_llm) as session:
-                await session.start(ReportAgent(state, clock=lambda: next(clock)))
-                for turn in fixture["reporterTurns"]:
-                    await session.run(user_input=turn)
-        finally:
-            await api.aclose()
-    return fake, state, fake_llm
+    run = await replay_call(fixture)
+    assert run.state is not None
+    return run.fake, run.state, run.llm
 
 
 @pytest.mark.parametrize("name", FIXTURES)
@@ -56,12 +39,16 @@ async def test_recorded_call_replays_on_the_contract(name: str) -> None:
     fixture = load_call_fixture(name)
     fake, state, fake_llm = await _replay(fixture)
 
-    # Every route the fixture records was asked for, in its order, and answered 2xx.
-    expected = ["calls_start", "get_context"]
+    # Every route the fixture records was asked for, in its order, and answered 2xx. The call
+    # code reads the context before the session starts (W3-12), the model may read it again; the
+    # script ends without a goodbye, so the hang-up saves the draft (§19 Q122).
+    expected = ["calls_start"]
     expected += ["update_draft"] * len(fixture["routes"]["update_draft"])
     expected += ["record_answer"] * len(fixture["routes"].get("record_answer", []))
-    assert sorted(c.route for c in fake.calls) == sorted(expected)
+    expected += ["end_call"]
+    assert sorted(c.route for c in fake.calls if c.route != "get_context") == sorted(expected)
     assert all(c.status == 200 for c in fake.calls)
+    assert fake.seen("end_call")[0].body["outcome"] == "draft_saved"
     assert fake_llm.remaining == 0
 
     # update_draft: the reporter's first turn, verbatim, as the transcript so far.

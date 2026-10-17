@@ -118,4 +118,5 @@ export const voiceTr: VoiceCatalog = {
   consent_given: 'Teşekkür ederim.',
   consent_repeat:
     'Kusura bakmayın, bu görüşmeleri kaydetmem ve size rapor linklerini mesajla göndermem uygun mu? Evet ya da hayır deyin.',
+  tool_error: 'Kusura bakmayın, bu işlem şu an olmadı. Tekrar deneyelim.',
 };

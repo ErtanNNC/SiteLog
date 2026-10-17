@@ -20,39 +20,22 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from livekit.agents import AgentSession
 
-from sitelog_voice.agent import ReportAgent
 from sitelog_voice.copy import default_copy
-from sitelog_voice.field_api import FieldApi
 from sitelog_voice.redact import contains_phone
 from sitelog_voice.session import CallState
 from tests.conftest import load_call_fixture
-from tests.fakes.field_api import BASE_URL, SECRET, FakeFieldApi
+from tests.fakes.field_api import FakeFieldApi
 from tests.fakes.llm import FakeLLM
+from tests.harness import replay_call
 
 FIXTURES = ["northgate-file-en", "northgate-stale-en", "riverside-fix-en"]
 
 
 async def _replay(fixture: dict[str, Any]) -> tuple[FakeFieldApi, CallState, FakeLLM]:
-    start = fixture["start"]["request"]
-    with FakeFieldApi(fixture) as fake:
-        api = FieldApi(base_url=BASE_URL, tool_secret=SECRET, timeout_s=2, retry_delay_s=0)
-        try:
-            auth, started = await api.calls_start(
-                room=start["room"], transport=start["transport"], call_id=start["callId"]
-            )
-            assert started.reporter is not None
-            state = CallState(api=api, auth=auth, locale=started.reporter.locale)
-            fake_llm = FakeLLM(fixture["agentTurns"])
-            clock = iter(float(i) for i in range(0, 10_000, 5))
-            async with AgentSession(llm=fake_llm) as session:
-                await session.start(ReportAgent(state, clock=lambda: next(clock)))
-                for turn in fixture["reporterTurns"]:
-                    await session.run(user_input=turn)
-        finally:
-            await api.aclose()
-    return fake, state, fake_llm
+    run = await replay_call(fixture)
+    assert run.state is not None
+    return run.fake, run.state, run.llm
 
 
 @pytest.mark.parametrize("name", FIXTURES)

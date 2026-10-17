@@ -116,4 +116,5 @@ export const voiceEs: VoiceCatalog = {
   consent_given: 'Gracias.',
   consent_repeat:
     'Perdón, ¿está bien que grabe estas llamadas y le envíe los enlaces de sus reportes por mensaje? Diga sí o no.',
+  tool_error: 'Perdón, eso no funcionó de mi lado. Intentémoslo de nuevo.',
 };

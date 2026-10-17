@@ -35,6 +35,10 @@ log = logging.getLogger("sitelog_voice.field_api")
 #: Back-off before the single retry.
 RETRY_DELAY_S = 0.25
 
+#: The route that would set `calls.disclosure_played` from the agent (§19 Q205). The contract has
+#: no such route yet: `mark_disclosure` sends it as soon as `pnpm voice:contract` writes one.
+DISCLOSURE_ROUTE = "disclosure"
+
 
 class FieldApiError(RuntimeError):
     """field-api refused a request (4xx) or failed twice (5xx / transport).
@@ -204,6 +208,34 @@ class FieldApi:
     async def tool(self, name: str, auth: CallAuth, **fields: Any) -> Any:
         """Any other tool route: `{callId, **fields}`, the answer as the contract's JSON."""
         return await self.request(name, {"callId": auth.call_id, **fields}, auth)
+
+    async def mark_disclosure(self, auth: CallAuth) -> bool:
+        """`calls.disclosure_played` (§9.4 "Recording", §19 Q163, W3-12): the recording notice was
+        played to the end. Sent only when the contract has the route (`DISCLOSURE_ROUTE`, §19
+        Q205: field-api's half is not built yet); returns whether field-api was told."""
+        if DISCLOSURE_ROUTE not in self._contract.routes:
+            return False
+        await self.request(DISCLOSURE_ROUTE, {"callId": auth.call_id}, auth)
+        return True
+
+    async def put_signed(self, url: str, data: bytes, *, mime: str) -> None:
+        """PUTs a file to a storage signed upload URL (the call recording, W3-12). One retry on a
+        5xx or the network, as the routes; the URL (it carries a token) is never logged."""
+        last: FieldApiError | None = None
+        for attempt in (1, 2):
+            try:
+                response = await self._client.put(url, content=data, headers={"Content-Type": mime})
+            except httpx.TransportError:
+                last = FieldApiError("storage_put", None, "transport")
+            else:
+                if response.status_code < 400:
+                    return
+                last = FieldApiError("storage_put", response.status_code, "storage_refused")
+                if not last.retryable:
+                    raise last
+            if attempt == 1:
+                await asyncio.sleep(self._retry_delay_s)
+        raise last or FieldApiError("storage_put", None, "transport")
 
     async def end_call(
         self,

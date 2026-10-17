@@ -5,7 +5,8 @@
 - STT confidence: the mean of the final transcripts' confidences (0–1), `null` without any;
 - turns: the reporter turns heard.
 
-Pure: the agent (W3-12) feeds it from the session's events; nothing here reads a clock.
+Pure: the agent (W3-12, `TurnTimer`) feeds it from the session's speech states and the final
+transcripts; nothing here reads a clock.
 """
 
 from __future__ import annotations
@@ -64,3 +65,39 @@ class CallMetrics:
         if self.sip_call_id:
             out["sipCallId"] = self.sip_call_id
         return out
+
+
+#: An agent's first audio this long after the reporter stopped is not an answer to that turn (a
+#: silence prompt, a filler after a pause), so it is not a turn latency.
+MAX_TURN_LATENCY_S = 10.0
+
+
+@dataclass
+class TurnTimer:
+    """The session's speech states → `CallMetrics` (W3-12), fed with the call's clock.
+
+    - the reporter stops speaking → the end of a turn; the agent's next first audio within
+      `MAX_TURN_LATENCY_S` → one latency sample (end of speech → first audio, §5 "Monitoring");
+    - the reporter starts speaking while the agent speaks → one interruption (a barge-in).
+    """
+
+    metrics: CallMetrics
+    _end_of_speech: float | None = None
+    _agent_speaking: bool = False
+
+    def reporter_started(self, now: float) -> None:
+        if self._agent_speaking:
+            self.metrics.interrupted()
+        self._end_of_speech = None
+
+    def reporter_stopped(self, now: float) -> None:
+        self._end_of_speech = now
+
+    def agent_started(self, now: float) -> None:
+        self._agent_speaking = True
+        if self._end_of_speech is not None and now - self._end_of_speech <= MAX_TURN_LATENCY_S:
+            self.metrics.agent_answered(end_of_speech_s=self._end_of_speech, first_audio_s=now)
+        self._end_of_speech = None
+
+    def agent_stopped(self, now: float) -> None:
+        self._agent_speaking = False

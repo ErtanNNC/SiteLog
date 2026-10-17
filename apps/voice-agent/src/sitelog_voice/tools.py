@@ -11,27 +11,122 @@ from `get_context`'s list); everything code knows it takes from `CallState`:
   The model cannot pass a "yes".
 - `end_call` refuses `filed` unless field-api answered `filed`.
 
-What the model gets back has phone numbers redacted (§10.12; the contract carries none anyway) and
-field-api errors as a short status, never a raw error. W3-02 lays them down; W3-09 … W3-14 fill the
-behaviour behind each route, and W3-12 speaks the read-back with `session.say` instead of handing
-it to the model.
+What the model gets back has phone numbers redacted (§10.12; the contract carries none anyway).
+W3-12 adds the guard every tool runs in (`build_tools`' `guard`):
+
+- the model's arguments are checked against `contract/` before anything leaves (`FieldApi`), so a
+  wrong value (`minutes: 2`) never reaches field-api;
+- no tool that processes the reporter's speech (`SPEECH_TOOLS`) runs before the disclosure was
+  played (§9.4 "Recording", §15.2): it answers `disclosure_first` and sends nothing;
+- an error reaches the model as `{status: error, code, say}`: `say` is code's short line in the call
+  language (`tool_error`, or the site question for `site_required`), never field-api's message;
+- field-api failing twice (a 5xx or the network) is an agent error: the call goes to the simple
+  recording mode (§7.3, §10.12 "calls fall back to plain recording");
+- the call (`ToolHooks`, `agent.ReportCall`) hears when a tool starts and what it answered: the §7.3
+  machine moves on it, and a filler covers a long wait.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from livekit.agents import function_tool
 from livekit.agents.llm import FunctionTool
 
 from .contract import ContractError, DraftState, TurnPending, is_pending
-from .copy import default_copy
+from .copy import VoiceCopy, default_copy
 from .field_api import FieldApiError
 from .redact import redact_phones
-from .session import CallState
+from .session import CallState, settle_outcome
+from .special import next_step_line
 
 ToolResult = dict[str, Any]
+
+#: Tools that process what the reporter said (or act on it): never before the disclosure.
+SPEECH_TOOLS = frozenset(
+    {
+        "update_draft",
+        "record_answer",
+        "apply_correction",
+        "file_report",
+        "set_day_status",
+        "schedule_callback",
+        "set_preference",
+        "load_report",
+        "save_change",
+        "start_fallback_recording",
+    }
+)
+
+
+class ToolHooks(Protocol):
+    """What the call does around a turn and a tool (`agent.ReportCall`); `NoHooks` for a bare
+    agent."""
+
+    def turn_heard(self, text: str, confidence: float | None) -> None: ...
+
+    def tool_started(self, name: str) -> None: ...
+
+    def tool_done(self, name: str, result: ToolResult) -> None: ...
+
+    def agent_error(self) -> None: ...
+
+    async def fallback(self, reason: str) -> None: ...
+
+    async def ended(self, outcome: str) -> None: ...
+
+
+class NoHooks:
+    def turn_heard(self, text: str, confidence: float | None) -> None:
+        pass
+
+    def tool_started(self, name: str) -> None:
+        pass
+
+    def tool_done(self, name: str, result: ToolResult) -> None:
+        pass
+
+    def agent_error(self) -> None:
+        pass
+
+    async def fallback(self, reason: str) -> None:
+        pass
+
+    async def ended(self, outcome: str) -> None:
+        pass
+
+
+async def post_fallback(state: CallState, reason: str, at: float) -> None:
+    """F6's simple recording mode, at field-api (`calls.fallback`, W3-11) and in the call state."""
+    if state.fallback:
+        return
+    state.fallback = True
+    await state.api.tool(
+        "start_fallback_recording", state.auth, reason=reason, at=round(min(max(at, 0), 3600), 2)
+    )
+
+
+async def send_end_call(state: CallState, outcome: str) -> None:
+    """`end_call` once, with the dialog log and the metrics; the outcome already settled."""
+    if state.ended:
+        return
+    await state.api.end_call(
+        state.auth,
+        outcome=outcome,
+        dialog_log=state.end_log(),
+        metrics=state.metrics.to_contract(),
+    )
+    state.ended = outcome
+
+
+def error_line(state: CallState, code: str, copy: VoiceCopy | None = None) -> str:
+    """The line the agent says for a tool error: never the error itself."""
+    copy = copy or default_copy()
+    if code == "site_required":
+        # F14: the draft needs the site first; the site question in code's words.
+        return next_step_line(state, copy)
+    return copy.line("tool_error", state.language)
 
 
 def _safe(value: Any) -> Any:
@@ -57,19 +152,30 @@ def _draft_view(draft: DraftState) -> ToolResult:
     }
 
 
-async def _guard(name: str, call: Callable[[], Awaitable[ToolResult]]) -> ToolResult:
-    try:
-        return _safe(await call())
-    except FieldApiError as exc:
-        return {"status": "error", "tool": name, "code": exc.code}
-    except ContractError:
-        return {"status": "error", "tool": name, "code": "contract"}
-
-
-def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionTool]:
+def build_tools(
+    state: CallState, *, now: Callable[[], float], hooks: ToolHooks | None = None
+) -> list[FunctionTool]:
     """The tools of one call, bound to its state. `now()` is seconds since the call connected."""
     api, auth = state.api, state.auth
     copy = default_copy()
+    hooks = hooks or NoHooks()
+
+    async def guard(name: str, call: Callable[[], Awaitable[ToolResult]]) -> ToolResult:
+        if name in SPEECH_TOOLS and not state.disclosure_played:
+            # §9.4 "Recording": nothing that processes speech before the recording notice.
+            return {"status": "disclosure_first"}
+        hooks.tool_started(name)
+        try:
+            result = _safe(await call())
+        except FieldApiError as exc:
+            if exc.retryable:
+                hooks.agent_error()
+            result = {"status": "error", "code": exc.code, "say": error_line(state, exc.code)}
+        except ContractError:
+            # The model's arguments (or field-api's answer) off the contract: nothing was done.
+            result = {"status": "error", "code": "invalid", "say": error_line(state, "invalid")}
+        hooks.tool_done(name, result)
+        return result
 
     @function_tool
     async def get_context() -> ToolResult:
@@ -88,7 +194,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                 "maxQuestions": ctx.max_questions,
             }
 
-        return await _guard("get_context", run)
+        return await guard("get_context", run)
 
     @function_tool
     async def pick_site(site_id: str) -> ToolResult:
@@ -99,7 +205,14 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
         """
         if state.context is None or site_id not in {s.id for s in state.context.sites}:
             return {"status": "unknown_site"}
-        return await _guard("pick_site", lambda: api.tool("pick_site", auth, siteId=site_id))
+
+        async def run() -> ToolResult:
+            data = await api.tool("pick_site", auth, siteId=site_id)
+            if state.context is not None:
+                state.context = state.context.model_copy(update={"site_id": data["siteId"]})
+            return data
+
+        return await guard("pick_site", run)
 
     @function_tool
     async def update_draft() -> ToolResult:
@@ -119,7 +232,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
             state.read_back_rev = draft.draft_rev if draft.read_back else None
             return _draft_view(draft)
 
-        return await _guard("update_draft", run)
+        return await guard("update_draft", run)
 
     @function_tool
     async def record_answer() -> ToolResult:
@@ -151,7 +264,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                 **_draft_view(draft),
             }
 
-        return await _guard("record_answer", run)
+        return await guard("record_answer", run)
 
     @function_tool
     async def apply_correction() -> ToolResult:
@@ -202,7 +315,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                 "readBack": data.get("readBack"),
             }
 
-        return await _guard("apply_correction", run)
+        return await guard("apply_correction", run)
 
     @function_tool
     async def file_report() -> ToolResult:
@@ -241,7 +354,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                 }
             return {"status": status}  # pending: say a short line, call file_report again
 
-        result = await _guard("file_report", run)
+        result = await guard("file_report", run)
         if result.get("status") == "filed":
             state.filed = True
         return result
@@ -311,7 +424,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                 state.day_logged = status
             return {"status": answer, "say": data["confirmation"]}
 
-        return await _guard("set_day_status", run)
+        return await guard("set_day_status", run)
 
     @function_tool
     async def schedule_callback(minutes: int) -> ToolResult:
@@ -333,7 +446,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                     "say": copy.line("callback_unavailable", state.language),
                 }
 
-        return await _guard("schedule_callback", run)
+        return await guard("schedule_callback", run)
 
     @function_tool
     async def set_preference(
@@ -354,7 +467,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
             fields["noCallsToday"] = True
         if not fields:
             return {"status": "nothing_to_change"}
-        return await _guard("set_preference", lambda: api.tool("set_preference", auth, **fields))
+        return await guard("set_preference", lambda: api.tool("set_preference", auth, **fields))
 
     @function_tool
     async def load_report(day_reference: str) -> ToolResult:
@@ -382,7 +495,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                 )
             return {**data, "say": say}
 
-        return await _guard("load_report", run)
+        return await guard("load_report", run)
 
     @function_tool
     async def save_change() -> ToolResult:
@@ -409,7 +522,7 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                 state.pending_change = None
             return {"status": data["status"], "say": data["confirmation"]}
 
-        return await _guard("save_change", run)
+        return await guard("save_change", run)
 
     @function_tool
     async def start_fallback_recording(
@@ -420,10 +533,16 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
         Args:
             reason: why.
         """
-        return await _guard(
-            "start_fallback_recording",
-            lambda: api.tool("start_fallback_recording", auth, reason=reason, at=round(now(), 2)),
-        )
+        if state.fallback:
+            return {"status": "recording"}
+
+        async def run() -> ToolResult:
+            await post_fallback(state, reason, now())
+            # The call says F6's line and plays the tone; the model is not asked again.
+            await hooks.fallback(reason)
+            return {"status": "recording"}
+
+        return await guard("start_fallback_recording", run)
 
     @function_tool
     async def end_call(
@@ -443,28 +562,18 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
         Args:
             outcome: what the call achieved.
         """
-        if outcome == "filed" and not state.filed:
-            outcome = "draft_saved"  # only field-api's `filed` answer files (§19 Q119)
-        # W3-14: a day off or a saved change only when field-api did it.
-        if outcome in ("no_work", "weather_day") and state.day_logged != outcome:
-            outcome = "draft_saved" if state.draft else "abandoned"
-        if outcome == "edit_applied" and not state.edit_saved:
-            outcome = "abandoned"
-        # §19 Q128: no callback is placed before W3-17.
-        if outcome == "callback_requested":
-            outcome = "draft_saved" if state.draft else "abandoned"
+        if state.ended:
+            return {"status": "ended", "outcome": state.ended}
+        # Only what field-api did: `filed` after its `filed` (§19 Q119), a day off or a saved
+        # change when it logged them (W3-14), no callback before W3-17 (§19 Q128).
+        settled = settle_outcome(state, outcome)
 
         async def run() -> ToolResult:
-            await api.end_call(
-                auth,
-                outcome=outcome,
-                dialog_log=state.end_log(),
-                metrics=state.metrics.to_contract(),
-            )
-            state.ended = outcome
-            return {"status": "ended", "outcome": outcome}
+            await send_end_call(state, settled)
+            await hooks.ended(settled)
+            return {"status": "ended", "outcome": settled}
 
-        return await _guard("end_call", run)
+        return await guard("end_call", run)
 
     return [
         get_context,

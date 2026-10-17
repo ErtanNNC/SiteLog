@@ -8,12 +8,23 @@ them wrong or make them up: the transcript segments of `update_draft`, the quest
 
 `build_live_session` assembles §9.4's runtime per call language: Deepgram streaming STT (`multi` for
 EN/ES, `tr` for Turkish, §10.2), the dialog model from `CLAUDE_MODEL_FAST`, Deepgram Aura-2 TTS for
-EN/ES or Azure for TR, Silero VAD and LiveKit's turn detector, with §9.4's adaptive end of turn.
-Tests never call it: they build a text-mode `AgentSession(llm=FakeLLM(...))` (no STT, no TTS).
+EN/ES or Azure for TR, Silero VAD and LiveKit's turn detector, with §9.4's adaptive end of turn
+(`turn_handling()`: LiveKit's dynamic endpointing between 1.5 s and 2.5 s, which lengthens the wait
+for a speaker who pauses long, as in a long report) and barge-in (`BARGE_IN_MIN_SPEECH_S`, so TTS
+stops within §9.4's 300 ms). Each provider is constructed only when its key is set; without one the
+builder names the missing variable (`MissingSettingError`). Tests run text-mode sessions instead
+(`AgentSession(llm=FakeLLM(...))`, no STT, no TTS), and one test builds the live session with
+placeholder keys to prove it assembles without a network.
+
+Noise suppression on the inbound channel (§9.4) is LiveKit Cloud's enhanced noise cancellation
+(`livekit-plugins-noise-cancellation`, BVC for the browser, BVC telephony for SIP): used when that
+package is installed (W3-16, with LiveKit Cloud, §19 Q204), otherwise the room's own input.
 """
 
 from __future__ import annotations
 
+import importlib
+import logging
 from dataclasses import dataclass, field
 from importlib import resources
 from typing import TYPE_CHECKING, Any
@@ -28,10 +39,18 @@ from .redact import redact_phones
 
 if TYPE_CHECKING:
     from livekit.agents import AgentSession
+    from livekit.agents.voice.turn import TurnHandlingOptions
+
+log = logging.getLogger("sitelog_voice.session")
 
 #: §9.4 "Turn-taking": end of turn starts at 1.5 s and extends to 2.5 s during long reports.
 END_OF_TURN_MIN_S = 1.5
 END_OF_TURN_LONG_S = 2.5
+#: §9.4 "barge-in stops TTS ≤ 300 ms": the reporter's speech this long interrupts the agent (VAD
+#: needs the rest of the budget to hear it).
+BARGE_IN_MIN_SPEECH_S = 0.25
+#: The key terms the streaming STT takes per call (get_context's list, most important first).
+STT_MAX_KEYTERMS = 100
 
 _LANGUAGE_NAMES: dict[Language, str] = {"en": "English", "es": "Spanish", "tr": "Turkish"}
 
@@ -101,6 +120,11 @@ class CallState:
     consent_tries: int = 0
     #: W3-14: the reporter said no to the consent question (the dialog log keeps no reporter line).
     consent_declined: bool = False
+    #: W3-12 (§9.4 "Recording", §15.2): the opening with the recording notice was played to the
+    #: end. No tool that processes the reporter's speech runs before it (`tools.SPEECH_TOOLS`).
+    disclosure_played: bool = False
+    #: W3-12 (F6 failure handling): the simple recording mode; the dialog model is not asked again.
+    fallback: bool = False
     #: The outcome `end_call` sent; None while the call runs.
     ended: str | None = None
     dialog: Dialog = field(default_factory=Dialog)
@@ -171,7 +195,8 @@ def build_live_session(settings: Settings, *, locale: str, keyterms: list[str]) 
     stt = deepgram.STT(
         model=settings.stt_model,
         language=stt_language(locale),
-        keyterm=keyterms[:100] if keyterms else [],
+        # get_context's key terms (§19 Q143: companies, confirmed glossary terms), for Nova-3.
+        keyterm=keyterms[:STT_MAX_KEYTERMS] if keyterms else [],
         api_key=dg_key,
     )
     llm = anthropic.LLM(
@@ -190,13 +215,75 @@ def build_live_session(settings: Settings, *, locale: str, keyterms: list[str]) 
         voice = settings.tts_voice_es if lang == "es" else settings.tts_voice_en
         tts = deepgram.TTS(model=voice, api_key=dg_key)
 
-    return AgentSession(
-        stt=stt,
-        llm=llm,
-        tts=tts,
-        vad=silero.VAD.load(),
-        turn_handling={
-            "turn_detection": inference.TurnDetector(),
-            "endpointing": {"min_delay": END_OF_TURN_MIN_S, "max_delay": END_OF_TURN_LONG_S},
+    handling = turn_handling()
+    handling["turn_detection"] = inference.TurnDetector()
+    return AgentSession(stt=stt, llm=llm, tts=tts, vad=silero.VAD.load(), turn_handling=handling)
+
+
+def turn_handling() -> TurnHandlingOptions:
+    """§9.4 "Turn-taking & audio" as LiveKit's turn options (the turn detector is added by the
+    live builder): end of turn adaptive from 1.5 s to 2.5 s (LiveKit's dynamic endpointing learns
+    the speaker's pauses within those bounds), barge-in on, short enough to stop TTS in 300 ms;
+    no preemptive reply (the model answers final turns only)."""
+    return {
+        "endpointing": {
+            "mode": "dynamic",
+            "min_delay": END_OF_TURN_MIN_S,
+            "max_delay": END_OF_TURN_LONG_S,
         },
+        "interruption": {"enabled": True, "min_duration": BARGE_IN_MIN_SPEECH_S},
+        # No reply drafted on a turn not yet final: `ReportAgent` records every turn the model
+        # sees as heard (the transcript update_draft sends), so it sees final turns only.
+        "preemptive_generation": {"enabled": False},
+    }
+
+
+def noise_cancellation(transport: str) -> Any | None:
+    """§9.4 "noise suppression on the inbound channel": LiveKit Cloud's BVC (telephony-tuned for
+    SIP) when `livekit-plugins-noise-cancellation` is installed; None (the room's input as it is)
+    otherwise. Imported by name so the package stays optional until W3-16 (§19 Q204)."""
+    try:
+        nc = importlib.import_module("livekit.plugins.noise_cancellation")
+    except ImportError:
+        return None
+    return nc.BVCTelephony() if transport == "pstn" else nc.BVC()
+
+
+def room_options(transport: str) -> Any:
+    """The room input for a call: the caller's audio with noise suppression where available; the
+    session closes when the caller leaves (the hang-up, `ReportCall.hang_up`), and the room is
+    deleted when the session closes (the agent's end of the call drops the caller's line too)."""
+    from livekit.agents import room_io
+
+    return room_io.RoomOptions(
+        audio_input=room_io.AudioInputOptions(noise_cancellation=noise_cancellation(transport)),
+        close_on_disconnect=True,
+        delete_room_on_close=True,
     )
+
+
+# ─────────────────────────────── outcomes ───────────────────────────────
+
+
+def settle_outcome(state: CallState, outcome: str) -> str:
+    """The outcome a call may end with: what field-api did, never the model's (or a timer's)
+    word for it. `filed` only after field-api's `filed` (§19 Q119), a day off or a saved change
+    only when field-api logged it (W3-14), no callback before W3-17 (§19 Q128); a call field-api
+    filed ends `filed` whatever ended it (a hang-up right after the yes)."""
+    if state.consent_declined:
+        return "abandoned"
+    if state.fallback:
+        return "fallback_recording"
+    if state.filed:
+        return "filed"
+    if state.day_logged is not None:
+        return state.day_logged
+    if state.edit_saved:
+        return "edit_applied"
+    if outcome == "filed":
+        outcome = "draft_saved"
+    elif outcome in ("no_work", "weather_day", "callback_requested", "edit_applied"):
+        outcome = "draft_saved" if state.draft else "abandoned"
+    if outcome == "draft_saved" and state.draft is None and not state.segments:
+        return "abandoned"
+    return outcome

@@ -48,6 +48,8 @@ class Seen:
     body: dict[str, Any]
     headers: dict[str, str]
     status: int
+    #: What the fake answered (the fixture's or a queued body).
+    answer: Any = None
 
 
 class FakeFieldApi:
@@ -134,7 +136,9 @@ class FakeFieldApi:
     def _answer(
         self, name: str, body: Any, headers: dict[str, str], status: int, payload: Any
     ) -> httpx.Response:
-        self.calls.append(Seen(name, body if isinstance(body, dict) else {}, headers, status))
+        self.calls.append(
+            Seen(name, body if isinstance(body, dict) else {}, headers, status, payload)
+        )
         if status < 400 and payload is not None:
             self.contract.check_response(name, payload)  # a fixture must match the contract
             assert not contains_phone(json.dumps(payload)), f"phone number in {name} answer"

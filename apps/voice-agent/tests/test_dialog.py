@@ -5,7 +5,17 @@ from __future__ import annotations
 import pytest
 
 from sitelog_voice.copy import default_copy
-from sitelog_voice.dialog import TRANSITIONS, CallTool, Dialog, EndCall, Event, Say, State
+from sitelog_voice.dialog import (
+    TRANSITIONS,
+    CallTool,
+    Dialog,
+    EndCall,
+    Event,
+    Say,
+    State,
+    tool_events,
+    turn_events,
+)
 
 
 def walk(*events: Event, start: float = 0.0) -> Dialog:
@@ -173,5 +183,131 @@ def test_every_spoken_key_is_copy() -> None:
         "goodbye_draft_saved",
         "goodbye_abandoned",
         "goodbye_fallback_recording",
+        "still_working",
+        "tool_error",
     ):
         assert key in keys
+
+
+# ─────────────────────────── W3-12: what drives the machine on a call ───────────────────────────
+
+
+def test_a_tool_wait_pauses_the_silence_clock_and_gets_one_filler() -> None:
+    d = walk(Event.ANSWERED, Event.DISCLOSURE_PLAYED, Event.SITE_KNOWN)  # listening at t=3
+    d.on(Event.SPEECH, 10)
+    d.tool_started(12)
+    assert d.tick(15.9) == []
+    assert d.tick(16) == [Say("still_working")]
+    assert d.tick(30) == []  # no silence prompt, no second filler while it waits
+    d.tool_finished(31)
+    assert d.tick(34) == [Say("backchannel")]  # quiet again from the answer
+    assert d.tick(39) == [Say("silence_prompt")]
+
+
+def test_special_requests_listen_and_can_fall_back() -> None:
+    d = walk(Event.ANSWERED, Event.DISCLOSURE_PLAYED, Event.SITE_KNOWN, Event.SPECIAL_INTENT)
+    assert d.state is State.SPECIAL
+    assert d.tick(12) == [Say("silence_prompt")]
+    assert d.on(Event.AGENT_ERROR, 13) == [Say("fallback"), CallTool("start_fallback_recording")]
+
+
+def test_the_model_can_offer_the_fallback_but_not_after_filing() -> None:
+    d = walk(Event.ANSWERED, Event.DISCLOSURE_PLAYED, Event.SITE_KNOWN)
+    assert d.enter_fallback(5) is True and d.state is State.FALLBACK_RECORDING
+    assert d.enter_fallback(6) is False
+    filed = walk(*HAPPY)
+    assert filed.enter_fallback(40) is False and filed.state is State.FILED
+
+
+def test_close_stops_every_timer() -> None:
+    d = walk(Event.ANSWERED, Event.DISCLOSURE_PLAYED, Event.SITE_KNOWN)
+    d.close(5)
+    assert d.state is State.GOODBYE
+    assert d.tick(1_000) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "confidence", "understood"),
+    [
+        ("Apex had three guys", None, True),
+        ("Apex had three guys", 0.92, True),
+        ("mmf", 0.31, False),
+        ("   ", None, False),
+    ],
+)
+def test_turn_events(text: str, confidence: float | None, understood: bool) -> None:
+    events = turn_events(text, confidence)
+    assert events[0] is Event.SPEECH
+    assert events[1] is (Event.UNDERSTOOD if understood else Event.NOT_UNDERSTOOD)
+
+
+QUESTION = {"missing": ["manpower[2].workers"], "question": {"text": "q", "choices": []}}
+READ_BACK = {"missing": [], "question": None, "readBack": "Shall I file it?"}
+FIX = {"status": "applied", "readBack": "Apex: 7. Shall I file it?"}
+CHANGE = [Event.CHANGE_REQUESTED, Event.CHANGE_APPLIED, Event.READ_BACK_DONE]
+
+
+@pytest.mark.parametrize(
+    ("tool", "result", "state", "events"),
+    [
+        ("update_draft", QUESTION, State.LISTENING, [Event.MISSING_ITEM]),
+        ("update_draft", READ_BACK, State.LISTENING, [Event.NOTHING_MISSING, Event.READ_BACK_DONE]),
+        ("update_draft", {"status": "pending"}, State.LISTENING, []),
+        (
+            "record_answer",
+            {"status": "applied", **READ_BACK},
+            State.CLARIFYING,
+            [Event.ANSWER_HEARD, Event.NOTHING_MISSING, Event.READ_BACK_DONE],
+        ),
+        (
+            "record_answer",
+            {"status": "not_understood", **QUESTION},
+            State.CLARIFYING,
+            [Event.ANSWER_HEARD, Event.MISSING_ITEM],
+        ),
+        ("apply_correction", FIX, State.CONFIRM, CHANGE),
+        (
+            "file_report",
+            {"status": "filed"},
+            State.CONFIRM,
+            [Event.READ_BACK_DONE, Event.CONFIRMED],
+        ),
+        ("file_report", {"status": "not_confirmed"}, State.CONFIRM, []),
+        ("file_report", {"status": "draft_changed", **READ_BACK}, State.CONFIRM, CHANGE),
+        ("pick_site", {"siteId": "x", "name": "Riverside"}, State.PICK_SITE, [Event.SITE_PICKED]),
+        ("set_day_status", {"status": "confirm"}, State.LISTENING, [Event.SPECIAL_INTENT]),
+        ("load_report", {"status": "found"}, State.LISTENING, [Event.SPECIAL_INTENT]),
+        ("update_draft", {"status": "error", "code": "transport"}, State.LISTENING, []),
+        ("set_preference", {"status": "ok"}, State.LISTENING, []),
+    ],
+)
+def test_tool_events(
+    tool: str, result: dict[str, object], state: State, events: list[Event]
+) -> None:
+    assert tool_events(tool, result, state) == events
+
+
+def test_tool_events_walk_the_hero_call() -> None:
+    """The hero call driven by the tools' answers alone reaches `filed` through §7.3's edges."""
+    d = walk(Event.ANSWERED, Event.DISCLOSURE_PLAYED, Event.SITE_KNOWN)
+    t = 10.0
+    for tool, result in (
+        ("update_draft", QUESTION),
+        ("record_answer", {"status": "applied", **READ_BACK}),
+        ("file_report", {"status": "not_confirmed"}),
+        ("apply_correction", FIX),
+        ("file_report", {"status": "filed"}),
+    ):
+        for event in tool_events(tool, result, d.state):
+            t += 1
+            d.on(event, t)
+    assert [h[3] for h in d.history][3:] == [
+        State.CLARIFYING,
+        State.LISTENING,
+        State.READ_BACK,
+        State.CONFIRM,
+        State.FIXING,
+        State.READ_BACK,
+        State.CONFIRM,
+        State.FILED,
+    ]

@@ -114,4 +114,5 @@ export const voiceEn: VoiceCatalog = {
   consent_given: 'Thank you.',
   consent_repeat:
     'Sorry, is it OK if I record these calls and text you report links? Say yes or no.',
+  tool_error: "Sorry, that didn't work on my side. Let's try again.",
 };
