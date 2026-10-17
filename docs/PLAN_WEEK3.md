@@ -326,7 +326,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-15 · Scripted call simulator and the call suite
 
-- [ ] **W3-15 done** · today _partial_ (M) · built (`fixtures/calls/` with `simulate`, `scripts/src/call-sim/`, `scripts/src/simulate-call.ts`, `simulate-call.test.ts`, `apps/field/e2e/supabase/worker/calls.spec.ts`, CI's call suite step); ticks when CI runs `pnpm e2e:voice` green in `e2e-supabase` (the `voice-agent` job's `tests/sim` replays the same fixtures)
+- [x] **W3-15 done** · today _done_ (CI green on 3162747: `e2e:voice` ran the 11 scripted calls through the real field-api and worker; the Python replay in `voice-agent`)
 - **Spec:** §17 Voice (scripted call simulations: happy path, questions, corrections, no work, weather day, callback, fallback, unknown caller; latency and barge-in metrics), §10.13 (≥ 10 scripted call simulations), §16.2 M7 Done when (10 scripted calls, EN and ES, number and Talk now).
 - **Already in the repo:** the M6 suite pattern (`pnpm e2e:m6`, tags per flow), the worker's fake providers and test clocks, `fixtures/voice`.
 - **Build:**
