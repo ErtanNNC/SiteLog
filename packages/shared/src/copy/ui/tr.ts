@@ -2017,7 +2017,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       recordInstead: 'Kayıtla devam et',
       errors: {
         rate_limited:
-          'Bu saat içinde üç görüşme başlattınız. Raporunuzu kaydedin ya da daha sonra yeniden deneyin.',
+          'Bu saat içinde üç görüşme başlattınız. {{minutes}} dk sonra yeniden arayabilirsiniz ya da raporunuzu kaydedin.',
         talk_now_unavailable: 'Şimdi konuş şu anda kullanılamıyor. Raporunuzu kaydedin.',
         voice_unavailable: 'Asistana ulaşılamadı. Yeniden deneyin ya da raporunuzu kaydedin.',
         kind_not_allowed: 'Bu link yalnızca fotoğraf içindir.',

@@ -163,7 +163,10 @@ test.describe('Talk now off the happy path (W3-13)', () => {
     const field = UI_RESOURCES.en.field;
     await page.goto(`/r/${CODE}`);
     await page.getByRole('button', { name: field.today.talkNow }).click();
-    await expect(page.getByRole('alert')).toHaveText(field.talk.errors.rate_limited);
+    // §19 Q171: when the next call is possible (`retryAfter` 1800 s → 30 min).
+    await expect(page.getByRole('alert')).toHaveText(
+      field.talk.errors.rate_limited.replace('{{minutes}}', '30'),
+    );
     await expect(page.getByRole('link', { name: field.talk.recordInstead })).toHaveAttribute(
       'href',
       '/record',

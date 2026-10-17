@@ -546,8 +546,9 @@ export const uiEn = {
       enableAudio: 'Tap to hear the assistant',
       recordInstead: 'Record instead',
       errors: {
+        /** §19 Q171: `minutes` until the next call is possible (field-api's `retryAfter`). */
         rate_limited:
-          'You’ve started three calls this hour. Record your report instead, or try again later.',
+          'You’ve started three calls this hour. You can call again in {{minutes}} min, or record your report instead.',
         talk_now_unavailable: 'Talk now isn’t available right now. Record your report instead.',
         voice_unavailable:
           'The assistant couldn’t be reached. Try again, or record your report instead.',

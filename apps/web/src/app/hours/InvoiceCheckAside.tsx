@@ -67,7 +67,12 @@ function EvidenceChip({ e, canOpen }: { e: InvoiceEvidence; canOpen: boolean }) 
   return canOpen ? (
     <Link
       to={evidenceHref(e)}
-      className={cn(chip, 'text-level hover:border-iron')}
+      className={cn(
+        chip,
+        'text-level hover:border-iron',
+        // §19 Q146: the 28 px chip keeps its look, its hit area is 44 px (as SourceLink's).
+        'relative before:absolute before:inset-x-0 before:top-1/2 before:h-target before:-translate-y-1/2',
+      )}
       aria-label={
         e.kind === 'report'
           ? t('hours.openReport', { no: e.reportNo })

@@ -10,6 +10,7 @@ import { Header } from '@/components/Header';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { ActionBar, Screen, ScreenTitle } from '@/components/Screen';
 import { useFieldCopy } from '@/i18n/useFieldCopy';
+import { retryMinutes } from '@/lib/errors';
 import { permissionError } from '@/recorder/recorder';
 import { formatClock } from '@/screens/record/clock';
 import { NoLink } from '@/screens/NoLink';
@@ -43,7 +44,7 @@ type Phase =
   | { kind: 'connecting' }
   | { kind: 'live' }
   | { kind: 'ended' }
-  | { kind: 'failed'; key: TalkErrorKey };
+  | { kind: 'failed'; key: TalkErrorKey; vars?: Record<string, number> };
 
 export interface TalkDeps {
   /** The `VoiceClient` for the token's URL (default: the lazy fake / LiveKit loader). */
@@ -210,7 +211,12 @@ function TalkCall({
       const key = (TALK_ERRORS as readonly string[]).includes(apiCode ?? '')
         ? (apiCode as TalkErrorKey)
         : 'generic';
-      setPhase({ kind: 'failed', key });
+      // §19 Q171: the Talk now limit says when the next call is possible (`retryAfter`).
+      setPhase(
+        key === 'rate_limited'
+          ? { kind: 'failed', key, vars: { minutes: retryMinutes(err) } }
+          : { kind: 'failed', key },
+      );
       return;
     }
     try {
@@ -335,7 +341,7 @@ function TalkCall({
       <Screen key="failed" title={t('talk.title')} header={header} dark dateLine={false}>
         <ScreenTitle>{t('talk.title')}</ScreenTitle>
         <p role="alert" className="m-0 text-[16px] leading-6 text-dust-light">
-          {t(`talk.errors.${phase.key}`)}
+          {t(`talk.errors.${phase.key}`, phase.vars)}
         </p>
         {retry && phase.key !== 'rate_limited' ? (
           <InverseButton onClick={() => void start()}>{tc('retry')}</InverseButton>

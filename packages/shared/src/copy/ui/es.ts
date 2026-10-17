@@ -479,7 +479,7 @@ export const uiEs: UiResources = {
       recordInstead: 'Mejor grabar',
       errors: {
         rate_limited:
-          'Ya inició tres llamadas en esta hora. Grabe su reporte o vuelva a intentarlo más tarde.',
+          'Ya inició tres llamadas en esta hora. Puede volver a llamar en {{minutes}} min, o grabe su reporte.',
         talk_now_unavailable: 'Hable ahora no está disponible en este momento. Grabe su reporte.',
         voice_unavailable:
           'No se pudo contactar al asistente. Inténtelo de nuevo o grabe su reporte.',

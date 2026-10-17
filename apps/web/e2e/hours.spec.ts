@@ -1,5 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /**
  * W3-06 · Crew hours (spec F19, P8) in demo mode: content, the invoice check with its voice-note
@@ -28,6 +28,13 @@ async function expectNoViolations(page: Page) {
 
 const overflow = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
+/** §19 Q146: the chip keeps its 28 px look; its hit area (`::before`) is 44 px tall. */
+async function expectHitArea(chip: Locator) {
+  expect((await chip.boundingBox())!.height).toBeLessThanOrEqual(30);
+  const hit = await chip.evaluate((el) => parseFloat(getComputedStyle(el, '::before').height));
+  expect(hit).toBeGreaterThanOrEqual(44);
+}
 
 const COPY = {
   en: {
@@ -73,6 +80,7 @@ for (const lang of ['en', 'tr'] as const) {
       // The voice-note second opens P7 there.
       const evidence = aside.getByRole('link', { name: c.evidence });
       await expect(evidence).toHaveAttribute('href', /\?clip=[^&]+&at=19$/);
+      await expectHitArea(evidence);
       await evidence.click();
       await expect(page).toHaveURL(/\/reports\/[^?]+\?clip=[^&]+&at=19$/);
       await expect(page.getByTestId('media-player').first()).toBeVisible({ timeout: 20_000 });

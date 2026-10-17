@@ -184,6 +184,16 @@ describe('Talk now (W3-13, §9.4, §19 Q121)', () => {
     expect(screen.getByRole('link', { name: 'Back to Today' })).toHaveAttribute('href', '/today');
   });
 
+  it('the Talk now limit says when the next call is possible, with Record instead (§19 Q171)', async () => {
+    const routes = fakeRoutes({
+      voiceToken: vi.fn().mockRejectedValue(apiError(429, 'rate_limited', { retryAfter: 1501 })),
+    });
+    renderTalk(routes, { getUserMedia: () => Promise.resolve(stream()) });
+    expect(await screen.findByRole('alert')).toHaveTextContent('You can call again in 26 min');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Record instead' })).toHaveAttribute('href', '/record');
+  });
+
   it('a device or consent refusal goes back through the link', async () => {
     const routes = fakeRoutes({
       voiceToken: vi.fn().mockRejectedValue(apiError(403, 'consent_required')),

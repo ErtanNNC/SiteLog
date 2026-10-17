@@ -45,6 +45,8 @@ export function EvidenceChips({
           className={cn(
             chip,
             'border-rebar bg-chalk text-asphalt hover:border-iron focus-visible:outline-2 focus-visible:outline-offset-2',
+            // §19 Q146: the 28 px chip keeps its look, its hit area is 44 px (as SourceLink's).
+            'relative before:absolute before:inset-x-0 before:top-1/2 before:h-target before:-translate-y-1/2',
           )}
           aria-label={t(isCall ? 'evidence.openCall' : 'evidence.openVoiceNote', {
             no: reportNo,
