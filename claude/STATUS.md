@@ -1,5 +1,52 @@
 # SiteLog · Durum
 
+**2026-10-17 (16:00 UTC) — Hafta 4 ilerliyor.**
+
+**Bitti ve CI'da yeşil:**
+
+- **W4-01:** telefon ülke seçici artık tüm ülkeleri listeliyor; şirketin ülkesi en üstte.
+- **W4-02:** kurulum sihirbazı Türkçe. Karşılama mesajı önizlemesi gerçek SMS metnini gösteriyor ve numaranın SMS alıp alamayacağını kontrol ediyor.
+- **W4-03:** Ekip sayfası v1.2'ye uygun hale geldi.
+- **W4-04:** Ekip sayfasına "Şimdi ara" düğmesi geldi. Ofis önce kişinin aranmayı kabul ettiğini onaylıyor; açmayan kişiye SMS gitmiyor.
+- **W4-05 (son parçası hariç):** Ayarlar Türkçe.
+  - "Saha kanalları" sekmesi, varsayılan iletişim tercihi, günlük link süresi.
+  - Rapor dili ve birimleri değiştirilebiliyor.
+  - "Bana test mesajı gönder" düğmesi var.
+- **W4-06, W4-07, W4-08:** hukuki metinler, Türkçe sesli asistanın sayıları doğru söylemesi ve başlangıç sözlüğü.
+- **W4-10:** fiyat şirket başına tutuluyor. Türk şirketleri "manuel" faturalanıyor.
+- **W4-11:** İletimerkezi teslim durumu kontrol ediliyor.
+- **W4-12:** kayıt olma testi ve sahte SMS sağlayıcısı. Karşılama mesajı tepki gelmezse 48 saat sonra bir kez otomatik tekrar gönderiliyor.
+
+**Push edildi, CI bekleniyor:**
+
+- **W4-09:** panelin kalan sayfaları Türkçe. Yalnız `/ops` ve `/try` İngilizce kaldı.
+  - Ofis e-postaları her okuyucunun panel dilinde gidiyor.
+  - Giriş ve davet e-postalarının Türkçe metni var.
+  - **Bulunan hata:** "imzadan sonra değiştirildi" e-postası daha önce kimseye gitmiyordu. Düzeltildi.
+
+**Sürüyor:**
+
+- Ayarlar'daki "Beni şimdi ara" düğmesi (W4-05'in son parçası). Kısa bir test araması: bilgilendirme, tek cümle, veda; kaydedilmiyor.
+- Sırada W4-16 var: M10 ve M11 kabul testleri, demo notları.
+
+**Yeni açık sorular.** Hepsinde önerdiğim varsayılan kodda çalışıyor:
+
+- **Q270:** Fiyatı Stripe fiyatından farklı olan şirkete ödeme sayfası açılmıyor. Böyle bir şirket için Stripe'ta ayrı fiyat açılmalı.
+- **Q280:** İletimerkezi teslim raporunun adresi. Hesap açılınca dokümanından doldurulacak; o zamana kadar kontrol kapalı.
+- **Q290:** Ülke paketinin kendi onay metni varsa Karşılama ekranında o metin gösteriliyor.
+- **Q300:** Ofis karşılamayı elle yeniden gönderdiyse, otomatik tekrar gönderim ondan 48 saat sonraya kayıyor.
+- **Q330:** "Şimdi ara" aynı kişi için günde kaç kez kullanılabilir? Şu an sınır yok, yalnız aynı anda tek arama var.
+- **Q340:** Giriş e-postasının dili, kullanıcı oluşturulurken belirleniyor. Önerim: kullanıcı panelde dilini değiştirince bu da güncellensin (henüz yapılmadı).
+
+**Sizden beklenenler değişmedi:** 08:00 UTC notundaki 6 madde. En acil olanlar:
+
+- İletimerkezi hesabı ve `SITELOG` başlığı;
+- avukat metinleri;
+- TR faturalama (Q8, Q9);
+- Stripe test modu.
+
+**Yeni:** Supabase'in giriş ve davet e-postası şablonlarının önizleme projesine yüklenmesi sizin adımınız. RUNBOOK'ta "Auth email templates (W4-09)" bölümünde anlatılıyor.
+
 **2026-10-17 (08:00 UTC) — Hafta 4 başladı.**
 
 - **Hafta 4 planı yazıldı:** `docs/PLAN_WEEK4.md` (171dfc9). İçinde W4-01 … W4-16 var: M10 (kurulum, ekip, ayarlar, faturalama) ve M11 (Türkiye pazarı).
