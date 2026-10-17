@@ -1,6 +1,6 @@
 import type { CallRow, ConsentType, Json, ReporterLocale } from '@sitelog/shared';
 import { unknownCallRecordingPath } from '@sitelog/shared';
-import type { FakeFieldStore } from './fake_store.ts';
+import { endOfDayIn, type FakeFieldStore } from './fake_store.ts';
 import { FieldDbError } from './store.ts';
 import type { VoiceConsentResult, VoiceSaveResult, VoiceSpecialStore } from './voice_special.ts';
 
@@ -237,7 +237,7 @@ export class FakeVoiceSpecialStore implements VoiceSpecialStore {
     const org = this.store.orgs.find((o) => o.id === rep.org_id)!;
     const day = new Intl.DateTimeFormat('en-CA', { timeZone: org.timezone }).format(this.now());
     // The end of that day in the org's time zone (the tests' orgs are on Chicago time).
-    const until = endOfDay(day, org.timezone);
+    const until = endOfDayIn(day, org.timezone);
     if (rep.no_calls_until && rep.no_calls_until >= until) {
       return Promise.resolve({ until: rep.no_calls_until, changed: false });
     }
@@ -258,6 +258,60 @@ export class FakeVoiceSpecialStore implements VoiceSpecialStore {
       },
     });
     return Promise.resolve({ until, changed: true });
+  }
+
+  /** W3-17: the fake's callbacks (`voice_schedule_callback()`), one per site-day and reporter. */
+  callbacks: { callId: string; siteDayId: string; reporterId: string; at: string }[] = [];
+
+  callbackContext(callId: string) {
+    const c = this.store.callRows.find((x) => x.id === callId);
+    if (!c?.site_id) return Promise.resolve(null);
+    const site = this.store.sites.find((s) => s.id === c.site_id)!;
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: site.timezone }).format(
+      new Date(c.started_at ?? this.now().toISOString()),
+    );
+    const day = this.store.siteDays.find((d) => d.site_id === site.id && d.date === date);
+    return Promise.resolve({
+      siteDayId: day?.id ?? `${site.id}:${date}`,
+      timezone: site.timezone,
+      window: { start: '07:00', end: '20:00' },
+      // The tests' deadline 17:30 + 90 min.
+      missingAt: day ? new Date(Date.parse(day.deadline_at) + 90 * 60_000).toISOString() : null,
+    });
+  }
+
+  async scheduleCallback(input: { callId: string; at: string; minutes: number }) {
+    const c = this.known(input.callId);
+    const org = this.store.orgs.find((o) => o.id === c.org_id)!;
+    const pack = this.store.countries.find((k) => k.code === org.country);
+    const autoCall = this.store.consents.some(
+      (k) => k.reporter_id === c.reporter_id && k.type === 'auto_call' && !k.revoked_at,
+    );
+    if ((!org.is_demo && !pack?.outbound_trunk_id) || !autoCall) {
+      throw new FieldDbError('not_available');
+    }
+    const cb = await this.callbackContext(c.id);
+    if (!cb) throw new FieldDbError('site_required');
+    if (
+      this.callbacks.some((x) => x.siteDayId === cb.siteDayId && x.reporterId === c.reporter_id)
+    ) {
+      return { status: 'limit_reached' as const };
+    }
+    this.callbacks.push({
+      callId: c.id,
+      siteDayId: cb.siteDayId,
+      reporterId: c.reporter_id,
+      at: input.at,
+    });
+    this.store.audits.push({
+      orgId: c.org_id,
+      actorType: 'agent',
+      action: 'call.callback_requested',
+      entity: 'call',
+      entityId: c.id,
+      diff: { at: input.at, minutes: input.minutes, site_day_id: cb.siteDayId },
+    });
+    return { status: 'scheduled' as const };
   }
 
   unknownCaller(callId: string, snippet: string) {
@@ -315,24 +369,4 @@ export class FakeVoiceSpecialStore implements VoiceSpecialStore {
     const pack = this.store.countries.find((k) => k.voice_number && k.voice_number === c?.to_e164);
     return Promise.resolve((pack?.field_locales[0] as ReporterLocale | undefined) ?? null);
   }
-}
-
-/** The instant a local date ends in a time zone (its next midnight), as ISO. */
-function endOfDay(date: string, tz: string): string {
-  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
-  const guess = Date.UTC(y, m - 1, d + 1, 0, 0, 0);
-  const offset = (at: number) => {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).formatToParts(new Date(at));
-    const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
-    return Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute')) - at;
-  };
-  return new Date(guess - offset(guess)).toISOString();
 }

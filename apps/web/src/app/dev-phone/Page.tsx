@@ -1,4 +1,13 @@
-import { ArrowLeft, Mail, MessageSquare, Send, Smartphone } from 'lucide-react';
+import {
+  ArrowLeft,
+  Mail,
+  MessageSquare,
+  Phone,
+  PhoneIncoming,
+  PhoneMissed,
+  Send,
+  Smartphone,
+} from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { formatDateInTz, formatPhone, formatTimeInTz } from '@sitelog/shared/format.ts';
 import { useAuth } from '@/auth/AuthProvider';
@@ -333,6 +342,10 @@ function Bubble({
   timezone: string;
 }) {
   const { t } = useCopy();
+  // W3-17 (§19 Q132): a demo org's outbound call rings here; nothing reaches a real phone.
+  if (message.channel === 'call' && message.call) {
+    return <CallEntry message={message} call={message.call} timezone={timezone} />;
+  }
   // The phone's view: SiteLog's texts arrive on the left, the reporter's own go out on the right.
   const fromReporter = message.direction === 'in';
   const status = statusLabel(t, message.status);
@@ -364,6 +377,69 @@ function Bubble({
         {' · '}
         <span className="sr-only">{t('devPhone.statusLabel')} </span>
         {status}
+      </p>
+    </li>
+  );
+}
+
+type CallState = 'ringing' | 'answered' | 'ended' | 'missed' | 'busy' | 'voicemail' | 'failed';
+
+/** What an outbound call did, from its `calls.status` (W3-17). */
+function callState(status: string): CallState {
+  switch (status) {
+    case 'in_progress':
+      return 'answered';
+    case 'completed':
+      return 'ended';
+    case 'no_answer':
+      return 'missed';
+    case 'busy':
+    case 'voicemail':
+    case 'failed':
+      return status;
+    default:
+      return 'ringing';
+  }
+}
+
+/**
+ * W3-17: an outbound call in the thread (the phone's view: it comes in from SiteLog), worded by
+ * its state with an icon beside the words (never the icon alone), the purpose and the time.
+ */
+function CallEntry({
+  message,
+  call,
+  timezone,
+}: {
+  message: DemoPhoneMessage;
+  call: NonNullable<DemoPhoneMessage['call']>;
+  timezone: string;
+}) {
+  const { t } = useCopy();
+  const state = callState(call.status);
+  const Icon =
+    state === 'ringing'
+      ? PhoneIncoming
+      : state === 'answered' || state === 'ended'
+        ? Phone
+        : PhoneMissed;
+  return (
+    <li className="flex flex-col items-start gap-1" data-testid="demo-phone-call">
+      <div className="flex max-w-[85%] items-center gap-2 rounded-card border border-rebar bg-chalk px-3 py-2 text-[15px]">
+        <Icon className="size-4 flex-none" aria-hidden="true" />
+        <span>
+          <span className="sr-only">{t('devPhone.fromSiteLog')}: </span>
+          {t(`devPhone.call.${state}`)}
+        </span>
+      </div>
+      <p className="font-mono text-[12px] text-dust">
+        {when(message.at, timezone)}
+        {' · '}
+        <span className="sr-only">{t('devPhone.channelLabel')} </span>
+        {t('devPhone.channels.call')}
+        {call.purpose === 'reminder' || call.purpose === 'callback'
+          ? ` · ${t(`devPhone.callPurpose.${call.purpose}`)}`
+          : ''}
       </p>
     </li>
   );

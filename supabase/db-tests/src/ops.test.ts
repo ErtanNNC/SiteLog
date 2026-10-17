@@ -147,6 +147,7 @@ describe('platform admins', () => {
       `select ops_retry_job(${dead})`,
       `select ops_discard_job(${dead})`,
       `select * from ops_cost_outliers()`,
+      `select * from ops_outbound_call_share()`,
     ]) {
       await expect(
         asUser(db, ORG_ADMIN, (q) => q(sql)),

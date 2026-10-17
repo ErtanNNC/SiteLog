@@ -23,6 +23,11 @@ export interface FieldSession {
   siteId: string | null;
   /** The report date chosen on Today when more than one was allowed (F5); null = the default. */
   date: string | null;
+  /**
+   * W3-17 (`resolve`'s `placesCalls`, spec §19 Q51): SiteLog places automated calls for the
+   * reporter's org. Absent in a session saved before W3-17: false until the next `resolve`.
+   */
+  placesCalls?: boolean;
 }
 
 type Storage = Pick<globalThis.Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -53,6 +58,7 @@ export function sessionFromResolve(
     needsConsent: res.needsConsent,
     siteId: same?.siteId && res.sites.some((s) => s.id === same.siteId) ? same.siteId : null,
     date: same?.date ?? null,
+    placesCalls: res.placesCalls === true,
   };
 }
 

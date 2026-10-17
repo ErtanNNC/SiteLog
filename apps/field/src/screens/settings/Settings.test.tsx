@@ -19,6 +19,8 @@ function prefs(patch: Partial<PreferencesResponse> = {}): PreferencesResponse {
     ],
     textsOptedOut: false,
     push: { offered: false, on: false },
+    placesCalls: false,
+    noCallsUntil: null,
     ...patch,
   };
 }
@@ -222,6 +224,70 @@ describe('Settings (F15, §9.3; W2-02)', () => {
       }),
     );
     expect(routes.revokeConsent).toHaveBeenCalledWith('K7Q2MX', { type: 'whatsapp' });
+  });
+
+  it('turns automated calls on after the sheet with the Welcome wording (W3-17, §19 Q131)', async () => {
+    const callsOff: PreferencesResponse['consents'] = [
+      { type: 'sms', held: true },
+      { type: 'auto_call', held: false },
+      { type: 'recording', held: true },
+      { type: 'data_processing', held: true },
+    ];
+    const callsOn = callsOff.map((c) => (c.type === 'auto_call' ? { ...c, held: true } : c));
+    const routes = fakeRoutes({
+      preferences: vi.fn().mockResolvedValue(prefs({ consents: callsOff, placesCalls: true })),
+      grantConsent: vi.fn().mockResolvedValue(prefs({ consents: callsOn, placesCalls: true })),
+      revokeConsent: vi.fn().mockResolvedValue(prefs({ consents: callsOff, placesCalls: true })),
+    });
+    renderApp('/settings', { routes });
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Turn on: Automated calls at report time' }),
+    );
+    const sheet = screen.getByRole('dialog', { name: 'Turn automated calls on?' });
+    expect(sheet).toHaveTextContent('Call me at report time (automated)');
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Turn on' }));
+    expect(routes.grantConsent).toHaveBeenCalledWith('K7Q2MX', {
+      type: 'auto_call',
+      textVersion: 'field.consent.v1',
+    });
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Turn off: Automated calls at report time' }),
+    );
+    expect(routes.revokeConsent).toHaveBeenCalledWith('K7Q2MX', { type: 'auto_call' });
+  });
+
+  it('offers "Don\'t call me today" to a call reporter where calls are placed (W3-17, §19 Q129)', async () => {
+    const tomorrow = new Date(Date.now() + 6 * 3600_000).toISOString();
+    const routes = fakeRoutes({
+      preferences: vi.fn().mockResolvedValue(prefs({ contactPref: 'call', placesCalls: true })),
+      updatePreferences: vi
+        .fn()
+        .mockResolvedValue(
+          prefs({ contactPref: 'call', placesCalls: true, noCallsUntil: tomorrow }),
+        ),
+    });
+    renderApp('/settings', { routes });
+    expect(await screen.findByRole('heading', { name: 'Calls today' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Don’t call me today' }));
+    expect(routes.updatePreferences).toHaveBeenCalledWith('K7Q2MX', { noCallsToday: true });
+    expect(await screen.findByText('No more calls today')).toBeInTheDocument();
+    // There is no undo (§19 Q217): the button is gone for today.
+    expect(screen.queryByRole('button', { name: 'Don’t call me today' })).toBeNull();
+  });
+
+  it('shows no call rows where SiteLog places no calls, or to a link reporter', async () => {
+    const routes = fakeRoutes({
+      preferences: vi.fn().mockResolvedValue(prefs({ contactPref: 'call' })),
+    });
+    renderApp('/settings', { routes });
+    expect(await screen.findByText('Texts with my daily report link')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Calls today' })).toBeNull();
+    const linkRoutes = fakeRoutes({
+      preferences: vi.fn().mockResolvedValue(prefs({ placesCalls: true })),
+    });
+    renderApp('/settings', { routes: linkRoutes });
+    expect(await screen.findAllByText('Texts with my daily report link')).not.toHaveLength(0);
+    expect(screen.queryByRole('heading', { name: 'Calls today' })).toBeNull();
   });
 
   it('sends the pack’s consent key as the version when it names one', async () => {

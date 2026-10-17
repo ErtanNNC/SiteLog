@@ -123,6 +123,24 @@ export const ConfigSchema = z.object({
   VAPID_PUBLIC_KEY: z.string().default(''),
   VAPID_PRIVATE_KEY: z.string().default(''),
   VAPID_SUBJECT: z.string().default(''),
+  /**
+   * Outbound reminder calls (W3-17, M8; spec §9.4, §19 Q125–Q132): LiveKit places a real org's
+   * call on its pack's outbound trunk (`countries.outbound_trunk_id`), creating the room
+   * `call-{id}`, dispatching LIVEKIT_AGENT_NAME and dialling with `CreateSIPParticipant`. Without
+   * the three values a real org's call is not placed (`telephony_unavailable`: the stage's message
+   * goes instead). A demo org's call is `console` whatever is set: it rings the Demo phone for
+   * CONSOLE_CALL_RING_S, never a real phone (§19 Q132).
+   */
+  LIVEKIT_URL: z.string().default(''),
+  LIVEKIT_API_KEY: z.string().default(''),
+  LIVEKIT_API_SECRET: z.string().default(''),
+  LIVEKIT_AGENT_NAME: z.string().default('sitelog-voice'),
+  /** §19 Q127: outbound calls at once on LiveKit (default 4: Build's 5 less one for inbound). */
+  VOICE_MAX_CONCURRENT_CALLS: intFrom(4).pipe(z.number().min(1).max(500)),
+  /** How long an outbound call rings before it counts as not answered (`ringing_timeout`). */
+  VOICE_RING_TIMEOUT_S: intFrom(30).pipe(z.number().min(5).max(120)),
+  /** How long a demo org's console call rings in the Demo phone before no answer. */
+  CONSOLE_CALL_RING_S: intFrom(30).pipe(z.number().min(1).max(600)),
   WORKER_CONCURRENCY: intFrom(4).pipe(z.number().min(1).max(64)),
   WORKER_PORT: intFrom(8080),
   WORKER_ID: z.string().default(''),

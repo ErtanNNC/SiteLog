@@ -19,8 +19,8 @@ import { currentSite, type FieldSession } from '@/session/session';
 /**
  * F4 step 3 (Field-02), first open only: the notice, the required consent, one consent per message
  * channel the pack offers (SMS; *Message me on WhatsApp* where the pack lists WhatsApp, unticked,
- * W2-15, spec §19 Q25; push has its own toggle in Settings), the automated-call consent only where the pack places
- * automated calls (none before M8: spec §19 Q33, Q51), the preference, the language from the pack's field locales, then
+ * W2-15, spec §19 Q25; push has its own toggle in Settings), the automated-call consent only where SiteLog places
+ * automated calls (`resolve`'s `placesCalls`, W3-17: spec §19 Q33, Q51), the preference, the language from the pack's field locales, then
  * `POST consent` with the wording's version (`FIELD_CONSENT_TEXT_VERSION`, or the pack's consent key
  * when it names one, spec §19 Q28). The optional 20-second test recording of F4 is M6.
  */
@@ -37,7 +37,7 @@ export function Welcome({
   const offersSms = country.messageChannels.includes('sms');
   // W2-15 (spec §19 Q25): WhatsApp only after this explicit opt-in, unticked by default.
   const offersWhatsapp = country.messageChannels.includes('whatsapp');
-  const offersCalls = placesAutomatedCalls(country);
+  const offersCalls = placesAutomatedCalls(session);
   const [required, setRequired] = useState(false);
   const [sms, setSms] = useState(true);
   const [whatsapp, setWhatsapp] = useState(false);

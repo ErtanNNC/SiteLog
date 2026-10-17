@@ -9,6 +9,7 @@ import { noPhotoCheckJob } from './no_photo_check';
 import { notifyJob } from './notify';
 import { parseAnswerJob } from './parse_answer';
 import { parseReply } from './parse_reply';
+import { placeCallJob } from './place_call';
 import { postCallReconcileJob } from './post_call';
 import { renderPdf } from './render_pdf';
 import { retentionCleanup } from './retention_cleanup';
@@ -54,4 +55,5 @@ export const registry: JobRegistry = {
   voice_turn: voiceTurnJob,
   post_call_reconcile: postCallReconcileJob,
   no_photo_check: noPhotoCheckJob,
+  place_call: placeCallJob,
 };

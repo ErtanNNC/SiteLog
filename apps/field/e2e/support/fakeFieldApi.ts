@@ -362,6 +362,11 @@ export interface FakeOptions {
   talkReport?: NonNullable<TodayResponse['report']>;
   /** W3-13 (F9): `resolve` answers a photos link of `dailyLinkSite` (the call-filed report's day). */
   photosLink?: boolean;
+  /**
+   * W3-17 (spec §19 Q51, Q132): SiteLog places automated calls for the org (`placesCalls`): the
+   * Welcome box, Settings' automated-call row and, for a call reporter, "Don't call me today".
+   */
+  placesCalls?: boolean;
 }
 
 /** W2-14: the fake VAPID public key `push/key` answers (65 bytes, base64url). */
@@ -406,12 +411,22 @@ export async function installFakeFieldApi(
         consents: opts.consented
           ? [
               { type: 'sms', held: true },
+              ...(opts.placesCalls
+                ? [
+                    {
+                      type: 'auto_call' as const,
+                      held: market.reporter.contactPref === 'call',
+                    },
+                  ]
+                : []),
               { type: 'recording', held: true },
               { type: 'data_processing', held: true },
             ]
           : [],
         textsOptedOut: opts.textsOptedOut ?? false,
         push: { offered: opts.push ?? false, on: false },
+        placesCalls: opts.placesCalls ?? false,
+        noCallsUntil: null,
       },
     },
     calls: [],
@@ -550,6 +565,7 @@ export async function installFakeFieldApi(
             ? { ...market.country, messageChannels: ['push', 'whatsapp', 'sms'] }
             : market.country,
           talkNow: options.talkNow !== undefined,
+          placesCalls: options.placesCalls ?? false,
         };
         return json(route, 200, res);
       }
@@ -573,6 +589,10 @@ export async function installFakeFieldApi(
             ...(b.contactPref ? { contactPref: b.contactPref } : {}),
             ...(b.locale ? { locale: b.locale } : {}),
             ...(b.messageChannel !== undefined ? { messageChannel: b.messageChannel } : {}),
+            // W3-17 (§19 Q129): until the end of today (a few hours on, whatever the clock).
+            ...((body as { noCallsToday?: boolean }).noCallsToday
+              ? { noCallsUntil: new Date(Date.now() + 6 * 3600_000).toISOString() }
+              : {}),
           };
         }
         return json(route, 200, api.state.prefs);
@@ -629,6 +649,15 @@ export async function installFakeFieldApi(
             ...(['sms', 'recording', 'data_processing'] as const)
               .filter((t) => (body as { types: string[] }).types.includes(t))
               .map((type) => ({ type, held: true })),
+            // W3-17: listed wherever SiteLog places calls, held when ticked.
+            ...(options.placesCalls
+              ? [
+                  {
+                    type: 'auto_call' as const,
+                    held: (body as { types: string[] }).types.includes('auto_call'),
+                  },
+                ]
+              : []),
             // W2-15: listed wherever the pack lists WhatsApp, held when ticked.
             ...(options.whatsapp
               ? [

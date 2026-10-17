@@ -952,6 +952,18 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     postCallUnreconciled() {
       return Promise.reject(new Error('fake db: postCallUnreconciled runs on PGlite only'));
     },
+    outboundCallStart() {
+      return Promise.reject(new Error('fake db: outboundCallStart runs on PGlite only'));
+    },
+    outboundCallRinging() {
+      return Promise.reject(new Error('fake db: outboundCallRinging runs on PGlite only'));
+    },
+    outboundCallUnanswered() {
+      return Promise.reject(new Error('fake db: outboundCallUnanswered runs on PGlite only'));
+    },
+    outboundCallShare() {
+      return Promise.resolve([]);
+    },
     reportNoPhotoCheck() {
       return Promise.reject(new Error('fake db: reportNoPhotoCheck runs on PGlite only'));
     },

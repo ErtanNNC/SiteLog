@@ -436,15 +436,33 @@ def build_tools(
 
         async def run() -> ToolResult:
             try:
-                return await api.tool("schedule_callback", auth, minutes=minutes)
+                data = await api.tool("schedule_callback", auth, minutes=minutes)
             except FieldApiError as exc:
                 if exc.code != "not_available":
                     raise
-                # §19 Q128: no pack places outbound calls yet (W3-17); code's line, not a promise.
+                # §19 Q128, Q131: the org places no calls, or the reporter has no auto_call
+                # consent of their own; code's line, not a promise.
                 return {
                     "status": "not_available",
                     "say": copy.line("callback_unavailable", state.language),
                 }
+            # W3-17: code's words for what field-api planned; the model says them.
+            status = data.get("status")
+            if status == "scheduled":
+                state.callback_requested = True
+                say = copy.line(
+                    "goodbye_callback_requested", state.language, time=str(data["localTime"])
+                )
+            elif status == "outside_window":
+                end = data.get("windowEnd")
+                say = (
+                    copy.line("callback_outside_window", state.language, time=str(end))
+                    if end
+                    else copy.line("callback_unavailable", state.language)
+                )
+            else:
+                say = copy.line("callback_limit", state.language)
+            return {**data, "say": say}
 
         return await guard("schedule_callback", run)
 
@@ -565,7 +583,7 @@ def build_tools(
         if state.ended:
             return {"status": "ended", "outcome": state.ended}
         # Only what field-api did: `filed` after its `filed` (§19 Q119), a day off or a saved
-        # change when it logged them (W3-14), no callback before W3-17 (§19 Q128).
+        # change when it logged them (W3-14), a callback once field-api queued it (§19 Q128).
         settled = settle_outcome(state, outcome)
 
         async def run() -> ToolResult:

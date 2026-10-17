@@ -81,6 +81,8 @@
     "day_off_filed": "{site} için bugünün raporu zaten kaydedildi.",
     "day_off_site_paused": "{site} SiteLog'da duraklatılmış. Ofisten yeniden başlatmasını isteyin.",
     "callback_unavailable": "Sizi henüz geri arayamıyorum. Hazır olduğunuzda tekrar arayın ya da linkinizi kullanın.",
+    "callback_outside_window": "En geç saat {time} gibi arayabilirim. Raporu şimdi yapalım mı?",
+    "callback_limit": "Günde yalnızca bir kez geri arayabilirim. Raporu şimdi yapalım mı?",
     "pref_not_today_ok": "Tamam, bugün sizi bir daha aramayacağım.",
     "edit_ask": "Neyi değiştireyim?",
     "edit_save_ask": "Kaydedeyim mi?",

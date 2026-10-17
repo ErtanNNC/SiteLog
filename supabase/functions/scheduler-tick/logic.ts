@@ -21,6 +21,8 @@ import {
   nextDueStage,
   noticeData,
   type NoticeData,
+  OUTBOUND_CALL_POLICY,
+  placesCalls,
   REMINDER_STAGE,
   reminderVars,
   remind,
@@ -63,6 +65,8 @@ export interface OrgSettingsInput {
   past_due_grace_days: number;
   /** §6.3 field channels (20261013000007): null = the column default. */
   daily_link_time?: string | null;
+  /** W3-17: the org's switch for automated calls (M10's control); null = the default, true. */
+  auto_call_enabled?: boolean | null;
   second_call_enabled?: boolean | null;
   call_window_start?: string | null;
   call_window_end?: string | null;
@@ -77,6 +81,8 @@ export interface OrgInput {
   settings: OrgSettingsInput;
   /** `orgs.units`: the heads-up's weather phrase (W2-06); imperial when absent. */
   units?: UnitSystem;
+  /** `orgs.is_demo` (W3-17): a demo org's calls ring the Demo phone (§19 Q132). */
+  is_demo?: boolean;
 }
 
 export interface SiteInput {
@@ -477,13 +483,6 @@ export function planTickJobs(input: TickPlanInput): PlannedJob[] {
 // ── The reminder ladder (W2-06; spec §7.1, §7.4, F11) ────────────────────────────────────────────
 
 /**
- * Whether any pack places outbound calls (spec §19 Q38: the trunks are env; Q51): none before M8,
- * so `remind()` answers a message (or nothing), never a call, and the consents for calls are not
- * loaded.
- */
-export const OUTBOUND_TRUNK = false;
-
-/**
  * The owner parameters of the ladder (spec §19 Q76, Q77; decided 2026-10-16 as built): the
  * recommended defaults (`REMIND_POLICY_DEFAULTS`).
  */
@@ -498,6 +497,8 @@ export interface LadderReporter {
   contact_pref: 'link' | 'call';
   message_channel: 'sms' | 'whatsapp' | 'push' | null;
   locale: string;
+  /** §19 Q129 (W3-17): "Don't call me today" until this instant. */
+  no_calls_until?: string | null;
 }
 
 /** One reporter of a step and what `remind()` decided for them. */
@@ -522,6 +523,13 @@ export interface LadderStep {
    * null with `send`.
    */
   notAfter: Date | null;
+  /** When R1 runs: `call_coming`'s "{time}" (§19 Q130). */
+  reminder1At: Date;
+  /**
+   * W3-17 (§19 Q127): a call of this stage waiting for capacity gives up at this time (the
+   * stage's time plus 30 minutes) and the stage's message goes instead.
+   */
+  callGiveUpAt: Date;
 }
 
 /**
@@ -557,7 +565,11 @@ export interface LadderPlanInput {
   /** Site-days whose daily link stage is already claimed (its `site_day.reminder` audit row). */
   dailyLinkDone: ReadonlySet<string>;
   now: Date;
-  outboundTrunk?: boolean;
+  /**
+   * W3-17: the reporters holding their own `auto_call` consent (§19 Q131); only these are called.
+   * Omitted: none.
+   */
+  autoCall?: ReadonlySet<string>;
   policy?: RemindPolicy;
 }
 
@@ -592,6 +604,14 @@ export function planLadder(input: LadderPlanInput): LadderStep[] {
       end: s.call_window_end ?? DEFAULT_CALL_WINDOW.end,
     };
     const reporters = siteLadderReporters(site, input.links, input.reporters);
+    // W3-17 (§19 Q51, Q125, Q132): a pack with an outbound trunk here, or a demo org (console).
+    const callsPlaced = placesCalls({ isDemo: org.is_demo === true }, pack);
+    const stageAt: Record<RemindStage, Date> = {
+      daily_link: times.reminder1At,
+      heads_up: times.headsUpAt,
+      reminder_1: times.reminder1At,
+      reminder_2: times.reminder2At,
+    };
     const step = (stage: RemindStage): LadderStep => ({
       siteDayId: sd.id,
       siteId: site.id,
@@ -607,8 +627,9 @@ export function planLadder(input: LadderPlanInput): LadderStep[] {
             status: r.status,
             contactPref: r.contact_pref,
             messageChannel: r.message_channel,
-            // Only `auto_call` matters to remind(), and only with a trunk (none before M8).
-            consents: new Set(),
+            // Only `auto_call` matters to remind() (§19 Q131), and only where calls are placed.
+            consents: new Set(input.autoCall?.has(r.id) ? (['auto_call'] as const) : []),
+            noCallsUntil: r.no_calls_until ?? null,
           },
           pack,
           stage,
@@ -620,16 +641,23 @@ export function planLadder(input: LadderPlanInput): LadderStep[] {
               reminder1Enabled: s.reminder1_enabled,
               reminder2Enabled: s.reminder2_enabled,
               secondCallEnabled: s.second_call_enabled ?? true,
+              autoCallEnabled: s.auto_call_enabled ?? true,
               callWindow,
             },
             weatherObserved: isWeatherObserved(weather),
-            outboundTrunk: input.outboundTrunk ?? OUTBOUND_TRUNK,
+            outboundTrunk: callsPlaced,
+            r1At: times.reminder1At,
             policy,
           },
         ),
       })),
       notAfter:
         policy.quietHours === 'skip' ? windowEndAfter(input.now, site.timezone, callWindow) : null,
+      reminder1At: times.reminder1At,
+      callGiveUpAt: new Date(
+        Math.max(stageAt[stage].getTime(), input.now.getTime()) +
+          OUTBOUND_CALL_POLICY.giveUpAfterMin * 60_000,
+      ),
     });
 
     const due = dueStage(sd, ladder, input.now);
@@ -665,6 +693,8 @@ export interface LadderVarsInput {
   voiceNumber: string | null;
   deadlineAt: Date;
   missingAt: Date;
+  /** When R1 runs (`call_coming`'s "{time}", W3-17); the deadline when not given. */
+  reminder1At?: Date;
   tz: string;
   weather: SiteDayWeather | null;
   /** The reporter's locale (`reporters.locale`): the language of the weather phrase. */
@@ -684,6 +714,9 @@ export function ladderVars(key: RemindKey, i: LadderVarsInput): Record<string, s
   switch (key) {
     case 'daily_link':
       return { site: i.siteName, link: link(), ...number };
+    case 'call_coming':
+      // §9.2: "I'll call you at {time} for today's report. Prefer to do it now? {link}" (§19 Q130).
+      return { time: formatTimeInTz(i.reminder1At ?? i.deadlineAt, i.tz), link: link() };
     case 'weather_headsup': {
       const language = languageOf(i.locale);
       return {
@@ -707,9 +740,10 @@ export function ladderKeyNeedsLink(key: RemindKey): boolean {
 
 /**
  * The claim's arguments for one step (`claim_site_day_reminder()`): a message per reporter whose
- * action is a message (with its variables from `varsFor`), and every other reporter as skipped,
- * with remind()'s reason. A call (M8; never before, `OUTBOUND_TRUNK`) is recorded as skipped
- * `call_not_built` with its message, if any, still sent.
+ * action is a message (with its variables from `varsFor`), a call per reporter whose action is a
+ * call (W3-17: one `place_call` job each, which gives up waiting for capacity at the step's
+ * `callGiveUpAt`, §19 Q127) with its message, if any (R2's), and every other reporter as skipped,
+ * with remind()'s reason.
  */
 export function claimArgs(
   step: LadderStep,
@@ -717,15 +751,17 @@ export function claimArgs(
 ): {
   messages: Array<{ reporterId: string; key: RemindKey; vars: Record<string, string> }>;
   skipped: Array<{ reporterId: string; reason: string }>;
+  calls: Array<{ reporterId: string; giveUpAt: string }>;
 } {
   const messages: Array<{ reporterId: string; key: RemindKey; vars: Record<string, string> }> = [];
   const skipped: Array<{ reporterId: string; reason: string }> = [];
+  const calls: Array<{ reporterId: string; giveUpAt: string }> = [];
   for (const t of step.targets) {
     const a = t.action;
     if (a.kind === 'message') {
       messages.push({ reporterId: t.reporter.id, key: a.key, vars: varsFor(t, a.key) });
     } else if (a.kind === 'call') {
-      skipped.push({ reporterId: t.reporter.id, reason: 'call_not_built' });
+      calls.push({ reporterId: t.reporter.id, giveUpAt: step.callGiveUpAt.toISOString() });
       if (a.message) {
         messages.push({ reporterId: t.reporter.id, key: a.message, vars: varsFor(t, a.message) });
       }
@@ -733,5 +769,5 @@ export function claimArgs(
       skipped.push({ reporterId: t.reporter.id, reason: a.reason });
     }
   }
-  return { messages, skipped };
+  return { messages, skipped, calls };
 }

@@ -152,6 +152,9 @@ export const NOTIFY_FALLBACK_GUARDS: Partial<Record<NotifierKey, NotifyGuard>> =
   weather_headsup: payloadGuard,
   reminder_1: payloadGuard,
   reminder_2: payloadGuard,
+  // W3-17: the 17:00 "I'll call you at …" (§19 Q130) and a call not reached (F6 step 1, F11).
+  call_coming: payloadGuard,
+  missed_call: payloadGuard,
   question_ready: payloadGuard,
   draft_ready: payloadGuard,
 };

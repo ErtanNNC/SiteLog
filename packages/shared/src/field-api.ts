@@ -217,17 +217,23 @@ export const DayStatusRequestSchema = z
 /**
  * `PATCH preferences` (F15, Settings; W2-02): the report mode, the language (one of the pack's
  * field locales) and the message channel (spec §19 Q21: one of the pack's built message channels,
- * else 400 `channel_not_offered`; null = the pack's order). Appendix B also lists `noCallsToday`
- * (outbound calls, M8): not accepted before then (400).
+ * else 400 `channel_not_offered`; null = the pack's order). W3-17 (spec §19 Q129): Appendix B's
+ * `noCallsToday`, "Don't call me today": no automated calls until the end of today (the org's time
+ * zone), audited; there is no "undo" (§19 Q217).
  */
 export const PreferencesRequestSchema = z
   .strictObject({
     contactPref: z.enum(CONTACT_PREFS).optional(),
     locale: z.enum(REPORTER_LOCALES).optional(),
     messageChannel: z.enum(MESSAGE_CHANNELS).nullable().optional(),
+    noCallsToday: z.literal(true).optional(),
   })
   .refine(
-    (p) => p.contactPref !== undefined || p.locale !== undefined || p.messageChannel !== undefined,
+    (p) =>
+      p.contactPref !== undefined ||
+      p.locale !== undefined ||
+      p.messageChannel !== undefined ||
+      p.noCallsToday !== undefined,
     'nothing to change',
   );
 
@@ -246,8 +252,12 @@ export const ConsentRevokeRequestSchema = z.strictObject({ type: z.enum(CONSENT_
  * `texts_opted_out`): a consent never overrides STOP.
  */
 export const ConsentGrantRequestSchema = z.strictObject({
-  /** `whatsapp` since W2-15 (*Message me on WhatsApp*, spec §19 Q25), when the pack lists it. */
-  type: z.enum(['sms', 'whatsapp']),
+  /**
+   * `whatsapp` since W2-15 (*Message me on WhatsApp*, spec §19 Q25), when the pack lists it;
+   * `auto_call` since W3-17 (*Call me at report time (automated)*, §19 Q131), where the org places
+   * calls (`placesCalls`; else 400 `calls_not_offered`).
+   */
+  type: z.enum(['sms', 'whatsapp', 'auto_call']),
   textVersion: z.string().trim().min(1).max(64),
 });
 

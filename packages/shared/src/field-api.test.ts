@@ -113,13 +113,20 @@ describe('field-api contract', () => {
         status: 'filed',
       }).success,
     ).toBe(false);
-    // Appendix B's messageChannel (W2-02; null = the pack's order); noCallsToday (M8) not yet.
+    // Appendix B's messageChannel (W2-02; null = the pack's order); noCallsToday (W3-17, §19 Q129).
     expect(PreferencesRequestSchema.safeParse({ locale: 'tr-TR' }).success).toBe(true);
     expect(PreferencesRequestSchema.safeParse({}).success).toBe(false);
     expect(PreferencesRequestSchema.safeParse({ messageChannel: 'sms' }).success).toBe(true);
     expect(PreferencesRequestSchema.safeParse({ messageChannel: null }).success).toBe(true);
     expect(PreferencesRequestSchema.safeParse({ messageChannel: 'fax' }).success).toBe(false);
-    expect(PreferencesRequestSchema.safeParse({ noCallsToday: true }).success).toBe(false);
+    expect(PreferencesRequestSchema.safeParse({ noCallsToday: true }).success).toBe(true);
+    // There is no undo (§19 Q217): `false` is no request.
+    expect(PreferencesRequestSchema.safeParse({ noCallsToday: false }).success).toBe(false);
+    // W3-17 (§19 Q131): Settings turns automated calls on.
+    expect(
+      ConsentGrantRequestSchema.safeParse({ type: 'auto_call', textVersion: 'field.consent.v1' })
+        .success,
+    ).toBe(true);
     expect(ConsentRevokeRequestSchema.safeParse({ type: 'sms' }).success).toBe(true);
     // W2-15: the WhatsApp consent is turned off like any other (spec §19 Q40).
     expect(ConsentRevokeRequestSchema.safeParse({ type: 'whatsapp' }).success).toBe(true);

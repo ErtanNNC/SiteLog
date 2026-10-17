@@ -18,6 +18,7 @@ import { formatDateTimeShort } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import NotFoundPage from '../not-found/Page';
 import { OrglessContacts } from './OrglessContacts';
+import { OutboundCalls } from './OutboundCalls';
 
 /**
  * /ops — SiteLog staff only (§15 reliability "dead-letter visible in an internal /ops page",
@@ -59,7 +60,7 @@ function OpsDashboard() {
       />
     );
 
-  const { queue, deadJobs, costOutliers } = ops.data;
+  const { queue, deadJobs, costOutliers, outboundCalls } = ops.data;
   const total = (k: 'queued' | 'running' | 'dead') => queue.reduce((a, q) => a + q[k], 0);
   const waits = queue.map((q) => q.oldestDueSeconds).filter((v): v is number => v !== null);
   const oldest = waits.length ? Math.max(...waits) : null;
@@ -347,6 +348,8 @@ function OpsDashboard() {
       </Card>
 
       <OrglessContacts />
+
+      <OutboundCalls rows={outboundCalls ?? []} />
 
       <Card>
         <CardHeader>

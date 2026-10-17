@@ -120,6 +120,9 @@ class CallState:
     consent_tries: int = 0
     #: W3-14: the reporter said no to the consent question (the dialog log keeps no reporter line).
     consent_declined: bool = False
+    #: W3-17 (§19 Q128): field-api queued the callback the reporter asked for (only then may the
+    #: call end `callback_requested`).
+    callback_requested: bool = False
     #: W3-12 (§9.4 "Recording", §15.2): the opening with the recording notice was played to the
     #: end. No tool that processes the reporter's speech runs before it (`tools.SPEECH_TOOLS`).
     disclosure_played: bool = False
@@ -268,7 +271,8 @@ def room_options(transport: str) -> Any:
 def settle_outcome(state: CallState, outcome: str) -> str:
     """The outcome a call may end with: what field-api did, never the model's (or a timer's)
     word for it. `filed` only after field-api's `filed` (§19 Q119), a day off or a saved change
-    only when field-api logged it (W3-14), no callback before W3-17 (§19 Q128); a call field-api
+    only when field-api logged it (W3-14), a callback only when field-api queued it (W3-17, §19
+    Q128); a call field-api
     filed ends `filed` whatever ended it (a hang-up right after the yes)."""
     if state.consent_declined:
         return "abandoned"
@@ -280,6 +284,8 @@ def settle_outcome(state: CallState, outcome: str) -> str:
         return state.day_logged
     if state.edit_saved:
         return "edit_applied"
+    if outcome == "callback_requested" and state.callback_requested:
+        return outcome
     if outcome == "filed":
         outcome = "draft_saved"
     elif outcome in ("no_work", "weather_day", "callback_requested", "edit_applied"):

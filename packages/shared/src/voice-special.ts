@@ -22,11 +22,12 @@ export const UNKNOWN_CALLER_RETENTION_DAYS = 30;
 
 /**
  * §19 Q128 as a parameter: one callback the reporter asked for per site-day, inside the call
- * window, before the missing step. `available` is false until a pack places outbound calls
- * (W3-17): `schedule_callback` then answers 400 `not_available` and the agent says
- * `callback_unavailable`.
+ * window, before the missing step. `available` since W3-17 (outbound calls): `schedule_callback`
+ * plans it and queues a delayed `place_call`; where the org places no calls, or the reporter has
+ * no `auto_call` consent of their own (§19 Q131), it answers 400 `not_available` and the agent
+ * says `callback_unavailable`.
  */
-export const VOICE_CALLBACK_POLICY = { available: false, perSiteDay: 1 } as const satisfies {
+export const VOICE_CALLBACK_POLICY = { available: true, perSiteDay: 1 } as const satisfies {
   available: boolean;
   perSiteDay: number;
 };
@@ -118,7 +119,7 @@ export function dayOffReadBack(input: {
     : renderVoice('day_off_confirm_weather', language, { site, time, hours });
 }
 
-/** What a callback request would do (§19 Q128; W3-17 places it, `VOICE_CALLBACK_POLICY`). */
+/** What a callback request does (§19 Q128; W3-17 places it, `VOICE_CALLBACK_POLICY`). */
 export type CallbackPlan =
   | { status: 'scheduled'; at: string; localTime: string }
   | { status: 'outside_window'; windowEnd: string | null }

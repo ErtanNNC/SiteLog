@@ -586,6 +586,22 @@ export const copy = {
       sms: 'Text',
       push: 'Push notification',
       whatsapp: 'WhatsApp',
+      /** W3-17: a demo org's outbound call rings here (console telephony, spec §19 Q132). */
+      call: 'Call',
+    },
+    /** W3-17: what an outbound call of SiteLog's did on the Demo phone. */
+    call: {
+      ringing: 'SiteLog is calling: ringing',
+      answered: 'On a call with SiteLog',
+      ended: 'Call with SiteLog ended',
+      missed: 'Missed call from SiteLog',
+      busy: 'Call from SiteLog: busy',
+      voicemail: 'Call from SiteLog reached voicemail: no message left',
+      failed: 'Call from SiteLog could not be placed',
+    },
+    callPurpose: {
+      reminder: 'Reminder call',
+      callback: 'Callback',
     },
     statusLabel: 'Status',
     status: {
@@ -2243,6 +2259,25 @@ export const copy = {
         body: 'It leaves this list and never runs again. The row is kept for the record and the discard is audited.',
         confirm: 'Discard job',
       },
+    },
+    /**
+     * W3-17 (M8, spec §16.2): per org and week, the share of called site-days filed on the call.
+     * Plain strings for `t()`: the card speaks the panel's language (EN, TR).
+     */
+    outboundCalls: {
+      title: 'Reminder calls (M8)',
+      hint: 'Per organisation and week: the site-days SiteLog called a reporter about, and how many were filed on that call by the reporter’s yes, with no office help. M8’s target is 85%.',
+      columns: {
+        org: 'Organisation',
+        week: 'Week of',
+        called: 'Called',
+        filed: 'Filed on the call',
+        share: 'Share',
+      },
+      share: '{{pct}}%',
+      belowTarget: 'Below the 85% target',
+      demo: 'Demo',
+      empty: 'No reminder calls in the last 8 weeks.',
     },
     /** Spec §19 Q44 (W1-16): unknown contacts no org sees. */
     orgless: {

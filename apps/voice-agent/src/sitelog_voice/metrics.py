@@ -34,6 +34,8 @@ class CallMetrics:
     interruptions: int = 0
     turns: int = 0
     sip_call_id: str | None = None
+    #: W3-17 (F6 step 1): who answered an outbound call, by its first utterance (`voicemail.py`).
+    answered_by: str | None = None
 
     def reporter_turn(self, *, confidence: float | None = None) -> None:
         self.turns += 1
@@ -64,6 +66,8 @@ class CallMetrics:
         }
         if self.sip_call_id:
             out["sipCallId"] = self.sip_call_id
+        if self.answered_by in ("human", "machine"):
+            out["answeredBy"] = self.answered_by
         return out
 
 

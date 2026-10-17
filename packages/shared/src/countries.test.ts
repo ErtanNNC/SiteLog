@@ -46,6 +46,7 @@ const ZZ_ROW: CountryRow = {
   voice_number: null,
   whatsapp_sender_id: null,
   whatsapp_templates: null,
+  outbound_trunk_id: null,
   legal_keys: {},
   created_at: '2026-10-14T00:00:00.000Z',
 };
@@ -61,6 +62,9 @@ describe('country pack rows (spec §4.6)', () => {
     for (const row of DEMO_COUNTRIES) {
       expect(row.sms_sender_id, row.code).toBeNull();
       expect(row.voice_number, row.code).toBeNull();
+      // W3-17 (§19 Q125): no outbound trunk in any migration.
+      expect(row.outbound_trunk_id, row.code).toBeNull();
+      expect(toCountryPack(row).outboundTrunkId, row.code).toBeNull();
       expect(row.legal_keys, row.code).toEqual({});
       // W2-14 (§19 Q107): push first, reached only by a reporter who turned notifications on;
       // W2-16 (§19 Q19): US SMS then WhatsApp, TR WhatsApp then SMS.
@@ -68,6 +72,22 @@ describe('country pack rows (spec §4.6)', () => {
         row.code === 'US' ? ['push', 'sms', 'whatsapp'] : ['push', 'whatsapp', 'sms'],
       );
     }
+  });
+
+  it('takes an outbound trunk (ST_…) only with the voice number as its caller id (§19 Q125, Q126)', () => {
+    const withTrunk = variant({ voice_number: '+15550142290', outbound_trunk_id: 'ST_abc123XYZ' });
+    expect(toCountryPack(withTrunk as CountryRow).outboundTrunkId).toBe('ST_abc123XYZ');
+    expect(CountryRowSchema.safeParse(variant({ outbound_trunk_id: 'ST_abc123XYZ' })).success).toBe(
+      false,
+    );
+    expect(
+      CountryRowSchema.safeParse(
+        variant({ voice_number: '+15550142290', outbound_trunk_id: 'trunk-1' }),
+      ).success,
+    ).toBe(false);
+    // A row read before 20261016000380 (no column) has no trunk.
+    const { outbound_trunk_id: _dropped, ...before } = us;
+    expect(CountryRowSchema.parse(before).outbound_trunk_id).toBeNull();
   });
 
   it('defaults to Twilio for SMS and WhatsApp; the TR pack overrides SMS (D48)', () => {
@@ -96,6 +116,7 @@ describe('country pack rows (spec §4.6)', () => {
       voiceNumber: null,
       whatsappSenderId: null,
       whatsappTemplates: {},
+      outboundTrunkId: null,
       legalKeys: {},
     });
     const set = toCountryPack({

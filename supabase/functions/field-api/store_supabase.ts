@@ -432,6 +432,16 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
       );
     },
 
+    async noCallsToday(reporterId, deviceId, now) {
+      return await rpc<{ until: string; changed: boolean }>(
+        admin.rpc('field_no_calls_today', {
+          p_reporter_id: reporterId,
+          p_device_id: deviceId,
+          p_now: now.toISOString(),
+        }),
+      );
+    },
+
     async grantConsent(reporterId, type, textVersion, deviceId, evidence) {
       return await rpc<{ granted: boolean }>(
         admin.rpc('field_grant_consent', {

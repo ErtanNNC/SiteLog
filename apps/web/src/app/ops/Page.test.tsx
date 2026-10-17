@@ -46,6 +46,31 @@ describe('OpsPage (demo data)', () => {
     expect(outlier).toHaveTextContent('6.8×');
   });
 
+  it('shows the M8 measure per org and week, below the target in words (W3-17)', async () => {
+    const store = new DemoStore();
+    const site = store.data.siteDays[0]!;
+    const template = store.data.calls[0]!;
+    const outbound = (id: string, day: string, outcome: string) =>
+      store.data.calls.push({
+        ...template,
+        id,
+        direction: 'outbound',
+        purpose: 'reminder',
+        attempt: 1,
+        site_day_id: day,
+        outcome: outcome as never,
+      });
+    const days = store.data.siteDays.filter((d) => d.date === site.date).slice(0, 2);
+    outbound('00000000-0000-4000-8000-0000000ca201', days[0]!.id, 'filed');
+    outbound('00000000-0000-4000-8000-0000000ca202', days[1]!.id, 'not_reached');
+    renderWithProviders(<OpsPage />, { route: '/ops', store });
+    const table = await screen.findByRole('table', { name: 'Reminder calls (M8)' });
+    const row = within(table).getAllByRole('row').at(-1)!;
+    expect(row).toHaveTextContent('Kestrel Build Group');
+    expect(row).toHaveTextContent('Demo');
+    expect(screen.getByText('Below the 85% target')).toBeInTheDocument();
+  });
+
   it('retries a dead job after confirming, refreshes the lists and records the operator', async () => {
     const store = new DemoStore();
     renderWithProviders(<OpsPage />, { route: '/ops', store });

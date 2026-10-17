@@ -7,6 +7,15 @@
  *   pnpm countries:set -- --code TR --whatsapp-sender +905320000000 --whatsapp-templates tr.json
  *   pnpm countries:set -- --code TR --clear-whatsapp-sender   → WhatsApp leaves real orgs' orders
  *   pnpm countries:set -- --code TR --print-whatsapp-templates → the bodies to submit, no write
+ *   pnpm countries:set -- --code US --outbound-trunk ST_xxxx    → automated calls (needs --voice)
+ *   pnpm countries:set -- --code US --clear-outbound-trunk     → no automated calls for real orgs
+ *
+ * W3-17 (spec §19 Q125, Q126): the pack's LiveKit outbound SIP trunk (`ST_…`), on which the worker
+ * places real orgs' reminder calls and callbacks, showing the pack's voice number as the caller id:
+ * a trunk needs the voice number (set in the same call or already there), and the voice number
+ * cannot be cleared while a trunk stays. Set it only once the trunk, the number and the
+ * SHAKEN/STIR registration are ready and counsel approved the `auto_call` wording (TCPA): from then
+ * on SiteLog calls real phones of that pack's orgs.
  *
  * W2-15 (spec §19 Q39): the WhatsApp sender (E.164, the Twilio WhatsApp sender) and the approved
  * template ids, a JSON file `{<message key>: {<language>: <content sid>}}` (keys of
@@ -32,6 +41,7 @@ import { WHATSAPP_KEYS } from '@sitelog/shared/channels.ts';
 import { isE164 } from '@sitelog/shared/format.ts';
 import {
   isValidSmsSenderId,
+  OUTBOUND_TRUNK_ID_RE,
   SMS_SENDER_TYPES,
   WhatsappTemplatesSchema,
   type SmsSenderType,
@@ -50,13 +60,16 @@ export interface CountriesSetArgs {
   whatsappSenderId?: string | null;
   /** A JSON file of template ids (`--whatsapp-templates`), or null to clear them. */
   whatsappTemplatesFile?: string | null;
+  /** W3-17: the LiveKit outbound SIP trunk (`--outbound-trunk`), or null to clear it. */
+  outboundTrunkId?: string | null;
   /** Print the WhatsApp template bodies of the pack and write nothing. */
   printWhatsappTemplates?: true;
   yes: boolean;
   allowStaging: boolean;
 }
 
-type ValueField = 'smsSenderId' | 'voiceNumber' | 'whatsappSenderId' | 'whatsappTemplatesFile';
+type ValueField =
+  'smsSenderId' | 'voiceNumber' | 'whatsappSenderId' | 'whatsappTemplatesFile' | 'outboundTrunkId';
 
 export function parseCountriesSetArgs(argv: readonly string[]): CountriesSetArgs {
   const rest = argv.filter((a) => a !== '--');
@@ -91,6 +104,10 @@ export function parseCountriesSetArgs(argv: readonly string[]): CountriesSetArgs
       once('--whatsapp-templates', 'whatsappTemplatesFile', value('--whatsapp-templates'));
     else if (a === '--clear-whatsapp-templates')
       once('--clear-whatsapp-templates', 'whatsappTemplatesFile', null);
+    else if (a === '--outbound-trunk' || a.startsWith('--outbound-trunk='))
+      once('--outbound-trunk', 'outboundTrunkId', value('--outbound-trunk'));
+    else if (a === '--clear-outbound-trunk')
+      once('--clear-outbound-trunk', 'outboundTrunkId', null);
     else if (a === '--print-whatsapp-templates') out.printWhatsappTemplates = true;
     else if (a === '--yes') out.yes = true;
     else if (a === '--allow-staging') out.allowStaging = true;
@@ -106,6 +123,7 @@ export function parseCountriesSetArgs(argv: readonly string[]): CountriesSetArgs
     ['--voice', 'voiceNumber'],
     ['--whatsapp-sender', 'whatsappSenderId'],
     ['--whatsapp-templates', 'whatsappTemplatesFile'],
+    ['--outbound-trunk', 'outboundTrunkId'],
   ] as const) {
     const v = out[field];
     if (typeof v === 'string') {
@@ -120,16 +138,25 @@ export function parseCountriesSetArgs(argv: readonly string[]): CountriesSetArgs
     throw new Error(
       `--whatsapp-sender must be E.164, e.g. +15550142290 (got "${out.whatsappSenderId}")`,
     );
+  if (typeof out.outboundTrunkId === 'string' && !OUTBOUND_TRUNK_ID_RE.test(out.outboundTrunkId))
+    throw new Error(
+      `--outbound-trunk must be a LiveKit SIP trunk id, e.g. ST_abc123 (got "${out.outboundTrunkId}")`,
+    );
+  if (out.outboundTrunkId && out.voiceNumber === null)
+    throw new Error(
+      '--outbound-trunk with --clear-voice: the trunk shows the voice number (spec §19 Q126)',
+    );
   const sets =
     out.smsSenderId !== undefined ||
     out.voiceNumber !== undefined ||
     out.whatsappSenderId !== undefined ||
-    out.whatsappTemplatesFile !== undefined;
+    out.whatsappTemplatesFile !== undefined ||
+    out.outboundTrunkId !== undefined;
   if (out.printWhatsappTemplates && sets)
     throw new Error('--print-whatsapp-templates writes nothing: pass it alone with --code');
   if (!sets && !out.printWhatsappTemplates)
     throw new Error(
-      'nothing to set: pass --sms-sender, --voice, --whatsapp-sender, --whatsapp-templates or a --clear-… flag',
+      'nothing to set: pass --sms-sender, --voice, --whatsapp-sender, --whatsapp-templates, --outbound-trunk or a --clear-… flag',
     );
   return { code, ...out };
 }
@@ -178,6 +205,8 @@ export interface PackEndpoints {
   whatsapp_provider: string;
   whatsapp_sender_id: string | null;
   whatsapp_templates: WhatsappTemplates | null;
+  /** W3-17 (20261016000380): the outbound SIP trunk; absent on a database before it. */
+  outbound_trunk_id?: string | null;
 }
 
 export interface NextEndpoints {
@@ -185,6 +214,7 @@ export interface NextEndpoints {
   voiceNumber: string | null;
   whatsappSenderId: string | null;
   whatsappTemplates: WhatsappTemplates | null;
+  outboundTrunkId: string | null;
 }
 
 /**
@@ -193,7 +223,10 @@ export interface NextEndpoints {
  */
 export function nextEndpoints(
   before: PackEndpoints,
-  args: Pick<CountriesSetArgs, 'smsSenderId' | 'voiceNumber' | 'whatsappSenderId'>,
+  args: Pick<
+    CountriesSetArgs,
+    'smsSenderId' | 'voiceNumber' | 'whatsappSenderId' | 'outboundTrunkId'
+  >,
   templates?: WhatsappTemplates | null,
 ): NextEndpoints {
   return {
@@ -202,7 +235,19 @@ export function nextEndpoints(
     whatsappSenderId:
       args.whatsappSenderId === undefined ? before.whatsapp_sender_id : args.whatsappSenderId,
     whatsappTemplates: templates === undefined ? before.whatsapp_templates : templates,
+    outboundTrunkId:
+      args.outboundTrunkId === undefined
+        ? (before.outbound_trunk_id ?? null)
+        : args.outboundTrunkId,
   };
+}
+
+/** §19 Q126 (W3-17): the trunk's calls show the pack's voice number, so a trunk needs one. */
+export function trunkProblem(
+  next: Pick<NextEndpoints, 'voiceNumber' | 'outboundTrunkId'>,
+): string | null {
+  if (next.outboundTrunkId === null || next.voiceNumber !== null) return null;
+  return 'an outbound trunk needs the pack’s voice number as its caller id: pass --voice too (spec §19 Q126)';
 }
 
 /**
@@ -265,17 +310,20 @@ export function describeEndpoints(row: PackEndpoints): string {
     ? `${row.whatsapp_sender_id} (sends through ${row.whatsapp_provider})`
     : 'not set (console for demo orgs; real orgs skip WhatsApp)';
   const templates = Object.keys(row.whatsapp_templates ?? {}).length;
-  return `${row.code} · ${row.sms_sender_type} SMS sender: ${sender} · voice number: ${voice} · WhatsApp sender: ${wa} · WhatsApp templates: ${templates} key(s)`;
+  const trunk = row.outbound_trunk_id
+    ? `${row.outbound_trunk_id} (automated calls for real orgs)`
+    : 'not set (no automated calls for real orgs)';
+  return `${row.code} · ${row.sms_sender_type} SMS sender: ${sender} · voice number: ${voice} · WhatsApp sender: ${wa} · WhatsApp templates: ${templates} key(s) · outbound trunk: ${trunk}`;
 }
 
 const COLUMNS =
-  'code, sms_provider, sms_sender_type, sms_sender_id, voice_number, field_locales, whatsapp_provider, whatsapp_sender_id, whatsapp_templates';
+  'code, sms_provider, sms_sender_type, sms_sender_id, voice_number, field_locales, whatsapp_provider, whatsapp_sender_id, whatsapp_templates, outbound_trunk_id';
 export const SELECT_PACK_SQL = `select ${COLUMNS} from countries where code = $1 for update`;
 /**
  * `$5::text::jsonb`, not `$5::jsonb`: postgres.js serialises a parameter the server types as jsonb
  * with `JSON.stringify`, so the templates' JSON text would be stored as one JSON string.
  */
-export const SET_ENDPOINTS_SQL = `select ${COLUMNS} from set_country_endpoints($1, $2, $3, $4, $5::text::jsonb)`;
+export const SET_ENDPOINTS_SQL = `select ${COLUMNS} from set_country_endpoints($1, $2, $3, $4, $5::text::jsonb, $6)`;
 
 /** A transaction's query function (postgres.js `sql.unsafe` in the script, a fake in tests). */
 export type Query = (text: string, params: unknown[]) => Promise<readonly unknown[]>;
@@ -295,13 +343,14 @@ export async function applyCountriesSet(
     throw new Error(`pack ${args.code} has an unknown sender type ${found.sms_sender_type}`);
   if (args.printWhatsappTemplates) return { before: found, after: found, changed: false };
   const next = nextEndpoints(found, args, templates);
-  const problem = senderProblem(found.sms_sender_type, next.smsSenderId);
+  const problem = senderProblem(found.sms_sender_type, next.smsSenderId) ?? trunkProblem(next);
   if (problem) throw new Error(problem);
   if (
     next.smsSenderId === found.sms_sender_id &&
     next.voiceNumber === found.voice_number &&
     next.whatsappSenderId === found.whatsapp_sender_id &&
-    JSON.stringify(next.whatsappTemplates) === JSON.stringify(found.whatsapp_templates)
+    JSON.stringify(next.whatsappTemplates) === JSON.stringify(found.whatsapp_templates) &&
+    next.outboundTrunkId === (found.outbound_trunk_id ?? null)
   )
     return { before: found, after: found, changed: false };
   const [after] = (await query(SET_ENDPOINTS_SQL, [
@@ -310,6 +359,7 @@ export async function applyCountriesSet(
     next.voiceNumber,
     next.whatsappSenderId,
     next.whatsappTemplates === null ? null : JSON.stringify(next.whatsappTemplates),
+    next.outboundTrunkId,
   ])) as PackEndpoints[];
   if (!after) throw new Error('set_country_endpoints() returned no row');
   return { before: found, after, changed: true };

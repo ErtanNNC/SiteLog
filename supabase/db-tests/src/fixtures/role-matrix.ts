@@ -785,6 +785,45 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) => `select report_no_photo_check('${o.report}', 't', 'b', '{}') as v`,
   },
+  // W3-17 (20261016000380_outbound_calls.sql): outbound reminder calls.
+  org_places_calls: {
+    why: '§19 Q51, Q132: field-api and the worker only (service role).',
+    allow: NONE,
+    call: (o) => `select org_places_calls('${o.org}') as v`,
+  },
+  field_no_calls_today: {
+    why: '§6.5, §19 Q129: field-api only (service role); "Don\'t call me today" comes through the recorder.',
+    allow: NONE,
+    call: (o) => `select field_no_calls_today('${o.reporter}', '${o.fieldDevice}') as v`,
+  },
+  outbound_call_start: {
+    why: '§10.1 place_call, §19 Q127–Q131: the worker only (service role); no client places a call.',
+    allow: NONE,
+    call: (o) =>
+      `select outbound_call_start('${o.reporter}', '${o.siteDay2}', 'reminder_1', now(), 'console') as v`,
+  },
+  outbound_call_ringing: {
+    why: '§10.1: the worker only (service role).',
+    allow: NONE,
+    call: (o) => `select outbound_call_ringing('${o.call}') as v`,
+  },
+  outbound_call_unanswered: {
+    why: '§10.1, F6 step 1: the worker only (service role).',
+    allow: NONE,
+    call: (o) => `select outbound_call_unanswered('${o.call}', 'no_answer', 'matrix') as v`,
+  },
+  voice_schedule_callback: {
+    why: '§6.5, §19 Q128: field-api only (service role) for the voice agent.',
+    allow: NONE,
+    call: (o) =>
+      `select voice_schedule_callback('${o.call}', now() + interval '30 minutes', 30) as v`,
+  },
+  outbound_call_share: {
+    why: "M8: the worker's digest only (service role); /ops reads it through ops_outbound_call_share().",
+    allow: NONE,
+    call: (o) =>
+      `select count(*) as v from outbound_call_share('${o.org}', '2026-10-01', '2026-10-31')`,
+  },
 };
 
 export type Scope = 'own' | 'other';

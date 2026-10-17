@@ -40,6 +40,7 @@ import {
   readReportData,
   settingsMessageChannels,
   sha256Hex,
+  placesCalls,
   toCountryPack,
   uploadBucket,
   uploadMediaType,
@@ -276,6 +277,12 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
   /** W3-13 (§19 Q121): `resolve` and `today` say whether Today offers Talk now. */
   const talkNow = (orgId: string) =>
     talkNowDeps ? talkNowAvailable(talkNowDeps, orgId) : Promise.resolve(false);
+  /**
+   * W3-17 (spec §19 Q51, Q125, Q132): SiteLog places automated calls for the reporter's org (a
+   * pack with an outbound trunk here, or a demo org's console calls).
+   */
+  const callsPlaced = (ctx: { org: OrgContext; pack: CountryPack }) =>
+    placesCalls({ isDemo: ctx.org.org.is_demo === true }, ctx.pack);
 
   // ── Every answer: no-store (registered first, so it wraps everything, errors included) ───────
   app.use('*', async (c, next) => {
@@ -503,6 +510,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
         .map(fieldSite),
       country: fieldCountryView(ctx.pack),
       talkNow: await talkNow(ctx.reporter.org_id),
+      placesCalls: callsPlaced(ctx),
     };
     return c.json(body);
   });
@@ -632,6 +640,10 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       throw new FieldError(400, 'channel_not_offered', undefined, {
         offered: settingsMessageChannels(ctx.pack),
       });
+    }
+    // W3-17 (§19 Q33, Q131): *Call me at report time (automated)* only where calls are placed.
+    if (body.types.includes('auto_call') && !callsPlaced(ctx)) {
+      throw new FieldError(400, 'calls_not_offered');
     }
     const fresh = [...new Set(body.types)].filter((t) => !ctx.consents.held.has(t));
     const evidence = {
@@ -1650,10 +1662,14 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       store.phoneOptedOut(reporter.phone_e164, ctx.pack.code),
       store.devicePushSubscribed(ctx.reporter.id, ctx.device.id),
     ]);
-    return settingsView(reporter, ctx.pack, consents, textsOptedOut(reporter, phoneOptedOut), {
-      keySet: vapidKey() !== null,
-      deviceSubscribed,
-    });
+    return settingsView(
+      reporter,
+      ctx.pack,
+      consents,
+      textsOptedOut(reporter, phoneOptedOut),
+      { keySet: vapidKey() !== null, deviceSubscribed },
+      callsPlaced(ctx),
+    );
   }
 
   app.get('/preferences', async (c) => {
@@ -1703,6 +1719,11 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
         device_id: ctx.device.id,
       });
     }
+    // W3-17 (spec §19 Q129): "Don't call me today", audited by field_no_calls_today().
+    if (body.noCallsToday) {
+      const { until } = await store.noCallsToday(before.id, ctx.device.id, now());
+      reporter = { ...reporter, no_calls_until: until };
+    }
     return c.json((await settingsBody(ctx, reporter)) satisfies PreferencesResponse);
   });
 
@@ -1724,7 +1745,10 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
   app.post('/consent/grant', async (c) => {
     const ctx = await authenticate(c, { consent: false });
     const body = await parseBody(c, ConsentGrantRequestSchema);
-    if (!ctx.pack.messageChannels.includes(body.type)) {
+    if (body.type === 'auto_call') {
+      // W3-17 (§19 Q131): Settings' automated calls, where the org places them.
+      if (!callsPlaced(ctx)) throw new FieldError(400, 'calls_not_offered');
+    } else if (!ctx.pack.messageChannels.includes(body.type)) {
       throw new FieldError(400, 'channel_not_offered', undefined, {
         offered: settingsMessageChannels(ctx.pack),
       });

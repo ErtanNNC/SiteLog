@@ -45,10 +45,11 @@ describe('schema end state (D11)', () => {
     expect(spec.enums.size).toBe(26);
     expect(blocks['6.4']!.match(/^create index /gm)).toHaveLength(9);
     // W2-15: the unique WhatsApp sender beside the SMS one; W3-03: the unique voice number;
-    // W3-11: one set of precise call seconds per report, call and value.
-    expect(blocks['6.4']!.match(/^create unique index /gm)).toHaveLength(4);
+    // W3-11: one set of precise call seconds per report, call and value; W3-17: each outbound
+    // attempt once per site-day and reporter (§19 Q128).
+    expect(blocks['6.4']!.match(/^create unique index /gm)).toHaveLength(5);
     const indexes = [...spec.indexes.values()].reduce((n, set) => n + set.size, 0);
-    expect(indexes).toBe(16);
+    expect(indexes).toBe(17);
     expect(spec.indexes.get('countries')).toEqual(
       new Set([
         'UNIQUE btree (sms_sender_id) WHERE (sms_sender_id IS NOT NULL)',

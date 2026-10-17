@@ -74,6 +74,12 @@ export const WhatsappTemplatesSchema = z.record(
 );
 export type WhatsappTemplates = z.infer<typeof WhatsappTemplatesSchema>;
 
+/**
+ * A LiveKit outbound SIP trunk id (`ST_` and 4–64 letters or digits), as the table's check and
+ * set_country_endpoints() take it (W3-17, spec §19 Q125).
+ */
+export const OUTBOUND_TRUNK_ID_RE = /^ST_[A-Za-z0-9]{4,64}$/;
+
 /** The shapes `set_country_endpoints()` accepts for a sender id, by the pack's sender type. */
 export function isValidSmsSenderId(type: SmsSenderType, senderId: string): boolean {
   switch (type) {
@@ -140,6 +146,13 @@ export const CountryRowSchema = z
       .regex(/^\+[1-9]\d{6,14}$/, 'whatsapp_sender_id must be E.164')
       .nullable(),
     whatsapp_templates: WhatsappTemplatesSchema.nullable(),
+    // W3-17 (20261016000380, §19 Q125): per environment, null in every migration. Optional so a
+    // row read before that migration still parses (as no trunk).
+    outbound_trunk_id: z
+      .string()
+      .regex(OUTBOUND_TRUNK_ID_RE, 'outbound_trunk_id must be a LiveKit SIP trunk id (ST_…)')
+      .nullable()
+      .default(null),
     legal_keys: LegalKeysSchema,
     created_at: z.string(),
   })
@@ -175,6 +188,13 @@ export const CountryRowSchema = z
         code: 'custom',
         path: ['sms_sender_id'],
         message: `not a valid ${row.sms_sender_type} sender id`,
+      });
+    // §19 Q126 (W3-17): the trunk's calls show the pack's voice number.
+    if (row.outbound_trunk_id !== null && row.voice_number === null)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['outbound_trunk_id'],
+        message: 'an outbound trunk needs the pack’s voice number (its caller id)',
       });
   });
 
@@ -212,6 +232,12 @@ export interface CountryPack {
   whatsappSenderId: E164 | null;
   /** The approved template of each key per language in this environment; `{}` = none. */
   whatsappTemplates: WhatsappTemplates;
+  /**
+   * W3-17 (spec §19 Q125, Q126): the LiveKit outbound SIP trunk in this environment; null = no
+   * automated calls for real orgs (a demo org's calls are `console`, §19 Q132). The calls show
+   * `voiceNumber`.
+   */
+  outboundTrunkId: string | null;
   legalKeys: { privacyNotice?: string; recordingNotice?: string; consent?: string };
 }
 
@@ -242,6 +268,7 @@ export function toCountryPack(row: CountryRow): CountryPack {
     voiceNumber: r.voice_number === null ? null : assertE164(r.voice_number),
     whatsappSenderId: r.whatsapp_sender_id === null ? null : assertE164(r.whatsapp_sender_id),
     whatsappTemplates: r.whatsapp_templates ?? {},
+    outboundTrunkId: r.outbound_trunk_id,
     legalKeys,
   };
 }

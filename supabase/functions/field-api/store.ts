@@ -465,11 +465,20 @@ export interface FieldStore extends DailyLinkStore, VoiceStore {
    */
   grantConsent(
     reporterId: string,
-    type: 'sms' | 'whatsapp',
+    type: 'sms' | 'whatsapp' | 'auto_call',
     textVersion: string,
     deviceId: string,
     evidence: Json,
   ): Promise<{ granted: boolean }>;
+  /**
+   * field_no_calls_today() (W3-17, spec §19 Q129): Settings' "Don't call me today", the end of
+   * today in the org's time zone (`now` the caller's clock), audited `reporter.preferences_changed`.
+   */
+  noCallsToday(
+    reporterId: string,
+    deviceId: string,
+    now: Date,
+  ): Promise<{ until: string; changed: boolean }>;
   /**
    * field_push_subscribe() (20261016000180, W2-14): stores the browser subscription of this device
    * and, when not held, the `push` consent (`web_checkbox`), audited `push.subscribed` and

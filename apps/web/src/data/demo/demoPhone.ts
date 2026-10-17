@@ -14,6 +14,7 @@ import { languageOf } from '@sitelog/shared/locale.ts';
 import { optOutNotification } from '@sitelog/shared/sms/inbound.ts';
 import { planInboundSms } from '@sitelog/shared/sms/keywords.ts';
 import { localId } from '@/lib/utils';
+import { mergeDemoPhoneCalls } from '../demoPhoneCalls';
 import type { DemoPhoneData, DemoPhoneMessage } from '../types';
 
 /**
@@ -324,7 +325,7 @@ export function demoPhoneData(data: DemoDataset): DemoPhoneData {
 }
 
 export function demoPhoneThread(data: DemoDataset, reporterId: string): DemoPhoneMessage[] {
-  return smsOf(data, reporterId)
+  const texts = smsOf(data, reporterId)
     .map((m, i) => ({ m, i }))
     .sort((a, b) => a.m.created_at.localeCompare(b.m.created_at) || a.i - b.i)
     .map(({ m }) => ({
@@ -337,4 +338,16 @@ export function demoPhoneThread(data: DemoDataset, reporterId: string): DemoPhon
       channel: m.channel === 'push' || m.channel === 'whatsapp' ? m.channel : ('sms' as const),
       at: m.created_at,
     }));
+  // W3-17 (§19 Q132): the reporter's outbound calls ring in the Demo phone too.
+  const calls = data.calls
+    .filter((c) => c.reporter_id === reporterId && c.direction === 'outbound')
+    .map((c) => ({
+      id: c.id,
+      status: c.status,
+      outcome: c.outcome,
+      purpose: c.purpose,
+      attempt: c.attempt ?? null,
+      created_at: c.created_at ?? '',
+    }));
+  return mergeDemoPhoneCalls(texts, calls);
 }

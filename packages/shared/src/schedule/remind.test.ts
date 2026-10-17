@@ -86,8 +86,9 @@ function expected(
   if (pref === 'link') return msg(KEY[stage]);
   switch (stage) {
     case 'daily_link':
-      // "—" with calls (call_coming optional, M8); without a trunk, Q76 (decided): the daily link.
-      return caps.trunk ? { kind: 'none', reason: 'call_reporter' } : msg('daily_link');
+      // W3-17 (§19 Q130): with calls placed, "I'll call you at {time}" (call_coming, with the
+      // link); without, Q76 (decided): the daily link.
+      return caps.trunk ? msg('call_coming') : msg('daily_link');
     case 'heads_up':
       return msg('weather_headsup');
     case 'reminder_1':
@@ -137,10 +138,12 @@ describe('remind(): the §7.4 table over every pack capability, preference and s
     expect(got).toEqual(want);
   });
 
-  it('never answers call_coming, and never a call without a trunk (none before M8)', () => {
+  it('call_coming and calls only where calls are placed (§19 Q130, W3-17)', () => {
     for (const [label, got] of rows) {
-      if (got.kind === 'message') expect(got.key, label).not.toBe('call_coming');
-      if (label.includes('trunk=false')) expect(got.kind, label).not.toBe('call');
+      if (label.includes('trunk=false')) {
+        expect(got.kind, label).not.toBe('call');
+        if (got.kind === 'message') expect(got.key, label).not.toBe('call_coming');
+      }
     }
   });
 
@@ -227,6 +230,76 @@ describe('remind(): flags, reporter, weather, consent', () => {
       policy: { ...REMIND_POLICY_DEFAULTS, quietHours: 'send' as const },
     };
     expect(remind(r, p, 'reminder_1', sendAnyway)).toEqual({ kind: 'message', key: 'reminder_1' });
+  });
+});
+
+describe('remind(): outbound calls (W3-17, §19 Q129, Q130, Q131)', () => {
+  const p = pack();
+  const caller = reporter({
+    contactPref: 'call',
+    consents: new Set<ConsentType>(['sms', 'auto_call']),
+  });
+  const r1At = at('2026-10-09', '17:45');
+  const at17 = ctx({ outboundTrunk: true, now: at('2026-10-09', '17:00'), r1At });
+
+  it('the 17:00 call_coming only when the R1 call will be placed', () => {
+    expect(remind(caller, p, 'daily_link', at17)).toEqual({ kind: 'message', key: 'call_coming' });
+    // No auto_call consent: no call comes, so the daily link (Q76).
+    expect(remind(reporter({ contactPref: 'call' }), p, 'daily_link', at17)).toEqual({
+      kind: 'message',
+      key: 'daily_link',
+    });
+    // R1 after the call window closes: no call comes.
+    const lateR1 = { ...at17, r1At: at('2026-10-09', '20:15') };
+    expect(remind(caller, p, 'daily_link', lateR1)).toEqual({ kind: 'message', key: 'daily_link' });
+    // The org turned automated calls off (auto_call_enabled, M10's control).
+    const off = { ...at17, settings: { ...at17.settings, autoCallEnabled: false } };
+    expect(remind(caller, p, 'daily_link', off)).toEqual({ kind: 'message', key: 'daily_link' });
+    expect(remind(caller, p, 'reminder_1', { ...off, now: r1At })).toEqual({
+      kind: 'message',
+      key: 'reminder_1',
+    });
+    // §19 Q130 as a parameter: none.
+    const quiet = { ...at17, policy: { ...REMIND_POLICY_DEFAULTS, callComing: 'none' as const } };
+    expect(remind(caller, p, 'daily_link', quiet)).toEqual({
+      kind: 'none',
+      reason: 'call_reporter',
+    });
+  });
+
+  it('"Don\'t call me today" turns the calls into the messages a link reporter gets (§19 Q129)', () => {
+    const notToday = { ...caller, noCallsUntil: at('2026-10-10', '00:00') };
+    expect(remind(notToday, p, 'daily_link', at17)).toEqual({
+      kind: 'message',
+      key: 'daily_link',
+    });
+    expect(remind(notToday, p, 'reminder_1', ctx({ outboundTrunk: true, now: r1At }))).toEqual({
+      kind: 'message',
+      key: 'reminder_1',
+    });
+    expect(
+      remind(
+        notToday,
+        p,
+        'reminder_2',
+        ctx({ outboundTrunk: true, now: at('2026-10-09', '18:30') }),
+      ),
+    ).toEqual({ kind: 'message', key: 'reminder_2' });
+    // Yesterday's "not today" is over.
+    const yesterday = { ...caller, noCallsUntil: '2026-10-09T05:00:00.000Z' };
+    expect(remind(yesterday, p, 'reminder_1', ctx({ outboundTrunk: true, now: r1At }))).toEqual({
+      kind: 'call',
+      purpose: 'reminder',
+    });
+  });
+
+  it('a link reporter never gets a call or call_coming, whatever the org places', () => {
+    const link = reporter({ consents: new Set<ConsentType>(['sms', 'auto_call']) });
+    expect(remind(link, p, 'daily_link', at17)).toEqual({ kind: 'message', key: 'daily_link' });
+    expect(remind(link, p, 'reminder_1', ctx({ outboundTrunk: true, now: r1At }))).toEqual({
+      kind: 'message',
+      key: 'reminder_1',
+    });
   });
 });
 

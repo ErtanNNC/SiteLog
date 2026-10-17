@@ -97,12 +97,17 @@ function reporter(
   };
 }
 
-function setup(opts: { waitMs?: number; onSleep?: () => void } = {}) {
+function setup(opts: { waitMs?: number; onSleep?: () => void; trunk?: boolean } = {}) {
   const clock = { now: T0 };
   const store = new FakeFieldStore(() => clock.now);
   const special = new FakeVoiceSpecialStore(store, () => clock.now);
   const us = DEMO_COUNTRIES.find((c) => c.code === 'US')!;
-  store.countries.push({ ...us, voice_number: VOICE_NUMBER } as CountryRow);
+  store.countries.push({
+    ...us,
+    voice_number: VOICE_NUMBER,
+    // W3-17: the pack's outbound trunk here (§19 Q125), so the org places calls.
+    outbound_trunk_id: opts.trunk ? 'ST_testTrunk1' : null,
+  } as CountryRow);
   store.orgs.push({
     id: ORG,
     name: 'Kestrel Build Group',
@@ -148,6 +153,7 @@ function setup(opts: { waitMs?: number; onSleep?: () => void } = {}) {
     consent(KEVIN, t);
     consent(AISHA, t);
   }
+  if (opts.trunk) consent(KEVIN, 'auto_call');
   const texts: DailyLinkMessage[] = [];
   const app = createFieldApp({
     store,
@@ -586,7 +592,7 @@ Deno.test(
 );
 
 Deno.test(
-  '"Not today" (§19 Q129) sets no calls until the end of today; a callback is not available yet',
+  '"Not today" (§19 Q129) sets no calls until the end of today; no callback where no calls are placed',
   async () => {
     const h = setup();
     const c = await h.sip(10, KEVIN_PHONE);
@@ -651,5 +657,35 @@ Deno.test(
     const kevin = await h.sip(12, KEVIN_PHONE);
     const refused = await h.tool('leave_message', kevin, { utterance: 'hello', start: 1 });
     assertEquals([refused.status, refused.json.error], [403, 'out_of_scope']);
+  },
+);
+
+Deno.test(
+  'W3-17: "call me back in half an hour" queues the one callback inside the window (§19 Q128, Q131)',
+  async () => {
+    const h = setup({ trunk: true });
+    const c = await h.sip(20, KEVIN_PHONE);
+    // 16:00 Chicago + 30 min: inside the window, before the missing step.
+    const cb = await h.tool('schedule_callback', c, { minutes: 30 });
+    assertEquals(cb.status, 200, cb.text);
+    assertEquals(cb.json, {
+      status: 'scheduled',
+      at: '2026-10-12T21:30:00.000Z',
+      localTime: '16:30',
+    });
+    assertEquals(h.special.callbacks.length, 1);
+    assertEquals(h.special.callbacks[0]!.at, '2026-10-12T21:30:00.000Z');
+    const audit = h.store.audits.find((a) => a.action === 'call.callback_requested')!;
+    assertEquals([audit.entityId, audit.actorType], [c.callId, 'agent']);
+    // One per site-day.
+    const again = await h.tool('schedule_callback', c, { minutes: 45 });
+    assertEquals(again.json, { status: 'limit_reached' });
+    // After the window closes (20:00): not planned.
+    const late = await h.tool('schedule_callback', c, { minutes: 300 });
+    assertEquals(late.json, { status: 'outside_window', windowEnd: '20:00' });
+    // Aisha has no auto_call consent of her own: not available (the agent says so).
+    const aisha = await h.sip(21, AISHA_PHONE);
+    const refused = await h.tool('schedule_callback', aisha, { minutes: 30 });
+    assertEquals([refused.status, refused.json.error], [400, 'not_available']);
   },
 );

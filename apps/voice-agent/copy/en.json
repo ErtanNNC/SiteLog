@@ -81,6 +81,8 @@
     "day_off_filed": "Today's report for {site} is already filed.",
     "day_off_site_paused": "{site} is paused in SiteLog. Ask the office to resume it.",
     "callback_unavailable": "I can't call you back yet. Call again or use your link whenever you're ready.",
+    "callback_outside_window": "I can only call until {time}. Want to do the report now?",
+    "callback_limit": "I can only call you back once a day. Want to do the report now?",
     "pref_not_today_ok": "OK, no more calls from me today.",
     "edit_ask": "What should I change?",
     "edit_save_ask": "Save it?",

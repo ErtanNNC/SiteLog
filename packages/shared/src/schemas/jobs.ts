@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SMS_KEYS, TWO_WAY_SMS_KEYS } from '../copy/sms.ts';
 import { FIELD_CHANNELS, SITE_DAY_STATUSES, type JOB_TYPES } from '../enums.ts';
+import { OUTBOUND_CALL_STAGES } from '../voice-outbound.ts';
 
 /**
  * A web report's re-check before a `notify` job sends (W2-07): `question_ready` while the question
@@ -72,6 +73,29 @@ export const JobPayloadSchemas = {
    * no photo is flagged `no_photo` (queued delayed at filing, `no_photo:<report>`).
    */
   no_photo_check: z.object({ reportId: uuid }),
+  /**
+   * §10.1 `place_call` (W3-17). `dial` (the default): the call of a stage, queued by
+   * claim_site_day_reminder() for R1 and R2 (`call:<site_day>:<reporter>:<stage>`) and by
+   * voice_schedule_callback() for the one callback (delayed to its time); `notAfter` is the call
+   * window's end, `giveUpAt` the end of the capacity wait (§19 Q127), `wait` the nth wait.
+   * `ring_end`: a console call's ring is over (`call_ring:<call>`). `missed`: a call not reached
+   * gets `missed_call` (`call_missed:<call>`, voice_call_end() for a voicemail greeting too).
+   */
+  place_call: z.union([
+    z.object({
+      phase: z.literal('dial').optional(),
+      reporterId: uuid,
+      siteDayId: uuid,
+      stage: z.enum(OUTBOUND_CALL_STAGES),
+      notAfter: z.string().datetime({ offset: true }).optional(),
+      giveUpAt: z.string().datetime({ offset: true }).optional(),
+      wait: z.number().int().min(0).max(60).optional(),
+      /** A callback: the call it was asked for on. */
+      requestedOn: uuid.optional(),
+    }),
+    z.object({ phase: z.literal('ring_end'), callId: uuid }),
+    z.object({ phase: z.literal('missed'), callId: uuid }),
+  ]),
   transcribe_audio: z.object({
     messageId: uuid,
     reportId: uuid.optional(),

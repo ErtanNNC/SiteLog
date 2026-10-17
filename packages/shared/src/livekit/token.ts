@@ -32,6 +32,11 @@ export interface LiveKitTokenOptions {
   name?: string;
   metadata?: string;
   video: LiveKitVideoGrant;
+  /**
+   * The `sip` grant (W3-17): `call` lets a server token place an outbound SIP call
+   * (SIP.CreateSIPParticipant). Only the worker's server tokens carry it.
+   */
+  sip?: { call?: boolean; admin?: boolean };
   /** Lifetime in seconds. */
   ttlS: number;
   now?: Date;
@@ -60,6 +65,7 @@ export async function mintLiveKitToken(opts: LiveKitTokenOptions): Promise<strin
     exp: now + opts.ttlS,
     video: opts.video,
   };
+  if (opts.sip) claims.sip = opts.sip;
   if (opts.identity) {
     claims.sub = opts.identity;
     claims.jti = opts.identity;

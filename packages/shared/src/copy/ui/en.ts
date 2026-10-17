@@ -692,6 +692,8 @@ export const uiEn = {
         title: 'Turn texts back on?',
         /** W2-15: *Turn on* for WhatsApp (Message me on WhatsApp, spec §19 Q25, Q40). */
         titleWhatsapp: 'Turn WhatsApp messages on?',
+        /** W3-17: *Turn on* for automated calls (spec §19 Q131): the Welcome wording again. */
+        titleCall: 'Turn automated calls on?',
         body: 'By turning this on, you agree again to:',
         note: 'You can turn them off here at any time.',
         confirm: 'Turn on',
@@ -704,6 +706,18 @@ export const uiEn = {
           'You stopped our texts by replying STOP. To get them again, reply START to one of our texts.',
         /** A one-way pack: replies don't reach SiteLog (spec §19 Q94). */
         office: 'Texts to this phone are stopped. Ask the office.',
+      },
+      /**
+       * W3-17 (F15, spec §19 Q129): "Don't call me today", for a reporter who prefers calls where
+       * SiteLog places them. Until the end of today; the messages come instead.
+       */
+      notToday: {
+        title: 'Calls today',
+        label: 'Don’t call me today',
+        hint: 'You’ll get today’s reminders as messages instead. Calls start again tomorrow.',
+        button: 'Don’t call me today',
+        on: 'No more calls today',
+        onHint: 'You’ll get today’s reminders as messages. Calls start again tomorrow.',
       },
       signOut: 'Sign out this phone',
       signOutSheet: {

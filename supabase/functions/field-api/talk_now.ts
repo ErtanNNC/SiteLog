@@ -1,11 +1,13 @@
 import type { Context, Hono } from 'hono';
 import {
   FIELD_RATE_LIMITS,
-  LIVEKIT_SERVER_TOKEN_TTL_S,
+  LiveKitApiError,
   VoiceTokenRequestSchema,
-  liveKitHttpOrigin,
-  mintLiveKitToken,
+  liveKitConfigFrom,
+  liveKitTwirp,
   talkNowParticipantToken,
+  type LiveKitConfig,
+  type LiveKitVideoGrant,
   type FieldDeviceRow,
   type FieldLinkRow,
   type ReporterRow,
@@ -53,67 +55,35 @@ export interface LiveKitApi {
   participantToken(input: { room: string; callId: string }): Promise<string>;
 }
 
-export interface LiveKitConfig {
-  url: string;
-  apiKey: string;
-  apiSecret: string;
-}
-
 /**
  * The LiveKit config from env, or null when any of the three is unset (then no Talk now here).
- * A URL that is not ws(s)/http(s) counts as unset.
+ * A URL that is not ws(s)/http(s) counts as unset (`liveKitConfigFrom`, shared with the worker's
+ * outbound calls, W3-17).
  */
 export function liveKitConfig(env: (name: string) => string | undefined): LiveKitConfig | null {
-  const url = env('LIVEKIT_URL');
-  const apiKey = env('LIVEKIT_API_KEY');
-  const apiSecret = env('LIVEKIT_API_SECRET');
-  if (!url || !apiKey || !apiSecret || !liveKitHttpOrigin(url)) return null;
-  return { url, apiKey, apiSecret };
+  return liveKitConfigFrom(env);
 }
 
-export class LiveKitApiError extends Error {
-  constructor(
-    readonly method: string,
-    readonly status: number,
-  ) {
-    super(`LiveKit ${method}: HTTP ${status}`);
-    this.name = 'LiveKitApiError';
-  }
-}
+export { LiveKitApiError, type LiveKitConfig };
 
 /** How long LiveKit keeps a Talk now room nobody joined (then `room_finished`: the backstop). */
 export const TALK_NOW_EMPTY_TIMEOUT_S = 120;
 
-/** LiveKit's Twirp API with short server tokens minted here (no SDK). */
+/** LiveKit's Twirp API with short server tokens minted here (no SDK; `liveKitTwirp`, shared). */
 export function liveKitHttpApi(
   cfg: LiveKitConfig,
   opts: { fetch?: typeof fetch; now?: () => Date; timeoutMs?: number } = {},
 ): LiveKitApi {
-  const origin = liveKitHttpOrigin(cfg.url)!;
-  const doFetch = opts.fetch ?? fetch;
+  const call = liveKitTwirp(cfg, opts);
   const now = opts.now ?? (() => new Date());
   async function twirp(
     service: string,
     method: string,
     body: unknown,
-    video: Record<string, unknown>,
+    video: LiveKitVideoGrant,
   ): Promise<void> {
-    const token = await mintLiveKitToken({
-      apiKey: cfg.apiKey,
-      apiSecret: cfg.apiSecret,
-      video,
-      ttlS: LIVEKIT_SERVER_TOKEN_TTL_S,
-      now: now(),
-    });
-    const res = await doFetch(`${origin}/twirp/livekit.${service}/${method}`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(opts.timeoutMs ?? 8000),
-    });
     // The body is LiveKit's (room or dispatch info): nothing in it is needed.
-    await res.body?.cancel();
-    if (!res.ok) throw new LiveKitApiError(method, res.status);
+    await call(service, method, body, { video });
   }
   return {
     url: cfg.url,

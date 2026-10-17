@@ -204,6 +204,12 @@ export const CallMetricsSchema = z.strictObject({
   sttConfidence: z.number().min(0).max(1).nullable(),
   turns: z.number().int().min(0),
   sipCallId: z.string().min(1).max(200).optional(),
+  /**
+   * W3-17 (F6 step 1): who answered an outbound call, by the first utterance (`voicemail.py`):
+   * `machine` ends the call `not_reached` with no message left, and voice_call_end() records it
+   * as `voicemail` and sends `missed_call`.
+   */
+  answeredBy: z.enum(['human', 'machine']).optional(),
 });
 
 /** One lane of waveform peaks: values 0 … 1, at most 2048 of them. */

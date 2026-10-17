@@ -24,6 +24,7 @@ function resolved(patch: Partial<ResolveResponse> = {}): ResolveResponse {
     sites: [],
     country: US_COUNTRY,
     talkNow: false,
+    placesCalls: false,
     ...patch,
   };
 }
@@ -174,7 +175,52 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
     expect(queue.get('filed')?.status).toBe('failed');
   });
 
-  it('links the pack’s privacy notice only when it names one, and asks no auto_call consent before M8', async () => {
+  it('asks Call me at report time (automated) where SiteLog places calls, ticked for a call preference (W3-17)', async () => {
+    const routes = fakeRoutes({
+      resolve: vi.fn().mockResolvedValue(
+        resolved({
+          needsDeviceCheck: false,
+          sites: [SITE],
+          placesCalls: true,
+          reporter: {
+            name: 'Kevin O’Brien',
+            firstName: 'Kevin',
+            locale: 'en-US',
+            contactPref: 'call',
+            status: 'invited',
+          },
+        }),
+      ),
+      consent: vi.fn().mockResolvedValue({
+        consents: [],
+        status: 'active',
+        contactPref: 'call',
+        locale: 'en-US',
+      }),
+      today: vi.fn().mockResolvedValue(todayResponse()),
+    });
+    renderApp('/r/K7Q2MX', { session: null, routes });
+    const box = await screen.findByRole('checkbox', {
+      name: 'Call me at report time (automated)',
+    });
+    expect(box).toBeChecked();
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'I agree to the recording and processing of my reports',
+      }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() =>
+      expect(routes.consent).toHaveBeenCalledWith('K7Q2MX', {
+        types: ['recording', 'data_processing', 'sms', 'auto_call'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'call',
+        locale: 'en-US',
+      }),
+    );
+  });
+
+  it('links the pack’s privacy notice only when it names one, and asks no auto_call consent where no calls are placed', async () => {
     const routes = fakeRoutes({
       resolve: vi.fn().mockResolvedValue(
         resolved({

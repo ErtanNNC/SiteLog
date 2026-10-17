@@ -9,6 +9,7 @@ import type { Storage } from './storage';
 import type { WaClient } from './wa/client';
 import type { MessagesClient } from './ai/claude';
 import type { Transcriber } from './ai/transcriber';
+import type { TelephonyRegistry } from './telephony';
 
 /** Everything a job or router handler needs. Built once at boot; tests build it with fakes. */
 export interface AiClients {
@@ -65,6 +66,11 @@ export interface Ctx {
   email: EmailProvider;
   /** The Notifier (spec §4.5, W1-08): every text to a field reporter goes through it. */
   notifier: SmsNotifier;
+  /**
+   * W3-17: how outbound calls are placed (`console` for demo orgs, `livekit` on a pack's trunk).
+   * Built from the config at boot; tests pass a fake. Absent: built from `config` when needed.
+   */
+  telephony?: TelephonyRegistry;
   ffmpeg: FfmpegRunner;
   log: Logger;
   now: () => Date;

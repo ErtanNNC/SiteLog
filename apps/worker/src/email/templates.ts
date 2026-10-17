@@ -367,11 +367,17 @@ export function weeklyDigestEmail(i: WeeklyDigestInput): RenderedEmail {
         )
         .join('')
     : '<li>All filed reports are signed off</li>';
+  // W3-17 (M8): only when SiteLog called a reporter this week.
+  const calls = s.outboundCalls;
+  const callsLine = calls
+    ? `${Math.round((calls.filedByCall / calls.callDays) * 100)}% filed on the call (${calls.filedByCall} of ${calls.callDays} site-days SiteLog called about)`
+    : null;
   const bodyHtml = `${kv([
     [
       'On time',
       `<strong>${onTimePct}%</strong> (${s.onTime} of ${s.siteDays} site-days; ${s.filed} filed)`,
     ],
+    ...(callsLine ? ([['Reminder calls', esc(callsLine)]] as Array<[string, string]>) : []),
   ])}
     <p style="margin:8px 0 4px 0"><strong>Weather hours by site</strong></p><ul style="margin:0 0 12px 18px;padding:0">${weather}</ul>
     <p style="margin:8px 0 4px 0"><strong>Invoice gaps</strong></p><ul style="margin:0 0 12px 18px;padding:0">${gaps}</ul>
@@ -380,6 +386,7 @@ export function weeklyDigestEmail(i: WeeklyDigestInput): RenderedEmail {
     subject,
     '',
     `On time: ${onTimePct}% (${s.onTime} of ${s.siteDays} site-days; ${s.filed} filed)`,
+    ...(callsLine ? [`Reminder calls: ${callsLine}`] : []),
     '',
     'Weather hours by site:',
     ...(s.weatherHoursBySite.length

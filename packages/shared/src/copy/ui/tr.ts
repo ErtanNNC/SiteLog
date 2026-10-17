@@ -1068,6 +1068,24 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       reported: 'SiteLog ekibine bildirildi.',
       errorId: 'Hata kimliği {{id}}',
     },
+    /** W3-17 (M8): the /ops card of reminder calls (the rest of /ops is SiteLog staff English). */
+    ops: {
+      outboundCalls: {
+        title: 'Hatırlatma aramaları (M8)',
+        hint: 'Kuruluş ve hafta bazında: SiteLog’un rapor veren için aradığı şantiye günleri ve bunlardan kaçının, ofis yardımı olmadan, rapor verenin “evet”iyle o aramada kaydedildiği. M8 hedefi %85.',
+        columns: {
+          org: 'Kuruluş',
+          week: 'Hafta',
+          called: 'Aranan',
+          filed: 'Aramada kaydedilen',
+          share: 'Oran',
+        },
+        share: '%{{pct}}',
+        belowTarget: '%85 hedefinin altında',
+        demo: 'Demo',
+        empty: 'Son 8 haftada hatırlatma araması yok.',
+      },
+    },
     devPhone: {
       subtitle:
         'SiteLog’un konsol sürücüsüyle gönderdiği tüm mesajlar; her rapor veren için ayrı bir konuşma.',
@@ -1089,6 +1107,20 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         sms: 'SMS',
         push: 'Anlık bildirim',
         whatsapp: 'WhatsApp',
+        call: 'Arama',
+      },
+      call: {
+        ringing: 'SiteLog arıyor: çalıyor',
+        answered: 'SiteLog ile görüşmede',
+        ended: 'SiteLog ile görüşme bitti',
+        missed: 'SiteLog’dan cevapsız arama',
+        busy: 'SiteLog’un araması: meşgul',
+        voicemail: 'SiteLog’un araması telesekretere düştü: mesaj bırakılmadı',
+        failed: 'SiteLog’un araması yapılamadı',
+      },
+      callPurpose: {
+        reminder: 'Hatırlatma araması',
+        callback: 'Geri arama',
       },
       statusLabel: 'Durum',
       status: {
@@ -2140,6 +2172,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       turnOnSheet: {
         title: 'Mesajlar yeniden açılsın mı?',
         titleWhatsapp: 'WhatsApp mesajları açılsın mı?',
+        titleCall: 'Otomatik aramalar açılsın mı?',
         body: 'Açarak şunu yeniden kabul etmiş olursunuz:',
         note: 'İstediğiniz zaman buradan kapatabilirsiniz.',
         confirm: 'Aç',
@@ -2149,6 +2182,14 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         start:
           'STOP yazarak mesajlarımızı durdurdunuz. Yeniden almak için mesajlarımızdan birine START yazın.',
         office: 'Bu telefona mesaj gönderimi durduruldu. Ofise danışın.',
+      },
+      notToday: {
+        title: 'Bugünkü aramalar',
+        label: 'Bugün beni aramayın',
+        hint: 'Bugünkü hatırlatmalar mesaj olarak gelir. Aramalar yarın yeniden başlar.',
+        button: 'Bugün beni aramayın',
+        on: 'Bugün başka arama yok',
+        onHint: 'Bugünkü hatırlatmalar mesaj olarak gelir. Aramalar yarın yeniden başlar.',
       },
       signOut: 'Bu telefonda oturumu kapat',
       signOutSheet: {

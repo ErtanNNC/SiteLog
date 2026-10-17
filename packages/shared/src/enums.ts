@@ -277,6 +277,12 @@ export const JOB_TYPES = [
    * `no_photo`; queued delayed at filing (`no_photo:<report>`).
    */
   'no_photo_check',
+  /**
+   * §10.1 (W3-17, M8): an outbound call (R1, R2, the callback) with its guards (§19 Q127–Q131),
+   * on the org's telephony (`livekit` on the pack's trunk, `console` for a demo org); and, by
+   * `phase`, the end of a console call's ring and the `missed_call` step of a call not reached.
+   */
+  'place_call',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

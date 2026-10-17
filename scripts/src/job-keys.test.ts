@@ -16,6 +16,21 @@ const ROOT = join(import.meta.dirname, '..', '..');
 
 /** Key shape (`${…}` → `{}`) → why the same key never has to start a second job. */
 const AUDITED: Record<string, string> = {
+  // W3-17 (outbound calls, 20261016000380_outbound_calls.sql, apps/worker/src/jobs/place_call.ts)
+  outboundCallKey:
+    "call:<site_day>:<reporter>:<stage>[:w<n>] (place_call waiting for capacity, §19 Q127): the nth wait of one stage's call is its own key, and a stage is claimed once (claim_site_day_reminder), so a retry finds its wait taken",
+  ringEndJobKey:
+    "call_ring:<call> (a console call's ring, §19 Q132): one ring per call; a call is placed once",
+  ladderDedupeKey:
+    "notify:reminder_1:<site_day>:<reporter> (a skipped or failed R1 call's own text): the ladder's key for R1 (claim_site_day_reminder writes the same shape), so a stage texts a reporter once whichever path sends it",
+  missedCallNotifyKey:
+    'notify:missed_call:<call> (F6 step 1, F11): one missed_call text per call not reached; a retried ring end or missed step finds the key taken',
+  "sql:'call:' || p_site_day_id || ':' || (m ->> 'reporterId') || ':' || p_stage":
+    "claim_site_day_reminder's calls (W3-17): one place_call per site-day, reporter and stage (R1, R2); a stage is claimed once",
+  "sql:'call_missed:' || c.id":
+    "voice_call_end()'s missed step of an outbound call the agent ended unreached (a voicemail greeting, F6 step 1): a call ends once",
+  "sql:'call:' || c.site_day_id || ':' || c.reporter_id || ':callback'":
+    'voice_schedule_callback() (§19 Q128): the one callback a reporter may ask for per site-day; a second request answers limit_reached',
   // apps/worker
   'transcribe:{}': 'one transcription per WhatsApp voice-note message',
   'extract:{}:{}': 'per report and source count: a new voice note or photo is a new count',

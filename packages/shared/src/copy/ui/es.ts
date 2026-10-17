@@ -602,6 +602,7 @@ export const uiEs: UiResources = {
       turnOnSheet: {
         title: '¿Volver a activar los mensajes de texto?',
         titleWhatsapp: '¿Activar los mensajes de WhatsApp?',
+        titleCall: '¿Activar las llamadas automáticas?',
         body: 'Al activarlos, acepta de nuevo:',
         note: 'Puede desactivarlos aquí cuando quiera.',
         confirm: 'Activar',
@@ -611,6 +612,14 @@ export const uiEs: UiResources = {
         start:
           'Detuvo nuestros mensajes al responder STOP. Para recibirlos de nuevo, responda START a uno de nuestros mensajes.',
         office: 'Los mensajes de texto a este teléfono están detenidos. Pregunte a la oficina.',
+      },
+      notToday: {
+        title: 'Llamadas de hoy',
+        label: 'No me llamen hoy',
+        hint: 'Hoy recibirá los recordatorios como mensajes. Las llamadas vuelven mañana.',
+        button: 'No me llamen hoy',
+        on: 'Hoy no hay más llamadas',
+        onHint: 'Hoy recibirá los recordatorios como mensajes. Las llamadas vuelven mañana.',
       },
       signOut: 'Cerrar sesión en este teléfono',
       signOutSheet: {

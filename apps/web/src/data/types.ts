@@ -1074,9 +1074,14 @@ export interface DemoPhoneMessage {
   /** §9.2 copy key of a text SiteLog sent (`welcome`, `verify_code`, …). */
   copyKey: string | null;
   provider: string | null;
-  /** W2-14: `sms` or `push` (a push to the installed field app has no phone); W2-15 `whatsapp`. */
-  channel: 'sms' | 'push' | 'whatsapp';
+  /**
+   * W2-14: `sms` or `push` (a push to the installed field app has no phone); W2-15 `whatsapp`;
+   * W3-17 `call`: a demo org's outbound call on the console telephony (§19 Q132), with `call`.
+   */
+  channel: 'sms' | 'push' | 'whatsapp' | 'call';
   at: string;
+  /** W3-17: the call's state (`calls.status`, `outcome`, `purpose`, `attempt`). */
+  call?: { status: string; outcome: string | null; purpose: string | null; attempt: number | null };
 }
 
 /** An email the console provider would have sent (`console_emails`). */
@@ -1149,8 +1154,24 @@ export interface OrglessContacts {
   orgs: Array<{ id: string; name: string; country: string }>;
 }
 
+/**
+ * W3-17 (M8, spec §16.2): per org and ISO week, the site-days SiteLog called a reporter about (an
+ * outbound ladder call or callback) and those filed by the reporter's yes on such a call.
+ */
+export interface OpsOutboundCalls {
+  orgId: string;
+  orgName: string;
+  isDemo: boolean;
+  /** Monday, YYYY-MM-DD. */
+  weekStart: string;
+  callDays: number;
+  filedByCall: number;
+}
+
 export interface OpsData {
   queue: OpsQueueRow[];
   deadJobs: OpsDeadJob[];
   costOutliers: OpsCostOutlier[];
+  /** W3-17: the M8 measure (`ops_outbound_call_share`). */
+  outboundCalls: OpsOutboundCalls[];
 }

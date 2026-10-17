@@ -1862,11 +1862,17 @@ Deno.test(
       locale: 'en-US',
       messageChannel: null,
       messageChannels: ['sms'],
-      // The texts consent is listed while the pack texts, so Settings can offer Turn on (Q86).
-      consents: [{ type: 'sms', held: false }],
+      // The texts consent is listed while the pack texts, so Settings can offer Turn on (Q86);
+      // W3-17: the automated calls too, since this demo org places (console) calls (§19 Q132).
+      consents: [
+        { type: 'sms', held: false },
+        { type: 'auto_call', held: false },
+      ],
       textsOptedOut: false,
       // No VAPID key pair in this environment: no Notifications toggle (W2-14).
       push: { offered: false, on: false },
+      placesCalls: true,
+      noCallsUntil: null,
     });
     await h.call('POST', 'consent', {
       body: {
@@ -1878,6 +1884,7 @@ Deno.test(
     });
     assertEquals((await h.call('GET', 'preferences')).json.consents, [
       { type: 'sms', held: true },
+      { type: 'auto_call', held: false },
       { type: 'recording', held: true },
       { type: 'data_processing', held: true },
     ]);
@@ -1938,9 +1945,21 @@ Deno.test(
         .messageChannel,
       null,
     );
-    // "Don't call me today" is M8's.
+    // W3-17 (§19 Q129): "Don't call me today" is the end of today in the org's time zone.
+    const notToday = await h.call('PATCH', 'preferences', { body: { noCallsToday: true } });
+    assertEquals(notToday.status, 200);
+    assertEquals(notToday.json.noCallsUntil, '2026-10-10T05:00:00.000Z');
+    assertEquals(marco.no_calls_until, '2026-10-10T05:00:00.000Z');
+    const said = h.store.audits.filter((a) => a.action === 'reporter.preferences_changed').at(-1)!;
+    assertEquals(said.diff, {
+      from: { no_calls_until: null },
+      to: { no_calls_until: '2026-10-10T05:00:00.000Z' },
+      channel: 'web',
+      device_id: h.store.devices[0]!.id,
+    });
+    // `false` is no request (there is no undo, §19 Q217).
     assertEquals(
-      (await h.call('PATCH', 'preferences', { body: { noCallsToday: true } })).json.error,
+      (await h.call('PATCH', 'preferences', { body: { noCallsToday: false } })).json.error,
       'invalid_request',
     );
   },
@@ -1953,6 +1972,7 @@ Deno.test('Settings: turning texts off revokes the sms consent only; reports go 
   assertEquals(res.status, 200);
   assertEquals(res.json.consents, [
     { type: 'sms', held: false },
+    { type: 'auto_call', held: false },
     { type: 'recording', held: true },
     { type: 'data_processing', held: true },
   ]);
@@ -2063,6 +2083,7 @@ Deno.test(
     assertEquals(res.status, 200);
     assertEquals(res.json.consents, [
       { type: 'sms', held: true },
+      { type: 'auto_call', held: false },
       { type: 'recording', held: true },
       { type: 'data_processing', held: true },
     ]);
@@ -3323,5 +3344,80 @@ Deno.test(
       h.store.consents.filter((c) => c.type === 'push' && c.revoked_at === null).length,
       1,
     );
+  },
+);
+
+Deno.test(
+  'W3-17: placesCalls, and the automated-call consent only where calls are placed (§19 Q33, Q51, Q131, Q132)',
+  async () => {
+    // A demo org: console calls (the Demo phone), so the box and the Settings row are offered.
+    const demo = setup();
+    const r = await demo.call('POST', 'resolve', { body: { code: CODES.marco }, code: null });
+    assertEquals(r.json.placesCalls, true);
+    await verifiedDevice(demo);
+    const first = await demo.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing', 'sms', 'auto_call'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'call',
+        locale: 'en-US',
+      },
+    });
+    assertEquals(first.status, 200);
+    assert((first.json.consents as string[]).includes('auto_call'));
+    // Settings: Turn off, then Turn on again with the wording (web_checkbox).
+    const off = await demo.call('POST', 'consent/revoke', { body: { type: 'auto_call' } });
+    assertEquals(
+      (off.json.consents as { type: string; held: boolean }[]).find((c) => c.type === 'auto_call'),
+      { type: 'auto_call', held: false },
+    );
+    const on = await demo.call('POST', 'consent/grant', {
+      body: { type: 'auto_call', textVersion: 'field.consent.v1' },
+    });
+    assertEquals(on.status, 200);
+    assertEquals(
+      (on.json.consents as { type: string; held: boolean }[]).find((c) => c.type === 'auto_call'),
+      { type: 'auto_call', held: true },
+    );
+    const given = demo.store.audits.filter((a) => a.action === 'consent.given').at(-1)!;
+    assertEquals((given.diff as Record<string, unknown>).type, 'auto_call');
+
+    // A real org whose pack has no outbound trunk here: no box, no row, refused.
+    const real = setup({ isDemo: false });
+    const rr = await real.call('POST', 'resolve', { body: { code: CODES.marco }, code: null });
+    assertEquals(rr.json.placesCalls, false);
+    await verifiedDevice(real);
+    const refused = await real.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing', 'auto_call'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'call',
+        locale: 'en-US',
+      },
+    });
+    assertEquals([refused.status, refused.json.error], [400, 'calls_not_offered']);
+    await real.call('POST', 'consent', {
+      body: {
+        types: ['recording', 'data_processing', 'sms'],
+        textVersion: 'field.consent.v1',
+        contactPref: 'call',
+        locale: 'en-US',
+      },
+    });
+    const prefs = await real.call('GET', 'preferences');
+    assertEquals(prefs.json.placesCalls, false);
+    assert(!(prefs.json.consents as { type: string }[]).some((c) => c.type === 'auto_call'));
+    const grant = await real.call('POST', 'consent/grant', {
+      body: { type: 'auto_call', textVersion: 'field.consent.v1' },
+    });
+    assertEquals([grant.status, grant.json.error], [400, 'calls_not_offered']);
+
+    // The same real org once its pack has a trunk (and its voice number, §19 Q126).
+    const trunk = setup({
+      isDemo: false,
+      country: { voice_number: '+15550142290', outbound_trunk_id: 'ST_abc123' },
+    });
+    const rt = await trunk.call('POST', 'resolve', { body: { code: CODES.marco }, code: null });
+    assertEquals(rt.json.placesCalls, true);
   },
 );

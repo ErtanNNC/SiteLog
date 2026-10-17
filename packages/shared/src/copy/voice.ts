@@ -120,8 +120,12 @@ export const VOICE_KEYS = [
   'day_off_in_progress',
   'day_off_filed',
   'day_off_site_paused',
-  // "Call me back" before outbound calls exist (W3-17), and F15's "not today" (§19 Q129).
+  // "Call me back" where no calls are placed (or without the reporter's auto_call consent), and
+  // F15's "not today" (§19 Q129).
   'callback_unavailable',
+  // W3-17 (§19 Q128): a callback asked for after the call window, or a second one the same day.
+  'callback_outside_window',
+  'callback_limit',
   'pref_not_today_ok',
   // F10 on a call: load_report's other answers, the change read back with "Save it?", the save.
   'edit_ask',

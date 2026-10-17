@@ -609,7 +609,7 @@ for (const run of RUNS) {
       const heading = page.getByRole('heading', { level: 1, name: field.routes.settings });
       await expect(heading).toBeFocused();
       await expect(page.getByText(s.consents.sms)).toBeVisible();
-      // One built channel: no channel choice; no "Don't call me today" before M8.
+      // One built channel: no channel choice; no "Don't call me today" where no calls are placed.
       await expect(page.getByText(s.channelTitle)).toHaveCount(0);
       await expectFieldScreen(page);
 
@@ -660,6 +660,83 @@ for (const run of RUNS) {
     });
   });
 }
+
+for (const run of RUNS) {
+  test.describe(`Automated calls (W3-17, spec §19 Q129, Q131) in ${run.lang}`, () => {
+    test.use({ locale: run.locale });
+
+    test('Call me at report time on Welcome, then Settings: the row and Don’t call me today', async ({
+      page,
+    }) => {
+      const field = UI_RESOURCES[run.lang].field;
+      const s = field.settings;
+      const base: Market = run.market();
+      const market: Market = { ...base, reporter: { ...base.reporter, contactPref: 'call' } };
+      const api = await installFakeFieldApi(page, market, { verified: true, placesCalls: true });
+      await page.goto(`/r/${CODE}`);
+      // A reporter who prefers calls finds the box ticked; it is the auto_call consent.
+      const box = page.getByRole('checkbox', { name: field.welcome.consentCall });
+      await expect(box).toBeChecked();
+      await expectFieldScreen(page);
+      await page.getByRole('checkbox', { name: field.welcome.consentRequired }).check();
+      await page.getByRole('button', { name: field.welcome.continue }).click();
+      await expect(
+        page.getByRole('heading', { level: 1, name: field.welcomeTest.title }),
+      ).toBeVisible();
+      expect((api.consent as { types: string[] }).types).toContain('auto_call');
+
+      await page.goto('/settings');
+      await expect(page.getByText(s.consents.auto_call)).toBeVisible();
+      await expect(page.getByRole('heading', { name: s.notToday.title })).toBeVisible();
+      await expectFieldScreen(page);
+      // Automated calls off, then on again with the Welcome wording (§19 Q131).
+      await page.getByRole('button', { name: `${s.turnOff}: ${s.consents.auto_call}` }).click();
+      expect(api.calls.find((c) => c.path === 'consent/revoke')!.body).toEqual({
+        type: 'auto_call',
+      });
+      await page.getByRole('button', { name: `${s.turnOn}: ${s.consents.auto_call}` }).click();
+      const sheet = page.getByRole('dialog', { name: s.turnOnSheet.titleCall });
+      await expect(sheet).toContainText(field.welcome.consentCall);
+      await sheet.getByRole('button', { name: s.turnOnSheet.confirm }).click();
+      expect(api.calls.find((c) => c.path === 'consent/grant')!.body).toEqual({
+        type: 'auto_call',
+        textVersion: market.country.legalKeys.consent ?? 'field.consent.v1',
+      });
+      // "Don't call me today" (§19 Q129): saved, then said as the state; no undo (§19 Q217).
+      await page.getByRole('button', { name: s.notToday.button }).click();
+      await expect(page.getByText(s.notToday.on)).toBeVisible();
+      expect(api.calls.filter((c) => c.method === 'PATCH').at(-1)!.body).toEqual({
+        noCallsToday: true,
+      });
+      await expect(page.getByRole('button', { name: s.notToday.button })).toHaveCount(0);
+      await expectFieldScreen(page);
+    });
+  });
+}
+
+test.describe('Automated calls at 1440 px, and none where no calls are placed (W3-17)', () => {
+  test('the Settings rows at 1440 px; a pack that places no calls shows neither', async ({
+    page,
+  }) => {
+    const s = UI_RESOURCES.en.field.settings;
+    const base = kestrel('en-US');
+    const market: Market = { ...base, reporter: { ...base.reporter, contactPref: 'call' } };
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await installFakeFieldApi(page, market, { verified: true, consented: true, placesCalls: true });
+    await page.goto(`/r/${CODE}`);
+    await page.getByRole('link', { name: UI_RESOURCES.en.field.routes.settings }).click();
+    await expect(page.getByRole('heading', { name: s.notToday.title })).toBeVisible();
+    await expectNoAxeViolations(page);
+
+    const other = await page.context().newPage();
+    await installFakeFieldApi(other, market, { verified: true, consented: true });
+    await other.goto(`/r/${CODE}`);
+    await other.getByRole('link', { name: UI_RESOURCES.en.field.routes.settings }).click();
+    await expect(other.getByText(s.consents.sms)).toBeVisible();
+    await expect(other.getByText(s.consents.auto_call)).toHaveCount(0);
+    await expect(other.getByRole('heading', { name: s.notToday.title })).toHaveCount(0);
+  });
+});
 
 /**
  * W2-14: the installed app (`display-mode: standalone`) with a fake Push API: permission granted

@@ -81,6 +81,8 @@
     "day_off_filed": "El reporte de hoy de {site} ya está archivado.",
     "day_off_site_paused": "{site} está en pausa en SiteLog. Pida a la oficina que la reactive.",
     "callback_unavailable": "Todavía no puedo devolverle la llamada. Llame otra vez o use su enlace cuando esté listo.",
+    "callback_outside_window": "Solo puedo llamar hasta las {time}. ¿Hacemos el reporte ahora?",
+    "callback_limit": "Solo puedo devolverle la llamada una vez al día. ¿Hacemos el reporte ahora?",
     "pref_not_today_ok": "Está bien, hoy no le llamo más.",
     "edit_ask": "¿Qué cambio?",
     "edit_save_ask": "¿Lo guardo?",

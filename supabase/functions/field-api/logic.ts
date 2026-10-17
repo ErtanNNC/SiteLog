@@ -158,17 +158,23 @@ export function needsConsent(held: ReadonlySet<ConsentType>): boolean {
  * and whether the phone opted out of texts (`textsOptedOut`, `textsOptedOut()`).
  */
 export function settingsView(
-  reporter: Pick<ReporterRow, 'contact_pref' | 'locale' | 'message_channel'>,
+  reporter: Pick<ReporterRow, 'contact_pref' | 'locale' | 'message_channel'> & {
+    no_calls_until?: string | null;
+  },
   pack: Pick<CountryPack, 'messageChannels'>,
   consents: readonly Pick<ConsentRow, 'type' | 'revoked_at'>[],
   optedOut: boolean,
   push: { keySet: boolean; deviceSubscribed: boolean } = { keySet: false, deviceSubscribed: false },
+  placesCalls = false,
 ): PreferencesResponse {
   const { held } = consentSets(consents);
   const shown = new Set(consents.map((c) => c.type));
   if (pack.messageChannels.includes('sms')) shown.add('sms');
   // W2-15: *Message me on WhatsApp* is offered wherever the pack lists WhatsApp (spec §19 Q25).
   if (pack.messageChannels.includes('whatsapp')) shown.add('whatsapp');
+  // W3-17 (§19 Q33, Q131): automated calls only where the org places them.
+  if (placesCalls) shown.add('auto_call');
+  else if (!held.has('auto_call')) shown.delete('auto_call');
   // The *Notifications* toggle is the push consent's control (W2-14), not a row of the list.
   shown.delete('push');
   return {
@@ -185,6 +191,8 @@ export function settingsView(
       offered: pack.messageChannels.includes('push') && push.keySet,
       on: push.deviceSubscribed && held.has('push'),
     },
+    placesCalls,
+    noCallsUntil: reporter.no_calls_until ?? null,
   };
 }
 

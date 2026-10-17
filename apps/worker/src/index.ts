@@ -21,6 +21,7 @@ import {
 } from './listener';
 import { createRunner, type Runner } from './runner';
 import { createMemoryStorage, createStorage } from './storage';
+import { createTelephony } from './telephony';
 import { createWaClient } from './wa/client';
 
 export const VERSION = '0.1.0';
@@ -69,6 +70,7 @@ export function buildContext(config: Config): Ctx {
       { insertConsoleEmail: (row) => db.insertConsoleEmail(row) },
     ),
     notifier: createWorkerNotifier(config, db, undefined, now),
+    telephony: createTelephony(config, { fetch: abortableFetch(), now }),
     ffmpeg,
     log,
     now,

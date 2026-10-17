@@ -421,12 +421,14 @@ describe('set_country_endpoints() (service role only)', () => {
               voice_number: null,
               whatsapp_sender_id: null,
               whatsapp_templates: null,
+              outbound_trunk_id: null,
             },
             to: {
               sms_sender_id: 'SITELOG',
               voice_number: null,
               whatsapp_sender_id: null,
               whatsapp_templates: null,
+              outbound_trunk_id: null,
             },
           },
         },
@@ -443,12 +445,14 @@ describe('set_country_endpoints() (service role only)', () => {
               voice_number: null,
               whatsapp_sender_id: null,
               whatsapp_templates: null,
+              outbound_trunk_id: null,
             },
             to: {
               sms_sender_id: '+18885550142',
               voice_number: '+15550142290',
               whatsapp_sender_id: null,
               whatsapp_templates: null,
+              outbound_trunk_id: null,
             },
           },
         },
@@ -517,6 +521,50 @@ describe('set_country_endpoints() (service role only)', () => {
     });
   });
 
+  it('sets the outbound trunk (§19 Q125) only with the voice number as its caller id (Q126), audited', async () => {
+    expect(
+      await rolledBack(() =>
+        sqlState(svc(`select set_country_endpoints('US', null, null, null, null, 'ST_abcDEF123')`)),
+      ),
+    ).toBe('22023');
+    expect(
+      await rolledBack(() =>
+        sqlState(
+          svc(`select set_country_endpoints('US', null, '+15550142290', null, null, 'trunk-1')`),
+        ),
+      ),
+    ).toBe('22023');
+    await rolledBack(async () => {
+      const [set] = await svc<{ r: CountryRow }>(
+        `select to_jsonb(set_country_endpoints('US', null, '+15550142290', null, null, ' ST_abcDEF123 ')) as r`,
+      );
+      expect(set!.r).toMatchObject({
+        voice_number: '+15550142290',
+        outbound_trunk_id: 'ST_abcDEF123',
+      });
+      expect(toCountryPack(set!.r).outboundTrunkId).toBe('ST_abcDEF123');
+      const [audit] = await svc<{ diff: Record<string, Record<string, unknown>> }>(
+        `select diff from audit_log where action = 'country.endpoints_set' order by id desc limit 1`,
+      );
+      expect(audit!.diff.from).toMatchObject({ outbound_trunk_id: null });
+      expect(audit!.diff.to).toMatchObject({ outbound_trunk_id: 'ST_abcDEF123' });
+      // The five-argument call (the trunk left out) clears it, as every value it is not given.
+      const [cleared] = await svc<{ r: CountryRow }>(
+        `select to_jsonb(set_country_endpoints('US', null, '+15550142290', null, null)) as r`,
+      );
+      expect(cleared!.r).toMatchObject({ outbound_trunk_id: null });
+    });
+    // The table keeps the rule too: the voice number cannot go while the trunk stays.
+    expect(
+      await rolledBack(async () => {
+        await svc(
+          `select set_country_endpoints('US', null, '+15550142290', null, null, 'ST_abcDEF123')`,
+        );
+        return sqlState(svc(`update countries set voice_number = null where code = 'US'`));
+      }),
+    ).toBe('23514');
+  });
+
   it('runs as the service role, and cannot be run by a signed-in user or anon', async () => {
     const sql = `select set_country_endpoints('TR', 'SITELOG', null, null, null)`;
     for (const caller of [
@@ -530,7 +578,7 @@ describe('set_country_endpoints() (service role only)', () => {
     // countries-set.test.ts runs it as service_role). service_role keeps EXECUTE through
     // Supabase's default privileges (the revoke names public, anon, authenticated).
     const [priv] = await svc<{ ok: boolean }>(
-      `select has_function_privilege('service_role', 'set_country_endpoints(text,text,text,text,jsonb)', 'execute') as ok`,
+      `select has_function_privilege('service_role', 'set_country_endpoints(text,text,text,text,jsonb,text)', 'execute') as ok`,
     );
     expect(priv!.ok).toBe(true);
     await rolledBack(async () => {

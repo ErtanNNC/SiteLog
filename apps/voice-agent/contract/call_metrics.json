@@ -54,6 +54,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 200
+    },
+    "answeredBy": {
+      "type": "string",
+      "enum": [
+        "human",
+        "machine"
+      ]
     }
   },
   "required": [

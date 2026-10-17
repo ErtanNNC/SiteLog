@@ -13,6 +13,7 @@ import {
   SELECT_PACK_SQL,
   SET_ENDPOINTS_SQL,
   senderProblem,
+  trunkProblem,
   type PackEndpoints,
   type Query,
 } from './countries-set.ts';
@@ -218,6 +219,7 @@ describe('pack values', () => {
       voiceNumber: null,
       whatsappSenderId: '+15550142299',
       whatsappTemplates: { daily_link: { en: SID } },
+      outboundTrunkId: null,
     });
     expect(nextEndpoints(set, { whatsappSenderId: null }, null)).toMatchObject({
       whatsappSenderId: null,
@@ -228,7 +230,29 @@ describe('pack values', () => {
       voiceNumber: null,
       whatsappSenderId: null,
       whatsappTemplates: null,
+      outboundTrunkId: null,
     });
+    // W3-17: the trunk kept, set or cleared like the rest.
+    const trunk = { ...set, outbound_trunk_id: 'ST_abc123' };
+    expect(nextEndpoints(trunk, {}).outboundTrunkId).toBe('ST_abc123');
+    expect(nextEndpoints(trunk, { outboundTrunkId: null }).outboundTrunkId).toBeNull();
+  });
+
+  it('takes --outbound-trunk (ST_…) and refuses it without a voice number (W3-17, §19 Q126)', () => {
+    expect(parseCountriesSetArgs(['--code', 'US', '--outbound-trunk', 'ST_abc123'])).toMatchObject({
+      outboundTrunkId: 'ST_abc123',
+    });
+    expect(parseCountriesSetArgs(['--code', 'US', '--clear-outbound-trunk'])).toMatchObject({
+      outboundTrunkId: null,
+    });
+    expect(() => parseCountriesSetArgs(['--code', 'US', '--outbound-trunk', 'trunk-1'])).toThrow(
+      'LiveKit SIP trunk id',
+    );
+    expect(() =>
+      parseCountriesSetArgs(['--code', 'US', '--outbound-trunk', 'ST_abc123', '--clear-voice']),
+    ).toThrow('voice number');
+    expect(trunkProblem({ voiceNumber: null, outboundTrunkId: 'ST_abc123' })).toMatch('--voice');
+    expect(trunkProblem({ voiceNumber: '+15550142290', outboundTrunkId: 'ST_abc123' })).toBeNull();
   });
 
   it('checks the sender against the pack’s sender type', () => {
@@ -243,12 +267,12 @@ describe('pack values', () => {
 
   it('describes a pack: console and Talk now until set', () => {
     expect(describeEndpoints(TR)).toBe(
-      'TR · alphanumeric SMS sender: not set (console transport) · voice number: not set (Talk now only) · WhatsApp sender: not set (console for demo orgs; real orgs skip WhatsApp) · WhatsApp templates: 0 key(s)',
+      'TR · alphanumeric SMS sender: not set (console transport) · voice number: not set (Talk now only) · WhatsApp sender: not set (console for demo orgs; real orgs skip WhatsApp) · WhatsApp templates: 0 key(s) · outbound trunk: not set (no automated calls for real orgs)',
     );
     expect(
       describeEndpoints({ ...US, sms_sender_id: '+18885550142', voice_number: '+15550142290' }),
     ).toBe(
-      'US · toll_free SMS sender: +18885550142 (sends through twilio) · voice number: +15550142290 · WhatsApp sender: not set (console for demo orgs; real orgs skip WhatsApp) · WhatsApp templates: 0 key(s)',
+      'US · toll_free SMS sender: +18885550142 (sends through twilio) · voice number: +15550142290 · WhatsApp sender: not set (console for demo orgs; real orgs skip WhatsApp) · WhatsApp templates: 0 key(s) · outbound trunk: not set (no automated calls for real orgs)',
     );
     expect(
       describeEndpoints({
@@ -291,7 +315,7 @@ describe('applyCountriesSet', () => {
     );
     expect(calls).toEqual([
       { text: SELECT_PACK_SQL, params: ['US'] },
-      { text: SET_ENDPOINTS_SQL, params: ['US', '+18885550142', '+15550142290', null, null] },
+      { text: SET_ENDPOINTS_SQL, params: ['US', '+18885550142', '+15550142290', null, null, null] },
     ]);
     expect(SELECT_PACK_SQL).toMatch(/for update$/);
     expect(result).toMatchObject({

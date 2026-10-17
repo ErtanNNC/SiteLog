@@ -33,10 +33,26 @@ const RELINK = new Set([
 /** Revoking one of these stops reporting: confirm first, then the Welcome & consent again. */
 const STOPS_REPORTING = OFFICE_NOTIFIED_REVOCATIONS as readonly ConsentType[];
 
-type Saving = 'pref' | 'channel' | 'locale' | ConsentType | 'turnOn' | 'signOut' | null;
+type Saving =
+  'pref' | 'channel' | 'locale' | ConsentType | 'turnOn' | 'signOut' | 'notToday' | null;
 
-/** The consents Settings can turn back on (spec §19 Q86; WhatsApp W2-15, §19 Q25, Q40). */
-type TurnOnType = 'sms' | 'whatsapp';
+/**
+ * The consents Settings can turn back on (spec §19 Q86; WhatsApp W2-15, §19 Q25, Q40; automated
+ * calls W3-17, §19 Q131, where SiteLog places them).
+ */
+type TurnOnType = 'sms' | 'whatsapp' | 'auto_call';
+
+/** The wording each *Turn on* shows again (the Welcome screen's, Field-02). */
+const TURN_ON_WORDING = {
+  sms: 'welcome.consentSms',
+  whatsapp: 'welcome.consentWhatsapp',
+  auto_call: 'welcome.consentCall',
+} as const;
+const TURN_ON_TITLE = {
+  sms: 'settings.turnOnSheet.title',
+  whatsapp: 'settings.turnOnSheet.titleWhatsapp',
+  auto_call: 'settings.turnOnSheet.titleCall',
+} as const;
 
 /**
  * Settings (F15, spec §9.3; W2-02): the report mode (*Text link* / *Phone call*, §19 Q33 allows a
@@ -48,7 +64,9 @@ type TurnOnType = 'sms' | 'whatsapp';
  * a one-way pack, §19 Q94), *Notifications* (W2-14, web push: only in the installed app with the
  * Push API, when field-api offers it; the browser's permission is asked only when it is turned on;
  * on = this phone's subscription and the `push` consent, off = both revoked, spec §19 Q27, Q40),
- * and *Sign out this phone*. "Don't call me today" is M8's. A change is
+ * *Automated calls at report time* and, for a reporter who prefers calls, "Don't call me today"
+ * (W3-17, only where SiteLog places calls: `placesCalls`; spec §19 Q129, Q131: until the end of
+ * today, the messages come instead; no undo, §19 Q217), and *Sign out this phone*. A change is
  * saved when it is made (`PATCH preferences`, `consent/revoke`, `consent/grant`,
  * `device/sign-out`), each audited by field-api. There is no artboard: built from §9.3 and the
  * Field-02 / Field-03 patterns (accepted by the owner, 2026-10-16).
@@ -84,12 +102,15 @@ function SettingsLoaded({
   const [turnOnType, setTurnOnType] = useState<TurnOnType>('sms');
   const [pushProblem, setPushProblem] = useState<'blocked' | 'failed' | null>(null);
   const [canPush] = useState(() => pushSupported());
+  // W3-17: "Don't call me today" holds against the time the screen opened (no clock in render).
+  const [openedAt] = useState(() => Date.now());
   const ids = {
     pref: useId(),
     channel: useId(),
     lang: useId(),
     consents: useId(),
     push: useId(),
+    notToday: useId(),
     sheet: useId(),
   };
 
@@ -301,6 +322,8 @@ function SettingsLoaded({
   const textsStopped = country.twoWaySms
     ? t('settings.textsStopped.start')
     : t('settings.textsStopped.office');
+  // W3-17 (§19 Q129): "Don't call me today" holds until the end of today.
+  const notToday = prefs.noCallsUntil !== null && Date.parse(prefs.noCallsUntil) > openedAt;
 
   return (
     <Screen title={title} dateLine={false}>
@@ -437,7 +460,9 @@ function SettingsLoaded({
                         {saving === type ? t('settings.saving') : t('settings.turnOff')}
                       </QuietButton>
                     </div>
-                  ) : (type === 'sms' && !prefs.textsOptedOut) || type === 'whatsapp' ? (
+                  ) : (type === 'sms' && !prefs.textsOptedOut) ||
+                    type === 'whatsapp' ||
+                    (type === 'auto_call' && prefs.placesCalls) ? (
                     <div className="w-32 flex-none">
                       <QuietButton
                         aria-label={t('settings.turnOnLabel', { consent: label })}
@@ -461,6 +486,34 @@ function SettingsLoaded({
               );
             })}
           </ul>
+        </section>
+      ) : null}
+
+      {prefs.placesCalls && prefs.contactPref === 'call' ? (
+        <section aria-labelledby={ids.notToday} className="flex flex-col">
+          <h2 id={ids.notToday} className={h2}>
+            {t('settings.notToday.title')}
+          </h2>
+          <div className="flex min-h-target flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-rebar bg-white py-2 pr-2 pl-3.5">
+            <span className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
+              <span className="text-[16px] leading-[22px]">
+                {notToday ? t('settings.notToday.on') : t('settings.notToday.label')}
+              </span>
+              <span className="text-[14px] leading-5 text-dust">
+                {notToday ? t('settings.notToday.onHint') : t('settings.notToday.hint')}
+              </span>
+            </span>
+            {notToday ? null : (
+              <div className="w-44 flex-none">
+                <QuietButton
+                  disabled={busy}
+                  onClick={() => void save('notToday', { noCallsToday: true })}
+                >
+                  {saving === 'notToday' ? t('settings.saving') : t('settings.notToday.button')}
+                </QuietButton>
+              </div>
+            )}
+          </div>
         </section>
       ) : null}
 
@@ -569,14 +622,12 @@ function SettingsLoaded({
           id={`${ids.sheet}-on`}
           className="m-0 text-[22px] leading-7 font-extrabold [font-stretch:118%]"
         >
-          {turnOnType === 'whatsapp'
-            ? t('settings.turnOnSheet.titleWhatsapp')
-            : t('settings.turnOnSheet.title')}
+          {t(TURN_ON_TITLE[turnOnType])}
         </h2>
         <p className="m-0 text-[16px] leading-6 text-steel">{t('settings.turnOnSheet.body')}</p>
         {/* The wording the reporter agreed to on Welcome (Field-02), shown again (§19 Q86). */}
         <p className="m-0 rounded-card bg-concrete px-3.5 py-3 text-[16px] leading-6 font-semibold">
-          {turnOnType === 'whatsapp' ? t('welcome.consentWhatsapp') : t('welcome.consentSms')}
+          {t(TURN_ON_WORDING[turnOnType])}
         </p>
         <p className="m-0 text-[15px] leading-[21px] text-steel">
           {t('settings.turnOnSheet.note')}

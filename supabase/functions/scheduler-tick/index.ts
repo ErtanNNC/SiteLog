@@ -332,7 +332,7 @@ async function loadOrgs(admin: AppClient): Promise<Map<string, OrgInput & { coun
   const orgRows = await fetchAll((from, to) =>
     admin
       .from('orgs')
-      .select('id, timezone, billing_status, country, units')
+      .select('id, timezone, billing_status, country, units, is_demo')
       .order('id')
       .range(from, to)
       .throwOnError(),
@@ -360,6 +360,7 @@ async function loadOrgs(admin: AppClient): Promise<Map<string, OrgInput & { coun
       settings,
       country: o.country,
       units: o.units === 'metric' ? 'metric' : 'imperial',
+      is_demo: o.is_demo === true,
     });
   }
   return orgs;
@@ -452,10 +453,22 @@ async function runLadder(
   if (reporterIds.length > 0) {
     const { data } = await admin
       .from('reporters')
-      .select('id, org_id, name, status, contact_pref, message_channel, locale')
+      .select('id, org_id, name, status, contact_pref, message_channel, locale, no_calls_until')
       .in('id', reporterIds)
       .throwOnError();
     for (const r of data) reporters.set(r.id, r);
+  }
+  // W3-17 (§19 Q131): who holds their own automated-call consent (never office_attested).
+  const autoCall = new Set<string>();
+  if (reporterIds.length > 0) {
+    const { data } = await admin
+      .from('consents')
+      .select('reporter_id, method')
+      .eq('type', 'auto_call')
+      .is('revoked_at', null)
+      .in('reporter_id', reporterIds)
+      .throwOnError();
+    for (const c of data) if (c.method !== 'office_attested') autoCall.add(c.reporter_id);
   }
   const { data: done } = await admin
     .from('audit_log')
@@ -480,6 +493,7 @@ async function runLadder(
     reporters,
     dailyLinkDone,
     now: input.now,
+    autoCall,
   });
   if (steps.length === 0) return out;
 
@@ -534,6 +548,7 @@ async function runLadder(
           voiceNumber: pack.voiceNumber,
           deadlineAt: step.deadlineAt,
           missingAt: step.missingAt,
+          reminder1At: step.reminder1At,
           tz: site.timezone,
           weather,
           locale: target.reporter.locale,
@@ -547,6 +562,7 @@ async function runLadder(
           p_messages: args.messages,
           p_skipped: args.skipped,
           p_not_after: step.notAfter?.toISOString() ?? null,
+          p_calls: args.calls,
         })
         .throwOnError();
       if (claimed !== true) continue;
@@ -556,6 +572,7 @@ async function runLadder(
         siteDayId: step.siteDayId,
         stage: step.stage,
         sent: args.messages.length,
+        called: args.calls.length,
         skipped: args.skipped.length,
       });
     } catch (err) {

@@ -10,6 +10,10 @@ import {
   SetDayStatusRequestSchema,
   UNKNOWN_CALLER_MAX_RECORDING_S,
   VOICE_CALLBACK_POLICY,
+  DEFAULT_CALL_WINDOW,
+  callbackPlan,
+  placesCalls,
+  toCountryPack,
   VoiceRecordingUploadRequestSchema,
   callYesNo,
   correctionNote,
@@ -69,7 +73,10 @@ import {
  *   with "Save it?"; `save_change` makes version n+1 only after the yes
  *   (`voice_save_filed_correction()`), with the `edit_applied` text.
  * - `set_preference {noCallsToday}` (§19 Q129): `reporters.no_calls_until`, audited.
- * - `schedule_callback` (§19 Q128): 400 `not_available` until a pack places outbound calls (W3-17).
+ * - `schedule_callback` (§19 Q128, W3-17): code plans the time (`callbackPlan()`: inside the call
+ *   window, the same day, before the missing step) and voice_schedule_callback() queues the one
+ *   callback of the site-day as a delayed `place_call`; 400 `not_available` where the org places no
+ *   calls or the reporter has no `auto_call` consent of their own (§19 Q131).
  * - `record_consent` (F3 call, §19 Q120): yes stores the consents by voice; no stores nothing more,
  *   deletes the call's recording and texts the link only when texts were consented before.
  * - `leave_message` and the recording of an unknown caller (F13, §19 Q124): a 160-character
@@ -125,6 +132,17 @@ export interface VoiceSpecialStore {
     textVersion: string;
   }): Promise<VoiceConsentResult>;
   noCallsToday(callId: string): Promise<{ until: string; changed: boolean }>;
+  /**
+   * W3-17 (§19 Q128): what a callback of this call is planned against: its site-day, the site's
+   * time zone, the org's call window and when the day's missing step comes. null: no site yet.
+   */
+  callbackContext(callId: string): Promise<CallbackContext | null>;
+  /** voice_schedule_callback(): the one callback of the site-day as a delayed `place_call`. */
+  scheduleCallback(input: {
+    callId: string;
+    at: string;
+    minutes: number;
+  }): Promise<{ status: 'scheduled' | 'limit_reached' }>;
   unknownCaller(
     callId: string,
     snippet: string,
@@ -134,8 +152,45 @@ export interface VoiceSpecialStore {
   callPackLocale(callId: string): Promise<ReporterLocale | null>;
 }
 
+/** A callback's planning inputs (W3-17, `callbackPlan()`). */
+export interface CallbackContext {
+  siteDayId: string;
+  timezone: string;
+  window: { start: string; end: string };
+  /** The day's missing step (the deadline plus `missing_offset_min`); a callback comes before it. */
+  missingAt: string | null;
+}
+
+/**
+ * A callback's planning inputs from its rows: the org's call window (the column defaults for
+ * nulls) and the day's missing step (the deadline plus `missing_offset_min`, default 90).
+ */
+export function callbackContextOf(
+  day: { id: string; deadline_at: string },
+  timezone: string,
+  settings: {
+    call_window_start?: string | null;
+    call_window_end?: string | null;
+    missing_offset_min?: number | null;
+  } | null,
+): CallbackContext {
+  const deadline = Date.parse(day.deadline_at);
+  return {
+    siteDayId: day.id,
+    timezone,
+    window: {
+      start: settings?.call_window_start ?? DEFAULT_CALL_WINDOW.start,
+      end: settings?.call_window_end ?? DEFAULT_CALL_WINDOW.end,
+    },
+    missingAt: Number.isFinite(deadline)
+      ? new Date(deadline + (settings?.missing_offset_min ?? 90) * 60_000).toISOString()
+      : null,
+  };
+}
+
 /** The refusals of these RPCs the routes answer (any other database error is a 500). */
 export const VOICE_SPECIAL_DB_ERRORS = [
+  'not_available',
   'call_not_found',
   'call_ended',
   'unknown_caller',
@@ -208,6 +263,44 @@ export function supabaseVoiceSpecialStore(admin: AppClient): VoiceSpecialStore {
         }),
       ),
     noCallsToday: (callId) => rpc(admin.rpc('voice_no_calls_today', { p_call_id: callId })),
+    async callbackContext(callId) {
+      const { data: call } = await admin
+        .from('calls')
+        .select('site_day_id, org_id')
+        .eq('id', callId)
+        .maybeSingle()
+        .throwOnError();
+      if (!call?.site_day_id || !call.org_id) return null;
+      const [{ data: day }, { data: settings }] = await Promise.all([
+        admin
+          .from('site_days')
+          .select('id, deadline_at, site_id')
+          .eq('id', call.site_day_id)
+          .single()
+          .throwOnError(),
+        admin
+          .from('org_settings')
+          .select('call_window_start, call_window_end, missing_enabled, missing_offset_min')
+          .eq('org_id', call.org_id)
+          .maybeSingle()
+          .throwOnError(),
+      ]);
+      const { data: site } = await admin
+        .from('sites')
+        .select('timezone')
+        .eq('id', day.site_id)
+        .single()
+        .throwOnError();
+      return callbackContextOf(day, site.timezone, settings);
+    },
+    scheduleCallback: (i) =>
+      rpc(
+        admin.rpc('voice_schedule_callback', {
+          p_call_id: i.callId,
+          p_at: i.at,
+          p_minutes: i.minutes,
+        }),
+      ),
     unknownCaller: (callId, snippet) =>
       rpc(admin.rpc('voice_unknown_caller', { p_call_id: callId, p_snippet: snippet })),
     unknownRecording: (callId) => rpc(admin.rpc('voice_unknown_recording', { p_call_id: callId })),
@@ -468,17 +561,49 @@ export function registerVoiceSpecialRoutes(
     )}`;
   }
 
-  // ── POST /voice/tools/schedule_callback (§19 Q128) ──────────────────────────────────────────
+  // ── POST /voice/tools/schedule_callback (§19 Q128, W3-17) ───────────────────────────────────
   app.post('/voice/tools/schedule_callback', async (c) => {
     const body = await h.parseBody(c, ScheduleCallbackRequestSchema);
     const call = await h.authorizedCall(c, body.callId);
-    await h.callScope(call);
-    // No pack places outbound calls yet (W3-17 queues the `place_call` `callbackPlan` plans).
-    if (!VOICE_CALLBACK_POLICY.available) {
-      throw new FieldError(400, 'not_available', 'Callbacks come with outbound calls (W3-17)');
-    }
-    throw new FieldError(400, 'not_available');
+    return h.once(c, call, 'schedule_callback', () => scheduleCallback(call, body.minutes));
   });
+
+  async function scheduleCallback(call: CallRow, minutes: number): Promise<Answer> {
+    const scope = await h.callScope(call);
+    if (!VOICE_CALLBACK_POLICY.available) {
+      throw new FieldError(400, 'not_available', 'Callbacks are off (VOICE_CALLBACK_POLICY)');
+    }
+    // §19 Q131: a callback is an automated call: the org places them and the reporter agreed.
+    if (
+      !placesCalls({ isDemo: scope.org.org.is_demo === true }, toCountryPack(scope.org.country))
+    ) {
+      throw new FieldError(400, 'not_available');
+    }
+    const cb = await special.callbackContext(call.id);
+    if (!cb) throw new FieldError(409, 'site_required', 'pick_site first');
+    const plan = callbackPlan({
+      now: now(),
+      minutes,
+      timezone: cb.timezone,
+      window: cb.window,
+      requestedToday: 0,
+      notAfter: cb.missingAt ? new Date(cb.missingAt) : null,
+    });
+    if (plan.status !== 'scheduled') return { status: 200, body: plan };
+    let queued: { status: 'scheduled' | 'limit_reached' };
+    try {
+      queued = await special.scheduleCallback({ callId: call.id, at: plan.at, minutes });
+    } catch (err) {
+      if (err instanceof FieldDbError && err.code === 'not_available') {
+        throw new FieldError(400, 'not_available');
+      }
+      dbError(err);
+    }
+    if (queued.status === 'limit_reached') {
+      return { status: 200, body: { status: 'limit_reached' } };
+    }
+    return { status: 200, body: plan };
+  }
 
   // ── POST /voice/tools/save_change (F10 call) ────────────────────────────────────────────────
   app.post('/voice/tools/save_change', async (c) => {

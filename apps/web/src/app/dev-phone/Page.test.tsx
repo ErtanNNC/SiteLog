@@ -100,6 +100,38 @@ describe('Demo phone', () => {
     expect(items[0]!).toHaveTextContent('Text');
   });
 
+  it('rings a demo org’s outbound call in the thread, then words a missed one (W3-17, §19 Q132)', async () => {
+    const store = new DemoStore();
+    const kevin = store.data.reporters.find((r) => r.name === "Kevin O'Brien")!;
+    const template = store.data.calls[0]!;
+    const call = (id: string, status: string, outcome: string | null, at: string) =>
+      store.data.calls.push({
+        ...template,
+        id,
+        reporter_id: kevin.id,
+        direction: 'outbound',
+        transport: 'pstn',
+        purpose: 'reminder',
+        attempt: 1,
+        status: status as never,
+        outcome: outcome as never,
+        created_at: at,
+      });
+    call(
+      '00000000-0000-4000-8000-0000000ca111',
+      'no_answer',
+      'not_reached',
+      '2099-01-01T00:00:00.000Z',
+    );
+    call('00000000-0000-4000-8000-0000000ca112', 'ringing', null, '2099-01-01T00:45:00.000Z');
+    renderWithProviders(<DevPhonePage />, { as: 'admin', store });
+    const thread = await openThread(/Kevin O'Brien/);
+    const calls = within(thread).getAllByTestId('demo-phone-call');
+    expect(calls.at(-2)).toHaveTextContent('Missed call from SiteLog');
+    expect(calls.at(-1)).toHaveTextContent('SiteLog is calling: ringing');
+    expect(calls.at(-1)).toHaveTextContent('Call · Reminder call');
+  });
+
   it('a one-way pack types no texts, only WhatsApp where the pack lists it (§19 Q35, W2-16)', async () => {
     const store = new DemoStore();
     store.data.org.country = 'TR';

@@ -353,8 +353,59 @@ Deno.test('settingsView: the built channels, and every consent given with its st
     ],
     textsOptedOut: false,
     push: { offered: false, on: false },
+    placesCalls: false,
+    noCallsUntil: null,
   });
 });
+
+Deno.test(
+  'settingsView W3-17: the automated-call row where calls are placed, and "not today"',
+  () => {
+    const us = toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'US')!);
+    const given = [
+      { type: 'recording', revoked_at: null },
+      { type: 'data_processing', revoked_at: null },
+    ] as const;
+    const reporter = {
+      contact_pref: 'call',
+      locale: 'en-US',
+      message_channel: null,
+      no_calls_until: '2026-10-13T05:00:00.000Z',
+    } as const;
+    const placed = settingsView(reporter, us, given, false, undefined, true);
+    assertEquals(placed.placesCalls, true);
+    assertEquals(placed.noCallsUntil, '2026-10-13T05:00:00.000Z');
+    assertEquals(
+      placed.consents.find((c) => c.type === 'auto_call'),
+      {
+        type: 'auto_call',
+        held: false,
+      },
+    );
+    // No calls placed: no row, unless the consent is still held (Turn off stays possible).
+    const none = settingsView(reporter, us, given, false, undefined, false);
+    assertEquals(none.placesCalls, false);
+    assertEquals(
+      none.consents.some((c) => c.type === 'auto_call'),
+      false,
+    );
+    const held = settingsView(
+      reporter,
+      us,
+      [...given, { type: 'auto_call', revoked_at: null }],
+      false,
+      undefined,
+      false,
+    );
+    assertEquals(
+      held.consents.find((c) => c.type === 'auto_call'),
+      {
+        type: 'auto_call',
+        held: true,
+      },
+    );
+  },
+);
 
 Deno.test('settingsView: push is the toggle, offered with the pack and a key pair (W2-14)', () => {
   const us = {

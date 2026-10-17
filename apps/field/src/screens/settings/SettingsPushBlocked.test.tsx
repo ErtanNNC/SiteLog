@@ -24,6 +24,8 @@ const PREFS: PreferencesResponse = {
   ],
   textsOptedOut: false,
   push: { offered: true, on: false },
+  placesCalls: false,
+  noCallsUntil: null,
 };
 
 describe('Settings: Notifications blocked before (W2-14 review)', () => {

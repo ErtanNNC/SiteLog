@@ -169,6 +169,11 @@ export const FIELD_API_ERRORS = [
   'photo_limit',
   'channel_not_offered',
   /**
+   * W3-17 (spec §19 Q33, Q131): the automated-call consent where the org places no calls (no
+   * outbound trunk in its pack here, not a demo org); `resolve` says so with `placesCalls: false`.
+   */
+  'calls_not_offered',
+  /**
    * Spec §19 Q86: *Turn on* for texts refused because the phone opted out of texts (SMS STOP or
    * the provider's opt-out list); only START undoes it (§9.5).
    */
@@ -274,6 +279,13 @@ export interface ResolveResponse {
    * prefers calls, §9.3).
    */
   talkNow: boolean;
+  /**
+   * W3-17 (spec §19 Q51's first option, Q125, Q132): SiteLog places automated calls for this
+   * reporter's org: a pack with an outbound trunk in this environment, or a demo org (its calls
+   * ring the panel's Demo phone). Only then does Field-02 show *Call me at report time
+   * (automated)* and Settings its row and "Don't call me today" (§19 Q33: never asked otherwise).
+   */
+  placesCalls: boolean;
 }
 
 /** The body of a 410 `link_expired`: enough for the Expired screen's language and call option. */
@@ -709,6 +721,17 @@ export interface PreferencesResponse {
    * *Notifications* toggle is its control.
    */
   push: { offered: boolean; on: boolean };
+  /**
+   * W3-17: SiteLog places automated calls for the reporter's org (`ResolveResponse.placesCalls`):
+   * the `auto_call` row is listed (*Turn on* / *Turn off*) and, for a reporter who prefers calls,
+   * "Don't call me today".
+   */
+  placesCalls: boolean;
+  /**
+   * §19 Q129 (W3-17): `reporters.no_calls_until`, "Don't call me today" said in Settings or on a
+   * call; no automated calls until then (the end of that day, the org's time zone). null = none.
+   */
+  noCallsUntil: string | null;
 }
 
 /** `GET push/key` (W2-14): the VAPID public key the browser subscribes with; null = no push here. */

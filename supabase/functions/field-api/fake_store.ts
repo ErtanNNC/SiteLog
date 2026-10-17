@@ -771,9 +771,43 @@ export class FakeFieldStore implements FieldStore {
     return Promise.resolve(this.optOuts.has(`${phone}|${country}`));
   }
 
+  /** field_no_calls_today(): the end of `now`'s day in the org's time zone, audited. */
+  noCallsToday(
+    reporterId: string,
+    deviceId: string,
+    now: Date,
+  ): Promise<{ until: string; changed: boolean }> {
+    this.calls.push('noCallsToday');
+    const r = this.reporters.find((x) => x.id === reporterId);
+    if (!r) return Promise.reject(new FieldDbError('reporter_not_found'));
+    const org = this.orgs.find((o) => o.id === r.org_id)!;
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: org.timezone }).format(now);
+    const until = endOfDayIn(day, org.timezone);
+    if (r.no_calls_until && r.no_calls_until >= until) {
+      return Promise.resolve({ until: r.no_calls_until, changed: false });
+    }
+    const before = r.no_calls_until ?? null;
+    r.no_calls_until = until;
+    this.audits.push({
+      orgId: r.org_id,
+      actorType: 'reporter',
+      actorId: reporterId,
+      action: 'reporter.preferences_changed',
+      entity: 'reporter',
+      entityId: reporterId,
+      diff: {
+        from: { no_calls_until: before },
+        to: { no_calls_until: until },
+        channel: 'web',
+        device_id: deviceId,
+      },
+    });
+    return Promise.resolve({ until, changed: true });
+  }
+
   grantConsent(
     reporterId: string,
-    type: 'sms' | 'whatsapp',
+    type: 'sms' | 'whatsapp' | 'auto_call',
     textVersion: string,
     deviceId: string,
     evidence: Json,
@@ -781,7 +815,14 @@ export class FakeFieldStore implements FieldStore {
     this.calls.push('grantConsent');
     const r = this.reporters.find((x) => x.id === reporterId);
     if (!r) return Promise.reject(new FieldDbError('reporter_not_found'));
-    const country = this.orgs.find((o) => o.id === r.org_id)?.country ?? '';
+    const org = this.orgs.find((o) => o.id === r.org_id);
+    const country = org?.country ?? '';
+    if (type === 'auto_call') {
+      const pack = this.countries.find((k) => k.code === country);
+      if (!org?.is_demo && !pack?.outbound_trunk_id) {
+        return Promise.reject(new FieldDbError('consent_not_offered'));
+      }
+    }
     if (
       type === 'sms' &&
       (r.status === 'opted_out' || this.optOuts.has(`${r.phone_e164}|${country}`))
@@ -2110,4 +2151,24 @@ export class FakeFieldStore implements FieldStore {
     this.audits.push(entry);
     return Promise.resolve();
   }
+}
+
+/** The instant a local date ends in a time zone (its next midnight), as ISO. */
+export function endOfDayIn(date: string, tz: string): string {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const guess = Date.UTC(y, m - 1, d + 1, 0, 0, 0);
+  const offset = (at: number) => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).formatToParts(new Date(at));
+    const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+    return Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute')) - at;
+  };
+  return new Date(guess - offset(guess)).toISOString();
 }

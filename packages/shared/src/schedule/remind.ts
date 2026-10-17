@@ -8,6 +8,7 @@ import {
   type MessageChannel,
 } from '../enums.ts';
 import { addDays, formatDateInTz, formatTimeInTz } from '../format.ts';
+import { noCallsToday } from '../voice-outbound.ts';
 import { deadlineInstant } from './reminders.ts';
 
 /**
@@ -29,13 +30,16 @@ import { deadlineInstant } from './reminders.ts';
  *   carry it. Two-way SMS never matters here (no ladder text carries a reply instruction), and
  *   the voice number only picks `reminder_2`'s variant with "or call {number}", which `renderSms`
  *   does from the pack (`smsRenderOptions`);
- * - the outbound trunk (spec §19 Q38: env, not the pack; none before M8), so no `call` before M8,
- *   and for a call the `auto_call` consent and the call window;
+ * - whether the org places calls (W3-17, spec §19 Q51, Q125, Q132: a pack with an outbound trunk
+ *   here, or a demo org on the `console` telephony), and for a call the org's `auto_call_enabled`,
+ *   the reporter's own `auto_call` consent (§19 Q131), the call window and "Don't call me today"
+ *   (`reporters.no_calls_until`, §19 Q129: the messages a link reporter gets instead);
  * - weather: the heads-up only when the 12:00 or 16:30 snapshot observed weather;
  * - two owner questions, as parameters with the defaults the owner decided on 2026-10-16
  *   (`REMIND_POLICY_DEFAULTS`):
- *   spec §19 Q76 (the daily link for call-preferring reporters while no call is placed) and Q77
- *   (ladder messages that fall outside the quiet hours, which are the org's call window, Q30).
+ *   spec §19 Q76 (the daily link for call-preferring reporters while no call is placed), Q77
+ *   (ladder messages that fall outside the quiet hours, which are the org's call window, Q30) and
+ *   Q130 (`call_coming` at the daily-link time only when the R1 call will really be placed).
  *
  * Consent and opt-out for a message are the Notifier's, at send time (`deliverableChannels`): it
  * audits `notify.skipped` with the reason. `remind()` does not repeat them.
@@ -52,7 +56,11 @@ export const REMIND_STAGE_KEY = {
   reminder_1: 'reminder_1',
   reminder_2: 'reminder_2',
 } as const satisfies Record<RemindStage, string>;
-export type RemindKey = (typeof REMIND_STAGE_KEY)[RemindStage];
+/**
+ * The keys a ladder stage sends: the stage's own, and `call_coming` at the daily-link time for a
+ * call reporter whose R1 call will be placed (W3-17, §19 Q130).
+ */
+export type RemindKey = (typeof REMIND_STAGE_KEY)[RemindStage] | 'call_coming';
 
 /** The `site_days.reminder_stage` value a stage sets (the daily link sets none). */
 export const REMIND_STAGE_NUMBER: Readonly<Record<RemindStage, number | null>> = {
@@ -70,7 +78,10 @@ export const REMIND_SKIP_REASONS = [
   'inactive',
   /** The heads-up with no weather observed today. */
   'no_weather',
-  /** A call reporter whose call comes at R1 (with an outbound trunk; or §19 Q76 set to `none`). */
+  /**
+   * A call reporter at the daily-link time whose call comes at R1 with §19 Q130 set to `none`, or
+   * with no call coming and §19 Q76 set to `none`.
+   */
   'call_reporter',
   /** No built channel of the order may carry the key (e.g. a link where the pack forbids links). */
   'no_channel',
@@ -105,6 +116,12 @@ export interface RemindPolicy {
    */
   callReporterDailyLink: 'daily_link' | 'none';
   /**
+   * §19 Q130 (W3-17): what a call reporter gets at the daily-link time when the R1 call will
+   * really be placed (calls placed, `auto_call`, R1 inside the window, not "Don't call me
+   * today"). `call_coming`: "I'll call you at {time}…" with the link (recommended); `none`.
+   */
+  callComing: 'call_coming' | 'none';
+  /**
    * §19 Q77: a ladder message (daily link, heads-up, R1, R2; W2-07's nudge) that would go out
    * outside the quiet-hours window. `skip`: not sent, audited (recommended); `send`: sent anyway.
    * Messages that answer the reporter's own action (device code, filed, edit applied, a reply)
@@ -115,6 +132,7 @@ export interface RemindPolicy {
 
 export const REMIND_POLICY_DEFAULTS: RemindPolicy = {
   callReporterDailyLink: 'daily_link',
+  callComing: 'call_coming',
   quietHours: 'skip',
 };
 
@@ -138,6 +156,8 @@ export interface RemindSettings {
   reminder2Enabled: boolean;
   /** `org_settings.second_call_enabled` (null = the column default, true). */
   secondCallEnabled: boolean;
+  /** `org_settings.auto_call_enabled` (W3-17; omitted = the column default, true). */
+  autoCallEnabled?: boolean;
   callWindow: QuietWindow;
 }
 
@@ -148,6 +168,8 @@ export interface RemindReporter {
   messageChannel: MessageChannel | null;
   /** Unrevoked consent types; only `auto_call` matters here (message consent is the Notifier's). */
   consents: ReadonlySet<ConsentType>;
+  /** §19 Q129 (W3-17): `reporters.no_calls_until`; while it is ahead, no calls ("not today"). */
+  noCallsUntil?: Date | string | null;
 }
 
 export interface RemindContext {
@@ -159,10 +181,16 @@ export interface RemindContext {
   /** The site-day's snapshot observed weather (`isWeatherObserved`). */
   weatherObserved: boolean;
   /**
-   * Whether the pack places outbound calls (spec §19 Q38: trunks are env; Q51). False until M8,
-   * so `remind()` never answers `call` before then.
+   * Whether the org places outbound calls (W3-17, `placesCalls()`: an outbound trunk in the pack
+   * here, or a demo org's `console` calls; spec §19 Q51, Q125, Q132). Without it, never a `call`.
    */
   outboundTrunk: boolean;
+  /**
+   * When R1 runs (the deadline + `reminder1_offset_min`): at the daily-link time the R1 call is
+   * announced (`call_coming`, §19 Q130) only if R1 falls inside the call window and before the
+   * end of "not today". Omitted: `now`.
+   */
+  r1At?: Date;
   /** Built message channels (default `IMPLEMENTED_MESSAGE_CHANNELS`). */
   implemented?: readonly MessageChannel[];
   policy?: RemindPolicy;
@@ -233,13 +261,25 @@ export function remind(
   };
 
   if (reporter.contactPref === 'call') {
-    // Calls only with a trunk, the auto_call consent and inside the call window (F11 rules).
-    const canCall = ctx.outboundTrunk && reporter.consents.has('auto_call') && inWindow;
+    // Calls only where the org places them, with its switch on, the reporter's own auto_call
+    // consent, inside the call window and not on a "Don't call me today" day (F11, §19 Q129, Q131).
+    const callsAt = (when: Date) =>
+      ctx.outboundTrunk &&
+      s.autoCallEnabled !== false &&
+      reporter.consents.has('auto_call') &&
+      insideWindow(when, ctx.tz, s.callWindow) &&
+      !noCallsToday(reporter.noCallsUntil, when);
+    const canCall = callsAt(ctx.now);
     switch (stage) {
       case 'daily_link':
-        // With a trunk the call comes at R1 (§7.4: "—", call_coming optional, M8). Without one,
-        // §19 Q76.
-        if (ctx.outboundTrunk || policy.callReporterDailyLink === 'none') {
+        // §19 Q130: "I'll call you at {time}" only when the R1 call will really be placed;
+        // otherwise the daily link as before (§19 Q76).
+        if (callsAt(ctx.r1At ?? ctx.now)) {
+          return policy.callComing === 'call_coming'
+            ? message('call_coming')
+            : { kind: 'none', reason: 'call_reporter' };
+        }
+        if (policy.callReporterDailyLink === 'none') {
           return { kind: 'none', reason: 'call_reporter' };
         }
         return message('daily_link');

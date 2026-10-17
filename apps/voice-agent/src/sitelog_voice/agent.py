@@ -66,6 +66,7 @@ from .special import (
     next_step_line,
 )
 from .tools import NoHooks, ToolHooks, ToolResult, build_tools, post_fallback, send_end_call
+from .voicemail import GREETING_WAIT_S, OutboundGate
 
 if TYPE_CHECKING:
     from livekit.agents import AgentSession
@@ -356,6 +357,19 @@ class ReportCall:
         self._identify()
         return opening
 
+    async def screen_outbound(self, first_utterance: str | None) -> bool:
+        """F6 step 1 (W3-17): an outbound call listens before it speaks. A voicemail greeting
+        ends the call `not_reached` with no message (field-api: `voicemail`, then `missed_call`);
+        a person, or silence, goes on to the opening. The words are matched, never processed.
+        True when the call goes on."""
+        decision = OutboundGate(self.state.language).first(first_utterance)
+        if decision == "begin":
+            self.state.metrics.answered_by = "human"
+            return True
+        self.state.metrics.answered_by = "machine"
+        await self.run(self.dialog.on(Event.NO_ANSWER, self.now()))
+        return False
+
     async def disclosure_played(self) -> None:
         self.state.disclosure_played = True
         self.dialog.on(Event.DISCLOSURE_PLAYED, self.now())
@@ -535,9 +549,68 @@ def _room_call_id(room: rtc.Room) -> str | None:
     return call_id if isinstance(call_id, str) else None
 
 
+def _room_is_outbound(room: rtc.Room) -> bool:
+    """An outbound call's room (W3-17): `{"direction": "outbound"}` in its metadata."""
+    try:
+        meta = json.loads(room.metadata or "{}")
+    except ValueError:
+        return False
+    return isinstance(meta, dict) and meta.get("direction") == "outbound"
+
+
 def _keeps_recording(state: CallState) -> bool:
-    """§19 Q120: no recording of a call whose reporter said no, or never answered the question."""
-    return not (state.consent_declined or state.consent_needed)
+    """§19 Q120: no recording of a call whose reporter said no, or never answered the question;
+    W3-17: none of a voicemail greeting (a third party's words, F6 step 1)."""
+    return not (
+        state.consent_declined or state.consent_needed or state.metrics.answered_by == "machine"
+    )
+
+
+async def _wait_answered(
+    participant: rtc.RemoteParticipant, room: rtc.Room, timeout_s: float
+) -> bool:
+    """An outbound SIP participant joins while it rings (`sip.callStatus` `dialing`/`ringing`);
+    the call starts only once it is `active` (answered). False: it never was (the worker settles
+    the unanswered call)."""
+    if participant.attributes.get("sip.callStatus", "active") == "active":
+        return True
+    answered: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
+
+    def changed(_changed: dict[str, str], p: rtc.Participant) -> None:
+        active = p.attributes.get("sip.callStatus") == "active"
+        if p.identity == participant.identity and active and not answered.done():
+            answered.set_result(True)
+
+    def left(p: rtc.RemoteParticipant) -> None:
+        if p.identity == participant.identity and not answered.done():
+            answered.set_result(False)
+
+    room.on("participant_attributes_changed", changed)
+    room.on("participant_disconnected", left)
+    try:
+        return await asyncio.wait_for(answered, timeout_s)
+    except TimeoutError:
+        return False
+    finally:
+        room.off("participant_attributes_changed", changed)
+        room.off("participant_disconnected", left)
+
+
+async def _first_utterance(session: AgentSession, timeout_s: float) -> str | None:
+    """The callee's first final transcript, or None after `timeout_s` of silence (F6 step 1)."""
+    heard: asyncio.Future[str] = asyncio.get_running_loop().create_future()
+
+    def transcribed(ev: Any) -> None:
+        if getattr(ev, "is_final", False) and not heard.done():
+            heard.set_result(str(getattr(ev, "transcript", "") or ""))
+
+    session.on("user_input_transcribed", transcribed)
+    try:
+        return await asyncio.wait_for(heard, timeout_s)
+    except TimeoutError:
+        return None
+    finally:
+        session.off("user_input_transcribed", transcribed)
 
 
 server = AgentServer()
@@ -555,6 +628,11 @@ async def entrypoint(ctx: JobContext) -> None:
     participant = await ctx.wait_for_participant()
     is_sip = participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
     transport = "pstn" if is_sip else "web"
+    outbound = is_sip and _room_is_outbound(room)
+    if outbound and not await _wait_answered(participant, room, timeout_s=90):
+        # Nobody picked up: the worker settles the call (no answer, busy) and texts missed_call.
+        ctx.shutdown(reason="outbound call not answered")
+        return
     if call_id is None and is_sip:
         # An inbound SIP call: field-api finds the reporter by the caller's number (§19 Q44).
         # An outbound call (W3-17) or Talk now names its call in the room metadata instead.
@@ -612,6 +690,10 @@ async def entrypoint(ctx: JobContext) -> None:
     call.on_finish.append(lambda: upload(_keeps_recording(state)))
     call.on_finish.append(close_room)
     ctx.add_shutdown_callback(call.hang_up)
+    if outbound and not await call.screen_outbound(
+        await _first_utterance(session, GREETING_WAIT_S)
+    ):
+        return  # a voicemail greeting: ended not_reached, nothing left on it (F6 step 1)
     call.start_ticker()
     await call.begin(first_name=started.reporter.first_name)
 

@@ -37,6 +37,7 @@ import type {
   OpsCostOutlierRow,
   OpsUnknownContactRow,
   OpsDeadJobRow,
+  OpsOutboundCallShareRow,
   OpsQueueStatRow,
 } from '@sitelog/shared/db/types.ts';
 import type { InvoiceStatus, MemberRole, ReporterStatus } from '@sitelog/shared/enums.ts';
@@ -44,6 +45,7 @@ import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/shared/format.ts';
 import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numbering.ts';
 import { invoiceUploadPath } from '@sitelog/shared/invoices.ts';
+import { mergeDemoPhoneCalls } from '../demoPhoneCalls';
 import {
   officePhotoStoragePath,
   type OfficePhotoMime,
@@ -2051,15 +2053,17 @@ export class SupabaseSource implements DataSource {
     return !error && data === true;
   }
   async getOps(): Promise<OpsData> {
-    const [queue, dead, outliers] = await Promise.all([
+    const [queue, dead, outliers, calls] = await Promise.all([
       this.rpc('ops_queue_stats', {}),
       this.rpc('ops_dead_jobs', { p_limit: 100 }),
       this.rpc('ops_cost_outliers', { p_days: 30 }),
+      this.rpc('ops_outbound_call_share', { p_weeks: 8 }),
     ]);
     return toOpsData(
       (queue ?? []) as OpsQueueStatRow[],
       (dead ?? []) as OpsDeadJobRow[],
       (outliers ?? []) as OpsCostOutlierRow[],
+      (calls ?? []) as OpsOutboundCallShareRow[],
     );
   }
   async retryDeadJob(jobId: number) {
@@ -2179,16 +2183,37 @@ export class SupabaseSource implements DataSource {
       channel: 'sms' | 'push' | 'whatsapp';
       created_at: string;
     }>;
-    return rows.reverse().map((m) => ({
-      id: m.id,
-      direction: m.direction,
-      body: m.body ?? '',
-      status: m.status,
-      copyKey: m.copy_key,
-      provider: m.provider,
-      channel: m.channel,
-      at: m.created_at,
-    }));
+    // W3-17 (§19 Q132): a demo org's outbound calls ring here (console telephony).
+    const calls = unwrap(
+      await this.sb
+        .from('calls')
+        .select('id, status, outcome, purpose, attempt, created_at')
+        .eq('org_id', this.orgId)
+        .eq('reporter_id', reporterId)
+        .eq('direction', 'outbound')
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ) as Array<{
+      id: string;
+      status: string;
+      outcome: string | null;
+      purpose: string | null;
+      attempt: number | null;
+      created_at: string;
+    }>;
+    return mergeDemoPhoneCalls(
+      rows.reverse().map((m) => ({
+        id: m.id,
+        direction: m.direction,
+        body: m.body ?? '',
+        status: m.status,
+        copyKey: m.copy_key,
+        provider: m.provider,
+        channel: m.channel,
+        at: m.created_at,
+      })),
+      calls,
+    );
   }
 
   async getDemoPhoneEmails(): Promise<DemoPhoneEmail[]> {
@@ -2339,6 +2364,7 @@ function toOpsData(
   queue: OpsQueueStatRow[],
   dead: OpsDeadJobRow[],
   outliers: OpsCostOutlierRow[],
+  calls: OpsOutboundCallShareRow[] = [],
 ): OpsData {
   const record = (v: unknown): Record<string, unknown> =>
     v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -2382,6 +2408,14 @@ function toOpsData(
         waTemplates: num(detail.waTemplates),
       };
     }),
+    outboundCalls: calls.map((c) => ({
+      orgId: c.org_id,
+      orgName: c.org_name,
+      isDemo: c.is_demo,
+      weekStart: String(c.week_start).slice(0, 10),
+      callDays: Number(c.call_days),
+      filedByCall: Number(c.filed_by_call),
+    })),
   };
 }
 

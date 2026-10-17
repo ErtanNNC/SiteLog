@@ -1,6 +1,11 @@
 import postgres, { type Sql, type TransactionSql } from 'postgres';
 import type {
   CallRow,
+  CallSkipReason,
+  CallStatus,
+  OutboundCallShareRow,
+  OutboundCallStage,
+  TelephonyDriver,
   CompanyRow,
   CorrectionChange,
   DailyReportData,
@@ -381,10 +386,30 @@ export interface ReportCostBaseline {
   sample: number;
 }
 
+/** W3-17: what outbound_call_start() answered (see `Db.outboundCallStart`). */
+export type OutboundCallStart =
+  | {
+      status: 'placed';
+      callId: string;
+      room: string;
+      attempt: 1 | 2 | 3;
+      purpose: 'reminder' | 'callback';
+      language: string | null;
+      trunkId: string | null;
+      from: string | null;
+      to: string;
+    }
+  | { status: 'skipped'; reason: CallSkipReason; open?: number };
+
 export interface DigestStats {
   siteDays: number;
   filed: number;
   onTime: number;
+  /**
+   * W3-17 (M8): the site-days SiteLog called a reporter about this week and those filed by the
+   * reporter's yes on such a call (`outbound_call_share()`); absent when none was called.
+   */
+  outboundCalls?: { callDays: number; filedByCall: number };
   weatherHoursBySite: Array<{ siteName: string; hours: number }>;
   unsigned: Array<{ reportNo: string; siteName: string; date: string }>;
   invoiceGaps: Array<{ companyName: string; gap: number }>;
@@ -764,6 +789,32 @@ export interface Db {
     reportId: string,
     notice: ReviewNotice,
   ): Promise<{ flagged: boolean; reason: string }>;
+
+  // Outbound calls (W3-17, 20261016000380_outbound_calls.sql) ------------------------------------
+  /**
+   * The guards that need the database, under the site-day's lock (the day, the reporter, the
+   * `auto_call` consent, "not today", the attempt, the org placing calls, the capacity for
+   * `livekit`), then the `calls` row (outbound, pstn, queued) audited `call.requested`; or the
+   * reason it was not placed (nothing written).
+   */
+  outboundCallStart(input: {
+    reporterId: string;
+    siteDayId: string;
+    stage: OutboundCallStage;
+    now: Date;
+    telephony: TelephonyDriver;
+    maxConcurrent: number | null;
+  }): Promise<OutboundCallStart>;
+  /** The dial started: `queued` → `ringing` (the Demo phone shows it ringing). */
+  outboundCallRinging(callId: string): Promise<{ changed: boolean; status: string }>;
+  /** The dial never reached the reporter: its status, outcome `not_reached`, audited. */
+  outboundCallUnanswered(
+    callId: string,
+    status: Extract<CallStatus, 'no_answer' | 'busy' | 'failed' | 'voicemail'>,
+    reason: string,
+  ): Promise<{ ended: boolean; status: string; outcome: string | null }>;
+  /** M8: per org and week, the called site-days and those filed by an outbound call. */
+  outboundCallShare(orgId: string, from: string, to: string): Promise<OutboundCallShareRow[]>;
 
   // SMS report keywords (W2-12)
   /**
@@ -1848,6 +1899,36 @@ export function createDb(sql: Sql): Db {
       return row!.r;
     },
 
+    // Outbound calls (W3-17) -------------------------------------------------------------------
+    async outboundCallStart(input) {
+      const [row] = await sql<Array<{ r: OutboundCallStart }>>`
+        select outbound_call_start(${input.reporterId}, ${input.siteDayId}, ${input.stage},
+          ${input.now.toISOString()}::timestamptz, ${input.telephony},
+          ${input.maxConcurrent}::int) as r`;
+      return row!.r;
+    },
+    async outboundCallRinging(callId) {
+      const [row] = await sql<Array<{ r: { changed: boolean; status: string } }>>`
+        select outbound_call_ringing(${callId}) as r`;
+      return row!.r;
+    },
+    async outboundCallUnanswered(callId, status, reason) {
+      const [row] = await sql<
+        Array<{ r: { ended: boolean; status: string; outcome: string | null } }>
+      >`select outbound_call_unanswered(${callId}, ${status}::call_status, ${reason}) as r`;
+      return row!.r;
+    },
+    async outboundCallShare(orgId, from, to) {
+      const rows = await sql<OutboundCallShareRow[]>`
+        select org_id, to_char(week_start, 'YYYY-MM-DD') as week_start, call_days, filed_by_call
+          from outbound_call_share(${orgId}, ${from}::date, ${to}::date)`;
+      return rows.map((r) => ({
+        ...r,
+        call_days: Number(r.call_days),
+        filed_by_call: Number(r.filed_by_call),
+      }));
+    },
+
     // SMS report keywords (W2-12) -------------------------------------------------------------
     async smsKeywordDays(reporterIds) {
       if (reporterIds.length === 0) return [];
@@ -2464,6 +2545,11 @@ export function createDb(sql: Sql): Db {
         invoiceGaps: gaps
           .filter((g) => Number(g.gap) !== 0)
           .map((g) => ({ companyName: g.company_name, gap: Number(g.gap) })),
+        ...(await db.outboundCallShare(orgId, weekStart, weekEnd).then((rows) => {
+          const callDays = rows.reduce((a, r) => a + r.call_days, 0);
+          const filedByCall = rows.reduce((a, r) => a + r.filed_by_call, 0);
+          return callDays > 0 ? { outboundCalls: { callDays, filedByCall } } : {};
+        })),
       };
     },
 

@@ -83,6 +83,11 @@ export type CountryRow = {
   whatsapp_sender_id: string | null;
   /** Per environment: `{<message key>: {<language>: <Twilio content sid>}}`; null = none. */
   whatsapp_templates: WhatsappTemplates | null;
+  /**
+   * W3-17 (spec §19 Q125): per environment, the LiveKit outbound SIP trunk (`ST_…`); null = no
+   * automated calls for real orgs. Its caller id is `voice_number` (§19 Q126; a trunk needs one).
+   */
+  outbound_trunk_id: string | null;
   legal_keys: { privacy_notice?: string; recording_notice?: string; consent?: string };
   created_at: string;
 };
@@ -1000,6 +1005,23 @@ export type OpsUnknownContactRow = {
   created_at: string;
 };
 
+/**
+ * outbound_call_share() row (W3-17, M8): per org and ISO week (Monday), the site-days SiteLog
+ * called a reporter about and those filed by the reporter's yes on such a call.
+ */
+export type OutboundCallShareRow = {
+  org_id: string;
+  week_start: string;
+  call_days: number;
+  filed_by_call: number;
+};
+
+/** ops_outbound_call_share() row: `outbound_call_share()` with the org's name. */
+export type OpsOutboundCallShareRow = OutboundCallShareRow & {
+  org_name: string;
+  is_demo: boolean;
+};
+
 /** ops_cost_outliers() row. */
 export type OpsCostOutlierRow = {
   report_id: string;
@@ -1067,6 +1089,7 @@ export type Database = {
         | 'voice_number'
         | 'whatsapp_sender_id'
         | 'whatsapp_templates'
+        | 'outbound_trunk_id'
         | 'legal_keys'
         | 'created_at'
       >;
@@ -1510,8 +1533,40 @@ export type Database = {
           p_voice_number: string | null;
           p_whatsapp_sender_id: string | null;
           p_whatsapp_templates: Json | null;
+          /** W3-17 (20261016000380): the outbound SIP trunk (§19 Q125); null clears it. */
+          p_outbound_trunk_id?: string | null;
         };
         Returns: CountryRow;
+      };
+      // W3-17 (20261016000380_outbound_calls.sql), service role only.
+      org_places_calls: { Args: { p_org_id: string }; Returns: boolean };
+      field_no_calls_today: {
+        Args: { p_reporter_id: string; p_device_id: string; p_now?: string | null };
+        Returns: Json;
+      };
+      outbound_call_start: {
+        Args: {
+          p_reporter_id: string;
+          p_site_day_id: string;
+          p_stage: string;
+          p_now: string;
+          p_telephony: string;
+          p_max_concurrent?: number | null;
+        };
+        Returns: Json;
+      };
+      outbound_call_ringing: { Args: { p_call_id: string }; Returns: Json };
+      outbound_call_unanswered: {
+        Args: { p_call_id: string; p_status: CallStatus; p_reason: string };
+        Returns: Json;
+      };
+      voice_schedule_callback: {
+        Args: { p_call_id: string; p_at: string; p_minutes: number };
+        Returns: Json;
+      };
+      outbound_call_share: {
+        Args: { p_org_id: string | null; p_from: string; p_to: string };
+        Returns: OutboundCallShareRow[];
       };
       next_report_no: { Args: { p_site_id: string }; Returns: string };
       // field-api (20261014000006_field_api.sql), service role only: uploads/:id/complete numbers
@@ -2121,6 +2176,8 @@ export type Database = {
           p_messages: Json;
           p_skipped?: Json;
           p_not_after?: string | null;
+          /** W3-17 (20261016000380): the stage's calls, one `place_call` job each. */
+          p_calls?: Json;
         };
         Returns: boolean;
       };
@@ -2182,6 +2239,11 @@ export type Database = {
       ops_retry_job: { Args: { p_job_id: number }; Returns: Json };
       ops_discard_job: { Args: { p_job_id: number }; Returns: Json };
       ops_cost_outliers: { Args: { p_days?: number }; Returns: OpsCostOutlierRow[] };
+      // W3-17 (20261016000380): the M8 measure per org and week, platform admins.
+      ops_outbound_call_share: {
+        Args: { p_weeks?: number };
+        Returns: OpsOutboundCallShareRow[];
+      };
       // Org-less unknown contacts (20261015000040_unknown_contacts_support.sql, spec §19 Q44).
       ops_unknown_contacts: { Args: { p_limit?: number }; Returns: OpsUnknownContactRow[] };
       ops_assign_unknown_contact: { Args: { p_id: string; p_org_id: string }; Returns: Json };

@@ -584,6 +584,8 @@ interface World {
   days: SiteDayInput[];
   links: Array<{ site_id: string; reporter_id: string; is_primary: boolean }>;
   reporters: Map<string, LadderReporter>;
+  /** W3-17: reporters holding their own auto_call consent. */
+  autoCall?: Set<string>;
 }
 
 function world(over: Partial<World> = {}): World {
@@ -639,6 +641,7 @@ function simulateLadder(
       reporters: w.reporters,
       dailyLinkDone,
       now,
+      ...(w.autoCall ? { autoCall: w.autoCall } : {}),
     });
     for (const step of steps) {
       const sd = w.days.find((d) => d.id === step.siteDayId)!;
@@ -666,6 +669,18 @@ function simulateLadder(
           siteDayId: sd.id,
           reporter: m.reporterId,
           key: m.key,
+        });
+      }
+      for (const c of args.calls) {
+        sent.push({
+          at: new Intl.DateTimeFormat('en-GB', {
+            timeZone: tz,
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(now),
+          siteDayId: sd.id,
+          reporter: c.reporterId,
+          key: `call (gives up ${c.giveUpAt})`,
         });
       }
       for (const k of args.skipped)
@@ -857,6 +872,94 @@ Deno.test(
     ]);
   },
 );
+
+Deno.test(
+  'planLadder W3-17: a call reporter with auto_call gets call_coming, the R1 call, the R2 call and message',
+  () => {
+    const kevin = rep('kevin', { contact_pref: 'call' });
+    const trunk = {
+      ...US,
+      voiceNumber: '+15550142290' as CountryPack['voiceNumber'],
+      outboundTrunkId: 'ST_abc123',
+    };
+    const calls = (w: World) =>
+      simulateLadder(w, '2026-10-12T22:00:00Z', '2026-10-12T23:35:00Z').sent.map(line);
+    const base = {
+      links: [{ site_id: 'site-1', reporter_id: 'kevin', is_primary: true }],
+      reporters: new Map([['kevin', kevin]]),
+      autoCall: new Set(['kevin']),
+    };
+    const expected = [
+      '17:00 kevin call_coming',
+      '17:45 kevin call (gives up 2026-10-12T23:15:00.000Z)',
+      '18:30 kevin reminder_2',
+      '18:30 kevin call (gives up 2026-10-13T00:00:00.000Z)',
+    ];
+    // A pack with an outbound trunk here (§19 Q125).
+    assertEquals(calls(world({ ...base, packs: new Map([['org-1', trunk]]) })), expected);
+    // A demo org without a trunk: the console telephony (§19 Q132).
+    assertEquals(
+      calls(world({ ...base, orgs: new Map([['org-1', orgOf('org-1', { is_demo: true })]]) })),
+      expected,
+    );
+    // A real org without a trunk: the messages (§19 Q38, Q76).
+    assertEquals(calls(world(base)), [
+      '17:00 kevin daily_link',
+      '17:45 kevin reminder_1',
+      '18:30 kevin reminder_2',
+    ]);
+    // No auto_call of their own (§19 Q131): the messages.
+    assertEquals(
+      calls(world({ ...base, autoCall: new Set(), packs: new Map([['org-1', trunk]]) })),
+      ['17:00 kevin daily_link', '17:45 kevin reminder_1', '18:30 kevin reminder_2'],
+    );
+    // "Don't call me today" (§19 Q129): the messages.
+    assertEquals(
+      calls(
+        world({
+          ...base,
+          packs: new Map([['org-1', trunk]]),
+          reporters: new Map([
+            [
+              'kevin',
+              rep('kevin', { contact_pref: 'call', no_calls_until: '2026-10-13T05:00:00Z' }),
+            ],
+          ]),
+        }),
+      ),
+      ['17:00 kevin daily_link', '17:45 kevin reminder_1', '18:30 kevin reminder_2'],
+    );
+    // second_call_enabled off: R2 is the message only.
+    assertEquals(
+      calls(
+        world({
+          ...base,
+          packs: new Map([['org-1', trunk]]),
+          orgs: new Map([
+            ['org-1', orgOf('org-1', { settings: { ...settings, second_call_enabled: false } })],
+          ]),
+        }),
+      ),
+      ['17:00 kevin call_coming', expected[1]!, '18:30 kevin reminder_2'],
+    );
+  },
+);
+
+Deno.test('ladderVars: call_coming says the R1 time and carries the link (§19 Q130)', () => {
+  const vars = ladderVars('call_coming', {
+    siteName: 'Northgate',
+    link: 'https://field.example/r/abc123',
+    voiceNumber: null,
+    deadlineAt: new Date('2026-10-12T22:30:00Z'),
+    missingAt: new Date('2026-10-13T00:00:00Z'),
+    reminder1At: new Date('2026-10-12T22:45:00Z'),
+    tz: 'America/Chicago',
+    weather: null,
+    locale: 'en-US',
+    units: 'imperial',
+  });
+  assertEquals(vars, { time: '17:45', link: 'https://field.example/r/abc123' });
+});
 
 Deno.test(
   'planLadder: quiet hours (Q77) — the stage is claimed, its messages skipped; notAfter is the window end',
