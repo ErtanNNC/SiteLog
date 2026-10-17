@@ -6,7 +6,8 @@ import { admin, pinSeedClock, SEED, signInWithMagicLink } from './support';
  * §17 E2E web against a real local Supabase stack (migrations + seed.sql, Auth, PostgREST,
  * Realtime, Edge Functions): login via admin generateLink, Overview realtime flip, report edit →
  * new version, sign-off, hours CSV, EOT pack request. No worker runs, so the pack stays queued.
- * Specs share one database and run in order.
+ * Specs share one database and run in order. The hours CSV and the EOT pack belong to the M9
+ * acceptance suite (W3-18, `pnpm e2e:m9`, `@m9 @F19` / `@F20`), which runs before the worker starts.
  */
 test.describe.configure({ mode: 'serial' });
 
@@ -330,64 +331,72 @@ test('signing off a filed report records who signed it', async ({ page }) => {
   ).toBeVisible();
 });
 
-test('crew hours: Payroll CSV downloads from the export edge function', async ({ page }) => {
-  await page.goto('/hours?week=2026-W41');
-  await expect(page.getByTestId('hours-matrix')).toBeVisible();
-  const exported = page.waitForResponse(
-    (r) => r.url().includes('/functions/v1/api-export-payroll') && r.request().method() === 'GET',
-  );
-  const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Payroll CSV' }).click();
-  expect((await exported).status()).toBe(200);
-  const file = await download;
-  expect(file.suggestedFilename()).toBe('payroll-2026-W41.csv');
-  const csv = await readFile((await file.path())!, 'utf8');
-  const [header, ...rows] = csv.trim().split(/\r?\n/);
-  expect(header).toBe('date,site,project_code,company,trade,workers,hours,report_no,version');
-  expect(rows.length).toBeGreaterThan(10);
-  expect(rows.every((r) => /^2026-10-(0[5-9]|1[01]),/.test(r))).toBe(true);
-  expect(csv).toContain('RL-2041-0187');
-});
+test(
+  'crew hours: Payroll CSV downloads from the export edge function',
+  { tag: ['@m9', '@F19'] },
+  async ({ page }) => {
+    await page.goto('/hours?week=2026-W41');
+    await expect(page.getByTestId('hours-matrix')).toBeVisible();
+    const exported = page.waitForResponse(
+      (r) => r.url().includes('/functions/v1/api-export-payroll') && r.request().method() === 'GET',
+    );
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Payroll CSV' }).click();
+    expect((await exported).status()).toBe(200);
+    const file = await download;
+    expect(file.suggestedFilename()).toBe('payroll-2026-W41.csv');
+    const csv = await readFile((await file.path())!, 'utf8');
+    const [header, ...rows] = csv.trim().split(/\r?\n/);
+    expect(header).toBe('date,site,project_code,company,trade,workers,hours,report_no,version');
+    expect(rows.length).toBeGreaterThan(10);
+    expect(rows.every((r) => /^2026-10-(0[5-9]|1[01]),/.test(r))).toBe(true);
+    expect(csv).toContain('RL-2041-0187');
+  },
+);
 
-test('EOT evidence pack request creates a queued pack and build job', async ({ page }) => {
-  const requestedAfter = new Date().toISOString();
-  await page.goto(`/weather?site=${SEED.sites.riverside}&month=2026-10`);
-  await expect(page.getByTestId('delay-log')).toBeVisible();
-  await page.getByRole('button', { name: 'Build EOT evidence pack' }).first().click();
-  const dialog = page.getByRole('dialog', { name: 'EOT evidence pack' });
-  await expect(dialog.getByRole('combobox', { name: 'Site' })).toContainText('Riverside');
-  const created = page.waitForResponse(
-    (r) => r.url().includes('/functions/v1/api-evidence-pack') && r.request().method() === 'POST',
-  );
-  await dialog.getByRole('button', { name: 'Generate PDF pack' }).click();
-  expect((await created).status()).toBe(201);
-  await expect(dialog).toHaveCount(0);
-  // No worker in this stack: the pack stays queued in the history list.
-  await expect(page.getByTestId('pack-history').getByTestId('pack-status').first()).toHaveText(
-    'Queued',
-  );
+test(
+  'EOT evidence pack request creates a queued pack and build job',
+  { tag: ['@m9', '@F20'] },
+  async ({ page }) => {
+    const requestedAfter = new Date().toISOString();
+    await page.goto(`/weather?site=${SEED.sites.riverside}&month=2026-10`);
+    await expect(page.getByTestId('delay-log')).toBeVisible();
+    await page.getByRole('button', { name: 'Build EOT evidence pack' }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'EOT evidence pack' });
+    await expect(dialog.getByRole('combobox', { name: 'Site' })).toContainText('Riverside');
+    const created = page.waitForResponse(
+      (r) => r.url().includes('/functions/v1/api-evidence-pack') && r.request().method() === 'POST',
+    );
+    await dialog.getByRole('button', { name: 'Generate PDF pack' }).click();
+    expect((await created).status()).toBe(201);
+    await expect(dialog).toHaveCount(0);
+    // No worker in this stack: the pack stays queued in the history list.
+    await expect(page.getByTestId('pack-history').getByTestId('pack-status').first()).toHaveText(
+      'Queued',
+    );
 
-  const { data: packs } = await admin()
-    .from('evidence_packs')
-    .select('id, site_id, status, period_start, period_end, created_by')
-    .eq('org_id', SEED.orgId)
-    .gte('created_at', requestedAfter)
-    .throwOnError();
-  expect(packs).toHaveLength(1);
-  expect(packs[0]).toMatchObject({
-    site_id: SEED.sites.riverside,
-    status: 'queued',
-    period_start: '2026-10-01',
-    period_end: '2026-10-31',
-    created_by: SEED.admin.id,
-  });
-  const { data: jobs } = await admin()
-    .from('jobs')
-    .select('type, status, payload')
-    .eq('type', 'build_evidence_pack')
-    .eq('payload->>packId', packs[0]!.id)
-    .throwOnError();
-  expect(jobs).toEqual([
-    expect.objectContaining({ type: 'build_evidence_pack', status: 'queued' }),
-  ]);
-});
+    const { data: packs } = await admin()
+      .from('evidence_packs')
+      .select('id, site_id, status, period_start, period_end, created_by')
+      .eq('org_id', SEED.orgId)
+      .gte('created_at', requestedAfter)
+      .throwOnError();
+    expect(packs).toHaveLength(1);
+    expect(packs[0]).toMatchObject({
+      site_id: SEED.sites.riverside,
+      status: 'queued',
+      period_start: '2026-10-01',
+      period_end: '2026-10-31',
+      created_by: SEED.admin.id,
+    });
+    const { data: jobs } = await admin()
+      .from('jobs')
+      .select('type, status, payload')
+      .eq('type', 'build_evidence_pack')
+      .eq('payload->>packId', packs[0]!.id)
+      .throwOnError();
+    expect(jobs).toEqual([
+      expect.objectContaining({ type: 'build_evidence_pack', status: 'queued' }),
+    ]);
+  },
+);

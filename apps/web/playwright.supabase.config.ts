@@ -15,6 +15,11 @@ import { ANON_KEY, APP_URL, SUPABASE_URL } from './e2e/supabase/support';
  * CI runs `--project=supabase`, starts the worker, then `--project=worker` (ci.yml e2e-supabase).
  * W2-17: specs tagged `@m6` (here the ladder, `@F11`) belong to the M6 acceptance suite,
  * `pnpm e2e:m6`, which CI runs as its own step (the other steps `--grep-invert @m6`).
+ * W3-17/W3-18: the outbound calls spec (`e2e/supabase/worker/outbound-calls.spec.ts`, `@m8`) runs
+ * with the field app's call suite in `pnpm e2e:voice` (`--grep "@m7|@m8"`, this config first);
+ * the M9 specs (`@m9`, one flow tag each: `@F19` hours, `@F20` the EOT pack, `@F21` the glossary)
+ * are `pnpm e2e:m9`, the `supabase` project only, which CI runs before the worker starts so the
+ * pack it requests stays queued. The other CI steps `--grep-invert` those tags.
  */
 const DIST = 'node_modules/.e2e/supabase';
 const PORT = new URL(APP_URL).port;

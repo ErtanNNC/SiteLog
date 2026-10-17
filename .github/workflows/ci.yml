@@ -236,9 +236,18 @@ jobs:
           pnpm --filter @sitelog/db exec vitest run --config vitest.stack.config.ts stack/field-api.test.ts stack/api-invite-reporter.test.ts -t "on the local stack"
       - name: Install Chromium
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
+      # W3-18: the M9 acceptance suite (spec §16.2 M9 Done when), one command (`pnpm e2e:m9`):
+      # every panel spec tagged `@m9`, one flow tag each (@F19 crew hours: BrightLine +16 h with
+      # its voice-note evidence, an invoice gap's notice citing Northgate's call, the accounts
+      # role, the payroll CSV, Turkish; @F20 the EOT pack request on Riverside's October; @F21 the
+      # glossary's review and Add term through the audited RPCs). It runs first, on the seed as
+      # written, in the `supabase` project: no worker yet, so the pack it requests stays queued.
+      # The pack's < 2 min build is the worker's PGlite test (W3-07, the check job).
+      - name: M9 acceptance suite (W3-18, pnpm e2e:m9)
+        run: pnpm e2e:m9
       # The `supabase` project: no worker runs, so the jobs these specs enqueue stay queued.
-      - name: Login · realtime · edit → v2 · sign-off · payroll CSV · EOT pack
-        run: pnpm --filter @sitelog/web e2e:supabase --project=supabase
+      - name: Login · realtime · edit → v2 · sign-off · TR org · Demo phone
+        run: pnpm --filter @sitelog/web e2e:supabase --project=supabase --grep-invert @m9
       # The worker (W1-08) against the stack, keyless: console SMS and console email (both land in
       # the Demo phone), the fake transcriber (W1-11: a voice note gets a fixtures/voice
       # transcript, no Deepgram key), the fake Claude (W2-09: extraction and parse_answer answer
@@ -283,10 +292,12 @@ jobs:
           exit 1
       # The `worker` project: invite → the worker's welcome text in the Demo phone → the personal
       # link resolves at field-api → HELP re-sends it (W1-08 Done when).
+      # The panel's `worker` project outside the M6 suite and the call suite (W3-17's outbound
+      # calls, `@m8`, run with the call suite below).
       - name: Invite → welcome text in the Demo phone (worker)
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
-        run: pnpm --filter @sitelog/web e2e:supabase --project=worker --grep-invert @m6 --pass-with-no-tests
+        run: pnpm --filter @sitelog/web e2e:supabase --project=worker --grep-invert "@m6|@m7|@m8" --pass-with-no-tests
       # The field app's `worker` project outside the M6 suite (W2-04: photos after filing → v2, the
       # `_v2` PDF and the Updated email). The rest of apps/field/e2e/supabase/ (W1-09's link →
       # record → upload, W1-13's question → draft → filed, W2-09 … W2-13) is tagged `@m6` and runs
@@ -316,15 +327,17 @@ jobs:
       # above) and the worker above on its fake providers, each on an org of its own; tagged
       # `@m7` / `@m8` and one flow each (@F6 hero, fallback, hang-up; @F7 a question; @F8 a
       # correction; @F10 Friday changed; @F12 weather day and no work; @F13 an unknown caller;
-      # @F14 two sites; @F15 text me instead). The SIP scripts dial the US pack's voice number,
-      # set here with the audited set_country_endpoints() (this stack only, after the M6 step,
-      # whose R2 text would otherwise name it). The voice agent's half (the same fixtures in
+      # @F14 two sites; @F15 text me instead); and, run first, the panel's outbound reminder
+      # calls on the console telephony (W3-17, `@m8`: @F11 R1 rings the Demo phone, missed_call,
+      # R2; @F15 "don't call me today"). The SIP scripts dial the US pack's voice number, set
+      # here with the audited set_country_endpoints() (this stack only, after the M6 step, whose
+      # R2 text would otherwise name it; the outbound spec's texts match with or without it). The voice agent's half (the same fixtures in
       # pytest) is the voice-agent job.
       - name: US voice number for the SIP scripts (this stack)
         env:
           SUPABASE_DB_URL: ${{ env.DB_URL }}
         run: pnpm countries:set -- --code US --voice +15550142290
-      - name: Call suite (W3-15, pnpm e2e:voice)
+      - name: Call suite (W3-15, W3-17, pnpm e2e:voice)
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
           VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production

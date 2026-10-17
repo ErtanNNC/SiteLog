@@ -184,6 +184,21 @@ One edge function and its helper; five shared modules plus the WhatsApp copy; th
 | W1-18  | partial   | Sites and Site detail built; no preference icon or channel dots; WhatsApp `wa.me` action                                                                      | `apps/web/src/app/site/Page.tsx:82`, `:112-135`                             |
 | W1-19  | partial   | Hosted Supabase and Netlify deploys run; no field host, `/api` rewrite, v1.2 functions, demo notes                                                            | `.github/workflows/deploy.yml:69-81`, `:209-218`                            |
 
+**Week 3 status (M7–M9, `docs/PLAN_WEEK3.md`; W3-18, 2026-10-17).** The table above is the kickoff snapshot of week 1. Week 3 is built on `spec-v1.2` with fakes for every provider; what is left is the owner's live half.
+
+| Ticket                                                                                | Status                                                                                       | What is left                                                                                                                                |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| W3-01 · W3-02 · W3-03 · W3-05 · W3-06 · W3-07 · W3-08 · W3-09 · W3-10 · W3-14 · W3-15 | done (CI green)                                                                              | nothing                                                                                                                                     |
+| W3-04 `voice-events`                                                                  | partial                                                                                      | the live check with the LiveKit project's webhook (W3-16)                                                                                   |
+| W3-11 hang-ups, fallback, post-call reconcile                                         | partial                                                                                      | a real call's recording through Deepgram and Claude (W3-16)                                                                                 |
+| W3-12 the voice agent                                                                 | partial                                                                                      | `lk agent console` with the real Deepgram and Claude (by hand, keys)                                                                        |
+| W3-13 Talk now and the photos screen                                                  | partial                                                                                      | the owner's phone check with LiveKit (W3-16)                                                                                                |
+| W3-16 M7 live                                                                         | code half built (RUNBOOK, `voice:latency`, `voice:samples`)                                  | the LiveKit project, the agent deployed, the M7 calls and latency; **inbound phone calls wait on §19 Q227** (the dispatch rule's room name) |
+| W3-17 outbound calls                                                                  | partial (console telephony)                                                                  | the Twilio trunk and number, counsel's `auto_call` wording, a real phone's R1 call                                                          |
+| W3-18 M7–M9 acceptance                                                                | suites and demo notes built (`pnpm e2e:voice`, `pnpm e2e:m9`, `docs/DEMO_NOTES.md` "Week 3") | their CI run; the owner's phones and the preview run                                                                                        |
+
+Open §19 questions raised in week 3 (Q135–Q227) each shipped a default (summary in `docs/PLAN_WEEK3.md`, "Week 3 open questions").
+
 ### W1-01 · Monorepo and tooling — partial · effort S
 
 **Done**
