@@ -181,6 +181,37 @@ export interface IletimerkeziCredentials {
   apiHash: string;
 }
 
+/**
+ * İYS (İleti Yönetim Sistemi) message type of the TR texts (spec §19 Q49, W4-11;
+ * `ILETIMERKEZI_IYS`): `informational` (bilgilendirme, the default and the recommendation: the
+ * order carries no İYS fields, as since W1-08) or `commercial` (ticari: the order is marked with
+ * `iys` and `iysList` BIREYSEL, the fields Q49 names). Counsel's answer to Q49 is then a
+ * configuration change, not code. Where those fields sit in the order and their values are
+ * unconfirmed until İletimerkezi confirms them (spec §19 Q281), and a commercial text also needs
+ * the recipient's İYS consent checked first, which SiteLog does not do (it never markets): so
+ * `commercial` is not for production before both are settled.
+ */
+export const ILETIMERKEZI_IYS_MODES = ['informational', 'commercial'] as const;
+export type IletimerkeziIysMode = (typeof ILETIMERKEZI_IYS_MODES)[number];
+
+/**
+ * `ILETIMERKEZI_IYS` as a mode: empty is the default (`informational`); any other value throws
+ * `SmsConfigError`, so a typo never sends texts of the wrong type.
+ */
+export function parseIletimerkeziIys(value: string | null | undefined): IletimerkeziIysMode {
+  const v = (value ?? '').trim().toLowerCase();
+  if (v === '') return 'informational';
+  if ((ILETIMERKEZI_IYS_MODES as readonly string[]).includes(v)) return v as IletimerkeziIysMode;
+  throw new SmsConfigError('iletimerkezi', [
+    `ILETIMERKEZI_IYS (one of ${ILETIMERKEZI_IYS_MODES.join(', ')})`,
+  ]);
+}
+
+/** The order's İYS fields for a mode (none for `informational`; spec §19 Q49, Q281). */
+export function iletimerkeziIysFields(mode: IletimerkeziIysMode): Record<string, string> {
+  return mode === 'commercial' ? { iys: '1', iysList: 'BIREYSEL' } : {};
+}
+
 export const ILETIMERKEZI_API_BASE = 'https://api.iletimerkezi.com';
 
 /**
@@ -196,15 +227,26 @@ export const ILETIMERKEZI_UNDELIVERABLE_CODES: readonly string[] = ['450'];
  * İletimerkezi (REST, `POST /v1/send-sms/json`), the TR pack's override (spec §19 Q20): one-way,
  * from the pack's approved alphanumeric title (`SITELOG`). The recipient goes without its `+`
  * (`905321234567`); the order id is the provider id. A response whose status code is not `200` is
- * a refusal, not retried; HTTP 429 and 5xx and network errors are retried. No İYS fields are sent:
- * these are operational texts to the customer's staff, and whether İYS applies is checked before
- * the first real send (spec §4.4, §9.1). Re-check the request against the provider's current
- * documentation then too: no real send has been made yet (spec §5.2).
+ * a refusal, not retried; HTTP 429 and 5xx and network errors are retried. The İYS fields follow
+ * `iys` (spec §19 Q49, `ILETIMERKEZI_IYS`): none by default (`informational`), since these are
+ * operational texts to the customer's staff. The text goes as given, Turkish letters and all (no
+ * transliteration): the provider picks the encoding, and the §9.2 TR texts are budgeted against
+ * the Turkish single shift table (`countSmsSegments`; W4-11's budget test in `sms-tr-budget.test.ts`;
+ * whether İletimerkezi uses that table is spec §19 Q15's open half).
+ *
+ * The request as re-checked for W4-11 (2026-10-17) against what this repo knows of the API, which
+ * is all there is without an account: `POST /v1/send-sms/json` with `request.authentication {key,
+ * hash}` and `request.order {sender, sendDateTime, message: {text, receipents: {number[]}}}` (the
+ * provider's spelling of "receipents"), answered with `response.status.code` (`200`: accepted)
+ * and `response.order.id`. No real send has been made yet; the owner re-checks it against the
+ * provider's current documentation with the account (spec §5.2, §19 Q280, W4-13). The order's
+ * delivery report is read by the worker's `sms_status` job (`iletimerkezi-report.ts`, §19 Q237).
  */
 export function createIletimerkeziSmsTransport(
   creds: IletimerkeziCredentials,
   fetchImpl: FetchLike,
   apiBase: string = ILETIMERKEZI_API_BASE,
+  iys: IletimerkeziIysMode = 'informational',
 ): SmsTransport {
   return {
     driver: 'iletimerkezi',
@@ -222,6 +264,7 @@ export function createIletimerkeziSmsTransport(
             sender: opts.sender,
             sendDateTime: [],
             message: { text: body, receipents: { number: [to.replace(/^\+/, '')] } },
+            ...iletimerkeziIysFields(iys),
           },
         },
       };
@@ -267,8 +310,11 @@ export interface SmsTransportConfig {
   randomUUID: () => string;
   /** TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN; empty values count as missing. */
   twilio?: Partial<TwilioCredentials>;
-  /** ILETIMERKEZI_API_KEY / ILETIMERKEZI_API_HASH. */
-  iletimerkezi?: Partial<IletimerkeziCredentials>;
+  /**
+   * ILETIMERKEZI_API_KEY / ILETIMERKEZI_API_HASH, and ILETIMERKEZI_IYS as given (empty:
+   * `informational`; an unknown value throws `SmsConfigError` when the driver is asked for).
+   */
+  iletimerkezi?: Partial<IletimerkeziCredentials> & { iys?: string | null };
   /** Tests point the drivers at a mock server. */
   apiBase?: { twilio?: string; iletimerkezi?: string };
 }
@@ -312,6 +358,7 @@ export function createSmsTransports(
           { apiKey: key, apiHash: hash },
           config.fetch,
           config.apiBase?.iletimerkezi,
+          parseIletimerkeziIys(config.iletimerkezi?.iys),
         );
       }
     }

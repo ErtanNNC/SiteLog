@@ -87,7 +87,12 @@ const AUDITED: Record<string, string> = {
   'jobKeys.welcomeLinked': 'welcome:<reporter>:linked:<unknown sender>, per linked sender',
   'reprocess:{}': 'per unknown sender linked (a sender is linked once)',
   jobKey:
-    "sms-webhook's enqueueNotify (W2-01): jobKeys.notifyAfter(<message dedupe key>, <failed attempt id>) from lateFallback, the fallback after a late status callback; per logical message and failed attempt, and an attempt fails once (nextMessageStatus never moves a failed row)",
+    "sms-webhook's enqueueNotify (W2-01), and the worker's in sms_status (W4-11; both through applyLateStatus): jobKeys.notifyAfter(<message dedupe key>, <failed attempt id>) from lateFallback, the fallback after a late status callback or an İletimerkezi report; per logical message and failed attempt, and an attempt fails once (nextMessageStatus never moves a failed row)",
+  // W4-11 (İletimerkezi delivery reports, 20261017000440_sms_status_poll.sql, apps/worker/src/jobs/sms_status.ts)
+  'jobKeys.smsStatus':
+    'sms_status:<message>:<n> (the nth read of an İletimerkezi report, §19 Q237): poll n queues poll n + 1 once; a row becomes sent once, so a retried poll finds the next key taken',
+  "sql:'sms_status:' || new.id::text || ':1'":
+    'enqueue_sms_status_poll() (W4-11): poll 1 of an İletimerkezi row that becomes sent; the trigger fires again only on another move to sent, which finds the key taken',
   'pack:{}': 'per evidence pack row',
   inboundDedupeKey: 'per WhatsApp message id (v1.0 webhook)',
   'weather:{}:{}:{}': 'per site, date and §10.10 slot',

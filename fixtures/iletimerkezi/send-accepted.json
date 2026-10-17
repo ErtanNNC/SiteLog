@@ -1,0 +1,6 @@
+{
+  "response": {
+    "status": { "code": 200, "message": "İşlem başarılı" },
+    "order": { "id": "{{order_id}}" }
+  }
+}

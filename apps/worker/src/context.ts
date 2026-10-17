@@ -1,5 +1,5 @@
 import type OpenAI from 'openai';
-import type { SmsNotifier } from '@sitelog/shared';
+import type { IletimerkeziReportSource, SmsNotifier } from '@sitelog/shared';
 import type { Config } from './config';
 import type { Db, JobMetrics } from './db';
 import type { EmailProvider } from './email/provider';
@@ -71,6 +71,11 @@ export interface Ctx {
    * Built from the config at boot; tests pass a fake. Absent: built from `config` when needed.
    */
   telephony?: TelephonyRegistry;
+  /**
+   * W4-11 (spec §19 Q237): the İletimerkezi delivery reports the `sms_status` job reads; null when
+   * there is nothing to read them with (`workerIletimerkeziReports`). Absent: built from `config`.
+   */
+  iletimerkeziReports?: IletimerkeziReportSource | null;
   ffmpeg: FfmpegRunner;
   log: Logger;
   now: () => Date;

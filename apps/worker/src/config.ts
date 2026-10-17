@@ -113,6 +113,18 @@ export const ConfigSchema = z.object({
   TWILIO_AUTH_TOKEN: z.string().default(''),
   ILETIMERKEZI_API_KEY: z.string().default(''),
   ILETIMERKEZI_API_HASH: z.string().default(''),
+  /**
+   * W4-11 (spec §19 Q49): the TR texts' İYS type, `informational` (no İYS fields; the default and
+   * the recommendation) or `commercial`. Any other value makes the İletimerkezi driver refuse.
+   */
+  ILETIMERKEZI_IYS: z.string().default(''),
+  /**
+   * W4-11 (spec §19 Q237): how İletimerkezi rows get their delivery status. `poll` (the
+   * recommendation): the `sms_status` job reads the order's report +2 min, +15 min and +2 h after
+   * the send; `off`: the rows stay `sent` (no fallback, no `message_failed` for TR texts). The
+   * report endpoint itself is still to confirm (§19 Q280): until it is, `poll` reads nothing.
+   */
+  ILETIMERKEZI_STATUS: z.enum(['poll', 'off']).default('poll'),
   SMS_WEBHOOK_URL: z.string().default(''),
   /**
    * Web push (W2-14, spec §4.4, §5.1): the VAPID key pair and its contact (`mailto:` or `https:`).

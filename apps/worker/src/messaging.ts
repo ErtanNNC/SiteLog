@@ -1,7 +1,11 @@
 import {
   consentSets,
   jobKeys,
+  createIletimerkeziReportSource,
   createNotifier,
+  ILETIMERKEZI_REPORT_ENDPOINT,
+  type IletimerkeziReportEndpoint,
+  type IletimerkeziReportSource,
   createSmsTransports,
   createWhatsappRegistration,
   toCountryPack,
@@ -144,7 +148,11 @@ export function workerLinkStore(db: Db): PersonalLinkStore {
 export function workerTransports(
   config: Pick<
     Config,
-    'TWILIO_ACCOUNT_SID' | 'TWILIO_AUTH_TOKEN' | 'ILETIMERKEZI_API_KEY' | 'ILETIMERKEZI_API_HASH'
+    | 'TWILIO_ACCOUNT_SID'
+    | 'TWILIO_AUTH_TOKEN'
+    | 'ILETIMERKEZI_API_KEY'
+    | 'ILETIMERKEZI_API_HASH'
+    | 'ILETIMERKEZI_IYS'
   >,
   fetchImpl: typeof fetch = abortableFetch(),
 ): (driver: SmsDriver) => SmsTransport {
@@ -152,8 +160,35 @@ export function workerTransports(
     fetch: (url, init) => fetchImpl(url, init),
     randomUUID: () => crypto.randomUUID(),
     twilio: { accountSid: config.TWILIO_ACCOUNT_SID, authToken: config.TWILIO_AUTH_TOKEN },
-    iletimerkezi: { apiKey: config.ILETIMERKEZI_API_KEY, apiHash: config.ILETIMERKEZI_API_HASH },
+    iletimerkezi: {
+      apiKey: config.ILETIMERKEZI_API_KEY,
+      apiHash: config.ILETIMERKEZI_API_HASH,
+      iys: config.ILETIMERKEZI_IYS,
+    },
   });
+}
+
+/**
+ * The İletimerkezi delivery reports (W4-11, spec §19 Q237) with the worker env's credentials, or
+ * null when there is nothing to read them with: `ILETIMERKEZI_STATUS=off`, no credentials, or the
+ * report endpoint not confirmed yet (`ILETIMERKEZI_REPORT_ENDPOINT`, §19 Q280). Tests pass the
+ * fixture endpoint and a mock server.
+ */
+export function workerIletimerkeziReports(
+  config: Pick<Config, 'ILETIMERKEZI_API_KEY' | 'ILETIMERKEZI_API_HASH' | 'ILETIMERKEZI_STATUS'>,
+  fetchImpl: typeof fetch = abortableFetch(),
+  endpoint: IletimerkeziReportEndpoint | null = ILETIMERKEZI_REPORT_ENDPOINT,
+  apiBase?: string,
+): IletimerkeziReportSource | null {
+  const apiKey = config.ILETIMERKEZI_API_KEY.trim();
+  const apiHash = config.ILETIMERKEZI_API_HASH.trim();
+  if (config.ILETIMERKEZI_STATUS !== 'poll' || !endpoint || !apiKey || !apiHash) return null;
+  return createIletimerkeziReportSource(
+    { apiKey, apiHash },
+    (url, init) => fetchImpl(url, init),
+    endpoint,
+    apiBase,
+  );
 }
 
 /** Twilio's delivery callbacks go to sms-webhook's /status route when it has a public URL. */

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { JobPayloadSchemas } from '@sitelog/shared';
 import type {
   NoticeData,
   CompanyRow,
@@ -1131,6 +1132,27 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async updateSmsMessage(id, patch) {
       Object.assign(d.messages.get(id)!, patch);
+    },
+    async notifyJobByDedupeKey(dedupeKey) {
+      const job = [...d.jobs.values()]
+        .filter(
+          (j) =>
+            j.type === 'notify' &&
+            (j.payload as { dedupeKey?: unknown } | null)?.dedupeKey === dedupeKey,
+        )
+        .sort((a, b) => a.id - b.id)[0];
+      const parsed = JobPayloadSchemas.notify.safeParse(job?.payload);
+      return parsed.success ? parsed.data : null;
+    },
+    async providerFaultNotifiedSince(orgId, since) {
+      // The fake's audit rows carry no time: any notified fault of the org counts.
+      void since;
+      return d.audit.some(
+        (a) =>
+          a.org_id === orgId &&
+          a.action === 'sms.provider_fault' &&
+          (a.diff as { notified?: unknown } | null)?.notified === true,
+      );
     },
     async listMessagesByDedupeKey(reporterId, dedupeKey) {
       return [...d.messages.values()]

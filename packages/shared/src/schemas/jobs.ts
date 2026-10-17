@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { SMS_KEYS, TWO_WAY_SMS_KEYS } from '../copy/sms.ts';
 import { FIELD_CHANNELS, SITE_DAY_STATUSES, type JOB_TYPES } from '../enums.ts';
+import { SMS_STATUS_POLLS } from '../sms/iletimerkezi-report.ts';
 import { OUTBOUND_CALL_STAGES } from '../voice-outbound.ts';
 
 /**
@@ -81,6 +82,16 @@ export const JobPayloadSchemas = {
    * `ring_end`: a console call's ring is over (`call_ring:<call>`). `missed`: a call not reached
    * gets `missed_call` (`call_missed:<call>`, voice_call_end() for a voicemail greeting too).
    */
+  /**
+   * §4.5, §19 Q237 (W4-11): poll `poll` (1-based) of an İletimerkezi text's delivery report, run at
+   * `sentAt` + `SMS_STATUS_POLL_OFFSETS_MS[poll - 1]`. `sentAt` is when the row became `sent`
+   * (the database clock, `enqueue_sms_status_poll()`); job key `jobKeys.smsStatus`.
+   */
+  sms_status: z.object({
+    messageId: uuid,
+    poll: z.number().int().min(1).max(SMS_STATUS_POLLS),
+    sentAt: z.string().datetime({ offset: true }),
+  }),
   place_call: z.union([
     z.object({
       phase: z.literal('dial').optional(),
@@ -487,6 +498,13 @@ export const jobKeys = {
    * failed attempt, so a repeated callback queues one job and each failed attempt its own.
    */
   notifyAfter: (dedupeKey: string, messageId: string) => `${dedupeKey}:after:${messageId}`,
+  /**
+   * W4-11 (§19 Q237): poll n of an İletimerkezi text's delivery report, per message and poll: a
+   * row becomes `sent` once, and each poll queues the next under its own key, so a retried poll
+   * never queues two. The first (`sms_status:<message>:1`) is queued by `enqueue_sms_status_poll()`
+   * (SQL, 20261017000440), which builds the same string.
+   */
+  smsStatus: (messageId: string, poll: number) => `sms_status:${messageId}:${poll}`,
   /**
    * The `render_pdf` job of a report version (file_report, create_report_version, the WhatsApp
    * edits): one PDF per version.

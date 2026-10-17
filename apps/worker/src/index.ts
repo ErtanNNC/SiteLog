@@ -10,7 +10,11 @@ import { connectDb } from './db';
 import { loadDotenv } from './dotenv';
 import { createEmailProvider } from './email/provider';
 import { createLogger } from './log';
-import { createWorkerNotifier, describePackTransports } from './messaging';
+import {
+  createWorkerNotifier,
+  describePackTransports,
+  workerIletimerkeziReports,
+} from './messaging';
 import { vapidConfigured } from './push';
 import { createFfmpegRunner, resolveFfmpegPath } from './media/ffmpeg';
 import {
@@ -71,6 +75,7 @@ export function buildContext(config: Config): Ctx {
     ),
     notifier: createWorkerNotifier(config, db, undefined, now),
     telephony: createTelephony(config, { fetch: abortableFetch(), now }),
+    iletimerkeziReports: workerIletimerkeziReports(config),
     ffmpeg,
     log,
     now,

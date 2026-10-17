@@ -7,6 +7,7 @@ import {
   createIletimerkeziSmsTransport,
   createSmsTransports,
   createTwilioSmsTransport,
+  parseIletimerkeziIys,
   twilioCallbackCode,
   twilioCallbackError,
   twilioLateFailureIsAccountFault,
@@ -162,6 +163,59 @@ describe('iletimerkezi driver (mocked HTTP)', () => {
       false,
       '402',
     ]);
+  });
+
+  // W4-11 (spec §9.1, §9.2): the TR text goes as written; the provider picks the encoding.
+  it('sends Turkish text as is, never transliterated', async () => {
+    const accepted = (id: string) =>
+      json(200, { response: { status: { code: '200', message: 'OK' }, order: { id } } });
+    const http = mockFetch(accepted('1'));
+    const driver = createIletimerkeziSmsTransport(creds, http.fetch);
+    const text =
+      'Bugün için hâlâ rapor yok. Ataşehir İnşaat, Şantiye, çalışma, ğ ı İ ş Ş Ç Ğ Ö Ü ö ü.';
+    await driver.send(TR_PHONE, text, { sender: 'SITELOG' });
+    const body = JSON.parse(String(http.calls[0]!.init.body)) as {
+      request: { order: { message: { text: string } } };
+    };
+    expect(body.request.order.message.text).toBe(text);
+    // The raw request too (JSON.stringify keeps the letters; no \u escapes or ASCII folding).
+    expect(String(http.calls[0]!.init.body)).toContain('hâlâ rapor yok. Ataşehir İnşaat, Şantiye');
+  });
+
+  // W4-11 (spec §19 Q49): İYS is configuration; informational (no İYS fields) by default.
+  it('adds no İYS fields by default; `commercial` marks the order (Q49, Q281)', async () => {
+    const accepted = json(200, {
+      response: { status: { code: '200', message: 'OK' }, order: { id: '2' } },
+    });
+    const informational = mockFetch(accepted.clone());
+    await createIletimerkeziSmsTransport(creds, informational.fetch).send(TR_PHONE, 'x', {
+      sender: 'SITELOG',
+    });
+    const order = (http: ReturnType<typeof mockFetch>) =>
+      (JSON.parse(String(http.calls[0]!.init.body)) as { request: { order: object } }).request
+        .order;
+    expect(Object.keys(order(informational)).sort()).toEqual(['message', 'sendDateTime', 'sender']);
+
+    const commercial = mockFetch(accepted.clone());
+    await createIletimerkeziSmsTransport(creds, commercial.fetch, undefined, 'commercial').send(
+      TR_PHONE,
+      'x',
+      { sender: 'SITELOG' },
+    );
+    expect(order(commercial)).toMatchObject({ iys: '1', iysList: 'BIREYSEL' });
+  });
+
+  it('reads ILETIMERKEZI_IYS strictly: empty is informational, a typo refuses the driver', () => {
+    expect(parseIletimerkeziIys(undefined)).toBe('informational');
+    expect(parseIletimerkeziIys(' ')).toBe('informational');
+    expect(parseIletimerkeziIys('Commercial')).toBe('commercial');
+    expect(() => parseIletimerkeziIys('ticari')).toThrow(SmsConfigError);
+    const pick = createSmsTransports({
+      fetch: mockFetch().fetch,
+      randomUUID: () => 'u',
+      iletimerkezi: { apiKey: 'k', apiHash: 'h', iys: 'marketing' },
+    });
+    expect(() => pick('iletimerkezi')).toThrow(/ILETIMERKEZI_IYS/);
   });
 });
 

@@ -80,6 +80,9 @@ supabase secrets set TWILIO_ACCOUNT_SID=AC... TWILIO_AUTH_TOKEN=... \
   SMS_WEBHOOK_URL=https://<project-ref>.supabase.co/functions/v1/sms-webhook
 # only for a pack whose sms_provider is iletimerkezi (TR) and whose sender id is set
 supabase secrets set ILETIMERKEZI_API_KEY=... ILETIMERKEZI_API_HASH=...
+# İYS type of the TR texts (spec §19 Q49; W4-11): unset = informational, the recommendation;
+# the worker reads the same variable, and its delivery-report poll is ILETIMERKEZI_STATUS (worker only)
+# supabase secrets set ILETIMERKEZI_IYS=commercial   # only after counsel's answer and §19 Q281
 # web push (W2-14): field-api serves the public key to the field app; the private key and the
 # subject are the worker's only (never a functions secret). Unset: no Notifications toggle.
 supabase secrets set VAPID_PUBLIC_KEY=B...

@@ -1,4 +1,5 @@
 import postgres, { type Sql, type TransactionSql } from 'postgres';
+import { JobPayloadSchemas } from '@sitelog/shared';
 import type {
   CallRow,
   CallSkipReason,
@@ -23,6 +24,7 @@ import type {
   GlossaryTermRow,
   InboundReporterRow,
   InboundScope,
+  JobPayloads,
   JobRow,
   JobType,
   MessageRow,
@@ -938,6 +940,16 @@ export interface Db {
    * (`payload.error_code`) and the attempt number (`payload.attempt`).
    */
   listMessagesByDedupeKey(reporterId: string, dedupeKey: string): Promise<PriorMessage[]>;
+  /**
+   * W4-11 (`applyLateStatus`): the payload of the first `notify` job that sent under a Notifier
+   * dedupe key, or null (the late fallback's variables; sms-webhook's store has the same).
+   */
+  notifyJobByDedupeKey(dedupeKey: string): Promise<JobPayloads['notify'] | null>;
+  /**
+   * W4-11: the org was told about an SMS provider fault since `since` (an `sms.provider_fault`
+   * audit row with `notified: true`), so the next one in the hour is audited, not notified.
+   */
+  providerFaultNotifiedSince(orgId: string, since: string): Promise<boolean>;
   /** `messages.payload.handled_at` of an inbound text (sms_inbound). */
   markSmsHandled(messageId: string, at: string): Promise<void>;
   /**
@@ -2134,6 +2146,22 @@ export function createDb(sql: Sql): Db {
         from messages
         where reporter_id = ${reporterId} and payload->>'dedupe_key' = ${dedupeKey}
         order by created_at, id`;
+    },
+    async notifyJobByDedupeKey(dedupeKey) {
+      const rows = await sql<Array<{ payload: unknown }>>`
+        select payload from jobs
+        where type = 'notify' and payload->>'dedupeKey' = ${dedupeKey}
+        order by id limit 1`;
+      const parsed = JobPayloadSchemas.notify.safeParse(rows[0]?.payload);
+      return parsed.success ? parsed.data : null;
+    },
+    async providerFaultNotifiedSince(orgId, since) {
+      const rows = await sql<Array<{ id: number }>>`
+        select id from audit_log
+        where org_id = ${orgId} and action = 'sms.provider_fault'
+          and diff->>'notified' = 'true' and created_at >= ${since}::timestamptz
+        limit 1`;
+      return rows.length > 0;
     },
     async markSmsHandled(messageId, at) {
       await sql`update messages

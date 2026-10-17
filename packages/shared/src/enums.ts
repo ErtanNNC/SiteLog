@@ -283,6 +283,13 @@ export const JOB_TYPES = [
    * `phase`, the end of a console call's ring and the `missed_call` step of a call not reached.
    */
   'place_call',
+  /**
+   * §4.5, §19 Q237 (W4-11): an İletimerkezi text's delivery report, read +2 min, +15 min and +2 h
+   * after the send until final (`enqueue_sms_status_poll()`, SQL, queues the first), moving the
+   * `messages` row on (never backwards) with the fallback and the office's notices of a late
+   * failure (`applyLateStatus`).
+   */
+  'sms_status',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

@@ -25,7 +25,8 @@ import type { AppClient } from './supabase.ts';
  * sms-webhook (keyword replies) build on it; the worker has its own store over Postgres.
  *
  * Env (read when a message goes out, never at import): TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
- * ILETIMERKEZI_API_KEY, ILETIMERKEZI_API_HASH (only for packs whose sender id is set here), and
+ * ILETIMERKEZI_API_KEY, ILETIMERKEZI_API_HASH (only for packs whose sender id is set here),
+ * ILETIMERKEZI_IYS (spec §19 Q49: `informational` by default, or `commercial`), and
  * SMS_WEBHOOK_URL (the public URL of sms-webhook, default `{SUPABASE_URL}/functions/v1/sms-webhook`).
  */
 
@@ -57,6 +58,8 @@ export function smsTransportsFromEnv(
       iletimerkezi: {
         apiKey: optionalEnv('ILETIMERKEZI_API_KEY'),
         apiHash: optionalEnv('ILETIMERKEZI_API_HASH'),
+        // Spec §19 Q49 (W4-11): the TR texts' İYS type, `informational` when unset.
+        iys: optionalEnv('ILETIMERKEZI_IYS'),
       },
     })(driver);
 }

@@ -19,6 +19,7 @@ import { sendWelcome } from './send_welcome';
 import { deleteTestClipJob, transcribeTestClipJob } from './test_clip';
 import { smsInbound } from './sms_inbound';
 import { smsKeyword } from './sms_keyword';
+import { smsStatusJob } from './sms_status';
 import { transcribeAudioJob } from './transcribe_audio';
 import { transcribeUploadJob } from './transcribe_upload';
 import type { JobRegistry } from './types';
@@ -56,4 +57,5 @@ export const registry: JobRegistry = {
   post_call_reconcile: postCallReconcileJob,
   no_photo_check: noPhotoCheckJob,
   place_call: placeCallJob,
+  sms_status: smsStatusJob,
 };
