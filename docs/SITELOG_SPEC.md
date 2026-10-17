@@ -2643,6 +2643,14 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 164 | An open question from the recorder or an earlier call when a call starts | Resolved; the call asks again what it needs (as built, W3-09) · Kept and asked on the call | **Open (owner).** Recommended: the first. |
 | 165 | A faster model for live call turns (`CLAUDE_MODEL_LIVE`) | Not now; revisit if W3-16 measures turns above 5 s p50 (Q117) · Add it now | **Open (owner).** Recommended: the first. |
 | 166 | `missing` lists both `manpower.workers` and `manpower.hours` for a crew whose one question ("how many and for how long") asks both | Tell the agent one question covers both · Keep two entries | **Open (owner).** Recommended: the first. |
+| 167 | Talk now when today's report is already filed (Today hides the button then; the server does not refuse, a call can still edit, F10) | No server refusal; the UI placement is enough (as built, W3-13) · Refuse on the server | **Open (owner).** Recommended: the first. |
+| 168 | How long a Talk now room nobody joins stays open | 120 s, then the W3-04 backstop ends the call `not_reached` (as built) · Other | **Open (owner).** Recommended: the first. |
+| 169 | Talk now's participant token lifetime | 10 minutes, refreshed by LiveKit while the call is up (as built) · Other | **Open (owner).** Recommended: the first. |
+| 170 | What the call screen does right after a call | Reads today and opens the report (Filed, or the draft after a hang-up), else Today, with no pause (as built) · Keep "Call ended" on screen for a moment | **Open (owner).** Recommended: the first. |
+| 171 | The 4th Talk now in an hour (limit 3) | Offers Record instead, no retry (as built) · Also say when the next call is possible (`retryAfter`) | **Open (owner).** Recommended: the second, a small copy change. |
+| 172 | The End call button's colours (orange is the live signal on that screen; Field-08 is not exported) | White on Missing red, with its icon and words (as built) · Asphalt on Missing red · Owner or design decides | **Open (owner).** Recommended: owner or design confirms; as built meets contrast. |
+| 173 | The photo-only screen when the photos link's day has no filed report yet | Says so, with no way to Today (as built; a photos link takes photos only) · Offer a link to Today | **Open (owner).** Recommended: the first. |
+| 174 | The billing read `talkNow` adds to every `resolve` and `today` | Accept (as built) · Cache it per request | **Open (owner).** Recommended: the first until it shows in latency. |
 
 ---
 

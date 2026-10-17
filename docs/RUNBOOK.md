@@ -251,6 +251,8 @@ Optional `VOICE_TOOL_WAIT_MS` (functions secret, default 12000, at most 15000): 
 
 LiveKit webhooks (W3-04, set up with W3-16): set the function secrets `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (the project's pair), deploy `voice-events --no-verify-jwt`, register `https://<ref>.supabase.co/functions/v1/voice-events` under LiveKit Settings → Webhooks, and send a test webhook. 200 `{received: true, ignored: true}` (or the call's result) means the signature passed; 401 `invalid_signature` means the key pair differs.
 
+Talk now (W3-13): with the owner's approval, `supabase secrets set LIVEKIT_URL=wss://<project>.livekit.cloud LIVEKIT_AGENT_NAME=sitelog-voice` (and the key pair, already set for `voice-events`). Then `resolve` / `today` answer `talkNow: true` for orgs that are not billing-blocked. Check on a phone: Today → Talk now → microphone → the call screen → End call opens the draft or Filed.
+
 ### Country packs per environment (GAP D47, W1-06a)
 
 Everything country-specific is a row of `countries` (spec §4.6): languages, units, paper, currency, default time zone, message channel order, SMS and WhatsApp provider, SMS sender type, two-way SMS, links in SMS, legal keys. Two kinds of value:
