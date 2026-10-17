@@ -1,70 +1,40 @@
 # SiteLog · Durum
 
-**2026-10-17 (sabah, 05:10 UTC):**
+**2026-10-17 (07:30 UTC) — Hafta 3'ün kodu bitti.**
 
-**Kısaca:** Hafta 3'ün kodla yapılabilen kısmı neredeyse bitti. Kalanlar büyük ölçüde sizin hesaplarınıza (LiveKit, Twilio, Azure) ve canlı testlerinize bağlı.
+**Kısaca:** W3-01 … W3-18'in koddan yapılabilen her şeyi yapıldı ve CI'da yeşil. Kalanlar sizin hesaplarınıza ve telefon testlerinize bağlı.
 
-**Yapıldı ve gönderildi** (yerel kontrollerin hepsi temiz):
+**Bitti ve CI'da yeşil:**
 
-| İş    | Ne yapıyor                                             | Durum                         |
-| ----- | ------------------------------------------------------ | ----------------------------- |
-| W3-09 | Arama sırasında rapor taslağı canlı oluşuyor           | CI yeşil, bitti               |
-| W3-10 | Asistan raporu okuyor; "evet" denmeden dosyalanmıyor   | CI yeşil, bitti               |
-| W3-11 | Aramadan sonraki iş (aşağıda)                          | CI yeşil; canlı test kaldı    |
-| W3-12 | Python sesli asistan tam akış (aşağıda)                | CI yeşil; canlı test kaldı    |
-| W3-13 | Saha uygulamasında "Talk now" ve fotoğraf linki ekranı | CI yeşil; telefon testi kaldı |
-| W3-14 | Aramada özel istekler (aşağıda)                        | CI yeşil, bitti               |
-| W3-15 | 11 senaryolu arama simülatörü (aşağıda)                | gönderildi, CI çalışıyor      |
+- W3-01 … W3-15: sesli asistanın tamamı (sözleşme, Python asistan, canlı taslak, okuma ve "evet", aramadan sonraki iş, özel istekler, "Talk now"), 11 senaryolu arama test takımı.
+- W3-16 kod kısmı: `pnpm voice:latency` (gecikme ölçümü), `pnpm voice:samples` (ses dinleme testi), RUNBOOK'ta LiveKit kurulumu için 11 adım.
+- W3-17: giden hatırlatma aramaları, sahte (konsol) hatla. R1 araması, cevapsız → "cevapsız arama" mesajı, R2, telesekreter algılama, geri arama, "Bugün arama", /ops M8 ölçüsü.
+- W3-18: `pnpm e2e:m9` ve `pnpm e2e:voice` test takımları, `docs/DEMO_NOTES.md` "Week 3" (arama senaryosu ve panel turu), açık soru özeti (`docs/PLAN_WEEK3.md` sonunda tablo).
+- **Q227 düzeltildi:** telefonla gelen aramada LiveKit odanın adını kendisi veriyor (içinde arayanın numarası var). Kod artık odanın kimliğini (`RM_…`) kullanıyor; numara hiçbir yere yazılmıyor, loglanmıyor. Bu olmasa ilk gerçek telefon araması reddedilirdi.
 
-- **W3-11, aramadan sonraki iş:**
-  - "Evet"ten önce kapatılan arama web'de devam eder.
-  - Kayıt yeniden dinlenip onaylanan raporla karşılaştırılır; fark varsa ofise not düşer.
-  - Fotoğraf yoksa 23:59'da işaretlenir.
-- **W3-12, Python sesli asistan:**
-  - Açılışta kayıt bildirimi okunur.
-  - Konuşma durumları takip edilir.
-  - Sessizlikte ve süre dolunca (10. dakikada uyarı, 12. dakikada bitiş) asistan bunu ele alır.
-  - İki kez anlaşılmazsa basit kayıt moduna geçer.
-  - Arama iki kanallı kaydedilir.
-  - Testler 92'den 246'ya çıktı.
-- **W3-14, aramada özel istekler:**
-  - "Bugün iş yok" ya da yağmur günü.
-  - Geçmiş raporu değiştirme.
-  - "Bugün arama".
-  - İlk aramada sesli onay.
-  - Bilinmeyen arayan.
-- **W3-15, arama simülatörü:**
-  - Senaryolar İngilizce ve İspanyolca; telefonla aramayı da "Talk now"u da kapsıyor.
-  - Bu test takımı gerçek bir veritabanına karşı ilk kez CI'da koşuyor; bir düzeltme turu çıkabilir.
-- **Q205 düzeltildi:** asistan artık "kayıt bildirimi okundu" bilgisini sunucuya iletiyor. Bu olmadan canlı arama kayıtları hiç işlenmeyecekti.
+**Yol boyunca bulunan ve düzeltilen hatalar:**
 
-**Şu an çalışıyor:**
+- Veritabanı kütüphanesi JSON'u iki kez kodluyordu (simülatör ve `countries:set` WhatsApp şablonları).
+- Worker ileri tarihli işleri 2 dakikalık genel kontrolü bekleyerek yapıyordu; artık zamanı gelince uyanıyor (aramalar ve tekrar denemeler daha hızlı).
+- Bir test hafta sonları kırılıyordu (demo verisi hafta içi); düzeltildi.
 
-- **W3-17, giden hatırlatma aramaları.** Gerçek hat olmadan, sahte (konsol) hatla kuruluyor:
-  - Demo şirketin araması Demo phone'da çalar.
-  - Açılmayan aramadan sonra "cevapsız arama" mesajı gider, ardından ikinci arama yapılır.
-  - Ayarlara "Bugün arama" ve "otomatik arama onayı" satırları ekleniyor.
-  - Gerçek arama sizin Twilio hattınızı bekliyor.
-- **W3-16'nın kod kısmı:**
-  - Gecikme ölçüm komutu (`pnpm voice:latency`).
-  - Ses örneği üretme aracı.
-  - LiveKit kurulumu için adım adım talimatlar.
-- **Sonra W3-18:** hafta 3'ün kabul testleri ve demo notları.
+**Sizin kararınızı bekleyen sorular** (hepsinde önerdiğim varsayılan kodda çalışıyor; tam liste `docs/PLAN_WEEK3.md` "Week 3 open questions"):
 
-**Açık sorular Q182–Q214** spec §19'da. Hepsinde önerdiğim varsayılan var, kod onunla kuruldu. Bakmanızı önerdiklerim:
-
-- **Q193:** STOP göndermiş bir telefondan aramada "evet" denirse SMS onayı kaydedilmesin. Öneri bu. Şu anki kod kaydediyor, ama mesaj engeli yine de geçerli.
-- **Q199:** Akşam 19:00'dan sonra, gün "eksik" olduktan sonra, aramada "bugün iş yok" denirse ne olsun? Şu an reddediliyor. Bu sizin kararınız.
-- **Q206:** Deepgram'ın, ses verisini kendi modelini geliştirmek için kullanmasından çıkmak (opt-out). Gizlilik için önerilir. Fiyat farkı olabilir; lütfen kontrol edin.
+- **Q193:** STOP göndermiş telefondan aramada "evet" → SMS onayı kaydedilmesin (önerim).
+- **Q199:** Akşam 19:00'dan sonra aramada "bugün iş yok" → şu an reddediliyor.
+- **Q206:** Deepgram'ın ses verisini model geliştirmede kullanmaması (opt-out). Fiyatı kontrol edin.
+- **Q222:** Günde en fazla kaç "cevapsız arama" mesajı? Şu an 3, önerim 1.
+- **Q228:** LiveKit'te hangi yönlendirme kuralı tipi? Önerim "callee + randomize" (LiveKit'in kendi panelinde numara görünmesin diye).
 
 **Sizden bekleyenler** (en uzun sürenler önce):
 
-1. **Twilio** hesap yükseltmesi, SIP trunk, sesli arama yapabilen bir US numarası, Trust Hub ve SHAKEN/STIR. Giden aramalar (W3-17) için.
-2. **Avukattan metinler:** otomatik arama onayı (TCPA), kayıt bildirimi ve KVKK.
-3. **LiveKit Cloud projesi ve Azure Speech.** Canlı aramalar (W3-16) bunları bekliyor. Talimatlar W3-16'nın kod kısmıyla RUNBOOK'a eklenecek.
-4. **Q140 onayı:** staging'deki sözlük çiftlerinin silinmesi.
-5. **Q181:** İspanyolca okuma metinleri, US lansmanından önce.
-6. **Bildirim testi için demo olmayan bir test şirketi:** telefon numarası, panel e-postası ve ülke (US/TR).
+1. **Twilio:** hesap yükseltmesi, SIP trunk, sesli US numarası, Trust Hub ve SHAKEN/STIR. Gerçek giden aramalar için; sonra tek komut: `pnpm countries:set -- --outbound-trunk ST_…`.
+2. **Avukat metinleri:** otomatik arama onayı (TCPA), kayıt bildirimi, KVKK.
+3. **LiveKit Cloud ve Azure Speech:** canlı aramalar için. Adımlar RUNBOOK "Voice: M7 live on the preview project (W3-16)" bölümünde; her adım sizin onayınızla.
+4. **Ses dinleme testi:** `pnpm voice:samples` ile örnekleri üretip EN/ES/TR seslerini seçmeniz (Q225).
+5. **Telefon testleri:** "Talk now" iPhone ve Android'de, 10 arama, Türkçe arama, gerçek R1 araması.
+6. **Q140** (staging sözlük çiftleri), **Q181** (İspanyolca okuma), ES/TR ses metinlerinin anadil kontrolü (Q63).
+7. Bildirim testi için demo olmayan bir test şirketi.
 
 **Önizleme worker'ı durmuş durumda.** Test etmek isterseniz söyleyin, yeniden başlatırım.
 
