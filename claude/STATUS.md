@@ -1,5 +1,25 @@
 # SiteLog · Durum
 
+**2026-10-17 (18:45 UTC) — Onaylarınız işlendi.**
+
+- **Bütün açık sorular kararlaştırıldı.** "Önerdiğin ve yaptığın tüm işleri ve soruların cevabını onaylıyorum" mesajınızla spec §19'daki 116 açık soru **Decided 2026-10-17 (önerilen varsayılan)** olarak işaretlendi.
+  - Bu, hafta 2–4'te açılan bütün soruları kapsıyor: Q135–Q227, Q229–Q246, Q270, Q280, Q290, Q300, Q330, Q340, Q350 ve öncekiler.
+  - Kodda değişen bir şey yok; hepsi zaten önerilen varsayılanla çalışıyordu.
+  - Tek istisna Q340: önerilen çözüm yazılmamıştı, şimdi yazılıyor. Panelde dil değiştirilince giriş e-postasının dili de değişecek.
+- **Açık kalan iki soru:**
+  - Q281: İletimerkezi mesaj türünü "ticari" sayarsa doldurulacak İYS alanları. Bu soru yalnız avukat Q49'a "ticari" derse geçerli.
+  - Q49: Türkçe SMS'lerin İYS'de "bilgilendirme" mi "ticari" mi sayılacağı. Önerimi onayladınız (bilgilendirme), ama bunu avukatın da teyit etmesi gerekiyor.
+- **Hafta 1 ve 2 tamamlandı.** "Testler yapıldı" demeniz üzerine `docs/PLAN_WEEK1.md` ve `docs/PLAN_WEEK2.md`'deki bütün kutular işaretlendi, "owner confirmed done, 2026-10-17" notuyla. Bu, W1-19 cut-over adımlarını da içeriyor.
+- **Hafta 3'te sizi bekleyenler:**
+  - W3-16: ses dinleme testi ve telefonla 10 arama.
+  - W3-04, W3-11, W3-12, W3-13 ve W3-18: telefon kontrolleri.
+  - Bunlar da yapıldıysa söyleyin, işaretleyeyim.
+- **Hafta 4'te sizi bekleyenler:**
+  - W4-13: İletimerkezi ve avukat metinleri.
+  - W4-14: Türkçe ses ve telefon testleri.
+  - W4-15: Stripe test modu.
+  - Rehberler RUNBOOK'ta: "TR go-live" ve "Billing" bölümleri.
+
 **2026-10-17 (18:00 UTC) — Hafta 4'ün kodu bitti.**
 
 - **CI'da yeşil:** W4-01 … W4-12 ve W4-16. Ayarlar'daki "Beni şimdi ara" (Q350) ve M10/M11 kabul testleri (`pnpm e2e:m10`, `pnpm e2e:m11`) dahil.
