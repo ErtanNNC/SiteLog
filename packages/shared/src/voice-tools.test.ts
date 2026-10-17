@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { emptyReportData, type DailyReportData, type ManpowerEntry } from './schemas/report.ts';
 import {
   callRecordingPath,
+  callRequiredFields,
   loadReportSummary,
   preferenceConfirmation,
+  readBack,
+  spokenQuestion,
+  voiceAnswerConfirmation,
   voiceNumber,
   voiceTextVersions,
   voiceWeekday,
@@ -83,5 +87,83 @@ describe('voice tool answers (W3-03)', () => {
 
   it('puts a recording at calls/{org}/{call}.ogg', () => {
     expect(callRecordingPath('o', 'c')).toBe('o/c.ogg');
+  });
+});
+
+describe('the live draft on a call (W3-09)', () => {
+  it('never asks for the photo on a call (§10.5 step 2)', () => {
+    expect(
+      callRequiredFields(['manpower', 'hours', 'weather', 'work_performed', 'safety', 'photo']),
+    ).toEqual(['manpower', 'hours', 'weather', 'work_performed', 'safety']);
+  });
+
+  it('speaks the question with at most two choices worded for the ear', () => {
+    expect(
+      spokenQuestion({
+        prompt:
+          '  Quick one — the Delta guys on Level 2: was that four or five people, and the full day? ',
+        options: [
+          { id: 'o1', label: '4 · full day' },
+          { id: 'o2', label: '5 · full day' },
+          { id: 'o3', label: 'Other' },
+        ],
+      }),
+    ).toEqual({
+      text: 'Quick one — the Delta guys on Level 2: was that four or five people, and the full day?',
+      choices: ['4, full day', '5, full day'],
+    });
+    expect(spokenQuestion({ prompt: 'x'.repeat(500), options: [] }).text).toHaveLength(400);
+  });
+
+  it("says F7's confirmation from code's numbers, in the call language", () => {
+    const delta = {
+      kind: 'crew',
+      company: 'Delta Mechanical',
+      workers: 5,
+      hoursPerWorker: 8,
+      totalHours: 40,
+    } as const;
+    expect(voiceAnswerConfirmation(delta, 'en')).toBe(
+      'Delta Mechanical: 5 workers, 8 hours each — 40 hours.',
+    );
+    expect(voiceAnswerConfirmation(delta, 'es')).toBe(
+      'Delta Mechanical: 5 trabajadores, 8 horas cada uno — 40 horas.',
+    );
+    expect(
+      voiceAnswerConfirmation(
+        { ...delta, company: 'Demirci ekibi', hoursPerWorker: 7.5, totalHours: 37.5 },
+        'tr',
+      ),
+    ).toBe('Demirci ekibi: 5 kişi, kişi başı 7,5 saat — toplam 37,5 saat.');
+    expect(
+      voiceAnswerConfirmation({ ...delta, hoursPerWorker: null, totalHours: null }, 'en'),
+    ).toBe('Delta Mechanical: 5 workers.');
+    expect(voiceAnswerConfirmation({ kind: 'weather', lostHours: 3.5 }, 'en')).toBe(
+      'Noted: 3.5 hours lost to weather.',
+    );
+    expect(voiceAnswerConfirmation({ kind: 'weather', lostHours: 0 }, 'en')).toBe(
+      'Noted: no weather stoppage.',
+    );
+    expect(voiceAnswerConfirmation({ kind: 'company_added', company: 'Ridgeway' }, 'en')).toMatch(
+      /^Noted: Ridgeway, a new subcontractor/,
+    );
+    expect(voiceAnswerConfirmation({ kind: 'noted' }, 'tr')).toBe('Not aldım.');
+  });
+
+  it('reads back numbers first, every one recomputed in code (§19 Q118)', () => {
+    const data = report([
+      crew(6, 8, 999),
+      { ...crew(4, 8, 32), companyId: 'k', companyName: 'Kestrel' },
+    ]);
+    data.weather.periods.push({ condition: 'Rain', lostHours: 3.5, source: [] });
+    // The stored 999 is not spoken: 6 × 8 + 4 × 8 = 80.
+    expect(readBack(data, 'en')).toBe(
+      "Here's what I've got: 10 on site from 2 companies, 80 hours. Weather stopped work for 3.5 hours. Shall I file it?",
+    );
+    expect(readBack(report([crew(6, 8, 48)]), 'en')).toBe(
+      "Here's what I've got: 6 on site from one company, 48 hours. Shall I file it?",
+    );
+    // A headcount not known: no partial total is spoken.
+    expect(readBack(report([crew(null, 8, null), crew(4, 8, 32)]), 'en')).toBe('Shall I file it?');
   });
 });

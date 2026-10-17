@@ -25,7 +25,18 @@ function fixture(id: string): EvalFixture {
 }
 
 function textIdsOf(f: EvalFixture): Set<string> {
-  return new Set(f.whatsappText ? f.input.segments.map((s) => s.uploadId) : []);
+  return new Set(
+    f.whatsappText ? f.input.segments.flatMap((s) => (s.uploadId ? [s.uploadId] : [])) : [],
+  );
+}
+
+/** The voice-note segments of a case (a call's have no place in the v1.0 WhatsApp input). */
+function voiceSegments(f: EvalFixture) {
+  return f.input.segments.flatMap((s) =>
+    s.uploadId !== undefined
+      ? [{ uploadId: s.uploadId, start: s.start, end: s.end, text: s.text }]
+      : [],
+  );
 }
 
 /** The v1 extraction input of a golden case. */
@@ -48,10 +59,10 @@ export function legacyInput(id: string): ExtractionInput {
     })),
     previousDraft: i.previousDraft ? downgradeV2toV1(i.previousDraft, { textIds: text }) : null,
     photos: i.photos.map(({ uploadId, ...p }) => ({ messageId: uploadId, ...p })),
-    segments: i.segments
+    segments: voiceSegments(f)
       .filter((s) => !text.has(s.uploadId))
       .map(({ uploadId, ...s }) => ({ messageId: uploadId, ...s })),
-    texts: i.segments
+    texts: voiceSegments(f)
       .filter((s) => text.has(s.uploadId))
       .map((s) => ({ messageId: s.uploadId, text: s.text })),
     reporterFirstName: i.reporterFirstName,

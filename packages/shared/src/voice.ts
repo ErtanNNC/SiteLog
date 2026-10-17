@@ -91,6 +91,51 @@ export const VoiceDraftStateSchema = z.strictObject({
   readBack: z.string().min(1).max(1200).nullable(),
 });
 
+/**
+ * W3-09 (spec §19 Q117): the live tools (`update_draft`, `record_answer`) run in the worker as a
+ * priority `voice_turn` job; field-api waits for its answer up to `VOICE_TOOL_WAIT_MS` (at most
+ * `VOICE_TOOL_WAIT_MAX_MS`). Past the wait it answers this instead (HTTP 202): the agent says a
+ * short line ("Still working on it, one moment") and calls the tool again with the same words,
+ * which finds the same turn (`voiceTurnKey`) and waits for it again, never a second extraction.
+ */
+export const VoiceTurnPendingSchema = z.strictObject({
+  status: z.literal('pending'),
+  /** When asking again is worth it, in milliseconds. */
+  retryAfterMs: z.number().int().min(0).max(15_000),
+});
+
+/** §19 Q117's default wait (`VOICE_TOOL_WAIT_MS` unset) and its cap. */
+export const VOICE_TOOL_WAIT_DEFAULT_MS = 12_000;
+export const VOICE_TOOL_WAIT_MAX_MS = 15_000;
+
+/** The live tools that run as a worker turn (W3-09). `apply_correction` joins them in W3-10. */
+export const VOICE_TURN_KINDS = ['update_draft', 'record_answer'] as const;
+export type VoiceTurnKind = (typeof VOICE_TURN_KINDS)[number];
+
+/**
+ * The turn a live tool request is (W3-09): SHA-256 (hex) of the tool and its words, so the same
+ * words of the same call are one turn however often the agent asks (a retry with a new request
+ * id, a call again after `pending`): `voice_turns (call_id, kind, turn_key)` is unique. WebCrypto,
+ * so Node, Deno and browsers share it.
+ */
+export async function voiceTurnKey(kind: VoiceTurnKind, input: unknown): Promise<string> {
+  const bytes = new TextEncoder().encode(`${kind}\n${canonicalJson(input)}`);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** JSON with object keys sorted, so equal values hash equally. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
 // ───────────────────────────── POST /voice/calls/start ─────────────────────────────
 
 /**
@@ -281,7 +326,9 @@ export const UpdateDraftRequestSchema = z.strictObject({
   ...toolBase,
   segments: z.array(TranscriptSegmentSchema).min(1).max(2000),
 });
-export const UpdateDraftResponseSchema = VoiceDraftStateSchema;
+export const UpdateDraftResponseSchema = z
+  .union([VoiceDraftStateSchema, VoiceTurnPendingSchema])
+  .describe('The draft state, or (HTTP 202) status pending: ask again with the same segments.');
 
 /** `record_answer` (§9.4, F7 on a call): the answer to the open question, as said. */
 export const RecordAnswerRequestSchema = z.strictObject({
@@ -291,13 +338,26 @@ export const RecordAnswerRequestSchema = z.strictObject({
   start: callSeconds,
   end: callSeconds.optional(),
 });
-export const RecordAnswerResponseSchema = z.strictObject({
-  /** `not_understood`: the answer did not give the value; the agent asks once more or moves on. */
-  status: z.enum(['applied', 'not_understood']),
-  /** F7's confirmation line, in the call language, numbers from code; null when not applied. */
+export const RecordAnswerResultSchema = z.strictObject({
+  /**
+   * `applied`: code applied the value (F7). `not_understood`: the answer did not give the value;
+   * the draft still has the question, and the agent asks it once more with its choices.
+   * `skipped` (W3-09): the second unclear answer: the question is recorded unanswered for the
+   * office (`unanswered:<field>`) and the draft has moved on (the next question, or the
+   * read-back).
+   */
+  status: z.enum(['applied', 'not_understood', 'skipped']),
+  /**
+   * The line to say, in the call language, numbers from code: F7's confirmation when applied,
+   * "I didn't catch that." when not understood, "I've left it for the office to check." when
+   * skipped.
+   */
   confirmation: z.string().min(1).max(400).nullable(),
   draft: VoiceDraftStateSchema,
 });
+export const RecordAnswerResponseSchema = z
+  .union([RecordAnswerResultSchema, VoiceTurnPendingSchema])
+  .describe('The answer settled, or (HTTP 202) status pending: ask again with the same words.');
 
 /**
  * `apply_correction` (§9.4, §10.6, F8 by voice; F10 after `load_report`): the change as said;
@@ -543,6 +603,7 @@ export const VOICE_CONTRACT: Record<string, z.ZodType> = {
   call_metrics: CallMetricsSchema,
   call_peaks: CallPeaksSchema,
   draft_state: VoiceDraftStateSchema,
+  turn_pending: VoiceTurnPendingSchema,
   ...Object.fromEntries(
     VOICE_TOOLS.flatMap((tool) => [
       [`tool_${tool}_request`, VOICE_TOOL_SCHEMAS[tool].request],
@@ -592,6 +653,14 @@ export const VOICE_API_ERRORS = [
   /** `noCallsToday` before §19 Q129's column exists (W3-17) (400). */
   'not_available',
   'rate_limited',
+  /** W3-09: a live tool before the call's site is known (`pick_site` first, F14) (409). */
+  'site_required',
+  /** W3-09: today's report of the call's site is filed already (F10 is `load_report`) (409). */
+  'report_closed',
+  /** W3-09: `record_answer` for a question that is not the call's open question (409). */
+  'question_closed',
+  /** W3-09: the worker could not run the turn (503; the agent's one retry runs it again). */
+  'turn_failed',
   /** The first request with this `X-Request-Id` is still running (409). */
   'request_in_progress',
   /** This `X-Request-Id` named another tool's request in this call (409). */
@@ -671,6 +740,8 @@ function base64Url(bytes: Uint8Array): string {
 export type VoiceCallStartRequest = z.infer<typeof VoiceCallStartRequestSchema>;
 export type VoiceCallStartResponse = z.infer<typeof VoiceCallStartResponseSchema>;
 export type VoiceDraftState = z.infer<typeof VoiceDraftStateSchema>;
+export type VoiceTurnPending = z.infer<typeof VoiceTurnPendingSchema>;
+export type RecordAnswerResult = z.infer<typeof RecordAnswerResultSchema>;
 export type DialogLogEntry = z.infer<typeof DialogLogEntrySchema>;
 export type CallMetrics = z.infer<typeof CallMetricsSchema>;
 export type CallPeaks = z.infer<typeof CallPeaksSchema>;

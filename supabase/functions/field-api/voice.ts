@@ -6,6 +6,15 @@ import {
   LoadReportRequestSchema,
   PickSiteRequestSchema,
   REQUIRED_CONSENTS,
+  RecordAnswerRequestSchema,
+  RecordAnswerResultSchema,
+  UpdateDraftRequestSchema,
+  VOICE_TOOL_WAIT_DEFAULT_MS,
+  VOICE_TOOL_WAIT_MAX_MS,
+  VoiceDraftStateSchema,
+  voiceTurnKey,
+  type VoiceTurnKind,
+  type VoiceTurnPending,
   SetPreferenceRequestSchema,
   StartFallbackRecordingRequestSchema,
   VOICE_CALL_MAX_S,
@@ -44,7 +53,7 @@ import {
 } from '@sitelog/shared';
 import { formatIssues, timingSafeEqual } from '../_shared/http.ts';
 import { FieldError, consentState, filedChangeable, siteDeadline } from './logic.ts';
-import type { FieldStore, OrgContext } from './store.ts';
+import type { FieldStore, OrgContext, VoiceTurnState } from './store.ts';
 
 /**
  * field-api's voice routes (W3-03; spec §6.5, §9.4, Appendix B "field-api voice routes"): what the
@@ -58,8 +67,12 @@ import type { FieldStore, OrgContext } from './store.ts';
  * No answer carries a phone number (§10.12): `calls/start` takes the SIP `from` and keeps it on
  * the call row; the agent only ever gets a first name and a locale.
  *
- * The model-backed tools (`update_draft`, `record_answer`, `apply_correction`, `file_report`,
- * `set_day_status`, `schedule_callback`) are W3-09 … W3-14's and are not served yet (404).
+ * The live tools (W3-09: `update_draft`, `record_answer`) run in the worker (§19 Q117): the route
+ * submits a turn (voice_turn_submit(): the report, its call source and live transcript, a
+ * priority `voice_turn` job) and waits for its answer up to VOICE_TOOL_WAIT_MS; past the wait it
+ * answers 202 `pending` and the agent, after a short line, asks again with the same words, which
+ * are the same turn. The other model-backed tools (`apply_correction`, `file_report`,
+ * `set_day_status`, `schedule_callback`) are W3-10 … W3-14's and are not served yet (404).
  */
 
 export interface VoiceDeps {
@@ -71,7 +84,26 @@ export interface VoiceDeps {
   /** STORAGE_PUBLIC_URL re-basing of a signed upload URL (`publicSignedUrl`). */
   publicSignedUrl: (signedUrl: string) => string;
   now: () => Date;
+  /** W3-09 (§19 Q117): how long a live tool waits for its worker turn (`voiceToolWaitMs`). */
+  toolWaitMs: () => number;
+  /** Waiting between polls of a turn (tests pass a fake). */
+  sleep: (ms: number) => Promise<void>;
 }
+
+/** How often a waiting live tool reads its turn (W3-09). */
+export const VOICE_TURN_POLL_MS = 150;
+
+/**
+ * VOICE_TOOL_WAIT_MS (§19 Q117): unset or not a number → 12 s; at most 15 s, at least one poll.
+ * Pure.
+ */
+export function voiceToolWaitMs(raw: number | undefined): number {
+  if (raw === undefined || !Number.isFinite(raw)) return VOICE_TOOL_WAIT_DEFAULT_MS;
+  return Math.min(VOICE_TOOL_WAIT_MAX_MS, Math.max(VOICE_TURN_POLL_MS, Math.round(raw)));
+}
+
+/** The answer of a live tool whose turn is still running past the wait (HTTP 202). */
+const PENDING: VoiceTurnPending = { status: 'pending', retryAfterMs: 1000 };
 
 /** A call the token named, with its reporter, org and the sites in scope. */
 interface CallScope {
@@ -166,7 +198,8 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
     c: Context,
     call: CallRow,
     tool: string,
-    run: () => Promise<{ status: 200 | 201; body: unknown }>,
+    run: () => Promise<{ status: 200 | 201 | 202; body: unknown }>,
+    opts: { waitForFirst?: boolean } = {},
   ): Promise<Response> {
     const key = c.req.header(VOICE_REQUEST_ID_HEADER)?.trim();
     if (!key) {
@@ -179,11 +212,19 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
     const claim = await store.claimToolRequest(call.id, key, tool);
     if (!claim.claimed) {
       if (claim.tool !== tool) throw new FieldError(409, 'request_conflict');
-      if (claim.status === null) throw new FieldError(409, 'request_in_progress');
+      let kept: { status: number | null; response: Json | null } | null = claim;
+      if (kept.status === null && opts.waitForFirst) {
+        // §19 Q151 (W3-09): a live tool's retry whose first copy still runs waits for that first
+        // answer (a caller should never hear an error for a slow first try); past the wait, or
+        // when the first copy failed (its key freed), `pending`: the agent asks again.
+        kept = await waitForClaim(call.id, key);
+        if (!kept || kept.status === null) return c.json(PENDING, 202);
+      }
+      if (kept.status === null) throw new FieldError(409, 'request_in_progress');
       c.header('Idempotent-Replay', 'true');
-      return c.json(claim.response as Record<string, unknown>, claim.status as 200 | 201);
+      return c.json(kept.response as Record<string, unknown>, kept.status as 200 | 201 | 202);
     }
-    let r: { status: 200 | 201; body: unknown };
+    let r: { status: 200 | 201 | 202; body: unknown };
     try {
       r = await run();
     } catch (err) {
@@ -193,6 +234,96 @@ export function registerVoiceRoutes(app: AnyHono, deps: VoiceDeps): void {
     await store.finishToolRequest(call.id, key, r.status, r.body as Json);
     return c.json(r.body, r.status);
   }
+
+  /** The claim of a named request once its first copy answered, or null (freed, or past the wait). */
+  async function waitForClaim(
+    callId: string,
+    key: string,
+  ): Promise<{ status: number | null; response: Json | null } | null> {
+    const polls = Math.ceil(deps.toolWaitMs() / VOICE_TURN_POLL_MS);
+    for (let i = 0; i < polls; i++) {
+      await deps.sleep(VOICE_TURN_POLL_MS);
+      const row = await store.getToolRequest(callId, key);
+      if (!row) return null;
+      if (row.status !== null) return row;
+    }
+    return null;
+  }
+
+  /**
+   * W3-09 (§19 Q117): a live tool as a worker turn. The reporter's consents first (§19 Q95, Q120:
+   * nothing of a caller who has not consented goes to a model), then the turn (the same words are
+   * the same turn), then the wait: its answer, checked against the contract; 202 `pending` past
+   * the wait; a failed turn's refusal as a 409 / 403, any other failure 503 `turn_failed` (the
+   * agent's one retry submits the same words, which runs the turn again).
+   */
+  async function liveTurn(
+    call: CallRow,
+    kind: VoiceTurnKind,
+    input: Json,
+  ): Promise<{ status: 200 | 202; body: unknown }> {
+    const scope = await callScope(call);
+    const held = consentState(await store.listConsents(scope.reporter.id)).held;
+    if (!REQUIRED_CONSENTS.every((t) => held.has(t))) {
+      throw new FieldError(403, 'consent_required');
+    }
+    if (!call.site_id) throw new FieldError(409, 'site_required', 'pick_site first');
+    const key = await voiceTurnKey(kind, input);
+    const submitted = await store.voiceTurnSubmit(call.id, kind, key, input);
+    let state: VoiceTurnState = submitted;
+    const polls = Math.ceil(deps.toolWaitMs() / VOICE_TURN_POLL_MS);
+    for (let i = 0; state.status === 'pending' && i < polls; i++) {
+      await deps.sleep(VOICE_TURN_POLL_MS);
+      state = (await store.getVoiceTurn(submitted.turnId)) ?? state;
+    }
+    if (state.status === 'pending') return { status: 202, body: PENDING };
+    if (state.status === 'failed') {
+      switch (state.error) {
+        case 'report_closed':
+        case 'question_closed':
+          throw new FieldError(409, state.error);
+        case 'consent_required':
+          throw new FieldError(403, 'consent_required');
+        default:
+          throw new FieldError(503, 'turn_failed', 'The turn could not run; ask again');
+      }
+    }
+    const schema = kind === 'update_draft' ? VoiceDraftStateSchema : RecordAnswerResultSchema;
+    const answer = schema.safeParse(state.result);
+    if (!answer.success) {
+      // A worker answer outside the contract is the worker's fault; never handed to the agent.
+      throw new FieldError(503, 'turn_failed', 'The turn answered outside the contract');
+    }
+    return { status: 200, body: answer.data };
+  }
+
+  // ── POST /voice/tools/update_draft (§9.4, §10.4 live mode; W3-09) ────────────────────────────
+  app.post('/voice/tools/update_draft', async (c) => {
+    const body = await parseVoiceBody(c, UpdateDraftRequestSchema);
+    const call = await authorizedCall(c, body.callId);
+    return once(
+      c,
+      call,
+      'update_draft',
+      () => liveTurn(call, 'update_draft', { segments: body.segments } as unknown as Json),
+      { waitForFirst: true },
+    );
+  });
+
+  // ── POST /voice/tools/record_answer (F7 on a call; W3-09) ────────────────────────────────────
+  app.post('/voice/tools/record_answer', async (c) => {
+    const body = await parseVoiceBody(c, RecordAnswerRequestSchema);
+    const call = await authorizedCall(c, body.callId);
+    const input = {
+      questionId: body.questionId,
+      utterance: body.utterance,
+      start: body.start,
+      ...(body.end !== undefined ? { end: body.end } : {}),
+    };
+    return once(c, call, 'record_answer', () => liveTurn(call, 'record_answer', input as Json), {
+      waitForFirst: true,
+    });
+  });
 
   /** The call's reporter, org and sites; an unknown caller's call has none (F13: 403). */
   async function callScope(call: CallRow): Promise<CallScope> {

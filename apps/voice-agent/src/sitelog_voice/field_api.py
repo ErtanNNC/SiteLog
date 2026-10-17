@@ -25,7 +25,9 @@ from .contract import (
     Contract,
     DraftState,
     GetContextResponse,
+    TurnPending,
     default_contract,
+    is_pending,
 )
 
 log = logging.getLogger("sitelog_voice.field_api")
@@ -187,10 +189,16 @@ class FieldApi:
         data = await self.request("get_context", {"callId": auth.call_id}, auth)
         return GetContextResponse.model_validate(data)
 
-    async def update_draft(self, auth: CallAuth, segments: list[dict[str, Any]]) -> DraftState:
+    async def update_draft(
+        self, auth: CallAuth, segments: list[dict[str, Any]]
+    ) -> DraftState | TurnPending:
+        """The draft from everything the reporter said; or (W3-09, §19 Q117) `TurnPending` when
+        the worker's turn runs past field-api's wait: ask again with the same segments."""
         data = await self.request(
             "update_draft", {"callId": auth.call_id, "segments": segments}, auth
         )
+        if is_pending(data):
+            return TurnPending.model_validate(data)
         return DraftState.model_validate(data)
 
     async def tool(self, name: str, auth: CallAuth, **fields: Any) -> Any:

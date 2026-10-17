@@ -18,6 +18,7 @@ import {
   type RateLimitResult,
   type ReportWithDate,
   type VoiceCallEndResult,
+  type VoiceTurnSubmitResult,
   type VoiceCallStartResult,
 } from './store.ts';
 
@@ -798,6 +799,38 @@ export function supabaseFieldStore(admin: AppClient): FieldStore {
         .single()
         .throwOnError();
       return { claimed: false, tool: row.tool, status: row.status, response: row.response };
+    },
+
+    async getToolRequest(callId, key) {
+      const { data } = await admin
+        .from('voice_tool_requests')
+        .select('tool, status, response')
+        .eq('call_id', callId)
+        .eq('request_key', key)
+        .maybeSingle()
+        .throwOnError();
+      return data;
+    },
+
+    async voiceTurnSubmit(callId, kind, key, input) {
+      return await rpc<VoiceTurnSubmitResult>(
+        admin.rpc('voice_turn_submit', {
+          p_call_id: callId,
+          p_kind: kind,
+          p_key: key,
+          p_input: input,
+        }),
+      );
+    },
+
+    async getVoiceTurn(id) {
+      const { data } = await admin
+        .from('voice_turns')
+        .select('status, result, error')
+        .eq('id', id)
+        .maybeSingle()
+        .throwOnError();
+      return data;
     },
 
     async finishToolRequest(callId, key, status, response) {

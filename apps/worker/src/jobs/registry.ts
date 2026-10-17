@@ -19,6 +19,7 @@ import { smsKeyword } from './sms_keyword';
 import { transcribeAudioJob } from './transcribe_audio';
 import { transcribeUploadJob } from './transcribe_upload';
 import type { JobRegistry } from './types';
+import { voiceTurnJob } from './voice_turn';
 import { weeklyDigest } from './weekly_digest';
 import { whatsappAnswerJob } from './whatsapp_answer';
 
@@ -48,4 +49,5 @@ export const registry: JobRegistry = {
   delete_test_clip: deleteTestClipJob,
   apply_correction: applyCorrectionJob,
   whatsapp_answer: whatsappAnswerJob,
+  voice_turn: voiceTurnJob,
 };

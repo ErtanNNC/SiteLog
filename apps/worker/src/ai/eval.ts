@@ -13,6 +13,7 @@ import {
   REQUIRED_FIELD_KEYS,
   ReportExtractionSchema,
   UNIT_SYSTEMS,
+  callRequiredFields,
   pickNextQuestion,
   round2,
   toObservedIn,
@@ -40,7 +41,7 @@ import { runUtteranceEval } from './utterance-fixtures';
 import { createAnthropicClient, type MessagesClient } from './claude';
 import { runReportExtraction, type ExtractionInputV2 } from './extract';
 import { buildOrgContextBlock } from './prompts/extraction';
-import { buildExtractionUserMessageV2 } from './prompts/extraction.v2';
+import { buildExtractionUserMessageV2, segmentMediaId } from './prompts/extraction.v2';
 import { loadDotenv } from '../dotenv';
 import { createLogger } from '../log';
 
@@ -97,12 +98,16 @@ export const FIXTURES_DIR = join(here, '..', '..', '..', '..', 'fixtures');
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-const SegmentSchema = z.strictObject({
-  uploadId: z.string().min(1),
+const segmentText = {
   start: z.number().min(0),
   end: z.number().min(0),
   text: z.string().min(1),
-});
+};
+/** A voice note's segment (`uploadId`), or (W3-09) a call's reporter lane (`callId`). */
+const SegmentSchema = z.union([
+  z.strictObject({ uploadId: z.string().min(1), ...segmentText }),
+  z.strictObject({ callId: z.string().min(1), ...segmentText }),
+]);
 
 const SiteDayWeatherSchema = z.strictObject({
   date: z.string().regex(DATE),
@@ -330,10 +335,12 @@ export interface CompareContext {
 }
 
 export function compareContextOf(input: ExtractionInputV2): CompareContext {
+  const required = input.requiredFields.filter((f): f is RequiredFieldKey =>
+    (REQUIRED_FIELD_KEYS as readonly string[]).includes(f),
+  );
   return {
-    requiredFields: input.requiredFields.filter((f): f is RequiredFieldKey =>
-      (REQUIRED_FIELD_KEYS as readonly string[]).includes(f),
-    ),
+    // §10.5 step 2 (W3-09): a call never asks for the photo.
+    requiredFields: input.channel === 'call' ? callRequiredFields(required) : required,
     photoCount: input.photos.length,
     companies: input.companies,
     rejectedMappings: input.rejectedMappings,
@@ -705,6 +712,7 @@ function droppedKeys(raw: unknown, parsed: unknown, path = ''): string[] {
 type AnySource = {
   type: string;
   uploadId?: string;
+  callId?: string;
   questionId?: string;
   start?: number;
   end?: number;
@@ -725,21 +733,26 @@ function sourcesIn(value: unknown, path = ''): Array<{ path: string; source: Any
 function sourceProblems(label: string, data: unknown, input: ExtractionInputV2): string[] {
   const problems: string[] = [];
   const segs = new Map<string, Array<{ start: number; end: number }>>();
-  for (const s of input.segments) segs.set(s.uploadId, [...(segs.get(s.uploadId) ?? []), s]);
+  for (const s of input.segments) {
+    // A voice note by its upload, a call (W3-09) by its call: `voice:` / `call:` keep them apart.
+    const key = s.callId !== undefined ? `call:${s.callId}` : `voice:${s.uploadId}`;
+    segs.set(key, [...(segs.get(key) ?? []), s]);
+  }
   const answers = new Set(input.previousAnswers.map((a) => a.questionId));
   const near = (a: number, b: number) => Math.abs(a - b) < 0.051;
   for (const { path, source: s } of sourcesIn(data)) {
     const at = `${label} ${path}`;
-    if (s.type === 'voice_note') {
-      const list = segs.get(s.uploadId ?? '');
+    if (s.type === 'voice_note' || s.type === 'call') {
+      const id = s.type === 'call' ? s.callId : s.uploadId;
+      const list = segs.get(`${s.type === 'call' ? 'call' : 'voice'}:${id ?? ''}`);
       if (!list) {
-        problems.push(`${at}: voice_note uploadId ${s.uploadId} is not a voice note in the input`);
+        problems.push(`${at}: ${s.type} ${id} is not a ${s.type} in the input`);
         continue;
       }
       if (!list.some((x) => near(x.start, s.start ?? -1)))
-        problems.push(`${at}: start ${s.start} is not a segment start of ${s.uploadId}`);
+        problems.push(`${at}: start ${s.start} is not a segment start of ${id}`);
       if (s.end !== undefined && !list.some((x) => near(x.end, s.end!)))
-        problems.push(`${at}: end ${s.end} is not a segment end of ${s.uploadId}`);
+        problems.push(`${at}: end ${s.end} is not a segment end of ${id}`);
       if (s.end !== undefined && s.start !== undefined && s.end < s.start)
         problems.push(`${at}: end before start`);
     } else if (s.type === 'answer') {
@@ -767,17 +780,21 @@ export function fixtureProblems(f: EvalFixture): string[] {
 
   // Transcript
   if (input.segments.length === 0) problems.push('transcript: no segments');
-  const byUpload = new Map<string, Array<{ start: number; end: number }>>();
+  const byMedia = new Map<string, Array<{ start: number; end: number }>>();
   for (const s of input.segments) {
+    const id = segmentMediaId(s);
     if (!(s.end > s.start))
-      problems.push(`transcript: segment ${s.uploadId}@${s.start} ends before it starts`);
-    const list = byUpload.get(s.uploadId) ?? [];
+      problems.push(`transcript: segment ${id}@${s.start} ends before it starts`);
+    const list = byMedia.get(id) ?? [];
     const prev = list[list.length - 1];
     if (prev && s.start < prev.end - 0.051)
-      problems.push(`transcript: segment ${s.uploadId}@${s.start} overlaps the previous one`);
+      problems.push(`transcript: segment ${id}@${s.start} overlaps the previous one`);
     list.push(s);
-    byUpload.set(s.uploadId, list);
+    byMedia.set(id, list);
   }
+  // W3-09: a call case is live mode (`CHANNEL: call`) and its segments are the call's.
+  if ((input.channel === 'call') !== input.segments.some((s) => s.callId !== undefined))
+    problems.push('transcript: a call case has call segments, and only a call case has them');
   const prompt = `${buildOrgContextBlock(input)}\n${buildExtractionUserMessageV2(input)}`;
   for (const p of findPhoneNumbers(prompt)) problems.push(`prompt: phone-number-like text "${p}"`);
   const companyIds = new Set(input.companies.map((c) => c.id));

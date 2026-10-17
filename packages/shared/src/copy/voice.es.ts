@@ -59,4 +59,15 @@ export const voiceEs: VoiceCatalog = {
   pref_text_ok: 'Listo, su reporte diario ahora es por enlace en un mensaje.',
   load_report_summary: 'Reporte del {day}, {report_no}: {workers} en obra, {hours} horas.',
   load_report_found: 'Encontré el reporte del {day}, {report_no}.',
+  still_working: 'Sigo en ello, un momento.',
+  answer_crew: '{company}: {workers} trabajadores, {hours_each} horas cada uno — {hours} horas.',
+  answer_crew_workers: '{company}: {workers} trabajadores.',
+  answer_weather: 'Anotado: {hours} horas perdidas por el clima.',
+  answer_no_stoppage: 'Anotado: el clima no detuvo el trabajo.',
+  answer_company_added:
+    'Anotado: {company}, un subcontratista nuevo que la oficina va a confirmar.',
+  answer_company_mapped: 'Anotado: {company}.',
+  answer_noted: 'Anotado.',
+  answer_again: 'Perdón, no le entendí.',
+  answer_skipped: 'No logré entenderlo, así que lo dejo para que la oficina lo revise.',
 };

@@ -333,6 +333,14 @@ export const TABLES: Record<string, TableCase> = {
       `insert into livekit_events (id, event, room, call_id, event_at) values ('EV_matrix_new', 'room_started', 'call-${o.call}', '${o.call}', now())`,
     set: 'event_at = event_at',
   },
+  voice_turns: {
+    why: "A call's live tool turns (W3-09, §19 Q117): field-api and the worker with the service role only; no client policy, no grant.",
+    allow: serviceOnly,
+    where: (o) => `call_id = '${o.call}'`,
+    insert: (o) =>
+      `insert into voice_turns (call_id, report_id, kind, turn_key, input) values ('${o.call}', '${o.report}', 'update_draft', '${'b'.repeat(64)}', '{}')`,
+    set: 'result = result',
+  },
   rate_limits: {
     why: 'field-api throttling (§6.5): service role only; no client policy, no grant.',
     allow: serviceOnly,
@@ -719,6 +727,13 @@ export const RPCS: Record<
     allow: NONE,
     call: (o) =>
       `select voice_call_event('EV_matrix', 'room_finished', 'call-${o.call}', now()) as v`,
+  },
+  // W3-09 (20261016000330_voice_turns.sql): a call's live tool turns, through field-api.
+  voice_turn_submit: {
+    why: '§6.5, §19 Q117: field-api only (service role) for the voice agent; the worker runs the turn.',
+    allow: NONE,
+    call: (o) =>
+      `select voice_turn_submit('${o.call}', 'update_draft', '${'c'.repeat(64)}', '{"segments": [{"start": 0, "end": 1, "text": "hi"}]}') as v`,
   },
 };
 

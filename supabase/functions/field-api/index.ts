@@ -40,6 +40,11 @@ function fieldApp() {
       // W3-03: the voice agent's bearer, and field-api's own key of the per-call tokens.
       voiceToolSecret: () => requireEnv('VOICE_AGENT_TOOL_SECRET'),
       callTokenSecret: () => requireEnv('VOICE_CALL_TOKEN_SECRET'),
+      // W3-09 (§19 Q117): a live tool's wait for its worker turn (default 12 s, at most 15 s).
+      voiceToolWaitMs: () => {
+        const raw = optionalEnv('VOICE_TOOL_WAIT_MS');
+        return raw ? Number(raw) : undefined;
+      },
     });
   }
   return app;

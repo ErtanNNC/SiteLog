@@ -94,6 +94,8 @@ async function addOtherOrg(): Promise<void> {
       values ('${CALL}', 'other-req', 'end_call', 200, '{"ok": true}'::jsonb);
     insert into livekit_events (id, event, room, call_id, event_at)
       values ('EV-${CALL}', 'room_started', 'call-${CALL}', '${CALL}', '2026-10-09T22:00:00Z');
+    insert into voice_turns (call_id, report_id, kind, turn_key, input)
+      values ('${CALL}', '${RPT}', 'update_draft', '${'d'.repeat(64)}', '{}'::jsonb);
     insert into unknown_contacts (id, org_id, phone_e164, channel, call_id)
       values ('${other(15)}', '${O}', '+15550190009', 'voice', '${CALL}');
     insert into conversations (id, org_id, reporter_id, phone_e164)

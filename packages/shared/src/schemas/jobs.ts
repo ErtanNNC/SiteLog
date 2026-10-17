@@ -56,6 +56,12 @@ export const JobPayloadSchemas = {
    * reports awaits the answer to a web question, `parse_answer` reads it and code applies it.
    */
   whatsapp_answer: z.object({ messageId: uuid }),
+  /**
+   * W3-09 (§19 Q117): one live tool turn of a call (`voice_turns` row), run under the report's
+   * lock key; voice_turn_submit() (SQL) enqueues it, `voice_turn:<turn>` (`:<n>` for the nth
+   * run after a failed one).
+   */
+  voice_turn: z.object({ turnId: uuid, reportId: uuid }),
   transcribe_audio: z.object({
     messageId: uuid,
     reportId: uuid.optional(),
@@ -332,6 +338,13 @@ export const jobKeys = {
    * answer clip. A clip is spoken once and answers one question; a second try is a new clip.
    */
   parseAnswer: (questionId: string, uploadId: string) => `answer:${questionId}:${uploadId}`,
+  /**
+   * A live tool turn of a call (W3-09, §19 Q117; voice_turn_submit(), SQL): per turn, and the
+   * same words of a call are one turn (`voiceTurnKey`). A turn the worker failed runs again on the
+   * agent's next request as the next attempt (`:<attempt>`), since a key names one job for good.
+   */
+  voiceTurn: (turnId: string, attempt: number) =>
+    attempt <= 1 ? `voice_turn:${turnId}` : `voice_turn:${turnId}:${attempt}`,
   /**
    * A correction's preview (W2-10, §10.6; field_request_correction(), SQL): per correction, and a
    * correction is made once (a second try is a new correction).

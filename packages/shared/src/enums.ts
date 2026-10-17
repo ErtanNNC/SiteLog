@@ -259,6 +259,12 @@ export const JOB_TYPES = [
    * `parse_answer` (the model) reads it, code applies the value with `field_channel 'whatsapp'`.
    */
   'whatsapp_answer',
+  /**
+   * §19 Q117 (W3-09): a live tool of a call (`update_draft`, `record_answer`) in the worker, with
+   * the worker's prompts, validation and code-computed totals; field-api waits for its answer
+   * (`voice_turns`). The highest priority: someone is on the phone.
+   */
+  'voice_turn',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

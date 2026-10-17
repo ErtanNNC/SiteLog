@@ -729,6 +729,33 @@ export type VoiceToolRequestRow = {
   created_at: string;
 };
 
+/** W3-09: the live tools that run in the worker as a turn (`voice_turns.kind`). */
+export type VoiceTurnKindDb = 'update_draft' | 'record_answer';
+export type VoiceTurnStatus = 'pending' | 'done' | 'failed';
+
+/**
+ * W3-09 (20261016000330, spec §19 Q117): one live tool turn of a call, run by the worker's
+ * `voice_turn` job while field-api waits for `result`. The same words of a call are one turn
+ * (`turn_key`, `voiceTurnKey`). Service role only (field-api, the worker).
+ */
+export type VoiceTurnRow = {
+  id: string;
+  call_id: string;
+  report_id: string;
+  kind: VoiceTurnKindDb;
+  turn_key: string;
+  /** The tool's words: `{segments}` or `{questionId, utterance, start, end?}`. */
+  input: Json;
+  status: VoiceTurnStatus;
+  /** The tool's answer (`VoiceDraftState`, `RecordAnswerResult`) once done. */
+  result: Json | null;
+  error: string | null;
+  /** Runs started (a failed turn runs again on the agent's next request). */
+  attempts: number;
+  created_at: string;
+  finished_at: string | null;
+};
+
 /**
  * W3-04 (20261016000320): a LiveKit webhook event voice-events acted on, one row per event id (a
  * redelivery runs nothing again). No body, identity or number. Service role only.
@@ -1243,6 +1270,10 @@ export type Database = {
       >;
       voice_tool_requests: Table<VoiceToolRequestRow, 'status' | 'response' | 'created_at'>;
       livekit_events: Table<LivekitEventRow, 'call_id' | 'received_at'>;
+      voice_turns: Table<
+        VoiceTurnRow,
+        'id' | 'status' | 'result' | 'error' | 'attempts' | 'created_at' | 'finished_at'
+      >;
       report_versions: Table<
         ReportVersionRow,
         | 'summary'
@@ -1517,6 +1548,12 @@ export type Database = {
       call_status_rank: {
         Args: { p_status: CallStatus };
         Returns: number;
+      };
+      // W3-09 (20261016000330_voice_turns.sql), service role only: a live tool turn of a call
+      // (the report and its call source, the live transcript, the worker job).
+      voice_turn_submit: {
+        Args: { p_call_id: string; p_kind: string; p_key: string; p_input: Json };
+        Returns: Json;
       };
       // Settings (F15, 20261016000010_field_settings.sql), service role only: consent/revoke sets
       // revoked_at, audits consent.revoked and tells the office of a required consent.

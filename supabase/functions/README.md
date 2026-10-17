@@ -90,6 +90,9 @@ supabase secrets set VOICE_AGENT_TOOL_SECRET=$(openssl rand -base64 32) \
 # voice-events (W3-04): LiveKit signs its webhooks with the project's API key and secret (the JWT's
 # iss and HS256 key). Unset: voice-events answers 500 "not configured" and LiveKit retries.
 supabase secrets set LIVEKIT_API_KEY=API... LIVEKIT_API_SECRET=...
+# Optional (W3-09, §19 Q117): how long update_draft / record_answer wait for their worker turn
+# before answering `pending`; default 12000, at most 15000.
+# supabase secrets set VOICE_TOOL_WAIT_MS=12000
 ```
 
 Local development reads the same names from `supabase/functions/.env` (`supabase functions serve
@@ -337,6 +340,15 @@ Notes:
   needs the `recording` consent). A write with `X-Request-Id` runs once per call
   (`voice_tool_requests`): the agent's retry gets the kept 2xx answer (`Idempotent-Replay: true`);
   the model-backed tools (W3-09 … W3-14, `file_report` among them) use the same `once()`.
+  W3-09: `update_draft` and `record_answer` are live turns (§19 Q117): `voice_turn_submit()`
+  (the day's report created or merged with the call as a source, the reporter's lane as the
+  call's live transcript, a priority `voice_turn` job; the same words are the same turn) and a
+  wait of `VOICE_TOOL_WAIT_MS` (default 12 s, at most 15 s) for the worker's answer, checked
+  against the contract; past it 202 `{status: pending}` (the agent says a line and asks again with
+  the same words). Refusals: 403 `consent_required` (the `recording` and `data_processing`
+  consents), 409 `site_required` (F14 first), `report_closed`, `question_closed`; a turn the worker
+  failed 503 `turn_failed` (the agent's retry runs it again). A retry whose first copy still runs
+  waits for its answer instead of 409 (§19 Q151).
 - **field-api** (W1-07). `resolve` takes the link code in its body, every other route in the
   `X-Link-Code` header; a new device gets the reporter's cookie `sl_dev_<8 hex>` (one per
   reporter; httpOnly, Secure, SameSite=Lax, Path=/, 180 days) from `device/send-code`, and

@@ -27,6 +27,7 @@ import type {
   TestClipView,
   UploadKind,
   UploadRow,
+  VoiceTurnKind,
 } from '@sitelog/shared';
 import type { AuditEntry } from '../_shared/audit.ts';
 import type { DayOffQuestion, StoredObject } from './logic.ts';
@@ -181,6 +182,23 @@ export interface VoiceCallStartResult {
   repeat: boolean;
 }
 
+/** A live tool turn as field-api waits on it (`voice_turns`, W3-09). */
+export interface VoiceTurnState {
+  status: 'pending' | 'done' | 'failed';
+  /** The tool's answer once done. */
+  result: Json | null;
+  /** The error code a failed turn settled with (`report_closed`, `turn_failed`, …). */
+  error: string | null;
+}
+
+/** voice_turn_submit() (20261016000330, W3-09). */
+export interface VoiceTurnSubmitResult extends VoiceTurnState {
+  turnId: string;
+  reportId: string;
+  /** The same words of the call were submitted before: this is that turn. */
+  repeat: boolean;
+}
+
 /** voice_call_end(): `ended` false on a repeat; the post_call_reconcile job of a known caller. */
 export interface VoiceCallEndResult {
   ended: boolean;
@@ -231,8 +249,29 @@ export interface VoiceStore {
     | { claimed: true }
     | { claimed: false; tool: string; status: number | null; response: Json | null }
   >;
+  /**
+   * A named request's claim as it stands (W3-09, §19 Q151: a retry of a live tool waits for the
+   * first copy's answer); null when no request holds the key.
+   */
+  getToolRequest(
+    callId: string,
+    key: string,
+  ): Promise<{ tool: string; status: number | null; response: Json | null } | null>;
   /** Keeps the claimed request's 2xx answer for its retries. */
   finishToolRequest(callId: string, key: string, status: number, response: Json): Promise<void>;
+  /**
+   * voice_turn_submit() (20261016000330, W3-09): a live tool turn of the call (the report, its
+   * call source and live transcript, the priority `voice_turn` job); the same words are the same
+   * turn (`repeat`, with its status and answer).
+   */
+  voiceTurnSubmit(
+    callId: string,
+    kind: VoiceTurnKind,
+    key: string,
+    input: Json,
+  ): Promise<VoiceTurnSubmitResult>;
+  /** A turn's status and answer, while field-api waits for the worker (W3-09). */
+  getVoiceTurn(id: string): Promise<VoiceTurnState | null>;
   /** Frees a claimed key whose request failed, so a retry runs it again. */
   releaseToolRequest(callId: string, key: string): Promise<void>;
   /** The orgs' companies (names and aliases), for the agent and its speech hints. */
@@ -296,6 +335,10 @@ export const FIELD_DB_ERRORS = [
   'call_ended',
   'voice_number_unknown',
   'reporter_disabled',
+  // W3-09 (20261016000330_voice_turns.sql)
+  'unknown_caller',
+  'site_required',
+  'report_closed',
 ] as const;
 
 export interface ReportMediaCounts {

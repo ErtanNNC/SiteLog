@@ -24,7 +24,7 @@ function phoneInput(caseId: string, text?: string): ExtractionInputV2 {
   const input = structuredClone(loadFixture(caseId).input);
   const segments = text
     ? [{ uploadId: UPLOAD, start: 0, end: 12, text }]
-    : input.segments.map((s) => ({ ...s, uploadId: UPLOAD }));
+    : input.segments.map((s) => ({ uploadId: UPLOAD, start: s.start, end: s.end, text: s.text }));
   return { ...input, segments, photos: [] };
 }
 

@@ -75,6 +75,19 @@ export const VOICE_KEYS = [
   'pref_text_ok',
   'load_report_summary',
   'load_report_found',
+  // W3-09: the live draft on a call. A turn still running past the wait (§19 Q117); F7 on a call:
+  // the confirmation after an answer from code's numbers (F7's spoken example), the unclear answer
+  // asked once more, the second one left for the office.
+  'still_working',
+  'answer_crew',
+  'answer_crew_workers',
+  'answer_weather',
+  'answer_no_stoppage',
+  'answer_company_added',
+  'answer_company_mapped',
+  'answer_noted',
+  'answer_again',
+  'answer_skipped',
 ] as const;
 export type VoiceKey = (typeof VOICE_KEYS)[number];
 

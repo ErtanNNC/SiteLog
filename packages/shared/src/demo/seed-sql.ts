@@ -202,6 +202,8 @@ export const PRUNE: ReadonlyArray<readonly [table: string, where: (k: PruneScope
   ['voice_tool_requests', (k) => `call_id in ${k.C}`],
   // LiveKit events voice-events acted on (W3-04): with their call.
   ['livekit_events', (k) => `call_id in ${k.C}`],
+  // A call's live tool turns (W3-09): with their call or their report.
+  ['voice_turns', (k) => `call_id in ${k.C} or report_id in ${k.P}`],
   [
     'calls',
     (k) => `org_id = ${k.o} or reporter_id in ${k.R} or site_id in ${k.S} or report_id in ${k.P}`,

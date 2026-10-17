@@ -7,6 +7,10 @@ import {
   emptyReportData,
   GetContextResponseSchema,
   LoadReportResponseSchema,
+  RecordAnswerResponseSchema,
+  UpdateDraftResponseSchema,
+  voiceTurnKey,
+  type Json,
   type OrgRow,
   type ReporterRow,
   type SiteRow,
@@ -15,7 +19,8 @@ import {
 } from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { createFieldApp } from './app.ts';
-import { FakeFieldStore } from './fake_store.ts';
+import { FakeFieldStore, type FakeVoiceTurn } from './fake_store.ts';
+import { VOICE_TURN_POLL_MS, voiceToolWaitMs } from './voice.ts';
 
 /**
  * field-api's /voice/* routes (W3-03; spec §6.5, §9.4, Appendix B "field-api voice routes") on the
@@ -102,6 +107,10 @@ interface Opts {
   country?: Partial<CountryRow>;
   /** No VOICE_CALL_TOKEN_SECRET / VOICE_AGENT_TOOL_SECRET in this environment. */
   unconfigured?: boolean;
+  /** W3-09: VOICE_TOOL_WAIT_MS. */
+  waitMs?: number;
+  /** W3-09: runs on every poll's sleep (the tests' worker settles turns from here). */
+  onSleep?: () => void;
 }
 
 function setup(opts: Opts = {}) {
@@ -226,6 +235,13 @@ function setup(opts: Opts = {}) {
     ...(opts.unconfigured
       ? {}
       : { voiceToolSecret: () => SECRET, callTokenSecret: () => TOKEN_SECRET }),
+    voiceToolWaitMs: () => opts.waitMs,
+    // A poll's wait passes on the test clock, at once.
+    sleep: (ms) => {
+      clock.now = new Date(clock.now.getTime() + ms);
+      opts.onSleep?.();
+      return Promise.resolve();
+    },
   });
   const call = async (
     path: string,
@@ -1023,5 +1039,267 @@ Deno.test(
       assertEquals(actions.filter((a) => a === action).length, 1, action);
     }
     assertEquals(h.store.jobs.filter((j) => j.type === 'post_call_reconcile').length, 1);
+  },
+);
+
+// ───────────────────────────── W3-09: the live draft (update_draft, record_answer) ─────────────
+
+const QUESTION = '44444444-0000-4000-8000-000000000001';
+const SEGMENTS = [
+  { start: 7.2, end: 13.8, text: 'Northgate, Friday. Dry all day, no weather problems.' },
+  { start: 13.8, end: 21.5, text: 'Apex had three guys on ramp B all day.' },
+];
+
+/** The draft state the worker answers (`voice_turns.result`). */
+function draftState(reportId: string, extra: Partial<Record<string, unknown>> = {}) {
+  return {
+    reportId,
+    draftRev: 2,
+    missing: ['manpower.workers:Delta Mechanical'],
+    question: {
+      id: QUESTION,
+      text: 'Quick one — the Delta guys on Level 2: was that four or five people, and the full day?',
+      choices: ['4, full day', '5, full day'],
+    },
+    readBack: null,
+    ...extra,
+  };
+}
+
+/** The tests' worker: settles a turn as the `voice_turn` job does. */
+function settle(t: FakeVoiceTurn, result: unknown) {
+  Object.assign(t, { status: 'done', result: result as Json, error: null });
+}
+
+Deno.test('voiceToolWaitMs: 12 s unset, at most 15 s (§19 Q117)', () => {
+  assertEquals(voiceToolWaitMs(undefined), 12_000);
+  assertEquals(voiceToolWaitMs(Number.NaN), 12_000);
+  assertEquals(voiceToolWaitMs(60_000), 15_000);
+  assertEquals(voiceToolWaitMs(3_000), 3_000);
+  assertEquals(voiceToolWaitMs(0), VOICE_TURN_POLL_MS);
+});
+
+Deno.test(
+  "update_draft: the worker's turn answers the draft state; the words go to the turn, never a number",
+  async () => {
+    const h = setup();
+    h.store.onVoiceTurn = (t) => settle(t, draftState(t.reportId));
+    const { callId, token } = await h.sip(30, KEVIN_PHONE);
+    const res = await h.tool('update_draft', callId, token, { segments: SEGMENTS });
+    assertEquals(res.status, 200, res.text);
+    const state = UpdateDraftResponseSchema.parse(res.json);
+    assertEquals(state, draftState(h.store.voiceTurns[0]!.reportId));
+    assertNoPhone(res.text);
+    // One turn, keyed by the words (the same words are the same turn, voice_turn_submit()).
+    assertEquals(h.store.voiceTurns.length, 1);
+    const turn = h.store.voiceTurns[0]!;
+    assertEquals([turn.kind, turn.input], ['update_draft', { segments: SEGMENTS }]);
+    assertEquals(turn.key, await voiceTurnKey('update_draft', { segments: SEGMENTS }));
+  },
+);
+
+Deno.test(
+  'update_draft past the wait: 202 pending; the same words again wait for the same turn',
+  async () => {
+    const h = setup({ waitMs: 600 });
+    const { callId, token } = await h.sip(31, KEVIN_PHONE);
+    const slow = await h.tool('update_draft', callId, token, { segments: SEGMENTS });
+    assertEquals([slow.status, slow.json], [202, { status: 'pending', retryAfterMs: 1000 }]);
+    UpdateDraftResponseSchema.parse(slow.json);
+    // The worker finishes while the agent says its line; asked again, the same turn answers.
+    settle(h.store.voiceTurns[0]!, draftState(h.store.voiceTurns[0]!.reportId));
+    const again = await h.tool('update_draft', callId, token, { segments: SEGMENTS });
+    assertEquals(again.status, 200, again.text);
+    assertEquals(again.json.question.id, QUESTION);
+    assertEquals(h.store.voiceTurns.length, 1);
+  },
+);
+
+Deno.test(
+  '§19 Q151: a retried update_draft whose first copy still runs waits for its answer',
+  async () => {
+    let polls = 0;
+    const h = setup({
+      waitMs: 1_500,
+      onSleep: () => {
+        // The first copy answers on the third poll.
+        if (++polls === 3)
+          Object.assign(h.store.toolRequests.get(`${callId}|req-draft`)!, {
+            status: 200,
+            response: draftState('aaaaaaaa-0000-4000-8000-000000000009'),
+          });
+      },
+    });
+    const { callId, token } = await h.sip(32, KEVIN_PHONE);
+    h.store.toolRequests.set(`${callId}|req-draft`, {
+      tool: 'update_draft',
+      status: null,
+      response: null,
+    });
+    const retry = await h.call(
+      'voice/tools/update_draft',
+      { callId, segments: SEGMENTS },
+      { token, requestId: 'req-draft' },
+    );
+    assertEquals(retry.status, 200, retry.text);
+    assertEquals(retry.headers.get('idempotent-replay'), 'true');
+    assertEquals(retry.json.reportId, 'aaaaaaaa-0000-4000-8000-000000000009');
+    // Nothing ran twice: the retry never submitted a turn of its own.
+    assertEquals(h.store.voiceTurns.length, 0);
+    // Still running past the wait: pending, never 409 (the agent would not retry a 4xx).
+    h.store.toolRequests.set(`${callId}|req-slow`, {
+      tool: 'update_draft',
+      status: null,
+      response: null,
+    });
+    const slow = await h.call(
+      'voice/tools/update_draft',
+      { callId, segments: SEGMENTS },
+      { token, requestId: 'req-slow' },
+    );
+    assertEquals([slow.status, slow.json.status], [202, 'pending']);
+  },
+);
+
+Deno.test(
+  "a failed turn: 503 turn_failed; the agent's retry with the same request id runs it again",
+  async () => {
+    const h = setup();
+    let runs = 0;
+    h.store.onVoiceTurn = (t) => {
+      if (++runs === 1) Object.assign(t, { status: 'failed', error: 'turn_failed' });
+      else settle(t, draftState(t.reportId, { question: null, readBack: 'Shall I file it?' }));
+    };
+    const { callId, token } = await h.sip(33, KEVIN_PHONE);
+    const ask = () =>
+      h.call(
+        'voice/tools/update_draft',
+        { callId, segments: SEGMENTS },
+        { token, requestId: 'req-fail' },
+      );
+    const first = await ask();
+    assertEquals([first.status, first.json.error], [503, 'turn_failed']);
+    const retry = await ask();
+    assertEquals(retry.status, 200, retry.text);
+    assertEquals(retry.json.readBack, 'Shall I file it?');
+    assertEquals([h.store.voiceTurns.length, h.store.voiceTurns[0]!.attempts], [1, 2]);
+  },
+);
+
+Deno.test(
+  'a turn that settles with a refusal answers it; an answer outside the contract is refused',
+  async () => {
+    const h = setup();
+    const { callId, token } = await h.sip(34, KEVIN_PHONE);
+    h.store.onVoiceTurn = (t) => Object.assign(t, { status: 'failed', error: 'report_closed' });
+    const closed = await h.tool('update_draft', callId, token, { segments: SEGMENTS });
+    assertEquals([closed.status, closed.json.error], [409, 'report_closed']);
+    h.store.onVoiceTurn = (t) => settle(t, { readBack: 'invented by nobody', bad: true });
+    const bad = await h.tool('update_draft', callId, token, {
+      segments: [...SEGMENTS, { start: 21.5, end: 25, text: 'That is it.' }],
+    });
+    assertEquals([bad.status, bad.json.error], [503, 'turn_failed']);
+  },
+);
+
+Deno.test(
+  'live tools are scoped: a site first, the consents, a known caller, the call token',
+  async () => {
+    const h = setup();
+    h.store.onVoiceTurn = (t) => settle(t, draftState(t.reportId));
+    // Marco covers three sites: no site yet (F14), and no consent on file.
+    const marco = await h.sip(35, MARCO_PHONE);
+    const noSite = await h.tool('update_draft', marco.callId, marco.token, { segments: SEGMENTS });
+    assertEquals([noSite.status, noSite.json.error], [403, 'consent_required']);
+    for (const t of ['recording', 'data_processing', 'sms'] as const)
+      h.store.consents.push({
+        id: crypto.randomUUID(),
+        reporter_id: MARCO,
+        type: t,
+        method: 'web_checkbox',
+        text_version: 'field.consent.v1',
+        evidence: null,
+        given_at: '2026-10-01T15:00:00Z',
+        revoked_at: null,
+      });
+    const stillNoSite = await h.tool('update_draft', marco.callId, marco.token, {
+      segments: SEGMENTS,
+    });
+    assertEquals([stillNoSite.status, stillNoSite.json.error], [409, 'site_required']);
+    assertEquals(
+      (await h.tool('pick_site', marco.callId, marco.token, { siteId: PIER9 })).status,
+      200,
+    );
+    const picked = await h.tool('update_draft', marco.callId, marco.token, { segments: SEGMENTS });
+    assertEquals(picked.status, 200, picked.text);
+
+    // An unknown caller has no draft (F13); another call's token opens nothing.
+    const stranger = await h.sip(36, '+15550199999');
+    const unknown = await h.tool('update_draft', stranger.callId, stranger.token, {
+      segments: SEGMENTS,
+    });
+    assertEquals([unknown.status, unknown.json.error], [403, 'unknown_caller']);
+    const kevin = await h.sip(37, KEVIN_PHONE);
+    const wrong = await h.tool('update_draft', kevin.callId, marco.token, { segments: SEGMENTS });
+    assertEquals([wrong.status, wrong.json.error], [401, 'call_token_invalid']);
+    // An empty transcript is no turn.
+    const empty = await h.tool('update_draft', kevin.callId, kevin.token, { segments: [] });
+    assertEquals([empty.status, empty.json.error], [400, 'invalid_request']);
+  },
+);
+
+Deno.test(
+  "record_answer: the reporter's words and the call second to the turn; F7's line back",
+  async () => {
+    const h = setup();
+    const { callId, token } = await h.sip(38, KEVIN_PHONE);
+    h.store.onVoiceTurn = (t) =>
+      settle(t, {
+        status: 'applied',
+        confirmation: 'Delta Mechanical: 5 workers, 8 hours each — 40 hours.',
+        draft: draftState(t.reportId, {
+          question: null,
+          missing: [],
+          readBack: 'Shall I file it?',
+        }),
+      });
+    const res = await h.call(
+      'voice/tools/record_answer',
+      { callId, questionId: QUESTION, utterance: 'Five, all day.', start: 80.4, end: 82.1 },
+      { token, requestId: 'req-answer' },
+    );
+    assertEquals(res.status, 200, res.text);
+    const body = RecordAnswerResponseSchema.parse(res.json);
+    assertEquals(body, {
+      status: 'applied',
+      confirmation: 'Delta Mechanical: 5 workers, 8 hours each — 40 hours.',
+      draft: draftState(h.store.voiceTurns[0]!.reportId, {
+        question: null,
+        missing: [],
+        readBack: 'Shall I file it?',
+      }),
+    });
+    assertEquals(h.store.voiceTurns[0]!.input, {
+      questionId: QUESTION,
+      utterance: 'Five, all day.',
+      start: 80.4,
+      end: 82.1,
+    });
+    // The retry of a settled answer is the kept answer: nothing counts twice.
+    const retry = await h.call(
+      'voice/tools/record_answer',
+      { callId, questionId: QUESTION, utterance: 'Five, all day.', start: 80.4, end: 82.1 },
+      { token, requestId: 'req-answer' },
+    );
+    assertEquals([retry.status, retry.headers.get('idempotent-replay')], [200, 'true']);
+    assertEquals(h.store.voiceTurns.length, 1);
+    // A question the worker finds closed is the agent's to drop.
+    h.store.onVoiceTurn = (t) => Object.assign(t, { status: 'failed', error: 'question_closed' });
+    const closed = await h.tool('record_answer', callId, token, {
+      questionId: QUESTION,
+      utterance: 'Six.',
+      start: 90,
+    });
+    assertEquals([closed.status, closed.json.error], [409, 'question_closed']);
   },
 );

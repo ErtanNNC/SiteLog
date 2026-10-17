@@ -88,9 +88,14 @@ const OPEN_STATUSES: readonly ReportStatus[] = [
   'awaiting_confirmation',
 ];
 
-/** A report of the web recorder (field-api sets channel 'web'). */
+/**
+ * A v1.2 report: the web recorder's (field-api sets channel 'web') or, W3-09, a call's (channel
+ * 'voice', voice_turn_submit()). Both are report data v2; a call report's later voice notes,
+ * photos and answers on the recorder (§7.2: one report per site-day) run the web pipeline, while
+ * the call's own turns run in `voice_turn`. The WhatsApp worker's reports have no channel.
+ */
 export function isWebReport(report: Pick<ReportRow, 'channel'>): boolean {
-  return report.channel === 'web';
+  return report.channel === 'web' || report.channel === 'voice';
 }
 
 /** The current draft in v2 terms (a v1 draft is read through the upgrade). */
@@ -185,8 +190,11 @@ export function reapplyAnswers(
       defaultShiftHours: ctx.defaultShiftHours,
       workingHours: ctx.workingHours,
       source: { type: 'answer', questionId: q.id },
-      // W2-09: a spoken answer's clip stays a source of the value.
-      ...(answer.voice?.type === 'voice_note' ? { extraSources: [answer.voice] } : {}),
+      // W2-09: a spoken answer's clip stays a source of the value; W3-09: an answer said on a
+      // call keeps its call second.
+      ...(answer.voice?.type === 'voice_note' || answer.voice?.type === 'call'
+        ? { extraSources: [answer.voice] }
+        : {}),
     }).data;
     reapplied.push(q.id);
   }

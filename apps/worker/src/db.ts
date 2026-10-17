@@ -1,8 +1,10 @@
 import postgres, { type Sql, type TransactionSql } from 'postgres';
 import type {
+  CallRow,
   CompanyRow,
   ConsentRow,
   PushSubscriptionRow,
+  VoiceTurnRow,
   ConsoleEmailRow,
   ConversationRow,
   CountryRow,
@@ -220,9 +222,13 @@ export interface QuestionInput {
   asked_at?: string | Date | null;
   /** 'web' for the web recorder's questions (W1-12, D13); null for the WhatsApp worker's. */
   channel?: FieldChannel | null;
+  /** W3-09: the call that asked it (channel 'voice'). */
+  call_id?: string | null;
 }
 
 export interface QuestionPatch {
+  /** W3-09: the tries of an answer said on a call (`[{via: 'call', status, at, start}]`). */
+  voice_answers?: Json;
   options?: Json | null;
   asked_message_id?: string | null;
   asked_at?: string | Date | null;
@@ -451,6 +457,18 @@ export interface Db {
   listTranscripts(mediaIds: string[]): Promise<TranscriptRow[]>;
   /** Transcripts of these calls (`transcripts.call_id`, §6.3), in the order given (W3-07). */
   listCallTranscripts(callIds: string[]): Promise<TranscriptRow[]>;
+  /** A call (W3-09: the call of a live turn). */
+  getCall(id: string): Promise<CallRow | null>;
+  /** W3-09: a live tool turn of a call (`voice_turns`). */
+  getVoiceTurn(id: string): Promise<VoiceTurnRow | null>;
+  /**
+   * W3-09: settles a pending turn with its answer (`done`) or its failure (`failed`, the error
+   * code field-api maps); false when the turn was not pending (settled before).
+   */
+  settleVoiceTurn(
+    id: string,
+    outcome: { status: 'done'; result: Json } | { status: 'failed'; error: string },
+  ): Promise<boolean>;
   upsertTranscript(input: TranscriptInput): Promise<TranscriptRow>;
   /** The transcript of a web recorder upload (W1-11). */
   getUploadTranscript(uploadId: string): Promise<TranscriptRow | null>;
@@ -939,6 +957,7 @@ const JSON_COLUMNS = new Set([
   'lines',
   'observed',
   'audio_source',
+  'voice_answers',
 ]);
 
 /** Report statuses whose current version is a draft (overwritten in place until filing). */
@@ -1149,6 +1168,23 @@ export function createDb(sql: Sql): Db {
       const ids = pgArray(callIds);
       return sql<TranscriptRow[]>`select * from transcripts where call_id = any(${ids}::uuid[])
         order by array_position(${ids}::uuid[], call_id)`;
+    },
+    async getCall(id) {
+      return one(await sql<CallRow[]>`select * from calls where id = ${id}`);
+    },
+    async getVoiceTurn(id) {
+      return one(await sql<VoiceTurnRow[]>`select * from voice_turns where id = ${id}`);
+    },
+    async settleVoiceTurn(id, outcome) {
+      const rows = await sql<Array<{ id: string }>>`
+        update voice_turns set
+          status = ${outcome.status},
+          result = ${outcome.status === 'done' ? sql.json(outcome.result as never) : null},
+          error = ${outcome.status === 'failed' ? outcome.error.slice(0, 500) : null},
+          finished_at = now()
+        where id = ${id} and status = 'pending'
+        returning id`;
+      return rows.length > 0;
     },
     async upsertTranscript(input) {
       const rows = await sql<TranscriptRow[]>`
@@ -1559,8 +1595,8 @@ export function createDb(sql: Sql): Db {
     // questions ---------------------------------------------------------------------------
     async insertQuestion(input) {
       const rows = await sql<QuestionRow[]>`
-        insert into questions (report_id, field, target, prompt, options, asked_message_id, asked_at, channel)
-        values (${input.report_id}, ${input.field}, ${sql.json((input.target ?? null) as never)}, ${input.prompt}, ${sql.json((input.options ?? null) as never)}, ${input.asked_message_id ?? null}, ${iso(input.asked_at)}, ${input.channel ?? null})
+        insert into questions (report_id, field, target, prompt, options, asked_message_id, asked_at, channel, call_id)
+        values (${input.report_id}, ${input.field}, ${sql.json((input.target ?? null) as never)}, ${input.prompt}, ${sql.json((input.options ?? null) as never)}, ${input.asked_message_id ?? null}, ${iso(input.asked_at)}, ${input.channel ?? null}, ${input.call_id ?? null})
         returning *`;
       return rows[0]!;
     },

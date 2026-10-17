@@ -24,6 +24,7 @@ import type {
   TestClipRow,
   TestClipView,
   UploadRow,
+  VoiceTurnKind,
 } from '@sitelog/shared';
 import {
   FILED_PHOTOS_MAX,
@@ -51,7 +52,23 @@ import {
   type ReportWithDate,
   type VoiceCallEndResult,
   type VoiceCallStartResult,
+  type VoiceTurnState,
+  type VoiceTurnSubmitResult,
 } from './store.ts';
+
+/** A `voice_turns` row of the fake (W3-09). */
+export interface FakeVoiceTurn {
+  id: string;
+  callId: string;
+  reportId: string;
+  kind: VoiceTurnKind;
+  key: string;
+  input: Json;
+  status: 'pending' | 'done' | 'failed';
+  result: Json | null;
+  error: string | null;
+  attempts: number;
+}
 
 /**
  * An in-memory FieldStore for the Deno tests (app_test.ts). The RPCs and the rate limiter
@@ -1914,6 +1931,69 @@ export class FakeFieldStore implements FieldStore {
     this.toolRequests.set(k, { tool, status: null, response: null });
     return Promise.resolve({ claimed: true as const });
   }
+  getToolRequest(callId: string, key: string) {
+    return Promise.resolve(this.toolRequests.get(`${callId}|${key}`) ?? null);
+  }
+
+  /** W3-09: a call's live tool turns (`voice_turns`), as voice_turn_submit() keeps them. */
+  voiceTurns: FakeVoiceTurn[] = [];
+  /**
+   * The tests' worker: called with a turn each time one is queued to run (a new turn, or a failed
+   * one submitted again); it may settle the turn at once, later (from `sleep`), or never.
+   */
+  onVoiceTurn: ((turn: FakeVoiceTurn) => void) | null = null;
+  voiceTurnSubmit(
+    callId: string,
+    kind: VoiceTurnKind,
+    key: string,
+    input: Json,
+  ): Promise<VoiceTurnSubmitResult> {
+    this.calls.push('voiceTurnSubmit');
+    const c = this.callRows.find((x) => x.id === callId);
+    if (!c) return Promise.reject(new FieldDbError('call_not_found'));
+    if (c.ended_at) return Promise.reject(new FieldDbError('call_ended'));
+    if (!c.reporter_id) return Promise.reject(new FieldDbError('unknown_caller'));
+    if (!c.site_id) return Promise.reject(new FieldDbError('site_required'));
+    const answer = (t: FakeVoiceTurn, repeat: boolean): VoiceTurnSubmitResult => ({
+      turnId: t.id,
+      reportId: t.reportId,
+      status: t.status,
+      result: t.result,
+      error: t.error,
+      repeat,
+    });
+    const found = this.voiceTurns.find(
+      (t) => t.callId === callId && t.kind === kind && t.key === key,
+    );
+    if (found) {
+      if (found.status === 'failed') {
+        Object.assign(found, { status: 'pending', error: null, attempts: found.attempts + 1 });
+        this.onVoiceTurn?.(found);
+      }
+      return Promise.resolve(answer(found, true));
+    }
+    c.report_id ??= this.id('aaaaaaaa');
+    const turn: FakeVoiceTurn = {
+      id: this.id('bbbbbbbb'),
+      callId,
+      reportId: c.report_id,
+      kind,
+      key,
+      input,
+      status: 'pending',
+      result: null,
+      error: null,
+      attempts: 1,
+    };
+    this.voiceTurns.push(turn);
+    this.onVoiceTurn?.(turn);
+    return Promise.resolve(answer(turn, false));
+  }
+  getVoiceTurn(id: string): Promise<VoiceTurnState | null> {
+    const t = this.voiceTurns.find((x) => x.id === id);
+    return Promise.resolve(t ? { status: t.status, result: t.result, error: t.error } : null);
+  }
+
   finishToolRequest(callId: string, key: string, status: number, response: Json) {
     const row = this.toolRequests.get(`${callId}|${key}`);
     if (row) Object.assign(row, { status, response });

@@ -444,6 +444,7 @@ LIVEKIT_AGENT_NAME=sitelog-voice # explicit dispatch name for SIP and web calls
 LIVEKIT_SIP_OUTBOUND_TRUNKS=     # [M8] CC:trunk_id pairs, e.g. US:ST_xxx (Twilio Elastic SIP Trunking); a pack without an entry places no outbound calls (§19 Q38)
 VOICE_AGENT_TOOL_SECRET=         # auth for agent → field-api tool calls (the agent and field-api)
 VOICE_CALL_TOKEN_SECRET=         # field-api only (W3-03): signs the per-call tokens; never the agent's, so it cannot mint another call's
+VOICE_TOOL_WAIT_MS=              # field-api, optional (W3-09, §19 Q117): a live tool's wait for its worker turn; default 12000, at most 15000
 DEEPGRAM_API_KEY=                # streaming STT, batch STT, Aura-2 TTS
 STT_MODEL=nova-3
 TTS_VOICE_EN=aura-2-thalia-en    # pick after listening tests
@@ -998,6 +999,22 @@ create table livekit_events (                    -- W3-04: a LiveKit webhook eve
   event_at timestamptz not null,                 -- the event's createdAt (never later than its receipt)
   received_at timestamptz not null default now()
 );                                               -- no body, identity or number is kept (§10.12)
+
+create table voice_turns (                       -- W3-09 (§19 Q117): a live tool turn of a call, run by the worker's voice_turn job while field-api waits; service role only
+  id uuid primary key default gen_random_uuid(),
+  call_id uuid not null references calls on delete cascade,
+  report_id uuid not null references reports on delete cascade,
+  kind text not null check (kind in ('update_draft', 'record_answer')),
+  turn_key text not null check (turn_key ~ '^[0-9a-f]{64}$'),  -- SHA-256 of the tool and its words: the same words are one turn
+  input jsonb not null check (jsonb_typeof(input) = 'object'),  -- {segments} or {questionId, utterance, start, end?}
+  status text not null default 'pending' check (status in ('pending', 'done', 'failed')),
+  result jsonb,                                  -- the tool's answer once done (the draft state; the answer's outcome)
+  error text,
+  attempts int not null default 1 check (attempts >= 1),  -- a failed turn runs again on the agent's next request
+  created_at timestamptz not null default now(),
+  finished_at timestamptz,
+  unique (call_id, kind, turn_key)
+);
 
 create table transcripts (
   id uuid primary key default gen_random_uuid(),
@@ -1754,6 +1771,7 @@ Speak in {reporter_locale}. Keep every turn under 2 sentences, except the read-b
 **Calls policy:** outbound only inside `call_window` and with `auto_call` consent; max 2 attempts per day; answering-machine detection → no voicemail message, the `missed_call` message instead; max call 12 min.
 **Recording:** dual-channel, written by the agent (reporter track left, agent audio right; Opus/OGG), uploaded to the `calls` bucket at call end; disclosure always played before any recording-dependent processing; `calls.disclosure_played = true`.
 *As built (W3-01):* the tools' inputs and answers are Zod schemas in `packages/shared/src/voice.ts` (Appendix B, "field-api voice routes"), with `pick_site` (F14) added to the table above; the agent's fixed lines (the disclosure `voice.recording_notice.v1` until the pack's `legal_keys.recording_notice` is set, the openings, fillers, the §7.3 silence and time lines, the F6 fallback line, the read-back pieces of §19 Q118, the filing question of Q119, the F3 consent sentence of Q120, the F13 line and a goodbye per outcome) are `packages/shared/src/copy/voice.{en,es,tr}.ts`, EN verbatim where this spec quotes the line. `pnpm voice:contract` writes both for the Python agent (`apps/voice-agent/contract/`, `copy/`), and CI fails when they drift.
+*As built (W3-09, the live draft):* `update_draft` and `record_answer` run in the worker (§19 Q117): field-api submits a turn (`voice_turns`, `voice_turn_submit()`: today's report of the call's site created with channel `voice` or merged, §7.2, the call as one `call` source, the reporter's lane as the call's live transcript, a priority `voice_turn` job) and waits up to `VOICE_TOOL_WAIT_MS` (12 s, at most 15 s) for its answer; past the wait it answers 202 `pending`, the agent says `still_working` and asks again with the same words, which are the same turn (SHA-256 of the tool and its words), so nothing is extracted twice; a retry whose first copy still runs waits for it (§19 Q151). The spoken question is code's pick (§10.5, never the photo on a call) in the model's words in the reporter's language, with at most two choices worded for the ear ("5 · full day" → "5, full day"); the answer is `parse_answer` on the reporter's words, applied in code with `{type: answer}` and `{type: call, callId, start, end}` as its sources; the agent then says F7's confirmation (`answer_crew`: "Delta Mechanical: 5 workers, 8 hours each — 40 hours.", from code's numbers), `answer_again` and the question once more, or, unclear twice, `answer_skipped` and goes on. Nothing missing: the read-back `readBack()` in `packages/shared/src/voice-tools.ts` (crew count, companies, total hours, weather lost hours, "Shall I file it?"; W3-10 adds the work, delivery and safety lines). The consents `recording` and `data_processing` are checked first (403 `consent_required`), the site must be known (409 `site_required`, F14). Recorded calls are `fixtures/calls/{northgate-call-en, riverside-delta-en, riverside-delta-es}.json` with their extraction cases `fixtures/transcripts/call-*.json` (CHANNEL call, segments by `callId`), replayed by `EXTRACT_PROVIDER=fake` and scored by `pnpm eval -- --recorded`.
 
 ### 9.5 Intents and keywords
 
@@ -1806,6 +1824,7 @@ Reporters may speak any supported language; the report is written in the org's r
 | `apply_correction` | report_id, correction_id | *As built (W2-10, §10.6):* a fix of a web draft, said (the clip transcribed, never report material) or typed: `apply_correction` (the model, `CLAUDE_MODEL`) proposes operations, code applies them into a preview (`applyCorrectionOps`: totals recomputed, a model total ignored, numbers stated in the words, the clip or `reporter_edit` as the source of each changed value) settled `ready` at the draft's version and revision (or `unclear`, `stale`); nothing changes the draft until Save change. Consent checked first (§19 Q95). Runs under the report's lock key |
 | `transcribe_test_clip` / `delete_test_clip` | test_clip_id | *As built (W2-13, F4):* the Welcome screen's test recording transcribed into its snippet (the file deleted at once); the clip and its words deleted 10 minutes after it was made, read or not (the retention job is the backstop). Never a report source |
 | `file_report` | report_id, via | Freeze, denormalise → `render_pdf` → `notify(filed)`, `send_email`. *As built (W1-15):* `via` is the confirm's channel (`field_confirm_report()`: `web`), stored as `reports.confirmed_via`; filing enqueues `render_pdf` (which enqueues `send_email` once the PDF exists) and `notify(filed)` keyed `notify:filed:{report_id}`, `{pdf_link}` being the Filed-screen link `/r/{personal code}/report/{id}`; a filing that finds the report filed (a retry after `status = filed`) enqueues them again under the same keys within a day of filing, so none is skipped and none is sent twice |
+| `voice_turn` | turn_id, report_id | *As built (W3-09, §19 Q117):* one live tool turn of a call (`voice_turns`, queued by field-api's `voice_turn_submit()` as the agent calls `update_draft` or `record_answer`; key `voice_turn:<turn>`, `…:<attempt>` for a run after a failed one), the highest priority (−1), under the report's lock key. `update_draft`: extraction v2 in live mode (`CHANNEL: call`, the report's calls and voice notes, every value citing the call second), the reporter's answers and crew fixes re-applied, then the call's decision in code: the open question asked on this call, else the next one (§10.5, no photo question on a call), else the read-back (§19 Q118); an open question asked elsewhere is resolved by the call. `record_answer`: `parse_answer` on the words, the value applied in code with the answer and the call second as its sources, F7's spoken confirmation from code's numbers; unclear → asked once more; unclear twice → `unanswered`, `unanswered:<field>`, the draft moves on. No text and no web clock during the call. The answer goes to `voice_turns.result`, which field-api waits for; a failure settles the turn `failed` at once (no queue retry: the caller is on the line) and the agent's next request with the same words runs it again |
 | `post_call_reconcile` | call_id | Batch-transcribe recording, attach sources, compare with confirmed data → `needs_review` on mismatch |
 | `place_call` | reporter_id, purpose | Telephony API call start (respects window, consent, attempts) |
 | `notify` | reporter_id, key, vars, dedupe_key | Notifier (§4.5): channel order, transport, `messages` row (with `channel`). *As built (W2-06):* an optional `guard` (`{siteDayId, statuses, notAfter}`, the reminder ladder's) is checked before sending: nothing goes out (`notify.skipped`, `stale_stage` / `quiet_hours`) once the site-day left those statuses, its reminders were paused, or `notAfter` passed |
@@ -1923,10 +1942,14 @@ Rules:
 ```text
 Source format: each voice note in the input carries an uploadId. A voice-note source is
 {"type":"voice_note","uploadId":"<uploadId of that voice note>","start":<segment start seconds>,"end":<segment end seconds>};
+each phone call in the input carries a callId. A call source is
+{"type":"call","callId":"<callId of that call>","start":<segment start seconds>,"end":<segment end seconds>};
 a value from an earlier answer is {"type":"answer","questionId":"<questionId of that answer>"}.
 A proposedQuestions field is the path of the gap it fills as written in missingRequired or lowConfidence.
 Do not output photos, schemaVersion, reportDate, reportLanguage, units or weather.observed — the system adds them.
 ```
+
+*As built (W3-09, live mode):* the note gained its call line (the two lines after the voice-note source); a call's segments come in the user message under `PHONE CALL callId=<call> (reporter channel)`, seconds from the call's start, beside the report's voice notes (a call and a voice note of one site-day are one report, §7.2), with `CHANNEL: call`. `update_draft` runs the extraction in the worker (§19 Q117: field-api queues a priority `voice_turn` job and waits for its answer), on `CLAUDE_MODEL` with this prompt, the note and the org block unchanged; code then drops any call source whose call is not in the input, recomputes the totals and picks the question by the call rules (§10.5: no photo question on a call).
 
 **User message template:** as v1 plus `REPORT_LANGUAGE`, `UNITS`, `REPORTER_LOCALE`, `CHANNEL` (web | call), `WORKING_HOURS`.
 
@@ -2701,8 +2724,8 @@ sitelog/
 | `POST /voice/calls/:id/recording` `{callId, mime: audio/ogg, bytes, durationS}` → `{bucket: calls, path, signedUrl, token}` | A signed upload URL for the dual-channel recording, `calls/{org}/{call}.ogg` (§9.4 "Recording"). |
 | `POST /voice/tools/get_context` | Reporter first name and locale, the org's name, report language, sites (≤ 3 spoken, F14) with today's status and deadline, the call's site once known, companies + aliases, key terms, the consents held (§19 Q120), the recording-notice and consent text versions (the pack's `legal_keys`, else `voice.recording_notice.v1` / `voice.consent.v1`), `maxQuestions`. |
 | `POST /voice/tools/pick_site` `{siteId}` | F14 on a call: fixes the call's site (W3-03's addition to §9.4's table). |
-| `POST /voice/tools/update_draft` `{segments[{start, end, text}]}` | Live extraction (§10.4) → the draft state `{reportId, draftRev, missing[], question?: {id, text, choices ≤ 2}, readBack?}`; the read-back is code's (§19 Q118). |
-| `POST /voice/tools/record_answer` `{questionId, utterance, start}` | `{status: applied or not_understood, confirmation, draft}`. |
+| `POST /voice/tools/update_draft` `{segments[{start, end, text}]}` | Live extraction (§10.4) → the draft state `{reportId, draftRev, missing[], question?: {id, text, choices ≤ 2}, readBack?}`; the read-back is code's (§19 Q118). *As built (W3-09):* a worker turn (§19 Q117), or 202 `{status: pending, retryAfterMs}` past `VOICE_TOOL_WAIT_MS`. |
+| `POST /voice/tools/record_answer` `{questionId, utterance, start, end?}` | `{status: applied, not_understood or skipped, confirmation, draft}` (W3-09: `skipped` is the second unclear answer, left for the office and the draft moved on), or 202 `pending`. |
 | `POST /voice/tools/apply_correction` `{utterance, start, reportId?}` | `{status, lines[], readBack (the change only), draft}`; `reportId` after `load_report` (F10). |
 | `POST /voice/tools/file_report` `{reportId, draftRev, utterance}` | Files only when the verbatim utterance is a §9.5 confirm and the revision is the read-back's (§19 Q119) → `filed {reportNo, pdf: pending}`, `not_confirmed` or `draft_changed {draft}`. |
 | `POST /voice/tools/set_day_status` `{status: no_work or weather_day, details}` | F12 on a call → `{status, confirmation}`. |

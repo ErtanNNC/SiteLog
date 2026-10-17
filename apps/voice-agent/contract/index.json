@@ -120,6 +120,10 @@
     "consent_required",
     "not_available",
     "rate_limited",
+    "site_required",
+    "report_closed",
+    "question_closed",
+    "turn_failed",
     "request_in_progress",
     "request_conflict",
     "internal"

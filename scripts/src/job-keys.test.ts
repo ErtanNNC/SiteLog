@@ -107,6 +107,10 @@ const AUDITED: Record<string, string> = {
     'field_test_clip_complete (W2-13, F4): the transcription of one test recording; per clip, and a retried complete finds the key taken',
   "sql:'post_call:' || c.id":
     "voice_call_end (W3-03): the post-call reconcile of one call (W3-11); a call ends once (a repeat returns ended false), and voice-events' backstop for a call the agent never ended uses the same key (W3-04, voice_call_event), so a call is reconciled once; the agent's end arriving after the backstop gets that job back",
+  "sql:'voice_turn:' || t.id":
+    'voice_turn_submit (W3-09, §19 Q117): the first run of one live tool turn of a call (jobKeys.voiceTurn); the same words of a call are one turn (unique call, kind, turn_key), so a repeat returns the turn and queues nothing',
+  "sql:'voice_turn:' || t.id || ':' || t.attempts":
+    'voice_turn_submit (W3-09): a failed turn submitted again runs as its next attempt (jobKeys.voiceTurn); attempts only grows, and a pending or done turn queues nothing',
   "sql:'answer:' || q.id || ':' || u.id":
     'field_answer_question_voice (W2-09, F7 Other…): parse_answer per question and answer clip (jobKeys.parseAnswer); a clip is spoken once and names one question (uploads.question_id), a retry of the same clip returns the first call, and a second try is a new clip',
   "sql:'correction:' || c.id":

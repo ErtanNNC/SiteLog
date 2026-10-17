@@ -25,7 +25,7 @@ from typing import Any, Literal
 from livekit.agents import function_tool
 from livekit.agents.llm import FunctionTool
 
-from .contract import ContractError, DraftState
+from .contract import ContractError, DraftState, TurnPending, is_pending
 from .field_api import FieldApiError
 from .redact import redact_phones
 from .session import CallState
@@ -102,12 +102,17 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
     @function_tool
     async def update_draft() -> ToolResult:
         """Update the report draft from everything the reporter has said so far. Returns what is
-        still missing, at most one question to ask, or the read-back when nothing is missing."""
+        still missing, at most one question to ask, or the read-back when nothing is missing.
+        `status: pending` means it is still working: say a short line and call it again."""
         if not state.segments:
             return {"status": "nothing_heard"}
 
         async def run() -> ToolResult:
             draft = await api.update_draft(auth, state.segments_payload())
+            if isinstance(draft, TurnPending):
+                # §19 Q117: the worker's turn runs past field-api's wait; the same words again
+                # find the same turn (W3-09).
+                return {"status": "pending"}
             state.draft = draft
             state.read_back_rev = draft.draft_rev if draft.read_back else None
             return _draft_view(draft)
@@ -116,7 +121,9 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
 
     @function_tool
     async def record_answer() -> ToolResult:
-        """Record the reporter's last words as the answer to the open question."""
+        """Record the reporter's last words as the answer to the open question. Say the
+        `confirmation` it returns; `not_understood`: ask the question once more with its choices;
+        `skipped`: it is left for the office, go on. `pending`: say a short line, call it again."""
         last = state.last_utterance
         question = state.draft.question if state.draft else None
         if last is None or question is None:
@@ -131,6 +138,8 @@ def build_tools(state: CallState, *, now: Callable[[], float]) -> list[FunctionT
                 start=last.start,
                 end=last.end,
             )
+            if is_pending(data):
+                return {"status": "pending"}
             draft = DraftState.model_validate(data["draft"])
             state.draft = draft
             state.read_back_rev = draft.draft_rev if draft.read_back else None

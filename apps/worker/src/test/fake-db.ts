@@ -291,6 +291,17 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
       const all = [...d.transcripts.values()];
       return ids.flatMap((id) => all.filter((t) => t.call_id === id));
     },
+    // W3-09: calls and their live turns are SQL (voice_turn_submit()); the voice_turn job's tests
+    // run on PGlite.
+    async getCall() {
+      return null;
+    },
+    async getVoiceTurn() {
+      return null;
+    },
+    async settleVoiceTurn() {
+      return false;
+    },
     async upsertTranscript(input) {
       const row: TranscriptRow = {
         ...V12_ROW_DEFAULTS.transcripts,
@@ -847,6 +858,7 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
         answered_at: null,
         created_at: iso(),
         channel: input.channel ?? null,
+        call_id: input.call_id ?? null,
       };
       d.questions.set(row.id, row);
       return row;

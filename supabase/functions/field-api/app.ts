@@ -132,7 +132,7 @@ import {
   openCorrectionView,
 } from './logic.ts';
 import { FieldDbError, type FieldStore, type OrgContext } from './store.ts';
-import { registerVoiceRoutes } from './voice.ts';
+import { registerVoiceRoutes, voiceToolWaitMs } from './voice.ts';
 
 /**
  * field-api (W1-07; spec §6.5, Appendix B, F4, F5, F12): the field app's only backend. Hono
@@ -199,6 +199,11 @@ export interface FieldApiDeps {
    */
   voiceToolSecret?: () => string;
   callTokenSecret?: () => string;
+  /**
+   * W3-09, §19 Q117: VOICE_TOOL_WAIT_MS, how long `update_draft` and `record_answer` wait for
+   * their worker turn before answering `pending` (default 12 s, at most 15 s).
+   */
+  voiceToolWaitMs?: () => number | undefined;
   now?: () => Date;
   /** Waiting between polls of a send claim (tests pass a fake). */
   sleep?: (ms: number) => Promise<void>;
@@ -1874,6 +1879,9 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
       }),
     publicSignedUrl: (url) => publicSignedUrl(url, deps.publicUrl?.()),
     now,
+    // W3-09 (§19 Q117): how long a live tool waits for its worker turn.
+    toolWaitMs: () => voiceToolWaitMs(deps.voiceToolWaitMs?.()),
+    sleep: deps.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms))),
   });
 
   return app;
@@ -1967,6 +1975,10 @@ const DB_ERROR_ANSWERS: Record<string, [FieldError['status'], FieldError['code']
   call_ended: [409, 'call_ended'],
   voice_number_unknown: [404, 'voice_number_unknown'],
   reporter_disabled: [403, 'reporter_disabled'],
+  // W3-09: a call's live turns (20261016000330_voice_turns.sql).
+  unknown_caller: [403, 'unknown_caller'],
+  site_required: [409, 'site_required'],
+  report_closed: [409, 'report_closed'],
 };
 
 function errorResponse(c: Context, err: unknown, now: Date): Response {

@@ -253,13 +253,16 @@ export function postProcessReportExtraction(
   raw: ReportExtraction,
   input: ExtractionInputV2,
 ): { data: DailyReportData; discrepancies: HoursDiscrepancy[]; droppedSources: number } {
-  const uploads = new Set(input.segments.map((s) => s.uploadId));
+  const uploads = new Set(input.segments.flatMap((s) => (s.uploadId ? [s.uploadId] : [])));
+  // W3-09: a call source must name a call of the input (live mode, `update_draft`).
+  const calls = new Set(input.segments.flatMap((s) => (s.callId ? [s.callId] : [])));
   const questions = new Set(input.previousAnswers.map((a) => a.questionId));
   const dropped = { n: 0 };
   const cleaned = filterSources(
     raw,
     (s) =>
       (s.type === 'voice_note' && uploads.has(s.uploadId)) ||
+      (s.type === 'call' && calls.has(s.callId)) ||
       (s.type === 'answer' && questions.has(s.questionId)) ||
       s.type === 'weather_api',
     dropped,

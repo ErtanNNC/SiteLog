@@ -143,6 +143,31 @@ export interface ComposeOptionsV2 {
   previousDraft?: DailyReportData | null;
   reportDate: string;
   observedWeather?: SiteDayWeather | null;
+  /** §10.4 `CHANNEL`: `call` for a call's live turn (W3-09), else `web`. */
+  channel?: 'web' | 'call';
+}
+
+/**
+ * W3-09: the reporter's lane of each call of the report (its live transcript, `transcripts.call_id`;
+ * an agent line, should a transcript hold one, is left out: the transcript the model reads is the
+ * reporter's speech only, §10.4), as segments keyed by call id, seconds from the call's start.
+ */
+export function callSegments(
+  callId: string,
+  transcript: TranscriptRow | null,
+): ExtractionSegmentV2[] {
+  if (!transcript) return [];
+  const segs = Array.isArray(transcript.segments)
+    ? (transcript.segments as Array<{ start: number; end: number; text: string; speaker?: string }>)
+    : [];
+  return segs
+    .filter((s) => s.speaker !== 'agent' && String(s.text ?? '').trim())
+    .map((s) => ({
+      callId,
+      start: Number(s.start) || 0,
+      end: Number(s.end) || 0,
+      text: String(s.text),
+    }));
 }
 
 /**
@@ -163,12 +188,23 @@ export async function composeReportExtractionInput(
   );
   const transcripts = await ctx.db.listTranscripts(voiceIds);
   const byUpload = new Map(transcripts.map((t) => [t.upload_id, t]));
-  const segments: ExtractionSegmentV2[] = voiceIds.flatMap((id) =>
+  const voiceSegments: ExtractionSegmentV2[] = voiceIds.flatMap((id) =>
     transcriptSegments(id, byUpload.get(id) ?? null).map(({ messageId, ...s }) => ({
       uploadId: messageId,
       ...s,
     })),
   );
+  // W3-09: the report's calls (a call and a voice note of one site-day are one report, §7.2),
+  // in the order they joined the report.
+  const callIds = [
+    ...new Set(sources.flatMap((s) => (s.kind === 'call' && s.call_id ? [s.call_id] : []))),
+  ];
+  const callTranscripts = callIds.length ? await ctx.db.listCallTranscripts(callIds) : [];
+  const byCall = new Map(callTranscripts.map((t) => [t.call_id, t]));
+  const segments: ExtractionSegmentV2[] = [
+    ...voiceSegments,
+    ...callIds.flatMap((id) => callSegments(id, byCall.get(id) ?? null)),
+  ];
   const photos = sources.flatMap((s) =>
     s.kind === 'photo' && s.upload_id
       ? [
@@ -201,7 +237,7 @@ export async function composeReportExtractionInput(
     reportLanguage: report.language,
     units: site.org.units,
     reporterLocale,
-    channel: 'web',
+    channel: opts.channel ?? 'web',
     defaultShiftHours: base.defaultShiftHours,
     requiredFields: base.requiredFields,
     companies: base.companies,

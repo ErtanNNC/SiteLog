@@ -307,6 +307,17 @@ export async function seedTwoOrgs(db: PGlite): Promise<void> {
           ('EV_matrix_${o.call}', 'room_started', 'call-${o.call}', '${o.call}', now());
       `);
   }
+  // W3-09: a live tool turn of each org's call.
+  const turns = await db.query<{ v: boolean }>(
+    `select to_regclass('public.voice_turns') is not null as v`,
+  );
+  if (turns.rows[0]!.v) {
+    for (const o of [ORG.A, ORG.B])
+      await db.exec(`
+        insert into voice_turns (call_id, report_id, kind, turn_key, input, status, result) values
+          ('${o.call}', '${o.report}', 'update_draft', '${'a'.repeat(64)}', '{"segments": []}', 'done', '{}');
+      `);
+  }
   await db.exec(`
     insert into auth.users (id, email) values ('${SPARE_USER}', 'spare@matrix.test'), ('${OPERATOR}', 'operator@matrix.test');
     insert into platform_admins (user_id, note) values ('${OPERATOR}', 'matrix');

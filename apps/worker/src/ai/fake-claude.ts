@@ -19,6 +19,7 @@ import { loadCorrectionCases, type CorrectionCase } from './correction-fixtures'
 import { loadUtteranceCases, type UtteranceCase } from './utterance-fixtures';
 import { createAnthropicClient, type MessagesClient } from './claude';
 import { FIXTURES_DIR, findPhoneNumbers, loadFixtures, type EvalFixture } from './eval';
+import { segmentMediaId } from './prompts/extraction.v2';
 
 /**
  * The fake extraction provider (`EXTRACT_PROVIDER=fake`): a Messages client that answers every
@@ -44,8 +45,13 @@ export interface FixtureCase {
   recorded: ExtractionOutput;
   /** The tool output as the golden set holds it (v2, W1-12), for the web recorder's extraction. */
   recordedV2: ReportExtraction;
-  /** The (first) voice note of the case: its fixture message id and segments. */
+  /**
+   * The (first) voice note of the case: its fixture message id and segments; for a call case
+   * (W3-09, `channel: 'call'`) the call's fixture id.
+   */
   voiceMessageId: string;
+  /** W3-09: `call` for a call case (live mode, segments keyed by callId), else `web`. */
+  channel: 'web' | 'call';
   segments: Array<{ start: number; end: number; text: string }>;
   photoIds: string[];
   /** Note length in seconds (last segment end, rounded up). */
@@ -54,7 +60,10 @@ export interface FixtureCase {
 }
 
 export interface FixtureLibrary {
+  /** The single-voice-note cases (what a recorder upload or a webhook audio message replays). */
   ids: string[];
+  /** W3-09: the call cases (one call's reporter lane; `update_draft` replays them). */
+  callIds: string[];
   get(id: string): FixtureCase;
   /** The case whose transcript appears in `text` (first segment match), if any. */
   findInText(text: string): FixtureCase | null;
@@ -76,9 +85,10 @@ export function loadFixtureLibrary(filter: string[] = []): FixtureLibrary {
   const cases = new Map<string, FixtureCase>();
   for (const f of loadFixtures(FIXTURES_DIR, filter)) {
     if (!f.recorded) continue;
-    const voiceIds = Array.from(new Set(f.input.segments.map((s) => s.uploadId)));
+    const voiceIds = Array.from(new Set(f.input.segments.map(segmentMediaId)));
     if (voiceIds.length !== 1 || f.whatsappText) continue;
     const voiceMessageId = voiceIds[0]!;
+    const channel = f.input.segments[0]?.callId !== undefined ? 'call' : 'web';
     const segments = f.input.segments.map((s) => ({ start: s.start, end: s.end, text: s.text }));
     const lang = f.recorded.languageDetected.includes('es')
       ? f.recorded.languageDetected.includes('en')
@@ -92,6 +102,7 @@ export function loadFixtureLibrary(filter: string[] = []): FixtureLibrary {
       recorded: downgradeExtractionV2(f.recorded),
       recordedV2: f.recorded,
       voiceMessageId,
+      channel,
       segments,
       photoIds: f.input.photos.map((p) => p.uploadId),
       durationS: Math.max(5, Math.ceil(Math.max(...segments.map((s) => s.end)))),
@@ -101,8 +112,10 @@ export function loadFixtureLibrary(filter: string[] = []): FixtureLibrary {
   const replies = JSON.parse(
     readFileSync(join(FIXTURES_DIR, 'tool-outputs', 'replies.json'), 'utf8'),
   ) as RecordedReplies;
+  const all = Array.from(cases.values());
   return {
-    ids: Array.from(cases.keys()),
+    ids: all.filter((c) => c.channel === 'web').map((c) => c.id),
+    callIds: all.filter((c) => c.channel === 'call').map((c) => c.id),
     get(id) {
       const c = cases.get(id);
       if (!c) throw new Error(`fixture ${id} is not a single-voice-note case`);
@@ -298,6 +311,10 @@ export function createFixtureClaude(opts: FixtureClaudeOptions): FakeClaude {
             const voiceIds = Array.from(
               text.matchAll(new RegExp(`VOICE NOTE ${idKey}=([0-9a-f-]{36})`, 'g')),
             ).map((m) => m[1]!);
+            // W3-09: live mode names the call (its reporter lane) by callId.
+            const callIds = Array.from(text.matchAll(/PHONE CALL callId=([0-9a-f-]{36})/g)).map(
+              (m) => m[1]!,
+            );
             const hasText = /TEXT MESSAGE messageId=/.test(text);
             const photosLine = /^PHOTOS: (.*)$/m.exec(text)?.[1] ?? '[]';
             const photos = JSON.parse(photosLine) as Array<Record<string, string>>;
@@ -305,7 +322,10 @@ export function createFixtureClaude(opts: FixtureClaudeOptions): FakeClaude {
             const c = matched ?? (opts.defaultCase ? lib.get(opts.defaultCase) : null);
             await wait('claude');
             if (!c) {
-              calls.push({ tool, noContent: voiceIds.length === 0 && !hasText });
+              calls.push({
+                tool,
+                noContent: voiceIds.length === 0 && callIds.length === 0 && !hasText,
+              });
               return toolMessage(
                 params,
                 tool,
@@ -316,7 +336,8 @@ export function createFixtureClaude(opts: FixtureClaudeOptions): FakeClaude {
             }
             calls.push({ tool, fixtureId: c.id, ...(matched ? {} : { fallback: true }) });
             const map = new Map<string, string>();
-            if (voiceIds[0]) map.set(c.voiceMessageId, voiceIds[0]);
+            const sent = c.channel === 'call' ? (callIds[0] ?? voiceIds[0]) : voiceIds[0];
+            if (sent) map.set(c.voiceMessageId, sent);
             c.photoIds.forEach((id, i) => {
               const actual = photos[i]?.[idKey];
               if (actual) map.set(id, actual);

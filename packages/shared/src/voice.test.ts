@@ -16,6 +16,7 @@ import {
   VOICE_TOOLS,
   VoiceCallStartRequestSchema,
   VoiceCallStartResponseSchema,
+  voiceTurnKey,
   type VoiceToolRequest,
 } from './voice.ts';
 
@@ -129,6 +130,49 @@ const TOOL_EXAMPLES: { [T in (typeof VOICE_TOOLS)[number]]: [VoiceToolRequest<T>
     { siteId: SITE, name: 'Northgate' },
   ],
 };
+
+describe('live turns (W3-09, §19 Q117)', () => {
+  it('answers the draft, or pending past the wait', () => {
+    const pending = { status: 'pending', retryAfterMs: 1000 };
+    expect(VOICE_TOOL_SCHEMAS.update_draft.response.parse(pending)).toEqual(pending);
+    expect(VOICE_TOOL_SCHEMAS.record_answer.response.parse(pending)).toEqual(pending);
+    expect(() =>
+      VOICE_TOOL_SCHEMAS.update_draft.response.parse({ status: 'pending', retryAfterMs: 60_000 }),
+    ).toThrow();
+    // A skipped answer (unclear twice) carries the draft that moved on.
+    const skipped = {
+      status: 'skipped',
+      confirmation: "I couldn't make that out, so I've left it for the office to check.",
+      draft: {
+        reportId: REPORT,
+        draftRev: 3,
+        missing: ['manpower.workers:Delta Mechanical'],
+        question: null,
+        readBack: 'Shall I file it?',
+      },
+    };
+    expect(VOICE_TOOL_SCHEMAS.record_answer.response.parse(skipped)).toEqual(skipped);
+  });
+
+  it('keys a turn by the tool and its words, whatever the key order', async () => {
+    const a = await voiceTurnKey('update_draft', {
+      segments: [{ start: 1, end: 2, text: 'Apex had six.' }],
+    });
+    const b = await voiceTurnKey('update_draft', {
+      segments: [{ text: 'Apex had six.', end: 2, start: 1 }],
+    });
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+    expect(b).toBe(a);
+    expect(
+      await voiceTurnKey('update_draft', { segments: [{ start: 1, end: 2, text: 'Apex had 7.' }] }),
+    ).not.toBe(a);
+    expect(
+      await voiceTurnKey('record_answer', {
+        segments: [{ start: 1, end: 2, text: 'Apex had six.' }],
+      }),
+    ).not.toBe(a);
+  });
+});
 
 describe('voice contract schemas', () => {
   it('round-trips a request and an answer of every tool', () => {
@@ -300,7 +344,8 @@ describe('deriveCallToken', () => {
 
 describe('VOICE_CONTRACT', () => {
   it('converts every schema to JSON Schema', () => {
-    expect(Object.keys(VOICE_CONTRACT).length).toBe(8 + VOICE_TOOLS.length * 2);
+    // 8 shapes, W3-09's turn_pending, and a request and an answer per tool.
+    expect(Object.keys(VOICE_CONTRACT).length).toBe(9 + VOICE_TOOLS.length * 2);
     for (const [name, schema] of Object.entries(VOICE_CONTRACT)) {
       expect(() => z.toJSONSchema(schema), name).not.toThrow();
     }

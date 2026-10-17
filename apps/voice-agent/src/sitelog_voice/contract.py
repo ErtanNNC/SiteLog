@@ -252,6 +252,20 @@ class DraftState(_View):
     read_back: str | None
 
 
+class TurnPending(_View):
+    """Contract `turn_pending` (W3-09, §19 Q117): the live tool's worker turn still runs past
+    field-api's wait (HTTP 202). Say a short line and call the tool again with the same words;
+    field-api finds the same turn."""
+
+    status: Literal["pending"]
+    retry_after_ms: int
+
+
+def is_pending(data: Any) -> bool:
+    """A live tool's answer is `turn_pending` (W3-09)."""
+    return isinstance(data, dict) and data.get("status") == "pending"
+
+
 #: model → (contract schema, JSON pointer inside it), for the drift test.
 TYPED_VIEWS: dict[type[_View], tuple[str, tuple[str, ...]]] = {
     CallsStartResponse: ("calls_start_response", ()),
@@ -262,4 +276,5 @@ TYPED_VIEWS: dict[type[_View], tuple[str, tuple[str, ...]]] = {
     Company: ("tool_get_context_response", ("properties", "companies", "items")),
     Consents: ("tool_get_context_response", ("properties", "consents")),
     DraftState: ("draft_state", ()),
+    TurnPending: ("turn_pending", ()),
 }

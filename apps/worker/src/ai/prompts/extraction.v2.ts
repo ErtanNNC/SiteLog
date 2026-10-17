@@ -49,15 +49,23 @@ export function extractionSystemPromptV2(): string {
 /** The source bookkeeping the tool schema needs (a separate cached system block): spec §10.4 "Source-format note (v2)" verbatim (§19 Q59). */
 export const EXTRACTION_V2_SOURCE_NOTE = `Source format: each voice note in the input carries an uploadId. A voice-note source is
 {"type":"voice_note","uploadId":"<uploadId of that voice note>","start":<segment start seconds>,"end":<segment end seconds>};
+each phone call in the input carries a callId. A call source is
+{"type":"call","callId":"<callId of that call>","start":<segment start seconds>,"end":<segment end seconds>};
 a value from an earlier answer is {"type":"answer","questionId":"<questionId of that answer>"}.
 A proposedQuestions field is the path of the gap it fills as written in missingRequired or lowConfidence.
 Do not output photos, schemaVersion, reportDate, reportLanguage, units or weather.observed — the system adds them.`;
 
-export interface ExtractionSegmentV2 {
-  uploadId: string;
-  start: number;
-  end: number;
-  text: string;
+/**
+ * One transcript segment of the input: a voice note's (`uploadId`) or, W3-09, a phone call's
+ * reporter lane (`callId`, seconds from the call's start). Exactly one of the two ids.
+ */
+export type ExtractionSegmentV2 = { start: number; end: number; text: string } & (
+  { uploadId: string; callId?: undefined } | { callId: string; uploadId?: undefined }
+);
+
+/** The voice note or call a segment belongs to (its id), for grouping and source checks. */
+export function segmentMediaId(s: ExtractionSegmentV2): string {
+  return s.uploadId ?? s.callId!;
 }
 
 export interface ExtractionInputV2 {
@@ -79,7 +87,7 @@ export interface ExtractionInputV2 {
   previousAnswers: Array<{ field: string; question: string; answer: string; questionId: string }>;
   previousDraft: DailyReportData | null;
   photos: Array<{ uploadId: string; caption?: string; takenAt: string }>;
-  /** Voice notes: segments grouped by upload in arrival order. */
+  /** Voice notes and (W3-09) calls: segments grouped by upload or call in arrival order. */
   segments: ExtractionSegmentV2[];
   reporterFirstName: string;
 }
@@ -137,15 +145,22 @@ export function buildExtractionUserMessageV2(input: ExtractionInputV2): string {
     `PHOTOS: ${JSON.stringify(input.photos)}`,
     'TRANSCRIPT SEGMENTS:',
   ];
-  const byUpload = new Map<string, ExtractionSegmentV2[]>();
+  // Voice notes and (W3-09) calls in arrival order, each with its own segments.
+  const byMedia = new Map<string, ExtractionSegmentV2[]>();
   for (const s of input.segments) {
-    const list = byUpload.get(s.uploadId) ?? [];
+    const id = segmentMediaId(s);
+    const list = byMedia.get(id) ?? [];
     list.push(s);
-    byUpload.set(s.uploadId, list);
+    byMedia.set(id, list);
   }
-  if (byUpload.size === 0) lines.push('(no voice note)');
-  for (const [uploadId, segs] of byUpload) {
-    lines.push(`VOICE NOTE uploadId=${uploadId}`);
+  if (byMedia.size === 0) lines.push('(no voice note)');
+  for (const segs of byMedia.values()) {
+    const first = segs[0]!;
+    lines.push(
+      first.callId !== undefined
+        ? `PHONE CALL callId=${first.callId} (reporter channel)`
+        : `VOICE NOTE uploadId=${first.uploadId}`,
+    );
     for (const s of segs)
       lines.push(`[${fmtSeconds(s.start)}–${fmtSeconds(s.end)}] ${s.text.trim()}`);
   }
