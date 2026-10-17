@@ -824,6 +824,24 @@ export const RPCS: Record<
     call: (o) =>
       `select count(*) as v from outbound_call_share('${o.org}', '2026-10-01', '2026-10-31')`,
   },
+  // W4-03 (20261017000420_team_v1_2.sql): Team on v1.2. clear_reporter_opt_out() (admin, one-way
+  // packs only) is in team-v1-2.test.ts: the fixture orgs are on the two-way US pack.
+  update_reporter_contact: {
+    why: '§2.2 "Manage reporters, phone numbers & channel preferences": admin, ops (F15 Office, §19 Q243).',
+    allow: ADMIN_OPS,
+    call: (o) =>
+      `select update_reporter_contact('${o.reporter}', 'call', 'sms', 'en-US', true) as v`,
+  },
+  revoke_reporter_devices: {
+    why: '§2.2 "Manage reporters": admin, ops (F16 lost phone, §19 Q244).',
+    allow: ADMIN_OPS,
+    call: (o) => `select revoke_reporter_devices('${o.reporter}') as v`,
+  },
+  team_reporter_states: {
+    why: 'P10: what Team shows (opt-outs, devices, consents, the welcome), admin and ops as /team.',
+    allow: ADMIN_OPS,
+    call: (o) => `select count(*) as v from team_reporter_states('${o.org}')`,
+  },
 };
 
 export type Scope = 'own' | 'other';

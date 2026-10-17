@@ -144,6 +144,10 @@ const TRANSLATED = [
   // W4-01: the phone-country picker and number field (Setup, Team's invite).
   'phone',
   'common.required',
+  // W4-03: Team & numbers, its dialogs and the shared pieces they render.
+  'team',
+  'common.moreActions',
+  'a11y.menuForName',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

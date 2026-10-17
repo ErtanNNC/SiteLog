@@ -1,5 +1,14 @@
 import { assertEquals } from '@std/assert';
-import { adminCount, displayNameFromEmail, memberChangeRefusal } from './logic.ts';
+import { adminCount, displayNameFromEmail, inviteMetadata, memberChangeRefusal } from './logic.ts';
+
+Deno.test('the invite carries the UI language, the org’s when left to the company (F24)', () => {
+  assertEquals(inviteMetadata('org', 'pm', 'tr-TR', 'en-US'), {
+    invited_org_id: 'org',
+    invited_role: 'pm',
+    ui_locale: 'tr-TR',
+  });
+  assertEquals(inviteMetadata('org', 'ops', null, 'tr-TR').ui_locale, 'tr-TR');
+});
 
 const members = [
   { user_id: 'a1', role: 'admin' as const },

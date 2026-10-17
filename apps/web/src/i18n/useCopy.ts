@@ -80,6 +80,16 @@ export function applyOrgLanguage(orgLocale: OrgLocale | null | undefined): void 
   if (lang !== currentLanguage()) void i18n.changeLanguage(lang);
 }
 
+/**
+ * The panel's default for a member of an org (§11.2, F24): their own `org_members.ui_locale` when
+ * set, else the org's locale. Still only a default: a choice made on this device wins.
+ */
+export function memberDefaultLocale(
+  org: { locale?: OrgLocale | null; uiLocale?: OrgLocale | null } | null | undefined,
+): OrgLocale | null | undefined {
+  return org?.uiLocale ?? org?.locale;
+}
+
 /** The same default when the viewer switches to an org with another locale (`AppShell`). */
 export function useOrgLanguageDefault(orgLocale: OrgLocale | null | undefined): void {
   useEffect(() => applyOrgLanguage(orgLocale), [orgLocale]);

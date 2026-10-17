@@ -8,6 +8,8 @@ import type {
   FieldChannel,
   InvoiceStatus,
   MemberRole,
+  MessageChannel,
+  MsgStatus,
   PackStatus,
   ReportStatus,
   ReporterRole,
@@ -26,7 +28,7 @@ import type {
 } from '@sitelog/shared/schemas/report.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import type { OrgSettingsRow } from '@sitelog/shared/db/types.ts';
-import type { OrgLocale, UnitSystem } from '@sitelog/shared/locale.ts';
+import type { OrgLocale, ReporterLocale, UnitSystem } from '@sitelog/shared/locale.ts';
 import type { CopyKey } from '@/i18n/keys';
 import type { NoticeText } from './notices';
 
@@ -85,6 +87,8 @@ export interface OfficeUser {
   email: string | null;
   title: string | null;
   role: MemberRole;
+  /** F24: the member's panel language (`org_members.ui_locale`); null = the org's. */
+  uiLocale?: OrgLocale | null;
 }
 
 export interface OrgSummary {
@@ -101,6 +105,11 @@ export interface OrgSummary {
   sitelogNumbers?: string[];
   /** `orgs.is_demo` (§6.3): a demo org, whose texts all go to the Demo phone (§4.5, §11.1). */
   demoOrg?: boolean;
+  /**
+   * F24 (W4-03): the member's own panel language (`org_members.ui_locale`); null or absent = the
+   * org's. It wins over the org's locale, never over a choice made on this device (§11.2).
+   */
+  uiLocale?: OrgLocale | null;
 }
 
 // ───────────────────────────── P3 Overview ─────────────────────────────
@@ -218,7 +227,13 @@ export interface AttentionItem {
  * "Text today's link" when the site has no one to text: api-text-daily-link's 409 `details.code`
  * (nobody linked; nobody linked is active), thrown as a `CodedError` by both data sources.
  */
-export const TEXT_LINK_ERROR_CODES = ['no_reporter', 'no_active_reporter'] as const;
+export const TEXT_LINK_ERROR_CODES = [
+  'no_reporter',
+  'no_active_reporter',
+  // W4-03: Team's row menu names the reporter.
+  'reporter_not_linked',
+  'reporter_not_active',
+] as const;
 export type TextDailyLinkErrorCode = (typeof TEXT_LINK_ERROR_CODES)[number];
 
 /** "Text today's link" (F17, W1-16): what the Notifier did. */
@@ -870,8 +885,33 @@ export interface WeatherLog {
 
 // ───────────────────────────── P10 Team ─────────────────────────────
 
+/**
+ * P10 statuses (W4-03, v1.2 data): `undeliverable` ("Can't text this number") is read from the
+ * welcome's last attempts (W2-01's walk), not from the v1.0 `last_invite_error`.
+ */
 export type ReporterChipStatus =
-  'active' | 'invite_sent' | 'not_on_whatsapp' | 'opted_out' | 'disabled';
+  'active' | 'invite_sent' | 'opted_out' | 'undeliverable' | 'disabled';
+
+/** One attempt of the latest welcome message (`messages`, W2-01): what Team reads its status from. */
+export interface WelcomeAttempt {
+  status: MsgStatus;
+  channel: MessageChannel | null;
+  provider_message_id: string | null;
+  attempt: number;
+  dedupe_key: string | null;
+}
+
+/** What Team shows beside a reporter row that RLS keeps from the panel (`team_reporter_states`). */
+export interface TeamReporterState {
+  reporterId: string;
+  /** `sms_opt_outs.method` of the phone on the org's pack. */
+  optOutMethod: 'sms_keyword' | 'provider_opt_out' | null;
+  /** Verified devices not revoked. */
+  devices: number;
+  /** Consent types held (not revoked). */
+  consents: string[];
+  welcome: WelcomeAttempt[];
+}
 
 export interface TeamReporter {
   id: string;
@@ -884,9 +924,47 @@ export interface TeamReporter {
   sites: Array<{ id: string; name: string; shortName: string; isPrimary: boolean }>;
   onTime30: number | null;
   reports30: number;
-  lastInviteError: string | null;
   /** §2.3: how the reporter prefers to report, a text link or a call. */
   contactPref: ContactPref;
+  /** §19 Q21: the preferred message channel; null = the pack's order. */
+  messageChannel: MessageChannel | null;
+  /** The language SiteLog uses with them (`reporters.locale`). */
+  locale: ReporterLocale;
+  /** Who stopped texts (§19 Q242): the person by STOP, or the provider; null when not opted out. */
+  optOutBy: 'person' | 'provider' | null;
+  /** Verified phones signed in (F16, §19 Q244). */
+  devices: number;
+  /** Consent types they hold (Edit says when a chosen channel has none, §19 Q243). */
+  consents: string[];
+  /** §19 Q243: the preferred channel has no consent yet, so messages go another way. */
+  channelUnreachable: boolean;
+  /** §19 Q241 (W4-12): the latest welcome was the automatic re-send. */
+  autoResent: boolean;
+}
+
+/** Team's RPC refusals the panel words itself (`team.errors.*`, W4-03): CodedError codes. */
+export const TEAM_RPC_CODES = [
+  'attestation_required',
+  'channel_not_offered',
+  'locale_not_offered',
+  'two_way_pack',
+  'opted_out_by_person',
+  'not_opted_out',
+] as const;
+export type TeamRpcCode = (typeof TEAM_RPC_CODES)[number];
+
+/** The org's country pack as Team needs it (§4.6). */
+export interface TeamPack {
+  code: string;
+  /** Languages SiteLog uses with field users; the first is a new reporter's default. */
+  fieldLocales: ReporterLocale[];
+  /** The pack's order (§4.5). */
+  messageChannels: MessageChannel[];
+  /** What Edit offers: the pack's built channels other than push (as the recorder's Settings). */
+  settingsChannels: MessageChannel[];
+  twoWaySms: boolean;
+  /** Where the reporter can call SiteLog (§19 Q33: a call preference without one uses Talk now). */
+  hasVoiceNumber: boolean;
 }
 
 export interface UnknownSenderItem {
@@ -906,6 +984,9 @@ export interface TeamData {
   unknownSenders: UnknownSenderItem[];
   officeUsers: OfficeUser[];
   sites: SiteOption[];
+  pack: TeamPack;
+  /** The org's locale: an office user's "company's language" (F24). */
+  orgLocale: OrgLocale;
 }
 
 // ───────────────────────────── P11 Glossary ─────────────────────────────

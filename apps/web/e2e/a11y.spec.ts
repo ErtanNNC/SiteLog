@@ -153,25 +153,30 @@ for (const width of WIDTHS) {
     });
 
     // WCAG 3.1.2: what an English-only page portals to <body> is English too, not the shell's TR.
-    test('the Turkish shell: an English page’s select and dialog stay lang="en"', async ({
+    test('the Turkish shell: an English page’s select and picker stay lang="en"', async ({
       page,
     }) => {
       await chooseTurkish(page);
       await signInFast(page);
       const langOf = (l: Locator) =>
         l.evaluate((el) => el.closest('[lang]')?.getAttribute('lang') ?? null);
-      // Team is still English-only (Weather & delays speaks Turkish since W3-07).
-      await page.goto('/team');
-      await expect(page.getByTestId('unknown-sender')).toBeVisible();
-      await page
-        .getByRole('button', { name: /Invite reporter/i })
-        .first()
-        .click();
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toBeVisible();
-      expect(await langOf(dialog)).toBe('en');
+      // Settings is still English-only (Team speaks Turkish since W4-03): its select's list.
+      await page.goto('/settings/payroll');
+      const format = page.getByRole('combobox', { name: 'Format' });
+      await expect(format).toBeVisible();
+      await format.click();
+      const options = page.getByRole('listbox');
+      await expect(options).toBeVisible();
+      expect(await langOf(options)).toBe('en');
+      // Axe runs once the list is closed: an open Radix select hides the rest of the page.
+      await page.keyboard.press('Escape');
+      await expect(options).toHaveCount(0);
       await expectNoViolations(page);
-      await dialog.getByRole('button', { name: /^Country code: / }).click();
+      // The setup wizard's site step (English until W4-02): W4-01's country-code picker.
+      await page.goto('/setup/site');
+      const country = page.getByRole('button', { name: /^Country code: / }).first();
+      await expect(country).toBeVisible();
+      await country.click();
       const listbox = page.getByRole('listbox', { name: 'Country code' });
       await expect(listbox).toBeVisible();
       expect(await langOf(listbox)).toBe('en');

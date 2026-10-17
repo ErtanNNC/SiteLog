@@ -19,7 +19,7 @@ import { DemoSource } from '@/data/demo/DemoSource';
 import { demoUserFor, getDemoStore, type DemoLoginKey } from '@/data/demo/store';
 import { fetchOrgs } from '@/data/supabase/SupabaseSource';
 import type { OrgSummary } from '@/data/types';
-import { applyOrgLanguage } from '@/i18n/useCopy';
+import { applyOrgLanguage, memberDefaultLocale } from '@/i18n/useCopy';
 import { env, isDemo } from '@/lib/env';
 import { setSentryUser } from '@/lib/sentry';
 import { supabase } from '@/lib/supabase';
@@ -157,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loadedUserRef.current = list ? u.id : null;
       const current = list ? pickOrg(list) : null;
       // The org's locale is the default language: apply it before `signed_in` mounts the shell.
-      applyOrgLanguage(current?.locale);
+      applyOrgLanguage(memberDefaultLocale(current));
       setUser(u);
       setDemoKey(key);
       setOrgs(list ?? []);
@@ -295,7 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     // Completing a failed sign-in load (no org was current): the shell mounts next, so its
     // language is set first. Once loaded, `AppShell` follows the current org's locale.
-    if (loadedUserRef.current !== user.id) applyOrgLanguage(pickOrg(list)?.locale);
+    if (loadedUserRef.current !== user.id) applyOrgLanguage(memberDefaultLocale(pickOrg(list)));
     loadedUserRef.current = user.id;
     setOrgs(list);
     setCurrentOrgState((cur) => list.find((o) => o.id === cur?.id) ?? pickOrg(list));

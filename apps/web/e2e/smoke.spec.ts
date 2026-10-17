@@ -285,7 +285,7 @@ test.describe('SiteLog panel (demo mode)', () => {
       await expect(picker).toHaveText(/US \+1/);
       await picker.click();
       const listbox = page.getByRole('listbox', { name: 'Country code' });
-      // Team is still English-only: the names are English (the panel's language on this page).
+      // The names come in the panel's language (English here; Team speaks Turkish since W4-03).
       await expect(listbox.getByRole('option')).toHaveCount(phoneRegions('en').length);
       await expect(listbox.getByRole('option').first()).toContainText('US +1');
       await expect(listbox.getByRole('option', { name: /Germany/ })).toHaveCount(1);

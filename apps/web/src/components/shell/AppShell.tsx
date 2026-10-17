@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigationType } from 'react-router';
 import { useAuth } from '@/auth/AuthProvider';
-import { useCopy, useOrgLanguageDefault } from '@/i18n/useCopy';
+import { memberDefaultLocale, useCopy, useOrgLanguageDefault } from '@/i18n/useCopy';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import { Dialog, DialogContent, DialogTitle } from '../ui/Dialog';
 import { OfflineBanner } from '../sitelog/States';
@@ -15,7 +15,7 @@ import { TopBar, TopBarSlotProvider } from './TopBar';
 export function AppShell() {
   const { t } = useCopy();
   const { currentOrg } = useAuth();
-  useOrgLanguageDefault(currentOrg?.locale);
+  useOrgLanguageDefault(memberDefaultLocale(currentOrg));
   const [drawer, setDrawer] = useState(false);
   useScrollTopOnNavigate();
   // The page's top-bar controls go to the slot that is shown at this width (see `TopBar`).

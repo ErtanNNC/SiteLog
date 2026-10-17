@@ -30,15 +30,19 @@ import {
   type ResolveUnknownCompanyInput,
   type ReviewGlossaryTermInput,
   type UpdateOrgInput,
+  type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
 } from './source';
 import {
+  TEAM_RPC_CODES,
   TEXT_LINK_ERROR_CODES,
   type OrgSettingsPatch,
   type ReportFilters,
+  type TeamRpcCode,
   type TextDailyLinkErrorCode,
 } from './types';
+import type { OrgLocale } from '@sitelog/shared/locale.ts';
 
 interface Opts {
   enabled?: boolean;
@@ -402,7 +406,8 @@ export function useTextDailyLink() {
   const s = useDataSource();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { siteId: string; first: string }) => s.textDailyLink(vars.siteId, uuid()),
+    mutationFn: (vars: { siteId: string; first: string; reporterId?: string }) =>
+      s.textDailyLink(vars.siteId, uuid(), vars.reporterId),
     onSuccess: (result, vars) => {
       void qc.invalidateQueries({ queryKey: [s.orgId] });
       const first = vars.first;
@@ -486,79 +491,142 @@ export function useSetInvoiceStatus() {
   );
 }
 
+// ─── Team & numbers (P10; W4-03: toasts and refusals in the panel's language) ───
+
+/** A Team RPC's refusal (`TEAM_RPC_CODES`) in the panel's language; anything else as it came. */
+function teamError(err: unknown): string {
+  const code = errorCode(err);
+  return code && (TEAM_RPC_CODES as readonly string[]).includes(code)
+    ? translate(`team.errors.${code as TeamRpcCode}`)
+    : errorMessage(err, translate('errors.generic'));
+}
+
+/** useSourceMutation with Team's error wording. */
+function useTeamMutation<TVars, TResult>(
+  fn: (vars: TVars) => Promise<TResult>,
+  success: (vars: TVars, result: TResult) => string,
+) {
+  const s = useDataSource();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (result, vars) => {
+      void qc.invalidateQueries({ queryKey: [s.orgId] });
+      toast.success(success(vars, result));
+    },
+    onError: (err) => toast.error(teamError(err)),
+  });
+}
+
 export function useInviteReporter() {
   const s = useDataSource();
-  return useSourceMutation((vars: InviteReporterInput) => s.inviteReporter(vars), {
-    success: (v, result) =>
+  return useTeamMutation(
+    (vars: InviteReporterInput) => s.inviteReporter(vars),
+    (v, result) =>
       result.status === 'opted_out'
-        ? copy.toasts.reporterInvitedOptedOut(v.name)
-        : copy.toasts.reporterInvited(v.name),
-  });
+        ? translate('team.toasts.invitedOptedOut', { name: v.name })
+        : translate('team.toasts.invited', { name: v.name }),
+  );
 }
 
 export function useLinkUnknownSender() {
   const s = useDataSource();
-  return useSourceMutation((vars: LinkUnknownSenderInput) => s.linkUnknownSender(vars), {
-    success: copy.toasts.linked,
-  });
+  return useTeamMutation(
+    (vars: LinkUnknownSenderInput) => s.linkUnknownSender(vars),
+    () => translate('team.toasts.linked'),
+  );
 }
 
 export function useIgnoreUnknownSender() {
   const s = useDataSource();
-  return useSourceMutation(
+  return useTeamMutation(
     (vars: { unknownSenderId: string }) => s.ignoreUnknownSender(vars.unknownSenderId),
-    { success: copy.toasts.ignored },
+    () => translate('team.toasts.ignored'),
   );
 }
 
 export function useSetReporterStatus() {
   const s = useDataSource();
-  return useSourceMutation(
+  return useTeamMutation(
     (vars: { reporterId: string; status: ReporterStatus; name: string }) =>
       s.setReporterStatus(vars.reporterId, vars.status),
-    {
-      success: (v) =>
-        v.status === 'disabled' ? copy.team.disabledToast(v.name) : copy.toasts.saved,
-    },
+    (v) =>
+      v.status === 'disabled'
+        ? translate('team.toasts.disabled', { name: v.name })
+        : translate('team.toasts.enabled', { name: v.name }),
   );
 }
 
 export function useResendInvite() {
   const s = useDataSource();
-  return useSourceMutation(
+  return useTeamMutation(
     (vars: { reporterId: string; name: string }) => s.resendInvite(vars.reporterId),
-    { success: (v) => copy.team.resent(v.name) },
+    (v) => translate('team.toasts.resent', { name: v.name }),
   );
 }
 
 export function useUpdateReporter() {
   const s = useDataSource();
-  return useSourceMutation((vars: UpdateReporterInput) => s.updateReporter(vars), {
-    success: (v) => copy.team.edit.saved(v.name.trim()),
+  return useTeamMutation(
+    (vars: UpdateReporterInput) => s.updateReporter(vars),
+    (v) => translate('team.toasts.updated', { name: v.name.trim() }),
+  );
+}
+
+/**
+ * Team → Edit's second half (W4-03): preference, message channel and language (one audited RPC),
+ * run after `useUpdateReporter` when they changed. Quiet: Edit toasts once for the whole save.
+ */
+export function useUpdateReporterContact() {
+  const s = useDataSource();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: UpdateReporterContactInput) => s.updateReporterContact(vars),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: [s.orgId] }),
+    onError: (err) => toast.error(teamError(err)),
   });
+}
+
+export function useRevokeReporterDevices() {
+  const s = useDataSource();
+  return useTeamMutation(
+    (vars: { reporterId: string; name: string }) => s.revokeReporterDevices(vars.reporterId),
+    (v) => translate('team.toasts.devicesRevoked', { name: v.name }),
+  );
+}
+
+export function useClearReporterOptOut() {
+  const s = useDataSource();
+  return useTeamMutation(
+    (vars: { reporterId: string; name: string; attested: boolean }) =>
+      s.clearReporterOptOut(vars.reporterId, vars.attested),
+    (v) => translate('team.toasts.optOutCleared', { name: v.name }),
+  );
 }
 
 export function useAddOfficeUser() {
   const s = useDataSource();
-  return useSourceMutation(
-    (vars: { email: string; role: MemberRole; name?: string }) => s.addOfficeUser(vars),
-    { success: (v) => copy.toasts.memberAdded(v.email) },
+  return useTeamMutation(
+    (vars: { email: string; role: MemberRole; name?: string; uiLocale?: OrgLocale | null }) =>
+      s.addOfficeUser(vars),
+    (v) => translate('team.toasts.memberAdded', { email: v.email }),
   );
 }
 
 export function useChangeMemberRole() {
   const s = useDataSource();
-  return useSourceMutation(
+  return useTeamMutation(
     (vars: { userId: string; role: MemberRole }) => s.changeMemberRole(vars.userId, vars.role),
-    { success: copy.toasts.memberUpdated },
+    () => translate('team.toasts.memberUpdated'),
   );
 }
 
 export function useRemoveMember() {
   const s = useDataSource();
-  return useSourceMutation((vars: { userId: string }) => s.removeMember(vars.userId), {
-    success: copy.toasts.memberRemoved,
-  });
+  return useTeamMutation(
+    (vars: { userId: string }) => s.removeMember(vars.userId),
+    () => translate('team.toasts.memberRemoved'),
+  );
 }
 
 export function useUpdateOrg() {

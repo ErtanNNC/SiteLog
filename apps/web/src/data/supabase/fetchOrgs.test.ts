@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildDemirDemo, DEMIR_ORG_NAME, DEMIR_USERS } from '@sitelog/shared/demo/demir.ts';
 import { DEMO_USERS, kestrelDemo } from '@sitelog/shared/demo/kestrel.ts';
+import { memberDefaultLocale } from '@/i18n/useCopy';
 import { fakeOrgsDb } from '@/test/fakeOrgsDb';
 import { fetchOrgs } from './SupabaseSource';
 
@@ -40,7 +41,7 @@ describe('fetchOrgs', () => {
       }),
     ]);
     expect(selects).toContain(
-      'org_members: org_id, role, orgs(id, name, timezone, locale, country, is_demo)',
+      'org_members: org_id, role, ui_locale, orgs(id, name, timezone, locale, country, is_demo)',
     );
   });
 
@@ -51,5 +52,24 @@ describe('fetchOrgs', () => {
     expect(orgs.map((o) => [o.name, o.activeSites, o.locale, o.country, o.demoOrg])).toEqual([
       ['Kestrel Build Group', 6, 'en-US', 'US', true],
     ]);
+  });
+
+  it('reads the member’s own panel language (F24, W4-03): it wins over the org’s locale', async () => {
+    const kestrel = kestrelDemo();
+    const lena = DEMO_USERS.find((u) => u.email === 'lena@kestrelbuild.example')!;
+    const members = kestrel.members.map((m) =>
+      m.user_id === lena.id ? { ...m, ui_locale: 'tr-TR' } : m,
+    );
+    const { db } = fakeOrgsDb({
+      orgs: [kestrel.org],
+      org_members: members,
+      site_options: kestrel.sites.map(({ id, org_id, status }) => ({ id, org_id, status })),
+    });
+    const [org] = await fetchOrgs(db, lena.id);
+    expect([org!.locale, org!.uiLocale]).toEqual(['en-US', 'tr-TR']);
+    expect(memberDefaultLocale(org)).toBe('tr-TR');
+    const [elif] = await fetchOrgs(bothDemoOrgs().db, DEMIR_USERS[0]!.id);
+    expect(elif!.uiLocale).toBeNull();
+    expect(memberDefaultLocale(elif)).toBe('tr-TR');
   });
 });

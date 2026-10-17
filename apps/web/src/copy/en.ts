@@ -344,10 +344,7 @@ export const copy = {
     edited: (v: number) => `Edited v${v}`,
     asked: (time: string) => `Asked ${time}`,
     confirmedByReply: 'Confirmed by reply',
-    verified: 'Verified',
     inviteSent: 'Invite sent',
-    /** F3 edge case: the provider refuses the number for good (key kept until the M10 statuses). */
-    notOnWhatsApp: 'Can’t reach this number',
     /** §11 "Opted out of texts": a STOP, or the SMS provider's own opt-out list (Twilio 21610). */
     optedOut: 'Opted out of texts',
     disabled: 'Disabled',
@@ -792,6 +789,10 @@ export const copy = {
         no_reporter: 'No site manager is linked to this site. Add one on Team & numbers.',
         no_active_reporter:
           'No active site manager on this site: the linked ones are disabled, opted out or have not accepted their invite yet.',
+        /** W4-03: Team's row menu names the reporter. */
+        reporter_not_linked: 'This reporter is no longer linked to that site.',
+        reporter_not_active:
+          'This reporter is not active yet: disabled, opted out of texts or still to accept the invite.',
       },
     },
     markNoWorkDialog: {
@@ -1713,24 +1714,27 @@ export const copy = {
     foreign: 'This is a {{country}} number. SiteLog texts it from your {{pack}} number.',
   },
 
+  /**
+   * P10 Team & numbers (W4-03: EN/TR through `t()`; the v1.2 statuses, preference and message
+   * channel, devices, today's link and office users' UI language).
+   */
   team: {
     title: 'Team & numbers',
     subtitle:
-      'SiteLog matches every WhatsApp message to a site by the sender’s number. No match, no report.',
+      'SiteLog matches every call and text to a site by the phone number. Personal links are tied to one person.',
+    thing: 'team',
     inviteReporter: 'Invite reporter',
     unknown: {
       title: 'Unknown number tried to report',
-      body: (phone: string, time: string) => `${phone} · ${time}`,
-      link: (site: string) => `Link to ${site}`,
+      body: '{{phone}} · {{time}}',
+      link: 'Link to {{site}}',
       linkOther: 'Link to a site…',
       ignore: 'Ignore',
-      linked: 'Number linked. The message is being processed.',
-      ignored: 'Number ignored.',
-      snippet: (text: string) => `“${text}”`,
-      guessed: (site: string) => `Mentions ${site}`,
+      snippet: '“{{text}}”',
+      guessed: 'Mentions {{site}}',
     },
     link: {
-      title: (phone: string) => `Link ${phone} to a site`,
+      title: 'Link {{phone}} to a site',
       description: 'The held message is processed as soon as the number is linked.',
       /** A caller or texter (W1-16): invited until they consent (F3, F13 step 4). */
       descriptionConsent:
@@ -1739,60 +1743,136 @@ export const copy = {
       namePlaceholder: 'Who is this?',
       role: 'Role',
       site: 'Site',
+      sitePlaceholder: 'Choose a site',
       confirm: 'Link number',
       nameRequired: 'Enter a name.',
       siteRequired: 'Choose a site.',
     },
-    reportsCount: (n: number) => `${plural(n, 'report')}`,
-    /** §2.3 contact preference, under the status chip (F3: "Active · Prefers call/link"). */
+    reportsCount_one: '{{count}} report in 30 days',
+    reportsCount_other: '{{count}} reports in 30 days',
+    /** P10 "Prefers": the report mode (§2.3), with the message channel when one is set (Q21). */
     prefers: {
-      link: 'Prefers text link',
-      call: 'Prefers call',
+      link: 'Text link',
+      call: 'Call',
+      withChannel: '{{pref}} · {{channel}}',
     },
+    /** §4.5 message channels, as Team and Edit name them. */
+    channels: {
+      sms: 'SMS',
+      whatsapp: 'WhatsApp',
+      push: 'Notifications',
+    },
+    /** §19 Q243: a channel saved without its consent stays unreachable until they consent. */
+    channelNotAgreed: '{{channel}} not agreed yet',
+    /** The language SiteLog uses with the reporter (`reporters.locale`). */
+    locales: {
+      'en-US': 'English',
+      'es-US': 'Spanish',
+      'tr-TR': 'Turkish',
+    },
+    speaks: 'Speaks {{languages}}',
     primary: 'Primary',
     noSites: 'No sites',
     empty: 'No reporters yet. Invite the first site manager.',
-    resent: (name: string) => `New invite queued for ${name}.`,
-    disabledToast: (name: string) => `${name} disabled.`,
+    /** P10 statuses: never by colour alone (each chip has its word). */
+    status: {
+      active: 'Active',
+      invite_sent: 'Invite sent',
+      opted_out: 'Opted out of texts',
+      undeliverable: 'Can’t text this number',
+      disabled: 'Disabled',
+    },
+    /** Under a status: who stopped texts (§19 Q242), the automatic re-send (Q241), devices. */
+    statusNotes: {
+      byPerson: 'Stopped by them (STOP)',
+      byProvider: 'Stopped by the phone company',
+      autoResent: 'Re-sent automatically',
+      devices_one: '{{count}} phone signed in',
+      devices_other: '{{count}} phones signed in',
+    },
     edit: {
-      title: (name: string) => `Edit ${name}`,
-      description: 'Changes apply from the next message this number sends.',
-      phone: 'WhatsApp number',
+      title: 'Edit {{name}}',
+      description: 'Changes apply to the next text or call.',
+      phone: 'Mobile number',
       phoneHint:
         'The number can’t be changed. To use a new number, disable this reporter and invite the new number.',
+      preference: 'Prefers',
+      messageChannel: 'Messages go by',
+      channelDefault: 'Your country’s order ({{order}})',
+      language: 'Language SiteLog uses',
+      languageHint: 'Texts, the recorder and calls are in this language.',
+      /** §19 Q243: required to change the preference or the channel. */
+      attest: '{{first}} asked for this change',
+      attestHint: 'Saved in the log with your name.',
+      attestRequired: 'Tick the box: change how SiteLog reaches {{first}} only when they asked.',
+      channelNotAgreed:
+        '{{first}} has not agreed to {{channel}} yet. Messages go another way until they turn it on in the recorder.',
       save: 'Save changes',
-      saved: (name: string) => `${name} updated.`,
     },
     officeEmpty: 'No office users.',
     changeRole: 'Change role',
     removeUser: 'Remove',
     you: 'you',
     disableDialog: {
-      title: (name: string) => `Disable ${name}?`,
-      body: 'Their messages are no longer matched to a site. Re-send the invite to enable them again.',
+      title: 'Disable {{name}}?',
+      body: 'SiteLog stops texting and calling them, and their link stops working. Re-send the welcome to enable them again.',
     },
     removeDialog: {
-      title: (name: string) => `Remove ${name}?`,
+      title: 'Remove {{name}}?',
       body: 'They lose access to this company right away. You can invite them again later.',
       confirm: 'Remove user',
     },
+    /** F16 lost phone (§19 Q244). */
+    revokeDialog: {
+      title: 'Revoke devices for {{name}}?',
+      body: 'Every phone that opened {{first}}’s link is signed out. Their next open asks for a code sent to {{phone}}. Their consents and personal link stay.',
+      count_one: 'Signed in now: {{count}} phone.',
+      count_other: 'Signed in now: {{count}} phones.',
+      confirm: 'Revoke devices',
+    },
+    /** §19 Q242: one-way packs only, an opt-out the phone company recorded. */
+    optOutDialog: {
+      title: 'Turn texts back on for {{name}}?',
+      body: 'The phone company stopped texts to this number. Do this only if {{first}} asked to get texts again. The phone company may still refuse them.',
+      attest: '{{first}} asked to get texts again',
+      confirm: 'Turn texts back on',
+    },
+    /** Why Team offers no way back on a two-way pack (START by the person only). */
+    optOutStartOnly:
+      'Only {{first}} can turn texts back on, by replying START to one of our texts.',
     reporters: 'Field reporters',
     columns: {
       name: 'Name',
-      whatsapp: 'WhatsApp',
+      mobile: 'Mobile',
+      prefers: 'Prefers',
       sites: 'Sites',
-      speaks: 'Speaks',
+      language: 'Language',
       onTime: 'On time · 30 d',
       status: 'Status',
     },
     roles: { site_manager: 'Site manager', backup: 'Backup' },
-    rowMenu: { edit: 'Edit', resendInvite: 'Re-send invite', disable: 'Disable' },
+    rowMenu: {
+      edit: 'Edit',
+      resendWelcome: 'Re-send welcome',
+      textLink: 'Text today’s link',
+      textLinkAt: 'Text today’s link · {{site}}',
+      revokeDevices: 'Revoke devices',
+      clearOptOut: 'Turn texts back on',
+      enable: 'Enable',
+      disable: 'Disable',
+    },
     office: 'Office users',
     addOfficeUser: 'Add office user',
     officeRoles: { admin: 'Admin', pm: 'Project manager', ops: 'Operations', accounts: 'Accounts' },
+    /** F24: an office user's panel language (`org_members.ui_locale`). */
+    uiLocales: {
+      'en-US': 'English',
+      'tr-TR': 'Turkish',
+    },
+    officeLanguage: 'Panel in {{language}}',
     howMatching: 'How matching works',
     howMatchingBody:
-      'Each reporter’s WhatsApp number is linked to one or more sites. A message from a linked number files to that site; an unknown number is held here until you link or ignore it.',
+      'Each reporter’s phone number and personal link are tied to their sites. A call or text from a linked number goes to those sites; an unknown number never creates a report. It is held here until you link or ignore it.',
     invite: {
       title: 'Invite reporter',
       name: 'Name',
@@ -1800,8 +1880,12 @@ export const copy = {
       role: 'Role',
       sites: 'Sites',
       languages: 'Speaks',
+      language: 'Language SiteLog uses',
+      preference: 'Preferred channel',
+      preferenceHint: 'They can always use the other one.',
+      /** §19 Q33: a call preference where the pack has no voice number. */
+      callTalkNow: 'They will use Talk now in the recorder.',
       send: 'Send welcome text',
-      sent: (name: string) => `Welcome text queued for ${name}.`,
       description:
         'Texts the reporter their personal link. They open it on their phone, confirm the number with a code and agree to recording.',
       namePlaceholder: 'Full name',
@@ -1811,7 +1895,7 @@ export const copy = {
       noSitesAskAdmin: 'Ask an admin to add a site first. Each reporter reports for a site.',
       addSite: 'Add a site',
       /** The org's report language (§9.6, `orgs.locale`), named as the chips name it. */
-      languagesHint: (language: string) => `Reports always come out in ${language}.`,
+      languagesHint: 'Reports always come out in {{language}}.',
       languageNames: {
         en: 'English',
         es: 'Spanish',
@@ -1829,8 +1913,9 @@ export const copy = {
       emailPlaceholder: 'name@company.com',
       emailInvalid: 'Enter a valid email.',
       role: 'Role',
+      uiLanguage: 'Panel language',
+      uiLanguageOrg: 'The company’s language ({{language}})',
       send: 'Send invite',
-      sent: (email: string) => `Invite sent to ${email}.`,
       lastAdmin: 'You can’t remove the last admin.',
       roleHelp: {
         admin: 'Everything, including settings and billing',
@@ -1838,6 +1923,31 @@ export const copy = {
         ops: 'Everything except settings and billing',
         accounts: 'Crew hours and payroll only',
       },
+    },
+    toasts: {
+      invited: 'Welcome text queued for {{name}}.',
+      /** api-invite-reporter answered `opted_out`: the number sent STOP, so nothing is texted. */
+      invitedOptedOut: '{{name}} opted out of texts (STOP); no welcome text was sent.',
+      linked: 'Number linked.',
+      ignored: 'Number ignored.',
+      resent: 'Welcome text re-sent to {{name}}.',
+      disabled: '{{name}} disabled.',
+      enabled: '{{name}} enabled. A new welcome text is on its way.',
+      updated: '{{name}} updated.',
+      devicesRevoked: '{{name}} is signed out on every phone. The next open asks for a code.',
+      optOutCleared: 'Texts turned back on for {{name}}.',
+      memberAdded: 'Invite sent to {{email}}.',
+      memberUpdated: 'Role updated.',
+      memberRemoved: 'User removed.',
+    },
+    /** The RPCs' refusals (CodedError codes), in the panel's language. */
+    errors: {
+      attestation_required: 'Tick the box first: the person must have asked for this.',
+      channel_not_offered: 'That channel is not offered in your country.',
+      locale_not_offered: 'That language is not offered in your country.',
+      two_way_pack: 'Only the person can turn texts back on, by replying START.',
+      opted_out_by_person: 'They stopped texts themselves. Only they can turn them back on.',
+      not_opted_out: 'Texts are not stopped for this number.',
     },
   },
 
@@ -2363,12 +2473,6 @@ export const copy = {
     versionSavedN: 'Version {{version}} saved.',
     invoiceAdded: 'Invoice added.',
     notificationsRead: 'Marked as read.',
-    reporterInvited: (name: string) => `Welcome text queued for ${name}.`,
-    /** api-invite-reporter answered `opted_out`: the number sent STOP, so nothing is texted. */
-    reporterInvitedOptedOut: (name: string) =>
-      `${name} opted out of texts (STOP); no welcome text was sent.`,
-    linked: 'Number linked.',
-    ignored: 'Number ignored.',
     termReviewed: 'Glossary updated.',
     termAdded: 'Term added.',
     settingsSaved: 'Settings saved.',
@@ -2376,9 +2480,6 @@ export const copy = {
     siteResumed: (site: string) => `${site} resumed.`,
     siteCreated: (site: string) => `${site} connected.`,
     siteUpdated: 'Site updated.',
-    memberAdded: (email: string) => `Invite sent to ${email}.`,
-    memberUpdated: 'Role updated.',
-    memberRemoved: 'User removed.',
     packRequested: 'Evidence pack requested.',
     csvReady: 'Payroll CSV ready.',
     companyResolved: 'Company resolved. New version saved.',
@@ -2616,6 +2717,7 @@ export const copy = {
     kpiBreakdown: 'Breakdown: {{parts}}',
     siteCard: (name: string) => `Site card: ${name}`,
     menuFor: (name: string) => `Menu for ${name}`,
+    menuForName: 'Menu for {{name}}',
     required: 'required',
     searchResults: 'Search results',
     loadingPage: 'Loading page',

@@ -1,11 +1,11 @@
 import { assertEquals, assertRejects } from '@std/assert';
 import {
-  deriveLinkCode,
-  linkCodeHash,
-  toCountryPack,
   type ConsentType,
   type CountryRow,
+  deriveLinkCode,
+  linkCodeHash,
   type MemberRole,
+  toCountryPack,
 } from '@sitelog/shared';
 import { DEMO_COUNTRIES } from '@sitelog/shared/demo/countries.ts';
 import { fakeMessaging } from '../_shared/fake_messaging.ts';
@@ -268,3 +268,40 @@ Deno.test('pickReporter: the active primary reporter, else the first active one'
   assertEquals(pickReporter([r('a', 'disabled')]), null);
   assertEquals(pickReporter([]), null);
 });
+
+Deno.test(
+  'Team names the reporter (W4-03): that one gets the link, linked and active, else 409',
+  async () => {
+    const OLA = '77777777-7777-4777-8777-777777777777';
+    const reporters = [
+      { id: PRIYA, name: 'Priya Raman', status: 'active', is_primary: false },
+      { id: OLA, name: 'Ola', status: 'invited', is_primary: true },
+    ];
+    const ok = setup({ reporters });
+    const result = await textDailyLink(ok.deps, LENA, {
+      siteId: SITE,
+      requestId: REQ,
+      reporterId: PRIYA,
+    });
+    assertEquals([result.sent, result.reporterId], [true, PRIYA]);
+    assertEquals(ok.audits.at(-1)!.entityId, PRIYA);
+
+    const inactive = setup({ reporters });
+    const notActive = await assertRejects(
+      () => textDailyLink(inactive.deps, LENA, { siteId: SITE, requestId: REQ, reporterId: OLA }),
+      HttpError,
+    );
+    assertEquals([notActive.status, notActive.details], [409, { code: 'reporter_not_active' }]);
+    const notLinked = await assertRejects(
+      () =>
+        textDailyLink(inactive.deps, LENA, {
+          siteId: SITE,
+          requestId: REQ,
+          reporterId: '99999999-9999-4999-8999-999999999999',
+        }),
+      HttpError,
+    );
+    assertEquals([notLinked.status, notLinked.details], [409, { code: 'reporter_not_linked' }]);
+    assertEquals(inactive.messaging.sent.length, 0);
+  },
+);

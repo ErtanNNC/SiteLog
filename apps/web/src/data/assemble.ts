@@ -98,7 +98,10 @@ import {
   parseIsoDate,
   type MeasureKind,
 } from '@sitelog/shared/format.ts';
-import type { UnitSystem } from '@sitelog/shared/locale.ts';
+import type { OrgLocale, ReporterLocale, UnitSystem } from '@sitelog/shared/locale.ts';
+import { settingsMessageChannels } from '@sitelog/shared/channels.ts';
+import type { CountryPack } from '@sitelog/shared/countries.ts';
+import { attemptIsFinal, attemptWasSent } from '@sitelog/shared/notify/walk.ts';
 import { copy } from '@/copy/en';
 import { copyRef } from '@/i18n/copyRef';
 import { groupBy, isRecord, sum, uniq } from '@/lib/utils';
@@ -149,6 +152,8 @@ import type {
   StreakStatus,
   TeamData,
   TeamReporter,
+  TeamReporterState,
+  WelcomeAttempt,
   TranscriptExcerpt,
   TranscriptSegment,
   WeatherLog,
@@ -2757,8 +2762,36 @@ export function assembleWeather(
 
 // ───────────────────────────── Team ─────────────────────────────
 
-export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
+/**
+ * P10 "Can't text this number" (W4-03): the latest welcome never went out and its walk is over
+ * (W2-01): no attempt was sent and the last one failed for good on its channel.
+ */
+export function welcomeUndeliverable(attempts: readonly WelcomeAttempt[]): boolean {
+  if (!attempts.length || attempts.some((a) => attemptWasSent(a))) return false;
+  const last = [...attempts].sort((a, b) => a.attempt - b.attempt).at(-1)!;
+  return attemptIsFinal({
+    status: last.status,
+    provider_message_id: last.provider_message_id,
+  });
+}
+
+/** The consent a message channel needs (§4.5; `MessageChannelSpec.consent`). */
+const CHANNEL_CONSENT = { sms: 'sms', whatsapp: 'whatsapp', push: 'push' } as const;
+
+/** §19 Q241 (W4-12): the automatic re-send's dedupe key. */
+const AUTO_RESEND_KEY = 'welcome_resend:';
+
+/**
+ * Team (P10, W4-03). `pack` is the org's country pack; `states` what `team_reporter_states()`
+ * answers (the demo builds the same from its rows).
+ */
+export function assembleTeam(
+  rows: RowSet,
+  ctx: AssembleCtx,
+  extra: { pack: CountryPack; states: readonly TeamReporterState[] },
+): TeamData {
   const ix = buildIndex(rows);
+  const stateById = new Map(extra.states.map((x) => [x.reporterId, x]));
   const today = formatDateInTz(ctx.now, rows.org.timezone);
   const from = addDays(today, -30);
   const reporters: TeamReporter[] = rows.reporters.map((r) => {
@@ -2787,6 +2820,8 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
         }
       }
     }
+    const state = stateById.get(r.id);
+    const welcome = state?.welcome ?? [];
     const chipStatus: TeamReporter['chipStatus'] =
       r.status === 'disabled'
         ? 'disabled'
@@ -2794,9 +2829,12 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
           ? 'opted_out'
           : isActiveReporterStatus(r.status)
             ? 'active'
-            : r.last_invite_error
-              ? 'not_on_whatsapp'
+            : welcomeUndeliverable(welcome)
+              ? 'undeliverable'
               : 'invite_sent';
+    const optedOut = r.status === 'opted_out' || r.opted_out_at !== null;
+    const method = state?.optOutMethod ?? null;
+    const channel = r.message_channel;
     return {
       id: r.id,
       name: r.name,
@@ -2808,8 +2846,23 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
       sites,
       onTime30: expected ? Math.round((onTime / expected) * 100) : null,
       reports30,
-      lastInviteError: r.last_invite_error,
       contactPref: r.contact_pref,
+      messageChannel: channel,
+      locale: r.locale as ReporterLocale,
+      optOutBy: !optedOut
+        ? null
+        : method === 'sms_keyword'
+          ? 'person'
+          : method === 'provider_opt_out'
+            ? 'provider'
+            : null,
+      devices: state?.devices ?? 0,
+      consents: state?.consents ?? [],
+      channelUnreachable:
+        channel !== null && !!state && !state.consents.includes(CHANNEL_CONSENT[channel]),
+      autoResent:
+        chipStatus === 'invite_sent' &&
+        welcome.some((a) => a.dedupe_key?.startsWith(AUTO_RESEND_KEY) === true),
     };
   });
   reporters.sort((a, b) => a.name.localeCompare(b.name));
@@ -2832,6 +2885,15 @@ export function assembleTeam(rows: RowSet, ctx: AssembleCtx): TeamData {
     unknownSenders,
     officeUsers: officeUsers(rows),
     sites: rows.sites.filter((s) => s.status !== 'archived').map(toSiteOption),
+    pack: {
+      code: extra.pack.code,
+      fieldLocales: [...extra.pack.fieldLocales],
+      messageChannels: [...extra.pack.messageChannels],
+      settingsChannels: settingsMessageChannels(extra.pack),
+      twoWaySms: extra.pack.twoWaySms,
+      hasVoiceNumber: extra.pack.voiceNumber !== null,
+    },
+    orgLocale: rows.org.locale as OrgLocale,
   };
 }
 
@@ -2844,6 +2906,7 @@ export function officeUsers(rows: RowSet): OfficeUser[] {
       email: m.email ?? null,
       title: m.title,
       role: m.role,
+      uiLocale: (m.ui_locale as OrgLocale | null) ?? null,
     }))
     .sort((a, b) => (order[a.role] ?? 9) - (order[b.role] ?? 9) || a.name.localeCompare(b.name));
 }

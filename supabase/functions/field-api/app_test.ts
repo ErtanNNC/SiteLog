@@ -2257,6 +2257,26 @@ Deno.test(
 );
 
 Deno.test(
+  'Team → Revoke devices (W4-03, §19 Q244): the next open asks for a code; consents and link stay',
+  async () => {
+    const h = setup();
+    await consented(h);
+    assertEquals((await h.call('GET', 'today')).status, 200);
+    const consents = h.store.consents.filter((c) => c.revoked_at === null).length;
+    // What revoke_reporter_devices() writes: every live device of the reporter revoked.
+    for (const d of h.store.devices) if (d.reporter_id === MARCO) d.revoked_at = T0.toISOString();
+    assertEquals((await h.call('GET', 'today')).json.error, 'device_unverified');
+    const resolved = await h.call('POST', 'resolve', { body: { code: CODES.marco }, code: null });
+    assertEquals(resolved.status, 200);
+    assertEquals(resolved.json.needsDeviceCheck, true);
+    // A new code makes a new device; the consents were kept, so no Welcome again.
+    await verifiedDevice(h);
+    assertEquals((await h.call('GET', 'today')).status, 200);
+    assertEquals(h.store.consents.filter((c) => c.revoked_at === null).length, consents);
+  },
+);
+
+Deno.test(
   'Settings: with texts turned off, the device code still goes by SMS (Q25, W2-02)',
   async () => {
     const messaging = fakeMessaging();

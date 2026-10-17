@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { copy } from '@/copy/en';
+import { useCopy } from '@/i18n/useCopy';
 import { cn } from '@/lib/utils';
 import { LANGUAGES } from '../team/InviteReporterDialog';
 import { Field, TimezoneSelect } from './fields';
@@ -56,6 +57,8 @@ export function SiteStep({
   /** The org's pack country (`orgs.country`): its numbers first, another country's warned (Q23). */
   packCountry: string;
 }) {
+  // The page is <EnglishOnly> until W4-02: t() reads English here; Team's string key is shared.
+  const { t } = useCopy();
   const c = copy.setup.site;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [geo, setGeo] = useState<GeoState>({ status: 'idle' });
@@ -333,7 +336,7 @@ export function SiteStep({
                   })}
                 </div>
                 <p className="text-caption text-dust">
-                  {copy.team.invite.languagesHint(reportLanguage)}
+                  {t('team.invite.languagesHint', { language: reportLanguage })}
                 </p>
               </fieldset>
 

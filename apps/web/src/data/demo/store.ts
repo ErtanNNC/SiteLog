@@ -86,6 +86,7 @@ import type {
   ResolveUnknownCompanyInput,
   ReviewGlossaryTermInput,
   UpdateOrgInput,
+  UpdateReporterContactInput,
   UpdateReporterInput,
   UpdateSitePatch,
 } from '../source';
@@ -96,9 +97,13 @@ import type {
   DemoPhoneMessage,
   OrgSettingsPatch,
   OrglessContacts,
+  TeamReporterState,
   TextDailyLinkErrorCode,
   TextDailyLinkResult,
 } from '../types';
+import { attemptNumber } from '@sitelog/shared/notify/walk.ts';
+import { settingsMessageChannels } from '@sitelog/shared/channels.ts';
+import type { OrgLocale } from '@sitelog/shared/locale.ts';
 
 /** Extra demo office user so `?as=ops` has someone to be (not part of the §18 seed). */
 export const DEMO_OPS_USER: DemoUser = {
@@ -999,7 +1004,12 @@ export class DemoStore {
    * (else its first active one), today's daily link in the site's day, and the `daily_link` text
    * unless they cannot get texts (disabled, opted out, no SMS consent). Audited like the function.
    */
-  textDailyLink(siteId: string, requestId: string, userId: string): TextDailyLinkResult {
+  textDailyLink(
+    siteId: string,
+    requestId: string,
+    userId: string,
+    reporterId?: string,
+  ): TextDailyLinkResult {
     const done = this.dailyLinkRequests.get(requestId);
     if (done) return done;
     const d = this.data;
@@ -1019,7 +1029,21 @@ export class DemoStore {
       );
     }
     const active = reporters.filter((x) => isActiveReporterStatus(x.r.status));
-    const reporter = (active.find((x) => x.sr.is_primary) ?? active[0])?.r;
+    // W4-03: Team's row menu names the reporter.
+    const named = reporterId ? reporters.find((x) => x.r.id === reporterId) : undefined;
+    if (reporterId && !named) {
+      throw new CodedError(
+        'reporter_not_linked' satisfies TextDailyLinkErrorCode,
+        'This reporter is not linked to this site',
+      );
+    }
+    if (named && !isActiveReporterStatus(named.r.status)) {
+      throw new CodedError(
+        'reporter_not_active' satisfies TextDailyLinkErrorCode,
+        'This reporter is not active',
+      );
+    }
+    const reporter = named?.r ?? (active.find((x) => x.sr.is_primary) ?? active[0])?.r;
     if (!reporter) {
       throw new CodedError(
         'no_active_reporter' satisfies TextDailyLinkErrorCode,
@@ -1371,7 +1395,11 @@ export class DemoStore {
       phone_e164: input.phone,
       role: input.role,
       languages: input.languages,
-      locale: reporterLocaleFor(pack, input.languages) ?? reporterDefaultsFor(pack).locale,
+      locale:
+        input.locale && pack.fieldLocales.includes(input.locale)
+          ? input.locale
+          : (reporterLocaleFor(pack, input.languages) ?? reporterDefaultsFor(pack).locale),
+      contact_pref: input.contactPref ?? 'link',
       status: 'invited',
       invited_at: this.nowIso(),
       verified_at: null,
@@ -1584,6 +1612,190 @@ export class DemoStore {
     this.emit({ table: 'all' });
   }
 
+  // ─── Team on v1.2 (W4-03): mirrors of 20261017000420_team_v1_2.sql ───
+
+  /**
+   * The demo's signed-in phones (F16): one per reporter who consented on it (the §18 consents
+   * stand for the first open), until Team revokes them. Not part of the §18 rows.
+   */
+  private readonly revokedDevices = new Set<string>();
+  /** Phone-level opt-outs (`sms_opt_outs.method`) this session knows of; tests set them. */
+  readonly smsOptOuts = new Map<string, 'sms_keyword' | 'provider_opt_out'>();
+
+  private devicesOf(reporterId: string): number {
+    if (this.revokedDevices.has(reporterId)) return 0;
+    return this.data.consents.some(
+      (c) => c.reporter_id === reporterId && c.type === 'recording' && c.revoked_at === null,
+    )
+      ? 1
+      : 0;
+  }
+
+  /** What team_reporter_states() answers, from the demo's rows. */
+  teamStates(): TeamReporterState[] {
+    const d = this.data;
+    return d.reporters.map((r) => {
+      const welcomes = d.messages
+        .filter((m) => m.reporter_id === r.id && m.copy_key === 'welcome' && m.direction === 'out')
+        .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+      const latest = welcomes.at(-1);
+      const keyOf = (m: { payload: unknown }) =>
+        ((m.payload as { dedupe_key?: unknown } | null)?.dedupe_key as string | undefined) ?? null;
+      const key = latest ? keyOf(latest) : null;
+      const attempts = latest
+        ? welcomes.filter((m) => m === latest || (key !== null && keyOf(m) === key))
+        : [];
+      // A STOP on the Demo phone is audited as the reporter with its method (demoReply).
+      const stop = d.audit
+        .filter((a) => a.entity_id === r.id && a.action === 'reporter.opted_out')
+        .at(-1);
+      const audited = (stop?.diff as { method?: string } | null)?.method;
+      const method =
+        this.smsOptOuts.get(r.phone_e164) ??
+        (r.status === 'opted_out' && audited === 'provider_opt_out'
+          ? 'provider_opt_out'
+          : r.status === 'opted_out' && audited === 'sms_keyword'
+            ? 'sms_keyword'
+            : null);
+      return {
+        reporterId: r.id,
+        optOutMethod: method,
+        devices: this.devicesOf(r.id),
+        consents: [
+          ...new Set(
+            d.consents
+              .filter((c) => c.reporter_id === r.id && c.revoked_at === null)
+              .map((c) => c.type as string),
+          ),
+        ].sort(),
+        welcome: attempts.map((m) => ({
+          status: m.status,
+          channel: m.channel,
+          provider_message_id: m.provider_message_id,
+          attempt: attemptNumber(m.payload),
+          dedupe_key: keyOf(m),
+        })),
+      };
+    });
+  }
+
+  /** update_reporter_contact(): preference, channel, language; the attestation for the first two. */
+  updateReporterContact(input: UpdateReporterContactInput, userId: string): { changed: boolean } {
+    const r = this.data.reporters.find((x) => x.id === input.reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    const pack = demoOrgPack(this.data);
+    if (!pack.fieldLocales.includes(input.locale))
+      throw new CodedError('locale_not_offered', 'locale_not_offered');
+    if (
+      input.messageChannel !== null &&
+      !settingsMessageChannels(pack).includes(input.messageChannel)
+    )
+      throw new CodedError('channel_not_offered', 'channel_not_offered');
+    const from: Record<string, string | null> = {};
+    const to: Record<string, string | null> = {};
+    if (r.contact_pref !== input.contactPref) {
+      from.contact_pref = r.contact_pref;
+      to.contact_pref = input.contactPref;
+    }
+    if (r.message_channel !== input.messageChannel) {
+      from.message_channel = r.message_channel;
+      to.message_channel = input.messageChannel;
+    }
+    if (Object.keys(to).length && !input.attested)
+      throw new CodedError('attestation_required', 'attestation_required');
+    if (r.locale !== input.locale) {
+      from.locale = r.locale;
+      to.locale = input.locale;
+    }
+    if (!Object.keys(to).length) return { changed: false };
+    r.contact_pref = input.contactPref;
+    r.message_channel = input.messageChannel;
+    r.locale = input.locale;
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'reporter.preferences_changed',
+      entity: 'reporter',
+      entity_id: r.id,
+      diff: { from, to, via: 'office', attested: input.attested },
+    });
+    this.emit({ table: 'all' });
+    return { changed: true };
+  }
+
+  /** revoke_reporter_devices() (§19 Q244): consents and the personal link stay. */
+  revokeReporterDevices(reporterId: string, userId: string): { devices: number } {
+    const r = this.data.reporters.find((x) => x.id === reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    const devices = this.devicesOf(r.id);
+    this.revokedDevices.add(r.id);
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'device.revoked',
+      entity: 'reporter',
+      entity_id: r.id,
+      diff: { via: 'office', devices, push_subscriptions: 0 },
+    });
+    this.emit({ table: 'all' });
+    return { devices };
+  }
+
+  /** clear_reporter_opt_out() (§19 Q242): an admin, one-way packs, a provider's opt-out only. */
+  clearReporterOptOut(reporterId: string, attested: boolean, userId: string): void {
+    const r = this.data.reporters.find((x) => x.id === reporterId);
+    if (!r) throw new Error(copy.errors.notFound);
+    if (demoOrgPack(this.data).twoWaySms) throw new CodedError('two_way_pack', 'two_way_pack');
+    if (!attested) throw new CodedError('attestation_required', 'attestation_required');
+    const method = this.teamStates().find((x) => x.reporterId === r.id)?.optOutMethod ?? null;
+    if (method === 'sms_keyword')
+      throw new CodedError('opted_out_by_person', 'opted_out_by_person');
+    if (method === null && r.status !== 'opted_out' && r.opted_out_at === null)
+      throw new CodedError('not_opted_out', 'not_opted_out');
+    this.smsOptOuts.delete(r.phone_e164);
+    const from = r.status;
+    if (r.status === 'opted_out') r.status = r.activated_at ? 'active' : 'invited';
+    r.opted_out_at = null;
+    this.audit({
+      org_id: this.data.org.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'reporter.opt_out_cleared',
+      entity: 'reporter',
+      entity_id: r.id,
+      diff: { via: 'office', method: method ?? 'provider_opt_out', status: { from, to: r.status } },
+    });
+    if (
+      !this.data.consents.some(
+        (c) => c.reporter_id === r.id && c.type === 'sms' && c.revoked_at === null,
+      )
+    ) {
+      const id = localId('consent');
+      this.data.consents.push({
+        id,
+        reporter_id: r.id,
+        type: 'sms',
+        method: 'office_attested',
+        text_version: 'team.texts_again.v1',
+        evidence: { user_id: userId, via: 'office', at: this.nowIso() },
+        given_at: this.nowIso(),
+        revoked_at: null,
+      });
+      this.audit({
+        org_id: this.data.org.id,
+        actor_type: 'user',
+        actor_id: userId,
+        action: 'consent.given',
+        entity: 'consent',
+        entity_id: id,
+        diff: { type: 'sms', method: 'office_attested', via: 'office', reporter_id: r.id },
+      });
+    }
+    this.emit({ table: 'all' });
+  }
+
   /** Mirror of update_reporter() (20261012000001_web_gaps.sql). The phone never changes. */
   updateReporter(input: UpdateReporterInput, userId: string): void {
     const r = this.data.reporters.find((x) => x.id === input.reporterId);
@@ -1707,7 +1919,10 @@ export class DemoStore {
     this.emit({ table: 'unknown_contacts', id });
   }
 
-  addOfficeUser(input: { email: string; role: MemberRole; name?: string }, userId: string): void {
+  addOfficeUser(
+    input: { email: string; role: MemberRole; name?: string; uiLocale?: OrgLocale | null },
+    userId: string,
+  ): void {
     const id = localId('user');
     this.data.users.push({
       id,
@@ -1724,6 +1939,7 @@ export class DemoStore {
       display_name: input.name ?? input.email,
       title: null,
       created_at: this.nowIso(),
+      ui_locale: input.uiLocale ?? null,
     });
     this.audit({
       org_id: this.data.org.id,
@@ -1732,7 +1948,7 @@ export class DemoStore {
       action: 'member.invited',
       entity: 'org',
       entity_id: this.data.org.id,
-      diff: { email: input.email, role: input.role },
+      diff: { email: input.email, role: input.role, ui_locale: input.uiLocale ?? null },
     });
     this.emit({ table: 'all' });
   }

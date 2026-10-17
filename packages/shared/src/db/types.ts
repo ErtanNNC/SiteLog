@@ -137,7 +137,10 @@ export type OrgMemberRow = {
   display_name: string | null;
   title: string | null;
   created_at: string;
-  /** The user's panel language; null → the org locale (§11.2). */
+  /**
+   * The user's panel language, `en-US` or `tr-TR` (check since 20261017000420, W4-03: F24's Add
+   * office user sets it); null → the org locale (§11.2).
+   */
   ui_locale: string | null;
 };
 
@@ -2160,6 +2163,32 @@ export type Database = {
           p_languages: string[];
         };
         Returns: Json;
+      };
+      // W4-03 (20261017000420_team_v1_2.sql): Team on v1.2, admin and ops (clear: admin).
+      update_reporter_contact: {
+        Args: {
+          p_reporter_id: string;
+          p_contact_pref: ContactPref;
+          p_message_channel: MessageChannel | null;
+          p_locale: string;
+          p_attested?: boolean;
+        };
+        Returns: Json;
+      };
+      revoke_reporter_devices: { Args: { p_reporter_id: string }; Returns: Json };
+      clear_reporter_opt_out: {
+        Args: { p_reporter_id: string; p_text_version: string; p_attested?: boolean };
+        Returns: Json;
+      };
+      team_reporter_states: {
+        Args: { p_org_id: string };
+        Returns: Array<{
+          reporter_id: string;
+          opt_out_method: string | null;
+          devices: number;
+          consents: string[];
+          welcome: Json;
+        }>;
       };
       log_audit: {
         Args: {

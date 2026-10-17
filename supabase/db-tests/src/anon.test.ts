@@ -76,6 +76,11 @@ const AUTHENTICATED_KEEPS = [
   'review_glossary_term(uuid,text,text,uuid)',
   'sign_off_report(uuid)',
   'undo_sign_off(uuid)',
+  // W4-03: Team on v1.2.
+  'update_reporter_contact(uuid,contact_pref,message_channel,text,boolean)',
+  'revoke_reporter_devices(uuid)',
+  'clear_reporter_opt_out(uuid,text,boolean)',
+  'team_reporter_states(uuid)',
 ] as const;
 
 let db: PGlite;

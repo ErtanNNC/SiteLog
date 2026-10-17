@@ -20,9 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/Select';
-import { copy } from '@/copy/en';
 import { useLinkUnknownSender } from '@/data/hooks';
 import type { SiteOption, UnknownSenderItem } from '@/data/types';
+import { useCopy } from '@/i18n/useCopy';
 
 interface Props {
   sender: UnknownSenderItem | null;
@@ -40,7 +40,7 @@ export function guessName(snippet: string | null): string {
 
 /** "Link to {site}" dialog: name, role, site → linkUnknownSender (F11). */
 export function LinkSenderDialog({ sender, onOpenChange, sites }: Props) {
-  const c = copy.team.link;
+  const { t } = useCopy();
   const link = useLinkUnknownSender();
   // The parent keys this dialog by sender id, so state initialises per sender.
   const [name, setName] = useState(() => guessName(sender?.snippet ?? null));
@@ -51,8 +51,8 @@ export function LinkSenderDialog({ sender, onOpenChange, sites }: Props) {
   const submit = () => {
     if (!sender) return;
     const next: Record<string, string> = {};
-    if (!name.trim()) next.name = c.nameRequired;
-    if (!siteId) next.site = c.siteRequired;
+    if (!name.trim()) next.name = t('team.link.nameRequired');
+    if (!siteId) next.site = t('team.link.siteRequired');
     setErrors(next);
     if (Object.keys(next).length) return;
     link.mutate(
@@ -65,14 +65,16 @@ export function LinkSenderDialog({ sender, onOpenChange, sites }: Props) {
     <Dialog open={!!sender} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{c.title(sender ? formatPhone(sender.phone) : '')}</DialogTitle>
+          <DialogTitle>
+            {t('team.link.title', { phone: sender ? formatPhone(sender.phone) : '' })}
+          </DialogTitle>
           <DialogDescription>
-            {sender?.channel ? c.descriptionConsent : c.description}
+            {sender?.channel ? t('team.link.descriptionConsent') : t('team.link.description')}
           </DialogDescription>
         </DialogHeader>
         {sender?.snippet ? (
           <blockquote className="mt-3 rounded-card border border-rebar bg-concrete/60 px-4 py-3 text-[15px] leading-[22px]">
-            {copy.team.unknown.snippet(sender.snippet)}
+            {t('team.unknown.snippet', { text: sender.snippet })}
           </blockquote>
         ) : null}
         <form
@@ -84,12 +86,12 @@ export function LinkSenderDialog({ sender, onOpenChange, sites }: Props) {
           }}
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="link-name">{c.name}</Label>
+            <Label htmlFor="link-name">{t('team.link.name')}</Label>
             <Input
               id="link-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={c.namePlaceholder}
+              placeholder={t('team.link.namePlaceholder')}
               aria-invalid={!!errors.name}
             />
             {errors.name ? (
@@ -100,22 +102,22 @@ export function LinkSenderDialog({ sender, onOpenChange, sites }: Props) {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-1.5">
-              <Label htmlFor="link-role">{c.role}</Label>
+              <Label htmlFor="link-role">{t('team.link.role')}</Label>
               <Select value={role} onValueChange={(v) => setRole(v as ReporterRole)}>
                 <SelectTrigger id="link-role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="backup">{copy.team.roles.backup}</SelectItem>
-                  <SelectItem value="site_manager">{copy.team.roles.site_manager}</SelectItem>
+                  <SelectItem value="backup">{t('team.roles.backup')}</SelectItem>
+                  <SelectItem value="site_manager">{t('team.roles.site_manager')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="link-site">{c.site}</Label>
+              <Label htmlFor="link-site">{t('team.link.site')}</Label>
               <Select value={siteId} onValueChange={setSiteId}>
                 <SelectTrigger id="link-site" aria-invalid={!!errors.site}>
-                  <SelectValue placeholder={copy.hours.siteSelect} />
+                  <SelectValue placeholder={t('team.link.sitePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   {sites.map((s) => (
@@ -134,10 +136,10 @@ export function LinkSenderDialog({ sender, onOpenChange, sites }: Props) {
           </div>
           <DialogFooter className="mt-2">
             <DialogClose asChild>
-              <Button variant="ghost">{copy.common.cancel}</Button>
+              <Button variant="ghost">{t('common.cancel')}</Button>
             </DialogClose>
             <Button type="submit" variant="primary" loading={link.isPending}>
-              {c.confirm}
+              {t('team.link.confirm')}
             </Button>
           </DialogFooter>
         </form>

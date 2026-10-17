@@ -1,11 +1,11 @@
 import {
   dailyLinkExpiresAt,
+  type DailyLinkStore,
   ensureDailyLink,
   fieldLinkUrl,
   formatDateInTz,
   formatPhone,
   isActiveReporterStatus,
-  type DailyLinkStore,
   type MemberRole,
   type Notifier,
   type NotifyOutcome,
@@ -22,6 +22,8 @@ import { HttpError } from '../_shared/http.ts';
  * - To whom: the site's active primary reporter, else its first active one (F17 "Call {manager}"
  *   names the same person); a disabled, opted-out or not yet active primary is passed over. A site
  *   with nobody linked is 409 `no_reporter`, one with nobody active 409 `no_active_reporter`.
+ *   Team's row menu (P10, W4-03) names the reporter (`reporterId`): one not linked to the site is
+ *   409 `reporter_not_linked`, one who is not active 409 `reporter_not_active`.
  * - Which link: today's in the site's time zone, reused while it lives (`ensureDailyLink`), so a
  *   second tap texts the same link; a new one expires after DAILY_LINK_TTL_HOURS (§5.1).
  * - Once per request: the panel sends a fresh `requestId` per tap; it is the Notifier's dedupe
@@ -95,13 +97,14 @@ export function pickReporter(reporters: readonly TextLinkReporter[]): TextLinkRe
   return active.find((r) => r.is_primary) ?? active[0] ?? null;
 }
 
-/** The 409 codes when the site has no one to text (`details.code`). */
-export type NoReporterCode = 'no_reporter' | 'no_active_reporter';
+/** The 409 codes when the site has no one to text, or not the one named (`details.code`). */
+export type NoReporterCode =
+  'no_reporter' | 'no_active_reporter' | 'reporter_not_linked' | 'reporter_not_active';
 
 export async function textDailyLink(
   deps: TextLinkDeps,
   userId: string,
-  input: { siteId: string; requestId: string },
+  input: { siteId: string; requestId: string; reporterId?: string },
 ): Promise<TextLinkResult> {
   const { store } = deps;
   const site = await store.loadSite(input.siteId);
@@ -118,7 +121,20 @@ export async function textDailyLink(
       code: 'no_reporter' satisfies NoReporterCode,
     });
   }
-  const reporter = pickReporter(linked);
+  const named = input.reporterId ? linked.find((r) => r.id === input.reporterId) : undefined;
+  if (input.reporterId && !named) {
+    throw new HttpError(409, 'This reporter is not linked to this site', {
+      code: 'reporter_not_linked' satisfies NoReporterCode,
+    });
+  }
+  if (named && !isActiveReporterStatus(named.status)) {
+    throw new HttpError(
+      409,
+      'This reporter is not active: disabled, opted out or has not accepted the invite yet',
+      { code: 'reporter_not_active' satisfies NoReporterCode },
+    );
+  }
+  const reporter = named ?? pickReporter(linked);
   if (!reporter) {
     throw new HttpError(
       409,

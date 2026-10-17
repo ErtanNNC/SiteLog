@@ -4,12 +4,15 @@
  *  - supabase/SupabaseSource.ts — supabase-js queries, RPCs, edge functions, realtime
  */
 import type {
+  ContactPref,
   InvoiceStatus,
   MemberRole,
+  MessageChannel,
   ReporterRole,
   ReporterStatus,
   TermKind,
 } from '@sitelog/shared/enums.ts';
+import type { OrgLocale, ReporterLocale } from '@sitelog/shared/locale.ts';
 import type { OfficePhotoMime, OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
 import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import type {
@@ -86,7 +89,28 @@ export interface InviteReporterInput {
   role: ReporterRole;
   siteIds: string[];
   languages: string[];
+  /** The language SiteLog uses with them (W4-03): one of the pack's field locales. */
+  locale?: ReporterLocale;
+  /** Preferred channel (F3, P10 invite dialog); default `link`. */
+  contactPref?: ContactPref;
 }
+
+/**
+ * Team → Edit (W4-03, F15 "Office", §19 Q243): preference, message channel and language in one
+ * audited change (`update_reporter_contact()`). `attested`: the reporter asked for a preference or
+ * channel change; required for those, not for a language change.
+ */
+export interface UpdateReporterContactInput {
+  reporterId: string;
+  contactPref: ContactPref;
+  /** null = the pack's order. */
+  messageChannel: MessageChannel | null;
+  locale: ReporterLocale;
+  attested: boolean;
+}
+
+/** The wording version of Team's "asked for texts again" attestation (§19 Q242). */
+export const TEAM_TEXTS_AGAIN_VERSION = 'team.texts_again.v1';
 
 /** Team → Edit reporter (§P10). The phone is not editable: disable and invite the new number. */
 export interface UpdateReporterInput {
@@ -298,7 +322,12 @@ export interface DataSource {
    * Notifier (api-text-daily-link; the demo writes the console text). `requestId` makes one tap
    * one text, however often the request is retried.
    */
-  textDailyLink(siteId: string, requestId: string): Promise<TextDailyLinkResult>;
+  textDailyLink(
+    siteId: string,
+    requestId: string,
+    /** Team's row menu (W4-03) names the reporter; else the site's primary active one. */
+    reporterId?: string,
+  ): Promise<TextDailyLinkResult>;
   resolveUnknownCompany(input: ResolveUnknownCompanyInput): Promise<void>;
   reviewGlossaryTerm(input: ReviewGlossaryTermInput): Promise<void>;
   addGlossaryTerm(input: AddGlossaryTermInput): Promise<void>;
@@ -319,7 +348,22 @@ export interface DataSource {
   resendInvite(reporterId: string): Promise<void>;
   /** Team row menu → Edit: name, role, sites, languages in one audited change. */
   updateReporter(input: UpdateReporterInput): Promise<void>;
-  addOfficeUser(input: { email: string; role: MemberRole; name?: string }): Promise<void>;
+  /** Team → Edit (W4-03): preference, message channel, language (`update_reporter_contact()`). */
+  updateReporterContact(input: UpdateReporterContactInput): Promise<{ changed: boolean }>;
+  /** Team → Revoke devices (F16, §19 Q244): every device and push subscription revoked. */
+  revokeReporterDevices(reporterId: string): Promise<{ devices: number }>;
+  /**
+   * Team → Turn texts back on (§19 Q242): an admin, one-way packs only, a provider's opt-out,
+   * with the attestation (an `sms` consent `office_attested`).
+   */
+  clearReporterOptOut(reporterId: string, attested: boolean): Promise<void>;
+  addOfficeUser(input: {
+    email: string;
+    role: MemberRole;
+    name?: string;
+    /** F24: the panel language; null = the company's. */
+    uiLocale?: OrgLocale | null;
+  }): Promise<void>;
   changeMemberRole(userId: string, role: MemberRole): Promise<void>;
   removeMember(userId: string): Promise<void>;
   /**

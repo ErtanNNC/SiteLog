@@ -46,6 +46,10 @@ import { addDays, formatDateInTz, isoWeekOf, isoWeekRange } from '@sitelog/share
 import { logoStoragePath, pdfStoragePath } from '@sitelog/shared/report/numbering.ts';
 import { invoiceUploadPath } from '@sitelog/shared/invoices.ts';
 import { mergeDemoPhoneCalls } from '../demoPhoneCalls';
+import { toCountryPack } from '@sitelog/shared/countries.ts';
+import { TEAM_RPC_CODES } from '../types';
+import type { CountryRow } from '@sitelog/shared/db/types.ts';
+import type { OrgLocale } from '@sitelog/shared/locale.ts';
 import {
   officePhotoStoragePath,
   type OfficePhotoMime,
@@ -87,6 +91,7 @@ import {
 } from '../assemble';
 import {
   PDF_EXPORT_LIMIT,
+  TEAM_TEXTS_AGAIN_VERSION,
   type AddGlossaryTermInput,
   type AddInvoiceInput,
   type CreateOfficeReportInput,
@@ -105,6 +110,7 @@ import {
   type SaveReportPdfInput,
   type SourceUser,
   type UpdateOrgInput,
+  type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
   type UploadedPhoto,
@@ -121,6 +127,7 @@ import type {
   OrglessContacts,
   ReportFilters,
   SearchResult,
+  TeamReporterState,
   TextDailyLinkResult,
 } from '../types';
 
@@ -1306,12 +1313,30 @@ export class SupabaseSource implements DataSource {
         .eq('status', 'pending')
         .then(unwrap),
     ]);
+    const [country, states] = await Promise.all([
+      this.sb.from('countries').select('*').eq('code', core.org.country).single().then(unwrapOne),
+      this.rpc('team_reporter_states', { p_org_id: this.orgId }),
+    ]);
     const rows: RowSet = {
       ...this.rowsFrom(core),
       siteDays,
       unknownContacts: unknownContacts as UnknownContactRow[],
     };
-    return assembleTeam(rows, this.ctx());
+    return assembleTeam(rows, this.ctx(), {
+      pack: toCountryPack(country as CountryRow),
+      states: (states ?? []).map((x) => ({
+        reporterId: x.reporter_id,
+        optOutMethod:
+          x.opt_out_method === 'sms_keyword' || x.opt_out_method === 'provider_opt_out'
+            ? x.opt_out_method
+            : null,
+        devices: x.devices,
+        consents: x.consents ?? [],
+        welcome: Array.isArray(x.welcome)
+          ? (x.welcome as unknown as TeamReporterState['welcome'])
+          : [],
+      })),
+    });
   }
 
   async getGlossary() {
@@ -1775,10 +1800,15 @@ export class SupabaseSource implements DataSource {
   async markNoWork(siteDayId: string) {
     await this.rpc('mark_no_work', { p_site_day_id: siteDayId });
   }
-  async textDailyLink(siteId: string, requestId: string): Promise<TextDailyLinkResult> {
+  async textDailyLink(
+    siteId: string,
+    requestId: string,
+    reporterId?: string,
+  ): Promise<TextDailyLinkResult> {
     const res = await this.callFunction<TextDailyLinkResult>('api-text-daily-link', {
       siteId,
       requestId,
+      ...(reporterId ? { reporterId } : {}),
     });
     return res.sent
       ? { sent: true, channel: res.channel }
@@ -1867,6 +1897,8 @@ export class SupabaseSource implements DataSource {
         role: input.role,
         siteIds: input.siteIds,
         languages: input.languages,
+        ...(input.locale ? { locale: input.locale } : {}),
+        ...(input.contactPref ? { contactPref: input.contactPref } : {}),
       },
     );
     return { status: result?.reporter?.status ?? ('invited' as const) };
@@ -1909,13 +1941,53 @@ export class SupabaseSource implements DataSource {
       .eq('id', unknownSenderId);
     if (error) throw new Error(error.message);
   }
-  async addOfficeUser(input: { email: string; role: MemberRole; name?: string }) {
-    // Supabase invite (magic link) is sent by the api-billing-adjacent admin function in production;
-    // the org_members row is created on first sign-in (§F20). Until then we store the pending role.
+  /** Team → Edit (W4-03): one audited RPC; its refusals come back as CodedErrors. */
+  async updateReporterContact(input: UpdateReporterContactInput) {
+    const data = await this.teamRpc('update_reporter_contact', {
+      p_reporter_id: input.reporterId,
+      p_contact_pref: input.contactPref,
+      p_message_channel: input.messageChannel,
+      p_locale: input.locale,
+      p_attested: input.attested,
+    });
+    return { changed: (data as { changed?: boolean } | null)?.changed === true };
+  }
+  async revokeReporterDevices(reporterId: string) {
+    const data = await this.teamRpc('revoke_reporter_devices', { p_reporter_id: reporterId });
+    return { devices: Number((data as { devices?: number } | null)?.devices ?? 0) };
+  }
+  async clearReporterOptOut(reporterId: string, attested: boolean) {
+    await this.teamRpc('clear_reporter_opt_out', {
+      p_reporter_id: reporterId,
+      p_text_version: TEAM_TEXTS_AGAIN_VERSION,
+      p_attested: attested,
+    });
+  }
+  /** Team's RPCs raise their refusal as the message (`attestation_required`, …): a CodedError. */
+  private async teamRpc<K extends keyof Database['public']['Functions']>(
+    fn: K,
+    args: Database['public']['Functions'][K]['Args'],
+  ) {
+    const { data, error } = await this.sb.rpc(fn, args as never);
+    if (error) {
+      const code = TEAM_RPC_CODES.find((c) => error.message === c);
+      throw code ? new CodedError(code, error.message) : new Error(error.message);
+    }
+    return data;
+  }
+  async addOfficeUser(input: {
+    email: string;
+    role: MemberRole;
+    name?: string;
+    uiLocale?: OrgLocale | null;
+  }) {
+    // api-invite-office-user (F24): Supabase's invite email (magic link) and the org_members row,
+    // with the panel language (null = the company's).
     await this.callFunction('api-invite-office-user', {
       orgId: this.orgId,
       email: input.email,
       role: input.role,
+      uiLocale: input.uiLocale ?? null,
     });
   }
   async changeMemberRole(userId: string, role: MemberRole) {
@@ -2428,11 +2500,12 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
   const members = unwrap(
     await sb
       .from('org_members')
-      .select('org_id, role, orgs(id, name, timezone, locale, country, is_demo)')
+      .select('org_id, role, ui_locale, orgs(id, name, timezone, locale, country, is_demo)')
       .eq('user_id', userId),
   ) as unknown as Array<{
     org_id: string;
     role: MemberRole;
+    ui_locale: string | null;
     orgs: Pick<OrgRow, 'id' | 'name' | 'timezone' | 'locale' | 'country' | 'is_demo'> | null;
   }>;
   // site_options: an accounts user cannot read `sites`, and every member counts active sites.
@@ -2448,7 +2521,12 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
       locale: m.orgs!.locale,
       country: m.orgs!.country,
       demoOrg: m.orgs!.is_demo,
+      uiLocale: isOrgLocale(m.ui_locale) ? m.ui_locale : null,
     }));
+}
+
+function isOrgLocale(v: string | null): v is OrgLocale {
+  return v === 'en-US' || v === 'tr-TR';
 }
 
 function idOf(row: unknown): string | null {

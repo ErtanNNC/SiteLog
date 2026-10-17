@@ -57,12 +57,15 @@ import {
   type ReviewGlossaryTermInput,
   type SourceUser,
   type UpdateOrgInput,
+  type UpdateReporterContactInput,
   type UpdateReporterInput,
   type UpdateSitePatch,
   type UploadedPhoto,
 } from '../source';
 import type { ChangeEvent, OrgSettingsPatch, ReportFilters } from '../types';
 import { demoOpsFor } from './ops';
+import { demoOrgPack } from './demoPhone';
+import type { OrgLocale } from '@sitelog/shared/locale.ts';
 import type { DemoStore } from './store';
 
 export interface DemoSourceOptions {
@@ -168,7 +171,12 @@ export class DemoSource implements DataSource {
     return this.run(() => assembleWeather(this.store.rows(), this.ctx(), month, siteId));
   }
   getTeam() {
-    return this.run(() => assembleTeam(this.store.rows(), this.ctx()));
+    return this.run(() =>
+      assembleTeam(this.store.rows(), this.ctx(), {
+        pack: demoOrgPack(this.store.data),
+        states: this.store.teamStates(),
+      }),
+    );
   }
   getGlossary() {
     return this.run(() => assembleGlossary(this.store.rows()));
@@ -304,11 +312,11 @@ export class DemoSource implements DataSource {
   markNoWork(siteDayId: string) {
     return this.run(() => this.store.markNoWork(siteDayId, this.user.id));
   }
-  textDailyLink(siteId: string, requestId: string) {
+  textDailyLink(siteId: string, requestId: string, reporterId?: string) {
     return this.run(() => {
       // api-text-daily-link's roles: everyone who sees the Overview (spec §19 Q69).
       if (!['admin', 'pm', 'ops'].includes(this.user.role)) throw new Error(copy.errors.notAllowed);
-      return this.store.textDailyLink(siteId, requestId, this.user.id);
+      return this.store.textDailyLink(siteId, requestId, this.user.id, reporterId);
     });
   }
   resolveUnknownCompany(input: ResolveUnknownCompanyInput) {
@@ -353,7 +361,32 @@ export class DemoSource implements DataSource {
   updateReporter(input: UpdateReporterInput) {
     return this.run(() => this.store.updateReporter(input, this.user.id));
   }
-  addOfficeUser(input: { email: string; role: MemberRole; name?: string }) {
+  /** W4-03: admin and ops, as update_reporter_contact() (§2.2 "Manage reporters"). */
+  updateReporterContact(input: UpdateReporterContactInput) {
+    return this.run(() => {
+      if (!['admin', 'ops'].includes(this.user.role)) throw new Error(copy.errors.notAllowed);
+      return this.store.updateReporterContact(input, this.user.id);
+    });
+  }
+  revokeReporterDevices(reporterId: string) {
+    return this.run(() => {
+      if (!['admin', 'ops'].includes(this.user.role)) throw new Error(copy.errors.notAllowed);
+      return this.store.revokeReporterDevices(reporterId, this.user.id);
+    });
+  }
+  /** §19 Q242: an admin only. */
+  clearReporterOptOut(reporterId: string, attested: boolean) {
+    return this.run(() => {
+      if (this.user.role !== 'admin') throw new Error(copy.errors.notAllowed);
+      return this.store.clearReporterOptOut(reporterId, attested, this.user.id);
+    });
+  }
+  addOfficeUser(input: {
+    email: string;
+    role: MemberRole;
+    name?: string;
+    uiLocale?: OrgLocale | null;
+  }) {
     return this.run(() => this.store.addOfficeUser(input, this.user.id));
   }
   changeMemberRole(userId: string, role: MemberRole) {
