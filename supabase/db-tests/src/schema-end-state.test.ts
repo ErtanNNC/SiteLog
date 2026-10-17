@@ -37,11 +37,11 @@ describe('schema end state (D11)', () => {
       blocks['6.3']!.indexOf('create table orgs'),
     );
     expect(blocks['6.4']).toMatch(/create view current_manpower/);
-    // The whole spec schema was read: 39 tables (GAP 9.2, plus countries since W1-06a,
-    // console_emails and sms_opt_outs since W1-08, test_clips since W2-13, draft_corrections since W2-10, push_subscriptions since W2-14, voice_tool_requests since W3-03, livekit_events since W3-04 and voice_turns since W3-09) and the 26 enums of §6.2 (message_channel since W1-06a), and
+    // The whole spec schema was read: 40 tables (GAP 9.2, plus countries since W1-06a,
+    // console_emails and sms_opt_outs since W1-08, test_clips since W2-13, draft_corrections since W2-10, push_subscriptions since W2-14, voice_tool_requests since W3-03, livekit_events since W3-04, voice_turns since W3-09 and billing_default_prices since W4-10) and the 26 enums of §6.2 (message_channel since W1-06a), and
     // from §6.4 its 9 indexes, the unique sender id of W1-08 and 2 views (spec.indexes also holds
     // §6.3's one, on jobs, and W2-14's two on push_subscriptions).
-    expect(spec.tables.size).toBe(39);
+    expect(spec.tables.size).toBe(40);
     expect(spec.enums.size).toBe(26);
     expect(blocks['6.4']!.match(/^create index /gm)).toHaveLength(9);
     // W2-15: the unique WhatsApp sender beside the SMS one; W3-03: the unique voice number;

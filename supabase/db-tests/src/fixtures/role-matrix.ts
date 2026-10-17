@@ -418,6 +418,15 @@ export const TABLES: Record<string, TableCase> = {
     set: 'type = type',
     orgless: true,
   },
+  billing_default_prices: {
+    why: "W4-10 (§19 Q234): SiteLog's default price per currency, read by create_org(); service role only.",
+    allow: serviceOnly,
+    where: () => `currency = 'USD'`,
+    insert: () =>
+      `insert into billing_default_prices (currency, price_per_site_minor) values ('EUR', 100)`,
+    set: 'price_per_site_minor = price_per_site_minor',
+    orgless: true,
+  },
   platform_admins: {
     why: 'SiteLog operators: service role only (revoked from anon and authenticated).',
     allow: serviceOnly,
@@ -1111,6 +1120,9 @@ export const PROBES: Probe[] = [
       ['is_demo', 'is_demo = true'],
       ['the country', `country = 'TR'`],
       ['the currency', `currency = 'TRY'`],
+      // W4-10 (§19 Q234): the price is SiteLog staff's (ops_set_org_price), never the admin's.
+      ['the price per site', `price_per_site_minor = 1`],
+      ['the price currency', `price_currency = 'EUR'`],
       ['the logo path', `logo_path = '${B.org}/logo.png'`],
     ] as const
   ).map(([what, set]): Probe => ({

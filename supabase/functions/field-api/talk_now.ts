@@ -14,7 +14,7 @@ import {
   type SiteRow,
   type VoiceTokenResponse,
 } from '@sitelog/shared';
-import { isBillingBlocked } from '../_shared/billing.ts';
+import { effectiveBilling, isBillingBlocked } from '../_shared/billing.ts';
 import { formatIssues } from '../_shared/http.ts';
 import { errorMessage, logError } from '../_shared/log.ts';
 import type { AppClient } from '../_shared/supabase.ts';
@@ -119,6 +119,8 @@ export interface OrgBilling {
   /** When the org last went past due (the audited `billing.status_changed`), if it is. */
   pastDueSince: string | null;
   graceDays: number;
+  /** §19 Q235 `block`: a lapsed trial blocks at once. */
+  noGrace?: boolean;
 }
 
 export interface TalkNowStore {
@@ -159,7 +161,14 @@ export function supabaseTalkNowStore(admin: AppClient): TalkNowStore {
   return {
     async orgBilling(orgId) {
       const [{ data: org }, { data: settings }] = await Promise.all([
-        admin.from('orgs').select('billing_status').eq('id', orgId).single().throwOnError(),
+        admin
+          .from('orgs')
+          .select(
+            'billing_status, trial_ends_at, billing_provider, billing_subscription_id, is_demo',
+          )
+          .eq('id', orgId)
+          .single()
+          .throwOnError(),
         admin
           .from('org_settings')
           .select('past_due_grace_days')
@@ -180,9 +189,12 @@ export function supabaseTalkNowStore(admin: AppClient): TalkNowStore {
           .throwOnError();
         pastDueSince = data[0]?.created_at ?? null;
       }
+      // W4-10 (§19 Q235): a trial that ended with no subscription is past due from its end.
+      const state = effectiveBilling({ ...org, past_due_since: pastDueSince }, new Date());
       return {
-        billingStatus: org.billing_status,
-        pastDueSince,
+        billingStatus: state.status,
+        pastDueSince: state.pastDueSince,
+        noGrace: state.noGrace,
         graceDays: settings?.past_due_grace_days ?? 14,
       };
     },

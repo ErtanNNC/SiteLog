@@ -355,7 +355,9 @@ describe('create_org(p_country)', () => {
       `select actor_id, diff from audit_log where entity_id = $1 and action = 'org.created'`,
       [orgId],
     );
-    expect(audit).toEqual([{ actor_id: LENA, diff: { country: 'TR' } }]);
+    expect(audit).toEqual([
+      { actor_id: LENA, diff: { country: 'TR', billing_provider: 'manual', price: null } },
+    ]);
   });
 
   it("still takes the deployed panel's call: the 4 named arguments make a US org", async () => {

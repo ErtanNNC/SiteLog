@@ -314,6 +314,8 @@ export const JobPayloadSchemas = {
     /** W2-07: the web report re-check (`NotifyReportGuardSchema`); the late fallback carries it on. */
     reportGuard: NotifyReportGuardSchema.optional(),
   }),
+  /** W4-10: the org whose Stripe quantity to sync (`sites_billing_sync`, 20261017000450). */
+  billing_sync: z.object({ orgId: uuid }),
 } as const satisfies Record<(typeof JOB_TYPES)[number], z.ZodType>;
 
 /**

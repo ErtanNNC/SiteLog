@@ -37,6 +37,8 @@ export function makeAuthState(
     locale: 'en-US',
     country: 'US',
     sitelogNumbers: [DEMO_SITELOG_NUMBER],
+    // §18.1: the org's own price (W4-10, spec §19 Q234).
+    price: { minor: 39900, currency: 'USD' },
   };
   return {
     status: 'signed_in',
@@ -94,6 +96,7 @@ export function Providers({
             locale: 'en-US',
             country: 'US',
             sitelogNumbers: [DEMO_SITELOG_NUMBER],
+            price: { minor: 39900, currency: 'USD' },
           },
   });
   return (

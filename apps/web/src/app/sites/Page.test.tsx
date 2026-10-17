@@ -93,11 +93,11 @@ describe('SitesPage', () => {
     );
   });
 
-  it('shows no price on the connect card where the country has none yet (spec §19 Q9)', async () => {
+  it('shows no price on the connect card where SiteLog set none yet (spec §19 Q9, Q234)', async () => {
     const auth = makeAuthState('admin');
     renderWithProviders(<SitesPage />, {
       route: '/sites',
-      auth: { currentOrg: { ...auth.currentOrg!, country: 'TR', locale: 'tr-TR' } },
+      auth: { currentOrg: { ...auth.currentOrg!, country: 'TR', locale: 'tr-TR', price: null } },
     });
     const card = await screen.findByTestId('connect-site-card');
     expect(card).toHaveTextContent('Connect another site');

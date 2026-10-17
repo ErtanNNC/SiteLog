@@ -38,10 +38,12 @@ describe('fetchOrgs', () => {
         locale: 'tr-TR',
         country: 'TR',
         demoOrg: true,
+        // W4-10: no price until §19 Q9 (a manual TR org).
+        price: null,
       }),
     ]);
     expect(selects).toContain(
-      'org_members: org_id, role, ui_locale, orgs(id, name, timezone, locale, country, is_demo)',
+      'org_members: org_id, role, ui_locale, orgs(id, name, timezone, locale, country, is_demo, price_per_site_minor, price_currency)',
     );
   });
 
@@ -52,6 +54,8 @@ describe('fetchOrgs', () => {
     expect(orgs.map((o) => [o.name, o.activeSites, o.locale, o.country, o.demoOrg])).toEqual([
       ['Kestrel Build Group', 6, 'en-US', 'US', true],
     ]);
+    // W4-10 (§19 Q234): the org's own price, for the Sites page's connect card.
+    expect(orgs[0]!.price).toEqual({ minor: 39900, currency: 'USD' });
   });
 
   it('reads the member’s own panel language (F24, W4-03): it wins over the org’s locale', async () => {

@@ -7,7 +7,13 @@ import { error, json, requireMethod, withHandler } from '../_shared/http.ts';
 import { errorMessage, logInfo, logWarn } from '../_shared/log.ts';
 import { notifyOrg } from '../_shared/notify.ts';
 import { adminClient, type AppClient, type TableRow } from '../_shared/supabase.ts';
-import { checkoutOrgId, isHandledEvent, subscriptionPatch, type OrgBillingPatch } from './logic.ts';
+import {
+  checkoutOrgId,
+  isHandledEvent,
+  paymentFailedChange,
+  subscriptionPatch,
+  type OrgBillingPatch,
+} from './logic.ts';
 
 /**
  * stripe-webhook (§F19 step 5, §13 billing) — public endpoint verified with Stripe-Signature.
@@ -115,15 +121,9 @@ async function handleEvent(stripe: Stripe, admin: AppClient, event: Stripe.Event
       const customerId = idOf(invoice.customer);
       const org = await findOrg(admin, { customerId });
       if (!org) return orgNotFound(event, { customerId });
-      await applyBillingChange(admin, org, { billing_status: 'past_due' }, event);
-      await notifyOrg(admin, {
-        orgId: org.id,
-        kind: 'billing',
-        title: 'Payment failed',
-        body: 'Stripe could not charge your card. Update the payment method in Billing to keep reports and reminders flowing.',
-        targetPath: '/billing',
-        data: noticeData('payment_failed', {}),
-      });
+      const change = paymentFailedChange(org);
+      await applyBillingChange(admin, org, change.patch, event);
+      await notifyOrg(admin, { orgId: org.id, ...change.notice });
       return;
     }
     case 'invoice.paid': {

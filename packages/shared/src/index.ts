@@ -16,6 +16,7 @@ export * from './tokens.ts';
 export * from './status.ts';
 export * from './notifications.ts';
 export * from './invoices.ts';
+export * from './billing.ts';
 export * from './glossary/keyterms.ts';
 export * from './glossary/starter.ts';
 export * from './glossary/starter.en.ts';

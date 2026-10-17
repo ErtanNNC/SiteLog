@@ -1,18 +1,15 @@
+import type { BillingPrice } from '@sitelog/shared/billing.ts';
 import { formatMoneyCents } from '@sitelog/shared/format.ts';
-import { PRICE_PER_SITE_CENTS } from '@/data/assemble';
 import type { PanelLanguage } from '@/i18n/language';
 
 /**
- * The monthly price per site on the "Connect another site" card (P4 "with country price").
- * Billing is a known country-specific exception until M10 (spec §19 Q30): only the US price is
- * set; the TR price is open (spec §19 Q9), so a Turkish org's card shows no price line yet.
+ * The monthly price per site on the "Connect another site" card (P4 "with country price"): the
+ * org's own price (W4-10, spec §19 Q234, `orgs.price_per_site_minor`), in the panel's language.
+ * An org SiteLog has set no price for (a TR org until §19 Q9) shows no price line.
  */
-const SITE_PRICE: Readonly<Record<string, { cents: number; currency: string }>> = {
-  US: { cents: PRICE_PER_SITE_CENTS, currency: 'USD' },
-};
-
-/** "$399" for a US org; null where no price is set for the org's country (or it is unknown). */
-export function sitePriceFor(country: string | undefined, language: PanelLanguage): string | null {
-  const price = country ? SITE_PRICE[country] : undefined;
-  return price ? formatMoneyCents(price.cents, price.currency, language) : null;
+export function sitePriceFor(
+  price: BillingPrice | null | undefined,
+  language: PanelLanguage,
+): string | null {
+  return price ? formatMoneyCents(price.minor, price.currency, language) : null;
 }

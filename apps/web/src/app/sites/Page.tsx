@@ -31,7 +31,7 @@ export default function SitesPage() {
   const sites = useSites();
   const { t, language } = useCopy();
   const { role, currentOrg } = useAuth();
-  const price = sitePriceFor(currentOrg?.country, language);
+  const price = sitePriceFor(currentOrg?.price, language);
   // Sites are added in the setup wizard, which is admin-only (RLS: sites_admin_insert).
   const canAddSite = canAccess(role, ROUTE_ROLES.setup!);
   const [tab, setTab] = useState<Tab>('all');

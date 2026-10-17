@@ -426,7 +426,7 @@ export function SiteStep({
             </ul>
             {siteCount > 0 ? (
               <p className="mt-3 font-mono text-[12px] text-dust-light">
-                {copy.billing.sitesTimes(siteCount)}
+                {c.pricing.sitesTimes(siteCount)}
               </p>
             ) : null}
           </CardContent>

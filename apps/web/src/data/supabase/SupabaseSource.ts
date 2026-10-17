@@ -36,6 +36,7 @@ import type {
   CurrentWeatherRow,
   OpsCostOutlierRow,
   OpsUnknownContactRow,
+  OpsOrgBillingRow,
   OpsDeadJobRow,
   OpsOutboundCallShareRow,
   OpsQueueStatRow,
@@ -62,6 +63,13 @@ import {
   transcriptMediaId,
 } from '@sitelog/shared/report/media.ts';
 import { copy } from '@/copy/en';
+import { captureError } from '@/lib/sentry';
+import {
+  billingAlert,
+  billingPrice,
+  type BillingPrice,
+  type BillingStatus,
+} from '@sitelog/shared/billing.ts';
 import { translate } from '@/i18n/useCopy';
 import { functionsUrl } from '@/lib/env';
 import { rasterizeSvgLogo } from '@/lib/logo';
@@ -70,6 +78,7 @@ import type { Db } from '@/lib/supabase';
 import { CodedError, errorMessage, uniq, uniqBy } from '@/lib/utils';
 import {
   assembleBilling,
+  pastDueSinceFrom,
   assembleGlossary,
   assembleHours,
   assembleNavBadges,
@@ -122,6 +131,7 @@ import type {
   DemoPhoneEmail,
   DemoPhoneMessage,
   OpsData,
+  OpsOrgBilling,
   OrgSettingsPatch,
   OrgSummary,
   OrglessContacts,
@@ -210,6 +220,7 @@ interface StripeInvoiceSummary {
   id: string;
   date: string;
   amount_cents: number;
+  currency: string;
   status: string | null;
   hosted_invoice_url: string | null;
   sites: number;
@@ -226,7 +237,8 @@ function toBillingInvoice(inv: StripeInvoiceSummary, tz: string): BillingData['i
     id: inv.id,
     date: formatDateInTz(new Date(inv.date), tz),
     sites: inv.sites,
-    amountCents: inv.amount_cents,
+    amountMinor: inv.amount_cents,
+    currency: inv.currency.toUpperCase(),
     status: inv.status === 'paid' ? 'paid' : inv.status === 'uncollectible' ? 'past_due' : 'open',
     url: inv.hosted_invoice_url ?? '',
   };
@@ -1363,7 +1375,11 @@ export class SupabaseSource implements DataSource {
    */
   async getBilling() {
     const core = await this.core();
-    const data = assembleBilling(this.rowsFrom(core), this.ctx());
+    const rows = this.rowsFrom(core);
+    rows.audit = [...rows.audit, ...(await this.pastDueAudit())];
+    const data = assembleBilling(rows, this.ctx());
+    // A manual org (§19 Q236) has no provider pages: nothing to ask api-billing.
+    if (data.plan.provider === 'manual') return data;
     const call = <T>(action: 'status' | 'invoices') =>
       this.callFunction<T>('api-billing', { orgId: this.orgId, action }).catch(() => null);
     const [status, invoices] = await Promise.all([
@@ -1384,6 +1400,41 @@ export class SupabaseSource implements DataSource {
         .map((i) => toBillingInvoice(i, core.org.timezone));
     }
     return data;
+  }
+
+  /** The latest audited move to past_due (the start of arrears scheduler-tick reads). */
+  private async pastDueAudit(): Promise<AuditLogRow[]> {
+    const res = await this.sb
+      .from('audit_log')
+      .select('*')
+      .eq('org_id', this.orgId)
+      .eq('action', 'billing.status_changed')
+      .eq('diff->>to', 'past_due')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    return res.error ? [] : ((res.data ?? []) as AuditLogRow[]);
+  }
+
+  /**
+   * The admin banner (F23, §19 Q235): the org row, its grace days and the start of arrears, no
+   * provider call (it runs on every page).
+   */
+  async getBillingAlert() {
+    const [org, settings, audit] = await Promise.all([
+      this.sb
+        .from('orgs')
+        .select('billing_status, billing_provider, billing_subscription_id, trial_ends_at, is_demo')
+        .eq('id', this.orgId)
+        .single(),
+      this.sb.from('org_settings').select('past_due_grace_days').eq('org_id', this.orgId).single(),
+      this.pastDueAudit(),
+    ]);
+    if (org.error || !org.data) return null;
+    return billingAlert(
+      { ...org.data, past_due_since: pastDueSinceFrom(audit) },
+      this.now(),
+      settings.data?.past_due_grace_days ?? 14,
+    );
   }
 
   async getBillingCheckoutUrl() {
@@ -2051,10 +2102,9 @@ export class SupabaseSource implements DataSource {
         result.inviteError = errorMessage(err, copy.errors.generic);
       }
     }
-    // A running subscription bills one unit per active site (as after pause / resume).
-    await this.callFunction('api-billing', { action: 'sync', orgId: this.orgId }).catch(
-      () => undefined,
-    );
+    // A running subscription bills one unit per active site (as after pause / resume); the
+    // database also queued a `billing_sync` job that retries a failed sync (W4-10).
+    await this.syncBillingQuantity();
     return result;
   }
   async updateSite(siteId: string, patch: UpdateSitePatch) {
@@ -2067,30 +2117,41 @@ export class SupabaseSource implements DataSource {
     if (patch.timezone !== undefined) row.timezone = patch.timezone;
     if (patch.deadline !== undefined) row.deadline = patch.deadline ?? null;
     if (patch.workingHours !== undefined) row.working_hours = patch.workingHours ?? null;
-    const { error } = await this.sb.from('sites').update(row).eq('id', siteId);
+    // Admin only (RLS sites_admin_update): a refused write matches no row, so say so (W4-10).
+    const { data, error } = await this.sb.from('sites').update(row).eq('id', siteId).select('id');
     if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error(copy.errors.notAllowed);
   }
   async setOrgLogo(file: File | null, orgId?: string) {
     await uploadOrgLogo(this.sb, orgId ?? this.orgId, file);
   }
+  /**
+   * Pause and resume are admin only (§2.2 billing; RLS `sites_admin_update`). The update reads the
+   * row back, so a refused write (no row) fails instead of reporting success (docs/AUDIT_BACKLOG.md
+   * "Site settings drawer … open to pm/ops"). The quantity sync follows at once; if it fails, the
+   * `billing_sync` job the database queued does it (W4-10, 20261017000450).
+   */
   async pauseSite(siteId: string) {
-    const { error } = await this.sb
-      .from('sites')
-      .update({ status: 'paused', paused_at: new Date().toISOString() })
-      .eq('id', siteId);
-    if (error) throw new Error(error.message);
-    await this.callFunction('api-billing', { action: 'sync', orgId: this.orgId }).catch(
-      () => undefined,
-    );
+    await this.setSiteStatus(siteId, { status: 'paused', paused_at: new Date().toISOString() });
   }
   async resumeSite(siteId: string) {
-    const { error } = await this.sb
-      .from('sites')
-      .update({ status: 'active', paused_at: null })
-      .eq('id', siteId);
+    await this.setSiteStatus(siteId, { status: 'active', paused_at: null });
+  }
+  private async setSiteStatus(
+    siteId: string,
+    patch: { status: 'paused' | 'active'; paused_at: string | null },
+  ) {
+    const { data, error } = await this.sb.from('sites').update(patch).eq('id', siteId).select('id');
     if (error) throw new Error(error.message);
+    if (!data || data.length === 0) throw new Error(copy.errors.notAllowed);
+    await this.syncBillingQuantity();
+  }
+  /** api-billing `sync`; a failure is left to the queued `billing_sync` job (W4-10). */
+  private async syncBillingQuantity() {
     await this.callFunction('api-billing', { action: 'sync', orgId: this.orgId }).catch(
-      () => undefined,
+      (err: unknown) => {
+        captureError(err, { where: 'api-billing sync', retry: 'billing_sync job' });
+      },
     );
   }
   async requestEvidencePack(input: RequestEvidencePackInput) {
@@ -2165,6 +2226,31 @@ export class SupabaseSource implements DataSource {
   }
   async ignoreOrglessContact(contactId: string) {
     await this.rpc('ops_ignore_unknown_contact', { p_id: contactId });
+  }
+  async getOpsOrgBilling(): Promise<OpsOrgBilling[]> {
+    const rows = ((await this.rpc('ops_org_billing', {})) ?? []) as OpsOrgBillingRow[];
+    return rows.map((r) => ({
+      orgId: r.id,
+      orgName: r.name,
+      country: r.country,
+      isDemo: r.is_demo,
+      provider: r.billing_provider === 'manual' ? 'manual' : 'stripe',
+      status: r.billing_status,
+      trialEndsAt: r.trial_ends_at,
+      hasSubscription: r.has_subscription,
+      price: billingPrice(r),
+      activeSites: Number(r.active_sites),
+    }));
+  }
+  async setOrgPrice(orgId: string, price: BillingPrice | null) {
+    await this.rpc('ops_set_org_price', {
+      p_org_id: orgId,
+      p_price_minor: price?.minor ?? null,
+      p_currency: price?.currency ?? null,
+    });
+  }
+  async setOrgBillingStatus(orgId: string, status: BillingStatus) {
+    await this.rpc('ops_set_org_billing_status', { p_org_id: orgId, p_status: status });
   }
 
   // ─── Realtime ───
@@ -2500,13 +2586,25 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
   const members = unwrap(
     await sb
       .from('org_members')
-      .select('org_id, role, ui_locale, orgs(id, name, timezone, locale, country, is_demo)')
+      .select(
+        'org_id, role, ui_locale, orgs(id, name, timezone, locale, country, is_demo, price_per_site_minor, price_currency)',
+      )
       .eq('user_id', userId),
   ) as unknown as Array<{
     org_id: string;
     role: MemberRole;
     ui_locale: string | null;
-    orgs: Pick<OrgRow, 'id' | 'name' | 'timezone' | 'locale' | 'country' | 'is_demo'> | null;
+    orgs: Pick<
+      OrgRow,
+      | 'id'
+      | 'name'
+      | 'timezone'
+      | 'locale'
+      | 'country'
+      | 'is_demo'
+      | 'price_per_site_minor'
+      | 'price_currency'
+    > | null;
   }>;
   // site_options: an accounts user cannot read `sites`, and every member counts active sites.
   const sites = unwrap(await sb.from('site_options').select('org_id, status'));
@@ -2522,6 +2620,7 @@ export async function fetchOrgs(sb: Db, userId: string): Promise<OrgSummary[]> {
       country: m.orgs!.country,
       demoOrg: m.orgs!.is_demo,
       uiLocale: isOrgLocale(m.ui_locale) ? m.ui_locale : null,
+      price: billingPrice(m.orgs!),
     }));
 }
 

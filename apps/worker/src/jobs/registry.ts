@@ -1,4 +1,5 @@
 import { applyCorrectionJob } from './apply_correction';
+import { billingSyncJob } from './billing_sync';
 import { buildEvidencePack } from './build_evidence_pack';
 import { decideNext } from './decide_next';
 import { extractReport } from './extract_report';
@@ -58,4 +59,5 @@ export const registry: JobRegistry = {
   no_photo_check: noPhotoCheckJob,
   place_call: placeCallJob,
   sms_status: smsStatusJob,
+  billing_sync: billingSyncJob,
 };

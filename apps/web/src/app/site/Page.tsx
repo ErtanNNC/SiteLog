@@ -58,7 +58,11 @@ export default function SiteDetailPage() {
   const { siteId = '' } = useParams();
   const { t, language } = useCopy();
   const source = useDataSource();
-  const { currentOrg } = useAuth();
+  const { currentOrg, role } = useAuth();
+  // Site settings (edit, recipients, Pause) are admin only, as RLS (sites_admin_update,
+  // site_recipients: admin; W4-10 closes docs/AUDIT_BACKLOG.md "Site settings drawer … open to
+  // pm/ops").
+  const canEditSite = role === 'admin';
   const navigate = useNavigate();
   const textLink = useTextDailyLink();
   const [params, setParams] = useSearchParams();
@@ -135,10 +139,12 @@ export default function SiteDetailPage() {
         }
         actions={
           <>
-            <Button variant="ghost" onClick={() => setSettingsOpen(true)}>
-              <Settings2 aria-hidden="true" />
-              {t('siteDetail.siteSettings')}
-            </Button>
+            {canEditSite ? (
+              <Button variant="ghost" onClick={() => setSettingsOpen(true)}>
+                <Settings2 aria-hidden="true" />
+                {t('siteDetail.siteSettings')}
+              </Button>
+            ) : null}
             {/* D30: typed reports stay; orange only while nobody reports from the site. */}
             <Button variant={primary ? 'ghost' : 'primary'} asChild>
               <Link to={`/reports/new?site=${site.id}`}>
@@ -204,12 +210,14 @@ export default function SiteDetailPage() {
         </TabsContent>
       </Tabs>
 
-      <SiteSettingsDrawer
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        detail={data}
-        orgDeadline={formatDeadline(site.deadline)}
-      />
+      {canEditSite ? (
+        <SiteSettingsDrawer
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          detail={data}
+          orgDeadline={formatDeadline(site.deadline)}
+        />
+      ) : null}
     </>
   );
 }

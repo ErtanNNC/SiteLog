@@ -14,7 +14,9 @@ import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
 import { DEMO_ORG_LOCALE, DEMO_SITELOG_NUMBER, DEMO_TODAY } from '@sitelog/shared/demo/kestrel.ts';
 import { DEMO_CALL_AUDIO_SITES, demoCallAudioPath } from '@sitelog/shared/demo/calls.ts';
 import { demoId } from '@sitelog/shared/demo/ids.ts';
+import { billingPrice, type BillingPrice, type BillingStatus } from '@sitelog/shared/billing.ts';
 import { copy } from '@/copy/en';
+import { translate } from '@/i18n/useCopy';
 import { randomUuid } from '@/lib/photos';
 import { sleep } from '@/lib/utils';
 import {
@@ -124,6 +126,7 @@ export class DemoSource implements DataSource {
         country: this.store.data.org.country,
         sitelogNumbers: [DEMO_SITELOG_NUMBER],
         demoOrg: this.store.data.org.is_demo,
+        price: billingPrice(this.store.data.org),
       },
     ]);
   }
@@ -187,6 +190,9 @@ export class DemoSource implements DataSource {
       data.org.logoUrl = this.store.logoUrl;
       return data;
     });
+  }
+  getBillingAlert() {
+    return this.run(() => assembleBilling(this.store.rows(), this.ctx()).alert);
   }
   getBilling() {
     return this.run(() => assembleBilling(this.store.rows(), this.ctx()));
@@ -252,10 +258,10 @@ export class DemoSource implements DataSource {
     });
   }
   getBillingCheckoutUrl(): Promise<string> {
-    return Promise.reject(new Error(copy.billing.checkoutDemo));
+    return Promise.reject(new Error(translate('billing.checkoutDemo')));
   }
   getBillingPortalUrl(): Promise<string> {
-    return Promise.reject(new Error(copy.billing.portalDemo));
+    return Promise.reject(new Error(translate('billing.portalDemo')));
   }
 
   // ─── Mutations ───
@@ -420,11 +426,18 @@ export class DemoSource implements DataSource {
       ),
     );
   }
+  /** Admin only, as RLS `sites_admin_update` on Supabase (§2.2 billing; W4-10). */
   pauseSite(siteId: string) {
-    return this.run(() => this.store.setSiteStatus(siteId, 'paused', this.user.id));
+    return this.run(() => {
+      if (this.user.role !== 'admin') throw new Error(copy.errors.notAllowed);
+      this.store.setSiteStatus(siteId, 'paused', this.user.id);
+    });
   }
   resumeSite(siteId: string) {
-    return this.run(() => this.store.setSiteStatus(siteId, 'active', this.user.id));
+    return this.run(() => {
+      if (this.user.role !== 'admin') throw new Error(copy.errors.notAllowed);
+      this.store.setSiteStatus(siteId, 'active', this.user.id);
+    });
   }
   requestEvidencePack(input: RequestEvidencePackInput) {
     return this.run(() => ({ packId: this.store.requestEvidencePack(input, this.user.id) }));
@@ -475,6 +488,24 @@ export class DemoSource implements DataSource {
     return this.run(() => {
       this.ops();
       this.store.ignoreOrglessContact(contactId, this.user.id);
+    });
+  }
+  getOpsOrgBilling() {
+    return this.run(() => {
+      this.ops();
+      return this.store.opsOrgBilling();
+    });
+  }
+  setOrgPrice(orgId: string, price: BillingPrice | null) {
+    return this.run(() => {
+      this.ops();
+      this.store.setOrgPrice(orgId, price, this.user.id);
+    });
+  }
+  setOrgBillingStatus(orgId: string, status: BillingStatus) {
+    return this.run(() => {
+      this.ops();
+      this.store.setOrgBillingStatus(orgId, status, this.user.id);
     });
   }
   /** Mirrors the ops_* RPCs: refused unless the user is a platform admin. */

@@ -15,6 +15,7 @@ import type {
 import type { OrgLocale, ReporterLocale } from '@sitelog/shared/locale.ts';
 import type { OfficePhotoMime, OfficePhotoUpload } from '@sitelog/shared/report/photos.ts';
 import type { StoredReportData } from '@sitelog/shared/schemas/report.ts';
+import type { BillingAlert, BillingPrice, BillingStatus } from '@sitelog/shared/billing.ts';
 import type {
   BillingData,
   ChangeEvent,
@@ -26,6 +27,7 @@ import type {
   NavBadges,
   NotificationItem,
   OpsData,
+  OpsOrgBilling,
   OrgSettingsPatch,
   OrgSummary,
   OrglessContacts,
@@ -260,6 +262,11 @@ export interface DataSource {
   getGlossary(): Promise<GlossaryData>;
   getSettings(): Promise<SettingsData>;
   getBilling(): Promise<BillingData>;
+  /**
+   * The admin banner on every page (F23, §19 Q235): past due, a lapsed trial or a canceled
+   * subscription; null when billing is fine. Database only, no provider call.
+   */
+  getBillingAlert(): Promise<BillingAlert | null>;
   getNotifications(): Promise<NotificationItem[]>;
   getNavBadges(): Promise<NavBadges>;
   getSetupState(): Promise<SetupState>;
@@ -420,6 +427,12 @@ export interface DataSource {
   assignUnknownContact(contactId: string, orgId: string): Promise<void>;
   /** Ignores an org-less contact (audited). */
   ignoreOrglessContact(contactId: string): Promise<void>;
+  /** W4-10: every org's billing (`ops_org_billing()`). */
+  getOpsOrgBilling(): Promise<OpsOrgBilling[]>;
+  /** W4-10 (§19 Q234): sets or clears an org's price (`ops_set_org_price()`, audited). */
+  setOrgPrice(orgId: string, price: BillingPrice | null): Promise<void>;
+  /** W4-10 (§19 Q236): a manual org's billing status (`ops_set_org_billing_status()`, audited). */
+  setOrgBillingStatus(orgId: string, status: BillingStatus): Promise<void>;
 
   // ─── Realtime ───
   subscribe(onChange: (event: ChangeEvent) => void): () => void;

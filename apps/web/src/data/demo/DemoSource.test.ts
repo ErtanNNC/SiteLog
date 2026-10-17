@@ -407,8 +407,9 @@ describe('DemoSource aggregations (§18 numbers, Fri Oct 9 2026)', () => {
     expect(settings.settings.default_deadline).toBe('17:30:00');
     expect(settings.siteRecipients).toHaveLength(6);
     const b = await s.getBilling();
-    expect(b.plan.monthlyCents).toBe(239_400);
-    expect(b.invoices.map((i) => i.amountCents)).toEqual([239_400, 239_400, 199_500, 159_600]);
+    expect(b.plan.monthlyMinor).toBe(239_400);
+    expect(b.plan.price).toEqual({ minor: 39_900, currency: 'USD' });
+    expect(b.invoices.map((i) => i.amountMinor)).toEqual([239_400, 239_400, 199_500, 159_600]);
     expect(await s.getNavBadges()).toEqual({
       reportsToReview: 1,
       unknownSenders: 1,
@@ -834,5 +835,19 @@ describe('Crew hours on v1.2 (W3-06)', () => {
     const csv = demoPayrollCsv(store, '2026-W41');
     expect(csv).toContain(`"'=HYPERLINK(""https://x.example/?""&A2,""Pay"")"`);
     expect(csv).not.toMatch(/(^|,)=HYPERLINK/m);
+  });
+});
+
+describe('Pause and Resume (W4-10: admin only everywhere)', () => {
+  it('refuses a pm and an ops user, as RLS sites_admin_update does on Supabase', async () => {
+    for (const role of ['pm', 'ops'] as const) {
+      const store = new DemoStore();
+      const u = demoUserFor(role);
+      const s = new DemoSource(store, { id: u.id, email: u.email, name: u.name, role: u.role });
+      const site = store.data.sites[0]!;
+      await expect(s.pauseSite(site.id), role).rejects.toThrow('You’re not allowed to do that.');
+      await expect(s.resumeSite(site.id), role).rejects.toThrow('You’re not allowed to do that.');
+      expect(site.status).toBe('active');
+    }
   });
 });

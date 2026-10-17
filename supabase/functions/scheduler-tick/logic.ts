@@ -43,7 +43,7 @@ import {
   weatherSlotDue,
   windowEndAfter,
 } from '@sitelog/shared';
-import { isBillingBlocked } from '../_shared/billing.ts';
+import { isOrgBillingBlocked } from '../_shared/billing.ts';
 
 /**
  * Pure decisions of the scheduler tick (§7.1, §7.4, §F9, §10.10, §13). Everything here works on
@@ -83,6 +83,13 @@ export interface OrgInput {
   units?: UnitSystem;
   /** `orgs.is_demo` (W3-17): a demo org's calls ring the Demo phone (§19 Q132). */
   is_demo?: boolean;
+  /**
+   * W4-10 (§19 Q235): a trial that ended with no subscription counts as past due from
+   * `trial_ends_at`; never for a demo or a `manual` org. Absent: no trial rule (as before).
+   */
+  trial_ends_at?: string | null;
+  billing_provider?: string | null;
+  billing_subscription_id?: string | null;
 }
 
 export interface SiteInput {
@@ -119,10 +126,20 @@ export function ladderFromSettings(s: OrgSettingsInput): LadderSettings {
   };
 }
 
-/** §F19 step 5 — blocked orgs get no site-days, reminders or weather fetches. */
+/**
+ * §F19 step 5 — blocked orgs get no site-days, reminders or weather fetches; a lapsed trial is
+ * past due from its end (§19 Q235, `isOrgBillingBlocked`).
+ */
 export function orgIsBlocked(org: OrgInput, now: Date): boolean {
-  return isBillingBlocked(
-    { billingStatus: org.billing_status, pastDueSince: org.past_due_since },
+  return isOrgBillingBlocked(
+    {
+      billing_status: org.billing_status,
+      billing_provider: org.billing_provider ?? null,
+      billing_subscription_id: org.billing_subscription_id ?? null,
+      trial_ends_at: org.trial_ends_at ?? null,
+      is_demo: org.is_demo === true,
+      past_due_since: org.past_due_since,
+    },
     now,
     org.settings.past_due_grace_days,
   );

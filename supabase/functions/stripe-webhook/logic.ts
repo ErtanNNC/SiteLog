@@ -1,3 +1,4 @@
+import { noticeData } from '@sitelog/shared/notifications.ts';
 import { idOf, mapStripeStatus, unixToIso, type BillingStatus } from '../_shared/billing.ts';
 
 /** Pure parts of the Stripe webhook; Stripe objects are typed structurally so tests need no SDK. */
@@ -52,4 +53,32 @@ export function subscriptionPatch(sub: SubscriptionLike, deleted = false): OrgBi
   const trialEndsAt = unixToIso(sub.trial_end);
   if (trialEndsAt) patch.trial_ends_at = trialEndsAt;
   return patch;
+}
+
+/**
+ * `invoice.payment_failed` (F23, §13 "Payment failed"): the org goes past due (the admin banner,
+ * the grace days, then the block) and its office gets the notice, which the panel shows in its
+ * language from `data` (`payment_failed`, EN/TR; title and body are the English fallback). A
+ * canceled subscription stays canceled.
+ */
+export function paymentFailedChange(org: { billing_status: string | null }): {
+  patch: OrgBillingPatch;
+  notice: {
+    kind: 'billing';
+    title: string;
+    body: string;
+    targetPath: '/billing';
+    data: ReturnType<typeof noticeData>;
+  };
+} {
+  return {
+    patch: org.billing_status === 'canceled' ? {} : { billing_status: 'past_due' },
+    notice: {
+      kind: 'billing',
+      title: 'Payment failed',
+      body: 'Stripe could not charge your card. Update the payment method in Billing to keep reports and reminders flowing.',
+      targetPath: '/billing',
+      data: noticeData('payment_failed', {}),
+    },
+  };
 }

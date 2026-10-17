@@ -18,6 +18,7 @@ import { formatDateTimeShort } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import NotFoundPage from '../not-found/Page';
 import { OrglessContacts } from './OrglessContacts';
+import { OrgBilling } from './OrgBilling';
 import { OutboundCalls } from './OutboundCalls';
 
 /**
@@ -350,6 +351,8 @@ function OpsDashboard() {
       <OrglessContacts />
 
       <OutboundCalls rows={outboundCalls ?? []} />
+
+      <OrgBilling />
 
       <Card>
         <CardHeader>

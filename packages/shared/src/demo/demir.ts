@@ -368,7 +368,7 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
       timezone: DEMIR_TZ,
       stripe_customer_id: null,
       stripe_subscription_id: null,
-      // The column default; TR billing is open (spec §19 questions 8 and 9).
+      // The column default; TR billing is `manual` (spec §19 Q236) while Q8 and Q9 are open.
       billing_status: 'trialing',
       trial_ends_at: null,
       created_at: setup('09:00'),
@@ -380,6 +380,9 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
       units: trPack.units,
       currency: trPack.currency,
       is_demo: true,
+      // §19 Q236: a TR org is billed `manual` until Q8 names a provider; no price until Q9 (no
+      // TRY row in billing_default_prices), as create_org() leaves it.
+      billing_provider: 'manual',
     },
     settings,
     users: DEMIR_USERS,

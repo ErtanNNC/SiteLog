@@ -153,6 +153,12 @@ export const ConfigSchema = z.object({
   VOICE_RING_TIMEOUT_S: intFrom(30).pipe(z.number().min(5).max(120)),
   /** How long a demo org's console call rings in the Demo phone before no answer. */
   CONSOLE_CALL_RING_S: intFrom(30).pipe(z.number().min(1).max(600)),
+  /**
+   * W4-10 (F23): the `billing_sync` job sets a real org's Stripe subscription quantity to its
+   * active sites (the same STRIPE_SECRET_KEY as api-billing). Without it the job logs and ends:
+   * nothing in this environment bills through Stripe.
+   */
+  STRIPE_SECRET_KEY: z.string().default(''),
   WORKER_CONCURRENCY: intFrom(4).pipe(z.number().min(1).max(64)),
   WORKER_PORT: intFrom(8080),
   WORKER_ID: z.string().default(''),

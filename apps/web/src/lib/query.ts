@@ -33,6 +33,8 @@ export const qk = {
   glossary: (org: string) => [org, 'glossary'] as const,
   settings: (org: string) => [org, 'settings'] as const,
   billing: (org: string) => [org, 'billing'] as const,
+  /** The admin banner (W4-10): under the org, so every org mutation refreshes it. */
+  billingAlert: (org: string) => [org, 'billing', 'alert'] as const,
   notifications: (org: string) => [org, 'notifications'] as const,
   setup: (org: string) => [org, 'setup'] as const,
   search: (org: string, q: string) => [org, 'search', q] as const,
@@ -44,4 +46,5 @@ export const qk = {
   opsAccess: (userId: string) => ['ops', userId, 'access'] as const,
   ops: (userId: string) => ['ops', userId, 'dashboard'] as const,
   orglessContacts: (userId: string) => ['ops', userId, 'orgless-contacts'] as const,
+  opsOrgBilling: (userId: string) => ['ops', userId, 'org-billing'] as const,
 };

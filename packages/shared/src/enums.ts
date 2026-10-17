@@ -290,6 +290,12 @@ export const JOB_TYPES = [
    * failure (`applyLateStatus`).
    */
   'sms_status',
+  /**
+   * W4-10 (F23 steps 1–3): a real Stripe org's subscription quantity set to its active sites, two
+   * minutes after a site was added, paused, resumed or archived (the `sites_billing_sync` trigger);
+   * the panel's own api-billing `sync` usually did it already, and a failed one is retried here.
+   */
+  'billing_sync',
 ] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 

@@ -2167,6 +2167,9 @@ export function buildKestrelDemo(opts: KestrelOptions = {}): DemoDataset {
       billing_subscription_id: 'sub_demo_kestrel',
       stripe_customer_id: 'cus_demo_kestrel',
       stripe_subscription_id: 'sub_demo_kestrel',
+      // §1.3 / §19 Q234: the org's own price, preset from billing_default_prices (USD 39900).
+      price_per_site_minor: 39900,
+      price_currency: 'USD',
     },
     settings: {
       org_id: ORG,

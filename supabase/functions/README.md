@@ -66,6 +66,9 @@ supabase secrets set \
   STRIPE_SECRET_KEY=sk_live_... \
   STRIPE_WEBHOOK_SECRET=whsec_... \
   STRIPE_PRICE_ID_SITE_US=price_...   # api-billing falls back to the old STRIPE_PRICE_ID_SITE
+# W4-10: Checkout bills the Stripe price of the org's currency, STRIPE_PRICE_ID_SITE_<CURRENCY>
+# (USD: STRIPE_PRICE_ID_SITE_US); its amount must equal the org's price (orgs.price_per_site_minor),
+# else 409 price_mismatch. A `manual` org (TR until spec §19 Q8) needs no Stripe secret at all.
 # optional: extra browser origins allowed by CORS (comma-separated), e.g. a preview deployment;
 # field-api also accepts them as the Origin of the field app (a field preview)
 supabase secrets set CORS_EXTRA_ORIGINS=https://preview.sitelog.app

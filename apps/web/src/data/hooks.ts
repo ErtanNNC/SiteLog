@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/auth/AuthProvider';
 import { copy } from '@/copy/en';
 import { translate } from '@/i18n/useCopy';
+import type { BillingPrice, BillingStatus } from '@sitelog/shared/billing.ts';
 import { pdfFileNames, saveBlob, zipFromUrls } from '@/lib/pdfZip';
 import { qk } from '@/lib/query';
 import { pendingTab } from '@/lib/tab';
@@ -133,6 +134,18 @@ export function useSettings() {
 export function useBilling() {
   const s = useDataSource();
   return useQuery({ queryKey: qk.billing(s.orgId), queryFn: () => s.getBilling() });
+}
+
+/** The shell's billing banner (F23, §19 Q235): admins only, refreshed every few minutes. */
+export function useBillingAlert(enabled: boolean) {
+  const s = useDataSource();
+  return useQuery({
+    queryKey: qk.billingAlert(s.orgId),
+    queryFn: () => s.getBillingAlert(),
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
 }
 
 export function useNotifications(opts: Opts = {}) {
@@ -670,7 +683,7 @@ export function usePauseSite() {
       await s.pauseSite(vars.siteId);
       refreshOrgs();
     },
-    { success: (v) => copy.toasts.sitePaused(v.siteName) },
+    { success: (v) => translate('toasts.sitePausedName', { site: v.siteName }) },
   );
 }
 
@@ -682,7 +695,7 @@ export function useResumeSite() {
       await s.resumeSite(vars.siteId);
       refreshOrgs();
     },
-    { success: (v) => copy.toasts.siteResumed(v.siteName) },
+    { success: (v) => translate('toasts.siteResumedName', { site: v.siteName }) },
   );
 }
 
@@ -816,7 +829,7 @@ function useStripeRedirect(kind: 'portal' | 'checkout') {
   return useMutation({
     mutationFn: async () => {
       const id = toast.loading(
-        kind === 'portal' ? copy.billing.portalOpening : copy.billing.checkoutOpening,
+        translate(kind === 'portal' ? 'billing.portalOpening' : 'billing.checkoutOpening'),
       );
       try {
         const url = await (kind === 'portal' ? s.getBillingPortalUrl() : s.getBillingCheckoutUrl());
@@ -906,6 +919,32 @@ export function useIgnoreOrglessContact() {
   return useOrglessMutation(
     (vars: { contactId: string }) => s.ignoreOrglessContact(vars.contactId),
     copy.ops.orgless.ignored,
+  );
+}
+
+/** /ops (W4-10): every org's billing, the price and a manual org's status. */
+export function useOpsOrgBilling() {
+  const s = useDataSource();
+  return useQuery({
+    queryKey: qk.opsOrgBilling(s.user.id),
+    queryFn: () => s.getOpsOrgBilling(),
+  });
+}
+
+export function useSetOrgPrice() {
+  const s = useDataSource();
+  return useOrglessMutation(
+    (vars: { orgId: string; price: BillingPrice | null }) => s.setOrgPrice(vars.orgId, vars.price),
+    copy.ops.billing.saved,
+  );
+}
+
+export function useSetOrgBillingStatus() {
+  const s = useDataSource();
+  return useOrglessMutation(
+    (vars: { orgId: string; status: BillingStatus }) =>
+      s.setOrgBillingStatus(vars.orgId, vars.status),
+    copy.ops.billing.saved,
   );
 }
 

@@ -128,6 +128,35 @@ export type OrgRow = {
   billing_provider: string | null;
   billing_customer_id: string | null;
   billing_subscription_id: string | null;
+  /**
+   * W4-10 (20261017000450_billing_per_org.sql, spec §19 Q234): the price per active site and
+   * month in minor units and its ISO 4217 currency, both or neither; preset by create_org() from
+   * `billing_default_prices`, changed only by SiteLog staff (`ops_set_org_price()`).
+   */
+  price_per_site_minor: number | null;
+  price_currency: string | null;
+};
+
+/** W4-10 (20261017000450): SiteLog's default price per currency; service role only. */
+export type BillingDefaultPriceRow = {
+  currency: string;
+  price_per_site_minor: number;
+  updated_at: string;
+};
+
+/** `ops_org_billing()` (W4-10): an org's billing on /ops. */
+export type OpsOrgBillingRow = {
+  id: string;
+  name: string;
+  country: string;
+  is_demo: boolean;
+  billing_provider: string;
+  billing_status: string | null;
+  trial_ends_at: string | null;
+  has_subscription: boolean;
+  price_per_site_minor: number | null;
+  price_currency: string | null;
+  active_sites: number;
 };
 
 export type OrgMemberRow = {
@@ -1122,6 +1151,8 @@ export type Database = {
         | 'billing_provider'
         | 'billing_customer_id'
         | 'billing_subscription_id'
+        | 'price_per_site_minor'
+        | 'price_currency'
       >;
       org_members: Table<
         OrgMemberRow,
@@ -1497,6 +1528,7 @@ export type Database = {
       >;
       scheduler_state: Table<SchedulerStateRow, 'value' | 'updated_at'>;
       stripe_events: Table<StripeEventRow, 'received_at' | 'processed_at'>;
+      billing_default_prices: Table<BillingDefaultPriceRow, 'updated_at'>;
       audit_log: Table<
         AuditLogRow,
         'id' | 'org_id' | 'actor_type' | 'actor_id' | 'entity' | 'entity_id' | 'diff' | 'created_at'
@@ -2298,6 +2330,14 @@ export type Database = {
         Args: Record<string, never>;
         Returns: Array<{ id: string; name: string; country: string }>;
       };
+      // Billing on /ops (20261017000450_billing_per_org.sql, W4-10, spec §19 Q234, Q236).
+      ops_org_billing: { Args: Record<string, never>; Returns: OpsOrgBillingRow[] };
+      ops_set_org_price: {
+        Args: { p_org_id: string; p_price_minor: number | null; p_currency: string | null };
+        Returns: Json;
+      };
+      ops_set_org_billing_status: { Args: { p_org_id: string; p_status: string }; Returns: Json };
+      billing_provider_for_country: { Args: { p_country: string }; Returns: string };
       // Worker (service role) only.
       report_cost_inputs: {
         Args: { p_report_id: string };

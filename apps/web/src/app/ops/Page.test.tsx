@@ -161,4 +161,67 @@ describe('OpsPage: unknown contacts with no organisation (spec §19 Q44, W1-16)'
       entity_id: 'unknown:orgless',
     });
   });
+
+  it('W4-10: SiteLog staff set an org’s price, audited; a Stripe org has no status to set', async () => {
+    const store = new DemoStore();
+    renderWithProviders(<OpsPage />, { route: '/ops', store });
+    const card = await screen.findByTestId('ops-org-billing');
+    const table = await within(card).findByRole('table', { name: 'Billing per organisation' });
+    const row = within(table).getByText('Kestrel Build Group').closest('tr')!;
+    expect(row).toHaveTextContent('Stripe');
+    expect(row).toHaveTextContent('$399.00');
+    await userEvent.click(
+      within(row).getByRole('button', { name: 'Edit the billing of Kestrel Build Group' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).queryByLabelText('Billing status (manual organisations only)'),
+    ).toBeNull();
+    const amount = within(dialog).getByLabelText('Price per site and month');
+    expect(amount).toHaveValue('399.00');
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '299.5');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(store.data.org.price_per_site_minor).toBe(29950);
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'billing.price_set',
+      diff: {
+        from: { minor: 39900, currency: 'USD' },
+        to: { minor: 29950, currency: 'USD' },
+        via: 'ops',
+      },
+    });
+  });
+
+  it('W4-10: a manual org’s status is set on /ops; a bad amount is refused in words', async () => {
+    const store = new DemoStore();
+    store.data.org.billing_provider = 'manual';
+    renderWithProviders(<OpsPage />, { route: '/ops', store });
+    const card = await screen.findByTestId('ops-org-billing');
+    await userEvent.click(
+      await within(card).findByRole('button', { name: 'Edit the billing of Kestrel Build Group' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    const amount = within(dialog).getByLabelText('Price per site and month');
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '12.345');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Enter an amount above zero with at most two decimals, or leave it empty.',
+    );
+    expect(store.data.org.price_per_site_minor).toBe(39900);
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '399');
+    await userEvent.click(
+      within(dialog).getByRole('combobox', { name: 'Billing status (manual organisations only)' }),
+    );
+    await userEvent.click(await screen.findByRole('option', { name: 'Past due' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(store.data.org.billing_status).toBe('past_due'));
+    expect(store.data.audit.at(-1)).toMatchObject({
+      action: 'billing.status_changed',
+      diff: { from: 'active', to: 'past_due', via: 'ops' },
+    });
+  });
 });

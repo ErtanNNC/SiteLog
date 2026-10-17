@@ -1,91 +1,72 @@
-import { PRICE_PER_SITE_CENTS, prorationFor } from '../_shared/billing.ts';
+import { billingPrice, billingProviderOf, monthlyTotalMinor } from '../_shared/billing.ts';
+import type { BillingOrg, BillingProvider, ProviderStatus } from '../_shared/billing_provider.ts';
+import { HttpError } from '../_shared/http.ts';
 
-/** Pure pieces of api-billing (§F19, §P13). Stripe objects are typed structurally for tests. */
-
-export interface InvoiceLike {
-  id: string;
-  created: number;
-  total: number;
-  currency: string;
-  status: string | null;
-  hosted_invoice_url?: string | null;
-  lines: { data: Array<{ quantity: number | null }> };
-}
-
-export interface InvoiceSummary {
-  id: string;
-  date: string;
-  amount_cents: number;
-  currency: string;
-  status: string | null;
-  hosted_invoice_url: string | null;
-  /** Billed site count (sum of line quantities). */
-  sites: number;
-}
-
-export function invoiceSummary(inv: InvoiceLike): InvoiceSummary {
-  return {
-    id: inv.id,
-    date: new Date(inv.created * 1000).toISOString(),
-    amount_cents: inv.total,
-    currency: inv.currency,
-    status: inv.status,
-    hosted_invoice_url: inv.hosted_invoice_url ?? null,
-    sites: inv.lines.data.reduce((sum, line) => sum + (line.quantity ?? 0), 0),
-  };
-}
+export {
+  checkoutQuantity,
+  invoiceSummary,
+  sitePriceId,
+  type InvoiceLike,
+  type InvoiceSummary,
+} from '../_shared/billing_provider.ts';
+export { syncDecision } from '../_shared/billing.ts';
 
 /**
- * Checkout subscribes one unit per active site. With none there is nothing to bill yet (Stripe
- * Checkout needs a quantity of at least 1), so the caller refuses instead of billing one site.
+ * api-billing's actions on any provider (§F23, §P13, W4-10). index.ts authenticates the admin,
+ * loads the org and picks its provider (`orgs.billing_provider`, `pickProvider`); this module
+ * does the rest against a small store, so the Deno tests run it on fakes per provider.
  */
-export function checkoutQuantity(activeSites: number): number | null {
-  const n = Math.max(0, Math.floor(activeSites));
-  return n > 0 ? n : null;
+
+export const BILLING_ACTIONS = [
+  'checkout',
+  'portal',
+  'sync',
+  'pause_site',
+  'resume_site',
+  'invoices',
+  'status',
+] as const;
+export type BillingAction = (typeof BILLING_ACTIONS)[number];
+
+export interface BillingStore {
+  activeSiteCount(orgId: string): Promise<number>;
+  getSite(
+    orgId: string,
+    siteId: string,
+  ): Promise<{ id: string; status: string; name: string } | null>;
+  setSiteStatus(siteId: string, next: 'paused' | 'active', at: string): Promise<void>;
+  audit(entry: {
+    orgId: string;
+    actorId: string;
+    action: 'site.paused' | 'site.resumed';
+    siteId: string;
+    diff: { from: string; to: string };
+  }): Promise<void>;
 }
 
-export interface SyncDecision {
-  update: boolean;
-  quantity: number;
-  proration: 'create_prorations' | 'none';
-}
-
-/** Subscription quantity must equal the number of active sites (§F19 steps 1–3). */
-export function syncDecision(currentQuantity: number | null, activeSites: number): SyncDecision {
-  const quantity = Math.max(0, Math.floor(activeSites));
-  const current = currentQuantity ?? 0;
-  return { update: quantity !== current, quantity, proration: prorationFor(current, quantity) };
-}
-
-export interface BillingSummary {
+export interface BillingSummary extends ProviderStatus {
+  provider: 'stripe' | 'manual';
   billingStatus: string | null;
   trialEndsAt: string | null;
   activeSites: number;
-  pricePerSiteCents: number;
-  monthlyTotalCents: number;
+  /** The org's price (§19 Q234); null while SiteLog has set none (a TR org until Q9). */
+  pricePerSiteMinor: number | null;
+  currency: string | null;
+  monthlyTotalMinor: number | null;
   hasCustomer: boolean;
   hasSubscription: boolean;
-  subscriptionStatus: string | null;
-  subscriptionQuantity: number | null;
-  nextInvoiceAt: string | null;
-  paymentMethod: { brand: string; last4: string } | null;
 }
 
-export function baseSummary(
-  org: {
-    billing_status: string | null;
-    trial_ends_at: string | null;
-    billing_customer_id: string | null;
-    billing_subscription_id: string | null;
-  },
-  activeSites: number,
-): BillingSummary {
+export function baseSummary(org: BillingOrg, activeSites: number): BillingSummary {
+  const price = billingPrice(org);
   return {
+    provider: billingProviderOf(org),
     billingStatus: org.billing_status,
     trialEndsAt: org.trial_ends_at,
     activeSites,
-    pricePerSiteCents: PRICE_PER_SITE_CENTS,
-    monthlyTotalCents: PRICE_PER_SITE_CENTS * activeSites,
+    pricePerSiteMinor: price?.minor ?? null,
+    currency: price?.currency ?? null,
+    monthlyTotalMinor: price ? monthlyTotalMinor(price, activeSites) : null,
     hasCustomer: org.billing_customer_id !== null,
     hasSubscription: org.billing_subscription_id !== null,
     subscriptionStatus: null,
@@ -95,11 +76,63 @@ export function baseSummary(
   };
 }
 
-/**
- * The Stripe price of one active site (§5.1 `STRIPE_PRICE_ID_SITE_US`). Until the secret is
- * renamed on every project (GAP 9.1: set the new one, read new with fallback, unset the old), the
- * old name `STRIPE_PRICE_ID_SITE` still works. Null when neither is set.
- */
-export function sitePriceId(env: (name: string) => string | undefined): string | null {
-  return env('STRIPE_PRICE_ID_SITE_US') ?? env('STRIPE_PRICE_ID_SITE') ?? null;
+export interface BillingRequest {
+  action: BillingAction;
+  siteId?: string;
+  userId: string;
+  email: string | null;
+}
+
+export interface BillingDeps {
+  store: BillingStore;
+  provider: BillingProvider;
+  now: () => Date;
+}
+
+export async function handleBillingAction(
+  deps: BillingDeps,
+  org: BillingOrg,
+  req: BillingRequest,
+): Promise<unknown> {
+  const { store, provider } = deps;
+  switch (req.action) {
+    case 'checkout':
+      return provider.checkout(org, await store.activeSiteCount(org.id), req.email);
+    case 'portal':
+      return provider.portal(org);
+    case 'sync':
+      return provider.syncQuantity(org, await store.activeSiteCount(org.id));
+    case 'pause_site':
+    case 'resume_site':
+      return setSiteStatus(deps, org, req);
+    case 'invoices':
+      return { invoices: await provider.invoices(org) };
+    case 'status': {
+      const summary = baseSummary(org, await store.activeSiteCount(org.id));
+      return { ...summary, ...(await provider.status(org)) };
+    }
+  }
+}
+
+/** Pause or resume a site (admin only, F23: billed from the next cycle), then the quantity sync. */
+async function setSiteStatus(deps: BillingDeps, org: BillingOrg, req: BillingRequest) {
+  if (!req.siteId) throw new HttpError(400, 'siteId is required');
+  const site = await deps.store.getSite(org.id, req.siteId);
+  if (!site) throw new HttpError(404, 'Site not found in this organisation');
+  if (site.status === 'archived') {
+    throw new HttpError(409, 'Archived sites cannot be paused or resumed');
+  }
+  const next = req.action === 'pause_site' ? 'paused' : 'active';
+  if (site.status !== next) {
+    await deps.store.setSiteStatus(site.id, next, deps.now().toISOString());
+    await deps.store.audit({
+      orgId: org.id,
+      actorId: req.userId,
+      action: next === 'paused' ? 'site.paused' : 'site.resumed',
+      siteId: site.id,
+      diff: { from: site.status, to: next },
+    });
+  }
+  const sync = await deps.provider.syncQuantity(org, await deps.store.activeSiteCount(org.id));
+  return { site: { id: site.id, name: site.name, status: next }, sync };
 }

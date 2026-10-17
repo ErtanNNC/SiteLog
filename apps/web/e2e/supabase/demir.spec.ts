@@ -91,6 +91,35 @@ test('Demir Yapı A.Ş.: Sites and Site detail in Turkish', async ({ page }) => 
   await expect(page.getByText('Tercih: telefon araması · TR konuşur')).toBeVisible();
 });
 
+// W4-10 (spec §19 Q236): a TR org is billed `manual` until Q8; its Billing reads in Turkish with
+// no Checkout and no portal, "SiteLog invoices you directly", no price until Q9 (the seed's org
+// as create_org() makes it), and its sites with Pause. No api-billing call is made.
+test('Demir Yapı A.Ş.: Billing in Turkish, invoiced by SiteLog, no Checkout', async ({ page }) => {
+  await pinSeedClock(page);
+  const billingCalls: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('/functions/v1/api-billing')) billingCalls.push(r.url());
+  });
+  await signInWithMagicLink(page, SEED.demirAdmin.email);
+  await page
+    .getByRole('navigation', { name: 'Ana gezinme' })
+    .getByRole('link', { name: 'Faturalandırma' })
+    .click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Faturalandırma' })).toBeVisible();
+  await expect(page.getByTestId('manual-billing')).toContainText(
+    'SiteLog sizi doğrudan faturalandırır',
+  );
+  await expect(page.getByTestId('no-price')).toBeVisible();
+  await expect(page.getByTestId('start-subscription')).toHaveCount(0);
+  await expect(page.getByTestId('update-payment')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Ödeme bilgilerini ekle' })).toHaveCount(0);
+  const sites = page.getByRole('table', { name: 'Bu plandaki şantiyeler' });
+  await expect(
+    sites.getByRole('button', { name: 'Kartal Konutları — B Blok şantiyesini duraklat' }),
+  ).toBeVisible();
+  expect(billingCalls).toEqual([]);
+});
+
 test('Lena still sees Kestrel Build Group only', async ({ page }) => {
   await pinSeedClock(page);
   await signInWithMagicLink(page);

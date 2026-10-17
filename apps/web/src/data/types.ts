@@ -28,6 +28,7 @@ import type {
 } from '@sitelog/shared/schemas/report.ts';
 import type { ReportTotals } from '@sitelog/shared/report/hours.ts';
 import type { OrgSettingsRow } from '@sitelog/shared/db/types.ts';
+import type { BillingAlert, BillingPrice, BillingProviderName } from '@sitelog/shared/billing.ts';
 import type { OrgLocale, ReporterLocale, UnitSystem } from '@sitelog/shared/locale.ts';
 import type { CopyKey } from '@/i18n/keys';
 import type { NoticeText } from './notices';
@@ -110,6 +111,8 @@ export interface OrgSummary {
    * org's. It wins over the org's locale, never over a choice made on this device (§11.2).
    */
   uiLocale?: OrgLocale | null;
+  /** W4-10 (§19 Q234): the org's price per active site and month; null while SiteLog set none. */
+  price?: BillingPrice | null;
 }
 
 // ───────────────────────────── P3 Overview ─────────────────────────────
@@ -1042,23 +1045,32 @@ export interface SettingsData {
 
 export interface BillingData {
   plan: {
-    monthlyCents: number;
+    /** `orgs.billing_provider` (§19 Q236): `manual` → no Checkout or portal, SiteLog invoices. */
+    provider: BillingProviderName;
+    /** The org's price per active site and month (§19 Q234); null while SiteLog has set none. */
+    price: BillingPrice | null;
     activeSites: number;
-    pricePerSiteCents: number;
+    /** Price × active sites in minor units, computed here; null without a price. */
+    monthlyMinor: number | null;
     nextInvoiceDate: string;
     paymentMethod: { brand: string; last4: string } | null;
     status: string | null;
     trialEndsAt: string | null;
     /** A Stripe subscription exists (not canceled); without one, payment buttons open Checkout. */
     hasSubscription: boolean;
+    /** `org_settings.past_due_grace_days` (F23: 14). */
+    graceDays: number;
   };
+  /** The past-due / trial-ended state the banner shows (§19 Q235), or null. */
+  alert: BillingAlert | null;
   sites: Array<{
     id: string;
     name: string;
     projectCode: string;
     activeSince: string | null;
     status: SiteStatus;
-    monthlyCents: number;
+    /** The site's monthly price: the org's price while active, null when paused or unpriced. */
+    monthlyMinor: number | null;
     pausedAt: string | null;
   }>;
   invoices: Array<{
@@ -1066,7 +1078,9 @@ export interface BillingData {
     id?: string;
     date: string;
     sites: number;
-    amountCents: number;
+    amountMinor: number;
+    /** ISO 4217, upper case. */
+    currency: string;
     status: 'paid' | 'open' | 'past_due';
     /** Stripe hosted invoice page; empty / '#' → open the customer portal instead. */
     url: string;
@@ -1249,6 +1263,20 @@ export interface OpsOutboundCalls {
   weekStart: string;
   callDays: number;
   filedByCall: number;
+}
+
+/** /ops (W4-10, `ops_org_billing()`): an org's billing for SiteLog staff. */
+export interface OpsOrgBilling {
+  orgId: string;
+  orgName: string;
+  country: string;
+  isDemo: boolean;
+  provider: BillingProviderName;
+  status: string | null;
+  trialEndsAt: string | null;
+  hasSubscription: boolean;
+  price: BillingPrice | null;
+  activeSites: number;
 }
 
 export interface OpsData {

@@ -4,8 +4,8 @@
  *
  * D9: the shell, sign-in, `/auth/callback`, the Overview (W1-16), Sites and Site detail (W1-18),
  * the Reports archive and Report review (W1-17), Crew hours (W3-06), Weather & delays (W3-07), the
- * Site glossary (W3-08), Team & numbers (W4-03), the not-found page and the placeholders speak the
- * panel's language (EN/TR).
+ * Site glossary (W3-08), Team & numbers (W4-03), Billing (W4-10), the not-found page and the
+ * placeholders speak the panel's language (EN/TR).
  * A page wrapped in `<EnglishOnly>` still reads `copy/en.ts` directly and renders in English inside
  * the translated shell; it loses the wrapper when it gets its Turkish.
  */
@@ -117,15 +117,7 @@ export function AppRoutes() {
                 </EnglishOnly>,
               )}
             />
-            <Route
-              path="/billing"
-              element={guard(
-                'billing',
-                <EnglishOnly>
-                  <BillingPage />
-                </EnglishOnly>,
-              )}
-            />
+            <Route path="/billing" element={guard('billing', <BillingPage />)} />
             <Route path="/dev/phone" element={guard('devPhone', <DevPhonePage />)} />
             {/* SiteLog staff only (platform_admins), not an org role and not in the sidebar. */}
             <Route

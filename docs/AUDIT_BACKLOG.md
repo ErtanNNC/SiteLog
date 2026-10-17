@@ -145,17 +145,19 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Stripe 14-day trial is never applied at checkout and never enforced when it lapses
 
-`supabase/functions/_shared/billing.ts:38` · billing / F19, §19 #4 · Confirmed 3/3
+`supabase/functions/_shared/billing.ts:38` · billing / F19, §19 #4 · Confirmed 3/3 · Closed in W4-10
 
 - **Problem:** An admin creates an org on Oct 1. The Billing page says 'Trial ends Oct 15'. They click 'Add payment details' on Oct 3, Stripe Checkout runs with no trial, and the card is charged $399 x sites right away, even though the UI promised a 14-day free trial. Another org never adds a card: on day 15 and every day after, scheduler-tick still creates site-days, sends reminders and weather jobs, and the panel works, so the rule 'card required before day 15' is never applied.
 - **Fix:** The direction is right, but the checkout half is incomplete. Stripe Checkout rejects subscription_data.trial_end unless it is at least 48 hours in the future. Passing trial_ends_at whenever it is 'still in the future' would therefore make checkout fail with a Stripe error for an admin who adds a card on day 13 or 14. Replace trialDaysFor with a helper that takes now: trialFor(org, now). - If trial_ends_at is null, return { trial_period_days: 14 }. - If trial_ends_at - now >= 48h, return { trial_end: floor(Date.parse(trial_ends_at)/1000) }. - If 0 < remaining < 48h, return { trial_period_days: max(1, ceil(remaining/86400000)) }, or charge now. Pick one and test it. - If remaining <= 0, retur…
+- **Closed in W4-10:** the checkout half was `checkoutTrial()` (the rest of the trial, at least 48 h + 1 h). The lapse half: per spec §19 Q235 an org `trialing` past `trial_ends_at` with no subscription counts as past due from that instant (`effectiveBilling()` / `isOrgBillingBlocked()` in `packages/shared/src/billing.ts`), so the admin banner shows on every page and, after the org's grace days, scheduler-tick and Talk now stop (never a demo or a `manual` org). Tests: `packages/shared/src/billing.test.ts`, `scheduler-tick/logic_test.ts`, `BillingBanner.test.tsx`.
 
 ### Adding a site never increments the Stripe subscription quantity
 
-`apps/web/src/data/supabase/SupabaseSource.ts:1351` · billing / F19 step 1 · Confirmed 3/3
+`apps/web/src/data/supabase/SupabaseSource.ts:1351` · billing / F19 step 1 · Confirmed 3/3 · Closed in W4-10
 
 - **Problem:** An org has an active subscription with quantity 3. The admin adds a 4th site from Sites -> Add site. Reports and reminders run for 4 sites, but Stripe keeps billing 3 x $399 until someone happens to pause or resume a site, so the org is under-billed by $399 per month for as long as that takes.
 - **Fix:** The suggested fix works, with one caveat. If the sync is added after the insert in createSite the way pauseSite and resumeSite do it (`.catch(() => undefined)`), a Stripe or network failure leaves the quantity drifted with no sign of it. A sturdier fix needs two parts. First, do the insert, the audit_log row and syncQuantity on the server, either through an edge-function action or through an RPC followed by a server-side sync. Second, add a self-healing reconciliation, for example in scheduler-tick or when the Billing 'status' action runs, that calls syncDecision for every org with a subscription whose item quantity differs from its active-site count.
+- **Closed in W4-10 (with its caveat):** the panel still calls api-billing `sync` after _Add site_, Pause and Resume, and a failure is reported to Sentry instead of dropped; the database queues a `billing_sync` job two minutes after every site insert or status change of a real Stripe org with a subscription (`sites_billing_sync`, `20261017000450_billing_per_org.sql`), which sets the quantity to the active sites through Stripe's REST API from the worker and is retried by the queue's backoff. Tests: `billing-per-org.test.ts` (the trigger), `apps/worker/src/jobs/billing_sync.test.ts`.
 
 ### Overview fails to load in Supabase mode for an org with no sites, so the 'Connect your first site' empty state never shows
 
@@ -173,10 +175,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Site settings drawer (edit site, recipients, Pause site) is open to pm/ops; in Supabase, pause and edit silently do nothing but toast success
 
-`apps/web/src/app/site/Page.tsx:114` · role-gating · Confirmed 3/3
+`apps/web/src/app/site/Page.tsx:114` · role-gating · Confirmed 3/3 · Closed in W4-10
 
 - **Problem:** An ops user opens /sites/<id>, clicks Site settings, then Pause site, then confirms. The toast reads 'Riverside Lofts paused', but the site stays active and keeps getting reminders and billing (Supabase). In demo, the site actually pauses, against the role matrix.
 - **Fix:** The suggested fix is right. Three refinements: 1. Gate in the UI with the existing helper. In site/Page.tsx, render the Site settings button and SiteSettingsDrawer only when `role === 'admin'`. pm/ops can either get a read-only view or no button. 2. Make the Supabase writes fail loudly when nothing changes: - updateSite / pauseSite / resumeSite: use `.update(...).eq('id', siteId).select('id')` and throw when `data.length === 0`. pm/ops can still SELECT sites, so an empty result really means the update was denied. - pauseSite / resumeSite: do this check before the api-billing sync call. - saveSiteRecipients: the same applies to the delete, or move it into an admin-checked RPC. 3. Mirror the …
+- **Closed in W4-10:** Site detail shows _Site settings_ (and its drawer) to admins only; `updateSite`, `pauseSite` and `resumeSite` read the row back (`.select('id')`) and fail with "You're not allowed to do that." when RLS matched none, before any quantity sync; the demo source refuses a pm or ops user the same way. Pause and Resume are admin only everywhere (Billing is an admin route). Tests: `site/Page.test.tsx`, `supabase/pauseSite.test.ts`, `demo/DemoSource.test.ts`, `e2e/billing.spec.ts`.
 
 ### Weather-day follow-up context is never cleared, so later photos and voice notes are filed into an old weather-day report
 
@@ -671,10 +674,11 @@ Fix the critical and high items before real customer data (other organisations, 
 
 ### Adding a site never syncs the Stripe quantity, so sites added after checkout are not billed
 
-`apps/web/src/data/supabase/SupabaseSource.ts:1351` · correctness/billing · Unverified
+`apps/web/src/data/supabase/SupabaseSource.ts:1351` · correctness/billing · Unverified · Closed in W4-10
 
 - **Problem:** An org subscribes with 1 site (quantity 1), then adds 4 more sites over the month from Sites → New site. Stripe keeps billing quantity 1 ($399) for 5 active sites until someone pauses or resumes a site, which happens to trigger a sync.
 - **Fix:** Call api-billing `{ action: 'sync' }` after createSite succeeds, and on any future archive or delete. Or move site creation into api-billing / an RPC that syncs, or have scheduler-tick reconcile quantity against active sites periodically.
+- **Closed in W4-10:** see "Adding a site never increments the Stripe subscription quantity" above (the panel's sync after _Add site_ plus the `billing_sync` job).
 
 ### Reminder targets are looked up by conversations.reporter_id, so a phone that is a reporter in two orgs gets reminders for only one of them
 

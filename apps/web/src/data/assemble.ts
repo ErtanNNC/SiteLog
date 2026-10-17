@@ -81,6 +81,13 @@ import { withPreciseCallSeconds } from '@sitelog/shared/report/reconcile.ts';
 import { isWorkingDay } from '@sitelog/shared/schedule/day.ts';
 import { readCallPeaks } from '@sitelog/shared/voice.ts';
 import {
+  billingAlert,
+  billingPrice,
+  billingProviderOf,
+  monthlyTotalMinor,
+  type BillingStateInput,
+} from '@sitelog/shared/billing.ts';
+import {
   addDays,
   convertMeasure,
   daysBetween,
@@ -208,7 +215,12 @@ export interface RowSet {
   packs: EvidencePackRow[];
   notifications: NotificationRow[];
   audit: AuditLogRow[];
-  billing?: Omit<BillingData['plan'], 'hasSubscription'> & { invoices: BillingData['invoices'] };
+  /** What the billing provider knows (demo: §18.1's card and invoices); price and sites are rows. */
+  billing?: {
+    nextInvoiceDate: string;
+    paymentMethod: BillingData['plan']['paymentMethod'];
+    invoices: BillingData['invoices'];
+  };
   /**
    * `data.photos` of report versions whose full row is not in `versions` (the Supabase Photos
    * tab loads only this column for the site's older reports).
@@ -227,7 +239,6 @@ export interface AssembleCtx {
   userId: string;
 }
 
-export const PRICE_PER_SITE_CENTS = 39_900;
 export const PAGE_SIZE = 50;
 
 // ───────────────────────────── Helpers ─────────────────────────────
@@ -2968,33 +2979,60 @@ export function assembleSettings(rows: RowSet): SettingsData {
   };
 }
 
+/**
+ * When the org last went past due: the latest audited `billing.status_changed` → past_due (what
+ * scheduler-tick reads), or null.
+ */
+export function pastDueSinceFrom(audit: readonly AuditLogRow[]): string | null {
+  let latest: string | null = null;
+  for (const a of audit) {
+    if (a.action !== 'billing.status_changed') continue;
+    const to = isRecord(a.diff) ? a.diff.to : null;
+    if (to === 'past_due' && (latest === null || a.created_at > latest)) latest = a.created_at;
+  }
+  return latest;
+}
+
+/** The org row's billing as the shared rules read it (§19 Q235). */
+export function billingStateOf(org: OrgRow, audit: readonly AuditLogRow[]): BillingStateInput {
+  return {
+    billing_status: org.billing_status,
+    billing_provider: org.billing_provider,
+    billing_subscription_id: org.billing_subscription_id,
+    trial_ends_at: org.trial_ends_at,
+    is_demo: org.is_demo,
+    past_due_since: pastDueSinceFrom(audit),
+  };
+}
+
+/**
+ * P13 Billing (W4-10): the org's own price (§19 Q234) × active sites, the provider (§19 Q236), the
+ * banner's alert (§19 Q235). Payment method, invoices and the next invoice date come from the
+ * provider (api-billing) in Supabase mode, from the demo dataset in demo mode.
+ */
 export function assembleBilling(rows: RowSet, ctx: AssembleCtx): BillingData {
   const active = rows.sites.filter((s) => s.status === 'active');
   const today = formatDateInTz(ctx.now, rows.org.timezone);
   const { y, m } = parseIsoDate(today);
   const nextMonth = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
-  const plan = rows.billing ?? {
-    monthlyCents: active.length * PRICE_PER_SITE_CENTS,
-    activeSites: active.length,
-    pricePerSiteCents: PRICE_PER_SITE_CENTS,
-    nextInvoiceDate: nextMonth,
-    paymentMethod: null,
-    status: rows.org.billing_status,
-    trialEndsAt: rows.org.trial_ends_at,
-    invoices: [],
-  };
+  const price = billingPrice(rows.org);
+  const graceDays = rows.settings.past_due_grace_days;
+  const extras = rows.billing;
   return {
     plan: {
-      monthlyCents: active.length * PRICE_PER_SITE_CENTS,
+      provider: billingProviderOf(rows.org),
+      price,
       activeSites: active.length,
-      pricePerSiteCents: PRICE_PER_SITE_CENTS,
-      nextInvoiceDate: plan.nextInvoiceDate,
-      paymentMethod: plan.paymentMethod,
+      monthlyMinor: price ? monthlyTotalMinor(price, active.length) : null,
+      nextInvoiceDate: extras?.nextInvoiceDate ?? nextMonth,
+      paymentMethod: extras?.paymentMethod ?? null,
       status: rows.org.billing_status,
       trialEndsAt: rows.org.trial_ends_at,
       hasSubscription:
         rows.org.billing_subscription_id != null && rows.org.billing_status !== 'canceled',
+      graceDays,
     },
+    alert: billingAlert(billingStateOf(rows.org, rows.audit), ctx.now, graceDays),
     sites: rows.sites
       .filter((s) => s.status !== 'archived')
       .map((s) => ({
@@ -3003,11 +3041,11 @@ export function assembleBilling(rows: RowSet, ctx: AssembleCtx): BillingData {
         projectCode: s.project_code,
         activeSince: s.active_since,
         status: s.status,
-        monthlyCents: s.status === 'active' ? PRICE_PER_SITE_CENTS : 0,
+        monthlyMinor: s.status === 'active' && price ? price.minor : null,
         pausedAt: s.paused_at,
       }))
       .sort((a, b) => ((a.activeSince ?? '') < (b.activeSince ?? '') ? -1 : 1)),
-    invoices: plan.invoices,
+    invoices: extras?.invoices ?? [],
   };
 }
 

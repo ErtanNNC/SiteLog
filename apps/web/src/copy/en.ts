@@ -296,7 +296,6 @@ export const copy = {
     unsavedChanges: 'You have unsaved changes. Leave without saving?',
     perMonth: '/ month',
     noSetupFee: 'no setup fee',
-    pricePerSite: '$399 / site / month',
     hours: (n: string) => `${n} h`,
     chooseFile: 'Choose file',
     noFile: 'No file chosen',
@@ -2133,48 +2132,66 @@ export const copy = {
     discard: 'Discard changes',
   },
 
+  /**
+   * P13 · Billing (W4-10, EN/TR): the org's own price (spec §19 Q234) in its currency and the
+   * panel's language, the provider (§19 Q236: `manual` → SiteLog invoices directly), the admin
+   * banner on every page (F23, §19 Q235).
+   */
   billing: {
     title: 'Billing',
-    subtitle: '$399 per active site, per month. No setup fee.',
+    subtitle: 'Billed per active site, per month. No setup fee.',
+    subtitlePrice: '{{price}} per active site, per month. No setup fee.',
     plan: 'Current plan',
-    monthly: 'Monthly total',
-    sitesTimes: (n: number) => `${plural(n, 'active site')} × $399`,
+    perMonth: '/ month',
+    /** "6 × $399.00 = $2,394.00": active sites × the org's price = the monthly total. */
+    equation: '{{count}} × {{price}} = {{total}}',
+    noPrice: 'SiteLog sets your price per site. Ask us if it is not shown here yet.',
     nextInvoice: 'Next invoice',
     paymentMethod: 'Payment method',
     updatePayment: 'Update payment method',
     whatCounts: 'What counts as active',
-    whatCountsBody:
-      'A site is active while it can receive reports. Paused sites are not billed from the next cycle.',
+    whatCountsActive: 'Active while it can receive reports.',
+    whatCountsPaused: 'Paused sites stop reminders and billing from the next cycle.',
+    whatCountsProrated: 'Added sites are prorated by Stripe.',
+    whatCountsManual: 'Added sites are on your next invoice from SiteLog.',
     sitesOnPlan: 'Sites on this plan',
-    columns: { site: 'Site', since: 'Active since', status: 'Status', monthly: 'Monthly' },
+    thing: 'billing',
+    columns: {
+      site: 'Site',
+      since: 'Active since',
+      status: 'Status',
+      monthly: 'Monthly',
+      action: 'Action',
+    },
     pause: 'Pause',
     resume: 'Resume',
+    pauseSiteLabel: 'Pause {{site}}',
+    resumeSiteLabel: 'Resume {{site}}',
     pauseDialog: {
-      title: (site: string) => `Pause ${site}?`,
+      title: 'Pause {{site}}?',
       body: 'Reminders stop and it won’t be billed from next cycle.',
       confirm: 'Pause site',
     },
     resumeDialog: {
-      title: (site: string) => `Resume ${site}?`,
+      title: 'Resume {{site}}?',
       body: 'Reminders start again and the site is billed from today.',
       confirm: 'Resume site',
     },
-    perMonth: '/ month',
     activeSitesLabel: 'Active sites',
-    card: (brand: string, last4: string) => `${brand} ending ${last4}`,
+    card: '{{brand}} ending {{last4}}',
     noPaymentMethod: 'No payment method on file',
     trial: 'Free trial',
-    trialEnds: (date: string) => `Trial ends ${date}`,
+    trialEnds: 'Trial ends {{date}}',
+    trialEnded: 'Trial ended {{date}}',
     noSubscription: 'No subscription yet',
-    statusBanner: {
-      past_due:
-        'Payment past due. Reports keep flowing for 14 days; update the payment method to keep reminders on.',
+    status: 'Billing status',
+    statuses: {
+      trialing: 'Free trial',
+      active: 'Active',
+      past_due: 'Past due',
+      canceled: 'Canceled',
+      paused: 'Paused',
     },
-    whatCountsPoints: [
-      'Active while it can receive reports.',
-      'Paused sites stop reminders and billing from the next cycle.',
-      'Added sites are prorated by Stripe.',
-    ],
     portalDemo: 'Demo mode: the Stripe customer portal opens here in production.',
     portalOpening: 'Opening the Stripe customer portal…',
     checkoutDemo: 'Demo mode: Stripe Checkout opens here in production.',
@@ -2188,19 +2205,41 @@ export const copy = {
       'Resume a site below, or add one, before you add payment details. Billing is per active site.',
     addSite: 'Add a site',
     noSitesTitle: 'No sites on the plan',
-    noSitesBody: 'Each active site is billed $399 a month.',
+    noSitesBody: 'Each active site is billed monthly.',
+    noSitesBodyPrice: 'Each active site is billed {{price}} a month.',
     checkoutSuccess: 'Subscription started. It can take a minute to show here.',
     checkoutCanceled: 'Checkout canceled. No subscription was started.',
-    pausedSince: (date: string) => `since ${date}`,
+    pausedSince: 'since {{date}}',
     invoicesEmpty: 'No invoices yet.',
-    invoiceDownload: (date: string) => `Download invoice ${date}`,
-    siteRow: (site: string) => site,
+    invoiceDownload: 'Download invoice {{date}}',
     notBilled: '—',
     invoices: 'Invoices',
     invoiceColumns: { date: 'Date', sites: 'Sites', amount: 'Amount', status: 'Status' },
     download: 'Download',
-    paused: (site: string) => `${site} paused.`,
-    resumed: (site: string) => `${site} resumed.`,
+    /** §19 Q236: a `manual` org (a TR org until §19 Q8). */
+    manual: {
+      title: 'SiteLog invoices you directly',
+      body: 'No card is needed here. SiteLog sends your invoice for the active sites below each month; a paused site is not billed from the next cycle.',
+      invoices: 'Your invoices come from SiteLog by email.',
+    },
+    /** The banner on every page for admins (F23, spec §19 Q235). */
+    banner: {
+      label: 'Billing',
+      past_due:
+        'Payment past due. Update the payment method by {{date}} to keep reminders and calls on.',
+      pastDueNoDate: 'Payment past due. Update the payment method to keep reminders and calls on.',
+      trial_ended:
+        'Your free trial ended on {{ended}}. Add payment details by {{date}} to keep reminders and calls on.',
+      manualPastDue:
+        'Your SiteLog invoice is past due. Reminders and calls stop on {{date}} unless it is paid.',
+      blocked:
+        'Reminders and calls are paused: billing is past due. Update the payment method to restart them.',
+      manualBlocked:
+        'Reminders and calls are paused: your SiteLog invoice is past due. Contact SiteLog to restart them.',
+      canceled:
+        'Your subscription is canceled. Reminders and calls are off until it is restarted from Billing.',
+      action: 'Open Billing',
+    },
   },
 
   setup: {
@@ -2312,6 +2351,8 @@ export const copy = {
         perMonth: '/ month',
         setup: '$0 setup',
         billed: 'billed per active site',
+        /** Until W4-02 reads the card from the org's price (`billingPrice()`, §19 Q234). */
+        sitesTimes: (n: number) => `${plural(n, 'active site')} × $399`,
         points: [
           'Cancel or pause any site at any time',
           'First invoice at the start of next month',
@@ -2448,6 +2489,46 @@ export const copy = {
       otherOrg: 'Switch to this org to open the report',
       empty: 'No cost outliers in the last 30 days.',
     },
+    /**
+     * W4-10 (spec §19 Q234, Q236): every org's billing; SiteLog staff set an org's price and a
+     * manual org's status (both audited). /ops stays English (§19 Q240).
+     */
+    billing: {
+      title: 'Billing per organisation',
+      hint: 'The price per active site and month of each organisation (SiteLog sets it; a new organisation gets its currency’s default) and the status of the ones SiteLog invoices directly. A Stripe organisation’s status follows Stripe.',
+      columns: {
+        org: 'Organisation',
+        provider: 'Billed by',
+        status: 'Status',
+        price: 'Price per site',
+        sites: 'Active sites',
+      },
+      providers: { stripe: 'Stripe', manual: 'SiteLog (manual)' },
+      demo: 'Demo',
+      noPrice: 'Not set',
+      edit: 'Edit',
+      editLabel: (org: string) => `Edit the billing of ${org}`,
+      dialogTitle: (org: string) => `Billing of ${org}`,
+      dialogBody:
+        'The price shows on the organisation’s Billing page and is what Checkout bills; a different price needs a matching Stripe price. Leave the amount empty to clear it.',
+      amount: 'Price per site and month',
+      amountHint: 'In the currency’s main unit, e.g. 399 or 399.00.',
+      amountInvalid: 'Enter an amount above zero with at most two decimals, or leave it empty.',
+      currency: 'Currency',
+      currencyInvalid: 'Enter a three-letter ISO currency code, e.g. USD or TRY.',
+      status: 'Billing status (manual organisations only)',
+      statuses: {
+        trialing: 'Free trial',
+        active: 'Active',
+        past_due: 'Past due',
+        canceled: 'Canceled',
+        paused: 'Paused',
+      },
+      save: 'Save',
+      saved: 'Billing saved. The change is audited.',
+      empty: 'No organisations.',
+      thing: 'billing',
+    },
     toasts: {
       retried: (id: number) => `Job ${id} is queued again.`,
       discarded: (id: number) => `Job ${id} discarded.`,
@@ -2478,6 +2559,9 @@ export const copy = {
     settingsSaved: 'Settings saved.',
     sitePaused: (site: string) => `${site} paused.`,
     siteResumed: (site: string) => `${site} resumed.`,
+    /** W4-10: the same toasts in the panel's language (Billing, Site settings). */
+    sitePausedName: '{{site}} paused.',
+    siteResumedName: '{{site}} resumed.',
     siteCreated: (site: string) => `${site} connected.`,
     siteUpdated: 'Site updated.',
     packRequested: 'Evidence pack requested.',

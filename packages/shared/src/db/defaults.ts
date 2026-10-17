@@ -25,6 +25,8 @@ export const V12_ROW_DEFAULTS = {
     billing_provider: 'stripe',
     billing_customer_id: null,
     billing_subscription_id: null,
+    price_per_site_minor: null,
+    price_currency: null,
   },
   org_members: { ui_locale: null },
   org_settings: {

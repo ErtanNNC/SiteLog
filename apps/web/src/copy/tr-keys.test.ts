@@ -148,6 +148,10 @@ const TRANSLATED = [
   'team',
   'common.moreActions',
   'a11y.menuForName',
+  // W4-10: Billing, its shell banner and the Pause / Resume toasts.
+  'billing',
+  'toasts.sitePausedName',
+  'toasts.siteResumedName',
 ] as const;
 
 describe('panel TR copy (D9)', () => {

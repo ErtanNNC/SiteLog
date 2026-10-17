@@ -332,7 +332,9 @@ async function loadOrgs(admin: AppClient): Promise<Map<string, OrgInput & { coun
   const orgRows = await fetchAll((from, to) =>
     admin
       .from('orgs')
-      .select('id, timezone, billing_status, country, units, is_demo')
+      .select(
+        'id, timezone, billing_status, country, units, is_demo, trial_ends_at, billing_provider, billing_subscription_id',
+      )
       .order('id')
       .range(from, to)
       .throwOnError(),
@@ -361,6 +363,9 @@ async function loadOrgs(admin: AppClient): Promise<Map<string, OrgInput & { coun
       country: o.country,
       units: o.units === 'metric' ? 'metric' : 'imperial',
       is_demo: o.is_demo === true,
+      trial_ends_at: o.trial_ends_at,
+      billing_provider: o.billing_provider,
+      billing_subscription_id: o.billing_subscription_id,
     });
   }
   return orgs;

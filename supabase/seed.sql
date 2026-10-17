@@ -40,8 +40,8 @@ begin
 end $$;
 
 -- Kestrel Build Group (7a0cfa5d-2a29-43fb-8665-fcd9bed4106d) --------------------------------------
-insert into orgs (id, name, address, license_no, logo_path, timezone, billing_status, trial_ends_at, created_at, country, locale, units, currency, tax_no, is_demo, billing_provider, billing_customer_id, billing_subscription_id, stripe_customer_id, stripe_subscription_id) values
-  ('7a0cfa5d-2a29-43fb-8665-fcd9bed4106d', 'Kestrel Build Group', '2101 W Fulton St, Chicago, IL 60612', 'IL GC-104-5582', NULL, 'America/Chicago', 'active', NULL, '2026-03-02T15:00:00.000Z', 'US', 'en-US', 'imperial', 'USD', NULL, true, 'stripe', 'cus_demo_kestrel', 'sub_demo_kestrel', 'cus_demo_kestrel', 'sub_demo_kestrel')
+insert into orgs (id, name, address, license_no, logo_path, timezone, billing_status, trial_ends_at, created_at, country, locale, units, currency, tax_no, is_demo, billing_provider, billing_customer_id, billing_subscription_id, price_per_site_minor, price_currency, stripe_customer_id, stripe_subscription_id) values
+  ('7a0cfa5d-2a29-43fb-8665-fcd9bed4106d', 'Kestrel Build Group', '2101 W Fulton St, Chicago, IL 60612', 'IL GC-104-5582', NULL, 'America/Chicago', 'active', NULL, '2026-03-02T15:00:00.000Z', 'US', 'en-US', 'imperial', 'USD', NULL, true, 'stripe', 'cus_demo_kestrel', 'sub_demo_kestrel', 39900, 'USD', 'cus_demo_kestrel', 'sub_demo_kestrel')
 on conflict (id) do update set
   name = excluded.name,
   address = excluded.address,
@@ -60,6 +60,8 @@ on conflict (id) do update set
   billing_provider = excluded.billing_provider,
   billing_customer_id = excluded.billing_customer_id,
   billing_subscription_id = excluded.billing_subscription_id,
+  price_per_site_minor = excluded.price_per_site_minor,
+  price_currency = excluded.price_currency,
   stripe_customer_id = excluded.stripe_customer_id,
   stripe_subscription_id = excluded.stripe_subscription_id
 where orgs.is_demo;
@@ -1790,8 +1792,8 @@ insert into audit_log (id, org_id, actor_type, actor_id, action, entity, entity_
   (9000001000182, '7a0cfa5d-2a29-43fb-8665-fcd9bed4106d', 'system', NULL, 'sms.sent', 'message', '5d90a5d8-f205-4966-8486-5adc8128fd28', '{"copy_key":"edit_applied","provider":"console"}'::jsonb, '2026-10-10T01:10:00.000Z');
 
 -- Demir Yapı A.Ş. (6068578e-a1cb-4424-8ef6-9852a765d8de) ------------------------------------------
-insert into orgs (id, name, address, license_no, logo_path, timezone, stripe_customer_id, stripe_subscription_id, billing_status, trial_ends_at, created_at, country, locale, units, currency, tax_no, is_demo, billing_provider, billing_customer_id, billing_subscription_id) values
-  ('6068578e-a1cb-4424-8ef6-9852a765d8de', 'Demir Yapı A.Ş.', NULL, NULL, NULL, 'Europe/Istanbul', NULL, NULL, 'trialing', NULL, '2026-10-05T06:00:00.000Z', 'TR', 'tr-TR', 'metric', 'TRY', NULL, true, 'stripe', NULL, NULL)
+insert into orgs (id, name, address, license_no, logo_path, timezone, stripe_customer_id, stripe_subscription_id, billing_status, trial_ends_at, created_at, country, locale, units, currency, tax_no, is_demo, billing_provider, billing_customer_id, billing_subscription_id, price_per_site_minor, price_currency) values
+  ('6068578e-a1cb-4424-8ef6-9852a765d8de', 'Demir Yapı A.Ş.', NULL, NULL, NULL, 'Europe/Istanbul', NULL, NULL, 'trialing', NULL, '2026-10-05T06:00:00.000Z', 'TR', 'tr-TR', 'metric', 'TRY', NULL, true, 'manual', NULL, NULL, NULL, NULL)
 on conflict (id) do update set
   name = excluded.name,
   address = excluded.address,
@@ -1811,7 +1813,9 @@ on conflict (id) do update set
   is_demo = excluded.is_demo,
   billing_provider = excluded.billing_provider,
   billing_customer_id = excluded.billing_customer_id,
-  billing_subscription_id = excluded.billing_subscription_id
+  billing_subscription_id = excluded.billing_subscription_id,
+  price_per_site_minor = excluded.price_per_site_minor,
+  price_currency = excluded.price_currency
 where orgs.is_demo;
 
 delete from jobs where (payload->>'orgId' = '6068578e-a1cb-4424-8ef6-9852a765d8de'::text or payload->>'siteId' in (select x.id::text from (select id from sites where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de') x) or payload->>'reporterId' in (select x.id::text from (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de') x) or payload->>'reportId' in (select x.id::text from (select id from reports where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de') x) or payload->>'callId' in (select x.id::text from (select id from calls where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de' or reporter_id in (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de') or site_id in (select id from sites where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de')) x) or payload->>'conversationId' in (select x.id::text from (select id from conversations where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de' or reporter_id in (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de')) x) or payload->>'messageId' in (select x.id::text from (select id from messages where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de' or reporter_id in (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de') or conversation_id in (select id from conversations where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de' or reporter_id in (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de'))) x) or payload->>'uploadId' in (select x.id::text from (select id from uploads where site_id in (select id from sites where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de') or reporter_id in (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de')) x) or payload->>'siteDayId' in (select x.id::text from (select id from site_days where site_id in (select id from sites where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de')) x) or payload->>'packId' in (select x.id::text from (select id from evidence_packs where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de' or site_id in (select id from sites where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de')) x) or payload->>'invoiceId' in (select x.id::text from (select id from sub_invoices where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de') x) or payload->>'unknownContactId' in (select x.id::text from (select id from unknown_contacts where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de') x) or payload->>'testClipId' in (select x.id::text from (select id from test_clips where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de' or reporter_id in (select id from reporters where org_id = '6068578e-a1cb-4424-8ef6-9852a765d8de')) x));

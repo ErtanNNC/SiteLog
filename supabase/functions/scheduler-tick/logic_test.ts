@@ -392,6 +392,35 @@ Deno.test('billing grace: past_due orgs are blocked only after past_due_grace_da
   assertEquals(orgIsBlocked(org('paused', null), now), true);
 });
 
+Deno.test('a lapsed trial with no card is past due from its end, then blocked (§19 Q235)', () => {
+  const trial = (ends: string, patch: Record<string, unknown> = {}) => ({
+    id: 'o',
+    timezone: 'America/Chicago',
+    billing_status: 'trialing',
+    past_due_since: null,
+    settings: { ...settings, past_due_grace_days: 14 },
+    trial_ends_at: ends,
+    billing_provider: 'stripe',
+    billing_subscription_id: null,
+    is_demo: false,
+    ...patch,
+  });
+  const now = new Date('2026-10-20T12:00:00Z');
+  // Ended yesterday: within its 14 grace days. Ended 15 days ago: blocked.
+  assertEquals(orgIsBlocked(trial('2026-10-19T12:00:00Z'), now), false);
+  assertEquals(orgIsBlocked(trial('2026-10-05T12:00:00Z'), now), true);
+  // Never a demo org, a manual org, or one with a subscription.
+  assertEquals(orgIsBlocked(trial('2026-10-05T12:00:00Z', { is_demo: true }), now), false);
+  assertEquals(
+    orgIsBlocked(trial('2026-10-05T12:00:00Z', { billing_provider: 'manual' }), now),
+    false,
+  );
+  assertEquals(
+    orgIsBlocked(trial('2026-10-05T12:00:00Z', { billing_subscription_id: 'sub_1' }), now),
+    false,
+  );
+});
+
 Deno.test('weatherJobFor needs coordinates and is keyed per site, date and slot', () => {
   assertEquals(weatherJobFor(site, '2026-10-09', '12:00'), {
     payload: { siteId: 'site-1', date: '2026-10-09' },

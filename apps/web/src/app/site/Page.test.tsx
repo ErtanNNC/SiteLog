@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
@@ -154,13 +154,14 @@ describe('SiteDetailPage (Riverside Lofts — Block B, Fri Oct 9 2026)', () => {
     ).toBeInTheDocument();
   });
 
-  it('hides Pause site from a project manager', async () => {
-    renderRiverside(new DemoStore(), 'pm');
-    await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
-    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
-    expect(within(dialog).queryByRole('button', { name: 'Pause site' })).toBeNull();
+  it('offers no Site settings (edit, recipients, Pause) to a pm or an ops user (W4-10)', async () => {
+    for (const role of ['pm', 'ops'] as const) {
+      renderRiverside(new DemoStore(), role);
+      await screen.findByRole('heading', { name: 'Riverside Lofts — Block B' });
+      expect(screen.queryByRole('button', { name: 'Site settings' }), role).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Pause site' }), role).toBeNull();
+      cleanup();
+    }
   });
 
   it('speaks Turkish when the panel does (W1-18)', async () => {

@@ -16,6 +16,9 @@ const ROOT = join(import.meta.dirname, '..', '..');
 
 /** Key shape (`${…}` → `{}`) → why the same key never has to start a second job. */
 const AUDITED: Record<string, string> = {
+  // W4-10 (20261017000450_billing_per_org.sql, apps/worker/src/jobs/billing_sync.ts)
+  "sql:'billing_sync:' || new.id || ':' || new.status || ':' || floor(extract(epoch from clock_timestamp()) * 1000)::bigint":
+    'billing_sync:<site>:<status>:<ms> (sites_billing_sync): one job per site change, keyed by the instant, so every add, pause or resume queues its own sync; the job is idempotent (it sets the quantity to the active sites)',
   // W3-17 (outbound calls, 20261016000380_outbound_calls.sql, apps/worker/src/jobs/place_call.ts)
   outboundCallKey:
     "call:<site_day>:<reporter>:<stage>[:w<n>] (place_call waiting for capacity, §19 Q127): the nth wait of one stage's call is its own key, and a stage is claimed once (claim_site_day_reminder), so a retry finds its wait taken",

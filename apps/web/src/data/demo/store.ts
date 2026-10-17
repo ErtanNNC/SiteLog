@@ -55,6 +55,12 @@ import { reportLanguageFor } from '@sitelog/shared/locale.ts';
 import { formatDateInTz, isoWeekOf } from '@sitelog/shared/format.ts';
 import { noticeData } from '@sitelog/shared/notifications.ts';
 import {
+  billingPrice,
+  billingProviderOf,
+  type BillingPrice,
+  type BillingStatus,
+} from '@sitelog/shared/billing.ts';
+import {
   invoiceHours,
   invoiceUploadPath,
   roundHours,
@@ -98,6 +104,7 @@ import type {
   OrgSettingsPatch,
   OrglessContacts,
   TeamReporterState,
+  OpsOrgBilling,
   TextDailyLinkErrorCode,
   TextDailyLinkResult,
 } from '../types';
@@ -220,15 +227,15 @@ export class DemoStore {
       packs: d.packs,
       notifications: d.notifications,
       audit: d.audit,
+      // What Stripe would know (§18.1's card and invoices); the price and the sites are the rows.
       billing: {
-        monthlyCents: d.billing.monthlyCents,
-        activeSites: d.sites.filter((s) => s.status === 'active').length,
-        pricePerSiteCents: 39_900,
         nextInvoiceDate: d.billing.nextInvoiceDate,
         paymentMethod: d.billing.paymentMethod,
-        status: d.org.billing_status,
-        trialEndsAt: d.org.trial_ends_at,
-        invoices: d.billing.invoices,
+        invoices: d.billing.invoices.map(({ amountCents, ...i }) => ({
+          ...i,
+          amountMinor: amountCents,
+          currency: d.org.price_currency ?? d.org.currency,
+        })),
       },
     };
   }
@@ -2064,6 +2071,63 @@ export class DemoStore {
       entity: 'site',
       entity_id: siteId,
       diff: null,
+    });
+    this.emit({ table: 'all' });
+  }
+
+  /** /ops (W4-10): `ops_org_billing()` over the store's one org. */
+  opsOrgBilling(): OpsOrgBilling[] {
+    const o = this.data.org;
+    return [
+      {
+        orgId: o.id,
+        orgName: o.name,
+        country: o.country,
+        isDemo: o.is_demo,
+        provider: billingProviderOf(o),
+        status: o.billing_status,
+        trialEndsAt: o.trial_ends_at,
+        hasSubscription: o.billing_subscription_id !== null,
+        price: billingPrice(o),
+        activeSites: this.data.sites.filter((s) => s.status === 'active').length,
+      },
+    ];
+  }
+
+  /** `ops_set_org_price()` (§19 Q234): staff set or clear an org's price, audited. */
+  setOrgPrice(orgId: string, price: BillingPrice | null, userId: string): void {
+    const o = this.data.org;
+    if (orgId !== o.id) throw new Error(copy.errors.notFound);
+    const from = billingPrice(o);
+    o.price_per_site_minor = price?.minor ?? null;
+    o.price_currency = price?.currency ?? null;
+    this.audit({
+      org_id: o.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'billing.price_set',
+      entity: 'org',
+      entity_id: o.id,
+      diff: { from, to: price, via: 'ops' } as unknown as AuditLogRow['diff'],
+    });
+    this.emit({ table: 'all' });
+  }
+
+  /** `ops_set_org_billing_status()` (§19 Q236): a manual org's status, audited; Stripe's refused. */
+  setOrgBillingStatus(orgId: string, status: BillingStatus, userId: string): void {
+    const o = this.data.org;
+    if (orgId !== o.id) throw new Error(copy.errors.notFound);
+    if (billingProviderOf(o) !== 'manual') throw new Error('a Stripe org’s status follows Stripe');
+    const from = o.billing_status;
+    o.billing_status = status;
+    this.audit({
+      org_id: o.id,
+      actor_type: 'user',
+      actor_id: userId,
+      action: 'billing.status_changed',
+      entity: 'org',
+      entity_id: o.id,
+      diff: { from, to: status, via: 'ops' },
     });
     this.emit({ table: 'all' });
   }

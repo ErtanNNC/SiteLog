@@ -5,6 +5,7 @@ import { memberDefaultLocale, useCopy, useOrgLanguageDefault } from '@/i18n/useC
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import { Dialog, DialogContent, DialogTitle } from '../ui/Dialog';
 import { OfflineBanner } from '../sitelog/States';
+import { BillingBanner } from './BillingBanner';
 import { Sidebar } from './Sidebar';
 import { TopBar, TopBarSlotProvider } from './TopBar';
 
@@ -36,6 +37,7 @@ export function AppShell() {
         </aside>
         <div className="flex min-w-0 flex-col">
           <OfflineBanner />
+          <BillingBanner />
           <TopBar
             onOpenMenu={() => setDrawer(true)}
             desktopSlotRef={setDesktopSlot}
