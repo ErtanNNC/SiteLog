@@ -5,7 +5,7 @@
 - **Bütün açık sorular kararlaştırıldı.** "Önerdiğin ve yaptığın tüm işleri ve soruların cevabını onaylıyorum" mesajınızla spec §19'daki 116 açık soru **Decided 2026-10-17 (önerilen varsayılan)** olarak işaretlendi.
   - Bu, hafta 2–4'te açılan bütün soruları kapsıyor: Q135–Q227, Q229–Q246, Q270, Q280, Q290, Q300, Q330, Q340, Q350 ve öncekiler.
   - Kodda değişen bir şey yok; hepsi zaten önerilen varsayılanla çalışıyordu.
-  - Tek istisna Q340: önerilen çözüm yazılmamıştı, şimdi yazılıyor. Panelde dil değiştirilince giriş e-postasının dili de değişecek.
+  - Tek istisna Q340: önerilen çözüm yazılmamıştı; şimdi yazıldı. Kullanıcı panelde dilini değiştirince, sonraki giriş e-postası da o dilde geliyor.
 - **Açık kalan iki soru:**
   - Q281: İletimerkezi mesaj türünü "ticari" sayarsa doldurulacak İYS alanları. Bu soru yalnız avukat Q49'a "ticari" derse geçerli.
   - Q49: Türkçe SMS'lerin İYS'de "bilgilendirme" mi "ticari" mi sayılacağı. Önerimi onayladınız (bilgilendirme), ama bunu avukatın da teyit etmesi gerekiyor.

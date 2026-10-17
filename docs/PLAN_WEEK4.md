@@ -403,7 +403,7 @@ New questions for spec §19, numbered from Q229, written into §19 as **open** w
 
 ## Week 4 open questions
 
-**Week 4 open questions (W4-16).** On 2026-10-17 the owner approved every recommended default below (spec §19 marks them decided); Q340's recommendation, not built at W4-16, is its follow-up. Q247–Q269, Q271–Q279, Q282–Q289, Q291–Q299, Q301–Q329, Q331–Q339, Q341–Q349 and Q351–Q369 are not used. Still open from earlier weeks and touching week 4: Q2, Q8, Q9, Q12, Q20, Q28 / Q50 (counsel's texts), Q40, Q49, Q63, Q1 / Q225 (the voices), Q206.
+**Week 4 open questions (W4-16).** On 2026-10-17 the owner approved every recommended default below (spec §19 marks them decided); Q340's recommendation, not built at W4-16, was built after it. Q247–Q269, Q271–Q279, Q282–Q289, Q291–Q299, Q301–Q329, Q331–Q339, Q341–Q349 and Q351–Q369 are not used. Still open from earlier weeks and touching week 4: Q2, Q8, Q9, Q12, Q20, Q28 / Q50 (counsel's texts), Q40, Q49, Q63, Q1 / Q225 (the voices), Q206.
 
 | Q    | Question (ticket)                                       | Default that shipped (parameter)                                                                                                                                                                | Owner's answer                                |
 | ---- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
