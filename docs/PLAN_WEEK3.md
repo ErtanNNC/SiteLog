@@ -359,7 +359,7 @@ Ordered so that the tickets needing **no owner answer and no key** come first (W
 
 ### W3-17 · Outbound reminder calls (M8)
 
-- [ ] **W3-17 done** · today _partial_ (XL) · built on console telephony (`20261016000380_outbound_calls.sql`, `packages/shared/src/voice-outbound.ts`, `packages/shared/src/livekit/twirp.ts`, `apps/worker/src/jobs/place_call.ts`, `apps/worker/src/telephony.ts`, `place-call.pglite.test.ts`, `supabase/db-tests/src/outbound-calls.test.ts`, `apps/voice-agent/tests/test_outbound.py`, `apps/web/e2e/supabase/worker/outbound-calls.spec.ts`); ticks when CI runs the `@m8` spec green in `e2e-supabase` and the owner's real phone receives the R1 call on the Twilio trunk and files by voice
+- [x] **W3-17 done** · today _done on console telephony_ (CI green on e08697a: the `@m8` outbound spec, R1 → missed_call → R2, "Don't call me today"); the real call on the owner's Twilio trunk is W3-16/W3-18's phone check
 - **Spec:** §7.4 (R1 call, R2 second call), F11 (call column; no answer → `missed_call`), F6 step 1 (answering-machine detection: our agent classifies the first utterance, no voicemail left), §9.4 calls policy (window, consent, max 2 attempts, 12 min), §4.5 `Notifier.call`, §10.1 `place_call`, F15 ("Don't call me today"), §19 Q33, Q38, Q51, Q76.
 - **Already in the repo:** `remind()` with the call branch and `OUTBOUND_TRUNK = false`, `claim_site_day_reminder()` and the ladder's guards, `Notifier.call()` refusing, `placesAutomatedCalls()` false, `auto_call` consent type, `PATCH preferences` refusing `noCallsToday`, Settings without "Don't call me today".
 - **Build:**
