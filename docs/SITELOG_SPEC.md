@@ -2653,6 +2653,13 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 172 | The End call button's colours (orange is the live signal on that screen; Field-08 is not exported) | White on Missing red, with its icon and words (as built) · Asphalt on Missing red · Owner or design decides | **Open (owner).** Recommended: owner or design confirms; as built meets contrast. |
 | 173 | The photo-only screen when the photos link's day has no filed report yet | Says so, with no way to Today (as built; a photos link takes photos only) · Offer a link to Today | **Open (owner).** Recommended: the first. |
 | 174 | The billing read `talkNow` adds to every `resolve` and `today` | Accept (as built) · Cache it per request | **Open (owner).** Recommended: the first until it shows in latency. |
+| 175 | Fillers and thanks around the spoken yes ("uh, yes", "yes, thanks", "sure") | Strict: refused and asked again (as built, W3-10, Q119) until W3-16's listening test, then consider uh/um/eh and thanks/gracias/teşekkürler · Accept them now | **Open (owner).** Recommended: the first. |
+| 176 | Which call reports get the `photos_link` text | Any report with a call source (F9: "after a call-filed report"), including a hang-up filed by the 2 h timeout (W3-11) and a fallback recording · Only reports confirmed on the call (as built) | **Open (owner).** Recommended: the first. |
+| 177 | Priority of a call's filing job while the caller waits (`file_report` runs at 1, behind texts at 0) | Measure in W3-16 first · Raise a call's filing to −1 now | **Open (owner).** Recommended: the first. |
+| 178 | The reporter's words kept as confirm evidence (first 200 characters in `call.file_refused` / `report.confirm_requested`, readable by whoever reads the audit log) | Keep · Keep a hash only | **Open (owner).** Recommended: the first. |
+| 179 | Model for corrections on a call | `CLAUDE_MODEL` (as built), revisit with Q165 after W3-16 · `CLAUDE_MODEL_FAST` | **Open (owner).** Recommended: the first. |
+| 180 | A correction said while a question is open (not only after the read-back) | Accepted; code then asks the open question again (as built) · Refused until the read-back | **Open (owner).** Recommended: the first. |
+| 181 | Q161's consequence: report languages are EN and TR only, so a Spanish caller always hears work and delivery lines as counts | Accept until a translation step exists · Add a translation step for the read-back (a model call, numbers still code's) | **Open (owner).** Recommended: the first for the pilot; the owner decides whether Spanish read-backs matter before US launch. |
 
 ---
 
