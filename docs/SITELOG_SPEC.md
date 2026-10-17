@@ -2633,6 +2633,12 @@ Sample report text (TR): "4. kat döşeme betonu Usta Beton tarafından tamamlan
 | 158 | Line statuses from LiveKit's SIP attributes, disconnect reasons and the SIP participant's `track_published` (documented fields, unverified against a real trunk) | As built; confirm at W3-16/W3-17, an unanswered generic hang-up is `failed` · Other mapping after the trunk test | **Open (owner).** Recommended: the first, re-checked with the first real calls. |
 | 159 | Retention of `livekit_events` (no body, no number) | Purge after 30 days in `retention_cleanup` · Keep with the call | **Open (owner).** Recommended: the first. |
 | 160 | A backstopped call's `ended_at` (LiveKit's `room_finished` comes about 20 s after the hang-up, so `duration_s` reads long) | The SIP participant's leave time when one was seen, else `room_finished` · `room_finished` (as built) | **Open (owner).** Recommended: the first. |
+| 161 | The read-back's work, delivery and safety lines (W3-10) when the call's language differs from the report's (an ES call on an EN report) | Speak only code's numbers in the call language until a translation step exists · Speak the lines in the report language | **Open (owner).** Recommended: the first. |
+| 162 | The batch transcript of a call's recording (W3-11) and the live transcript in `transcripts.call_id` (unique per call) | Replace the live row after the reconcile, the live segments stay in the turn inputs · A new column | **Open (owner).** Recommended: the first. |
+| 163 | `update_draft` before the recording notice was played (`calls.disclosure_played`) | W3-12 marks the disclosure and `voice_turn_submit` refuses until it is set · No gate | **Open (owner).** Recommended: the first. |
+| 164 | An open question from the recorder or an earlier call when a call starts | Resolved; the call asks again what it needs (as built, W3-09) · Kept and asked on the call | **Open (owner).** Recommended: the first. |
+| 165 | A faster model for live call turns (`CLAUDE_MODEL_LIVE`) | Not now; revisit if W3-16 measures turns above 5 s p50 (Q117) · Add it now | **Open (owner).** Recommended: the first. |
+| 166 | `missing` lists both `manpower.workers` and `manpower.hours` for a crew whose one question ("how many and for how long") asks both | Tell the agent one question covers both · Keep two entries | **Open (owner).** Recommended: the first. |
 
 ---
 

@@ -247,6 +247,8 @@ Afterwards (not part of the demo): step 22 removes `whatsapp-webhook`, the `WA_*
 
 `field-api` serves the voice agent's `/voice/*` routes. Set `VOICE_AGENT_TOOL_SECRET` and `VOICE_CALL_TOKEN_SECRET` as functions secrets (`openssl rand -base64 32` each; on a hosted project only with the owner's approval). Give the agent only `VOICE_AGENT_TOOL_SECRET`: the call-token secret stays with `field-api`, so the agent cannot mint a token for another call. Without them the `/voice/*` routes answer 500 "not configured" and the field routes go on.
 
+Optional `VOICE_TOOL_WAIT_MS` (functions secret, default 12000, at most 15000): how long `update_draft` / `record_answer` wait for the worker's `voice_turn` before answering `pending`. The worker must be running for calls to get a draft; a `voice_turn` that fails is never retried by the queue, the agent asks again.
+
 LiveKit webhooks (W3-04, set up with W3-16): set the function secrets `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (the project's pair), deploy `voice-events --no-verify-jwt`, register `https://<ref>.supabase.co/functions/v1/voice-events` under LiveKit Settings → Webhooks, and send a test webhook. 200 `{received: true, ignored: true}` (or the call's result) means the signature passed; 401 `invalid_signature` means the key pair differs.
 
 ### Country packs per environment (GAP D47, W1-06a)
