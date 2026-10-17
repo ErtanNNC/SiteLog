@@ -249,7 +249,7 @@ Afterwards (not part of the demo): step 22 removes `whatsapp-webhook`, the `WA_*
 
 Optional `VOICE_TOOL_WAIT_MS` (functions secret, default 12000, at most 15000): how long `update_draft` / `record_answer` wait for the worker's `voice_turn` before answering `pending`. The worker must be running for calls to get a draft; a `voice_turn` that fails is never retried by the queue, the agent asks again. A call's `file_report` waits for the worker's `file_report` job (priority 1) within the same wait; a busy queue shows as `pending` on the call (the agent asks again), never as a second filing. After a call-filed report the reporter gets `filed` and then `photos_link` (`notify:photos_link:<report>`).
 
-LiveKit webhooks (W3-04, set up with W3-16): set the function secrets `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (the project's pair), deploy `voice-events --no-verify-jwt`, register `https://<ref>.supabase.co/functions/v1/voice-events` under LiveKit Settings → Webhooks, and send a test webhook. 200 `{received: true, ignored: true}` (or the call's result) means the signature passed; 401 `invalid_signature` means the key pair differs.
+LiveKit webhooks (W3-04; the whole set-up is "Voice: M7 live on the preview project" below): set the function secrets `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` (the project's pair), deploy `voice-events --no-verify-jwt`, register `https://<ref>.supabase.co/functions/v1/voice-events` under LiveKit Settings → Webhooks, and send a test webhook. 200 `{received: true, ignored: true}` (or the call's result) means the signature passed; 401 `invalid_signature` means the key pair differs.
 
 Talk now (W3-13): with the owner's approval, `supabase secrets set LIVEKIT_URL=wss://<project>.livekit.cloud LIVEKIT_AGENT_NAME=sitelog-voice` (and the key pair, already set for `voice-events`). Then `resolve` / `today` answer `talkNow: true` for orgs that are not billing-blocked. Check on a phone: Today → Talk now → microphone → the call screen → End call opens the draft or Filed.
 
@@ -258,6 +258,63 @@ After a call (W3-11): each ended call of a known caller runs one `post_call_reco
 Special requests on a call (W3-14): an unknown caller's recordings are in the `calls` bucket under `unknown/`; nobody in the office can read them; `retention_cleanup` deletes them with the snippet after 30 days unless the number is linked. `reporters.no_calls_until` holds "not today"; outbound calls honour it from W3-17.
 
 The voice agent (W3-12): LiveKit Cloud's own session recording is off (`record=False`, §19 Q207); call audio lives only in the `calls` bucket. The agent marks each call's disclosure at field-api once the notice has played (`POST /voice/calls/:id/disclosure`, §19 Q205); a call without that mark (an agent that died during the opening) keeps no processed recording (`no_disclosure`). Before the pilot add `livekit-plugins-noise-cancellation` to the agent's lock (§19 Q204) and decide Deepgram's `mip_opt_out` (§19 Q206).
+
+### Voice: M7 live on the preview project (W3-16)
+
+The owner's steps to put the voice agent on LiveKit Cloud against the **preview** project, then run M7's calls and read the latency. Every step that touches LiveKit, a hosted Supabase project, the agent or a number is **owner-approved**, one at a time; the preview project first, staging only after the owner says so. Nothing here runs in CI. Keys go into the places named below (Supabase secrets, LiveKit agent secrets, a local file outside the repo), never into the repo or a chat.
+
+**Before you start.** The preview project has this branch's migrations and functions (Deploy → environment `preview`, target `supabase`), today's demo (`seed`) and the field app pointing at it (`phone-setup`). A worker runs against the preview project with **real** Claude: on a call `update_draft`, `record_answer`, `apply_correction` and `file_report` are worker jobs (`voice_turn`, §19 Q117), so a worker on `EXTRACT_PROVIDER=fake` answers every call with the recorded fixture drafts. Run it from a developer machine with the preview database URL, `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLAUDE_MODEL_FAST` and `DEEPGRAM_API_KEY` (the post-call reconcile transcribes the recording), and check its boot line `extraction provider` says `"provider":"claude"`. Have the agent's values at hand: `CLAUDE_MODEL_FAST` (the model the preview worker uses for its fast calls), `DEEPGRAM_API_KEY`, `AZURE_SPEECH_KEY` / `AZURE_SPEECH_REGION` (the F0 resource, §5.2 step 3) and `ANTHROPIC_API_KEY`.
+
+1. **LiveKit Cloud project** (§5.2 step 1). Create a project on the free Build plan. From its settings note the URL (`wss://<project>.livekit.cloud`), and create an API key pair (`LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`).
+2. **The `lk` CLI.** Install it (LiveKit's docs: Homebrew, the install script or a release binary), then `lk cloud auth` and pick the project; `lk project list` shows it as the default. `pnpm voice:console` uses the same login.
+3. **Function secrets on the preview project.** Generate the two voice secrets (`openssl rand -base64 32`, each once) and set, with the preview ref:
+
+   ```sh
+   supabase secrets set --project-ref <preview ref> \
+     VOICE_AGENT_TOOL_SECRET='<secret 1>' VOICE_CALL_TOKEN_SECRET='<secret 2>' \
+     LIVEKIT_URL='wss://<project>.livekit.cloud' LIVEKIT_API_KEY='<key>' LIVEKIT_API_SECRET='<secret>' \
+     LIVEKIT_AGENT_NAME=sitelog-voice
+   ```
+
+   `VOICE_CALL_TOKEN_SECRET` stays with field-api only; the agent gets `VOICE_AGENT_TOOL_SECRET` (step 5). With the LiveKit trio set, `resolve` / `today` answer `talkNow: true` (§19 Q121) for orgs that are not billing-blocked. Functions read secrets on their next start; no redeploy is needed.
+
+4. **Webhook.** LiveKit project settings → Webhooks → add `https://<preview ref>.supabase.co/functions/v1/voice-events`, signed with the API key of step 1 (the pair `voice-events` checks), and send a test event: a 200 means the signature passed, a 401 `invalid_signature` that the key pair differs from step 3's (Voice secrets, above).
+5. **Agent secrets.** In a file outside the repo (for example `~/sitelog-agent-preview.env`, `chmod 600`), one `KEY=value` a line, the names of `apps/voice-agent/src/sitelog_voice/config.py`:
+
+   ```sh
+   FIELD_API_URL=https://<preview ref>.supabase.co/functions/v1/field-api
+   VOICE_AGENT_TOOL_SECRET=<secret 1 of step 3>
+   DEEPGRAM_API_KEY=…
+   ANTHROPIC_API_KEY=…
+   CLAUDE_MODEL_FAST=<the preview worker's fast model>
+   AZURE_SPEECH_KEY=…
+   AZURE_SPEECH_REGION=westeurope
+   STT_MODEL=nova-3
+   TTS_VOICE_EN=aura-2-thalia-en          # until the listening test (step 11) picks
+   TTS_VOICE_ES=aura-2-nestor-es
+   TTS_VOICE_TR=tr-TR-EmelNeural
+   LIVEKIT_AGENT_NAME=sitelog-voice
+   NODE_ENV=production
+   SENTRY_DSN=…                           # optional
+   SENTRY_ENVIRONMENT=preview
+   ```
+
+   No `LIVEKIT_URL` / key / secret here: LiveKit Cloud gives a deployed agent its own project's. The agent's name (`sitelog-voice`) is what field-api dispatches to and the dispatch rule names; the agent takes it from `LIVEKIT_AGENT_NAME` or `livekit.toml`'s `[agent] name`.
+
+6. **Create and deploy the agent** (§5.2 step 4). First `pnpm voice:contract -- --check` and `pnpm voice:test` (the contract and copy the image carries are current). Optionally try it locally with `pnpm voice:console` (the laptop microphone; it reads the root `.env`, so put the same values there for that run). Then, in `apps/voice-agent`: `lk agent create --secrets-file ~/sitelog-agent-preview.env`. It builds the `Dockerfile` on LiveKit Cloud and writes `livekit.toml` (its shape is `livekit.toml.example`; it holds no secret, commit it). Later code changes: `lk agent deploy`; secret changes: `lk agent update-secrets --secrets-file …` (check `lk agent --help` for the CLI version at hand); `lk agent status` and `lk agent logs` show it running. The Build plan allows one agent deployment and five concurrent sessions (§5.2).
+7. **Talk now first** (no number needed). On a phone, open a demo reporter's link (Marco Ruiz for EN and ES, Emre Yıldız for TR), Today → **Talk now** → allow the microphone → the call. Expect the recording notice in the first 5 s, then report. Check `voice-events` received the room (`select event, room, call_id, event_at from livekit_events order by event_at desc limit 5;` in the preview SQL editor, read only) and the call's row (below).
+8. **The free US number.** LiveKit project → Telephony → Phone numbers → get the free US local number. Then a dispatch rule for it: every call to the number starts its own room with the prefix `call-` and dispatches the agent `sitelog-voice` (the console's Telephony → Dispatch rules, rule type _individual_, or `lk sip dispatch create <rule.json>`). **Check the room name on the first test call** (`lk room list` while it rings, or the agent log): field-api's `calls/start` accepts only `call-{uuid}` rooms, and LiveKit names a dispatch rule's room itself. If the agent log shows `calls/start` refused (400) or the room is `call-_+1…_…`, stop: phone calls wait on spec §19 Q227 (Talk now is not affected).
+9. **The pack's voice number:** `SUPABASE_DB_URL='<preview connection string>' pnpm countries:set -- --code US --voice +1… --yes`. Texts and the field app then offer "or call {number}". A phone call finds only reporters of **real** orgs (§19 Q44): for phone tests add the tester's phone as a reporter of a non-demo org on the preview project (panel → Team; the reporter's consents through their link first), else the call is an unknown caller (F13).
+10. **The M7 runs** (W3-16 Done when). The scripts are `fixtures/calls/*.json` with a `simulate` block (11: EN and ES; `start.transport` says phone or Talk now; the reporter's lines are in `reporterTurns`). Say each script's reporter lines on a real call, by phone and by Talk now, EN and ES; one Turkish Talk now call as Emre Yıldız (Demir Yapı) must file Kartal's report in Turkish. After each call note its id and check the filed report in the panel (P7 plays the call). `pnpm simulate:call -- --live` (TTS reporter audio into a room) is not built (§19 Q212): the live runs are by voice. The calls of the run:
+
+```sql
+select id, transport, language, outcome, duration_s, metrics->>'latencyP50Ms' as p50, created_at
+  from calls order by created_at desc limit 20;
+```
+
+**Latency:** `SUPABASE_DB_URL='<preview connection string>' pnpm voice:latency -- --days 1` prints, per transport (`sip` the number, `web` Talk now) and language, the turn latency p50 / p95, barge-in, interruptions and call length, each marked `ok`, `OVER` or `n/a` against F6 (≤ 1.2 s p50, ≤ 2.5 s p95, barge-in ≤ 300 ms, a typical call ≤ 6 min). It only reads: its session and transaction are read-only, so it is safe on any database. `--from 2026-10-19 --to 2026-10-20` for a given day (UTC), `--json` for the numbers, `--check` exits 1 when a measured target is over. Until §19 Q226 the latency is pooled from each call's own p50 / p95 and barge-in reads "not measured" (judge it by ear: the agent must stop within a breath of being talked over). M7 asks for ≤ 1.2 s p50; record the output and the call ids in W3-16. 11. **Voice listening test** (§9.1, §19 Q1, Q225). With `DEEPGRAM_API_KEY` and `AZURE_SPEECH_KEY` in the shell (or the root `.env`): `pnpm voice:samples` writes `voice-samples/<lang>/<voice>/<line>-24k.wav` and `-8k.wav` (Talk now and a phone line) for the disclosure, two read-backs and the filed goodbye, rendered by code as on a call, plus `voice-samples/lines.txt` with the texts; `--voice <id>` adds a candidate (two more Aura-2 EN and ES voices from Deepgram's catalogue, Q225), `--lang tr` one language, `--dry-run` only prints the lines. Pick by ear on the 8 kHz files first, set `TTS_VOICE_EN/ES/TR` in the agent's secrets file and `lk agent update-secrets`. The Turkish voice is also checked on numbers and company names in a Talk now call (Q1).
+
+**Back out.** Talk now off: `supabase secrets unset --project-ref <preview ref> LIVEKIT_URL` (field-api then answers `talkNow: false`). Phone off: delete the number's dispatch rule, then `pnpm countries:set -- --code US --clear-voice --yes` on that database. The agent: `lk agent delete` (or leave it idle; it costs nothing without calls). Nothing here changes the database schema or another environment.
 
 ### Country packs per environment (GAP D47, W1-06a)
 

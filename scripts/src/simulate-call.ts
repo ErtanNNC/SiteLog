@@ -118,7 +118,7 @@ async function main(): Promise<number> {
     console.error(
       missing.length
         ? `--live needs ${missing.join(', ')} (W3-16, by hand).`
-        : '--live (W3-16): TTS reporter audio with site noise into a LiveKit room against the deployed agent is not built yet (spec §19 Q212). Run the scripts by phone or Talk now and read the latency with `calls.metrics`.',
+        : '--live (W3-16): TTS reporter audio with site noise into a LiveKit room against the deployed agent is not built yet (spec §19 Q212). Run the scripts by phone or Talk now and read the latency with `pnpm voice:latency` (docs/RUNBOOK.md, "Voice: M7 live").',
     );
     return 2;
   }

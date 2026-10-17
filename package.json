@@ -36,6 +36,8 @@
     "voice:test": "cd apps/voice-agent && uv run --locked ruff check && uv run --locked ruff format --check && uv run --locked pyright && uv run --locked pytest -m 'not live'",
     "voice:console": "cd apps/voice-agent && lk agent console",
     "simulate:call": "pnpm --filter @sitelog/scripts simulate-call",
+    "voice:latency": "pnpm --filter @sitelog/scripts voice-latency",
+    "voice:samples": "pnpm --filter @sitelog/scripts voice-samples",
     "brand": "pnpm --filter @sitelog/web brand && pnpm --filter @sitelog/field brand",
     "check": "pnpm typecheck && pnpm lint && pnpm test"
   },

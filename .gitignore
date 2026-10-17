@@ -40,3 +40,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.pyc
+
+# voice listening-test samples (pnpm voice:samples, W3-16)
+voice-samples/
