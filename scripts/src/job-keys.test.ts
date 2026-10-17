@@ -46,8 +46,12 @@ const AUDITED: Record<string, string> = {
   'email:pack:{}': 'per evidence pack',
   'jobKeys.extractUpload':
     'extract:<report>:upload:<latest voice upload>: enqueued once every kept voice note of the report is transcribed (W1-11), so it names the notes up to that upload; a new voice note is a new latest upload',
-  'send_welcome:{}':
-    'the Notifier key of a send_welcome job (messages.payload, not jobs): per job, so a retry never texts twice',
+  welcomeKey:
+    'the Notifier key of a send_welcome job (messages.payload, not jobs): send_welcome:<job> per job, so a retry never texts twice; the automatic re-send (W4-12, §19 Q241) uses welcome_resend:<reporter>, one per reporter ever, so a retried or moved re-send never texts twice',
+  'jobKeys.welcomeAutoResend':
+    "welcome_resend:<reporter> (send_welcome, W4-12, §19 Q241): the one automatic re-send per reporter, queued by every welcome that went; the first takes the key for good, so later welcomes (the office's Re-send, a retry) queue nothing more",
+  'jobKeys.welcomeAutoResendDeferred':
+    "welcome_resend:<reporter>:<site date> (send_welcome, W4-12): the automatic re-send moved to the site's next 09:00 when it ran outside the daytime; per site date, so a retry of the night run finds the key taken and the move happens at most once a day",
   'office_daily_link:{}':
     'the Notifier key of the office\'s "Text today\'s link" (api-text-daily-link, W1-16): per request id, which the panel makes fresh per tap, so a retried request texts once and the next tap texts again',
   sendKey:

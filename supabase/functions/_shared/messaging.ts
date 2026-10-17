@@ -13,6 +13,7 @@ import {
   type SmsDriver,
   type SmsNotifier,
   type SmsTransport,
+  smsApiBases,
 } from '@sitelog/shared';
 import { logAudit } from './audit.ts';
 import { optionalEnv } from './env.ts';
@@ -28,7 +29,19 @@ import type { AppClient } from './supabase.ts';
  * ILETIMERKEZI_API_KEY, ILETIMERKEZI_API_HASH (only for packs whose sender id is set here),
  * ILETIMERKEZI_IYS (spec §19 Q49: `informational` by default, or `commercial`), and
  * SMS_WEBHOOK_URL (the public URL of sms-webhook, default `{SUPABASE_URL}/functions/v1/sms-webhook`).
+ * Test only (W4-12): SMS_PROVIDER_STUB=true with TWILIO_API_BASE and ILETIMERKEZI_API_BASE sends
+ * the texts to the local SMS stand-in instead of the providers (the local stack and CI; never a
+ * hosted project).
  */
+
+/** The local SMS stand-in's bases (W4-12), or none: read only when SMS_PROVIDER_STUB=true. */
+export function smsApiBasesFromEnv(): { twilio?: string; iletimerkezi?: string } {
+  return smsApiBases({
+    SMS_PROVIDER_STUB: optionalEnv('SMS_PROVIDER_STUB'),
+    TWILIO_API_BASE: optionalEnv('TWILIO_API_BASE'),
+    ILETIMERKEZI_API_BASE: optionalEnv('ILETIMERKEZI_API_BASE'),
+  });
+}
 
 /** The public URL of sms-webhook as Twilio calls it (status callbacks, signature checks). */
 export function smsWebhookUrl(): string | null {
@@ -61,6 +74,7 @@ export function smsTransportsFromEnv(
         // Spec §19 Q49 (W4-11): the TR texts' İYS type, `informational` when unset.
         iys: optionalEnv('ILETIMERKEZI_IYS'),
       },
+      apiBase: smsApiBasesFromEnv(),
     })(driver);
 }
 
@@ -257,6 +271,9 @@ export function edgeWhatsappRegistration(
     statusCallbackUrl: statusCallbackUrl(),
     lastInbound: (phone, sender) => lastInboundWhatsapp(admin, phone, sender),
     randomUUID: () => crypto.randomUUID(),
+    get apiBase() {
+      return smsApiBasesFromEnv().twilio;
+    },
   });
 }
 

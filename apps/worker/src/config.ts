@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WELCOME_RESEND_MODES, smsApiBases } from '@sitelog/shared';
 
 /**
  * Worker configuration (§5.1). Parsed once at boot; every value is validated.
@@ -127,6 +128,22 @@ export const ConfigSchema = z.object({
   ILETIMERKEZI_STATUS: z.enum(['poll', 'off']).default('poll'),
   SMS_WEBHOOK_URL: z.string().default(''),
   /**
+   * Test-only (W4-12, the local stack and CI): the SMS drivers send to the local SMS stand-in
+   * (`pnpm sms:stand-in`) at TWILIO_API_BASE and ILETIMERKEZI_API_BASE instead of the providers
+   * (`smsApiBases`), so a real org's texts are sent and read back without a phone. Refused in
+   * production (the worker does not start); never set on a hosted project. Both bases are read
+   * only when it is on.
+   */
+  SMS_PROVIDER_STUB: bool.default(false),
+  TWILIO_API_BASE: z.string().default(''),
+  ILETIMERKEZI_API_BASE: z.string().default(''),
+  /**
+   * W4-12 (spec §19 Q241, F3): `auto` (the recommendation, the default) re-sends a welcome once,
+   * 48 h after it reached the phone with no reaction since, in the site's daytime; `off` leaves
+   * it to the office's Re-send button.
+   */
+  WELCOME_RESEND: z.enum(WELCOME_RESEND_MODES).default('auto'),
+  /**
    * Web push (W2-14, spec §4.4, §5.1): the VAPID key pair and its contact (`mailto:` or `https:`).
    * All three set: real orgs' push goes to the push services; otherwise push is `console` (demo
    * orgs only; a real org's push leaves its order, so SMS carries the message). The public key is
@@ -238,6 +255,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!cfg.CLAUDE_MODEL_FAST) cfg.CLAUDE_MODEL_FAST = cfg.CLAUDE_MODEL;
   if (!cfg.WORKER_ID) cfg.WORKER_ID = `${hostname()}-${process.pid}`;
   if (cfg.EMAIL_PROVIDER === 'resend' && !cfg.RESEND_API_KEY) cfg.EMAIL_PROVIDER = 'console';
+  if (cfg.SMS_PROVIDER_STUB) {
+    if (cfg.NODE_ENV === 'production') throw new Error(SMS_PROVIDER_STUB_REFUSED);
+    try {
+      smsApiBases(cfg);
+    } catch (err) {
+      throw new Error(`Invalid worker configuration: ${(err as Error).message}`, { cause: err });
+    }
+  }
   if (cfg.WORKER_CLOCK_OVERRIDE) {
     if (cfg.NODE_ENV === 'production') throw new Error(WORKER_CLOCK_REFUSED);
     if (!Number.isFinite(Date.parse(cfg.WORKER_CLOCK_START)))
@@ -247,6 +272,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   return cfg;
 }
+
+/** SMS_PROVIDER_STUB under NODE_ENV=production: the worker refuses to start (W4-12). */
+export const SMS_PROVIDER_STUB_REFUSED =
+  'SMS_PROVIDER_STUB is refused in production: texts would go to a local stand-in instead of the phones. Unset it, or run with NODE_ENV=development.';
 
 /** WORKER_CLOCK_OVERRIDE under NODE_ENV=production: the worker refuses to start. */
 export const WORKER_CLOCK_REFUSED =

@@ -7,6 +7,7 @@ import {
   type IletimerkeziReportEndpoint,
   type IletimerkeziReportSource,
   createSmsTransports,
+  smsApiBases,
   createWhatsappRegistration,
   toCountryPack,
   type CountryPack,
@@ -144,7 +145,12 @@ export function workerLinkStore(db: Db): PersonalLinkStore {
   };
 }
 
-/** The SMS drivers with the worker env's credentials. */
+/** The local SMS stand-in's settings (W4-12; test only, `SMS_PROVIDER_STUB`). */
+type StandInConfig = Partial<
+  Pick<Config, 'SMS_PROVIDER_STUB' | 'TWILIO_API_BASE' | 'ILETIMERKEZI_API_BASE'>
+>;
+
+/** The SMS drivers with the worker env's credentials (and the stand-in's bases, W4-12). */
 export function workerTransports(
   config: Pick<
     Config,
@@ -153,7 +159,8 @@ export function workerTransports(
     | 'ILETIMERKEZI_API_KEY'
     | 'ILETIMERKEZI_API_HASH'
     | 'ILETIMERKEZI_IYS'
-  >,
+  > &
+    StandInConfig,
   fetchImpl: typeof fetch = abortableFetch(),
 ): (driver: SmsDriver) => SmsTransport {
   return createSmsTransports({
@@ -165,6 +172,7 @@ export function workerTransports(
       apiHash: config.ILETIMERKEZI_API_HASH,
       iys: config.ILETIMERKEZI_IYS,
     },
+    apiBase: smsApiBases(config),
   });
 }
 
@@ -175,10 +183,11 @@ export function workerTransports(
  * fixture endpoint and a mock server.
  */
 export function workerIletimerkeziReports(
-  config: Pick<Config, 'ILETIMERKEZI_API_KEY' | 'ILETIMERKEZI_API_HASH' | 'ILETIMERKEZI_STATUS'>,
+  config: Pick<Config, 'ILETIMERKEZI_API_KEY' | 'ILETIMERKEZI_API_HASH' | 'ILETIMERKEZI_STATUS'> &
+    StandInConfig,
   fetchImpl: typeof fetch = abortableFetch(),
   endpoint: IletimerkeziReportEndpoint | null = ILETIMERKEZI_REPORT_ENDPOINT,
-  apiBase?: string,
+  apiBase: string | undefined = smsApiBases(config).iletimerkezi,
 ): IletimerkeziReportSource | null {
   const apiKey = config.ILETIMERKEZI_API_KEY.trim();
   const apiHash = config.ILETIMERKEZI_API_HASH.trim();
@@ -232,11 +241,13 @@ export function workerWhatsappRegistration(
   config: Pick<
     Config,
     'TWILIO_ACCOUNT_SID' | 'TWILIO_AUTH_TOKEN' | 'SMS_WEBHOOK_URL' | 'SUPABASE_URL'
-  >,
+  > &
+    StandInConfig,
   db: Pick<Db, 'lastInboundWhatsapp'>,
   fetchImpl: typeof fetch = abortableFetch(),
   now: () => Date = () => new Date(),
 ): ChannelRegistration {
+  const apiBase = smsApiBases(config).twilio;
   return createWhatsappRegistration({
     fetch: (url, init) => fetchImpl(url, init),
     twilio: () => ({ accountSid: config.TWILIO_ACCOUNT_SID, authToken: config.TWILIO_AUTH_TOKEN }),
@@ -244,6 +255,7 @@ export function workerWhatsappRegistration(
     lastInbound: (phone, sender) => db.lastInboundWhatsapp(phone, sender),
     randomUUID: () => crypto.randomUUID(),
     now,
+    ...(apiBase ? { apiBase } : {}),
   });
 }
 

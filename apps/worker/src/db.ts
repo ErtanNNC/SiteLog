@@ -1009,6 +1009,11 @@ export interface Db {
   clearSmsOptOut(phone: string, country: string): Promise<void>;
   /** Live personal links of a reporter, newest first. */
   listPersonalLinks(reporterId: string): Promise<Array<{ id: string; code_hash: string }>>;
+  /**
+   * Whether any link of the reporter (personal, daily, expired or revoked) was ever opened
+   * (`field_links.last_opened_at`): the reaction the automatic welcome re-send waits for (W4-12).
+   */
+  hasOpenedLink(reporterId: string): Promise<boolean>;
   /** false when the code hash is taken (unique); nothing written then. */
   insertPersonalLink(row: { id: string; code_hash: string; reporter_id: string }): Promise<boolean>;
   /** A row with a taken `dedupe_key` (a retried send_email) is not filed again: its id is returned. */
@@ -2254,6 +2259,12 @@ export function createDb(sql: Sql): Db {
     },
     async clearSmsOptOut(phone, country) {
       await sql`delete from sms_opt_outs where phone_e164 = ${phone} and country = ${country}`;
+    },
+    async hasOpenedLink(reporterId) {
+      const rows = await sql<Array<{ opened: boolean }>>`
+        select exists (select 1 from field_links
+          where reporter_id = ${reporterId} and last_opened_at is not null) as opened`;
+      return rows[0]?.opened === true;
     },
     async listPersonalLinks(reporterId) {
       return sql<Array<{ id: string; code_hash: string }>>`

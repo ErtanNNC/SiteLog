@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   loadConfig,
   openAiTranscribeModel,
+  SMS_PROVIDER_STUB_REFUSED,
   STALE_LOCK_MS,
   WORKER_CLOCK_REFUSED,
   workerClock,
@@ -96,5 +97,31 @@ describe('worker config: the CI test clock (WORKER_CLOCK_OVERRIDE, W2-06)', () =
     expect(
       workerClock(loadConfig({ ...BASE, WORKER_CLOCK_START: START }), () => 7)().getTime(),
     ).toBe(7);
+  });
+});
+
+describe('worker config: the local SMS stand-in and the welcome re-send (W4-12)', () => {
+  const STUB = {
+    SMS_PROVIDER_STUB: 'true',
+    TWILIO_API_BASE: 'http://127.0.0.1:4010',
+    ILETIMERKEZI_API_BASE: 'http://127.0.0.1:4010',
+  };
+
+  it('takes the stand-in outside production only, and only with both bases', () => {
+    expect(loadConfig({ ...BASE, ...STUB }).SMS_PROVIDER_STUB).toBe(true);
+    expect(() => loadConfig({ ...BASE, ...STUB, NODE_ENV: 'production' })).toThrow(
+      SMS_PROVIDER_STUB_REFUSED,
+    );
+    expect(() =>
+      loadConfig({ ...BASE, SMS_PROVIDER_STUB: 'true', TWILIO_API_BASE: 'http://127.0.0.1:4010' }),
+    ).toThrow(/ILETIMERKEZI_API_BASE/);
+    // Off, stray bases change nothing.
+    expect(loadConfig({ ...BASE, TWILIO_API_BASE: 'x' }).SMS_PROVIDER_STUB).toBe(false);
+  });
+
+  it('re-sends the welcome automatically by default (§19 Q241), or not with off', () => {
+    expect(loadConfig(BASE).WELCOME_RESEND).toBe('auto');
+    expect(loadConfig({ ...BASE, WELCOME_RESEND: 'off' }).WELCOME_RESEND).toBe('off');
+    expect(() => loadConfig({ ...BASE, WELCOME_RESEND: 'twice' })).toThrow(/WELCOME_RESEND/);
   });
 });

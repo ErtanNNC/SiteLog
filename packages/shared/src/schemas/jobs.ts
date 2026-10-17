@@ -264,6 +264,13 @@ export const JobPayloadSchemas = {
     reporterId: uuid,
     siteId: uuid.optional(),
     reinvite: z.boolean().default(false),
+    /**
+     * W4-12 (spec §19 Q241, `WELCOME_RESEND`): the one automatic re-send 48 h after a welcome that
+     * reached the phone, in the site's daytime, queued by the first welcome that went
+     * (`jobKeys.welcomeAutoResend`). The worker sends it only while nothing has happened since
+     * (no consent, no link opened, still `invited`, the phone not opted out).
+     */
+    auto: z.boolean().optional(),
   }),
   send_template: z.object({
     conversationId: uuid,
@@ -550,6 +557,18 @@ export const jobKeys = {
   welcomeInvite: (reporterId: string, invite: number) => `welcome:${reporterId}:invite:${invite}`,
   /** The welcome of the nth "Re-send welcome" (api-invite-reporter, `canResend`). */
   welcomeResend: (reporterId: string, resend: number) => `welcome:${reporterId}:resend:${resend}`,
+  /**
+   * W4-12 (§19 Q241): the automatic re-send of a reporter's welcome, queued by the first welcome
+   * that went (send_welcome), and the Notifier key of its text: one automatic re-send per
+   * reporter, ever. Team reads "Re-sent automatically" from the `welcome_resend:` prefix.
+   */
+  welcomeAutoResend: (reporterId: string) => `welcome_resend:${reporterId}`,
+  /**
+   * W4-12: the automatic re-send moved to the site's next daytime when its job ran outside it (a
+   * worker outage, retries): one per reporter and site date, so it moves at most once a day.
+   */
+  welcomeAutoResendDeferred: (reporterId: string, siteDate: string) =>
+    `welcome_resend:${reporterId}:${siteDate}`,
   /** The welcome of a reporter linked from an unknown WhatsApp sender (api-link-unknown-sender). */
   welcomeLinked: (reporterId: string, unknownSenderId: string) =>
     `welcome:${reporterId}:linked:${unknownSenderId}`,

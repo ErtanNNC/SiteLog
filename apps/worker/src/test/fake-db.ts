@@ -100,6 +100,8 @@ export interface FakeDbData {
     kind: 'personal';
     revoked_at: string | null;
     created_at: string;
+    /** W4-12: when the link was last opened (`field_links.last_opened_at`). */
+    last_opened_at?: string | null;
   }>;
   consoleEmails: ConsoleEmailRow[];
   /** uploads: whose they are (the dead-job notice, W1-10), and full rows for W1-11. */
@@ -1238,6 +1240,9 @@ export function createFakeDb(now: () => Date = () => new Date()): FakeDb {
     },
     async clearSmsOptOut(phone, country) {
       d.smsOptOuts = d.smsOptOuts.filter((o) => !(o.phone_e164 === phone && o.country === country));
+    },
+    async hasOpenedLink(reporterId) {
+      return d.fieldLinks.some((l) => l.reporter_id === reporterId && !!l.last_opened_at);
     },
     async listPersonalLinks(reporterId) {
       return d.fieldLinks

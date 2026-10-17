@@ -7,10 +7,18 @@ import {
   formatDeadline,
   formatPhone,
   isActiveReporterStatus,
+  jobKeys,
+  localDate,
+  nextInsideWindow,
   noticeData,
+  welcomeResendDueAt,
+  welcomeResendSkip,
+  WELCOME_RESEND_WINDOW,
   type NoticeData,
   type NotifyOutcome,
+  type SiteRow,
 } from '@sitelog/shared';
+import type { Ctx } from '../context';
 import { loadOrgPack, workerLinkStore } from '../messaging';
 import { PermanentJobError, type JobHandler } from './types';
 
@@ -38,6 +46,22 @@ import { PermanentJobError, type JobHandler } from './types';
  *   Notifier, the invite left unsent (no `invited_at`, so a re-send stays allowed) and the office
  *   told why; a reporter the office disabled meanwhile gets nothing and nobody is told;
  * - a provider outage (`retryable`): thrown, the queue retries.
+ *
+ * W4-12 · F3's automatic re-send (spec §19 Q241, `WELCOME_RESEND`, default `auto`): the first
+ * welcome that reaches the phone queues one `send_welcome` with `auto`, under the job key
+ * `welcome_resend:<reporter>` (`jobKeys.welcomeAutoResend`; taken for good, so once per reporter
+ * ever), due 48 h later in the site's daytime (09:00–18:00 site time, `welcomeResendDueAt`; the
+ * delay on the database clock, as every delayed job). When it runs it sends only while nothing
+ * happened since (`welcomeResendSkip`: still `invited`, no consent answer, no link opened, the
+ * phone not opted out on the pack, no newer welcome from the office's Re-send): otherwise it
+ * sends nothing and is audited `reporter.welcome_resend_skipped` with the reason. A job that runs
+ * outside the daytime (a worker outage) moves to the next 09:00 once per site date
+ * (`jobKeys.welcomeAutoResendDeferred`). The text's Notifier key is `welcome_resend:<reporter>`,
+ * so a retry never texts twice and Team shows "Re-sent automatically" (W4-03); it is audited
+ * `reporter.welcome_resent` (`auto`), not `reporter.reinvited`, so the office's one Re-send stays
+ * for later (`canResend`). A re-send with nothing deliverable (an opt-out, no channel) tells the
+ * office nothing new, only the audit: the first welcome's outcome was already theirs; a provider's
+ * refusal is told as for any welcome (the number may have gone bad since).
  */
 
 /** Why nothing went, with what the office can do (§13: reporter, channel, reason, action). */
@@ -61,6 +85,11 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
     ctx.log.info('welcome not sent: reporter disabled', { reporter_id: reporter.id });
     return;
   }
+  const auto = payload.auto === true;
+  if (auto && ctx.config.WELCOME_RESEND === 'off') {
+    ctx.log.info('automatic welcome re-send off (WELCOME_RESEND)', { reporter_id: reporter.id });
+    return;
+  }
   const sites = await ctx.db.listSitesForReporter(reporter.id);
   const site =
     (payload.siteId ? sites.find((s) => s.id === payload.siteId) : undefined) ?? sites[0] ?? null;
@@ -73,6 +102,43 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
   if (!ctx.config.FIELD_APP_URL) throw new Error('FIELD_APP_URL is not set');
 
   const pack = await loadOrgPack(ctx.db, org);
+  if (auto) {
+    const now = ctx.now();
+    const skip = welcomeResendSkip(
+      {
+        status: reporter.status,
+        invitedAt: reporter.invited_at,
+        consents: (await ctx.db.listConsents(reporter.id)).length,
+        linkOpened: await ctx.db.hasOpenedLink(reporter.id),
+        phoneOptedOut: await ctx.db.isSmsOptedOut(reporter.phone_e164, pack.code),
+      },
+      now,
+    );
+    if (skip) {
+      await ctx.db.logAudit({
+        org_id: reporter.org_id,
+        actor_type: 'system',
+        action: 'reporter.welcome_resend_skipped',
+        entity: 'reporter',
+        entity_id: reporter.id,
+        diff: { auto: true, reason: skip },
+      });
+      return;
+    }
+    const at = nextInsideWindow(now, site.timezone, WELCOME_RESEND_WINDOW);
+    if (at.getTime() > now.getTime()) {
+      // Ran outside the site's daytime (a worker outage, retries): the next 09:00, once a day.
+      await ctx.db.enqueueJob(
+        'send_welcome',
+        { reporterId: reporter.id, siteId: site.id, reinvite: false, auto: true },
+        {
+          dedupeKey: jobKeys.welcomeAutoResendDeferred(reporter.id, localDate(now, site.timezone)),
+          delayMs: at.getTime() - now.getTime(),
+        },
+      );
+      return;
+    }
+  }
   const link = await ensurePersonalLink(
     workerLinkStore(ctx.db),
     ctx.config.LINK_SIGNING_SECRET,
@@ -101,6 +167,8 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
       data,
     );
 
+  // The Notifier key: per job (a retry never texts twice); the automatic re-send's per reporter.
+  const welcomeKey = auto ? jobKeys.welcomeAutoResend(reporter.id) : `send_welcome:${job.id}`;
   let outcome: NotifyOutcome;
   try {
     outcome = await ctx.notifier.send(
@@ -114,7 +182,7 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
         link: fieldLinkUrl(ctx.config.FIELD_APP_URL, link.code),
         ...(pack.voiceNumber ? { number: formatPhone(pack.voiceNumber) } : {}),
       },
-      { dedupeKey: `send_welcome:${job.id}` },
+      { dedupeKey: welcomeKey },
     );
   } catch (err) {
     if (!(err instanceof SmsSendError) || err.retryable) throw err;
@@ -196,6 +264,17 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
       detail: outcome.detail ?? null,
     });
     if (outcome.detail === 'disabled') return;
+    if (auto) {
+      await ctx.db.logAudit({
+        org_id: reporter.org_id,
+        actor_type: 'system',
+        action: 'reporter.welcome_resend_skipped',
+        entity: 'reporter',
+        entity_id: reporter.id,
+        diff: { auto: true, reason: outcome.reason, detail: outcome.detail ?? null },
+      });
+      return;
+    }
     const consoleRealOrg = outcome.detail === 'console_real_org';
     await notify(
       'the welcome text was not sent',
@@ -218,9 +297,41 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
   await ctx.db.logAudit({
     org_id: reporter.org_id,
     actor_type: 'system',
-    action: payload.reinvite ? 'reporter.reinvited' : 'reporter.invited',
+    action: auto
+      ? 'reporter.welcome_resent'
+      : payload.reinvite
+        ? 'reporter.reinvited'
+        : 'reporter.invited',
     entity: 'reporter',
     entity_id: reporter.id,
-    diff: { site_id: site.id, channel: outcome.channel, message_id: outcome.messageId },
+    diff: {
+      site_id: site.id,
+      channel: outcome.channel,
+      message_id: outcome.messageId,
+      ...(auto ? { auto: true } : {}),
+    },
   });
+  if (!auto) await queueAutoResend(ctx, reporter.id, site);
 };
+
+/**
+ * §19 Q241: the one automatic re-send, queued by the welcome that went (the key is taken for good
+ * by the first, so later welcomes queue nothing more), 48 h on in the site's daytime.
+ */
+async function queueAutoResend(
+  ctx: Ctx,
+  reporterId: string,
+  site: Pick<SiteRow, 'id' | 'timezone'>,
+): Promise<void> {
+  if (ctx.config.WELCOME_RESEND !== 'auto') return;
+  const now = ctx.now();
+  const due = welcomeResendDueAt(now, site.timezone);
+  await ctx.db.enqueueJob(
+    'send_welcome',
+    { reporterId, siteId: site.id, reinvite: false, auto: true },
+    {
+      dedupeKey: jobKeys.welcomeAutoResend(reporterId),
+      delayMs: due.getTime() - now.getTime(),
+    },
+  );
+}

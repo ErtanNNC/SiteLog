@@ -25,6 +25,7 @@
     "e2e:m6": "pnpm --filter @sitelog/web e2e:supabase --grep @m6 && pnpm --filter @sitelog/field e2e:supabase --grep @m6",
     "e2e:voice": "pnpm --filter @sitelog/web e2e:supabase --project=worker --grep \"@m7|@m8\" && pnpm --filter @sitelog/field e2e:supabase --project=worker --grep \"@m7|@m8\"",
     "e2e:m9": "pnpm --filter @sitelog/web e2e:supabase --project=supabase --grep @m9",
+    "e2e:onboarding": "pnpm --filter @sitelog/web e2e:supabase --project=worker --grep \"@m10|@m11\"",
     "eval": "pnpm --filter @sitelog/worker eval",
     "transcribe:fixture": "pnpm --filter @sitelog/worker transcribe:fixture",
     "loadtest": "pnpm --filter @sitelog/worker loadtest",
@@ -39,6 +40,7 @@
     "simulate:call": "pnpm --filter @sitelog/scripts simulate-call",
     "voice:latency": "pnpm --filter @sitelog/scripts voice-latency",
     "voice:samples": "pnpm --filter @sitelog/scripts voice-samples",
+    "sms:stand-in": "pnpm --filter @sitelog/scripts sms-stand-in",
     "brand": "pnpm --filter @sitelog/web brand && pnpm --filter @sitelog/field brand",
     "check": "pnpm typecheck && pnpm lint && pnpm test"
   },

@@ -144,8 +144,11 @@ jobs:
       # clock; never set on a hosted project). VOICE_AGENT_TOOL_SECRET is the voice agent's bearer
       # on field-api's /voice/* routes (the W3-15 call suite sends it as the agent would) and
       # VOICE_CALL_TOKEN_SECRET signs the per-call tokens (field-api only); both test values. The
-      # rest are dummies so no function boots half-configured. No pack has a sender id here, so
-      # every text goes to the console driver: nothing reaches Meta, Stripe, Twilio or Anthropic.
+      # rest are dummies so no function boots half-configured. No pack has a sender id here until
+      # the self-serve step at the end, so every text goes to the console driver; then (W4-12)
+      # SMS_PROVIDER_STUB sends the real drivers' texts to the local SMS stand-in on the runner
+      # (host.docker.internal from the Edge Runtime container): nothing reaches Meta, Stripe,
+      # Twilio, İletimerkezi or Anthropic.
       - name: Edge Function env
         run: |
           cat > supabase/functions/.env <<'ENV'
@@ -165,6 +168,12 @@ jobs:
           STRIPE_SECRET_KEY=sk_test_e2e_dummy
           STRIPE_WEBHOOK_SECRET=whsec_e2e_dummy
           STRIPE_PRICE_ID_SITE_US=price_e2e_dummy
+          SMS_PROVIDER_STUB=true
+          TWILIO_API_BASE=http://host.docker.internal:4010
+          ILETIMERKEZI_API_BASE=http://host.docker.internal:4010
+          TWILIO_ACCOUNT_SID=ACe2e00000000000000000000000000000
+          ILETIMERKEZI_API_KEY=e2e-iletimerkezi-key
+          ILETIMERKEZI_API_HASH=e2e-iletimerkezi-hash
           ENV
       - name: Start Supabase (migrations + seed.sql)
         run: supabase start -x studio,imgproxy,logflare,vector,supavisor,postgres-meta,mailpit
@@ -261,6 +270,20 @@ jobs:
       # the M6 step, minutes later, still well before 20:00 on that clock), and runs on in
       # real time, so the ladder jobs' quiet-hours `notAfter` (20:00 Chicago that day) is ahead of
       # it, not days behind. Queue timing (run_after, claim_jobs) stays on the database clock.
+      # W4-12: the local SMS stand-in (`pnpm sms:stand-in`, :4010 on all interfaces) in place of
+      # Twilio and İletimerkezi. Until the self-serve step gives the packs a sender id it receives
+      # nothing; the worker (127.0.0.1) and the functions (host.docker.internal) reach it through
+      # SMS_PROVIDER_STUB with TWILIO_API_BASE / ILETIMERKEZI_API_BASE.
+      - name: Start the SMS stand-in
+        run: |
+          nohup pnpm sms:stand-in > "$RUNNER_TEMP/sms-stand-in.log" 2>&1 &
+          for attempt in $(seq 1 60); do
+            curl -sf -m 2 http://127.0.0.1:4010/__stand-in/health > /dev/null && { echo "stand-in up after ${attempt}s"; exit 0; }
+            sleep 1
+          done
+          echo "::error::the SMS stand-in did not start"
+          cat "$RUNNER_TEMP/sms-stand-in.log" || true
+          exit 1
       - name: Start the worker
         env:
           SUPABASE_DB_URL: ${{ env.DB_URL }}
@@ -279,6 +302,14 @@ jobs:
           POLL_INTERVAL_MS: '120000'
           WORKER_CLOCK_OVERRIDE: 'true'
           WORKER_CLOCK_START: '2026-10-12T22:46:30Z'
+          # W4-12: real orgs' texts to the SMS stand-in once a pack has a sender id (the last step).
+          SMS_PROVIDER_STUB: 'true'
+          TWILIO_API_BASE: http://127.0.0.1:4010
+          ILETIMERKEZI_API_BASE: http://127.0.0.1:4010
+          TWILIO_ACCOUNT_SID: ACe2e00000000000000000000000000000
+          TWILIO_AUTH_TOKEN: e2e-twilio-auth-token
+          ILETIMERKEZI_API_KEY: e2e-iletimerkezi-key
+          ILETIMERKEZI_API_HASH: e2e-iletimerkezi-hash
         run: |
           nohup pnpm --filter @sitelog/worker exec tsx src/index.ts > "$RUNNER_TEMP/worker.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/worker.pid"
@@ -297,7 +328,7 @@ jobs:
       - name: Invite → welcome text in the Demo phone (worker)
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
-        run: pnpm --filter @sitelog/web e2e:supabase --project=worker --grep-invert "@m6|@m7|@m8" --pass-with-no-tests
+        run: pnpm --filter @sitelog/web e2e:supabase --project=worker --grep-invert "@m6|@m7|@m8|@m10|@m11" --pass-with-no-tests
       # The field app's `worker` project outside the M6 suite (W2-04: photos after filing → v2, the
       # `_v2` PDF and the Updated email). The rest of apps/field/e2e/supabase/ (W1-09's link →
       # record → upload, W1-13's question → draft → filed, W2-09 … W2-13) is tagged `@m6` and runs
@@ -305,7 +336,7 @@ jobs:
       - name: Field app · photos after filing (worker)
         env:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
-        run: pnpm --filter @sitelog/field e2e:supabase --project=worker --grep-invert "@m6|@m7|@m8" --pass-with-no-tests
+        run: pnpm --filter @sitelog/field e2e:supabase --project=worker --grep-invert "@m6|@m7|@m8|@m10|@m11" --pass-with-no-tests
       # W2-17: the M6 acceptance suite (spec §16.2 M6 Done when), one command (`pnpm e2e:m6`): every
       # spec tagged `@m6`, one tag per flow (@F4 new phone, consent, preference, test clip; @F5
       # record, upload, offline; @F7 buttons, Other by voice and by number; @F8 fix by voice and
@@ -342,6 +373,26 @@ jobs:
           WORKER_HEALTH_URL: http://127.0.0.1:8080/health
           VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
         run: pnpm e2e:voice
+      # W4-12: self-serve onboarding (spec §16.2 M10 Done when; `pnpm e2e:onboarding`), last, as it
+      # gives both packs a sender id on this stack: the US pack the stand-in's toll-free number
+      # (Twilio), the TR pack the `SITELOG` title (İletimerkezi), through the audited
+      # set_country_endpoints(). Then a brand-new user per pack (`@m10` US, `@m11` TR) signs up,
+      # makes a real org, a site and the manager's invite; the welcome and the device code reach
+      # the stand-in through the real drivers; the manager files by link and, the next day, by
+      # Talk now (§19 Q246; the agent's requests to field-api's /voice/* routes); the panel lists
+      # both reports and their PDFs are stored. The worker and its fake providers are the ones above.
+      - name: Stand-in senders for both packs (this stack)
+        env:
+          SUPABASE_DB_URL: ${{ env.DB_URL }}
+        run: |
+          pnpm countries:set -- --code US --sms-sender +18885550100
+          pnpm countries:set -- --code TR --sms-sender SITELOG
+      - name: Self-serve onboarding (W4-12, pnpm e2e:onboarding)
+        env:
+          WORKER_HEALTH_URL: http://127.0.0.1:8080/health
+          SMS_STAND_IN_URL: http://127.0.0.1:4010
+          VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
+        run: pnpm e2e:onboarding
       - name: Supabase logs
         if: failure()
         run: |
@@ -350,6 +401,7 @@ jobs:
             echo "::group::$c"; docker logs "supabase_${c}_sitelog" --tail 150 2>&1 || true; echo "::endgroup::"
           done
           echo "::group::worker"; tail -n 200 "$RUNNER_TEMP/worker.log" 2>/dev/null || true; echo "::endgroup::"
+          echo "::group::sms stand-in"; tail -n 100 "$RUNNER_TEMP/sms-stand-in.log" 2>/dev/null || true; echo "::endgroup::"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

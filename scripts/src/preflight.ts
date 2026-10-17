@@ -37,6 +37,11 @@ export const NOT_IN_ENV_EXAMPLE: Record<string, string> = {
   WORKER_CLOCK_OVERRIDE:
     "tests only: the worker's clock starts at WORKER_CLOCK_START and runs on in real time (CI's e2e-supabase worker, the W2-06 ladder spec); refused in production, never set on a hosted project",
   WORKER_CLOCK_START: 'tests only: the start of the WORKER_CLOCK_OVERRIDE clock (an ISO instant)',
+  SMS_PROVIDER_STUB:
+    "tests only (W4-12): the SMS drivers send to the local SMS stand-in (`pnpm sms:stand-in`; CI's e2e-supabase worker and functions env); refused in production by the worker, never set on a hosted project",
+  TWILIO_API_BASE: 'tests only: the SMS stand-in for Twilio, read only with SMS_PROVIDER_STUB=true',
+  ILETIMERKEZI_API_BASE:
+    'tests only: the SMS stand-in for İletimerkezi, read only with SMS_PROVIDER_STUB=true',
 };
 
 /**
