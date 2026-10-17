@@ -1,5 +1,19 @@
 # SiteLog · Durum
 
+**2026-10-17 (18:00 UTC) — Hafta 4'ün kodu bitti.**
+
+- **CI'da yeşil:** W4-01 … W4-12 ve W4-16. Ayarlar'daki "Beni şimdi ara" (Q350) ve M10/M11 kabul testleri (`pnpm e2e:m10`, `pnpm e2e:m11`) dahil.
+- **M11 testi:** Elif'in gezdiği her panel sayfasında İngilizce metin kalmadığını kontrol ediyor. Demir Yapı'nın Türkçe link raporunu, Türkçe PDF'ini ve Türkçe aramaları da uçtan uca deniyor.
+- **Hafta 4 açık soruları:** tamamı `docs/PLAN_WEEK4.md` sonundaki "Week 4 open questions" tablosunda, kodda çalışan varsayılanlarıyla birlikte.
+  - Q340 tek istisna: önerdiğim çözüm henüz yapılmadı. Giriş e-postasının dili, kullanıcının davet ya da kayıt anındaki dilinde kalıyor.
+  - Yeni soru Q350: "Beni şimdi ara" için bütçe ve arama saatleri.
+- **Demo notları:** `docs/DEMO_NOTES.md` "Week 4". Yeni bir şirketin kendi kendine kurulumu, Türkçe demo ve faturalama döngüsü adım adım; sizin hesaplarınızı gerektiren adımlar **(owner)** olarak işaretli.
+- **Kalanlar sizde:**
+  - **W4-13:** İletimerkezi hesabı, `SITELOG` başlığı, avukat metinleri.
+  - **W4-14:** Azure ve LiveKit ile Türkçe ses testi, telefon testleri.
+  - **W4-15:** Stripe test modu.
+  - **Supabase şablonları:** giriş ve davet e-posta şablonlarının önizleme projesine yüklenmesi (RUNBOOK "Auth email templates").
+
 **2026-10-17 (16:00 UTC) — Hafta 4 ilerliyor.**
 
 **Bitti ve CI'da yeşil:**

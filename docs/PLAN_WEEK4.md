@@ -342,7 +342,7 @@ Ordered so that the tickets needing **no key** come first (W4-01 … W4-09; thei
 
 ### W4-16 · M10–M11 acceptance: suites, the owner's onboarding run, the TR demo
 
-- [ ] **W4-16 done** · today _missing_ (M)
+- [x] **W4-16 done** · today _done_ (CI half green on dd97a4d: `e2e:m10` and `e2e:m11`; the onboarding run, the TR demo and the Billing cycle on the preview project are the owner's, `docs/DEMO_NOTES.md` "Week 4") (M)
 - **Spec:** §16.2 M10, M11 **Done when**, §17 (E2E panel "TR locale"; Field app; SMS one-way copy and delivery receipts).
 - **Design:** every artboard above; screenshots at 390 and 1440 px in EN and TR for the report.
 - **Build:**
