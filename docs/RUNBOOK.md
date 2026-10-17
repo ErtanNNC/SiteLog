@@ -257,6 +257,8 @@ After a call (W3-11): each ended call of a known caller runs one `post_call_reco
 
 Special requests on a call (W3-14): an unknown caller's recordings are in the `calls` bucket under `unknown/`; nobody in the office can read them; `retention_cleanup` deletes them with the snippet after 30 days unless the number is linked. `reporters.no_calls_until` holds "not today"; outbound calls honour it from W3-17.
 
+The voice agent (W3-12): LiveKit Cloud's own session recording is off (`record=False`, §19 Q207); call audio lives only in the `calls` bucket. Until field-api has the disclosure route (§19 Q205), post-call processing skips every live recording (`no_disclosure`). Before the pilot add `livekit-plugins-noise-cancellation` to the agent's lock (§19 Q204) and decide Deepgram's `mip_opt_out` (§19 Q206).
+
 ### Country packs per environment (GAP D47, W1-06a)
 
 Everything country-specific is a row of `countries` (spec §4.6): languages, units, paper, currency, default time zone, message channel order, SMS and WhatsApp provider, SMS sender type, two-way SMS, links in SMS, legal keys. Two kinds of value:
