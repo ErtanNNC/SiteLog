@@ -1,5 +1,13 @@
 # TalkOlog · Durum
 
+**2026-10-19 (17:30 UTC) — Twilio numarası preview'de.**
+
+- **Yapılan:** `+17752628262` preview'de US paketinin SMS ve WhatsApp göndericisi (`countries-set`, audit `country.endpoints_set`). Demo olmayan US şirketlerinin mesajları artık bu numaradan gider; demo şirketler Demo telefonda kalır.
+- **TR paketi bu numarayı alamadı:** bir WhatsApp numarası tek pakete bağlı (gelen mesajın hangi pakete ait olduğu numaradan bulunuyor; veritabanında tekil kural). TR için ya ikinci bir Twilio WhatsApp numarası, ya da bu kuralı değiştiren bir tasarım kararı gerekiyor (§19'a soru olarak yazılacak). TR SMS kararı A: İletimerkezi `TALKOLOG` gelene kadar TR SMS yok.
+- **Sizin adımlarınız:** Twilio'da numaranın "A message comes in" adresi ve WhatsApp sender webhook'u: `https://sftfnlfbtxowotuhdwep.supabase.co/functions/v1/sms-webhook#rp=ct,rt,5xx&rc=3` (HTTP POST). WhatsApp şablonları: `claude/whatsapp-templates.md`; onaylanınca `HX…` kimlikleri. Önerilen: numarayı Advanced Opt-Out'lu bir Messaging Service'e alın (RUNBOOK, §19 Q45).
+- **Not:** numara yerel bir US numarası (775), paket "toll-free" diye etiketli; ayarlar sayfasında öyle görünür. Gönderimi etkilemez.
+- **Yunanistan / Dubai:** ülke paketi yok; bu ülkelerdeki numaralara US şirketinin mesajları gidebilir (Twilio coğrafi izinleri açık). O ülkeler için ayrı paket (dil, yasal metin) ayrı bir karar.
+
 **2026-10-19 (12:30 UTC) — Ürün adı TalkOlog (eski adıyla SiteLog).**
 
 - **Değişen:** kullanıcının okuduğu her metin TalkOlog diyor: SMS ve WhatsApp metinleri, e-postalar, PDF, panel, saha uygulaması (EN/ES/TR), sesli asistanın cümleleri, kurulum sihirbazı. TR paketinin SMS başlığı `TALKOLOG` (belgelerde, testlerde ve CI'da). Marka SVG'lerinin etiketleri ve paneldeki logo yazısı TalkOlog; işaret (logo) ve ikonlar aynı.
