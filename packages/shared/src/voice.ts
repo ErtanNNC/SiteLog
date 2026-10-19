@@ -41,7 +41,7 @@ export const VOICE_REQUEST_ID_HEADER = 'X-Request-Id';
 export const VOICE_REQUEST_ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 /**
- * The LiveKit room SiteLog names for a call: `call-{uuid}` (§9.4 "How a call starts"; Talk now
+ * The LiveKit room TalkOlog names for a call: `call-{uuid}` (§9.4 "How a call starts"; Talk now
  * and outbound calls, §19 Q157).
  */
 export const VOICE_ROOM_RE = /^call-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -54,7 +54,7 @@ export const VOICE_ROOM_RE = /^call-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 export const VOICE_ROOM_SID_RE = /^RM_[A-Za-z0-9]{1,64}$/;
 
 /**
- * The key of a call's room (`calls.provider_call_id`, `livekit_events.room`): its name when SiteLog
+ * The key of a call's room (`calls.provider_call_id`, `livekit_events.room`): its name when TalkOlog
  * named it (`call-{uuid}`), else its sid (§19 Q227). One pattern, so the JSON contract carries it.
  */
 export const VOICE_ROOM_KEY_RE =
@@ -173,7 +173,7 @@ function canonicalJson(value: unknown): string {
  * orgs of the pack whose voice number is `to` (§4.6, §19 Q44); a Talk now call (`web`) and an
  * outbound call pass the `callId` the call row already has.
  *
- * `room` is the room's key (`voiceRoomKey`): `call-{uuid}`, the name SiteLog gives Talk now and
+ * `room` is the room's key (`voiceRoomKey`): `call-{uuid}`, the name TalkOlog gives Talk now and
  * outbound rooms, or, for an inbound phone call in a room the dispatch rule named (§19 Q227), the
  * room's sid `RM_…` (never the dispatch rule's room name, which carries the caller's number). A
  * sid comes only with `transport 'pstn'` and no `callId`.

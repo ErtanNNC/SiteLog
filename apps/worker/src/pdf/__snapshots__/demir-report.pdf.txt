@@ -21,7 +21,7 @@ Akış Mekanik TEYİTLİ Mekanik 2. kat 3 24 sa
 Demir Yapı öz ekip Genel işçilik Şantiye geneli 5 40 sa
 Toplam · 4 firma 20 160 sa
 Akış Mekanik işçi sayısı şantiye şefi tarafından teyit edildi (saat 18:44).
-SiteLog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 1 / 2
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 1 / 2
 
 Demir Yapı A Ş · Kartal Konutları — B Blok KK-1203-0005 · 9 Eki 2026
 04 YAPILAN İŞLER
@@ -38,10 +38,10 @@ Zemin kat Kalıp sökümü yapıldı Tamamlandı
 08 ŞANTİYE FOTOĞRAFLARI
 17:20 · 4 kat döşeme betonu 08:10 · Yağmurda dış cephe
 09 KAYNAK KAYDI
-Rapor, SiteLog asistanıyla yapılan kayıtlı bir telefon görüşmesinden (4 dk 12 sn, Türkçe) derlenmiştir (görüşme saati
+Rapor, TalkOlog asistanıyla yapılan kayıtlı bir telefon görüşmesinden (4 dk 12 sn, Türkçe) derlenmiştir (görüşme saati
 18:41). 2 fotoğraf eklendi. Şantiye şefi raporu görüşmede sesli olarak onayladı (saat 18:46). Ses kaydı, döküm ve sürüm
-geçmişi SiteLog’da saklanmaktadır.
+geçmişi TalkOlog’da saklanmaktadır.
 Görüşmede sesli onaylandı · 18:46
 Şantiye şefi · Emre Yıldız Proje müdürü · imza ve tarih
-SiteLog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 2 / 2
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 2 / 2
 

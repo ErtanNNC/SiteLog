@@ -41,7 +41,7 @@ import { canResend, invitePhone, inviteProfile, lineCheckRefusal, linkRows } fro
  * §9.5), or a disabled reporter who did (`opted_out_at`), is created or re-enabled `opted_out`:
  * the welcome job then skips it and tells the office why (§13). The answer never holds the link
  * code. W4-02 (§19 Q229 `delivery`): a number libphonenumber knows to be a fixed line is refused
- * (422 `landline_text` for a text link; `landline_unreachable` where SiteLog cannot reach it by
+ * (422 `landline_text` for a text link; `landline_unreachable` where TalkOlog cannot reach it by
  * phone either), before anything is written.
  */
 
@@ -186,7 +186,7 @@ async function invite(admin: AppClient, user: AuthedUser, body: z.output<typeof 
     .upsert(links, { onConflict: 'site_id,reporter_id', ignoreDuplicates: true })
     .throwOnError();
 
-  // The personal link (F3): reused when the reporter has one SiteLog can text again.
+  // The personal link (F3): reused when the reporter has one TalkOlog can text again.
   const personal = await ensurePersonalLink(
     supabaseLinkStore(admin),
     requireEnv('LINK_SIGNING_SECRET'),

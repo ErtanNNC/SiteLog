@@ -225,7 +225,7 @@ export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<Built
       const language = org ? reportLanguageFor(org.locale) : 'en';
       const rendered = invoiceQueryEmail({
         language,
-        orgName: org?.name ?? 'SiteLog',
+        orgName: org?.name ?? 'TalkOlog',
         companyName: inv.company_name,
         invoiceNo: inv.invoice_no,
         periodStart: inv.period_start,
@@ -255,7 +255,7 @@ export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<Built
       const messages = await perReader(ctx, org, to, (language) =>
         evidencePackReadyEmail({
           language,
-          orgName: org?.name ?? 'SiteLog',
+          orgName: org?.name ?? 'TalkOlog',
           siteName: site?.name ?? null,
           periodStart: pack.period_start,
           periodEnd: pack.period_end,
@@ -332,7 +332,7 @@ export async function buildEmail(ctx: Ctx, payload: EmailPayload): Promise<Built
       const messages = await perReader(ctx, org, to, (language) =>
         reportEditedAfterSignoffEmail({
           language,
-          orgName: org?.name ?? 'SiteLog',
+          orgName: org?.name ?? 'TalkOlog',
           reportNo: report.report_no,
           changeNote: payload.changeNote ?? '',
           version: payload.version ?? report.current_version,

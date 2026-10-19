@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * /ops (W3-17, M8, spec §16.2 "≥ 85 % of call reporters' reports done by an outbound call without
- * office help"): per organisation and ISO week, the site-days SiteLog called a reporter about and
+ * office help"): per organisation and ISO week, the site-days TalkOlog called a reporter about and
  * the share filed by the reporter's yes on such a call (`ops_outbound_call_share`). The weekly
  * digest carries the same numbers per org. Below the target is said in words, never by colour
  * alone. Speaks the panel's language (EN, TR).

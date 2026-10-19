@@ -32,11 +32,11 @@ for (const { lang, locale, timezoneId, date } of LANGUAGES) {
       await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
       await expect(page.getByText(copy.field.expired.noCode)).toBeVisible();
       await expect(page.locator('html')).toHaveAttribute('lang', lang);
-      await expect(page).toHaveTitle(`${title} · SiteLog`);
+      await expect(page).toHaveTitle(`${title} · TalkOlog`);
 
       // Field-03 / Field-10 header: the mark and the name, on Asphalt; the date line under it.
       const header = page.getByRole('banner');
-      await expect(header).toContainText('SiteLog');
+      await expect(header).toContainText('TalkOlog');
       await expect(header.locator('img[src="/brand/logo-mark.svg"]')).toBeVisible();
       await expect(page.locator('time')).toHaveText(date);
       await expect(page.locator('time')).toHaveAttribute('datetime', '2026-10-09');
@@ -153,8 +153,8 @@ test.describe('PWA', () => {
     expect(href).toBe('/manifest.webmanifest');
     const manifest = await (await request.get(href!)).json();
     expect(manifest).toMatchObject({
-      name: 'SiteLog',
-      short_name: 'SiteLog',
+      name: 'TalkOlog',
+      short_name: 'TalkOlog',
       display: 'standalone',
       theme_color: '#16181B',
       start_url: '/',

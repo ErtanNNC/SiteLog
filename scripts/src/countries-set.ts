@@ -1,7 +1,7 @@
 /**
  * Sets a country pack's per-environment values in one database (spec §4.6, GAP D47):
  *
- *   pnpm countries:set -- --code TR --sms-sender SITELOG
+ *   pnpm countries:set -- --code TR --sms-sender TALKOLOG
  *   pnpm countries:set -- --code US --sms-sender +18885550142 --voice +15550142290
  *   pnpm countries:set -- --code TR --clear-sms-sender        → back to the console transport
  *   pnpm countries:set -- --code TR --whatsapp-sender +905320000000 --whatsapp-templates tr.json
@@ -15,7 +15,7 @@
  * a trunk needs the voice number (set in the same call or already there), and the voice number
  * cannot be cleared while a trunk stays. Set it only once the trunk, the number and the
  * SHAKEN/STIR registration are ready and counsel approved the `auto_call` wording (TCPA): from then
- * on SiteLog calls real phones of that pack's orgs.
+ * on TalkOlog calls real phones of that pack's orgs.
  *
  * W2-15 (spec §19 Q39): the WhatsApp sender (E.164, the Twilio WhatsApp sender) and the approved
  * template ids, a JSON file `{<message key>: {<language>: <content sid>}}` (keys of
@@ -292,7 +292,7 @@ export function describeWhatsappTemplates(row: PackEndpoints): string[] {
 export function senderProblem(type: SmsSenderType, senderId: string | null): string | null {
   if (senderId === null || isValidSmsSenderId(type, senderId)) return null;
   const shape: Record<SmsSenderType, string> = {
-    alphanumeric: 'an alphanumeric title of 1 to 11 letters, digits or spaces (e.g. SITELOG)',
+    alphanumeric: 'an alphanumeric title of 1 to 11 letters, digits or spaces (e.g. TALKOLOG)',
     short_code: 'a short code of 3 to 8 digits',
     toll_free: 'an E.164 number (e.g. +18885550142)',
     long_code: 'an E.164 number',

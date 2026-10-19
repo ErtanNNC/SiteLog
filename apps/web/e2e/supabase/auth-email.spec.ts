@@ -109,12 +109,12 @@ test.describe('Sign-in email in the reader’s language (W4-09)', { tag: ['@m11'
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
-      .toBe('SiteLog giriş linkiniz');
+      .toBe('TalkOlog giriş linkiniz');
     const caught = mail as CaughtMail | null;
-    expect(caught!.html).toContain('SiteLog’a giriş yapın');
+    expect(caught!.html).toContain('TalkOlog’a giriş yapın');
     expect(caught!.html).toContain('Giriş yap');
     expect(caught!.html).toContain('lang="tr"');
-    expect(caught!.html).not.toContain('Sign in to SiteLog');
+    expect(caught!.html).not.toContain('Sign in to TalkOlog');
     // The button carries GoTrue's verify link back to the panel.
     expect(caught!.html).toMatch(/\/auth\/v1\/verify\?token=/);
   });
@@ -191,9 +191,9 @@ test.describe('Sign-in email after a language switch (§19 Q340)', { tag: ['@m11
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
-      .toBe('SiteLog giriş linkiniz');
+      .toBe('TalkOlog giriş linkiniz');
     const caught = mail as CaughtMail | null;
     expect(caught!.html).toContain('lang="tr"');
-    expect(caught!.html).not.toContain('Sign in to SiteLog');
+    expect(caught!.html).not.toContain('Sign in to TalkOlog');
   });
 });

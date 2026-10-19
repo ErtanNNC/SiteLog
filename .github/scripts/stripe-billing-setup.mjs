@@ -1,5 +1,5 @@
 // Stripe test mode for the preview project (deploy.yml, target billing-setup, owner-dispatched).
-// Idempotent: finds or creates the SiteLog site Product (metadata sitelog=site) and its monthly USD
+// Idempotent: finds or creates the TalkOlog site Product (metadata sitelog=site) and its monthly USD
 // per-unit price (lookup key sitelog_site_usd_monthly, 39900), and replaces the webhook endpoint for
 // WEBHOOK_URL (a signing secret cannot be read back, so the endpoint is deleted and created anew each
 // run) with exactly the events stripe-webhook handles (HANDLED_EVENTS in its logic.ts). Plain
@@ -15,7 +15,7 @@ import { appendFileSync, chmodSync, readFileSync, writeFileSync } from 'node:fs'
 const LOOKUP_KEY = 'sitelog_site_usd_monthly';
 const AMOUNT = 39900;
 const CURRENCY = 'usd';
-const PRODUCT_NAME = 'SiteLog site';
+const PRODUCT_NAME = 'TalkOlog site';
 
 if (process.argv[2] === '--summary') {
   const j = JSON.parse(readFileSync(process.argv[3], 'utf8'));
@@ -143,7 +143,7 @@ if (!price) {
     recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
     lookup_key: LOOKUP_KEY,
     transfer_lookup_key: true,
-    nickname: 'SiteLog site, monthly, per active site',
+    nickname: 'TalkOlog site, monthly, per active site',
   });
   priceCreated = true;
 }
@@ -153,7 +153,7 @@ const endpoints = await stripe('GET', 'webhook_endpoints', { limit: 100 });
 const endpoint = await stripe('POST', 'webhook_endpoints', {
   url: webhookUrl,
   enabled_events: events,
-  description: 'SiteLog preview: stripe-webhook (deploy.yml billing-setup)',
+  description: 'TalkOlog preview: stripe-webhook (deploy.yml billing-setup)',
   metadata: { sitelog: 'preview' },
   ...(apiVersion ? { api_version: apiVersion } : {}),
 });

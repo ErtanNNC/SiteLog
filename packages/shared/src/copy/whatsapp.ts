@@ -53,11 +53,11 @@ export const waCopy = {
   unclearAudio: (): string =>
     "I couldn't make that out — try again closer to the phone, away from machinery.",
   unknownNumber: (): string =>
-    "Hi — this number isn't set up with SiteLog yet, so nothing was filed. I've let the office know.",
+    "Hi — this number isn't set up with TalkOlog yet, so nothing was filed. I've let the office know.",
   unknownNumberNoOrg: (): string =>
-    "Hi — this number isn't set up with SiteLog yet, so nothing was filed. Ask your office to add your number.",
+    "Hi — this number isn't set up with TalkOlog yet, so nothing was filed. Ask your office to add your number.",
   sitePaused: (site: string): string =>
-    `${site} is paused in SiteLog. Ask the office to resume it.`,
+    `${site} is paused in TalkOlog. Ask the office to resume it.`,
   pickSite: (): string => 'Which site is this for?',
   whichDay: (today: string, yesterday: string): string =>
     `Is this for today (${formatMonthDay(today)}) or yesterday (${formatMonthDay(yesterday)})?`,

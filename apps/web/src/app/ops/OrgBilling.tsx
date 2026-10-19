@@ -33,8 +33,8 @@ import { useOpsOrgBilling, useSetOrgBillingStatus, useSetOrgPrice } from '@/data
 import type { OpsOrgBilling } from '@/data/types';
 
 /**
- * /ops (W4-10, spec §19 Q234, Q236): every organisation's billing. SiteLog staff set the price
- * per active site and month (`ops_set_org_price()`) and, for an org SiteLog invoices directly
+ * /ops (W4-10, spec §19 Q234, Q236): every organisation's billing. TalkOlog staff set the price
+ * per active site and month (`ops_set_org_price()`) and, for an org TalkOlog invoices directly
  * (`manual`), its status (`ops_set_org_billing_status()`); both audited. A Stripe org's status
  * follows Stripe. English only, as the rest of /ops (§19 Q240).
  */

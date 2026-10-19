@@ -31,7 +31,7 @@ describe('the lines each language reads', () => {
       'goodbye_filed',
     ]);
     expect(lines[0]!.text).toBe(
-      "SiteLog, hi Marco. This call is recorded to write your daily report. Go ahead with today's report for Riverside Lofts — Block B.",
+      "TalkOlog, hi Marco. This call is recorded to write your daily report. Go ahead with today's report for Riverside Lofts — Block B.",
     );
     expect(lines[1]!.text).toMatch(
       /^Here's what I've got: twenty-three on site from five companies, one hundred eighty-four hours\. Weather stopped work for three and a half hours\..*Shall I file it\?$/,
@@ -179,7 +179,7 @@ describe('runVoiceSamples', () => {
       sampleFile('/tmp/s', 'tr', 'tr-TR-AhmetNeural', 'readback', 8000),
     );
     expect(String(files.get(join('/tmp/s', 'lines.txt')))).toContain(
-      'disclosure: SiteLog, merhaba Emre.',
+      'disclosure: TalkOlog, merhaba Emre.',
     );
   });
 

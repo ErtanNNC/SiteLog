@@ -171,7 +171,7 @@ describe('WeatherPage edge cases', () => {
     const history = await screen.findByTestId('pack-history');
     expect(within(history).getAllByTestId('pack-not-started')).toHaveLength(1);
     expect(within(history).getByTestId('pack-not-started')).toHaveTextContent(
-      'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact SiteLog support.',
+      'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact TalkOlog support.',
     );
   });
 

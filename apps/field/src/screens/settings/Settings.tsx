@@ -39,7 +39,7 @@ type Saving =
 
 /**
  * The consents Settings can turn back on (spec §19 Q86; WhatsApp W2-15, §19 Q25, Q40; automated
- * calls W3-17, §19 Q131, where SiteLog places them).
+ * calls W3-17, §19 Q131, where TalkOlog places them).
  */
 type TurnOnType = 'sms' | 'whatsapp' | 'auto_call';
 
@@ -66,7 +66,7 @@ const TURN_ON_TITLE = {
  * Push API, when field-api offers it; the browser's permission is asked only when it is turned on;
  * on = this phone's subscription and the `push` consent, off = both revoked, spec §19 Q27, Q40),
  * *Automated calls at report time* and, for a reporter who prefers calls, "Don't call me today"
- * (W3-17, only where SiteLog places calls: `placesCalls`; spec §19 Q129, Q131: until the end of
+ * (W3-17, only where TalkOlog places calls: `placesCalls`; spec §19 Q129, Q131: until the end of
  * today, the messages come instead; no undo, §19 Q217), and *Sign out this phone*. A change is
  * saved when it is made (`PATCH preferences`, `consent/revoke`, `consent/grant`,
  * `device/sign-out`), each audited by field-api. There is no artboard: built from §9.3 and the

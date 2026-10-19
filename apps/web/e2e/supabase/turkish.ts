@@ -11,7 +11,7 @@ import { copy as en } from '../../src/copy/en';
  * 2. no text block is an English string of the panel's catalogue. Every English string of
  *    `src/copy/en.ts` (the panel's `en` resource) and of the shared `common` namespace becomes a
  *    pattern (`{{var}}` matching any text), unless it is also a Turkish string anywhere in the
- *    Turkish catalogue (brand and channel names such as "SiteLog", "WhatsApp", "PDF") or has
+ *    Turkish catalogue (brand and channel names such as "TalkOlog", "WhatsApp", "PDF") or has
  *    fewer than four letters outside its variables. A text block is an element's whole text, an
  *    `aria-label`, `placeholder` or `title`; content marked as another language (`lang="en"`, the
  *    recording notice in English on Field channels, the language switch's "English") is left out,

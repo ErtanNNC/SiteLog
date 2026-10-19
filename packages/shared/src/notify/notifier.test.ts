@@ -24,14 +24,14 @@ const pack = (code: 'US' | 'TR', patch: Partial<CountryRow> = {}): CountryPack =
   toCountryPack({ ...DEMO_COUNTRIES.find((c) => c.code === code)!, ...patch });
 const US = demoPack('US');
 const US_LIVE = pack('US', { sms_sender_id: '+18885550142' });
-const TR_LIVE = pack('TR', { sms_sender_id: 'SITELOG' });
+const TR_LIVE = pack('TR', { sms_sender_id: 'TALKOLOG' });
 
 const WELCOME = {
   first: 'Marco',
   company: 'Kestrel Build Group',
   site: 'Riverside Lofts — Block B',
   deadline: '17:30',
-  link: 'https://go.sitelog.app/r/K7Q2MX',
+  link: 'https://go.talkolog.com/r/K7Q2MX',
 };
 
 function recipient(
@@ -198,7 +198,7 @@ describe('Notifier (spec §4.5)', () => {
       status: 'delivered',
       error: null,
     });
-    expect(row.body).toContain('https://go.sitelog.app/r/K7Q2MX');
+    expect(row.body).toContain('https://go.talkolog.com/r/K7Q2MX');
     expect(row.body).toContain('Reply STOP to opt out, HELP for help');
     expect(h.sent[0]!.body).toBe(row.body);
     expect(h.audit).toEqual([
@@ -231,14 +231,14 @@ describe('Notifier (spec §4.5)', () => {
     expect(row.body).not.toContain('K7Q2MX');
   });
 
-  it('the TR pack goes through İletimerkezi from SITELOG, one-way (no reply clause)', async () => {
+  it('the TR pack goes through İletimerkezi from TALKOLOG, one-way (no reply clause)', async () => {
     const h = harness();
     await h.notifier.deliver(
       recipient({ isDemo: false, pack: TR_LIVE, locale: 'tr-TR', phone_e164: '+905321234567' }),
       'welcome',
       { ...WELCOME, first: 'Emre', company: 'Demir Yapı A.Ş.', site: 'Ataşehir Ofis Binası' },
     );
-    expect(h.sent[0]).toMatchObject({ driver: 'iletimerkezi', sender: 'SITELOG' });
+    expect(h.sent[0]).toMatchObject({ driver: 'iletimerkezi', sender: 'TALKOLOG' });
     expect(h.sent[0]!.statusCallback).toBeUndefined();
     expect(h.sent[0]!.body).toMatch(/^Merhaba Emre/);
     expect(h.sent[0]!.body).not.toMatch(/STOP/);
@@ -345,8 +345,10 @@ describe('Notifier (spec §4.5)', () => {
     await h.notifier.deliver(recipient({ isDemo: false, pack: US_LIVE }), 'verify_code', {
       code: '482913',
     });
-    expect(h.sent[0]!.body).toBe('SiteLog code: 482913. It expires in 10 minutes.');
-    expect(h.rows.get('m-1')!.body).toBe(`SiteLog code: ${MASKED_CODE}. It expires in 10 minutes.`);
+    expect(h.sent[0]!.body).toBe('TalkOlog code: 482913. It expires in 10 minutes.');
+    expect(h.rows.get('m-1')!.body).toBe(
+      `TalkOlog code: ${MASKED_CODE}. It expires in 10 minutes.`,
+    );
   });
 
   it('consent, opt-out and disabled decide; nothing is sent and the skip is audited', async () => {
@@ -558,7 +560,7 @@ describe('Notifier replies (sms-webhook)', () => {
       reporter_id: null,
       provider: 'twilio',
       copy_key: 'unknown_number',
-      body: "This number isn't set up with SiteLog. Ask your office to add you.",
+      body: "This number isn't set up with TalkOlog. Ask your office to add you.",
     });
   });
 
@@ -668,7 +670,10 @@ describe('Notifier replies (sms-webhook)', () => {
 describe('Notifier fallback between channels (§19 Q22, W2-01)', () => {
   /** US with its SMS sender here, ordering SMS then the fake second channel. */
   const TWO = pack('US', { sms_sender_id: '+18885550142', message_channels: ['sms', 'whatsapp'] });
-  const FILED = { report_no: 'RL-2041-0187', pdf_link: 'https://go.sitelog.app/r/K7Q2MX/report/1' };
+  const FILED = {
+    report_no: 'RL-2041-0187',
+    pdf_link: 'https://go.talkolog.com/r/K7Q2MX/report/1',
+  };
   const real = (over: Parameters<typeof recipient>[0] = {}) =>
     recipient({
       isDemo: false,
@@ -946,7 +951,10 @@ describe('Notifier fallback between channels (§19 Q22, W2-01)', () => {
 });
 
 describe('Notifier web push (W2-14, §19 Q27)', () => {
-  const FILED = { report_no: 'RL-2041-0187', pdf_link: 'https://go.sitelog.app/r/K7Q2MX/report/1' };
+  const FILED = {
+    report_no: 'RL-2041-0187',
+    pdf_link: 'https://go.talkolog.com/r/K7Q2MX/report/1',
+  };
   const real = (over: Parameters<typeof recipient>[0] = {}) =>
     recipient({
       isDemo: false,
@@ -1005,7 +1013,7 @@ describe('Notifier web push (W2-14, §19 Q27)', () => {
     const out = await h.notifier.deliver(
       real(),
       'draft_ready',
-      { link: 'https://go.sitelog.app/r/K7Q2MX' },
+      { link: 'https://go.talkolog.com/r/K7Q2MX' },
       {
         dedupeKey: 'notify:draft_ready:1',
       },
@@ -1027,7 +1035,7 @@ describe('Notifier web push (W2-14, §19 Q27)', () => {
       ['no VAPID pair here', push({ configured: false }), real(), 'filed'],
     ] as const) {
       const h = harness({ channels: [p.registration] });
-      const vars = key === 'filed' ? FILED : { link: 'https://go.sitelog.app/r/K7Q2MX' };
+      const vars = key === 'filed' ? FILED : { link: 'https://go.talkolog.com/r/K7Q2MX' };
       const out = await h.notifier.deliver(r, key, vars as never);
       expect(out.channel, label).toBe('sms');
       expect(p.pushed, label).toEqual([]);
@@ -1057,8 +1065,11 @@ describe('Notifier web push (W2-14, §19 Q27)', () => {
 
 describe('Notifier WhatsApp (W2-15; §19 Q25, Q39, Q84)', () => {
   const SID = `HX${'a'.repeat(32)}`;
-  const DAILY = { site: 'Riverside Lofts — Block B', link: 'https://go.sitelog.app/r/K7Q2MX' };
-  const FILED = { report_no: 'RL-2041-0187', pdf_link: 'https://go.sitelog.app/r/K7Q2MX/report/1' };
+  const DAILY = { site: 'Riverside Lofts — Block B', link: 'https://go.talkolog.com/r/K7Q2MX' };
+  const FILED = {
+    report_no: 'RL-2041-0187',
+    pdf_link: 'https://go.talkolog.com/r/K7Q2MX/report/1',
+  };
   const order = { message_channels: ['push', 'whatsapp', 'sms'] as CountryRow['message_channels'] };
 
   function wa(reply: { status: number; json: unknown } = { status: 201, json: { sid: 'SMwa1' } }) {
@@ -1166,7 +1177,7 @@ describe('Notifier WhatsApp (W2-15; §19 Q25, Q39, Q84)', () => {
     const h = harness({ channels: [w.registration] });
     const r = recipient({
       isDemo: false,
-      pack: pack('TR', { ...order, sms_sender_id: 'SITELOG' }),
+      pack: pack('TR', { ...order, sms_sender_id: 'TALKOLOG' }),
       locale: 'tr-TR',
       consents: ['sms', 'whatsapp'],
     });

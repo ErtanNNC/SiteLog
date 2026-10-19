@@ -71,7 +71,7 @@ describe('/legal/:key (W4-06, §19 Q50)', () => {
 
     const tr = PRIVACY.texts.tr!;
     expect(await screen.findByRole('heading', { level: 1, name: tr.title })).toBeInTheDocument();
-    expect(document.title).toBe(`${tr.title} · SiteLog`);
+    expect(document.title).toBe(`${tr.title} · TalkOlog`);
     for (const paragraph of tr.body) expect(screen.getByText(paragraph)).toBeInTheDocument();
     expect(screen.getByText('Sürüm 1 · Cumartesi, 17 Ekim 2026')).toBeInTheDocument();
     expect(screen.getByRole('article')).toHaveAttribute('lang', 'tr');

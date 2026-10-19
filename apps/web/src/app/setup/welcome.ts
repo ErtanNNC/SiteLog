@@ -9,7 +9,7 @@ import { languageOf, type ReporterLocale } from '@sitelog/shared/locale.ts';
 /**
  * F2's welcome preview (W4-02): the §9.2 `welcome` text exactly as the worker's `send_welcome`
  * renders it (`renderSms` with the pack's variant: the reply clause only on a two-way pack, "or
- * call {number}" only with a voice number), in the language SiteLog will use with the person, by
+ * call {number}" only with a voice number), in the language TalkOlog will use with the person, by
  * SMS (§19 Q25), with a sample personal link (the real one is made by the invite).
  */
 

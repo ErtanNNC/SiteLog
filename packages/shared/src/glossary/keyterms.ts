@@ -2,7 +2,7 @@ import type { CompanyRow, GlossaryTermRow } from '../db/types.ts';
 
 /**
  * §10.2 speech-recognition hints (Deepgram `keyterm`, Nova-3), one list for every way a site
- * manager talks to SiteLog (spec F21: "confirmed terms are used both by extraction and as
+ * manager talks to TalkOlog (spec F21: "confirmed terms are used both by extraction and as
  * speech-recognition hints for calls and voice notes"): the worker's batch transcription of a
  * voice note (`transcribe_upload`) and, on a call, `get_context`'s `keyterms` for the agent's
  * streaming STT (W3-03, §9.4). Moved here from the worker in W3-08 so both get the same list.
@@ -41,7 +41,7 @@ function hasLongNumber(term: string): boolean {
   return term.replace(/[\s().+-]/g, '').match(/\d{7,}/) !== null;
 }
 
-/** Confirmed by the office, or SiteLog's own: the only terms that become hints (F21). */
+/** Confirmed by the office, or TalkOlog's own: the only terms that become hints (F21). */
 export function isUsableTerm(status: GlossaryTermRow['status']): boolean {
   return status === 'confirmed' || status === 'built_in';
 }

@@ -44,7 +44,7 @@ const US = demoPack('US');
 const TR = demoPack('TR');
 /** US with its toll-free sender and TR with its title set in this environment. */
 const US_LIVE = pack('US', { sms_sender_id: '+18885550142', voice_number: '+15550142290' });
-const TR_LIVE = pack('TR', { sms_sender_id: 'SITELOG' });
+const TR_LIVE = pack('TR', { sms_sender_id: 'TALKOLOG' });
 /** A pack that forbids links in SMS (it must list WhatsApp or push, D47); two-way like US. */
 const NO_LINKS = pack('US', { sms_links_allowed: false, message_channels: ['whatsapp', 'sms'] });
 /** A valid pack that lists no SMS for its messages (its SMS sender still exists). */
@@ -313,7 +313,7 @@ describe('smsReplyAllowed: the two-way replies (§9.5, F13, F15)', () => {
     expect(smsReplyAllowed(US, 'unknown_number')).toBe(true);
     // The reply renders in the pack's variant.
     expect(renderSms('stop_confirm', 'en', {}, smsRenderOptions(US))).toBe(
-      "You won't get more texts from SiteLog. Reply START to resume.",
+      "You won't get more texts from TalkOlog. Reply START to resume.",
     );
   });
 
@@ -342,7 +342,7 @@ describe('pickMessageTransport (§4.5, §5.2)', () => {
     expect(pickMessageTransport({ isDemo: false }, US_LIVE, 'sms')).toBe('twilio');
     expect(pickMessageTransport({ isDemo: false }, TR_LIVE, 'sms')).toBe('iletimerkezi');
     // An override is a pack value, not code: TR on Twilio is a row change (§19 Q20).
-    const trTwilio = pack('TR', { sms_provider: 'twilio', sms_sender_id: 'SITELOG' });
+    const trTwilio = pack('TR', { sms_provider: 'twilio', sms_sender_id: 'TALKOLOG' });
     expect(pickMessageTransport({ isDemo: false }, trTwilio, 'sms')).toBe('twilio');
   });
 
@@ -398,7 +398,7 @@ describe('the pack decides the SMS variant and sender, never the driver', () => 
     expect(smsSendOptionsFor(US)).toEqual({});
     expect(smsSendOptionsFor(TR)).toEqual({});
     expect(smsSendOptionsFor(US_LIVE)).toEqual({ sender: '+18885550142' });
-    expect(smsSendOptionsFor(TR_LIVE)).toEqual({ sender: 'SITELOG' });
+    expect(smsSendOptionsFor(TR_LIVE)).toEqual({ sender: 'TALKOLOG' });
   });
 
   it('types a transport and a notifier that fakes can implement', async () => {

@@ -46,9 +46,9 @@ const SID = `HX${'a'.repeat(32)}`;
 
 describe('parseCountriesSetArgs', () => {
   it('takes the pack and the values to set or clear; a flag left out keeps the value', () => {
-    expect(parseCountriesSetArgs(['--', '--code', 'tr', '--sms-sender', 'SITELOG'])).toEqual({
+    expect(parseCountriesSetArgs(['--', '--code', 'tr', '--sms-sender', 'TALKOLOG'])).toEqual({
       code: 'TR',
-      smsSenderId: 'SITELOG',
+      smsSenderId: 'TALKOLOG',
       yes: false,
       allowStaging: false,
     });
@@ -70,13 +70,13 @@ describe('parseCountriesSetArgs', () => {
   });
 
   it('refuses a missing or malformed pack, conflicting or empty flags and nothing to do', () => {
-    expect(() => parseCountriesSetArgs(['--sms-sender', 'SITELOG'])).toThrow('--code is required');
+    expect(() => parseCountriesSetArgs(['--sms-sender', 'TALKOLOG'])).toThrow('--code is required');
     expect(() => parseCountriesSetArgs(['--code', 'TUR', '--clear-voice'])).toThrow(
       'country code like TR',
     );
     expect(() => parseCountriesSetArgs(['--code', 'TR'])).toThrow('nothing to set');
     expect(() =>
-      parseCountriesSetArgs(['--code', 'TR', '--sms-sender', 'SITELOG', '--clear-sms-sender']),
+      parseCountriesSetArgs(['--code', 'TR', '--sms-sender', 'TALKOLOG', '--clear-sms-sender']),
     ).toThrow('conflicts');
     expect(() => parseCountriesSetArgs(['--code', 'TR', '--sms-sender', '  '])).toThrow(
       '--clear-sms-sender',
@@ -151,7 +151,7 @@ describe('parseWhatsappTemplates', () => {
       whatsapp_templates: { daily_link: { en: SID } },
     });
     expect(lines).toContain(
-      `daily_link.en [{{1}}=site, {{2}}=link] (${SID}): Today's report for {{1}}: {{2}} - SiteLog`,
+      `daily_link.en [{{1}}=site, {{2}}=link] (${SID}): Today's report for {{1}}: {{2}} - TalkOlog`,
     );
     expect(lines.find((l) => l.startsWith('daily_link.es'))).toMatch(/\(not set\)/);
     expect(lines.some((l) => l.startsWith('welcome.'))).toBe(false);
@@ -225,8 +225,8 @@ describe('pack values', () => {
       whatsappSenderId: null,
       whatsappTemplates: null,
     });
-    expect(nextEndpoints(TR, { smsSenderId: 'SITELOG' })).toEqual({
-      smsSenderId: 'SITELOG',
+    expect(nextEndpoints(TR, { smsSenderId: 'TALKOLOG' })).toEqual({
+      smsSenderId: 'TALKOLOG',
       voiceNumber: null,
       whatsappSenderId: null,
       whatsappTemplates: null,
@@ -256,12 +256,12 @@ describe('pack values', () => {
   });
 
   it('checks the sender against the pack’s sender type', () => {
-    expect(senderProblem('alphanumeric', 'SITELOG')).toBeNull();
+    expect(senderProblem('alphanumeric', 'TALKOLOG')).toBeNull();
     expect(senderProblem('alphanumeric', null)).toBeNull();
     expect(senderProblem('alphanumeric', '+905320000000')).toMatch('alphanumeric title');
-    expect(senderProblem('alphanumeric', 'SITELOGSITEL')).toMatch('1 to 11');
+    expect(senderProblem('alphanumeric', 'TALKOLOGTALK')).toMatch('1 to 11');
     expect(senderProblem('toll_free', '+18885550142')).toBeNull();
-    expect(senderProblem('toll_free', 'SITELOG')).toMatch('E.164');
+    expect(senderProblem('toll_free', 'TALKOLOG')).toMatch('E.164');
     expect(senderProblem('short_code', '12345')).toBeNull();
   });
 
@@ -326,10 +326,10 @@ describe('applyCountriesSet', () => {
   });
 
   it('writes nothing when nothing changes', async () => {
-    const { query, calls } = fakeDb([{ ...TR, sms_sender_id: 'SITELOG' }]);
+    const { query, calls } = fakeDb([{ ...TR, sms_sender_id: 'TALKOLOG' }]);
     const result = await applyCountriesSet(
       query,
-      parseCountriesSetArgs(['--code', 'TR', '--sms-sender', 'SITELOG']),
+      parseCountriesSetArgs(['--code', 'TR', '--sms-sender', 'TALKOLOG']),
     );
     expect(result.changed).toBe(false);
     expect(calls.map((c) => c.text)).toEqual([SELECT_PACK_SQL]);
@@ -362,7 +362,7 @@ describe('runCountriesSet (pnpm countries:set)', () => {
     }));
     return { deps: { env, connect, log: (l: string) => lines.push(l) }, connect, end, lines };
   }
-  const SET_TR = ['--code', 'TR', '--sms-sender', 'SITELOG'];
+  const SET_TR = ['--code', 'TR', '--sms-sender', 'TALKOLOG'];
 
   it.each([
     ['no SUPABASE_DB_URL', {}, SET_TR, 'SUPABASE_DB_URL is not set'],
@@ -395,13 +395,13 @@ describe('runCountriesSet (pnpm countries:set)', () => {
   it('writes to an allowed hosted target, logging it without the password', async () => {
     const h = harness({ SUPABASE_DB_URL: ` ${HOSTED} ` });
     const result = await runCountriesSet([...SET_TR, '--yes'], h.deps);
-    expect(result).toMatchObject({ changed: true, after: { sms_sender_id: 'SITELOG' } });
+    expect(result).toMatchObject({ changed: true, after: { sms_sender_id: 'TALKOLOG' } });
     expect(h.connect).toHaveBeenCalledWith(HOSTED);
     expect(h.end).toHaveBeenCalledTimes(1);
     expect(h.lines).toEqual([
       `countries:set → ${describeTarget(HOSTED)}`,
       `  before: ${describeEndpoints(TR)}`,
-      `  after:  ${describeEndpoints({ ...TR, sms_sender_id: 'SITELOG' })} (audited as country.endpoints_set)`,
+      `  after:  ${describeEndpoints({ ...TR, sms_sender_id: 'TALKOLOG' })} (audited as country.endpoints_set)`,
     ]);
     expect(h.lines.join('\n')).not.toContain('s3cret-pw');
   });
@@ -433,7 +433,7 @@ describe('runCountriesSet (pnpm countries:set)', () => {
   });
 
   it('says when nothing changed, and closes the connection when the apply fails', async () => {
-    const same = harness({ SUPABASE_DB_URL: LOCAL }, [{ ...TR, sms_sender_id: 'SITELOG' }]);
+    const same = harness({ SUPABASE_DB_URL: LOCAL }, [{ ...TR, sms_sender_id: 'TALKOLOG' }]);
     expect(await runCountriesSet(SET_TR, same.deps)).toMatchObject({ changed: false });
     expect(same.lines.at(-1)).toBe('  unchanged: nothing written');
 

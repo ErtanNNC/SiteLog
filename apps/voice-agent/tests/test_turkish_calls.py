@@ -37,7 +37,7 @@ async def test_turkish_call_speaks_turkish_words(name: str) -> None:
     assert state.language == "tr"
     copy = default_copy()
     assert copy.line("recording_notice", "tr") in replay.opening
-    assert replay.opening.startswith("SiteLog, merhaba Emre.")
+    assert replay.opening.startswith("TalkOlog, merhaba Emre.")
     said = [e["text"] for e in state.log if e["speaker"] == "agent"]
     assert said
     for line in said:

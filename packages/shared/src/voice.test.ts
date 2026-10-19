@@ -117,7 +117,7 @@ const TOOL_EXAMPLES: { [T in (typeof VOICE_TOOLS)[number]]: [VoiceToolRequest<T>
       callId: CALL,
       outcome: 'filed',
       dialogLog: [
-        { t: 0.4, speaker: 'agent', text: 'SiteLog, hi Kevin.' },
+        { t: 0.4, speaker: 'agent', text: 'TalkOlog, hi Kevin.' },
         { t: 61.5, speaker: 'agent', text: 'Got it, one moment.', tool: 'update_draft' },
       ],
       metrics: {

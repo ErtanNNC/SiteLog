@@ -219,7 +219,7 @@ describe('OverviewPage (demo data, Fri Oct 9 2026)', () => {
     await userEvent.click(await screen.findByTestId('todays-pdfs'));
     await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     expect((click.mock.instances[0] as unknown as HTMLAnchorElement).download).toBe(
-      'SiteLog_daily-reports_2026-10-09.zip',
+      'TalkOlog_daily-reports_2026-10-09.zip',
     );
     // The four reports filed today (Riverside, Oakmont, Pier 9, Northgate).
     expect(calls).toEqual([{ reportIds: expect.any(Array) }]);

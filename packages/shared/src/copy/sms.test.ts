@@ -235,10 +235,10 @@ describe('renderSms', () => {
       ),
     ).toBe("Today's report for Riverside Lofts B: sl.link/r/Q7T2XD");
     expect(renderSms('welcome', 'en', welcomeVars, TWO_WAY)).toBe(
-      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 (555) 014-2290: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
+      "Hi Marco, I'm TalkOlog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 (555) 014-2290: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
     );
     expect(renderSms('welcome', 'en', welcomeVars, TWO_WAY_NO_NUMBER)).toBe(
-      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
+      "Hi Marco, I'm TalkOlog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
     );
     expect(
       renderSms(
@@ -266,13 +266,13 @@ describe('renderSms', () => {
         TWO_WAY_NO_NUMBER,
       ),
     ).toBe(
-      'SiteLog daily reports for Kestrel Build Group. Your link: sl.link/r/Q7T2XD - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.',
+      'TalkOlog daily reports for Kestrel Build Group. Your link: sl.link/r/Q7T2XD - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.',
     );
   });
 
   it('renders ES with and without a voice number', () => {
     expect(renderSms('welcome', 'es', welcomeVars, TWO_WAY)).toBe(
-      'Hola Marco, soy SiteLog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min, o llame al +1 (555) 014-2290: sl.link/r/MRZ4K7 - Responda STOP para darse de baja, HELP para ayuda',
+      'Hola Marco, soy TalkOlog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min, o llame al +1 (555) 014-2290: sl.link/r/MRZ4K7 - Responda STOP para darse de baja, HELP para ayuda',
     );
     expect(renderSms('missed_call', 'es', { link: 'sl.link/r/Q7T2XD' }, TWO_WAY_NO_NUMBER)).toBe(
       'No pude comunicarme con usted para el reporte de hoy. Toque sl.link/r/Q7T2XD.',
@@ -288,10 +288,10 @@ describe('renderSms', () => {
       'No pude comunicarme con usted para el reporte de hoy. Llame al +1 (555) 014-2290 o toque sl.link/r/Q7T2XD.',
     );
     expect(renderSms('stop_confirm', 'es', {}, TWO_WAY)).toBe(
-      'Ya no recibirá mensajes de SiteLog. Responda START para reactivarlos.',
+      'Ya no recibirá mensajes de TalkOlog. Responda START para reactivarlos.',
     );
     expect(renderSms('unknown_number', 'es', {}, TWO_WAY)).toBe(
-      'Este número no está en SiteLog. Pida a su oficina que lo agregue.',
+      'Este número no está en TalkOlog. Pida a su oficina que lo agregue.',
     );
   });
 
@@ -331,27 +331,27 @@ describe('renderSms', () => {
       company: 'Demir Yapı A.Ş.',
       site: 'Ataşehir Ofis Binası',
       deadline: '17:30',
-      link: 'go.sitelog.app/r/K4T9QZ',
+      link: 'go.talkolog.com/r/K4T9QZ',
     };
     expect(renderSms('welcome', 'tr', vars, ONE_WAY_NO_NUMBER)).toBe(
-      'Merhaba Mehmet, ben SiteLog, Demir Yapı A.Ş. için Ataşehir Ofis Binası günlük rapor asistanıyım. Her iş günü 17:30 öncesi linke dokunup ~3 dk anlatın: go.sitelog.app/r/K4T9QZ',
+      'Merhaba Mehmet, ben TalkOlog, Demir Yapı A.Ş. için Ataşehir Ofis Binası günlük rapor asistanıyım. Her iş günü 17:30 öncesi linke dokunup ~3 dk anlatın: go.talkolog.com/r/K4T9QZ',
     );
     expect(renderSms('welcome', 'tr', { ...vars, number: '+90 850 123 4567' }, ONE_WAY)).toBe(
-      'Merhaba Mehmet, ben SiteLog, Demir Yapı A.Ş. için Ataşehir Ofis Binası günlük rapor asistanıyım. Her iş günü 17:30 öncesi linke dokunup ~3 dk anlatın ya da +90 850 123 4567 numarayı arayın: go.sitelog.app/r/K4T9QZ',
+      'Merhaba Mehmet, ben TalkOlog, Demir Yapı A.Ş. için Ataşehir Ofis Binası günlük rapor asistanıyım. Her iş günü 17:30 öncesi linke dokunup ~3 dk anlatın ya da +90 850 123 4567 numarayı arayın: go.talkolog.com/r/K4T9QZ',
     );
     expect(
       renderSms(
         'reminder_2',
         'tr',
-        { time: '19:00', link: 'go.sitelog.app/r/K4T9QZ' },
+        { time: '19:00', link: 'go.talkolog.com/r/K4T9QZ' },
         ONE_WAY_NO_NUMBER,
       ),
     ).toBe(
-      'Bugün için hâlâ rapor yok. Saat 19:00 itibarıyla ofise bilgi vereceğim. go.sitelog.app/r/K4T9QZ',
+      'Bugün için hâlâ rapor yok. Saat 19:00 itibarıyla ofise bilgi vereceğim. go.talkolog.com/r/K4T9QZ',
     );
     expect(
-      renderSms('missed_call', 'tr', { link: 'go.sitelog.app/r/K4T9QZ' }, ONE_WAY_NO_NUMBER),
-    ).toBe('Bugünkü rapor için ulaşamadım. go.sitelog.app/r/K4T9QZ');
+      renderSms('missed_call', 'tr', { link: 'go.talkolog.com/r/K4T9QZ' }, ONE_WAY_NO_NUMBER),
+    ).toBe('Bugünkü rapor için ulaşamadım. go.talkolog.com/r/K4T9QZ');
   });
 
   it('adds nothing to a Turkish text', () => {
@@ -423,16 +423,16 @@ describe('the pack variant: two-way SMS (spec §4.6, §9.2)', () => {
 
   it('keeps the two-way welcome byte for byte: catalogue text + reply hint is the §9.2 text', () => {
     expect(renderSms('welcome', 'en', vars, TWO_WAY)).toBe(
-      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 (555) 014-2290: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
+      "Hi Marco, I'm TalkOlog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 (555) 014-2290: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
     );
     expect(renderSms('welcome', 'en', vars, TWO_WAY_NO_NUMBER)).toBe(
-      "Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
+      "Hi Marco, I'm TalkOlog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: sl.link/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
     );
     expect(renderSms('welcome', 'es', vars, TWO_WAY)).toBe(
-      'Hola Marco, soy SiteLog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min, o llame al +1 (555) 014-2290: sl.link/r/MRZ4K7 - Responda STOP para darse de baja, HELP para ayuda',
+      'Hola Marco, soy TalkOlog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min, o llame al +1 (555) 014-2290: sl.link/r/MRZ4K7 - Responda STOP para darse de baja, HELP para ayuda',
     );
     expect(renderSms('welcome', 'es', vars, TWO_WAY_NO_NUMBER)).toBe(
-      'Hola Marco, soy SiteLog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min: sl.link/r/MRZ4K7 - Responda STOP para darse de baja, HELP para ayuda',
+      'Hola Marco, soy TalkOlog, el asistente de reportes diarios de Kestrel Build Group en Riverside Lofts — Block B. Cada día de trabajo antes de las 17:30, toque su enlace y hable unos 3 min: sl.link/r/MRZ4K7 - Responda STOP para darse de baja, HELP para ayuda',
     );
   });
 
@@ -675,10 +675,10 @@ describe('test_message (W4-05, spec §19 Q232)', () => {
   it('names the company in EN, ES and TR, GSM-7 in EN and ES, at most two segments', () => {
     const company = 'Kestrel Build Group LLC';
     expect(renderTestMessage('en', company)).toBe(
-      'SiteLog test message for Kestrel Build Group LLC. Your site managers get their texts from this sender. No reply needed.',
+      'TalkOlog test message for Kestrel Build Group LLC. Your site managers get their texts from this sender. No reply needed.',
     );
     expect(renderTestMessage('tr', 'Demir Yapı A.Ş.')).toBe(
-      'Demir Yapı A.Ş. için SiteLog deneme mesajı. Şantiye şefleriniz mesajlarını bu göndericiden alır. Yanıt gerekmez.',
+      'Demir Yapı A.Ş. için TalkOlog deneme mesajı. Şantiye şefleriniz mesajlarını bu göndericiden alır. Yanıt gerekmez.',
     );
     expect(renderTestMessage('es', company)).toContain('Kestrel Build Group LLC');
     for (const lang of ['en', 'es'] as const) {
@@ -690,6 +690,6 @@ describe('test_message (W4-05, spec §19 Q232)', () => {
         countSmsSegments(renderTestMessage(lang, company)).turkishShift.segments,
       ).toBeLessThanOrEqual(2);
     }
-    expect(renderTestMessage('en', '  ')).toContain('for SiteLog.');
+    expect(renderTestMessage('en', '  ')).toContain('for TalkOlog.');
   });
 });

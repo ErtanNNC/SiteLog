@@ -68,13 +68,13 @@ describe('report schemas', () => {
       parseJobPayload('notify', {
         reporterId,
         key: 'filed',
-        vars: { site: 'Riverside Lofts', link: 'https://go.sitelog.app/r/abc' },
+        vars: { site: 'Riverside Lofts', link: 'https://go.talkolog.com/r/abc' },
         dedupeKey: 'notify:filed:r1',
       }),
     ).toEqual({
       reporterId,
       key: 'filed',
-      vars: { site: 'Riverside Lofts', link: 'https://go.sitelog.app/r/abc' },
+      vars: { site: 'Riverside Lofts', link: 'https://go.talkolog.com/r/abc' },
       dedupeKey: 'notify:filed:r1',
     });
     expect(

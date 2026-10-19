@@ -5,7 +5,7 @@ import { asService, asUser, bootDatabase } from './harness.ts';
 
 /**
  * 20261015000010_signoff_pdf_rerender.sql: signing off (and undoing it) re-renders the current
- * version's PDF, so the stored file shows "Signed off in SiteLog by {name}" (§12), each event
+ * version's PDF, so the stored file shows "Signed off in TalkOlog by {name}" (§12), each event
  * under its own dedupe key (D16).
  */
 

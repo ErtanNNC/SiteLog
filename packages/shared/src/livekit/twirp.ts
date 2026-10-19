@@ -10,7 +10,7 @@ import {
  * short server tokens minted here: no SDK, WebCrypto and `fetch` only, so field-api (Deno, Talk
  * now's room and dispatch, W3-13) and the worker (Node, outbound calls, W3-17) share it.
  *
- * The calls SiteLog makes: `RoomService/CreateRoom`, `AgentDispatchService/CreateDispatch` and,
+ * The calls TalkOlog makes: `RoomService/CreateRoom`, `AgentDispatchService/CreateDispatch` and,
  * for an outbound call, `SIP/CreateSIPParticipant` on the pack's outbound trunk (§9.4 "How a call
  * starts", §19 Q125, Q126). A refusal throws `LiveKitApiError` with LiveKit's Twirp error code and,
  * for a SIP dial that was not answered, the SIP status (`sip_status_code` in the error's meta).

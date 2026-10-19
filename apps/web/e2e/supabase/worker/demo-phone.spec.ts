@@ -89,7 +89,7 @@ test('inviting Marco to another site shows the welcome text with a working perso
   const welcome = welcomeBubbles.last();
   await expect(welcome).toBeVisible();
   await expect(phone).toHaveURL(/\/dev\/phone$/);
-  await expect(welcome).toContainText("Hi Marco, I'm SiteLog");
+  await expect(welcome).toContainText("Hi Marco, I'm TalkOlog");
   await expect(welcome).toContainText('welcome');
   const link = welcome.getByRole('link', { name: /\/r\// });
   await expect(link).toHaveAttribute('target', '_blank');
@@ -130,7 +130,7 @@ test('inviting Marco to another site shows the welcome text with a working perso
   await phone.getByRole('button', { name: 'Send', exact: true }).click();
   const help = thread
     .getByRole('listitem')
-    .filter({ hasText: 'SiteLog daily reports for Kestrel Build Group' })
+    .filter({ hasText: 'TalkOlog daily reports for Kestrel Build Group' })
     .last();
   await expect(help).toBeVisible();
   expect(linkCode(await help.getByRole('link', { name: /\/r\// }).getAttribute('href'))).toBe(code);

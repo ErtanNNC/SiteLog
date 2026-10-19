@@ -175,7 +175,7 @@ describe('/r/:code (F4: resolve → device check → welcome → Today)', () => 
     expect(queue.get('filed')?.status).toBe('failed');
   });
 
-  it('asks Call me at report time (automated) where SiteLog places calls, ticked for a call preference (W3-17)', async () => {
+  it('asks Call me at report time (automated) where TalkOlog places calls, ticked for a call preference (W3-17)', async () => {
     const routes = fakeRoutes({
       resolve: vi.fn().mockResolvedValue(
         resolved({

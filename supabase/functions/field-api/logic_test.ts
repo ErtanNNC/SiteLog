@@ -92,7 +92,7 @@ Deno.test('consentState and needsConsent: held, revoked, and the required pair',
 
 Deno.test('fieldCountryView: the pack subset, never the sender or a provider', () => {
   const tr = toCountryPack(DEMO_COUNTRIES.find((c) => c.code === 'TR')!);
-  const view = fieldCountryView({ ...tr, smsSenderId: 'SITELOG' });
+  const view = fieldCountryView({ ...tr, smsSenderId: 'TALKOLOG' });
   assertEquals(view, {
     code: 'TR',
     voiceNumber: null,
@@ -101,7 +101,7 @@ Deno.test('fieldCountryView: the pack subset, never the sender or a provider', (
     messageChannels: ['push', 'whatsapp', 'sms'],
     legalKeys: {},
   });
-  assert(!JSON.stringify(view).includes('SITELOG'));
+  assert(!JSON.stringify(view).includes('TALKOLOG'));
   // Nor the WhatsApp sender or its templates (W2-15).
   const wa = fieldCountryView({ ...tr, whatsappSenderId: '+905320000099' as never });
   assert(!JSON.stringify(wa).includes('905320000099'));
@@ -216,12 +216,12 @@ Deno.test('historyStart: 14 days including today, in the site time zone', () => 
 
 Deno.test('origins: FIELD_APP_URL and CORS_EXTRA_ORIGINS; no Origin header is fine', () => {
   const allowed = fieldOrigins(
-    'https://go.sitelog.app/',
+    'https://go.talkolog.com/',
     ' https://pr-1--field.netlify.app , not a url,',
   );
-  assertEquals(allowed, ['https://go.sitelog.app', 'https://pr-1--field.netlify.app']);
+  assertEquals(allowed, ['https://go.talkolog.com', 'https://pr-1--field.netlify.app']);
   assertEquals(originAllowed(undefined, allowed), true);
-  assertEquals(originAllowed('https://go.sitelog.app', allowed), true);
+  assertEquals(originAllowed('https://go.talkolog.com', allowed), true);
   assertEquals(originAllowed('https://evil.test', allowed), false);
   assertEquals(fieldOrigins(undefined, undefined), []);
 });

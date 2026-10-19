@@ -32,7 +32,7 @@ import { smsStatusJob } from './sms_status';
  * undelivered text walks to the next channel, or tells the office once when none is left.
  *
  * Demir Yapı (§18.2) is the seed's TR org; here it is made a real org (`is_demo` false) and the TR
- * pack is given the `SITELOG` title, so its texts take the İletimerkezi driver, not `console`.
+ * pack is given the `TALKOLOG` title, so its texts take the İletimerkezi driver, not `console`.
  */
 
 const FIXTURES = join(
@@ -209,7 +209,7 @@ async function auditOf(id: string) {
 beforeAll(async () => {
   pg = await startPgliteDatabase({ seed: true });
   await pg.q(`update orgs set is_demo = false where id = $1`, [DEMIR_ORG_ID]);
-  await pg.q(`update countries set sms_sender_id = 'SITELOG' where code = 'TR'`);
+  await pg.q(`update countries set sms_sender_id = 'TALKOLOG' where code = 'TR'`);
   const [s] = await pg.q<{ id: string }>(`select id from reporters where phone_e164 = $1`, [
     '+905320000512',
   ]);
@@ -242,7 +242,7 @@ describe('sms_status: İletimerkezi delivery reports (W4-11)', () => {
     const sent = await sendFiled(ctx, ['delivered']);
     // The driver sent the Turkish text as is, from the title, to the number without its +.
     const last = mock.sent.at(-1)!;
-    expect(last.sender).toBe('SITELOG');
+    expect(last.sender).toBe('TALKOLOG');
     expect(last.numbers).toEqual(['905320000512']);
     expect(last.text).toBe(
       'Kaydedildi: Günlük Rapor DY-2041-0199. PDF: https://sl.link/r/AB12CD34EF56/report/1',

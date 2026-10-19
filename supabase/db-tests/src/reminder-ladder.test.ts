@@ -37,7 +37,7 @@ async function day(date: string, patch: Record<string, unknown> = {}): Promise<s
 const message = (key: string, rid = reporterId) => ({
   reporterId: rid,
   key,
-  vars: { site: 'Elm St.', link: 'https://go.sitelog.app/r/ABCDEFGHJKMN' },
+  vars: { site: 'Elm St.', link: 'https://go.talkolog.com/r/ABCDEFGHJKMN' },
 });
 
 async function claim(

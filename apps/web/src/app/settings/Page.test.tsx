@@ -285,12 +285,12 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
     const store = new DemoStore();
     renderWithProviders(<SettingsPage />, opts(store, 'channels'));
     const pack = await screen.findByTestId('pack-card');
-    expect(pack).toHaveTextContent('Set by SiteLog per country');
+    expect(pack).toHaveTextContent('Set by TalkOlog per country');
     expect(row('Country')).toHaveTextContent(/United States\s*US/);
     expect(row('Text sender')).toHaveTextContent(
       'Toll-free number · Not set up in this environment',
     );
-    expect(row('Number to call SiteLog')).toHaveTextContent('Talk now only');
+    expect(row('Number to call TalkOlog')).toHaveTextContent('Talk now only');
     expect(screen.getByTestId('channel-order')).toHaveTextContent('Notifications → SMS → WhatsApp');
     expect(row('Replies to texts')).toHaveTextContent('Two-way');
     expect(row('Links in texts')).toHaveTextContent('Allowed');
@@ -330,7 +330,7 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
     expect(store.data.audit.at(-1)!.action).toBe('settings.updated');
   });
 
-  it('holds Save while the expiry is not whole hours from 1 to 168; empty is SiteLog’s default', async () => {
+  it('holds Save while the expiry is not whole hours from 1 to 168; empty is TalkOlog’s default', async () => {
     const store = new DemoStore();
     renderWithProviders(<SettingsPage />, opts(store, 'channels'));
     const ttl = await screen.findByLabelText('Daily link expiry (hours)');
@@ -363,11 +363,11 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
       screen.getAllByRole('tab', { name: 'Saha kanalları', selected: true }).length,
     ).toBeGreaterThan(0);
     expect(screen.getByTestId('pack-card')).toHaveTextContent(
-      'SiteLog tarafından ülkeye göre ayarlanır',
+      'TalkOlog tarafından ülkeye göre ayarlanır',
     );
     expect(row('Ülke')).toHaveTextContent('TR');
     expect(row('Mesaj göndericisi')).toHaveTextContent('Gönderici adı · Bu ortamda ayarlanmadı');
-    expect(row('SiteLog’u arama numarası')).toHaveTextContent('Yalnızca Şimdi konuş');
+    expect(row('TalkOlog’u arama numarası')).toHaveTextContent('Yalnızca Şimdi konuş');
     expect(row('Mesajlara yanıt')).toHaveTextContent('Tek yönlü');
     const notice = screen.getByTestId('recording-notice');
     expect(
@@ -433,7 +433,7 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'This is my own number.' }));
     await userEvent.click(call);
     expect(await within(dialog).findByTestId('call-result')).toHaveTextContent(
-      'Demo company: the call was placed on SiteLog’s console, so no real phone rings.',
+      'Demo company: the call was placed on TalkOlog’s console, so no real phone rings.',
     );
     expect(store.data.audit.at(-1)).toMatchObject({
       action: 'settings.test_call',
@@ -459,7 +459,7 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
     store.data.org.is_demo = false;
     renderWithProviders(<SettingsPage />, opts(store, 'channels'));
     expect(await screen.findByTestId('no-calls')).toHaveTextContent(
-      'SiteLog does not place calls in United States yet.',
+      'TalkOlog does not place calls in United States yet.',
     );
     expect(screen.getByRole('button', { name: 'Send me a test message' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Call me now' })).toBeNull();

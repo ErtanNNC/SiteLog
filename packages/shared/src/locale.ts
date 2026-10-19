@@ -6,7 +6,7 @@
  *   new language is code (copy, prompts, PDF labels, voices) before any pack can name it.
  * - The org locale (`orgs.locale`, `en-US` | `tr-TR`) sets the report language and the panel's
  *   default. Units and currency are org columns, preset from the pack by `create_org`.
- * - The reporter locale (`reporters.locale`, `en-US` | `es-US` | `tr-TR`) is the language SiteLog
+ * - The reporter locale (`reporters.locale`, `en-US` | `es-US` | `tr-TR`) is the language TalkOlog
  *   texts and speaks with that person.
  * - The panel speaks EN and TR; the field app and SMS speak EN, ES and TR.
  */
@@ -36,7 +36,7 @@ export function isLanguage(value: string): value is Language {
   return (LANGUAGES as readonly string[]).includes(value);
 }
 
-/** 'es-US' → 'es', 'tr' → 'tr'. Throws on a language SiteLog does not support. */
+/** 'es-US' → 'es', 'tr' → 'tr'. Throws on a language TalkOlog does not support. */
 export function languageOf(locale: AnyLocale | string): Language {
   const lang = locale.split('-')[0]?.toLowerCase() ?? '';
   if (!isLanguage(lang)) throw new Error(`Unsupported locale: ${locale}`);

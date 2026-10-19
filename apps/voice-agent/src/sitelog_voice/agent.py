@@ -597,7 +597,7 @@ def _call_metadata(job_metadata: str | None, room_metadata: str | None) -> dict[
 
 def _room_call_id(meta: dict[str, object], room_name: str | None) -> str | None:
     """A web or outbound call's id: the metadata's `callId`, else the uuid of a `call-{uuid}`
-    room (SiteLog names those rooms after the call, §19 Q227)."""
+    room (TalkOlog names those rooms after the call, §19 Q227)."""
     call_id = meta.get("callId")
     if isinstance(call_id, str):
         return call_id

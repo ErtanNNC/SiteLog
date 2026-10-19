@@ -1,5 +1,5 @@
 /**
- * SiteLog design tokens (spec §14.1–§14.4) for code that cannot read CSS: the react-pdf report
+ * TalkOlog design tokens (spec §14.1–§14.4) for code that cannot read CSS: the react-pdf report
  * (packages/pdf) and the email templates (apps/worker). The browser apps use `tokens.css` through
  * Tailwind. Both files hold the same names and values; `scripts/src/tokens.test.ts` keeps them
  * equal. Hex values are lower case, as in tokens.css.

@@ -14,7 +14,7 @@ function fakeFetch(status: number, body: string, contentType: string | null = JS
 }
 
 /** What the field host answers for /api/* when the build has no /api rule (the app fallback). */
-const INDEX_HTML = '<!doctype html><html lang="en"><head><title>SiteLog</title></head></html>';
+const INDEX_HTML = '<!doctype html><html lang="en"><head><title>TalkOlog</title></head></html>';
 
 describe('field-api client (D39)', () => {
   it('calls field-api same-origin at /api by default', () => {

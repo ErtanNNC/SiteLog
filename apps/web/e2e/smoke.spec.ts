@@ -15,7 +15,7 @@ async function signIn(page: Page, as?: string) {
   await page.getByRole('button', { name: 'Email me a sign-in link' }).click();
 }
 
-test.describe('SiteLog panel (demo mode)', () => {
+test.describe('TalkOlog panel (demo mode)', () => {
   test('login → overview renders the KPIs → every nav item opens', async ({ page }) => {
     await signIn(page);
     await expect(page.getByRole('heading', { name: 'Today across 6 sites' })).toBeVisible();
@@ -191,7 +191,7 @@ test.describe('SiteLog panel (demo mode)', () => {
 
     // The page opens the report once the browser has rendered and stored its PDF (slow runners).
     await expect(page).toHaveURL(/\/reports\/(?!new)[^/?]+$/, { timeout: 30_000 });
-    await expect(page.getByText(/Entered by .+ in SiteLog at/)).toBeVisible();
+    await expect(page.getByText(/Entered by .+ in TalkOlog at/)).toBeVisible();
     await expect(page.getByText('Wall framing')).toBeVisible();
     // The filed report shows the photo with its caption.
     const photos = page.getByTestId('section-photos');
@@ -305,7 +305,7 @@ test.describe('SiteLog panel (demo mode)', () => {
       ).toBe(true);
       await dialog.getByTestId('invite-phone').fill('55 1234 5678');
       await expect(dialog.getByTestId('invite-phone-foreign')).toHaveText(
-        'This is a Mexico number. SiteLog texts it from your United States number.',
+        'This is a Mexico number. TalkOlog texts it from your United States number.',
       );
       // A warning, not an error: the number stands.
       await expect(dialog.getByText('+52 55 1234 5678')).toBeVisible();

@@ -19,10 +19,10 @@ describe('Demo phone', () => {
     renderWithProviders(<DevPhonePage />, { as: 'admin' });
     const thread = await openThread(/Marco Ruiz/);
     const welcome = within(thread).getAllByRole('listitem')[0]!;
-    expect(welcome).toHaveTextContent(/Hi Marco, I'm SiteLog/);
+    expect(welcome).toHaveTextContent(/Hi Marco, I'm TalkOlog/);
     expect(welcome).toHaveTextContent('welcome');
     expect(welcome).toHaveTextContent('Sent');
-    const link = within(welcome).getByRole('link', { name: /go\.sitelog\.app\/r\// });
+    const link = within(welcome).getByRole('link', { name: /go\.talkolog\.com\/r\// });
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     expect(link).toHaveAccessibleName(/\(opens in a new tab\)$/);
@@ -42,7 +42,9 @@ describe('Demo phone', () => {
     await userEvent.type(box, 'help');
     await userEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(
-      await within(thread).findByText(/SiteLog daily reports for Kestrel Build Group\. Your link:/),
+      await within(thread).findByText(
+        /TalkOlog daily reports for Kestrel Build Group\. Your link:/,
+      ),
     ).toBeInTheDocument();
     expect(within(thread).getAllByRole('listitem')).toHaveLength(before + 2);
     expect(box).toHaveValue('');
@@ -50,7 +52,7 @@ describe('Demo phone', () => {
     await userEvent.type(box, 'STOP{Enter}');
     expect(
       await within(thread).findByText(
-        "You won't get more texts from SiteLog. Reply START to resume.",
+        "You won't get more texts from TalkOlog. Reply START to resume.",
       ),
     ).toBeInTheDocument();
     const dana = store.data.reporters.find((r) => r.name === 'Dana Whitfield')!;
@@ -86,7 +88,7 @@ describe('Demo phone', () => {
       direction: 'out',
       provider: 'console',
       copy_key: 'draft_ready',
-      body: 'Your draft is ready to check: https://go.sitelog.app/r/K7Q2MX',
+      body: 'Your draft is ready to check: https://go.talkolog.com/r/K7Q2MX',
       status: 'delivered',
       created_at: '2099-01-01T00:00:00.000Z',
     });
@@ -127,8 +129,8 @@ describe('Demo phone', () => {
     renderWithProviders(<DevPhonePage />, { as: 'admin', store });
     const thread = await openThread(/Kevin O'Brien/);
     const calls = within(thread).getAllByTestId('demo-phone-call');
-    expect(calls.at(-2)).toHaveTextContent('Missed call from SiteLog');
-    expect(calls.at(-1)).toHaveTextContent('SiteLog is calling: ringing');
+    expect(calls.at(-2)).toHaveTextContent('Missed call from TalkOlog');
+    expect(calls.at(-1)).toHaveTextContent('TalkOlog is calling: ringing');
     expect(calls.at(-1)).toHaveTextContent('Call · Reminder call');
   });
 
@@ -140,13 +142,13 @@ describe('Demo phone', () => {
     expect(screen.queryByRole('textbox', { name: 'Reply as Marco Ruiz' })).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        'The TR country pack has one-way SMS: a reporter replies to SiteLog on WhatsApp.',
+        'The TR country pack has one-way SMS: a reporter replies to TalkOlog on WhatsApp.',
       ),
     ).toBeInTheDocument();
     // HELP on WhatsApp is answered there, labelled WhatsApp.
     const box = screen.getByRole('textbox', { name: 'Reply on WhatsApp as Marco Ruiz' });
     await userEvent.type(box, 'HELP{Enter}');
-    const help = await within(thread).findByText(/SiteLog daily reports for Kestrel Build Group/);
+    const help = await within(thread).findByText(/TalkOlog daily reports for Kestrel Build Group/);
     expect(help.closest('li')).toHaveTextContent('WhatsApp');
   });
 
@@ -159,7 +161,7 @@ describe('Demo phone', () => {
       screen.getByRole('textbox', { name: 'Reply on WhatsApp as Dana Whitfield' }),
       'HELP{Enter}',
     );
-    const help = await within(thread).findByText(/SiteLog daily reports for Kestrel Build Group/);
+    const help = await within(thread).findByText(/TalkOlog daily reports for Kestrel Build Group/);
     expect(help.closest('li')).toHaveTextContent('WhatsApp');
     // STOP on WhatsApp stops WhatsApp only: Dana is not opted out of texts (§19 Q40).
     await userEvent.type(
@@ -168,7 +170,7 @@ describe('Demo phone', () => {
     );
     expect(
       await within(thread).findByText(
-        "You won't get more WhatsApp messages from SiteLog. Reply START to resume.",
+        "You won't get more WhatsApp messages from TalkOlog. Reply START to resume.",
       ),
     ).toBeInTheDocument();
     expect(store.data.reporters.find((r) => r.name === 'Dana Whitfield')!.status).not.toBe(
@@ -202,7 +204,7 @@ describe('Demo phone', () => {
     expect(store.data.reporters.find((r) => r.name === 'Ben Okafor')!.locale).toBe('en-US');
     renderWithProviders(<DevPhonePage />, { as: 'admin', store });
     const thread = await openThread(/Ana Torres/);
-    expect(within(thread).getByText(/Hola Ana, soy SiteLog/)).toBeInTheDocument();
+    expect(within(thread).getByText(/Hola Ana, soy TalkOlog/)).toBeInTheDocument();
     expect(within(thread).getByRole('link', { name: /\/r\// })).toBeInTheDocument();
   });
 
@@ -250,7 +252,7 @@ describe('Demo phone', () => {
         'CALL',
       ),
     );
-    // The text and SiteLog's confirmation of the switch (spec §19 Q46).
+    // The text and TalkOlog's confirmation of the switch (spec §19 Q46).
     await waitFor(() => expect(within(region).getAllByRole('listitem')).toHaveLength(before + 2));
     await waitFor(() => expect(region.scrollTop).toBe(900));
     // The new text landed inside the live region that was mounted before it.
@@ -320,7 +322,7 @@ describe('Demo phone', () => {
       kind: 'report_filed',
       recipients: ['pm@kestrelbuild.example'],
       subject: 'Daily report · Riverside Lofts — Block B · Oct 9 · RL-2041-0187',
-      body: 'Filed by Marco. Open: https://app.sitelog.app/reports/r1',
+      body: 'Filed by Marco. Open: https://app.talkolog.com/reports/r1',
       attachments: [{ filename: 'RL-2041-0187.pdf', bytes: 52_000 }],
       at: '2026-10-09T22:43:00Z',
     });

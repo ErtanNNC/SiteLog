@@ -11,7 +11,7 @@ import type { E164 } from '../format.ts';
  * `SmsTransport` interface. Pure: `fetch` and the credentials are injected, so the worker (Node),
  * the edge functions (Deno) and the tests (mocked HTTP) share them. Which driver a message uses is
  * `pickMessageTransport()` (the org and its country pack), never the driver's own choice; whether
- * replies reach SiteLog is the pack's `two_way_sms`, never the driver's.
+ * replies reach TalkOlog is the pack's `two_way_sms`, never the driver's.
  *
  * A driver throws `SmsSendError` when the provider refuses a message: `retryable` for what may
  * pass later (HTTP 429 or 5xx, a network error), `undeliverable` for a number the provider cannot
@@ -188,7 +188,7 @@ export interface IletimerkeziCredentials {
  * `iys` and `iysList` BIREYSEL, the fields Q49 names). Counsel's answer to Q49 is then a
  * configuration change, not code. Where those fields sit in the order and their values are
  * unconfirmed until İletimerkezi confirms them (spec §19 Q281), and a commercial text also needs
- * the recipient's İYS consent checked first, which SiteLog does not do (it never markets): so
+ * the recipient's İYS consent checked first, which TalkOlog does not do (it never markets): so
  * `commercial` is not for production before both are settled.
  */
 export const ILETIMERKEZI_IYS_MODES = ['informational', 'commercial'] as const;
@@ -225,7 +225,7 @@ export const ILETIMERKEZI_UNDELIVERABLE_CODES: readonly string[] = ['450'];
 
 /**
  * İletimerkezi (REST, `POST /v1/send-sms/json`), the TR pack's override (spec §19 Q20): one-way,
- * from the pack's approved alphanumeric title (`SITELOG`). The recipient goes without its `+`
+ * from the pack's approved alphanumeric title (`TALKOLOG`). The recipient goes without its `+`
  * (`905321234567`); the order id is the provider id. A response whose status code is not `200` is
  * a refusal, not retried; HTTP 429 and 5xx and network errors are retried. The İYS fields follow
  * `iys` (spec §19 Q49, `ILETIMERKEZI_IYS`): none by default (`informational`), since these are

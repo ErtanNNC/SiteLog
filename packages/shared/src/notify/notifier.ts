@@ -613,8 +613,8 @@ export function createNotifier(deps: NotifierDeps): SmsNotifier {
         },
       });
       if (refused?.optedOut && input.channel === 'sms') {
-        // The provider's own opt-out list (a STOP SiteLog never saw, or one before this sender):
-        // SiteLog's state catches up, for the number and for the reporter. Another channel's
+        // The provider's own opt-out list (a STOP TalkOlog never saw, or one before this sender):
+        // TalkOlog's state catches up, for the number and for the reporter. Another channel's
         // opt-out is a revoked consent of its type (spec §19 Q40), its own ticket's.
         const at = now().toISOString();
         await store.recordPhoneOptOut({

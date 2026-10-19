@@ -39,7 +39,7 @@ describe('inviteLineCheck', () => {
     }
   });
 
-  it('refuses a landline for a text link, and allows a call only where SiteLog can reach it', () => {
+  it('refuses a landline for a text link, and allows a call only where TalkOlog can reach it', () => {
     expect(inviteLineCheck(ISTANBUL_LANDLINE, 'link', { reachable: true })).toEqual({
       ok: false,
       problem: 'landline_text',

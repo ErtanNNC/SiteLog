@@ -253,7 +253,7 @@ export const SMS_TEST_MESSAGE: Readonly<Record<SmsLocale, string>> = {
 
 /** The test message in a language, with the company's name. */
 export function renderTestMessage(locale: SmsLocale, company: string): string {
-  return SMS_TEST_MESSAGE[locale].replace('{company}', company.trim() || 'SiteLog');
+  return SMS_TEST_MESSAGE[locale].replace('{company}', company.trim() || 'TalkOlog');
 }
 
 export function isTwoWaySmsKey(key: SmsKey): key is TwoWaySmsKey {

@@ -81,7 +81,7 @@ export async function subscribeBrowser(
   const key = applicationServerKey(publicKey);
   let existing = await pushManager.getSubscription();
   // A subscription made with another VAPID key (the pair rotated, another environment) is refused
-  // by the push service for SiteLog's key (403): drop it and subscribe with the current one.
+  // by the push service for TalkOlog's key (403): drop it and subscribe with the current one.
   if (existing && !sameKey(existing.options?.applicationServerKey, key)) {
     await existing.unsubscribe().catch(() => false);
     existing = null;

@@ -5,7 +5,7 @@
   right), places both on one timeline (silence where nobody spoke, the agent's audio where it was
   heard, a barge-in cut where it was cut) and writes a stereo Opus/OGG file in a thread.
   `CallRecorder` starts it for the call and stops it at the end. LiveKit Cloud's own session
-  recording stays off (`session.start(record=False)`): the audio goes to SiteLog's `calls` bucket
+  recording stays off (`session.start(record=False)`): the audio goes to TalkOlog's `calls` bucket
   only.
 - **Upload** at the end of the call (`upload_recording`): the file is checked (OGG, Opus, two
   channels, within the contract's size and length), field-api's `POST /voice/calls/:id/recording`

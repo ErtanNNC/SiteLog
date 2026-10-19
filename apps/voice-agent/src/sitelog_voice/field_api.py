@@ -58,7 +58,7 @@ class FieldApiError(RuntimeError):
         return self.status is None or self.status >= 500
 
 
-#: The room SiteLog names for a call: `call-{uuid}` (Talk now, outbound calls; §19 Q157).
+#: The room TalkOlog names for a call: `call-{uuid}` (Talk now, outbound calls; §19 Q157).
 CALL_ROOM_RE = re.compile(r"^call-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 #: A LiveKit room sid (§19 Q227).
 ROOM_SID_RE = re.compile(r"^RM_[A-Za-z0-9]{1,64}$")

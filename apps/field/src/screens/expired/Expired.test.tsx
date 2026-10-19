@@ -50,7 +50,7 @@ describe('Expired link (F16, §9.3; W2-03)', () => {
   });
 
   it.each([
-    ['site_paused', 'This site is paused in SiteLog. Ask the office to resume it.'],
+    ['site_paused', 'This site is paused in TalkOlog. Ask the office to resume it.'],
     ['not_working_day', 'Today is not a working day for this site, so there is no link for today.'],
     ['no_consent', 'You turned off texts, so we can’t text you the link. Ask the office for it.'],
   ] as const)('says why nothing was sent: %s', async (reason, text) => {

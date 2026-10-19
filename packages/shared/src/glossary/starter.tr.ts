@@ -3,7 +3,7 @@ import type { StarterTerm } from './starter.ts';
 /**
  * The Turkish starter glossary (spec §19 Q238, W4-08; listed in spec §18.3 for the native-speaker
  * read, Q63): site words a Turkish site manager says → how a Turkish daily report writes them.
- * Written by SiteLog from the spec's own Turkish (§18.2's "döküm", "TBM / tool box") and common
+ * Written by TalkOlog from the spec's own Turkish (§18.2's "döküm", "TBM / tool box") and common
  * Turkish site vocabulary (concrete, reinforcement, earthworks, finishes, İSG). No company, crew or
  * area names: those are the org's own. A new org whose report language is Turkish starts with
  * these as `built_in` (`seed_starter_glossary()`, 20261017000410_starter_glossary.sql, which must

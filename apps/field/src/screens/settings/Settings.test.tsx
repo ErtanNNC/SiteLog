@@ -39,7 +39,7 @@ describe('Settings (F15, §9.3; W2-02)', () => {
     expect(await screen.findByText('Texts with my daily report link')).toBeInTheDocument();
     expect(routes.preferences).toHaveBeenCalledWith('K7Q2MX', expect.any(AbortSignal));
     expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
-    expect(document.title).toBe('Settings · SiteLog');
+    expect(document.title).toBe('Settings · TalkOlog');
     expect(screen.getByRole('radio', { name: /Text link/ })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Phone call/ })).not.toBeChecked();
     // One built channel: no channel choice (W2-14 / W2-15 add the others).
@@ -275,7 +275,7 @@ describe('Settings (F15, §9.3; W2-02)', () => {
     expect(screen.queryByRole('button', { name: 'Don’t call me today' })).toBeNull();
   });
 
-  it('shows no call rows where SiteLog places no calls, or to a link reporter', async () => {
+  it('shows no call rows where TalkOlog places no calls, or to a link reporter', async () => {
     const routes = fakeRoutes({
       preferences: vi.fn().mockResolvedValue(prefs({ contactPref: 'call' })),
     });

@@ -1,4 +1,4 @@
-# Example Fly.io config for the SiteLog worker. Deploy from the repo root:
+# Example Fly.io config for the TalkOlog worker. Deploy from the repo root:
 #   fly launch --no-deploy --copy-config --config apps/worker/fly.toml
 #   fly secrets set SUPABASE_DB_URL=... SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
 #     WA_PHONE_NUMBER_ID=... WA_ACCESS_TOKEN=... OPENAI_API_KEY=... DEEPGRAM_API_KEY=... ANTHROPIC_API_KEY=... RESEND_API_KEY=... SENTRY_DSN=...
@@ -25,8 +25,8 @@ primary_region = "dfw"
   CLAUDE_MODEL = "claude-sonnet-5-5"
   CLAUDE_MODEL_FAST = "claude-haiku-5-5"
   EMAIL_PROVIDER = "resend"
-  EMAIL_FROM = "SiteLog <reports@sitelog.app>"
-  APP_URL = "https://app.sitelog.app"
+  EMAIL_FROM = "TalkOlog <reports@talkolog.com>"
+  APP_URL = "https://app.talkolog.com"
   LOG_LEVEL = "info"
 
 [http_service]

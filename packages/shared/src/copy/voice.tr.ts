@@ -8,12 +8,12 @@ import type { VoiceCatalog } from './voice.ts';
 export const voiceTr: VoiceCatalog = {
   recording_notice: 'Günlük raporunuz için bu görüşme kaydediliyor.',
   opening_inbound:
-    'SiteLog, merhaba {first}. {recording_notice} {site} için bugünün raporunu dinliyorum.',
-  opening_inbound_pick_site: 'SiteLog, merhaba {first}. {recording_notice}',
+    'TalkOlog, merhaba {first}. {recording_notice} {site} için bugünün raporunu dinliyorum.',
+  opening_inbound_pick_site: 'TalkOlog, merhaba {first}. {recording_notice}',
   opening_outbound:
-    'Merhaba {first}, ben {company} için SiteLog asistanı. {recording_notice} {site} için bugünün raporunu alabilir miyim?',
+    'Merhaba {first}, ben {company} için TalkOlog asistanı. {recording_notice} {site} için bugünün raporunu alabilir miyim?',
   opening_talk_now:
-    'SiteLog, merhaba {first}. {recording_notice} {site} için bugünün raporunu dinliyorum.',
+    'TalkOlog, merhaba {first}. {recording_notice} {site} için bugünün raporunu dinliyorum.',
   go_ahead:
     'Buyurun: bugün ne yapıldı, sahada kimler vardı, hava, teslimatlar ve eklemek istedikleriniz.',
   pick_site: 'Bu rapor hangi şantiye için: {sites}?',
@@ -43,9 +43,9 @@ export const voiceTr: VoiceCatalog = {
   consent_declined: 'Anlaşıldı. Bu görüşmeden hiçbir şey saklanmayacak. İyi günler.',
   consent_declined_link:
     'Anlaşıldı. Bu görüşmeden hiçbir şey saklanmayacak. Raporu web üzerinden verebilmeniz için linkinizi mesajla göndereceğim. İyi günler.',
-  unknown_greeting: 'Merhaba, ben SiteLog asistanı.',
+  unknown_greeting: 'Merhaba, ben TalkOlog asistanı.',
   unknown_caller:
-    "Bu numara henüz SiteLog'da kayıtlı değil. Adınızı, firmanızı ve şantiyeyi söyleyin, ofise ileteyim.",
+    "Bu numara henüz TalkOlog'da kayıtlı değil. Adınızı, firmanızı ve şantiyeyi söyleyin, ofise ileteyim.",
   unknown_goodbye: 'Teşekkürler, ofise ileteceğim. İyi günler.',
   goodbye_filed: 'Kaydedildi. PDF ve fotoğraf eklemeniz için bir link gönderdim. İyi akşamlar.',
   goodbye_draft_saved:
@@ -102,7 +102,7 @@ export const voiceTr: VoiceCatalog = {
   day_off_in_progress:
     'Bugünün raporu zaten başladı, bunu raporda söyleyin: işi ne durdurdu ve ne kadar sürdü.',
   day_off_filed: '{site} için bugünün raporu zaten kaydedildi.',
-  day_off_site_paused: "{site} SiteLog'da duraklatılmış. Ofisten yeniden başlatmasını isteyin.",
+  day_off_site_paused: "{site} TalkOlog'da duraklatılmış. Ofisten yeniden başlatmasını isteyin.",
   callback_unavailable:
     'Sizi henüz geri arayamıyorum. Hazır olduğunuzda tekrar arayın ya da linkinizi kullanın.',
   callback_outside_window: 'En geç saat {time} gibi arayabilirim. Raporu şimdi yapalım mı?',
@@ -121,8 +121,8 @@ export const voiceTr: VoiceCatalog = {
   consent_repeat:
     'Kusura bakmayın, bu görüşmeleri kaydetmem ve size rapor linklerini mesajla göndermem uygun mu? Evet ya da hayır deyin.',
   tool_error: 'Kusura bakmayın, bu işlem şu an olmadı. Tekrar deneyelim.',
-  test_call_greeting: 'Merhaba, ben SiteLog asistanı. Bu görüşme kaydedilmiyor.',
+  test_call_greeting: 'Merhaba, ben TalkOlog asistanı. Bu görüşme kaydedilmiyor.',
   test_call_line:
-    'Bu, {company} için SiteLog deneme aramasıdır. Telefonunuz SiteLog aramalarını almaya hazır.',
+    'Bu, {company} için TalkOlog deneme aramasıdır. Telefonunuz TalkOlog aramalarını almaya hazır.',
   test_call_goodbye: 'Deneme bu kadar. İyi günler.',
 };

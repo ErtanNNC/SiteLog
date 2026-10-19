@@ -178,7 +178,7 @@ export function Sidebar({
       </nav>
 
       <div className="border-t border-iron px-3 py-3" data-testid="sidebar-footer">
-        {/* §11.2 footer: the agent's status, then the org's SiteLog number(s) when it has one. */}
+        {/* §11.2 footer: the agent's status, then the org's TalkOlog number(s) when it has one. */}
         <div className="flex items-start gap-2 px-2 py-1 text-caption text-dust-light">
           <span className="relative mt-1 flex size-2.5 shrink-0" aria-hidden="true">
             <span className="absolute inline-flex size-full rounded-full bg-filed opacity-60" />

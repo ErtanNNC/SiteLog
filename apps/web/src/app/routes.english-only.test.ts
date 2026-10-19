@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * W4-09 (spec §19 Q240): every panel page speaks the panel's language (EN/TR) but `/try` (v1.0's
- * WhatsApp simulator, until GAP step 22 removes it) and `/ops` (SiteLog staff only), which stay
+ * WhatsApp simulator, until GAP step 22 removes it) and `/ops` (TalkOlog staff only), which stay
  * English under `<EnglishOnly>` (README "Deliberate deviations"). A new page that comes in wrapped,
  * or a wrapper used anywhere but the route map, fails here.
  */

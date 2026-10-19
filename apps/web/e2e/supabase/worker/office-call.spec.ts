@@ -80,7 +80,7 @@ test(
     const dialog = page.getByRole('dialog', { name: `Call ${AISHA.name} now?` });
     await dialog
       .getByRole('checkbox', {
-        name: 'Aisha agreed to get calls from SiteLog for the daily report',
+        name: 'Aisha agreed to get calls from TalkOlog for the daily report',
       })
       .click();
     await dialog.getByRole('button', { name: 'Call now' }).click();

@@ -120,7 +120,7 @@ async function whatsappFrom(orgId: string, phone: string, body: string, packCode
       store: workerInboundStore(world.ctx.db),
       notifier: world.ctx.notifier,
       linkSecret: () => world.ctx.config.LINK_SIGNING_SECRET || 'secret',
-      fieldAppUrl: () => world.ctx.config.FIELD_APP_URL || 'https://go.sitelog.app',
+      fieldAppUrl: () => world.ctx.config.FIELD_APP_URL || 'https://go.talkolog.com',
       now: () => clock.now(),
       randomUUID,
     },
@@ -157,7 +157,7 @@ describe('W2-16: WhatsApp inbound and the real channel orders', () => {
       {
         reporterId: SELIN,
         key: 'daily_link',
-        vars: { site: 'Ataşehir Ofis Binası', link: 'https://go.sitelog.app/r/AAAA2222' },
+        vars: { site: 'Ataşehir Ofis Binası', link: 'https://go.talkolog.com/r/AAAA2222' },
         dedupeKey: 'notify:w2-16:selin-daily',
       },
       {} as never,
@@ -171,7 +171,7 @@ describe('W2-16: WhatsApp inbound and the real channel orders', () => {
     expect(result.keyword).toBe('help');
     const help = await lastOut(SELIN);
     expect(help).toMatchObject({ channel: 'whatsapp', copy_key: 'help' });
-    expect(help.body).toMatch(/^Demir Yapı.* için SiteLog günlük raporları\. Linkiniz: http/);
+    expect(help.body).toMatch(/^Demir Yapı.* için TalkOlog günlük raporları\. Linkiniz: http/);
   });
 
   it('answers the open question with "5" on WhatsApp: applied with field_channel whatsapp', async () => {
@@ -227,7 +227,7 @@ describe('W2-16: WhatsApp inbound and the real channel orders', () => {
       {
         reporterId: MARCO,
         key: 'daily_link',
-        vars: { site: 'Riverside Lofts', link: 'https://go.sitelog.app/r/AAAA1111' },
+        vars: { site: 'Riverside Lofts', link: 'https://go.talkolog.com/r/AAAA1111' },
         dedupeKey: 'notify:w2-16:marco-daily',
       },
       {} as never,

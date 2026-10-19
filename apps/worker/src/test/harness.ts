@@ -167,7 +167,7 @@ export function createHarness(
   const storage = createMemoryStorage();
   const config = testConfig({
     LINK_SIGNING_SECRET: 'test-link-signing-secret',
-    FIELD_APP_URL: 'https://go.sitelog.app',
+    FIELD_APP_URL: 'https://go.talkolog.com',
   });
   const sms: Harness['sms'] = [];
   let smsFailure: Error | null = null;

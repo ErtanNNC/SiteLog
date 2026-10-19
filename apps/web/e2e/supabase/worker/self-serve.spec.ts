@@ -8,7 +8,7 @@ import { admin, ANON_KEY, signInWithMagicLink, SUPABASE_URL } from '../support';
 
 /**
  * W4-12 · self-serve onboarding end to end (spec §16.2 M10 Done when: "a new contractor
- * self-onboards a site and gets the first report via link **and** via call without SiteLog
+ * self-onboards a site and gets the first report via link **and** via call without TalkOlog
  * staff"; F1–F6; §19 Q246: Talk now counts as the call). One brand-new customer per pack, on a
  * **real** org (not a demo org), with no seed rows and no staff action:
  *

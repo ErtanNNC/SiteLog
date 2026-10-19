@@ -107,7 +107,7 @@ export const V1_DATA = '{"schemaVersion":1,"reportDate":"2026-10-09"}';
 
 /** Signed-in user with no membership anywhere (the org_members insert target). */
 export const SPARE_USER = 'cccccccc-1111-4000-8000-000000000001';
-/** A SiteLog operator (platform_admins), member of no org. */
+/** A TalkOlog operator (platform_admins), member of no org. */
 export const OPERATOR = 'cccccccc-1111-4000-8000-000000000002';
 
 /** The shared-phone case: A's conversation, B's voice note and its transcript. */

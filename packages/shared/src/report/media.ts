@@ -64,7 +64,7 @@ export interface MediaRef {
   durationS: number | null;
   /** Waveform peaks: uploads.peaks, or the WhatsApp message's payload.peaks. */
   peaks: number[] | null;
-  /** When SiteLog received it. */
+  /** When TalkOlog received it. */
   receivedAt: string;
   /** The upload's caption, or the message body (a photo's WhatsApp caption). */
   text: string | null;

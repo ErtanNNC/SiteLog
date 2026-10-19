@@ -20,14 +20,14 @@ const TOKEN_HEX = new Set(Object.values(colors).map((c) => c.toLowerCase()));
 
 const TEMPLATES = {
   magic_link: {
-    tr: ['SiteLog’a giriş yapın', 'Giriş yap'],
-    en: ['Sign in to SiteLog', 'Sign in'],
-    subject: ['SiteLog giriş linkiniz', 'Your SiteLog sign-in link'],
+    tr: ['TalkOlog’a giriş yapın', 'Giriş yap'],
+    en: ['Sign in to TalkOlog', 'Sign in'],
+    subject: ['TalkOlog giriş linkiniz', 'Your TalkOlog sign-in link'],
   },
   invite: {
-    tr: ['SiteLog’a davet edildiniz', 'Daveti kabul et', '{{ with .Data.invited_org_name }}'],
-    en: ['You are invited to SiteLog', 'Accept the invite'],
-    subject: ['SiteLog’a davet edildiniz', 'You are invited to SiteLog'],
+    tr: ['TalkOlog’a davet edildiniz', 'Daveti kabul et', '{{ with .Data.invited_org_name }}'],
+    en: ['You are invited to TalkOlog', 'Accept the invite'],
+    subject: ['TalkOlog’a davet edildiniz', 'You are invited to TalkOlog'],
   },
 } as const;
 

@@ -148,7 +148,7 @@ test('a typed report is filed with a photo and its PDF stored, then every page s
   await picker.getByLabel('Caption for photo 1').fill('Level 2 deck');
   await page.getByTestId('file-report').click();
   await page.waitForURL(/\/reports\/(?!new)[0-9a-f-]{36}$/, { timeout: 60_000 });
-  await expect(page.getByText(/Entered by .+ in SiteLog at/)).toBeVisible();
+  await expect(page.getByText(/Entered by .+ in TalkOlog at/)).toBeVisible();
 
   const reportId = new URL(page.url()).pathname.split('/').at(-1)!;
   // The photo: a JPEG in the private bucket, an office upload (no reporter, uploaded by the
@@ -303,7 +303,7 @@ test.describe('in a tr-TR browser', { tag: ['@m11', '@F2'] }, () => {
     const welcome = page.getByTestId('welcome-text');
     await expect(welcome).toHaveAttribute('lang', 'tr');
     await expect(welcome).toContainText(
-      'Merhaba Emre, ben SiteLog, Yıldız İnşaat A.Ş. için Kartal günlük rapor asistanıyım.',
+      'Merhaba Emre, ben TalkOlog, Yıldız İnşaat A.Ş. için Kartal günlük rapor asistanıyım.',
     );
     await expect(welcome).not.toContainText('STOP');
     await expect(welcome).not.toContainText('arayın');

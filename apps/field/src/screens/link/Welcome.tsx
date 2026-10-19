@@ -20,7 +20,7 @@ import { currentSite, type FieldSession } from '@/session/session';
 /**
  * F4 step 3 (Field-02), first open only: the notice, the required consent, one consent per message
  * channel the pack offers (SMS; *Message me on WhatsApp* where the pack lists WhatsApp, unticked,
- * W2-15, spec §19 Q25; push has its own toggle in Settings), the automated-call consent only where SiteLog places
+ * W2-15, spec §19 Q25; push has its own toggle in Settings), the automated-call consent only where TalkOlog places
  * automated calls (`resolve`'s `placesCalls`, W3-17: spec §19 Q33, Q51), the preference, the language from the pack's field locales, then
  * `POST consent` with the wording's version (`FIELD_CONSENT_TEXT_VERSION`, or the pack's consent key
  * when it names one, spec §19 Q28). The optional 20-second test recording of F4 is M6.

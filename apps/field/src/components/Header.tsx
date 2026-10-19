@@ -46,7 +46,7 @@ function ChevronIcon() {
 
 /**
  * The field app's top bar (Field-03-Today, Field-10-Today-TR): the mark, the site's name and, on
- * Today, the settings gear. Before a link tells us the site it shows "SiteLog" as on
+ * Today, the settings gear. Before a link tells us the site it shows "TalkOlog" as on
  * Field-02-Welcome. With `onChangeSite` the name is the site switcher (named "{site}, Change
  * site", §9.3: more than one site). The gear is 56 px, the field target size (§14.6).
  */

@@ -100,7 +100,7 @@ describe('router: unknown number (F11)', () => {
       body: 'this is Luis, covering Elm St. today, 4 guys on site',
     });
     expect(h.sentTexts()).toEqual([
-      "Hi — this number isn't set up with SiteLog yet, so nothing was filed. Ask your office to add your number.",
+      "Hi — this number isn't set up with TalkOlog yet, so nothing was filed. Ask your office to add your number.",
     ]);
     const sender = await h.db.findPendingUnknownContact(PHONE_UNKNOWN);
     expect(sender?.snippet).toContain('Luis');
@@ -289,7 +289,7 @@ describe('router: intake (F5, F12)', () => {
     const convo = await h.conversation('idle');
     await h.send(convo, { type: 'audio' });
     expect(h.sentTexts()).toEqual([
-      'Riverside Lofts — Block B is paused in SiteLog. Ask the office to resume it.',
+      'Riverside Lofts — Block B is paused in TalkOlog. Ask the office to resume it.',
     ]);
     expect(Array.from(h.db.data.reports.values())).toHaveLength(0);
   });
@@ -431,7 +431,7 @@ describe('router: draft confirmation and filing (F7)', () => {
       vars: { report_no: report.report_no },
     });
     expect((filedText!.payload as { vars: { pdf_link: string } }).vars.pdf_link).toMatch(
-      new RegExp(`^https://go\\.sitelog\\.app/r/[A-Z2-9]{12}/report/${report.id}$`),
+      new RegExp(`^https://go\\.talkolog\\.com/r/[A-Z2-9]{12}/report/${report.id}$`),
     );
     expect((await h.db.getConversation(convo.id))!.state).toBe('idle');
     expect(h.db.data.audit.map((a) => a.action)).toContain('report.filed');

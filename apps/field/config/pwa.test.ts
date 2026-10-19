@@ -19,10 +19,10 @@ function pngSize(file: string): { width: number; height: number } {
 describe('PWA manifest (§9.3, §14.5)', () => {
   const manifest = pwaOptions.manifest || {};
 
-  it('is SiteLog, standalone, Asphalt theme and Chalk background, opening at /', () => {
+  it('is TalkOlog, standalone, Asphalt theme and Chalk background, opening at /', () => {
     expect(manifest).toMatchObject({
-      name: 'SiteLog',
-      short_name: 'SiteLog',
+      name: 'TalkOlog',
+      short_name: 'TalkOlog',
       display: 'standalone',
       theme_color: '#16181B',
       background_color: '#FBFAF7',

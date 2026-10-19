@@ -385,7 +385,7 @@ export function PhotoGrid({
 }
 
 /**
- * The SiteLog mini mark: the kit's 32 px mark (docs/brand/favicon-32.svg, the simplified mark the
+ * The TalkOlog mini mark: the kit's 32 px mark (docs/brand/favicon-32.svg, the simplified mark the
  * Report artboards' footer draws), in the token colours.
  */
 export function MiniMark({ size = 10 }: { size?: number }) {

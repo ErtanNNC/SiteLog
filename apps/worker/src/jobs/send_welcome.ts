@@ -67,8 +67,8 @@ import { PermanentJobError, type JobHandler } from './types';
 /** Why nothing went, with what the office can do (§13: reporter, channel, reason, action). */
 const WELCOME_SKIPPED: Record<Exclude<NotifyOutcome, { channel: string }>['reason'], string> = {
   opted_out:
-    'They opted out of texts, so SiteLog texts them nothing until they opt in again (START, on packs that take replies).',
-  no_consent: 'They declined texts when asked for consent, so SiteLog texts them nothing.',
+    'They opted out of texts, so TalkOlog texts them nothing until they opt in again (START, on packs that take replies).',
+  no_consent: 'They declined texts when asked for consent, so TalkOlog texts them nothing.',
   no_channel:
     'No message channel of their country can carry the welcome and its link. Contact them another way.',
 };
@@ -193,7 +193,7 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
         reporter.org_id,
         'reporter_opted_out',
         `${reporter.name} opted out of texts`,
-        `${formatPhone(reporter.phone_e164)} is on the SMS provider's opt-out list (they replied STOP to this sender before), so SiteLog texts them nothing until they reply START. Call them if you need their reports.`,
+        `${formatPhone(reporter.phone_e164)} is on the SMS provider's opt-out list (they replied STOP to this sender before), so TalkOlog texts them nothing until they reply START. Call them if you need their reports.`,
         '/team',
         null,
         noticeData('reporter_opted_out', {
@@ -236,7 +236,7 @@ export const sendWelcome: JobHandler<'send_welcome'> = async (ctx, payload, job)
     if (notified) {
       await notify(
         'the welcome text failed at the SMS provider',
-        `Texts are failing for this account (${error}). SiteLog has been alerted; the reporter was not marked as invited. Re-send the welcome from Team & numbers once the provider is back.`,
+        `Texts are failing for this account (${error}). TalkOlog has been alerted; the reporter was not marked as invited. Re-send the welcome from Team & numbers once the provider is back.`,
         noticeData('welcome_provider_fault', { name: reporter.name, error }),
       );
     }

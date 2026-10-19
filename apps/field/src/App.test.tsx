@@ -23,8 +23,8 @@ describe('field app shell (W1-04)', () => {
       ).toBeInTheDocument();
       expect(screen.getByText(copy.expired.noCode)).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: copy.expired.send })).toBeNull();
-      expect(screen.getByRole('banner')).toHaveTextContent('SiteLog');
-      expect(document.title).toBe(`${copy.expired.title} · SiteLog`);
+      expect(screen.getByRole('banner')).toHaveTextContent('TalkOlog');
+      expect(document.title).toBe(`${copy.expired.title} · TalkOlog`);
       unmount();
     },
   );
@@ -46,7 +46,7 @@ describe('field app shell (W1-04)', () => {
     renderApp('/', { session: null });
     expect(screen.getByRole('heading', { level: 1, name: 'Open your link' })).toBeInTheDocument();
     expect(
-      screen.getByText('Open SiteLog from the link in your text message.'),
+      screen.getByText('Open TalkOlog from the link in your text message.'),
     ).toBeInTheDocument();
   });
 

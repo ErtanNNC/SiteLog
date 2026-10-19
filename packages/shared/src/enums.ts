@@ -46,7 +46,7 @@ export const COMPANY_STATUSES = ['confirmed', 'unconfirmed'] as const;
 export type CompanyStatus = (typeof COMPANY_STATUSES)[number];
 
 /**
- * How a report or answer reached SiteLog (§6.2 `field_channel`), plus `office` for reports typed
+ * How a report or answer reached TalkOlog (§6.2 `field_channel`), plus `office` for reports typed
  * in the panel (GAP D13, a recorded deviation). null = v1.0 Meta WhatsApp rows (D13, amended by
  * D49). `whatsapp` since W2-16 (§19 Q26): keywords, answers and unknown contacts over Twilio
  * WhatsApp.
@@ -55,9 +55,9 @@ export const FIELD_CHANNELS = ['web', 'voice', 'sms', 'office', 'whatsapp'] as c
 export type FieldChannel = (typeof FIELD_CHANNELS)[number];
 
 /**
- * How SiteLog reaches a person (§6.2 `message_channel`, §4.5; GAP D48): the Notifier's channel
+ * How TalkOlog reaches a person (§6.2 `message_channel`, §4.5; GAP D48): the Notifier's channel
  * order is the person's `reporters.message_channel`, then the country pack's `message_channels`.
- * Separate from `field_channel` (how a report reached SiteLog): push is never inbound. Week 1
+ * Separate from `field_channel` (how a report reached TalkOlog): push is never inbound. Week 1
  * builds SMS only; WhatsApp (through Twilio) and web push come with M6 (week 2).
  */
 export const MESSAGE_CHANNELS = ['sms', 'whatsapp', 'push'] as const;

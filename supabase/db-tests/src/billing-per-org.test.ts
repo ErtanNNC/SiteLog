@@ -9,7 +9,7 @@ import { applyMigration, asService, asUser, bootDatabase, probeAs } from './harn
  *   (US: USD 39900; TR: none until Q9) and its provider from the pack (TR `manual`, Q236);
  * - the backfill gives existing orgs their currency's price and a TR org without a subscription
  *   `manual`, audited;
- * - only SiteLog staff change an org's price (ops_set_org_price) or a manual org's status
+ * - only TalkOlog staff change an org's price (ops_set_org_price) or a manual org's status
  *   (ops_set_org_billing_status), audited; a Stripe org's status is Stripe's;
  * - a site added, paused or resumed in a real Stripe org with a subscription queues `billing_sync`.
  */

@@ -53,7 +53,7 @@ async function claimR1(id: string, notAfter: string | null = null): Promise<JobP
     {
       reporterId: MARCO,
       key: 'reminder_1',
-      vars: { site: 'Riverside Lofts', link: 'https://go.sitelog.app/r/ABCDEFGHJKMN' },
+      vars: { site: 'Riverside Lofts', link: 'https://go.talkolog.com/r/ABCDEFGHJKMN' },
     },
   ];
   const [claimed] = await pg.q<{ ok: boolean }>(

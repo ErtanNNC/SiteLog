@@ -49,7 +49,7 @@ export interface BillingSummary extends ProviderStatus {
   billingStatus: string | null;
   trialEndsAt: string | null;
   activeSites: number;
-  /** The org's price (§19 Q234); null while SiteLog has set none (a TR org until Q9). */
+  /** The org's price (§19 Q234); null while TalkOlog has set none (a TR org until Q9). */
   pricePerSiteMinor: number | null;
   currency: string | null;
   monthlyTotalMinor: number | null;

@@ -37,7 +37,7 @@ const keep = head
   .join('\n')
   // Published files are referenced relative and without "./" (Artifact files map).
   .replaceAll('"./', '"')
-  .replace(/<title>[^<]*<\/title>/, '<title>SiteLog Demo</title>');
+  .replace(/<title>[^<]*<\/title>/, '<title>TalkOlog Demo</title>');
 writeFileSync(join(OUT, 'index.html'), `${keep}\n${body.trim().replaceAll('"./', '"')}\n`);
 
 const files = [];

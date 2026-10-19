@@ -27,7 +27,7 @@ import type { StoredReportData } from '../schemas/report.ts';
 import { demoId, demoLinkCode } from './ids.ts';
 
 /** FIELD_APP_URL of the links in seeded texts (§5.1 example; `--link-base` overrides it). */
-export const DEMO_LINK_BASE = 'https://go.sitelog.app';
+export const DEMO_LINK_BASE = 'https://go.talkolog.com';
 
 /**
  * Seeded audit rows get ids from here up (org n: base + n × 1,000,000 + its row number), far above
@@ -169,7 +169,7 @@ export function demoConsents(input: {
     type,
     method: 'web_checkbox',
     text_version: input.textVersion,
-    evidence: { user_agent: 'SiteLog demo seed' },
+    evidence: { user_agent: 'TalkOlog demo seed' },
     given_at: input.givenAt,
     revoked_at: null,
   }));

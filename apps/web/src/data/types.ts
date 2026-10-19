@@ -104,7 +104,7 @@ export interface OrgSummary {
   locale?: OrgLocale;
   /** `orgs.country` (§6.3), its country pack's code (§4.6) when known: the wizard's locked country. */
   country?: string;
-  /** The org's SiteLog number(s) for texts and calls, E.164 (§11.2 sidebar footer); none yet → []. */
+  /** The org's TalkOlog number(s) for texts and calls, E.164 (§11.2 sidebar footer); none yet → []. */
   sitelogNumbers?: string[];
   /** `orgs.is_demo` (§6.3): a demo org, whose texts all go to the Demo phone (§4.5, §11.1). */
   demoOrg?: boolean;
@@ -113,7 +113,7 @@ export interface OrgSummary {
    * org's. It wins over the org's locale, never over a choice made on this device (§11.2).
    */
   uiLocale?: OrgLocale | null;
-  /** W4-10 (§19 Q234): the org's price per active site and month; null while SiteLog set none. */
+  /** W4-10 (§19 Q234): the org's price per active site and month; null while TalkOlog set none. */
   price?: BillingPrice | null;
 }
 
@@ -395,7 +395,7 @@ export interface SitePhoto {
 export type ReportStatusFilter = 'all' | 'filed' | 'needs_review' | 'signed_off' | 'weather_day';
 
 /**
- * How a report reached SiteLog, as the panel shows it (§11.3 `ChannelIcon`, P6 Channel filter):
+ * How a report reached TalkOlog, as the panel shows it (§11.3 `ChannelIcon`, P6 Channel filter):
  * `link` = the web recorder from a text link (`field_channel` web), `call` = a phone call (voice).
  * Reports typed in the panel, sent by SMS or from the WhatsApp era have neither.
  */
@@ -530,7 +530,7 @@ export interface MediaClip {
   storagePath: string | null;
   /** Signed URL (10 min) or null (demo mode, or the file is gone). */
   url: string | null;
-  /** When SiteLog received it (a call: when it started). */
+  /** When TalkOlog received it (a call: when it started). */
   receivedAt: string;
   /** The transcript's language codes, e.g. ['es', 'en']. */
   languages: string[];
@@ -610,7 +610,7 @@ export interface ActivityEntry {
   id: string;
   at: string;
   actorType: 'agent' | 'reporter' | 'user' | 'system';
-  /** The reporter or office user; null for SiteLog itself (worded by the page). */
+  /** The reporter or office user; null for TalkOlog itself (worded by the page). */
   actorName: string | null;
   kind: ActivityKind;
   /**
@@ -935,7 +935,7 @@ export interface TeamReporter {
   contactPref: ContactPref;
   /** §19 Q21: the preferred message channel; null = the pack's order. */
   messageChannel: MessageChannel | null;
-  /** The language SiteLog uses with them (`reporters.locale`). */
+  /** The language TalkOlog uses with them (`reporters.locale`). */
   locale: ReporterLocale;
   /** Who stopped texts (§19 Q242): the person by STOP, or the provider; null when not opted out. */
   optOutBy: 'person' | 'provider' | null;
@@ -980,14 +980,14 @@ export type TeamRpcCode = (typeof TEAM_RPC_CODES)[number];
 /** The org's country pack as Team needs it (§4.6). */
 export interface TeamPack {
   code: string;
-  /** Languages SiteLog uses with field users; the first is a new reporter's default. */
+  /** Languages TalkOlog uses with field users; the first is a new reporter's default. */
   fieldLocales: ReporterLocale[];
   /** The pack's order (§4.5). */
   messageChannels: MessageChannel[];
   /** What Edit offers: the pack's built channels other than push (as the recorder's Settings). */
   settingsChannels: MessageChannel[];
   twoWaySms: boolean;
-  /** Where the reporter can call SiteLog (§19 Q33: a call preference without one uses Talk now). */
+  /** Where the reporter can call TalkOlog (§19 Q33: a call preference without one uses Talk now). */
   hasVoiceNumber: boolean;
 }
 
@@ -1031,7 +1031,7 @@ export interface GlossaryTerm {
   firstSeenAt: string;
   lastSeenAt: string | null;
   isBuiltIn: boolean;
-  /** SiteLog's global term (`org_id` null): read-only for the office. */
+  /** TalkOlog's global term (`org_id` null): read-only for the office. */
   isGlobal: boolean;
 }
 
@@ -1077,9 +1077,9 @@ export interface SettingsData {
 
 export interface BillingData {
   plan: {
-    /** `orgs.billing_provider` (§19 Q236): `manual` → no Checkout or portal, SiteLog invoices. */
+    /** `orgs.billing_provider` (§19 Q236): `manual` → no Checkout or portal, TalkOlog invoices. */
     provider: BillingProviderName;
-    /** The org's price per active site and month (§19 Q234); null while SiteLog has set none. */
+    /** The org's price per active site and month (§19 Q234); null while TalkOlog has set none. */
     price: BillingPrice | null;
     activeSites: number;
     /** Price × active sites in minor units, computed here; null without a price. */
@@ -1194,13 +1194,13 @@ export interface DemoPhoneData {
   reporters: DemoPhoneReporter[];
 }
 
-/** One text of a thread: `out` from SiteLog to the reporter, `in` from the reporter. */
+/** One text of a thread: `out` from TalkOlog to the reporter, `in` from the reporter. */
 export interface DemoPhoneMessage {
   id: string;
   direction: 'in' | 'out';
   body: string;
   status: string;
-  /** §9.2 copy key of a text SiteLog sent (`welcome`, `verify_code`, …). */
+  /** §9.2 copy key of a text TalkOlog sent (`welcome`, `verify_code`, …). */
   copyKey: string | null;
   provider: string | null;
   /**
@@ -1229,7 +1229,7 @@ export interface ChangeEvent {
   id?: string | null;
 }
 
-// ───────────────────────────── Ops (/ops, SiteLog staff only) ─────────────────────────────
+// ───────────────────────────── Ops (/ops, TalkOlog staff only) ─────────────────────────────
 
 /** Queue health per job type (§15 reliability). */
 export interface OpsQueueRow {
@@ -1284,7 +1284,7 @@ export interface OrglessContacts {
 }
 
 /**
- * W3-17 (M8, spec §16.2): per org and ISO week, the site-days SiteLog called a reporter about (an
+ * W3-17 (M8, spec §16.2): per org and ISO week, the site-days TalkOlog called a reporter about (an
  * outbound ladder call or callback) and those filed by the reporter's yes on such a call.
  */
 export interface OpsOutboundCalls {
@@ -1297,7 +1297,7 @@ export interface OpsOutboundCalls {
   filedByCall: number;
 }
 
-/** /ops (W4-10, `ops_org_billing()`): an org's billing for SiteLog staff. */
+/** /ops (W4-10, `ops_org_billing()`): an org's billing for TalkOlog staff. */
 export interface OpsOrgBilling {
   orgId: string;
   orgName: string;

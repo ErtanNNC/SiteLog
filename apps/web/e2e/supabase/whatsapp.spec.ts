@@ -21,7 +21,7 @@ test('Demo phone (TR): HELP on WhatsApp is answered there in Turkish', async ({ 
   // The one-way note belongs to the open thread, so it shows once a reporter is picked.
   await expect(
     page.getByText(
-      'TR ülke paketinde SMS tek yönlü: rapor veren SiteLog’a WhatsApp’tan yanıt verir.',
+      'TR ülke paketinde SMS tek yönlü: rapor veren TalkOlog’a WhatsApp’tan yanıt verir.',
     ),
   ).toBeVisible();
   const thread = page.getByRole('list', { name: `${EMRE} ile mesajlar` });
@@ -31,7 +31,7 @@ test('Demo phone (TR): HELP on WhatsApp is answered there in Turkish', async ({ 
   await page.getByRole('button', { name: 'Gönder', exact: true }).click();
   const help = thread
     .getByRole('listitem')
-    .filter({ hasText: 'Demir Yapı A.Ş. için SiteLog günlük raporları' })
+    .filter({ hasText: 'Demir Yapı A.Ş. için TalkOlog günlük raporları' })
     .last();
   await expect(help).toBeVisible();
   await expect(help).toContainText('WhatsApp');

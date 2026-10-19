@@ -18,7 +18,7 @@ import { useCopy } from '@/i18n/useCopy';
 /**
  * W4-08 (§19 Q238): change how reports write a built-in starter term. Saved by the audited
  * `review_glossary_term` (`change`): the term becomes the org's confirmed term, and the starter
- * seed never puts SiteLog's wording back.
+ * seed never puts TalkOlog's wording back.
  */
 export function ChangeTermDialog({
   term,

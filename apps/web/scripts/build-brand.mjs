@@ -7,7 +7,7 @@
  *  - renders the PNG favicons with Chromium: 16 px from favicon-16.svg (the simplified mark below
  *    32 px), 32 px from favicon-32.svg, 48 px from logo-mark.svg, and the 180 px apple-touch icon from
  *    logo-app-icon.svg, full bleed because iOS rounds the corners itself;
- *  - builds logo-lockup.svg: the kit mark + "SiteLog" in Archivo ExtraBold Expanded (800, stretch
+ *  - builds logo-lockup.svg: the kit mark + "TalkOlog" in Archivo ExtraBold Expanded (800, stretch
  *    125%), the glyphs outlined so the file renders the same without the web font.
  *
  *   pnpm brand                                   (= pnpm --filter @sitelog/web brand)
@@ -67,7 +67,7 @@ function lockupSvg() {
   const font = loadFontkit().openSync(FONT);
   const scale = SIZE / font.unitsPerEm;
   const baseline = MARK / 2 + (font.capHeight * scale) / 2; // capitals centred on the mark
-  const run = font.layout('SiteLog');
+  const run = font.layout('TalkOlog');
   let x = MARK + GAP;
   const d = run.glyphs.map((glyph, i) => {
     const pos = run.positions[i];
@@ -80,8 +80,8 @@ function lockupSvg() {
   });
   const width = Math.ceil(x - TRACKING * SIZE);
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${MARK}" width="${width}" height="${MARK}" role="img" aria-label="SiteLog">` +
-    `<title>SiteLog</title>${inner.trim()}<path fill="${ASPHALT}" d="${d.join('')}"/></svg>\n`
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${MARK}" width="${width}" height="${MARK}" role="img" aria-label="TalkOlog">` +
+    `<title>TalkOlog</title>${inner.trim()}<path fill="${ASPHALT}" d="${d.join('')}"/></svg>\n`
   );
 }
 
@@ -117,5 +117,5 @@ for (const file of KIT_FILES) {
   console.log(`public/brand/${file} ← docs/brand/${file}`);
 }
 writeFileSync(join(OUT, 'logo-lockup.svg'), lockupSvg());
-console.log('public/brand/logo-lockup.svg ← kit mark + "SiteLog" (Archivo 800, stretch 125%)');
+console.log('public/brand/logo-lockup.svg ← kit mark + "TalkOlog" (Archivo 800, stretch 125%)');
 await renderPngs();

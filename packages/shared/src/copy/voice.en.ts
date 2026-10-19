@@ -8,12 +8,12 @@ import type { VoiceCatalog } from './voice.ts';
 export const voiceEn: VoiceCatalog = {
   recording_notice: 'This call is recorded to write your daily report.',
   opening_inbound:
-    "SiteLog, hi {first}. {recording_notice} Go ahead with today's report for {site}.",
-  opening_inbound_pick_site: 'SiteLog, hi {first}. {recording_notice}',
+    "TalkOlog, hi {first}. {recording_notice} Go ahead with today's report for {site}.",
+  opening_inbound_pick_site: 'TalkOlog, hi {first}. {recording_notice}',
   opening_outbound:
-    "Hi {first}, it's the SiteLog assistant for {company}. {recording_notice} Ready to give me today's report for {site}?",
+    "Hi {first}, it's the TalkOlog assistant for {company}. {recording_notice} Ready to give me today's report for {site}?",
   opening_talk_now:
-    "SiteLog, hi {first}. {recording_notice} Go ahead with today's report for {site}.",
+    "TalkOlog, hi {first}. {recording_notice} Go ahead with today's report for {site}.",
   go_ahead: 'Go ahead — what got done, who was on site, weather, deliveries, anything else.',
   pick_site: 'Which site is this for — {sites}?',
   pick_site_by_name: 'Say the site name.',
@@ -42,9 +42,9 @@ export const voiceEn: VoiceCatalog = {
   consent_declined: 'Understood. Nothing from this call is kept. Goodbye.',
   consent_declined_link:
     "Understood. Nothing from this call is kept. I'll text you your link so you can report on the web. Goodbye.",
-  unknown_greeting: "Hi, it's the SiteLog assistant.",
+  unknown_greeting: "Hi, it's the TalkOlog assistant.",
   unknown_caller:
-    "This number isn't set up with SiteLog yet. Tell me your name, your company and the site, and I'll pass it to the office.",
+    "This number isn't set up with TalkOlog yet. Tell me your name, your company and the site, and I'll pass it to the office.",
   unknown_goodbye: "Thanks, I'll pass it to the office. Goodbye.",
   goodbye_filed: "Filed. I've sent you the PDF and a link to add photos. Have a good evening.",
   goodbye_draft_saved: "I've saved your draft and I'll send you a link to finish it. Goodbye.",
@@ -98,7 +98,7 @@ export const voiceEn: VoiceCatalog = {
   day_off_in_progress:
     "Today's report has already started, so say it in the report: what stopped work and for how long.",
   day_off_filed: "Today's report for {site} is already filed.",
-  day_off_site_paused: '{site} is paused in SiteLog. Ask the office to resume it.',
+  day_off_site_paused: '{site} is paused in TalkOlog. Ask the office to resume it.',
   callback_unavailable:
     "I can't call you back yet. Call again or use your link whenever you're ready.",
   callback_outside_window: 'I can only call until {time}. Want to do the report now?',
@@ -117,8 +117,8 @@ export const voiceEn: VoiceCatalog = {
   consent_repeat:
     'Sorry, is it OK if I record these calls and text you report links? Say yes or no.',
   tool_error: "Sorry, that didn't work on my side. Let's try again.",
-  test_call_greeting: "Hi, it's the SiteLog assistant. This call is not recorded.",
+  test_call_greeting: "Hi, it's the TalkOlog assistant. This call is not recorded.",
   test_call_line:
-    'This is a test call from SiteLog for {company}. Your phone is set up to receive SiteLog calls.',
+    'This is a test call from TalkOlog for {company}. Your phone is set up to receive TalkOlog calls.',
   test_call_goodbye: "That's all for this test. Goodbye.",
 };

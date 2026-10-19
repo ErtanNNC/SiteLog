@@ -65,7 +65,7 @@ describe('voice copy (W3-01)', () => {
         recording_notice: notice,
       }),
     ).toBe(
-      'Merhaba Emre, ben Demir Yapı için SiteLog asistanı. Günlük raporunuz için bu görüşme kaydediliyor. Kartal için bugünün raporunu alabilir miyim?',
+      'Merhaba Emre, ben Demir Yapı için TalkOlog asistanı. Günlük raporunuz için bu görüşme kaydediliyor. Kartal için bugünün raporunu alabilir miyim?',
     );
     expect(() => renderVoice('goodbye_no_work', 'en')).toThrow(/needs \{site\}/);
     expect(() => renderVoice('goodbye_no_work', 'en', { site: ' ' })).toThrow(/needs \{site\}/);

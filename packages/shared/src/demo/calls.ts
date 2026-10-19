@@ -93,7 +93,7 @@ export function demoCallTranscript(
     start: 0,
     end: round1(Math.max(1, first - 0.5)),
     speaker: 'agent',
-    text: `Hi ${input.firstName}, this is the SiteLog assistant for ${input.company}. This call is recorded for your daily report. Tell me about today.`,
+    text: `Hi ${input.firstName}, this is the TalkOlog assistant for ${input.company}. This call is recorded for your daily report. Tell me about today.`,
   });
   let last = first;
   starts.forEach((start, i) => {

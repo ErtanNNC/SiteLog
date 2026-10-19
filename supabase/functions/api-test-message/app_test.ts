@@ -34,7 +34,7 @@ function setup(
   const sent: Array<{ driver: SmsDriver; to: string; body: string; sender?: string }> = [];
   const code = opts.code ?? 'US';
   const sender =
-    opts.sender === undefined ? (code === 'US' ? '+18885550142' : 'SITELOG') : opts.sender;
+    opts.sender === undefined ? (code === 'US' ? '+18885550142' : 'TALKOLOG') : opts.sender;
   const store: TestMessageStore = {
     memberRole: () => Promise.resolve(opts.role === undefined ? 'admin' : opts.role),
     loadOrg: () =>
@@ -75,7 +75,7 @@ Deno.test('sends the test text through the pack’s provider with its sender id'
     {
       driver: 'twilio',
       to: '+15550142290',
-      body: 'SiteLog test message for Kestrel Build Group. Your site managers get their texts from this sender. No reply needed.',
+      body: 'TalkOlog test message for Kestrel Build Group. Your site managers get their texts from this sender. No reply needed.',
       sender: '+18885550142',
     },
   ]);
@@ -98,28 +98,31 @@ Deno.test(
     assertEquals(t.sent[0]!.to, '+905325550142');
     assertEquals(
       t.sent[0]!.body,
-      'Demir Yapı A.Ş. için SiteLog deneme mesajı. Şantiye şefleriniz mesajlarını bu göndericiden alır. Yanıt gerekmez.',
+      'Demir Yapı A.Ş. için TalkOlog deneme mesajı. Şantiye şefleriniz mesajlarını bu göndericiden alır. Yanıt gerekmez.',
     );
   },
 );
 
-Deno.test('a demo org or a pack with no sender here: console, nothing leaves SiteLog', async () => {
-  const demo = setup({ isDemo: true });
-  assertEquals(await sendTestMessage(demo.deps, LENA, input), {
-    outcome: 'console',
-    reason: 'demo',
-  });
-  const unset = setup({ sender: null });
-  assertEquals(await sendTestMessage(unset.deps, LENA, input), {
-    outcome: 'console',
-    reason: 'no_sender',
-  });
-  assertEquals([...demo.sent, ...unset.sent], []);
-  assertEquals(
-    [...demo.claims, ...unset.claims].map((c) => c.driver),
-    ['console', 'console'],
-  );
-});
+Deno.test(
+  'a demo org or a pack with no sender here: console, nothing leaves TalkOlog',
+  async () => {
+    const demo = setup({ isDemo: true });
+    assertEquals(await sendTestMessage(demo.deps, LENA, input), {
+      outcome: 'console',
+      reason: 'demo',
+    });
+    const unset = setup({ sender: null });
+    assertEquals(await sendTestMessage(unset.deps, LENA, input), {
+      outcome: 'console',
+      reason: 'no_sender',
+    });
+    assertEquals([...demo.sent, ...unset.sent], []);
+    assertEquals(
+      [...demo.claims, ...unset.claims].map((c) => c.driver),
+      ['console', 'console'],
+    );
+  },
+);
 
 Deno.test('admins only; a bad number is 400 and claims nothing', async () => {
   for (const role of ['ops', 'pm', null] as const) {

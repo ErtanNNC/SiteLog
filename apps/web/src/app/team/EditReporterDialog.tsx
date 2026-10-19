@@ -45,7 +45,7 @@ const DEFAULT_CHANNEL = 'default';
 
 /**
  * Team row menu → Edit (P10, F15 "Office"; W4-03): name, role, sites and languages
- * (`update_reporter()`), and the preference, message channel and language SiteLog uses
+ * (`update_reporter()`), and the preference, message channel and language TalkOlog uses
  * (`update_reporter_contact()`). A preference or channel change needs "{first} asked for this
  * change" (§19 Q243); a channel without its consent is saved and Edit says it stays unreachable
  * until they turn it on. The phone is read-only: a new number means disable + invite again.

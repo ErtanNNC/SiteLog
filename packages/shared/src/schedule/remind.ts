@@ -14,7 +14,7 @@ import { deadlineInstant } from './reminders.ts';
 /**
  * §7.4 / F11 reminder decisions (spec §4.5 `remind(reporter, pack, stage)`: "pure decision
  * function (M6), unit-tested"; W2-05). For one reporter of one site-day and one ladder stage, what
- * SiteLog does: a message (its §9.2 key), an outbound call, or nothing (with the reason, so the
+ * TalkOlog does: a message (its §9.2 key), an outbound call, or nothing (with the reason, so the
  * caller can audit it). `scheduler-tick` asks it per reporter when it claims a stage (W2-06).
  *
  * The stages a reporter hears about are the daily link, the weather heads-up, R1 and R2; the

@@ -128,7 +128,7 @@ export function skipSendsMessage(reason: CallSkipReason): boolean {
 /**
  * Team's _Call now_ (W4-04; spec F3 edge cases, P10, §19 Q230, Q330; the recommended defaults
  * until the owner answers): admin and ops, only where the org places calls, after the office's
- * attestation that the person agreed to get calls from SiteLog for the daily report, stored as an
+ * attestation that the person agreed to get calls from TalkOlog for the daily report, stored as an
  * `auto_call` consent `office_attested` (the office user and `attestVersion`). One call (purpose
  * `daily_report`) inside the site's call window, refused when the day is filed or a call to the
  * reporter is live; outside §19 Q128's ladder attempts (`calls.attempt` null) and at most
@@ -298,7 +298,7 @@ export function outboundRoomMetadata(callId: string): string {
 
 /**
  * The M8 measure (§16.2: "≥ 85 % of call reporters' reports done by an outbound call without
- * office help"): per org and week, the site-days SiteLog called a reporter about and the share
+ * office help"): per org and week, the site-days TalkOlog called a reporter about and the share
  * filed by the reporter's yes on such a call. null when nothing was called.
  */
 export function outboundCallShare(row: {

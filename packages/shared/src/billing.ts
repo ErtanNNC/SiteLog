@@ -8,11 +8,11 @@ import { intlLocaleOf, type AnyLocale } from './locale.ts';
  *
  * - The price lives on the org (§19 Q234 `BILLING_PRICE_POLICY`): `orgs.price_per_site_minor`
  *   and `orgs.price_currency`, preset by create_org() from `billing_default_prices` for the pack's
- *   currency (null when SiteLog has set none, e.g. TRY until Q9) and changed only by SiteLog
+ *   currency (null when TalkOlog has set none, e.g. TRY until Q9) and changed only by TalkOlog
  *   staff on /ops (`ops_set_org_billing()`, audited). The Stripe price of a currency is env
  *   (`STRIPE_PRICE_ID_SITE_<CURRENCY>`, `STRIPE_PRICE_ID_SITE_US` for USD).
  * - The provider is per org (`orgs.billing_provider`): `stripe`, or `manual` (§19 Q236: a TR org
- *   until Q8 names the entity and the provider; SiteLog invoices it directly and sets its status).
+ *   until Q8 names the entity and the provider; TalkOlog invoices it directly and sets its status).
  * - A lapsed trial (§19 Q235 `TRIAL_END_POLICY`): an org still `trialing` after `trial_ends_at`
  *   with no subscription counts as past due from that instant (the banner, the org's grace days,
  *   then `isBillingBlocked`); never a demo org, never a `manual` org.
@@ -64,7 +64,7 @@ export interface BillingPrice {
   currency: string;
 }
 
-/** The org's price per active site and month, or null when SiteLog has not set one (§19 Q234). */
+/** The org's price per active site and month, or null when TalkOlog has not set one (§19 Q234). */
 export function billingPrice(org: {
   price_per_site_minor: number | null | undefined;
   price_currency: string | null | undefined;
@@ -193,7 +193,7 @@ export function isOrgBillingBlocked(
 /** What the admin banner says on every page (F23 "past-due banner", §19 Q235). */
 export interface BillingAlert {
   kind: 'past_due' | 'trial_ended' | 'canceled';
-  /** Who bills the org: a `manual` org pays SiteLog's invoice, not a card. */
+  /** Who bills the org: a `manual` org pays TalkOlog's invoice, not a card. */
   provider: BillingProviderName;
   /** The start of arrears (the trial's end for `trial_ended`), when known. */
   since: string | null;

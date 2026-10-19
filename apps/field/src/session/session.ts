@@ -24,7 +24,7 @@ export interface FieldSession {
   /** The report date chosen on Today when more than one was allowed (F5); null = the default. */
   date: string | null;
   /**
-   * W3-17 (`resolve`'s `placesCalls`, spec §19 Q51): SiteLog places automated calls for the
+   * W3-17 (`resolve`'s `placesCalls`, spec §19 Q51): TalkOlog places automated calls for the
    * reporter's org. Absent in a session saved before W3-17: false until the next `resolve`.
    */
   placesCalls?: boolean;

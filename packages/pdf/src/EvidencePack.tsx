@@ -65,8 +65,8 @@ export function EvidencePack({ input }: { input: EvidencePackInput }) {
     <Document
       title={p.docTitle(site.name, input.periodStart, input.periodEnd)}
       author={org.name}
-      creator="SiteLog"
-      producer="SiteLog"
+      creator="TalkOlog"
+      producer="TalkOlog"
       language={copy.intl}
     >
       <Page size={size} style={styles.page}>

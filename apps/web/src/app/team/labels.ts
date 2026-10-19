@@ -1,7 +1,7 @@
 import type { ContactPref, MessageChannel } from '@sitelog/shared/enums.ts';
 import type { CopyT } from '@/i18n/useCopy';
 
-/** Languages a reporter may speak: SiteLog's field languages (EN, ES, TR) first, then others. */
+/** Languages a reporter may speak: TalkOlog's field languages (EN, ES, TR) first, then others. */
 export const LANGUAGES = ['en', 'es', 'tr', 'pl', 'pt', 'hi', 'fr'] as const;
 export type SpokenLanguage = (typeof LANGUAGES)[number];
 

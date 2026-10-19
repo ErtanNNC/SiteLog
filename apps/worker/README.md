@@ -1,6 +1,6 @@
 # @sitelog/worker
 
-The SiteLog job runner (`docs/SITELOG_SPEC.md` §4.2): pulls jobs from Postgres, downloads WhatsApp
+The TalkOlog job runner (`docs/SITELOG_SPEC.md` §4.2): pulls jobs from Postgres, downloads WhatsApp
 media, converts OGG/Opus with ffmpeg, transcribes (OpenAI), extracts the report (Claude tool use),
 drives the WhatsApp conversation state machine (§7.2), renders PDFs, sends email and weather jobs.
 
@@ -35,24 +35,24 @@ The Dockerfile installs the Debian package and sets `FFMPEG_PATH`.
 
 ## Environment variables
 
-| Variable                                                      | Default                                       | Used by                                                                                 |
-| ------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `SUPABASE_DB_URL`                                             | required                                      | job loop + repository (`postgres` client, service role)                                 |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                   | ''                                            | Storage buckets `audio`, `photos`, `pdfs`, `exports`, `logos`                           |
-| `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_GRAPH_VERSION`   | '', '', `v21.0`                               | WhatsApp Cloud API (send, media)                                                        |
-| `TRANSCRIBE_PROVIDER`, `DEEPGRAM_API_KEY`, `TRANSCRIBE_MODEL` | `deepgram`, '', '' (nova-3 / whisper-1)       | `transcribe_upload` (§10.2, W1-11); keyless outside production: the fixtures/voice fake |
-| `OPENAI_API_KEY`                                              | ''                                            | `TRANSCRIBE_PROVIDER=openai`; the WhatsApp voice notes (whisper-1) until step 22        |
-| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLAUDE_MODEL_FAST`      | '', `claude-sonnet-5-5`, = `CLAUDE_MODEL`     | extraction / corrections / answers / classification                                     |
-| `WEATHER_API_BASE`, `WEATHER_API_KEY`                         | Open-Meteo customer API, ''                   | `fetch_weather`                                                                         |
-| `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM`              | `resend`, '', `SiteLog <reports@sitelog.app>` | email (falls back to the `console` provider without a key)                              |
-| `APP_URL`                                                     | `https://app.sitelog.app`                     | links in emails                                                                         |
-| `WORKER_CONCURRENCY`, `WORKER_PORT`, `WORKER_ID`              | 4, 8080, hostname-pid                         | runner + health server                                                                  |
-| `JOB_TIMEOUT_MS`, `POLL_INTERVAL_MS`, `SWEEP_INTERVAL_MS`     | 300000, 5000, 60000                           | per-job timeout (at most 9 min), poll fallback, timeout sweep                           |
-| `SUPABASE_DB_LISTEN_URL`                                      | = `SUPABASE_DB_URL`                           | session-mode connection for LISTEN jobs (not port 6543)                                 |
-| `AUDIO_RETENTION_DAYS`                                        | 730                                           | `retention_cleanup`                                                                     |
-| `SENTRY_DSN`, `LOG_LEVEL`, `NODE_ENV`                         | '', `info`, `development`                     | monitoring, JSON logs                                                                   |
-| `FFMPEG_PATH`                                                 | ''                                            | ffmpeg binary override                                                                  |
-| `WORKER_DRY_RUN`                                              | false                                         | in-memory storage (tests)                                                               |
+| Variable                                                      | Default                                         | Used by                                                                                 |
+| ------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `SUPABASE_DB_URL`                                             | required                                        | job loop + repository (`postgres` client, service role)                                 |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                   | ''                                              | Storage buckets `audio`, `photos`, `pdfs`, `exports`, `logos`                           |
+| `WA_PHONE_NUMBER_ID`, `WA_ACCESS_TOKEN`, `WA_GRAPH_VERSION`   | '', '', `v21.0`                                 | WhatsApp Cloud API (send, media)                                                        |
+| `TRANSCRIBE_PROVIDER`, `DEEPGRAM_API_KEY`, `TRANSCRIBE_MODEL` | `deepgram`, '', '' (nova-3 / whisper-1)         | `transcribe_upload` (§10.2, W1-11); keyless outside production: the fixtures/voice fake |
+| `OPENAI_API_KEY`                                              | ''                                              | `TRANSCRIBE_PROVIDER=openai`; the WhatsApp voice notes (whisper-1) until step 22        |
+| `ANTHROPIC_API_KEY`, `CLAUDE_MODEL`, `CLAUDE_MODEL_FAST`      | '', `claude-sonnet-5-5`, = `CLAUDE_MODEL`       | extraction / corrections / answers / classification                                     |
+| `WEATHER_API_BASE`, `WEATHER_API_KEY`                         | Open-Meteo customer API, ''                     | `fetch_weather`                                                                         |
+| `EMAIL_PROVIDER`, `RESEND_API_KEY`, `EMAIL_FROM`              | `resend`, '', `TalkOlog <reports@talkolog.com>` | email (falls back to the `console` provider without a key)                              |
+| `APP_URL`                                                     | `https://app.talkolog.com`                      | links in emails                                                                         |
+| `WORKER_CONCURRENCY`, `WORKER_PORT`, `WORKER_ID`              | 4, 8080, hostname-pid                           | runner + health server                                                                  |
+| `JOB_TIMEOUT_MS`, `POLL_INTERVAL_MS`, `SWEEP_INTERVAL_MS`     | 300000, 5000, 60000                             | per-job timeout (at most 9 min), poll fallback, timeout sweep                           |
+| `SUPABASE_DB_LISTEN_URL`                                      | = `SUPABASE_DB_URL`                             | session-mode connection for LISTEN jobs (not port 6543)                                 |
+| `AUDIO_RETENTION_DAYS`                                        | 730                                             | `retention_cleanup`                                                                     |
+| `SENTRY_DSN`, `LOG_LEVEL`, `NODE_ENV`                         | '', `info`, `development`                       | monitoring, JSON logs                                                                   |
+| `FFMPEG_PATH`                                                 | ''                                              | ffmpeg binary override                                                                  |
+| `WORKER_DRY_RUN`                                              | false                                           | in-memory storage (tests)                                                               |
 
 Secrets that are only needed by some jobs default to empty so the worker boots in a partial
 environment; the job that needs a missing secret fails with a clear message (and retries).

@@ -57,7 +57,7 @@ import type {
 } from '@sitelog/shared';
 
 /**
- * Typed repository over the SiteLog schema (supabase/migrations). The worker uses the service
+ * Typed repository over the TalkOlog schema (supabase/migrations). The worker uses the service
  * role connection string and the SQL functions of 20261011000005_rpcs.sql for every queue,
  * audit and denormalisation operation. Row types come from @sitelog/shared (`Tables<'…'>`).
  *
@@ -429,7 +429,7 @@ export interface DigestStats {
   filed: number;
   onTime: number;
   /**
-   * W3-17 (M8): the site-days SiteLog called a reporter about this week and those filed by the
+   * W3-17 (M8): the site-days TalkOlog called a reporter about this week and those filed by the
    * reporter's yes on such a call (`outbound_call_share()`); absent when none was called.
    */
   outboundCalls?: { callDays: number; filedByCall: number };
@@ -959,7 +959,7 @@ export interface Db {
   /** W2-14: the push service answered 404/410: revoked `gone`, audited (push_subscription_gone()). */
   pushSubscriptionGone(id: string, status: number): Promise<boolean>;
   /**
-   * W2-15: when this phone last wrote to SiteLog on WhatsApp (the newest inbound `whatsapp`
+   * W2-15: when this phone last wrote to TalkOlog on WhatsApp (the newest inbound `whatsapp`
    * message), the start of its 24-hour window; null when never.
    */
   /**

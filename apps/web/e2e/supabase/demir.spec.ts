@@ -104,10 +104,10 @@ test(
 );
 
 // W4-10 (spec §19 Q236): a TR org is billed `manual` until Q8; its Billing reads in Turkish with
-// no Checkout and no portal, "SiteLog invoices you directly", no price until Q9 (the seed's org
+// no Checkout and no portal, "TalkOlog invoices you directly", no price until Q9 (the seed's org
 // as create_org() makes it), and its sites with Pause. No api-billing call is made.
 test(
-  'Demir Yapı A.Ş.: Billing in Turkish, invoiced by SiteLog, no Checkout',
+  'Demir Yapı A.Ş.: Billing in Turkish, invoiced by TalkOlog, no Checkout',
   { tag: ['@m11', '@F23'] },
   async ({ page }) => {
     await pinSeedClock(page);
@@ -122,7 +122,7 @@ test(
       .click();
     await expect(page.getByRole('heading', { level: 1, name: 'Faturalandırma' })).toBeVisible();
     await expect(page.getByTestId('manual-billing')).toContainText(
-      'SiteLog sizi doğrudan faturalandırır',
+      'TalkOlog sizi doğrudan faturalandırır',
     );
     await expect(page.getByTestId('no-price')).toBeVisible();
     await expect(page.getByTestId('start-subscription')).toHaveCount(0);

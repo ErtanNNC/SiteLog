@@ -20,7 +20,7 @@ type Contact = OrglessData['contacts'][number];
 
 /**
  * /ops (spec §19 Q44, W1-16): the unknown contacts no organisation sees (an SMS on a sender every
- * org of the pack shares, from a number with no history in exactly one of them). SiteLog staff
+ * org of the pack shares, from a number with no history in exactly one of them). TalkOlog staff
  * give one to its organisation, which then links it with consent, or ignore it. Times in UTC.
  */
 export function OrglessContacts() {

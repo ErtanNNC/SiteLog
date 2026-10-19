@@ -308,7 +308,7 @@ describe('ReportsPage PDF export (signed URLs)', () => {
     await userEvent.click(screen.getByTestId('export-zip'));
     await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
     const anchor = click.mock.instances[0] as unknown as HTMLAnchorElement;
-    expect(anchor.download).toBe('SiteLog_reports_2026-10-09.zip');
+    expect(anchor.download).toBe('TalkOlog_reports_2026-10-09.zip');
     expect(source.calls).toHaveLength(1);
     expect(source.calls[0]).toEqual({ reportIds: [expect.any(String)] });
     expect(fetchMock).toHaveBeenCalledWith(

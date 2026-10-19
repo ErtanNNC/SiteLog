@@ -331,13 +331,13 @@ describe('notify job (§10.1, D48)', () => {
     const payload = {
       reporterId: h.marco.id,
       key: 'filed' as const,
-      vars: { report_no: 'RL-2041-0188', pdf_link: 'https://go.sitelog.app/p/x' },
+      vars: { report_no: 'RL-2041-0188', pdf_link: 'https://go.talkolog.com/p/x' },
       dedupeKey: 'notify:filed:r1',
     };
     await h.runJob('notify', payload);
     await h.runJob('notify', payload);
     expect(h.sms.map((s) => s.body)).toEqual([
-      'Filed: Daily Report RL-2041-0188. PDF: https://go.sitelog.app/p/x',
+      'Filed: Daily Report RL-2041-0188. PDF: https://go.talkolog.com/p/x',
     ]);
     const [m] = [...h.db.data.messages.values()];
     expect(m).toMatchObject({ copy_key: 'filed', reporter_id: h.marco.id, status: 'delivered' });
@@ -358,7 +358,7 @@ describe('notify job (§10.1, D48)', () => {
     await h.runJob('notify', {
       reporterId: h.marco.id,
       key: 'filed',
-      vars: { report_no: 'RL-2041-0188', pdf_link: 'https://go.sitelog.app/p/x' },
+      vars: { report_no: 'RL-2041-0188', pdf_link: 'https://go.talkolog.com/p/x' },
       dedupeKey: 'notify:filed:r1',
     });
     expect(h.sms).toEqual([]);
@@ -390,7 +390,7 @@ describe('notify job (§10.1, D48)', () => {
   const notifyPayload = (h: ReturnType<typeof createHarness>) => ({
     reporterId: h.marco.id,
     key: 'filed' as const,
-    vars: { report_no: 'RL-2041-0188', pdf_link: 'https://go.sitelog.app/p/x' },
+    vars: { report_no: 'RL-2041-0188', pdf_link: 'https://go.talkolog.com/p/x' },
     dedupeKey: 'notify:filed:r1',
   });
 

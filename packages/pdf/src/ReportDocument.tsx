@@ -38,7 +38,7 @@ export function letterheadLine(org: ReportPdfInput['org'], copy: PdfCopy): strin
   return parts.length ? parts.join(' · ') : null;
 }
 
-/** How the report reached SiteLog: typed in the panel, a v1.2 channel, or v1.0 WhatsApp (null). */
+/** How the report reached TalkOlog: typed in the panel, a v1.2 channel, or v1.0 WhatsApp (null). */
 export function sourceChannel(input: ReportPdfInput): SourceChannel {
   if (input.enteredBy != null) return 'office';
   return input.report.channel ?? 'whatsapp_legacy';
@@ -137,8 +137,8 @@ export function ReportDocument({ input }: { input: ReportPdfInput }) {
       title={`${report.reportNo} v${report.version} — ${site.name}`}
       author={org.name}
       subject={copy.title}
-      creator="SiteLog"
-      producer="SiteLog"
+      creator="TalkOlog"
+      producer="TalkOlog"
     >
       <Page size={pageSize(input.settings.paper)} style={styles.page}>
         <RunningHeader

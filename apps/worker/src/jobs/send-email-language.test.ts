@@ -87,7 +87,7 @@ describe('office emails in the reader’s language (W4-09, Q239)', () => {
     expect(tr.subject).toBe('Riverside Lofts — rapor yok · Cum 9 Eki');
     expect(tr.text).toContain('Marco 2 hatırlatmaya yanıt vermedi.');
     expect(tr.html).toContain('Eksik');
-    expect(tr.html).toContain('SiteLog’da aç');
+    expect(tr.html).toContain('TalkOlog’da aç');
     expect(tr.idempotencyKey).toBe(`email:missing:${siteDayId}:tr`);
 
     // A retry sends nothing twice, in either language.
@@ -131,7 +131,7 @@ describe('office emails in the reader’s language (W4-09, Q239)', () => {
       ['tr', ['lena@kestrel.example', 'sam@kestrel.example']],
     ]);
     expect(digest.messages[1]!.rendered.subject).toBe(
-      'SiteLog haftalık · Pzt 5 Eki – Paz 11 Eki · %0 zamanında',
+      'TalkOlog haftalık · Pzt 5 Eki – Paz 11 Eki · %0 zamanında',
     );
 
     // The scheduled digest job sends the same two.
@@ -144,8 +144,8 @@ describe('office emails in the reader’s language (W4-09, Q239)', () => {
       job('weekly_digest:x'),
     );
     expect(h.email.sent.map((m) => m.subject)).toEqual([
-      'SiteLog weekly · Mon Oct 5 – Sun Oct 11 · 0% on time',
-      'SiteLog haftalık · Pzt 5 Eki – Paz 11 Eki · %0 zamanında',
+      'TalkOlog weekly · Mon Oct 5 – Sun Oct 11 · 0% on time',
+      'TalkOlog haftalık · Pzt 5 Eki – Paz 11 Eki · %0 zamanında',
     ]);
   });
 

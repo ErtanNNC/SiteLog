@@ -92,7 +92,7 @@ export interface InviteReporterInput {
   role: ReporterRole;
   siteIds: string[];
   languages: string[];
-  /** The language SiteLog uses with them (W4-03): one of the pack's field locales. */
+  /** The language TalkOlog uses with them (W4-03): one of the pack's field locales. */
   locale?: ReporterLocale;
   /** Preferred channel (F3, P10 invite dialog); default `link`. */
   contactPref?: ContactPref;
@@ -466,7 +466,7 @@ export interface DataSource {
   /** Live updates of the Demo phone's texts and emails (its own channel, not the org-wide one). */
   subscribeDemoPhone(onChange: () => void): () => void;
 
-  // ─── Platform ops (/ops, §15): SiteLog operators only, never an org role ───
+  // ─── Platform ops (/ops, §15): TalkOlog operators only, never an org role ───
   /** True when the signed-in user is in `platform_admins`; false (not an error) otherwise. */
   isPlatformAdmin(): Promise<boolean>;
   /** Queue health, dead jobs and cost outliers across every org (RPCs refuse non-operators). */

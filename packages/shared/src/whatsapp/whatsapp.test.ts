@@ -33,10 +33,10 @@ function message(over: Partial<OutboundMessage> = {}): OutboundMessage {
   return {
     to: assertE164('+905321234567'),
     reporterId: 'r-emre',
-    body: 'Kuzey Blok bugünkü rapor: https://go.sitelog.app/r/AB12CD',
+    body: 'Kuzey Blok bugünkü rapor: https://go.talkolog.com/r/AB12CD',
     key: 'daily_link',
     language: 'tr',
-    vars: { site: 'Kuzey Blok', link: 'https://go.sitelog.app/r/AB12CD' },
+    vars: { site: 'Kuzey Blok', link: 'https://go.talkolog.com/r/AB12CD' },
     pack: TR_WA,
     ...over,
   };
@@ -56,12 +56,12 @@ describe('WhatsApp templates (W2-15, §9.2)', () => {
   it('numbers a key’s §9.2 variables in order; Meta’s start and end rule', () => {
     const tr = whatsappTemplate('daily_link', 'tr', whatsappRenderOptions(TR_WA));
     expect(tr).toEqual({
-      body: 'SiteLog: {{1}} bugünkü rapor: {{2}} - SiteLog',
+      body: 'TalkOlog: {{1}} bugünkü rapor: {{2}} - TalkOlog',
       variables: ['site', 'link'],
     });
     const en = whatsappTemplate('filed', 'en', whatsappRenderOptions(TR_WA));
     expect(en).toEqual({
-      body: 'Filed: Daily Report {{1}}. PDF: {{2}} - SiteLog',
+      body: 'Filed: Daily Report {{1}}. PDF: {{2}} - TalkOlog',
       variables: ['report_no', 'pdf_link'],
     });
     // The pack's voice number decides the "or call {number}" clause.
@@ -125,7 +125,7 @@ describe('Twilio WhatsApp transport (W2-15)', () => {
     expect(form.get('ContentSid')).toBe(SID);
     expect(JSON.parse(form.get('ContentVariables')!)).toEqual({
       '1': 'Kuzey Blok',
-      '2': 'https://go.sitelog.app/r/AB12CD',
+      '2': 'https://go.talkolog.com/r/AB12CD',
     });
     expect(form.get('Body')).toBeNull();
     expect(form.get('StatusCallback')).toBe(opts.statusCallback);

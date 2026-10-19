@@ -79,7 +79,7 @@ async function draftReady(key: string): Promise<JobPayloads['notify']> {
   return {
     reporterId: MARCO,
     key: 'draft_ready',
-    vars: { link: 'https://go.sitelog.app/r/ABCDEF' },
+    vars: { link: 'https://go.talkolog.com/r/ABCDEF' },
     dedupeKey: `notify:draft_ready:${key}`,
   };
 }
@@ -153,7 +153,7 @@ describe('web push (W2-14)', () => {
       phone_e164: null,
     });
     // The demo org's console row keeps the whole link (the Demo phone opens it).
-    expect(row!.body).toContain('https://go.sitelog.app/r/ABCDEF');
+    expect(row!.body).toContain('https://go.talkolog.com/r/ABCDEF');
     expect(service.calls).toEqual([]);
     // What the Demo phone reads (SupabaseSource.getDemoPhoneThread).
     const thread = await pg.q<{ channel: string }>(

@@ -119,7 +119,7 @@ describe('source record and sign-off (§12 page 2, driven by channel and confirm
 
   it('words a web-recorder report as §12 does', () => {
     expect(en.sourceRecord(base, confirmed)).toBe(
-      'Compiled from a voice note recorded via the site manager’s personal link (2 min 48 s, Spanish and English) and 2 photos received at 17:38. Confirmed by the site manager on the recorder at 17:43. Audio, transcript and version history are retained in SiteLog.',
+      'Compiled from a voice note recorded via the site manager’s personal link (2 min 48 s, Spanish and English) and 2 photos received at 17:38. Confirmed by the site manager on the recorder at 17:43. Audio, transcript and version history are retained in TalkOlog.',
     );
     expect(en.signoff.confirmed('web', '17:43')).toBe('Confirmed on the recorder · 17:43');
   });
@@ -134,7 +134,7 @@ describe('source record and sign-off (§12 page 2, driven by channel and confirm
       receivedAt: '18:41',
     };
     expect(en.sourceRecord(call, { ...confirmed, via: 'voice', confirmedAt: '18:46' })).toBe(
-      'Compiled from a recorded phone call with the SiteLog assistant (4 min 12 s, Turkish) at 18:41. Confirmed by the site manager by voice on the call at 18:46. Audio, transcript and version history are retained in SiteLog.',
+      'Compiled from a recorded phone call with the TalkOlog assistant (4 min 12 s, Turkish) at 18:41. Confirmed by the site manager by voice on the call at 18:46. Audio, transcript and version history are retained in TalkOlog.',
     );
     expect(en.signoff.confirmed('voice', '18:46')).toBe('Confirmed by voice on the call · 18:46');
     expect(pdfCopy('tr').signoff.confirmed('voice', '18:46')).toBe(
@@ -170,7 +170,7 @@ describe('source record and sign-off (§12 page 2, driven by channel and confirm
   it('words a report typed in the panel', () => {
     const office = { ...base, channel: 'office' as const, enteredBy: 'Lena Ortiz', audioCount: 0 };
     expect(en.sourceRecord(office, { ...confirmed, via: 'office', confirmedAt: null })).toBe(
-      'Entered in SiteLog by Lena Ortiz. Filed at 17:43. 2 photos attached. Version history is retained in SiteLog.',
+      'Entered in TalkOlog by Lena Ortiz. Filed at 17:43. 2 photos attached. Version history is retained in TalkOlog.',
     );
   });
 
@@ -211,10 +211,10 @@ describe('manpower footnotes (answers and edits)', () => {
 
   it('words an office edit without a change note', () => {
     expect(PDF_COPY.en.editNote(3, 'office_user', null, '09:12')).toBe(
-      'Edited in SiteLog by the office at 09:12 (v3).',
+      'Edited in TalkOlog by the office at 09:12 (v3).',
     );
     expect(PDF_COPY.tr.editNote(3, 'office_user', null, '09:12')).toBe(
-      'Ofis tarafından SiteLog’da düzenlendi (saat 09:12, v3).',
+      'Ofis tarafından TalkOlog’da düzenlendi (saat 09:12, v3).',
     );
   });
 });

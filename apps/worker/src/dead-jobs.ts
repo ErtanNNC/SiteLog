@@ -128,7 +128,7 @@ export async function deadJobSubject(ctx: Ctx, job: JobRow): Promise<DeadJobSubj
 /** The office's panel notice for a dead job, or null when the job faces no reporter. */
 export function deadJobNotice(job: JobRow, s: DeadJobSubject): DeadJobNotice | null {
   const type = job.type as JobTypeKey;
-  const tries = `SiteLog tried ${JOB_MAX_ATTEMPTS} times over about three hours and has stopped`;
+  const tries = `TalkOlog tried ${JOB_MAX_ATTEMPTS} times over about three hours and has stopped`;
   if (MESSAGE_JOB_TYPES.includes(type) && s.reporter) {
     const inbound = type === 'sms_inbound' || type === 'sms_keyword' || type === 'inbound_message';
     return {
@@ -136,7 +136,7 @@ export function deadJobNotice(job: JobRow, s: DeadJobSubject): DeadJobNotice | n
       title: inbound
         ? `${s.reporter.name}: a message from them was not handled`
         : `${s.reporter.name}: a message to them was not sent`,
-      body: `${tries} (${type}). They may be waiting for an answer; contact them directly if it matters today. SiteLog has been alerted.`,
+      body: `${tries} (${type}). They may be waiting for an answer; contact them directly if it matters today. TalkOlog has been alerted.`,
       targetPath: '/team',
       data: noticeData(inbound ? 'message_not_handled' : 'message_not_sent', {
         name: s.reporter.name,
@@ -149,7 +149,7 @@ export function deadJobNotice(job: JobRow, s: DeadJobSubject): DeadJobNotice | n
     return {
       kind: 'processing_failed',
       title: `${s.report.reportNo}: processing stopped`,
-      body: `${tries} (${type}). The reporter may be waiting for their draft. SiteLog has been alerted; open the report to check its sources.`,
+      body: `${tries} (${type}). The reporter may be waiting for their draft. TalkOlog has been alerted; open the report to check its sources.`,
       targetPath: `/reports/${s.report.id}`,
       data: noticeData('processing_failed', {
         reportNo: s.report.reportNo,

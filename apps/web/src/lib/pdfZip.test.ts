@@ -99,9 +99,9 @@ describe('saveBlob', () => {
       .spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => undefined);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:zip');
-    saveBlob(new Blob(['x']), 'SiteLog_reports_2026-10-09.zip');
+    saveBlob(new Blob(['x']), 'TalkOlog_reports_2026-10-09.zip');
     const anchor = click.mock.instances[0] as unknown as HTMLAnchorElement;
-    expect(anchor.download).toBe('SiteLog_reports_2026-10-09.zip');
+    expect(anchor.download).toBe('TalkOlog_reports_2026-10-09.zip');
     expect(anchor.href).toBe('blob:zip');
     expect(document.body.contains(anchor)).toBe(false);
   });

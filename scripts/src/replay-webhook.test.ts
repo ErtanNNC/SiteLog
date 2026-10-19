@@ -94,11 +94,11 @@ describe('replay-webhook Twilio mode (W1-08)', () => {
   it('fills the placeholders: E.164 sender, the pack sender, a fresh SID per replay', () => {
     const t = '{"a":"{{phone}}","b":"{{to}}","c":"{{sid}}","d":"{{message_sid}}"}';
     const one = JSON.parse(
-      substituteTwilio(t, { phone: '1 555 014 3378', to: 'SITELOG', sid: '' }),
+      substituteTwilio(t, { phone: '1 555 014 3378', to: 'TALKOLOG', sid: '' }),
     );
-    const two = JSON.parse(substituteTwilio(t, { phone: '15550143378', to: 'SITELOG', sid: '' }));
+    const two = JSON.parse(substituteTwilio(t, { phone: '15550143378', to: 'TALKOLOG', sid: '' }));
     expect(one.a).toBe('+15550143378');
-    expect(one.b).toBe('SITELOG');
+    expect(one.b).toBe('TALKOLOG');
     expect(one.c).toMatch(/^SM[0-9a-f]+$/);
     expect(one.c).not.toBe(two.c);
     expect(JSON.parse(substituteTwilio(t, { phone: '1', to: 'x', sid: 'SMgiven' })).d).toBe(
@@ -125,13 +125,13 @@ describe('replay-webhook Twilio mode (W1-08)', () => {
 
   it('reads the Twilio flags', () => {
     const args = parseArgs(
-      ['--sms-url', 'https://x/sms', '--token', 't', '--to', 'SITELOG', '--sid', 'SM9', 'f.json'],
+      ['--sms-url', 'https://x/sms', '--token', 't', '--to', 'TALKOLOG', '--sid', 'SM9', 'f.json'],
       {},
     );
     expect(args).toMatchObject({
       smsUrl: 'https://x/sms',
       token: 't',
-      to: 'SITELOG',
+      to: 'TALKOLOG',
       sid: 'SM9',
       files: ['f.json'],
     });

@@ -10,7 +10,7 @@ import { REPORT_EMAIL_COPY, type ReportEmailCopy } from './report-copy';
 import type { DigestStats } from '../db';
 
 /**
- * §13 email content. SiteLog-styled (tokens from §14), table layout for mail clients, text alternative
+ * §13 email content. TalkOlog-styled (tokens from §14), table layout for mail clients, text alternative
  * for every message, no emoji. Subjects follow `Daily report · {site short} · {Ddd Mon d} · {report_no}`.
  */
 
@@ -54,7 +54,7 @@ export function layout(opts: {
 <tr><td style="padding:20px 28px;border-bottom:2px solid ${T.asphalt}">
   <table role="presentation" cellspacing="0" cellpadding="0"><tr>
     <td style="width:28px;height:28px;background:${T.signal};border-radius:6px"></td>
-    <td style="padding-left:10px;font:800 18px/28px Archivo,Helvetica,Arial,sans-serif;letter-spacing:-0.01em">SiteLog</td>
+    <td style="padding-left:10px;font:800 18px/28px Archivo,Helvetica,Arial,sans-serif;letter-spacing:-0.01em">TalkOlog</td>
   </tr></table>
 </td></tr>
 <tr><td style="padding:24px 28px 8px 28px">
@@ -386,7 +386,7 @@ export function weeklyDigestEmail(i: WeeklyDigestInput): RenderedEmail {
   const unsignedItems = s.unsigned.map(
     (u) => `${u.reportNo} · ${u.siteName} · ${shortDate(u.date, lang)}`,
   );
-  // W3-17 (M8): only when SiteLog called a reporter this week.
+  // W3-17 (M8): only when TalkOlog called a reporter this week.
   const calls = s.outboundCalls;
   const callsLine = calls
     ? c.callsLine(
@@ -420,7 +420,7 @@ export function weeklyDigestEmail(i: WeeklyDigestInput): RenderedEmail {
     `${c.unsigned}:`,
     ...bullets(unsignedItems, c.allSigned),
     '',
-    `${c.openSiteLog}: ${i.url}`,
+    `${c.openTalkOlog}: ${i.url}`,
   ].join('\n');
   return {
     subject,
@@ -428,7 +428,7 @@ export function weeklyDigestEmail(i: WeeklyDigestInput): RenderedEmail {
       title: c.title,
       eyebrow: i.orgName,
       bodyHtml,
-      cta: { label: c.openSiteLog, url: i.url },
+      cta: { label: c.openTalkOlog, url: i.url },
       footerNote: REPORT_EMAIL_COPY[lang].footer,
     }),
     text,

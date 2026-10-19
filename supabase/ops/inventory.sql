@@ -1,4 +1,4 @@
--- SiteLog · read-only staging inventory (docs/GAP_ANALYSIS.md §4.1 stage 1, W1-01 step 0).
+-- TalkOlog · read-only staging inventory (docs/GAP_ANALYSIS.md §4.1 stage 1, W1-01 step 0).
 --
 -- Run by the Deploy workflow's `inventory` target (.github/workflows/deploy.yml):
 --   psql -X -q -A -t -F "<tab>" -v ON_ERROR_STOP=1 -f supabase/ops/inventory.sql

@@ -966,7 +966,7 @@ Deno.test(
       latenciesMs: [700, 800, 1900],
       bargeInMs: [240],
     };
-    const dialogLog = [{ t: 0.5, speaker: 'agent', text: 'SiteLog, hi Kevin.' }];
+    const dialogLog = [{ t: 0.5, speaker: 'agent', text: 'TalkOlog, hi Kevin.' }];
     const end = await h.tool('end_call', callId, token, {
       outcome: 'fallback_recording',
       dialogLog,

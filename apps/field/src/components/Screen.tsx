@@ -7,7 +7,7 @@ import { Header } from './Header';
 /**
  * One field screen (§14.6: one decision per screen): the top bar, the date line and the content,
  * in a single column that never scrolls sideways at 390 px. `title` names the page in the browser
- * tab and the app switcher ("Today · SiteLog"). `header` replaces the default top bar (Today's site
+ * tab and the app switcher ("Today · TalkOlog"). `header` replaces the default top bar (Today's site
  * switcher, Recording's status bar); `dark` is the Recording screen (Chalk on Asphalt, Field-04).
  *
  * When a screen mounts, focus moves to its `h1`: the control that was focused (Stop & send, the

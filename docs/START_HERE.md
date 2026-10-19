@@ -32,7 +32,7 @@ The full design canvas (all 32 artboards incl. hours, weather, team, settings, b
 - [ ] For the demo deploy (W1-19): a free **Supabase** project and a free **Netlify / Vercel / Cloudflare Pages** account.
 
 **Start now because of lead time (spec §5.2)**
-- [ ] **İletimerkezi** account → subscription approval via e-Devlet → request the sender title `SITELOG` (1–2 business days). 100 test SMS included.
+- [ ] **İletimerkezi** account → subscription approval via e-Devlet → request the sender title `TALKOLOG` (1–2 business days). 100 test SMS included.
 - [ ] **Twilio**, when you're ready to spend ~$20: upgrade → toll-free number → toll-free verification (days to weeks). The trial can't send our custom texts.
 
 **Week 2 (voice)**

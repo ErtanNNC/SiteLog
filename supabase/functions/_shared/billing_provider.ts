@@ -4,8 +4,8 @@
  *   - `stripe`: Checkout (the org's price, the rest of its 14-day trial), the customer portal,
  *     the quantity sync, invoices and the payment method, on a structural Stripe client so tests
  *     need no SDK and no key;
- *   - `manual`: SiteLog invoices the org directly (a TR org until Q8 names a provider): no
- *     Checkout, no portal, nothing to sync, no invoices here; SiteLog staff set its status on /ops.
+ *   - `manual`: TalkOlog invoices the org directly (a TR org until Q8 names a provider): no
+ *     Checkout, no portal, nothing to sync, no invoices here; TalkOlog staff set its status on /ops.
  * A new provider (iyzico, PayTR, … once Q8 is decided) is one more implementation of this
  * interface and one more `billing_provider` value.
  */
@@ -91,20 +91,20 @@ const NO_PROVIDER_STATUS: ProviderStatus = {
   paymentMethod: null,
 };
 
-/** §19 Q236: SiteLog invoices the org directly. 409 `manual_billing` for the hosted pages. */
+/** §19 Q236: TalkOlog invoices the org directly. 409 `manual_billing` for the hosted pages. */
 export const manualProvider: BillingProvider = {
   name: 'manual',
   hostedPages: false,
   checkout() {
     return Promise.reject(
-      new HttpError(409, 'SiteLog invoices this organisation directly', {
+      new HttpError(409, 'TalkOlog invoices this organisation directly', {
         code: 'manual_billing',
       }),
     );
   },
   portal() {
     return Promise.reject(
-      new HttpError(409, 'SiteLog invoices this organisation directly', {
+      new HttpError(409, 'TalkOlog invoices this organisation directly', {
         code: 'manual_billing',
       }),
     );
@@ -293,7 +293,7 @@ export function stripeProvider(deps: StripeProviderDeps): BillingProvider {
       }
       const price = billingPrice(org);
       if (!price) {
-        throw new HttpError(409, 'SiteLog has not set a price for this organisation yet', {
+        throw new HttpError(409, 'TalkOlog has not set a price for this organisation yet', {
           code: 'no_price',
         });
       }
@@ -308,7 +308,7 @@ export function stripeProvider(deps: StripeProviderDeps): BillingProvider {
       ) {
         throw new HttpError(
           409,
-          'This organisation has its own price; SiteLog sets up its subscription',
+          'This organisation has its own price; TalkOlog sets up its subscription',
           { code: 'price_mismatch' },
         );
       }

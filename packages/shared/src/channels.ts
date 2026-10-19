@@ -25,13 +25,13 @@ import type { E164 } from './format.ts';
  */
 
 /**
- * How a report reached SiteLog (§4.5): `web`, `voice` or `sms`. It mirrors the Postgres enum
+ * How a report reached TalkOlog (§4.5): `web`, `voice` or `sms`. It mirrors the Postgres enum
  * `field_channel` (§6.2, `enums.ts`), which also has `office` for reports typed in the panel (D13).
  */
 export type { FieldChannel } from './enums.ts';
 
 /**
- * How SiteLog reaches a person (§4.5, enum `message_channel`): `sms`, `whatsapp`, `push`. Push can
+ * How TalkOlog reaches a person (§4.5, enum `message_channel`): `sms`, `whatsapp`, `push`. Push can
  * never be inbound, so it is a separate type from `FieldChannel`.
  */
 export type { MessageChannel } from './enums.ts';
@@ -303,7 +303,7 @@ export class MessageSendError extends Error {
   }
 }
 
-/** Why SiteLog places an outbound call (§4.5, `calls.purpose`). */
+/** Why TalkOlog places an outbound call (§4.5, `calls.purpose`). */
 export type CallPurpose = 'daily_report' | 'reminder' | 'callback';
 
 /**
@@ -367,7 +367,7 @@ export const SMS_DRIVERS = ['twilio', 'iletimerkezi', 'console'] as const;
 export type SmsDriver = (typeof SMS_DRIVERS)[number];
 
 export interface SmsSendOptions {
-  /** The pack's sender id (`countries.sms_sender_id`): TR `SITELOG`, US the toll-free number. */
+  /** The pack's sender id (`countries.sms_sender_id`): TR `TALKOLOG`, US the toll-free number. */
   sender?: string;
   /** Delivery-status webhook (Twilio). */
   statusCallback?: string;
@@ -379,7 +379,7 @@ export interface SmsSendOptions {
 }
 
 /**
- * One SMS driver. Whether replies reach SiteLog is the pack's `two_way_sms`, never the driver's:
+ * One SMS driver. Whether replies reach TalkOlog is the pack's `two_way_sms`, never the driver's:
  * `console` follows the pack too, so the Demo phone takes replies only on two-way packs.
  */
 export interface SmsTransport {

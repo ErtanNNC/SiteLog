@@ -15,7 +15,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 export const copy = {
   app: {
-    name: 'SiteLog',
+    name: 'TalkOlog',
     tagline: 'Talk. It’s logged.',
     skipToContent: 'Skip to content',
   },
@@ -114,19 +114,19 @@ export const copy = {
         processing_delayed: { title: '{{reportNo}} is taking longer than usual' },
         processing_failed: {
           title: '{{reportNo}}: processing stopped',
-          body: 'SiteLog tried {{tries}} times over about three hours and has stopped ({{job}}). The reporter may be waiting for their draft. SiteLog has been alerted; open the report to check its sources.',
+          body: 'TalkOlog tried {{tries}} times over about three hours and has stopped ({{job}}). The reporter may be waiting for their draft. TalkOlog has been alerted; open the report to check its sources.',
         },
         message_not_sent: {
           title: '{{name}}: a message to them was not sent',
-          body: 'SiteLog tried {{tries}} times over about three hours and has stopped ({{job}}). They may be waiting for an answer; contact them directly if it matters today. SiteLog has been alerted.',
+          body: 'TalkOlog tried {{tries}} times over about three hours and has stopped ({{job}}). They may be waiting for an answer; contact them directly if it matters today. TalkOlog has been alerted.',
         },
         message_not_handled: {
           title: '{{name}}: a message from them was not handled',
-          body: 'SiteLog tried {{tries}} times over about three hours and has stopped ({{job}}). They may be waiting for an answer; contact them directly if it matters today. SiteLog has been alerted.',
+          body: 'TalkOlog tried {{tries}} times over about three hours and has stopped ({{job}}). They may be waiting for an answer; contact them directly if it matters today. TalkOlog has been alerted.',
         },
         message_opted_out: {
           title: '{{name}}: a message to them was not sent',
-          body: 'Their number is on the SMS provider’s opt-out list, so SiteLog texts them nothing until they reply START.',
+          body: 'Their number is on the SMS provider’s opt-out list, so TalkOlog texts them nothing until they reply START.',
         },
         message_refused: {
           title: '{{name}}: a message to them was not sent',
@@ -134,12 +134,12 @@ export const copy = {
         },
         message_channels_failed: {
           title: '{{name}}: a message to them was not sent',
-          body: 'SiteLog tried every message channel it has for them ({{channels}}) and none could deliver the message ({{error}}). Check their number and channels in Team & numbers.',
+          body: 'TalkOlog tried every message channel it has for them ({{channels}}) and none could deliver the message ({{error}}). Check their number and channels in Team & numbers.',
         },
         message_account_fault: {
           title: '{{name}}: a text to them failed at the SMS provider',
           titleUnnamed: 'A text failed at the SMS provider',
-          body: 'Texts are failing for this account ({{error}}). The SMS provider accepted the text and then refused it for the account or the sender, not for the reporter’s number. SiteLog tries their other message channels, if they have any. Other texts that fail this way in the next hour are not notified again.',
+          body: 'Texts are failing for this account ({{error}}). The SMS provider accepted the text and then refused it for the account or the sender, not for the reporter’s number. TalkOlog tries their other message channels, if they have any. Other texts that fail this way in the next hour are not notified again.',
         },
         message_no_sender: {
           title: '{{name}}: a message to them was not sent',
@@ -148,15 +148,15 @@ export const copy = {
         welcome_undeliverable: { title: '{{name}}: the welcome text could not be delivered' },
         welcome_provider_fault: {
           title: '{{name}}: the welcome text failed at the SMS provider',
-          body: 'Texts are failing for this account ({{error}}). SiteLog has been alerted; the reporter was not marked as invited. Re-send the welcome from Team & numbers once the provider is back.',
+          body: 'Texts are failing for this account ({{error}}). TalkOlog has been alerted; the reporter was not marked as invited. Re-send the welcome from Team & numbers once the provider is back.',
         },
         welcome_not_sent: {
           title: '{{name}}: the welcome text was not sent',
           bodies: {
             opted_out:
-              'They opted out of texts, so SiteLog texts them nothing until they opt in again (START, on packs that take replies).',
+              'They opted out of texts, so TalkOlog texts them nothing until they opt in again (START, on packs that take replies).',
             no_consent:
-              'They declined texts when asked for consent, so SiteLog texts them nothing.',
+              'They declined texts when asked for consent, so TalkOlog texts them nothing.',
             no_channel:
               'No message channel of their country can carry the welcome and its link. Contact them another way.',
             console_real_org:
@@ -174,11 +174,11 @@ export const copy = {
         },
         reporter_opted_out: {
           title: '{{name}} opted out of texts',
-          body: '{{phone}} is on the SMS provider’s opt-out list (they replied STOP to this sender before), so SiteLog texts them nothing until they reply START. Call them if you need their reports.',
+          body: '{{phone}} is on the SMS provider’s opt-out list (they replied STOP to this sender before), so TalkOlog texts them nothing until they reply START. Call them if you need their reports.',
         },
         reporter_stop: {
           title: '{{name}} opted out of texts (STOP)',
-          body: '{{phone}} replied STOP, so SiteLog texts them nothing until they reply START. Call them if you need their reports.',
+          body: '{{phone}} replied STOP, so TalkOlog texts them nothing until they reply START. Call them if you need their reports.',
         },
         unknown_contact: { title: 'Unknown number tried to report' },
         reporter_consent_revoked: {
@@ -186,11 +186,11 @@ export const copy = {
             recording: '{{name}} turned off consent to the recording of their reports',
             data_processing: '{{name}} turned off consent to the processing of their reports',
           },
-          body: 'They turned it off in Settings on their phone, so SiteLog takes no reports from them until they consent again on their phone. Contact them if that is unexpected.',
+          body: 'They turned it off in Settings on their phone, so TalkOlog takes no reports from them until they consent again on their phone. Contact them if that is unexpected.',
         },
         device_verify_locked: {
           title: '{{name}}’s phone check is locked for an hour',
-          body: 'Someone entered 5 wrong codes on their link within an hour, so SiteLog refuses new codes for an hour. If it was not them, their link may be in the wrong hands: contact them.',
+          body: 'Someone entered 5 wrong codes on their link within an hour, so TalkOlog refuses new codes for an hour. If it was not them, their link may be in the wrong hands: contact them.',
         },
         reporter_wrong_site: {
           title: '{{name}} says the site is wrong',
@@ -215,9 +215,9 @@ export const copy = {
       },
     },
     footer: {
-      /** §11.2: the status line, then the org's SiteLog number(s) when it has one. */
+      /** §11.2: the status line, then the org's TalkOlog number(s) when it has one. */
       agentReady: 'Agent ready · texts & calls',
-      sitelogNumbers: 'SiteLog numbers',
+      sitelogNumbers: 'TalkOlog numbers',
       profile: 'Profile',
       signOut: 'Sign out',
       userMenu: 'Account menu',
@@ -462,7 +462,7 @@ export const copy = {
     speedValue: '{{rate}}×',
     /** §11.3 (W3-05): a call's two lanes and the speaker filter. */
     laneReporter: 'Site manager',
-    laneAgent: 'SiteLog assistant',
+    laneAgent: 'TalkOlog assistant',
     speakerFilter: 'Speaker',
     filter: {
       both: 'Both',
@@ -549,10 +549,10 @@ export const copy = {
   /** The error boundary around the whole panel (`src/app/AppErrorBoundary.tsx`). */
   errorBoundary: {
     title: 'Something went wrong',
-    body: 'SiteLog hit an unexpected error. Try again, or sign out and sign back in.',
+    body: 'TalkOlog hit an unexpected error. Try again, or sign out and sign back in.',
     retry: 'Try again',
     signOut: 'Sign out',
-    reported: 'The SiteLog team has been told about it.',
+    reported: 'The TalkOlog team has been told about it.',
     errorId: 'Error ID {{id}}',
   },
 
@@ -561,7 +561,7 @@ export const copy = {
    * per reporter, and the emails of the console email provider.
    */
   devPhone: {
-    subtitle: 'Every text SiteLog sends through the console driver, one thread per reporter.',
+    subtitle: 'Every text TalkOlog sends through the console driver, one thread per reporter.',
     tabsLabel: 'Demo phone views',
     tabTexts: 'Texts',
     tabEmail: 'Email',
@@ -573,7 +573,7 @@ export const copy = {
     back: 'All reporters',
     threadLabel: 'Texts with {{name}}',
     threadEmpty: 'No texts with {{name}} yet.',
-    fromSiteLog: 'SiteLog',
+    fromTalkOlog: 'TalkOlog',
     opensInNewTab: '(opens in a new tab)',
     copyKey: 'Message',
     /** W2-14: the channel of each message (a push to the installed app, or a text). */
@@ -585,15 +585,15 @@ export const copy = {
       /** W3-17: a demo org's outbound call rings here (console telephony, spec §19 Q132). */
       call: 'Call',
     },
-    /** W3-17: what an outbound call of SiteLog's did on the Demo phone. */
+    /** W3-17: what an outbound call of TalkOlog's did on the Demo phone. */
     call: {
-      ringing: 'SiteLog is calling: ringing',
-      answered: 'On a call with SiteLog',
-      ended: 'Call with SiteLog ended',
-      missed: 'Missed call from SiteLog',
-      busy: 'Call from SiteLog: busy',
-      voicemail: 'Call from SiteLog reached voicemail: no message left',
-      failed: 'Call from SiteLog could not be placed',
+      ringing: 'TalkOlog is calling: ringing',
+      answered: 'On a call with TalkOlog',
+      ended: 'Call with TalkOlog ended',
+      missed: 'Missed call from TalkOlog',
+      busy: 'Call from TalkOlog: busy',
+      voicemail: 'Call from TalkOlog reached voicemail: no message left',
+      failed: 'Call from TalkOlog could not be placed',
     },
     callPurpose: {
       reminder: 'Reminder call',
@@ -618,9 +618,9 @@ export const copy = {
     send: 'Send',
     replyFailed: 'The reply was not sent.',
     oneWay:
-      'Replies are off: the {{code}} country pack has one-way SMS, so a reporter cannot text SiteLog.',
+      'Replies are off: the {{code}} country pack has one-way SMS, so a reporter cannot text TalkOlog.',
     oneWayWhatsapp:
-      'The {{code}} country pack has one-way SMS: a reporter replies to SiteLog on WhatsApp.',
+      'The {{code}} country pack has one-way SMS: a reporter replies to TalkOlog on WhatsApp.',
     maskedNote: 'This is not a demo organisation: link codes are masked and nothing can be typed.',
     notDemoTitle: 'The Demo phone is for demo organisations',
     notDemoBody:
@@ -1097,9 +1097,9 @@ export const copy = {
       viaLink: 'voice note via text link at {{time}}',
       viaCall: 'phone call {{time}} ({{duration}})',
       viaCallNoLength: 'phone call {{time}}',
-      /** W3-05: SiteLog called the site manager (a reminder or call-back call, M8). */
-      viaCallOut: 'call from SiteLog {{time}} ({{duration}})',
-      viaCallOutNoLength: 'call from SiteLog {{time}}',
+      /** W3-05: TalkOlog called the site manager (a reminder or call-back call, M8). */
+      viaCallOut: 'call from TalkOlog {{time}} ({{duration}})',
+      viaCallOutNoLength: 'call from TalkOlog {{time}}',
       /** W3-05: Talk now in the recorder (`calls.transport 'web'`). */
       viaBrowserCall: 'browser call {{time}} ({{duration}})',
       viaBrowserCallNoLength: 'browser call {{time}}',
@@ -1117,7 +1117,7 @@ export const copy = {
       editedBy: 'edited by {{name}} {{time}}',
       signedOff: 'signed off by {{name}} {{time}}',
       filedWithoutConfirmation: 'filed without confirmation',
-      enteredBy: 'Entered by {{name}} in SiteLog at {{time}}',
+      enteredBy: 'Entered by {{name}} in TalkOlog at {{time}}',
     },
     actions: {
       edit: 'Edit',
@@ -1208,8 +1208,8 @@ export const copy = {
       voiceNotes: '{{count}} voice notes',
       call: 'Call',
       recordings: '{{count}} recordings',
-      typed: 'Typed in SiteLog',
-      typedBy: '{{name}} typed this report in SiteLog; there is no voice note.',
+      typed: 'Typed in TalkOlog',
+      typedBy: '{{name}} typed this report in TalkOlog; there is no voice note.',
       fullTranscript: 'Full transcript',
       activity: 'Activity',
       excerpts: 'Transcript excerpts',
@@ -1235,14 +1235,14 @@ export const copy = {
     title: '{{weekday}} — {{site}}',
     versionLine: '{{author}} · {{time}}',
     versionLineNote: '{{author}} · {{time}} · {{note}}',
-    versionAuthor: { agent: 'SiteLog agent', reporter: 'Reply', office_user: 'Office' },
+    versionAuthor: { agent: 'TalkOlog agent', reporter: 'Reply', office_user: 'Office' },
     viewingOld: 'You’re viewing version {{version}}. Version {{current}} is current.',
     viewCurrent: 'View current',
     signOffHidden: 'Sign-off is for admins and project managers.',
     undoWindow: 'Undo within 10 minutes',
     pdfPreparing: 'Preparing the PDF…',
     pdfFailed: 'The PDF could not be made. Try again.',
-    pdfNotSaved: 'PDF opened, but it could not be saved to SiteLog yet.',
+    pdfNotSaved: 'PDF opened, but it could not be saved to TalkOlog yet.',
     weatherDayNote: 'Weather day — no work performed.',
     summaryEmpty: 'No summary.',
     manpowerEmpty: 'No manpower reported.',
@@ -1301,7 +1301,7 @@ export const copy = {
     },
     activity: {
       empty: 'No activity yet.',
-      agent: 'SiteLog',
+      agent: 'TalkOlog',
       office: 'Office',
       system: 'System',
       /** P7 Activity entries (`ActivityKind`); `{{…}}` values from the entry's params. */
@@ -1410,7 +1410,7 @@ export const copy = {
       segments_one: '{{count}} segment',
       segments_other: '{{count}} segments',
       reporter: 'Reporter',
-      agent: 'SiteLog',
+      agent: 'TalkOlog',
     },
     /** Lengths of clips and calls: "48 s", "2 min", "2 min 05 s". */
     duration: {
@@ -1583,7 +1583,7 @@ export const copy = {
     noEvidence: 'No gap days to show evidence for.',
     noReportEvidence: 'No site report recorded hours for this company on the gap days.',
     queryMail: {
-      subject: 'Invoice {{no}} — hours query from SiteLog',
+      subject: 'Invoice {{no}} — hours query from TalkOlog',
       intro:
         'Hello {{company}},\n\nInvoice {{no}} ({{period}}) shows more hours than our daily site reports. Day by day:',
       row: '{{date}}: invoiced {{invoiced}}, reported {{reported}}, gap {{gap}}',
@@ -1693,7 +1693,7 @@ export const copy = {
       sections_other: '{{count}} sections',
       demoDownload: 'Demo mode: the worker renders the PDF; nothing to download here.',
       notStarted:
-        'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact SiteLog support.',
+        'Not started after 10 minutes. Evidence packs aren’t being built for your company right now. Contact TalkOlog support.',
     },
   },
 
@@ -1711,7 +1711,7 @@ export const copy = {
     hint: 'Stored in international format, e.g. {{example}}',
     invalid: 'Enter a valid mobile number for the chosen country.',
     /** Spec §19 Q23: the org's pack applies to every reporter; a warning, never a block. */
-    foreign: 'This is a {{country}} number. SiteLog texts it from your {{pack}} number.',
+    foreign: 'This is a {{country}} number. TalkOlog texts it from your {{pack}} number.',
   },
 
   /**
@@ -1721,7 +1721,7 @@ export const copy = {
   team: {
     title: 'Team & numbers',
     subtitle:
-      'SiteLog matches every call and text to a site by the phone number. Personal links are tied to one person.',
+      'TalkOlog matches every call and text to a site by the phone number. Personal links are tied to one person.',
     thing: 'team',
     inviteReporter: 'Invite reporter',
     unknown: {
@@ -1738,7 +1738,7 @@ export const copy = {
       description: 'The held message is processed as soon as the number is linked.',
       /** A caller or texter (W1-16): invited until they consent (F3, F13 step 4). */
       descriptionConsent:
-        'SiteLog texts them a welcome with their link. They can report once they agree to texts and recording.',
+        'TalkOlog texts them a welcome with their link. They can report once they agree to texts and recording.',
       name: 'Name',
       namePlaceholder: 'Who is this?',
       role: 'Role',
@@ -1764,7 +1764,7 @@ export const copy = {
     },
     /** §19 Q243: a channel saved without its consent stays unreachable until they consent. */
     channelNotAgreed: '{{channel}} not agreed yet',
-    /** The language SiteLog uses with the reporter (`reporters.locale`). */
+    /** The language TalkOlog uses with the reporter (`reporters.locale`). */
     locales: {
       'en-US': 'English',
       'es-US': 'Spanish',
@@ -1799,12 +1799,12 @@ export const copy = {
       preference: 'Prefers',
       messageChannel: 'Messages go by',
       channelDefault: 'Your country’s order ({{order}})',
-      language: 'Language SiteLog uses',
+      language: 'Language TalkOlog uses',
       languageHint: 'Texts, the recorder and calls are in this language.',
       /** §19 Q243: required to change the preference or the channel. */
       attest: '{{first}} asked for this change',
       attestHint: 'Saved in the log with your name.',
-      attestRequired: 'Tick the box: change how SiteLog reaches {{first}} only when they asked.',
+      attestRequired: 'Tick the box: change how TalkOlog reaches {{first}} only when they asked.',
       channelNotAgreed:
         '{{first}} has not agreed to {{channel}} yet. Messages go another way until they turn it on in the recorder.',
       save: 'Save changes',
@@ -1815,7 +1815,7 @@ export const copy = {
     you: 'you',
     disableDialog: {
       title: 'Disable {{name}}?',
-      body: 'SiteLog stops texting and calling them, and their link stops working. Re-send the welcome to enable them again.',
+      body: 'TalkOlog stops texting and calling them, and their link stops working. Re-send the welcome to enable them again.',
     },
     removeDialog: {
       title: 'Remove {{name}}?',
@@ -1843,23 +1843,23 @@ export const copy = {
      */
     callNow: {
       title: 'Call {{name}} now?',
-      body: 'SiteLog’s assistant calls {{first}} now about today’s report at {{site}}. {{first}} first hears that the call is recorded.',
-      attest: '{{first}} agreed to get calls from SiteLog for the daily report',
+      body: 'TalkOlog’s assistant calls {{first}} now about today’s report at {{site}}. {{first}} first hears that the call is recorded.',
+      attest: '{{first}} agreed to get calls from TalkOlog for the daily report',
       attestHint:
         'Saved in the log with your name. It allows this call only: reminder calls still need {{first}}’s own agreement in the recorder.',
-      noText: 'If {{first}} doesn’t answer, SiteLog sends no text. You see how it went here.',
+      noText: 'If {{first}} doesn’t answer, TalkOlog sends no text. You see how it went here.',
       confirm: 'Call now',
       /** office_call_start()'s refusals (`OFFICE_CALL_REFUSALS`). */
       refused: {
         attestation_required: 'Tick the box first: the person must have agreed to get calls.',
-        no_trunk: 'SiteLog can’t place calls for your company yet.',
+        no_trunk: 'TalkOlog can’t place calls for your company yet.',
         reporter_inactive:
-          'This reporter is disabled or opted out of texts. SiteLog doesn’t call them.',
+          'This reporter is disabled or opted out of texts. TalkOlog doesn’t call them.',
         calls_turned_off:
           'They turned automated calls off in the recorder. Only they can turn them back on.',
         no_calls_today: 'They asked not to be called today.',
         site_not_active: 'The site is paused or archived.',
-        outside_window: 'It is outside the hours SiteLog calls at this site.',
+        outside_window: 'It is outside the hours TalkOlog calls at this site.',
         day_filed: 'Today’s report for this site is already filed.',
         call_live: 'A call to them is already under way.',
         limit_reached: 'The office has called them as often as allowed today.',
@@ -1924,7 +1924,7 @@ export const copy = {
       role: 'Role',
       sites: 'Sites',
       languages: 'Speaks',
-      language: 'Language SiteLog uses',
+      language: 'Language TalkOlog uses',
       preference: 'Preferred channel',
       preferenceHint: 'They can always use the other one.',
       /** §19 Q33: a call preference where the pack has no voice number. */
@@ -2057,7 +2057,7 @@ export const copy = {
     mapToPlaceholder: 'Choose a company',
     mapConfirm: 'Map',
     noResults: 'No terms match “{{q}}”.',
-    /** W4-08 (§19 Q238): SiteLog's starter terms. */
+    /** W4-08 (§19 Q238): TalkOlog's starter terms. */
     builtIn: {
       changeTitle: 'Change built-in term',
       changeDescription:
@@ -2145,7 +2145,7 @@ export const copy = {
     /** Field channels (P12, F22; W4-05). */
     channels: {
       pack: 'Your country pack',
-      packHint: 'Set by SiteLog per country. Ask SiteLog to change it.',
+      packHint: 'Set by TalkOlog per country. Ask TalkOlog to change it.',
       country: 'Country',
       sender: 'Text sender',
       senderTypes: {
@@ -2155,11 +2155,11 @@ export const copy = {
         alphanumeric: 'Sender name',
       },
       senderNotSet: 'Not set up in this environment',
-      voiceNumber: 'Number to call SiteLog',
+      voiceNumber: 'Number to call TalkOlog',
       talkNowOnly: 'Talk now only',
       channelOrder: 'Message order',
       twoWay: 'Replies to texts',
-      twoWayYes: 'Two-way: STOP, HELP and replies reach SiteLog',
+      twoWayYes: 'Two-way: STOP, HELP and replies reach TalkOlog',
       twoWayNo: 'One-way: texts cannot be answered',
       links: 'Links in texts',
       linksYes: 'Allowed',
@@ -2169,7 +2169,7 @@ export const copy = {
       dailyLinkTime: 'Daily link time',
       dailyLinkTimeHint: 'Every reporter gets today’s link by text at this time, site time.',
       ttl: 'Daily link expiry (hours)',
-      ttlHint: 'Empty: SiteLog’s default. Whole hours, 1–168.',
+      ttlHint: 'Empty: TalkOlog’s default. Whole hours, 1–168.',
       ttlInvalid: 'Enter whole hours from 1 to 168, or leave it empty.',
       calls: 'Calls',
       autoCall: 'Call people who prefer calls',
@@ -2181,19 +2181,19 @@ export const copy = {
       callWindowFrom: 'From',
       callWindowTo: 'To',
       noCalls:
-        'SiteLog does not place calls in {{country}} yet. People who prefer calls use Talk now in the recorder; reminder texts keep to the call window.',
+        'TalkOlog does not place calls in {{country}} yet. People who prefer calls use Talk now in the recorder; reminder texts keep to the call window.',
       newReporters: 'New reporters',
       defaultPref: 'Default preference',
       defaultPrefHint: 'Setup and Invite start with it. They can always use the other one.',
       notice: 'Recording notice',
-      noticeHint: 'Said at the start of every call. SiteLog sets and versions it per country.',
+      noticeHint: 'Said at the start of every call. TalkOlog sets and versions it per country.',
       noticeVersion: 'Version {{version}}',
       test: 'Test',
       testHint: 'See what your site managers receive.',
       testMessage: 'Send me a test message',
       testDialog: {
         title: 'Send me a test message',
-        body: 'SiteLog texts a test message to this number from your country’s sender. The number is not saved.',
+        body: 'TalkOlog texts a test message to this number from your country’s sender. The number is not saved.',
         phone: 'Your mobile number',
         language: 'Language of the text',
         attest: 'This is my own number.',
@@ -2205,14 +2205,14 @@ export const copy = {
         demo: 'Demo company: nothing was sent. Real companies get it from the country’s sender.',
         noSender:
           'No text sender is set up for {{country}} in this environment, so nothing was sent.',
-        failed: 'The text provider refused the test message. SiteLog has logged it.',
+        failed: 'The text provider refused the test message. TalkOlog has logged it.',
         rateLimited: 'Five test messages an hour. Try again later.',
         invalidPhone: 'Enter a valid mobile number.',
       },
       callMeNow: 'Call me now',
       callDialog: {
         title: 'Call me now',
-        body: 'SiteLog calls this number with a short test call: who is calling, one sentence and goodbye. Nothing is recorded and the number is not saved.',
+        body: 'TalkOlog calls this number with a short test call: who is calling, one sentence and goodbye. Nothing is recorded and the number is not saved.',
         phone: 'Your mobile number',
         language: 'Language of the call',
         attest: 'This is my own number.',
@@ -2221,10 +2221,10 @@ export const copy = {
       },
       callResults: {
         requested: 'Calling you now. Your phone should ring within a minute.',
-        demo: 'Demo company: the call was placed on SiteLog’s console, so no real phone rings.',
+        demo: 'Demo company: the call was placed on TalkOlog’s console, so no real phone rings.',
         rateLimited: 'Five test calls an hour. Try again later.',
         callLive: 'A test call is still on its way. Wait for it to end.',
-        noTrunk: 'SiteLog does not place calls in {{country}} yet.',
+        noTrunk: 'TalkOlog does not place calls in {{country}} yet.',
         invalidPhone: 'Enter a valid mobile number.',
       },
     },
@@ -2246,8 +2246,8 @@ export const copy = {
       removeLine: 'Remove line',
       removeLineN: 'Remove line {{n}}',
       footer: 'Footer',
-      footerText: 'Generated by SiteLog from the site manager’s voice report',
-      footerToggle: 'Show “Generated by SiteLog…” footer',
+      footerText: 'Generated by TalkOlog from the site manager’s voice report',
+      footerToggle: 'Show “Generated by TalkOlog…” footer',
       paper: 'Paper size',
       letter: 'Letter',
       a4: 'A4',
@@ -2315,7 +2315,7 @@ export const copy = {
 
   /**
    * P13 · Billing (W4-10, EN/TR): the org's own price (spec §19 Q234) in its currency and the
-   * panel's language, the provider (§19 Q236: `manual` → SiteLog invoices directly), the admin
+   * panel's language, the provider (§19 Q236: `manual` → TalkOlog invoices directly), the admin
    * banner on every page (F23, §19 Q235).
    */
   billing: {
@@ -2326,7 +2326,7 @@ export const copy = {
     perMonth: '/ month',
     /** "6 × $399.00 = $2,394.00": active sites × the org's price = the monthly total. */
     equation: '{{count}} × {{price}} = {{total}}',
-    noPrice: 'SiteLog sets your price per site. Ask us if it is not shown here yet.',
+    noPrice: 'TalkOlog sets your price per site. Ask us if it is not shown here yet.',
     nextInvoice: 'Next invoice',
     paymentMethod: 'Payment method',
     updatePayment: 'Update payment method',
@@ -2334,7 +2334,7 @@ export const copy = {
     whatCountsActive: 'Active while it can receive reports.',
     whatCountsPaused: 'Paused sites stop reminders and billing from the next cycle.',
     whatCountsProrated: 'Added sites are prorated by Stripe.',
-    whatCountsManual: 'Added sites are on your next invoice from SiteLog.',
+    whatCountsManual: 'Added sites are on your next invoice from TalkOlog.',
     sitesOnPlan: 'Sites on this plan',
     thing: 'billing',
     columns: {
@@ -2399,9 +2399,9 @@ export const copy = {
     download: 'Download',
     /** §19 Q236: a `manual` org (a TR org until §19 Q8). */
     manual: {
-      title: 'SiteLog invoices you directly',
-      body: 'No card is needed here. SiteLog sends your invoice for the active sites below each month; a paused site is not billed from the next cycle.',
-      invoices: 'Your invoices come from SiteLog by email.',
+      title: 'TalkOlog invoices you directly',
+      body: 'No card is needed here. TalkOlog sends your invoice for the active sites below each month; a paused site is not billed from the next cycle.',
+      invoices: 'Your invoices come from TalkOlog by email.',
     },
     /** The banner on every page for admins (F23, spec §19 Q235). */
     banner: {
@@ -2412,11 +2412,11 @@ export const copy = {
       trial_ended:
         'Your free trial ended on {{ended}}. Add payment details by {{date}} to keep reminders and calls on.',
       manualPastDue:
-        'Your SiteLog invoice is past due. Reminders and calls stop on {{date}} unless it is paid.',
+        'Your TalkOlog invoice is past due. Reminders and calls stop on {{date}} unless it is paid.',
       blocked:
         'Reminders and calls are paused: billing is past due. Update the payment method to restart them.',
       manualBlocked:
-        'Reminders and calls are paused: your SiteLog invoice is past due. Contact SiteLog to restart them.',
+        'Reminders and calls are paused: your TalkOlog invoice is past due. Contact TalkOlog to restart them.',
       canceled:
         'Your subscription is canceled. Reminders and calls are off until it is restarted from Billing.',
       action: 'Open Billing',
@@ -2467,7 +2467,7 @@ export const copy = {
       countryLocked: 'The country can’t be changed after setup.',
       countryRequired: 'Choose your company’s country.',
       countryList: 'the country list',
-      noCountries: 'No country is set up in this SiteLog database yet.',
+      noCountries: 'No country is set up in this TalkOlog database yet.',
       presets: {
         title: 'Set by {{country}}',
         reportLanguage: 'Report language',
@@ -2518,7 +2518,7 @@ export const copy = {
       backupName: 'Backup name',
       backupPhone: 'Backup mobile number',
       /** The backup's own language and preference (W4-02), as the manager's. */
-      backupLanguage: 'Language SiteLog uses with the backup',
+      backupLanguage: 'Language TalkOlog uses with the backup',
       backupPreference: 'Backup’s preferred channel',
       addAnother: 'Add another site',
       send: 'Send welcome text',
@@ -2534,11 +2534,11 @@ export const copy = {
         landline_text:
           'This is a landline number, which can’t get texts. Choose Call, or enter a mobile number.',
         landline_unreachable:
-          'This is a landline number. SiteLog can’t text it, and Talk now needs the personal link and a code, both sent by text. Enter a mobile number.',
+          'This is a landline number. TalkOlog can’t text it, and Talk now needs the personal link and a code, both sent by text. Enter a mobile number.',
       },
       preview: {
         title: 'Preview · what {{name}} receives',
-        from: 'SiteLog · text message',
+        from: 'TalkOlog · text message',
         /** §19 Q25: the welcome always goes by SMS; the link in the preview is not theirs. */
         sampleLink: 'The link is a sample. Each person gets their own.',
         callAnyTime: 'They can also call {{number}} any time.',
@@ -2576,9 +2576,9 @@ export const copy = {
   },
 
   ops: {
-    eyebrow: 'SiteLog internal',
+    eyebrow: 'TalkOlog internal',
     title: 'Ops',
-    subtitle: 'Job queue, dead letters and report cost across every org. SiteLog staff only.',
+    subtitle: 'Job queue, dead letters and report cost across every org. TalkOlog staff only.',
     errorThing: 'ops data',
     refresh: 'Refresh',
     utc: (when: string) => `${when} UTC`,
@@ -2641,7 +2641,7 @@ export const copy = {
      */
     outboundCalls: {
       title: 'Reminder calls (M8)',
-      hint: 'Per organisation and week: the site-days SiteLog called a reporter about, and how many were filed on that call by the reporter’s yes, with no office help. M8’s target is 85%.',
+      hint: 'Per organisation and week: the site-days TalkOlog called a reporter about, and how many were filed on that call by the reporter’s yes, with no office help. M8’s target is 85%.',
       columns: {
         org: 'Organisation',
         week: 'Week of',
@@ -2692,12 +2692,12 @@ export const copy = {
       empty: 'No cost outliers in the last 30 days.',
     },
     /**
-     * W4-10 (spec §19 Q234, Q236): every org's billing; SiteLog staff set an org's price and a
+     * W4-10 (spec §19 Q234, Q236): every org's billing; TalkOlog staff set an org's price and a
      * manual org's status (both audited). /ops stays English (§19 Q240).
      */
     billing: {
       title: 'Billing per organisation',
-      hint: 'The price per active site and month of each organisation (SiteLog sets it; a new organisation gets its currency’s default) and the status of the ones SiteLog invoices directly. A Stripe organisation’s status follows Stripe.',
+      hint: 'The price per active site and month of each organisation (TalkOlog sets it; a new organisation gets its currency’s default) and the status of the ones TalkOlog invoices directly. A Stripe organisation’s status follows Stripe.',
       columns: {
         org: 'Organisation',
         provider: 'Billed by',
@@ -2705,7 +2705,7 @@ export const copy = {
         price: 'Price per site',
         sites: 'Active sites',
       },
-      providers: { stripe: 'Stripe', manual: 'SiteLog (manual)' },
+      providers: { stripe: 'Stripe', manual: 'TalkOlog (manual)' },
       demo: 'Demo',
       noPrice: 'Not set',
       edit: 'Edit',
@@ -2787,7 +2787,7 @@ export const copy = {
     none: 'None of these reports has a PDF yet.',
     failed: 'Couldn’t build the zip. Try again.',
     capped: 'Exporting the first {{limit}} of {{total}} reports. Narrow the filters for the rest.',
-    fileName: (label: string, date: string) => `SiteLog_${label}_${date}.zip`,
+    fileName: (label: string, date: string) => `TalkOlog_${label}_${date}.zip`,
     labels: { today: 'daily-reports', archive: 'reports' },
   },
 
@@ -2808,12 +2808,12 @@ export const copy = {
     },
     phone: {
       region: (name: string) => `Simulated WhatsApp chat with ${name}`,
-      title: 'SiteLog',
+      title: 'TalkOlog',
       subtitle: (name: string, site: string) => `${name} · ${site}`,
       simulated: 'Simulated',
       log: 'Conversation',
-      typing: 'SiteLog is typing…',
-      fromAgent: 'SiteLog',
+      typing: 'TalkOlog is typing…',
+      fromAgent: 'TalkOlog',
       fromReporter: (first: string) => first,
       sentAt: (who: string, time: string) => `${who}, ${time}`,
       voiceNote: 'Voice note',
@@ -2834,13 +2834,13 @@ export const copy = {
       input: 'Type a reply',
       placeholder: 'Type a reply or a command…',
       send: 'Send',
-      busy: 'SiteLog is replying…',
+      busy: 'TalkOlog is replying…',
       suggestions: 'Try next',
     },
     sheet: {
       title: 'Send a voice note',
       description:
-        'Test cases from the SiteLog evaluation set, each from a Kestrel site and its site manager. The simulator uses the report the extraction is expected to produce from each transcript.',
+        'Test cases from the TalkOlog evaluation set, each from a Kestrel site and its site manager. The simulator uses the report the extraction is expected to produce from each transcript.',
       send: 'Send',
       sendLabel: (title: string) => `Send: ${title}`,
       typed: 'Typed report',

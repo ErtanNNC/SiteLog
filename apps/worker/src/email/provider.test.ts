@@ -30,7 +30,7 @@ describe('Resend provider: idempotency conflicts (review of a5da973)', () => {
         message: 'Same idempotency key used with a different request payload.',
       },
     });
-    const provider = createResendProvider('re_test', 'SiteLog <r@x.y>');
+    const provider = createResendProvider('re_test', 'TalkOlog <r@x.y>');
     await expect(provider.send(msg)).resolves.toEqual({ id: null, alreadySent: true });
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0]![1]).toEqual({ idempotencyKey: msg.idempotencyKey });
@@ -41,7 +41,7 @@ describe('Resend provider: idempotency conflicts (review of a5da973)', () => {
       data: null,
       error: { name: 'concurrent_idempotent_requests', statusCode: 409, message: 'in progress' },
     });
-    const provider = createResendProvider('re_test', 'SiteLog <r@x.y>');
+    const provider = createResendProvider('re_test', 'TalkOlog <r@x.y>');
     await expect(provider.send(msg)).rejects.toThrow(/concurrent_idempotent_requests/);
     send.mockResolvedValueOnce({
       data: null,
@@ -54,7 +54,7 @@ describe('Resend provider: idempotency conflicts (review of a5da973)', () => {
 
   it('returns the id of an accepted email', async () => {
     send.mockResolvedValueOnce({ data: { id: 'em_1' }, error: null });
-    const provider = createResendProvider('re_test', 'SiteLog <r@x.y>');
+    const provider = createResendProvider('re_test', 'TalkOlog <r@x.y>');
     await expect(provider.send(msg)).resolves.toEqual({ id: 'em_1' });
   });
 });

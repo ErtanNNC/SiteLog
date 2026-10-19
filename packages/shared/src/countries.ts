@@ -206,7 +206,7 @@ export interface CountryPack {
   code: string;
   /** The org's locale at creation: report language and the panel's default. */
   defaultLocale: OrgLocale;
-  /** Languages SiteLog texts and speaks with field users; the first is a new reporter's default. */
+  /** Languages TalkOlog texts and speaks with field users; the first is a new reporter's default. */
   fieldLocales: readonly ReporterLocale[];
   units: UnitSystem;
   paper: PaperSize;
@@ -221,7 +221,7 @@ export interface CountryPack {
   smsSenderType: SmsSenderType;
   /** null = not registered in this environment: SMS goes through `console`. */
   smsSenderId: string | null;
-  /** Replies (STOP/HELP/CALL/TEXT, OK) reach SiteLog; otherwise one-way copy only. */
+  /** Replies (STOP/HELP/CALL/TEXT, OK) reach TalkOlog; otherwise one-way copy only. */
   twoWaySms: boolean;
   /** Message keys with a link may go by SMS. */
   smsLinksAllowed: boolean;

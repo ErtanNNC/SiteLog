@@ -105,7 +105,10 @@ describe('Talk now (W3-13, §9.4, §19 Q121)', () => {
       now: () => t,
     });
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Speaking with the SiteLog assistant' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Speaking with the TalkOlog assistant',
+      }),
     ).toBeInTheDocument();
     await waitFor(() => expect(routes.voiceToken).toHaveBeenCalledWith('K7Q2MX', SITE.id));
     expect(gum).toHaveBeenCalledWith({ audio: true });

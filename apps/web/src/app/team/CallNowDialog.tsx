@@ -24,7 +24,7 @@ export interface CallNowTarget {
 
 /**
  * Team → Call now (W4-04; spec F3 edge cases, P10, §19 Q230): the office attests that the person
- * agreed to get calls from SiteLog for the daily report, then SiteLog's assistant calls them about
+ * agreed to get calls from TalkOlog for the daily report, then TalkOlog's assistant calls them about
  * today's report at the site (`office_call_start()`: an `auto_call` consent `office_attested`
  * with the office user, the call through the ladder's telephony). The box is required; unanswered,
  * nothing is texted, and the row shows how the call went.

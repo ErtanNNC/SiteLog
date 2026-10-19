@@ -637,7 +637,7 @@ export function observedWeatherOf(json: unknown): ObservedWeather | null {
   return null;
 }
 
-/** A call segment's speaker lane: the reporter (`reporter`, `user`) or SiteLog (`agent`…). */
+/** A call segment's speaker lane: the reporter (`reporter`, `user`) or TalkOlog (`agent`…). */
 function speakerOf(value: unknown): TranscriptSegment['speaker'] | undefined {
   if (value === 'reporter' || value === 'user' || value === 'caller') return 'reporter';
   if (value === 'agent' || value === 'assistant') return 'agent';
@@ -2087,7 +2087,7 @@ export function reportActivity(
       });
   }
 
-  // The reporter's texts that day (any channel the Notifier used). A text SiteLog sent carries a
+  // The reporter's texts that day (any channel the Notifier used). A text TalkOlog sent carries a
   // personal link, so only its kind and delivery show; a reply shows its words.
   if (reporter)
     for (const m of rows.messages) {
@@ -2297,7 +2297,7 @@ export function assembleReportDetail(
             ? // F10 (W2-11, §19 Q81): the reporter who made the version (a backup may), else the report's.
               (v.author_reporter_id && ix.reporterById.get(v.author_reporter_id)?.name) ||
               reporterName
-            : 'SiteLog agent',
+            : 'TalkOlog agent',
       changeNote: v.change_note,
       createdAt: v.created_at,
       isCurrent: v.version === report.current_version,

@@ -112,18 +112,18 @@ describe('countSmsSegments: Turkish', () => {
         company: 'Demir Yapı A.Ş.',
         site: 'Ataşehir Ofis Binası',
         deadline: '17:30',
-        link: 'go.sitelog.app/r/K4T9QZ',
+        link: 'go.talkolog.com/r/K4T9QZ',
       },
       { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
     );
-    expect(text).toHaveLength(174);
+    expect(text).toHaveLength(176);
     const c = countSmsSegments(text);
-    // UCS-2: 174 code units, 67 per concatenated segment.
-    expect(c.default).toEqual({ encoding: 'ucs2', units: 174, segments: 3, perSegment: 67 });
-    // Shift: 174 + 9 Turkish letters (ı×5, ş×2, Ş, ç) + 1 for "~" (extension) = 184 septets.
+    // UCS-2: 176 code units, 67 per concatenated segment.
+    expect(c.default).toEqual({ encoding: 'ucs2', units: 176, segments: 3, perSegment: 67 });
+    // Shift: 176 + 9 Turkish letters (ı×5, ş×2, Ş, ç) + 1 for "~" (extension) = 186 septets.
     expect(c.turkishShift).toEqual({
       encoding: 'gsm7-turkish-shift',
-      units: 184,
+      units: 186,
       segments: 2,
       perSegment: 149,
     });
@@ -133,7 +133,7 @@ describe('countSmsSegments: Turkish', () => {
     const text = renderSms(
       'reminder_2',
       'tr',
-      { time: '19:00', link: 'go.sitelog.app/r/K4T9QZ' },
+      { time: '19:00', link: 'go.talkolog.com/r/K4T9QZ' },
       { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
     );
     const c = countSmsSegments(text);
@@ -146,14 +146,14 @@ describe('countSmsSegments: Turkish', () => {
     const text = renderSms(
       'filed',
       'tr',
-      { report_no: 'AY-0412-0031', pdf_link: 'go.sitelog.app/p/AY0031' },
+      { report_no: 'AY-0412-0031', pdf_link: 'go.talkolog.com/p/AY0031' },
       { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
     );
     expect(countSmsSegments(text).default).toMatchObject({ encoding: 'gsm7', segments: 1 });
     const draft = renderSms(
       'draft_ready',
       'tr',
-      { link: 'go.sitelog.app/r/K4T9QZ' },
+      { link: 'go.talkolog.com/r/K4T9QZ' },
       { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
     );
     const d = countSmsSegments(draft);
@@ -171,13 +171,13 @@ describe('countSmsSegments: every Turkish text (spec §19 Q15)', () => {
     company: 'Demir Yapı A.Ş.',
     site: 'Ataşehir Ofis Binası',
     deadline: '17:30',
-    link: 'go.sitelog.app/r/K4T9QZ',
+    link: 'go.talkolog.com/r/K4T9QZ',
     number: '+90 850 123 4567',
     code: '482913',
     time: '17:00',
     weather_phrase: 'Bu sabah yağmur yağdı (6 mm)',
     report_no: 'AO-0512-0031',
-    pdf_link: 'go.sitelog.app/p/AO0031',
+    pdf_link: 'go.talkolog.com/p/AO0031',
     weekday: 'Cuma',
     change: 'Usta Beton 7 işçi, 56 saat (önceden 6 işçi, 48 saat)',
     v: 2,

@@ -150,12 +150,12 @@ describe('countries:set on the migrated schema', () => {
 
   it('sets the TR title once (one audit row), and clears it', async () => {
     await rolledBack(async () => {
-      const set = await run('--code', 'tr', '--sms-sender', 'SITELOG');
+      const set = await run('--code', 'tr', '--sms-sender', 'TALKOLOG');
       expect(set).toMatchObject({
         changed: true,
-        after: { code: 'TR', sms_provider: 'iletimerkezi', sms_sender_id: 'SITELOG' },
+        after: { code: 'TR', sms_provider: 'iletimerkezi', sms_sender_id: 'TALKOLOG' },
       });
-      expect(await run('--code', 'TR', '--sms-sender', 'SITELOG')).toMatchObject({
+      expect(await run('--code', 'TR', '--sms-sender', 'TALKOLOG')).toMatchObject({
         changed: false,
       });
       expect(await audits()).toHaveLength(1);
@@ -210,16 +210,16 @@ describe('runCountriesSet on PGlite', () => {
     await rolledBack(async () => {
       const { connect, calls } = savepointConnection();
       const lines: string[] = [];
-      const result = await runCountriesSet(['--code', 'TR', '--sms-sender', 'SITELOG'], {
+      const result = await runCountriesSet(['--code', 'TR', '--sms-sender', 'TALKOLOG'], {
         env: { SUPABASE_DB_URL: LOCAL },
         connect,
         log: (l) => lines.push(l),
       });
-      expect(result.after.sms_sender_id).toBe('SITELOG');
+      expect(result.after.sms_sender_id).toBe('TALKOLOG');
       expect(await pack('TR')).toEqual(result.after);
       expect(calls).toEqual({ connect: 1, end: 1 });
       expect(lines).toHaveLength(3);
-      expect(lines[2]).toContain('SITELOG (sends through iletimerkezi)');
+      expect(lines[2]).toContain('TALKOLOG (sends through iletimerkezi)');
       expect(lines.join('\n')).not.toContain('s3cret-pw');
       expect(await audits()).toHaveLength(1);
     });
@@ -228,7 +228,7 @@ describe('runCountriesSet on PGlite', () => {
   it('refuses a hosted target without --yes before connecting', async () => {
     const { connect, calls } = savepointConnection();
     await expect(
-      runCountriesSet(['--code', 'TR', '--sms-sender', 'SITELOG'], {
+      runCountriesSet(['--code', 'TR', '--sms-sender', 'TALKOLOG'], {
         env: {
           SUPABASE_DB_URL:
             'postgresql://postgres:s3cret-pw@db.abcdefghijklmnopqrst.supabase.co:5432/postgres',

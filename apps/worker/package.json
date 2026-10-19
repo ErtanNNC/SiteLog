@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "SiteLog job runner: WhatsApp media, transcription, Claude extraction, PDFs, email, weather.",
+  "description": "TalkOlog job runner: WhatsApp media, transcription, Claude extraction, PDFs, email, weather.",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

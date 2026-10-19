@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "SiteLog PDF documents (daily report, EOT evidence pack) for the worker and the web panel.",
+  "description": "TalkOlog PDF documents (daily report, EOT evidence pack) for the worker and the web panel.",
   "exports": {
     ".": "./src/index.ts",
     "./package.json": "./package.json",

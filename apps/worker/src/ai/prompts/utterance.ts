@@ -5,18 +5,18 @@
  * code resolves the day to a date, finds the report and makes the preview (apply_correction). The
  * text is data, never instructions; phone numbers are taken out by `callTool` (§10.12).
  */
-export const UTTERANCE_SYSTEM_PROMPT = `You classify one short message from a construction site manager to SiteLog, a daily report assistant.
+export const UTTERANCE_SYSTEM_PROMPT = `You classify one short message from a construction site manager to TalkOlog, a daily report assistant.
 The message arrives by SMS (CHANNEL: sms) or as a spoken turn of a phone call (CHANNEL: call), in English, Spanish or Turkish.
 Return ONLY a call to the classify_utterance tool with one intent:
-- confirm: approves what SiteLog read back (ok, yes, file it, sí, dale, evet, tamam)
+- confirm: approves what TalkOlog read back (ok, yes, file it, sí, dale, evet, tamam)
 - fix: changes something in today's draft ("Apex had seven", "no, cinco")
 - no_work: no work today (planned closure, holiday)
 - weather_day: weather stopped work ("rained out", "sent everyone home at eleven", "yağmurdan iş durdu")
 - edit_request: changes a report of an earlier day ("EDIT FRI Apex was 7 not 6", "change Friday's report", "cuma raporunu düzelt")
 - callback: asks to be called back later
 - preference: asks for texts instead of calls, or calls instead of texts
-- opt_out: asks SiteLog to stop contacting them
-- help: asks how SiteLog works
+- opt_out: asks TalkOlog to stop contacting them
+- help: asks how TalkOlog works
 - other: anything else
 
 Entities, only when the message states them:

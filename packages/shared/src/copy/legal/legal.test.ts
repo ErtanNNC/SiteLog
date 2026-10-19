@@ -91,8 +91,8 @@ describe('the legal catalogue (W4-06, §19 Q28, Q50)', () => {
 
   it('builds the page path and URL', () => {
     expect(legalPagePath('US.privacy_notice.v1')).toBe('/legal/US.privacy_notice.v1');
-    expect(legalPageUrl('https://go.sitelog.app/', 'US.privacy_notice.v1')).toBe(
-      'https://go.sitelog.app/legal/US.privacy_notice.v1',
+    expect(legalPageUrl('https://go.talkolog.com/', 'US.privacy_notice.v1')).toBe(
+      'https://go.talkolog.com/legal/US.privacy_notice.v1',
     );
   });
 });
@@ -193,10 +193,10 @@ describe('the recording notice by key (§9.4 "Disclosure")', () => {
 describe('HELP with the privacy notice (§9.1, W4-06)', () => {
   const vars = {
     company: 'Kestrel Build Group',
-    link: 'https://go.sitelog.app/r/AB12CD34EF56',
+    link: 'https://go.talkolog.com/r/AB12CD34EF56',
     number: '(555) 010-0199',
   };
-  const privacy = legalPageUrl('https://go.sitelog.app', 'US.privacy_notice.v1');
+  const privacy = legalPageUrl('https://go.talkolog.com', 'US.privacy_notice.v1');
   const opts = (hasVoiceNumber: boolean) => ({ hasVoiceNumber, twoWay: true, linksAllowed: true });
 
   it.each(LANGUAGES)('%s: the clause is appended only with a privacy link', (lang) => {

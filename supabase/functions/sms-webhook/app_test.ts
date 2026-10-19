@@ -59,7 +59,7 @@ function setup(opts: { token?: () => string; fail?: Error } = {}): Harness {
   const store = new FakeSmsStore();
   store.countries.push(
     row('US', { sms_sender_id: US_SENDER }),
-    row('TR', { sms_sender_id: 'SITELOG' }),
+    row('TR', { sms_sender_id: 'TALKOLOG' }),
   );
   const base = {
     contactPref: 'link' as const,
@@ -132,7 +132,7 @@ function setup(opts: { token?: () => string; fail?: Error } = {}): Harness {
     authToken: opts.token ?? (() => TOKEN),
     webhookUrl: () => BASE,
     linkSecret: () => SECRET,
-    fieldAppUrl: () => 'https://go.sitelog.app',
+    fieldAppUrl: () => 'https://go.talkolog.com',
     authUser: (req) => {
       const user = req.headers.get('authorization')?.replace(/^Bearer /, '');
       if (!user) return Promise.reject(new HttpError(401, 'Sign in required'));
@@ -294,7 +294,7 @@ Deno.test(
 
 Deno.test('a one-way pack stores the text with no keyword (the TR pack)', async () => {
   const h = setup();
-  await h.twilio('', { ...sms('+905321234567', 'STOP'), To: 'SITELOG' });
+  await h.twilio('', { ...sms('+905321234567', 'STOP'), To: 'TALKOLOG' });
   assertEquals(h.store.inbound.length, 1);
   assertEquals(h.store.inbound[0]!.payload.keyword, null);
   assertEquals(h.store.inbound[0]!.payload.pack, 'TR');
@@ -354,7 +354,7 @@ Deno.test(
     const sentBy = {
       reporterId: DANA,
       key: 'daily_link' as const,
-      vars: { site: 'Pier 9', link: 'https://go.sitelog.app/r/AAAAAA' },
+      vars: { site: 'Pier 9', link: 'https://go.talkolog.com/r/AAAAAA' },
       dedupeKey: 'notify:daily:x',
     };
     h.store.notifyJobs.push({ id: 1, payload: sentBy, dedupeKey: sentBy.dedupeKey });
@@ -410,7 +410,7 @@ Deno.test('a late failure of a notify message queues its fallback once (W2-01, Q
   const sentBy = {
     reporterId: DANA,
     key: 'filed' as const,
-    vars: { report_no: 'RL-2041-0199', pdf_link: 'https://go.sitelog.app/r/AAAAAA/report/1' },
+    vars: { report_no: 'RL-2041-0199', pdf_link: 'https://go.talkolog.com/r/AAAAAA/report/1' },
     dedupeKey: 'notify:filed:r9',
   };
   h.store.notifyJobs.push({ id: 1, payload: sentBy, dedupeKey: sentBy.dedupeKey });
@@ -472,7 +472,10 @@ Deno.test(
       const sentBy = {
         reporterId: DANA,
         key: 'filed' as const,
-        vars: { report_no: `RL-2041-01${n}`, pdf_link: 'https://go.sitelog.app/r/AAAAAA/report/1' },
+        vars: {
+          report_no: `RL-2041-01${n}`,
+          pdf_link: 'https://go.talkolog.com/r/AAAAAA/report/1',
+        },
         dedupeKey: `notify:filed:acct${n}`,
       };
       h.store.notifyJobs.push({ id: n, payload: sentBy, dedupeKey: sentBy.dedupeKey });
@@ -659,7 +662,7 @@ Deno.test(
     assertEquals(h.store.jobs, []);
     // A demo org: the reply goes through console and keeps its link (the Demo phone opens it).
     assertEquals(h.messaging.sent[0]!.driver, 'console');
-    assertMatch(h.messaging.rows[0]!.body, /https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{12} /);
+    assertMatch(h.messaging.rows[0]!.body, /https:\/\/go\.talkolog\.com\/r\/[A-Z0-9]{12} /);
     const link = h.store.links.links[0]!;
     const code = await deriveLinkCode(SECRET, link.id);
     assertEquals(link.code_hash, linkCodeHash(code));
@@ -984,7 +987,7 @@ Deno.test(
     assertEquals(h.store.inbound[0]!.channel, 'whatsapp');
     const reply = h.messaging.rows.find((r) => r.id === out.replyId)!;
     assertEquals([reply.channel, reply.provider, reply.copy_key], ['whatsapp', 'console', 'help']);
-    assertMatch(reply.body, /^Demir Yapı A\.Ş\. için SiteLog günlük raporları\. Linkiniz: https:/);
+    assertMatch(reply.body, /^Demir Yapı A\.Ş\. için TalkOlog günlük raporları\. Linkiniz: https:/);
     assertEquals(h.messaging.sent, []);
   },
 );

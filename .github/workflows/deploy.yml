@@ -839,7 +839,7 @@ jobs:
           # only one (the Build plan allows one), else none.
           lk agent list --project "$LK_PROJECT" --json --yes > "$RUNNER_TEMP/agents.json"
           if ! id="$(node "$GITHUB_WORKSPACE/.github/scripts/livekit-pick-agent.mjs" "$RUNNER_TEMP/agents.json")"; then
-            echo "::error::Several agents in the LiveKit project and none clearly SiteLog's; delete the extra ones (lk agent delete) or keep one named $LIVEKIT_AGENT_NAME."
+            echo "::error::Several agents in the LiveKit project and none clearly TalkOlog's; delete the extra ones (lk agent delete) or keep one named $LIVEKIT_AGENT_NAME."
             exit 1
           fi
           if [ "$LOGS_ONLY" = true ]; then

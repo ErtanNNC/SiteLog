@@ -16,11 +16,11 @@ Deno.test('a missing or invalid pack is an error, never a silent console', () =>
   assertThrows(() => packFromRow(null, 'org o'), Error, 'No country pack for org o');
   // An alphanumeric sender with two-way SMS breaks the table's own check.
   assertThrows(() =>
-    packFromRow({ ...us, sms_sender_type: 'alphanumeric', sms_sender_id: 'SITELOG' }, 'US'),
+    packFromRow({ ...us, sms_sender_type: 'alphanumeric', sms_sender_id: 'TALKOLOG' }, 'US'),
   );
 });
 
 Deno.test('the receiving sender id is compared as stored (trimmed)', () => {
   assertEquals(senderKey(' +18885550142 '), '+18885550142');
-  assertEquals(senderKey('SITELOG'), 'SITELOG');
+  assertEquals(senderKey('TALKOLOG'), 'TALKOLOG');
 });

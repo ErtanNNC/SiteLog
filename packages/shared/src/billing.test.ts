@@ -34,7 +34,7 @@ describe('billingPrice (§19 Q234)', () => {
       currency: 'USD',
     });
   });
-  it('is null when SiteLog set no price, or the row is malformed', () => {
+  it('is null when TalkOlog set no price, or the row is malformed', () => {
     expect(billingPrice({ price_per_site_minor: null, price_currency: null })).toBeNull();
     expect(billingPrice({ price_per_site_minor: 39900, price_currency: null })).toBeNull();
     expect(billingPrice({ price_per_site_minor: 0, price_currency: 'USD' })).toBeNull();

@@ -11,7 +11,7 @@ import { demir, installFakeFieldApi, kestrel, type Market } from './support/fake
  * W3-13 on the production build at 390 px, against the fake field-api and the app's scripted fake
  * VoiceClient (`src/voice/fake.ts`, chosen by the `fake:` URL the fake `voice/token` answers):
  * - in EN, ES and TR: Today offers Talk now (`talkNow`), the call screen asks for the microphone
- *   (Chromium's fake one), shows "Speaking with the SiteLog assistant", the recording notice as text,
+ *   (Chromium's fake one), shows "Speaking with the TalkOlog assistant", the recording notice as text,
  *   the timer, Mute and End call; the scripted call ends from the assistant's side and the Filed
  *   screen of the report it filed opens; axe, the 56 px targets and no sideways scroll on each;
  * - a hang-up (End call) opens the day's draft; three calls an hour, then the refusal;

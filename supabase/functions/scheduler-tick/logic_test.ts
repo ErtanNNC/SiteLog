@@ -1141,7 +1141,7 @@ Deno.test(
   () => {
     const base = {
       siteName: 'Elm St. Townhomes',
-      link: 'https://go.sitelog.app/r/ABCDEFGHJKMN',
+      link: 'https://go.talkolog.com/r/ABCDEFGHJKMN',
       voiceNumber: null,
       deadlineAt: new Date('2026-10-12T22:30:00Z'),
       missingAt: new Date('2026-10-13T00:00:00Z'),

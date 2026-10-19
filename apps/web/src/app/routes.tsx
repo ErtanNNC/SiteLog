@@ -90,7 +90,7 @@ export function AppRoutes() {
             <Route path="/settings/:section" element={guard('settings', <SettingsPage />)} />
             <Route path="/billing" element={guard('billing', <BillingPage />)} />
             <Route path="/dev/phone" element={guard('devPhone', <DevPhonePage />)} />
-            {/* SiteLog staff only (platform_admins), not an org role and not in the sidebar. */}
+            {/* TalkOlog staff only (platform_admins), not an org role and not in the sidebar. */}
             <Route
               path="/ops"
               element={

@@ -164,7 +164,7 @@ test(
       .click();
     const thread = page.getByRole('list', { name: `Texts with ${KEVIN.name}` });
     await expect(
-      thread.getByTestId('demo-phone-call').filter({ hasText: 'Missed call from SiteLog' }).last(),
+      thread.getByTestId('demo-phone-call').filter({ hasText: 'Missed call from TalkOlog' }).last(),
     ).toBeVisible();
     await expect(
       thread.getByRole('listitem').filter({ hasText: "Missed you for today's report." }).last(),

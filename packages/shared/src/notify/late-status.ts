@@ -89,7 +89,7 @@ export function messageAccountFaultNotification(
     title: reporterName
       ? `${reporterName}: a text to them failed at the SMS provider`
       : 'A text failed at the SMS provider',
-    body: `Texts are failing for this account (${error}). The SMS provider accepted the text and then refused it for the account or the sender, not for the reporter's number. SiteLog tries their other message channels, if they have any. Other texts that fail this way in the next hour are not notified again.`,
+    body: `Texts are failing for this account (${error}). The SMS provider accepted the text and then refused it for the account or the sender, not for the reporter's number. TalkOlog tries their other message channels, if they have any. Other texts that fail this way in the next hour are not notified again.`,
     targetPath: '/team',
     data: noticeData('message_account_fault', { name: reporterName, error }),
   };

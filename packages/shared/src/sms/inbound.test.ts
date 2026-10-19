@@ -35,7 +35,7 @@ const pack = (code: 'US' | 'TR', patch: Partial<CountryRow> = {}): CountryPack =
   toCountryPack({ ...DEMO_COUNTRIES.find((c) => c.code === code)!, ...patch });
 const US_LIVE = pack('US', { sms_sender_id: '+18885550142' });
 const US_DEMO = demoPack('US');
-const TR_LIVE = pack('TR', { sms_sender_id: 'SITELOG' });
+const TR_LIVE = pack('TR', { sms_sender_id: 'TALKOLOG' });
 const T0 = new Date('2026-10-09T23:00:00Z');
 const SECRET = 'link-signing-secret';
 const DANA = '00000000-0000-4000-8000-0000000000c2';
@@ -237,7 +237,7 @@ function harness(
       randomUUID: uuid,
     }),
     linkSecret: () => SECRET,
-    fieldAppUrl: () => 'https://go.sitelog.app',
+    fieldAppUrl: () => 'https://go.talkolog.com',
     now: () => T0,
     randomUUID: uuid,
   };
@@ -326,7 +326,7 @@ describe('processInboundSms (W1-08)', () => {
       {
         driver: 'twilio',
         to: DANA_PHONE,
-        body: "You won't get more texts from SiteLog. Reply START to resume.",
+        body: "You won't get more texts from TalkOlog. Reply START to resume.",
       },
     ]);
     expect(out.replyId).toBe('10000000-0000-4000-8000-000000000001');
@@ -363,7 +363,7 @@ describe('processInboundSms (W1-08)', () => {
     expect(h.reporters[0]!.contactPref).toBe('link');
     // Spec §19 Q46: CALL and TEXT are confirmed; START is not (Twilio confirms it, Q45).
     expect(h.sent.map((s) => s.body)).toEqual([
-      "You won't get more texts from SiteLog. Reply START to resume.",
+      "You won't get more texts from TalkOlog. Reply START to resume.",
       'OK, your daily report is now set to a call. Reply TEXT to switch to a link.',
       'OK, your daily report is now set to a link by text. Reply CALL to switch to a call.',
     ]);
@@ -389,7 +389,7 @@ describe('processInboundSms (W1-08)', () => {
       diff: { kind: 'personal', via: 'sms_help' },
     });
     expect(h.sent[0]!.body).toBe(
-      `SiteLog daily reports for Real Builders. Your link: https://go.sitelog.app/r/${code} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.`,
+      `TalkOlog daily reports for Real Builders. Your link: https://go.talkolog.com/r/${code} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.`,
     );
     expect([...h.rows.values()][0]!.body).toContain(`/r/${MASKED_CODE} `);
     // The same link the next time.
@@ -409,7 +409,7 @@ describe('processInboundSms (W1-08)', () => {
     const code = await deriveLinkCode(SECRET, h.links[0]!.id);
     const body = h.sent[0]!.body;
     expect(body).toBe(
-      `SiteLog daily reports for Real Builders. Your link: https://go.sitelog.app/r/${code} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply. - Privacy: https://go.sitelog.app/legal/ZZ.privacy_notice.v1`,
+      `TalkOlog daily reports for Real Builders. Your link: https://go.talkolog.com/r/${code} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply. - Privacy: https://go.talkolog.com/legal/ZZ.privacy_notice.v1`,
     );
     expect(countSmsSegments(body).default.segments).toBeLessThanOrEqual(2);
     // The stored row masks the personal link, never the privacy page.
@@ -663,7 +663,7 @@ describe('processInboundSms: the report keywords (W2-12)', () => {
 });
 
 describe('processInboundSms on WhatsApp (W2-16; spec §9.5, §19 Q26, Q40, Q85)', () => {
-  const TR_WA = pack('TR', { sms_sender_id: 'SITELOG', whatsapp_sender_id: '+905320000099' });
+  const TR_WA = pack('TR', { sms_sender_id: 'TALKOLOG', whatsapp_sender_id: '+905320000099' });
   const EMRE_PHONE = assertE164('+905321234567');
   const emre = (patch: Partial<InboundReporterRow> = {}) => ({
     ...reporter({
@@ -687,7 +687,7 @@ describe('processInboundSms on WhatsApp (W2-16; spec §9.5, §19 Q26, Q40, Q85)'
     expect(h.waForms[0]!.get('To')).toBe('whatsapp:+905321234567');
     expect(h.waForms[0]!.get('From')).toBe('whatsapp:+905320000099');
     expect(h.waForms[0]!.get('Body')).toMatch(
-      /^Demir Yapı için SiteLog günlük raporları\. Linkiniz: https:\/\/go\.sitelog\.app\/r\//,
+      /^Demir Yapı için TalkOlog günlük raporları\. Linkiniz: https:\/\/go\.talkolog\.com\/r\//,
     );
     expect([...h.rows.values()].at(-1)).toMatchObject({
       channel: 'whatsapp',
@@ -707,7 +707,7 @@ describe('processInboundSms on WhatsApp (W2-16; spec §9.5, §19 Q26, Q40, Q85)'
     expect([...h.optOuts]).toEqual([]);
     expect(h.notifications).toEqual([]);
     expect(h.waForms.at(-1)!.get('Body')).toBe(
-      "SiteLog'dan artık WhatsApp mesajı almayacaksınız. Yeniden başlatmak için START yazın.",
+      "TalkOlog'dan artık WhatsApp mesajı almayacaksınız. Yeniden başlatmak için START yazın.",
     );
     const start = await h.run('START', { ...wa, messageId: 'm-in-2' });
     expect(start.consentChanges).toEqual([{ reporterId: 'r-emre', grant: true }]);
@@ -758,7 +758,7 @@ describe('processInboundSms on WhatsApp (W2-16; spec §9.5, §19 Q26, Q40, Q85)'
     expect(out.unknownContact).toBe(true);
     expect(h.unknown[0]).toMatchObject({ channel: 'whatsapp' });
     expect(h.waForms[0]!.get('Body')).toBe(
-      "Bu numara SiteLog'da kayıtlı değil. Ofisinizden sizi eklemesini isteyin.",
+      "Bu numara TalkOlog'da kayıtlı değil. Ofisinizden sizi eklemesini isteyin.",
     );
   });
 });

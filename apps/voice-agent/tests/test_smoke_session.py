@@ -66,7 +66,7 @@ async def test_text_mode_call_gets_context_and_ends(
     assert fake_llm.remaining == 0
     assert set(fake_llm.tool_names[0]) == set(TOOL_NAMES)
     texts = fake_llm.request_texts()
-    assert texts and "SiteLog voice assistant" in texts[0]
+    assert texts and "TalkOlog voice assistant" in texts[0]
     assert "[phone]" in texts[0]
     for text in texts:
         assert not contains_phone(text), text

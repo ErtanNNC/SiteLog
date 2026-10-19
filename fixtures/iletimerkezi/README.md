@@ -6,7 +6,7 @@ no account or key exists yet, W4-13).
 - `send-accepted.json`: the answer of `POST /v1/send-sms/json` to an accepted order, in the shape
   the driver has assumed since W1-08 (`response.status.code` `200`, `response.order.id`). Not
   confirmed against the provider (spec §19 Q280).
-- `report-*.json`: delivery reports in **SiteLog's normalized shape** (`IletimerkeziReport` in
+- `report-*.json`: delivery reports in **TalkOlog's normalized shape** (`IletimerkeziReport` in
   `packages/shared/src/sms/iletimerkezi-report.ts`: `ready`, and per recipient `number`,
   `delivery` `pending` | `delivered` | `undelivered` | `unknown`, `code`), as served by the fixture
   endpoint (`ILETIMERKEZI_REPORT_FIXTURE_ENDPOINT`). They are **not** the provider's format, which

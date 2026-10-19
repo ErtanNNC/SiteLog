@@ -130,7 +130,7 @@ async function filedJob(reportKey: string): Promise<JobPayloads['notify']> {
   const payload: JobPayloads['notify'] = {
     reporterId: MARCO,
     key: 'filed',
-    vars: { report_no: 'RL-2041-0199', pdf_link: 'https://go.sitelog.app/r/ABCDEF/report/1' },
+    vars: { report_no: 'RL-2041-0199', pdf_link: 'https://go.talkolog.com/r/ABCDEF/report/1' },
     dedupeKey: `notify:filed:${reportKey}`,
   };
   const id = await pg.db.enqueueJob('notify', payload, { dedupeKey: payload.dedupeKey });

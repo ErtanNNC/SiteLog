@@ -22,7 +22,7 @@ import { OrgBilling } from './OrgBilling';
 import { OutboundCalls } from './OutboundCalls';
 
 /**
- * /ops — SiteLog staff only (§15 reliability "dead-letter visible in an internal /ops page",
+ * /ops — TalkOlog staff only (§15 reliability "dead-letter visible in an internal /ops page",
  * §15 cost guardrail, §16.2 M9). Not in the sidebar; anyone who is not a platform admin gets the
  * not-found page. Data is platform-wide (every org), so times are shown in UTC.
  */

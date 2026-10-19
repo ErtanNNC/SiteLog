@@ -32,7 +32,7 @@ As in week 1 (`docs/PLAN_WEEK1.md`, "How each ticket runs"), with `W2-xx` as the
 | `DEEPGRAM_API_KEY`                                                                                   | W2-09, W2-10, W2-13  | `TRANSCRIBE_PROVIDER=fake` with the `fixtures/voice` transcripts                                                                                    |
 | VAPID key pair (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`)                            | W2-14                | The developer generates a local pair (`npx web-push generate-vapid-keys`); hosted values are `secrets set` by the owner. No pair: push is `console` |
 | Twilio WhatsApp sender, Meta business verification, approved templates per language (Q39), long lead | W2-15, W2-16         | `console` (demo orgs and a pack with no WhatsApp sender, §4.5); the Twilio WhatsApp Sandbox for a developer's own phone                             |
-| Twilio SMS sender (toll-free verification) / İletimerkezi `SITELOG`                                  | W2-06, W2-12         | `console` and the Demo phone, as in week 1                                                                                                          |
+| Twilio SMS sender (toll-free verification) / İletimerkezi `TALKOLOG`                                 | W2-06, W2-12         | `console` and the Demo phone, as in week 1                                                                                                          |
 
 ## Tickets
 

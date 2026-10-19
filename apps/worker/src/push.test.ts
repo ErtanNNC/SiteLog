@@ -33,10 +33,10 @@ function sub(id: string) {
 const MESSAGE: OutboundMessage = {
   to: assertE164('+15550143378'),
   reporterId: 'r-1',
-  body: 'One question about today: https://go.sitelog.app/r/ABCDEF',
+  body: 'One question about today: https://go.talkolog.com/r/ABCDEF',
   key: 'question_ready',
   language: 'en',
-  vars: { link: 'https://go.sitelog.app/r/ABCDEF' },
+  vars: { link: 'https://go.talkolog.com/r/ABCDEF' },
 };
 
 function setup(
@@ -117,7 +117,7 @@ describe('web push transport (W2-14)', () => {
   });
 
   it('a bare 400, 403 or 413 keeps the subscription: refused for this message, the SMS fallback (W2-15/16 review)', async () => {
-    // Apple and FCM answer 400 / 403 for a bad or expired VAPID JWT too (SiteLog's key or clock):
+    // Apple and FCM answer 400 / 403 for a bad or expired VAPID JWT too (TalkOlog's key or clock):
     // one configuration error must not revoke every subscription.
     for (const answer of [
       400,

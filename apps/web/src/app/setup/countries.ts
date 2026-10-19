@@ -117,7 +117,7 @@ export function reportLanguageName(t: CopyT, locale: OrgLocale | undefined): str
 
 /**
  * A new site manager's defaults in a pack's country: its phone country, first field language and
- * the language SiteLog uses with them (the pack's first field locale, F2; W4-02).
+ * the language TalkOlog uses with them (the pack's first field locale, F2; W4-02).
  */
 export interface SiteDefaults {
   /** A region libphonenumber knows: the pack's country, or US for one it does not know. */

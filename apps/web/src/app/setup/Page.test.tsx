@@ -92,10 +92,10 @@ describe('SetupPage (demo org)', () => {
       // "or call" (no voice number in the demo pack); the v1.0 template and its buttons are gone.
       const preview = screen.getByTestId('welcome-preview');
       expect(screen.getByTestId('welcome-text')).toHaveTextContent(
-        "Hi Elena, I'm SiteLog, the daily report assistant for Kestrel Build Group at Harbor View Apartments. Each workday before 17:30, tap your link and talk for ~3 min: https://go.sitelog.app/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
+        "Hi Elena, I'm TalkOlog, the daily report assistant for Kestrel Build Group at Harbor View Apartments. Each workday before 17:30, tap your link and talk for ~3 min: https://go.talkolog.com/r/MRZ4K7 - Reply STOP to opt out, HELP for help",
       );
       expect(screen.getByTestId('welcome-text')).toHaveAttribute('lang', 'en');
-      expect(preview).toHaveTextContent('SiteLog · text message');
+      expect(preview).toHaveTextContent('TalkOlog · text message');
       expect(preview).not.toHaveTextContent('Got it');
       expect(screen.queryByTestId('welcome-call-note')).not.toBeInTheDocument();
       // The org's own price (W4-10, §19 Q234).
@@ -503,7 +503,7 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
       await userEvent.click(await screen.findByRole('option', { name: 'Spanish' }));
       // The preview follows the chosen language (es-US), with the Spanish reply clause.
       const text = screen.getByTestId('welcome-text');
-      expect(text).toHaveTextContent(/^Hola Luis, soy SiteLog, el asistente de reportes diarios/);
+      expect(text).toHaveTextContent(/^Hola Luis, soy TalkOlog, el asistente de reportes diarios/);
       expect(text).toHaveAttribute('lang', 'es');
       // The backup reporter gets their own language and preference.
       await userEvent.click(screen.getByRole('button', { name: 'Add a backup reporter' }));
@@ -536,13 +536,13 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
   );
 
   it(
-    'refuses a landline for a text link and allows a call where SiteLog reaches it (Q229)',
+    'refuses a landline for a text link and allows a call where TalkOlog reaches it (Q229)',
     { timeout: 30_000 },
     async () => {
       const store = new DemoStore();
       const source = makeSource('admin', store);
       storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
-      // A demo org places its calls (console telephony): SiteLog can reach a landline by phone.
+      // A demo org places its calls (console telephony): TalkOlog can reach a landline by phone.
       renderWithProviders(<Harness />, {
         route: '/setup/site',
         source,
@@ -570,7 +570,7 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
     },
   );
 
-  it('blocks a landline SiteLog can neither text nor call (Q229, F2)', async () => {
+  it('blocks a landline TalkOlog can neither text nor call (Q229, F2)', async () => {
     const store = new DemoStore();
     const source = makeSource('admin', store);
     storage.set(keyFor(store), { done: { company: true }, flow: 'wizard', createdSites: [] });
@@ -586,7 +586,7 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Call' }));
     await userEvent.click(screen.getByRole('button', { name: 'Send welcome text' }));
     expect(
-      await screen.findByText(/^This is a landline number\. SiteLog can’t text it/),
+      await screen.findByText(/^This is a landline number\. TalkOlog can’t text it/),
     ).toBeInTheDocument();
     expect(store.data.sites.some((s) => s.project_code === 'KK-1302')).toBe(false);
     // A mobile number goes through.
@@ -631,14 +631,14 @@ describe('SetupPage site step on v1.2 (W4-02)', () => {
       // The TR welcome: one-way (no reply clause), no voice number (no "or call").
       const text = screen.getByTestId('welcome-text');
       expect(text).toHaveTextContent(
-        `Merhaba Emre, ben SiteLog, ${DEMIR_ORG_NAME} için Kartal günlük rapor asistanıyım. Her iş günü 17:30 öncesi linke dokunup ~3 dk anlatın: https://go.sitelog.app/r/MRZ4K7`,
+        `Merhaba Emre, ben TalkOlog, ${DEMIR_ORG_NAME} için Kartal günlük rapor asistanıyım. Her iş günü 17:30 öncesi linke dokunup ~3 dk anlatın: https://go.talkolog.com/r/MRZ4K7`,
       );
       expect(text).not.toHaveTextContent(/STOP|arayın/);
       expect(text).toHaveAttribute('lang', 'tr');
       expect(screen.getByText('Önizleme · Emre ne alacak')).toBeInTheDocument();
       // No TRY price yet (§19 Q9): Billing's line instead of a number.
       expect(screen.getByTestId('pricing-card')).toHaveTextContent(
-        'Şantiye başına fiyatınızı SiteLog belirler.',
+        'Şantiye başına fiyatınızı TalkOlog belirler.',
       );
       await userEvent.click(screen.getByRole('button', { name: 'Karşılama mesajını gönder' }));
 

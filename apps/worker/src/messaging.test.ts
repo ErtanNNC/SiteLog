@@ -19,10 +19,10 @@ describe('worker messaging (W1-08)', () => {
       TR: 'console: no sender id; whatsapp: no sender id',
       US: 'console: no sender id; whatsapp: no sender id',
     });
-    rows.find((r) => r.code === 'TR')!.sms_sender_id = 'SITELOG';
+    rows.find((r) => r.code === 'TR')!.sms_sender_id = 'TALKOLOG';
     rows.find((r) => r.code === 'TR')!.whatsapp_sender_id = '+905320000099';
     expect(describePackTransports(rows).TR).toBe(
-      'iletimerkezi (SITELOG); whatsapp twilio (+905320000099)',
+      'iletimerkezi (TALKOLOG); whatsapp twilio (+905320000099)',
     );
   });
 
@@ -61,7 +61,7 @@ describe('worker messaging (W1-08)', () => {
 
   it('the console email provider files what it would send for the Demo phone', async () => {
     const filed: unknown[] = [];
-    const provider = createConsoleProvider(silentLogger, 'SiteLog <reports@sitelog.app>', {
+    const provider = createConsoleProvider(silentLogger, 'TalkOlog <reports@talkolog.com>', {
       async insertConsoleEmail(row) {
         filed.push(row);
         return 'e-1';

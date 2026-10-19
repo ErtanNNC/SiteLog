@@ -73,7 +73,7 @@ export const placeCallJob: JobHandler<'place_call'> = async (ctx, payload) => {
 /**
  * W4-05 (P12, §19 Q232, Q350): Settings' _Call me now_. settings_test_call_start() wrote the call
  * (queued, no reporter, the admin's number held until now); the same telephony as the ladder
- * dials it: `console` for a demo org (nothing leaves SiteLog; the ring ends unanswered after
+ * dials it: `console` for a demo org (nothing leaves TalkOlog; the ring ends unanswered after
  * CONSOLE_CALL_RING_S), `livekit` on the pack's trunk with the pack's number as caller id. No
  * call window (the admin asked for it, on their own phone) and never a text: a test call has no
  * reporter. settings_test_call_dial() hands over the number and blanks it; a skip ends the call

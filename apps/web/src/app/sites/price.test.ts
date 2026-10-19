@@ -8,7 +8,7 @@ describe('sitePriceFor (P4 "Connect another site", spec §19 Q234, Q9)', () => {
     expect(sitePriceFor({ minor: 150000, currency: 'TRY' }, 'tr')).toBe('₺1.500');
   });
 
-  it('shows no price where SiteLog set none (TR waits for the owner, Q9)', () => {
+  it('shows no price where TalkOlog set none (TR waits for the owner, Q9)', () => {
     expect(sitePriceFor(null, 'tr')).toBeNull();
     expect(sitePriceFor(undefined, 'en')).toBeNull();
   });

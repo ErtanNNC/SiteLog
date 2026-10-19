@@ -11,7 +11,7 @@
  */
 export const uiEn = {
   common: {
-    appName: 'SiteLog',
+    appName: 'TalkOlog',
     language: 'Language',
     /** Endonyms: each language is named in itself, whatever the UI language. */
     languageNames: { en: 'English', es: 'Español', tr: 'Türkçe' },
@@ -71,7 +71,7 @@ export const uiEn = {
       /** The installed app opened with no link stored on this phone. */
       none: {
         title: 'Open your link',
-        body: 'Open SiteLog from the link in your text message.',
+        body: 'Open TalkOlog from the link in your text message.',
       },
       /** Anything else (a bad connection, a server error). */
       failed: 'Couldn’t open your link. Check your signal and try again.',
@@ -114,7 +114,7 @@ export const uiEn = {
       prefLink: 'Text link',
       prefLinkHint: 'Tap the link, talk, done. Add photos.',
       prefCall: 'Phone call',
-      prefCallHint: 'SiteLog calls you and listens.',
+      prefCallHint: 'TalkOlog calls you and listens.',
       prefNote: 'You can always use the other one.',
       continue: 'Continue',
       saving: 'Saving…',
@@ -226,7 +226,7 @@ export const uiEn = {
       /** Microphone refused or no MediaRecorder (F5 edge cases). */
       permission: {
         title: 'Microphone needed',
-        body: 'Allow the microphone so SiteLog can hear your report.',
+        body: 'Allow the microphone so TalkOlog can hear your report.',
         ios: 'iPhone: Settings → Safari → Microphone → Allow',
         android: 'Android: tap the lock icon by the address bar → Permissions → Microphone',
         fallback: 'Or record with your phone’s voice recorder and send the file:',
@@ -541,7 +541,7 @@ export const uiEn = {
      */
     talk: {
       title: 'Talk now',
-      assistant: 'Speaking with the SiteLog assistant',
+      assistant: 'Speaking with the TalkOlog assistant',
       status: {
         microphone: 'Asking for the microphone…',
         connecting: 'Connecting to the assistant…',
@@ -596,7 +596,7 @@ export const uiEn = {
       photo: 'Photo · {{date}}',
       remove: 'Remove',
       /** The phone's storage refused the item: it lives in this page only. */
-      unsaved: 'Not saved on this phone: keep SiteLog open until it is sent.',
+      unsaved: 'Not saved on this phone: keep TalkOlog open until it is sent.',
     },
     /**
      * Past reports (F10, F14, §9.3; W2-03). No artboard: built from §9.3 and the Draft (Field-06)
@@ -618,7 +618,7 @@ export const uiEn = {
       eyebrow: 'Report · {{date}}',
       version: 'Version {{version}}',
       continue: 'Continue this report',
-      noData: 'Nothing to show yet: SiteLog is still writing this report.',
+      noData: 'Nothing to show yet: TalkOlog is still writing this report.',
       back: 'Back to Past reports',
       failed: 'Couldn’t load your past reports. Check your signal and try again.',
       reportFailed: 'Couldn’t load this report. Check your signal and try again.',
@@ -642,8 +642,8 @@ export const uiEn = {
       sending: 'Sending…',
       sent: 'Sent. Open today’s link in the message we just sent you.',
       reasons: {
-        site_paused: 'This site is paused in SiteLog. Ask the office to resume it.',
-        site_inactive: 'This site is no longer on your list in SiteLog. Ask the office.',
+        site_paused: 'This site is paused in TalkOlog. Ask the office to resume it.',
+        site_inactive: 'This site is no longer on your list in TalkOlog. Ask the office.',
         not_working_day: 'Today is not a working day for this site, so there is no link for today.',
         no_consent: 'You turned off texts, so we can’t text you the link. Ask the office for it.',
         opted_out: 'You asked us to stop texting you, so we can’t send the link. Ask the office.',
@@ -662,7 +662,7 @@ export const uiEn = {
     settings: {
       channelTitle: 'Where should we send your messages?',
       channelDefault: 'Best available',
-      channelDefaultHint: 'SiteLog picks, in your company’s order',
+      channelDefaultHint: 'TalkOlog picks, in your company’s order',
       channels: {
         sms: 'Text message (SMS)',
         whatsapp: 'WhatsApp',
@@ -685,7 +685,7 @@ export const uiEn = {
         label: 'Notifications on this phone',
         hint: 'Your report prompts arrive as notifications. If one can’t reach this phone, we text you instead.',
         blocked:
-          'Notifications are blocked for SiteLog on this phone. Allow them in your phone’s settings, then turn them on here.',
+          'Notifications are blocked for TalkOlog on this phone. Allow them in your phone’s settings, then turn them on here.',
         failed: 'Couldn’t turn on notifications. Try again.',
       },
       on: 'On',
@@ -696,7 +696,7 @@ export const uiEn = {
       /** Behind *Turn off* for recording or processing (F15: reports stop, the office is told). */
       stopSheet: {
         title: 'Stop reporting?',
-        body: 'With this off, SiteLog can’t take your voice notes or photos, so your reports stop. The office is told. To report again, you agree again on this phone.',
+        body: 'With this off, TalkOlog can’t take your voice notes or photos, so your reports stop. The office is told. To report again, you agree again on this phone.',
         confirm: 'Turn off',
         cancel: 'Keep it on',
       },
@@ -720,12 +720,12 @@ export const uiEn = {
         /** A pack with two-way SMS: START undoes STOP (§9.5). */
         start:
           'You stopped our texts by replying STOP. To get them again, reply START to one of our texts.',
-        /** A one-way pack: replies don't reach SiteLog (spec §19 Q94). */
+        /** A one-way pack: replies don't reach TalkOlog (spec §19 Q94). */
         office: 'Texts to this phone are stopped. Ask the office.',
       },
       /**
        * W3-17 (F15, spec §19 Q129): "Don't call me today", for a reporter who prefers calls where
-       * SiteLog places them. Until the end of today; the messages come instead.
+       * TalkOlog places them. Until the end of today; the messages come instead.
        */
       notToday: {
         title: 'Calls today',

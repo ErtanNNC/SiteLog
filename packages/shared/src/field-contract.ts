@@ -280,7 +280,7 @@ export interface ResolveResponse {
    */
   talkNow: boolean;
   /**
-   * W3-17 (spec §19 Q51's first option, Q125, Q132): SiteLog places automated calls for this
+   * W3-17 (spec §19 Q51's first option, Q125, Q132): TalkOlog places automated calls for this
    * reporter's org: a pack with an outbound trunk in this environment, or a demo org (its calls
    * ring the panel's Demo phone). Only then does Field-02 show *Call me at report time
    * (automated)* and Settings its row and "Don't call me today" (§19 Q33: never asked otherwise).
@@ -722,7 +722,7 @@ export interface PreferencesResponse {
    */
   push: { offered: boolean; on: boolean };
   /**
-   * W3-17: SiteLog places automated calls for the reporter's org (`ResolveResponse.placesCalls`):
+   * W3-17: TalkOlog places automated calls for the reporter's org (`ResolveResponse.placesCalls`):
    * the `auto_call` row is listed (*Turn on* / *Turn off*) and, for a reporter who prefers calls,
    * "Don't call me today".
    */

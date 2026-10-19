@@ -13,11 +13,11 @@ import type { SmsCatalog, SmsKey, SmsWeatherPhrases } from './sms.ts';
 export const smsEs: SmsCatalog<SmsKey> = {
   welcome: {
     withNumber:
-      'Hola {first}, soy SiteLog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min, o llame al {number}: {link}',
+      'Hola {first}, soy TalkOlog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min, o llame al {number}: {link}',
     withoutNumber:
-      'Hola {first}, soy SiteLog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min: {link}',
+      'Hola {first}, soy TalkOlog, el asistente de reportes diarios de {company} en {site}. Cada día de trabajo antes de las {deadline}, toque su enlace y hable unos 3 min: {link}',
   },
-  verify_code: 'Su código de SiteLog: {code}. Vence en 10 minutos.',
+  verify_code: 'Su código de TalkOlog: {code}. Vence en 10 minutos.',
   daily_link: {
     withNumber: 'Reporte de hoy para {site}: {link} - o simplemente llame al {number}.',
     withoutNumber: 'Reporte de hoy para {site}: {link}',
@@ -43,15 +43,15 @@ export const smsEs: SmsCatalog<SmsKey> = {
   photos_link: 'Agregue fotos al reporte de hoy: {link}',
   edit_applied: 'Reporte del {weekday} actualizado: {change}. Versión {v} enviada a la oficina.',
   finish_report: 'Su llamada terminó antes de registrar el reporte. Termínelo con un toque: {link}',
-  site_paused: '{site} está en pausa en SiteLog. Pida a la oficina que reactive la obra.',
-  unknown_number: 'Este número no está en SiteLog. Pida a su oficina que lo agregue.',
+  site_paused: '{site} está en pausa en TalkOlog. Pida a la oficina que reactive la obra.',
+  unknown_number: 'Este número no está en TalkOlog. Pida a su oficina que lo agregue.',
   help: {
     withNumber:
-      'Reportes diarios de SiteLog para {company}. Su enlace: {link} - Llame al {number} - Envíe CALL o TEXT para elegir llamada o mensaje - STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
+      'Reportes diarios de TalkOlog para {company}. Su enlace: {link} - Llame al {number} - Envíe CALL o TEXT para elegir llamada o mensaje - STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
     withoutNumber:
-      'Reportes diarios de SiteLog para {company}. Su enlace: {link} - Envíe CALL o TEXT para elegir llamada o mensaje - STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
+      'Reportes diarios de TalkOlog para {company}. Su enlace: {link} - Envíe CALL o TEXT para elegir llamada o mensaje - STOP para darse de baja. Pueden aplicarse cargos por mensajes y datos.',
   },
-  stop_confirm: 'Ya no recibirá mensajes de SiteLog. Responda START para reactivarlos.',
+  stop_confirm: 'Ya no recibirá mensajes de TalkOlog. Responda START para reactivarlos.',
   // No accents, so GSM-7: one segment each (spec §19 Q46).
   pref_call_ok:
     'Listo, su reporte diario ahora es por llamada. Responda TEXT para cambiar a un enlace.',
@@ -64,7 +64,7 @@ export const smsEs: SmsCatalog<SmsKey> = {
   // W2-16 (spec §19 Q85, Q40): WhatsApp only, for the Q63 review.
   whatsapp_use_link: 'Las notas de voz van por su enlace: {link}',
   whatsapp_stop_confirm:
-    'SiteLog deja de enviarle mensajes de WhatsApp. Responda START para reactivarlos.',
+    'TalkOlog deja de enviarle mensajes de WhatsApp. Responda START para reactivarlos.',
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (mirrors `smsReplyHintEn`). */
@@ -90,4 +90,4 @@ export const smsHelpPrivacyEs = ' - Privacidad: {privacy_link}';
 
 /** W4-05 (spec §19 Q232): Settings' "Send me a test message". For the Q63 review. */
 export const smsTestMessageEs =
-  'Mensaje de prueba de SiteLog para {company}. Sus jefes de obra reciben los mensajes de este remitente. No hace falta responder.';
+  'Mensaje de prueba de TalkOlog para {company}. Sus jefes de obra reciben los mensajes de este remitente. No hace falta responder.';

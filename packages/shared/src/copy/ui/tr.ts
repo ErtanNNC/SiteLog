@@ -3,7 +3,7 @@ import type { PanelCopyTree, UiResources } from './types.ts';
 /** UI copy, Turkish (D9). Sentences use the formal "siz", no exclamation marks (§9.7). */
 export const uiTr: UiResources & { panel: PanelCopyTree } = {
   common: {
-    appName: 'SiteLog',
+    appName: 'TalkOlog',
     language: 'Dil',
     languageNames: { en: 'English', es: 'Español', tr: 'Türkçe' },
     loading: 'Yükleniyor…',
@@ -21,7 +21,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
    */
   panel: {
     app: {
-      name: 'SiteLog',
+      name: 'TalkOlog',
       tagline: 'Anlatın. Kayda geçsin.',
       skipToContent: 'İçeriğe geç',
     },
@@ -100,19 +100,19 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           processing_delayed: { title: '{{reportNo}} her zamankinden uzun sürüyor' },
           processing_failed: {
             title: '{{reportNo}}: işleme durdu',
-            body: 'SiteLog yaklaşık üç saat içinde {{tries}} kez denedi ve durdu ({{job}}). Rapor veren taslağını bekliyor olabilir. SiteLog ekibi uyarıldı; kaynaklarını kontrol etmek için raporu açın.',
+            body: 'TalkOlog yaklaşık üç saat içinde {{tries}} kez denedi ve durdu ({{job}}). Rapor veren taslağını bekliyor olabilir. TalkOlog ekibi uyarıldı; kaynaklarını kontrol etmek için raporu açın.',
           },
           message_not_sent: {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
-            body: 'SiteLog yaklaşık üç saat içinde {{tries}} kez denedi ve durdu ({{job}}). Bir yanıt bekliyor olabilir; bugün önemliyse kendisiyle doğrudan iletişime geçin. SiteLog ekibi uyarıldı.',
+            body: 'TalkOlog yaklaşık üç saat içinde {{tries}} kez denedi ve durdu ({{job}}). Bir yanıt bekliyor olabilir; bugün önemliyse kendisiyle doğrudan iletişime geçin. TalkOlog ekibi uyarıldı.',
           },
           message_not_handled: {
             title: '{{name}}: ondan gelen bir mesaj işlenemedi',
-            body: 'SiteLog yaklaşık üç saat içinde {{tries}} kez denedi ve durdu ({{job}}). Bir yanıt bekliyor olabilir; bugün önemliyse kendisiyle doğrudan iletişime geçin. SiteLog ekibi uyarıldı.',
+            body: 'TalkOlog yaklaşık üç saat içinde {{tries}} kez denedi ve durdu ({{job}}). Bir yanıt bekliyor olabilir; bugün önemliyse kendisiyle doğrudan iletişime geçin. TalkOlog ekibi uyarıldı.',
           },
           message_opted_out: {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
-            body: 'Numarası SMS sağlayıcısının çıkış listesinde; START yazana kadar SiteLog ona mesaj göndermez.',
+            body: 'Numarası SMS sağlayıcısının çıkış listesinde; START yazana kadar TalkOlog ona mesaj göndermez.',
           },
           message_refused: {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
@@ -120,12 +120,12 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           },
           message_channels_failed: {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
-            body: 'SiteLog onun için kullanabildiği tüm mesaj kanallarını denedi ({{channels}}) ve hiçbiri mesajı iletemedi ({{error}}). Numarasını ve kanallarını Ekip ve numaralar sayfasında kontrol edin.',
+            body: 'TalkOlog onun için kullanabildiği tüm mesaj kanallarını denedi ({{channels}}) ve hiçbiri mesajı iletemedi ({{error}}). Numarasını ve kanallarını Ekip ve numaralar sayfasında kontrol edin.',
           },
           message_account_fault: {
             title: '{{name}}: ona giden bir mesaj SMS sağlayıcısında başarısız oldu',
             titleUnnamed: 'Bir mesaj SMS sağlayıcısında başarısız oldu',
-            body: 'Bu hesap için mesajlar başarısız oluyor ({{error}}). SMS sağlayıcısı mesajı kabul etti, sonra rapor verenin numarası yüzünden değil, hesap ya da gönderici yüzünden reddetti. SiteLog varsa diğer mesaj kanallarını dener. Önümüzdeki bir saat içinde aynı şekilde başarısız olan mesajlar için yeniden bildirim gelmez.',
+            body: 'Bu hesap için mesajlar başarısız oluyor ({{error}}). SMS sağlayıcısı mesajı kabul etti, sonra rapor verenin numarası yüzünden değil, hesap ya da gönderici yüzünden reddetti. TalkOlog varsa diğer mesaj kanallarını dener. Önümüzdeki bir saat içinde aynı şekilde başarısız olan mesajlar için yeniden bildirim gelmez.',
           },
           message_no_sender: {
             title: '{{name}}: ona giden bir mesaj gönderilemedi',
@@ -134,15 +134,15 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           welcome_undeliverable: { title: '{{name}}: karşılama mesajı iletilemedi' },
           welcome_provider_fault: {
             title: '{{name}}: karşılama mesajı SMS sağlayıcısında başarısız oldu',
-            body: 'Bu hesap için mesajlar başarısız oluyor ({{error}}). SiteLog ekibi uyarıldı; rapor veren davet edildi olarak işaretlenmedi. Sağlayıcı düzelince karşılama mesajını Ekip ve numaralar sayfasından yeniden gönderin.',
+            body: 'Bu hesap için mesajlar başarısız oluyor ({{error}}). TalkOlog ekibi uyarıldı; rapor veren davet edildi olarak işaretlenmedi. Sağlayıcı düzelince karşılama mesajını Ekip ve numaralar sayfasından yeniden gönderin.',
           },
           welcome_not_sent: {
             title: '{{name}}: karşılama mesajı gönderilmedi',
             bodies: {
               opted_out:
-                'Mesajlardan çıktı; yeniden kabul edene kadar (yanıt alan paketlerde START) SiteLog ona mesaj göndermez.',
+                'Mesajlardan çıktı; yeniden kabul edene kadar (yanıt alan paketlerde START) TalkOlog ona mesaj göndermez.',
               no_consent:
-                'Onay sorulduğunda mesajları reddetti, bu yüzden SiteLog ona mesaj göndermez.',
+                'Onay sorulduğunda mesajları reddetti, bu yüzden TalkOlog ona mesaj göndermez.',
               no_channel:
                 'Ülkesinin hiçbir mesaj kanalı karşılama mesajını ve linkini taşıyamıyor. Kendisine başka bir yoldan ulaşın.',
               console_real_org:
@@ -160,11 +160,11 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           },
           reporter_opted_out: {
             title: '{{name}} mesajlardan çıktı',
-            body: '{{phone}} SMS sağlayıcısının çıkış listesinde (bu göndericiye daha önce STOP yazdı); START yazana kadar SiteLog ona mesaj göndermez. Raporlarına ihtiyacınız varsa kendisini arayın.',
+            body: '{{phone}} SMS sağlayıcısının çıkış listesinde (bu göndericiye daha önce STOP yazdı); START yazana kadar TalkOlog ona mesaj göndermez. Raporlarına ihtiyacınız varsa kendisini arayın.',
           },
           reporter_stop: {
             title: '{{name}} mesajlardan çıktı (STOP)',
-            body: '{{phone}} STOP yazdı; START yazana kadar SiteLog ona mesaj göndermez. Raporlarına ihtiyacınız varsa kendisini arayın.',
+            body: '{{phone}} STOP yazdı; START yazana kadar TalkOlog ona mesaj göndermez. Raporlarına ihtiyacınız varsa kendisini arayın.',
           },
           unknown_contact: { title: 'Bilinmeyen bir numara rapor göndermeye çalıştı' },
           reporter_consent_revoked: {
@@ -172,11 +172,11 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
               recording: '{{name}} raporlarının kaydedilmesine verdiği onayı kapattı',
               data_processing: '{{name}} raporlarının işlenmesine verdiği onayı kapattı',
             },
-            body: 'Onayı telefonundaki Ayarlar ekranından kapattı; telefonundan yeniden onay verene kadar SiteLog ondan rapor almaz. Beklenmedik bir durumsa kendisiyle iletişime geçin.',
+            body: 'Onayı telefonundaki Ayarlar ekranından kapattı; telefonundan yeniden onay verene kadar TalkOlog ondan rapor almaz. Beklenmedik bir durumsa kendisiyle iletişime geçin.',
           },
           device_verify_locked: {
             title: '{{name}} için telefon doğrulaması bir saatliğine kilitlendi',
-            body: 'Bir saat içinde linkine 5 kez yanlış kod girildi; SiteLog bir saat boyunca yeni kod kabul etmiyor. Bunu yapan kendisi değilse linki başkasının elinde olabilir: kendisiyle iletişime geçin.',
+            body: 'Bir saat içinde linkine 5 kez yanlış kod girildi; TalkOlog bir saat boyunca yeni kod kabul etmiyor. Bunu yapan kendisi değilse linki başkasının elinde olabilir: kendisiyle iletişime geçin.',
           },
           reporter_wrong_site: {
             title: '{{name}} şantiyenin yanlış olduğunu söylüyor',
@@ -202,7 +202,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       },
       footer: {
         agentReady: 'Asistan hazır · mesaj ve arama',
-        sitelogNumbers: 'SiteLog numaraları',
+        sitelogNumbers: 'TalkOlog numaraları',
         profile: 'Profil',
         signOut: 'Çıkış yap',
         userMenu: 'Hesap menüsü',
@@ -480,7 +480,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       speed: 'Oynatma hızı',
       speedValue: '{{rate}}×',
       laneReporter: 'Şantiye şefi',
-      laneAgent: 'SiteLog asistanı',
+      laneAgent: 'TalkOlog asistanı',
       speakerFilter: 'Konuşan',
       filter: {
         both: 'İkisi de',
@@ -525,7 +525,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       plan: 'Mevcut plan',
       perMonth: '/ ay',
       equation: '{{count}} × {{price}} = {{total}}',
-      noPrice: 'Şantiye başına fiyatınızı SiteLog belirler. Burada henüz görünmüyorsa bize sorun.',
+      noPrice: 'Şantiye başına fiyatınızı TalkOlog belirler. Burada henüz görünmüyorsa bize sorun.',
       nextInvoice: 'Sonraki fatura',
       paymentMethod: 'Ödeme yöntemi',
       updatePayment: 'Ödeme yöntemini güncelle',
@@ -534,7 +534,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       whatCountsPaused:
         'Duraklatılan şantiyelerde hatırlatmalar ve faturalandırma bir sonraki dönemden itibaren durur.',
       whatCountsProrated: 'Eklenen şantiyeler Stripe tarafından kıst olarak faturalandırılır.',
-      whatCountsManual: 'Eklenen şantiyeler SiteLog’un bir sonraki faturasına yansır.',
+      whatCountsManual: 'Eklenen şantiyeler TalkOlog’un bir sonraki faturasına yansır.',
       sitesOnPlan: 'Bu plandaki şantiyeler',
       thing: 'faturalandırma',
       columns: {
@@ -599,9 +599,9 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       invoiceColumns: { date: 'Tarih', sites: 'Şantiye', amount: 'Tutar', status: 'Durum' },
       download: 'İndir',
       manual: {
-        title: 'SiteLog sizi doğrudan faturalandırır',
-        body: 'Burada kart gerekmez. SiteLog her ay aşağıdaki aktif şantiyeler için faturanızı gönderir; duraklatılan bir şantiye bir sonraki dönemden itibaren faturalandırılmaz.',
-        invoices: 'Faturalarınız SiteLog’dan e-postayla gelir.',
+        title: 'TalkOlog sizi doğrudan faturalandırır',
+        body: 'Burada kart gerekmez. TalkOlog her ay aşağıdaki aktif şantiyeler için faturanızı gönderir; duraklatılan bir şantiye bir sonraki dönemden itibaren faturalandırılmaz.',
+        invoices: 'Faturalarınız TalkOlog’dan e-postayla gelir.',
       },
       banner: {
         label: 'Faturalandırma',
@@ -612,11 +612,11 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         trial_ended:
           'Ücretsiz denemeniz {{ended}} tarihinde bitti. Hatırlatmaların ve aramaların sürmesi için ödeme bilgilerini {{date}} tarihine kadar ekleyin.',
         manualPastDue:
-          'SiteLog faturanızın ödemesi gecikti. Ödenmezse hatırlatmalar ve aramalar {{date}} tarihinde durur.',
+          'TalkOlog faturanızın ödemesi gecikti. Ödenmezse hatırlatmalar ve aramalar {{date}} tarihinde durur.',
         blocked:
           'Hatırlatmalar ve aramalar durduruldu: ödeme gecikti. Yeniden başlatmak için ödeme yöntemini güncelleyin.',
         manualBlocked:
-          'Hatırlatmalar ve aramalar durduruldu: SiteLog faturanızın ödemesi gecikti. Yeniden başlatmak için SiteLog ile iletişime geçin.',
+          'Hatırlatmalar ve aramalar durduruldu: TalkOlog faturanızın ödemesi gecikti. Yeniden başlatmak için TalkOlog ile iletişime geçin.',
         canceled:
           'Aboneliğiniz iptal edildi. Faturalandırma sayfasından yeniden başlatılana kadar hatırlatmalar ve aramalar kapalıdır.',
         action: 'Faturalandırmayı aç',
@@ -667,7 +667,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         countryLocked: 'Ülke kurulumdan sonra değiştirilemez.',
         countryRequired: 'Şirketinizin ülkesini seçin.',
         countryList: 'ülke listesi',
-        noCountries: 'Bu SiteLog veritabanında henüz hiçbir ülke tanımlı değil.',
+        noCountries: 'Bu TalkOlog veritabanında henüz hiçbir ülke tanımlı değil.',
         presets: {
           title: '{{country}} için ayarlar',
           reportLanguage: 'Rapor dili',
@@ -719,7 +719,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         removeBackup: 'Yedeği kaldır',
         backupName: 'Yedeğin adı',
         backupPhone: 'Yedeğin cep telefonu',
-        backupLanguage: 'SiteLog’un yedekle kullanacağı dil',
+        backupLanguage: 'TalkOlog’un yedekle kullanacağı dil',
         backupPreference: 'Yedeğin tercih ettiği kanal',
         addAnother: 'Başka şantiye ekle',
         send: 'Karşılama mesajını gönder',
@@ -733,11 +733,11 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           landline_text:
             'Bu bir sabit hat numarası, mesaj alamaz. Arama’yı seçin ya da bir cep telefonu numarası girin.',
           landline_unreachable:
-            'Bu bir sabit hat numarası. SiteLog bu numaraya mesaj gönderemez; Şimdi konuş için de mesajla gelen kişisel link ve kod gerekir. Bir cep telefonu numarası girin.',
+            'Bu bir sabit hat numarası. TalkOlog bu numaraya mesaj gönderemez; Şimdi konuş için de mesajla gelen kişisel link ve kod gerekir. Bir cep telefonu numarası girin.',
         },
         preview: {
           title: 'Önizleme · {{name}} ne alacak',
-          from: 'SiteLog · kısa mesaj',
+          from: 'TalkOlog · kısa mesaj',
           sampleLink: 'Link örnektir. Herkes kendi linkini alır.',
           callAnyTime: 'İstediği zaman {{number}} numarasını da arayabilir.',
           unavailable: 'Önizleme yok: bu ülkede mesajlar link içeremez.',
@@ -903,8 +903,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         viaLink: 'mesajdaki linkle sesli not, {{time}}',
         viaCall: 'telefon araması {{time}} ({{duration}})',
         viaCallNoLength: 'telefon araması {{time}}',
-        viaCallOut: 'SiteLog araması {{time}} ({{duration}})',
-        viaCallOutNoLength: 'SiteLog araması {{time}}',
+        viaCallOut: 'TalkOlog araması {{time}} ({{duration}})',
+        viaCallOutNoLength: 'TalkOlog araması {{time}}',
         viaBrowserCall: 'tarayıcı araması {{time}} ({{duration}})',
         viaBrowserCallNoLength: 'tarayıcı araması {{time}}',
         fallbackRecording: 'basit kayıt modu',
@@ -920,7 +920,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         editedBy: '{{name}} düzenledi {{time}}',
         signedOff: '{{name}} onayladı {{time}}',
         filedWithoutConfirmation: 'onaysız dosyalandı',
-        enteredBy: '{{name}} SiteLog’a girdi, {{time}}',
+        enteredBy: '{{name}} TalkOlog’a girdi, {{time}}',
       },
       actions: {
         edit: 'Düzenle',
@@ -1006,8 +1006,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         voiceNotes: '{{count}} sesli not',
         call: 'Arama',
         recordings: '{{count}} kayıt',
-        typed: 'SiteLog’da yazıldı',
-        typedBy: 'Bu raporu {{name}} SiteLog’da yazdı; sesli not yok.',
+        typed: 'TalkOlog’da yazıldı',
+        typedBy: 'Bu raporu {{name}} TalkOlog’da yazdı; sesli not yok.',
         fullTranscript: 'Konuşma dökümünün tamamı',
         activity: 'Etkinlik',
         excerpts: 'Döküm alıntıları',
@@ -1031,14 +1031,14 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       title: '{{weekday}} — {{site}}',
       versionLine: '{{author}} · {{time}}',
       versionLineNote: '{{author}} · {{time}} · {{note}}',
-      versionAuthor: { agent: 'SiteLog asistanı', reporter: 'Yanıt', office_user: 'Ofis' },
+      versionAuthor: { agent: 'TalkOlog asistanı', reporter: 'Yanıt', office_user: 'Ofis' },
       viewingOld: 'Sürüm {{version}} görüntüleniyor. Güncel sürüm {{current}}.',
       viewCurrent: 'Güncel sürümü göster',
       signOffHidden: 'Onay, yöneticiler ve proje müdürleri içindir.',
       undoWindow: '10 dakika içinde geri alın',
       pdfPreparing: 'PDF hazırlanıyor…',
       pdfFailed: 'PDF hazırlanamadı. Tekrar deneyin.',
-      pdfNotSaved: 'PDF açıldı ama henüz SiteLog’a kaydedilemedi.',
+      pdfNotSaved: 'PDF açıldı ama henüz TalkOlog’a kaydedilemedi.',
       weatherDayNote: 'Hava nedeniyle çalışılmadı — iş yapılmadı.',
       summaryEmpty: 'Özet yok.',
       manpowerEmpty: 'İşçilik bildirilmedi.',
@@ -1086,7 +1086,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       },
       activity: {
         empty: 'Henüz etkinlik yok.',
-        agent: 'SiteLog',
+        agent: 'TalkOlog',
         office: 'Ofis',
         system: 'Sistem',
         events: {
@@ -1187,7 +1187,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         none: 'Bu rapor için konuşma dökümü yok.',
         segments: '{{count}} bölüm',
         reporter: 'Rapor veren',
-        agent: 'SiteLog',
+        agent: 'TalkOlog',
       },
       duration: {
         seconds: '{{s}} sn',
@@ -1295,7 +1295,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     team: {
       title: 'Ekip ve numaralar',
       subtitle:
-        'SiteLog her aramayı ve mesajı telefon numarasından bir şantiyeyle eşleştirir. Kişisel linkler tek bir kişiye aittir.',
+        'TalkOlog her aramayı ve mesajı telefon numarasından bir şantiyeyle eşleştirir. Kişisel linkler tek bir kişiye aittir.',
       thing: 'ekip',
       inviteReporter: 'Raporcu davet et',
       unknown: {
@@ -1311,7 +1311,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         title: '{{phone}} numarasını bir şantiyeyle eşleştir',
         description: 'Bekleyen mesaj, numara eşleştirilir eşleştirilmez işlenir.',
         descriptionConsent:
-          'SiteLog ona linkiyle birlikte bir karşılama mesajı gönderir. Mesajları ve kaydı kabul ettiğinde rapor verebilir.',
+          'TalkOlog ona linkiyle birlikte bir karşılama mesajı gönderir. Mesajları ve kaydı kabul ettiğinde rapor verebilir.',
         name: 'Ad',
         namePlaceholder: 'Bu kim?',
         role: 'Görev',
@@ -1364,12 +1364,12 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         preference: 'Tercih',
         messageChannel: 'Mesajların gideceği kanal',
         channelDefault: 'Ülkenizin sırası ({{order}})',
-        language: 'SiteLog’un kullanacağı dil',
+        language: 'TalkOlog’un kullanacağı dil',
         languageHint: 'Mesajlar, kayıt ekranı ve aramalar bu dilde olur.',
         attest: 'Bu değişikliği {{first}} istedi',
         attestHint: 'Adınızla birlikte kayda geçer.',
         attestRequired:
-          'Kutuyu işaretleyin: SiteLog’un {{first}} kişisine ulaşma şeklini yalnızca kendisi istediğinde değiştirin.',
+          'Kutuyu işaretleyin: TalkOlog’un {{first}} kişisine ulaşma şeklini yalnızca kendisi istediğinde değiştirin.',
         channelNotAgreed:
           '{{first}} henüz {{channel}} kanalını kabul etmedi. Kayıt ekranından açana kadar mesajlar başka yoldan gider.',
         save: 'Değişiklikleri kaydet',
@@ -1380,7 +1380,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       you: 'siz',
       disableDialog: {
         title: '{{name}} devre dışı bırakılsın mı?',
-        body: 'SiteLog ona mesaj göndermeyi ve aramayı bırakır, linki de çalışmaz. Yeniden etkinleştirmek için karşılama mesajını tekrar gönderin.',
+        body: 'TalkOlog ona mesaj göndermeyi ve aramayı bırakır, linki de çalışmaz. Yeniden etkinleştirmek için karşılama mesajını tekrar gönderin.',
       },
       removeDialog: {
         title: '{{name}} kaldırılsın mı?',
@@ -1401,22 +1401,23 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       },
       callNow: {
         title: '{{name}} şimdi aransın mı?',
-        body: 'SiteLog asistanı {{first}} kişisini {{site}} için bugünkü rapor hakkında şimdi arar. {{first}} önce görüşmenin kaydedildiğini duyar.',
-        attest: '{{first}}, günlük rapor için SiteLog’un aramasını kabul etti',
+        body: 'TalkOlog asistanı {{first}} kişisini {{site}} için bugünkü rapor hakkında şimdi arar. {{first}} önce görüşmenin kaydedildiğini duyar.',
+        attest: '{{first}}, günlük rapor için TalkOlog’un aramasını kabul etti',
         attestHint:
           'Adınızla birlikte kayda geçer. Yalnızca bu aramaya izin verir: hatırlatma aramaları için {{first}} kişisinin kayıt uygulamasında kendi onayı gerekir.',
         noText:
-          '{{first}} açmazsa SiteLog mesaj göndermez. Aramanın nasıl geçtiğini burada görürsünüz.',
+          '{{first}} açmazsa TalkOlog mesaj göndermez. Aramanın nasıl geçtiğini burada görürsünüz.',
         confirm: 'Şimdi ara',
         refused: {
           attestation_required: 'Önce kutuyu işaretleyin: kişi aranmayı kabul etmiş olmalı.',
-          no_trunk: 'SiteLog şirketiniz için henüz arama yapamıyor.',
-          reporter_inactive: 'Bu raporcu devre dışı ya da mesajları durdurmuş. SiteLog onu aramaz.',
+          no_trunk: 'TalkOlog şirketiniz için henüz arama yapamıyor.',
+          reporter_inactive:
+            'Bu raporcu devre dışı ya da mesajları durdurmuş. TalkOlog onu aramaz.',
           calls_turned_off:
             'Otomatik aramaları kayıt uygulamasında kendisi kapattı. Yalnızca kendisi yeniden açabilir.',
           no_calls_today: 'Bugün aranmak istemediğini bildirdi.',
           site_not_active: 'Şantiye duraklatılmış ya da arşivlenmiş.',
-          outside_window: 'SiteLog’un bu şantiyede arama yaptığı saatlerin dışındayız.',
+          outside_window: 'TalkOlog’un bu şantiyede arama yaptığı saatlerin dışındayız.',
           day_filed: 'Bu şantiyenin bugünkü raporu zaten kaydedildi.',
           call_live: 'Kendisiyle zaten bir arama sürüyor.',
           limit_reached: 'Ofis onu bugün izin verilen sayıda aradı.',
@@ -1482,7 +1483,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         role: 'Görev',
         sites: 'Şantiyeler',
         languages: 'Konuştuğu diller',
-        language: 'SiteLog’un kullanacağı dil',
+        language: 'TalkOlog’un kullanacağı dil',
         preference: 'Tercih edilen kanal',
         preferenceHint: 'Diğerini de her zaman kullanabilir.',
         callTalkNow: 'Kayıt ekranındaki Şimdi konuş ile arar.',
@@ -1620,7 +1621,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       workingDaysHint: 'Hatırlatmalar ve “eksik” yalnızca çalışma günlerinde sayılır.',
       channels: {
         pack: 'Ülke paketiniz',
-        packHint: 'SiteLog tarafından ülkeye göre ayarlanır. Değişiklik için SiteLog’a yazın.',
+        packHint: 'TalkOlog tarafından ülkeye göre ayarlanır. Değişiklik için TalkOlog’a yazın.',
         country: 'Ülke',
         sender: 'Mesaj göndericisi',
         senderTypes: {
@@ -1630,11 +1631,11 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           alphanumeric: 'Gönderici adı',
         },
         senderNotSet: 'Bu ortamda ayarlanmadı',
-        voiceNumber: 'SiteLog’u arama numarası',
+        voiceNumber: 'TalkOlog’u arama numarası',
         talkNowOnly: 'Yalnızca Şimdi konuş',
         channelOrder: 'Mesaj sırası',
         twoWay: 'Mesajlara yanıt',
-        twoWayYes: 'Çift yönlü: STOP, HELP ve yanıtlar SiteLog’a ulaşır',
+        twoWayYes: 'Çift yönlü: STOP, HELP ve yanıtlar TalkOlog’a ulaşır',
         twoWayNo: 'Tek yönlü: mesajlar yanıtlanamaz',
         links: 'Mesajlarda bağlantı',
         linksYes: 'İzinli',
@@ -1644,7 +1645,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         dailyLinkTime: 'Günlük bağlantı saati',
         dailyLinkTimeHint: 'Her raporcu günün bağlantısını bu saatte mesajla alır (şantiye saati).',
         ttl: 'Günlük bağlantının geçerlilik süresi (saat)',
-        ttlHint: 'Boş: SiteLog’un varsayılanı. Tam saat, 1–168.',
+        ttlHint: 'Boş: TalkOlog’un varsayılanı. Tam saat, 1–168.',
         ttlInvalid: '1 ile 168 arasında tam saat girin veya boş bırakın.',
         calls: 'Aramalar',
         autoCall: 'Arama tercih edenleri ara',
@@ -1657,19 +1658,19 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         callWindowFrom: 'Başlangıç',
         callWindowTo: 'Bitiş',
         noCalls:
-          'SiteLog {{country}} içinde henüz arama yapmıyor. Arama tercih edenler kayıt ekranında Şimdi konuş’u kullanır; hatırlatma mesajları arama aralığına uyar.',
+          'TalkOlog {{country}} içinde henüz arama yapmıyor. Arama tercih edenler kayıt ekranında Şimdi konuş’u kullanır; hatırlatma mesajları arama aralığına uyar.',
         newReporters: 'Yeni raporcular',
         defaultPref: 'Varsayılan tercih',
         defaultPrefHint: 'Kurulum ve Davet bununla başlar. Diğerini her zaman kullanabilirler.',
         notice: 'Kayıt bildirimi',
-        noticeHint: 'Her aramanın başında söylenir. SiteLog ülkeye göre belirler ve sürümler.',
+        noticeHint: 'Her aramanın başında söylenir. TalkOlog ülkeye göre belirler ve sürümler.',
         noticeVersion: 'Sürüm {{version}}',
         test: 'Deneme',
         testHint: 'Şantiye şeflerinizin ne aldığını görün.',
         testMessage: 'Bana deneme mesajı gönder',
         testDialog: {
           title: 'Bana deneme mesajı gönder',
-          body: 'SiteLog bu numaraya ülkenizin göndericisinden bir deneme mesajı gönderir. Numara kaydedilmez.',
+          body: 'TalkOlog bu numaraya ülkenizin göndericisinden bir deneme mesajı gönderir. Numara kaydedilmez.',
           phone: 'Cep telefonu numaranız',
           language: 'Mesajın dili',
           attest: 'Bu numara bana ait.',
@@ -1681,14 +1682,14 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
           demo: 'Demo şirket: hiçbir şey gönderilmedi. Gerçek şirketler mesajı ülkenin göndericisinden alır.',
           noSender:
             'Bu ortamda {{country}} için mesaj göndericisi ayarlanmadı, bu yüzden hiçbir şey gönderilmedi.',
-          failed: 'Mesaj sağlayıcısı deneme mesajını reddetti. SiteLog bunu kaydetti.',
+          failed: 'Mesaj sağlayıcısı deneme mesajını reddetti. TalkOlog bunu kaydetti.',
           rateLimited: 'Saatte beş deneme mesajı. Daha sonra tekrar deneyin.',
           invalidPhone: 'Geçerli bir cep telefonu numarası girin.',
         },
         callMeNow: 'Beni şimdi ara',
         callDialog: {
           title: 'Beni şimdi ara',
-          body: 'SiteLog bu numarayı kısa bir deneme aramasıyla arar: kimin aradığını, tek bir cümleyi ve vedayı söyler. Hiçbir şey kaydedilmez, numara saklanmaz.',
+          body: 'TalkOlog bu numarayı kısa bir deneme aramasıyla arar: kimin aradığını, tek bir cümleyi ve vedayı söyler. Hiçbir şey kaydedilmez, numara saklanmaz.',
           phone: 'Cep telefonu numaranız',
           language: 'Aramanın dili',
           attest: 'Bu numara bana ait.',
@@ -1697,10 +1698,10 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         },
         callResults: {
           requested: 'Aranıyorsunuz. Telefonunuz bir dakika içinde çalmalı.',
-          demo: 'Demo şirket: arama SiteLog konsolunda yapıldı, gerçek bir telefon çalmaz.',
+          demo: 'Demo şirket: arama TalkOlog konsolunda yapıldı, gerçek bir telefon çalmaz.',
           rateLimited: 'Saatte beş deneme araması. Daha sonra tekrar deneyin.',
           callLive: 'Bir deneme araması hâlâ sürüyor. Bitmesini bekleyin.',
-          noTrunk: 'SiteLog henüz {{country}} içinde arama yapmıyor.',
+          noTrunk: 'TalkOlog henüz {{country}} içinde arama yapmıyor.',
           invalidPhone: 'Geçerli bir cep telefonu numarası girin.',
         },
       },
@@ -1722,8 +1723,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         removeLine: 'Satırı kaldır',
         removeLineN: '{{n}}. satırı kaldır',
         footer: 'Alt bilgi',
-        footerText: 'Şantiye şefinin sesli raporundan SiteLog tarafından oluşturuldu',
-        footerToggle: '“SiteLog tarafından oluşturuldu…” alt bilgisini göster',
+        footerText: 'Şantiye şefinin sesli raporundan TalkOlog tarafından oluşturuldu',
+        footerToggle: '“TalkOlog tarafından oluşturuldu…” alt bilgisini göster',
         paper: 'Kâğıt boyutu',
         letter: 'Letter',
         a4: 'A4',
@@ -1852,17 +1853,17 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     },
     errorBoundary: {
       title: 'Bir sorun oluştu',
-      body: 'SiteLog beklenmeyen bir hatayla karşılaştı. Tekrar deneyin ya da çıkış yapıp yeniden giriş yapın.',
+      body: 'TalkOlog beklenmeyen bir hatayla karşılaştı. Tekrar deneyin ya da çıkış yapıp yeniden giriş yapın.',
       retry: 'Tekrar dene',
       signOut: 'Çıkış yap',
-      reported: 'SiteLog ekibine bildirildi.',
+      reported: 'TalkOlog ekibine bildirildi.',
       errorId: 'Hata kimliği {{id}}',
     },
-    /** W3-17 (M8): the /ops card of reminder calls (the rest of /ops is SiteLog staff English). */
+    /** W3-17 (M8): the /ops card of reminder calls (the rest of /ops is TalkOlog staff English). */
     ops: {
       outboundCalls: {
         title: 'Hatırlatma aramaları (M8)',
-        hint: 'Kuruluş ve hafta bazında: SiteLog’un rapor veren için aradığı şantiye günleri ve bunlardan kaçının, ofis yardımı olmadan, rapor verenin “evet”iyle o aramada kaydedildiği. M8 hedefi %85.',
+        hint: 'Kuruluş ve hafta bazında: TalkOlog’un rapor veren için aradığı şantiye günleri ve bunlardan kaçının, ofis yardımı olmadan, rapor verenin “evet”iyle o aramada kaydedildiği. M8 hedefi %85.',
         columns: {
           org: 'Kuruluş',
           week: 'Hafta',
@@ -1878,7 +1879,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     },
     devPhone: {
       subtitle:
-        'SiteLog’un konsol sürücüsüyle gönderdiği tüm mesajlar; her rapor veren için ayrı bir konuşma.',
+        'TalkOlog’un konsol sürücüsüyle gönderdiği tüm mesajlar; her rapor veren için ayrı bir konuşma.',
       tabsLabel: 'Demo telefon görünümleri',
       tabTexts: 'Mesajlar',
       tabEmail: 'E-posta',
@@ -1889,7 +1890,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       back: 'Tüm rapor verenler',
       threadLabel: '{{name}} ile mesajlar',
       threadEmpty: '{{name}} ile henüz mesaj yok.',
-      fromSiteLog: 'SiteLog',
+      fromTalkOlog: 'TalkOlog',
       opensInNewTab: '(yeni sekmede açılır)',
       copyKey: 'Mesaj',
       channelLabel: 'Kanal',
@@ -1900,13 +1901,13 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         call: 'Arama',
       },
       call: {
-        ringing: 'SiteLog arıyor: çalıyor',
-        answered: 'SiteLog ile görüşmede',
-        ended: 'SiteLog ile görüşme bitti',
-        missed: 'SiteLog’dan cevapsız arama',
-        busy: 'SiteLog’un araması: meşgul',
-        voicemail: 'SiteLog’un araması telesekretere düştü: mesaj bırakılmadı',
-        failed: 'SiteLog’un araması yapılamadı',
+        ringing: 'TalkOlog arıyor: çalıyor',
+        answered: 'TalkOlog ile görüşmede',
+        ended: 'TalkOlog ile görüşme bitti',
+        missed: 'TalkOlog’dan cevapsız arama',
+        busy: 'TalkOlog’un araması: meşgul',
+        voicemail: 'TalkOlog’un araması telesekretere düştü: mesaj bırakılmadı',
+        failed: 'TalkOlog’un araması yapılamadı',
       },
       callPurpose: {
         reminder: 'Hatırlatma araması',
@@ -1930,9 +1931,9 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       send: 'Gönder',
       replyFailed: 'Yanıt gönderilemedi.',
       oneWay:
-        'Yanıtlar kapalı: {{code}} ülke paketinde SMS tek yönlü, rapor veren SiteLog’a mesaj gönderemez.',
+        'Yanıtlar kapalı: {{code}} ülke paketinde SMS tek yönlü, rapor veren TalkOlog’a mesaj gönderemez.',
       oneWayWhatsapp:
-        '{{code}} ülke paketinde SMS tek yönlü: rapor veren SiteLog’a WhatsApp’tan yanıt verir.',
+        '{{code}} ülke paketinde SMS tek yönlü: rapor veren TalkOlog’a WhatsApp’tan yanıt verir.',
       maskedNote: 'Bu bir demo şirket değil: link kodları gizlenir ve buradan mesaj yazılamaz.',
       notDemoTitle: 'Demo telefon demo şirketler içindir',
       notDemoBody:
@@ -2199,7 +2200,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       noEvidence: 'Kanıt gösterilecek fark günü yok.',
       noReportEvidence: 'Fark günlerinde hiçbir şantiye raporu bu firma için saat kaydetmedi.',
       queryMail: {
-        subject: 'Fatura {{no}} — SiteLog saat sorusu',
+        subject: 'Fatura {{no}} — TalkOlog saat sorusu',
         intro:
           'Merhaba {{company}},\n\n{{no}} numaralı fatura ({{period}}) günlük şantiye raporlarımızdan daha fazla saat gösteriyor. Gün gün:',
         row: '{{date}}: faturalanan {{invoiced}}, raporlanan {{reported}}, fark {{gap}}',
@@ -2295,7 +2296,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       mapToPlaceholder: 'Bir firma seçin',
       mapConfirm: 'Eşleştir',
       noResults: '“{{q}}” ile eşleşen terim yok.',
-      /** W4-08 (§19 Q238): SiteLog'un hazır başlangıç terimleri. */
+      /** W4-08 (§19 Q238): TalkOlog'un hazır başlangıç terimleri. */
       builtIn: {
         changeTitle: 'Yerleşik terimi değiştir',
         changeDescription:
@@ -2392,7 +2393,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         demoDownload:
           'Demo modu: PDF’i arka plan servisi oluşturur; burada indirilecek bir şey yok.',
         notStarted:
-          '10 dakika geçti, başlamadı. Şirketiniz için kanıt dosyaları şu anda oluşturulmuyor. SiteLog destek ekibiyle iletişime geçin.',
+          '10 dakika geçti, başlamadı. Şirketiniz için kanıt dosyaları şu anda oluşturulmuyor. TalkOlog destek ekibiyle iletişime geçin.',
       },
     },
     /** `PhoneInput` (W4-01): the country-code picker and the number field. */
@@ -2405,7 +2406,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       hint: 'Uluslararası biçimde kaydedilir, ör. {{example}}',
       invalid: 'Seçilen ülke için geçerli bir cep telefonu numarası girin.',
       foreign:
-        'Bu bir {{country}} numarası. SiteLog bu numaraya {{pack}} numaranızdan mesaj gönderir.',
+        'Bu bir {{country}} numarası. TalkOlog bu numaraya {{pack}} numaranızdan mesaj gönderir.',
     },
   },
   field: {
@@ -2450,7 +2451,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       },
       none: {
         title: 'Linkinizi açın',
-        body: 'SiteLog’u mesajınızdaki linkten açın.',
+        body: 'TalkOlog’u mesajınızdaki linkten açın.',
       },
       failed: 'Linkiniz açılamadı. Sinyalinizi kontrol edip tekrar deneyin.',
     },
@@ -2489,7 +2490,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       prefLink: 'Mesajla link',
       prefLinkHint: 'Linke dokunun, anlatın, bitti. Fotoğraf ekleyin.',
       prefCall: 'Telefon araması',
-      prefCallHint: 'SiteLog sizi arar ve dinler.',
+      prefCallHint: 'TalkOlog sizi arar ve dinler.',
       prefNote: 'İstediğiniz zaman diğerini de kullanabilirsiniz.',
       continue: 'Devam et',
       saving: 'Kaydediliyor…',
@@ -2590,7 +2591,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       tooShort: 'Hiçbir şey duyamadım — tekrar deneyin',
       permission: {
         title: 'Mikrofon gerekli',
-        body: 'SiteLog’un raporunuzu duyabilmesi için mikrofona izin verin.',
+        body: 'TalkOlog’un raporunuzu duyabilmesi için mikrofona izin verin.',
         ios: 'iPhone: Ayarlar → Safari → Mikrofon → İzin ver',
         android: 'Android: adres çubuğundaki kilit simgesine dokunun → İzinler → Mikrofon',
         fallback: 'Ya da telefonunuzun ses kaydedicisiyle kaydedip dosyayı gönderin:',
@@ -2855,7 +2856,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     },
     talk: {
       title: 'Şimdi konuş',
-      assistant: 'SiteLog asistanıyla konuşuyorsunuz',
+      assistant: 'TalkOlog asistanıyla konuşuyorsunuz',
       status: {
         microphone: 'Mikrofon izni isteniyor…',
         connecting: 'Asistana bağlanılıyor…',
@@ -2900,7 +2901,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       voiceNote: 'Sesli not · {{date}}',
       photo: 'Fotoğraf · {{date}}',
       remove: 'Kaldır',
-      unsaved: 'Bu telefona kaydedilemedi: gönderilene kadar SiteLog’u açık tutun.',
+      unsaved: 'Bu telefona kaydedilemedi: gönderilene kadar TalkOlog’u açık tutun.',
     },
     history: {
       intro: 'Son 14 gündeki raporlarınız.',
@@ -2918,7 +2919,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       eyebrow: 'Rapor · {{date}}',
       version: 'Sürüm {{version}}',
       continue: 'Bu rapora devam et',
-      noData: 'Henüz gösterilecek bir şey yok: SiteLog bu raporu hâlâ yazıyor.',
+      noData: 'Henüz gösterilecek bir şey yok: TalkOlog bu raporu hâlâ yazıyor.',
       back: 'Geçmiş raporlara dön',
       failed: 'Geçmiş raporlarınız yüklenemedi. Sinyalinizi kontrol edip tekrar deneyin.',
       reportFailed: 'Bu rapor yüklenemedi. Sinyalinizi kontrol edip tekrar deneyin.',
@@ -2940,8 +2941,8 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       sending: 'Gönderiliyor…',
       sent: 'Gönderildi. Size az önce gönderdiğimiz mesajdaki bugünün linkini açın.',
       reasons: {
-        site_paused: 'Bu şantiye SiteLog’da duraklatıldı. Ofisten yeniden açmasını isteyin.',
-        site_inactive: 'Bu şantiye artık SiteLog’daki listenizde değil. Ofise sorun.',
+        site_paused: 'Bu şantiye TalkOlog’da duraklatıldı. Ofisten yeniden açmasını isteyin.',
+        site_inactive: 'Bu şantiye artık TalkOlog’daki listenizde değil. Ofise sorun.',
         not_working_day: 'Bugün bu şantiyede çalışma günü değil; bugün için link yok.',
         no_consent: 'Mesajları kapattınız; linki size mesajla gönderemiyoruz. Ofisten isteyin.',
         opted_out: 'Size mesaj göndermememizi istediniz; linki gönderemiyoruz. Ofise sorun.',
@@ -2956,7 +2957,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
     settings: {
       channelTitle: 'Mesajlarınızı nereye gönderelim?',
       channelDefault: 'En uygun kanal',
-      channelDefaultHint: 'SiteLog şirketinizin sırasına göre seçer',
+      channelDefaultHint: 'TalkOlog şirketinizin sırasına göre seçer',
       channels: {
         sms: 'Kısa mesaj (SMS)',
         whatsapp: 'WhatsApp',
@@ -2977,7 +2978,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
         label: 'Bu telefonda bildirim',
         hint: 'Rapor hatırlatmalarınız bildirim olarak gelir. Bu telefona ulaşamazsa size mesaj göndeririz.',
         blocked:
-          'SiteLog bildirimleri bu telefonda engelli. Telefonunuzun ayarlarından izin verin, sonra buradan açın.',
+          'TalkOlog bildirimleri bu telefonda engelli. Telefonunuzun ayarlarından izin verin, sonra buradan açın.',
         failed: 'Bildirimler açılamadı. Tekrar deneyin.',
       },
       on: 'Açık',
@@ -2986,7 +2987,7 @@ export const uiTr: UiResources & { panel: PanelCopyTree } = {
       turnOffLabel: 'Kapat: {{consent}}',
       stopSheet: {
         title: 'Rapor vermeyi durdurmak mı istiyorsunuz?',
-        body: 'Bu kapalıyken SiteLog sesli notlarınızı ve fotoğraflarınızı alamaz, raporlarınız durur. Ofise haber verilir. Yeniden rapor vermek için bu telefonda tekrar onay verirsiniz.',
+        body: 'Bu kapalıyken TalkOlog sesli notlarınızı ve fotoğraflarınızı alamaz, raporlarınız durur. Ofise haber verilir. Yeniden rapor vermek için bu telefonda tekrar onay verirsiniz.',
         confirm: 'Kapat',
         cancel: 'Açık kalsın',
       },

@@ -44,7 +44,7 @@ test(
     await dialog.getByRole('checkbox', { name: 'This is my own number.' }).click();
     await dialog.getByRole('button', { name: 'Call me now' }).click();
     await expect(dialog.getByTestId('call-result')).toContainText(
-      'Demo company: the call was placed on SiteLog’s console',
+      'Demo company: the call was placed on TalkOlog’s console',
     );
 
     const { data: rows } = await admin()

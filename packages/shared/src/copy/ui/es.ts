@@ -6,7 +6,7 @@ import type { UiResources } from './types.ts';
  */
 export const uiEs: UiResources = {
   common: {
-    appName: 'SiteLog',
+    appName: 'TalkOlog',
     language: 'Idioma',
     languageNames: { en: 'English', es: 'Español', tr: 'Türkçe' },
     loading: 'Cargando…',
@@ -56,7 +56,7 @@ export const uiEs: UiResources = {
       },
       none: {
         title: 'Abra su enlace',
-        body: 'Abra SiteLog desde el enlace de su mensaje de texto.',
+        body: 'Abra TalkOlog desde el enlace de su mensaje de texto.',
       },
       failed: 'No se pudo abrir su enlace. Revise su señal e intente de nuevo.',
     },
@@ -95,7 +95,7 @@ export const uiEs: UiResources = {
       prefLink: 'Enlace por texto',
       prefLinkHint: 'Toque el enlace, hable, listo. Agregue fotos.',
       prefCall: 'Llamada telefónica',
-      prefCallHint: 'SiteLog le llama y escucha.',
+      prefCallHint: 'TalkOlog le llama y escucha.',
       prefNote: 'Siempre puede usar la otra opción.',
       continue: 'Continuar',
       saving: 'Guardando…',
@@ -197,7 +197,7 @@ export const uiEs: UiResources = {
       tooShort: 'No pude escuchar nada — intente de nuevo',
       permission: {
         title: 'Se necesita el micrófono',
-        body: 'Permita el micrófono para que SiteLog pueda oír su reporte.',
+        body: 'Permita el micrófono para que TalkOlog pueda oír su reporte.',
         ios: 'iPhone: Ajustes → Safari → Micrófono → Permitir',
         android: 'Android: toque el candado junto a la dirección → Permisos → Micrófono',
         fallback: 'O grabe con la grabadora de voz de su teléfono y envíe el archivo:',
@@ -470,7 +470,7 @@ export const uiEs: UiResources = {
     },
     talk: {
       title: 'Hable ahora',
-      assistant: 'Hablando con el asistente de SiteLog',
+      assistant: 'Hablando con el asistente de TalkOlog',
       status: {
         microphone: 'Pidiendo el micrófono…',
         connecting: 'Conectando con el asistente…',
@@ -516,7 +516,7 @@ export const uiEs: UiResources = {
       voiceNote: 'Nota de voz · {{date}}',
       photo: 'Foto · {{date}}',
       remove: 'Quitar',
-      unsaved: 'No se guardó en este teléfono: deje SiteLog abierto hasta que se envíe.',
+      unsaved: 'No se guardó en este teléfono: deje TalkOlog abierto hasta que se envíe.',
     },
     history: {
       intro: 'Sus reportes de los últimos 14 días.',
@@ -534,7 +534,7 @@ export const uiEs: UiResources = {
       eyebrow: 'Reporte · {{date}}',
       version: 'Versión {{version}}',
       continue: 'Continuar este reporte',
-      noData: 'Aún no hay nada que mostrar: SiteLog todavía está escribiendo este reporte.',
+      noData: 'Aún no hay nada que mostrar: TalkOlog todavía está escribiendo este reporte.',
       back: 'Volver a Reportes anteriores',
       failed: 'No se pudieron cargar sus reportes anteriores. Revise su señal e intente de nuevo.',
       reportFailed: 'No se pudo cargar este reporte. Revise su señal e intente de nuevo.',
@@ -556,8 +556,8 @@ export const uiEs: UiResources = {
       sending: 'Enviando…',
       sent: 'Enviado. Abra el enlace de hoy en el mensaje que le acabamos de enviar.',
       reasons: {
-        site_paused: 'Esta obra está en pausa en SiteLog. Pida a la oficina que la reactive.',
-        site_inactive: 'Esta obra ya no está en su lista de SiteLog. Consulte a la oficina.',
+        site_paused: 'Esta obra está en pausa en TalkOlog. Pida a la oficina que la reactive.',
+        site_inactive: 'Esta obra ya no está en su lista de TalkOlog. Consulte a la oficina.',
         not_working_day: 'Hoy no es día laborable en esta obra, así que no hay enlace para hoy.',
         no_consent:
           'Desactivó los mensajes, así que no podemos enviarle el enlace. Pídalo a la oficina.',
@@ -574,7 +574,7 @@ export const uiEs: UiResources = {
     settings: {
       channelTitle: '¿Dónde le enviamos los mensajes?',
       channelDefault: 'La mejor opción disponible',
-      channelDefaultHint: 'SiteLog elige, en el orden de su empresa',
+      channelDefaultHint: 'TalkOlog elige, en el orden de su empresa',
       channels: {
         sms: 'Mensaje de texto (SMS)',
         whatsapp: 'WhatsApp',
@@ -595,7 +595,7 @@ export const uiEs: UiResources = {
         label: 'Notificaciones en este teléfono',
         hint: 'Los avisos de su reporte le llegan como notificaciones. Si una no llega a este teléfono, le enviamos un mensaje de texto.',
         blocked:
-          'Las notificaciones de SiteLog están bloqueadas en este teléfono. Permítalas en la configuración del teléfono y luego actívelas aquí.',
+          'Las notificaciones de TalkOlog están bloqueadas en este teléfono. Permítalas en la configuración del teléfono y luego actívelas aquí.',
         failed: 'No se pudieron activar las notificaciones. Intente de nuevo.',
       },
       on: 'Activado',
@@ -604,7 +604,7 @@ export const uiEs: UiResources = {
       turnOffLabel: 'Desactivar: {{consent}}',
       stopSheet: {
         title: '¿Dejar de reportar?',
-        body: 'Si lo desactiva, SiteLog no puede recibir sus notas de voz ni sus fotos, así que sus reportes se detienen. Se avisa a la oficina. Para volver a reportar, acepte de nuevo en este teléfono.',
+        body: 'Si lo desactiva, TalkOlog no puede recibir sus notas de voz ni sus fotos, así que sus reportes se detienen. Se avisa a la oficina. Para volver a reportar, acepte de nuevo en este teléfono.',
         confirm: 'Desactivar',
         cancel: 'Dejarlo activado',
       },

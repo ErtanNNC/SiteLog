@@ -1,5 +1,5 @@
 /**
- * /try — "Try it on WhatsApp": the field side of SiteLog in the browser, on the demo data.
+ * /try — "Try it on WhatsApp": the field side of TalkOlog in the browser, on the demo data.
  * The chat is driven by the pure engine (engine.ts) through a controller that outlives the page
  * (controller.ts); its effects land in the DemoStore, so the panel's Overview, Sites and Reports
  * update as the conversation goes.

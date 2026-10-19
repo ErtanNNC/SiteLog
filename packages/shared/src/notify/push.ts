@@ -10,7 +10,7 @@ import type { OutboundMessage } from '../channels.ts';
  */
 
 /** The notification's title: the product name, the same in every language. */
-export const PUSH_TITLE = 'SiteLog';
+export const PUSH_TITLE = 'TalkOlog';
 
 /** The JSON payload a push carries (encrypted to the subscription by the transport). */
 export interface PushNotificationData {
@@ -67,20 +67,20 @@ export function readPushData(raw: unknown): PushNotificationData {
  * (`PUSH_GONE_REASONS`: it was made with another VAPID key, or Apple's device token is bad);
  * `retry` (429, 5xx: later, same channel); `refused` (anything else: not this time, the
  * subscription kept, the message falls back). A bare 400 or 403 is refused, not gone: Apple and
- * FCM answer them for a bad or expired VAPID JWT too (SiteLog's key or clock), and revoking on
+ * FCM answer them for a bad or expired VAPID JWT too (TalkOlog's key or clock), and revoking on
  * those would drop every subscription at once for one configuration error. 413 is the payload's
- * size, SiteLog's, never the subscription's (W2-15/16 review).
+ * size, TalkOlog's, never the subscription's (W2-15/16 review).
  */
 export type PushResult = 'sent' | 'gone' | 'retry' | 'refused';
 
 const PUSH_GONE_STATUSES: readonly number[] = [404, 410];
 
 /**
- * A 400 or 403 body that names the subscription, not SiteLog's credentials: FCM's answer for a
+ * A 400 or 403 body that names the subscription, not TalkOlog's credentials: FCM's answer for a
  * subscription made with another VAPID key ("…do not correspond to the credentials used to
  * create the subscriptions", legacy `UnauthorizedRegistration`), Apple's `BadDeviceToken` and
  * `DeviceTokenNotForTopic`. Apple's `BadJwtToken`, `ExpiredJwtToken` or `InvalidProviderToken`
- * and FCM's other answers are SiteLog's side: refused.
+ * and FCM's other answers are TalkOlog's side: refused.
  */
 const PUSH_GONE_REASONS =
   /do not correspond to the credentials used to create the subscription|UnauthorizedRegistration|BadDeviceToken|DeviceTokenNotForTopic/i;

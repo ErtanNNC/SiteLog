@@ -268,7 +268,7 @@ describe('country pack rows (§4.6)', () => {
     ['a blank sender id', `update countries set sms_sender_id = '' where code = 'US'`, '23514'],
     [
       'a padded sender title',
-      `update countries set sms_sender_id = ' SITELOG' where code = 'TR'`,
+      `update countries set sms_sender_id = ' TALKOLOG' where code = 'TR'`,
       '23514',
     ],
     [
@@ -278,7 +278,7 @@ describe('country pack rows (§4.6)', () => {
     ],
     [
       'a title on a toll-free pack',
-      `update countries set sms_sender_id = 'SITELOG' where code = 'US'`,
+      `update countries set sms_sender_id = 'TALKOLOG' where code = 'US'`,
       '23514',
     ],
   ])('refuses %s', async (_label, sql, code) => {
@@ -286,17 +286,17 @@ describe('country pack rows (§4.6)', () => {
   });
 
   it('refuses a sender type change that keeps a sender of the old shape (a later migration)', async () => {
-    // A policy migration that moved TR to a long code on a database where SITELOG is set fails
+    // A policy migration that moved TR to a long code on a database where TALKOLOG is set fails
     // at push time, instead of leaving a row toCountryPack() throws on.
     await rolledBack(async () => {
-      await svc(`select set_country_endpoints('TR', 'SITELOG', null, null, null)`);
+      await svc(`select set_country_endpoints('TR', 'TALKOLOG', null, null, null)`);
       expect(
         await sqlState(svc(`update countries set sms_sender_type = 'long_code' where code = 'TR'`)),
       ).toBe('23514');
     });
     // The same migration passes when it also clears the sender (set again for the new type).
     await rolledBack(async () => {
-      await svc(`select set_country_endpoints('TR', 'SITELOG', null, null, null)`);
+      await svc(`select set_country_endpoints('TR', 'TALKOLOG', null, null, null)`);
       await svc(
         `update countries set sms_sender_type = 'long_code', sms_sender_id = null where code = 'TR'`,
       );
@@ -397,9 +397,9 @@ describe('set_country_endpoints() (service role only)', () => {
   it('sets a sender id and a voice number per pack type, audited', async () => {
     await rolledBack(async () => {
       const [tr] = await svc<{ r: CountryRow }>(
-        `select to_jsonb(set_country_endpoints('tr', ' SITELOG ', null, null, null)) as r`,
+        `select to_jsonb(set_country_endpoints('tr', ' TALKOLOG ', null, null, null)) as r`,
       );
-      expect(tr!.r).toMatchObject({ code: 'TR', sms_sender_id: 'SITELOG', voice_number: null });
+      expect(tr!.r).toMatchObject({ code: 'TR', sms_sender_id: 'TALKOLOG', voice_number: null });
       const [us] = await svc<{ r: CountryRow }>(
         `select to_jsonb(set_country_endpoints('US', '+18885550142', '+15550142290', null, null)) as r`,
       );
@@ -426,7 +426,7 @@ describe('set_country_endpoints() (service role only)', () => {
               outbound_trunk_id: null,
             },
             to: {
-              sms_sender_id: 'SITELOG',
+              sms_sender_id: 'TALKOLOG',
               voice_number: null,
               whatsapp_sender_id: null,
               whatsapp_templates: null,
@@ -469,8 +469,8 @@ describe('set_country_endpoints() (service role only)', () => {
 
   it.each([
     ['an E.164 sender on an alphanumeric pack', `'TR', '+905320000512', null, null, null`],
-    ['a 12-character title', `'TR', 'SITELOGAPP12', null, null, null`],
-    ['a title on a toll-free pack', `'US', 'SITELOG', null, null, null`],
+    ['a 12-character title', `'TR', 'TALKOLOGAPP1', null, null, null`],
+    ['a title on a toll-free pack', `'US', 'TALKOLOG', null, null, null`],
     ['a malformed voice number', `'US', null, '555-0142', null, null`],
     ['an unknown pack', `'DE', null, null, null, null`],
     ['a WhatsApp sender that is not E.164 (W2-15)', `'TR', null, null, '0532 000 0000', null`],
@@ -568,7 +568,7 @@ describe('set_country_endpoints() (service role only)', () => {
   });
 
   it('runs as the service role, and cannot be run by a signed-in user or anon', async () => {
-    const sql = `select set_country_endpoints('TR', 'SITELOG', null, null, null)`;
+    const sql = `select set_country_endpoints('TR', 'TALKOLOG', null, null, null)`;
     for (const caller of [
       { role: 'authenticated', userId: LENA },
       { role: 'anon' },
@@ -586,9 +586,9 @@ describe('set_country_endpoints() (service role only)', () => {
     await rolledBack(async () => {
       await db.exec('set local role service_role');
       const res = await db.query<{ code: string; sms_sender_id: string }>(
-        `select code, sms_sender_id from set_country_endpoints('TR', 'SITELOG', null, null, null)`,
+        `select code, sms_sender_id from set_country_endpoints('TR', 'TALKOLOG', null, null, null)`,
       );
-      expect(res.rows).toEqual([{ code: 'TR', sms_sender_id: 'SITELOG' }]);
+      expect(res.rows).toEqual([{ code: 'TR', sms_sender_id: 'TALKOLOG' }]);
     });
   });
 });

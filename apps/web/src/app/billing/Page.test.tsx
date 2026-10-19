@@ -221,7 +221,7 @@ describe('BillingPage (demo data)', () => {
     ).toBeInTheDocument();
   });
 
-  it('a price SiteLog changed reads from the org, not from code (§19 Q234)', async () => {
+  it('a price TalkOlog changed reads from the org, not from code (§19 Q234)', async () => {
     const d = kestrelDemo();
     const store = new DemoStore({
       ...d,
@@ -232,7 +232,7 @@ describe('BillingPage (demo data)', () => {
     expect(screen.getByText('$299.00 per active site, per month. No setup fee.')).toBeVisible();
   });
 
-  it('a manual TR org reads in Turkish: no Checkout, no portal, SiteLog invoices it (§19 Q236)', async () => {
+  it('a manual TR org reads in Turkish: no Checkout, no portal, TalkOlog invoices it (§19 Q236)', async () => {
     const d = kestrelDemo();
     const store = new DemoStore({
       ...d,
@@ -263,14 +263,14 @@ describe('BillingPage (demo data)', () => {
       renderWithProviders(<BillingPage />, { route: '/billing', source, auth: { isDemo: false } });
       expect(await screen.findByRole('heading', { name: 'Faturalandırma' })).toBeInTheDocument();
       expect(screen.getByTestId('manual-billing')).toHaveTextContent(
-        'SiteLog sizi doğrudan faturalandırır',
+        'TalkOlog sizi doğrudan faturalandırır',
       );
       expect(screen.queryByTestId('start-subscription')).toBeNull();
       expect(screen.queryByTestId('update-payment')).toBeNull();
       expect(screen.queryByText('Ödeme bilgilerini ekle')).toBeNull();
       const plan = screen.getByTestId('plan-card');
       expect(within(plan).getByTestId('no-price')).toHaveTextContent(
-        'Şantiye başına fiyatınızı SiteLog belirler.',
+        'Şantiye başına fiyatınızı TalkOlog belirler.',
       );
       expect(within(plan).getByTestId('billing-status')).toHaveTextContent('Ücretsiz deneme');
       expect(within(plan).getByTestId('trial')).toHaveTextContent('Deneme Sal, 20 Eki 2026');
@@ -281,7 +281,7 @@ describe('BillingPage (demo data)', () => {
           name: 'Riverside Lofts — Block B şantiyesini duraklat',
         }),
       ).toBeInTheDocument();
-      expect(screen.getByText('Faturalarınız SiteLog’dan e-postayla gelir.')).toBeInTheDocument();
+      expect(screen.getByText('Faturalarınız TalkOlog’dan e-postayla gelir.')).toBeInTheDocument();
       expect(checkout).not.toHaveBeenCalled();
       expect(portal).not.toHaveBeenCalled();
     } finally {
@@ -289,7 +289,7 @@ describe('BillingPage (demo data)', () => {
     }
   });
 
-  it('with a TRY price set by SiteLog, money reads in lira and Turkish digits', async () => {
+  it('with a TRY price set by TalkOlog, money reads in lira and Turkish digits', async () => {
     const d = kestrelDemo();
     const store = new DemoStore({
       ...d,

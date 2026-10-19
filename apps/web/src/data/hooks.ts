@@ -917,7 +917,7 @@ function useStripeRedirect(kind: 'portal' | 'checkout') {
 
 // ───────────────────────────── Platform ops (/ops) ─────────────────────────────
 
-/** Is the signed-in user a SiteLog operator? Errors count as "no" (the page then 404s). */
+/** Is the signed-in user a TalkOlog operator? Errors count as "no" (the page then 404s). */
 export function usePlatformAdmin() {
   const s = useDataSource();
   return useQuery({

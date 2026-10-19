@@ -31,7 +31,7 @@ describe('Postgres enum mirrors (§6.2)', () => {
 
   it('parses only known labels', () => {
     expect(FieldChannelSchema.parse('office')).toBe('office');
-    // W2-16 (§19 Q26): answers and keywords reach SiteLog over WhatsApp too.
+    // W2-16 (§19 Q26): answers and keywords reach TalkOlog over WhatsApp too.
     expect(FieldChannelSchema.safeParse('whatsapp').success).toBe(true);
     expect(FieldChannelSchema.safeParse('push').success).toBe(false);
     expect(SourceKindSchema.safeParse('voice_note').success).toBe(true);

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "SiteLog field web recorder (Vite + React PWA), opened from a personal text link.",
+  "description": "TalkOlog field web recorder (Vite + React PWA), opened from a personal text link.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

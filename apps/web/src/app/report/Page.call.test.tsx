@@ -47,7 +47,7 @@ describe('ReportDetailPage: a call with two lanes (W3-05)', () => {
     expect(player).toHaveAttribute('data-kind', 'call');
     expect(player).toHaveAttribute('data-lanes', '2');
     expect(within(player).getByTestId('lane-reporter')).toHaveTextContent('Site manager');
-    expect(within(player).getByTestId('lane-agent')).toHaveTextContent('SiteLog assistant');
+    expect(within(player).getByTestId('lane-agent')).toHaveTextContent('TalkOlog assistant');
     expect(screen.getByTestId('demo-tones')).toHaveTextContent('Demo recording: tones, no speech');
     expect(screen.getByTestId('provenance')).toHaveTextContent(
       "Reported by Kevin O'Brien · phone call 17:10 (2 min 41 s) · confirmed by voice",
@@ -66,7 +66,7 @@ describe('ReportDetailPage: a call with two lanes (W3-05)', () => {
       'true',
     );
     // Both: the assistant's opening (muted) before the first quote, and the quote.
-    expect(within(block).getByText(/Hi Kevin, this is the SiteLog assistant/)).toBeInTheDocument();
+    expect(within(block).getByText(/Hi Kevin, this is the TalkOlog assistant/)).toBeInTheDocument();
     expect(within(block).getByText(/Apex, 3 guys, 8 hours/)).toBeInTheDocument();
 
     await userEvent.click(within(filter).getByRole('button', { name: 'Site manager' }));
@@ -115,7 +115,7 @@ describe('ReportDetailPage: a call with two lanes (W3-05)', () => {
     expect(screen.queryByRole('group', { name: 'Speaker' })).not.toBeInTheDocument();
   });
 
-  it('words a browser call, a call from SiteLog and the simple recording mode', async () => {
+  it('words a browser call, a call from TalkOlog and the simple recording mode', async () => {
     const web = northgate();
     web.call.transport = 'web';
     render(web.store, web.report.id);
@@ -127,13 +127,13 @@ describe('ReportDetailPage: a call with two lanes (W3-05)', () => {
     ).toBeInTheDocument();
   });
 
-  it('words a call SiteLog placed that ended in the simple recording', async () => {
+  it('words a call TalkOlog placed that ended in the simple recording', async () => {
     const out = northgate();
     out.call.direction = 'outbound';
     out.call.outcome = 'fallback_recording';
     render(out.store, out.report.id);
     expect(await screen.findByTestId('provenance')).toHaveTextContent(
-      "Reported by Kevin O'Brien · call from SiteLog 17:10 (2 min 41 s) · simple recording mode · confirmed by voice",
+      "Reported by Kevin O'Brien · call from TalkOlog 17:10 (2 min 41 s) · simple recording mode · confirmed by voice",
     );
     expect(
       within(screen.getByTestId('activity')).getByText(
@@ -148,7 +148,7 @@ describe('ReportDetailPage: a call with two lanes (W3-05)', () => {
     render(store, report.id);
     const player = await screen.findByTestId('media-player');
     expect(within(player).getByTestId('lane-reporter')).toHaveTextContent('Şantiye şefi');
-    expect(within(player).getByTestId('lane-agent')).toHaveTextContent('SiteLog asistanı');
+    expect(within(player).getByTestId('lane-agent')).toHaveTextContent('TalkOlog asistanı');
     const filter = screen.getByRole('group', { name: 'Konuşan' });
     expect(within(filter).getByRole('button', { name: 'İkisi de' })).toBeInTheDocument();
     expect(within(filter).getByRole('button', { name: 'Asistan' })).toBeInTheDocument();

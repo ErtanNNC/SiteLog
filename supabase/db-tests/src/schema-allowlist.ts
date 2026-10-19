@@ -33,7 +33,7 @@ export const SCHEMA_ALLOWLIST: AllowEntry[] = [
   {
     id: 'd12-tables',
     reason:
-      'Repo-only tables kept as recorded additions: panel notifications (§13), SiteLog operators and cost per report (/ops), scheduler bookkeeping, Stripe webhook idempotency.',
+      'Repo-only tables kept as recorded additions: panel notifications (§13), TalkOlog operators and cost per report (/ops), scheduler bookkeeping, Stripe webhook idempotency.',
     closes: 'kept',
     decision: 'D12',
     diffs: [

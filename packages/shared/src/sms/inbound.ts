@@ -19,7 +19,7 @@ import { jobKeys } from '../schemas/jobs.ts';
 import { localDate } from '../schedule/day.ts';
 
 /**
- * What SiteLog does with an inbound text once it is stored (§9.5, F13, F15; W1-08): the plan of
+ * What TalkOlog does with an inbound text once it is stored (§9.5, F13, F15; W1-08): the plan of
  * `planInboundSms` applied to the reporters, the phone's own opt-out (`sms_opt_outs`), the F13
  * unknown contact, the office notification of an opt-out (§13 "Message undeliverable / opted
  * out"), the one reply through the Notifier, and the row marked handled. One function for the two
@@ -208,7 +208,7 @@ export function optOutNotification(reporter: {
     orgId: reporter.orgId,
     kind: 'reporter_opted_out',
     title: `${reporter.name} opted out of texts (STOP)`,
-    body: `${formatPhone(reporter.phone)} replied STOP, so SiteLog texts them nothing until they reply START. Call them if you need their reports.`,
+    body: `${formatPhone(reporter.phone)} replied STOP, so TalkOlog texts them nothing until they reply START. Call them if you need their reports.`,
     targetPath: '/team',
     data: noticeData('reporter_stop', { name: reporter.name, phone: formatPhone(reporter.phone) }),
   };
@@ -218,7 +218,7 @@ export function optOutNotification(reporter: {
  * Spec §19 Q44 (decided 2026-10-15): the org an unknown number's text is filed under. Its
  * history: the orgs of its reporters (here only disabled ones, or the text would not be unknown)
  * and the orgs that linked an earlier contact of it, all within the scope (real orgs of the pack
- * on the Twilio route). Exactly one → that org; none or several → null, and SiteLog support sees
+ * on the Twilio route). Exactly one → that org; none or several → null, and TalkOlog support sees
  * it on /ops, never every org of the pack.
  */
 export function guessContactOrg(
@@ -298,7 +298,7 @@ export async function processInboundSms(
   }
   if (plan.unknownContact) {
     // Spec §19 Q44: the org of the number's history (a disabled reporter here, an earlier
-    // contact that org linked) when there is exactly one; else org-less, for SiteLog support.
+    // contact that org linked) when there is exactly one; else org-less, for TalkOlog support.
     const orgId = guessContactOrg(
       reporters.map((r) => r.orgId),
       (await store.linkedContactOrgs?.(text.from, pack.code, input.scope)) ?? [],

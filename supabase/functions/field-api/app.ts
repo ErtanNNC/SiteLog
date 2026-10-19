@@ -278,7 +278,7 @@ export function createFieldApp(deps: FieldApiDeps): Hono<Env> {
   const talkNow = (orgId: string) =>
     talkNowDeps ? talkNowAvailable(talkNowDeps, orgId) : Promise.resolve(false);
   /**
-   * W3-17 (spec §19 Q51, Q125, Q132): SiteLog places automated calls for the reporter's org (a
+   * W3-17 (spec §19 Q51, Q125, Q132): TalkOlog places automated calls for the reporter's org (a
    * pack with an outbound trunk here, or a demo org's console calls).
    */
   const callsPlaced = (ctx: { org: OrgContext; pack: CountryPack }) =>

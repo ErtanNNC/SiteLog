@@ -114,8 +114,8 @@ Deno.test('the text is the §9.2 verify_code in the reporter language', async ()
   assertEquals(
     m.sent.map((s) => s.body),
     [
-      'SiteLog code: 042917. It expires in 10 minutes.',
-      'SiteLog kodunuz: 042917. 10 dakika geçerlidir.',
+      'TalkOlog code: 042917. It expires in 10 minutes.',
+      'TalkOlog kodunuz: 042917. 10 dakika geçerlidir.',
     ],
   );
 });
@@ -137,8 +137,8 @@ Deno.test(
     );
     assertEquals(sent.channel, 'sms');
     assertEquals(live.sent[0]!.driver, 'twilio');
-    assertEquals(live.sent[0]!.body, 'SiteLog code: 042917. It expires in 10 minutes.');
-    assertEquals(live.rows[0]!.body, `SiteLog code: ${MASKED_CODE}. It expires in 10 minutes.`);
+    assertEquals(live.sent[0]!.body, 'TalkOlog code: 042917. It expires in 10 minutes.');
+    assertEquals(live.rows[0]!.body, `TalkOlog code: ${MASKED_CODE}. It expires in 10 minutes.`);
   },
 );
 

@@ -170,7 +170,7 @@ export async function verifyLiveKitWebhook(
 const int64 = z.union([z.string(), z.number()]);
 const protoEnum = z.union([z.string(), z.number()]);
 
-/** A LiveKit `WebhookEvent` as JSON (only the fields SiteLog reads; the rest is kept loose). */
+/** A LiveKit `WebhookEvent` as JSON (only the fields TalkOlog reads; the rest is kept loose). */
 export const LiveKitWebhookEventSchema = z
   .object({
     event: z.string().min(1).max(64),
@@ -281,7 +281,7 @@ export interface VoiceEvent {
 
 /**
  * A webhook event as `voice-events` handles it, or null when there is nothing to do: an event it
- * does not act on, or a room with neither a `call-{uuid}` name nor a sid. A room SiteLog did not
+ * does not act on, or a room with neither a `call-{uuid}` name nor a sid. A room TalkOlog did not
  * name (an inbound phone call's, named by the SIP dispatch rule: §19 Q227) is keyed by its sid
  * (`RM_…`); its name is dropped here and goes nowhere.
  */

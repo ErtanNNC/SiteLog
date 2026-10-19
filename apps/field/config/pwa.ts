@@ -2,7 +2,7 @@
  * The field app's PWA (spec §9.3, §14.5; W1-04 step 6): manifest, icons and a service worker that
  * precaches the app shell only.
  *
- * - Manifest: name "SiteLog", `display: standalone`, theme Asphalt (`#16181B`), background Chalk (the
+ * - Manifest: name "TalkOlog", `display: standalone`, theme Asphalt (`#16181B`), background Chalk (the
  *   field screens' background, §14.6), icons rendered from `docs/brand/logo-app-icon.svg` by
  *   `scripts/build-brand.mjs` (192 and 512 px, and a 512 px maskable icon with the mark inside the
  *   safe zone). `start_url` is `/`: the router decides where that lands, so a home-screen icon that
@@ -49,8 +49,8 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   includeAssets: ['brand/*.svg', 'brand/*.png'],
   manifest: {
     id: '/',
-    name: 'SiteLog',
-    short_name: 'SiteLog',
+    name: 'TalkOlog',
+    short_name: 'TalkOlog',
     description: undefined,
     start_url: '/',
     scope: '/',

@@ -60,10 +60,10 @@ describe('sender ids across packs (spec §4.6, F13)', () => {
   it('sms-webhook can find the pack by the receiving sender id', async () => {
     await db.exec('begin; set local role service_role;');
     try {
-      await db.query(`select set_country_endpoints('TR', 'SITELOG', null, null, null)`);
+      await db.query(`select set_country_endpoints('TR', 'TALKOLOG', null, null, null)`);
       const found = await db.query<{ code: string }>(
         `select code from countries where sms_sender_id = $1`,
-        ['SITELOG'],
+        ['TALKOLOG'],
       );
       expect(found.rows).toEqual([{ code: 'TR' }]);
     } finally {

@@ -1,4 +1,4 @@
-/* SiteLog panel styles — §14. Tailwind v4, CSS-first. The tokens (@theme) live in @sitelog/shared. */
+/* TalkOlog panel styles — §14. Tailwind v4, CSS-first. The tokens (@theme) live in @sitelog/shared. */
 @import 'tailwindcss';
 
 @import '@sitelog/shared/tokens.css';

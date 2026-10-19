@@ -1,5 +1,5 @@
 /*
- * SiteLog design tokens (spec §14.1–§14.4), shared by the panel (apps/web) and the field app
+ * TalkOlog design tokens (spec §14.1–§14.4), shared by the panel (apps/web) and the field app
  * (apps/field). Tailwind 4, CSS-first: this file is the "preset". Import it after Tailwind:
  *
  *   @import 'tailwindcss';

@@ -1,7 +1,7 @@
 [project]
 name = "sitelog-voice"
 version = "0.1.0"
-description = "SiteLog voice agent: the phone and Talk now channel (spec §4.2, §9.4), LiveKit Agents."
+description = "TalkOlog voice agent: the phone and Talk now channel (spec §4.2, §9.4), LiveKit Agents."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [

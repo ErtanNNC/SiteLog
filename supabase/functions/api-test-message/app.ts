@@ -21,7 +21,7 @@ import { HttpError } from '../_shared/http.ts';
  * - What: the fixed `test_message` text (`SMS_TEST_MESSAGE`, EN/ES/TR) in the language asked, with
  *   the company's name; no link, no reply instruction.
  * - How: the pack's own SMS transport (`pickMessageTransport`): `console` for a demo org and for a
- *   pack with no sender id in this environment, where nothing leaves SiteLog and the answer says so.
+ *   pack with no sender id in this environment, where nothing leaves TalkOlog and the answer says so.
  * - How often: at most 5 an hour per org (`settings_test_message_claim()`, audited
  *   `settings.test_message` with the masked number, the driver and the language); the sixth is
  *   429 `rate_limited` with the time the next one is allowed.
@@ -63,7 +63,7 @@ export interface TestMessageDeps {
 
 export type TestMessageResult =
   | { outcome: 'sent'; driver: Exclude<SmsDriver, 'console'> }
-  /** Nothing left SiteLog: a demo org, or a pack with no sender id in this environment. */
+  /** Nothing left TalkOlog: a demo org, or a pack with no sender id in this environment. */
   | { outcome: 'console'; reason: 'demo' | 'no_sender' }
   | { outcome: 'failed'; driver: SmsDriver };
 

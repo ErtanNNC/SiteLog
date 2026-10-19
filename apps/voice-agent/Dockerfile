@@ -1,4 +1,4 @@
-# SiteLog voice agent (spec §4.2, §9.4). `lk agent deploy` builds this on LiveKit Cloud; deploying is
+# TalkOlog voice agent (spec §4.2, §9.4). `lk agent deploy` builds this on LiveKit Cloud; deploying is
 # owner-approved: by hand or the owner's dispatch of the Deploy workflow's voice-setup target
 # (docs/RUNBOOK.md, W3-16), never on a push.
 FROM python:3.12-slim

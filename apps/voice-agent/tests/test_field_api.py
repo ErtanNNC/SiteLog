@@ -247,7 +247,7 @@ def test_call_id_comes_from_the_dispatch_when_the_room_metadata_has_not_arrived(
     assert _call_metadata("", dispatch)["callId"] == call_id
     assert _call_metadata("not json", None) == {}
     assert _room_call_id(_call_metadata(dispatch, ""), ROOM) == call_id
-    # Neither metadata yet: the room SiteLog named after the call still gives the id.
+    # Neither metadata yet: the room TalkOlog named after the call still gives the id.
     assert _room_call_id({}, ROOM) == call_id
     # An inbound phone call's room (named by the SIP dispatch rule) has no call id.
     assert _room_call_id({}, "sip_+15550142087_Xq7Lm2Pz9Kd4") is None

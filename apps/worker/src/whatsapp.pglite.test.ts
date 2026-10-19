@@ -52,7 +52,7 @@ function ctxOf(config: Config = testConfig()): Ctx {
 const daily = (key: string): JobPayloads['notify'] => ({
   reporterId: MARCO,
   key: 'daily_link',
-  vars: { site: 'Riverside Lofts', link: 'https://go.sitelog.app/r/ABCDEF' },
+  vars: { site: 'Riverside Lofts', link: 'https://go.talkolog.com/r/ABCDEF' },
   dedupeKey: `notify:daily:${key}`,
 });
 
@@ -127,7 +127,7 @@ describe('WhatsApp (W2-15)', () => {
     await notifyJob(ctxOf(), payload, {} as never);
     const [row] = await rows(payload.dedupeKey);
     expect(row).toMatchObject({ channel: 'whatsapp', provider: 'console', status: 'delivered' });
-    expect(row!.body).toContain('https://go.sitelog.app/r/ABCDEF');
+    expect(row!.body).toContain('https://go.talkolog.com/r/ABCDEF');
     expect(twilio.forms).toEqual([]);
     // What the Demo phone reads (SupabaseSource.getDemoPhoneThread).
     const thread = await pg.q<{ n: number }>(
@@ -206,7 +206,7 @@ describe('WhatsApp (W2-15)', () => {
     expect(status!.status).not.toBe('opted_out');
     // The message just opened the 24-hour window: the confirmation goes free-form.
     expect(twilio.forms.at(-1)!.get('Body')).toBe(
-      "You won't get more WhatsApp messages from SiteLog. Reply START to resume.",
+      "You won't get more WhatsApp messages from TalkOlog. Reply START to resume.",
     );
     expect(twilio.forms.at(-1)!.get('To')).toBe(`whatsapp:${MARCO_PHONE}`);
     // Handled once: a redelivery runs nothing.

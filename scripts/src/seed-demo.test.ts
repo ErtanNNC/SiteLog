@@ -32,7 +32,7 @@ describe('pnpm seed:demo', () => {
     expect(() => parseSeedArgs(['--date', 'tomorrow'])).toThrow(/today" or YYYY-MM-DD/);
     expect(() => parseSeedArgs(['--date'])).toThrow(/needs a value/);
     expect(() => parseSeedArgs(['--force'])).toThrow(/unknown argument/);
-    expect(() => parseSeedArgs(['--link-base', 'go.sitelog.app'])).toThrow(/http/);
+    expect(() => parseSeedArgs(['--link-base', 'go.talkolog.com'])).toThrow(/http/);
   });
 });
 

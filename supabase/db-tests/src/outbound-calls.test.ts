@@ -272,7 +272,7 @@ describe('the M8 measure (outbound_call_share, ops_outbound_call_share)', () => 
     ).toMatch('calls_outbound_attempt_key');
   });
 
-  it('is read on /ops by SiteLog staff only', async () => {
+  it('is read on /ops by TalkOlog staff only', async () => {
     const res = await asUser(db, OPERATOR, (q) =>
       q<{ org_name: string; call_days: number }>(`select * from ops_outbound_call_share(520)`),
     );

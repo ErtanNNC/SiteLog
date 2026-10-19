@@ -310,7 +310,7 @@ export interface VoiceStore {
   /** The orgs' companies (names and aliases), for the agent and its speech hints. */
   listCompanies(orgIds: string[]): Promise<Pick<CompanyRow, 'org_id' | 'name' | 'aliases'>[]>;
   /**
-   * Glossary terms for speech hints: SiteLog's, the orgs', those scoped to one of the sites, and
+   * Glossary terms for speech hints: TalkOlog's, the orgs', those scoped to one of the sites, and
    * (spec §19 Q143) those scoped to one of the reporters.
    */
   listGlossary(

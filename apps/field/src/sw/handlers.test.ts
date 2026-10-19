@@ -11,7 +11,7 @@ import {
   type WindowClientLike,
 } from './handlers';
 
-const ORIGIN = 'https://go.sitelog.app';
+const ORIGIN = 'https://go.talkolog.com';
 
 function scope(windows: string[] = []) {
   const shown: Array<[string, NotificationOptionsLike]> = [];
@@ -50,23 +50,23 @@ describe('service worker push handlers (W2-14)', () => {
     await showPush(
       s,
       data({
-        title: 'SiteLog',
-        body: 'Un dato sobre su reporte: https://go.sitelog.app/r/K7Q2MX',
+        title: 'TalkOlog',
+        body: 'Un dato sobre su reporte: https://go.talkolog.com/r/K7Q2MX',
         tag: 'question_ready',
         lang: 'es',
-        url: 'https://go.sitelog.app/r/K7Q2MX',
+        url: 'https://go.talkolog.com/r/K7Q2MX',
       }),
     );
     expect(shown).toEqual([
       [
-        'SiteLog',
+        'TalkOlog',
         {
-          body: 'Un dato sobre su reporte: https://go.sitelog.app/r/K7Q2MX',
+          body: 'Un dato sobre su reporte: https://go.talkolog.com/r/K7Q2MX',
           tag: 'question_ready',
           lang: 'es',
           icon: NOTIFICATION_ICON,
           badge: NOTIFICATION_ICON,
-          data: { url: 'https://go.sitelog.app/r/K7Q2MX' },
+          data: { url: 'https://go.talkolog.com/r/K7Q2MX' },
         },
       ],
     ]);
@@ -74,21 +74,21 @@ describe('service worker push handlers (W2-14)', () => {
 
   it('shows a plain-text or empty push as a notification that opens the app', async () => {
     expect(pushEventData(data('not json'))).toMatchObject({ body: 'not json', url: null });
-    expect(pushEventData(null)).toMatchObject({ title: 'SiteLog', body: '', url: null });
+    expect(pushEventData(null)).toMatchObject({ title: 'TalkOlog', body: '', url: null });
     const { s, shown } = scope();
     await showPush(s, null);
     expect(shown[0]![1].data).toEqual({ url: null });
   });
 
   it('a tap navigates an open window of the app to the link and focuses it', async () => {
-    const { s, opened, clients } = scope(['https://go.sitelog.app/today']);
+    const { s, opened, clients } = scope(['https://go.talkolog.com/today']);
     let closed = false;
     await openFromNotification(s, {
-      data: { url: 'https://go.sitelog.app/r/K7Q2MX' },
+      data: { url: 'https://go.talkolog.com/r/K7Q2MX' },
       close: () => (closed = true),
     });
     expect(closed).toBe(true);
-    expect(clients[0]!.navigated).toEqual(['https://go.sitelog.app/r/K7Q2MX']);
+    expect(clients[0]!.navigated).toEqual(['https://go.talkolog.com/r/K7Q2MX']);
     expect(clients[0]!.focused).toBe(1);
     expect(opened).toEqual([]);
   });
@@ -97,7 +97,7 @@ describe('service worker push handlers (W2-14)', () => {
     const none = scope();
     await openFromNotification(none.s, { data: { url: null }, close: () => {} });
     expect(none.opened).toEqual([`${ORIGIN}/`]);
-    const other = scope(['https://go.sitelog.app/today']);
+    const other = scope(['https://go.talkolog.com/today']);
     await openFromNotification(other.s, {
       data: { url: 'https://files.example/report.pdf' },
       close: () => {},
@@ -108,15 +108,15 @@ describe('service worker push handlers (W2-14)', () => {
   });
 
   it('a window that refuses to navigate: the link opens in a new window (W2-14 review)', async () => {
-    const { s, opened, clients } = scope(['https://go.sitelog.app/today']);
+    const { s, opened, clients } = scope(['https://go.talkolog.com/today']);
     clients[0]!.navigate = () =>
       Promise.reject(
         new TypeError('This service worker is not the client’s active service worker.'),
       );
     await openFromNotification(s, {
-      data: { url: 'https://go.sitelog.app/r/K7Q2MX' },
+      data: { url: 'https://go.talkolog.com/r/K7Q2MX' },
       close: () => {},
     });
-    expect(opened).toEqual(['https://go.sitelog.app/r/K7Q2MX']);
+    expect(opened).toEqual(['https://go.talkolog.com/r/K7Q2MX']);
   });
 });

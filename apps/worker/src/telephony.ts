@@ -22,7 +22,7 @@ import type { Config } from './config';
  *   `calls/start {callId}` once the reporter answers and listens for a voicemail greeting first,
  *   F6 step 1), then `SIP/CreateSIPParticipant` with `wait_until_answered`: the answer, or the SIP
  *   status of a dial that never reached the reporter (busy, no answer, failed).
- * - `console`: a demo org's call (§19 Q132): nothing leaves SiteLog. The call rings in the panel's
+ * - `console`: a demo org's call (§19 Q132): nothing leaves TalkOlog. The call rings in the panel's
  *   Demo phone for CONSOLE_CALL_RING_S, then counts as not answered. Answering it in the browser
  *   (LiveKit, like Talk now) is spec §19 Q215.
  */

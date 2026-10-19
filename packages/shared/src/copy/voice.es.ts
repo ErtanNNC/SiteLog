@@ -7,12 +7,12 @@ import type { VoiceCatalog } from './voice.ts';
 export const voiceEs: VoiceCatalog = {
   recording_notice: 'Esta llamada se graba para escribir su reporte diario.',
   opening_inbound:
-    'SiteLog, hola {first}. {recording_notice} Adelante con el reporte de hoy de {site}.',
-  opening_inbound_pick_site: 'SiteLog, hola {first}. {recording_notice}',
+    'TalkOlog, hola {first}. {recording_notice} Adelante con el reporte de hoy de {site}.',
+  opening_inbound_pick_site: 'TalkOlog, hola {first}. {recording_notice}',
   opening_outbound:
-    'Hola {first}, soy el asistente de SiteLog para {company}. {recording_notice} ¿Está listo para darme el reporte de hoy de {site}?',
+    'Hola {first}, soy el asistente de TalkOlog para {company}. {recording_notice} ¿Está listo para darme el reporte de hoy de {site}?',
   opening_talk_now:
-    'SiteLog, hola {first}. {recording_notice} Adelante con el reporte de hoy de {site}.',
+    'TalkOlog, hola {first}. {recording_notice} Adelante con el reporte de hoy de {site}.',
   go_ahead:
     'Adelante: qué se hizo, quién estuvo en la obra, el clima, las entregas y cualquier otra cosa.',
   pick_site: '¿Para qué obra es: {sites}?',
@@ -42,9 +42,9 @@ export const voiceEs: VoiceCatalog = {
   consent_declined: 'Entendido. No se guarda nada de esta llamada. Adiós.',
   consent_declined_link:
     'Entendido. No se guarda nada de esta llamada. Le enviaré su enlace por mensaje para que haga el reporte en la web. Adiós.',
-  unknown_greeting: 'Hola, soy el asistente de SiteLog.',
+  unknown_greeting: 'Hola, soy el asistente de TalkOlog.',
   unknown_caller:
-    'Este número todavía no está en SiteLog. Dígame su nombre, su empresa y la obra, y se lo pasaré a la oficina.',
+    'Este número todavía no está en TalkOlog. Dígame su nombre, su empresa y la obra, y se lo pasaré a la oficina.',
   unknown_goodbye: 'Gracias, se lo pasaré a la oficina. Adiós.',
   goodbye_filed:
     'Registrado. Le envié el PDF y un enlace para agregar fotos. Que tenga buena tarde.',
@@ -100,7 +100,7 @@ export const voiceEs: VoiceCatalog = {
   day_off_in_progress:
     'El reporte de hoy ya empezó, así que dígalo en el reporte: qué paró el trabajo y por cuánto tiempo.',
   day_off_filed: 'El reporte de hoy de {site} ya está archivado.',
-  day_off_site_paused: '{site} está en pausa en SiteLog. Pida a la oficina que la reactive.',
+  day_off_site_paused: '{site} está en pausa en TalkOlog. Pida a la oficina que la reactive.',
   callback_unavailable:
     'Todavía no puedo devolverle la llamada. Llame otra vez o use su enlace cuando esté listo.',
   callback_outside_window: 'Solo puedo llamar hasta las {time}. ¿Hacemos el reporte ahora?',
@@ -119,8 +119,8 @@ export const voiceEs: VoiceCatalog = {
   consent_repeat:
     'Perdón, ¿está bien que grabe estas llamadas y le envíe los enlaces de sus reportes por mensaje? Diga sí o no.',
   tool_error: 'Perdón, eso no funcionó de mi lado. Intentémoslo de nuevo.',
-  test_call_greeting: 'Hola, soy el asistente de SiteLog. Esta llamada no se graba.',
+  test_call_greeting: 'Hola, soy el asistente de TalkOlog. Esta llamada no se graba.',
   test_call_line:
-    'Esta es una llamada de prueba de SiteLog para {company}. Su teléfono está listo para recibir llamadas de SiteLog.',
+    'Esta es una llamada de prueba de TalkOlog para {company}. Su teléfono está listo para recibir llamadas de TalkOlog.',
   test_call_goodbye: 'Eso es todo para esta prueba. Adiós.',
 };

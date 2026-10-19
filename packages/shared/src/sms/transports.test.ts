@@ -113,7 +113,7 @@ describe('iletimerkezi driver (mocked HTTP)', () => {
       }),
     );
     const driver = createIletimerkeziSmsTransport(creds, http.fetch, 'https://ime.test');
-    const out = await driver.send(TR_PHONE, 'Merhaba Emre, ben SiteLog', { sender: 'SITELOG' });
+    const out = await driver.send(TR_PHONE, 'Merhaba Emre, ben TalkOlog', { sender: 'TALKOLOG' });
     expect(out).toEqual({ providerId: 'iletimerkezi:98765' });
     const [call] = http.calls;
     expect(call!.url).toBe('https://ime.test/v1/send-sms/json');
@@ -121,10 +121,10 @@ describe('iletimerkezi driver (mocked HTTP)', () => {
       request: {
         authentication: { key: 'key-1', hash: 'hash-1' },
         order: {
-          sender: 'SITELOG',
+          sender: 'TALKOLOG',
           sendDateTime: [],
           message: {
-            text: 'Merhaba Emre, ben SiteLog',
+            text: 'Merhaba Emre, ben TalkOlog',
             receipents: { number: ['905321234567'] },
           },
         },
@@ -138,12 +138,12 @@ describe('iletimerkezi driver (mocked HTTP)', () => {
       json(502, {}),
     );
     const driver = createIletimerkeziSmsTransport(creds, http.fetch);
-    const refused = await driver.send(TR_PHONE, 'x', { sender: 'SITELOG' }).catch((e) => e);
+    const refused = await driver.send(TR_PHONE, 'x', { sender: 'TALKOLOG' }).catch((e) => e);
     expect(refused).toBeInstanceOf(SmsSendError);
     expect([refused.retryable, refused.opts.code]).toEqual([false, '401']);
     // An account fault is never blamed on the number (send_welcome keeps the reporter reachable).
     expect(refused.undeliverable).toBe(false);
-    const outage = await driver.send(TR_PHONE, 'x', { sender: 'SITELOG' }).catch((e) => e);
+    const outage = await driver.send(TR_PHONE, 'x', { sender: 'TALKOLOG' }).catch((e) => e);
     expect(outage.retryable).toBe(true);
   });
 
@@ -155,9 +155,9 @@ describe('iletimerkezi driver (mocked HTTP)', () => {
       json(200, { response: { status: { code: '402', message: 'Bakiye yetersiz' } } }),
     );
     const driver = createIletimerkeziSmsTransport(creds, http.fetch);
-    const bad = await driver.send(TR_PHONE, 'x', { sender: 'SITELOG' }).catch((e) => e);
+    const bad = await driver.send(TR_PHONE, 'x', { sender: 'TALKOLOG' }).catch((e) => e);
     expect([bad.undeliverable, bad.retryable, bad.opts.code]).toEqual([true, false, '450']);
-    const balance = await driver.send(TR_PHONE, 'x', { sender: 'SITELOG' }).catch((e) => e);
+    const balance = await driver.send(TR_PHONE, 'x', { sender: 'TALKOLOG' }).catch((e) => e);
     expect([balance.undeliverable, balance.retryable, balance.opts.code]).toEqual([
       false,
       false,
@@ -173,7 +173,7 @@ describe('iletimerkezi driver (mocked HTTP)', () => {
     const driver = createIletimerkeziSmsTransport(creds, http.fetch);
     const text =
       'Bugün için hâlâ rapor yok. Ataşehir İnşaat, Şantiye, çalışma, ğ ı İ ş Ş Ç Ğ Ö Ü ö ü.';
-    await driver.send(TR_PHONE, text, { sender: 'SITELOG' });
+    await driver.send(TR_PHONE, text, { sender: 'TALKOLOG' });
     const body = JSON.parse(String(http.calls[0]!.init.body)) as {
       request: { order: { message: { text: string } } };
     };
@@ -189,7 +189,7 @@ describe('iletimerkezi driver (mocked HTTP)', () => {
     });
     const informational = mockFetch(accepted.clone());
     await createIletimerkeziSmsTransport(creds, informational.fetch).send(TR_PHONE, 'x', {
-      sender: 'SITELOG',
+      sender: 'TALKOLOG',
     });
     const order = (http: ReturnType<typeof mockFetch>) =>
       (JSON.parse(String(http.calls[0]!.init.body)) as { request: { order: object } }).request
@@ -200,7 +200,7 @@ describe('iletimerkezi driver (mocked HTTP)', () => {
     await createIletimerkeziSmsTransport(creds, commercial.fetch, undefined, 'commercial').send(
       TR_PHONE,
       'x',
-      { sender: 'SITELOG' },
+      { sender: 'TALKOLOG' },
     );
     expect(order(commercial)).toMatchObject({ iys: '1', iysList: 'BIREYSEL' });
   });

@@ -16,8 +16,8 @@ import { LANGUAGES, type Language } from '../locale.ts';
  * (`pnpm countries:set -- --code XX --whatsapp-templates <file>`): `countries.whatsapp_templates`,
  * `{<key>: {<language>: <content sid>}}`.
  *
- * Meta refuses a body that starts or ends with a variable, so such a text gets "SiteLog: " in front
- * or " - SiteLog" at the end (spec §19 Q110). A template is tied to the pack's variant: a voice
+ * Meta refuses a body that starts or ends with a variable, so such a text gets "TalkOlog: " in front
+ * or " - TalkOlog" at the end (spec §19 Q110). A template is tied to the pack's variant: a voice
  * number set or cleared later changes the "or call {number}" clause, so the templates of the keys
  * with that clause are submitted again.
  */
@@ -37,8 +37,8 @@ export interface WhatsappTemplate {
   variables: string[];
 }
 
-const PREFIX = 'SiteLog: ';
-const SUFFIX = ' - SiteLog';
+const PREFIX = 'TalkOlog: ';
+const SUFFIX = ' - TalkOlog';
 
 /** The template of a key in a language for the pack's variant. */
 export function whatsappTemplate(

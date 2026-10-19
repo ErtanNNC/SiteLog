@@ -1,4 +1,12 @@
-# SiteLog · Durum
+# TalkOlog · Durum
+
+**2026-10-19 (12:30 UTC) — Ürün adı TalkOlog (eski adıyla SiteLog).**
+
+- **Değişen:** kullanıcının okuduğu her metin TalkOlog diyor: SMS ve WhatsApp metinleri, e-postalar, PDF, panel, saha uygulaması (EN/ES/TR), sesli asistanın cümleleri, kurulum sihirbazı. TR paketinin SMS başlığı `TALKOLOG` (belgelerde, testlerde ve CI'da). Marka SVG'lerinin etiketleri ve paneldeki logo yazısı TalkOlog; işaret (logo) ve ikonlar aynı.
+- **Değişmeyen:** teknik isimler (`@sitelog/*` paketleri, veritabanı, repo, env adları, `docs/SITELOG_SPEC.md`). Uygulanmış migration'lar da değişmedi (geriye dönük düzenleme yasak). İçlerindeki iki bildirim metni panelde zaten çeviri anahtarıyla gösteriliyor, eski isim ekrana çıkmıyor.
+- **Alan adları (sizin seçiminiz, §19 Q360):** panel `app.talkolog.com`, saha uygulaması ve linkler `go.talkolog.com`, e-posta `reports@talkolog.com`. Koddaki varsayılanlar buna göre. **Sizin adımlarınız:** DNS, Netlify'da alan adı, Supabase Auth adresi, Resend alan doğrulaması (RUNBOOK "Domain talkolog.com"). Hiçbirini ben yapmadım.
+- **Test:** `scripts/src/product-name.test.ts` eski adı her metinde arıyor; geri gelirse `pnpm check` kırılıyor.
+- **Bilmeniz gereken:** `CLAUDE.md` ve geçmiş plan belgeleri (PLAN_WEEK1–4, GAP_ANALYSIS, AUDIT_BACKLOG, START_HERE) eski adla kaldı; bunlar geçmiş kayıt. CLAUDE.md'yi isterseniz siz güncelleyin ya da bana söyleyin. Tasarım çizimleri (`docs/design`) de teslim edildiği gibi duruyor.
 
 **2026-10-19 (11:10 UTC) — Talk now preview'de uçtan uca çalışıyor.**
 
@@ -44,7 +52,7 @@
   - Yeni soru Q350: "Beni şimdi ara" için bütçe ve arama saatleri.
 - **Demo notları:** `docs/DEMO_NOTES.md` "Week 4". Yeni bir şirketin kendi kendine kurulumu, Türkçe demo ve faturalama döngüsü adım adım; sizin hesaplarınızı gerektiren adımlar **(owner)** olarak işaretli.
 - **Kalanlar sizde:**
-  - **W4-13:** İletimerkezi hesabı, `SITELOG` başlığı, avukat metinleri.
+  - **W4-13:** İletimerkezi hesabı, `TALKOLOG` başlığı, avukat metinleri.
   - **W4-14:** Azure ve LiveKit ile Türkçe ses testi, telefon testleri.
   - **W4-15:** Stripe test modu.
   - **Supabase şablonları:** giriş ve davet e-posta şablonlarının önizleme projesine yüklenmesi (RUNBOOK "Auth email templates").
@@ -89,7 +97,7 @@
 
 **Sizden beklenenler değişmedi:** 08:00 UTC notundaki 6 madde. En acil olanlar:
 
-- İletimerkezi hesabı ve `SITELOG` başlığı;
+- İletimerkezi hesabı ve `TALKOLOG` başlığı;
 - avukat metinleri;
 - TR faturalama (Q8, Q9);
 - Stripe test modu.
@@ -111,12 +119,12 @@
   - W4-08: yeni şirketlere hazır gelen Türkçe başlangıç sözlüğü ve Türkçe test seti.
 - **CI:** hafta 3'ün ardından Q227 ve Q226 da yeşil (fa630b2).
 - **Yeni açık sorular Q229–Q246.** Hepsinde önerdiğim varsayılan var ve kod onunla kurulacak; listeyi `docs/PLAN_WEEK4.md` "Owner decisions" bölümünde bulabilirsiniz. Önemli olanlar:
-  - **Q234:** Fiyat şirket başına tutulsun, yalnız SiteLog ekibi değiştirebilsin.
+  - **Q234:** Fiyat şirket başına tutulsun, yalnız TalkOlog ekibi değiştirebilsin.
   - **Q235:** Deneme süresi biter ve kart girilmemişse, ödemesi gecikmiş şirket gibi işlem yapılsın: önce uyarı, sonra hatırlatmalar durur.
-  - **Q236:** Q8 karara bağlanana kadar Türk şirketleri "manuel" faturalansın, yani faturayı SiteLog doğrudan kessin.
+  - **Q236:** Q8 karara bağlanana kadar Türk şirketleri "manuel" faturalansın, yani faturayı TalkOlog doğrudan kessin.
   - **Q230:** Ekip sayfasındaki "Şimdi ara" düğmesi yalnız yönetici ve operasyon kullanıcılarında olsun ve önce ofisin onayını istesin.
 - **Sizden, hafta 4 için (bugün başlayın, uzun sürüyor):**
-  1. İletimerkezi hesabı, e-Devlet aboneliği ve `SITELOG` başlığı. Türkçe karakter tablosunu ve teslim raporlarını da sorun.
+  1. İletimerkezi hesabı, e-Devlet aboneliği ve `TALKOLOG` başlığı. Türkçe karakter tablosunu ve teslim raporlarını da sorun.
   2. Avukattan:
      - KVKK aydınlatma metni, kayıt bildirimi ve onay metni, TR ve EN;
      - yurt dışına aktarım dayanağı;
@@ -281,7 +289,7 @@ Not: `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` worker'ın `.env`'ine girer (Supa
 
 0. ~~GitHub Actions çalışmıyor~~ — 19:04 UTC'de düzeldi (teşekkürler); bekleyen commit'lerin CI'ı çalışıyor.
 1. **Anahtarlar:** `ANTHROPIC_API_KEY` ve `DEEPGRAM_API_KEY` (W1-11/W1-12'den itibaren; yoksa fake/console ile devam ederim, gerçek transkripsiyon ve çıkarım çalışmaz) · `RESEND_API_KEY` (W1-15; yoksa `EMAIL_PROVIDER=console`) · Twilio / İletimerkezi isteğe bağlı (console sürücüsü ve Demo phone yeter).
-2. **Uzun süreli kayıtlar:** Twilio toll-free doğrulaması (US) ve İletimerkezi `SITELOG` başlığı (TR); onaylanınca gönderici kimliklerini `pnpm countries:set` ile siz girersiniz (paket satırı, env değil).
+2. **Uzun süreli kayıtlar:** Twilio toll-free doğrulaması (US) ve İletimerkezi `TALKOLOG` başlığı (TR); onaylanınca gönderici kimliklerini `pnpm countries:set` ile siz girersiniz (paket satırı, env değil).
 3. **Kontroller:** field preview'u telefonla açma (W1-04/W1-07 probe'u), logo kontrolü; W1-09 için iPhone (Safari) ve Android (Chrome) ile HTTPS önizlemeden: 2 dk ses + 2 fotoğraf, uçak modunda kuyruk, ekran kilidi, sessize alma ve gelen arama sırasında kayıt.
 4. **Proje dosyaları:** bu ortamda claude.ai Projesi'ne dosya yazamıyorum; `docs/SITELOG_SPEC.md`, `docs/decisions/channel-options.md` ve bu `claude/STATUS.md` repoda güncel; Projeye kopyalanması size kalıyor (Proje GitHub'dan senkronsa kendiliğinden gelir).
 
@@ -438,7 +446,7 @@ Toplamları her zaman kod hesaplıyor; kişinin söylemediği bir sayı kabul ed
 
 **Yeni sorular (önerimle kuruldu; aksini söylemezseniz böyle kalır):**
 
-- **Q110:** şablon metni §9.2 metninin aynısı. Meta, değişkenle başlayan ya da biten şablonu kabul etmediği için başa "SiteLog: " ya da sona " - SiteLog" ekleniyor.
+- **Q110:** şablon metni §9.2 metninin aynısı. Meta, değişkenle başlayan ya da biten şablonu kabul etmediği için başa "TalkOlog: " ya da sona " - TalkOlog" ekleniyor.
 - **Q111 (metin kontrolünüz):** iki yönlü cevapların Türkçe metinleri (yardım, STOP onayı, bilinmeyen numara, tercih değişikliği).
 - **Q112:** WhatsApp'ta START, WhatsApp iznini yalnızca daha önce bu izni vermiş kişiye geri veriyor.
 - **Q113:** WhatsApp'tan gelen bir cevap anlaşılamazsa kişiye sorunun linki tekrar gönderiliyor; soru açık kalıyor.

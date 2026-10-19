@@ -137,7 +137,7 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
   const setupDay = cal.pastDay(SETUP_DAY);
   const setup = (time: string) => cal.atDate(setupDay, time, DEMIR_TZ);
   // §18.2: the TR pack (spec §4.6). TR pack: no voice number, so texts carry no "or call"; one-way
-  // SMS (the SITELOG title), so no reply prompt.
+  // SMS (the TALKOLOG title), so no reply prompt.
   const trPack = demoPack('TR');
   const smsOptions = smsRenderOptions(trPack);
 
@@ -256,7 +256,7 @@ export function buildDemirDemo(opts: DemirOptions = {}): DemoOrgRows {
       linkBase,
     });
     fieldLinks.push(personal.row);
-    // §9.2 `welcome` in Turkish, from the SITELOG sender (one-way: no reply prompt).
+    // §9.2 `welcome` in Turkish, from the TALKOLOG sender (one-way: no reply prompt).
     const welcome = demoSms({
       key: `welcome:${r.id}`,
       orgId: ORG,

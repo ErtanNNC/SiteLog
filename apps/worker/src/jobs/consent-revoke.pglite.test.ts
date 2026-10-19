@@ -42,7 +42,7 @@ afterAll(async () => {
 describe('a revoked sms consent (F15 Settings)', () => {
   it('skips the next daily_link with no_consent; the device code still goes', async () => {
     const n = notifier();
-    const vars = { site: 'Riverside Lofts', link: 'https://go.sitelog.app/r/ABCDEF' };
+    const vars = { site: 'Riverside Lofts', link: 'https://go.talkolog.com/r/ABCDEF' };
     const before = await n.send(MARCO, 'daily_link', vars, { dedupeKey: 'w202:before' });
     expect(before.channel).toBe('sms');
 
@@ -70,7 +70,7 @@ describe('a revoked sms consent (F15 Settings)', () => {
 
   it('Turn on (spec §19 Q86) brings texts back; an opted-out phone stays opted out', async () => {
     const n = notifier();
-    const vars = { site: 'Riverside Lofts', link: 'https://go.sitelog.app/r/ABCDEF' };
+    const vars = { site: 'Riverside Lofts', link: 'https://go.talkolog.com/r/ABCDEF' };
     const [g] = await pg.q<{ r: { granted: boolean } }>(
       `select field_grant_consent($1, 'sms', 'field.consent.v1', null, null) as r`,
       [MARCO],

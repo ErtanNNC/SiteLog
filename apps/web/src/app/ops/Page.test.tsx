@@ -11,7 +11,7 @@ describe('OpsPage (demo data)', () => {
   it('shows queue health, dead jobs without phone numbers or bodies, and the cost outlier', async () => {
     renderWithProviders(<OpsPage />, { route: '/ops' });
     expect(await screen.findByRole('heading', { name: 'Ops', level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('SiteLog internal')).toBeInTheDocument();
+    expect(screen.getByText('TalkOlog internal')).toBeInTheDocument();
 
     const kpis = screen.getByTestId('ops-kpis');
     expect(kpis).toHaveTextContent('Queued6');
@@ -128,7 +128,7 @@ describe('OpsPage (demo data)', () => {
 });
 
 describe('OpsPage: unknown contacts with no organisation (spec §19 Q44, W1-16)', () => {
-  it('lists them for SiteLog staff and ignores one, audited', async () => {
+  it('lists them for TalkOlog staff and ignores one, audited', async () => {
     const store = new DemoStore();
     const luis = store.data.unknownContacts[0]!;
     store.data.unknownContacts.push({
@@ -162,7 +162,7 @@ describe('OpsPage: unknown contacts with no organisation (spec §19 Q44, W1-16)'
     });
   });
 
-  it('W4-10: SiteLog staff set an org’s price, audited; a Stripe org has no status to set', async () => {
+  it('W4-10: TalkOlog staff set an org’s price, audited; a Stripe org has no status to set', async () => {
     const store = new DemoStore();
     renderWithProviders(<OpsPage />, { route: '/ops', store });
     const card = await screen.findByTestId('ops-org-billing');

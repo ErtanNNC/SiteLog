@@ -49,7 +49,7 @@ describe('a photos link: the photo-only screen (F9, W3-13)', () => {
     expect(screen.getByRole('button', { name: 'Take or choose photos' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Record/ })).toBeNull();
     expect(screen.queryByText(/Talk now/)).toBeNull();
-    expect(document.title).toBe('Add photos · SiteLog');
+    expect(document.title).toBe('Add photos · TalkOlog');
   });
 
   it('sends two photos as one batch to the filed report and shows version 2', async () => {

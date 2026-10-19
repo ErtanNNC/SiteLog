@@ -110,7 +110,7 @@ function MicIcon({ off }: { off: boolean }) {
  * list and the Recording screen's pattern): the microphone first (asked once; refused → how to allow
  * it, and Record instead), then `voice/token` and the call through a `VoiceClient` (LiveKit, or the
  * scripted fake for a fake field-api), lazy-loaded with this screen. In the call: "Speaking with the
- * SiteLog assistant", the line's status (connecting, the assistant speaking or listening,
+ * TalkOlog assistant", the line's status (connecting, the assistant speaking or listening,
  * reconnecting), the recording notice as text (the pack's `legal_keys.recording_notice` when it has
  * this language, W4-06, else the voice copy's line; the sentence the agent says first), a
  * timer, Mute and **End call** (56 px); no captions in M7. After the call it reads the day again:

@@ -42,12 +42,12 @@ type GeoState =
 
 /**
  * F2 step 2 · First site & manager (W4-02 on v1.2): the site, then its manager with the language
- * SiteLog uses with them (the pack's field locales, the first preselected) beside the languages
+ * TalkOlog uses with them (the pack's field locales, the first preselected) beside the languages
  * they speak, and their preferred channel (Team's `PreferenceField`; a call preference in a pack
  * without a voice number uses Talk now, §19 Q33); the backup reporter likewise. Beside the form,
  * the §9.2 `welcome` as the manager will receive it by SMS (§19 Q25) and the org's price (§19
  * Q234). The line check (§19 Q229) refuses a known landline for a text link, and for a call where
- * SiteLog cannot reach it by phone (`reachable`).
+ * TalkOlog cannot reach it by phone (`reachable`).
  */
 export function SiteStep({
   draft,
@@ -84,9 +84,9 @@ export function SiteStep({
   packCountry: string;
   /** The org's country pack: field locales, the welcome's variant, the voice number. */
   pack: CountryPack | undefined;
-  /** SiteLog can reach a reporter by phone in this org (`reachableByPhone`, F2, §19 Q229). */
+  /** TalkOlog can reach a reporter by phone in this org (`reachableByPhone`, F2, §19 Q229). */
   reachable: boolean;
-  /** The org's price per active site and month (W4-10); null while SiteLog set none. */
+  /** The org's price per active site and month (W4-10); null while TalkOlog set none. */
   price: BillingPrice | null | undefined;
 }) {
   const { t, language } = useCopy();
@@ -541,7 +541,7 @@ export function SiteStep({
   );
 }
 
-/** "Language SiteLog uses": the pack's field locales, named in the panel's language (Team's copy). */
+/** "Language TalkOlog uses": the pack's field locales, named in the panel's language (Team's copy). */
 function LocaleSelect({
   id,
   label,
@@ -593,7 +593,7 @@ function SmsBubble({ from, text, lang }: { from: string; text: string; lang: str
 
 /**
  * The pricing card (F2, §19 Q234): the org's own price per active site and month (W4-10), "$0
- * setup · billed per active site"; without a price, Billing's line that SiteLog sets it.
+ * setup · billed per active site"; without a price, Billing's line that TalkOlog sets it.
  */
 function PricingCard({
   priceText,

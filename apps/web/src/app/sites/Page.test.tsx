@@ -93,7 +93,7 @@ describe('SitesPage', () => {
     );
   });
 
-  it('shows no price on the connect card where SiteLog set none yet (spec §19 Q9, Q234)', async () => {
+  it('shows no price on the connect card where TalkOlog set none yet (spec §19 Q9, Q234)', async () => {
     const auth = makeAuthState('admin');
     renderWithProviders(<SitesPage />, {
       route: '/sites',

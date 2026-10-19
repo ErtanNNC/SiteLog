@@ -1,4 +1,4 @@
-/* SiteLog field app styles — spec §14, §14.6. Tailwind v4, CSS-first; the tokens (@theme) are the
+/* TalkOlog field app styles — spec §14, §14.6. Tailwind v4, CSS-first; the tokens (@theme) are the
    panel's, from @sitelog/shared. Phone rules: Asphalt on Chalk, body 17–18 px, targets ≥ 56 px. */
 @import 'tailwindcss';
 

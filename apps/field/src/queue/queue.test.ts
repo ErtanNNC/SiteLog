@@ -464,7 +464,7 @@ describe('UploadQueue (F5 step 3, §9.3 offline)', () => {
     draft.describe({ mime: 'audio/webm;codecs=opus', startedAt: '2026-10-09T21:00:00.000Z' });
     for (let i = 0; i < 8; i++) draft.append(new Blob([`c${i}`]), i * 1_000);
     await draft.seal();
-    // The page is killed here: no Stop, no clip. The phone opens SiteLog again.
+    // The page is killed here: no Stop, no clip. The phone opens TalkOlog again.
     const sent: QueuedUpload[] = [];
     const page2 = new UploadQueue({
       store: openIndexedDbQueueStore(factory),

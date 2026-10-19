@@ -8,7 +8,8 @@
  *   (`demo/kestrel.ts`, `demo/demir.ts`) stores its links the same way.
  * - Codes are upper case and read back from an SMS, so the hash is taken of the trimmed, upper case
  *   code: `k7q2mx` and `K7Q2MX` are the same link.
- * - The SMS link is `{FIELD_APP_URL}/r/{code}` until the `sl.link` short domain exists (GAP §8 Q7).
+ * - The SMS link is `{FIELD_APP_URL}/r/{code}`: in production the field app's host is the short
+ *   link host, `go.talkolog.com` (spec §19 Q360), so there is no separate short domain.
  * - A personal link's code is derived from its id under LINK_SIGNING_SECRET (`deriveLinkCode`,
  *   W1-08), so the service can text the same link again; demo links keep their seeded codes.
  *
@@ -93,7 +94,7 @@ export const LINK_CODE_LENGTH = 12;
 export const MASKED_CODE = '••••••';
 
 /**
- * A field link with its code masked: `https://go.sitelog.app/r/K7Q2MX` → `…/r/••••••`, also a
+ * A field link with its code masked: `https://go.talkolog.com/r/K7Q2MX` → `…/r/••••••`, also a
  * Filed-screen link (`/r/{code}/report/{id}`). A text without `/r/` is returned unchanged.
  * The Notifier stores texts this way unless the console transport writes them for a demo org
  * (spec §4.5; docs/AUDIT_BACKLOG.md "Office users can read reporters' device codes and personal

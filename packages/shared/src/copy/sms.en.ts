@@ -11,11 +11,11 @@ import type { SmsCatalog, SmsKey, SmsWeatherPhrases } from './sms.ts';
 export const smsEn: SmsCatalog<SmsKey> = {
   welcome: {
     withNumber:
-      "Hi {first}, I'm SiteLog, the daily report assistant for {company} at {site}. Each workday before {deadline}, tap your link and talk for ~3 min, or call {number}: {link}",
+      "Hi {first}, I'm TalkOlog, the daily report assistant for {company} at {site}. Each workday before {deadline}, tap your link and talk for ~3 min, or call {number}: {link}",
     withoutNumber:
-      "Hi {first}, I'm SiteLog, the daily report assistant for {company} at {site}. Each workday before {deadline}, tap your link and talk for ~3 min: {link}",
+      "Hi {first}, I'm TalkOlog, the daily report assistant for {company} at {site}. Each workday before {deadline}, tap your link and talk for ~3 min: {link}",
   },
-  verify_code: 'SiteLog code: {code}. It expires in 10 minutes.',
+  verify_code: 'TalkOlog code: {code}. It expires in 10 minutes.',
   daily_link: {
     withNumber: "Today's report for {site}: {link} - or just call {number}.",
     withoutNumber: "Today's report for {site}: {link}",
@@ -39,15 +39,15 @@ export const smsEn: SmsCatalog<SmsKey> = {
   photos_link: "Add photos to today's report: {link}",
   edit_applied: 'Updated {weekday}: {change}. Version {v} sent to the office.',
   finish_report: 'Your call ended before filing. Finish in one tap: {link}',
-  site_paused: '{site} is paused in SiteLog. Ask the office to resume it.',
-  unknown_number: "This number isn't set up with SiteLog. Ask your office to add you.",
+  site_paused: '{site} is paused in TalkOlog. Ask the office to resume it.',
+  unknown_number: "This number isn't set up with TalkOlog. Ask your office to add you.",
   help: {
     withNumber:
-      'SiteLog daily reports for {company}. Your link: {link} - Call {number} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.',
+      'TalkOlog daily reports for {company}. Your link: {link} - Call {number} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.',
     withoutNumber:
-      'SiteLog daily reports for {company}. Your link: {link} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.',
+      'TalkOlog daily reports for {company}. Your link: {link} - Text CALL or TEXT to switch - STOP to opt out. Msg & data rates may apply.',
   },
-  stop_confirm: "You won't get more texts from SiteLog. Reply START to resume.",
+  stop_confirm: "You won't get more texts from TalkOlog. Reply START to resume.",
   pref_call_ok: 'OK, your daily report is now set to a call. Reply TEXT to switch to a link.',
   pref_text_ok:
     'OK, your daily report is now set to a link by text. Reply CALL to switch to a call.',
@@ -58,7 +58,7 @@ export const smsEn: SmsCatalog<SmsKey> = {
   // W2-16 (spec §19 Q85, Q40): WhatsApp only.
   whatsapp_use_link: 'Voice notes go through your link: {link}',
   whatsapp_stop_confirm:
-    "You won't get more WhatsApp messages from SiteLog. Reply START to resume.",
+    "You won't get more WhatsApp messages from TalkOlog. Reply START to resume.",
 };
 
 /** The `welcome` reply clause for packs with two-way SMS (§9.2), appended by `renderSms`. */
@@ -90,4 +90,4 @@ export const smsHelpPrivacyEn = ' - Privacy: {privacy_link}';
  * (never a reporter). GSM-7, one segment.
  */
 export const smsTestMessageEn =
-  'SiteLog test message for {company}. Your site managers get their texts from this sender. No reply needed.';
+  'TalkOlog test message for {company}. Your site managers get their texts from this sender. No reply needed.';

@@ -54,7 +54,7 @@ describe('the SMS stand-in (W4-12)', () => {
   it('accepts a Twilio text from the real driver and lists it by recipient', async () => {
     const out = await transports()('twilio').send(
       assertE164('+15550142290'),
-      'Hi Kevin, Kestrel Build Group uses SiteLog.',
+      'Hi Kevin, Kestrel Build Group uses TalkOlog.',
       { sender: '+18885550100' },
     );
     expect(out.providerId).toMatch(/^SM[0-9a-f]{32}$/);
@@ -65,7 +65,7 @@ describe('the SMS stand-in (W4-12)', () => {
         channel: 'sms',
         to: '+15550142290',
         from: '+18885550100',
-        body: 'Hi Kevin, Kestrel Build Group uses SiteLog.',
+        body: 'Hi Kevin, Kestrel Build Group uses TalkOlog.',
         at: expect.any(String),
       },
     ]);
@@ -75,15 +75,15 @@ describe('the SMS stand-in (W4-12)', () => {
   it('accepts an İletimerkezi order (Turkish letters as sent) with a fresh order id', async () => {
     const t = transports()('iletimerkezi');
     const a = await t.send(assertE164('+905320000001'), 'Merhaba Emre, şantiye raporu.', {
-      sender: 'SITELOG',
+      sender: 'TALKOLOG',
     });
-    const b = await t.send(assertE164('+905320000002'), 'İkinci', { sender: 'SITELOG' });
+    const b = await t.send(assertE164('+905320000002'), 'İkinci', { sender: 'TALKOLOG' });
     expect(a.providerId).toMatch(/^iletimerkezi:\d+$/);
     expect(b.providerId).not.toBe(a.providerId);
     const [first] = await received('+905320000001');
     expect(first).toMatchObject({
       provider: 'iletimerkezi',
-      from: 'SITELOG',
+      from: 'TALKOLOG',
       body: 'Merhaba Emre, şantiye raporu.',
     });
   });

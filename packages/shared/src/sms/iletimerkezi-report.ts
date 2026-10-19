@@ -15,7 +15,7 @@ import { ILETIMERKEZI_API_BASE } from './transports.ts';
  * documentation in hand, and no real send made (spec §19 Q280). So the transport-level part is
  * built (the POST, HTTP 429 / 5xx and network errors retryable, anything else a refusal) and the
  * endpoint itself is a parameter, `IletimerkeziReportEndpoint`: its path, its body and the parser
- * of its answer into SiteLog's own `IletimerkeziReport`. `ILETIMERKEZI_REPORT_ENDPOINT` stays null
+ * of its answer into TalkOlog's own `IletimerkeziReport`. `ILETIMERKEZI_REPORT_ENDPOINT` stays null
  * until the owner has the documentation (W4-13); until then the job reads no report and the row
  * stays `sent` (as before W4-11), and the tests run the job and the transport against the fixture
  * endpoint (`ILETIMERKEZI_REPORT_FIXTURE_ENDPOINT`, `fixtures/iletimerkezi/*.json`), whose answer
@@ -66,7 +66,7 @@ export interface IletimerkeziReportEndpoint {
 export const ILETIMERKEZI_REPORT_ENDPOINT: IletimerkeziReportEndpoint | null = null;
 
 /**
- * The tests' and the mock's endpoint: the answer is SiteLog's normalized report, validated. Never
+ * The tests' and the mock's endpoint: the answer is TalkOlog's normalized report, validated. Never
  * pointed at the provider (its path does not exist there).
  */
 export const ILETIMERKEZI_REPORT_FIXTURE_ENDPOINT: IletimerkeziReportEndpoint = {
@@ -167,7 +167,7 @@ export interface ReportVerdict {
 
 /**
  * What a report says about the message to `phone` (E.164): its recipient by number (without
- * `+`), or the order's only recipient (SiteLog sends one number per order). A report not ready,
+ * `+`), or the order's only recipient (TalkOlog sends one number per order). A report not ready,
  * a recipient not listed, `pending` and `unknown` are not final: the message stays `sent` and the
  * next poll reads again. Only `delivered` and `undelivered` move it; an undelivered text counts as
  * the number's (`undeliverable`, F3 "Can't reach this number" for a welcome), never the account's,

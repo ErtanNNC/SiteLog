@@ -2,7 +2,7 @@ import type { StarterTerm } from './starter.ts';
 
 /**
  * The English starter glossary (spec §19 Q238, W4-08; listed in spec §18.3): US site words → how a
- * daily report writes them. Written by SiteLog from the spec's own field words (§18.1's "the deck",
+ * daily report writes them. Written by TalkOlog from the spec's own field words (§18.1's "the deck",
  * "block", "rough-in", "punch", "topped out", "stood down", "yards", "mud") and common US site
  * vocabulary (formwork, equipment, safety, inspections). No company, crew or area names. A new org
  * whose report language is English starts with these as `built_in` (`seed_starter_glossary()`,

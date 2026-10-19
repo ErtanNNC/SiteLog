@@ -331,7 +331,7 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       );
     }
     if (!whatsapp && !pack.twoWaySms) {
-      throw new HttpError(409, 'This country pack has one-way SMS: replies cannot reach SiteLog');
+      throw new HttpError(409, 'This country pack has one-way SMS: replies cannot reach TalkOlog');
     }
     const from = assertE164(ctx.reporter.phone_e164);
     const scope = { orgId: ctx.org.id };

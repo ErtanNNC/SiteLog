@@ -363,7 +363,7 @@ export interface FakeOptions {
   /** W3-13 (F9): `resolve` answers a photos link of `dailyLinkSite` (the call-filed report's day). */
   photosLink?: boolean;
   /**
-   * W3-17 (spec §19 Q51, Q132): SiteLog places automated calls for the org (`placesCalls`): the
+   * W3-17 (spec §19 Q51, Q132): TalkOlog places automated calls for the org (`placesCalls`): the
    * Welcome box, Settings' automated-call row and, for a call reporter, "Don't call me today".
    */
   placesCalls?: boolean;
@@ -649,7 +649,7 @@ export async function installFakeFieldApi(
             ...(['sms', 'recording', 'data_processing'] as const)
               .filter((t) => (body as { types: string[] }).types.includes(t))
               .map((type) => ({ type, held: true })),
-            // W3-17: listed wherever SiteLog places calls, held when ticked.
+            // W3-17: listed wherever TalkOlog places calls, held when ticked.
             ...(options.placesCalls
               ? [
                   {

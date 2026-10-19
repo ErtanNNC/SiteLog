@@ -54,7 +54,7 @@ export interface OfficeEmailCopy {
     noGaps: string;
     unsigned: string;
     allSigned: string;
-    openSiteLog: string;
+    openTalkOlog: string;
     title: string;
   };
   unknown: {
@@ -79,7 +79,7 @@ export interface OfficeEmailCopy {
 
 export const OFFICE_EMAIL_COPY: Record<ReportLanguage, OfficeEmailCopy> = {
   en: {
-    open: 'Open in SiteLog',
+    open: 'Open in TalkOlog',
     missing: {
       subject: (site, date) => `${site} — no report · ${date}`,
       someone: 'The site manager',
@@ -102,7 +102,7 @@ export const OFFICE_EMAIL_COPY: Record<ReportLanguage, OfficeEmailCopy> = {
       ask: 'Could you check the days where the hours differ? The daily reports with audio evidence are available on request.',
       askShort: 'Could you check the days where the hours differ?',
       title: 'Hours query',
-      footer: 'Sent with SiteLog.',
+      footer: 'Sent with TalkOlog.',
     },
     pack: {
       subject: (site, from, to) => `EOT evidence pack ready · ${site} · ${from} – ${to}`,
@@ -116,20 +116,20 @@ export const OFFICE_EMAIL_COPY: Record<ReportLanguage, OfficeEmailCopy> = {
       allSites: 'All sites',
     },
     digest: {
-      subject: (from, to, pct) => `SiteLog weekly · ${from} – ${to} · ${pct}% on time`,
+      subject: (from, to, pct) => `TalkOlog weekly · ${from} – ${to} · ${pct}% on time`,
       onTime: 'On time',
       percent: (pct) => `${pct}%`,
       onTimeDetail: (onTime, days, filed) => `(${onTime} of ${days} site-days; ${filed} filed)`,
       calls: 'Reminder calls',
       callsLine: (pct, filed, days) =>
-        `${pct}% filed on the call (${filed} of ${days} site-days SiteLog called about)`,
+        `${pct}% filed on the call (${filed} of ${days} site-days TalkOlog called about)`,
       weather: 'Weather hours by site',
       noWeather: 'No weather stoppages',
       gaps: 'Invoice gaps',
       noGaps: 'No open invoice gaps',
       unsigned: 'Unsigned reports',
       allSigned: 'All filed reports are signed off',
-      openSiteLog: 'Open SiteLog',
+      openTalkOlog: 'Open TalkOlog',
       title: 'Weekly digest',
     },
     unknown: {
@@ -153,7 +153,7 @@ export const OFFICE_EMAIL_COPY: Record<ReportLanguage, OfficeEmailCopy> = {
     },
   },
   tr: {
-    open: 'SiteLog’da aç',
+    open: 'TalkOlog’da aç',
     missing: {
       subject: (site, date) => `${site} — rapor yok · ${date}`,
       someone: 'Şantiye şefi',
@@ -175,7 +175,7 @@ export const OFFICE_EMAIL_COPY: Record<ReportLanguage, OfficeEmailCopy> = {
       ask: 'Saatlerin farklı olduğu günleri kontrol edebilir misiniz? Ses kayıtlı günlük raporlar talep üzerine paylaşılabilir.',
       askShort: 'Saatlerin farklı olduğu günleri kontrol edebilir misiniz?',
       title: 'Saat sorgusu',
-      footer: 'SiteLog ile gönderildi.',
+      footer: 'TalkOlog ile gönderildi.',
     },
     pack: {
       subject: (site, from, to) => `Süre uzatımı kanıt dosyası hazır · ${site} · ${from} – ${to}`,
@@ -189,21 +189,21 @@ export const OFFICE_EMAIL_COPY: Record<ReportLanguage, OfficeEmailCopy> = {
       allSites: 'Tüm şantiyeler',
     },
     digest: {
-      subject: (from, to, pct) => `SiteLog haftalık · ${from} – ${to} · %${pct} zamanında`,
+      subject: (from, to, pct) => `TalkOlog haftalık · ${from} – ${to} · %${pct} zamanında`,
       onTime: 'Zamanında',
       percent: (pct) => `%${pct}`,
       onTimeDetail: (onTime, days, filed) =>
         `(${days} şantiye gününden ${onTime} tanesi; ${filed} dosyalandı)`,
       calls: 'Hatırlatma aramaları',
       callsLine: (pct, filed, days) =>
-        `%${pct} aramada dosyalandı (SiteLog’un aradığı ${days} şantiye gününden ${filed} tanesi)`,
+        `%${pct} aramada dosyalandı (TalkOlog’un aradığı ${days} şantiye gününden ${filed} tanesi)`,
       weather: 'Şantiyelere göre hava kaynaklı saatler',
       noWeather: 'Hava kaynaklı duruş yok',
       gaps: 'Fatura farkları',
       noGaps: 'Açık fatura farkı yok',
       unsigned: 'Onaylanmamış raporlar',
       allSigned: 'Dosyalanan tüm raporlar onaylandı',
-      openSiteLog: 'SiteLog’u aç',
+      openTalkOlog: 'TalkOlog’u aç',
       title: 'Haftalık özet',
     },
     unknown: {

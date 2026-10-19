@@ -49,7 +49,7 @@ const isStatusKey = (s: string | null): s is StatusKey =>
  * currency and the panel's language, the sites on the plan with Pause / Resume (admin only, as
  * the route), invoices. A Stripe org starts its subscription in Checkout and manages it in the
  * customer portal; a `manual` org (§19 Q236: a TR org until Q8) sees the trial, its sites and its
- * price, and "SiteLog invoices you directly", with no Checkout or portal. The past-due banner is
+ * price, and "TalkOlog invoices you directly", with no Checkout or portal. The past-due banner is
  * the shell's (`BillingBanner`, every page). EN/TR.
  */
 export default function BillingPage() {

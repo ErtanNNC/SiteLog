@@ -45,7 +45,9 @@ describe('AppErrorBoundary (§11.5)', () => {
     const heading = await screen.findByRole('heading', { level: 1, name: 'Something went wrong' });
     expect(heading).toHaveFocus();
     expect(
-      screen.getByText('SiteLog hit an unexpected error. Try again, or sign out and sign back in.'),
+      screen.getByText(
+        'TalkOlog hit an unexpected error. Try again, or sign out and sign back in.',
+      ),
     ).toBeInTheDocument();
     expect(captureError).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'render exploded' }),

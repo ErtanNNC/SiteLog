@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "SiteLog office web panel (Vite + React).",
+  "description": "TalkOlog office web panel (Vite + React).",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

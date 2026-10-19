@@ -1950,7 +1950,7 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
       company: 'Kestrel Build Group',
       site: 'Elm St. Townhomes',
       deadline: '17:30',
-      link: 'https://go.sitelog.app/r/ABCDEF',
+      link: 'https://go.talkolog.com/r/ABCDEF',
     };
     const out = await notifier.send(MARCO, 'welcome', vars, { dedupeKey: 'w108:test' });
     expect(out.channel).toBe('sms');
@@ -1971,7 +1971,7 @@ describe('PostgresDb on PGlite: messaging (W1-08)', () => {
       payload: { dedupe_key: 'w108:test' },
     });
     // Kestrel is a demo org: the whole text, link and all, for the Demo phone.
-    expect(row.body).toContain('https://go.sitelog.app/r/ABCDEF');
+    expect(row.body).toContain('https://go.talkolog.com/r/ABCDEF');
     expect(await notifier.send(MARCO, 'welcome', vars, { dedupeKey: 'w108:test' })).toEqual(out);
     expect(sent).toHaveLength(1);
     const audit = await q<{ action: string }>(

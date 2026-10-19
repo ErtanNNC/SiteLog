@@ -214,10 +214,10 @@ describe('country pack rows (spec §4.6)', () => {
     ['an unknown sender type', { sms_sender_type: 'email' }],
     ['a voice number that is not E.164', { voice_number: '555-0142' }],
     ['an empty sender id', { sms_sender_id: '' }],
-    ['a toll-free sender that is not a number', { sms_sender_id: 'SITELOG' }],
+    ['a toll-free sender that is not a number', { sms_sender_id: 'TALKOLOG' }],
     [
       'a padded sender title (the table stores it trimmed)',
-      { sms_sender_type: 'alphanumeric', two_way_sms: false, sms_sender_id: 'SITELOG ' },
+      { sms_sender_type: 'alphanumeric', two_way_sms: false, sms_sender_id: 'TALKOLOG ' },
     ],
     ['a two-way alphanumeric sender', { sms_sender_type: 'alphanumeric', two_way_sms: true }],
     [
@@ -249,10 +249,10 @@ describe('country pack rows (spec §4.6)', () => {
 
 describe('sender ids and time zones', () => {
   it('checks a sender id against its type, as set_country_endpoints() does', () => {
-    expect(isValidSmsSenderId('alphanumeric', 'SITELOG')).toBe(true);
-    expect(isValidSmsSenderId('alphanumeric', 'SITE LOG 26')).toBe(true);
-    expect(isValidSmsSenderId('alphanumeric', 'SITELOGAPP12')).toBe(false); // 12 characters
-    expect(isValidSmsSenderId('alphanumeric', 'SİTELOG')).toBe(false); // GSM-safe ASCII only
+    expect(isValidSmsSenderId('alphanumeric', 'TALKOLOG')).toBe(true);
+    expect(isValidSmsSenderId('alphanumeric', 'TALKO LOG 2')).toBe(true);
+    expect(isValidSmsSenderId('alphanumeric', 'TALKOLOGAPP1')).toBe(false); // 12 characters
+    expect(isValidSmsSenderId('alphanumeric', 'TALKOLOĞ')).toBe(false); // GSM-safe ASCII only
     expect(isValidSmsSenderId('alphanumeric', '+18885550142')).toBe(false);
     expect(isValidSmsSenderId('toll_free', '+18885550142')).toBe(true);
     expect(isValidSmsSenderId('long_code', '+15550142290')).toBe(true);

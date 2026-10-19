@@ -43,14 +43,14 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   sites: SiteOption[];
-  /** The org's pack (W4-03): the languages SiteLog uses and whether it has a number to call. */
+  /** The org's pack (W4-03): the languages TalkOlog uses and whether it has a number to call. */
   pack?: Pick<TeamPack, 'fieldLocales' | 'hasVoiceNumber'>;
   defaultSiteIds?: string[];
 }
 
 /**
  * P10 "Invite reporter": name, mobile (W4-01's picker and warning), role, sites, the languages they
- * speak, the language SiteLog uses with them and the preferred channel (W4-03) → the welcome
+ * speak, the language TalkOlog uses with them and the preferred channel (W4-03) → the welcome
  * text (F3, by SMS, §19 Q25).
  */
 export function InviteReporterDialog({

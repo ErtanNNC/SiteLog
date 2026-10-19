@@ -1,33 +1,33 @@
-# SiteLog — Field channels (decision record)
+# TalkOlog — Field channels (decision record)
 
 **Status:** Decided · **Date:** 2026-10-13, amended 2026-10-14; Q20 comparison 2026-10-17 · **Implemented in:** SITELOG_SPEC.md v1.2 (§0, §3, §4.4–§4.6, §5.1, §5.2, §6.2, §6.3, §7, §8 F3–F24, §9, §15, §19) and the Design canvas page "Field: text link & call"
 
 ## Amendment 2026-10-17 — Q20 revisited: TR SMS on İletimerkezi or a Twilio alphanumeric sender (for the owner; W4-13)
 
-**Status:** comparison for the owner, no change. Spec §19 Q20 (decided 2026-10-15: keep İletimerkezi, "revisit at M11 with Twilio's TR registration rules and prices") stands until the owner decides otherwise; the TR pack's provider then changes only by a forward migration (`countries.sms_provider` for `TR` from `iletimerkezi` to `twilio`; the sender type stays `alphanumeric`), followed by `pnpm countries:set -- --code TR --sms-sender SITELOG` per database once Twilio has the title registered. WhatsApp for TR is on Twilio either way.
+**Status:** comparison for the owner, no change. Spec §19 Q20 (decided 2026-10-15: keep İletimerkezi, "revisit at M11 with Twilio's TR registration rules and prices") stands until the owner decides otherwise; the TR pack's provider then changes only by a forward migration (`countries.sms_provider` for `TR` from `iletimerkezi` to `twilio`; the sender type stays `alphanumeric`), followed by `pnpm countries:set -- --code TR --sms-sender TALKOLOG` per database once Twilio has the title registered. WhatsApp for TR is on Twilio either way.
 
-Both options send one-way from the alphanumeric title `SITELOG` (an alphanumeric sender takes no replies; the pack's check refuses `two_way_sms` with it), so two-way SMS does not separate them; it stays off for TR and interaction happens on the recorder or the call. They differ on four points. **Registration:** İletimerkezi registers the BTK-approved title through the account after the e-Devlet subscription approval (spec §5.2: about 1–2 business days); for Twilio, whether a Turkish alphanumeric sender must be pre-registered, who registers it with the Turkish operators, what documents it needs and how long it takes are Twilio's Turkey rules, which the owner gets from Twilio (not verifiable from this repo). **Price:** no figures here; the owner asks both for a current quote per Turkey SMS segment, any monthly or sender fee, minimum purchase or credit packages and how unused credit expires. Compare on cost per month, not per segment: segments × price, where a sender that uses the Turkish single shift table sends `welcome`, `weather_headsup` and `reminder_2` as 2 segments and every other key as 1 (`sms-tr-budget.test.ts`), and one without it (as the repo counts Twilio, `countSmsSegments`' `default`) pays 2 instead of 1 for the keys §19 Q15 lists as "1 / 2" (the daily link, the reminders and the weather heads-up among them) and 3 for `welcome`; whether each actually uses the table is a question to both (Q15's open half). **Delivery reports:** Twilio's status callbacks are built (sms-webhook `/status`, `applyLateStatus`), so TR texts on Twilio would reach `delivered` / `undelivered` with no new work; İletimerkezi's poller is built (W4-11) but reads nothing until its report endpoint is confirmed with the account (§19 Q280). **İYS and compliance:** with Q49's recommendation (informational) neither needs İYS fields; if counsel says commercial, İletimerkezi's fields are parameterised but unconfirmed (Q281) and Twilio's path to İYS is unknown, a question for Twilio. Recommendation: keep İletimerkezi (the Q20 decision) unless Twilio's quote and Turkey registration terms come out clearly better, since its only built-in advantage, delivery callbacks, closes for İletimerkezi once Q280 is answered; one vendor for SMS and WhatsApp is the argument for Twilio.
+Both options send one-way from the alphanumeric title `TALKOLOG` (an alphanumeric sender takes no replies; the pack's check refuses `two_way_sms` with it), so two-way SMS does not separate them; it stays off for TR and interaction happens on the recorder or the call. They differ on four points. **Registration:** İletimerkezi registers the BTK-approved title through the account after the e-Devlet subscription approval (spec §5.2: about 1–2 business days); for Twilio, whether a Turkish alphanumeric sender must be pre-registered, who registers it with the Turkish operators, what documents it needs and how long it takes are Twilio's Turkey rules, which the owner gets from Twilio (not verifiable from this repo). **Price:** no figures here; the owner asks both for a current quote per Turkey SMS segment, any monthly or sender fee, minimum purchase or credit packages and how unused credit expires. Compare on cost per month, not per segment: segments × price, where a sender that uses the Turkish single shift table sends `welcome`, `weather_headsup` and `reminder_2` as 2 segments and every other key as 1 (`sms-tr-budget.test.ts`), and one without it (as the repo counts Twilio, `countSmsSegments`' `default`) pays 2 instead of 1 for the keys §19 Q15 lists as "1 / 2" (the daily link, the reminders and the weather heads-up among them) and 3 for `welcome`; whether each actually uses the table is a question to both (Q15's open half). **Delivery reports:** Twilio's status callbacks are built (sms-webhook `/status`, `applyLateStatus`), so TR texts on Twilio would reach `delivered` / `undelivered` with no new work; İletimerkezi's poller is built (W4-11) but reads nothing until its report endpoint is confirmed with the account (§19 Q280). **İYS and compliance:** with Q49's recommendation (informational) neither needs İYS fields; if counsel says commercial, İletimerkezi's fields are parameterised but unconfirmed (Q281) and Twilio's path to İYS is unknown, a question for Twilio. Recommendation: keep İletimerkezi (the Q20 decision) unless Twilio's quote and Turkey registration terms come out clearly better, since its only built-in advantage, delivery callbacks, closes for İletimerkezi once Q280 is answered; one vendor for SMS and WhatsApp is the argument for Twilio.
 
 | Criterion | İletimerkezi (as built, TR pack) | Twilio alphanumeric sender for TR |
 |---|---|---|
-| Registration of `SITELOG` | e-Devlet subscription approval, then the title through the account (spec §5.2: 1–2 business days) | Twilio's Turkey sender rules: pre-registration, documents, lead time — confirm with Twilio |
+| Registration of `TALKOLOG` | e-Devlet subscription approval, then the title through the account (spec §5.2: 1–2 business days) | Twilio's Turkey sender rules: pre-registration, documents, lead time — confirm with Twilio |
 | Price | Owner gets a current quote (per segment, packages, fees) | Owner gets a current quote (per segment, fees) |
 | Segments per Turkish text | Budgeted with the Turkish shift table: `welcome`, `weather_headsup`, `reminder_2` 2, the rest 1 (confirm the table is used, Q15) | Counted without the table: Q15's "1 / 2" keys 2, `welcome` 3 (confirm with Twilio) |
 | Two-way | No (alphanumeric) | No (alphanumeric) |
 | Delivery reports | Poller built (W4-11); endpoint unconfirmed (Q280), rows stay `sent` until then | Status callbacks built (sms-webhook `/status`) |
 | İYS (Q49, Q281) | Informational: none; commercial: fields parameterised, unconfirmed | Informational: none; commercial: unknown, ask Twilio |
-| Change needed in SiteLog | None | One migration (`sms_provider`), `countries:set` per database |
+| Change needed in TalkOlog | None | One migration (`sms_provider`), `countries:set` per database |
 
 ## Amendment 2026-10-14 — country packs and message channels (owner decision; consequences in GAP D47–D49)
 
 **The owner's decision, verbatim:**
 
-> Karar: SiteLog global bir ürün; ülkeye özel her şey kod değil "ülke paketi" (yapılandırma) olacak. Şu anki ticket'ı bitirince uygula, sonra plana devam et:
+> Karar: TalkOlog global bir ürün; ülkeye özel her şey kod değil "ülke paketi" (yapılandırma) olacak. Şu anki ticket'ı bitirince uygula, sonra plana devam et:
 > 1. Ülke paketi: orgs.country/locale'deki US/TR sabitlemelerini ve kurulum sihirbazındaki ülke seçimini bir countries yapılandırmasına bağla: ülke kodu, varsayılan diller, birim, kâğıt boyutu, para birimi, mesaj kanalı sırası (ör. whatsapp → sms ya da sms → whatsapp), SMS gönderici tipi ve kimliği, iki yönlü SMS var mı, link içeren SMS'e izin var mı, sesli numara (yoksa yalnızca Talk now), yasal metin anahtarları. Şimdilik US ve TR paketleri olsun; yeni ülke = yeni satır.
 > 2. Kanallar: Notifier kanal sırasını ülke paketinden ve kişinin tercihinden alsın. Kanal türlerine whatsapp ve push'u ekle (uygulamaları 2. haftada, M6 hatırlatmalarıyla). Varsayılan sağlayıcı twilio (SMS + WhatsApp), ülke bazında override mümkün olsun; iki yönlü SMS ve URL izni sürücüden değil ülke paketinden gelsin.
 > 3. Spec'i (§3, §4.4, §4.5, §5.1, §5.2, §6.3, §9, §15.2, §19), docs/decisions/channel-options.md'yi ve .env.example'ı güncelle, spec'i projeye geri yaz, PLAN_WEEK1'i gerekiyorsa düzelt. Bitince 3 satırlık özet ver.
 
-**In English:** SiteLog is a global product; everything country-specific becomes a "country pack" (configuration), not code. (1) The US/TR hard-coding in `orgs.country`/`locale` and the setup wizard's country choice are bound to a `countries` configuration: country code, default languages, units, paper size, currency, message channel order (e.g. whatsapp → sms or sms → whatsapp), SMS sender type and id, whether two-way SMS exists, whether SMS with links is allowed, the voice number (none = Talk now only) and the legal text keys. US and TR packs for now; a new country is a new row. (2) The Notifier takes the channel order from the country pack and the person's preference. WhatsApp and push join the channel types (built in week 2 with the M6 reminders). Twilio is the default provider (SMS + WhatsApp), overridable per country; two-way SMS and the permission to send links come from the country pack, not the driver. (3) The spec, this record and `.env.example` are updated.
+**In English:** TalkOlog is a global product; everything country-specific becomes a "country pack" (configuration), not code. (1) The US/TR hard-coding in `orgs.country`/`locale` and the setup wizard's country choice are bound to a `countries` configuration: country code, default languages, units, paper size, currency, message channel order (e.g. whatsapp → sms or sms → whatsapp), SMS sender type and id, whether two-way SMS exists, whether SMS with links is allowed, the voice number (none = Talk now only) and the legal text keys. US and TR packs for now; a new country is a new row. (2) The Notifier takes the channel order from the country pack and the person's preference. WhatsApp and push join the channel types (built in week 2 with the M6 reminders). Twilio is the default provider (SMS + WhatsApp), overridable per country; two-way SMS and the permission to send links come from the country pack, not the driver. (3) The spec, this record and `.env.example` are updated.
 
 **What it means**
 
@@ -40,7 +40,7 @@ Both options send one-way from the alphanumeric title `SITELOG` (an alphanumeric
   | Units · paper · currency · default time zone | imperial · Letter · USD · America/Chicago | metric · A4 · TRY · Europe/Istanbul |
   | Message channel order | `{sms}` in week 1 (real order: spec §19 Q19) | `{sms}` in week 1 |
   | SMS provider · WhatsApp provider | twilio · twilio | iletimerkezi · twilio |
-  | SMS sender type · sender id | toll-free · set per environment once verified | alphanumeric · `SITELOG` once approved |
+  | SMS sender type · sender id | toll-free · set per environment once verified | alphanumeric · `TALKOLOG` once approved |
   | Two-way SMS · links in SMS | yes · yes | no · yes |
   | Voice number | set per environment once bought | none (Talk now only) |
   | Legal text keys | to come (§19 Q28) | to come (§19 Q28) |
@@ -65,7 +65,7 @@ The 2026-10-13 rows below stand except these:
 | Need | Provider | Free for the demo |
 |---|---|---|
 | Messaging, SMS + WhatsApp (default for every pack) | **Twilio** (US pack: toll-free number) | Trial can't send custom texts (preset templates, 5 verified numbers) → upgrade + toll-free verification needed for real texts (~$2.15/month number + ~$0.01 per SMS); WhatsApp Sandbox for development (week 2) |
-| SMS — TR pack override | **İletimerkezi** (sender `SITELOG`) | 100 test SMS; title approval 1–2 business days via e-Devlet |
+| SMS — TR pack override | **İletimerkezi** (sender `TALKOLOG`) | 100 test SMS; title approval 1–2 business days via e-Devlet |
 | Web push (week 2) | Standard Web Push (VAPID), no provider | Free |
 | Demo without real messages | `console` transport + **Demo phone** page in the panel | Free, no registration |
 
@@ -73,7 +73,7 @@ The 2026-10-13 rows below stand except these:
 
 | Area | US pack | TR pack |
 |---|---|---|
-| SMS | `two_way_sms` true: toll-free verification (or A2P 10DLC) before real sends; STOP / HELP / START / CALL / TEXT keywords | `two_way_sms` false: one-way from alphanumeric sender **SITELOG**; no replies, so all interaction happens on the recorder or the call |
+| SMS | `two_way_sms` true: toll-free verification (or A2P 10DLC) before real sends; STOP / HELP / START / CALL / TEXT keywords | `two_way_sms` false: one-way from alphanumeric sender **TALKOLOG**; no replies, so all interaction happens on the recorder or the call |
 | Calls | Voice number per pack (none → Talk now); TCPA prior express consent for automated/AI calls; recording disclosure in the first 5 s | No voice number yet → Talk now; KVKK notice and explicit consent; recording disclosure in Turkish |
 | Consent | Stored per person and channel in `consents` | Same |
 | Message channel order | `{sms}` in week 1 (spec §19 Q19) | `{sms}` in week 1 |
@@ -100,7 +100,7 @@ The 2026-10-13 rows below stand except these:
 | Turkish voice | **Azure AI Speech** (`tr-TR` neural) | F0: 0.5 M characters/month |
 | LLM | **Claude** (Anthropic API) | Paid, small per report |
 | SMS — US | **Twilio** (toll-free number) | Trial can't send custom texts (preset templates, 5 verified numbers) → upgrade + toll-free verification needed for real texts (~$2.15/month number + ~$0.01 per SMS) |
-| SMS — TR | **İletimerkezi** (sender `SITELOG`) | 100 test SMS; title approval 1–2 business days via e-Devlet |
+| SMS — TR | **İletimerkezi** (sender `TALKOLOG`) | 100 test SMS; title approval 1–2 business days via e-Devlet |
 | Demo without SMS | `console` driver + **Demo phone** page in the panel | Free, no registration |
 
 _(The three SMS rows are superseded in part by the 2026-10-14 amendment: Twilio is the default SMS and WhatsApp provider for every pack, İletimerkezi is the TR pack's SMS override, web push joins in week 2, and `console` covers every message channel; see "Providers as amended".)_
@@ -117,7 +117,7 @@ The product value is "report by voice in ~3 minutes without learning an app", no
 
 | Area | US | Turkey |
 |---|---|---|
-| SMS | Two-way; toll-free verification (or A2P 10DLC) before real sends; STOP / HELP / START / CALL / TEXT keywords | One-way from alphanumeric sender **SITELOG**; no replies, so all interaction happens on the recorder or the call |
+| SMS | Two-way; toll-free verification (or A2P 10DLC) before real sends; STOP / HELP / START / CALL / TEXT keywords | One-way from alphanumeric sender **TALKOLOG**; no replies, so all interaction happens on the recorder or the call |
 | Calls | TCPA prior express consent for automated/AI calls; recording disclosure in the first 5 s | KVKK notice and explicit consent; recording disclosure in Turkish |
 | Consent | Stored per person and channel in `consents` | Same |
 

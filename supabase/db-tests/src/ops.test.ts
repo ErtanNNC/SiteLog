@@ -7,7 +7,7 @@ import { asService, asUser, bootDatabase } from './harness.ts';
  * retry / discard with audit) and the cost-per-report inputs, baseline and outlier list.
  */
 
-const OPERATOR = 'bbbbbbbb-1111-4111-8111-111111111111'; // SiteLog staff, no org membership
+const OPERATOR = 'bbbbbbbb-1111-4111-8111-111111111111'; // TalkOlog staff, no org membership
 const ORG_ADMIN = 'bbbbbbbb-2222-4222-8222-222222222222'; // customer admin
 const UUID_A = 'cccccccc-1111-4111-8111-111111111111';
 
@@ -536,8 +536,8 @@ describe('cost per report', () => {
 });
 
 // 20261015000040_unknown_contacts_support.sql (spec §19 Q44, W1-16): org-less unknown contacts
-// are SiteLog support's, never every org's.
-describe('org-less unknown contacts for SiteLog support', () => {
+// are TalkOlog support's, never every org's.
+describe('org-less unknown contacts for TalkOlog support', () => {
   async function contact(orgId: string | null = null): Promise<string> {
     const rows = await svc<{ id: string }>(
       `insert into unknown_contacts (org_id, phone_e164, snippet, channel, status)

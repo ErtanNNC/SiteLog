@@ -1,4 +1,4 @@
-# SiteLog worker — Node 22 + ffmpeg. Build from the repo root:
+# TalkOlog worker — Node 22 + ffmpeg. Build from the repo root:
 #   docker build -f apps/worker/Dockerfile -t sitelog-worker .
 FROM node:22-slim AS build
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH

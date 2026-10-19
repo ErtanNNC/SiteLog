@@ -284,7 +284,7 @@ export interface PackClip {
   segments: Array<{ start: number; end: number; text: string }>;
 }
 
-/** A call segment's speaker lane (§6.3 `dialog_log` / Deepgram): the reporter, or SiteLog. */
+/** A call segment's speaker lane (§6.3 `dialog_log` / Deepgram): the reporter, or TalkOlog. */
 function speakerOf(value: unknown): 'reporter' | 'agent' | null {
   if (value === 'reporter' || value === 'user' || value === 'caller') return 'reporter';
   if (value === 'agent' || value === 'assistant') return 'agent';

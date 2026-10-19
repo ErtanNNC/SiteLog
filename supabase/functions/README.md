@@ -1,4 +1,4 @@
-# SiteLog Edge Functions
+# TalkOlog Edge Functions
 
 Deno 2 / TypeScript functions deployed to Supabase (spec §4.2, Appendix B). They share one Deno
 config and import map, `deno.json`, which maps `@sitelog/shared` to `../../packages/shared/src`
@@ -59,7 +59,7 @@ Set everything else once per project (names from spec §5.1 and `.env.example`):
 
 ```bash
 supabase secrets set \
-  APP_URL=https://app.sitelog.app \
+  APP_URL=https://app.talkolog.com \
   WA_APP_SECRET=... \
   WA_VERIFY_TOKEN=... \
   SCHEDULER_SECRET=... \
@@ -71,11 +71,11 @@ supabase secrets set \
 # else 409 price_mismatch. A `manual` org (TR until spec §19 Q8) needs no Stripe secret at all.
 # optional: extra browser origins allowed by CORS (comma-separated), e.g. a preview deployment;
 # field-api also accepts them as the Origin of the field app (a field preview)
-supabase secrets set CORS_EXTRA_ORIGINS=https://preview.sitelog.app
+supabase secrets set CORS_EXTRA_ORIGINS=https://preview.talkolog.com
 # field-api: the HMAC key of the device codes, and the field app's origin; also the key the
 # personal link codes are derived with (api-invite-reporter, sms-webhook and the worker use the
 # same value)
-supabase secrets set LINK_SIGNING_SECRET=$(openssl rand -hex 32) FIELD_APP_URL=https://go.sitelog.app
+supabase secrets set LINK_SIGNING_SECRET=$(openssl rand -hex 32) FIELD_APP_URL=https://go.talkolog.com
 # SMS (W1-08): sms-webhook checks X-Twilio-Signature with TWILIO_AUTH_TOKEN against SMS_WEBHOOK_URL
 # (default {SUPABASE_URL}/functions/v1/sms-webhook, which must be the URL Twilio posts to). The
 # drivers need credentials only for packs whose sender id is set (`pnpm countries:set`).
@@ -175,7 +175,7 @@ CLI accepts a `deno.json` wherever it accepts an `import_map.json` (it reads the
   failures only, and the fragment is never sent, so the signature and `SMS_WEBHOOK_URL` stay
   as they are): the function stores the text, its audit and the worker's `sms_inbound` job in one
   transaction (`receive_sms_inbound()`), and the retries cover a failure before it commits. Delivery callbacks need nothing: each send names
-  `{SMS_WEBHOOK_URL}/status`. Twilio's own STOP/HELP handling: spec §19 Q45 (when Twilio sends `OptOutType`, SiteLog records the change and sends no reply of its own; RUNBOOK §2).
+  `{SMS_WEBHOOK_URL}/status`. Twilio's own STOP/HELP handling: spec §19 Q45 (when Twilio sends `OptOutType`, TalkOlog records the change and sends no reply of its own; RUNBOOK §2).
 - **LiveKit** (Cloud project → Settings → Webhooks, W3-16 with the owner's approval): URL
   `https://<project-ref>.supabase.co/functions/v1/voice-events`, signed with the project's API key
   (the same `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` as the function's secrets). A test delivery

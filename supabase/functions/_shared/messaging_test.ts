@@ -75,7 +75,7 @@ Deno.test(
       );
       assertEquals(
         await transports('iletimerkezi').send(assertE164('+905320000001'), 'merhaba', {
-          sender: 'SITELOG',
+          sender: 'TALKOLOG',
         }),
         { providerId: 'iletimerkezi:7' },
       );

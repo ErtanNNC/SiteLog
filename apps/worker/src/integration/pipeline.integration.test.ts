@@ -586,7 +586,7 @@ describe('integration: webhook → worker → outbound (real database, faked out
     ]);
     const replies = sentSince(waMark, STRANGER);
     expect(replies.map((e) => e.kind)).toEqual(['text']);
-    expect(replies[0]!.body).toContain("isn't set up with SiteLog yet");
+    expect(replies[0]!.body).toContain("isn't set up with TalkOlog yet");
     const [reports] = await database.q<{ n: number }>(
       `select count(*)::int as n from reports r join conversations c on c.reporter_id = r.reporter_id
        where c.phone_e164 = $1`,

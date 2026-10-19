@@ -11,7 +11,7 @@
  *   CreateRoom) and `roomAdmin` of one room (AgentDispatchService CreateDispatch).
  */
 
-/** The `video` grant of a LiveKit token (only the fields SiteLog uses). */
+/** The `video` grant of a LiveKit token (only the fields TalkOlog uses). */
 export interface LiveKitVideoGrant {
   roomCreate?: boolean;
   roomJoin?: boolean;

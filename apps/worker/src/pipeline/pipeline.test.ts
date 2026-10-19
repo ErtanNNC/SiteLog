@@ -866,7 +866,7 @@ describe('jobs: welcome, template, retention', () => {
       {
         driver: 'console',
         to: PHONE_MARCO,
-        body: `Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: https://go.sitelog.app/r/${code} - Reply STOP to opt out, HELP for help`,
+        body: `Hi Marco, I'm TalkOlog, the daily report assistant for Kestrel Build Group at Riverside Lofts — Block B. Each workday before 17:30, tap your link and talk for ~3 min: https://go.talkolog.com/r/${code} - Reply STOP to opt out, HELP for help`,
         sender: undefined,
       },
     ]);
@@ -899,7 +899,7 @@ describe('jobs: welcome, template, retention', () => {
     h.db.data.reporters.get(h.marco.id)!.status = 'invited';
     await h.runJob('send_welcome', { reporterId: h.marco.id, siteId: SITE_RIVERSIDE });
     expect(h.sms[0]).toMatchObject({ driver: 'twilio', sender: '+18885550142', to: PHONE_MARCO });
-    expect(h.sms[0]!.body).toMatch(/https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{12} /);
+    expect(h.sms[0]!.body).toMatch(/https:\/\/go\.talkolog\.com\/r\/[A-Z0-9]{12} /);
     const [message] = [...h.db.data.messages.values()];
     expect(message!.provider).toBe('twilio');
     expect(message!.status).toBe('sent');
@@ -1003,7 +1003,7 @@ describe('jobs: welcome, template, retention', () => {
     // İletimerkezi out of credit: the same, for the TR pack.
     const tr = createHarness();
     tr.db.data.orgs.get(tr.org.id)!.country = 'TR';
-    tr.db.data.countries.find((c) => c.code === 'TR')!.sms_sender_id = 'SITELOG';
+    tr.db.data.countries.find((c) => c.code === 'TR')!.sms_sender_id = 'TALKOLOG';
     const jorge = tr.db.data.reporters.get(tr.jorge.id)!;
     jorge.status = 'invited';
     jorge.locale = 'tr-TR';
@@ -1068,7 +1068,7 @@ describe('jobs: welcome, template, retention', () => {
       {
         driver: 'twilio',
         to: PHONE_MARCO,
-        body: "You won't get more texts from SiteLog. Reply START to resume.",
+        body: "You won't get more texts from TalkOlog. Reply START to resume.",
         sender: '+18885550142',
       },
     ]);
@@ -1090,7 +1090,7 @@ describe('jobs: welcome, template, retention', () => {
       messageId: inbound('00000000-0000-4000-8000-00000000f002', 'help'),
     });
     expect(h.db.data.fieldLinks).toHaveLength(1);
-    expect(h.sms[1]!.body).toMatch(/Your link: https:\/\/go\.sitelog\.app\/r\/[A-Z0-9]{12} /);
+    expect(h.sms[1]!.body).toMatch(/Your link: https:\/\/go\.talkolog\.com\/r\/[A-Z0-9]{12} /);
     expect([...h.db.data.messages.values()].find((m) => m.copy_key === 'help')!.body).toContain(
       MASKED_CODE,
     );
@@ -1150,7 +1150,7 @@ describe('jobs: welcome, template, retention', () => {
     expect(h.db.data.audit.filter((a) => a.action === 'reporter.opted_out')).toHaveLength(1);
     expect(h.db.data.notifications.filter((n) => n.kind === 'reporter_opted_out')).toHaveLength(1);
     expect(h.sms.map((m) => m.body)).toEqual([
-      "You won't get more texts from SiteLog. Reply START to resume.",
+      "You won't get more texts from TalkOlog. Reply START to resume.",
     ]);
   });
 

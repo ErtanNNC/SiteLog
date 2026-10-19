@@ -2,7 +2,7 @@ import type { SmsCatalog, SmsWeatherPhrases, TrSmsKey } from './sms.ts';
 
 /**
  * §9.2 SMS copy, Turkish: verbatim from the spec table. The TR pack's SMS is one-way (the
- * `SITELOG` alphanumeric title, `two_way_sms = false`), so these texts never ask for a reply,
+ * `TALKOLOG` alphanumeric title, `two_way_sms = false`), so these texts never ask for a reply,
  * Turkish has no welcome reply hint, and the two-way keys (unknown_number, help, stop_confirm,
  * pref_call_ok, pref_text_ok) have no Turkish text: a pack with two-way SMS and Turkish fails `packCopyGaps()` until they
  * exist. The report keywords' replies (day_off_link, edit_preview, edit_unclear; W2-12, spec §19
@@ -12,11 +12,11 @@ import type { SmsCatalog, SmsWeatherPhrases, TrSmsKey } from './sms.ts';
 export const smsTr: SmsCatalog<TrSmsKey> = {
   welcome: {
     withNumber:
-      'Merhaba {first}, ben SiteLog, {company} için {site} günlük rapor asistanıyım. Her iş günü {deadline} öncesi linke dokunup ~3 dk anlatın ya da {number} numarayı arayın: {link}',
+      'Merhaba {first}, ben TalkOlog, {company} için {site} günlük rapor asistanıyım. Her iş günü {deadline} öncesi linke dokunup ~3 dk anlatın ya da {number} numarayı arayın: {link}',
     withoutNumber:
-      'Merhaba {first}, ben SiteLog, {company} için {site} günlük rapor asistanıyım. Her iş günü {deadline} öncesi linke dokunup ~3 dk anlatın: {link}',
+      'Merhaba {first}, ben TalkOlog, {company} için {site} günlük rapor asistanıyım. Her iş günü {deadline} öncesi linke dokunup ~3 dk anlatın: {link}',
   },
-  verify_code: 'SiteLog kodunuz: {code}. 10 dakika geçerlidir.',
+  verify_code: 'TalkOlog kodunuz: {code}. 10 dakika geçerlidir.',
   daily_link: {
     withNumber: '{site} bugünkü rapor: {link} - ya da {number} numarayı arayın.',
     withoutNumber: '{site} bugünkü rapor: {link}',
@@ -42,7 +42,7 @@ export const smsTr: SmsCatalog<TrSmsKey> = {
   photos_link: 'Bugünkü rapora fotoğraf ekleyin: {link}',
   edit_applied: '{weekday} güncellendi: {change}. Sürüm {v} ofise gönderildi.',
   finish_report: 'Görüşme kayıttan önce bitti. Tek dokunuşla tamamlayın: {link}',
-  site_paused: "{site} SiteLog'da duraklatıldı. Ofisten yeniden açmasını isteyin.",
+  site_paused: "{site} TalkOlog'da duraklatıldı. Ofisten yeniden açmasını isteyin.",
   // W2-12 (spec §19 Q83, Q102): the report keywords' replies, for a two-way TR pack or WhatsApp;
   // for the Q63 review.
   day_off_link: '{site} için bugünün ayrıntılarını ekleyin: {link}',
@@ -50,21 +50,21 @@ export const smsTr: SmsCatalog<TrSmsKey> = {
   edit_unclear: 'Bu değişikliği mesajla yapamadım. Geçmiş raporlardan yapın: {link}',
   // W2-16 (spec §19 Q111): the two-way replies in Turkish, sent on WhatsApp (TR SMS is one-way);
   // for the Q63 review.
-  unknown_number: "Bu numara SiteLog'da kayıtlı değil. Ofisinizden sizi eklemesini isteyin.",
+  unknown_number: "Bu numara TalkOlog'da kayıtlı değil. Ofisinizden sizi eklemesini isteyin.",
   help: {
     withNumber:
-      '{company} için SiteLog günlük raporları. Linkiniz: {link} - {number} numarayı arayın - Değiştirmek için CALL ya da TEXT yazın - Durdurmak için STOP yazın.',
+      '{company} için TalkOlog günlük raporları. Linkiniz: {link} - {number} numarayı arayın - Değiştirmek için CALL ya da TEXT yazın - Durdurmak için STOP yazın.',
     withoutNumber:
-      '{company} için SiteLog günlük raporları. Linkiniz: {link} - Değiştirmek için CALL ya da TEXT yazın - Durdurmak için STOP yazın.',
+      '{company} için TalkOlog günlük raporları. Linkiniz: {link} - Değiştirmek için CALL ya da TEXT yazın - Durdurmak için STOP yazın.',
   },
-  stop_confirm: "SiteLog'dan artık mesaj almayacaksınız. Yeniden başlatmak için START yazın.",
+  stop_confirm: "TalkOlog'dan artık mesaj almayacaksınız. Yeniden başlatmak için START yazın.",
   pref_call_ok: 'Tamam, günlük raporunuz artık telefonla. Linke geçmek için TEXT yazın.',
   pref_text_ok:
     'Tamam, günlük raporunuz artık mesajla gelen linkle. Aramaya geçmek için CALL yazın.',
   // W2-16 (spec §19 Q85, Q40): WhatsApp only.
   whatsapp_use_link: 'Sesli notlar linkinizden gönderilir: {link}',
   whatsapp_stop_confirm:
-    "SiteLog'dan artık WhatsApp mesajı almayacaksınız. Yeniden başlatmak için START yazın.",
+    "TalkOlog'dan artık WhatsApp mesajı almayacaksınız. Yeniden başlatmak için START yazın.",
 };
 
 /**
@@ -90,4 +90,4 @@ export const smsHelpPrivacyTr = ' - Aydınlatma metni: {privacy_link}';
 
 /** W4-05 (spec §19 Q232): Settings' "Send me a test message". For the Q63 review. */
 export const smsTestMessageTr =
-  '{company} için SiteLog deneme mesajı. Şantiye şefleriniz mesajlarını bu göndericiden alır. Yanıt gerekmez.';
+  '{company} için TalkOlog deneme mesajı. Şantiye şefleriniz mesajlarını bu göndericiden alır. Yanıt gerekmez.';

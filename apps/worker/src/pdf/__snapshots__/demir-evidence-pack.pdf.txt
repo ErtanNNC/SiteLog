@@ -12,7 +12,7 @@ Bu dosya, dönem içinde hava koşullarının çalışmayı durdurduğu veya de�
 verilerini içerir. Her gün, raporunun nasıl onaylandığını belirtir. Kayıtlar saklanmaktadır ve talep üzerine sunulabilir.
 Hava durumu verisi: Open-Meteo (CC BY 4.0), şantiye konumu için saatlik değerler. Talebe hazır = ses kanıtı + fotoğraf + ölçülen hava durumu verisi;
 rapor şantiye şefi veya ofis tarafından onaylanmış olmalıdır.
-SiteLog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 1 / 6
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 1 / 6
 
 Demir Yapı A Ş · Kartal Konutları — B Blok Kanıt dosyası · Per 1 Eki – Cmt 31 Eki
 01 GÜNLERE GÖRE GECİKME ÖZETİ
@@ -23,7 +23,7 @@ Cum 9 Eki KK-1203-0005 Yağmur Dış cephe işleri durdu; ekip 2,5 sa SFH Görü
 v1 iç mekâna kaydırıldı
 Toplam 5 sa 1/2
 Kanıt: S = zaman damgalı ses kaydı (sesli not veya görüşme) · F = fotoğraf · H = ölçülen hava durumu verisi.
-SiteLog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 2 / 6
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 2 / 6
 
 Demir Yapı A Ş · Kartal Konutları — B Blok KK-1203-0004 · Per, 8 Eki 2026
 Per, 8 Eki 2026 KK-1203-0004 v1 · dosyalandı · 2,5 sa kayıp
@@ -63,7 +63,7 @@ SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
 10:00 0,0 14 18 34
 11:00 0,0 14 18 34
 12:00 0,0 14 18 34
-SiteLog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 3 / 6
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 3 / 6
 
 Demir Yapı A Ş · Kartal Konutları — B Blok KK-1203-0004 · Per, 8 Eki 2026
 SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
@@ -73,7 +73,7 @@ SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
 16:00 0,0 19 18 34
 17:00 0,0 19 18 34
 18:00 0,0 19 18 34
-SiteLog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 4 / 6
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 4 / 6
 
 Demir Yapı A Ş · Kartal Konutları — B Blok KK-1203-0005 · Cum, 9 Eki 2026
 Cum, 9 Eki 2026 KK-1203-0005 v1 · dosyalandı · 2,5 sa kayıp · talebe hazır
@@ -104,7 +104,7 @@ arama 2:15–2:22 “yağmur yüzünden dış cephe iki buçuk saat durdu, ekibi
 10 Eki 01:31 · L4 pour complete 17:05 · Rain at the south elevation
 07 ÖLÇÜLEN HAVA DURUMU (SAATLİK)
 SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
-SiteLog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 5 / 6
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 5 / 6
 
 Demir Yapı A Ş · Kartal Konutları — B Blok KK-1203-0005 · Cum, 9 Eki 2026
 SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
@@ -122,5 +122,5 @@ SAAT YAĞIŞ (MM) SICAKLIK (°C) RÜZGÂR (KM/H) HAMLE (KM/H)
 16:00 0,0 19 18 34
 17:00 0,0 19 18 34
 18:00 0,0 19 18 34
-SiteLog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 6 / 6
+TalkOlog tarafından sesli rapordan oluşturuldu · Hava durumu verisi: Open-Meteo Sayfa 6 / 6
 

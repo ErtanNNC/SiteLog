@@ -14,7 +14,7 @@ describe('welcomePreview (W4-02: the §9.2 welcome as sent, F2 preview)', () => 
   it('US in English: the reply clause (two-way) and "or call" with the pack’s number', () => {
     const us = { ...demoPack('US'), voiceNumber: assertE164('+15550142290') };
     expect(welcomePreview(us, 'en-US', vars)).toEqual({
-      text: `Hi Marco, I'm SiteLog, the daily report assistant for Kestrel Build Group at Riverside Lofts. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 555 014 2290: ${SAMPLE_WELCOME_LINK} - Reply STOP to opt out, HELP for help`,
+      text: `Hi Marco, I'm TalkOlog, the daily report assistant for Kestrel Build Group at Riverside Lofts. Each workday before 17:30, tap your link and talk for ~3 min, or call +1 555 014 2290: ${SAMPLE_WELCOME_LINK} - Reply STOP to opt out, HELP for help`,
       language: 'en',
       number: '+1 555 014 2290',
     });
@@ -30,7 +30,7 @@ describe('welcomePreview (W4-02: the §9.2 welcome as sent, F2 preview)', () => 
   it('US in Spanish (es-US): the Spanish text with the Spanish reply clause', () => {
     const preview = welcomePreview(demoPack('US'), 'es-US', vars)!;
     expect(preview.language).toBe('es');
-    expect(preview.text).toMatch(/^Hola Marco, soy SiteLog/);
+    expect(preview.text).toMatch(/^Hola Marco, soy TalkOlog/);
     expect(preview.text).toContain(SAMPLE_WELCOME_LINK);
   });
 
@@ -42,7 +42,7 @@ describe('welcomePreview (W4-02: the §9.2 welcome as sent, F2 preview)', () => 
       site: 'Kartal',
     })!;
     expect(preview).toEqual({
-      text: `Merhaba Emre, ben SiteLog, Demir Yapı A.Ş. için Kartal günlük rapor asistanıyım. Her iş günü 17:30 öncesi linke dokunup ~3 dk anlatın: ${SAMPLE_WELCOME_LINK}`,
+      text: `Merhaba Emre, ben TalkOlog, Demir Yapı A.Ş. için Kartal günlük rapor asistanıyım. Her iş günü 17:30 öncesi linke dokunup ~3 dk anlatın: ${SAMPLE_WELCOME_LINK}`,
       language: 'tr',
       number: null,
     });

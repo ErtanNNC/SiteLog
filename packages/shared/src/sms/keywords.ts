@@ -84,7 +84,7 @@ export const SMS_EDIT_WORDS = ['edit', 'editar', 'edita', 'corregir', 'düzelt',
  * revocation rule expect to be honoured in reply to a text (STOPALL, UNSUBSCRIBE, CANCEL, END,
  * QUIT, REVOKE, OPTOUT, OPT OUT), UNSTOP for START and INFO for HELP, as Twilio's default
  * handling reads them. YES (Twilio's other opt-in word) is not START here: it answers the M6
- * ladder's questions, and a missed opt-in only keeps SiteLog quiet.
+ * ladder's questions, and a missed opt-in only keeps TalkOlog quiet.
  */
 export const SMS_KEYWORD_ALIASES: Readonly<Record<string, SmsKeyword>> = {
   stopall: 'stop',
@@ -284,15 +284,15 @@ export function orderInboundReporters<R extends InboundReporter>(reporters: read
  * - HELP: the `help` reply for the first reporter, also after an opt-out;
  * - CALL / TEXT: `contact_pref` → `call` / `link` for every reporter not opted out, and the
  *   `pref_call_ok` / `pref_text_ok` confirmation unless the first reporter is opted out (spec §19
- *   Q46: the change decides how SiteLog reaches the person);
+ *   Q46: the change decides how TalkOlog reaches the person);
  * - OK, NO WORK, WEATHER, EDIT (W2-12): named in `reportKeyword` for the worker's `sms_keyword`
  *   job, unless the phone opted out; no reply here;
  * - any other text: stored, no reply.
  *
  * Spec §19 Q45 (owner, 2026-10-15): when Twilio recognised the keyword itself (`OptOutType`
  * present: STOP, START or HELP on a Messaging Service with Advanced Opt-Out), Twilio sends
- * SiteLog's own `stop_confirm` / `help` texts, set as that service's opt-out replies (RUNBOOK), so
- * SiteLog sends no reply of its own and the reporter gets one answer; the opt-out and the other
+ * TalkOlog's own `stop_confirm` / `help` texts, set as that service's opt-out replies (RUNBOOK), so
+ * TalkOlog sends no reply of its own and the reporter gets one answer; the opt-out and the other
  * changes are still recorded.
  */
 export function planInboundSms(input: {

@@ -124,12 +124,12 @@ export const LINE_CHECK_MESSAGES: Record<LineCheckProblem, string> = {
   landline_text:
     'This number is a landline, which cannot get texts. Choose Phone call, or enter a mobile number.',
   landline_unreachable:
-    'This number is a landline. SiteLog cannot text it, and Talk now needs the personal link and a code sent by text. Enter a mobile number.',
+    'This number is a landline. TalkOlog cannot text it, and Talk now needs the personal link and a code sent by text. Enter a mobile number.',
 };
 
 /**
  * F2's line check on the server (W4-02, §19 Q229 `delivery`): a fixed line is refused for a text
- * link, and for a call where SiteLog cannot reach it by phone (no voice number, no calls placed).
+ * link, and for a call where TalkOlog cannot reach it by phone (no voice number, no calls placed).
  * The panel checks the same before it sends; this keeps the rule for every client. `contactPref`
  * is the preference the reporter ends up with (a reused reporter keeps theirs unless the office
  * sets it).

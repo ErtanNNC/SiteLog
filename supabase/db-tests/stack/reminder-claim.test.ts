@@ -62,7 +62,7 @@ describeStack('claim_site_day_reminder racing a filing', () => {
     {
       reporterId,
       key: 'reminder_1',
-      vars: { site: 'Ladder', link: 'https://go.sitelog.app/r/ABCDEFGHJKMN' },
+      vars: { site: 'Ladder', link: 'https://go.talkolog.com/r/ABCDEFGHJKMN' },
     },
   ];
 

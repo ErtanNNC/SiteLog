@@ -162,7 +162,7 @@ export function isTwilioWhatsappForm(params: URLSearchParams): boolean {
 /**
  * The fields of an inbound WhatsApp message, or null when they are not one. Its media (voice
  * notes, photos; spec §19 Q85) are listed by URL and type; the sender's WhatsApp profile name is
- * never read (no personal data SiteLog does not need).
+ * never read (no personal data TalkOlog does not need).
  */
 export function parseTwilioWhatsappInbound(params: URLSearchParams): TwilioInboundWhatsapp | null {
   const messageSid = params.get('MessageSid') ?? params.get('SmsSid');
@@ -187,7 +187,7 @@ export function parseTwilioWhatsappInbound(params: URLSearchParams): TwilioInbou
   };
 }
 
-/** A delivery-status callback (`StatusCallback` of a message SiteLog sent). */
+/** A delivery-status callback (`StatusCallback` of a message TalkOlog sent). */
 export interface TwilioStatusCallback {
   messageSid: string;
   status: string;

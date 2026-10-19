@@ -71,7 +71,7 @@ Server calls used: RPCs `create_org`, `sign_off_report`, `undo_sign_off`, `creat
 
 `src/styles/tokens.css` is Tailwind v4 CSS-first: `@theme` defines every §14.1 colour (core, functional, chip, heatmap ramp), the fonts (Archivo / IBM Plex Mono), radii (chip 4 · btn 6 · card 8) and type sizes; the default Tailwind palette is removed so only tokens can be used (`bg-signal`, `text-dust`, `border-rebar`, `bg-heat-4`…). Utilities: `font-display` (Archivo Expanded 800 via `font-stretch: 125%`), `font-h2`, `eyebrow` (mono, uppercase, 0.08em), `tabular`, `hazard-stripe`. Focus ring: 2 px Asphalt + 2 px offset. Rules: orange is a signal (≈10 % of a screen), borders over shadows, no gradients, no emoji, no left-border accent cards, buttons 44 px (40 px dense), lucide icons 24 px / 2 px stroke.
 
-UI primitives live in `src/components/ui` (shadcn-style, restyled), SiteLog components in `src/components/sitelog` (StatusChip, KpiTile, StreakBar, CalendarMonth, VoicePlayer, SourceLink, TranscriptExcerpt, DataTable, HeatmapGrid, EvidenceChips, PageHeader, EmptyState/ErrorState/NoAccess/OfflineBanner/ReviewReasonsBanner, skeletons). All copy comes from `src/copy/en.ts`.
+UI primitives live in `src/components/ui` (shadcn-style, restyled), TalkOlog components in `src/components/sitelog` (StatusChip, KpiTile, StreakBar, CalendarMonth, VoicePlayer, SourceLink, TranscriptExcerpt, DataTable, HeatmapGrid, EvidenceChips, PageHeader, EmptyState/ErrorState/NoAccess/OfflineBanner/ReviewReasonsBanner, skeletons). All copy comes from `src/copy/en.ts`.
 
 ## Languages (D9)
 

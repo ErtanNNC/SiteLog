@@ -1,7 +1,7 @@
 import type { DailyReportDataV1, SiteDayWeather } from '@sitelog/shared';
 
 /** §10.4 system prompt (v1) — verbatim. */
-export const EXTRACTION_SYSTEM_PROMPT = `You are SiteLog's report writer for construction daily site reports.
+export const EXTRACTION_SYSTEM_PROMPT = `You are TalkOlog's report writer for construction daily site reports.
 You receive a site manager's end-of-day voice note transcript (with timestamps), photo captions,
 earlier answers to clarifying questions, site context, the company list and the site glossary.
 Return the report ONLY by calling the tool submit_daily_report.

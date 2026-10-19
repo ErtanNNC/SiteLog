@@ -267,14 +267,14 @@ export function createNotifyJob(
         if (!(err instanceof SmsSendError) || channels.includes(',')) {
           // More than SMS was tried: every channel of the order failed (§19 Q22, §13).
           await officeNotice(
-            `SiteLog tried every message channel it has for them (${channels}) and none could deliver the message (${error}). Check their number and channels in Team & numbers.`,
+            `TalkOlog tried every message channel it has for them (${channels}) and none could deliver the message (${error}). Check their number and channels in Team & numbers.`,
             noticeData('message_channels_failed', { name: reporter.name, channels, error }),
           );
           return;
         }
         await officeNotice(
           err.optedOut
-            ? 'Their number is on the SMS provider’s opt-out list, so SiteLog texts them nothing until they reply START.'
+            ? 'Their number is on the SMS provider’s opt-out list, so TalkOlog texts them nothing until they reply START.'
             : `The SMS provider refused their number (${error}). Check the number in Team & numbers.`,
           err.optedOut
             ? noticeData('message_opted_out', { name: reporter.name })

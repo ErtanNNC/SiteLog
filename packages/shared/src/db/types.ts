@@ -131,13 +131,13 @@ export type OrgRow = {
   /**
    * W4-10 (20261017000450_billing_per_org.sql, spec §19 Q234): the price per active site and
    * month in minor units and its ISO 4217 currency, both or neither; preset by create_org() from
-   * `billing_default_prices`, changed only by SiteLog staff (`ops_set_org_price()`).
+   * `billing_default_prices`, changed only by TalkOlog staff (`ops_set_org_price()`).
    */
   price_per_site_minor: number | null;
   price_currency: string | null;
 };
 
-/** W4-10 (20261017000450): SiteLog's default price per currency; service role only. */
+/** W4-10 (20261017000450): TalkOlog's default price per currency; service role only. */
 export type BillingDefaultPriceRow = {
   currency: string;
   price_per_site_minor: number;
@@ -247,7 +247,7 @@ export type ReporterRow = {
   verified_at: string | null;
   last_invite_error: string | null;
   created_at: string;
-  /** Language SiteLog speaks and texts: en-US, es-US, tr-TR (§6.3). */
+  /** Language TalkOlog speaks and texts: en-US, es-US, tr-TR (§6.3). */
   locale: string;
   contact_pref: ContactPref;
   activated_at: string | null;
@@ -997,7 +997,7 @@ export type StripeEventRow = {
   processed_at: string | null;
 };
 
-/** SiteLog's own operators (/ops). Not an org role; managed with the service role (§15). */
+/** TalkOlog's own operators (/ops). Not an org role; managed with the service role (§15). */
 export type PlatformAdminRow = {
   user_id: string;
   note: string | null;
@@ -1052,7 +1052,7 @@ export type OpsUnknownContactRow = {
 };
 
 /**
- * outbound_call_share() row (W3-17, M8): per org and ISO week (Monday), the site-days SiteLog
+ * outbound_call_share() row (W3-17, M8): per org and ISO week (Monday), the site-days TalkOlog
  * called a reporter about and those filed by the reporter's yes on such a call.
  */
 export type OutboundCallShareRow = {

@@ -205,7 +205,7 @@ describe('extraction post-processing with the recorded tool output', () => {
     expect(res.data.missingRequired).toContain('manpower.workers:Delta Mechanical');
     expect(ExtractionOutputSchema.safeParse(res.raw).success).toBe(true);
     const sys = client.calls[0]!.system as Array<{ text: string }>;
-    expect(sys[0]!.text).toContain("You are SiteLog's report writer");
+    expect(sys[0]!.text).toContain("You are TalkOlog's report writer");
     expect(sys[1]!.text).toContain('GLOSSARY');
     expect(JSON.stringify(client.calls[0])).not.toContain('+1555');
   });

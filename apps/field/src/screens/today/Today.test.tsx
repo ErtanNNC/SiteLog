@@ -52,7 +52,7 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
     // Talk now is not offered here (`talkNow` false); no voice number in the pack: no call line.
     expect(screen.queryByText(/Talk now/)).toBeNull();
     expect(screen.queryByRole('link', { name: /or call/ })).toBeNull();
-    expect(document.title).toBe('Today · SiteLog');
+    expect(document.title).toBe('Today · TalkOlog');
   });
 
   it('offers Call {number} only when the pack has a voice number, and the site switcher with two sites', async () => {
@@ -479,7 +479,10 @@ describe('Today (F5 step 1, Field-03 / Field-10)', () => {
     fireEvent.click(talk);
     // The call screen (lazy): it asks for the microphone first.
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Speaking with the SiteLog assistant' }),
+      await screen.findByRole('heading', {
+        level: 1,
+        name: 'Speaking with the TalkOlog assistant',
+      }),
     ).toBeInTheDocument();
   });
 

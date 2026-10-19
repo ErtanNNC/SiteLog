@@ -58,7 +58,7 @@ describe('Past reports (F10, F14, §9.3; W2-03)', () => {
     renderApp('/history', { routes });
     expect(await screen.findByText('RL-2041-0187')).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Past reports' })).toBeInTheDocument();
-    expect(document.title).toBe('Past reports · SiteLog');
+    expect(document.title).toBe('Past reports · TalkOlog');
     // Two sites: a heading per site, the newest site first.
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(headings).toEqual([SITE_2.name.toUpperCase(), RIVERSIDE.toUpperCase()]);

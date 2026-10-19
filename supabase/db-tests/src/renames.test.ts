@@ -120,7 +120,7 @@ describe('enum labels (§6.2)', () => {
     expect(author).toMatchObject({ ok: false, code: '22P02' });
   });
 
-  it("keeps the reporter status guard: 'active' is SiteLog's to set, not the office's", async () => {
+  it("keeps the reporter status guard: 'active' is TalkOlog's to set, not the office's", async () => {
     const res = await probeAs(
       db,
       user(OPS),

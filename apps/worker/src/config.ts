@@ -99,9 +99,9 @@ export const ConfigSchema = z.object({
 
   EMAIL_PROVIDER: z.enum(['resend', 'console']).default('resend'),
   RESEND_API_KEY: z.string().default(''),
-  EMAIL_FROM: z.string().default('SiteLog <reports@sitelog.app>'),
+  EMAIL_FROM: z.string().default('TalkOlog <reports@talkolog.com>'),
 
-  APP_URL: z.string().default('https://app.sitelog.app'),
+  APP_URL: z.string().default('https://app.talkolog.com'),
   /**
    * Messaging (W1-08, spec §4.5, §5.1): the field app's host for the links in texts, the secret
    * personal link codes are derived with (the same LINK_SIGNING_SECRET as field-api), the SMS

@@ -1,4 +1,4 @@
-# Supabase CLI configuration for SiteLog.
+# Supabase CLI configuration for TalkOlog.
 # Reference: https://supabase.com/docs/guides/local-development/cli/config
 # Paths in this file are relative to the supabase/ directory.
 project_id = "sitelog"
@@ -49,11 +49,11 @@ enable_confirmations = false
 # switch for a new address). GoTrue renders the subject as a template too. The hosted project's
 # templates are an owner step (docs/RUNBOOK.md, "Auth email templates").
 [auth.email.template.magic_link]
-subject = "{{ if or (eq .Data.ui_locale \"tr-TR\") (eq .Data.ui_locale \"tr\") }}SiteLog giriş linkiniz{{ else }}Your SiteLog sign-in link{{ end }}"
+subject = "{{ if or (eq .Data.ui_locale \"tr-TR\") (eq .Data.ui_locale \"tr\") }}TalkOlog giriş linkiniz{{ else }}Your TalkOlog sign-in link{{ end }}"
 content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.invite]
-subject = "{{ if or (eq .Data.ui_locale \"tr-TR\") (eq .Data.ui_locale \"tr\") }}SiteLog’a davet edildiniz{{ else }}You are invited to SiteLog{{ end }}"
+subject = "{{ if or (eq .Data.ui_locale \"tr-TR\") (eq .Data.ui_locale \"tr\") }}TalkOlog’a davet edildiniz{{ else }}You are invited to TalkOlog{{ end }}"
 content_path = "./supabase/templates/invite.html"
 
 # The local stack's mail catcher (Mailpit; the CLI keeps the section name `inbucket`): the sign-in

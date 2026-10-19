@@ -230,7 +230,7 @@ describe('Recording (F5 step 2, Field-04)', () => {
     // Not stuck on "Starting…": the clip goes from memory, and the reporter is told.
     expect(await screen.findByRole('heading', { level: 1, name: 'Sending…' })).toBeInTheDocument();
     expect(
-      screen.getByText('Not saved on this phone: keep SiteLog open until it is sent.'),
+      screen.getByText('Not saved on this phone: keep TalkOlog open until it is sent.'),
     ).toBeInTheDocument();
     await act(async () => finish());
     expect(await screen.findByRole('heading', { name: 'processing-stub' })).toBeInTheDocument();

@@ -16,17 +16,17 @@ describe('web push payload (W2-14)', () => {
       pushPayload({
         to: assertE164('+15550143378'),
         reporterId: 'r-1',
-        body: 'Your draft is ready: https://go.sitelog.app/r/K7Q2MX',
+        body: 'Your draft is ready: https://go.talkolog.com/r/K7Q2MX',
         key: 'draft_ready',
         language: 'es',
-        vars: { link: 'https://go.sitelog.app/r/K7Q2MX' },
+        vars: { link: 'https://go.talkolog.com/r/K7Q2MX' },
       }),
     ).toEqual({
       title: PUSH_TITLE,
-      body: 'Your draft is ready: https://go.sitelog.app/r/K7Q2MX',
+      body: 'Your draft is ready: https://go.talkolog.com/r/K7Q2MX',
       tag: 'draft_ready',
       lang: 'es',
-      url: 'https://go.sitelog.app/r/K7Q2MX',
+      url: 'https://go.talkolog.com/r/K7Q2MX',
     });
   });
 
@@ -41,7 +41,7 @@ describe('web push payload (W2-14)', () => {
 
   it('reads any payload safely in the service worker', () => {
     expect(readPushData(null)).toEqual({
-      title: 'SiteLog',
+      title: 'TalkOlog',
       body: '',
       tag: 'sitelog',
       lang: 'en',
@@ -49,8 +49,8 @@ describe('web push payload (W2-14)', () => {
     });
     expect(readPushData('plain text').body).toBe('plain text');
     expect(readPushData({ title: 'x', body: 'y', url: 'data:text/html,hi' }).url).toBeNull();
-    expect(readPushData({ body: 'b', url: 'https://go.sitelog.app/r/K7Q2MX' }).url).toBe(
-      'https://go.sitelog.app/r/K7Q2MX',
+    expect(readPushData({ body: 'b', url: 'https://go.talkolog.com/r/K7Q2MX' }).url).toBe(
+      'https://go.talkolog.com/r/K7Q2MX',
     );
   });
 
@@ -58,8 +58,8 @@ describe('web push payload (W2-14)', () => {
     expect([201, 202, 200].map((s) => pushResult(s))).toEqual(['sent', 'sent', 'sent']);
     expect([404, 410].map((s) => pushResult(s))).toEqual(['gone', 'gone']);
     expect([429, 500, 503].map((s) => pushResult(s))).toEqual(['retry', 'retry', 'retry']);
-    // W2-15/16 review: a bare 400 or 403 may be SiteLog's VAPID JWT (key or clock), and 413 is
-    // SiteLog's payload: refused for this message, the subscription kept.
+    // W2-15/16 review: a bare 400 or 403 may be TalkOlog's VAPID JWT (key or clock), and 413 is
+    // TalkOlog's payload: refused for this message, the subscription kept.
     expect([400, 403, 413].map((s) => pushResult(s))).toEqual(['refused', 'refused', 'refused']);
     expect(pushResult(403, '{"reason":"BadJwtToken"}')).toBe('refused');
     expect(pushResult(403, '{"reason":"ExpiredJwtToken"}')).toBe('refused');

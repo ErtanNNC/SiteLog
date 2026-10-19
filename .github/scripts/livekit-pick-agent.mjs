@@ -1,4 +1,4 @@
-// deploy.yml voice-setup: which agent of the LiveKit Cloud project is SiteLog's, from the JSON of
+// deploy.yml voice-setup: which agent of the LiveKit Cloud project is TalkOlog's, from the JSON of
 // `lk agent list --json` (protojson: {"agents": [{"agentId", "agentName", …}]}). Prints the id of
 // the agent whose dispatch name is LIVEKIT_AGENT_NAME, else of the only agent, else nothing (none
 // yet: the job creates one). Exits 3 when several agents exist and none, or more than one, has

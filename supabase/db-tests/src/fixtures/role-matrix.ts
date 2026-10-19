@@ -395,7 +395,7 @@ export const TABLES: Record<string, TableCase> = {
     set: 'read_at = read_at',
   },
   report_costs: {
-    why: 'SiteLog-internal cost (README "/ops, cost"): service role and ops RPCs only.',
+    why: 'TalkOlog-internal cost (README "/ops, cost"): service role and ops RPCs only.',
     allow: serviceOnly,
     where: (o) => `org_id = '${o.org}'`,
     insert: (o) =>
@@ -419,7 +419,7 @@ export const TABLES: Record<string, TableCase> = {
     orgless: true,
   },
   billing_default_prices: {
-    why: "W4-10 (§19 Q234): SiteLog's default price per currency, read by create_org(); service role only.",
+    why: "W4-10 (§19 Q234): TalkOlog's default price per currency, read by create_org(); service role only.",
     allow: serviceOnly,
     where: () => `currency = 'USD'`,
     insert: () =>
@@ -428,7 +428,7 @@ export const TABLES: Record<string, TableCase> = {
     orgless: true,
   },
   platform_admins: {
-    why: 'SiteLog operators: service role only (revoked from anon and authenticated).',
+    why: 'TalkOlog operators: service role only (revoked from anon and authenticated).',
     allow: serviceOnly,
     where: () => `user_id = '${OPERATOR}'`,
     insert: () => `insert into platform_admins (user_id) values (auth.uid())`,
@@ -1145,7 +1145,7 @@ export const PROBES: Probe[] = [
       ['is_demo', 'is_demo = true'],
       ['the country', `country = 'TR'`],
       ['the currency', `currency = 'TRY'`],
-      // W4-10 (§19 Q234): the price is SiteLog staff's (ops_set_org_price), never the admin's.
+      // W4-10 (§19 Q234): the price is TalkOlog staff's (ops_set_org_price), never the admin's.
       ['the price per site', `price_per_site_minor = 1`],
       ['the price currency', `price_currency = 'EUR'`],
       ['the logo path', `logo_path = '${B.org}/logo.png'`],
@@ -1201,7 +1201,7 @@ export const PROBES: Probe[] = [
   },
   // reporters lockdown (20261013000007; docs/AUDIT_BACKLOG.md "reporters and unknown_senders
   // write policies allow forging verification state"): consent, opt-out and activation state is
-  // SiteLog's; the office disables and re-invites.
+  // TalkOlog's; the office disables and re-invites.
   ...(
     [
       ['ops', 'clears an opt-out (opted_out_at)', `opted_out_at = null`, A.optedOut],

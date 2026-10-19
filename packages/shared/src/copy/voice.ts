@@ -140,7 +140,7 @@ export const VOICE_KEYS = [
   // F3 on a call (§19 Q120): the yes recorded; the question again after an unclear answer.
   'consent_given',
   'consent_repeat',
-  // W3-12: a tool that failed on SiteLog's side, said instead of the error (§9.4: tool errors are
+  // W3-12: a tool that failed on TalkOlog's side, said instead of the error (§9.4: tool errors are
   // spoken as a short line, never raw).
   'tool_error',
   // W4-05 (P12, §19 Q232, Q350): Settings' Call me now, the whole script of a test call: the

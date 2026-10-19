@@ -182,7 +182,7 @@ describe('W2-08: No work and Weather as reports, filed by the worker', () => {
       {
         reporterId: MARCO,
         key: 'reminder_1',
-        vars: { site: 'Riverside Lofts', link: 'https://go.sitelog.app/r/ABCDEFGHJKMN' },
+        vars: { site: 'Riverside Lofts', link: 'https://go.talkolog.com/r/ABCDEFGHJKMN' },
       },
     ];
     await pg.q(`select claim_site_day_reminder($1, 'reminder_1', $2::jsonb, '[]'::jsonb) as ok`, [

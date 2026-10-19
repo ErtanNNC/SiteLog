@@ -100,7 +100,7 @@ describe('Kestrel demo data (§18.1)', () => {
       'Priya Raman': ['en-US', 'link', 'active'],
       'Jorge Medina': ['es-US', 'link', 'invited'],
     });
-    // Marco speaks ES · EN (his notes are mixed); SiteLog texts him in English.
+    // Marco speaks ES · EN (his notes are mixed); TalkOlog texts him in English.
     expect(reporter('Marco Ruiz').languages).toEqual(['es', 'en']);
     for (const r of demo.reporters) expect(r.verified_at).toBeNull();
   });
@@ -472,14 +472,14 @@ describe('Kestrel demo data (§18.1)', () => {
     const marcoDaily = demo.messages.find(
       (m) => m.copy_key === 'daily_link' && m.reporter_id === reporter('Marco Ruiz').id,
     )!;
-    const link = /https:\/\/go\.sitelog\.app\/r\/([A-Z0-9]{6})/.exec(marcoDaily.body!)![1]!;
+    const link = /https:\/\/go\.talkolog\.com\/r\/([A-Z0-9]{6})/.exec(marcoDaily.body!)![1]!;
     expect(marcoDaily.body).toBe(
       renderSms(
         'daily_link',
         'en',
         {
           site: 'Riverside Lofts — Block B',
-          link: `https://go.sitelog.app/r/${link}`,
+          link: `https://go.talkolog.com/r/${link}`,
           number: formatPhone(DEMO_SITELOG_NUMBER),
         },
         // Two-way with links from the US pack; the number is §18.1 story data (spec §19 Q34).
@@ -494,7 +494,7 @@ describe('Kestrel demo data (§18.1)', () => {
       report_date: DEMO_TODAY,
     });
     const jorge = demo.messages.find((m) => m.reporter_id === reporter('Jorge Medina').id)!;
-    expect(jorge.body).toMatch(/^Hola Jorge, soy SiteLog/);
+    expect(jorge.body).toMatch(/^Hola Jorge, soy TalkOlog/);
     expect(demo.messages.find((m) => m.copy_key === 'edit_applied')!.body).toBe(
       'Updated Friday: Apex Concrete 7 workers, 56 h (was 6, 48 h). Version 2 sent to the office.',
     );

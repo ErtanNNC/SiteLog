@@ -146,7 +146,7 @@ describe('Demir Yapı A.Ş. (§18.2)', () => {
           company: 'Demir Yapı A.Ş.',
           site: 'Kartal Konutları — B Blok',
           deadline: '17:30',
-          link: `https://go.sitelog.app/r/${code(emre!.body!)}`,
+          link: `https://go.talkolog.com/r/${code(emre!.body!)}`,
         },
         // The TR pack: no voice number, one-way SMS, links allowed (spec §4.6).
         { hasVoiceNumber: false, twoWay: false, linksAllowed: true },
@@ -158,7 +158,7 @@ describe('Demir Yapı A.Ş. (§18.2)', () => {
       linksAllowed: true,
     });
     expect(selin!.body).toMatch(
-      /^Merhaba Selin, ben SiteLog, Demir Yapı A\.Ş\. için Ataşehir Ofis Binası/,
+      /^Merhaba Selin, ben TalkOlog, Demir Yapı A\.Ş\. için Ataşehir Ofis Binası/,
     );
     for (const m of demir.messages) {
       expect(m).toMatchObject({

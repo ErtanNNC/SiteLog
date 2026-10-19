@@ -5,7 +5,7 @@ import { STARTER_GLOSSARY_EN } from './starter.en.ts';
 import { STARTER_GLOSSARY_TR } from './starter.tr.ts';
 
 /**
- * Spec §19 Q238 (W4-08, the recommended default): every new org starts with SiteLog's short
+ * Spec §19 Q238 (W4-08, the recommended default): every new org starts with TalkOlog's short
  * built-in glossary in its report language (§9.6: `en-US` → English, `tr-TR` → Turkish), seeded
  * `built_in` by `on_org_created()` through `seed_starter_glossary()`
  * (20261017000410_starter_glossary.sql). Built-in terms count as confirmed (`isUsableTerm`): they

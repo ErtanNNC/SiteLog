@@ -185,7 +185,7 @@ describe('lateFallback (a status callback after the send)', () => {
   const sentBy = {
     reporterId: REPORTER,
     key: 'filed' as const,
-    vars: { report_no: 'RL-2041-0187', pdf_link: 'https://go.sitelog.app/r/K7Q2MX/report/x' },
+    vars: { report_no: 'RL-2041-0187', pdf_link: 'https://go.talkolog.com/r/K7Q2MX/report/x' },
     dedupeKey: 'notify:filed:r1',
   };
   const message = {

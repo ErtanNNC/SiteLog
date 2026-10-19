@@ -51,7 +51,7 @@ describe('TeamPage (demo data)', () => {
     expect(await screen.findByRole('heading', { name: 'Team & numbers' })).toBeInTheDocument();
     expect(
       screen.getByText(
-        'SiteLog matches every call and text to a site by the phone number. Personal links are tied to one person.',
+        'TalkOlog matches every call and text to a site by the phone number. Personal links are tied to one person.',
       ),
     ).toBeInTheDocument();
     const table = screen.getByRole('table', { name: 'Field reporters' });
@@ -155,7 +155,7 @@ describe('TeamPage (demo data)', () => {
     );
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
     expect(within(dialog).getByRole('alert')).toHaveTextContent(
-      'Tick the box: change how SiteLog reaches Marco only when they asked.',
+      'Tick the box: change how TalkOlog reaches Marco only when they asked.',
     );
     await userEvent.click(
       within(dialog).getByRole('checkbox', { name: 'Marco asked for this change' }),
@@ -186,7 +186,7 @@ describe('TeamPage (demo data)', () => {
     renderWithProviders(<TeamPage />, { route: '/team', store });
     await openMenu('Jorge Medina', 'Edit');
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Language SiteLog uses' }));
+    await userEvent.click(within(dialog).getByRole('combobox', { name: 'Language TalkOlog uses' }));
     await userEvent.click(await screen.findByRole('option', { name: 'English' }));
     expect(within(dialog).queryByRole('checkbox', { name: /asked for this change/ })).toBeNull();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
@@ -328,7 +328,7 @@ describe('TeamPage (demo data)', () => {
     await waitFor(() => expect(within(dialog).getByRole('radio', { name: 'Call' })).toBeChecked());
   });
 
-  it('invites a reporter with the language SiteLog uses and the preferred channel', async () => {
+  it('invites a reporter with the language TalkOlog uses and the preferred channel', async () => {
     const store = new DemoStore();
     renderWithProviders(<TeamPage />, { route: '/team', store });
     await userEvent.click(await screen.findByRole('button', { name: 'Invite reporter' }));
@@ -554,14 +554,14 @@ describe('Call now (W4-04, F3, §19 Q230)', () => {
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toHaveTextContent('Call Priya Raman now?');
     expect(dialog).toHaveTextContent(
-      'SiteLog’s assistant calls Priya now about today’s report at Elm St. Townhomes.',
+      'TalkOlog’s assistant calls Priya now about today’s report at Elm St. Townhomes.',
     );
-    expect(dialog).toHaveTextContent('If Priya doesn’t answer, SiteLog sends no text.');
+    expect(dialog).toHaveTextContent('If Priya doesn’t answer, TalkOlog sends no text.');
     const confirm = within(dialog).getByRole('button', { name: 'Call now' });
     expect(confirm).toBeDisabled();
     await userEvent.click(
       within(dialog).getByRole('checkbox', {
-        name: 'Priya agreed to get calls from SiteLog for the daily report',
+        name: 'Priya agreed to get calls from TalkOlog for the daily report',
       }),
     );
     await userEvent.click(confirm);
@@ -649,13 +649,13 @@ describe('Call now (W4-04, F3, §19 Q230)', () => {
     expect(dialog).toHaveTextContent('Emre Yıldız şimdi aransın mı?');
     await userEvent.click(
       within(dialog).getByRole('checkbox', {
-        name: 'Emre, günlük rapor için SiteLog’un aramasını kabul etti',
+        name: 'Emre, günlük rapor için TalkOlog’un aramasını kabul etti',
       }),
     );
     await userEvent.click(within(dialog).getByRole('button', { name: 'Şimdi ara' }));
     await waitFor(() =>
       expect(error).toHaveBeenCalledWith(
-        'SiteLog’un bu şantiyede arama yaptığı saatlerin dışındayız.',
+        'TalkOlog’un bu şantiyede arama yaptığı saatlerin dışındayız.',
       ),
     );
   });

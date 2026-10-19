@@ -58,7 +58,7 @@ describe('P7 provenance line', () => {
   it('says who typed an office report, with no confirmation', () => {
     const d = detailOf((r) => r.report_no === 'RL-2041-0187');
     const typed = { ...d, report: { ...d.report, channel: 'office' as const } };
-    expect(line(typed, 'Lena Ortiz')).toMatch(/^Entered by Lena Ortiz in SiteLog at \d{2}:\d{2}/);
+    expect(line(typed, 'Lena Ortiz')).toMatch(/^Entered by Lena Ortiz in TalkOlog at \d{2}:\d{2}/);
     expect(line(typed, 'Lena Ortiz')).not.toContain('confirmed');
   });
 

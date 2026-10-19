@@ -32,7 +32,7 @@ export function demoOrgPack(data: DemoDataset): CountryPack {
 }
 
 /**
- * Kestrel's texts offer §18.1's SiteLog number as story data (spec §19 Q34), like the seeded ones.
+ * Kestrel's texts offer §18.1's TalkOlog number as story data (spec §19 Q34), like the seeded ones.
  */
 function renderOptions(data: DemoDataset) {
   const pack = demoOrgPack(data);
@@ -173,7 +173,7 @@ export function demoDailyLink(
 }
 
 /**
- * A text (or, W2-16, a WhatsApp message) typed as the reporter, and what SiteLog does with it
+ * A text (or, W2-16, a WhatsApp message) typed as the reporter, and what TalkOlog does with it
  * (sms-webhook's plan). WhatsApp is two-way on every pack that lists it (spec §19 Q26).
  */
 export function demoReply(

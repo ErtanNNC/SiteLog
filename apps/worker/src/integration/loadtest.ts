@@ -913,7 +913,7 @@ export function formatResult(r: LoadTestResult): string {
     `  ${name.padEnd(28)} ${String(p.n).padStart(5)} ${f1(p.p50).padStart(8)} ${f1(p.p95).padStart(8)} ${f1(p.max).padStart(8)}  ${target}`;
   const lines = [
     '',
-    `SiteLog load test · ${o.reports} reports · window ${o.windowMin} min · scale ${o.timeScale} · ${o.instances}×${o.concurrency} slots · ${o.database}`,
+    `TalkOlog load test · ${o.reports} reports · window ${o.windowMin} min · scale ${o.timeScale} · ${o.instances}×${o.concurrency} slots · ${o.database}`,
     `  wall time ${r.wallSeconds.toFixed(1)} s · site-days closed ${r.reports.closed}/${r.reports.pushed} ` +
       `${JSON.stringify(r.reports.siteDays)} · filed after OK ${r.reports.filedByConfirm} · needs review ${r.reports.needsReview}`,
     ...(r.timedOut

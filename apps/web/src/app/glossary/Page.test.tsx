@@ -133,7 +133,7 @@ describe('GlossaryPage (demo data)', () => {
     const table = await screen.findByRole('table', { name: 'All terms' });
     const iron = within(table).getByText('“the iron”').closest('tr')!;
     expect(within(iron).getByText('Built-in')).toBeInTheDocument();
-    // SiteLog's global terms (org_id null) are read-only: no row actions.
+    // TalkOlog's global terms (org_id null) are read-only: no row actions.
     const llovio = within(table).getByText('“llovió”').closest('tr')!;
     expect(within(llovio).queryByRole('button')).not.toBeInTheDocument();
 

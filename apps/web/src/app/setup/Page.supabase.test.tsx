@@ -218,7 +218,7 @@ describe('SetupPage (no org yet, Supabase mode)', () => {
   it('lets a user stuck on a failing country list sign out with "Save and finish later"', async () => {
     h.countries = {
       data: null,
-      error: { message: 'No country is set up in this SiteLog database yet.' },
+      error: { message: 'No country is set up in this TalkOlog database yet.' },
     };
     const signOut = vi.fn(async () => {});
     renderWithProviders(<Harness />, {

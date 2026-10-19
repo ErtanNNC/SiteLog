@@ -80,7 +80,7 @@ describe.skipIf(!enabled)('PDF text snapshots (pdftotext)', () => {
     const flat = pdfText(await renderEvidencePackPdf(sampleEvidencePackInput)).replace(/\s+/g, ' ');
     expect(flat).toContain('Confirmed by the site manager on WhatsApp at 17:41.');
     expect(flat).toContain('Confirmed by the site manager on the recorder at 18:12.');
-    expect(flat).toContain('Signed off in SiteLog by Sam Kowalski · Oct 5, 08:30.');
+    expect(flat).toContain('Signed off in TalkOlog by Sam Kowalski · Oct 5, 08:30.');
     expect(flat).toContain('voice note 0:41–0:47');
     expect(flat).not.toMatch(/Each report was confirmed/);
   }, 60_000);

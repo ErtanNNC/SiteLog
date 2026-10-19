@@ -60,7 +60,7 @@ function countryName(code: string, language: string): string {
 }
 
 /**
- * P12 · Settings → Field channels (F22; W4-05): the org's country pack read-only ("Set by SiteLog
+ * P12 · Settings → Field channels (F22; W4-05): the org's country pack read-only ("Set by TalkOlog
  * per country"), the daily link time and expiry (§19 Q231), the two call switches where the org
  * places calls and the call window (also the quiet hours of reminder texts, §19 Q30, Q77), the
  * default preference for new reporters (§19 Q231), the recording notice per field language with its
@@ -78,7 +78,7 @@ export function FieldChannelsSection({
   const country = countryName(org.country, language);
   const callsPlaced = pack ? placesCalls({ isDemo: org.isDemo }, pack) : false;
 
-  // The expiry is typed as text: an empty field is "SiteLog's default" (null), anything else must
+  // The expiry is typed as text: an empty field is "TalkOlog's default" (null), anything else must
   // be whole hours in range before it reaches the draft.
   const [ttlText, setTtlText] = useState(
     draft.daily_link_ttl_hours === null ? '' : String(draft.daily_link_ttl_hours),
@@ -230,7 +230,7 @@ function PackRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** The pack as SiteLog set it, read-only (§4.6: a pack is a database row, never edited here). */
+/** The pack as TalkOlog set it, read-only (§4.6: a pack is a database row, never edited here). */
 function PackCard({ pack, country }: { pack: CountryPack; country: string }) {
   const { t } = useCopy();
   const order = pack.messageChannels.map((c) => t(`team.channels.${c}`)).join(' → ');

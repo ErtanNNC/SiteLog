@@ -160,7 +160,7 @@ for (const width of [1440, 390] as const) {
     await table.getByRole('button', { name: 'Menu for Priya Raman' }).click();
     await page.getByRole('menuitem', { name: 'Call now' }).click();
     const dialog = page.getByRole('dialog', { name: 'Call Priya Raman now?' });
-    await expect(dialog).toContainText('If Priya doesn’t answer, SiteLog sends no text.');
+    await expect(dialog).toContainText('If Priya doesn’t answer, TalkOlog sends no text.');
     const confirm = dialog.getByRole('button', { name: 'Call now' });
     await expect(confirm).toBeDisabled();
     expect(await overflow(page), '/team call now').toBeLessThanOrEqual(0);
@@ -168,7 +168,7 @@ for (const width of [1440, 390] as const) {
     // The attestation (§19 Q230) is the only way to the button; 44 px targets.
     await dialog
       .getByRole('checkbox', {
-        name: 'Priya agreed to get calls from SiteLog for the daily report',
+        name: 'Priya agreed to get calls from TalkOlog for the daily report',
       })
       .click();
     const size = await confirm.boundingBox();

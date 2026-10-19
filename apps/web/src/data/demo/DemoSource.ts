@@ -78,7 +78,7 @@ import type { DemoStore } from './store';
 export interface DemoSourceOptions {
   /** Simulated network latency so skeletons are visible in the browser (0 in tests). */
   latencyMs?: number;
-  /** The demo user is a SiteLog operator so /ops can be seen (default true). */
+  /** The demo user is a TalkOlog operator so /ops can be seen (default true). */
   platformAdmin?: boolean;
 }
 

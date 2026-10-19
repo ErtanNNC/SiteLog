@@ -346,7 +346,7 @@ function Bubble({
   if (message.channel === 'call' && message.call) {
     return <CallEntry message={message} call={message.call} timezone={timezone} />;
   }
-  // The phone's view: SiteLog's texts arrive on the left, the reporter's own go out on the right.
+  // The phone's view: TalkOlog's texts arrive on the left, the reporter's own go out on the right.
   const fromReporter = message.direction === 'in';
   const status = statusLabel(t, message.status);
   return (
@@ -359,7 +359,9 @@ function Bubble({
             : 'border-rebar bg-concrete text-asphalt',
         )}
       >
-        <span className="sr-only">{fromReporter ? reporterName : t('devPhone.fromSiteLog')}: </span>
+        <span className="sr-only">
+          {fromReporter ? reporterName : t('devPhone.fromTalkOlog')}:{' '}
+        </span>
         <Linkified text={message.body} />
       </div>
       <p className="font-mono text-[12px] text-dust">
@@ -403,7 +405,7 @@ function callState(status: string): CallState {
 }
 
 /**
- * W3-17: an outbound call in the thread (the phone's view: it comes in from SiteLog), worded by
+ * W3-17: an outbound call in the thread (the phone's view: it comes in from TalkOlog), worded by
  * its state with an icon beside the words (never the icon alone), the purpose and the time.
  */
 function CallEntry({
@@ -428,7 +430,7 @@ function CallEntry({
       <div className="flex max-w-[85%] items-center gap-2 rounded-card border border-rebar bg-chalk px-3 py-2 text-[15px]">
         <Icon className="size-4 flex-none" aria-hidden="true" />
         <span>
-          <span className="sr-only">{t('devPhone.fromSiteLog')}: </span>
+          <span className="sr-only">{t('devPhone.fromTalkOlog')}: </span>
           {t(`devPhone.call.${state}`)}
         </span>
       </div>

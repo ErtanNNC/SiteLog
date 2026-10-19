@@ -38,7 +38,7 @@ const COPY = {
     filter: 'Speaker',
     both: 'Both',
     reporter: 'Site manager',
-    agentLane: 'SiteLog assistant',
+    agentLane: 'TalkOlog assistant',
     call: /^call 0:10/,
   },
   tr: {
@@ -46,7 +46,7 @@ const COPY = {
     filter: 'Konuşan',
     both: 'İkisi de',
     reporter: 'Şantiye şefi',
-    agentLane: 'SiteLog asistanı',
+    agentLane: 'TalkOlog asistanı',
     call: /^arama 0:10/,
   },
 } as const;
@@ -73,7 +73,7 @@ for (const lang of ['en', 'tr'] as const) {
 
       // The filter, by keyboard: the site manager only hides the assistant's lines.
       const clip = page.getByTestId('source-clip');
-      await expect(clip.getByText(/Hi Kevin, this is the SiteLog assistant/)).toBeVisible();
+      await expect(clip.getByText(/Hi Kevin, this is the TalkOlog assistant/)).toBeVisible();
       const filter = page.getByRole('group', { name: c.filter });
       const reporterOnly = filter.getByRole('button', { name: c.reporter });
       await reporterOnly.focus();

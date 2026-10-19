@@ -6,7 +6,7 @@ import { demoId } from '@sitelog/shared/demo/ids.ts';
  * W4-10 · Billing on v1.2 (spec P13, F23, §19 Q234–Q236) in demo mode: Kestrel's plan from the
  * org's own price ("6 × $399.00 = $2,394.00"), in English and in Turkish, axe WCAG 2.2 AA and no
  * sideways scroll at 1440 and 390 px; Pause offered to admins only (the Billing route and the
- * Site settings drawer). Demir Yapı's manual Billing (no Checkout, "SiteLog invoices you
+ * Site settings drawer). Demir Yapı's manual Billing (no Checkout, "TalkOlog invoices you
  * directly") is `supabase/demir.spec.ts`, on the seeded stack.
  */
 

@@ -139,10 +139,10 @@ describe('PhoneInput picker (W4-01)', () => {
     await userEvent.type(screen.getByTestId('phone'), '+52 55 1234 5678');
     expect(last).toMatchObject({ e164: '+525512345678' });
     expect(screen.getByTestId('phone-foreign')).toHaveTextContent(
-      'This is a Mexico number. SiteLog texts it from your United States number.',
+      'This is a Mexico number. TalkOlog texts it from your United States number.',
     );
     expect(screen.getByTestId('phone')).toHaveAccessibleDescription(
-      /This is a Mexico number\. SiteLog texts it from your United States number\./,
+      /This is a Mexico number\. TalkOlog texts it from your United States number\./,
     );
     expect(screen.getByTestId('phone')).not.toHaveAttribute('aria-invalid', 'true');
   });
@@ -162,7 +162,7 @@ describe('PhoneInput picker (W4-01)', () => {
     render(<Harness start="TR" packCountry="TR" />);
     await userEvent.type(screen.getByTestId('phone'), '+1 555 014 3378');
     expect(screen.getByTestId('phone-foreign')).toHaveTextContent(
-      'Bu bir Amerika Birleşik Devletleri numarası. SiteLog bu numaraya Türkiye numaranızdan mesaj gönderir.',
+      'Bu bir Amerika Birleşik Devletleri numarası. TalkOlog bu numaraya Türkiye numaranızdan mesaj gönderir.',
     );
   });
 

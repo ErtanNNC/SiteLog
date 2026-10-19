@@ -105,7 +105,7 @@ for (const run of RUNS) {
       await page.goto('/legal/ZZ.privacy_notice.v1');
       const text = PRIVACY.texts[run.lang]!;
       await expect(page.getByRole('heading', { level: 1, name: text.title })).toBeVisible();
-      await expect(page).toHaveTitle(`${text.title} · SiteLog`);
+      await expect(page).toHaveTitle(`${text.title} · TalkOlog`);
       await expectFieldScreen(page);
       await page.setViewportSize({ width: 1440, height: 900 });
       await expectNoSidewaysScroll(page);

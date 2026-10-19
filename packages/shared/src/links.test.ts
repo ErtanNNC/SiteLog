@@ -44,26 +44,28 @@ describe('field link codes', () => {
   });
 
   it('builds the SMS link on the field host', () => {
-    expect(fieldLinkUrl('https://go.sitelog.app/', 'k7q2mx')).toBe(
-      'https://go.sitelog.app/r/K7Q2MX',
+    expect(fieldLinkUrl('https://go.talkolog.com/', 'k7q2mx')).toBe(
+      'https://go.talkolog.com/r/K7Q2MX',
     );
     expect(fieldLinkUrl('http://localhost:5174', 'K7Q2MX')).toBe('http://localhost:5174/r/K7Q2MX');
   });
 
   it('builds the Filed-screen link of the `filed` text, masked like any field link (W1-15)', () => {
-    const url = fieldReportLinkUrl('https://go.sitelog.app/', 'k7q2mx', 'r-1');
-    expect(url).toBe('https://go.sitelog.app/r/K7Q2MX/report/r-1');
-    expect(maskFieldLinkUrl(`PDF: ${url}`)).toBe('PDF: https://go.sitelog.app/r/••••••/report/r-1');
+    const url = fieldReportLinkUrl('https://go.talkolog.com/', 'k7q2mx', 'r-1');
+    expect(url).toBe('https://go.talkolog.com/r/K7Q2MX/report/r-1');
+    expect(maskFieldLinkUrl(`PDF: ${url}`)).toBe(
+      'PDF: https://go.talkolog.com/r/••••••/report/r-1',
+    );
   });
 
   it('builds the Past reports links of an SMS EDIT, masked like any field link (W2-12)', () => {
-    const url = fieldHistoryLinkUrl('https://go.sitelog.app/', 'k7q2mx', 'r-1');
-    expect(url).toBe('https://go.sitelog.app/r/K7Q2MX/history/r-1');
-    expect(fieldHistoryLinkUrl('https://go.sitelog.app', 'K7Q2MX')).toBe(
-      'https://go.sitelog.app/r/K7Q2MX/history',
+    const url = fieldHistoryLinkUrl('https://go.talkolog.com/', 'k7q2mx', 'r-1');
+    expect(url).toBe('https://go.talkolog.com/r/K7Q2MX/history/r-1');
+    expect(fieldHistoryLinkUrl('https://go.talkolog.com', 'K7Q2MX')).toBe(
+      'https://go.talkolog.com/r/K7Q2MX/history',
     );
     expect(maskFieldLinkUrl(`Confirm here: ${url}`)).toBe(
-      'Confirm here: https://go.sitelog.app/r/••••••/history/r-1',
+      'Confirm here: https://go.talkolog.com/r/••••••/history/r-1',
     );
   });
 
@@ -109,8 +111,8 @@ describe('personal link codes (W1-08)', () => {
   });
 
   it('masks the code of a field link, and nothing else', () => {
-    expect(maskFieldLinkUrl('https://go.sitelog.app/r/K7Q2MX')).toBe(
-      `https://go.sitelog.app/r/${MASKED_CODE}`,
+    expect(maskFieldLinkUrl('https://go.talkolog.com/r/K7Q2MX')).toBe(
+      `https://go.talkolog.com/r/${MASKED_CODE}`,
     );
     expect(maskFieldLinkUrl('Your link: http://localhost:5174/r/AB12CD/report/42 · Call')).toBe(
       `Your link: http://localhost:5174/r/${MASKED_CODE}/report/42 · Call`,

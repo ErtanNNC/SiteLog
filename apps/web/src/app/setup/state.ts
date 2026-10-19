@@ -30,7 +30,7 @@ export interface SiteDraft {
   managerCountry: string;
   managerPhone: string;
   languages: string[];
-  /** W4-02 (F2): the language SiteLog uses with the manager, one of the pack's field locales. */
+  /** W4-02 (F2): the language TalkOlog uses with the manager, one of the pack's field locales. */
   locale: ReporterLocale;
   /** W4-02 (F2): the manager's preferred channel, Text link or Call. */
   contactPref: ContactPref;

@@ -33,7 +33,7 @@ import type { Db } from './db';
  *   (`pushResult`): 2xx sent; 404, 410, a 400 or 403 whose body names the subscription (another
  *   VAPID key, a bad device token), or keys web-push cannot use gone (the row is revoked `gone`,
  *   audited, so it is never tried again); 429 / 5xx, a network failure or a timeout retry;
- *   anything else refused, a bare 400 or 403 included (it may be SiteLog's VAPID JWT: one
+ *   anything else refused, a bare 400 or 403 included (it may be TalkOlog's VAPID JWT: one
  *   configuration error must not revoke every subscription). One sent: the message went out.
  *   None sent: a retry when any may pass later (the job retries this channel) until the
  *   message's `PUSH_MAX_ATTEMPTS`th push try (the row's send count) or the job's last run,

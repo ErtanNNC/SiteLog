@@ -1,4 +1,4 @@
-# SiteLog voice agent
+# TalkOlog voice agent
 
 The phone and **Talk now** channel (spec §4.2, §9.4): a Python LiveKit Agents worker that takes a site manager's report by voice and talks to `field-api`'s `/voice/*` routes only. Python 3.12 with [uv](https://docs.astral.sh/uv/); outside the pnpm workspace.
 

@@ -38,15 +38,15 @@ describe('Sidebar', () => {
     expect(screen.getByText('6 active sites')).toBeInTheDocument();
   });
 
-  it('shows the v1.2 footer: agent ready for texts and calls, with the org’s SiteLog number (§11.2)', () => {
+  it('shows the v1.2 footer: agent ready for texts and calls, with the org’s TalkOlog number (§11.2)', () => {
     renderWithProviders(<Sidebar />, { as: 'admin' });
     expect(screen.getByText('Agent ready · texts & calls')).toBeInTheDocument();
-    const numbers = screen.getByRole('list', { name: 'SiteLog numbers' });
+    const numbers = screen.getByRole('list', { name: 'TalkOlog numbers' });
     expect(within(numbers).getByText('+1 555 014 2290')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-footer')).not.toHaveTextContent(/WhatsApp/);
   });
 
-  it('leaves the number line out when the org has no SiteLog number yet', () => {
+  it('leaves the number line out when the org has no TalkOlog number yet', () => {
     const org = { ...makeAuthState('admin').currentOrg!, sitelogNumbers: [] };
     renderWithProviders(<Sidebar />, { as: 'admin', auth: { currentOrg: org, orgs: [org] } });
     expect(screen.getByText('Agent ready · texts & calls')).toBeInTheDocument();

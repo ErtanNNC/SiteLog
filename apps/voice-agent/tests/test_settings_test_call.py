@@ -62,13 +62,13 @@ async def _start(fake_fixture: dict[str, Any], said: list[str], hang_up_at: int 
 def test_the_script_is_the_disclosure_one_line_and_goodbye_in_each_language() -> None:
     copy = default_copy()
     assert settings_test_lines("en", "Kestrel Build Group", copy) == [
-        "Hi, it's the SiteLog assistant. This call is not recorded.",
-        "This is a test call from SiteLog for Kestrel Build Group. "
-        "Your phone is set up to receive SiteLog calls.",
+        "Hi, it's the TalkOlog assistant. This call is not recorded.",
+        "This is a test call from TalkOlog for Kestrel Build Group. "
+        "Your phone is set up to receive TalkOlog calls.",
         "That's all for this test. Goodbye.",
     ]
     tr = settings_test_lines("tr", "Demir Yapı A.Ş.", copy)
-    assert tr[0] == "Merhaba, ben SiteLog asistanı. Bu görüşme kaydedilmiyor."
+    assert tr[0] == "Merhaba, ben TalkOlog asistanı. Bu görüşme kaydedilmiyor."
     assert "Demir Yapı A.Ş." in tr[1]
     assert len(settings_test_lines("es", "Kestrel", copy)) == 3
 
