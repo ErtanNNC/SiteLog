@@ -178,6 +178,11 @@ def redacted_context(chat_ctx: llm.ChatContext) -> llm.ChatContext:
             items.append(item.model_copy(update={"arguments": redact_phones(item.arguments)}))
         else:
             items.append(item)
+    # The model answers a context that ends with the reporter or a tool, never with a line of the
+    # agent's own: newer models refuse an assistant prefill (preview Talk now, 2026-10-19: a filler
+    # said while `update_draft` ran ended the context and the call fell back to the recording).
+    while items and items[-1].type == "message" and items[-1].role == "assistant":
+        items.pop()
     ctx.items = items
     return ctx
 
@@ -357,13 +362,18 @@ class ReportCall:
 
         self._ticker = asyncio.get_running_loop().create_task(run())
 
-    async def say(self, text: str, *, interruptible: bool = True) -> bool:
-        """Speaks code's line; True when it was played to the end."""
+    async def say(self, text: str, *, interruptible: bool = True, to_chat: bool = True) -> bool:
+        """Speaks code's line; True when it was played to the end. `to_chat=False` keeps it out of
+        the dialog model's context: a backchannel, a filler or a prompt of the dialog's timers is
+        code's, and said while a tool runs it would end the context on an assistant message, which
+        the model refuses (no assistant prefill)."""
         self.state.said(text, at=self.now())
         if self.session is None:
             return True
         try:
-            handle = self.session.say(text, allow_interruptions=interruptible)
+            handle = self.session.say(
+                text, allow_interruptions=interruptible, add_to_chat_ctx=to_chat
+            )
             await handle
         except RuntimeError:
             return False  # the session is closing (the caller hung up)
@@ -477,7 +487,7 @@ class ReportCall:
             text = goodbye_line(self.state, self.copy, settle_outcome(self.state, ending))
             await self.say(text, interruptible=False)
             return
-        await self.say(self.copy.line(key, self.state.language))
+        await self.say(self.copy.line(key, self.state.language), to_chat=False)
 
     async def _start_fallback(self, reason: str) -> None:
         try:

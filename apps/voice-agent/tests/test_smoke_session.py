@@ -126,3 +126,24 @@ def test_redacted_context_covers_every_item() -> None:
     original = ctx.items[0]
     assert isinstance(original, llm.ChatMessage)
     assert "555 014 2087" in (original.text_content or "")
+
+
+def test_the_model_context_never_ends_with_an_agent_line() -> None:
+    """Preview Talk now (2026-10-19): "Still working on it, one moment." said while update_draft
+    ran ended the context, and Anthropic refused it ("does not support assistant message
+    prefill"); the call fell back to the recording. Code's trailing lines are not sent."""
+    from livekit.agents import llm
+
+    ctx = llm.ChatContext()
+    ctx.add_message(role="assistant", content="Go ahead with today's report.")
+    ctx.add_message(role="user", content="Four painters all day.")
+    ctx.insert(llm.FunctionCall(call_id="c1", name="update_draft", arguments="{}"))
+    ctx.insert(
+        llm.FunctionCallOutput(call_id="c1", name="update_draft", output="{}", is_error=False)
+    )
+    ctx.add_message(role="assistant", content="Still working on it, one moment.")
+    ctx.add_message(role="assistant", content="Mm-hm, go on.")
+    out = redacted_context(ctx).items
+    assert [i.type for i in out] == ["message", "message", "function_call", "function_call_output"]
+    # The opening before the reporter's turn stays; the session's own context keeps every line.
+    assert len(ctx.items) == 6
