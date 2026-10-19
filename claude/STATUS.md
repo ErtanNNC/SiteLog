@@ -1,5 +1,20 @@
 # SiteLog · Durum
 
+**2026-10-19 (11:10 UTC) — Talk now preview'de uçtan uca çalışıyor.**
+
+- **Sonuç:** Dana ile Talk now: asistan raporu aldı, soruları sordu, rapor oluştu. Sizin testiniz, 2026-10-19.
+- **Bugün bulunan ve düzeltilen hatalar** (hepsi testli, preview'e kurulu):
+  - Asistan çağrı kimliğini odanın bilgisinden okuyordu; bilgi gelmeden çöküyordu. Artık çağrı isteğinden okuyor.
+  - `set_preference` aracının şeması Anthropic'in reddettiği biçimdeydi; model hiç çalışmıyordu. Düzeltildi, bütün araçları kontrol eden test eklendi.
+  - Kodun ara cümleleri ("Still working on it") modelin geçmişine giriyordu; yeni model bunu reddediyordu. Artık girmiyor.
+  - Arama bitince kayıt yüklenmeden süreç kapatılıyordu (10 sn). Süre 90 sn.
+  - Yedek kayda ("bip") geçen aramanın açık sorusu web'e devredilmiyordu; uygulamada soru takılıyordu. Migration `20261019000100` düzeltti ve takılı soruları devretti.
+  - deploy.yml: `voice-setup` artık günlükleri gösteriyor; `voice_logs_only` asistanı yeniden kurmadan günlükleri okuyor.
+- **Bakmanız gereken (karar değil, bilgi):**
+  - **Yavaşlık:** kısa bir rapor yaklaşık 6 dk sürdü. Ölçülen: işçinin bir `update_draft` turu ~24 sn (Claude çıkarımı, GitHub runner'da çalışan işçi). Asistanın field-api isteği 15 sn'de zaman aşımına uğrayıp yeniden deniyor. Preview kurulumu (ücretsiz katmanlar, runner'daki işçi) bunun bir kısmı; canlıda Fly.io'daki işçiyle yeniden ölçülmeli (`pnpm voice:latency`, F6 hedefleri).
+  - **Talk now saatlik sınırı** (§19 Q171) testte çabuk doluyor; değiştirmedim.
+  - İşçi preview'de 60 dk çalışıyor; her test oturumunda `preview-worker` yeniden başlatılmalı.
+
 **2026-10-17 (18:45 UTC) — Onaylarınız işlendi.**
 
 - **Bütün açık sorular kararlaştırıldı.** "Önerdiğin ve yaptığın tüm işleri ve soruların cevabını onaylıyorum" mesajınızla spec §19'daki 116 açık soru **Decided 2026-10-17 (önerilen varsayılan)** olarak işaretlendi.
