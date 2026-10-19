@@ -75,6 +75,10 @@ on:
         description: 'Target eval only: extraction, answers, corrections, utterances, tr, or all (every set but tr)'
         type: string
         default: all
+      voice_logs_only:
+        description: "Target voice-setup only: read the running agent's logs, set no secret and deploy nothing (a redeploy loses the last calls' logs)"
+        type: boolean
+        default: false
 
 concurrency:
   # preview-worker runs for an hour: its own group, so seed, phone-setup and supabase dispatches to the
@@ -702,6 +706,7 @@ jobs:
       LK_VERSION: 2.18.8
       LK_SHA256: 3e0977d0385d2f220d7f455105ac52f8035f79e70aecdf70b6dc054179905c7c
       LK_PROJECT: sitelog-preview
+      LOGS_ONLY: ${{ inputs.voice_logs_only && 'true' || 'false' }}
     steps:
       - name: Check configuration
         # Presence and shape only; no value is printed.
@@ -760,6 +765,7 @@ jobs:
         with:
           version: 2.118.0
       - name: Secrets files
+        if: env.LOGS_ONLY != 'true'
         # Two env files in RUNNER_TEMP (mode 600): the functions' and the agent's. They share the new
         # VOICE_AGENT_TOOL_SECRET; VOICE_CALL_TOKEN_SECRET goes to the functions only.
         env:
@@ -811,6 +817,7 @@ jobs:
           chmod 600 "$fn" "$agent"
           echo "VOICE_FUNCTION_SECRETS=$set_names" >> "$GITHUB_ENV"
       - name: Function secrets on the preview project
+        if: env.LOGS_ONLY != 'true'
         run: |
           supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$RUNNER_TEMP/voice-functions.env" >/dev/null
           echo "Set on the preview project: $VOICE_FUNCTION_SECRETS."
@@ -835,6 +842,14 @@ jobs:
             echo "::error::Several agents in the LiveKit project and none clearly SiteLog's; delete the extra ones (lk agent delete) or keep one named $LIVEKIT_AGENT_NAME."
             exit 1
           fi
+          if [ "$LOGS_ONLY" = true ]; then
+            # voice_logs_only: the running version is left as it is, so its logs are still there.
+            [ -n "$id" ] || { echo "::error::No agent in the LiveKit project to read logs from."; exit 1; }
+            echo "Agent $id: logs only, nothing changed."
+            echo "id=$id" >> "$GITHUB_OUTPUT"
+            echo "action=left as it is (logs only)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           secrets="$RUNNER_TEMP/voice-agent.env"
           if [ -n "$id" ]; then
             echo "Agent $id found: its secrets updated (others it has, such as Azure ones added by hand, are kept), then a new version deployed."
@@ -854,7 +869,7 @@ jobs:
           echo "id=$id" >> "$GITHUB_OUTPUT"
           echo "action=$action" >> "$GITHUB_OUTPUT"
       - name: Agent status and summary
-        if: steps.agent.outputs.id != ''
+        if: steps.agent.outputs.id != '' && env.LOGS_ONLY != 'true'
         working-directory: apps/voice-agent
         env:
           AGENT_ID: ${{ steps.agent.outputs.id }}
@@ -882,7 +897,8 @@ jobs:
       - name: Agent logs (read-only)
         # The new version's first minutes: its build log, then its runtime log (start-up errors,
         # a missing setting, and a test call made meanwhile: the runtime log is followed for 15
-        # minutes). `lk agent logs` tails, so each read is cut off by a timeout.
+        # minutes; with voice_logs_only, the running version's log so far, read for a minute).
+        # `lk agent logs` tails, so each read is cut off by a timeout.
         if: steps.agent.outputs.id != ''
         continue-on-error: true
         working-directory: apps/voice-agent
@@ -890,11 +906,16 @@ jobs:
           AGENT_ID: ${{ steps.agent.outputs.id }}
           NO_COLOR: '1'
         run: |
-          sleep 90
-          echo "=== build log ==="
-          timeout 30 lk agent logs --project "$LK_PROJECT" --id "$AGENT_ID" --log-type build --yes 2>&1 | tail -n 80 || true
+          follow=900
+          if [ "$LOGS_ONLY" = true ]; then
+            follow=60
+          else
+            sleep 90
+            echo "=== build log ==="
+            timeout 30 lk agent logs --project "$LK_PROJECT" --id "$AGENT_ID" --log-type build --yes 2>&1 | tail -n 80 || true
+          fi
           echo "=== deploy log ==="
-          timeout 900 lk agent logs --project "$LK_PROJECT" --id "$AGENT_ID" --log-type deploy --yes 2>&1 | tail -n 400 || true
+          timeout "$follow" lk agent logs --project "$LK_PROJECT" --id "$AGENT_ID" --log-type deploy --yes 2>&1 | tail -n 1500 || true
       - name: Remove the secrets files and the lk config
         if: always()
         run: rm -rf "$RUNNER_TEMP/voice-functions.env" "$RUNNER_TEMP/voice-agent.env" "$RUNNER_TEMP/agents.json" "$HOME/.livekit"
