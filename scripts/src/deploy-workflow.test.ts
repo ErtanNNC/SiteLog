@@ -87,6 +87,7 @@ describe('deploy.yml', () => {
       'plan',
       'supabase',
       'seed',
+      'countries-set',
       'phone-setup',
       'preview-worker',
       'voice-setup',
@@ -180,9 +181,9 @@ describe('deploy.yml', () => {
   });
 
   it('guards every job that changes staging or production with the live branch (D40)', () => {
-    // phone-setup, voice-setup and billing-setup set function secrets on the preview project only
-    // (their own guard, below and in their own tests).
-    const PREVIEW_ONLY = ['phone-setup', 'voice-setup', 'billing-setup'];
+    // phone-setup, voice-setup and billing-setup set function secrets on the preview project only,
+    // countries-set its country packs (their own guard, below and in their own tests).
+    const PREVIEW_ONLY = ['phone-setup', 'voice-setup', 'billing-setup', 'countries-set'];
     for (const id of PREVIEW_ONLY) {
       const job = JOBS.get(id)!;
       expect(job.condition, id).toContain(`needs.plan.outputs.${id.replace('-', '_')} == 'true'`);
@@ -609,13 +610,20 @@ describe('deploy.yml plan step, run under bash', () => {
         ENVIRONMENT: environment,
         PR_NUMBER: '',
       });
-    for (const target of ['voice-setup', 'billing-setup']) {
+    for (const target of ['voice-setup', 'billing-setup', 'countries-set']) {
       const output = target.replace('-', '_');
       const ok = run(PREVIEW, 'preview', target);
       expect(ok.status, ok.log).toBe(0);
       expect(ok.outputs[output], target).toBe('true');
       expect(PLAN_TARGETS.filter((t) => ok.outputs[t] === 'true')).toEqual([]);
-      for (const other of ['voice_setup', 'billing_setup', 'preview_worker', 'seed', 'eval']) {
+      for (const other of [
+        'voice_setup',
+        'billing_setup',
+        'countries_set',
+        'preview_worker',
+        'seed',
+        'eval',
+      ]) {
         if (other !== output) expect(ok.outputs[other], `${target}: ${other}`).toBe('false');
       }
       expect(ok.summary).toContain(`| ${output} | true |`);
@@ -767,6 +775,7 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
       'preview-worker',
       'voice-setup',
       'billing-setup',
+      'countries-set',
       'eval',
     ]);
   });
