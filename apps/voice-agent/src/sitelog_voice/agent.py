@@ -672,7 +672,13 @@ async def _first_utterance(session: AgentSession, timeout_s: float) -> str | Non
         session.off("user_input_transcribed", transcribed)
 
 
-server = AgentServer()
+#: How long a call's process may take to close after the room does: the goodbye drains, then the
+#: two-lane recording is finalised and uploaded (§9.4, W3-11), a few MB over the network. LiveKit's
+#: default (10 s) killed a Talk now process mid-upload on the preview (2026-10-19): the call had no
+#: recording and its post-call job could not run.
+SHUTDOWN_PROCESS_TIMEOUT_S = 90.0
+
+server = AgentServer(shutdown_process_timeout=SHUTDOWN_PROCESS_TIMEOUT_S)
 
 
 @server.rtc_session()
