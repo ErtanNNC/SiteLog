@@ -468,18 +468,20 @@ def build_tools(
 
     @function_tool
     async def set_preference(
-        contact_pref: Literal["link", "call"] | None = None,
+        contact_pref: Literal["link", "call", "unchanged"],
         no_calls_today: bool = False,
     ) -> ToolResult:
         """Change how the reporter is reached: "text me instead" is link, "call me" is call;
         "not today" sets no_calls_today.
 
         Args:
-            contact_pref: link or call.
+            contact_pref: link or call; unchanged when the reporter did not ask to change it.
             no_calls_today: true when the reporter asked not to be called today.
         """
+        # A required string enum: Anthropic refuses an enum on a nullable type ("string", "null"),
+        # and the strict tool schema makes `Literal | None`, or any parameter with a default, that.
         fields: dict[str, Any] = {}
-        if contact_pref is not None:
+        if contact_pref != "unchanged":
             fields["contactPref"] = contact_pref
         if no_calls_today:
             fields["noCallsToday"] = True
