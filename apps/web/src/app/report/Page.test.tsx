@@ -396,12 +396,16 @@ describe('ReportDetailPage: photos in Edit', () => {
         }),
       }),
     );
-    await waitFor(() =>
-      expect(screen.getByTestId('version-switcher')).toHaveTextContent('v3 · current'),
+    // The new version's PDF and photos render after the save; a loaded CI runner needs more than
+    // the default second (it timed out there once with the code unchanged).
+    await waitFor(
+      () => expect(screen.getByTestId('version-switcher')).toHaveTextContent('v3 · current'),
+      { timeout: 5000 },
     );
-    const section = await screen.findByTestId('section-photos');
-    await waitFor(() =>
-      expect(within(section).getByText('Pump truck at 13:00')).toBeInTheDocument(),
+    const section = await screen.findByTestId('section-photos', undefined, { timeout: 5000 });
+    await waitFor(
+      () => expect(within(section).getByText('Pump truck at 13:00')).toBeInTheDocument(),
+      { timeout: 5000 },
     );
     expect(within(section).getAllByTestId('report-photo')).toHaveLength(2);
     expect(within(section).getByRole('img', { name: 'Pump truck at 13:00' })).toHaveAttribute(
