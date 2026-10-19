@@ -381,14 +381,14 @@ jobs:
           VOICE_AGENT_TOOL_SECRET: e2e-voice-agent-tool-secret-not-for-production
         run: pnpm e2e:voice
       # W4-12 / W4-16: the M10 and M11 suites run last, as they need both packs to have a sender
-      # id on this stack: the US pack the stand-in's toll-free number (Twilio), the TR pack the
-      # `TALKOLOG` title (İletimerkezi), through the audited set_country_endpoints().
+      # id on this stack: one stand-in number (Twilio) for both packs, as the owner runs one
+      # number for every country (§19 Q370), through the audited set_country_endpoints().
       - name: Stand-in senders for both packs (this stack)
         env:
           SUPABASE_DB_URL: ${{ env.DB_URL }}
         run: |
           pnpm countries:set -- --code US --sms-sender +18885550100
-          pnpm countries:set -- --code TR --sms-sender TALKOLOG
+          pnpm countries:set -- --code TR --sms-sender +18885550100
       # W4-16: the M10 acceptance suite (spec §16.2 M10 Done when; `pnpm e2e:m10`): every panel
       # spec tagged `@m10`, one flow tag each. The `supabase` project: Team (@F15 an ops user moves
       # Marco to WhatsApp with the attestation, @F16 Revoke devices and the code asked again,

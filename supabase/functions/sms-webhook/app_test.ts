@@ -25,6 +25,8 @@ const BASE = 'https://proj.supabase.co/functions/v1/sms-webhook';
 const TOKEN = 'twilio-auth-token';
 const SECRET = 'link-signing-secret';
 const US_SENDER = '+18885550142';
+/** The TR pack's long code since §19 Q370 (Twilio). */
+const TR_SENDER = '+18885550199';
 const T0 = new Date('2026-10-09T23:00:00Z');
 
 const row = (code: 'US' | 'TR', patch: Partial<CountryRow>) => ({
@@ -59,7 +61,7 @@ function setup(opts: { token?: () => string; fail?: Error } = {}): Harness {
   const store = new FakeSmsStore();
   store.countries.push(
     row('US', { sms_sender_id: US_SENDER }),
-    row('TR', { sms_sender_id: 'TALKOLOG' }),
+    row('TR', { sms_sender_id: TR_SENDER }),
   );
   const base = {
     contactPref: 'link' as const,
@@ -294,7 +296,7 @@ Deno.test(
 
 Deno.test('a one-way pack stores the text with no keyword (the TR pack)', async () => {
   const h = setup();
-  await h.twilio('', { ...sms('+905321234567', 'STOP'), To: 'TALKOLOG' });
+  await h.twilio('', { ...sms('+905321234567', 'STOP'), To: TR_SENDER });
   assertEquals(h.store.inbound.length, 1);
   assertEquals(h.store.inbound[0]!.payload.keyword, null);
   assertEquals(h.store.inbound[0]!.payload.pack, 'TR');
@@ -307,6 +309,44 @@ Deno.test('a text to a sender no pack has is acknowledged and dropped', async ()
   assertEquals(res.status, 200);
   assertEquals(h.store.inbound, []);
   assertEquals(h.store.jobs, []);
+});
+
+Deno.test(
+  'one sender for several packs: the last text, the reporters, the country, the sender (§19 Q370)',
+  async () => {
+    const h = setup();
+    h.store.countries.find((c) => c.code === 'TR')!.sms_sender_id = US_SENDER;
+    const packOf = async (from: string) => {
+      await h.twilio('', sms(from, 'Hello'));
+      return h.store.inbound.at(-1)!.payload.pack;
+    };
+    // An unknown Turkish number: its own country. A Greek one: the sender's (US).
+    assertEquals(await packOf('+905329876543'), 'TR');
+    assertEquals(await packOf('+306912345678'), 'US');
+    // Dana is a reporter of a real US org.
+    assertEquals(await packOf('+15550145521'), 'US');
+    // The last text to Dana went from a TR org: her reply is that pack's.
+    h.store.lastOutbound.set('+15550145521|sms', 'TR');
+    assertEquals(await packOf('+15550145521'), 'TR');
+  },
+);
+
+Deno.test('a WhatsApp sender shared by two packs picks the pack the same way', async () => {
+  const h = setup();
+  for (const c of h.store.countries) c.whatsapp_sender_id = '+17752628262';
+  const message = (from: string) => ({
+    MessageSid: `SM${Math.random().toString(36).slice(2, 12)}`,
+    AccountSid: 'AC1',
+    From: `whatsapp:${from}`,
+    To: 'whatsapp:+17752628262',
+    Body: 'Merhaba',
+    NumMedia: '0',
+  });
+  await h.twilio('', message('+905329876543'));
+  assertEquals(h.store.inbound.at(-1)!.payload.pack, 'TR');
+  h.store.lastOutbound.set('+905329876543|whatsapp', 'US');
+  await h.twilio('', message('+905329876543'));
+  assertEquals(h.store.inbound.at(-1)!.payload.pack, 'US');
 });
 
 Deno.test('status callbacks move a message forward only', async () => {

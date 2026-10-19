@@ -366,7 +366,7 @@ describe('Settings → Field channels (W4-05, P12, §19 Q231, Q232)', () => {
       'TalkOlog tarafından ülkeye göre ayarlanır',
     );
     expect(row('Ülke')).toHaveTextContent('TR');
-    expect(row('Mesaj göndericisi')).toHaveTextContent('Gönderici adı · Bu ortamda ayarlanmadı');
+    expect(row('Mesaj göndericisi')).toHaveTextContent('Uzun numara · Bu ortamda ayarlanmadı');
     expect(row('TalkOlog’u arama numarası')).toHaveTextContent('Yalnızca Şimdi konuş');
     expect(row('Mesajlara yanıt')).toHaveTextContent('Tek yönlü');
     const notice = screen.getByTestId('recording-notice');

@@ -53,12 +53,19 @@ export class FakeSmsStore implements SmsWebhookStore {
   /** `sms.provider_fault` audit rows with `notified: true` written before the test (org → at). */
   priorFaultNotices: Array<{ orgId: string; at: string }> = [];
 
-  packBySender(to: string) {
-    return Promise.resolve(this.countries.find((c) => c.sms_sender_id === to.trim()) ?? null);
+  packsBySender(to: string) {
+    return Promise.resolve(this.countries.filter((c) => c.sms_sender_id === to.trim()));
   }
 
-  packByWhatsappSender(to: string) {
-    return Promise.resolve(this.countries.find((c) => c.whatsapp_sender_id === to.trim()) ?? null);
+  packsByWhatsappSender(to: string) {
+    return Promise.resolve(this.countries.filter((c) => c.whatsapp_sender_id === to.trim()));
+  }
+
+  /** §19 Q370: the pack of the last message sent to a phone, as `<phone>|<channel>` → pack. */
+  lastOutbound = new Map<string, string>();
+
+  lastOutboundPack(phone: string, channel: 'sms' | 'whatsapp', _since: string) {
+    return Promise.resolve(this.lastOutbound.get(`${phone}|${channel}`) ?? null);
   }
 
   /** W2-16: the `whatsapp_answer` jobs queued, by message id. */

@@ -1,7 +1,7 @@
 /**
  * Sets a country pack's per-environment values in one database (spec §4.6, GAP D47):
  *
- *   pnpm countries:set -- --code TR --sms-sender TALKOLOG
+ *   pnpm countries:set -- --code TR --sms-sender +17752628262
  *   pnpm countries:set -- --code US --sms-sender +18885550142 --voice +15550142290
  *   pnpm countries:set -- --code TR --clear-sms-sender        → back to the console transport
  *   pnpm countries:set -- --code TR --whatsapp-sender +905320000000 --whatsapp-templates tr.json

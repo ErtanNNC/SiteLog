@@ -1003,7 +1003,14 @@ describe('jobs: welcome, template, retention', () => {
     // İletimerkezi out of credit: the same, for the TR pack.
     const tr = createHarness();
     tr.db.data.orgs.get(tr.org.id)!.country = 'TR';
-    tr.db.data.countries.find((c) => c.code === 'TR')!.sms_sender_id = 'TALKOLOG';
+    Object.assign(
+      tr.db.data.countries.find((c) => c.code === 'TR')!,
+      {
+        sms_provider: 'iletimerkezi',
+        sms_sender_type: 'alphanumeric',
+        sms_sender_id: 'TALKOLOG',
+      },
+    );
     const jorge = tr.db.data.reporters.get(tr.jorge.id)!;
     jorge.status = 'invited';
     jorge.locale = 'tr-TR';

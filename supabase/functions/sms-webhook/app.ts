@@ -2,6 +2,8 @@ import { z } from 'zod';
 import {
   EMPTY_TWIML,
   applyLateStatus,
+  chooseInboundPack,
+  INBOUND_PACK_WINDOW_DAYS,
   assertE164,
   isTwilioWhatsappForm,
   parseTwilioWhatsappInbound,
@@ -16,6 +18,7 @@ import {
   twilioLateFailureIsAccountFault,
   verifyTwilioSignature,
   type CountryPack,
+  type CountryRow,
   type E164,
   type SmsNotifier,
 } from '@sitelog/shared';
@@ -47,8 +50,10 @@ import type { SmsWebhookStore } from './store.ts';
  *                                    (spec §19 Q35), or on the WhatsApp thread where the pack lists
  *                                    WhatsApp (W2-16). JWT.
  *
- * The pack is found by the sender id that received the text (`To` = `countries.sms_sender_id`,
- * unique across packs). A text is stored once per provider message id: a redelivery of a text
+ * The pack is found by the sender id that received the text (`To` = `countries.sms_sender_id`).
+ * A sender may serve several packs (spec §19 Q370): `packFor` then picks one with
+ * `chooseInboundPack` (the pack of the last message to that phone, its reporters', its country's,
+ * the sender's own). A text is stored once per provider message id: a redelivery of a text
  * handled to the end is acknowledged and nothing runs twice; one not yet handled is enqueued again
  * under the same dedupe key (the job is idempotent). A real sender never reaches a demo org's
  * reporters (the worker handles real orgs only); the Demo phone never reaches a real org's.
@@ -152,6 +157,38 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
   }
 
   /**
+   * §19 Q370: the pack of a message to a sender that may serve several packs, or null when it
+   * serves none in this database.
+   */
+  async function packFor(
+    rows: CountryRow[],
+    from: E164,
+    to: string,
+    channel: 'sms' | 'whatsapp',
+  ): Promise<CountryRow | null> {
+    if (rows.length <= 1) return rows[0] ?? null;
+    const since = new Date(now().getTime() - INBOUND_PACK_WINDOW_DAYS * 86_400_000).toISOString();
+    const lastOutboundPack = await store.lastOutboundPack(from, channel, since);
+    const reporterPacks = (
+      await Promise.all(
+        rows.map(async (row) =>
+          (await store.reportersByPhone(from, row.code, { realOnly: true })).length > 0
+            ? [row.code]
+            : [],
+        ),
+      )
+    ).flat();
+    const code = chooseInboundPack({
+      candidates: rows.map((r) => r.code),
+      lastOutboundPack,
+      reporterPacks,
+      from,
+      to,
+    });
+    return rows.find((r) => r.code === code) ?? null;
+  }
+
+  /**
    * Stores the text once per provider id with its `sms.received` audit and, for a Twilio text
    * not yet handled, its `sms_inbound` job: one transaction (`receive_sms_inbound()`).
    */
@@ -204,7 +241,12 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       logWarn('whatsapp.inbound.unreadable');
       return twiml();
     }
-    const row = await store.packByWhatsappSender(message.to);
+    const row = await packFor(
+      await store.packsByWhatsappSender(message.to),
+      message.from,
+      message.to,
+      'whatsapp',
+    );
     if (!row) {
       logWarn('whatsapp.inbound.unknown_sender_id', { to: message.to });
       return twiml();
@@ -242,7 +284,7 @@ export function createSmsWebhook(deps: SmsWebhookDeps): (req: Request) => Promis
       logWarn('sms.inbound.unreadable');
       return twiml();
     }
-    const row = await store.packBySender(text.to);
+    const row = await packFor(await store.packsBySender(text.to), text.from, text.to, 'sms');
     if (!row) {
       // A sender no pack has in this database (a number moved, a test number): nothing to do.
       logWarn('sms.inbound.unknown_sender_id', { to: text.to });

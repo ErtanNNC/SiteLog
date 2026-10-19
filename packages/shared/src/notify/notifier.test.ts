@@ -24,7 +24,11 @@ const pack = (code: 'US' | 'TR', patch: Partial<CountryRow> = {}): CountryPack =
   toCountryPack({ ...DEMO_COUNTRIES.find((c) => c.code === code)!, ...patch });
 const US = demoPack('US');
 const US_LIVE = pack('US', { sms_sender_id: '+18885550142' });
-const TR_LIVE = pack('TR', { sms_sender_id: 'TALKOLOG' });
+const TR_LIVE = pack('TR', {
+  sms_provider: 'iletimerkezi',
+  sms_sender_type: 'alphanumeric',
+  sms_sender_id: 'TALKOLOG',
+});
 
 const WELCOME = {
   first: 'Marco',
@@ -1177,7 +1181,12 @@ describe('Notifier WhatsApp (W2-15; §19 Q25, Q39, Q84)', () => {
     const h = harness({ channels: [w.registration] });
     const r = recipient({
       isDemo: false,
-      pack: pack('TR', { ...order, sms_sender_id: 'TALKOLOG' }),
+      pack: pack('TR', {
+        ...order,
+        sms_provider: 'iletimerkezi',
+        sms_sender_type: 'alphanumeric',
+        sms_sender_id: 'TALKOLOG',
+      }),
       locale: 'tr-TR',
       consents: ['sms', 'whatsapp'],
     });

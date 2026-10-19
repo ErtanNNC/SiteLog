@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import {
   CountryRowSchema,
@@ -104,6 +104,10 @@ const US_PRESETS: OrgPresets = {
   pdf_paper: 'letter',
 };
 
+/** TR as an alphanumeric İletimerkezi pack (before §19 Q370), and back to its migrated shape. */
+const ALPHANUMERIC_TR = `update countries set sms_provider = 'iletimerkezi', sms_sender_type = 'alphanumeric' where code = 'TR'`;
+const LONG_CODE_TR = `update countries set sms_provider = 'twilio', sms_sender_type = 'long_code', sms_sender_id = null where code = 'TR'`;
+
 beforeAll(async () => {
   db = await bootDatabase();
   await db.exec(
@@ -175,9 +179,9 @@ describe('country pack rows (§4.6)', () => {
         currency: 'TRY',
         default_timezone: 'Europe/Istanbul',
         message_channels: ['push', 'whatsapp', 'sms'],
-        sms_provider: 'iletimerkezi',
+        sms_provider: 'twilio',
         whatsapp_provider: 'twilio',
-        sms_sender_type: 'alphanumeric',
+        sms_sender_type: 'long_code',
         sms_sender_id: null,
         two_way_sms: false,
         sms_links_allowed: true,
@@ -224,7 +228,7 @@ describe('country pack rows (§4.6)', () => {
     ],
     [
       'two-way SMS from an alphanumeric sender',
-      `update countries set two_way_sms = true where code = 'TR'`,
+      `update countries set sms_sender_type = 'alphanumeric', two_way_sms = true where code = 'TR'`,
       '23514',
     ],
     [
@@ -273,7 +277,7 @@ describe('country pack rows (§4.6)', () => {
     ],
     [
       'an E.164 sender on an alphanumeric pack',
-      `update countries set sms_sender_id = '+905320000512' where code = 'TR'`,
+      `update countries set sms_sender_type = 'alphanumeric', sms_sender_id = '+905320000512' where code = 'TR'`,
       '23514',
     ],
     [
@@ -286,9 +290,11 @@ describe('country pack rows (§4.6)', () => {
   });
 
   it('refuses a sender type change that keeps a sender of the old shape (a later migration)', async () => {
-    // A policy migration that moved TR to a long code on a database where TALKOLOG is set fails
-    // at push time, instead of leaving a row toCountryPack() throws on.
+    // A policy migration that moves a titled pack to a long code (TR in 20261019000200) on a
+    // database where its title is set fails at push time, instead of leaving a row
+    // toCountryPack() throws on.
     await rolledBack(async () => {
+      await svc(ALPHANUMERIC_TR);
       await svc(`select set_country_endpoints('TR', 'TALKOLOG', null, null, null)`);
       expect(
         await sqlState(svc(`update countries set sms_sender_type = 'long_code' where code = 'TR'`)),
@@ -296,6 +302,7 @@ describe('country pack rows (§4.6)', () => {
     });
     // The same migration passes when it also clears the sender (set again for the new type).
     await rolledBack(async () => {
+      await svc(ALPHANUMERIC_TR);
       await svc(`select set_country_endpoints('TR', 'TALKOLOG', null, null, null)`);
       await svc(
         `update countries set sms_sender_type = 'long_code', sms_sender_id = null where code = 'TR'`,
@@ -394,6 +401,10 @@ describe('create_org(p_country)', () => {
 });
 
 describe('set_country_endpoints() (service role only)', () => {
+  // An alphanumeric pack to test titles on: TR as it was before 20261019000200 (§19 Q370).
+  beforeAll(() => svc(ALPHANUMERIC_TR));
+  afterAll(() => svc(LONG_CODE_TR));
+
   it('sets a sender id and a voice number per pack type, audited', async () => {
     await rolledBack(async () => {
       const [tr] = await svc<{ r: CountryRow }>(
@@ -515,11 +526,12 @@ describe('set_country_endpoints() (service role only)', () => {
         `select to_jsonb(set_country_endpoints('TR', null, null, '+905320000000', '{}'::jsonb)) as r`,
       );
       expect(cleared!.r).toMatchObject({ whatsapp_templates: null });
+      // One WhatsApp sender may serve several packs (§19 Q370, 20261019000200).
       expect(
         await sqlState(
           svc(`select set_country_endpoints('US', null, null, '+905320000000', null)`),
         ),
-      ).toBe('23505');
+      ).toBe('ok');
     });
   });
 

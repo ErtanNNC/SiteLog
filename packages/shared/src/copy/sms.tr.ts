@@ -1,8 +1,8 @@
 import type { SmsCatalog, SmsWeatherPhrases, TrSmsKey } from './sms.ts';
 
 /**
- * §9.2 SMS copy, Turkish: verbatim from the spec table. The TR pack's SMS is one-way (the
- * `TALKOLOG` alphanumeric title, `two_way_sms = false`), so these texts never ask for a reply,
+ * §9.2 SMS copy, Turkish: verbatim from the spec table. The TR pack's SMS is one-way
+ * (`two_way_sms = false`: a Twilio long code since §19 Q370, the `TALKOLOG` title later), so these texts never ask for a reply,
  * Turkish has no welcome reply hint, and the two-way keys (unknown_number, help, stop_confirm,
  * pref_call_ok, pref_text_ok) have no Turkish text: a pack with two-way SMS and Turkish fails `packCopyGaps()` until they
  * exist. The report keywords' replies (day_off_link, edit_preview, edit_unclear; W2-12, spec §19

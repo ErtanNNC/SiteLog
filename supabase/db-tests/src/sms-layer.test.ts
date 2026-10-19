@@ -4,7 +4,7 @@ import { bootDatabase, probeAs } from './harness.ts';
 import { ORG, seedTwoOrgs } from './fixtures/two-orgs.ts';
 
 /**
- * W1-08 (20261014000007_sms_layer.sql): sender ids unique across packs, a message that has only a
+ * W1-08 (20261014000007_sms_layer.sql): sender ids across packs (shared since 20261019000200), a message that has only a
  * phone (a text from an unknown number, F13), and the console email store of the Demo phone.
  */
 
@@ -35,37 +35,75 @@ async function errorOf(sql: string, params: unknown[] = []): Promise<string | nu
   }
 }
 
-describe('sender ids across packs (spec §4.6, F13)', () => {
-  it('two packs cannot share a sender id; packs without one can', async () => {
-    // Both launch packs have no sender here (null = console): the partial index allows that.
-    const nulls = await db.query<{ n: number }>(
-      `select count(*)::int as n from countries where sms_sender_id is null`,
-    );
-    expect(nulls.rows[0]!.n).toBeGreaterThanOrEqual(2);
-    // A ZZ pack with a long code, then the US pack asking for the same number.
+describe('sender ids across packs (spec §4.6, F13, §19 Q370)', () => {
+  it('two packs may share a sender id (one number for every country, 20261019000200)', async () => {
     expect(
       await errorOf(`
-        insert into countries (code, default_locale, field_locales, units, paper, currency,
-          default_timezone, message_channels, sms_sender_type, sms_sender_id, two_way_sms, sms_links_allowed)
-        values ('ZZ', 'en-US', '{en-US}', 'imperial', 'letter', 'USD', 'America/Chicago', '{sms}',
-          'long_code', '+18885550142', true, true);
-        select set_country_endpoints('US', '+18885550142', null, null, null);
+        select set_country_endpoints('US', '+17752628262', null, '+17752628262', null);
+        select set_country_endpoints('TR', '+17752628262', null, '+17752628262', null);
       `),
-    ).toBe('23505');
-    expect(
-      await errorOf(`select set_country_endpoints('US', '+18885550142', null, null, null)`),
     ).toBeNull();
   });
 
-  it('sms-webhook can find the pack by the receiving sender id', async () => {
+  it('sms-webhook finds every pack of the receiving sender id', async () => {
     await db.exec('begin; set local role service_role;');
     try {
-      await db.query(`select set_country_endpoints('TR', 'TALKOLOG', null, null, null)`);
+      await db.query(`select set_country_endpoints('US', '+17752628262', null, null, null)`);
+      await db.query(`select set_country_endpoints('TR', '+17752628262', null, null, null)`);
       const found = await db.query<{ code: string }>(
-        `select code from countries where sms_sender_id = $1`,
-        ['TALKOLOG'],
+        `select code from countries where sms_sender_id = $1 order by code`,
+        ['+17752628262'],
       );
-      expect(found.rows).toEqual([{ code: 'TR' }]);
+      expect(found.rows).toEqual([{ code: 'TR' }, { code: 'US' }]);
+    } finally {
+      await db.exec('rollback');
+    }
+  });
+
+  it('a STOP binds every pack of the sender, and START clears them all', async () => {
+    await db.exec('begin; set local role service_role;');
+    try {
+      await db.query(`select set_country_endpoints('US', '+17752628262', null, null, null)`);
+      await db.query(`select set_country_endpoints('TR', '+17752628262', null, null, null)`);
+      const rows = async () =>
+        (
+          await db.query<{ country: string; method: string }>(
+            `select country, method from sms_opt_outs where phone_e164 = '+905321234567' order by country`,
+          )
+        ).rows;
+      await db.query(
+        `insert into sms_opt_outs (phone_e164, country, method) values ('+905321234567', 'TR', 'sms_keyword')`,
+      );
+      expect(await rows()).toEqual([
+        { country: 'TR', method: 'sms_keyword' },
+        { country: 'US', method: 'sms_keyword' },
+      ]);
+      // The same STOP again (a redelivery) changes nothing.
+      await db.query(
+        `insert into sms_opt_outs (phone_e164, country, method) values ('+905321234567', 'US', 'provider_opt_out')
+         on conflict do nothing`,
+      );
+      expect((await rows()).length).toBe(2);
+      await db.query(
+        `delete from sms_opt_outs where phone_e164 = '+905321234567' and country = 'TR'`,
+      );
+      expect(await rows()).toEqual([]);
+    } finally {
+      await db.exec('rollback');
+    }
+  });
+
+  it('an opt-out on a pack with its own sender stays on that pack', async () => {
+    await db.exec('begin; set local role service_role;');
+    try {
+      await db.query(`select set_country_endpoints('US', '+18885550142', null, null, null)`);
+      await db.query(
+        `insert into sms_opt_outs (phone_e164, country, method) values ('+15550145521', 'US', 'sms_keyword')`,
+      );
+      const res = await db.query<{ country: string }>(
+        `select country from sms_opt_outs where phone_e164 = '+15550145521'`,
+      );
+      expect(res.rows).toEqual([{ country: 'US' }]);
     } finally {
       await db.exec('rollback');
     }

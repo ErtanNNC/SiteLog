@@ -34,7 +34,7 @@ function setup(
   const sent: Array<{ driver: SmsDriver; to: string; body: string; sender?: string }> = [];
   const code = opts.code ?? 'US';
   const sender =
-    opts.sender === undefined ? (code === 'US' ? '+18885550142' : 'TALKOLOG') : opts.sender;
+    opts.sender === undefined ? (code === 'US' ? '+18885550142' : '+18885550199') : opts.sender;
   const store: TestMessageStore = {
     memberRole: () => Promise.resolve(opts.role === undefined ? 'admin' : opts.role),
     loadOrg: () =>
@@ -86,7 +86,7 @@ Deno.test('sends the test text through the pack’s provider with its sender id'
 });
 
 Deno.test(
-  'a TR pack: İletimerkezi, the Turkish text, a national number read in Türkiye',
+  'a TR pack: Twilio since §19 Q370, the Turkish text, a national number read in Türkiye',
   async () => {
     const t = setup({ code: 'TR' });
     const r = await sendTestMessage(t.deps, LENA, {
@@ -94,7 +94,7 @@ Deno.test(
       phone: '0532 555 01 42',
       language: 'tr',
     });
-    assertEquals(r, { outcome: 'sent', driver: 'iletimerkezi' });
+    assertEquals(r, { outcome: 'sent', driver: 'twilio' });
     assertEquals(t.sent[0]!.to, '+905325550142');
     assertEquals(
       t.sent[0]!.body,

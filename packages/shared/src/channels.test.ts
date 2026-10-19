@@ -44,7 +44,11 @@ const US = demoPack('US');
 const TR = demoPack('TR');
 /** US with its toll-free sender and TR with its title set in this environment. */
 const US_LIVE = pack('US', { sms_sender_id: '+18885550142', voice_number: '+15550142290' });
-const TR_LIVE = pack('TR', { sms_sender_id: 'TALKOLOG' });
+const TR_LIVE = pack('TR', {
+  sms_provider: 'iletimerkezi',
+  sms_sender_type: 'alphanumeric',
+  sms_sender_id: 'TALKOLOG',
+});
 /** A pack that forbids links in SMS (it must list WhatsApp or push, D47); two-way like US. */
 const NO_LINKS = pack('US', { sms_links_allowed: false, message_channels: ['whatsapp', 'sms'] });
 /** A valid pack that lists no SMS for its messages (its SMS sender still exists). */
@@ -338,11 +342,11 @@ describe('pickMessageTransport (§4.5, §5.2)', () => {
     expect(pickMessageTransport({ isDemo: false }, TR, 'sms')).toBe('console');
   });
 
-  it("then the pack's provider: Twilio by default, İletimerkezi for TR (D48)", () => {
+  it("then the pack's provider: Twilio by default, İletimerkezi where a pack says so (D48)", () => {
     expect(pickMessageTransport({ isDemo: false }, US_LIVE, 'sms')).toBe('twilio');
     expect(pickMessageTransport({ isDemo: false }, TR_LIVE, 'sms')).toBe('iletimerkezi');
-    // An override is a pack value, not code: TR on Twilio is a row change (§19 Q20).
-    const trTwilio = pack('TR', { sms_provider: 'twilio', sms_sender_id: 'TALKOLOG' });
+    // An override is a pack value, not code: TR on Twilio is a row change (§19 Q20, Q370).
+    const trTwilio = pack('TR', { sms_sender_id: '+17752628262' });
     expect(pickMessageTransport({ isDemo: false }, trTwilio, 'sms')).toBe('twilio');
   });
 

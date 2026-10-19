@@ -16,24 +16,45 @@ import type { SmsWebhookStore } from './store.ts';
 /** sms-webhook's store over supabase-js with the service role. */
 export function supabaseSmsStore(admin: AppClient): SmsWebhookStore {
   return {
-    async packBySender(to) {
+    async packsBySender(to) {
       const { data } = await admin
         .from('countries')
         .select('*')
         .eq('sms_sender_id', to.trim())
-        .maybeSingle()
         .throwOnError();
-      return (data as CountryRow | null) ?? null;
+      return (data ?? []) as CountryRow[];
     },
 
-    async packByWhatsappSender(to) {
+    async packsByWhatsappSender(to) {
       const { data } = await admin
         .from('countries')
         .select('*')
         .eq('whatsapp_sender_id', to.trim())
+        .throwOnError();
+      return (data ?? []) as CountryRow[];
+    },
+
+    async lastOutboundPack(phone, channel, since) {
+      const { data: message } = await admin
+        .from('messages')
+        .select('org_id')
+        .eq('direction', 'out')
+        .eq('phone_e164', phone)
+        .eq('channel', channel)
+        .not('org_id', 'is', null)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
         .throwOnError();
-      return (data as CountryRow | null) ?? null;
+      if (!message?.org_id) return null;
+      const { data: org } = await admin
+        .from('orgs')
+        .select('country')
+        .eq('id', message.org_id)
+        .maybeSingle()
+        .throwOnError();
+      return org?.country ?? null;
     },
 
     async reportersByPhone(phone, country, scope) {

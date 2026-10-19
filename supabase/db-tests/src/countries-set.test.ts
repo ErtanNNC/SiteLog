@@ -148,14 +148,15 @@ describe('countries:set on the migrated schema', () => {
     });
   });
 
-  it('sets the TR title once (one audit row), and clears it', async () => {
+  it('sets the TR sender once (one audit row), and clears it', async () => {
     await rolledBack(async () => {
-      const set = await run('--code', 'tr', '--sms-sender', 'TALKOLOG');
+      // TR sends through Twilio from a long code since §19 Q370 (20261019000200).
+      const set = await run('--code', 'tr', '--sms-sender', '+17752628262');
       expect(set).toMatchObject({
         changed: true,
-        after: { code: 'TR', sms_provider: 'iletimerkezi', sms_sender_id: 'TALKOLOG' },
+        after: { code: 'TR', sms_provider: 'twilio', sms_sender_id: '+17752628262' },
       });
-      expect(await run('--code', 'TR', '--sms-sender', 'TALKOLOG')).toMatchObject({
+      expect(await run('--code', 'TR', '--sms-sender', '+17752628262')).toMatchObject({
         changed: false,
       });
       expect(await audits()).toHaveLength(1);
@@ -169,8 +170,8 @@ describe('countries:set on the migrated schema', () => {
     await rolledBack(async () => {
       const before = await pack('TR');
       // The script's own check, from the sender type it read (not the database's 22023).
-      await expect(run('--code', 'TR', '--sms-sender', '+905320000000')).rejects.toThrow(
-        'not a valid alphanumeric sender',
+      await expect(run('--code', 'TR', '--sms-sender', 'TALKOLOG')).rejects.toThrow(
+        'not a valid long_code sender',
       );
       expect(await pack('TR')).toEqual(before);
       await expect(run('--code', 'DE', '--clear-voice')).rejects.toThrow('no country pack DE');
@@ -210,16 +211,16 @@ describe('runCountriesSet on PGlite', () => {
     await rolledBack(async () => {
       const { connect, calls } = savepointConnection();
       const lines: string[] = [];
-      const result = await runCountriesSet(['--code', 'TR', '--sms-sender', 'TALKOLOG'], {
+      const result = await runCountriesSet(['--code', 'TR', '--sms-sender', '+17752628262'], {
         env: { SUPABASE_DB_URL: LOCAL },
         connect,
         log: (l) => lines.push(l),
       });
-      expect(result.after.sms_sender_id).toBe('TALKOLOG');
+      expect(result.after.sms_sender_id).toBe('+17752628262');
       expect(await pack('TR')).toEqual(result.after);
       expect(calls).toEqual({ connect: 1, end: 1 });
       expect(lines).toHaveLength(3);
-      expect(lines[2]).toContain('TALKOLOG (sends through iletimerkezi)');
+      expect(lines[2]).toContain('+17752628262 (sends through twilio)');
       expect(lines.join('\n')).not.toContain('s3cret-pw');
       expect(await audits()).toHaveLength(1);
     });

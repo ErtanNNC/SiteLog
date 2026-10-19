@@ -95,7 +95,8 @@ const RUNS: Run[] = [
     voiceNote: 'tr-kartal-2026-10-09',
     callTranscript: 'call-kartal-2026-10-09-tr',
     utterances: ['Evet.'],
-    provider: 'iletimerkezi',
+    // §19 Q370: TR texts go through Twilio from the number the US pack shares.
+    provider: 'twilio',
   },
 ];
 

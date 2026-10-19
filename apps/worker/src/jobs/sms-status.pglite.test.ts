@@ -209,7 +209,9 @@ async function auditOf(id: string) {
 beforeAll(async () => {
   pg = await startPgliteDatabase({ seed: true });
   await pg.q(`update orgs set is_demo = false where id = $1`, [DEMIR_ORG_ID]);
-  await pg.q(`update countries set sms_sender_id = 'TALKOLOG' where code = 'TR'`);
+  await pg.q(
+    `update countries set sms_provider = 'iletimerkezi', sms_sender_type = 'alphanumeric', sms_sender_id = 'TALKOLOG' where code = 'TR'`,
+  );
   const [s] = await pg.q<{ id: string }>(`select id from reporters where phone_e164 = $1`, [
     '+905320000512',
   ]);

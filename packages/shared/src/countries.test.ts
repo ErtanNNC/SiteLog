@@ -90,10 +90,11 @@ describe('country pack rows (spec §4.6)', () => {
     expect(CountryRowSchema.parse(before).outbound_trunk_id).toBeNull();
   });
 
-  it('defaults to Twilio for SMS and WhatsApp; the TR pack overrides SMS (D48)', () => {
+  it('defaults to Twilio for SMS and WhatsApp; TR too since §19 Q370 (a long code)', () => {
     expect([DEFAULT_SMS_PROVIDER, DEFAULT_WHATSAPP_PROVIDER]).toEqual(['twilio', 'twilio']);
     expect(demoPack('US').smsProvider).toBe('twilio');
-    expect(demoPack('TR').smsProvider).toBe('iletimerkezi');
+    expect(demoPack('TR').smsProvider).toBe('twilio');
+    expect(demoPack('TR').smsSenderType).toBe('long_code');
     expect(demoPack('TR').whatsappProvider).toBe('twilio');
   });
 
@@ -107,9 +108,9 @@ describe('country pack rows (spec §4.6)', () => {
       currency: 'TRY',
       defaultTimezone: 'Europe/Istanbul',
       messageChannels: ['push', 'whatsapp', 'sms'],
-      smsProvider: 'iletimerkezi',
+      smsProvider: 'twilio',
       whatsappProvider: 'twilio',
-      smsSenderType: 'alphanumeric',
+      smsSenderType: 'long_code',
       smsSenderId: null,
       twoWaySms: false,
       smsLinksAllowed: true,

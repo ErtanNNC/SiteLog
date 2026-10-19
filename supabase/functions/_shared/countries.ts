@@ -28,17 +28,6 @@ export async function loadPack(admin: AppClient, code: string): Promise<CountryP
   return packFromRow(data as CountryRow | null, `country ${code}`);
 }
 
-/** The pack whose SMS sender received a text (F13; unique across packs since 20261014000007). */
-export async function packBySender(admin: AppClient, to: string): Promise<CountryPack | null> {
-  const { data } = await admin
-    .from('countries')
-    .select('*')
-    .eq('sms_sender_id', senderKey(to))
-    .maybeSingle()
-    .throwOnError();
-  return data ? toCountryPack(data as CountryRow) : null;
-}
-
 /** An org's pack (its `country`) with the org fields the messaging code needs. */
 export async function loadOrgPack(
   admin: AppClient,

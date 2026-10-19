@@ -35,7 +35,11 @@ const pack = (code: 'US' | 'TR', patch: Partial<CountryRow> = {}): CountryPack =
   toCountryPack({ ...DEMO_COUNTRIES.find((c) => c.code === code)!, ...patch });
 const US_LIVE = pack('US', { sms_sender_id: '+18885550142' });
 const US_DEMO = demoPack('US');
-const TR_LIVE = pack('TR', { sms_sender_id: 'TALKOLOG' });
+const TR_LIVE = pack('TR', {
+  sms_provider: 'iletimerkezi',
+  sms_sender_type: 'alphanumeric',
+  sms_sender_id: 'TALKOLOG',
+});
 const T0 = new Date('2026-10-09T23:00:00Z');
 const SECRET = 'link-signing-secret';
 const DANA = '00000000-0000-4000-8000-0000000000c2';
@@ -663,7 +667,12 @@ describe('processInboundSms: the report keywords (W2-12)', () => {
 });
 
 describe('processInboundSms on WhatsApp (W2-16; spec §9.5, §19 Q26, Q40, Q85)', () => {
-  const TR_WA = pack('TR', { sms_sender_id: 'TALKOLOG', whatsapp_sender_id: '+905320000099' });
+  const TR_WA = pack('TR', {
+    sms_provider: 'iletimerkezi',
+    sms_sender_type: 'alphanumeric',
+    sms_sender_id: 'TALKOLOG',
+    whatsapp_sender_id: '+905320000099',
+  });
   const EMRE_PHONE = assertE164('+905321234567');
   const emre = (patch: Partial<InboundReporterRow> = {}) => ({
     ...reporter({

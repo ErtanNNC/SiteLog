@@ -65,10 +65,19 @@ export interface OfficeNotification {
 }
 
 export interface SmsWebhookStore extends InboundSmsStore {
-  /** The pack whose `sms_sender_id` is this sender (unique across packs, 20261014000007). */
-  packBySender(to: string): Promise<CountryRow | null>;
-  /** W2-16: the pack whose `whatsapp_sender_id` is this sender (unique, 20261016000210). */
-  packByWhatsappSender(to: string): Promise<CountryRow | null>;
+  /** The packs whose `sms_sender_id` is this sender (shared across packs since §19 Q370). */
+  packsBySender(to: string): Promise<CountryRow[]>;
+  /** W2-16: the packs whose `whatsapp_sender_id` is this sender (shared since §19 Q370). */
+  packsByWhatsappSender(to: string): Promise<CountryRow[]>;
+  /**
+   * §19 Q370: the pack (the org's country) of the last message sent to this phone on this channel
+   * since `since`, or null: a reply to a shared sender belongs to the text before it.
+   */
+  lastOutboundPack(
+    phone: string,
+    channel: 'sms' | 'whatsapp',
+    since: string,
+  ): Promise<string | null>;
   /**
    * `receive_sms_inbound()`, one transaction: writes the inbound row and its `sms.received` audit
    * (actor: the reporter, or the system for an unknown number), and for a Twilio text not yet

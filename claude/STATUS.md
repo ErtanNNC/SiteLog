@@ -1,5 +1,12 @@
 # TalkOlog · Durum
 
+**2026-10-19 (19:00 UTC) — Tek numara, bütün ülkeler (§19 Q370, onayınızla).**
+
+- **Değişen:** Bir SMS/WhatsApp numarası artık birden fazla ülke paketine tanımlanabiliyor. Gelen mesajın ülkesi sırayla şöyle bulunuyor: o kişiye son 30 günde gönderilen son mesaj, kişinin kayıtlı olduğu şirket, kişinin telefonunun ülke kodu, numaranın kendi ülkesi. STOP numarayı paylaşan bütün paketlerde geçerli; START hepsinden kaldırıyor.
+- **TR paketi:** SMS artık Twilio'dan (long code), Türkçe metinler yine cevap istemiyor. İletimerkezi kodu duruyor; `TALKOLOG` başlığı gelince bir migration ile geri dönülür (§19 Q20 güncellendi).
+- **Kod:** migration `20261019000200_shared_senders.sql`, `packages/shared/src/sms/sender-pack.ts` (kural + testler), `sms-webhook` (paket seçimi + testler), veritabanı ve CI testleri güncellendi.
+- **Preview'e kurulum:** migration preview'e gönderildikten sonra numara TR paketine SMS ve WhatsApp için tanımlanacak (aşağıdaki adımlar sohbette).
+
 **2026-10-19 (17:30 UTC) — Twilio numarası preview'de.**
 
 - **Yapılan:** `+17752628262` preview'de US paketinin SMS ve WhatsApp göndericisi (`countries-set`, audit `country.endpoints_set`). Demo olmayan US şirketlerinin mesajları artık bu numaradan gider; demo şirketler Demo telefonda kalır.

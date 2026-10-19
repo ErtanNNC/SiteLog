@@ -19,7 +19,14 @@ describe('worker messaging (W1-08)', () => {
       TR: 'console: no sender id; whatsapp: no sender id',
       US: 'console: no sender id; whatsapp: no sender id',
     });
-    rows.find((r) => r.code === 'TR')!.sms_sender_id = 'TALKOLOG';
+    Object.assign(
+      rows.find((r) => r.code === 'TR')!,
+      {
+        sms_provider: 'iletimerkezi',
+        sms_sender_type: 'alphanumeric',
+        sms_sender_id: 'TALKOLOG',
+      },
+    );
     rows.find((r) => r.code === 'TR')!.whatsapp_sender_id = '+905320000099';
     expect(describePackTransports(rows).TR).toBe(
       'iletimerkezi (TALKOLOG); whatsapp twilio (+905320000099)',
@@ -28,7 +35,7 @@ describe('worker messaging (W1-08)', () => {
 
   it("reads the org's pack fresh; an unknown pack is an error", async () => {
     const db = createFakeDb();
-    expect((await loadOrgPack(db, { country: 'TR' })).smsProvider).toBe('iletimerkezi');
+    expect((await loadOrgPack(db, { country: 'TR' })).smsProvider).toBe('twilio');
     db.data.countries.find((c) => c.code === 'US')!.sms_sender_id = '+18885550142';
     expect((await loadOrgPack(db, { country: 'US' })).smsSenderId).toBe('+18885550142');
     await expect(loadOrgPack(db, { country: 'ZZ' })).rejects.toThrow(/No country pack ZZ/);
