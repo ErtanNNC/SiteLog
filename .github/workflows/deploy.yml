@@ -476,7 +476,9 @@ jobs:
         # The inputs reach the script as separate arguments from the environment, never through
         # the shell's parsing of the command line.
         run: |
-          args=(--code "$PACK_CODE")
+          set -o pipefail
+          # A hosted database needs --yes even to read; the dispatch is the owner's approval.
+          args=(--code "$PACK_CODE" --yes)
           if [ "$PACK_PRINT" = true ]; then
             args+=(--print-whatsapp-templates)
           else
@@ -486,7 +488,6 @@ jobs:
               printf '%s' "$PACK_WHATSAPP_TEMPLATES" > "$RUNNER_TEMP/whatsapp-templates.json"
               args+=(--whatsapp-templates "$RUNNER_TEMP/whatsapp-templates.json")
             fi
-            args+=(--yes)
           fi
           pnpm -s countries:set -- "${args[@]}" | tee "$RUNNER_TEMP/countries-set.txt"
           {
