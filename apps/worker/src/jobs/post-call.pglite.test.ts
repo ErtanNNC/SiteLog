@@ -434,6 +434,34 @@ describe('W3-11: the fallback recording becomes the report (F6 failure handling)
   });
 });
 
+describe("the fallback hands the call's open question to the web (preview, 2026-10-19)", () => {
+  it("a voice question left open by a fallback call becomes the web's, so the recorder can answer it", async () => {
+    const call = await newCall('2030-07-04T21:00:00Z');
+    const draft = await turn(call, 'update_draft', { segments: fixtureSegments() });
+    const question = VoiceDraftStateSchema.parse(draft.result).question!;
+    const [before] = await pg.q<{ channel: string }>(
+      `select channel from questions where id = $1`,
+      [question.id],
+    );
+    expect(before!.channel).toBe('voice');
+    await pg.q(`select voice_call_fallback($1, 'agent_error', 30)`, [call]);
+    await endCall(call, 'fallback_recording');
+    await uploadRecording(call, fakeAudio('call-riverside-en', 75));
+    await runPostCall(call);
+    const [after] = await pg.q<{ channel: string; answered_at: string | null }>(
+      `select channel, answered_at from questions where id = $1`,
+      [question.id],
+    );
+    expect(after).toEqual({ channel: 'web', answered_at: null });
+    const [audit] = await pg.q<{ diff: { call_id: string; questions: number } }>(
+      `select diff from audit_log where action = 'report.questions_handed_to_web'
+          and entity_id = $1`,
+      [draft.reportId],
+    );
+    expect(audit!.diff).toEqual({ call_id: call, questions: 1 });
+  });
+});
+
 describe('W3-11: the post-call reconcile of a filed call (§10.9, §19 Q123)', () => {
   async function fileCall(started: string, deltaAnswer?: string) {
     const call = await newCall(started);
