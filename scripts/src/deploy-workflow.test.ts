@@ -1,5 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -80,6 +89,8 @@ describe('deploy.yml', () => {
       'seed',
       'phone-setup',
       'preview-worker',
+      'voice-setup',
+      'billing-setup',
       'eval',
       'worker',
       'preview',
@@ -140,6 +151,9 @@ describe('deploy.yml', () => {
       expect(job.text).toContain(`${k}: \${{ secrets.${k} }}`);
     expect(job.text).not.toMatch(/ILETIMERKEZI_|RESEND_/);
     expect(job.text).not.toMatch(/VAPID_[A-Z_]*.*GITHUB_ENV/);
+    // billing_sync's Stripe key (test mode, billing-setup), to the worker process only.
+    expect(startStep).toContain('STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}');
+    expect(job.text).not.toMatch(/STRIPE_[A-Z_]*.*GITHUB_ENV/);
     expect(job.text).not.toMatch(/TWILIO_[A-Z_]*.*GITHUB_ENV/);
     // The AI keys come only from the preview Environment's secrets, never written to GITHUB_ENV.
     expect(job.text).not.toMatch(/(ANTHROPIC|DEEPGRAM)_API_KEY.*GITHUB_ENV/);
@@ -166,9 +180,19 @@ describe('deploy.yml', () => {
   });
 
   it('guards every job that changes staging or production with the live branch (D40)', () => {
-    // phone-setup sets field-api secrets on the preview project only (its own guard, below).
+    // phone-setup, voice-setup and billing-setup set function secrets on the preview project only
+    // (their own guard, below and in their own tests).
+    const PREVIEW_ONLY = ['phone-setup', 'voice-setup', 'billing-setup'];
+    for (const id of PREVIEW_ONLY) {
+      const job = JOBS.get(id)!;
+      expect(job.condition, id).toContain(`needs.plan.outputs.${id.replace('-', '_')} == 'true'`);
+      expect(job.condition, id).toContain("inputs.environment == 'preview'");
+      expect(job.condition, id).toContain("github.ref == 'refs/heads/spec-v1.2'");
+      expect(job.text, id).toMatch(/^ {4}environment: preview$/m);
+      expect(job.text, id).toContain('"$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF"');
+    }
     const changing = [...JOBS].filter(
-      ([id, j]) => id !== 'phone-setup' && MUTATING.some((re) => re.test(commands(j.text))),
+      ([id, j]) => !PREVIEW_ONLY.includes(id) && MUTATING.some((re) => re.test(commands(j.text))),
     );
     expect(changing.map(([id]) => id).sort()).toEqual(['field', 'supabase', 'web', 'worker']);
     const phone = JOBS.get('phone-setup')!;
@@ -575,6 +599,43 @@ describe('deploy.yml plan step, run under bash', () => {
     expect(job.text).toMatch(/^ {4}secrets: inherit$/m);
   });
 
+  it('voice-setup and billing-setup: only for the preview Environment from spec-v1.2, never in `all`', () => {
+    const run = (ref: string, environment: string, target: string) =>
+      runStep(plan, {
+        EVENT: 'workflow_dispatch',
+        REF: ref,
+        REF_NAME: ref.replace(/^refs\/(heads|tags)\//, ''),
+        TARGET: target,
+        ENVIRONMENT: environment,
+        PR_NUMBER: '',
+      });
+    for (const target of ['voice-setup', 'billing-setup']) {
+      const output = target.replace('-', '_');
+      const ok = run(PREVIEW, 'preview', target);
+      expect(ok.status, ok.log).toBe(0);
+      expect(ok.outputs[output], target).toBe('true');
+      expect(PLAN_TARGETS.filter((t) => ok.outputs[t] === 'true')).toEqual([]);
+      for (const other of ['voice_setup', 'billing_setup', 'preview_worker', 'seed', 'eval']) {
+        if (other !== output) expect(ok.outputs[other], `${target}: ${other}`).toBe('false');
+      }
+      expect(ok.summary).toContain(`| ${output} | true |`);
+      for (const [ref, environment] of [
+        [PREVIEW, 'staging'],
+        [PREVIEW, 'production'],
+        [LIVE, 'preview'],
+        [LIVE, 'staging'],
+        [`refs/tags/spec-v1.2`, 'preview'],
+      ] as const) {
+        const r = run(ref, environment, target);
+        expect(r.outputs[output], `${target} ${ref} ${environment}`).toBe('false');
+        expect(r.log).toContain(`${target} skipped`);
+      }
+      expect(run(PREVIEW, 'preview', 'all').outputs[output]).toBe('false');
+      expect(run(LIVE, 'staging', 'all').outputs[output]).toBe('false');
+      expect(JOBS.get('plan')!.text).toContain(`[ "$1" != ${target} ]`);
+    }
+  });
+
   it('the inventory runs alone, from staging only', () => {
     expect(decide('workflow_dispatch', PREVIEW, 'staging', 'inventory').on).toEqual(['inventory']);
     expect(decide('workflow_dispatch', LIVE, 'production', 'inventory').on).toEqual([]);
@@ -688,9 +749,26 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
     expect(field.condition).toContain("needs.plan.outputs.field == 'true'");
     expect(field.text).toContain("environment: ${{ inputs.environment || 'staging' }}");
     expect(JOBS.get('plan')!.text).toContain('field: ${{ steps.plan.outputs.field }}');
-    expect(WORKFLOW).toMatch(
-      /options:\s+\[all, supabase, worker, web, field, inventory, seed, phone-setup, preview-worker, eval\]/,
-    );
+    const options = /target:[\s\S]*?options:\s*\[([^\]]*)\]/.exec(WORKFLOW)?.[1] ?? '';
+    expect(
+      options
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean),
+    ).toEqual([
+      'all',
+      'supabase',
+      'worker',
+      'web',
+      'field',
+      'inventory',
+      'seed',
+      'phone-setup',
+      'preview-worker',
+      'voice-setup',
+      'billing-setup',
+      'eval',
+    ]);
   });
 
   it("uses its own Netlify site key and name, never the panel's (D42)", () => {
@@ -1209,5 +1287,540 @@ describe('deploy.yml preview-worker steps, run under bash', () => {
     const r = beat('exit 7');
     expect(r.status).toBe(1);
     expect(r.log).toContain('stopped answering /health');
+  });
+});
+
+/* ── voice-setup and billing-setup (the preview project's LiveKit Cloud and Stripe test mode) ─── */
+
+describe('deploy.yml voice-setup job', () => {
+  const job = JOBS.get('voice-setup')!;
+
+  it('reads the voice keys from the preview Environment and pins the lk CLI by checksum', () => {
+    for (const name of [
+      'LIVEKIT_URL',
+      'LIVEKIT_API_KEY',
+      'LIVEKIT_API_SECRET',
+      'DEEPGRAM_API_KEY',
+      'ANTHROPIC_API_KEY',
+    ])
+      expect(job.text, name).toContain(`${name}: \${{ secrets.${name} }}`);
+    // The preview worker's fast-model default, unchanged.
+    expect(job.text).toContain(
+      "CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}",
+    );
+    // English only: no Azure key, no TR or ES voice.
+    expect(job.text).not.toMatch(/secrets\.AZURE|TTS_VOICE_(TR|ES)=/);
+    // Secrets never reach GITHUB_ENV (only the list of names does).
+    expect(job.text).not.toMatch(
+      /(LIVEKIT_API_SECRET|_API_KEY|tool_secret|call_secret).*GITHUB_ENV/,
+    );
+    expect(job.text).toMatch(/^ {6}LK_VERSION: \d+\.\d+\.\d+$/m);
+    expect(job.text).toMatch(/^ {6}LK_SHA256: [0-9a-f]{64}$/m);
+    const install = stepScript('voice-setup', 'Install the lk CLI');
+    expect(install).toContain('sha256sum -c -');
+    expect(install).toContain(
+      'https://github.com/livekit/livekit-cli/releases/download/v${LK_VERSION}/$archive',
+    );
+    // The contract check runs before anything is deployed.
+    const steps = jobSteps(job.text).map((s) => s.name);
+    expect(steps.indexOf('Voice contract is current')).toBeLessThan(
+      steps.indexOf('Function secrets on the preview project'),
+    );
+    expect(jobSteps(job.text).find((s) => s.name === 'Voice contract is current')!.text).toMatch(
+      /^ {8}run: pnpm voice:contract -- --check$/m,
+    );
+    // The secrets files and the lk config are removed whatever happened.
+    const cleanup = jobSteps(job.text).find(
+      (s) => s.name === 'Remove the secrets files and the lk config',
+    )!;
+    expect(cleanup.text).toContain('if: always()');
+    expect(cleanup.text).toContain('"$RUNNER_TEMP/voice-agent.env"');
+    expect(cleanup.text).toContain('"$HOME/.livekit"');
+  });
+
+  it('updates the agent the project has, else creates one, never by a committed livekit.toml', () => {
+    const agent = stepScript('voice-setup', 'Agent on LiveKit Cloud');
+    expect(agent).toContain('lk agent list --project "$LK_PROJECT" --json');
+    expect(agent).toContain(
+      'lk agent update-secrets --project "$LK_PROJECT" --id "$id" --secrets-file "$secrets" --yes',
+    );
+    expect(agent).toContain('lk agent deploy --project "$LK_PROJECT" --id "$id" --yes');
+    expect(agent).toContain(
+      'lk agent create --project "$LK_PROJECT" --region "$LIVEKIT_AGENT_REGION" --secrets-file "$secrets" --yes',
+    );
+    expect(existsSync(join(ROOT, 'apps', 'voice-agent', 'livekit.toml'))).toBe(false);
+    expect(stepScript('voice-setup', 'LiveKit project for the lk CLI')).toContain(
+      'lk project add "$LK_PROJECT" --url "$LIVEKIT_URL" --api-key "$LIVEKIT_API_KEY" --api-secret "$LIVEKIT_API_SECRET" --default --yes >/dev/null',
+    );
+    const summary = stepScript('voice-setup', 'Agent status and summary');
+    expect(summary).toContain(
+      'https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/voice-events',
+    );
+  });
+
+  describe('Check configuration, run under bash', () => {
+    const check = stepScript('voice-setup', 'Check configuration');
+    const base = {
+      SUPABASE_ACCESS_TOKEN: 'token',
+      SUPABASE_PROJECT_REF: 'previewref0000000000',
+      LIVEKIT_URL: 'wss://sitelog-preview.livekit.cloud',
+      LIVEKIT_API_KEY: 'APIkey',
+      LIVEKIT_API_SECRET: 'lk-secret-value',
+      DEEPGRAM_API_KEY: 'dg-value',
+      ANTHROPIC_API_KEY: 'sk-ant-value',
+    };
+
+    it('passes with every value, and names each missing one without printing a value', () => {
+      expect(runStep(check, base).status).toBe(0);
+      const missing = runStep(check, {
+        ...base,
+        LIVEKIT_API_SECRET: '',
+        DEEPGRAM_API_KEY: '',
+        SUPABASE_PROJECT_REF: '',
+      });
+      expect(missing.status).toBe(1);
+      expect(missing.log).toContain(
+        'LIVEKIT_API_SECRET (secret) DEEPGRAM_API_KEY (secret) SUPABASE_PROJECT_REF (variable)',
+      );
+      expect(missing.log).not.toMatch(/APIkey|sk-ant-value|lk-secret-value/);
+    });
+
+    it('refuses the staging project, a pasted line break and a URL that is not wss://', () => {
+      const staging = runStep(check, { ...base, SUPABASE_PROJECT_REF: STAGING_PROJECT_REF });
+      expect(staging.status).toBe(1);
+      expect(staging.log).toContain('refusing');
+      const pasted = runStep(check, { ...base, ANTHROPIC_API_KEY: 'sk-ant-value\n' });
+      expect(pasted.status).toBe(1);
+      expect(pasted.log).toContain('ANTHROPIC_API_KEY holds a space or a line break');
+      expect(pasted.log).not.toContain('sk-ant-value');
+      const https = runStep(check, { ...base, LIVEKIT_URL: 'https://sitelog.livekit.cloud' });
+      expect(https.status).toBe(1);
+      expect(https.log).toContain('LIVEKIT_URL must be');
+    });
+  });
+
+  describe('Secrets files, run under bash with a stand-in for supabase', () => {
+    const script = stepScript('voice-setup', 'Secrets files');
+    const env = {
+      SUPABASE_PROJECT_REF: 'previewref0000000000',
+      LIVEKIT_URL: 'wss://sitelog-preview.livekit.cloud',
+      LIVEKIT_API_KEY: 'APIkey',
+      LIVEKIT_API_SECRET: 'lk-secret-value',
+      DEEPGRAM_API_KEY: 'dg-value',
+      ANTHROPIC_API_KEY: 'sk-ant-value',
+      CLAUDE_MODEL_FAST: 'fast-model-from-env',
+      LIVEKIT_AGENT_NAME: 'sitelog-voice',
+      RUNNER_TEMP: '.',
+    };
+    const files = (names: string[]) =>
+      runStep(script, env, undefined, {
+        supabase: `printf '%s' '${JSON.stringify(names.map((name) => ({ name, value: 'digest' })))}'`,
+      });
+    const read = (run: StepRun, file: string) =>
+      Object.fromEntries(
+        readFileSync(join(run.dir, file), 'utf8')
+          .trim()
+          .split('\n')
+          .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]),
+      );
+
+    it('one new tool secret in both files; the call-token secret only when missing', () => {
+      const fresh = files(['LINK_SIGNING_SECRET']);
+      expect(fresh.status, fresh.log).toBe(0);
+      const fn = read(fresh, 'voice-functions.env');
+      const agent = read(fresh, 'voice-agent.env');
+      expect(Object.keys(fn)).toEqual([
+        'LIVEKIT_URL',
+        'LIVEKIT_API_KEY',
+        'LIVEKIT_API_SECRET',
+        'LIVEKIT_AGENT_NAME',
+        'VOICE_AGENT_TOOL_SECRET',
+        'VOICE_CALL_TOKEN_SECRET',
+      ]);
+      expect(fn.LIVEKIT_AGENT_NAME).toBe('sitelog-voice');
+      expect(Buffer.from(fn.VOICE_AGENT_TOOL_SECRET!, 'base64')).toHaveLength(32);
+      expect(fn.VOICE_CALL_TOKEN_SECRET).not.toBe(fn.VOICE_AGENT_TOOL_SECRET);
+      expect(fresh.log).toContain(`::add-mask::${fn.VOICE_AGENT_TOOL_SECRET}`);
+      expect(fresh.log).toContain(`::add-mask::${fn.VOICE_CALL_TOKEN_SECRET}`);
+      expect(agent).toEqual({
+        FIELD_API_URL: 'https://previewref0000000000.supabase.co/functions/v1/field-api',
+        VOICE_AGENT_TOOL_SECRET: fn.VOICE_AGENT_TOOL_SECRET,
+        DEEPGRAM_API_KEY: 'dg-value',
+        ANTHROPIC_API_KEY: 'sk-ant-value',
+        CLAUDE_MODEL_FAST: 'fast-model-from-env',
+        STT_MODEL: 'nova-3',
+        TTS_VOICE_EN: 'aura-2-thalia-en',
+        LIVEKIT_AGENT_NAME: 'sitelog-voice',
+        NODE_ENV: 'production',
+        SENTRY_ENVIRONMENT: 'preview',
+      });
+      for (const file of ['voice-functions.env', 'voice-agent.env'])
+        expect(statSync(join(fresh.dir, file)).mode & 0o777, file).toBe(0o600);
+      expect(fresh.envFile.VOICE_FUNCTION_SECRETS).toBe(
+        'LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET LIVEKIT_AGENT_NAME VOICE_AGENT_TOOL_SECRET VOICE_CALL_TOKEN_SECRET',
+      );
+
+      const again = files(['VOICE_CALL_TOKEN_SECRET', 'VOICE_AGENT_TOOL_SECRET']);
+      expect(again.status, again.log).toBe(0);
+      const fn2 = read(again, 'voice-functions.env');
+      expect(fn2.VOICE_CALL_TOKEN_SECRET).toBeUndefined();
+      expect(again.log).toContain('VOICE_CALL_TOKEN_SECRET already set: kept.');
+      // The tool secret is new on every run, and the agent gets the same one.
+      expect(fn2.VOICE_AGENT_TOOL_SECRET).not.toBe(fn.VOICE_AGENT_TOOL_SECRET);
+      expect(read(again, 'voice-agent.env').VOICE_AGENT_TOOL_SECRET).toBe(
+        fn2.VOICE_AGENT_TOOL_SECRET,
+      );
+      expect(again.envFile.VOICE_FUNCTION_SECRETS).not.toContain('VOICE_CALL_TOKEN_SECRET');
+    });
+  });
+
+  describe('livekit-pick-agent.mjs', () => {
+    const pick = (agents: unknown) => {
+      const dir = mkdtempSync(join(tmpdir(), 'lk-agents-'));
+      scratch.push(dir);
+      const file = join(dir, 'agents.json');
+      writeFileSync(file, agents === undefined ? '' : JSON.stringify(agents));
+      const res = spawnSync(
+        process.execPath,
+        [join(ROOT, '.github', 'scripts', 'livekit-pick-agent.mjs'), file],
+        {
+          encoding: 'utf8',
+          env: { PATH: process.env.PATH ?? '', LIVEKIT_AGENT_NAME: 'sitelog-voice' },
+        },
+      );
+      return { status: res.status, id: res.stdout.trim(), err: res.stderr };
+    };
+
+    it('the agent named sitelog-voice, else the only one, else none', () => {
+      expect(pick(undefined)).toMatchObject({ status: 0, id: '' });
+      expect(pick({})).toMatchObject({ status: 0, id: '' });
+      expect(pick({ agents: [{ agentId: 'CA_one' }] })).toMatchObject({ status: 0, id: 'CA_one' });
+      expect(
+        pick({
+          agents: [
+            { agentId: 'CA_other', agentName: 'other' },
+            { agentId: 'CA_ours', agentName: 'sitelog-voice' },
+          ],
+        }),
+      ).toMatchObject({ status: 0, id: 'CA_ours' });
+    });
+
+    it('refuses to choose among several agents none (or more than one) of them named sitelog-voice', () => {
+      const none = pick({ agents: [{ agentId: 'CA_a' }, { agentId: 'CA_b', agentName: 'x' }] });
+      expect(none.status).toBe(3);
+      expect(none.id).toBe('');
+      expect(none.err).toContain('CA_a, CA_b');
+      const two = pick({
+        agents: [
+          { agentId: 'CA_a', agentName: 'sitelog-voice' },
+          { agentId: 'CA_b', agentName: 'sitelog-voice' },
+        ],
+      });
+      expect(two.status).toBe(3);
+    });
+  });
+});
+
+describe('deploy.yml billing-setup job', () => {
+  const job = JOBS.get('billing-setup')!;
+
+  it('test mode only, the Stripe key from the preview Environment, never to GITHUB_ENV', () => {
+    expect(new Set(job.text.match(/\bsecrets\.\w+/g))).toEqual(
+      new Set(['secrets.SUPABASE_ACCESS_TOKEN', 'secrets.STRIPE_SECRET_KEY']),
+    );
+    expect(job.text).not.toMatch(/STRIPE_SECRET_KEY.*GITHUB_ENV|whsec.*GITHUB_ENV/);
+    // The endpoint's API version is the one supabase/functions/README.md pins for the SDK.
+    const version = /^ {6}STRIPE_WEBHOOK_API_VERSION: (\S+)$/m.exec(job.text)?.[1];
+    expect(version).toBeTruthy();
+    expect(readFileSync(join(ROOT, 'supabase', 'functions', 'README.md'), 'utf8')).toContain(
+      `\`${version}\``,
+    );
+    const secrets = stepScript('billing-setup', 'Function secrets on the preview project');
+    expect(secrets).toContain(
+      'supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$f" >/dev/null',
+    );
+    const cleanup = jobSteps(job.text).find((s) => s.name === 'Remove the secrets file')!;
+    expect(cleanup.text).toContain('if: always()');
+  });
+
+  describe('Check configuration, run under bash', () => {
+    const check = stepScript('billing-setup', 'Check configuration');
+    const base = {
+      SUPABASE_ACCESS_TOKEN: 'token',
+      SUPABASE_PROJECT_REF: 'previewref0000000000',
+      STRIPE_SECRET_KEY: 'sk_test_abc',
+    };
+
+    it('takes a test-mode key and refuses a live or restricted one, staging and missing values', () => {
+      expect(runStep(check, base).status).toBe(0);
+      for (const key of ['sk_live_abc', 'rk_test_abc', 'pk_test_abc']) {
+        const r = runStep(check, { ...base, STRIPE_SECRET_KEY: key });
+        expect(r.status, key).toBe(1);
+        expect(r.log).toContain('not a test-mode secret key');
+        expect(r.log).not.toContain(key);
+      }
+      const staging = runStep(check, { ...base, SUPABASE_PROJECT_REF: STAGING_PROJECT_REF });
+      expect(staging.status).toBe(1);
+      const missing = runStep(check, { ...base, STRIPE_SECRET_KEY: '' });
+      expect(missing.status).toBe(1);
+      expect(missing.log).toContain('STRIPE_SECRET_KEY (secret)');
+    });
+  });
+
+  describe('Function secrets, run under bash with a stand-in for supabase', () => {
+    const script = stepScript('billing-setup', 'Function secrets on the preview project');
+    const run = (names: string[]) =>
+      runStep(
+        script,
+        {
+          SUPABASE_PROJECT_REF: 'previewref0000000000',
+          STRIPE_SECRET_KEY: 'sk_test_abc',
+          PANEL_URL: 'https://panel.example',
+          RUNNER_TEMP: '.',
+        },
+        (dir) =>
+          writeFileSync(
+            join(dir, 'billing-functions.env'),
+            'STRIPE_WEBHOOK_SECRET=whsec_x\nSTRIPE_PRICE_ID_SITE_US=price_x\n',
+          ),
+        {
+          supabase: [
+            'if [ "$1 $2" = "secrets list" ]; then',
+            `  printf '%s' '${JSON.stringify(names.map((name) => ({ name })))}'`,
+            'else',
+            '  echo "$*" > supabase.args',
+            'fi',
+          ].join('\n'),
+        },
+      );
+
+    it('sets the three Stripe secrets, and APP_URL only when it is missing', () => {
+      const fresh = run(['FIELD_APP_URL']);
+      expect(fresh.status, fresh.log).toBe(0);
+      expect(readFileSync(join(fresh.dir, 'billing-functions.env'), 'utf8')).toBe(
+        'STRIPE_WEBHOOK_SECRET=whsec_x\nSTRIPE_PRICE_ID_SITE_US=price_x\nSTRIPE_SECRET_KEY=sk_test_abc\nAPP_URL=https://panel.example\n',
+      );
+      expect(readFileSync(join(fresh.dir, 'supabase.args'), 'utf8').trim()).toBe(
+        'secrets set --project-ref previewref0000000000 --env-file ./billing-functions.env',
+      );
+      expect(fresh.envFile.BILLING_FUNCTION_SECRETS).toBe(
+        'STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID_SITE_US APP_URL',
+      );
+      const kept = run(['APP_URL', 'STRIPE_PRICE_ID_SITE']);
+      expect(kept.status, kept.log).toBe(0);
+      expect(readFileSync(join(kept.dir, 'billing-functions.env'), 'utf8')).not.toContain(
+        'APP_URL',
+      );
+      expect(kept.log).toContain('APP_URL already set: kept.');
+      expect(kept.log).toContain('::warning::The old STRIPE_PRICE_ID_SITE');
+    });
+  });
+});
+
+describe('stripe-billing-setup.mjs, run with a stand-in for fetch', () => {
+  const SCRIPT = join(ROOT, '.github', 'scripts', 'stripe-billing-setup.mjs');
+  const URL_ = 'https://previewref0000000000.supabase.co/functions/v1/stripe-webhook';
+  const LOGIC = readFileSync(
+    join(ROOT, 'supabase', 'functions', 'stripe-webhook', 'logic.ts'),
+    'utf8',
+  );
+  const HANDLED_BLOCK = /export const HANDLED_EVENTS = \[([\s\S]*?)\]/.exec(LOGIC)?.[1] ?? '';
+  const HANDLED = [...HANDLED_BLOCK.matchAll(/'([a-z_.]+)'/g)].map((m) => m[1]);
+
+  interface State {
+    products: unknown[];
+    prices: unknown[];
+    endpoints: { id: string; url: string }[];
+    portal: unknown[];
+  }
+  /** A fake Stripe: answers the calls the script makes and logs each (method, path, form). */
+  const FAKE = `
+import { appendFileSync, readFileSync } from 'node:fs';
+const state = JSON.parse(readFileSync(process.env.FAKE_STATE, 'utf8'));
+globalThis.fetch = async (url, init = {}) => {
+  const u = new URL(url);
+  const method = init.method ?? 'GET';
+  const params = method === 'GET' ? u.searchParams.toString() : String(init.body ?? '');
+  appendFileSync(process.env.FAKE_LOG, JSON.stringify({ method, path: u.pathname, params, auth: init.headers?.Authorization }) + '\\n');
+  const ok = (body) => new Response(JSON.stringify(body), { status: 200 });
+  const p = u.pathname;
+  if (method === 'GET' && p === '/v1/products') return ok({ data: state.products });
+  if (method === 'POST' && p === '/v1/products') return ok({ id: 'prod_new' });
+  if (method === 'GET' && p === '/v1/prices') return ok({ data: state.prices });
+  if (method === 'POST' && p === '/v1/prices') return ok({ id: 'price_new' });
+  if (method === 'GET' && p === '/v1/webhook_endpoints') return ok({ data: state.endpoints });
+  if (method === 'POST' && p === '/v1/webhook_endpoints') return ok({ id: 'we_new', secret: 'whsec_new', api_version: new URLSearchParams(params).get('api_version') });
+  if (method === 'DELETE' && p.startsWith('/v1/webhook_endpoints/')) return ok({ deleted: true });
+  if (method === 'GET' && p === '/v1/billing_portal/configurations') return ok({ data: state.portal });
+  return new Response(JSON.stringify({ error: { message: 'unexpected ' + method + ' ' + p } }), { status: 400 });
+};
+`;
+
+  function setup(state: State, key = 'sk_test_abc') {
+    const dir = mkdtempSync(join(tmpdir(), 'stripe-setup-'));
+    scratch.push(dir);
+    writeFileSync(join(dir, 'fake.mjs'), FAKE);
+    writeFileSync(join(dir, 'state.json'), JSON.stringify(state));
+    writeFileSync(join(dir, 'log.jsonl'), '');
+    const res = spawnSync(process.execPath, ['--import', join(dir, 'fake.mjs'), SCRIPT], {
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH ?? '',
+        STRIPE_SECRET_KEY: key,
+        WEBHOOK_URL: URL_,
+        WEBHOOK_API_VERSION: '2026-09-30.endive',
+        OUT_ENV: join(dir, 'out.env'),
+        OUT_JSON: join(dir, 'out.json'),
+        FAKE_STATE: join(dir, 'state.json'),
+        FAKE_LOG: join(dir, 'log.jsonl'),
+      },
+    });
+    const calls = readFileSync(join(dir, 'log.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as { method: string; path: string; params: string; auth: string });
+    return { res, dir, calls, log: `${res.stdout}${res.stderr}` };
+  }
+
+  const fittingPrice = {
+    id: 'price_kept',
+    product: 'prod_kept',
+    unit_amount: 39900,
+    currency: 'usd',
+    type: 'recurring',
+    billing_scheme: 'per_unit',
+    recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
+  };
+
+  it('creates the product, price and endpoint on an empty account, with exactly the handled events', () => {
+    const run = setup({ products: [], prices: [], endpoints: [], portal: [] });
+    expect(run.res.status, run.log).toBe(0);
+    const posts = run.calls.filter((c) => c.method === 'POST');
+    expect(posts.map((c) => c.path)).toEqual([
+      '/v1/products',
+      '/v1/prices',
+      '/v1/webhook_endpoints',
+    ]);
+    expect(new URLSearchParams(posts[0]!.params).get('metadata[sitelog]')).toBe('site');
+    const price = new URLSearchParams(posts[1]!.params);
+    expect(Object.fromEntries(price)).toMatchObject({
+      product: 'prod_new',
+      currency: 'usd',
+      unit_amount: '39900',
+      'recurring[interval]': 'month',
+      'recurring[usage_type]': 'licensed',
+      lookup_key: 'sitelog_site_usd_monthly',
+      transfer_lookup_key: 'true',
+    });
+    const endpoint = new URLSearchParams(posts[2]!.params);
+    expect(endpoint.get('url')).toBe(URL_);
+    expect(endpoint.getAll('enabled_events[]')).toEqual(HANDLED);
+    expect(HANDLED).toContain('checkout.session.completed');
+    expect(endpoint.get('api_version')).toBe('2026-09-30.endive');
+    expect(run.calls.every((c) => c.auth === 'Bearer sk_test_abc')).toBe(true);
+    expect(readFileSync(join(run.dir, 'out.env'), 'utf8')).toBe(
+      'STRIPE_WEBHOOK_SECRET=whsec_new\nSTRIPE_PRICE_ID_SITE_US=price_new\n',
+    );
+    expect(statSync(join(run.dir, 'out.env')).mode & 0o777).toBe(0o600);
+    expect(run.res.stdout).toContain('::add-mask::whsec_new');
+    // The mask comes before any other line that could carry the secret.
+    expect(run.res.stdout.indexOf('::add-mask::whsec_new')).toBe(
+      run.res.stdout.indexOf('whsec_new') - '::add-mask::'.length,
+    );
+    const out = JSON.parse(readFileSync(join(run.dir, 'out.json'), 'utf8'));
+    expect(out).toMatchObject({
+      productId: 'prod_new',
+      productCreated: true,
+      priceId: 'price_new',
+      priceCreated: true,
+      endpointId: 'we_new',
+      deletedEndpoints: [],
+      portalConfigured: false,
+    });
+    expect(JSON.stringify(out)).not.toContain('whsec');
+  });
+
+  it('keeps a fitting product and price, and replaces only the endpoints on this URL', () => {
+    const run = setup({
+      products: [
+        { id: 'prod_other', metadata: {} },
+        { id: 'prod_kept', metadata: { sitelog: 'site' } },
+      ],
+      prices: [fittingPrice],
+      endpoints: [
+        { id: 'we_old', url: URL_ },
+        { id: 'we_elsewhere', url: 'https://example.com/hook' },
+      ],
+      portal: [{ id: 'bpc_1' }],
+    });
+    expect(run.res.status, run.log).toBe(0);
+    expect(run.calls.filter((c) => c.method === 'POST').map((c) => c.path)).toEqual([
+      '/v1/webhook_endpoints',
+    ]);
+    expect(run.calls.filter((c) => c.method === 'DELETE').map((c) => c.path)).toEqual([
+      '/v1/webhook_endpoints/we_old',
+    ]);
+    // The new endpoint exists before the old one goes.
+    const order = run.calls.map((c) => `${c.method} ${c.path}`);
+    expect(order.indexOf('POST /v1/webhook_endpoints')).toBeLessThan(
+      order.indexOf('DELETE /v1/webhook_endpoints/we_old'),
+    );
+    expect(readFileSync(join(run.dir, 'out.env'), 'utf8')).toContain(
+      'STRIPE_PRICE_ID_SITE_US=price_kept',
+    );
+    expect(JSON.parse(readFileSync(join(run.dir, 'out.json'), 'utf8'))).toMatchObject({
+      productId: 'prod_kept',
+      productCreated: false,
+      priceId: 'price_kept',
+      priceCreated: false,
+      deletedEndpoints: ['we_old'],
+      portalConfigured: true,
+    });
+  });
+
+  it('moves the lookup key to a new price when the existing one has another amount', () => {
+    const run = setup({
+      products: [{ id: 'prod_kept', metadata: { sitelog: 'site' } }],
+      prices: [{ ...fittingPrice, unit_amount: 29900 }],
+      endpoints: [],
+      portal: [],
+    });
+    expect(run.res.status, run.log).toBe(0);
+    const price = run.calls.find((c) => c.method === 'POST' && c.path === '/v1/prices')!;
+    expect(new URLSearchParams(price.params).get('transfer_lookup_key')).toBe('true');
+    expect(new URLSearchParams(price.params).get('product')).toBe('prod_kept');
+  });
+
+  it('refuses a key that is not a test-mode secret key before calling Stripe', () => {
+    for (const key of ['sk_live_abc', 'rk_test_abc', '']) {
+      const run = setup({ products: [], prices: [], endpoints: [], portal: [] }, key);
+      expect(run.res.status, key).toBe(1);
+      expect(run.res.stdout).toContain('::error::STRIPE_SECRET_KEY is not a test-mode secret key');
+      expect(run.calls).toEqual([]);
+    }
+  });
+
+  it('--summary writes ids and names only', () => {
+    const run = setup({ products: [], prices: [], endpoints: [], portal: [] });
+    const summary = join(run.dir, 'summary.md');
+    writeFileSync(summary, '');
+    const res = spawnSync(process.execPath, [SCRIPT, '--summary', join(run.dir, 'out.json')], {
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH ?? '',
+        GITHUB_STEP_SUMMARY: summary,
+        SUPABASE_PROJECT_REF: 'previewref0000000000',
+        BILLING_FUNCTION_SECRETS: 'STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID_SITE_US',
+      },
+    });
+    expect(res.status, res.stderr).toBe(0);
+    const text = readFileSync(summary, 'utf8');
+    expect(text).toContain('`prod_new`');
+    expect(text).toContain('`price_new`');
+    expect(text).toContain('`we_new`');
+    expect(text).toContain(URL_);
+    expect(text).toContain('Customer portal');
+    expect(text).not.toMatch(/whsec_|sk_test_/);
   });
 });

@@ -79,6 +79,15 @@ def test_no_provider_is_built_without_its_key(missing: str, locale: str) -> None
         build_live_session(_settings(**env), locale=locale, keyterms=[])
 
 
+@pytest.mark.filterwarnings("ignore:A test tried to use socket")
+@pytest.mark.parametrize("locale", ["en-US", "es-US"])
+async def test_english_and_spanish_need_no_azure_key(locale: str) -> None:
+    # deploy.yml's voice-setup deploys an English-only agent: no AZURE_SPEECH_KEY, no TTS_VOICE_TR.
+    env = {k: v for k, v in KEYS.items() if k != "AZURE_SPEECH_KEY"}
+    session = build_live_session(_settings(**env), locale=locale, keyterms=[])
+    assert type(session.tts).__module__.split(".")[2] == "deepgram"
+
+
 def test_turn_handling_follows_section_9_4() -> None:
     handling: dict[str, Any] = dict(turn_handling())
     assert handling["endpointing"] == {

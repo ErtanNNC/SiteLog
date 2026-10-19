@@ -25,6 +25,12 @@ name: Deploy
 #   workflow_dispatch preview, target     → the worker in the runner against the preview project for
 #     preview-worker                        60 minutes (fake transcription and extraction, console
 #                                           texts and email), from spec-v1.2 only: the phone check
+#   workflow_dispatch preview, target     → LiveKit Cloud for the preview project: the voice secrets on
+#     voice-setup                           its functions and the Python agent deployed with the lk CLI
+#                                           (English voices only), from spec-v1.2 only
+#   workflow_dispatch preview, target     → Stripe test mode for the preview project: product, price,
+#     billing-setup                         webhook endpoint and the Stripe secrets on its functions,
+#                                           from spec-v1.2 only
 #   push to main                          → skipped by the guard (there is no main yet, D40)
 #
 # Until the cut-over (W1-19) the live branch runs its own pre-W1-01 deploy.yml (no guard, no
@@ -43,10 +49,23 @@ on:
         options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; all three owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; voice-setup = the voice secrets on the preview project and the agent deployed to LiveKit Cloud; billing-setup = Stripe test mode for the preview project (product, price, webhook and secrets); all five owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
         type: choice
         options:
-          [all, supabase, worker, web, field, inventory, seed, phone-setup, preview-worker, eval]
+          [
+            all,
+            supabase,
+            worker,
+            web,
+            field,
+            inventory,
+            seed,
+            phone-setup,
+            preview-worker,
+            voice-setup,
+            billing-setup,
+            eval,
+          ]
         default: all
       eval_models:
         description: 'Target eval only: comma-separated Claude model ids (empty = sonnet, haiku and opus)'
@@ -86,6 +105,8 @@ jobs:
       seed: ${{ steps.plan.outputs.seed }}
       phone_setup: ${{ steps.plan.outputs.phone_setup }}
       preview_worker: ${{ steps.plan.outputs.preview_worker }}
+      voice_setup: ${{ steps.plan.outputs.voice_setup }}
+      billing_setup: ${{ steps.plan.outputs.billing_setup }}
       eval: ${{ steps.plan.outputs.eval }}
     steps:
       - name: Decide what this run may touch
@@ -98,9 +119,9 @@ jobs:
           TARGET: ${{ inputs.target || 'all' }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false eval=false
+          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false voice_setup=false billing_setup=false eval=false
           # `all` covers the four deploy targets; the inventory runs only when asked for.
-          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != eval ]; }; }
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != voice-setup ] && [ "$1" != billing-setup ] && [ "$1" != eval ]; }; }
 
           if [ "$EVENT" = pull_request ]; then
             web=true field=true preview=true
@@ -124,6 +145,20 @@ jobs:
               preview_worker=true
             else
               echo "::notice::preview-worker skipped: it runs the worker against the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = voice-setup ]; then
+            # LiveKit Cloud (W3-16) for the preview project only: its voice secrets and the agent.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              voice_setup=true
+            else
+              echo "::notice::voice-setup skipped: it touches the preview project and its LiveKit Cloud project only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = billing-setup ]; then
+            # Stripe test mode (W4-15) for the preview project only.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              billing_setup=true
+            else
+              echo "::notice::billing-setup skipped: it touches the preview project and Stripe test mode only, dispatched with environment preview from $PREVIEW_BRANCH."
             fi
           elif [ "$TARGET" = eval ]; then
             # The model comparison (.github/workflows/eval.yml) with the preview Environment's key only.
@@ -169,6 +204,8 @@ jobs:
             echo "seed=$seed"
             echo "phone_setup=$phone_setup"
             echo "preview_worker=$preview_worker"
+            echo "voice_setup=$voice_setup"
+            echo "billing_setup=$billing_setup"
             echo "eval=$eval"
           } >> "$GITHUB_OUTPUT"
           {
@@ -182,7 +219,7 @@ jobs:
             echo
             echo "| Job | Runs |"
             echo "| --- | --- |"
-            for k in supabase worker web field preview inventory seed phone_setup preview_worker eval; do echo "| $k | ${!k} |"; done
+            for k in supabase worker web field preview inventory seed phone_setup preview_worker voice_setup billing_setup eval; do echo "| $k | ${!k} |"; done
           } >> "$GITHUB_STEP_SUMMARY"
 
   supabase:
@@ -534,6 +571,8 @@ jobs:
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          # Stripe test mode (billing-setup) for the billing_sync job; empty = the job logs and ends.
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           # Open-Meteo's free endpoint (no key; the worker's default is the commercial one).
           WEATHER_API_BASE: https://api.open-meteo.com/v1/forecast
           WORKER_PORT: '8080'
@@ -631,6 +670,312 @@ jobs:
             phones=$(grep -cE '\+[0-9][0-9 ().-]{6,}[0-9]' "$RUNNER_TEMP/worker.log" || true)
             echo "Phone-like strings in the whole log (hidden above): ${phones:-0}"
           fi
+
+  voice-setup:
+    name: Voice · LiveKit Cloud agent and voice secrets (preview)
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # RUNBOOK §2 "Voice: M7 live on the preview project (W3-16)", steps 3, 5 and 6, English only:
+    # 1. The preview project's functions: LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET and
+    #    LIVEKIT_AGENT_NAME (voice-events and Talk now), VOICE_CALL_TOKEN_SECRET only when missing
+    #    (field-api's alone, never rotated: it signs live call tokens) and a VOICE_AGENT_TOOL_SECRET
+    #    made anew each run, which the agent gets in the same job.
+    # 2. The Python agent (apps/voice-agent) on LiveKit Cloud with the lk CLI: the agent already in
+    #    the project gets the secrets and a new version, else one is created (CI commits no
+    #    livekit.toml, so the agent is found by `lk agent list`). Its secrets file lives in
+    #    RUNNER_TEMP (mode 600) and is deleted at the end. No Azure key: a Turkish call refuses
+    #    (AZURE_SPEECH_KEY, session.py) until the TR voice is set up by hand.
+    # The LiveKit webhook URL is the one step left in LiveKit's dashboard (the run summary names it).
+    if: >-
+      needs.plan.outputs.voice_setup == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      LIVEKIT_AGENT_NAME: sitelog-voice
+      # Non-interactive `lk agent create` needs a region (the preview Environment's variable wins).
+      LIVEKIT_AGENT_REGION: ${{ vars.LIVEKIT_AGENT_REGION || 'us-east' }}
+      # The lk CLI: a pinned release binary, checked against the release's checksums.txt entry.
+      LK_VERSION: 2.18.8
+      LK_SHA256: 3e0977d0385d2f220d7f455105ac52f8035f79e70aecdf70b6dc054179905c7c
+      LK_PROJECT: sitelog-preview
+    steps:
+      - name: Check configuration
+        # Presence and shape only; no value is printed.
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          missing=()
+          for n in SUPABASE_ACCESS_TOKEN LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET DEEPGRAM_API_KEY ANTHROPIC_API_KEY; do
+            if [ -z "${!n}" ]; then missing+=("$n (secret)"); fi
+          done
+          if [ -z "$SUPABASE_PROJECT_REF" ]; then missing+=("SUPABASE_PROJECT_REF (variable)"); fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::voice-setup needs these in the preview Environment: ${missing[*]}."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+          # A value pasted on a phone often carries a space or a line break: name it, never show it.
+          for n in LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET DEEPGRAM_API_KEY ANTHROPIC_API_KEY; do
+            if [[ "${!n}" =~ [[:space:]] ]]; then
+              echo "::error::$n holds a space or a line break; paste it again in the preview Environment's secrets."
+              exit 1
+            fi
+          done
+          if [[ ! "$LIVEKIT_URL" =~ ^wss://[A-Za-z0-9.-]+$ ]]; then
+            echo "::error::LIVEKIT_URL must be the LiveKit project's URL, wss://<project>.livekit.cloud."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Voice contract is current
+        # The contract and copy the agent's image carries (apps/voice-agent/contract, copy).
+        run: pnpm voice:contract -- --check
+      - name: Install the lk CLI
+        run: |
+          dir="$RUNNER_TEMP/lk-cli"
+          mkdir -p "$dir"
+          archive="lk_${LK_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$dir/$archive" "https://github.com/livekit/livekit-cli/releases/download/v${LK_VERSION}/$archive"
+          echo "$LK_SHA256  $dir/$archive" | sha256sum -c -
+          tar -xzf "$dir/$archive" -C "$dir" lk
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/lk" --version
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Secrets files
+        # Two env files in RUNNER_TEMP (mode 600): the functions' and the agent's. They share the new
+        # VOICE_AGENT_TOOL_SECRET; VOICE_CALL_TOKEN_SECRET goes to the functions only.
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # The preview worker's fast model (as preview-worker), switched by the Environment's variable.
+          CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}
+        run: |
+          umask 077
+          names="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(x=>x.name).join(" ")))')"
+          tool_secret="$(openssl rand -base64 32 | tr -d '\n')"
+          echo "::add-mask::$tool_secret"
+          fn="$RUNNER_TEMP/voice-functions.env"
+          agent="$RUNNER_TEMP/voice-agent.env"
+          {
+            echo "LIVEKIT_URL=$LIVEKIT_URL"
+            echo "LIVEKIT_API_KEY=$LIVEKIT_API_KEY"
+            echo "LIVEKIT_API_SECRET=$LIVEKIT_API_SECRET"
+            echo "LIVEKIT_AGENT_NAME=$LIVEKIT_AGENT_NAME"
+            echo "VOICE_AGENT_TOOL_SECRET=$tool_secret"
+          } > "$fn"
+          set_names="LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET LIVEKIT_AGENT_NAME VOICE_AGENT_TOOL_SECRET"
+          if [[ " $names " == *" VOICE_CALL_TOKEN_SECRET "* ]]; then
+            echo "VOICE_CALL_TOKEN_SECRET already set: kept."
+          else
+            call_secret="$(openssl rand -base64 32 | tr -d '\n')"
+            echo "::add-mask::$call_secret"
+            echo "VOICE_CALL_TOKEN_SECRET=$call_secret" >> "$fn"
+            set_names="$set_names VOICE_CALL_TOKEN_SECRET"
+            echo "VOICE_CALL_TOKEN_SECRET was missing: set to a new random value."
+          fi
+          # The names of apps/voice-agent/src/sitelog_voice/config.py. No LIVEKIT_URL, key or secret:
+          # LiveKit Cloud gives a deployed agent its own project's.
+          {
+            echo "FIELD_API_URL=https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/field-api"
+            echo "VOICE_AGENT_TOOL_SECRET=$tool_secret"
+            echo "DEEPGRAM_API_KEY=$DEEPGRAM_API_KEY"
+            echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
+            echo "CLAUDE_MODEL_FAST=$CLAUDE_MODEL_FAST"
+            echo "STT_MODEL=nova-3"
+            echo "TTS_VOICE_EN=aura-2-thalia-en"
+            echo "LIVEKIT_AGENT_NAME=$LIVEKIT_AGENT_NAME"
+            echo "NODE_ENV=production"
+            echo "SENTRY_ENVIRONMENT=preview"
+          } > "$agent"
+          chmod 600 "$fn" "$agent"
+          echo "VOICE_FUNCTION_SECRETS=$set_names" >> "$GITHUB_ENV"
+      - name: Function secrets on the preview project
+        run: |
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$RUNNER_TEMP/voice-functions.env" >/dev/null
+          echo "Set on the preview project: $VOICE_FUNCTION_SECRETS."
+      - name: LiveKit project for the lk CLI
+        # Non-interactive: `lk project add <name> --url --api-key --api-secret --default` saves the
+        # project in the runner's ~/.livekit (removed at the end); the later commands name it.
+        env:
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+        run: |
+          lk project add "$LK_PROJECT" --url "$LIVEKIT_URL" --api-key "$LIVEKIT_API_KEY" --api-secret "$LIVEKIT_API_SECRET" --default --yes >/dev/null
+          echo "lk project $LK_PROJECT added as the default."
+      - name: Agent on LiveKit Cloud
+        id: agent
+        working-directory: apps/voice-agent
+        run: |
+          # The agent already in the project: the one whose dispatch name is sitelog-voice, else the
+          # only one (the Build plan allows one), else none.
+          lk agent list --project "$LK_PROJECT" --json --yes > "$RUNNER_TEMP/agents.json"
+          if ! id="$(node "$GITHUB_WORKSPACE/.github/scripts/livekit-pick-agent.mjs" "$RUNNER_TEMP/agents.json")"; then
+            echo "::error::Several agents in the LiveKit project and none clearly SiteLog's; delete the extra ones (lk agent delete) or keep one named $LIVEKIT_AGENT_NAME."
+            exit 1
+          fi
+          secrets="$RUNNER_TEMP/voice-agent.env"
+          if [ -n "$id" ]; then
+            echo "Agent $id found: its secrets updated (others it has, such as Azure ones added by hand, are kept), then a new version deployed."
+            lk agent update-secrets --project "$LK_PROJECT" --id "$id" --secrets-file "$secrets" --yes
+            lk agent deploy --project "$LK_PROJECT" --id "$id" --yes
+            action=deployed
+          else
+            echo "No agent in the project yet: creating one (region $LIVEKIT_AGENT_REGION)."
+            lk agent create --project "$LK_PROJECT" --region "$LIVEKIT_AGENT_REGION" --secrets-file "$secrets" --yes
+            id="$(sed -n 's/^[[:space:]]*id[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' livekit.toml | head -n 1)"
+            action=created
+          fi
+          if [ -z "$id" ]; then
+            echo "::error::lk agent create left no agent id in livekit.toml."
+            exit 1
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+      - name: Agent status and summary
+        if: steps.agent.outputs.id != ''
+        working-directory: apps/voice-agent
+        env:
+          AGENT_ID: ${{ steps.agent.outputs.id }}
+          AGENT_ACTION: ${{ steps.agent.outputs.action }}
+          NO_COLOR: '1'
+        run: |
+          status="$(lk agent status --project "$LK_PROJECT" --id "$AGENT_ID" --yes 2>&1 || true)"
+          echo "$status"
+          {
+            echo "### Voice on the preview project"
+            echo
+            echo "- Function secrets set on \`$SUPABASE_PROJECT_REF\` (names only): $VOICE_FUNCTION_SECRETS. An existing VOICE_CALL_TOKEN_SECRET is kept."
+            echo "- Agent \`$AGENT_ID\` $AGENT_ACTION on LiveKit Cloud (dispatch name \`$LIVEKIT_AGENT_NAME\`), its secrets updated (others kept): FIELD_API_URL, VOICE_AGENT_TOOL_SECRET, DEEPGRAM_API_KEY, ANTHROPIC_API_KEY, CLAUDE_MODEL_FAST, STT_MODEL, TTS_VOICE_EN, LIVEKIT_AGENT_NAME, NODE_ENV, SENTRY_ENVIRONMENT. English voices only: a Turkish call needs AZURE_SPEECH_KEY (RUNBOOK, W3-16 step 5)."
+            echo
+            echo "**Left for you in LiveKit's dashboard**, once (project settings → Webhooks): add this URL, signed with the same API key, and send a test event (200 = the signature passed):"
+            echo
+            echo "\`https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/voice-events\`"
+            echo
+            echo "Agent status:"
+            echo
+            echo '```'
+            echo "$status"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove the secrets files and the lk config
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/voice-functions.env" "$RUNNER_TEMP/voice-agent.env" "$RUNNER_TEMP/agents.json" "$HOME/.livekit"
+
+  billing-setup:
+    name: Billing · Stripe test mode for the preview project
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # RUNBOOK §2 "Billing (W4-15)", steps 2, 4 and 5, test mode only (the key must start sk_test_):
+    # .github/scripts/stripe-billing-setup.mjs finds or creates the Product (metadata sitelog=site)
+    # and its monthly USD per-unit price of 39900 (lookup key sitelog_site_usd_monthly), and
+    # replaces the webhook endpoint for the preview project's stripe-webhook (a signing secret
+    # cannot be read back) with exactly HANDLED_EVENTS. Then the preview project's functions get
+    # STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_PRICE_ID_SITE_US, and APP_URL (Checkout's
+    # and the portal's return URLs, the api-* CORS origin) when it is missing.
+    if: >-
+      needs.plan.outputs.billing_setup == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: preview
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      PANEL_URL: ${{ vars.VITE_APP_URL || 'https://pr-1--staging-sitelog.netlify.app' }}
+      # The endpoint's API version is the functions' Stripe SDK's (supabase/functions/README.md).
+      STRIPE_WEBHOOK_API_VERSION: 2026-09-30.endive
+    steps:
+      - name: Check configuration
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          missing=()
+          for n in SUPABASE_ACCESS_TOKEN STRIPE_SECRET_KEY; do
+            if [ -z "${!n}" ]; then missing+=("$n (secret)"); fi
+          done
+          if [ -z "$SUPABASE_PROJECT_REF" ]; then missing+=("SUPABASE_PROJECT_REF (variable)"); fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::billing-setup needs these in the preview Environment: ${missing[*]}."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing."
+            exit 1
+          fi
+          if [[ "$STRIPE_SECRET_KEY" != sk_test_* ]]; then
+            echo "::error::STRIPE_SECRET_KEY is not a test-mode secret key (it must start sk_test_); refusing. No live key goes on the preview project."
+            exit 1
+          fi
+          if [[ "$STRIPE_SECRET_KEY" =~ [[:space:]] ]]; then
+            echo "::error::STRIPE_SECRET_KEY holds a space or a line break; paste it again in the preview Environment's secrets."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+            supabase/functions/stripe-webhook
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - name: Stripe product, price and webhook endpoint
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          umask 077
+          WEBHOOK_URL="https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/stripe-webhook" \
+          WEBHOOK_API_VERSION="$STRIPE_WEBHOOK_API_VERSION" \
+          OUT_ENV="$RUNNER_TEMP/billing-functions.env" OUT_JSON="$RUNNER_TEMP/billing.json" \
+            node .github/scripts/stripe-billing-setup.mjs
+      - name: Function secrets on the preview project
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          umask 077
+          f="$RUNNER_TEMP/billing-functions.env"
+          echo "STRIPE_SECRET_KEY=$STRIPE_SECRET_KEY" >> "$f"
+          set_names="STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_ID_SITE_US"
+          names="$(supabase secrets list --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).map(x=>x.name).join(" ")))')"
+          if [[ " $names " == *" APP_URL "* ]]; then
+            echo "APP_URL already set: kept."
+          else
+            echo "APP_URL=$PANEL_URL" >> "$f"
+            set_names="$set_names APP_URL"
+            echo "APP_URL was missing: set to $PANEL_URL."
+          fi
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$f" >/dev/null
+          echo "Set on the preview project: $set_names."
+          echo "BILLING_FUNCTION_SECRETS=$set_names" >> "$GITHUB_ENV"
+          if [[ " $names " == *" STRIPE_PRICE_ID_SITE "* ]]; then
+            echo "::warning::The old STRIPE_PRICE_ID_SITE is still set on the preview project; STRIPE_PRICE_ID_SITE_US wins. Unset it when convenient (GAP 9.1)."
+          fi
+      - name: Summary
+        run: node .github/scripts/stripe-billing-setup.mjs --summary "$RUNNER_TEMP/billing.json"
+      - name: Remove the secrets file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/billing-functions.env" "$RUNNER_TEMP/billing.json"
 
   eval:
     name: Eval · Claude models on the golden sets (preview key)
