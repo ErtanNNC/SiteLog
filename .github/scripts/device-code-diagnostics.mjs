@@ -65,3 +65,27 @@ show(
   'Marco',
   await get(`reporters?select=id,org_id,name,status,message_channel&name=eq.Marco%20Ruiz`),
 );
+
+// Talk now (W3-13): the newest calls, LiveKit's webhooks and the voice requests. Phone-number
+// fields are dropped before printing.
+const noPhones = (rows) =>
+  rows.map((row) =>
+    Object.fromEntries(Object.entries(row).filter(([k]) => !/e164|phone|number|caller/i.test(k))),
+  );
+show('calls', noPhones(await get('calls?select=*&order=created_at.desc&limit=5')));
+show(
+  'livekit events',
+  noPhones(await get('livekit_events?select=*&order=created_at.desc&limit=15')),
+);
+show(
+  'voice requests',
+  await logs(
+    "select timestamp, req.method, req.url, res.status_code from function_edge_logs cross join unnest(metadata) as m cross join unnest(m.request) as req cross join unnest(m.response) as res where req.url like '%/voice%' or req.url like '%voice-events%' order by timestamp desc limit 40",
+  ),
+);
+show(
+  'voice function logs',
+  await logs(
+    "select timestamp, m.function_id, m.level, substr(event_message, 0, 600) as msg from function_logs cross join unnest(metadata) as m where event_message like '%voice%' or event_message like '%call%' or event_message like '%livekit%' order by timestamp desc limit 40",
+  ),
+);
