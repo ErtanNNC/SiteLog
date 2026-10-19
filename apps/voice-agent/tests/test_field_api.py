@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -228,3 +229,28 @@ async def test_the_agent_sends_the_sid_of_a_dispatch_rule_room_and_the_name_of_a
     assert await _room_key(_Room(ROOM, "RM_Q227room")) == ROOM  # type: ignore[arg-type]
     with pytest.raises(RuntimeError):
         await _room_key(_Room("sip_+15550142087_Xq7Lm2Pz9Kd4", "bad"))  # type: ignore[arg-type]
+
+
+def test_call_id_comes_from_the_dispatch_when_the_room_metadata_has_not_arrived() -> None:
+    """Talk now on the preview (2026-10-19): the agent joined before the room's metadata reached
+    it, sent `calls/start` without the call id and the contract refused it ("a web call passes
+    callId"). The dispatch's metadata comes with the job; the `call-{uuid}` name is last."""
+    from sitelog_voice.agent import (  # pyright: ignore[reportPrivateUsage]
+        _call_metadata,
+        _room_call_id,
+        _room_is_outbound,
+    )
+
+    call_id = ROOM.removeprefix("call-")
+    dispatch = json.dumps({"callId": call_id, "transport": "web"})
+    assert _call_metadata(dispatch, "") == {"callId": call_id, "transport": "web"}
+    assert _call_metadata("", dispatch)["callId"] == call_id
+    assert _call_metadata("not json", None) == {}
+    assert _room_call_id(_call_metadata(dispatch, ""), ROOM) == call_id
+    # Neither metadata yet: the room SiteLog named after the call still gives the id.
+    assert _room_call_id({}, ROOM) == call_id
+    # An inbound phone call's room (named by the SIP dispatch rule) has no call id.
+    assert _room_call_id({}, "sip_+15550142087_Xq7Lm2Pz9Kd4") is None
+    outbound = json.dumps({"callId": call_id, "direction": "outbound"})
+    assert _room_is_outbound(_call_metadata(outbound, ""))
+    assert not _room_is_outbound(_call_metadata(dispatch, ""))

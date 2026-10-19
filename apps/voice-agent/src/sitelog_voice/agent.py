@@ -49,7 +49,7 @@ from .copy import Language, VoiceCopy, default_copy
 from .dialog import Action, CallTool, Dialog, EndCall, Event, Limits, Say, State
 from .dialog import tool_events as dialog_tool_events
 from .dialog import turn_events as dialog_turn_events
-from .field_api import CallAuth, FieldApi, FieldApiError, room_key
+from .field_api import CALL_ROOM_RE, CallAuth, FieldApi, FieldApiError, room_key
 from .metrics import TurnTimer
 from .observability import init_sentry, setup_logging
 from .recording import CallRecorder, tone_frames, upload_recording
@@ -571,14 +571,29 @@ def _interruptible(session: AgentSession) -> bool:
     return bool(getattr(speech, "allow_interruptions", True)) if speech is not None else True
 
 
-def _room_call_id(room: rtc.Room) -> str | None:
-    """A web or outbound call's id, from the room metadata `{"callId": …}` (W3-13, W3-17)."""
-    try:
-        meta = json.loads(room.metadata or "{}")
-    except ValueError:
-        return None
-    call_id = meta.get("callId") if isinstance(meta, dict) else None
-    return call_id if isinstance(call_id, str) else None
+def _call_metadata(job_metadata: str | None, room_metadata: str | None) -> dict[str, object]:
+    """The call's metadata (`{"callId": …, "direction": …}`): field-api and the worker put the same
+    JSON on the agent dispatch and on the room (W3-13, W3-17). The dispatch's comes with the job;
+    the room's may not have reached the agent yet when it joins, so it is only the fallback."""
+    for raw in (job_metadata, room_metadata):
+        try:
+            meta = json.loads(raw or "{}")
+        except ValueError:
+            continue
+        if isinstance(meta, dict) and meta:
+            return meta
+    return {}
+
+
+def _room_call_id(meta: dict[str, object], room_name: str | None) -> str | None:
+    """A web or outbound call's id: the metadata's `callId`, else the uuid of a `call-{uuid}`
+    room (SiteLog names those rooms after the call, §19 Q227)."""
+    call_id = meta.get("callId")
+    if isinstance(call_id, str):
+        return call_id
+    if room_name and CALL_ROOM_RE.match(room_name):
+        return room_name.removeprefix("call-")
+    return None
 
 
 #: How long the agent waits for the room's sid (it comes with the connection, or just after it).
@@ -597,13 +612,9 @@ async def _room_key(room: rtc.Room) -> str:
     return key
 
 
-def _room_is_outbound(room: rtc.Room) -> bool:
+def _room_is_outbound(meta: dict[str, object]) -> bool:
     """An outbound call's room (W3-17): `{"direction": "outbound"}` in its metadata."""
-    try:
-        meta = json.loads(room.metadata or "{}")
-    except ValueError:
-        return False
-    return isinstance(meta, dict) and meta.get("direction") == "outbound"
+    return meta.get("direction") == "outbound"
 
 
 def _keeps_recording(state: CallState) -> bool:
@@ -672,13 +683,14 @@ async def entrypoint(ctx: JobContext) -> None:
     setup_logging()
     await ctx.connect()
     room = ctx.room
-    call_id = _room_call_id(room)
+    meta = _call_metadata(ctx.job.metadata, room.metadata)
+    call_id = _room_call_id(meta, room.name)
     from_e164: str | None = None
     to_e164: str | None = None
     participant = await ctx.wait_for_participant()
     is_sip = participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP
     transport = "pstn" if is_sip else "web"
-    outbound = is_sip and _room_is_outbound(room)
+    outbound = is_sip and _room_is_outbound(meta)
     if outbound and not await _wait_answered(participant, room, timeout_s=90):
         # Nobody picked up: the worker settles the call (no answer, busy) and texts missed_call.
         ctx.shutdown(reason="outbound call not answered")
