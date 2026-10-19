@@ -89,3 +89,17 @@ show(
     "select timestamp, m.function_id, m.level, substr(event_message, 0, 600) as msg from function_logs cross join unnest(metadata) as m where event_message like '%voice%' or event_message like '%call%' or event_message like '%livekit%' order by timestamp desc limit 40",
   ),
 );
+// A call's live turns and the worker's queue: status, timing and errors only (no transcript text,
+// no draft, no payload).
+show(
+  'voice turns',
+  await get(
+    'voice_turns?select=id,call_id,kind,status,error,attempts,created_at,finished_at&order=created_at.desc&limit=20',
+  ),
+);
+show(
+  'jobs (latest)',
+  await get(
+    'jobs?select=id,type,status,attempts,last_error,run_after,locked_at,created_at,finished_at&order=created_at.desc&limit=30',
+  ),
+);
