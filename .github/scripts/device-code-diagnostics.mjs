@@ -75,7 +75,7 @@ const noPhones = (rows) =>
 show('calls', noPhones(await get('calls?select=*&order=created_at.desc&limit=5')));
 show(
   'livekit events',
-  noPhones(await get('livekit_events?select=*&order=created_at.desc&limit=15')),
+  noPhones(await get('livekit_events?select=*&order=received_at.desc&limit=15')),
 );
 show(
   'voice requests',
