@@ -881,7 +881,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Agent logs (read-only)
         # The new version's first minutes: its build log, then its runtime log (start-up errors,
-        # a missing setting, and a test call made meanwhile: the runtime log is followed for 8
+        # a missing setting, and a test call made meanwhile: the runtime log is followed for 15
         # minutes). `lk agent logs` tails, so each read is cut off by a timeout.
         if: steps.agent.outputs.id != ''
         continue-on-error: true
@@ -894,7 +894,7 @@ jobs:
           echo "=== build log ==="
           timeout 30 lk agent logs --project "$LK_PROJECT" --id "$AGENT_ID" --log-type build --yes 2>&1 | tail -n 80 || true
           echo "=== deploy log ==="
-          timeout 480 lk agent logs --project "$LK_PROJECT" --id "$AGENT_ID" --log-type deploy --yes 2>&1 | tail -n 400 || true
+          timeout 900 lk agent logs --project "$LK_PROJECT" --id "$AGENT_ID" --log-type deploy --yes 2>&1 | tail -n 400 || true
       - name: Remove the secrets files and the lk config
         if: always()
         run: rm -rf "$RUNNER_TEMP/voice-functions.env" "$RUNNER_TEMP/voice-agent.env" "$RUNNER_TEMP/agents.json" "$HOME/.livekit"
