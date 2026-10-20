@@ -164,11 +164,13 @@ describeField('field-api on the local stack', () => {
       expect(setCookie).toContain(attr);
     cookie = /^([^;]+)/.exec(setCookie)![1]!;
 
-    // The console text (W1-07; the Notifier from W1-08), as the Demo phone shows it.
+    // The console message (W1-07; the Notifier from W1-08), as the Demo phone shows it. A reporter
+    // who never answered a consent prompt gets the device code by WhatsApp first: the US pack
+    // orders WhatsApp before SMS and a demo org's WhatsApp is console (spec §19 Q372).
     const [msg] = await sql<{ body: string; channel: string; provider: string }[]>`
       select body, channel, provider from messages
       where reporter_id = ${f.marco.id} and copy_key = 'verify_code' order by created_at desc limit 1`;
-    expect(msg).toMatchObject({ channel: 'sms', provider: 'console' });
+    expect(msg).toMatchObject({ channel: 'whatsapp', provider: 'console' });
     const otp = /(\d{6})/.exec(msg!.body)![1]!;
     const [dev] = await sql<{ code_hash: string }[]>`
       select code_hash from field_devices where reporter_id = ${f.marco.id}`;
