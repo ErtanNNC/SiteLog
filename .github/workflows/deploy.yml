@@ -25,6 +25,10 @@ name: Deploy
 #   workflow_dispatch preview, target     → the worker in the runner against the preview project for
 #     preview-worker                        60 minutes (fake transcription and extraction, console
 #                                           texts and email), from spec-v1.2 only: the phone check
+#   workflow_dispatch preview, target     → the always-on worker for the preview project on Fly.io
+#     preview-worker-fly                    (its own app, FLY_APP; real transcription and extraction,
+#                                           Twilio texts for real orgs, console email), from spec-v1.2
+#                                           only
 #   workflow_dispatch preview, target     → LiveKit Cloud for the preview project: the voice secrets on
 #     voice-setup                           its functions and the Python agent deployed with the lk CLI
 #                                           (English voices only), from spec-v1.2 only
@@ -49,7 +53,7 @@ on:
         options: [staging, production, preview]
         default: staging
       target:
-        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; voice-setup = the voice secrets on the preview project and the agent deployed to LiveKit Cloud; billing-setup = Stripe test mode for the preview project (product, price, webhook and secrets); countries-set = a country pack's SMS and WhatsApp sender and WhatsApp templates on the preview project (or, with pack_print, the template bodies to submit); all six owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
+        description: What to deploy (inventory = read-only staging inventory, deploys nothing; seed = the demo orgs into the preview project; phone-setup = field-api secrets and a panel sign-in link on the preview project; preview-worker = the worker in the runner against the preview project for 60 minutes, fake transcription and extraction, console texts; preview-worker-fly = the always-on worker for the preview project on its own Fly.io app; voice-setup = the voice secrets on the preview project and the agent deployed to LiveKit Cloud; billing-setup = Stripe test mode for the preview project (product, price, webhook and secrets); countries-set = a country pack's SMS and WhatsApp sender and WhatsApp templates on the preview project (or, with pack_print, the template bodies to submit); all seven owner-approved; eval = Claude models on the golden sets with the preview key, environment preview)
         type: choice
         options:
           [
@@ -62,6 +66,7 @@ on:
             seed,
             phone-setup,
             preview-worker,
+            preview-worker-fly,
             voice-setup,
             billing-setup,
             countries-set,
@@ -103,7 +108,8 @@ on:
 
 concurrency:
   # preview-worker runs for an hour: its own group, so seed, phone-setup and supabase dispatches to the
-  # preview project are not held behind it.
+  # preview project are not held behind it. preview-worker-fly deploys and returns, so it shares the
+  # preview group (one change to the preview project at a time).
   group: deploy-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || inputs.target == 'preview-worker' && 'preview-worker' || inputs.target == 'eval' && 'eval' || inputs.environment || 'staging' }}
   cancel-in-progress: false
 
@@ -130,6 +136,7 @@ jobs:
       seed: ${{ steps.plan.outputs.seed }}
       phone_setup: ${{ steps.plan.outputs.phone_setup }}
       preview_worker: ${{ steps.plan.outputs.preview_worker }}
+      preview_worker_fly: ${{ steps.plan.outputs.preview_worker_fly }}
       voice_setup: ${{ steps.plan.outputs.voice_setup }}
       billing_setup: ${{ steps.plan.outputs.billing_setup }}
       countries_set: ${{ steps.plan.outputs.countries_set }}
@@ -145,9 +152,9 @@ jobs:
           TARGET: ${{ inputs.target || 'all' }}
           PR_NUMBER: ${{ github.event.number }}
         run: |
-          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false voice_setup=false billing_setup=false countries_set=false eval=false
+          supabase=false worker=false web=false field=false preview=false inventory=false seed=false phone_setup=false preview_worker=false preview_worker_fly=false voice_setup=false billing_setup=false countries_set=false eval=false
           # `all` covers the four deploy targets; the inventory runs only when asked for.
-          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != voice-setup ] && [ "$1" != billing-setup ] && [ "$1" != countries-set ] && [ "$1" != eval ]; }; }
+          wants() { [ "$TARGET" = "$1" ] || { [ "$TARGET" = all ] && [ "$1" != inventory ] && [ "$1" != seed ] && [ "$1" != phone-setup ] && [ "$1" != preview-worker ] && [ "$1" != preview-worker-fly ] && [ "$1" != voice-setup ] && [ "$1" != billing-setup ] && [ "$1" != countries-set ] && [ "$1" != eval ]; }; }
 
           if [ "$EVENT" = pull_request ]; then
             web=true field=true preview=true
@@ -171,6 +178,13 @@ jobs:
               preview_worker=true
             else
               echo "::notice::preview-worker skipped: it runs the worker against the preview project only, dispatched with environment preview from $PREVIEW_BRANCH."
+            fi
+          elif [ "$TARGET" = preview-worker-fly ]; then
+            # The always-on worker for the preview project on its own Fly.io app, never staging's.
+            if [ "$ENVIRONMENT" = preview ] && [ "$REF" = "refs/heads/$PREVIEW_BRANCH" ]; then
+              preview_worker_fly=true
+            else
+              echo "::notice::preview-worker-fly skipped: it deploys the preview project's worker to its own Fly.io app only, dispatched with environment preview from $PREVIEW_BRANCH."
             fi
           elif [ "$TARGET" = voice-setup ]; then
             # LiveKit Cloud (W3-16) for the preview project only: its voice secrets and the agent.
@@ -237,6 +251,7 @@ jobs:
             echo "seed=$seed"
             echo "phone_setup=$phone_setup"
             echo "preview_worker=$preview_worker"
+            echo "preview_worker_fly=$preview_worker_fly"
             echo "voice_setup=$voice_setup"
             echo "billing_setup=$billing_setup"
             echo "countries_set=$countries_set"
@@ -253,7 +268,7 @@ jobs:
             echo
             echo "| Job | Runs |"
             echo "| --- | --- |"
-            for k in supabase worker web field preview inventory seed phone_setup preview_worker voice_setup billing_setup countries_set eval; do echo "| $k | ${!k} |"; done
+            for k in supabase worker web field preview inventory seed phone_setup preview_worker preview_worker_fly voice_setup billing_setup countries_set eval; do echo "| $k | ${!k} |"; done
           } >> "$GITHUB_STEP_SUMMARY"
 
   supabase:
@@ -620,6 +635,10 @@ jobs:
     # reporter it texts in this run (audited `field_link.created`). Existing links, and devices (they
     # belong to the reporter, not to a link), keep working; device codes are field-api's, not the
     # worker's.
+    #
+    # Once the always-on worker runs on Fly.io (target preview-worker-fly), this 60-minute worker is
+    # not needed. Running both at once is safe: claim_jobs() locks each job (FOR UPDATE SKIP LOCKED),
+    # so a job runs in one of them only.
     if: >-
       needs.plan.outputs.preview_worker == 'true' &&
       inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
@@ -800,6 +819,198 @@ jobs:
             phones=$(grep -cE '\+[0-9][0-9 ().-]{6,}[0-9]' "$RUNNER_TEMP/worker.log" || true)
             echo "Phone-like strings in the whole log (hidden above): ${phones:-0}"
           fi
+
+  preview-worker-fly:
+    name: Worker · Fly.io, always on, for the preview project
+    needs: plan
+    # Owner-approved only (dispatch). Guard repeated literally: environment preview, branch spec-v1.2.
+    # Deploys the worker to its own Fly.io app (the preview Environment's FLY_APP, whose name must
+    # contain "preview", so a repository-level FLY_APP of staging's worker is refused) with
+    # apps/worker/fly.preview.toml: one machine, always on, against the preview project. The runtime
+    # secrets are staged on the app from the preview Environment (stdin only, never argv or the log);
+    # a GitHub secret left empty sets nothing, and a value already on the app stays until it is
+    # unset there (`flyctl secrets unset`). docs/RUNBOOK.md §2 "Preview worker on Fly.io".
+    #
+    # NODE_ENV=production: the worker refuses the fake transcriber and extractor in production, and
+    # its Docker image ships without fixtures/, so the fakes could not run there anyway. This job
+    # therefore requires ANTHROPIC_API_KEY and DEEPGRAM_API_KEY (the keyless run is preview-worker).
+    #
+    # LINK_SIGNING_SECRET is the worker's own, made here once and kept on the app (a later run makes
+    # none while the app has one), so the links the worker creates stay stable across deploys. It is
+    # never a Supabase secret, and that is safe on the preview project for the reason preview-worker
+    # gives: field-api resolves `/r/:code` by the code's sha256 (`field_links.code_hash`), never by
+    # the secret, so the worker inserts one new personal link per reporter it first texts (audited
+    # `field_link.created`) and every existing link and device keeps working.
+    if: >-
+      needs.plan.outputs.preview_worker_fly == 'true' &&
+      inputs.environment == 'preview' && github.ref == 'refs/heads/spec-v1.2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: preview
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      FLY_APP: ${{ vars.FLY_APP }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD_SECRET: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      # The links in the texts (the field app with /api to the preview project) and the panel's
+      # address in the email links. The panel default is talkolog.com, where the preview panel is
+      # published (preview-worker's default is still the pr-1 Netlify alias).
+      FIELD_APP_URL: ${{ vars.FIELD_APP_URL || 'https://pr-1--sitelog-field-staging-ertannnc.netlify.app' }}
+      PANEL_URL: ${{ vars.VITE_APP_URL || 'https://talkolog.com' }}
+      # The models: the preview Environment's variables switch them without a code change; these
+      # ids are only the defaults (as preview-worker's).
+      CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5-5' }}
+      CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}
+    steps:
+      - name: Check configuration
+        env:
+          HAS_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY != '' }}
+        run: |
+          missing=()
+          for n in FLY_API_TOKEN SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD_SECRET; do
+            if [ -z "${!n}" ]; then missing+=("${n%_SECRET} (secret)"); fi
+          done
+          for n in FLY_APP SUPABASE_PROJECT_REF; do
+            if [ -z "${!n}" ]; then missing+=("$n (variable)"); fi
+          done
+          if [ "$HAS_ANTHROPIC_API_KEY" != true ]; then missing+=("ANTHROPIC_API_KEY (secret)"); fi
+          if [ "$HAS_DEEPGRAM_API_KEY" != true ]; then missing+=("DEEPGRAM_API_KEY (secret)"); fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::preview-worker-fly needs these in the preview Environment: ${missing[*]}. FLY_API_TOKEN is a deploy token of the preview worker's Fly app, FLY_APP its name (docs/RUNBOOK.md \"Preview worker on Fly.io\"). The worker runs in production mode, where the fake transcriber and extractor are refused: both AI keys are required."
+            exit 1
+          fi
+          if [ "$SUPABASE_PROJECT_REF" = "$STAGING_PROJECT_REF" ]; then
+            echo "::error::preview resolves to the staging project; refusing to deploy a worker against it."
+            exit 1
+          fi
+          if [[ ! "$FLY_APP" =~ ^[a-z0-9][a-z0-9-]*$ ]] || [[ "$FLY_APP" != *preview* ]]; then
+            echo "::error::FLY_APP ($FLY_APP) must be the preview worker's own Fly app, a name with \"preview\" in it (e.g. talkolog-worker-preview); refusing, so staging's worker app is never redeployed against the preview project."
+            exit 1
+          fi
+          pw="$(printf '%s' "$SUPABASE_DB_PASSWORD_SECRET" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "::add-mask::$pw"
+          { echo "SUPABASE_DB_PASSWORD<<__PW__"; printf '%s\n' "$pw"; echo "__PW__"; } >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.118.0
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Link project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Fly secrets
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          LIVEKIT_URL: ${{ secrets.LIVEKIT_URL }}
+          LIVEKIT_API_KEY: ${{ secrets.LIVEKIT_API_KEY }}
+          LIVEKIT_API_SECRET: ${{ secrets.LIVEKIT_API_SECRET }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          # The connection string as preview-worker builds it: the pooler address `supabase link`
+          # saved, in session mode (5432, which also delivers the worker's LISTEN), with the password
+          # URL-encoded, and the pooler user checked against the preview ref. Never printed.
+          f=supabase/.temp/pooler-url
+          if [ ! -s "$f" ]; then
+            echo "::error::supabase link saved no pooler address ($f)."
+            exit 1
+          fi
+          SUPABASE_DB_URL="$(node -e '
+            const u = new URL(require("fs").readFileSync(process.argv[1], "utf8").trim());
+            u.password = encodeURIComponent(process.env.SUPABASE_DB_PASSWORD);
+            u.port = "5432";
+            if (!u.username.includes(process.env.SUPABASE_PROJECT_REF)) { console.error("pooler user is not the preview project"); process.exit(1); }
+            console.log(u.toString());
+          ' "$f")"
+          echo "::add-mask::$SUPABASE_DB_URL"
+          SUPABASE_SERVICE_ROLE_KEY="$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const k=JSON.parse(s).find(x=>x.name==="service_role");if(!k)process.exit(1);console.log(k.api_key)})')"
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::no service_role key for the preview project."
+            exit 1
+          fi
+          echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"
+          SUPABASE_URL="https://${SUPABASE_PROJECT_REF}.supabase.co"
+
+          # The names the app already has (values are never readable back).
+          if ! existing="$(flyctl secrets list --app "$FLY_APP" --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s||"[]");console.log(a.map(x=>x.Name??x.name).filter(Boolean).join(" "))})')"; then
+            echo "::error::could not list the secrets of the Fly app $FLY_APP: create the app and its deploy token first (docs/RUNBOOK.md \"Preview worker on Fly.io\")."
+            exit 1
+          fi
+          names=(SUPABASE_URL SUPABASE_DB_URL SUPABASE_SERVICE_ROLE_KEY)
+          for n in TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN ANTHROPIC_API_KEY DEEPGRAM_API_KEY \
+            VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT STRIPE_SECRET_KEY \
+            LIVEKIT_URL LIVEKIT_API_KEY LIVEKIT_API_SECRET SENTRY_DSN; do
+            if [ -n "${!n}" ]; then names+=("$n"); fi
+          done
+          if [[ " $existing " == *" LINK_SIGNING_SECRET "* ]]; then
+            echo "LINK_SIGNING_SECRET already on the app: kept (links stay stable)."
+          else
+            LINK_SIGNING_SECRET="$(openssl rand -hex 32)"
+            echo "::add-mask::$LINK_SIGNING_SECRET"
+            names+=(LINK_SIGNING_SECRET)
+            echo "LINK_SIGNING_SECRET was missing: a new random one is set."
+          fi
+          for n in "${names[@]}"; do
+            if [[ "${!n}" =~ [[:space:]] ]]; then
+              echo "::error::$n holds a space or a line break; paste it again in the preview Environment's secrets."
+              exit 1
+            fi
+          done
+          # NAME=value lines on stdin (printf is a shell builtin: no value in any process's argv),
+          # staged for the deploy below.
+          for n in "${names[@]}"; do printf '%s=%s\n' "$n" "${!n}"; done |
+            flyctl secrets import --stage --app "$FLY_APP" >/dev/null
+          echo "Staged on $FLY_APP: ${names[*]}."
+          echo "FLY_STAGED_SECRETS=${names[*]}" >> "$GITHUB_ENV"
+      - name: Deploy
+        run: |
+          # The values that follow the preview Environment's variables (fly.preview.toml's [env] is
+          # static); none of them is a secret. --ha=false: one machine, not Fly's default two.
+          flyctl deploy . --remote-only --ha=false --app "$FLY_APP" \
+            --config apps/worker/fly.preview.toml --dockerfile apps/worker/Dockerfile \
+            --env "APP_URL=$PANEL_URL" --env "FIELD_APP_URL=$FIELD_APP_URL" \
+            --env "CLAUDE_MODEL=$CLAUDE_MODEL" --env "CLAUDE_MODEL_FAST=$CLAUDE_MODEL_FAST"
+      - name: Health check and summary
+        run: |
+          url="https://${FLY_APP}.fly.dev/health"
+          for attempt in $(seq 1 30); do
+            body=$(curl -sS -m 10 "$url" || true)
+            case "$body" in *'"listening":true'*) echo "worker healthy and listening (attempt $attempt): $body"; break ;; esac
+            if [ "$attempt" = 30 ]; then
+              echo "::error::$url did not answer with listening: true after the deploy (flyctl logs --app $FLY_APP)."
+              echo "Last answer: ${body:-none}"
+              exit 1
+            fi
+            sleep 10
+          done
+          staged=" $FLY_STAGED_SECRETS "
+          has() { [[ "$staged" == *" $1 "* ]]; }
+          {
+            echo "### Worker on Fly.io for the preview project"
+            echo
+            echo "App \`$FLY_APP\` (one always-on machine, \`apps/worker/fly.preview.toml\`) runs against \`$SUPABASE_PROJECT_REF\` and answers \`$url\` with \`listening: true\`."
+            echo
+            echo "- Transcription: **deepgram** (nova-3); extraction: **claude** (\`$CLAUDE_MODEL\`, fast \`$CLAUDE_MODEL_FAST\`)."
+            if has TWILIO_AUTH_TOKEN; then
+              echo "- Texts: **Twilio** for a real (non-demo) org whose pack has a sender on the preview project; demo orgs, and packs with no sender, stay console (the panel's Demo phone)."
+            else
+              echo "- Texts: console only (no TWILIO_* in the preview Environment): the panel's Demo phone."
+            fi
+            echo "- Email: **console** (no Resend on preview): the worker log only."
+            if has VAPID_PRIVATE_KEY; then echo "- Web push: real for real orgs; console for demo orgs."; else echo "- Web push: console (no VAPID pair)."; fi
+            if has LIVEKIT_API_SECRET; then echo "- Reminder calls: LiveKit for a real org whose pack has an outbound trunk; demo orgs ring the Demo phone."; else echo "- Reminder calls: none placed for real orgs (no LIVEKIT_*); demo orgs ring the Demo phone."; fi
+            if has STRIPE_SECRET_KEY; then echo "- billing_sync: Stripe (the preview Environment's key, test mode)."; else echo "- billing_sync: no Stripe key, the job logs and ends."; fi
+            echo "- Links in texts: \`$FIELD_APP_URL\`; panel links in email: \`$PANEL_URL\`."
+            echo "- Secrets staged this run (names only): ${FLY_STAGED_SECRETS}."
+            echo "- No Supabase secret was set or changed. The 60-minute preview-worker is no longer needed while this runs (both at once are safe: claim_jobs locks each job)."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   voice-setup:
     name: Voice · LiveKit Cloud agent and voice secrets (preview)

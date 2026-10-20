@@ -1,0 +1,50 @@
+# The always-on TalkOlog worker for the PREVIEW Supabase project (deploy.yml target
+# preview-worker-fly, environment preview, branch spec-v1.2 only; docs/RUNBOOK.md "Preview worker on
+# Fly.io"). Never deploy it by hand to the staging or production app: those use fly.toml.
+#
+# Secrets (SUPABASE_*, TWILIO_*, ANTHROPIC_API_KEY, DEEPGRAM_API_KEY, VAPID_*, STRIPE_SECRET_KEY,
+# LIVEKIT_*, SENTRY_DSN, LINK_SIGNING_SECRET) are staged by the job from the preview Environment.
+# APP_URL, FIELD_APP_URL, CLAUDE_MODEL and CLAUDE_MODEL_FAST come from the job as
+# `flyctl deploy --env` (they follow the preview Environment's variables).
+app = "talkolog-worker-preview"
+primary_region = "iad"
+
+[build]
+  dockerfile = "apps/worker/Dockerfile"
+
+[env]
+  # Production mode: no .env files read, and the fake transcriber and extractor are refused (the
+  # image ships without fixtures/, so they could not run here anyway). The job therefore requires
+  # ANTHROPIC_API_KEY and DEEPGRAM_API_KEY in the preview Environment.
+  NODE_ENV = "production"
+  WORKER_PORT = "8080"
+  WORKER_CONCURRENCY = "4"
+  TRANSCRIBE_PROVIDER = "deepgram"
+  TRANSCRIBE_MODEL = "nova-3"
+  EXTRACT_PROVIDER = "claude"
+  # No Resend on preview: office email goes to the worker log only.
+  EMAIL_PROVIDER = "console"
+  # Open-Meteo's free endpoint (no key; the worker's default is the commercial one).
+  WEATHER_API_BASE = "https://api.open-meteo.com/v1/forecast"
+  LOG_LEVEL = "info"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # One machine, always on: the worker LISTENs for jobs and runs the scheduler's work all day.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/health"
+
+# PDF rendering (@react-pdf/renderer) and ffmpeg run in the same process: 1 GB as the staging
+# worker's machines, on one shared CPU (preview traffic is a handful of reports a day).
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

@@ -90,6 +90,7 @@ describe('deploy.yml', () => {
       'countries-set',
       'phone-setup',
       'preview-worker',
+      'preview-worker-fly',
       'voice-setup',
       'billing-setup',
       'eval',
@@ -182,11 +183,20 @@ describe('deploy.yml', () => {
 
   it('guards every job that changes staging or production with the live branch (D40)', () => {
     // phone-setup, voice-setup and billing-setup set function secrets on the preview project only,
-    // countries-set its country packs (their own guard, below and in their own tests).
-    const PREVIEW_ONLY = ['phone-setup', 'voice-setup', 'billing-setup', 'countries-set'];
+    // countries-set its country packs, preview-worker-fly the preview worker's own Fly app (their
+    // own guard, below and in their own tests).
+    const PREVIEW_ONLY = [
+      'phone-setup',
+      'voice-setup',
+      'billing-setup',
+      'countries-set',
+      'preview-worker-fly',
+    ];
     for (const id of PREVIEW_ONLY) {
       const job = JOBS.get(id)!;
-      expect(job.condition, id).toContain(`needs.plan.outputs.${id.replace('-', '_')} == 'true'`);
+      expect(job.condition, id).toContain(
+        `needs.plan.outputs.${id.replaceAll('-', '_')} == 'true'`,
+      );
       expect(job.condition, id).toContain("inputs.environment == 'preview'");
       expect(job.condition, id).toContain("github.ref == 'refs/heads/spec-v1.2'");
       expect(job.text, id).toMatch(/^ {4}environment: preview$/m);
@@ -773,6 +783,7 @@ describe('deploy.yml field job (W1-04, D42/D43)', () => {
       'seed',
       'phone-setup',
       'preview-worker',
+      'preview-worker-fly',
       'voice-setup',
       'billing-setup',
       'countries-set',
@@ -1296,6 +1307,259 @@ describe('deploy.yml preview-worker steps, run under bash', () => {
     const r = beat('exit 7');
     expect(r.status).toBe(1);
     expect(r.log).toContain('stopped answering /health');
+  });
+});
+
+/* ── preview-worker-fly (the always-on worker for the preview project on its own Fly.io app) ─── */
+
+describe('deploy.yml preview-worker-fly job', () => {
+  const job = JOBS.get('preview-worker-fly')!;
+  const plan = stepScript('plan', 'Decide what this run may touch');
+  const PREVIEW = 'refs/heads/spec-v1.2';
+  const LIVE = `refs/heads/${LIVE_BRANCH}`;
+
+  it('is a dispatch choice, guarded to the preview Environment and spec-v1.2, never in `all`', () => {
+    expect(WORKFLOW).toMatch(/^ {12}preview-worker-fly,$/m);
+    expect(job.condition).toContain("needs.plan.outputs.preview_worker_fly == 'true'");
+    expect(job.condition).toContain("inputs.environment == 'preview'");
+    expect(job.condition).toContain("github.ref == 'refs/heads/spec-v1.2'");
+    expect(job.condition).not.toContain(LIVE_BRANCH);
+    expect(job.text).toMatch(/^ {4}environment: preview$/m);
+    expect(JOBS.get('plan')!.text).toMatch(
+      /^ {6}preview_worker_fly: \$\{\{ steps\.plan\.outputs\.preview_worker_fly \}\}$/m,
+    );
+    const run = (ref: string, environment: string, target: string) =>
+      runStep(plan, {
+        EVENT: 'workflow_dispatch',
+        REF: ref,
+        REF_NAME: ref.replace(/^refs\/(heads|tags)\//, ''),
+        TARGET: target,
+        ENVIRONMENT: environment,
+        PR_NUMBER: '',
+      });
+    const ok = run(PREVIEW, 'preview', 'preview-worker-fly');
+    expect(ok.status, ok.log).toBe(0);
+    expect(ok.outputs.preview_worker_fly).toBe('true');
+    expect(ok.outputs.preview_worker).toBe('false');
+    expect(PLAN_TARGETS.filter((t) => ok.outputs[t] === 'true')).toEqual([]);
+    expect(ok.summary).toContain('| preview_worker_fly | true |');
+    for (const [ref, environment] of [
+      [PREVIEW, 'staging'],
+      [PREVIEW, 'production'],
+      [LIVE, 'preview'],
+      [LIVE, 'staging'],
+      ['refs/tags/spec-v1.2', 'preview'],
+    ] as const) {
+      const r = run(ref, environment, 'preview-worker-fly');
+      expect(r.outputs.preview_worker_fly, `${ref} ${environment}`).toBe('false');
+      expect(r.log).toContain('preview-worker-fly skipped');
+    }
+    expect(run(PREVIEW, 'preview', 'all').outputs.preview_worker_fly).toBe('false');
+    expect(run(LIVE, 'staging', 'all').outputs.preview_worker_fly).toBe('false');
+    expect(run(PREVIEW, 'preview', 'preview-worker').outputs.preview_worker_fly).toBe('false');
+    expect(JOBS.get('plan')!.text).toContain('[ "$1" != preview-worker-fly ]');
+  });
+
+  it('deploys fly.preview.toml as one always-on machine in production mode, console email', () => {
+    expect(job.text).toContain('uses: superfly/flyctl-actions/setup-flyctl@master');
+    expect(job.text).toContain('FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}');
+    expect(job.text).toContain('FLY_APP: ${{ vars.FLY_APP }}');
+    const deploy = stepScript('preview-worker-fly', 'Deploy');
+    expect(deploy).toContain('flyctl deploy . --remote-only --ha=false --app "$FLY_APP"');
+    expect(deploy).toContain('--config apps/worker/fly.preview.toml');
+    expect(deploy).not.toContain('apps/worker/fly.toml');
+    expect(job.text).toContain("CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-sonnet-5-5' }}");
+    expect(job.text).toContain(
+      "CLAUDE_MODEL_FAST: ${{ vars.CLAUDE_MODEL_FAST || 'claude-haiku-5-5' }}",
+    );
+    expect(job.text).toContain("PANEL_URL: ${{ vars.VITE_APP_URL || 'https://talkolog.com' }}");
+    const toml = readFileSync(join(ROOT, 'apps', 'worker', 'fly.preview.toml'), 'utf8');
+    for (const line of [
+      'NODE_ENV = "production"',
+      'EMAIL_PROVIDER = "console"',
+      'TRANSCRIBE_PROVIDER = "deepgram"',
+      'EXTRACT_PROVIDER = "claude"',
+      'WEATHER_API_BASE = "https://api.open-meteo.com/v1/forecast"',
+      'auto_stop_machines = false',
+      'min_machines_running = 1',
+      'path = "/health"',
+      'size = "shared-cpu-1x"',
+    ])
+      expect(toml).toContain(line);
+    // Nothing that production refuses (the worker would not start), and no Resend on preview.
+    expect(toml).not.toMatch(/SMS_PROVIDER_STUB|WORKER_CLOCK_OVERRIDE|= "fake"|RESEND_/);
+    // The health check waits for the LISTEN, as preview-worker's.
+    expect(stepScript('preview-worker-fly', 'Health check and summary')).toContain(
+      `*'"listening":true'*`,
+    );
+  });
+
+  it('never echoes a secret and keeps every value out of argv and GITHUB_ENV', () => {
+    const secrets = stepScript('preview-worker-fly', 'Fly secrets');
+    expect(secrets).toContain('flyctl secrets import --stage --app "$FLY_APP"');
+    expect(secrets).not.toMatch(/flyctl secrets set/);
+    expect(secrets).not.toMatch(/echo "[^"]*\$\{!n\}/);
+    // Only the names go on to the summary step.
+    expect(secrets).not.toMatch(
+      /\$\{?(!n|SUPABASE_DB_URL|SUPABASE_SERVICE_ROLE_KEY|LINK_SIGNING_SECRET)\b.*GITHUB_ENV/,
+    );
+    expect(secrets).toContain('echo "FLY_STAGED_SECRETS=${names[*]}" >> "$GITHUB_ENV"');
+    expect(job.text).not.toMatch(/ILETIMERKEZI_|RESEND_/);
+    expect(job.text).not.toMatch(/SMS_PROVIDER_STUB|WORKER_CLOCK_OVERRIDE/);
+  });
+
+  describe('Check configuration, run under bash', () => {
+    const check = stepScript('preview-worker-fly', 'Check configuration');
+    const base = {
+      FLY_API_TOKEN: 'fly-token',
+      FLY_APP: 'talkolog-worker-preview',
+      SUPABASE_ACCESS_TOKEN: 'token',
+      SUPABASE_DB_PASSWORD_SECRET: ' pw ',
+      SUPABASE_PROJECT_REF: 'previewref0000000000',
+      HAS_ANTHROPIC_API_KEY: 'true',
+      HAS_DEEPGRAM_API_KEY: 'true',
+    };
+
+    it('passes with every value and hands the trimmed password on', () => {
+      const ok = runStep(check, base);
+      expect(ok.status, ok.log).toBe(0);
+      expect(readFileSync(join(ok.dir, '.github-env'), 'utf8')).toContain(
+        'SUPABASE_DB_PASSWORD<<__PW__\npw\n__PW__',
+      );
+    });
+
+    it('names each missing setting, the Fly ones and both AI keys included', () => {
+      const r = runStep(check, {
+        ...base,
+        FLY_API_TOKEN: '',
+        FLY_APP: '',
+        HAS_ANTHROPIC_API_KEY: 'false',
+      });
+      expect(r.status).toBe(1);
+      for (const s of ['FLY_API_TOKEN (secret)', 'FLY_APP (variable)', 'ANTHROPIC_API_KEY'])
+        expect(r.log).toContain(s);
+      expect(r.log).not.toContain('DEEPGRAM_API_KEY (secret)');
+      expect(r.log).not.toContain('fly-token');
+    });
+
+    it("refuses the staging project and an app that is not the preview worker's", () => {
+      const staging = runStep(check, { ...base, SUPABASE_PROJECT_REF: STAGING_PROJECT_REF });
+      expect(staging.status).toBe(1);
+      expect(staging.log).toContain('refusing to deploy a worker against it');
+      for (const app of ['sitelog-worker', 'talkolog-worker', 'Preview App', 'x;preview'])
+        expect(runStep(check, { ...base, FLY_APP: app }).status, app).toBe(1);
+    });
+  });
+
+  describe('Fly secrets, run under bash with stand-ins for supabase and flyctl', () => {
+    const secrets = stepScript('preview-worker-fly', 'Fly secrets');
+    const REF = 'previewref0000000000';
+    const VALUES = {
+      TWILIO_ACCOUNT_SID: 'ACsid0000',
+      TWILIO_AUTH_TOKEN: 'twilio-token-0000',
+      ANTHROPIC_API_KEY: 'sk-ant-0000',
+      DEEPGRAM_API_KEY: 'dg-0000',
+      LIVEKIT_URL: 'wss://p.livekit.cloud',
+      LIVEKIT_API_KEY: 'lk-key-0000',
+      LIVEKIT_API_SECRET: 'lk-secret-0000',
+    };
+
+    function run(existing: string[], extra: Record<string, string> = {}) {
+      return runStep(
+        secrets,
+        {
+          FLY_APP: 'talkolog-worker-preview',
+          SUPABASE_PROJECT_REF: REF,
+          SUPABASE_DB_PASSWORD: 'p@ss word/1',
+          VAPID_PUBLIC_KEY: '',
+          VAPID_PRIVATE_KEY: '',
+          VAPID_SUBJECT: '',
+          STRIPE_SECRET_KEY: '',
+          SENTRY_DSN: '',
+          ...VALUES,
+          ...extra,
+        },
+        (dir) => {
+          mkdirSync(join(dir, 'supabase', '.temp'), { recursive: true });
+          writeFileSync(
+            join(dir, 'supabase', '.temp', 'pooler-url'),
+            `postgresql://postgres.${REF}@aws-0-us-east-1.pooler.supabase.com:6543/postgres\n`,
+          );
+          writeFileSync(
+            join(dir, 'existing.json'),
+            JSON.stringify(existing.map((Name) => ({ Name, Digest: 'd' }))),
+          );
+        },
+        {
+          supabase: `echo '[{"name":"anon","api_key":"anon-0000"},{"name":"service_role","api_key":"service-role-0000"}]'`,
+          flyctl: [
+            'echo "$*" >> argv.log',
+            'case "$1 $2" in',
+            '  "secrets list") cat existing.json ;;',
+            '  "secrets import") cat > stdin.txt ;;',
+            'esac',
+          ].join('\n'),
+        },
+      );
+    }
+
+    it('stages the non-empty values on stdin only, and a new link secret when the app has none', () => {
+      const r = run([]);
+      expect(r.status, r.log).toBe(0);
+      const stdin = readFileSync(join(r.dir, 'stdin.txt'), 'utf8');
+      const lines = Object.fromEntries(
+        stdin
+          .trim()
+          .split('\n')
+          .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]),
+      );
+      expect(lines.SUPABASE_URL).toBe(`https://${REF}.supabase.co`);
+      expect(lines.SUPABASE_DB_URL).toBe(
+        `postgresql://postgres.${REF}:p%40ss%20word%2F1@aws-0-us-east-1.pooler.supabase.com:5432/postgres`,
+      );
+      expect(lines.SUPABASE_SERVICE_ROLE_KEY).toBe('service-role-0000');
+      for (const [k, v] of Object.entries(VALUES)) expect(lines[k], k).toBe(v);
+      expect(lines.LINK_SIGNING_SECRET).toMatch(/^[0-9a-f]{64}$/);
+      // Empty GitHub secrets set nothing (and never blank a value already on the app).
+      for (const k of ['VAPID_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'SENTRY_DSN'])
+        expect(lines[k], k).toBeUndefined();
+      const argv = readFileSync(join(r.dir, 'argv.log'), 'utf8');
+      expect(argv).toContain('secrets import --stage --app talkolog-worker-preview');
+      // The log holds the values only in the runner's mask commands.
+      const log = r.log
+        .split('\n')
+        .filter((l) => !l.startsWith('::add-mask::'))
+        .join('\n');
+      for (const v of [
+        ...Object.values(VALUES),
+        'service-role-0000',
+        'p%40ss',
+        lines.LINK_SIGNING_SECRET!,
+      ]) {
+        expect(argv).not.toContain(v);
+        expect(log).not.toContain(v);
+        expect(readFileSync(join(r.dir, '.github-env'), 'utf8')).not.toContain(v);
+      }
+      expect(r.log).toContain('LINK_SIGNING_SECRET was missing');
+      expect(r.envFile.FLY_STAGED_SECRETS).toContain('LINK_SIGNING_SECRET');
+    });
+
+    it('keeps the link secret the app already has, so links stay stable across deploys', () => {
+      const r = run(['SUPABASE_URL', 'LINK_SIGNING_SECRET']);
+      expect(r.status, r.log).toBe(0);
+      expect(readFileSync(join(r.dir, 'stdin.txt'), 'utf8')).not.toContain('LINK_SIGNING_SECRET');
+      expect(r.log).toContain('LINK_SIGNING_SECRET already on the app: kept');
+    });
+
+    it('refuses a pasted line break and a pooler user of another project', () => {
+      const broken = run([], { TWILIO_AUTH_TOKEN: 'abc\ndef' });
+      expect(broken.status).toBe(1);
+      expect(broken.log).toContain('TWILIO_AUTH_TOKEN holds a space or a line break');
+      expect(existsSync(join(broken.dir, 'stdin.txt'))).toBe(false);
+      const other = run([], { SUPABASE_PROJECT_REF: 'otherref000000000000' });
+      expect(other.status).toBe(1);
+      expect(existsSync(join(other.dir, 'stdin.txt'))).toBe(false);
+    });
   });
 });
 
