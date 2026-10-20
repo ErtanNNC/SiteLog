@@ -28,7 +28,11 @@ jobs:
       - run: pnpm format:check
       # pdftotext for the worker's PDF text snapshots (apps/worker/src/pdf/snapshot.test.ts).
       - name: Install poppler-utils
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils
+        # The runner image's third-party apt sources (packages.microsoft.com) sometimes answer 403;
+        # only Ubuntu's own archive is needed for poppler-utils, so drop them before the update.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft-prod.sources
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils
       - run: pnpm test
       - name: Build web + field + worker
         run: pnpm build
@@ -248,7 +252,11 @@ jobs:
         run: pnpm --filter @sitelog/web exec playwright install --with-deps chromium
       # W4-16: the M11 step reads Demir Yapı's filed PDF as text (pdftotext, as the check job).
       - name: Install poppler-utils
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils
+        # The runner image's third-party apt sources (packages.microsoft.com) sometimes answer 403;
+        # only Ubuntu's own archive is needed for poppler-utils, so drop them before the update.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft-prod.sources
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends poppler-utils
       # W3-18: the M9 acceptance suite (spec §16.2 M9 Done when), one command (`pnpm e2e:m9`):
       # every panel spec tagged `@m9`, one flow tag each (@F19 crew hours: BrightLine +16 h with
       # its voice-note evidence, an invoice gap's notice citing Northgate's call, the accounts
